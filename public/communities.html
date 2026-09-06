@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Communities 🏘️ — Token Communities on $Send</title>
+<meta name="description" content="Start a token community on $Send by pasting a contract address. Go live at 10 members, post to the community wall, earn a 10× Send Power multiplier, and level up your community and your member level — exponentially. Robinhood Chain. Entertainment only.">
+<meta name="keywords" content="crypto communities, token community, memecoin community, $Send, GWC, Robinhood Chain, conviction, community level, crypto social, meme coin community">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#8ee000">
+<link rel="canonical" href="https://justsendit.example/communities.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:url" content="https://justsendit.example/communities.html">
+<meta property="og:title" content="Communities 🏘️ — start & join token communities on $Send">
+<meta property="og:description" content="Paste a contract to start a community. Go live at 10 members, earn 10× Send Power, and level up your community + conviction. Entertainment only.">
+<meta property="og:image" content="https://justsendit.example/assets/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:image" content="https://justsendit.example/assets/logo.png">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="weekly.css">
+</head>
+<body>
+<a class="skip-link" href="#comm-grid">Skip to communities</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a class="active" href="communities.html" aria-current="page">Communities</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="profile-hero" style="padding-bottom:0.8rem;">
+  <h1 class="section-title display green" style="margin-bottom:0.4rem;">Communities 🏘️</h1>
+  <p class="section-sub" style="margin-bottom:0.9rem;">Rally around a token. Paste a contract to <b>start a community</b> — it goes <b>LIVE at 10 members</b>. Anyone can read a live community's wall; <b>members</b> (verified holders) post photos, GIFs &amp; videos there and earn a <b>⚡ 10× Send Power</b> multiplier on everything. Every community lists its members ranked by <b>member level</b> — and participating levels both you <b>and</b> the community up, exponentially.</p>
+
+  <form class="comm-start" id="comm-start" autocomplete="off">
+    <label class="sr-only" for="comm-addr">Token contract address</label>
+    <input class="addr-input" id="comm-addr" type="text" inputmode="text" spellcheck="false" placeholder="Paste a token contract address (0x…)" pattern="0x[0-9a-fA-F]{40}" aria-describedby="comm-start-msg">
+    <button class="btn btn-primary" id="comm-start-go" type="submit">🏛️ Start a community</button>
+  </form>
+  <p class="comm-start-msg" id="comm-start-msg" role="status" aria-live="polite"></p>
+
+  <details class="grules comm-rules">
+    <summary>📖 How communities &amp; the points work — read this</summary>
+    <div class="grules-body">
+      <ul class="comm-rules-list">
+        <li>🏛️ <b>Anyone can start one</b> by pasting a token's contract address (needs ≥ $500 liquidity). A community is <b>not an endorsement</b> — the person who starts it is a <b>community starter</b>, never a "dev".</li>
+        <li>🔟 A community goes <b>LIVE once 10 real holders opt in</b>. To start, join, or post you must <b>actually hold that token</b> — verified on-chain from a linked (read-only) wallet — plus no more than 2 counting opt-ins per network. Holding is checked on an <b>ongoing</b> basis: sell or move the tokens out and your spot (and the 10×) is revoked.</li>
+        <li>🛠️ <b>One exception to "you must hold":</b> the token's own <b>deployer/owner wallet</b> (verified on-chain, from a wallet you've signed for) may start that token's community <b>without holding it</b> — devs often keep a clean wallet. That opt-in does <b>not</b> count as one of the 10 verified holders, so a dev can't tip their own community live.</li>
+        <li>⚡ <b>10× Send Power:</b> while you're in <b>≥1 live community</b>, <b>everything you earn is multiplied 10×</b> — every post, reaction and comment inside it included. It's a flat 10× (being in five communities is still 10×) and it stacks <b>on top of</b> your Holder Boost and OG bonus.</li>
+        <li>👑 <b>Founder bonus:</b> the person whose community reaches 10 members earns a big <b>one-time Send Power bonus</b>.</li>
+        <li>🏆 <b>Community level</b> (exponential curve) rises as <b>distinct members</b> stay active — posting, reacting, and calling the token. The most active communities float to the top.</li>
+        <li>💎 <b>Your member level</b> (your “conviction”) is <b>per community</b> — it climbs the longer you're a member and the more you post. It shows as a badge next to that token in the <b>Convicted In</b> section of your public wall. (Both levels are daily-capped so no one can farm them.)</li>
+      </ul>
+    </div>
+  </details>
+</header>
+
+<main id="main" style="padding:0.4rem 1.25rem 4rem;">
+  <div class="wrap" style="max-width:1000px;">
+    <section class="comm-officials" id="comm-officials" aria-labelledby="comm-officials-h" hidden>
+      <h2 class="comm-officials-h" id="comm-officials-h">🏠 The official communities — jump in</h2>
+      <p class="modal-note comm-officials-note">$Send and $GWC have their own communities from day one, run by the site itself. They're the easiest way to see what participating looks like: read the wall, then hold the token to opt in and earn <b>10× Send Power</b> on everything you do there.</p>
+      <ul class="comm-grid comm-grid-official" id="comm-officials-grid" aria-label="Official communities"></ul>
+    </section>
+
+    <section class="wk" id="wk" aria-labelledby="wk-h">
+      <div class="wk-head">
+        <h2 class="wk-h" id="wk-h">🏆 This week's competition</h2>
+        <p class="wk-when"><span class="wk-dates" id="wk-dates"></span> <span class="wk-count" id="wk-count"></span></p>
+      </div>
+      <p class="wk-explain">Which community's <b>members</b> earned it the most points this week — from joining it, and from posting, reacting and commenting inside it. <b>Nothing to do with market cap</b>, and there's nothing to win but bragging rights.</p>
+      <details class="grules wk-rules">
+        <summary>🧮 How the weekly score works</summary>
+        <div class="grules-body">
+          <ul>
+            <li>✍️ A community only scores when its <b>members are active inside it</b> — a new member joining, posts, reactions and comments on that community's wall, and Send Calls on its own token by its members.</li>
+            <li>🧢 Every member's contribution is <b>daily-capped</b>, so one busy account can't farm a community up the board.</li>
+            <li>💰 <b>Market cap, price and holder count count for nothing here.</b> This board measures activity, full stop.</li>
+            <li>🗓️ The week runs <b>Monday 00:00 UTC → Monday 00:00 UTC</b>. At the rollover every weekly score resets to zero; all-time <b>community level</b> is untouched.</li>
+            <li>🎉 It's a leaderboard for fun — <b>entertainment only</b>. There's no prize, no entry, and nothing to buy.</li>
+          </ul>
+        </div>
+      </details>
+      <p class="wk-status" id="wk-status" role="status" aria-live="polite"></p>
+      <p class="wk-empty" id="wk-empty" hidden><b>No points scored yet this week.</b> The board opens the moment someone joins a community, or posts, reacts or comments inside one — join yours below and put it on the board. 🏁</p>
+      <ol class="wk-board" id="wk-board" aria-label="Communities ranked by points earned this week" hidden></ol>
+    </section>
+
+    <div class="comm-bar">
+      <div class="comm-tabs" role="group" aria-label="Filter communities by status">
+        <button class="comm-tab is-on" type="button" aria-pressed="true" data-cstatus="live">🟢 Live</button>
+        <button class="comm-tab" type="button" aria-pressed="false" data-cstatus="pending">⏳ Starting up</button>
+      </div>
+      <div class="comm-sorts" role="group" aria-label="Sort communities">
+        <button class="sort-btn is-on" type="button" data-csort="active" aria-pressed="true">🔥 Most active</button>
+        <button class="sort-btn" type="button" data-csort="members" aria-pressed="false">👥 Members</button>
+        <button class="sort-btn" type="button" data-csort="mcap" aria-pressed="false">💰 Market cap</button>
+        <button class="sort-btn" type="button" data-csort="new" aria-pressed="false">🆕 New</button>
+      </div>
+    </div>
+    <p class="comm-status" id="comm-status" role="status" aria-live="polite"></p>
+    <ul class="comm-grid" id="comm-grid" aria-label="Communities"></ul>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    A community is a fan group, not an endorsement of any token — most tokens go to zero, and nothing here is financial advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="communities.js"></script>
+<script src="notifications.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

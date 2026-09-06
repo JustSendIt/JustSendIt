@@ -1,0 +1,81 @@
+/* ===== moderation.css — muted senders: red @names + 🔇 flag, unmute popdown, and the u.html Moderation menu =====
+ * Depends on the tokens in styles.css (--red, --ink-2, --ink-4, --text, --text-dim, --green-bright). */
+
+/* --- a muted @name, wherever it appears (wins over per-user accent colours set inline) --- */
+.is-muted { color: var(--red) !important; text-shadow: none !important; }
+a.is-muted { text-decoration: line-through; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-decoration: line-through underline; }
+.mute-mark { font-size: 0.9em; }
+/* "also Sent It" sender rows wrap avatar + 💎 pill + name in one link: strike only the name text */
+.sc-sender-who.is-muted { text-decoration: none; }
+.sc-sender-who.is-muted .sc-sender-name { text-decoration: line-through; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+/* the generic a.is-muted:hover rule above would otherwise re-strike the whole flex row (💎 pill + avatar) — out-specify it */
+.sc-sender-who.is-muted:hover, .sc-sender-who.is-muted:focus-visible { text-decoration: none; }
+.sc-sender-who.is-muted:hover .sc-sender-name, .sc-sender-who.is-muted:focus-visible .sc-sender-name { text-decoration: line-through underline; }
+#pub-name-line.is-muted { text-shadow: 0 0 24px rgba(255,93,93,0.35) !important; }
+#pub-name-line .mute-mark { font-size: 0.7em; vertical-align: middle; }
+
+/* --- the 🔇 flag button next to a muted name --- */
+.mute-flag {
+  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  min-width: 28px; min-height: 28px; margin-left: 0.25rem; padding: 0 0.3rem;
+  border-radius: 999px; border: 1.5px solid rgba(255,93,93,0.45); background: rgba(255,93,93,0.12);
+  color: var(--red); font-size: 0.85rem; line-height: 1; cursor: pointer; vertical-align: middle;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+.mute-flag:hover { background: rgba(255,93,93,0.22); transform: translateY(-1px); }
+.mute-flag:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.mute-flag[aria-expanded="true"] { background: var(--red); color: #1a0505; }
+@media (max-width: 600px) { .mute-flag { min-width: 44px; min-height: 44px; margin: -8px 0 -8px 0.25rem; } }
+
+/* --- a hidden card/comment authored by a muted sender (belt-and-braces; the server already filters feeds) --- */
+.mute-hidden, [data-mute-hidden] { display: none !important; }
+
+/* --- unmute popdown (role=dialog, non-modal, anchored under the flag) --- */
+.mute-pop {
+  position: absolute; z-index: 120; width: min(300px, calc(100vw - 16px));
+  background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; padding: 0.85rem 0.9rem;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,93,93,0.15);
+  color: var(--text); font-family: 'Rubik', sans-serif;
+}
+.mute-pop-title { margin: 0 0 0.25rem; font-weight: 800; font-size: 0.95rem; }
+.mute-pop-title b { color: var(--red); }
+.mute-pop-sub { margin: 0 0 0.7rem; color: var(--text-dim); font-size: 0.82rem; line-height: 1.45; }
+.mute-pop-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.mute-pop-actions .btn { flex: 1 1 auto; }
+
+/* --- u.html: "🛡️ Moderation ▾" menu button in the wall header --- */
+.mod-wrap { position: relative; display: inline-flex; }
+.mod-trigger { gap: 0.35rem; }
+.mod-caret { font-size: 0.7rem; line-height: 1; transition: transform 0.15s ease; }
+.mod-wrap.open .mod-caret { transform: rotate(180deg); }
+.mod-menu {
+  position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 70; width: min(300px, calc(100vw - 16px));
+  background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; padding: 0.4rem;
+  box-shadow: 0 14px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(142,224,0,0.06);
+}
+.mod-item {
+  display: flex; align-items: center; gap: 0.55rem; width: 100%; text-align: left; min-height: 44px;
+  padding: 0.6rem 0.7rem; border-radius: 10px; border: none; background: none; cursor: pointer;
+  color: var(--text); font-family: 'Rubik', sans-serif; font-weight: 700; font-size: 0.9rem;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.mod-item:hover, .mod-item:focus-visible { background: rgba(255,93,93,0.13); color: var(--red); outline: none; }
+.mod-item:focus-visible { box-shadow: inset 0 0 0 3px var(--green-bright); }
+.mod-item-unmute:hover, .mod-item-unmute:focus-visible { background: rgba(142,224,0,0.12); color: var(--green-bright); }
+.mod-item[disabled] { opacity: 0.6; cursor: wait; }
+.mod-ico { flex: 0 0 auto; width: 1.2em; text-align: center; }
+.mod-hint { margin: 0.2rem 0.3rem 0.3rem; color: var(--text-dim); font-size: 0.8rem; line-height: 1.45; }
+
+/* the "you muted @name" note under the wall name */
+.mod-note {
+  margin: 0.35rem 0 0.2rem; padding: 0.55rem 0.8rem; border-radius: 12px; max-width: 52ch;
+  background: rgba(255,93,93,0.1); border: 1.5px solid rgba(255,93,93,0.35);
+  color: var(--text); font-size: 0.85rem; line-height: 1.5;
+}
+.mod-note b { color: var(--red); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mute-flag, .mod-caret, .mod-item { transition: none; }
+  .mute-flag:hover { transform: none; }
+}

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sender Profile — $Send 👤</title>
+<meta name="description" content="A sender's public wall on $Send — Just Send It. See their sends, Send Calls, and the tokens they're convicted in. Follow them, react, and join the $Send / $GWC meme community on Robinhood Chain. Entertainment only.">
+<meta name="keywords" content="$Send sender, public wall, Send Calls, crypto profile, memecoin community, Robinhood Chain, $Send, GWC, crypto memes">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#8ee000">
+<meta property="og:type" content="profile">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:title" content="A sender's public wall — $Send · Just Send It 🚀">
+<meta property="og:description" content="See their sends, Send Calls, and the tokens they're convicted in. Join the $Send / $GWC meme community on Robinhood Chain. Entertainment only.">
+<meta property="og:image" content="https://justsendit.example/assets/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:image" content="https://justsendit.example/assets/logo.png">
+<link rel="icon" href="/assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/tokentext.css">
+<link rel="stylesheet" href="/moderation.css">
+<link rel="stylesheet" href="/checkin.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to posts</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="/index.html"><img src="/assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="/index.html#tokens">Tokens</a>
+    <a href="/index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="/index.html#swap">Swap</a>
+    <a href="/newpairs.html">New&nbsp;Pairs</a>
+    <a href="/communities.html">Communities</a>
+    <a href="/wall.html">Send&nbsp;Wall</a>
+    <a href="/watchlist.html">Watchlist</a>
+    <a href="/arcade.html">Arcade</a>
+    <a href="/about.html">About</a>
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="wall-hero" id="who-hero">
+  <div class="wall-banner">
+    <img class="wall-banner-img" id="header-img" alt="" hidden>
+  </div>
+  <div class="wall-id">
+    <div class="wall-id-top">
+      <div class="wall-avatar" id="avatar-wrap">
+        <img class="wall-avatar-img" id="pub-avatar-img" alt="" hidden>
+        <span class="wall-avatar-emoji" id="pub-avatar" aria-hidden="true">🚀</span>
+      </div>
+      <div class="wall-id-actions">
+        <button class="btn-follow" id="follow-btn" hidden>＋ Follow</button>
+        <a class="btn btn-ghost btn-sm" id="edit-btn" href="/profile.html" hidden>Edit profile ✏️</a>
+        <button class="btn btn-ghost btn-sm" id="share-btn" aria-label="Copy link to this wall">Share 🔗</button>
+        <div class="mod-wrap" id="mod-wrap" hidden>
+          <button class="btn btn-ghost btn-sm mod-trigger" id="mod-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mod-menu">🛡️ Moderation <span class="mod-caret" aria-hidden="true">▾</span></button>
+          <div class="mod-menu" id="mod-menu" role="menu" aria-labelledby="mod-trigger" hidden></div>
+        </div>
+      </div>
+    </div>
+    <h1 class="wall-name display" id="pub-name-line">@<span id="pub-username">…</span></h1>
+    <p class="mod-note" id="mod-note" hidden></p>
+    <div class="wall-badges">
+      <span class="wall-level" id="pub-level" hidden></span>
+      <span class="wall-diamond" id="pub-diamond" hidden></span>
+    </div>
+    <p class="wall-bio" id="pub-bio"></p>
+    <div class="wall-socials" id="pub-socials" hidden></div>
+    <p class="wall-meta"><span aria-hidden="true">🗓️</span> sending since <span id="pub-joined">—</span></p>
+    <div class="wall-stats" id="pub-stats">
+      <a class="wall-stat" href="#feed"><span class="n" id="st-posts">0</span><span class="l">Posts</span></a>
+      <div class="wall-stat"><span class="n" id="st-followers">0</span><span class="l">Followers</span></div>
+      <div class="wall-stat"><span class="n" id="st-following">0</span><span class="l">Following</span></div>
+      <div class="wall-stat"><span class="n" id="st-fires">0</span><span class="l">Reactions</span></div>
+    </div>
+  </div>
+</header>
+
+<main id="main" style="padding:0.5rem 1.25rem 4rem;">
+  <div class="wrap" style="max-width:640px;">
+    <!-- daily check-in — filled by upage.js, own wall only; stays empty + hidden for everyone else -->
+    <section id="checkin" aria-label="Daily check-in" hidden></section>
+    <section class="wall-pins" id="pub-pins" hidden aria-label="Pinned tokens"></section>
+    <div class="composer card" id="profile-composer" hidden>
+      <div class="composer-id">
+        <span class="composer-ava" id="pc-avatar" aria-hidden="true">🚀</span>
+        <span class="composer-handle">@<span id="pc-handle"></span></span>
+      </div>
+      <label for="pc-text" class="sr-only">Write a post</label>
+      <textarea id="pc-text" maxlength="500" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
+      <div id="pc-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
+      <div class="composer-bar">
+        <label class="file-label">📷 Photo / GIF / Video<input type="file" id="pc-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
+        <button class="btn btn-primary btn-sm" id="pc-publish">SEND IT 🚀</button>
+        <span class="hint" id="pc-count" aria-hidden="true">500</span>
+      </div>
+      <p class="hint" id="pc-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
+    </div>
+    <div class="wall-tabs" role="tablist" aria-label="Wall sections">
+      <button class="wall-tab active" id="wt-posts" type="button" role="tab" aria-selected="true" aria-controls="panel-posts" data-tab="posts">🧱 Posts</button>
+      <button class="wall-tab" id="wt-calls" type="button" role="tab" aria-selected="false" aria-controls="panel-calls" data-tab="calls">📣 Send&nbsp;Calls</button>
+      <button class="wall-tab" id="wt-lb" type="button" role="tab" aria-selected="false" aria-controls="panel-lb" data-tab="lb">🏆 Leaderboard</button>
+    </div>
+    <section id="panel-posts" role="tabpanel" aria-labelledby="wt-posts" tabindex="0">
+      <div class="wall-feed" id="feed" aria-label="This sender's posts"></div>
+      <div class="empty-wall" id="empty" style="display:none;">
+        <div style="font-size:3rem;" aria-hidden="true">🦗</div>
+        <p>No posts yet.</p>
+      </div>
+    </section>
+    <section id="panel-calls" role="tabpanel" aria-labelledby="wt-calls" tabindex="0" hidden>
+      <div class="sc-stats" id="sc-stats" aria-live="polite"></div>
+      <div class="sc-list" id="sc-list"></div>
+    </section>
+    <section id="panel-lb" role="tabpanel" aria-labelledby="wt-lb" tabindex="0" hidden>
+      <p class="lb-intro">The best Send Callers, ranked by total Xs across their calls. <button class="sc-info" id="lb-help" type="button" aria-expanded="false">ⓘ How?</button></p>
+      <p class="sc-explain" id="lb-explain" hidden>Each call's <b>peak Xs since it was called</b> (where +100% = 1x) is summed per person. Pick a window below. Calling big <i>and</i> often both help — but a call that never runs adds nothing.</p>
+      <div class="lb-windows" id="lb-windows" role="group" aria-label="Leaderboard window"></div>
+      <ol class="lb-list" id="lb-list"></ol>
+    </section>
+    <div class="empty-wall" id="notfound" style="display:none;">
+      <div style="font-size:3rem;" aria-hidden="true">👻</div>
+      <p>No sender with that name. <a href="/wall.html">Back to the wall</a></p>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸 · Not affiliated with Robinhood Markets, Inc.</p>
+   <div class="nav-foot">
+     <a href="/index.html">Home</a> · <a href="/index.html#tokens">Tokens</a> · <a href="/index.html#guide">How to Buy</a> · <a href="/index.html#swap">Swap</a> · <a href="/newpairs.html">New Pairs</a> · <a href="/communities.html">Communities</a> · <a href="/wall.html">Send Wall</a> · <a href="/watchlist.html">Watchlist</a> · <a href="/arcade.html">Arcade</a> · <a href="/about.html">About</a> · <a href="/profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="/prefs.js"></script>
+<script src="/app.js"></script>
+<script src="/tokentext.js"></script>
+<script src="/nav.js"></script>
+<script src="/cursor.js"></script>
+<script src="/wallet.js"></script>
+<script src="/auth.js"></script>
+<script src="/moderation.js"></script>
+<script src="/search.js"></script>
+<script src="/player.js"></script>
+<script src="/newpairs.js"></script>
+<script src="/sendcall.js"></script>
+<script src="/tokenmodal.js"></script>
+<script src="/upage.js"></script>
+<script src="/notifications.js"></script>
+<script src="/compose.js"></script>
+</body>
+</html>

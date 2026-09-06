@@ -1,0 +1,885 @@
+<title>JustSendIt White Paper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --paper:      #F7F9FB;
+    --card:       #FFFFFF;
+    --ink:        #0D1626;
+    --muted:      #586A85;
+    --faint:      #7C8CA3;
+    --rule:       #E3E9F0;
+    --rule-soft:  #EEF2F7;
+    --accent:     #2F6F1E;
+    --accent-bg:  #EDF6E8;
+    --warn:       #B45309;
+    --warn-bg:    #FDF4E7;
+    --crit:       #B42318;
+    --crit-bg:    #FDF1F0;
+    --mono-bg:    #F2F5F9;
+
+    --display: "Newsreader", Georgia, "Times New Roman", serif;
+    --body: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:     #0B1220;
+      --card:      #111A2B;
+      --ink:       #E8EEF7;
+      --muted:     #9FB0CC;
+      --faint:     #7788A3;
+      --rule:      #1F2942;
+      --rule-soft: #172034;
+      --accent:    #B4FF2B;
+      --accent-bg: #17240C;
+      --warn:      #F0B45E;
+      --warn-bg:   #2A2010;
+      --crit:      #FF8A80;
+      --crit-bg:   #2C1512;
+      --mono-bg:   #162033;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:     #0B1220;
+    --card:      #111A2B;
+    --ink:       #E8EEF7;
+    --muted:     #9FB0CC;
+    --faint:     #7788A3;
+    --rule:      #1F2942;
+    --rule-soft: #172034;
+    --accent:    #B4FF2B;
+    --accent-bg: #17240C;
+    --warn:      #F0B45E;
+    --warn-bg:   #2A2010;
+    --crit:      #FF8A80;
+    --crit-bg:   #2C1512;
+    --mono-bg:   #162033;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  /* ---------- masthead ---------- */
+  .masthead {
+    padding: 72px 0 40px;
+    border-bottom: 2px solid var(--ink);
+    max-width: var(--measure);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 20px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(38px, 6vw, 62px);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--display);
+    font-size: clamp(19px, 2.4vw, 23px);
+    line-height: 1.5;
+    color: var(--muted);
+    margin: 0 0 28px;
+    text-wrap: pretty;
+  }
+  .byline {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--faint);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin: 0;
+  }
+
+  /* ---------- layout with TOC ---------- */
+  .body-grid { display: grid; grid-template-columns: 1fr; gap: 0; }
+  @media (min-width: 1100px) {
+    .body-grid {
+      grid-template-columns: 210px minmax(0, var(--measure));
+      gap: 56px;
+      justify-content: start;
+    }
+  }
+
+  .toc { display: none; }
+  @media (min-width: 1100px) {
+    .toc {
+      display: block;
+      position: sticky;
+      top: 32px;
+      align-self: start;
+      max-height: calc(100vh - 64px);
+      overflow-y: auto;
+      padding-top: 52px;
+      font-size: 13.5px;
+      line-height: 1.45;
+    }
+    .toc h2 {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin: 0 0 14px;
+      font-weight: 400;
+    }
+    .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+    .toc a { color: var(--muted); text-decoration: none; display: grid; grid-template-columns: 26px 1fr; gap: 4px; }
+    .toc a:hover { color: var(--accent); }
+    .toc .n { font-family: var(--mono); font-size: 11.5px; color: var(--faint); padding-top: 2px; }
+  }
+
+  main { max-width: var(--measure); }
+
+  /* ---------- sections ---------- */
+  section { padding: 46px 0 0; }
+  section + section { border-top: 1px solid var(--rule-soft); margin-top: 40px; }
+
+  .sec-head { display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: baseline; margin: 0 0 18px; }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    padding-top: 6px;
+  }
+  h2 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(25px, 3.4vw, 33px);
+    line-height: 1.18;
+    letter-spacing: -0.012em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--body);
+    font-weight: 600;
+    font-size: 17px;
+    letter-spacing: 0.005em;
+    margin: 32px 0 10px;
+  }
+  p { margin: 0 0 17px; text-wrap: pretty; }
+  main > section > p,
+  main > section > ul,
+  main > section > ol,
+  main > section > h3,
+  main > section > .note,
+  main > section > .figure,
+  main > section > .tablewrap { margin-left: 50px; }
+  @media (max-width: 640px) {
+    .sec-head { grid-template-columns: 34px 1fr; }
+    main > section > p,
+    main > section > ul,
+    main > section > ol,
+    main > section > h3,
+    main > section > .note,
+    main > section > .figure,
+    main > section > .tablewrap { margin-left: 0; }
+  }
+
+  ul, ol { margin: 0 0 17px; padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  li::marker { color: var(--faint); }
+
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  p code, li code, td code {
+    background: var(--mono-bg);
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  /* ---------- callouts ---------- */
+  .note {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 16px 20px;
+    margin: 0 0 20px;
+    font-size: 15.5px;
+  }
+  .note :last-child { margin-bottom: 0; }
+  .note .lbl {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 7px;
+  }
+  .note.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  .note.warn .lbl { color: var(--warn); }
+  .note.crit { border-left-color: var(--crit); background: var(--crit-bg); }
+  .note.crit .lbl { color: var(--crit); }
+
+  /* ---------- formula figure ---------- */
+  .figure {
+    background: var(--mono-bg);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin: 0 0 20px;
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.75;
+    overflow-x: auto;
+  }
+  .figure .cap {
+    font-family: var(--body);
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+    line-height: 1.55;
+  }
+
+  /* ---------- tables ---------- */
+  .tablewrap { overflow-x: auto; margin: 0 0 22px; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 14.5px;
+    min-width: 380px;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding-bottom: 10px;
+  }
+  th, td { padding: 9px 14px 9px 0; text-align: left; vertical-align: top; }
+  thead th {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 400;
+    border-bottom: 1.5px solid var(--ink);
+    padding-bottom: 7px;
+  }
+  tbody tr { border-bottom: 1px solid var(--rule-soft); }
+  tbody tr:last-child { border-bottom: 1px solid var(--rule); }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.name { font-weight: 500; }
+  .sev-crit { color: var(--crit); font-weight: 600; }
+  .sev-high { color: var(--warn); font-weight: 600; }
+  .sev-med  { color: var(--muted); }
+
+  /* ---------- misc ---------- */
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--faint);
+    margin: 0 0 8px;
+  }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  a:focus-visible, .toc a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 34px 0; }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 26px;
+    border-top: 2px solid var(--ink);
+    max-width: var(--measure);
+    font-size: 14px;
+    color: var(--muted);
+  }
+  @media (min-width: 1100px) { footer { margin-left: 266px; } }
+
+  /* ---------- print / PDF ---------- */
+  @media print {
+    :root {
+      --paper: #FFFFFF; --card: #FFFFFF; --ink: #101B2D; --muted: #45566E;
+      --faint: #6B7C94; --rule: #C9D4E0; --rule-soft: #E3E9F0;
+      --accent: #2A6419; --accent-bg: #F2F8EE;
+      --warn: #8A4308; --warn-bg: #FBF6EE; --crit: #96190F; --crit-bg: #FBF0EF;
+      --mono-bg: #F4F6FA;
+      --measure: 100%;
+    }
+    @page { margin: 15mm 14mm 16mm; }
+    body { background: #fff; font-size: 10pt; line-height: 1.5; }
+    .page { max-width: none; padding: 0; display: block; }
+    .body-grid { display: block; }
+    .toc { display: none !important; }
+    main, .masthead, footer { max-width: none; margin-left: 0; }
+
+    .masthead { padding: 0 0 18px; border-bottom-width: 1.5px; break-after: avoid; }
+    h1 { font-size: 30pt; margin-bottom: 12px; }
+    .standfirst { font-size: 12pt; margin-bottom: 14px; }
+    .eyebrow { margin-bottom: 10px; }
+    .byline { font-size: 8.5pt; }
+
+    section { padding-top: 20px; break-inside: auto; }
+    section + section { margin-top: 16px; border-top-color: var(--rule-soft); }
+    .sec-head { break-after: avoid; page-break-after: avoid; margin-bottom: 12px; }
+    h2 { font-size: 16pt; }
+    h3 { font-size: 11pt; margin: 18px 0 7px; break-after: avoid; page-break-after: avoid; }
+    p, li { orphans: 3; widows: 3; }
+    main > section > p, main > section > ul, main > section > ol,
+    main > section > h3, main > section > .note, main > section > .figure,
+    main > section > .tablewrap { margin-left: 34px; }
+
+    .note, .figure { break-inside: avoid; page-break-inside: avoid; font-size: 9.5pt; }
+    .figure { font-size: 9pt; line-height: 1.6; }
+    .tablewrap { overflow: visible; break-inside: auto; }
+    table { font-size: 8.8pt; min-width: 0; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    th, td { padding: 5px 10px 5px 0; }
+
+    a { color: var(--ink); text-decoration: none; }
+    footer { margin-top: 26px; padding-top: 14px; font-size: 8.5pt; break-inside: avoid; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">White paper &middot; Version 1</p>
+    <h1>JustSendIt, explained plainly</h1>
+    <p class="standfirst">A community website for two joke coins, with a points game, a risk scanner, and a rocket you can cash out of. This is everything it does, how it protects you, and the exact numbers behind all of it &mdash; written so a twelve&#8209;year&#8209;old can follow every word.</p>
+    <p class="byline">
+      <span>Robinhood Chain &middot; ID 4663</span>
+      <span>$SEND &amp; $GWC</span>
+      <span>Entertainment only</span>
+      <span>Not financial advice</span>
+    </p>
+  </header>
+
+  <div class="body-grid">
+
+    <nav class="toc" aria-label="Contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#s1"><span class="n">01</span><span>What this is</span></a></li>
+        <li><a href="#s2"><span class="n">02</span><span>The coins and the chain</span></a></li>
+        <li><a href="#s3"><span class="n">03</span><span>What it refuses to say</span></a></li>
+        <li><a href="#s4"><span class="n">04</span><span>Getting an account</span></a></li>
+        <li><a href="#s5"><span class="n">05</span><span>Scrambling your data</span></a></li>
+        <li><a href="#s6"><span class="n">06</span><span>Locking the doors</span></a></li>
+        <li><a href="#s7"><span class="n">07</span><span>Your wallet stays yours</span></a></li>
+        <li><a href="#s8"><span class="n">08</span><span>Send Power</span></a></li>
+        <li><a href="#s9"><span class="n">09</span><span>Multipliers</span></a></li>
+        <li><a href="#s10"><span class="n">10</span><span>Send Calls</span></a></li>
+        <li><a href="#s11"><span class="n">11</span><span>Communities</span></a></li>
+        <li><a href="#s12"><span class="n">12</span><span>Rocket Run</span></a></li>
+        <li><a href="#s13"><span class="n">13</span><span>The risk scanner</span></a></li>
+        <li><a href="#s14"><span class="n">14</span><span>Posting and muting</span></a></li>
+        <li><a href="#s15"><span class="n">15</span><span>The bot catcher</span></a></li>
+        <li><a href="#s16"><span class="n">16</span><span>How it is built</span></a></li>
+        <li><a href="#s17"><span class="n">17</span><span>Honest limits</span></a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <!-- 1 -->
+      <section id="s1">
+        <div class="sec-head"><span class="sec-num">01</span><h2>What this is</h2></div>
+        <p>JustSendIt is a website built around two joke cryptocurrencies called <strong>$SEND</strong> and <strong>$GWC</strong>. A joke cryptocurrency, usually called a memecoin, is a coin made for fun and community rather than for solving a problem. Most of them lose all their value. That is not a warning buried in small print here; it is the starting assumption the whole site is designed around.</p>
+        <p>The site does four things. It <strong>explains</strong> how to buy the coins if you have never bought crypto before. It gives people a <strong>place to hang out</strong>, post, and follow each other. It runs a <strong>points game</strong> that rewards showing up and taking part. And it <strong>scans brand-new coins</strong> as they appear and flags the ones that look dangerous.</p>
+        <p>Here is the important part. The site never holds your money, never asks for your password to a wallet, and never tells you to buy anything. It is a scoreboard and a clubhouse, not a bank and not a broker.</p>
+        <div class="note">
+          <span class="lbl">The one-sentence version</span>
+          <p>A clubhouse for two joke coins, with a points game attached and a smoke detector pointed at new coins &mdash; where nothing you do can be paid for, and nothing the site says is advice.</p>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section id="s2">
+        <div class="sec-head"><span class="sec-num">02</span><h2>The coins and the chain</h2></div>
+        <p>A <strong>blockchain</strong> is a shared public notebook. Every transaction anyone makes is written in it, everyone can read it, and nobody can quietly erase a page. These coins live on one called <strong>Robinhood Chain</strong>. Every blockchain has an ID number so software knows which one it is talking to. This one is <strong>4663</strong>.</p>
+        <p>Each coin is a small program living at a fixed address on that chain. An address is a long string starting with <code>0x</code>. It is like a house number: it never changes, and anyone can look up what happens there.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>The two coins</caption>
+            <thead><tr><th>Coin</th><th>Name</th><th>Address on Robinhood Chain</th></tr></thead>
+            <tbody>
+              <tr><td class="name">$SEND</td><td>SEND IT</td><td class="num">0xa40a9c0e&hellip;7d01e105</td></tr>
+              <tr><td class="name">$GWC</td><td>Generational Wealth Coin</td><td class="num">0x61339f11&hellip;cc620f22</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>One detail matters and is stated openly across the site: <strong>$GWC charges a 5% fee when you buy and another 5% when you sell.</strong> $SEND charges 1% on buying, selling and transferring, and that 1% is added back into the trading pool. These are properties of the coins themselves, not of this website, and the site cannot change them.</p>
+      </section>
+
+      <!-- 3 -->
+      <section id="s3">
+        <div class="sec-head"><span class="sec-num">03</span><h2>What it refuses to say</h2></div>
+        <p>Most crypto websites are adverts. This one is built with a short list of things it is not allowed to claim, and those rules show up in the code and the copy, not just in an about page.</p>
+        <ul>
+          <li><strong>It never says a coin will go up.</strong> It shows what the chain says and lets you decide.</li>
+          <li><strong>It never claims to be unhackable.</strong> No site can honestly promise that, so it does not.</li>
+          <li><strong>It is not connected to Robinhood the company.</strong> The chain is called Robinhood Chain. That is where the name comes from and nothing more.</li>
+          <li><strong>It calls itself entertainment.</strong> Points, levels and games are for fun. They are not money and cannot be exchanged for money.</li>
+          <li><strong>It never inflates a number.</strong> If the site cannot verify something, it says so instead of guessing.</li>
+        </ul>
+        <div class="note warn">
+          <span class="lbl">Read this bit twice</span>
+          <p>Brand-new coins are dangerous by default. Most go to zero. The scanner in section 13 is a smoke detector, not a safety certificate, and a green score is never permission to buy.</p>
+        </div>
+      </section>
+
+      <!-- 4 -->
+      <section id="s4">
+        <div class="sec-head"><span class="sec-num">04</span><h2>Getting an account</h2></div>
+        <p>You can join in three ways: with a crypto wallet, with an email and password, or through Google, Facebook, X or Instagram.</p>
+        <h3>Signing in with a wallet</h3>
+        <p>A <strong>wallet</strong> is an app that holds your coins. Signing in with one does not hand it over. The site shows you a sentence and asks your wallet to sign it, the way you might sign your name to prove it is you. Signing a sentence moves nothing and gives permission for nothing.</p>
+        <p>The sentence has the website's own address written inside it. That matters. If a scammer copies this site onto a lookalike domain, the sentence their fake site shows will name <em>their</em> address, so an alert reader can spot the mismatch before signing. The site also invents a fresh random code for each attempt, so an old signature cannot be reused later.</p>
+        <div class="figure">
+localhost:8642 wants you to sign in with your wallet.
+
+Read-only sign-in to JustSendIt. This signature
+never moves funds and grants no token approvals.
+
+URI: http://localhost:8642
+Address: 0x&hellip;
+Chain ID: 4663
+Nonce: &lt;fresh random code&gt;
+Issued At: &lt;timestamp&gt;
+Expiration Time: &lt;10 minutes later&gt;
+          <div class="cap">The real message, as the server writes it. The domain, the chain, a single-use code and a ten-minute expiry are all inside the text you sign. Always check the first line names the site you are actually on.</div>
+        </div>
+        <h3>Signing in with a password</h3>
+        <p>Passwords are never stored. They are put through a slow scrambling process called <strong>scrypt</strong>, which is deliberately hard for a computer to run millions of times, so guessing is expensive. Only the scrambled result is kept. Passwords are also capped at 1024 characters so nobody can jam the server with an enormous one.</p>
+        <h3>Two-factor</h3>
+        <p>You can add a second lock. One option is a six-digit code from an authenticator app that changes every 30 seconds. The other is a wallet signature. Turning wallet two-factor <em>off</em> requires a fresh wallet signature, so someone who steals a logged-in session still cannot remove it. Code guessing is rate-limited and gives up after five tries, which destroys the half-finished login.</p>
+      </section>
+
+      <!-- 5 -->
+      <section id="s5">
+        <div class="sec-head"><span class="sec-num">05</span><h2>Scrambling your data</h2></div>
+        <p>Everything personal is stored scrambled, using a method called <strong>AES-256-GCM</strong>. Think of it as a safe that also has a tamper seal: without the key you cannot read what is inside, and if anyone alters the contents the seal breaks and the site refuses to trust it.</p>
+        <p>The key lives outside the database. In a proper deployment it is set as an environment variable. On a developer's machine the server makes one and writes it to a file only the owner can read.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>How each kind of data is stored</caption>
+            <thead><tr><th>Data</th><th>Stored as</th><th>Readable without the key?</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Email addresses</td><td>Scrambled</td><td>No</td></tr>
+              <tr><td class="name">Wallet addresses you linked</td><td>Scrambled</td><td>No</td></tr>
+              <tr><td class="name">Two-factor secrets</td><td>Scrambled</td><td>No</td></tr>
+              <tr><td class="name">Wallets you track privately</td><td>Scrambled</td><td>No</td></tr>
+              <tr><td class="name">Your IP address</td><td>Fingerprint only</td><td>No &mdash; and it cannot be turned back</td></tr>
+              <tr><td class="name">Login session token</td><td>One-way hash</td><td>No &mdash; the real one is never stored</td></tr>
+              <tr><td class="name">Password</td><td>Slow one-way hash</td><td>No</td></tr>
+              <tr><td class="name">Posts and public profile</td><td>Plain</td><td>Yes &mdash; these are meant to be public</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>The clever bit: looking things up without unlocking them</h3>
+        <p>If your email is scrambled, how does the site find your account when you log in? It keeps a second value called a <strong>blind index</strong>: a fixed fingerprint of your email made with a secret key. Two identical emails always make the same fingerprint, so the site can match you, but the fingerprint cannot be turned back into your email.</p>
+        <div class="note warn">
+          <span class="lbl">What a thief would actually see &mdash; stated precisely</span>
+          <p>Someone who copied the database without the key would find meaningless text starting with <code>v1:</code> where the emails, linked wallets and two-factor secrets should be. That much is genuinely protected.</p>
+          <p>But it is <strong>not</strong> true that the file would tell them nothing. Usernames, profiles, every post and comment, the follow and mute graph, each account's $SEND and $GWC balances, and the dollar amounts spent on calls are all stored in plain form, because most of it is public on the site anyway. Two places also record a <strong>wallet address in plain text</strong> next to an account: the record of a Send Call, and the log of points awarded.</p>
+          <p>So the honest summary is that the most sensitive fields are encrypted and the rest of the database is readable. And if the key were stolen along with the data, even the encrypted part would be open &mdash; which is why the key belongs somewhere the database backups are not.</p>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section id="s6">
+        <div class="sec-head"><span class="sec-num">06</span><h2>Locking the doors</h2></div>
+        <p>Web attacks mostly work by getting a browser to run code it should not, or by tricking your browser into doing something while you are logged in. The site closes those doors with rules the browser itself enforces.</p>
+        <h3>The strict list</h3>
+        <p>A <strong>Content Security Policy</strong> is a list the site hands your browser saying where code and images may come from. This one is unusually tight: scripts may only load from the site itself, and there is no inline script anywhere on any page. If an attacker somehow slipped a script tag into a post, the browser would refuse to run it.</p>
+        <div class="figure">
+default-src 'self'
+script-src  'self'                        &larr; only our own code, ever
+style-src   'self' 'unsafe-inline' fonts.googleapis.com
+img-src     'self' data: blob: cdn.dexscreener.com dd.dexscreener.com
+connect-src 'self' rpc.mainnet.chain.robinhood.com
+                   robinhoodchain.blockscout.com
+                   api.dexscreener.com
+frame-src   dexscreener.com               &larr; only price charts
+frame-ancestors 'none'                    &larr; nobody can hide us in their page
+object-src  'none'
+          <div class="cap">The full policy. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking.</div>
+        </div>
+        <h3>Checking who asked</h3>
+        <p>Whenever something changes &mdash; a post, a call, a setting &mdash; the server checks which website the request came from and rejects it unless it came from this one. That stops another site from acting for you while you happen to be logged in.</p>
+        <h3>Speed limits</h3>
+        <p>Nearly every action has a cap on how often it can be repeated. Making Send Calls is limited to 10 attempts every 10 minutes, comments 25, joining communities 30, and starting a community 3 per day. Logins and wallet challenges are limited per IP address. The limits sit far above what a real person does and far below what a script needs.</p>
+        <h3>Uploads</h3>
+        <p>The site does not trust what a file calls itself. It reads the first few bytes of every upload and checks they match a real image or video. A file named <code>cat.png</code> that is secretly a program fails that check.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>Upload size limits</caption>
+            <thead><tr><th>Type</th><th class="num">Maximum</th></tr></thead>
+            <tbody>
+              <tr><td class="name">JPEG, PNG, WebP</td><td class="num">20 MB</td></tr>
+              <tr><td class="name">GIF</td><td class="num">25 MB</td></tr>
+              <tr><td class="name">MP4, WebM video</td><td class="num">64 MB</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section id="s7">
+        <div class="sec-head"><span class="sec-num">07</span><h2>Your wallet stays yours</h2></div>
+        <p>This is the part people worry about most, so here it is precisely.</p>
+        <p>The site <strong>never takes custody</strong>. It never sees a private key or a recovery phrase, it cannot move your coins, and it cannot approve anything on your behalf. Linking a wallet is a signature, which proves ownership and nothing else.</p>
+        <p>There is exactly <strong>one</strong> feature where real money moves, and it is the built-in swap. When you use it, the site builds a transaction and hands it to your wallet. <em>You</em> approve it, in your own wallet, and then your ETH really does leave. Nothing else on the site can spend anything.</p>
+        <div class="note warn">
+          <span class="lbl">Be precise about this</span>
+          <p>&ldquo;Non-custodial&rdquo; means the site cannot move your money on its own. It does not mean money never moves. The swap spends real ETH the moment you approve it in your wallet, and a swap that goes badly is still your loss.</p>
+        </div>
+        <h3>How holdings are checked</h3>
+        <p>Your rewards depend on what you actually hold, so the site never asks your browser. It reads your balance straight from the blockchain on the server, where you cannot edit the answer. A check is only trusted for <strong>26 hours</strong>. After that your bonus pauses until it is re-checked, which happens automatically whenever you open your dashboard.</p>
+        <p>That pause is deliberate. Without it, someone could get verified once, sell everything, and keep the bonus forever.</p>
+        <h3>The wallet tracker</h3>
+        <p>You can save wallet addresses to watch what they do. These are read from public blockchain records, they are private to your account, and they are stored scrambled.</p>
+      </section>
+
+      <!-- 8 -->
+      <section id="s8">
+        <div class="sec-head"><span class="sec-num">08</span><h2>Send Power</h2></div>
+        <p><strong>Send Power</strong> is the points system. Almost everything useful earns some. Points are also experience, so earning them raises your level.</p>
+        <p>Two rules keep it fair. <strong>Nearly every action has a daily cap</strong>, so it cannot be repeated forever for points. And every award is recorded with a unique tag, so the same action can never be paid twice.</p>
+        <p>The exception is worth naming: <strong>payouts for a call's milestones are uncapped</strong>, because they are earned by a coin's real performance rather than by repeating an action. Those are the rows marked &ldquo;no cap&rdquo; below.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>Every action, its base points, and its daily cap</caption>
+            <thead><tr><th>Action</th><th class="num">Points</th><th class="num">Cap per day</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Swap for $SEND or $GWC</td><td class="num">150</td><td class="num">20</td></tr>
+              <tr><td class="name">Connect a wallet</td><td class="num">50</td><td class="num">5</td></tr>
+              <tr><td class="name">Your very first post</td><td class="num">50</td><td class="num">1</td></tr>
+              <tr><td class="name">Make a Send Call</td><td class="num">40</td><td class="num">20</td></tr>
+              <tr><td class="name">Each X a call reaches</td><td class="num">60</td><td class="num">no cap</td></tr>
+              <tr><td class="name">Post on the wall</td><td class="num">25</td><td class="num">40</td></tr>
+              <tr><td class="name">Daily check-in</td><td class="num">20</td><td class="num">1</td></tr>
+              <tr><td class="name">Track a wallet</td><td class="num">15</td><td class="num">10</td></tr>
+              <tr><td class="name">Send It on someone's call</td><td class="num">10</td><td class="num">30</td></tr>
+              <tr><td class="name">Customise your wall</td><td class="num">10</td><td class="num">2</td></tr>
+              <tr><td class="name">Comment</td><td class="num">8</td><td class="num">20</td></tr>
+              <tr><td class="name">Follow someone</td><td class="num">6</td><td class="num">10</td></tr>
+              <tr><td class="name">Watch a token</td><td class="num">5</td><td class="num">30</td></tr>
+              <tr><td class="name">Gain a follower</td><td class="num">5</td><td class="num">30</td></tr>
+              <tr><td class="name">Get upvoted</td><td class="num">4</td><td class="num">100</td></tr>
+              <tr><td class="name">Get a reaction</td><td class="num">3</td><td class="num">60</td></tr>
+              <tr><td class="name">React to a post</td><td class="num">2</td><td class="num">40</td></tr>
+              <tr><td class="name">Vote on a post</td><td class="num">2</td><td class="num">60</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>There is also a hard ceiling of <strong>500,000</strong> points on any single award, no matter how large the multipliers stack up. It is a backstop against a bug or an extreme edge case minting a silly number.</p>
+        <h3>Levels and titles</h3>
+        <p>Levels get harder as you climb, because each level costs a bit more than the last plus an amount that doubles roughly every seven levels. There is no maximum level.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>Titles, and the level that unlocks them</caption>
+            <thead><tr><th class="num">Level</th><th>Title</th><th class="num">Level</th><th>Title</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1</td><td>Fresh Sender</td><td class="num">60</td><td>Send Sensei</td></tr>
+              <tr><td class="num">5</td><td>Coin Curious</td><td class="num">70</td><td>Wealth Wizard</td></tr>
+              <tr><td class="num">10</td><td>Send Apprentice</td><td class="num">80</td><td>Send Lord</td></tr>
+              <tr><td class="num">20</td><td>Rocket Rider</td><td class="num">90</td><td>Send God</td></tr>
+              <tr><td class="num">30</td><td>Send Sergeant</td><td class="num">100</td><td>Biggest Sender</td></tr>
+              <tr><td class="num">40</td><td>Diamond Hands</td><td class="num">110</td><td>Send Deity</td></tr>
+              <tr><td class="num">50</td><td>Rocket Commander</td><td class="num">125</td><td>Eternal Sender</td></tr>
+              <tr><td class="num">&nbsp;</td><td>&nbsp;</td><td class="num">150</td><td>Sender Singularity</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section id="s9">
+        <div class="sec-head"><span class="sec-num">09</span><h2>Multipliers</h2></div>
+        <p>Base points are only the start. Four separate bonuses multiply together, and the result is what you are actually paid.</p>
+        <div class="figure">
+what you earn = base points
+              &times; Holder Boost
+              &times; OG bonus
+              &times; Community bonus
+              &times; Arcade boost
+          <div class="cap">All four multiply. Someone with none of them earns exactly the base amount, because each bonus is 1&times; when it does not apply.</div>
+        </div>
+        <h3>Holder Boost &mdash; owning the coins</h3>
+        <p>The more of the coin supply you hold, the bigger your bonus. Every weighted 1% of supply adds 10. <strong>$GWC counts three times as much as $SEND</strong> for the same percentage.</p>
+        <p>That number is then multiplied by your <strong>Diamond level</strong>, which rewards holding without selling. Selling resets the streak to zero.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>Diamond levels &mdash; earned by holding, lost by selling</caption>
+            <thead><tr><th class="num">Days held</th><th>Name</th><th class="num">Multiplier</th></tr></thead>
+            <tbody>
+              <tr><td class="num">0</td><td>Paper Grip</td><td class="num">&times;1</td></tr>
+              <tr><td class="num">3</td><td>Getting a Grip</td><td class="num">&times;1.6</td></tr>
+              <tr><td class="num">7</td><td>Firm Hands</td><td class="num">&times;2.5</td></tr>
+              <tr><td class="num">14</td><td>Steel Hands</td><td class="num">&times;4</td></tr>
+              <tr><td class="num">30</td><td>Diamond Forming</td><td class="num">&times;6.3</td></tr>
+              <tr><td class="num">60</td><td>Diamond Hands</td><td class="num">&times;10</td></tr>
+              <tr><td class="num">120</td><td>Flawless Diamond</td><td class="num">&times;16</td></tr>
+              <tr><td class="num">240</td><td>Titanium Grip</td><td class="num">&times;25</td></tr>
+              <tr><td class="num">365</td><td>Diamond Legend</td><td class="num">&times;40</td></tr>
+              <tr><td class="num">550</td><td>Unbreakable</td><td class="num">&times;63</td></tr>
+              <tr><td class="num">730</td><td>Immortal Diamond</td><td class="num">&times;100</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>OG &mdash; being early</h3>
+        <p>If you bought <em>both</em> coins within their first month, and you still hold both, you earn <strong>10&times;</strong> on everything. It is checked against the blockchain. Sell out of either coin entirely and the badge is revoked.</p>
+        <h3>Community &mdash; taking part</h3>
+        <p>Being a verified holder in at least one live community is a flat <strong>10&times;</strong>. It is not per community. Joining five communities does not give you fifty times anything.</p>
+        <h3>Arcade &mdash; today's game</h3>
+        <p>Cashing out of Rocket Run gives a bonus of up to <strong>5&times;</strong> lasting 24 hours. Section 12 explains it.</p>
+        <div class="note">
+          <span class="lbl">Why a bonus can switch off</span>
+          <p>Every holding-based bonus depends on a blockchain check no older than 26 hours. If yours goes stale, the bonus drops to 1&times; until it is re-checked. It is not a punishment; it is the only way to be sure you still hold what you claimed.</p>
+        </div>
+      </section>
+
+      <!-- 10 -->
+      <section id="s10">
+        <div class="sec-head"><span class="sec-num">10</span><h2>Send Calls</h2></div>
+        <p>A <strong>Send Call</strong> is a public prediction. You pick a coin, and a permanent scorecard appears on your wall tracking how it does from that moment on. It is a way of putting your reputation where your mouth is.</p>
+        <p><strong>A call can never be edited or deleted.</strong> That is the whole point. A prediction you can delete after it goes wrong is worthless. Its best-ever result is kept forever, even if the coin later dies.</p>
+        <h3>How results are counted</h3>
+        <p>Results are counted in <strong>Xs</strong>. Doubling in price is 1X. Going up 340% is 3.4X. Every whole X pays <span class="mono">60 &times; that X</span>, so hitting 1X pays 60, hitting 3X pays 180, and the ladder stops at 50X.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>Call grades</caption>
+            <thead><tr><th>Grade</th><th>Meaning</th><th class="num">Best result reached</th></tr></thead>
+            <tbody>
+              <tr><td class="name">S</td><td>Legendary</td><td class="num">20X or more</td></tr>
+              <tr><td class="name">A</td><td>Massive</td><td class="num">10X&ndash;20X</td></tr>
+              <tr><td class="name">B</td><td>Big</td><td class="num">5X&ndash;10X</td></tr>
+              <tr><td class="name">C</td><td>Solid</td><td class="num">2X&ndash;5X</td></tr>
+              <tr><td class="name">D</td><td>Small</td><td class="num">0.5X&ndash;2X</td></tr>
+              <tr><td class="name">E</td><td>Flat</td><td class="num">0X&ndash;0.5X</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The scale runs <strong>E to S</strong>. The code also defines an F for &ldquo;underwater&rdquo;, but a Send Call can never receive it: a call's score is measured against its highest point ever reached, which starts at the entry price and only ever moves up. A call that falls below where it started scores E, not F.</p>
+        <h3>Rules that stop cheating</h3>
+        <ul>
+          <li><strong>A coin needs at least $500 of trading liquidity to be callable.</strong> Otherwise someone could create a fake coin, trade with themselves, and farm a huge score.</li>
+          <li><strong>You get 5 calls a day to start</strong>, counted over a rolling 24 hours so midnight is not a reset to abuse. A day where one of your matured calls doubled earns you an extra slot, up to 5. A day where they all flopped costs you one, down to a floor of 1.</li>
+          <li><strong>A call is only judged after 24 hours</strong>, so it gets a fair chance to run.</li>
+          <li><strong>If a coin you called gets rugged</strong> &mdash; its liquidity pulled by the creator &mdash; your daily allowance drops by 2.</li>
+          <li><strong>Burning a full day's allowance inside one hour</strong> is treated as spam, and only counts if your allowance was 3 or more, so a one-call-a-day user is never punished for using it.</li>
+        </ul>
+        <p>Other people can tap <strong>Send It</strong> on your call to join in. They earn from their own entry price, not yours, and it is capped at 30 a day.</p>
+      </section>
+
+      <!-- 11 -->
+      <section id="s11">
+        <div class="sec-head"><span class="sec-num">11</span><h2>Communities</h2></div>
+        <p>Any coin can have a community. You paste its address, and if it has at least $500 of liquidity a page is created, automatically decorated with the coin's logo and links.</p>
+        <p>A community stays in starting-up mode until <strong>10 verified holders</strong> have joined. Only then does it go live.</p>
+        <h3>Proving you belong</h3>
+        <p>To count as verified you must actually hold that community's own coin, checked on the blockchain from a wallet you signed with. This is re-checked in the background. <strong>Sell your coins and you lose your verified status and the 10&times; with it.</strong></p>
+        <p>Two rules stop one person pretending to be a crowd. No more than <strong>2</strong> verified joins may come from the same network address, and joins from the founder's own network do not count toward their own community going live.</p>
+        <p>There is one exception to holding: the wallet that <em>created</em> the coin can start its community without holding any, because the chain already proves who they are.</p>
+        <h3>Community XP and conviction</h3>
+        <p>Communities level up from what their members do inside them. Members separately earn <strong>conviction</strong>, which is personal loyalty to that one community.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>What scores, for the community and for you</caption>
+            <thead><tr><th>Action</th><th class="num">Community XP</th><th class="num">Your conviction</th></tr></thead>
+            <tbody>
+              <tr><td class="name">A new member joins</td><td class="num">200</td><td class="num">40</td></tr>
+              <tr><td class="name">Post on the community wall</td><td class="num">30</td><td class="num">20</td></tr>
+              <tr><td class="name">A Send Call on its coin</td><td class="num">40</td><td class="num">30</td></tr>
+              <tr><td class="name">Comment</td><td class="num">10</td><td class="num">6</td></tr>
+              <tr><td class="name">A post gets a reaction</td><td class="num">4</td><td class="num">2</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Caps stop one loud person carrying a community: a single member can push at most <strong>250</strong> community XP per day into any one community, and earn at most <strong>150</strong> conviction there per day.</p>
+        <h3>The weekly competition</h3>
+        <p>Each week the communities are ranked by points earned that week alone. The week runs Monday to Monday in UTC and every score resets to zero at the rollover. All-time community level is untouched.</p>
+        <p>The ranking measures <strong>activity only</strong>. Price, market value and holder count count for nothing. There is no prize.</p>
+      </section>
+
+      <!-- 12 -->
+      <section id="s12">
+        <div class="sec-head"><span class="sec-num">12</span><h2>Rocket Run</h2></div>
+        <p>A free game, once per day. A rocket climbs and a number rises with it. You tap to cash out whenever you like. At some hidden moment the rocket explodes, and if you have not cashed out by then you get nothing.</p>
+        <p>Nothing is at stake. There is nothing to buy, no way to pay to play again, and no way to lose anything you had. The only thing you can win is a temporary points bonus.</p>
+        <div class="figure">
+multiplier after s seconds  =  e ^ (0.06 &times; s)
+
+   10 seconds  &rarr;  1.8&times;
+   30 seconds  &rarr;  6&times;
+   60 seconds  &rarr;  36&times;
+
+boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
+
+   cash out at  2&times;  &rarr;  1.25&times; boost
+   cash out at  9&times;  &rarr;  3&times;    boost
+   cash out at 17&times;  &rarr;  5&times;    boost (the cap)
+          <div class="cap">The climb starts slow and accelerates. The reward for waiting is deliberately gentle, so waiting longer is mostly extra risk for very little extra bonus.</div>
+        </div>
+        <h3>Why you cannot cheat, and neither can the site</h3>
+        <p>This is the part worth understanding. When you launch, the server rolls the explosion point <em>immediately</em> and writes it down before you see anything. It is never sent to your browser until the round is over. Your browser is only drawing an animation; it genuinely does not know the answer.</p>
+        <p>Because the number was fixed at launch and stored, the site cannot move it either when it sees you about to win. And because the multiplier is calculated from the server's own clock, changing your computer's clock does nothing.</p>
+        <div class="note">
+          <span class="lbl">The honest limits of that</span>
+          <p>This makes cheating impossible <em>for players</em> and stops the outcome being changed mid-round. It is not the same as being mathematically provable to an outsider: you are trusting that the server rolled fairly. Since nothing is staked, there is nothing to win by cheating &mdash; but it is worth stating plainly rather than calling it provably fair.</p>
+        </div>
+        <p>Other rules: the explosion point is capped at 50&times;, a round left abandoned expires after 5 minutes and counts as a loss, and the day rolls over at midnight UTC.</p>
+        <h3>The daily check-in</h3>
+        <p>Showing up is worth <strong>20</strong> points, once per day, claimed by tapping a button on your own wall. It used to happen silently on page load. Making it a button means it is something you did, not something that happened to you.</p>
+      </section>
+
+      <!-- 13 -->
+      <section id="s13">
+        <div class="sec-head"><span class="sec-num">13</span><h2>The risk scanner</h2></div>
+        <p>New coins appear on Robinhood Chain constantly, and a lot of them are traps. The <strong>New Pairs Radar</strong> watches them appear and puts a plain-English warning label on the dangerous ones.</p>
+        <p>Every coin starts at <strong>100 out of 100</strong>. Each warning sign that trips subtracts points.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>The warning signs and what each one costs</caption>
+            <thead><tr><th>Warning</th><th>What it means</th><th class="num">Cost</th></tr></thead>
+            <tbody>
+              <tr><td class="name sev-crit">Honeypot risk</td><td>People are buying but almost nobody can sell</td><td class="num">&minus;45</td></tr>
+              <tr><td class="name sev-crit">Dumping</td><td>Price fell more than 50% in an hour</td><td class="num">&minus;32</td></tr>
+              <tr><td class="name sev-high">Serial deployer</td><td>Made by a wallet that launches many coins that die</td><td class="num">&minus;26</td></tr>
+              <tr><td class="name sev-high">Very low liquidity</td><td>Barely any money pooled &mdash; easy to rug, hard to exit</td><td class="num">&minus;26</td></tr>
+              <tr><td class="name sev-high">Whale-heavy</td><td>One wallet holds a huge share and can dump on you</td><td class="num">&minus;20</td></tr>
+              <tr><td class="name sev-med">Not verified</td><td>The code is not published, so nobody can audit it</td><td class="num">&minus;15</td></tr>
+              <tr><td class="name sev-med">Very few holders</td><td>A handful of wallets control the price</td><td class="num">&minus;15</td></tr>
+              <tr><td class="name sev-med">Heavy selling</td><td>Sells outnumber buys</td><td class="num">&minus;12</td></tr>
+              <tr><td class="name sev-med">No volume</td><td>Almost nothing is trading</td><td class="num">&minus;12</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>The score sorts coins into bands, and the radar has three views: <strong>Best Runners</strong> for biggest gainers, the <strong>Hot Feed</strong> for the highest-scoring new coins one at a time, and the <strong>DEX List</strong> with every filter. A coin whose name and symbol cannot be read from the chain is hidden from all three, because a coin nobody can identify is not something to show anyone.</p>
+        <div class="note crit">
+          <span class="lbl">An important weakness, stated openly</span>
+          <p>A warning can only trip on data the site could actually read. If a coin is so new that its liquidity, holder and verification data have not been indexed yet, <strong>nothing trips, and it scores 100 out of 100</strong> &mdash; the same score as a coin that genuinely passed every check. A perfect score can mean &ldquo;all clear&rdquo; or it can mean &ldquo;we could not see anything&rdquo;, and today the display does not distinguish them. Treat a 100 on a very fresh coin as unknown, not as safe.</p>
+        </div>
+        <p>The data comes from three public sources: the chain's own node, a block explorer, and a price service. The score is a set of quick heuristics on public data. It is <strong>not</strong> an audit, not a guarantee, and not advice.</p>
+      </section>
+
+      <!-- 14 -->
+      <section id="s14">
+        <div class="sec-head"><span class="sec-num">14</span><h2>Posting and muting</h2></div>
+        <p>There is a shared feed called the <strong>Send Wall</strong>, and everyone gets a public page of their own. You can post text, images, GIFs and video, comment, react, vote, follow people and search for them.</p>
+        <p>If you paste a coin's address into a post, the site quietly replaces it with the coin's ticker, which anyone can tap to see its full details. Up to three addresses per post are converted this way.</p>
+        <h3>Muting</h3>
+        <p>On anyone's public profile there is a <strong>Moderation</strong> menu with a mute option. Muting is one-sided and private. Their posts and comments disappear from your feeds. Where they cannot be removed entirely, such as inside a list of people on a call, they appear greyed with a muted marker you can tap to unmute.</p>
+        <h3>What is public and what is not</h3>
+        <div class="tablewrap">
+          <table>
+            <caption>Visibility</caption>
+            <thead><tr><th>Public to everyone</th><th>Private to you</th></tr></thead>
+            <tbody>
+              <tr><td>Your username and profile</td><td>Your email address</td></tr>
+              <tr><td>Your posts, comments, reactions</td><td>Your wallet balances</td></tr>
+              <tr><td>Your Send Calls and their results</td><td>The wallets you track</td></tr>
+              <tr><td>Your level and points</td><td>Your two-factor secret</td></tr>
+              <tr><td>Your Diamond level</td><td>Who you muted</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Note that your <em>Diamond level</em> is public but the holdings behind it are not. Others see that you have held for a long time without seeing how much you own.</p>
+      </section>
+
+      <!-- 15 -->
+      <section id="s15">
+        <div class="sec-head"><span class="sec-num">15</span><h2>The bot catcher</h2></div>
+        <p>A points game invites scripts. The site watches how fast accounts create things and whether they post the same thing repeatedly. Accounts acting faster than a human is capable of are put into <strong>read-only</strong> mode.</p>
+        <p>Read-only is not a ban. You can still browse everything, check in daily, connect a wallet, buy and hold coins, and keep earning from your Holder Boost. What stops is creating things: posting, commenting, reacting, voting, following, calling, and customising.</p>
+        <p>The punishment escalates: <strong>24 hours</strong> the first time, <strong>one week</strong> if it happens again, and permanent after that. The thresholds are set far above ordinary enthusiastic use.</p>
+        <div class="note warn">
+          <span class="lbl">One design choice you should judge for yourself</span>
+          <p>A restriction can be lifted early by buying and holding $SEND: <strong>$25 worth per 24 hours</strong> of the restriction, or a flat <strong>$1,000</strong> to clear a permanent one, which must then be held for 40 days. The money goes into the coin, not to the site, and the coins stay yours. It is still a mechanic where spending money removes a penalty, and anyone reading this should weigh that for themselves rather than take our framing for it.</p>
+        </div>
+      </section>
+
+      <!-- 16 -->
+      <section id="s16">
+        <div class="sec-head"><span class="sec-num">16</span><h2>How it is built</h2></div>
+        <p>The site is deliberately simple. There is no framework, no build step and no bundler. It is plain JavaScript that runs in the browser exactly as written, and a single Node.js program on the server.</p>
+        <ul>
+          <li><strong>One server file</strong> holds every rule. Having one source of truth means the number you see and the number you are paid cannot drift apart.</li>
+          <li><strong>SQLite</strong> stores everything in a single file on disk.</li>
+          <li><strong>No JavaScript is written inline</strong> in any page, which is what allows the strict security policy in section 6.</li>
+          <li><strong>Only two outside code libraries</strong> are used: one for checking wallet signatures, one for drawing QR codes.</li>
+        </ul>
+        <p>The advantage of this style is that anyone can read it. There is no compilation between what is written and what runs, so the code in the repository is the code in your browser. For a project asking people to trust it, that is worth more than convenience.</p>
+      </section>
+
+      <!-- 17 -->
+      <section id="s17">
+        <div class="sec-head"><span class="sec-num">17</span><h2>Honest limits</h2></div>
+        <p>A white paper that only lists strengths is an advert. These are the real limits.</p>
+        <ul>
+          <li><strong>A perfect risk score can mean &ldquo;no data&rdquo;.</strong> Described in section 13. It is the most important caveat on the page.</li>
+          <li><strong>The site depends on outside services.</strong> Prices, holder counts and contract details come from a price service and a block explorer. If those are wrong or offline, the site shows less, and it says so rather than inventing numbers.</li>
+          <li><strong>Encryption protects a stolen database, not a stolen server.</strong> If an attacker took the key as well as the data, the scrambling would not save you.</li>
+          <li><strong>Rocket Run is fair but not provably fair.</strong> You are trusting the server's roll. Nothing is staked, so nothing is lost either way.</li>
+          <li><strong>Points are not money.</strong> They cannot be cashed out, sold or transferred, and they never will be.</li>
+          <li><strong>Nothing here is advice.</strong> The site shows what the blockchain says. What you do about it is yours to decide, and most new coins go to zero.</li>
+        </ul>
+        <div class="note">
+          <span class="lbl">The point of all this</span>
+          <p>Crypto is full of sites that promise safety and deliver marketing. This one tries the opposite: state the rules exactly, show the real numbers, admit what it cannot see, and never tell you what to buy. Whether that is enough is for you to judge &mdash; which is the whole idea.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <p><strong>JustSendIt White Paper, version 1.</strong> Every number in this document was read directly from the server source rather than from marketing copy. Where the documentation and the code disagreed, the code was treated as correct.</p>
+    <p>JustSendIt is not affiliated with, endorsed by, or connected to Robinhood Markets, Inc. Robinhood Chain is the name of a public blockchain. Nothing here is financial advice. Points, levels, badges and games are entertainment and have no monetary value. Most new tokens lose all their value.</p>
+  </footer>
+
+</div>

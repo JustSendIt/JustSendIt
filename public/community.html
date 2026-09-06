@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Community — $Send · Just Send It 🏘️</title>
+<meta name="description" content="A token community on $Send — its wall, its members, its exponentially-levelling community level, and your member level. Go live at 10 members, earn 10× Send Power. Robinhood Chain. Entertainment only.">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#8ee000">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:title" content="A token community on $Send 🏘️">
+<meta property="og:description" content="Its wall, its members, its community level, and your conviction. Go live at 10 members, earn 10× Send Power. Entertainment only.">
+<meta property="og:image" content="https://justsendit.example/assets/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:image" content="https://justsendit.example/assets/logo.png">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+</head>
+<body>
+<a class="skip-link" href="#comm-feed">Skip to community wall</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a class="active" href="communities.html" aria-current="page">Communities</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<main id="main" style="padding:0.5rem 1.25rem 4rem;">
+  <div class="wrap" style="max-width:680px;">
+    <p style="margin:0 0 0.6rem;"><a class="linklike" href="communities.html">← All communities</a></p>
+    <header class="comm-hero card" id="comm-hero"><p class="modal-note" style="text-align:center; padding:1.5rem;">Loading community… 🏘️</p></header>
+
+    <section class="comm-members card" id="comm-members" aria-labelledby="comm-members-h" hidden>
+      <h2 class="comm-members-h" id="comm-members-h">👥 Members <span class="comm-members-sub" id="comm-members-sub"></span></h2>
+      <p class="modal-note comm-members-note">Ranked by <b>community level</b> — earned by posting, reacting &amp; commenting here. Every member helps the community level up. 💎</p>
+      <ol class="comm-members-list" id="comm-members-list" aria-label="Community members ranked by community level"></ol>
+    </section>
+
+    <section class="comm-wall" id="comm-wall" hidden>
+      <div class="composer card" id="comm-composer" hidden>
+        <div class="composer-id"><span class="composer-ava" id="comm-c-ava" aria-hidden="true">🚀</span><span class="composer-handle">@<span id="comm-c-handle"></span></span></div>
+        <label for="comm-c-text" class="sr-only">Post to the community wall</label>
+        <textarea id="comm-c-text" maxlength="500" placeholder="Post to the community 🏘️ Paste a contract address → it becomes a clickable $TICKER"></textarea>
+        <div id="comm-c-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
+        <div class="composer-bar">
+          <label class="file-label">📷 Photo / GIF / Video<input type="file" id="comm-c-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
+          <button class="btn btn-primary btn-sm" id="comm-c-send">Post 🚀</button>
+          <span class="hint" id="comm-c-count" aria-hidden="true">500</span>
+        </div>
+        <p class="modal-note" id="comm-c-status" role="status" aria-live="polite"></p>
+      </div>
+      <div class="comm-wall-locked" id="comm-wall-locked" hidden></div>
+      <div class="wall-feed" id="comm-feed" role="feed" aria-label="Community posts"></div>
+      <div class="empty-wall" id="comm-empty" style="display:none;"><div style="font-size:3rem;" aria-hidden="true">🦗</div><p>No posts yet — be the first to send it here.</p></div>
+      <div style="text-align:center; margin-top:1.2rem;"><button class="btn btn-ghost btn-sm" id="comm-more" hidden>Load more ⬇️</button></div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    A community is a fan group, not an endorsement of any token — most tokens go to zero, and nothing here is financial advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="newpairs.js"></script>
+<script src="tokenmodal.js"></script>
+<script src="community.js"></script>
+<script src="notifications.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

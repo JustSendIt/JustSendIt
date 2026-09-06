@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /profile.html
+Disallow: /watchlist.html
+Disallow: /api/
+
+Sitemap: https://justsendit.example/sitemap.xml

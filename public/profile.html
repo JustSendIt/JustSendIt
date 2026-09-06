@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Profile — $Send 👤</title>
+<meta name="description" content="Your $Send profile: pro-grade private wallet tracker, unique handle, customizable public wall, 2FA security, and site preferences.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="communities.html">Communities</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<main id="main">
+
+  <!-- signed out -->
+  <section id="signedout" hidden>
+    <div class="wrap" style="text-align:center; max-width:560px;">
+      <h1 class="section-title display">Your Send Station 👤</h1>
+      <p class="section-sub">One account gets you a pro-grade <b>private</b> wallet tracker, a unique handle, a fully customizable public Send Wall, and optional 2FA.</p>
+      <button class="btn btn-primary" id="signedout-cta">Sign In / Create Account 🚀</button>
+      <p class="pnl-note" style="margin-top:1rem;">Connect a wallet (free signature, no transaction) or use email — sign in later with your email <b>or</b> your unique @handle.</p>
+    </div>
+  </section>
+
+  <!-- signed in -->
+  <section id="signedin" hidden style="padding-top:1.6rem;">
+    <div class="wrap">
+
+      <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1.2rem; flex-wrap:wrap;">
+        <span id="pf-avatar" style="font-size:2.2rem;" aria-hidden="true">🚀</span>
+        <div>
+          <h1 style="font-weight:800; font-size:1.2rem; margin:0;">@<span id="pf-username-show"></span></h1>
+          <a id="pf-wall-link" class="btn btn-primary btn-sm" href="#" style="margin-top:0.4rem;">🧱 View My Public Wall →</a>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="signout-btn" style="margin-left:auto;">Sign Out 👋</button>
+      </div>
+
+      <div id="claim-banner" class="warn-box" style="margin:0 0 1.5rem;" hidden>
+        <b>Claim your handle! 🏷️</b> You got a temporary username — pick your real one in <b>Settings → Account</b> below. Usernames are unique: first come, first served.
+      </div>
+
+      <!-- ===== GAMIFICATION DASHBOARD: the main dashboard ===== -->
+      <h2 class="sr-only">Your Send Power</h2>
+      <div class="card gamify-card" id="gamify-dash" aria-label="Your Send progress dashboard" style="margin-bottom:1.6rem;"></div>
+
+      <!-- ===== CONNECTED WALLET ANALYTICS ===== -->
+      <div class="card" id="connected-wallet" style="margin-bottom:1.6rem;">
+        <h2 class="display" style="color:var(--green-bright); font-size:1.5rem; margin-bottom:0.3rem;">My Connected Wallet 👛</h2>
+        <p class="privacy-chip" style="margin-bottom:0.2rem;">🔒 Read-only · we can never move your funds</p>
+        <div id="cw-selector" style="margin:0.6rem 0;"></div>
+        <div id="cw-body"></div>
+      </div>
+
+      <!-- ===== TRACKER: now its own page ===== -->
+      <div class="card gold-card" style="margin-bottom:1.6rem;">
+        <h2 class="display" style="color:var(--gold); font-size:1.7rem; margin-bottom:0.4rem;">Wallet Tracker 💼</h2>
+        <p class="privacy-chip" style="margin-bottom:0.8rem;">🔒 Private — only you can see it</p>
+        <p class="modal-note" style="margin:0 0 0.9rem;">Follow any wallet on Robinhood Chain — holdings, trades, cost basis and PNL, read straight from the chain in your browser and cached so it opens instantly next time. It has its own page now (also in your account menu ▾).</p>
+        <a class="btn btn-gold" href="/tracker.html">Open the Wallet Tracker 💼 →</a>
+      </div>
+
+      <!-- ===== SETTINGS: collapsible ===== -->
+      <h2 class="display" style="color:var(--green-bright); font-size:1.3rem; margin-bottom:0.8rem;">Settings ⚙️</h2>
+      <div class="settings-group">
+
+        <details class="setting-card" id="sec-account">
+          <summary>🪪 Account</summary>
+          <div class="setting-body">
+            <label class="f-label">Avatar emoji</label>
+            <div id="pf-avatar-pick" role="radiogroup" aria-label="Choose your avatar emoji" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:0.6rem;"></div>
+            <label class="f-label" for="pf-username">Username <span style="font-weight:400;">(your unique public ID — also works for sign-in)</span></label>
+            <input class="addr-input" id="pf-username" maxlength="24" spellcheck="false" autocomplete="username">
+            <p class="modal-note" id="pf-uname-status" aria-live="polite" style="margin:0.3rem 0;"></p>
+            <label class="f-label" for="pf-bio">Bio <span style="font-weight:400;">(shows on your public wall)</span></label>
+            <input class="addr-input" id="pf-bio" maxlength="200" placeholder="here to send it 🚀">
+            <label class="f-label" for="pf-twitter">🐦 X / Twitter <span style="font-weight:400;">(handle, no @ — links from your public wall)</span></label>
+            <input class="addr-input" id="pf-twitter" maxlength="30" spellcheck="false" autocomplete="off" placeholder="yourhandle">
+            <label class="f-label" for="pf-instagram">📸 Instagram <span style="font-weight:400;">(handle, no @)</span></label>
+            <input class="addr-input" id="pf-instagram" maxlength="30" spellcheck="false" autocomplete="off" placeholder="yourhandle">
+            <button class="btn btn-primary btn-sm" id="save-profile-btn" style="margin-top:0.9rem;">Save Changes 💾</button>
+          </div>
+        </details>
+
+        <details class="setting-card" id="sec-security">
+          <summary>🔐 Security</summary>
+          <div class="setting-body">
+            <div class="f-label" style="margin-top:0;">Sign-in methods</div>
+            <div id="pf-methods" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin:0.4rem 0 0.7rem;"></div>
+            <button class="btn btn-ghost btn-sm" id="link-wallet-btn">Link a wallet 🔗</button>
+
+            <div style="margin-top:1.1rem; border-top:1px solid var(--ink-4); padding-top:0.9rem;">
+              <div class="f-label" style="margin-top:0;">Two-factor authentication <span id="twofa-state" class="privacy-chip" style="margin-left:0.4rem;">off</span></div>
+              <div id="twofa-off">
+                <p class="modal-note">Add a second lock on your account. Works with any authenticator app on your phone (Google Authenticator, Authy, 1Password…), or use a linked wallet signature.</p>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+                  <button class="btn btn-primary btn-sm" id="totp-start-btn">📱 Set up phone app</button>
+                  <button class="btn btn-ghost btn-sm" id="wallet-2fa-btn">🦊 Use wallet as 2FA</button>
+                  <button class="btn btn-ghost btn-sm" id="pw-2fa-btn" hidden>🔑 Use my password as 2FA</button>
+                </div>
+                <div id="pw2fa-setup" hidden style="margin-top:0.9rem; max-width:420px;">
+                  <p class="modal-note">With password-2FA on, signing in with your wallet also asks for your account password — two different things a thief would need.</p>
+                  <label class="f-label" for="pw2fa-pass">Confirm your account password</label>
+                  <div style="display:flex; gap:0.5rem;">
+                    <input class="addr-input" id="pw2fa-pass" type="password" autocomplete="current-password" style="margin:0;" placeholder="••••••••">
+                    <button class="btn btn-primary btn-sm" id="pw2fa-confirm-btn">Enable ✅</button>
+                  </div>
+                </div>
+                <div id="totp-setup" hidden style="margin-top:0.9rem; text-align:center;">
+                  <img id="totp-qr" alt="QR code — scan with your authenticator app" style="border-radius:12px; border:4px solid #fff;">
+                  <p class="modal-note">Scan with your authenticator app, or enter this key manually:<br><code id="totp-secret" style="color:var(--green-bright); word-break:break-all;"></code></p>
+                  <label class="f-label" for="totp-confirm" style="text-align:left;">Enter the 6-digit code to turn it on</label>
+                  <div style="display:flex; gap:0.5rem;">
+                    <input class="addr-input" id="totp-confirm" style="margin:0; text-align:center; letter-spacing:0.3em;" inputmode="numeric" maxlength="6" placeholder="123456">
+                    <button class="btn btn-primary btn-sm" id="totp-confirm-btn">Enable ✅</button>
+                  </div>
+                </div>
+              </div>
+              <div id="twofa-on" hidden>
+                <p class="modal-note">✅ Two-factor is protecting this account (<span id="twofa-kind"></span>).</p>
+                <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                  <input class="addr-input" id="twofa-disable-code" style="margin:0; width:130px; text-align:center;" inputmode="numeric" maxlength="6" placeholder="code" aria-label="Authenticator code">
+                  <input class="addr-input" id="twofa-disable-pw" type="password" autocomplete="current-password" style="margin:0; width:180px;" placeholder="account password" aria-label="Account password" hidden>
+                  <button class="btn btn-ghost btn-sm" id="twofa-disable-btn">Turn off 2FA</button>
+                </div>
+                <p class="modal-note">Turning it off always needs the current factor — a code, your password, or a wallet signature.</p>
+              </div>
+            </div>
+
+            <div id="add-email-block" hidden style="margin-top:1.1rem; border-top:1px solid var(--ink-4); padding-top:0.9rem;">
+              <div class="f-label" style="margin-top:0;">Add an email + password</div>
+              <p class="modal-note">You signed in with a wallet. Adding an email + password gives you a second way in, lets you disconnect the wallet without locking yourself out, and unlocks <b>password as two-factor</b> for wallet sign-ins. Stored encrypted; we never email you unless you ask.</p>
+              <form id="add-email-form" autocomplete="off" style="display:grid; gap:0.5rem; max-width:420px;">
+                <label class="f-label" for="ae-email" style="margin:0;">Email</label>
+                <input class="addr-input" id="ae-email" type="email" autocomplete="email" style="margin:0;" placeholder="you@example.com" required>
+                <label class="f-label" for="ae-pw" style="margin:0;">Password (8+ characters)</label>
+                <input class="addr-input" id="ae-pw" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
+                <label class="f-label" for="ae-pw2" style="margin:0;">Confirm password</label>
+                <input class="addr-input" id="ae-pw2" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
+                <div id="ae-factor" hidden><label class="f-label" for="ae-code" style="margin:0;">Your current authenticator code</label><input class="addr-input" id="ae-code" inputmode="numeric" maxlength="6" style="margin:0;" placeholder="123456"></div>
+                <button class="btn btn-primary btn-sm" type="submit" id="ae-submit">Add email + password 🔐</button>
+                <p class="modal-note" id="ae-status" role="status" aria-live="polite" style="margin:0;"></p>
+              </form>
+            </div>
+          </div>
+        </details>
+
+        <details class="setting-card" id="sec-wall">
+          <summary>🎨 My Wall Style</summary>
+          <div class="setting-body">
+            <p class="modal-note" style="margin-top:0;">Make your public wall yours — colors and images, no code needed.</p>
+            <label class="f-label">Accent color</label>
+            <div class="color-swatches" id="accent-swatches" role="radiogroup" aria-label="Accent color"></div>
+            <label class="f-label">Background tint</label>
+            <div class="color-swatches" id="bg-swatches" role="radiogroup" aria-label="Background color"></div>
+            <label class="f-label">Profile photo <span style="font-weight:400;">(replaces your emoji on your wall)</span></label>
+            <div class="img-slot" id="slot-avatar"></div>
+            <label class="f-label">Header image <span style="font-weight:400;">(banner across the top of your wall)</span></label>
+            <div class="img-slot" id="slot-header"></div>
+            <label class="f-label">Background image <span style="font-weight:400;">(behind your whole wall)</span></label>
+            <div class="img-slot" id="slot-background"></div>
+            <p class="modal-note">JPEG/PNG/WebP up to ~3MB. Changes go live on <a id="pf-wall-link2" href="#">your wall ↗</a> instantly.</p>
+          </div>
+        </details>
+
+        <details class="setting-card" id="sec-site">
+          <summary>🖥️ Site Preferences</summary>
+          <div class="setting-body">
+            <label class="f-label" style="margin-top:0;">Site color <span style="font-weight:400;">(re-themes the whole site, just for you)</span></label>
+            <div class="color-swatches" id="site-accent-swatches" role="radiogroup" aria-label="Site accent color"></div>
+            <div class="pref-row">
+              <div><div class="p-label">Confetti &amp; effects 🎉</div><div class="p-sub">bursts on clicks, reactions, and buys</div></div>
+              <button class="switch" id="pref-confetti" role="switch" aria-checked="true" aria-label="Toggle confetti effects"></button>
+            </div>
+            <div class="pref-row">
+              <div><div class="p-label">Ticker tape 📈</div><div class="p-sub">the scrolling banner on the homepage</div></div>
+              <button class="switch" id="pref-ticker" role="switch" aria-checked="true" aria-label="Toggle ticker tape"></button>
+            </div>
+            <div class="pref-row">
+              <div><div class="p-label">Resume music between pages 🎵</div><div class="p-sub">keep the theme playing as you browse</div></div>
+              <button class="switch" id="pref-music" role="switch" aria-checked="true" aria-label="Toggle music auto-resume"></button>
+            </div>
+            <p class="modal-note">Preferences save to your account and follow you to any device you sign in on.</p>
+          </div>
+        </details>
+
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    PNL figures are best-effort estimates from public on-chain data — not financial or tax advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+   <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="wallet.js"></script>
+<script src="chain.js"></script>
+<script src="tracker.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="profile.js"></script>
+<script src="gamify.js"></script>
+<script src="notifications.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

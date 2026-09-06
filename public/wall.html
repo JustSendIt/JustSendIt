@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Send Wall 🧱 — Post Your Sends</title>
+<meta name="description" content="The Send Wall — the $Send &amp; $GWC meme community feed on Robinhood Chain. Post your sends, crypto memes, gains and pain, make Send Calls on tokens, react, comment, and follow other senders. Entertainment only, not financial advice.">
+<meta name="keywords" content="Send Wall, crypto community, memecoin community, crypto memes, meme coin feed, $Send, GWC, Robinhood Chain, Send Calls, crypto social, memecoin, cryptocurrency">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#8ee000">
+<link rel="canonical" href="https://justsendit.example/wall.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:url" content="https://justsendit.example/wall.html">
+<meta property="og:title" content="The Send Wall 🧱 — the $Send meme community feed">
+<meta property="og:description" content="Post your sends, memes, gains and pain. React, comment, follow, and make Send Calls on tokens. The $Send / $GWC community on Robinhood Chain. Entertainment only.">
+<meta property="og:image" content="https://justsendit.example/assets/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:title" content="The Send Wall 🧱 — $Send community feed">
+<meta name="twitter:description" content="Post your sends, memes and gains. React, comment, follow, and make Send Calls. Entertainment only.">
+<meta name="twitter:image" content="https://justsendit.example/assets/logo.png">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to feed</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="communities.html">Communities</a>
+    <a class="active" href="wall.html" aria-current="page">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="profile-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.4rem;">The Send Wall 🧱</h1>
+  <p class="section-sub" style="margin-bottom:0;">The public feed — everyone's sends, live. Sign in to post, react, and talk your talk.</p>
+  <a class="btn btn-primary btn-sm my-wall-btn" id="my-wall-link" href="/profile.html" hidden>🧱 Go to My Send Wall →</a>
+</header>
+
+<main id="main" style="padding:1.2rem 1.25rem 4rem;">
+  <div class="wrap">
+
+    <div class="feed-tabs" role="tablist" aria-label="Feed filter">
+      <button class="feed-tab" role="tab" data-feed="all" aria-selected="true">🌍 Everyone</button>
+      <button class="feed-tab" role="tab" data-feed="following" id="tab-following" aria-selected="false">⭐ Following</button>
+    </div>
+
+    <div class="feed-sort" role="group" aria-label="Sort posts">
+      <button class="sort-btn is-on" type="button" data-sort="top" aria-pressed="true">🔝 Top</button>
+      <button class="sort-btn" type="button" data-sort="new" aria-pressed="false">🕒 New</button>
+      <p class="sort-caption" id="sort-caption" role="status" aria-live="polite">Ranked by community upvotes — top sends float up. 🔥🚀 are just for vibes.</p>
+    </div>
+    <div class="resort-nudge" id="resort-nudge" hidden>
+      <button class="btn btn-ghost btn-sm" type="button" id="resort-btn">↕ Ranking changed — refresh</button>
+    </div>
+
+    <div class="composer card" id="composer-card">
+      <div id="composer-signedout" style="text-align:center; padding:0.6rem 0;">
+        <p style="color:var(--text-dim); margin-bottom:0.9rem;">You're seeing the live feed. Want in on it?</p>
+        <button class="btn btn-primary" id="signin-cta">Sign In To Post 🚀</button>
+      </div>
+      <div id="composer-signedin" hidden>
+        <div style="display:flex; gap:0.7rem; margin-bottom:0.7rem; align-items:center;">
+          <span style="font-size:1.6rem;" id="my-avatar" aria-hidden="true">🚀</span>
+          <span style="font-weight:800;">@<span id="my-handle"></span></span>
+        </div>
+        <label for="post-text" class="f-label" style="position:absolute; left:-9999px;">Write a post</label>
+        <textarea id="post-text" maxlength="500" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
+        <div id="img-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
+        <div class="composer-bar">
+          <label class="file-label">📷 Photo / GIF / Video<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
+          <button class="btn btn-primary btn-sm" id="publish-btn">SEND IT 🚀</button>
+          <span class="hint" id="char-count" aria-hidden="true">500</span>
+        </div>
+        <p class="hint" id="wall-c-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
+      </div>
+    </div>
+
+    <div class="wall-feed" id="feed" role="feed" aria-label="Send Wall posts"></div>
+    <div class="empty-wall" id="empty" style="display:none;">
+      <div style="font-size:3rem;" aria-hidden="true">🦗</div>
+      <p>Nothing on the wall yet. Be the first to send it.</p>
+    </div>
+    <div style="text-align:center; margin-top:1.4rem;">
+      <button class="btn btn-ghost btn-sm" id="load-more" hidden>Load more ⬇️</button>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    Posts are user content — keep it fun, keep it legal, no financial advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+   <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="newpairs.js"></script>
+<script src="tokenmodal.js"></script>
+<script src="sendcall.js"></script>
+<script src="wall.js"></script>
+<script src="notifications.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

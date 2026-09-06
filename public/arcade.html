@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcade 🕹️ — $Send</title>
+<meta name="description" content="Rocket Run — the $Send arcade. One free flight a day: ride the multiplier and cash out for a temporary Send Power boost. Free bonus game, nothing at stake, entertainment only.">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="arcade.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the game</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="communities.html">Communities</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a class="active" href="arcade.html" aria-current="page">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+  </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="np-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">Arcade 🕹️</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;"><b>Rocket Run</b> — one free flight a day. Ride the multiplier as high as your nerve holds, then cash out for a 24-hour Send&nbsp;Power boost.</p>
+  <p class="np-hero-warn">🎮 <b>A free daily bonus game.</b> Nothing is at stake, nothing is for sale and no money is involved — the only thing you can come away with is a temporary Send&nbsp;Power boost. Entertainment only.</p>
+</header>
+
+<main id="main" tabindex="-1">
+  <div class="wrap arc-wrap">
+
+    <!-- ===== the game ===== -->
+    <section class="card arc-game" aria-labelledby="arc-game-h">
+      <h2 class="arc-game-h" id="arc-game-h">🚀 Rocket Run</h2>
+
+      <!-- status badges: boost active / today's flight -->
+      <div class="arc-badges" id="arc-badges"></div>
+
+      <!-- the stage: canvas (or a static scene under prefers-reduced-motion) + the big readout -->
+      <div class="arc-stage" id="arc-stage">
+        <canvas class="arc-canvas" id="arc-canvas" aria-hidden="true"></canvas>
+        <div class="arc-static" id="arc-static" aria-hidden="true" hidden>
+          <span class="arc-static-ico" id="arc-static-ico">🚀</span>
+        </div>
+        <div class="arc-overlay">
+          <p class="arc-x" id="arc-x" aria-live="off">1.00×</p>
+          <p class="arc-sub" id="arc-sub">Ready for takeoff</p>
+        </div>
+      </div>
+
+      <!-- controls -->
+      <div class="arc-controls">
+        <button class="btn arc-btn arc-btn--go" id="arc-btn" type="button" hidden>🚀 Launch</button>
+        <p class="arc-hint hint" id="arc-hint"></p>
+      </div>
+
+      <!-- state messaging (sign in / already flown / outcome / errors) -->
+      <div class="arc-panel" id="arc-panel"></div>
+
+      <!-- sparse polite announcements: whole multipliers, then the outcome -->
+      <p class="sr-only" id="arc-live" role="status" aria-live="polite" aria-atomic="true"></p>
+    </section>
+
+    <!-- ===== how it works ===== -->
+    <section class="arc-info" aria-label="How Rocket Run works">
+      <div class="arc-info-grid">
+
+        <div class="card arc-how">
+          <h2 class="arc-h" id="arc-how-h">📖 How it works</h2>
+          <ol class="arc-steps">
+            <li><b>Launch.</b> The rocket takes off at <b>1.00×</b> and the multiplier climbs — slowly at first, then faster and faster.</li>
+            <li><b>Cash out whenever you like.</b> Whatever the multiplier reads when you tap becomes your <b>Send Power boost</b> for the next 24 hours.</li>
+            <li><b>Or leave it too long.</b> Every flight has a hidden crash point. Tap after it, and the flight is over with no boost — that's the whole game.</li>
+          </ol>
+          <p class="arc-note"><b>Nobody knows the crash point — not even this page.</b> It's rolled on the server the moment you launch and stays there until your flight ends, so it can't be read, guessed or pre-computed by your browser. You only find out where it was when you tap.</p>
+          <p class="arc-note">One flight per day (resets at <b>00:00 UTC</b>). Your boost multiplies the Send Power you earn from posting, reacting and everything else, and it <b>stacks</b> on your Holder, OG and community multipliers.</p>
+          <p class="arc-note arc-note-honest">🎮 This is a free bonus game. There is <b>nothing to buy, nothing to put in and nothing to lose</b> — a flight that ends early just means no boost today. Not gambling, not an investment, no money involved. Entertainment only.</p>
+        </div>
+
+        <div class="card arc-curve-card">
+          <h2 class="arc-h" id="arc-curve-h">📈 The boost curve</h2>
+          <p class="arc-note">The multiplier is <b>e<sup>0.06 × seconds</sup></b> — a pure function of how long you stay up. Your boost is <b>1 + (multiplier − 1) ÷ 4</b>, capped.</p>
+          <div class="arc-tablewrap">
+            <table class="arc-table">
+              <caption class="sr-only">Time in the air, the multiplier it reaches, and the Send Power boost cashing out there is worth</caption>
+              <thead><tr><th scope="col">In the air</th><th scope="col">Multiplier</th><th scope="col">Boost for 24h</th></tr></thead>
+              <tbody id="arc-curve-body"></tbody>
+            </table>
+          </div>
+          <p class="arc-note" id="arc-curve-note"></p>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    Rocket Run is a free daily bonus game — no stakes, no money, nothing purchasable. It pays a temporary Send Power boost and nothing else. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="notifications.js"></script>
+<script src="compose.js"></script>
+<script src="arcade.js"></script>
+</body>
+</html>

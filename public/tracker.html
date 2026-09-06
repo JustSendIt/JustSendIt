@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallet Tracker 💼 — $Send</title>
+<meta name="description" content="Follow any wallet on Robinhood Chain: holdings, trades, cost basis and PNL — read straight from the chain in your browser. Read-only, private to you. Entertainment only, not financial advice.">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="tracker.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to wallet tracker</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="communities.html">Communities</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+  </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="np-hero trk-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">Wallet Tracker 💼</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Follow any wallet on Robinhood Chain: holdings, trades, cost basis and PNL — read straight from the chain in your browser. Read-only: nothing is ever signed or moved.</p>
+  <p class="np-hero-warn">⚠️ Numbers are best-effort from public chain data — not a guarantee, not an audit, not advice. Copying a wallet's trades can lose you money. <b>Do your own research.</b></p>
+</header>
+
+<main id="main" tabindex="-1">
+  <div class="trk-wrap">
+
+    <!-- ===== SIGNED-OUT EXPLAINER ===== -->
+    <div class="card trk-signedout" id="trk-signedout" hidden>
+      <h2 class="display trk-h2" id="trk-so-h">What you get 🔍</h2>
+      <ul class="trk-so-list" aria-labelledby="trk-so-h">
+        <li><span aria-hidden="true">💼</span> <b>Track up to 10 wallets</b> — yours, a friend's, or any address you're curious about. Private to your account.</li>
+        <li><span aria-hidden="true">📊</span> <b>Holdings &amp; portfolio value</b> — every token the wallet holds, priced from live DEX pools.</li>
+        <li><span aria-hidden="true">🧾</span> <b>Trade history &amp; cost basis</b> — buys, sells and transfers reconstructed from the chain, with an average entry price per token.</li>
+        <li><span aria-hidden="true">📈</span> <b>Realized &amp; unrealized PNL</b> — what's been locked in by selling, and what's still on paper.</li>
+        <li><span aria-hidden="true">⚡</span> <b>Instant reopen</b> — your last report is saved to your account, so it shows immediately and refreshes live in the background.</li>
+      </ul>
+      <p class="modal-note">Read-only, always: the tracker only <i>reads</i> public data. It never asks you to sign a transaction and can never move funds.</p>
+      <button class="btn btn-primary" id="trk-signin" type="button">Sign in to track wallets 🚀</button>
+    </div>
+
+    <!-- ===== SIGNED-IN LAYOUT ===== -->
+    <div class="trk-layout" id="trk-layout" hidden>
+
+      <aside class="trk-side" aria-labelledby="trk-side-h">
+        <h2 class="display trk-h2" id="trk-side-h">Your wallets</h2>
+
+        <div class="track-cap" id="trk-cap" hidden>
+          <div class="track-cap-top"><span class="track-cap-count" id="trk-cap-count">0 / 10 tracked</span><span class="track-cap-tier" id="trk-cap-tier"></span></div>
+          <div class="track-cap-bar" aria-hidden="true"><div class="track-cap-fill" id="trk-cap-fill" style="width:0"></div></div>
+          <p class="track-cap-note" id="trk-cap-note"></p>
+        </div>
+
+        <p class="np-status trk-wstatus" id="trk-wstatus"><span class="np-live-dot" aria-hidden="true"></span> Loading your wallets…</p>
+        <ul class="trk-wlist" id="trk-wlist" aria-label="Tracked wallets"></ul>
+
+        <div class="trk-chips" id="trk-chips" hidden>
+          <p class="trk-chips-lbl" id="trk-chips-lbl">Quick add</p>
+          <div class="trk-chips-row" role="group" aria-labelledby="trk-chips-lbl" id="trk-chips-row"></div>
+        </div>
+
+        <form id="trk-add" class="trk-add" novalidate>
+          <h3 class="trk-h3" id="trk-add-h">Track a wallet</h3>
+          <label class="f-label" for="trk-addr">Wallet address</label>
+          <input class="addr-input" id="trk-addr" placeholder="0x… (42 characters)" spellcheck="false" autocomplete="off" autocapitalize="off" inputmode="text" aria-describedby="trk-addr-help trk-addr-err" required>
+          <p class="trk-err" id="trk-addr-err" hidden></p>
+          <label class="f-label" for="trk-label">Label <span class="trk-opt">(optional)</span></label>
+          <input class="addr-input" id="trk-label" maxlength="40" placeholder="e.g. Whale I'm watching" autocomplete="off">
+          <button class="btn btn-gold btn-sm trk-add-btn" type="submit" id="trk-add-btn">Track ➕</button>
+          <p class="modal-note" id="trk-addr-help">Any Robinhood Chain address works — a wallet, a friend's, a whale. Labels are private to you.</p>
+        </form>
+      </aside>
+
+      <section class="trk-main" aria-labelledby="trk-main-h">
+        <div class="trk-main-head">
+          <h2 class="display trk-h2" id="trk-main-h">Report</h2>
+          <button class="btn btn-ghost btn-sm" id="trk-refresh" type="button" hidden>↻ Refresh</button>
+        </div>
+        <p class="trk-selected" id="trk-selected" hidden></p>
+        <div class="trk-banner" id="trk-banner" hidden></div>
+        <p class="trk-progress" id="trk-progress" role="status" aria-live="polite"></p>
+
+        <details class="trk-explain" id="trk-explain">
+          <summary>❓ What am I looking at?</summary>
+          <div class="trk-explain-body">
+            <dl class="trk-defs">
+              <dt>Portfolio value</dt><dd>Everything the wallet holds, in USD right now: its ETH plus every token that has a live market on Robinhood Chain.</dd>
+              <dt>ETH balance</dt><dd>The wallet's native ETH — what it uses to pay gas and buy tokens.</dd>
+              <dt>Unrealized PNL</dt><dd>Paper profit or loss on tokens still held: today's value minus what the wallet paid for them (average cost).</dd>
+              <dt>Realized PNL</dt><dd>Profit or loss already locked in by selling: sale proceeds minus the average cost of what was sold.</dd>
+              <dt>Average entry (cost basis)</dt><dd>The average price paid per token in ETH across all buys. Tokens transferred in count as free, which pulls the average down.</dd>
+              <dt>Held</dt><dd>How many of that token the wallet holds right now, read from the chain.</dd>
+              <dt>Hide dust</dt><dd>Hides positions worth under $1 that were never traded, so the list stays readable.</dd>
+            </dl>
+            <p class="modal-note">Trades are reconstructed by matching token transfers against known DEX pools; very deep histories are truncated and some legs can't be valued. USD figures use today's ETH price. This is an estimate for entertainment, not tax or investment advice.</p>
+          </div>
+        </details>
+
+        <div class="trk-report" id="trk-report" aria-busy="false"></div>
+      </section>
+
+    </div>
+
+    <div class="sr-only" id="trk-sr" aria-live="polite"></div>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    Your tracked wallets are private to you. Data is best-effort from public on-chain sources — not a guarantee, not an audit, not advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="tracker.html">Wallet Tracker</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="chain.js"></script>
+<script src="tracker.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="notifications.js"></script>
+<script src="trackerpage.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

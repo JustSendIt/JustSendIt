@@ -1,0 +1,174 @@
+/* ===== arcade.css — the Arcade page (Rocket Run). Brand tokens/utilities come from styles.css. =====
+ * Owns only .arc-* (plus the page's own <section> padding override). Never edit styles.css. */
+
+.arc-wrap { padding-bottom: 2rem; }
+/* styles.css gives every <section> 4.2rem of padding — far too much between these two stacked blocks */
+.arc-game, .arc-info { padding: 1.4rem; }
+.arc-info { padding-left: 0; padding-right: 0; }
+.arc-game { margin: 0 auto 1.6rem; max-width: 860px; }
+
+.arc-game-h, .arc-h {
+  font-family: 'Luckiest Guy', 'Rubik', cursive; letter-spacing: 0.03em;
+  color: var(--green-bright); margin: 0 0 0.8rem; text-align: center; font-size: 1.5rem;
+}
+.arc-h { font-size: 1.25rem; text-align: left; }
+
+/* ---------- status badges ---------- */
+.arc-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin: 0 0 0.9rem; }
+.arc-badges:empty { display: none; }
+.arc-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 999px;
+  padding: 0.4rem 0.85rem; font-weight: 800; font-size: 0.88rem; line-height: 1.3;
+  border: 1.5px solid var(--ink-4); background: var(--ink-2); color: var(--text);
+}
+.arc-badge b { font-variant-numeric: tabular-nums; }
+.arc-badge--boost { border-color: rgba(255,179,64,0.55); background: rgba(255,179,64,0.1); color: var(--gold); }
+.arc-badge--boost b { color: var(--gold); }
+.arc-badge--done { border-color: rgba(159,224,255,0.4); background: rgba(159,224,255,0.08); color: var(--diamond); }
+.arc-badge--free { border-color: rgba(142,224,0,0.5); background: rgba(142,224,0,0.1); color: var(--green-bright); }
+
+/* ---------- the stage ---------- */
+.arc-stage {
+  position: relative; border-radius: 18px; overflow: hidden;
+  border: 1.5px solid var(--ink-4); background: #070a10;
+  min-height: 190px; display: grid;
+}
+.arc-canvas { display: block; width: 100%; height: 240px; grid-area: 1 / 1; }
+/* reduced motion: the rocket parks in the corner so it never sits underneath the big centred readout */
+.arc-static {
+  grid-area: 1 / 1; display: grid; align-items: end; justify-items: end; padding: 0.7rem 1rem;
+  height: 240px; background: linear-gradient(180deg, #0b1220, #070a10);
+}
+/* these two set display explicitly, so the UA's [hidden] rule needs help to win */
+.arc-canvas[hidden], .arc-static[hidden] { display: none !important; }
+.arc-static-ico { font-size: 3.4rem; line-height: 1; filter: drop-shadow(0 0 18px rgba(142,224,0,0.5)); }
+
+.arc-overlay {
+  grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.2rem; pointer-events: none; padding: 0.6rem; text-align: center; min-width: 0;
+}
+.arc-x {
+  margin: 0; font-family: 'Luckiest Guy', 'Rubik', cursive; line-height: 1;
+  font-size: clamp(2.6rem, 13vw, 4.6rem); letter-spacing: 0.02em;
+  color: var(--green-bright); font-variant-numeric: tabular-nums;
+  text-shadow: 0 3px 0 #172a00, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1);
+  overflow-wrap: anywhere;
+}
+.arc-x.is-warm { color: var(--gold); text-shadow: 0 3px 0 #3d2200, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1); }
+.arc-x.is-hot  { color: #ff8f4d; text-shadow: 0 3px 0 #3d1500, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1); }
+.arc-x.is-over { color: var(--red); text-shadow: 0 3px 0 #3d0000, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1); }
+.arc-sub {
+  margin: 0; font-weight: 800; font-size: 0.95rem; color: var(--text);
+  text-shadow: 0 1px 6px rgba(7,10,16,0.95), 0 0 12px rgba(7,10,16,0.9); overflow-wrap: anywhere;
+}
+.arc-sub.is-bad { color: var(--red); }
+.arc-sub.is-good { color: var(--green-bright); }
+
+/* ---------- controls ---------- */
+.arc-controls { margin-top: 1rem; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+/* The game button styles itself rather than reusing .btn-primary / .btn-gold: those are in app.js's
+   auto-confetti selector, and a burst of celebration on the tap that turns out to be a bust would be a lie.
+   Confetti here fires only on a real cash-out. */
+.arc-btn {
+  width: 100%; max-width: 460px; min-height: 60px; font-size: 1.3rem;
+  white-space: normal; overflow-wrap: anywhere;
+}
+.arc-btn--go {
+  background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: #12200a;
+  box-shadow: 0 6px 0 #33520a, 0 14px 34px rgba(142,224,0,0.35);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+}
+.arc-btn--go:hover:not(:disabled) { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 #33520a, 0 20px 44px rgba(142,224,0,0.45); }
+.arc-btn--cash {
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: #2b1600;
+  box-shadow: 0 6px 0 #8a4c00, 0 14px 34px rgba(255,179,64,0.3);
+  text-shadow: 0 1px 0 rgba(255,255,255,0.35); font-variant-numeric: tabular-nums;
+}
+.arc-btn--cash:hover:not(:disabled) { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 #8a4c00, 0 20px 44px rgba(255,179,64,0.4); }
+/* the finished state stays fully legible (no opacity wash) — it still carries the only "come back tomorrow" copy */
+.arc-btn--done {
+  background: var(--ink-3); color: var(--text); border: 2px solid var(--ink-4);
+  box-shadow: none; text-shadow: none;
+}
+.arc-btn:disabled { cursor: not-allowed; transform: none !important; }
+.arc-btn:disabled:hover, .arc-btn:disabled:active { transform: none !important; }
+.arc-hint { margin: 0; font-size: 0.84rem; color: var(--text-dim); text-align: center; line-height: 1.5; min-height: 1.3em; }
+.arc-hint kbd {
+  font-family: inherit; font-weight: 800; color: var(--text);
+  border: 1px solid var(--ink-4); border-radius: 5px; padding: 0 0.3em; background: var(--ink);
+}
+
+/* ---------- state panel ---------- */
+.arc-panel { margin-top: 1rem; }
+.arc-panel:empty { display: none; }
+.arc-msg {
+  border: 1.5px solid var(--ink-4); background: var(--ink-2); border-radius: 14px;
+  padding: 0.9rem 1rem; color: var(--text); line-height: 1.6; font-size: 0.94rem;
+}
+.arc-msg:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
+.arc-msg + .arc-msg { margin-top: 0.6rem; }
+.arc-msg p { margin: 0 0 0.5rem; }
+.arc-msg p:last-child { margin-bottom: 0; }
+.arc-msg .arc-msg-h {
+  font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1.15rem; letter-spacing: 0.03em;
+  color: var(--text); margin: 0 0 0.4rem;
+}
+.arc-msg--win { border-color: rgba(142,224,0,0.5); background: rgba(142,224,0,0.08); }
+.arc-msg--win .arc-msg-h { color: var(--green-bright); }
+.arc-msg--bust { border-color: rgba(255,93,93,0.5); background: rgba(255,93,93,0.08); }
+.arc-msg--bust .arc-msg-h { color: var(--red); }
+.arc-msg--warn { border-color: rgba(255,179,64,0.5); background: rgba(255,179,64,0.08); }
+.arc-msg--warn .arc-msg-h { color: var(--gold); }
+.arc-msg-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.arc-msg-actions .btn { flex: 0 1 auto; }
+.arc-count { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--text); white-space: nowrap; }
+.arc-big { font-variant-numeric: tabular-nums; color: var(--gold); font-weight: 800; }
+
+/* ---------- how it works / payout curve ---------- */
+.arc-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1.2rem; align-items: start; }
+.arc-how, .arc-curve-card { padding: 1.2rem; }
+.arc-steps { margin: 0 0 0.9rem; padding-left: 1.2rem; color: var(--text); line-height: 1.65; font-size: 0.94rem; }
+.arc-steps li { margin-bottom: 0.45rem; }
+.arc-steps b { color: var(--green-bright); }
+.arc-note { margin: 0 0 0.7rem; font-size: 0.88rem; line-height: 1.6; color: var(--text-dim); }
+.arc-note:last-child { margin-bottom: 0; }
+.arc-note b { color: var(--text); }
+.arc-note sup { font-size: 0.72em; }
+.arc-note-honest {
+  border-top: 1px solid var(--ink-4); padding-top: 0.7rem; margin-top: 0.9rem; color: var(--text-dim);
+}
+
+.arc-tablewrap { overflow-x: auto; margin: 0 0 0.7rem; }
+.arc-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.arc-table th, .arc-table td { padding: 0.45rem 0.5rem; text-align: left; border-bottom: 1px solid var(--ink-4); white-space: nowrap; }
+.arc-table thead th { color: var(--text-dim); font-weight: 800; font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.arc-table tbody th { color: var(--text); font-weight: 800; font-size: 0.88rem; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+.arc-table td { color: var(--text); font-variant-numeric: tabular-nums; }
+.arc-table td:nth-child(2) { color: var(--green-bright); font-weight: 700; }
+.arc-table td:nth-child(3) { color: var(--gold); font-weight: 800; }
+.arc-table tbody tr:last-child td { border-bottom: none; }
+.arc-table tr.is-cap td:nth-child(3)::after { content: ' (max)'; color: var(--text-dim); font-weight: 600; font-size: 0.85em; }
+
+/* ---------- focus ---------- */
+.arc-game :focus-visible, .arc-info :focus-visible, #main:focus-visible {
+  outline: 3px solid var(--green-bright); outline-offset: 3px; border-radius: 8px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 620px) {
+  .arc-game, .arc-how, .arc-curve-card { padding: 1rem; }
+  .arc-canvas, .arc-static { height: 200px; }
+  .arc-btn { min-height: 56px; font-size: 1.1rem; }
+  .arc-game-h { font-size: 1.3rem; }
+}
+@media (max-width: 360px) {
+  .arc-game, .arc-how, .arc-curve-card { padding: 0.8rem; }
+  .arc-badge { font-size: 0.8rem; padding: 0.35rem 0.65rem; }
+  .arc-table th, .arc-table td { padding: 0.4rem 0.35rem; }
+}
+
+/* ---------- reduced motion: no animation anywhere, and the static stage takes over ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .arc-btn, .arc-btn:hover, .arc-btn:active { transition: none; transform: none !important; }
+  .arc-static-ico { animation: none; }
+}

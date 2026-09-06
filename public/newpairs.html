@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Pairs Radar 📡 — Fresh Tokens on Robinhood Chain</title>
+<meta name="description" content="A live, honest radar of brand-new tokens launched on Robinhood Chain — market cap, liquidity, holders, and plain-English honeypot &amp; rug risk flags so you can spot the traps. Read any token's full on-chain detail and contract. Simpler than Dexscreener. Entertainment only, not financial advice.">
+<meta name="keywords" content="new crypto tokens, new memecoins, Robinhood Chain new pairs, honeypot scanner, rug check, token risk scanner, crypto safety, dexscreener alternative, memecoin radar, new token launches, crypto due diligence, DYOR">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#8ee000">
+<link rel="canonical" href="https://justsendit.example/newpairs.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:url" content="https://justsendit.example/newpairs.html">
+<meta property="og:title" content="New Pairs Radar 📡 — spot fresh tokens (and traps) on Robinhood Chain">
+<meta property="og:description" content="Live scanner of brand-new Robinhood Chain tokens with honest honeypot, rug and whale risk flags. Read the full on-chain detail and contract before you ape. Entertainment only.">
+<meta property="og:image" content="https://justsendit.example/assets/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:title" content="New Pairs Radar 📡 — Robinhood Chain token scanner">
+<meta name="twitter:description" content="Live scanner of new tokens with honest honeypot &amp; rug flags. Read the on-chain detail before you ape. Entertainment only.">
+<meta name="twitter:image" content="https://justsendit.example/assets/logo.png">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+</head>
+<body>
+<a class="skip-link" href="#np-list">Skip to new pairs</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="index.html#tokens">Tokens</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="index.html#swap">Swap</a>
+    <a class="active" href="newpairs.html" aria-current="page">New&nbsp;Pairs</a>
+    <a href="communities.html">Communities</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="about.html">About</a>
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="np-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">New Pairs Radar 📡</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Every new token launched on Robinhood Chain — read straight from the chain, with honest flags on the ones to avoid.</p>
+  <p class="np-hero-warn">⚠️ Fresh tokens are dangerous by default. Most go to zero. We flag the obvious traps — but never do we tell you to buy. <b>Do your own research.</b></p>
+</header>
+
+<main id="main">
+  <div class="np-wrap">
+
+    <div class="np-viewswitch" role="tablist" aria-label="View mode">
+      <button class="np-vs-btn" id="np-vs-runners" type="button" role="tab" aria-selected="true"  data-mode="runners"><span class="np-vs-ico" aria-hidden="true">📈</span><span class="np-vs-txt">Best&nbsp;Runners</span></button>
+      <button class="np-vs-btn" id="np-vs-feed" type="button" role="tab" aria-selected="false" data-mode="feed"><span class="np-vs-ico" aria-hidden="true">🎬</span><span class="np-vs-txt">Hot&nbsp;Feed</span></button>
+      <button class="np-vs-btn" id="np-vs-list" type="button" role="tab" aria-selected="false" data-mode="list"><span class="np-vs-ico" aria-hidden="true">📋</span><span class="np-vs-txt">DEX&nbsp;List</span></button>
+    </div>
+
+    <section class="np-controls" aria-label="Filter and sort new pairs">
+      <div class="np-search">
+        <span aria-hidden="true">🔎</span>
+        <input id="np-q" type="search" class="np-search-input" autocomplete="off" placeholder="Search name, symbol, or address" aria-label="Search pairs">
+        <button id="np-q-clear" class="np-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>✕</button>
+      </div>
+      <div class="np-safety" role="radiogroup" aria-label="Safety filter">
+        <button class="np-seg is-on" type="button" role="radio" aria-checked="true" data-safety="safer">🛡️ Safer</button>
+        <button class="np-seg" type="button" role="radio" aria-checked="false" data-safety="all">🌐 All</button>
+        <button class="np-seg" type="button" role="radio" aria-checked="false" data-safety="risky">☠️ Risky</button>
+      </div>
+      <label class="np-sort-wrap"><span class="sr-only">Sort by</span>
+        <select id="np-sort" class="np-sort">
+          <option value="new">🆕 Newest</option>
+          <option value="old">🕐 Oldest first</option>
+          <option value="health">🛡️ Safest first</option>
+          <option value="liq">💧 Most liquidity</option>
+          <option value="vol">📊 Most volume 24h</option>
+          <option value="move">🚀 Biggest movers 1h</option>
+          <option value="holders">👥 Most holders</option>
+          <option value="active">🔥 Most active</option>
+        </select>
+      </label>
+      <div class="np-density" role="group" aria-label="Row density">
+        <button type="button" class="np-den is-on" data-density="comfortable" aria-pressed="true">☰ Comfort</button>
+        <button type="button" class="np-den" data-density="compact" aria-pressed="false">≡ Compact</button>
+      </div>
+      <button class="np-more" type="button" id="np-more" aria-expanded="false" aria-controls="np-filters">⚙️ Filters <span class="np-count-badge" id="np-fcount" hidden>0</span></button>
+      <button class="np-refresh" type="button" id="np-refresh" aria-label="Refresh now">↻</button>
+    </section>
+
+    <div class="np-chips" id="np-presets" role="group" aria-label="Quick filters">
+      <button class="np-chip" type="button" data-preset="safest"   aria-pressed="false">🛡️ Safest</button>
+      <button class="np-chip" type="button" data-preset="verified" aria-pressed="false">✓ Verified</button>
+      <button class="np-chip" type="button" data-preset="liq"      aria-pressed="false">💧 Real liquidity</button>
+      <button class="np-chip" type="button" data-preset="community" aria-pressed="false">👥 Community</button>
+      <button class="np-chip" type="button" data-preset="fresh"    aria-pressed="false">🕐 Brand new</button>
+      <button class="np-chip" type="button" data-preset="trading"  aria-pressed="false">📊 Actually trading</button>
+      <button class="np-chip" type="button" data-preset="nowhale"  aria-pressed="false">🐋 Hide whales</button>
+      <button class="np-chip" type="button" data-preset="nohoney"  aria-pressed="false">🍯 Hide honeypots</button>
+    </div>
+
+    <div class="np-filters" id="np-filters" hidden>
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">Quote &amp; code</legend>
+        <label class="np-f"><input type="checkbox" id="f-weth" checked> Ξ WETH</label>
+        <label class="np-f"><input type="checkbox" id="f-usdg" checked> 💵 USDG</label>
+        <label class="np-f"><input type="checkbox" id="f-other" checked> ❔ Other</label>
+        <label class="np-f"><input type="checkbox" id="f-verified"> 📄 Verified only</label>
+        <label class="np-f"><input type="checkbox" id="f-indexed"> 📈 Indexed only</label>
+      </fieldset>
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">Age &amp; size</legend>
+        <label class="np-f-range">Max age <input type="range" id="f-maxage" min="5" max="1440" step="5" value="1440"><output id="f-maxage-out">All-time</output></label>
+        <label class="np-f-range">Min liquidity <input type="range" id="f-minliq" min="0" max="50000" step="1000" value="0"><output id="f-minliq-out">$0</output></label>
+        <label class="np-f-range">Min vol 24h <input type="range" id="f-minvol" min="0" max="50000" step="500" value="0"><output id="f-minvol-out">$0</output></label>
+        <label class="np-f-range">Min health <input type="range" id="f-minhealth" min="0" max="100" step="5" value="0"><output id="f-minhealth-out">0</output></label>
+      </fieldset>
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">Holders &amp; concentration</legend>
+        <label class="np-f-range">Min holders <input type="range" id="f-minholders" min="0" max="500" step="10" value="0"><output id="f-minholders-out">0</output></label>
+        <label class="np-f-range">Max top wallet <input type="range" id="f-maxtop" min="5" max="100" step="5" value="100"><output id="f-maxtop-out">any</output></label>
+      </fieldset>
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">Activity</legend>
+        <label class="np-f">Price 1h
+          <select id="f-price1h"><option value="any">Any</option><option value="up">Up only</option><option value="down">Down only</option><option value="m20">∣move∣ ≥ 20%</option><option value="m50">≥ 50%</option></select></label>
+        <label class="np-f">Flow 24h
+          <select id="f-flow"><option value="any">Any</option><option value="buys">More buys</option><option value="sells">More sells</option><option value="bal">Balanced</option></select></label>
+      </fieldset>
+      <fieldset class="np-fgroup np-fgroup--hide"><legend class="np-fgroup-h">Hide risk flags</legend>
+        <label class="np-f"><input type="checkbox" data-hide="honeypotSuspect"> 🍯 Honeypots</label>
+        <label class="np-f"><input type="checkbox" data-hide="dumping"> 📉 Dumping</label>
+        <label class="np-f"><input type="checkbox" data-hide="serialDeployer"> 🔁 Serial deployers</label>
+        <label class="np-f"><input type="checkbox" data-hide="lowLiquidity"> 💧 Thin liquidity</label>
+        <label class="np-f"><input type="checkbox" data-hide="concentrated"> 🐋 Whale-heavy</label>
+        <label class="np-f"><input type="checkbox" data-hide="unverified"> 📄 Unverified</label>
+        <label class="np-f"><input type="checkbox" data-hide="lowHolders"> 👥 Few holders</label>
+        <label class="np-f"><input type="checkbox" data-hide="sellPressure"> 🔻 Heavy selling</label>
+        <label class="np-f"><input type="checkbox" data-hide="deadVolume"> 💤 No volume</label>
+      </fieldset>
+      <div class="np-savedviews" id="np-saved" aria-label="Saved views"></div>
+      <div class="np-filters-foot">
+        <button class="btn btn-sm btn-ghost" type="button" id="np-savenow">💾 Save current view</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="np-reset">↺ Reset filters</button>
+      </div>
+    </div>
+
+    <p class="np-status" id="np-status"><span class="np-live-dot" aria-hidden="true"></span> Scanning the chain…</p>
+    <button class="np-newbar" id="np-newbar" type="button" hidden></button>
+
+    <ul class="np-list" id="np-list" aria-label="New token pairs"></ul>
+    <div class="sr-only" id="np-sr" aria-live="polite"></div>
+
+    <section class="np-feed" id="np-feed" hidden tabindex="0" role="region" aria-roledescription="Token feed" aria-label="Hot feed — new tokens our checks score a full 100 out of 100">
+      <div class="np-feed-chrome">
+        <span class="np-feed-live" id="np-feed-live"><span class="np-live-dot"></span> live</span>
+        <button class="np-feed-fresh" id="np-feed-fresh" type="button" hidden></button>
+      </div>
+      <span class="np-feed-dyor" aria-hidden="true">🎉 Entertainment only · DYOR</span>
+      <div class="np-feed-nav">
+        <button class="np-rail-btn" id="np-feed-up"   type="button" aria-label="Previous token">▲</button>
+        <button class="np-rail-btn" id="np-feed-down" type="button" aria-label="Next token">▼</button>
+      </div>
+      <div class="np-feed-hint" id="np-feed-hint">Swipe up ▲ for the next</div>
+      <div class="np-feed-track" id="np-feed-track"></div>
+      <div class="sr-only" id="np-feed-sr" aria-live="polite"></div>
+    </section>
+
+    <section class="np-runners" id="np-runners" hidden aria-label="Best runners — top gainers by time window">
+      <div class="np-runners-bar">
+        <div class="np-runwin" role="radiogroup" aria-label="Time window">
+          <button class="np-seg is-on" type="button" role="radio" aria-checked="true"  data-win="24h">24h</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="week">1W</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="month">1M</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="year">1Y</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="all">All</button>
+        </div>
+      </div>
+      <p class="np-runners-note">📈 Biggest gains in the window — a past run says nothing about the next one. Tap any token to see its risk scan before you even think about buying.</p>
+      <p class="np-runners-status" id="np-runners-status" role="status" aria-live="polite">Loading best runners…</p>
+      <ol class="np-runners-list" id="np-runners-list" aria-label="Top gaining tokens"></ol>
+      <p class="np-runners-foot">🎉 Entertainment only · a big run is not a recommendation — most tokens round-trip to zero. DYOR.</p>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    These are automatic heuristics from public on-chain data — not a guarantee, not an audit, and not an endorsement of any token. We don't tell you to buy anything. Most new tokens go to zero. No financial advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+   <div class="nav-foot">
+     <a href="index.html">Home</a> · <a href="index.html#tokens">Tokens</a> · <a href="index.html#guide">How to Buy</a> · <a href="index.html#swap">Swap</a> · <a href="newpairs.html">New Pairs</a> · <a href="communities.html">Communities</a> · <a href="wall.html">Send Wall</a> · <a href="watchlist.html">Watchlist</a> · <a href="arcade.html">Arcade</a> · <a href="about.html">About</a> · <a href="profile.html">My Profile</a>
+   </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="watch.js"></script>
+<script src="tokenmodal.js"></script>
+<script src="newpairs.js"></script>
+<script src="notifications.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+# dependencies
+node_modules/
+
+# runtime data — NEVER commit (contains all user accounts, sessions, uploads)
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# secrets / local env
+.env
+.env.local
+.env.*.local
+.env.production
+*.pem
+*.key
+*.p12
+
+# logs / os
+*.log
+npm-debug.log*
+.DS_Store
+
+# generated output — build it with scripts/build-whitepaper.sh, don't commit it
+JustSendIt-Whitepaper.pdf
+WHITEPAPER.pdf
+
+# ── Media with unresolved rights — DO NOT COMMIT ────────────────────────────
+# These two are excluded on purpose, not by accident. The feature video is
+# real-world action-sports footage with the $Send logo composited on; unlike the
+# other clips in public/assets (which carry C2PA credentials showing they were
+# generated) it carries no authorship metadata at all. The theme audio is a
+# bit-exact copy of that video's audio track, so it inherits the same question
+# and adds music rights on top.
+#
+# The repo is intended for a CC0 release, and CC0 is an irrevocable grant to
+# everyone — you cannot waive rights you do not hold. Both files stay on disk so
+# the site keeps working locally; they simply never enter git.
+#
+# If you produce a licence that permits sublicensing under a public-domain
+# dedication, delete these two lines. Note that GitHub also hard-rejects the
+# video for exceeding 100 MB: do NOT "fix" that with Git LFS or by re-encoding,
+# because both routes publish the footage.
+public/assets/justsendit-full.mp4
+public/assets/justsendit-audio.m4a
+
+# ── Internal audit tracker — DO NOT COMMIT ──────────────────────────────────
+# 366 KB / 143 findings, 75 still marked open, four of them with step-by-step
+# exploit reproductions against this exact codebase. Publishing it alongside the
+# source hands an attacker a prioritised roadmap into a live site. It is also a
+# generated export, not source. Keep it locally; it does not belong in git.
+audit-2026-09-05.csv

@@ -1,0 +1,21 @@
+{
+  "name": "justsendit",
+  "version": "1.0.0",
+  "description": "A community platform, game, and honest on-chain toolkit for the $Send (SEND IT) memecoin on Robinhood Chain.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server.js",
+    "whitepaper": "bash scripts/build-whitepaper.sh"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [],
+  "author": "JustSendIt",
+  "license": "CC0-1.0",
+  "type": "commonjs",
+  "dependencies": {
+    "ethers": "^6.17.0",
+    "qrcode": "^1.5.4"
+  }
+}

@@ -1,0 +1,88 @@
+/* ===== tokentext.css — $TICKER chips in post text + 🏘️ community tags on token cards ===== */
+
+/* --- $TICKER chip (inline in post / comment text) --- */
+.tok-chip {
+  display: inline-flex; align-items: center; vertical-align: baseline; position: relative;
+  margin: 0 0.05em; padding: 0.02em 0.5em; min-height: 1.5em; line-height: 1.35;
+  font: inherit; font-weight: 800; font-size: 0.92em; letter-spacing: 0.01em;
+  color: var(--green-bright); background: rgba(142,224,0,0.13);
+  border: 1.5px solid rgba(142,224,0,0.5); border-radius: 999px; cursor: pointer;
+  white-space: nowrap; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
+}
+.tok-chip:hover { background: rgba(142,224,0,0.24); border-color: var(--green); transform: translateY(-1px); }
+.tok-chip:active { transform: scale(0.96); }
+.tok-chip:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+
+/* unresolved raw address: shortened, monospace, with a copy button */
+.tok-addr {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em; color: var(--green-bright);
+  background: rgba(142,224,0,0.08); border: 1px solid rgba(142,224,0,0.25); border-radius: 6px; padding: 0 0.3em; white-space: nowrap;
+}
+.tok-copy {
+  display: inline-flex; align-items: center; justify-content: center; vertical-align: baseline; position: relative;
+  min-width: 1.7em; min-height: 1.5em; margin-left: 0.15em; padding: 0 0.3em; line-height: 1;
+  font: inherit; font-size: 0.85em; color: var(--text); background: var(--ink-4); border: none; border-radius: 7px; cursor: pointer;
+}
+.tok-copy:hover { background: var(--green); color: #12200a; }
+.tok-copy:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+
+/* --- 🏘️ community tag (sits on a card's meta / sub line) --- */
+.tok-comm-slot { display: inline-flex; align-items: center; min-height: 1.35rem; vertical-align: middle; max-width: 100%; }
+.tok-comm-slot:empty { min-width: 0; }
+.tok-comm {
+  display: inline-flex; align-items: center; gap: 0.25rem; position: relative;
+  font-family: 'Rubik', system-ui, sans-serif; font-size: 0.7rem; font-weight: 800; line-height: 1.3;
+  padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid; text-decoration: none; white-space: nowrap;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.tok-comm.has { color: var(--green-bright); border-color: rgba(142,224,0,0.5); background: rgba(142,224,0,0.12); }
+.tok-comm.has:hover { background: rgba(142,224,0,0.24); border-color: var(--green); }
+.tok-comm.has.forming { color: var(--gold); border-color: rgba(255,179,64,0.5); background: rgba(255,179,64,0.12); }
+.tok-comm.has.forming:hover { background: rgba(255,179,64,0.22); border-color: var(--gold); }
+.tok-comm.none { color: var(--text-dim); border-color: var(--ink-4); background: var(--ink-3); }
+.tok-comm.none:hover { color: var(--green-bright); border-color: var(--green); }
+.tok-comm:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+/* phones: grow the REAL box of the card tags (they have room around them) instead of an invisible 44px pseudo-element
+   that would overhang into the neighbouring pin chip / line of text and steal its taps. Inline $TICKER chips and the
+   📋 copy button in post text keep their natural size (≥24px, WCAG 2.5.8 inline exception). */
+@media (pointer: coarse) {
+  .np-meta .tok-comm, .np-runner-name .tok-comm, .np-slide-sub .tok-comm, .pin-chip .tok-comm { padding: 0.35rem 0.6rem; }
+}
+
+/* where the tag lives on each card (keeps the existing one-line layouts intact) */
+/* DEX list: .np-meta is a no-wrap flex row inside a ~150px .np-id at phone widths — let the tag wrap to its own line
+   rather than being clipped by .np-card { overflow:hidden } */
+.np-meta { flex-wrap: wrap; row-gap: 0.2rem; }
+.np-meta .tok-comm-slot { margin-left: 0.1rem; min-width: 0; }
+.np-meta .tok-comm { display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; } /* inline-block so text-overflow actually applies (it is ignored on inline-flex) */
+/* Best Runners: the tag sits at the end of the full-width name row (never in the metrics cell, which shares grid
+   cell 3 with the ticker at ≥560px). The name row is nowrap + overflow hidden, so keep the focus ring inside it. */
+.np-runner-name .tok-comm-slot { margin-left: 0.4rem; }
+.np-runner-name .tok-comm { font-size: 0.66rem; padding: 0.06rem 0.45rem; }
+.np-runner-name .tok-comm:focus-visible { outline-offset: -2px; }
+.np-slide-sub .tok-comm-slot { margin-left: 0.25rem; }
+.pin-chip .tok-comm-slot { margin-left: 0.15rem; }
+.pin-chip .tok-comm { font-size: 0.66rem; padding: 0.06rem 0.42rem; }
+
+/* --- fuller community section (token-detail popup) --- */
+.tok-comm-slot-panel { display: block; }
+.tok-comm-panel {
+  display: grid; gap: 0.45rem; margin: 0 0 0.9rem; padding: 0.8rem 0.9rem; min-height: 5.6rem;
+  background: rgba(142,224,0,0.06); border: 1.5px solid var(--ink-4); border-left: 3px solid var(--green); border-radius: 14px;
+}
+.tok-comm-h { font-family: 'Luckiest Guy', cursive; font-weight: 400; font-size: 1rem; letter-spacing: 0.02em; color: var(--green-bright); margin: 0; }
+.tok-comm-txt { margin: 0; font-size: 0.9rem; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.tok-comm-txt b { color: var(--text); }
+.tok-comm-loading { color: var(--text-dim); }
+.tok-comm-live { color: var(--green-bright); font-weight: 800; }
+.tok-comm-forming { color: var(--gold); font-weight: 800; }
+.tok-comm-offtxt { color: var(--gold); font-weight: 800; }
+.tok-comm-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.tok-comm-acts .btn { text-decoration: none; }
+.tok-comm-note { margin: 0; font-size: 0.72rem; line-height: 1.45; color: var(--text-dim); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tok-chip, .tok-comm { transition: none; }
+  .tok-chip:hover { transform: none; }
+  .tok-chip:active { transform: none; }
+}

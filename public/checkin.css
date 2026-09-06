@@ -1,0 +1,84 @@
+/* ===== checkin.css — the daily check-in card at the top of your OWN public wall (u.html) =====
+ * Rendered by upage.js into #checkin. Depends on the tokens + .card/.btn utilities in styles.css
+ * (--gold, --gold-deep, --green, --green-bright, --ink-2, --ink-3, --ink-4, --text, --text-dim). */
+
+/* NB: no `display:block` here — an id selector would out-specify [hidden] and leave an empty
+   0.5rem-margined block on every wall that isn't yours. The hidden attribute must win. */
+#checkin { margin: 0.5rem 0; }        /* same 0.5rem rhythm as .wall-pins right below it */
+#checkin[hidden] { display: none; }
+
+/* --- the card --- */
+.ci-card {
+  padding: 1.1rem 1.15rem;
+  border-color: rgba(255,179,64,0.34);            /* gold: this is a reward, not a token card */
+  box-shadow: 0 14px 34px rgba(0,0,0,0.42), 0 0 0 1px rgba(255,179,64,0.07);
+}
+.ci-card-done { border-color: rgba(142,224,0,0.34); box-shadow: 0 14px 34px rgba(0,0,0,0.42), 0 0 0 1px rgba(142,224,0,0.08); }
+
+/* --- head: emoji + title --- */
+.ci-head { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
+.ci-emoji { font-size: 1.35rem; line-height: 1; flex: 0 0 auto; }
+.ci-title {
+  margin: 0; font-family: 'Luckiest Guy', cursive; font-weight: 400;
+  font-size: 1.15rem; letter-spacing: 0.4px; color: var(--gold);
+  /* Luckiest Guy sits low in its box — nudge it back onto the emoji's baseline */
+  line-height: 1.25;
+}
+.ci-card-done .ci-title { color: var(--green-bright); }
+
+/* --- the action --- */
+.ci-btn {
+  width: 100%; min-height: 48px;                  /* comfortably past the 44px touch target at every width */
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  /* .btn's 2rem side padding is for pill-width buttons — a full-width one just needs room for the label at 320px */
+  padding-left: 1.2rem; padding-right: 1.2rem;
+  font-size: 1.02rem;
+}
+.ci-btn[disabled] { opacity: 0.65; cursor: progress; }
+
+/* --- copy --- */
+.ci-note { margin: 0.6rem 0 0; color: var(--text-dim); font-size: 0.84rem; line-height: 1.5; }
+.ci-note b { color: var(--gold); font-weight: 800; }
+.ci-card-done .ci-note b { color: var(--green-bright); }
+
+/* --- the confirmed panel (focus lands here when the button is replaced) ---
+ * tabindex="-1" only; a programmatic focus after a mouse tap won't match :focus-visible,
+ * so the ring appears for keyboard users and stays out of the way for everyone else. */
+.ci-done:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 4px; border-radius: 14px; }
+
+/* --- countdown to the next check-in (deliberately NOT a live region — it would read every second) --- */
+.ci-next {
+  margin: 0.7rem 0 0; padding: 0.5rem 0.7rem; border-radius: 12px;
+  background: var(--ink-2); border: 1.5px solid var(--ink-4);
+  color: var(--text-dim); font-size: 0.82rem; line-height: 1.5;
+}
+.ci-clock {
+  color: var(--text); font-weight: 800;
+  font-variant-numeric: tabular-nums;             /* the seconds digit must not shove the line around */
+  font-feature-settings: 'tnum' 1;
+  white-space: nowrap;
+}
+.ci-utc { display: inline-block; color: var(--text-dim); opacity: 0.85; }
+
+/* --- inline status: read-only accounts, network errors (role="status") ---
+ * The live region is ALWAYS in the DOM and never display:none — a region toggled out of
+ * display can silently fail to announce. Empty it just collapses to nothing; the red box
+ * only appears once there is something to say. */
+.ci-msg { margin: 0; font-size: 0.83rem; line-height: 1.5; color: var(--text); }
+.ci-msg:not(:empty) {
+  margin-top: 0.6rem; padding: 0.55rem 0.75rem; border-radius: 12px;
+  background: rgba(255,93,93,0.1); border: 1.5px solid rgba(255,93,93,0.35);
+}
+
+/* --- small screens: 320px must not overflow or crowd --- */
+@media (max-width: 400px) {
+  .ci-card { padding: 0.95rem 0.9rem; border-radius: 18px; }
+  .ci-title { font-size: 1.05rem; }
+  .ci-btn { font-size: 0.96rem; padding-left: 0.7rem; padding-right: 0.7rem; }
+  .ci-next { font-size: 0.8rem; }
+  .ci-utc { display: block; margin-top: 0.15rem; } /* wrap the parenthetical instead of squeezing the clock */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ci-btn { transition: none; }
+}
