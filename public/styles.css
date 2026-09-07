@@ -1439,7 +1439,6 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
   .profile-link { font-size: 0.82rem; padding: 0.45rem 0.7rem; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .swap-row { grid-template-columns: 1fr; }
   .chart-frame iframe { height: 340px; }
-  footer { padding-bottom: 5.5rem; } /* clear the fixed FAB (bottom-right) and music player (bottom-left) */
 }
 
 /* ===== Universal wallet connect picker ===== */
@@ -2437,7 +2436,9 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .wl-wallet-row .np-name { font-size: 1.02rem; }
 .wl-wallet-row .wl-w-addr { color: var(--text-dim); font-family: ui-monospace, Menlo, monospace; font-size: 0.8rem; }
 .wl-wallet-body { padding: 0.2rem 0.15rem 0.6rem; }
-.np-msg-link, .np-msg a { color: var(--green-bright); text-decoration: underline; font-weight: 700; }
+/* :not(.btn) — this is for inline links inside a message. Without it, it out-specifies every
+   .btn-* variant and repaints button labels green-and-underlined on their own fill. */
+.np-msg-link, .np-msg a:not(.btn) { color: var(--green-bright); text-decoration: underline; font-weight: 700; }
 #wl-token-panel:focus-visible, #wl-wallet-panel:focus-visible { outline: none; }
 
 /* ===================== SEND CALLS ===================== */
@@ -3260,7 +3261,11 @@ body::after {
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* ---- shared indicator geometry ---- */
-.np-viewswitch { position: relative; isolation: isolate; }
+/* sticky, NOT relative. It inherits `top: var(--nav-h)` from the base rule, and on a relatively
+   positioned box that is a downward OFFSET, not a threshold — the switcher was shoved 63px down
+   the page and sat on top of the feed below it. Sticky establishes a containing block for the
+   ::before indicator just as well, so the pill still works. */
+.np-viewswitch { position: sticky; isolation: isolate; }
 /* Only the view switcher gets a SLIDING pill. It is display:flex at full width with flex:1 1 0, so
    its three tabs are genuinely equal thirds and a fractional indicator lands exactly (measured:
    187.3px indicator against a 187px tab). .np-safety and .np-runwin are inline-flex and shrink to
@@ -3326,3 +3331,89 @@ body::after {
   .np-viewswitch::before { transition: none; }
   .np-safety .np-seg, .np-runwin .np-seg { transition: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   15. Footer clearance + gold buttons
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ---- footer sits under two fixed elements ----
+   #compose-fab is pinned bottom-right at `bottom: 1rem` and stands ~50px tall; #music-player is
+   pinned bottom-left at the same offset and stands ~52px. Both therefore occupy the bottom ~68px
+   of every viewport. The footer's own padding-bottom was 3rem (48px), so scrolling to the end of
+   ANY page parked the FAB and the player on top of the last line of fine print. The clearance
+   used to live in a max-width:560px block, which is backwards — the overlap is not a phone
+   problem, it happens at every width because both elements are pinned to the viewport, not the
+   column. 5.5rem clears the taller of the two with room to spare, and the safe-area inset keeps
+   that true on notched devices where the FAB is itself pushed up. */
+footer {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  position: relative;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--green) 4%, transparent), transparent 220px),
+    var(--ink);
+  border-top: 1px solid var(--hair);
+}
+/* the accent hairline is drawn, not bordered, so it can fade at the edges and follow a custom
+   accent instead of the old hard-coded rgba(142,224,0,0.18) */
+footer::before {
+  content: ''; position: absolute; top: -1px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  opacity: 0.5; pointer-events: none;
+}
+.disclaimer {
+  color: var(--on-green);
+  box-shadow: 0 4px 0 var(--green-dark), 0 10px 26px var(--glow-g);
+  border: 1px solid color-mix(in srgb, var(--green) 70%, white 12%);
+}
+footer .fine a { color: var(--gold); }
+footer .nav-foot a { color: var(--text-dim); text-decoration: none; transition: color var(--dur-2) var(--ease-out); }
+footer .nav-foot a:hover { color: var(--green-bright); }
+
+/* ---- gold buttons ----
+   .btn-primary got the glass/hairline pass in section 3; .btn-gold never did, so the two sat
+   side by side on the watchlist looking like they came from different sites. Same construction,
+   gold tokens — and the tokens mean a user-picked highlight carries through instead of the old
+   literal #8a4c00 / rgba(255,179,64,…). */
+.btn-gold {
+  color: var(--on-gold);
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep));
+  border: 1px solid color-mix(in srgb, var(--gold) 70%, white 12%);
+  box-shadow:
+    0 6px 0 var(--gold-deep),
+    0 10px 28px var(--glow-o),
+    inset 0 1px 0 rgba(255,255,255,0.45);
+}
+.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 6px 0 var(--gold-deep), 0 14px 40px var(--glow-o), inset 0 1px 0 rgba(255,255,255,0.5); }
+.btn-gold:active { transform: translateY(1px); }
+.btn-gold:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.btn-gold, .btn-rh { transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .btn-gold:hover, .btn-gold:active { transform: none; } }
+
+/* ---- watchlist "wallet tracking has its own page" card ----
+   a flat --ink-2 panel among glass ones. Same well treatment as the other notices, and the CTA
+   gets room to read as the primary action of the card rather than a link in a paragraph. */
+.wl-trk-card {
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 40%), var(--glass-well);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border: 1px solid var(--hair); border-radius: var(--r-3);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--glass-edge);
+  padding: 0.9rem 1.1rem; gap: 0.7rem 1.2rem;
+}
+.wl-trk-card > span { color: var(--text-dim); line-height: 1.55; }
+
+/* ---- Hot Feed fills the viewport exactly ----
+   The feed's height was `100dvh - nav - switch`, which ignores #main's own padding (0.6rem top,
+   4rem bottom) and the switcher's 0.4rem margin. Those 80 leftover pixels made the whole PAGE
+   scrollable underneath a full-height scroll container — and the moment you scrolled them, the
+   sticky switcher pinned under the nav and sat on top of the feed again. Subtracting the real
+   chrome makes the column exactly one viewport tall, so there is nothing to scroll and nothing
+   to overlap. 1rem = #main's 0.6rem padding-top + the switcher's 0.4rem margin-bottom. */
+body.np-mode-feed { --np-feed-h: calc(100dvh - var(--nav-h, 58px) - var(--np-switch-h) - 1rem); }
+@supports not (height: 100dvh) {
+  body.np-mode-feed { --np-feed-h: calc(100vh - var(--nav-h, 58px) - var(--np-switch-h) - 1rem); }
+}
+body.np-mode-feed #main { padding-bottom: 0; }
+body.np-mode-feed .np-feed,
+body.np-mode-feed .np-slide { height: var(--np-feed-h); }
+body.np-mode-feed .np-slide { contain-intrinsic-size: 1px var(--np-feed-h); }

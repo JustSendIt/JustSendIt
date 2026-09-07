@@ -101,8 +101,17 @@
       out['--green'] = a; out['--green-bright'] = bright; out['--green-dark'] = shade(a, 0.6);
       out['--on-green'] = lum(a) > 0.35 ? '#0a1204' : '#f3ffe0';   // ink that reads on the fill itself
     }
-    if (isHex(colors.highlight)) { out['--gold'] = fixFg(colors.highlight, surfaces, 4.5); out['--gold-deep'] = shade(out['--gold'], 0.7); }
-    if (isHex(colors.rare)) { out['--diamond'] = fixFg(colors.rare, surfaces, 4.5); out['--diamond-deep'] = shade(out['--diamond'], 0.55); }
+    // --on-* is the ink printed ON the fill, so it has to be re-solved with the fill. Leaving the
+    // default dark ink in place put #2b1600 on whatever gold the user picked; a deep gold fill
+    // then had near-black text on near-black. Same rule as --on-green above.
+    if (isHex(colors.highlight)) {
+      out['--gold'] = fixFg(colors.highlight, surfaces, 4.5); out['--gold-deep'] = shade(out['--gold'], 0.7);
+      out['--on-gold'] = lum(out['--gold']) > 0.35 ? '#2b1600' : '#fff4e0';
+    }
+    if (isHex(colors.rare)) {
+      out['--diamond'] = fixFg(colors.rare, surfaces, 4.5); out['--diamond-deep'] = shade(out['--diamond'], 0.55);
+      out['--on-diamond'] = lum(out['--diamond']) > 0.35 ? '#04121c' : '#e8f8ff';
+    }
     if (isHex(colors.text)) {
       // 7:1 (AAA) is the aim, but at the darkest permitted background even pure white only reaches
       // ~7.0:1 against the base surface and less against the lighter ones in the ramp, so AAA is not
@@ -121,7 +130,7 @@
     // legacy siteAccent folds into colors.accent so an old saved profile keeps working
     const colors = Object.assign({}, p.colors || {});
     if (!colors.accent && isHex(p.siteAccent)) colors.accent = p.siteAccent;
-    const all = [].concat(...Object.values(GROUPS), ['--on-green']);
+    const all = [].concat(...Object.values(GROUPS), ['--on-green', '--on-gold', '--on-diamond']);
     all.forEach(t => root.style.removeProperty(t));
     const solved = themeFrom(colors);
     Object.keys(solved).forEach(t => root.style.setProperty(t, solved[t]));
