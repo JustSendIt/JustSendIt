@@ -20,6 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="governance.css">
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 </head>
@@ -55,6 +56,39 @@
       <h2 class="comm-members-h" id="comm-members-h">👥 Members <span class="comm-members-sub" id="comm-members-sub"></span></h2>
       <p class="modal-note comm-members-note">Ranked by <b>community level</b> — earned by posting, reacting &amp; commenting here. Every member helps the community level up. 💎</p>
       <ol class="comm-members-list" id="comm-members-list" aria-label="Community members ranked by community level"></ol>
+    </section>
+
+    <section class="comm-props card" id="comm-props" aria-labelledby="comm-props-h" hidden>
+      <div class="comm-props-head">
+        <h2 class="comm-members-h" id="comm-props-h">🗳️ Proposals</h2>
+        <button class="btn btn-primary btn-sm" id="prop-new" type="button" hidden>✍️ New proposal</button>
+      </div>
+      <p class="prop-intro">Verified holders decide. Round one needs <b>50%</b> of yes-and-no votes to promote; round two needs <b>75%</b> to pass. Abstaining helps reach quorum and never counts against a proposal.</p>
+      <form class="prop-form" id="prop-form" hidden>
+        <label class="sr-only" for="prop-title">Proposal title</label>
+        <input type="text" id="prop-title" maxlength="120" placeholder="What should the community decide?" required>
+        <label class="sr-only" for="prop-body">Proposal detail</label>
+        <textarea id="prop-body" maxlength="2000" rows="4" placeholder="Explain it. Paste a contract address → it becomes a clickable $TICKER"></textarea>
+        <div class="prop-form-row">
+          <button class="btn btn-primary btn-sm" id="prop-save" type="submit">Save draft</button>
+          <button class="btn btn-ghost btn-sm" id="prop-cancel" type="button">Cancel</button>
+          <span class="hint" id="prop-count" aria-hidden="true">2000</span>
+        </div>
+        <p class="modal-note" id="prop-status" role="status" aria-live="polite"></p>
+      </form>
+      <ol class="comm-props-list" id="comm-props-list" aria-label="Community proposals"></ol>
+      <p class="prop-empty" id="prop-empty" hidden>No proposals yet. Verified holders can start one.</p>
+    </section>
+
+    <section class="comm-snaps card" id="comm-snaps" aria-labelledby="comm-snaps-h" hidden>
+      <div class="comm-props-head">
+        <h2 class="comm-members-h" id="comm-snaps-h">📸 Holder snapshots</h2>
+        <button class="btn btn-ghost btn-sm" id="snap-take" type="button" hidden>📸 Take a snapshot</button>
+      </div>
+      <p class="prop-intro">A snapshot reads the chain at that moment and records every address holding the token, with how much each one holds. The newest is shown first.</p>
+      <p class="modal-note" id="snap-status" role="status" aria-live="polite"></p>
+      <div class="snap-tabs" id="snap-tabs" role="tablist" aria-label="Snapshots, newest first"></div>
+      <div class="snap-body" id="snap-body"></div>
     </section>
 
     <section class="comm-wall" id="comm-wall" hidden>
@@ -101,6 +135,8 @@
 <script src="player.js"></script>
 <script src="newpairs.js"></script>
 <script src="tokenmodal.js"></script>
+<script src="proposals.js"></script>
+<script src="snapshots.js"></script>
 <script src="community.js"></script>
 <script src="notifications.js"></script>
 <script src="compose.js"></script>

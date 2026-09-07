@@ -314,6 +314,35 @@ CREATE TABLE IF NOT EXISTS proposal_votes (
 );
 -- no idx on proposal_votes(proposal_id): the PK already leads with it, so the tally is covered
 CREATE INDEX IF NOT EXISTS idx_pv_user ON proposal_votes(user_id, proposal_id);
+-- ===== Community holder snapshots: the chain, frozen at a moment =====
+-- Rows are stored as gzipped JSON chunks rather than one row per holder: a token with 30k holders
+-- would otherwise add 30k rows per snapshot, and a snapshot is only ever read whole.
+CREATE TABLE IF NOT EXISTS holder_snapshots (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  community_id   INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  token_addr     TEXT NOT NULL,                 -- denormalised so a snapshot survives community edits
+  requested_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  status         TEXT NOT NULL,                 -- running | complete | partial | failed
+  reason         TEXT,                          -- why it is partial/failed, shown to the reader verbatim
+  started_at     INTEGER NOT NULL,
+  finished_at    INTEGER,
+  symbol         TEXT,
+  decimals       INTEGER NOT NULL DEFAULT 18,
+  total_supply   TEXT,                          -- raw uint256 decimal string
+  supply_held    TEXT,                          -- raw sum of stored balances
+  holder_count   INTEGER NOT NULL DEFAULT 0,
+  expected_count INTEGER,                       -- explorer's own holder count, for the completeness check
+  pages          INTEGER NOT NULL DEFAULT 0,
+  top20          TEXT                           -- JSON [[addr, rawValue]] so the header renders without unzipping
+);
+CREATE INDEX IF NOT EXISTS idx_snap_comm ON holder_snapshots(community_id, id DESC);
+CREATE TABLE IF NOT EXISTS holder_snapshot_chunks (
+  snapshot_id INTEGER NOT NULL REFERENCES holder_snapshots(id) ON DELETE CASCADE,
+  chunk       INTEGER NOT NULL,
+  n           INTEGER NOT NULL,                 -- holders in this chunk
+  blob        BLOB NOT NULL,                    -- gzip(JSON [[addr, rawValue], ...])
+  PRIMARY KEY (snapshot_id, chunk)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS runner_tokens (
   token_addr   TEXT PRIMARY KEY,                     -- lowercased
   pair_addr    TEXT,
@@ -953,7 +982,7 @@ async function resolveTokensInText(text) {
 // community for a token (cheap: communities are few) — used to tag tokens site-wide
 function communityForToken(addr) {
   const c = db.prepare('SELECT id, status, member_count, qual_count, official FROM communities WHERE token_addr = ? COLLATE NOCASE').get(String(addr || '').toLowerCase());
-  return c ? { id: c.id, status: c.status, memberCount: c.member_count, qualCount: c.qual_count, official: !!c.official } : null;
+  return c ? { id: c.id, status: c.status, memberCount: c.member_count, qualCount: c.qual_count, official: !!c.official, demo: !!c.demo } : null;
 }
 async function rpc(method, params) {
   const ctrl = new AbortController();
@@ -1440,6 +1469,7 @@ function communityCardView(c, me) {
     holders: c.c_holders, mcap: c.c_mc, price: c.c_price, priceChange: c.c_pc24, liq: c.c_liq,
     level: levelForXp(c.xp), activity: Math.round(act * 10) / 10, activityTier: actTier(act),
     official: !!c.official, // the $Send / $GWC house communities — pinned first, always live
+    demo: !!c.demo,         // the open sandbox: joinable with no tokens, and grants no multiplier
     joined: me ? !!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=?').get(c.id, me.id) : false,
   };
 }
@@ -1788,6 +1818,139 @@ async function jget(url) {
     return await res.json();
   } catch { return null; }
 }
+/* ===== Community holder snapshots ==================================================================
+   Walks Blockscout's paginated holders endpoint and freezes the full holder list at a moment in time.
+
+   TWO MEASURED FACTS drive this design, both learned the hard way against the live explorer:
+   1. items_count > 50 returns HTTP 200 with an EMPTY list and no cursor. The page size is therefore
+      hardcoded at 50 and must never be exposed as a tunable — a "faster" value silently returns nothing.
+   2. When rate-limited the explorer ALSO answers 200 with an empty list rather than 429. So an empty
+      page is genuinely ambiguous: it can mean "end of list" or "please slow down".
+   Because of (2) a snapshot can never be marked complete just because the pages ran out. Every walk is
+   cross-checked against the explorer's own holder count, and anything short is stored as PARTIAL with
+   the reason attached. A partial snapshot is never presented as a complete one. ======================= */
+const SNAP_PAGE_SIZE = 50;        // hard limit, measured — larger silently returns an empty page
+const SNAP_PAGE_TIMEOUT = 15000;
+const SNAP_PAGE_TRIES = 5;        // an empty page is retried with a seconds-long backoff, never trusted
+const SNAP_PAGE_GAP_MS = 220;     // politeness gap; the explorer starts returning empties under bursts
+const SNAP_MAX_PAGES = 600;       // 30,000 holders ceiling
+const SNAP_CHUNK = 1000;          // holders per gzipped blob
+const SNAP_MIN_INTERVAL = 10 * 60 * 1000;  // per community
+const snapRunning = new Set();
+
+async function snapPage(token, cursor) {
+  const qs = new URLSearchParams({ items_count: String(SNAP_PAGE_SIZE) });
+  if (cursor) for (const [k, v] of Object.entries(cursor)) qs.set(k, String(v));
+  const url = BLOCKSCOUT + '/api/v2/tokens/' + token + '/holders?' + qs.toString();
+  let emptyBackoff = false, lastCode = 0;
+  for (let attempt = 0; attempt < SNAP_PAGE_TRIES; attempt++) {
+    if (attempt) {
+      // An EMPTY page means throttling, and the explorer stays cross for tens of seconds, so it needs a
+      // far longer wait than a network blip. Measured recovery was ~45s, hence seconds not milliseconds.
+      const base = emptyBackoff ? 4000 : 400;
+      await new Promise(r => setTimeout(r, base * Math.pow(2, attempt - 1) + Math.random() * 250));
+    }
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), SNAP_PAGE_TIMEOUT);
+      const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json' }, signal: ctrl.signal });
+      clearTimeout(to);
+      // The explorer throttles in two different shapes: a hard 429, and a soft "200 with an empty list".
+      // Both mean slow down, and both are retried with the long backoff rather than believed.
+      if (res.status === 429) { emptyBackoff = true; lastCode = 429; continue; }
+      if (!res.ok) { lastCode = res.status; continue; }
+      const j = await res.json();
+      const items = Array.isArray(j.items) ? j.items : [];
+      // An empty page is ambiguous (end-of-list vs throttled), so retry it. Only an empty page that
+      // survives every retry is treated as the end, and even then the count check has the final say.
+      if (!items.length && attempt < SNAP_PAGE_TRIES - 1) { emptyBackoff = true; continue; }
+      return { items, next: j.next_page_params || null };
+    } catch { /* timeout or network — fall through to the next attempt */ }
+  }
+  return { failed: true, code: lastCode }; // never treated as end-of-list
+}
+
+async function runSnapshot(snapId, cid, token) {
+  const seen = new Map();           // address -> raw value string (dedupe: paging can repeat a row)
+  let cursor = null, pages = 0, failedAt = null, failCode = 0;
+  try {
+    for (; pages < SNAP_MAX_PAGES; pages++) {
+      const page = await snapPage(token, cursor);
+      if (!page || page.failed) { failedAt = pages; failCode = (page && page.code) || 0; break; }
+      for (const it of page.items) {
+        const a = it && it.address && it.address.hash ? String(it.address.hash).toLowerCase() : null;
+        if (a && !seen.has(a)) seen.set(a, String(it.value || '0'));
+      }
+      if (!page.next || !page.items.length) { cursor = null; break; }
+      cursor = page.next;
+      await new Promise(r => setTimeout(r, SNAP_PAGE_GAP_MS));
+    }
+  } catch { failedAt = pages; }
+
+  // The explorer's own count is the yardstick — without it we cannot claim completeness. It comes from
+  // the token metadata endpoint, which also carries decimals, symbol and total supply in the same call.
+  // (/counters answers "Internal server error" on this chain, so it is deliberately not used.)
+  let meta = null;
+  try { meta = await jget(BLOCKSCOUT + '/api/v2/tokens/' + token); } catch {}
+  const expected = (meta && meta.holders_count != null && Number(meta.holders_count) > 0) ? Number(meta.holders_count) : null;
+
+  const holders = [...seen.entries()].sort((a, b) => (BigInt(b[1]) > BigInt(a[1]) ? 1 : BigInt(b[1]) < BigInt(a[1]) ? -1 : 0));
+  let held = 0n; for (const [, v] of holders) { try { held += BigInt(v); } catch {} }
+
+  let status = 'complete', reason = null;
+  if (failedAt != null) {
+    status = 'partial';
+    reason = failCode === 429
+      ? 'The public block explorer is rate-limiting us right now, so the holder list could not be read in full. Try again in a few minutes.'
+      : 'The chain data source stopped responding part-way through, at page ' + (failedAt + 1) + '.';
+  }
+  else if (pages >= SNAP_MAX_PAGES)          { status = 'partial'; reason = 'This token has more holders than one snapshot stores (' + (SNAP_MAX_PAGES * SNAP_PAGE_SIZE).toLocaleString('en-US') + ').'; }
+  else if (!holders.length)                  { status = 'failed';  reason = 'No holders could be read from the chain data source.'; }
+  else if (expected != null && holders.length < Math.floor(expected * 0.98)) {
+    status = 'partial'; reason = 'The explorer reports ' + expected.toLocaleString('en-US') + ' holders but only ' + holders.length.toLocaleString('en-US') + ' could be read.';
+  }
+
+  try {
+    db.exec('BEGIN');
+    let chunks = 0;
+    for (let i = 0; i < holders.length; i += SNAP_CHUNK) {
+      const slice = holders.slice(i, i + SNAP_CHUNK);
+      db.prepare('INSERT INTO holder_snapshot_chunks (snapshot_id, chunk, n, blob) VALUES (?,?,?,?)')
+        .run(snapId, chunks, slice.length, zlib.gzipSync(Buffer.from(JSON.stringify(slice))));
+      chunks++;
+    }
+    db.prepare(`UPDATE holder_snapshots SET status=?, reason=?, finished_at=?, symbol=?, decimals=?, total_supply=?,
+                supply_held=?, holder_count=?, expected_count=?, pages=?, top20=? WHERE id=?`)
+      .run(status, reason, now(),
+           (meta && meta.symbol) || null,
+           meta && meta.decimals != null ? Number(meta.decimals) : 18,
+           (meta && meta.total_supply) ? String(meta.total_supply) : null,
+           held.toString(), holders.length, expected, pages,
+           JSON.stringify(holders.slice(0, 20)), snapId);
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch {}
+    try { db.prepare("UPDATE holder_snapshots SET status='failed', reason=?, finished_at=? WHERE id=?").run('Could not store the snapshot.', now(), snapId); } catch {} }
+  snapRunning.delete(cid);
+}
+
+function snapshotView(s, withHolders, offset, limit) {
+  const out = {
+    id: s.id, communityId: s.community_id, token: s.token_addr, status: s.status, reason: s.reason,
+    startedAt: s.started_at, finishedAt: s.finished_at, symbol: s.symbol, decimals: s.decimals,
+    totalSupply: s.total_supply, supplyHeld: s.supply_held, holderCount: s.holder_count,
+    expectedCount: s.expected_count, pages: s.pages,
+    complete: s.status === 'complete',
+    top20: s.top20 ? JSON.parse(s.top20) : [],
+  };
+  if (!withHolders) return out;
+  const rows = db.prepare('SELECT chunk, n, blob FROM holder_snapshot_chunks WHERE snapshot_id=? ORDER BY chunk').all(s.id);
+  let all = [];
+  for (const r of rows) { try { all = all.concat(JSON.parse(zlib.gunzipSync(r.blob).toString('utf8'))); } catch {} }
+  out.holders = all.slice(offset, offset + limit).map((h, i) => ({ rank: offset + i + 1, address: h[0], value: h[1] }));
+  out.offset = offset; out.limit = limit; out.total = all.length;
+  return out;
+}
+
 async function jgetH(url, headers) { // jget with custom headers (for the optional Dextools API key)
   try {
     const ctrl = new AbortController();
@@ -4773,6 +4936,22 @@ const server = http.createServer(async (req, res) => {
         const officials = db.prepare('SELECT * FROM communities WHERE official = 1 ORDER BY id').all().map(c => communityCardView(c, me)); // always returned, whatever tab/sort
         return send(res, 200, { status, sort, officials, communities: rows.slice(0, 120).map(c => communityCardView(c, me)) });
       }
+      /* ----- snapshot-scoped: /api/communities/:cid/snapshots/:sid ----- */
+      {
+        const sm = /^\/api\/communities\/(\d+)\/snapshots\/(\d+)$/.exec(p);
+        if (sm) {
+          if (req.method !== 'GET') return bad(res, 'method not allowed', 405);
+          const cid = Number(sm[1]), sid = Number(sm[2]);
+          const s = db.prepare('SELECT * FROM holder_snapshots WHERE id=? AND community_id=?').get(sid, cid);
+          if (!s) return bad(res, 'snapshot not found', 404);
+          const offset = Math.max(0, Number(url.searchParams.get('offset')) || 0);
+          const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit')) || 100));
+          // A finished snapshot never changes, so it is safe to cache hard — this is what makes an old
+          // snapshot open instantly instead of unzipping on every view.
+          const headers = s.finished_at ? { 'Cache-Control': 'private, max-age=86400' } : {};
+          return send(res, 200, { snapshot: snapshotView(s, true, offset, limit) }, headers);
+        }
+      }
       /* ----- proposal-scoped: /api/communities/:cid/proposals/:pid[/vote|/open] -----
          Placed BEFORE the /:cid(/join|posts|members|proposals) matcher because that regex ends in $
          and can never match a second path segment. Has its own 405 tail — do not share m's. */
@@ -4838,7 +5017,7 @@ const server = http.createServer(async (req, res) => {
         }
       }
       {
-        const m = /^\/api\/communities\/(\d+)(?:\/(join|posts|members|proposals))?$/.exec(p);
+        const m = /^\/api\/communities\/(\d+)(?:\/(join|posts|members|proposals|snapshots))?$/.exec(p);
         if (m) {
           const cid = Number(m[1]), sub = m[2];
           const c = db.prepare('SELECT * FROM communities WHERE id=?').get(cid);
@@ -4950,6 +5129,31 @@ const server = http.createServer(async (req, res) => {
             scanWriteAction(me.id, 'post', title);
             const fresh = db.prepare('SELECT * FROM proposals WHERE id=?').get(Number(info.lastInsertRowid));
             return send(res, 200, { proposal: proposalView(fresh, me, c, cmRow) });
+          }
+          if (sub === 'snapshots' && req.method === 'GET') {
+            const rows = db.prepare('SELECT * FROM holder_snapshots WHERE community_id=? ORDER BY id DESC LIMIT 40').all(cid);
+            return send(res, 200, { snapshots: rows.map(s => snapshotView(s, false)) });   // newest first
+          }
+          if (sub === 'snapshots' && req.method === 'POST') {
+            if (!me) return bad(res, 'sign in first', 401);
+            if (blockReadOnly(res, me)) return;
+            if (c.status !== 'live') return bad(res, 'this community is not live yet', 403);
+            const cmS = db.prepare('SELECT qualified FROM community_members WHERE community_id=? AND user_id=?').get(cid, me.id);
+            if (!cmS || !cmS.qualified) return bad(res, 'only verified members of this community can take a snapshot', 403);
+            if (snapRunning.has(cid)) return bad(res, 'a snapshot is already running for this community', 409);
+            // A snapshot is hundreds of calls to a shared public explorer, so it is throttled per
+            // community rather than per user — otherwise ten members could each start one.
+            const last = db.prepare('SELECT started_at FROM holder_snapshots WHERE community_id=? ORDER BY id DESC LIMIT 1').get(cid);
+            if (last && now() - last.started_at < SNAP_MIN_INTERVAL) {
+              return bad(res, 'a snapshot was taken recently — you can take another in ' + Math.ceil((SNAP_MIN_INTERVAL - (now() - last.started_at)) / 60000) + ' minutes', 429);
+            }
+            const info = db.prepare("INSERT INTO holder_snapshots (community_id, token_addr, requested_by, status, started_at) VALUES (?,?,?,'running',?)")
+              .run(cid, c.token_addr, me.id, now());
+            const snapId = Number(info.lastInsertRowid);
+            snapRunning.add(cid);
+            runSnapshot(snapId, cid, c.token_addr).catch(() => { snapRunning.delete(cid); });   // walks in the background
+            const s = db.prepare('SELECT * FROM holder_snapshots WHERE id=?').get(snapId);
+            return send(res, 202, { snapshot: snapshotView(s, false) });
           }
           return bad(res, 'method not allowed', 405);
         }

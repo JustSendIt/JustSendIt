@@ -57,7 +57,8 @@
       : '<button class="btn ' + (joined ? 'btn-ghost' : 'btn-primary') + ' comm-join-btn" id="comm-join" type="button" aria-pressed="' + (!!joined) + '">' + (joined ? '✓ You’re in' + (c.mine && c.mine.isCreator ? ' (starter 👑)' : '') : '➕ Opt in' + (live ? ' & get 10×' : '')) + '</button>';
     const conv = (joined && c.mine) ? xpBar('💎 Your conviction · ' + esc(c.mine.convictionTitle), c.mine.convictionLevel, c.mine.convictionInto, c.mine.convictionSpan, 'comm-xp-conv') : '';
     const blockReason = (c.mine && c.mine.blockReason) || null; // anti-sybil block (IP cap / starter network) — NOT a holdings problem, so say so
-    const twoX = (qualified && live) ? '<span class="comm-2x-badge" title="You earn 10× Send Power on everything while in a live community">⚡ 10× active</span>'
+    const twoX = c.demo ? '<span class="comm-2x-badge comm-2x-off" title="The sandbox is for trying things out, so it grants no Send Power multiplier">🧪 Sandbox — no 10×</span>'
+      : (qualified && live) ? '<span class="comm-2x-badge" title="You earn 10× Send Power on everything while in a live community">⚡ 10× active</span>'
       : (joined && live ? '<span class="comm-2x-badge comm-2x-off" title="' + esc(blockReason || 'Your holding could not be verified on-chain right now — hold this token to keep the 10×') + '">⏸ 10× ' + (blockReason ? 'not active' : 'paused') + '</span>' : '');
 
     heroEl.innerHTML = banner +
@@ -97,7 +98,12 @@
       document.getElementById('comm-c-handle').textContent = AUTH.user.username;
     } else {
       comp.hidden = true; lk.hidden = false;
-      document.getElementById('comm-wall-locked').innerHTML = joined ? '' : '👀 <b>Anyone can read this wall.</b> To post, <b>opt in</b> above — that means <b>connecting a wallet</b> and confirming you <b>hold this token</b> on-chain. Members also earn <b>10× Send Power</b>. ⚡';
+      // The sandbox community has no token to hold and deliberately grants no multiplier, so it must
+      // not repeat the standard copy — that would be telling people something untrue about it.
+      document.getElementById('comm-wall-locked').innerHTML = joined ? ''
+        : ((C && C.demo)
+          ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no tokens and no wallet</b> and try everything — posting, proposals, voting and snapshots. It is for learning, so it earns <b>no Send Power multiplier</b>.'
+          : '👀 <b>Anyone can read this wall.</b> To post, <b>opt in</b> above — that means <b>connecting a wallet</b> and confirming you <b>hold this token</b> on-chain. Members also earn <b>10× Send Power</b>. ⚡');
     }
   }
 
@@ -199,7 +205,7 @@
             if (leaving) sendToast('Left the community');
             else if (j.qualified === false) sendToast(j.reason || 'You’re in as a member — but not as a verified holder yet'); // honest: no "Opted in!" for a blocked slot
             else if (j.requalified) sendToast('↻ Re-verified — you’re back in as a holder' + (j.status === 'live' ? ' (10× restored) ⚡' : ''));
-            else sendToast(j.status === 'live' ? '⚡ You’re in — 10× Send Power active!' : '➕ Opted in!');
+            else sendToast((C && C.demo) ? '🧪 You’re in the sandbox — try everything!' : (j.status === 'live' ? '⚡ You’re in — 10× Send Power active!' : '➕ Opted in!'));
           }
           // founder bonus is credited to the CREATOR only — pop it just for them (the joiner who tips it live isn't the creator)
           if (j.founder && j.founder.awarded && j.community && j.community.mine && j.community.mine.isCreator && window.showPoints) showPoints(j.founder.points);
