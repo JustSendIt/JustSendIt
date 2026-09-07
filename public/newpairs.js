@@ -130,8 +130,13 @@
     return 'caution';
   }
   // verdict presentation — a perfect 100 reads "Looks Good, Send It 🚀"; everything else uses TRI
+  // A token whose liquidity/holder/index data could not be read is NOT a clean bill of health — it is an
+  // unknown. Without this it would trip no flags, score 100, and carry the greenest verdict on the site,
+  // which would make "we could not check" look identical to "we checked and it is fine".
+  const thinData = (p) => !!(p.risk && p.risk.thinData);
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
+    if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
     if (tri === 'ok' && health >= 100) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' };
     return TRI[tri];
   }
@@ -1195,7 +1200,7 @@
   const healthOf = (p) => Math.round((p.risk && p.risk.health) || 0);
   // The ONE feed filter: a perfect score AND the 'ok' triage — i.e. exactly the pairs that carry the
   // 🚀 "Looks Good, Send It" verdict. Same test as verdictOf(), kept in one place so the two can never drift.
-  const feedQualifies = (p) => triageOf(p) === 'ok' && healthOf(p) >= 100;
+  const feedQualifies = (p) => !thinData(p) && triageOf(p) === 'ok' && healthOf(p) >= 100;
   const feedMove = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
   function rocketCount(addr) { try { return Number(localStorage.getItem('np:rocket:' + addr)) || 0; } catch { return 0; } }
   function srLine(p) {

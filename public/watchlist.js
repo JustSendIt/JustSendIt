@@ -25,7 +25,10 @@
   /* ---------- verdict + flags ---------- */
   const TRI = { ok: { cls: 'np-t-ok', ico: '🟢', word: 'Looks OK' }, caution: { cls: 'np-t-caution', ico: '🟡', word: 'Caution' }, high: { cls: 'np-t-high', ico: '🔴', word: 'High risk' }, avoid: { cls: 'np-t-avoid', ico: '☠️', word: 'Avoid' } };
   function triageOf(p) { const r = p.risk || {}; if (TRI[r.triage]) return r.triage; if (r.health != null) return r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid'; return 'caution'; }
-  function verdictOf(p) { const tri = triageOf(p), h = Math.round((p.risk && p.risk.health) || 0); if (tri === 'ok' && h >= 100) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' }; return TRI[tri]; }
+  // same honesty rule as the radar: unreadable data is an unknown, never a green verdict
+  function verdictOf(p) { const tri = triageOf(p), h = Math.round((p.risk && p.risk.health) || 0);
+    if (p.risk && p.risk.thinData) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
+    if (tri === 'ok' && h >= 100) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' }; return TRI[tri]; }
   const FLAG = {
     honeypotSuspect: { ico: '🍯', word: "Can't sell?", sev: 'bad' }, dumping: { ico: '📉', word: 'Dumping', sev: 'bad' },
     serialDeployer: { ico: '🔁', word: 'Serial deployer', sev: 'bad' }, lowLiquidity: { ico: '💧', word: 'Thin liquidity', sev: 'bad' },

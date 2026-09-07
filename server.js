@@ -440,6 +440,7 @@ for (const col of [
   "ALTER TABLE call_hops ADD COLUMN held_usd REAL NOT NULL DEFAULT 0",        // USD value of what they still HOLD (0 = sold out / no position)
   // Communities: a flat 10× Send Power while qualified in ≥1 live community; posts can belong to a community wall
   "ALTER TABLE users ADD COLUMN live_comm_count INTEGER NOT NULL DEFAULT 0",  // # of LIVE communities this user qualifies in (drives the flat 10× flag)
+  "ALTER TABLE communities ADD COLUMN demo INTEGER NOT NULL DEFAULT 0",       // 1 = open sandbox community: no token required, and deliberately grants no 10×
   "ALTER TABLE posts ADD COLUMN community_id INTEGER",                        // NULL = Send Wall / profile; set = a community wall
   // Convicted In: reference price/mcap captured when the token was pinned (basis for "Xs up since you convicted")
   "ALTER TABLE pinned_tokens ADD COLUMN pin_price REAL",                      // USD price at pin time (0/NULL = no baseline, e.g. legacy pin)
@@ -1416,6 +1417,10 @@ function awardConviction(cid, uid, kind, base, ref) {
 // Why an opt-in does NOT count as a verified holder slot (null = it does). The reason is shown to the member so a
 // holder blocked by the anti-sybil caps is never told "Opted in!" and then left wondering why posting/10× are off.
 function qualifyReason(me, c, ip, holds) {
+  // A demo community is an open sandbox: anyone may join and use every feature. It deliberately
+  // skips the holding test AND the per-network anti-sybil cap, which is safe only because a demo
+  // membership grants no Send Power multiplier (see joinCommunity) — so there is nothing to farm.
+  if (c.demo) return null;
   if (!holds) return 'You must hold $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
   const ipk = ip ? bidx(ip) : null; // IPs are stored only as blind indexes
   const ipUses = db.prepare("SELECT COUNT(*) n FROM community_members WHERE community_id=? AND qualified=1 AND join_ip=?").get(c.id, ipk).n;
@@ -1441,6 +1446,26 @@ function communityCardView(c, me) {
 // The house communities: $Send and $GWC exist from day one (owned by the site's own system account), live immediately,
 // pinned to the top of the Communities page so a newcomer can see what participating looks like and join in one tap.
 let officialSeedTimer = null;
+// The open sandbox: a community branded for Robinhood Chain itself that ANYONE can join with no
+// tokens at all, so a newcomer can try posting, proposing, voting and snapshots before they own
+// anything. It is pointed at the chain's WETH contract so the snapshot feature reads real on-chain
+// holders rather than inventing data. Deliberately grants no Send Power multiplier — see joinCommunity.
+const demoToken = () => WETH_ADDR.toLowerCase();   // resolved lazily: WETH_ADDR is declared further down
+function seedDemoCommunity() {
+  try {
+    let owner = db.prepare('SELECT id FROM users WHERE system = 1').get();
+    if (!owner) return; // the official seeder creates the system account; it runs first
+    const ex = db.prepare('SELECT id FROM communities WHERE token_addr = ? COLLATE NOCASE').get(demoToken());
+    if (ex) { db.prepare("UPDATE communities SET demo=1, official=1, status='live' WHERE id=?").run(ex.id); return; }
+    db.prepare(`INSERT INTO communities (creator_id, token_addr, pair_addr, symbol, name, brand, status, official, demo,
+                founder_paid, went_live_at, creator_ip, created_at)
+                VALUES (?,?,?,?,?,?,'live',1,1,1,?,NULL,?)`)
+      .run(owner.id, demoToken(), demoToken(), 'RHC', 'Robinhood Chain',
+           JSON.stringify({ enhanced: false, boosted: 0, imageUrl: null, header: null, websites: [], socials: [] }),
+           now(), now());
+    console.log('🏘️ seeded the open Robinhood Chain sandbox community');
+  } catch (e) { console.error('demo community seed failed:', e && e.message); }
+}
 async function seedOfficialCommunities() {
   try {
     let owner = db.prepare('SELECT id FROM users WHERE system = 1').get();
@@ -1491,7 +1516,10 @@ function joinCommunity(me, cid, ip, holds) {
     if (isNew) db.prepare('INSERT INTO community_members (community_id, user_id, joined_at, qualified, join_ip) VALUES (?,?,?,?,?)').run(cid, me.id, now(), qual ? 1 : 0, ip ? bidx(ip) : null);
     else db.prepare('UPDATE community_members SET qualified = 1, qual_check_at = ?, join_ip = ? WHERE community_id=? AND user_id=?').run(now(), ip ? bidx(ip) : null, cid, me.id);
     db.prepare('UPDATE communities SET member_count = member_count + ' + (isNew ? 1 : 0) + (qual ? ', qual_count = qual_count + 1' : '') + ' WHERE id=?').run(cid);
-    if (qual && wasLive) db.prepare('UPDATE users SET live_comm_count = live_comm_count + 1 WHERE id=?').run(me.id); // already live → this member gets the 10× flag now
+    // THE ONE THING A DEMO MEMBERSHIP MUST NOT DO: grant the flat 10× Send Power. Demo members get a
+    // qualified row so they can post, vote, propose and take snapshots like anyone else, but
+    // live_comm_count is untouched, so joining the sandbox cannot multiply what you earn site-wide.
+    if (qual && wasLive && !c.demo) db.prepare('UPDATE users SET live_comm_count = live_comm_count + 1 WHERE id=?').run(me.id);
     if (!wasLive && (c.qual_count + (qual ? 1 : 0)) >= LIVE_THRESHOLD) {
       db.prepare("UPDATE communities SET status='live', went_live_at=? WHERE id=?").run(now(), cid);
       db.prepare('UPDATE users SET live_comm_count = live_comm_count + 1 WHERE id IN (SELECT user_id FROM community_members WHERE community_id=? AND qualified=1)').run(cid); // grant the 10× flag to ALL qualified members on go-live
@@ -1619,7 +1647,7 @@ let communityHolderSweeping = false;
 async function sweepCommunityHolders() {
   if (communityHolderSweeping) return; communityHolderSweeping = true;
   try {
-    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status = 'live' ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
+    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status = 'live' AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
     for (const r of rows) {
       let holds; try { holds = await holdsToken(r.user_id, r.token_addr); } catch { continue; } // RPC error → skip (never revoke on a transient failure)
       const t = now();
@@ -2136,6 +2164,22 @@ function applyRisk(e, deployerCounts, deployerDied) {
   const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
   r.health = Math.max(0, Math.min(100, 100 - penalty));
   r.triage = r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid';
+  /* DATA COMPLETENESS — the difference between "we checked and it is fine" and "we could not check".
+     Every flag above is null-guarded, so a token too new to have liquidity, holder or verification data
+     trips NOTHING, scores 100 - 0 = 100, and would otherwise be presented with the greenest verdict on
+     the site. That is exactly backwards: least-known reads as safest. We therefore record which signals
+     were actually readable, and a token missing the load-bearing ones can never reach the top tier. */
+  r.dataKnown = {
+    indexed:  !!e.indexed,
+    liquidity: e.market.liquidityUsd != null,
+    holders:   e.holders.count != null,
+    concentration: e.holders.topHolderPct != null,
+    verified:  e.token.isVerified != null,
+  };
+  r.dataScore = Object.values(r.dataKnown).filter(Boolean).length;   // 0..5
+  // liquidity + holders + an index entry are the minimum needed to say anything at all
+  r.thinData = !(r.dataKnown.indexed && r.dataKnown.liquidity && r.dataKnown.holders);
+  if (r.thinData && r.triage === 'ok') r.triage = 'caution';
   // honesty floor: a token carrying a high/critical-severity flag can never read as the green "Looks OK" tier
   const SEV_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
   const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
@@ -3537,6 +3581,14 @@ const server = http.createServer(async (req, res) => {
         try { recovered = verifyMessage(message, String(b.signature || '')).toLowerCase(); }
         catch { return bad(res, 'bad signature'); }
         if (!walletAddresses(u.id).includes(recovered)) return bad(res, 'that wallet is not linked to this account', 401);
+        // Same rule the 2FA-management path enforces (verifyCurrentFactor): only a wallet linked BEFORE
+        // two-factor was switched on counts as the second factor. Without this, an attacker holding a
+        // stolen session cookie can link a fresh wallet of their own and then use it to satisfy 2FA —
+        // which makes the factor worth nothing. Pre-migration rows (NULL timestamps) keep legacy behaviour.
+        const w2 = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(u.id, bidx(recovered));
+        if (w2 && w2.linked_at && u.twofa_enabled_at && w2.linked_at > u.twofa_enabled_at) {
+          return bad(res, 'that wallet was linked after two-factor was turned on — sign with the wallet you enabled it with', 401);
+        }
         pendingLogins.delete(String(b.pending));
         return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id)) });
       }
@@ -4809,8 +4861,12 @@ const server = http.createServer(async (req, res) => {
             if (blockReadOnly(res, me)) return;
             probationTick(me.id);
             if (!rateLimit('commjoin:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
-            let holds; try { holds = await holdsToken(me.id, c.token_addr); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in
-            if (!holds) return bad(res, 'You must hold $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
+            let holds;
+            if (c.demo) holds = true;   // the open sandbox: no token, no wallet, no chain call — anyone may walk in
+            else {
+              try { holds = await holdsToken(me.id, c.token_addr); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in
+              if (!holds) return bad(res, 'You must hold $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
+            }
             const j = joinCommunity(me, cid, clientIp(req), holds);
             if (j.error) return bad(res, j.error === 'not found' ? 'community not found' : 'could not join', j.error === 'not found' ? 404 : 500);
             if (j.alreadyMember) return send(res, 200, { joined: true, alreadyMember: true, qualified: j.qualified !== false, reason: j.reason || null, community: communityDetailView(c, me, clientIp(req)) }); // a member who holds but can't re-qualify gets the honest reason, not "Opted in!"
@@ -4825,7 +4881,7 @@ const server = http.createServer(async (req, res) => {
               db.exec('BEGIN');
               db.prepare('DELETE FROM community_members WHERE community_id=? AND user_id=?').run(cid, me.id);
               db.prepare('UPDATE communities SET member_count = MAX(member_count-1,0)' + (row.qualified ? ', qual_count = MAX(qual_count-1,0)' : '') + ' WHERE id=?').run(cid);
-              if (row.qualified && c.status === 'live') db.prepare('UPDATE users SET live_comm_count = MAX(live_comm_count-1,0) WHERE id=?').run(me.id);
+              if (row.qualified && c.status === 'live' && !c.demo) db.prepare('UPDATE users SET live_comm_count = MAX(live_comm_count-1,0) WHERE id=?').run(me.id);
               db.exec('COMMIT');
             } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not leave', 500); }
             return send(res, 200, { left: true, community: communityDetailView(db.prepare('SELECT * FROM communities WHERE id=?').get(cid), me, clientIp(req)) });
@@ -4843,8 +4899,10 @@ const server = http.createServer(async (req, res) => {
             if (c.status !== 'live') return bad(res, 'this community isn’t live yet — it needs ' + LIVE_THRESHOLD + ' members', 403);
             // posting needs a VERIFIED slot (qualified=1), not just a membership row — the anti-sybil caps must gate the wall too, exactly as the opt-in copy promises
             if (!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? AND qualified=1').get(cid, me.id)) return bad(res, 'posting needs a verified holder slot — opt in (and re-verify if your slot was paused) to post on this wall', 403);
-            let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr); } catch { return bad(res, RPC_DOWN_MSG, 503); }
-            if (!holdsP) return bad(res, 'You need to hold $' + c.symbol + ' to post on its community wall.', 403);
+            if (!c.demo) {   // the sandbox has no token to hold, so the holding gate does not apply there
+              let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+              if (!holdsP) return bad(res, 'You need to hold $' + c.symbol + ' to post on its community wall.', 403);
+            }
             if (!rateLimit('commpost:' + me.id, 12, 6e5)) return bad(res, 'slow down', 429);
             const bigUpload = Number(req.headers['content-length'] || 0) > MEDIA_GATE_BYTES;
             if (bigUpload && mediaInFlight >= MEDIA_CONCURRENCY) return bad(res, 'lots of uploads right now — try again in a moment', 503);
@@ -5133,7 +5191,7 @@ function productionChecks() {
   }
 }
 
-server.listen(PORT, () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); setTimeout(() => { seedOfficialCommunities().catch(() => {}); }, 2500).unref(); });
+server.listen(PORT, () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
 
 // New Pairs Radar is hidden (unlinked from the nav) — no background refresher runs so we don't hit the
 // RPC/Blockscout/Dexscreener every 90s for a page nobody can reach. The /api/pairs/new endpoint still
