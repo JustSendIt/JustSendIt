@@ -3246,3 +3246,83 @@ body::after {
 .oc-table th:first-child, .oc-table td:first-child { text-align: left; }
 .oc-table td { text-align: right; padding: 0.3rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
 @media (max-width: 640px) { .oc-canvas { height: 200px; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   14. SEGMENTED CONTROLS — New Pairs toggles
+   The three toggle groups on this page were still wearing the pre-overhaul
+   blue-grey palette and swapped their active state instantly, which reads as a
+   flicker rather than a movement. They are now one consistent control with a
+   pill that SLIDES between segments.
+
+   The indicator is the container's own ::before, positioned from :has() — so
+   there is no new DOM, no JS, and the animation is a transform, which stays off
+   the layout path. Buttons sit above it on z-index and only transition colour.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ---- shared indicator geometry ---- */
+.np-viewswitch { position: relative; isolation: isolate; }
+/* Only the view switcher gets a SLIDING pill. It is display:flex at full width with flex:1 1 0, so
+   its three tabs are genuinely equal thirds and a fractional indicator lands exactly (measured:
+   187.3px indicator against a 187px tab). .np-safety and .np-runwin are inline-flex and shrink to
+   fit their labels, so their segments are NOT equal width — a fractional pill would sit visibly
+   off-centre there. They get a filled active segment instead, which is correct at any label width. */
+.np-viewswitch::before {
+  content: ''; position: absolute; z-index: 0;
+  top: var(--seg-pad); bottom: var(--seg-pad); left: var(--seg-pad);
+  width: calc((100% - 2 * var(--seg-pad) - (var(--seg-n) - 1) * var(--seg-gap)) / var(--seg-n));
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--green-bright), var(--green));
+  box-shadow: 0 2px 14px var(--glow-g), inset 0 1px 0 rgba(255,255,255,0.45);
+  transform: translateX(calc(var(--seg-i, 0) * (100% + var(--seg-gap))));
+  transition: transform var(--dur-3) var(--ease-out);
+  pointer-events: none;
+}
+.np-vs-btn, .np-seg { position: relative; z-index: 1; }
+
+/* ---- view switcher (3 tabs) ---- */
+.np-viewswitch {
+  --seg-pad: 5px; --seg-gap: 4px; --seg-n: 3;
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 40%), var(--glass-nav);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border: 1px solid var(--hair);
+  box-shadow: var(--shadow-1), inset 0 1px 0 var(--glass-edge);
+}
+.np-viewswitch:has(.np-vs-btn:nth-child(2)[aria-selected="true"]) { --seg-i: 1; }
+.np-viewswitch:has(.np-vs-btn:nth-child(3)[aria-selected="true"]) { --seg-i: 2; }
+.np-vs-btn { transition: color var(--dur-2) var(--ease-out); }
+.np-vs-btn:hover { color: var(--text); }
+/* the ink is a token now, not a literal, so a user-chosen accent keeps its contrast */
+.np-vs-btn[aria-selected="true"] { background: none; color: var(--on-green); }
+
+/* ---- safety filter (3) and time window (5) ---- */
+.np-safety, .np-runwin {
+  background: var(--glass-well); border: 1px solid var(--edge-ctl);
+}
+.np-safety .np-seg, .np-runwin .np-seg {
+  text-align: center;
+  transition: color var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+}
+.np-seg:hover { color: var(--text); }
+.np-seg.is-on {
+  background: linear-gradient(180deg, var(--green-bright), var(--green));
+  color: var(--on-green);
+  box-shadow: 0 2px 12px var(--glow-g), inset 0 1px 0 rgba(255,255,255,0.45);
+}
+
+/* Focus must read against BOTH the dark track and the bright pill, so it uses the
+   theme-independent focus token rather than the accent (which a user can change). */
+.np-vs-btn:focus-visible, .np-seg:focus-visible {
+  outline: 3px solid var(--focus); outline-offset: -2px; box-shadow: none;
+}
+
+/* :has() is broadly supported, but where it is not the pill would sit under the
+   first segment forever — so fall back to the old solid-fill active state. */
+@supports not selector(:has(*)) {
+  .np-viewswitch::before { display: none; }
+  .np-vs-btn[aria-selected="true"] { background: linear-gradient(180deg, var(--green-bright), var(--green)); color: var(--on-green); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .np-viewswitch::before { transition: none; }
+  .np-safety .np-seg, .np-runwin .np-seg { transition: none; }
+}
