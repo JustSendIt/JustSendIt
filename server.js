@@ -272,6 +272,48 @@ CREATE TABLE IF NOT EXISTS community_members (
 );
 CREATE INDEX IF NOT EXISTS idx_cm_user ON community_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_cm_comm ON community_members(community_id, conviction_xp DESC);
+-- ===== Community proposals: verified holders decide anything, in two rounds =====
+-- Round 1 promotes on >=50% of DECISIVE votes (yes+no; abstains are deliberately excluded from the
+-- threshold but DO count toward quorum, so "present and neutral" is a real third option rather than
+-- a silent No). Round 2 passes on >=75% of decisive votes. Tallies and quorum are frozen at close,
+-- so a sell-off after the fact can never rewrite a decided proposal.
+CREATE TABLE IF NOT EXISTS proposals (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  community_id  INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  author_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title         TEXT NOT NULL,
+  body          TEXT NOT NULL DEFAULT '',
+  tokens        TEXT,
+  status        TEXT NOT NULL DEFAULT 'draft',   -- draft|open|round2|passed|rejected|expired
+  electorate    INTEGER NOT NULL DEFAULT 0,      -- qual_count frozen when voting opened (record date)
+  quorum_r1     INTEGER NOT NULL DEFAULT 0,
+  quorum_r2     INTEGER NOT NULL DEFAULT 0,
+  r1_yes INTEGER, r1_no INTEGER, r1_abs INTEGER, -- written ONCE at close, never recomputed
+  r2_yes INTEGER, r2_no INTEGER, r2_abs INTEGER,
+  reason        TEXT,
+  deadline      INTEGER,                         -- next moment this row needs attention; NULL when terminal
+  created_at    INTEGER NOT NULL,
+  opened_at     INTEGER,                         -- round 1 start AND the electorate record date
+  r1_ends_at    INTEGER,
+  r2_opened_at  INTEGER,
+  r2_ends_at    INTEGER,
+  resolved_at   INTEGER,
+  author_ip     TEXT                             -- bidx() blind index only, like communities.creator_ip
+);
+CREATE INDEX IF NOT EXISTS idx_prop_comm   ON proposals(community_id, status, id DESC);
+CREATE INDEX IF NOT EXISTS idx_prop_author ON proposals(author_id, community_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_prop_due    ON proposals(deadline) WHERE deadline IS NOT NULL;
+CREATE TABLE IF NOT EXISTS proposal_votes (
+  proposal_id INTEGER NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+  round       INTEGER NOT NULL,                  -- round 2 is a FRESH ballot: one row per round
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  choice      TEXT NOT NULL,                     -- yes|no|abstain
+  created_at  INTEGER NOT NULL,
+  vote_ip     TEXT,                              -- bidx() blind index, anti-sybil audit only
+  PRIMARY KEY (proposal_id, round, user_id)      -- one vote per holder per round, and it is final
+);
+-- no idx on proposal_votes(proposal_id): the PK already leads with it, so the tally is covered
+CREATE INDEX IF NOT EXISTS idx_pv_user ON proposal_votes(user_id, proposal_id);
 CREATE TABLE IF NOT EXISTS runner_tokens (
   token_addr   TEXT PRIMARY KEY,                     -- lowercased
   pair_addr    TEXT,
@@ -738,6 +780,139 @@ const COMM_XP_DAILY_CAP = { wall_post: 400, wall_react_get: 300, wall_comment: 2
 const COMM_XP_PER_USER_DAY = 250;  // max community-XP one member can push into one community/day (anti-solo-inflate)
 const CONV_XP = { join: 40, wall_post: 20, wall_comment: 6, wall_react_give: 2, send_call: 30 };        // per-member conviction XP per action
 const CONV_DAILY_CAP = 150;        // max conviction XP a member earns in one community/day
+
+/* ===== Community proposals + two-round voting =====================================================
+   THE COUNTING RULE, stated once so nobody has to infer it:
+     decisive = yes + no.  Abstains are EXCLUDED from the threshold and INCLUDED in quorum.
+     Round 1 promotes when yes*2 >= decisive  (>=50% of decisive votes).
+     Round 2 passes   when yes*4 >= decisive*3 (>=75% of decisive votes).
+   Abstain therefore means "I turned up and I am neutral" — it helps reach quorum and never counts
+   against the motion. A tied 50/50 round 1 promotes, which is safe because round 1 is only a
+   promotion gate; the real bar is round 2's supermajority.
+
+   Rounds always run their full clock. An early close would have to be judged against a MOVING
+   electorate — holders here sell constantly — which is gameable: dump enough supply and the
+   remaining ballots suddenly look decisive. Quorum and tallies are frozen at close for the same
+   reason: a decided proposal can never be rewritten by a later sell-off. ================================ */
+const PROP_DRAFT_TTL = 24 * 3600 * 1000;   // an unopened draft self-expires after a day
+const PROP_R1_MS     = 3 * 864e5;          // round 1 runs 72h — long enough that an every-other-day member still gets a ballot
+const PROP_R2_MS     = 2 * 864e5;          // round 2 runs 48h — shorter, the electorate is already engaged
+const PROP_QUORUM_R1 = { frac: 0.20, min: 5, max: 50 };
+const PROP_QUORUM_R2 = { frac: 0.30, min: 6, max: 60 };
+const PROP_OPEN_PER_USER = 1;              // non-terminal proposals one member may run in one community
+const PROP_OPEN_PER_COMM = 5;              // non-terminal proposals a community may run at once
+const PROP_TITLE_MAX = 120, PROP_BODY_MAX = 2000;
+const PROP_NOTIFY_CAP = 200;               // max recipients of one proposal's fan-out
+const W_prop = 4;                          // grid-activity weight for opening a proposal
+const PROP_LIVE = "('open','round2')";
+
+function quorumFor(qual, q) {
+  const n = Math.min(q.max, Math.max(q.min, Math.ceil((qual || 0) * q.frac)));
+  return Math.max(1, Math.min(qual || 1, n)); // never demand more ballots than there are eligible voters
+}
+// The single source of truth for a tally — used live during a round and once at resolution.
+// The JOIN on qualified=1 is deliberate: a member who sold their tokens stops being a holder, so
+// their ballot stops counting. joined_at <= opened_at is the record date, so nobody can join after
+// a vote starts in order to swing it.
+function tallyRound(p, round) {
+  const rows = db.prepare(`SELECT v.choice, COUNT(*) n FROM proposal_votes v
+      JOIN community_members cm ON cm.community_id = ? AND cm.user_id = v.user_id
+     WHERE v.proposal_id = ? AND v.round = ? AND cm.qualified = 1 AND cm.joined_at <= ?
+     GROUP BY v.choice`).all(p.community_id, p.id, round, p.opened_at);
+  const t = { yes: 0, no: 0, abstain: 0 };
+  for (const r of rows) if (t[r.choice] != null) t[r.choice] = r.n;
+  const decisive = t.yes + t.no, ballots = decisive + t.abstain;
+  return { ...t, decisive, ballots, pct: decisive ? Math.round(t.yes / decisive * 100) : 0 };
+}
+const propPasses = (t, round) => round === 1 ? (t.yes * 2 >= t.decisive) : (t.yes * 4 >= t.decisive * 3);
+
+// Resolve one proposal whose deadline has passed. Synchronous and transactional: the row is re-read
+// inside the transaction, so a concurrent request cannot resolve the same proposal twice.
+function resolveProposal(id) {
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const p = db.prepare('SELECT * FROM proposals WHERE id = ?').get(id);
+    if (!p || !p.deadline || p.deadline > now()) { db.exec('ROLLBACK'); return; }
+    if (p.status === 'draft') {
+      db.prepare("UPDATE proposals SET status='expired', reason='draft_never_opened', deadline=NULL, resolved_at=? WHERE id=?").run(now(), id);
+      db.exec('COMMIT'); return;
+    }
+    const round = p.status === 'round2' ? 2 : 1;
+    const t = tallyRound(p, round);
+    const quorum = round === 1 ? p.quorum_r1 : p.quorum_r2;
+    let status, reason;
+    if (t.ballots < quorum)         { status = 'expired';  reason = 'r' + round + '_no_quorum'; }
+    else if (t.decisive === 0)      { status = 'rejected'; reason = 'r' + round + '_no_decisive'; }
+    else if (propPasses(t, round))  { status = round === 1 ? 'round2' : 'passed'; reason = round === 1 ? 'promoted' : 'passed'; }
+    else                            { status = 'rejected'; reason = 'r' + round + (round === 1 ? '_below_50' : '_below_75'); }
+
+    const froze = round === 1
+      ? { r1_yes: t.yes, r1_no: t.no, r1_abs: t.abstain }
+      : { r2_yes: t.yes, r2_no: t.no, r2_abs: t.abstain };
+    if (round === 1) {
+      db.prepare('UPDATE proposals SET r1_yes=?, r1_no=?, r1_abs=? WHERE id=?').run(froze.r1_yes, froze.r1_no, froze.r1_abs, id);
+      if (status === 'round2') {
+        db.prepare("UPDATE proposals SET status='round2', reason=NULL, r2_opened_at=?, r2_ends_at=?, deadline=? WHERE id=?")
+          .run(now(), now() + PROP_R2_MS, now() + PROP_R2_MS, id);
+      } else {
+        db.prepare('UPDATE proposals SET status=?, reason=?, deadline=NULL, resolved_at=? WHERE id=?').run(status, reason, now(), id);
+      }
+    } else {
+      db.prepare('UPDATE proposals SET r2_yes=?, r2_no=?, r2_abs=?, status=?, reason=?, deadline=NULL, resolved_at=? WHERE id=?')
+        .run(froze.r2_yes, froze.r2_no, froze.r2_abs, status, reason, now(), id);
+    }
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch {} }
+}
+// Cheap because idx_prop_due is partial — it indexes only rows that still have a deadline.
+function resolveDueProposals(cid) {
+  const rows = cid
+    ? db.prepare('SELECT id FROM proposals WHERE community_id=? AND deadline IS NOT NULL AND deadline <= ?').all(cid, now())
+    : db.prepare('SELECT id FROM proposals WHERE deadline IS NOT NULL AND deadline <= ? LIMIT 200').all(now());
+  for (const r of rows) resolveProposal(r.id);
+}
+// Why this member may or may not vote. Returns null when they may. `cm` is passed in rather than
+// re-queried so a 20-row list does not run 20 identical membership lookups.
+function voteGateReason(me, c, p, cm) {
+  if (!me) return 'Sign in to vote.';
+  if (c.status !== 'live') return 'This community is not live yet.';
+  if (p.status !== 'open' && p.status !== 'round2') return 'Voting is closed on this proposal.';
+  if (!cm) return 'Join this community to vote.';
+  if (!cm.qualified) return 'Only verified holders of $' + c.symbol + ' can vote. Re-verify your wallet to get a slot.';
+  if (p.opened_at && cm.joined_at > p.opened_at) return 'You joined after this vote opened, so you are not on its roll.';
+  const round = p.status === 'round2' ? 2 : 1;
+  if (db.prepare('SELECT 1 FROM proposal_votes WHERE proposal_id=? AND round=? AND user_id=?').get(p.id, round, me.id)) {
+    return 'You have already voted in this round. Votes are final.';
+  }
+  return null;
+}
+function proposalView(p, me, c, cm) {
+  const round = p.status === 'round2' ? 2 : 1;
+  const live = p.status === 'open' || p.status === 'round2';
+  // While a round is live the running tally is sealed — publishing it would let late voters
+  // strategise against the count. It opens fully the moment the round closes.
+  const frozen1 = p.r1_yes != null ? { yes: p.r1_yes, no: p.r1_no, abstain: p.r1_abs } : null;
+  const frozen2 = p.r2_yes != null ? { yes: p.r2_yes, no: p.r2_no, abstain: p.r2_abs } : null;
+  const liveT = live ? tallyRound(p, round) : null;
+  const mine = me ? db.prepare('SELECT choice FROM proposal_votes WHERE proposal_id=? AND round=? AND user_id=?').get(p.id, round, me.id) : null;
+  return {
+    id: p.id, communityId: p.community_id, title: p.title, body: p.body,
+    tokens: parseTokens(p.tokens),
+    status: p.status, reason: p.reason, round,
+    electorate: p.electorate, quorumR1: p.quorum_r1, quorumR2: p.quorum_r2,
+    ballots: liveT ? liveT.ballots : null,          // turnout is public live; the split is not
+    quorumNow: round === 1 ? p.quorum_r1 : p.quorum_r2,
+    r1: frozen1, r2: frozen2,
+    createdAt: p.created_at, openedAt: p.opened_at, endsAt: p.status === 'round2' ? p.r2_ends_at : p.r1_ends_at,
+    resolvedAt: p.resolved_at, deadline: p.deadline,
+    author: (() => { const a = db.prepare('SELECT username, avatar, avatar_img FROM users WHERE id=?').get(p.author_id);
+                     return a ? { username: a.username, avatar: a.avatar, avatarImg: a.avatar_img ? '/uploads/' + a.avatar_img : null } : null; })(),
+    isMine: !!(me && me.id === p.author_id),
+    myVote: mine ? mine.choice : null,
+    canVote: !voteGateReason(me, c, p, cm),
+    gate: voteGateReason(me, c, p, cm),
+  };
+}
 
 // --- Robinhood Chain reads (server-authoritative → holdings can't be spoofed) ---
 const RH_RPC = 'https://rpc.mainnet.chain.robinhood.com';
@@ -4546,8 +4721,72 @@ const server = http.createServer(async (req, res) => {
         const officials = db.prepare('SELECT * FROM communities WHERE official = 1 ORDER BY id').all().map(c => communityCardView(c, me)); // always returned, whatever tab/sort
         return send(res, 200, { status, sort, officials, communities: rows.slice(0, 120).map(c => communityCardView(c, me)) });
       }
+      /* ----- proposal-scoped: /api/communities/:cid/proposals/:pid[/vote|/open] -----
+         Placed BEFORE the /:cid(/join|posts|members|proposals) matcher because that regex ends in $
+         and can never match a second path segment. Has its own 405 tail — do not share m's. */
       {
-        const m = /^\/api\/communities\/(\d+)(?:\/(join|posts|members))?$/.exec(p);
+        const pm = /^\/api\/communities\/(\d+)\/proposals\/(\d+)(?:\/(vote|open))?$/.exec(p);
+        if (pm) {
+          const cid = Number(pm[1]), pid = Number(pm[2]), act = pm[3];
+          const c = db.prepare('SELECT * FROM communities WHERE id=?').get(cid);
+          if (!c) return bad(res, 'community not found', 404);
+          resolveDueProposals(cid);
+          const pr = db.prepare('SELECT * FROM proposals WHERE id=? AND community_id=?').get(pid, cid);
+          if (!pr) return bad(res, 'proposal not found', 404);
+          // a draft is author-visible only, and 404s for everyone else so its existence stays private
+          if (pr.status === 'draft' && (!me || me.id !== pr.author_id)) return bad(res, 'proposal not found', 404);
+          const cmRow = me ? db.prepare('SELECT qualified, joined_at FROM community_members WHERE community_id=? AND user_id=?').get(cid, me.id) : null;
+
+          if (!act && req.method === 'GET') return send(res, 200, { proposal: proposalView(pr, me, c, cmRow) });
+
+          if (!act && req.method === 'DELETE') {          // only an unopened draft can be withdrawn
+            if (!me || me.id !== pr.author_id) return bad(res, 'not your proposal', 403);
+            if (pr.status !== 'draft') return bad(res, 'a proposal that has opened for voting can never be withdrawn', 409);
+            db.prepare('DELETE FROM proposals WHERE id=?').run(pid);
+            return send(res, 200, { ok: true });
+          }
+          if (act === 'open' && req.method === 'POST') {  // opening freezes the electorate, so it is a deliberate act
+            if (!me) return bad(res, 'sign in first', 401);
+            if (blockReadOnly(res, me)) return;
+            if (me.id !== pr.author_id) return bad(res, 'not your proposal', 403);
+            if (pr.status !== 'draft') return bad(res, 'already open', 409);
+            if (!cmRow || !cmRow.qualified) return bad(res, 'you must be a verified holder of $' + c.symbol + ' to open a vote', 403);
+            const t0 = now();
+            db.prepare(`UPDATE proposals SET status='open', opened_at=?, r1_ends_at=?, deadline=?,
+                        electorate=?, quorum_r1=?, quorum_r2=? WHERE id=?`)
+              .run(t0, t0 + PROP_R1_MS, t0 + PROP_R1_MS, c.qual_count,
+                   quorumFor(c.qual_count, PROP_QUORUM_R1), quorumFor(c.qual_count, PROP_QUORUM_R2), pid);
+            bumpActivity(cid, W_prop);
+            // tell the roll a vote has opened — capped, and only people who can actually vote
+            const voters = db.prepare('SELECT user_id FROM community_members WHERE community_id=? AND qualified=1 AND user_id<>? LIMIT ?').all(cid, me.id, PROP_NOTIFY_CAP);
+            for (const v of voters) notify(v.user_id, '\uD83D\uDDF3\uFE0F', 'New $' + c.symbol + ' proposal open for your vote: ' + pr.title, 'community');
+            const fresh = db.prepare('SELECT * FROM proposals WHERE id=?').get(pid);
+            return send(res, 200, { proposal: proposalView(fresh, me, c, cmRow) });
+          }
+          if (act === 'vote' && req.method === 'POST') {
+            if (!me) return bad(res, 'sign in first', 401);
+            if (blockReadOnly(res, me)) return;
+            if (!rateLimit('propvote:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
+            const why = voteGateReason(me, c, pr, cmRow);
+            if (why) return bad(res, why, 403);
+            const b = await readBody(req);
+            const choice = String(b.choice || '');
+            if (choice !== 'yes' && choice !== 'no' && choice !== 'abstain') return bad(res, 'choose yes, no or abstain');
+            const round = pr.status === 'round2' ? 2 : 1;
+            try {
+              db.prepare('INSERT INTO proposal_votes (proposal_id, round, user_id, choice, created_at, vote_ip) VALUES (?,?,?,?,?,?)')
+                .run(pid, round, me.id, choice, now(), bidx(clientIp(req)));
+            } catch { return bad(res, 'you have already voted in this round', 409); } // PK collision = double vote
+            awardCommunityXp(cid, me.id, 'wall_react_get', COMM_XP.wall_react_get, 'c' + cid + ':prop_vote:' + pid + ':' + round + ':' + me.id);
+            awardConviction(cid, me.id, 'wall_react_give', CONV_XP.wall_react_give, 'v' + cid + ':prop_vote:' + pid + ':' + round + ':' + me.id);
+            const fresh = db.prepare('SELECT * FROM proposals WHERE id=?').get(pid);
+            return send(res, 200, { proposal: proposalView(fresh, me, c, cmRow) });
+          }
+          return bad(res, 'method not allowed', 405);
+        }
+      }
+      {
+        const m = /^\/api\/communities\/(\d+)(?:\/(join|posts|members|proposals))?$/.exec(p);
         if (m) {
           const cid = Number(m[1]), sub = m[2];
           const c = db.prepare('SELECT * FROM communities WHERE id=?').get(cid);
@@ -4624,6 +4863,35 @@ const server = http.createServer(async (req, res) => {
             bumpActivity(cid, W_post); scanWriteAction(me.id, 'post', text);
             const row = db.prepare('SELECT * FROM posts WHERE id=?').get(info.lastInsertRowid);
             return send(res, 200, { post: postView(row, me), pointsEarned: earned });
+          }
+          if (sub === 'proposals' && req.method === 'GET') {
+            resolveDueProposals(cid);
+            // one membership lookup for the whole page, not one per proposal
+            const cmRow = me ? db.prepare('SELECT qualified, joined_at FROM community_members WHERE community_id=? AND user_id=?').get(cid, me.id) : null;
+            const rows = db.prepare(`SELECT * FROM proposals WHERE community_id=? AND (status <> 'draft' OR author_id = ?)
+                                     ORDER BY (status IN ('open','round2')) DESC, id DESC LIMIT 40`).all(cid, me ? me.id : -1);
+            return send(res, 200, { proposals: rows.map(r => proposalView(r, me, c, cmRow)) });
+          }
+          if (sub === 'proposals' && req.method === 'POST') {
+            if (!me) return bad(res, 'sign in first', 401);
+            if (blockReadOnly(res, me)) return;
+            if (c.status !== 'live') return bad(res, 'this community is not live yet', 403);
+            const cmRow = db.prepare('SELECT qualified, joined_at FROM community_members WHERE community_id=? AND user_id=?').get(cid, me.id);
+            if (!cmRow || !cmRow.qualified) return bad(res, 'only verified holders of $' + c.symbol + ' can start a proposal', 403);
+            if (!rateLimit('propnew:' + me.id, 5, 864e5)) return bad(res, 'slow down', 429);
+            const mineOpen = db.prepare("SELECT COUNT(*) n FROM proposals WHERE community_id=? AND author_id=? AND resolved_at IS NULL").get(cid, me.id).n;
+            if (mineOpen >= PROP_OPEN_PER_USER) return bad(res, 'you already have a proposal running here — finish it first', 429);
+            const commOpen = db.prepare("SELECT COUNT(*) n FROM proposals WHERE community_id=? AND status IN ('open','round2')").get(cid).n;
+            if (commOpen >= PROP_OPEN_PER_COMM) return bad(res, 'this community already has ' + PROP_OPEN_PER_COMM + ' votes running — wait for one to close', 429);
+            const b = await readBody(req);
+            const title = String(b.title || '').trim().slice(0, PROP_TITLE_MAX);
+            if (title.length < 4) return bad(res, 'give your proposal a title of at least 4 characters');
+            const rt = await resolveTokensInText(String(b.body || '').trim().slice(0, PROP_BODY_MAX));
+            const info = db.prepare('INSERT INTO proposals (community_id, author_id, title, body, tokens, status, deadline, created_at, author_ip) VALUES (?,?,?,?,?,?,?,?,?)')
+              .run(cid, me.id, title, rt.text, rt.tokens, 'draft', now() + PROP_DRAFT_TTL, now(), bidx(clientIp(req)));
+            scanWriteAction(me.id, 'post', title);
+            const fresh = db.prepare('SELECT * FROM proposals WHERE id=?').get(Number(info.lastInsertRowid));
+            return send(res, 200, { proposal: proposalView(fresh, me, c, cmRow) });
           }
           return bad(res, 'method not allowed', 405);
         }
@@ -4820,6 +5088,10 @@ ogTimer.unref();
 
 // Re-verify qualified community members still hold the community's token; revoke the 10× on a sell / recycled-bag move.
 const commHolderTimer = setInterval(() => { sweepCommunityHolders().catch(() => {}); }, 10 * 60 * 1000);
+// Close proposals whose round has ended, even if nobody visits that community. Cheap: idx_prop_due
+// is a PARTIAL index over rows that still have a deadline, so a settled proposal costs nothing.
+const propTimer = setInterval(() => { try { resolveDueProposals(null); } catch {} }, 60 * 1000);
+propTimer.unref();
 commHolderTimer.unref();
 
 // Reap upload-then-abandon media (never attached to a post) so they don't leak disk + quota.
