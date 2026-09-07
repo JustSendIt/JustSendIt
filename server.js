@@ -1808,6 +1808,32 @@ const PIN_MAX = 12;                            // how many tokens a user can pin
 const PAIRS_KEEP = 48;      // how many newest pairs to track/enrich
 const PAIRS_TTL = 30 * 1000; // background refresh cadence (demand-driven: re-sweeps on the next request once stale)
 
+/* Blockscout is a shared public service and it answers 429 — and sometimes 200-with-empty — when we
+   ask too often. The fix is to ask less, not to disguise who is asking:
+     1. identical concurrent requests share ONE upstream call (coalescing), and
+     2. a short TTL cache serves repeats, so ten viewers of the same token cost one call.
+   This is why the same endpoints that were rate-limiting during development now sit well inside the
+   budget: the call volume dropped, rather than the limit being circumvented. */
+const jgetInflight = new Map();   // url -> Promise
+const jgetCache = new Map();      // url -> { at, val }
+const JGET_TTL = 20 * 1000;
+const JGET_MAX = 500;
+function jgetCached(url, ttl) {
+  const t = ttl || JGET_TTL;
+  const hit = jgetCache.get(url);
+  if (hit && now() - hit.at < t) return Promise.resolve(hit.val);
+  const flying = jgetInflight.get(url);
+  if (flying) return flying;                      // someone is already asking — wait on their answer
+  const pr = jget(url).then((val) => {
+    if (jgetCache.size > JGET_MAX) jgetCache.clear();
+    jgetCache.set(url, { at: now(), val });
+    jgetInflight.delete(url);
+    return val;
+  }).catch((e) => { jgetInflight.delete(url); throw e; });
+  jgetInflight.set(url, pr);
+  return pr;
+}
+
 async function jget(url) {
   try {
     const ctrl = new AbortController();
@@ -1891,7 +1917,7 @@ async function runSnapshot(snapId, cid, token) {
   // the token metadata endpoint, which also carries decimals, symbol and total supply in the same call.
   // (/counters answers "Internal server error" on this chain, so it is deliberately not used.)
   let meta = null;
-  try { meta = await jget(BLOCKSCOUT + '/api/v2/tokens/' + token); } catch {}
+  try { meta = await jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + token); } catch {}
   const expected = (meta && meta.holders_count != null && Number(meta.holders_count) > 0) ? Number(meta.holders_count) : null;
 
   const holders = [...seen.entries()].sort((a, b) => (BigInt(b[1]) > BigInt(a[1]) ? 1 : BigInt(b[1]) < BigInt(a[1]) ? -1 : 0));
@@ -2601,9 +2627,9 @@ async function enrichPairs() {
   if (usdgDecimals == null) { const d = await tokenDecimals(USDG_ADDR); if (d != null) usdgDecimals = d; } // cache only a successful read (retry next refresh)
   const enriched = (await mapLimit(valid, 6, async (t) => {
     const [meta, addr, holders, ts, reserves, ownerInfo, tokenDec] = await Promise.all([
-      jget(BLOCKSCOUT + '/api/v2/tokens/' + t.token),
-      jget(BLOCKSCOUT + '/api/v2/addresses/' + t.token),
-      jget(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10'),
+      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token),
+      jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token),
+      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10'),
       blockTimestamp(t.block),
       getReserves(t.pair),        // pooled reserves (read-only)
       tokenOwner(t.token),        // owner()/renounced (read-only)
@@ -2640,9 +2666,9 @@ const wlEnrichCache = new Map(); // pairAddr(lc) -> {t, pair} — shared across 
 async function enrichOne(item, opts = {}) {
   const t = { token: item.token_addr, pair: item.pair_addr, token0: item.token0, token1: item.token1, quoteSymbol: item.quote_symbol || '?', block: 0 };
   const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr] = await Promise.all([
-    jget(BLOCKSCOUT + '/api/v2/tokens/' + t.token),
-    jget(BLOCKSCOUT + '/api/v2/addresses/' + t.token),
-    jget(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10'),
+    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token),
+    jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token),
+    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10'),
     getReserves(t.pair),
     tokenOwner(t.token),
     tokenDecimals(t.token),
