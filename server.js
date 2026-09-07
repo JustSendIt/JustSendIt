@@ -4174,8 +4174,20 @@ const server = http.createServer(async (req, res) => {
           return send(res, 200, { ok: true, url: null });
         }
         let name;
-        try { name = saveImage(b.image, 3.5 * 1024 * 1024); } catch (e) { return bad(res, e.message); }
-        if (!name) return bad(res, 'send a jpeg/png/webp data URL');
+        // Two accepted shapes. A data URI still goes through saveImage (that is how a canvas-resized
+        // still photo arrives). A /uploads/<name> reference comes from the streaming /api/upload
+        // route, which is how GIFs and video get here — they must NOT be re-encoded through a canvas,
+        // which would flatten an animation to a single frame and drop a video entirely.
+        if (typeof b.image === 'string' && b.image.startsWith('/uploads/')) {
+          const ref = b.image.slice('/uploads/'.length);
+          if (!/^[a-f0-9]{24}\.(jpg|png|webp|gif|mp4|webm)$/.test(ref)) return bad(res, 'bad media reference');
+          if (!db.prepare('SELECT 1 FROM uploads WHERE name = ? AND user_id = ?').get(ref, me.id)) return bad(res, 'that upload is not yours');
+          name = ref;
+          // claim it, or the orphan sweeper deletes the file out from under the profile
+          db.prepare('UPDATE uploads SET claimed = 1 WHERE name = ?').run(ref);
+        } else {
+          try { name = saveImage(b.image, 3.5 * 1024 * 1024); } catch (e) { return bad(res, e.message); }
+          if (!name) return bad(res, 'send a jpeg/png/webp data URL, or an /uploads/ reference'); }
         deleteUpload(me[kind]);
         db.prepare(`UPDATE users SET ${kind} = ? WHERE id = ?`).run(name, me.id);
         awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd());

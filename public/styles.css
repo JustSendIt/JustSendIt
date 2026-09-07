@@ -3196,3 +3196,19 @@ body::after {
   border-radius: 0 var(--r-1) var(--r-1) 0; padding: 0.55rem 0.8rem;
 }
 @media (prefers-reduced-motion: reduce) { .np-chain-btn:hover { transform: none; } }
+
+/* ---------- 12. Video wall backgrounds ----------
+   Fixed behind everything, with a scrim that does the same job the still-image gradient does:
+   guarantee wall text stays readable over footage we did not choose. */
+.wall-bg-video {
+  position: fixed; inset: 0; z-index: -3;
+  width: 100%; height: 100%; object-fit: cover;
+  pointer-events: none;
+}
+.wall-bg-scrim {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background: linear-gradient(rgba(6,8,12,0.82), rgba(6,8,12,0.9));
+}
+/* a profile slot preview may hold a video too */
+.img-slot video { max-width: 100%; border-radius: var(--r-2); display: block; }
+@media (prefers-reduced-motion: reduce) { .wall-bg-video { display: none; } .wall-bg-scrim { background: var(--ink); } }

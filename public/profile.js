@@ -53,9 +53,19 @@ function renderImgSlot(kind, url) {
   const zone = document.getElementById('slot-' + kind);
   zone.innerHTML = '';
   if (url) {
-    const img = document.createElement('img');
-    img.src = url; img.alt = 'current ' + kind + ' image';
-    zone.appendChild(img);
+    if (/\.(mp4|webm)$/i.test(url)) {
+      // muted + loop + playsinline + preload=metadata: a profile video must never demand attention,
+      // never play sound, and never block first paint.
+      const v = document.createElement('video');
+      v.src = url; v.muted = true; v.loop = true; v.autoplay = true;
+      v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
+      v.setAttribute('aria-label', 'current ' + kind + ' video');
+      zone.appendChild(v);
+    } else {
+      const img = document.createElement('img');
+      img.src = url; img.alt = 'current ' + kind + ' image';
+      zone.appendChild(img);
+    }
   } else {
     const d = document.createElement('div');
     d.className = 'none'; d.textContent = 'none';
@@ -63,7 +73,7 @@ function renderImgSlot(kind, url) {
   }
   const up = document.createElement('label');
   up.className = 'file-label';
-  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" accept="image/*" hidden>';
+  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" accept="image/*,video/mp4,video/webm" hidden>';
   up.querySelector('input').addEventListener('change', e => uploadThemeImage(kind, e.target));
   zone.appendChild(up);
   if (url) {
@@ -82,8 +92,28 @@ function renderImgSlot(kind, url) {
     zone.appendChild(rm);
   }
 }
-function uploadThemeImage(kind, input) {
+async function uploadThemeImage(kind, input) {
   const f = input.files[0]; if (!f) return;
+  const animated = /^video\//.test(f.type) || f.type === 'image/gif';
+  if (animated) {
+    // A canvas re-encode would flatten a GIF to one frame and cannot handle video at all, so these
+    // stream through the same validated upload path the Send Wall uses — magic-byte checked, size
+    // capped per type, and compressed identically. One pipeline, one set of limits.
+    const cap = f.type === 'image/gif' ? 25 : 64;
+    if (f.size > cap * 1024 * 1024) { sendToast('Too big — keep it under ' + cap + 'MB'); return; }
+    sendToast('Uploading…');
+    try {
+      const r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': f.type, 'X-Filename': encodeURIComponent(f.name || 'media') }, body: f });
+      const u = await r.json();
+      if (!r.ok || !u.url) throw new Error(u.error || 'upload failed');
+      const j = await api('/api/profile/image', { method: 'POST', body: { kind, image: u.url } });
+      myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = j.url;
+      renderImgSlot(kind, j.url);
+      sendToast('Looking good 😎');
+    } catch (err) { sendToast('⚠️ ' + (err.message || 'upload failed')); }
+    return;
+  }
   if (f.size > 8 * 1024 * 1024) { sendToast('Too big — keep it under 8MB 🐘'); return; }
   const rd = new FileReader();
   rd.onload = () => {

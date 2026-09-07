@@ -132,10 +132,45 @@ function applyTheme(t) {
   }
   if (t.wall_bg) { document.body.style.background = t.wall_bg; document.body.classList.add('themed-page'); }
   if (t.bg_img) {
-    document.body.style.backgroundImage = 'linear-gradient(rgba(6,8,12,0.82), rgba(6,8,12,0.9)), url(' + t.bg_img + ')';
     document.body.classList.add('themed-page');
+    if (/\.(mp4|webm)$/i.test(t.bg_img)) {
+      // A video background is a fixed layer BEHIND everything, never a CSS background-image (CSS
+      // cannot play video). The scrim above it is what keeps wall text readable over arbitrary
+      // footage — without it, contrast depends on whatever the user uploaded.
+      let v = document.getElementById('wall-bg-video');
+      if (!v) {
+        v = document.createElement('video');
+        v.id = 'wall-bg-video'; v.className = 'wall-bg-video';
+        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+        v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true'); v.preload = 'metadata';
+        document.body.appendChild(v);
+        const scrim = document.createElement('div');
+        scrim.className = 'wall-bg-scrim'; scrim.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(scrim);
+        document.addEventListener('visibilitychange', () => { try { document.hidden ? v.pause() : v.play(); } catch {} });
+        // Motion sensitivity is a real accessibility need, not a preference: hold the first frame.
+        try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
+      }
+      v.src = t.bg_img;
+    } else {
+      document.body.style.backgroundImage = 'linear-gradient(rgba(6,8,12,0.82), rgba(6,8,12,0.9)), url(' + t.bg_img + ')';
+    }
   }
-  if (t.header_img) { const h = document.getElementById('header-img'); h.src = t.header_img; h.hidden = false; }
+  if (t.header_img) {
+    const h = document.getElementById('header-img');
+    if (/\.(mp4|webm)$/i.test(t.header_img)) {
+      // Swap the <img> for a muted looping <video> in place. Muted + playsinline is what lets it
+      // autoplay at all on mobile; pausing when the tab is hidden keeps a background video from
+      // burning battery behind another tab.
+      const v = document.createElement('video');
+      v.id = h.id; v.className = h.className;
+      v.src = t.header_img; v.muted = true; v.loop = true; v.autoplay = true;
+      v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
+      v.setAttribute('aria-hidden', 'true');
+      h.replaceWith(v);
+      document.addEventListener('visibilitychange', () => { try { document.hidden ? v.pause() : v.play(); } catch {} });
+    } else { h.src = t.header_img; h.hidden = false; }
+  }
   // avatar: the wrap owns the circle; toggle the permanent img/emoji children (show the image only once it proves it loaded)
   const aimg = document.getElementById('pub-avatar-img'), aemo = document.getElementById('pub-avatar');
   if (t.avatar_img) {

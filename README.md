@@ -6,6 +6,22 @@
 
 **New here?** [`WHITEPAPER.html`](WHITEPAPER.html) explains the whole project in plain English — what it does, how it protects your data, the full points economy with every number, the games, and an honest list of its limits. Open it in a browser, or run `npm run whitepaper` to render it as a PDF.
 
+
+### What this repository is
+
+This is the complete source of the JustSendIt website, released to the public domain under
+[CC0 1.0](LICENSE) so anyone can read, audit, fork or self-host it. It is the code, not a service:
+running it yourself gives you your own independent site with its own database and its own users.
+
+A fork is not the official deployment and is not endorsed by it. The contract addresses below are
+real mainnet addresses, so if you are looking for the live site, confirm the domain rather than
+trusting any copy of this code you happen to find.
+
+**Media note:** the site's feature video and theme audio are deliberately **not** in this repository.
+Their rights could not be established, and CC0 is an irrevocable grant that cannot be made over work
+you do not own. `public/index.html` still references the video, so a fresh clone shows an empty
+player there until you supply footage of your own.
+
 ---
 
 ## 1. What is this?
@@ -130,7 +146,7 @@ Fresh Sender (`<5`) → Coin Curious (5) → Send Apprentice (10) → Rocket Rid
 This is the heart of the game: **holding $Send and $GWC multiplies every point you earn.** Your boost is one number:
 
 ```
-weightedPct   = yourSend% + 3 × yourGWC%        // $GWC counts 10×
+weightedPct   = yourSend% + 3 × yourGWC%        // $GWC is weighted 3× per % of supply
 supplyBoost   = 10 × weightedPct                 // +10× for every weighted 1% of supply
 diamondFactor = your Diamond tier factor         // 1 … up to 100 (see §3.3)
 
@@ -315,7 +331,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - While you're a qualified member of **≥ 1 live community**, **every point you earn is multiplied 10×** — a flat **10×** applied in the same `awardPoints` path as everything else, so it stacks *on top of* your Holder Boost and OG bonus. The full stack the server multiplies is: `base × HolderBoost × OG × Community`. Every action you take **inside a community** (posting, reacting, commenting on its wall) earns Send Power at that 10×, and your dashboard shows the bonus as an achievement you can unlock.
 - It's a **flat 10×** — being in five live communities is still 10× (it doesn't stack with itself).
 
-**Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+5,000 base Send Power**, itself run through the normal multiplier path like any award (so a starter who is now in their own live community receives it ×3, and more with a Holder Boost/OG). It's **idempotent** — it can never be paid twice, even on rejoins.
+**Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+5,000 base Send Power**, itself run through the normal multiplier path like any award (so a starter who is now in their own live community receives it ×10, and more with a Holder Boost/OG). It's **idempotent** — it can never be paid twice, even on rejoins.
 
 **Members & member levels** — every community page lists **all of its members**, ranked by their **community member level** (the conviction level below), with the top three medalled and the starter crowned 👑. Participating raises your own member level *and* contributes XP to the community itself — so an active member is literally what levels a community up.
 
@@ -358,7 +374,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - **Stack:** a zero‑framework Node.js HTTP server + built‑in `node:sqlite`. No build step. Frontend is vanilla JS under a strict Content‑Security‑Policy (`script-src 'self'`). Requires Node ≥ 24.
 - **Start:** `node server.js` (serves `public/`, stores data in `data/`).
 - **Security & privacy (built in):**
-  - **Encryption at rest.** Emails, wallet↔account links, OAuth subjects, 2FA secrets, tracked wallets, sign‑in nonces, tracker reports and IPs are stored **AES‑256‑GCM‑encrypted** under `DATA_KEY`, with HMAC blind indexes for the lookups the server needs (login by email, wallet by address). Session cookies are stored only as SHA‑256 hashes; passwords as scrypt hashes. A stolen `app.db` without the key is unreadable. **Set `DATA_KEY` (64 hex chars) in production**; otherwise a key is generated once into `data/.data_key` (chmod 600) — back it up separately from the DB, and never lose it.
+  - **Encryption at rest.** Emails, wallet↔account links, OAuth subjects, 2FA secrets, tracked wallets, sign‑in nonces, tracker reports and IPs are stored **AES‑256‑GCM‑encrypted** under `DATA_KEY`, with HMAC blind indexes for the lookups the server needs (login by email, wallet by address). Session cookies are stored only as SHA‑256 hashes; passwords as scrypt hashes. The most sensitive fields are encrypted; a copy of the database without the key does not reveal emails, linked wallets or 2FA secrets. Public content (usernames, posts, the follow graph) is stored in the clear, because it is public on the site anyway. **Set `DATA_KEY` (64 hex chars) in production**; otherwise a key is generated once into `data/.data_key` (chmod 600) — back it up separately from the DB, and never lose it.
   - **Phishing‑resistant wallet sign‑in.** The message you sign is domain‑bound (SIWE‑style: it names this site's host, URI, chain ID, a one‑time nonce and an expiry) and the server only accepts the exact message it issued, so a signature harvested on any other site can never open a session here. 2FA confirmations are domain‑bound too.
   - **Two‑factor for everyone.** Authenticator app, wallet signature, or — for wallet‑first accounts that add an **email + password** (Profile → Security) — the **password as the second factor** for wallet sign‑ins. Changing or removing 2FA always requires the current factor; for wallet‑2FA only wallets linked *before* it was enabled count.
   - Strict CSP (`script-src 'self'`), HttpOnly/SameSite cookies, per‑route rate limits, read‑only wallet connect (a free signature, never a transaction or approval).
