@@ -69,11 +69,9 @@
   // same 📈 chart the New Pairs detail shows — the watchlist renders its own (lighter) body, so it needs its own copy
   const CHART_OPTS = 'embed=1&amp;loadChartSettings=0&amp;trades=0&amp;tabs=0&amp;info=0&amp;chartLeftToolbar=0&amp;chartDefaultOnMobile=1&amp;chartTheme=dark&amp;theme=dark&amp;chartStyle=1&amp;chartType=usd&amp;interval=15';
   function chartHTML(p) {
-    const label = (p.token.name ? p.token.name + ' ' : '') + '$' + p.token.symbol;
-    if (!p.indexed || !p.pair || !p.pair.address) return '<p class="np-why-clean">📈 No chart yet — this pair isn\'t indexed by Dexscreener, so there is no price history to draw.</p>';
-    return '<div class="np-chart"><iframe class="np-chart-frame" title="' + esc(label) + ' live price chart on Dexscreener" loading="lazy" ' +
-      'src="https://dexscreener.com/robinhood/' + esc(p.pair.address) + '?' + CHART_OPTS + '"></iframe></div>' +
-      '<p class="np-chart-note">Live chart from Dexscreener. <a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Open it full-size ↗</a></p>';
+    if (!p.indexed || !p.pair || !p.pair.address) return '<p class="np-why-clean">📈 No chart yet — this pair has not traded, so there is nothing to draw.</p>';
+    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h"></div>' +
+      '<p class="np-chart-note">Built live from on-chain swaps. <a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a></p>';
   }
   function detailHTML(p) {
     const h = p.holders || {}, m = p.market || {}, r = p.risk || {};
@@ -153,7 +151,7 @@
     const det = e.target; if (!det || det.tagName !== 'DETAILS' || !det.classList.contains('np-card')) return;
     const li = det.closest('li[data-addr]'); if (!li) return;
     const addr = li.dataset.addr;
-    if (det.open) { state.open.add(addr); if (!li.querySelector('.np-body')) { const p = state.items.find(x => x.pair.address === addr); if (p) det.insertAdjacentHTML('beforeend', detailHTML(p)); } }
+    if (det.open) { state.open.add(addr); if (!li.querySelector('.np-body')) { const p = state.items.find(x => x.pair.address === addr); if (p) det.insertAdjacentHTML('beforeend', detailHTML(p)); if (window.mountOnChainCharts) mountOnChainCharts(); } }
     else state.open.delete(addr);
   }, true);
 

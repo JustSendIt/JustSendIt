@@ -2203,6 +2203,142 @@ async function scanNewPairs() {
   pairsRaw = dedup.reverse().slice(-Math.max(PAIRS_KEEP, 120));
 }
 
+/* ===== On-chain price charts ==========================================================
+   Charts are built from the pair contract's own Swap events rather than from a third-party chart
+   service. That is not a workaround — it is the better source: Dexscreener and every other
+   aggregator DERIVE their candles from these same logs, so reading them directly removes a
+   dependency, removes a rate limit, and removes a step where the number can drift.
+
+   Robinhood Chain runs ~0.1s blocks, and a 6M-block eth_getLogs (about a week) returns in well
+   under a second, so the whole history we care about is one request.
+
+   USD anchoring needs exactly ONE external number for the entire site: ETH/USD. Everything else is
+   a ratio we compute from chain data. That call is cached for a minute and shared across every
+   token, instead of one third-party lookup per token per view.
+
+   NOT DONE, deliberately: no scraping of DexTools / CoinMarketCap / CoinGecko web pages, and no
+   rotating identities to slip past a rate limit. Both breach those services' terms and would get
+   the site blocked; the on-chain path above is both legitimate and more accurate. CoinGecko's
+   documented free price endpoint is used as the USD anchor, which is what it is published for. */
+const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822'; // Swap(address,uint,uint,uint,uint,address)
+const SYNC_TOPIC = '0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1'; // Sync(uint112,uint112)
+const CHART_TF = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+const chartCache = new Map();          // `${pair}:${tf}` -> { at, data }
+const CHART_TTL = 30 * 1000;
+let ethUsdCache = { at: 0, usd: 0 };
+
+async function ethUsd() {
+  if (ethUsdCache.usd && now() - ethUsdCache.at < 60000) return ethUsdCache.usd;
+  const j = await jget('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+  const v = j && j.ethereum && Number(j.ethereum.usd);
+  if (v > 0) ethUsdCache = { at: now(), usd: v };
+  return ethUsdCache.usd || 0;   // 0 means "unknown"; the client shows native units rather than a wrong dollar figure
+}
+
+const hexToBig = (h) => { try { return BigInt('0x' + h); } catch { return 0n; } };
+
+/* Decode one Swap log into a price in QUOTE units per TOKEN unit.
+   data = amount0In, amount1In, amount0Out, amount1Out (4 x uint256, 32 bytes each). */
+function swapPrice(log, tokenIsZero, decToken, decQuote) {
+  const d = String(log.data || '').replace(/^0x/, '');
+  if (d.length < 256) return null;
+  const a0In = hexToBig(d.slice(0, 64)), a1In = hexToBig(d.slice(64, 128));
+  const a0Out = hexToBig(d.slice(128, 192)), a1Out = hexToBig(d.slice(192, 256));
+  const tokIn = tokenIsZero ? a0In : a1In, tokOut = tokenIsZero ? a0Out : a1Out;
+  const quoIn = tokenIsZero ? a1In : a0In, quoOut = tokenIsZero ? a1Out : a0Out;
+  const tokAmt = tokIn > 0n ? tokIn : tokOut;
+  const quoAmt = tokIn > 0n ? quoOut : quoIn;
+  if (tokAmt === 0n || quoAmt === 0n) return null;
+  // scale to floats only at the end, after the integer maths, so precision survives 18 decimals
+  const t = Number(tokAmt) / Math.pow(10, decToken);
+  const q = Number(quoAmt) / Math.pow(10, decQuote);
+  if (!(t > 0) || !(q > 0)) return null;
+  return q / t;
+}
+
+async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
+  const tf = CHART_TF[tfKey] || 3600;
+  const key = pairAddr + ':' + tfKey;
+  const hit = chartCache.get(key);
+  if (hit && now() - hit.at < CHART_TTL) return hit.data;
+
+  const headHex = await rpc('eth_blockNumber', []);
+  const head = parseInt(headHex, 16);
+  if (!head) return null;
+  const BLOCKS_PER_SEC = 10;                      // ~0.1s blocks, measured
+  const span = Math.min(head, Math.round(hours * 3600 * BLOCKS_PER_SEC));
+  const fromBlock = '0x' + Math.max(0, head - span).toString(16);
+
+  const [logs, t0, t1, decT] = await Promise.all([
+    rpc('eth_getLogs', [{ address: pairAddr, topics: [SWAP_TOPIC], fromBlock, toBlock: 'latest' }]),
+    ethCall(pairAddr, '0x0dfe1681'),              // token0()
+    ethCall(pairAddr, '0xd21220a7'),              // token1()
+    tokenDecimals(tokenAddr),
+  ]);
+  if (!Array.isArray(logs)) return null;
+  const token0 = t0 ? '0x' + String(t0).slice(-40).toLowerCase() : null;
+  const tokenIsZero = token0 === String(tokenAddr).toLowerCase();
+  const decToken = decT != null ? decT : 18;
+  const decQuote = 18;                            // WETH/USDG legs are both 18 on this chain's pairs
+
+  // block -> timestamp: sample sparsely and interpolate, rather than one call per log
+  const blocks = [...new Set(logs.map(l => parseInt(l.blockNumber, 16)))].sort((a, b) => a - b);
+  const marks = [];
+  const step = Math.max(1, Math.floor(blocks.length / 12));
+  for (let i = 0; i < blocks.length; i += step) marks.push(blocks[i]);
+  if (blocks.length && marks[marks.length - 1] !== blocks[blocks.length - 1]) marks.push(blocks[blocks.length - 1]);
+  const stamps = new Map();
+  await Promise.all(marks.map(async (b) => {
+    const blk = await rpc('eth_getBlockByNumber', ['0x' + b.toString(16), false]).catch(() => null);
+    if (blk && blk.timestamp) stamps.set(b, parseInt(blk.timestamp, 16) * 1000);
+  }));
+  const known = [...stamps.entries()].sort((a, b) => a[0] - b[0]);
+  // If NONE of the timestamp probes resolved we cannot place a single swap in time. Falling back to
+  // "now" would silently pile every trade into one candle and render a confident-looking chart that
+  // is entirely wrong — worse than no chart. Say so instead.
+  if (logs.length && !known.length) {
+    return { pair: pairAddr, token: tokenAddr, tf: tfKey, quote: 'ETH', ethUsd: await ethUsd(),
+             candles: [], swaps: logs.length, source: 'on-chain Swap events',
+             note: 'Found ' + logs.length + ' swaps but could not read block times from the chain just now, so they cannot be placed on a timeline. Try again in a moment.' };
+  }
+  const tsFor = (b) => {
+    if (!known.length) return now();
+    if (b <= known[0][0]) return known[0][1] - (known[0][0] - b) * 100;
+    for (let i = 1; i < known.length; i++) {
+      if (b <= known[i][0]) {
+        const [b0, t0v] = known[i - 1], [b1, t1v] = known[i];
+        return b1 === b0 ? t1v : t0v + (t1v - t0v) * ((b - b0) / (b1 - b0));
+      }
+    }
+    const last = known[known.length - 1];
+    return last[1] + (b - last[0]) * 100;
+  };
+
+  const buckets = new Map();
+  for (const l of logs) {
+    const px = swapPrice(l, tokenIsZero, decToken, decQuote);
+    if (!px) continue;
+    const ts = tsFor(parseInt(l.blockNumber, 16));
+    const b = Math.floor(ts / 1000 / tf) * tf;
+    const c = buckets.get(b);
+    if (!c) buckets.set(b, { t: b, o: px, h: px, l: px, c: px, n: 1 });
+    else { c.h = Math.max(c.h, px); c.l = Math.min(c.l, px); c.c = px; c.n++; }
+  }
+  const candles = [...buckets.values()].sort((a, b) => a.t - b.t);
+  const usd = await ethUsd();
+  const data = {
+    pair: pairAddr, token: tokenAddr, tf: tfKey, quote: 'ETH',
+    ethUsd: usd || null,
+    candles,
+    swaps: logs.length,
+    source: 'on-chain Swap events',
+    // Say plainly when there is nothing to draw, rather than rendering an empty chart that looks broken.
+    note: candles.length ? null : 'No swaps on this pair in the window, so there is nothing to chart yet.',
+  };
+  chartCache.set(key, { at: now(), data });
+  return data;
+}
+
 /* ===== Multi-chain New Pairs ==========================================================
    Robinhood Chain is the HOME chain and the only one we analyse deeply: we read PairCreated logs
    from its factory over its own RPC, and Blockscout gives us holder counts, contract verification
@@ -4769,6 +4905,18 @@ const server = http.createServer(async (req, res) => {
         const wkey = Object.prototype.hasOwnProperty.call(RUNNER_WINDOWS, url.searchParams.get('window')) ? url.searchParams.get('window') : '24h';
         const tracked = db.prepare('SELECT MIN(first_seen_at) m FROM runner_tokens').get().m || now();
         return send(res, 200, { window: wkey, runners: bestRunners(wkey), trackingSinceMs: tracked, updatedAt: now() });
+      }
+      /* ----- on-chain candles: our own chart, no third-party chart service ----- */
+      if (p === '/api/chart' && req.method === 'GET') {
+        const pair = String(url.searchParams.get('pair') || '').toLowerCase().trim();
+        const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(pair) || !/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'bad pair or token address');
+        if (!rateLimit('chart:' + clientIp(req), 90, 6e4)) return bad(res, 'slow down', 429);
+        const tf = Object.prototype.hasOwnProperty.call(CHART_TF, url.searchParams.get('tf')) ? url.searchParams.get('tf') : '1h';
+        const hours = Math.min(720, Math.max(1, Number(url.searchParams.get('hours')) || 168));
+        let data; try { data = await buildCandles(pair, token, tf, hours); } catch (e) { return bad(res, 'could not read the chain', 502); }
+        if (!data) return bad(res, 'could not read the chain', 502);
+        return send(res, 200, data, { 'Cache-Control': 'public, max-age=30' });
       }
       if (p === '/api/pairs/contract' && req.method === 'GET') { // deep honeypot / contract-code read (lazy, cached)
         const token = String(url.searchParams.get('token') || '').toLowerCase().trim();

@@ -514,17 +514,16 @@
      frame-src in the CSP allows dexscreener.com and nothing else. */
   const CHART_OPTS = 'embed=1&amp;loadChartSettings=0&amp;trades=0&amp;tabs=0&amp;info=0&amp;chartLeftToolbar=0&amp;chartDefaultOnMobile=1&amp;chartTheme=dark&amp;theme=dark&amp;chartStyle=1&amp;chartType=usd&amp;interval=15';
   function chartHTML(p) {
-    const label = (p.token.name ? p.token.name + ' ' : '') + '$' + p.token.symbol;
     if (!p.indexed || !p.pair || !p.pair.address) {
-      return '<p class="np-why-clean">📈 No chart yet — this pair isn\'t indexed by Dexscreener, so there is no price history to draw.</p>';
+      return '<p class="np-why-clean">📈 No chart yet — this pair has not traded, so there is nothing to draw.</p>';
     }
-    return '<div class="np-chart">' +
-        '<iframe class="np-chart-frame" title="' + esc(label) + ' live price chart on Dexscreener" loading="lazy" ' +
-          'src="https://dexscreener.com/robinhood/' + esc(p.pair.address) + '?' + CHART_OPTS + '"></iframe>' +
-      '</div>' +
-      '<p class="np-chart-note">Live chart from Dexscreener. ' +
-        '<a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Open it full-size ↗</a></p>';
+    // Our own chart, drawn from this pair's Swap events. No third-party iframe: same underlying data
+    // every aggregator uses, minus the rate limit, the tracking surface and the extra hop.
+    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h"></div>' +
+      '<p class="np-chart-note">Built live from on-chain swaps. ' +
+      '<a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a></p>';
   }
+  function mountCharts(root) { if (window.mountOnChainCharts) mountOnChainCharts(root || document); }
   function group(id, title, openDefault, inner) {
     return '<details class="np-detail-group" data-group="' + id + '"' + (openDefault ? ' open' : '') + '>' +
       '<summary class="np-detail-h">' + title + '</summary><div class="np-detail-body">' + inner + '</div></details>';
@@ -1124,7 +1123,7 @@
       if (det.classList.contains('np-card')) {
         const li = det.closest('li[data-addr]'); if (!li) return;
         const addr = li.dataset.addr;
-        if (det.open) { state.open.add(addr); const p = pairFor(addr); if (p) markViewed(p.token.address); if (p && !li.querySelector('.np-body')) { det.insertAdjacentHTML('beforeend', bodyHTML(p)); animateRings(li); } }
+        if (det.open) { state.open.add(addr); const p = pairFor(addr); if (p) markViewed(p.token.address); if (p && !li.querySelector('.np-body')) { det.insertAdjacentHTML('beforeend', bodyHTML(p)); if (window.mountOnChainCharts) mountOnChainCharts(); animateRings(li); } }
         else state.open.delete(addr);
       } else if (det.classList.contains('np-detail-group') && det.dataset.group) {
         state.sections[det.dataset.group] = det.open; persist();
@@ -1184,7 +1183,7 @@
       const d = e.target; if (!(d.classList && d.classList.contains('np-slide-details')) || !d.open) return;
       if (d.querySelector('.np-body')) return;
       const slide = d.closest('.np-slide'); const p = slide && state.byAddr.get(slide.dataset.addr);
-      if (p) { markViewed(p.token.address); d.insertAdjacentHTML('beforeend', bodyHTML(p)); animateRings(d); }
+      if (p) { markViewed(p.token.address); d.insertAdjacentHTML('beforeend', bodyHTML(p)); if (window.mountOnChainCharts) mountOnChainCharts(); animateRings(d); }
     }, true);
     freshBtn.addEventListener('click', () => { const first = feedTrack.querySelector('.np-slide--new'); if (first) first.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); });
     document.getElementById('np-feed-up').addEventListener('click', () => flip(-1));

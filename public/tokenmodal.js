@@ -64,6 +64,7 @@
         var honest = body.querySelector('.np-honest'); // sit inside the detail, just above its closing honesty note
         if (honest) honest.insertAdjacentHTML('beforebegin', comm); else body.insertAdjacentHTML('beforeend', comm);
         if (window.NPCard.animateRings) window.NPCard.animateRings(body);
+        if (window.mountOnChainCharts) mountOnChainCharts(body);   // our own chart, not an embedded one
       }
       else body.innerHTML = '<p class="tm-msg">🤷 This token isn’t priced on Dexscreener right now — it may have delisted or rugged.</p>' + comm;
       if (window.decorateTokenCommunities) decorateTokenCommunities(body);
