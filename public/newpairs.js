@@ -867,7 +867,14 @@
       const res = await fetch('/api/pairs/new' + (CHAIN && CHAIN !== 'robinhood' ? '?chain=' + encodeURIComponent(CHAIN) : ''), { credentials: 'same-origin' });
       const j = await res.json();
       npData.building = !!j.building; npData.error = j.error || null;
-      if (Array.isArray(j.chains) && j.chains.length) { CHAINS = j.chains; renderChains(); }
+      if (Array.isArray(j.chains) && j.chains.length) {
+        CHAINS = j.chains;
+        if (!CHAINS.some(c => c.slug === CHAIN)) {   // a saved chain that is no longer offered
+          CHAIN = j.chain || 'robinhood';
+          try { localStorage.setItem('np:chain', CHAIN); } catch {}
+        }
+        renderChains();
+      }
       if (chainNote) {
         if (j.note) { chainNote.textContent = j.note; chainNote.hidden = false; }
         else { chainNote.textContent = ''; chainNote.hidden = true; }
@@ -1219,6 +1226,9 @@
 
   function renderChains() {
     if (!chainBar) return;
+    // one chain on offer → no chooser at all, and no note about chains that are not there
+    if (CHAINS.length < 2) { chainBar.hidden = true; chainBar.innerHTML = ''; if (chainNote) { chainNote.hidden = true; chainNote.textContent = ''; } return; }
+    chainBar.hidden = false;
     chainBar.innerHTML = CHAINS.map(c =>
       '<button class="np-chain-btn' + (c.slug === CHAIN ? ' is-on' : '') + '" type="button" role="tab"' +
       ' aria-selected="' + (c.slug === CHAIN ? 'true' : 'false') + '" tabindex="' + (c.slug === CHAIN ? '0' : '-1') + '"' +

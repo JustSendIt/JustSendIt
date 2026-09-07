@@ -3225,6 +3225,16 @@ body::after {
 .oc-tf.is-on { color: var(--green-bright); border-color: var(--g-edge); background: var(--g-tint); }
 /* "on-chain" is a provenance claim, so it is stated plainly rather than as decoration */
 .oc-src { font-size: 0.68rem; color: var(--text-mute); letter-spacing: var(--tr-caps); text-transform: uppercase; }
+/* The live price takes the direction colour, so the number and the line always agree. */
+.oc-live { font-family: var(--mono, ui-monospace, monospace); font-size: 0.95rem; font-weight: 700; margin-left: auto; margin-right: 0.6rem; }
+.onchain-chart.is-up   .oc-live { color: var(--green-bright); }
+.onchain-chart.is-down .oc-live { color: var(--red); }
+.onchain-chart.is-up   { border-color: color-mix(in srgb, var(--green) 22%, transparent); }
+.onchain-chart.is-down { border-color: rgba(255,93,93,0.22); }
+/* a one-frame pulse each second so a changing number reads as live rather than static */
+.oc-live.tick { animation: oc-tick 420ms var(--ease-out, ease-out); }
+@keyframes oc-tick { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .oc-live.tick { animation: none; } }
 .oc-canvas { display: block; width: 100%; height: 240px; }
 .oc-status { font-size: 0.8rem; color: var(--text-dim); margin: 0.35rem 0 0; }
 .oc-data { margin-top: 0.4rem; }

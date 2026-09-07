@@ -2282,6 +2282,46 @@ function swapPrice(log, tokenIsZero, decToken, decQuote) {
   return q / t;
 }
 
+/* Spot price for the live line. This is what a 1-second poll hits, so it has to be genuinely cheap:
+   ONE eth_call for getReserves, and price = quoteReserve / tokenReserve adjusted for decimals.
+   Coalesced and cached for 900ms, so a hundred viewers of the same pair cost the chain one call per
+   second, not a hundred. The chain runs ~0.1s blocks, so a 1s cadence is a real refresh rather than
+   a spinning wheel showing the same number. */
+const spotCache = new Map();      // pair -> { at, val }
+const spotInflight = new Map();
+const SPOT_TTL = 900;
+async function spotPrice(pairAddr, tokenAddr) {
+  const key = pairAddr + ':' + tokenAddr;
+  const hit = spotCache.get(key);
+  if (hit && now() - hit.at < SPOT_TTL) return hit.val;
+  const flying = spotInflight.get(key);
+  if (flying) return flying;
+  const pr = (async () => {
+    const [res, t0, decT] = await Promise.all([
+      getReserves(pairAddr),
+      ethCall(pairAddr, '0x0dfe1681'),        // token0()
+      tokenDecimals(tokenAddr),
+    ]);
+    if (!res) return null;
+    const token0 = t0 ? '0x' + String(t0).slice(-40).toLowerCase() : null;
+    const tokenIsZero = token0 === String(tokenAddr).toLowerCase();
+    const tokRes = tokenIsZero ? res.r0 : res.r1;
+    const quoRes = tokenIsZero ? res.r1 : res.r0;
+    if (tokRes === 0n) return null;
+    const dT = decT != null ? decT : 18;
+    const t = Number(tokRes) / Math.pow(10, dT);
+    const q = Number(quoRes) / Math.pow(10, 18);   // WETH/USDG legs are 18 on this chain's pairs
+    if (!(t > 0) || !(q > 0)) return null;
+    return q / t;
+  })().then((val) => {
+    if (val != null) spotCache.set(key, { at: now(), val });   // never cache a failure
+    spotInflight.delete(key);
+    return val;
+  }).catch((e) => { spotInflight.delete(key); throw e; });
+  spotInflight.set(key, pr);
+  return pr;
+}
+
 async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
   const tf = CHART_TF[tfKey] || 3600;
   const key = pairAddr + ':' + tfKey;
@@ -2385,7 +2425,12 @@ const CHAINS = [
   { slug: 'arbitrum',  name: 'Arbitrum',        emoji: '🔷', deep: false },
 ];
 const CHAIN_BY_SLUG = Object.fromEntries(CHAINS.map(c => [c.slug, c]));
+// Only Robinhood Chain is surfaced. The other-chain pipeline stays built and working behind this
+// flag — set MULTICHAIN=1 to advertise them again — because the data there is market-only and the
+// home chain is the one this site is actually about.
 const DEFAULT_CHAIN = 'robinhood';
+const MULTICHAIN = process.env.MULTICHAIN === '1';
+const PUBLIC_CHAINS = MULTICHAIN ? CHAINS : CHAINS.filter(c => c.slug === DEFAULT_CHAIN);
 const FOREIGN_TTL = 90 * 1000;
 const foreignCache = new Map();   // slug -> { pairs, updatedAt, building, error }
 
@@ -4892,11 +4937,11 @@ const server = http.createServer(async (req, res) => {
         const chainQ = String(url.searchParams.get('chain') || DEFAULT_CHAIN);
         if (chainQ !== DEFAULT_CHAIN) {
           const ch = CHAIN_BY_SLUG[chainQ];
-          if (!ch) return bad(res, 'unknown chain');
+          if (!ch || !MULTICHAIN) return bad(res, 'unknown chain');   // other chains are off unless MULTICHAIN=1
           const st = foreignCache.get(chainQ) || { pairs: [], updatedAt: 0, building: false, error: null };
           if (!st.updatedAt || now() - st.updatedAt > FOREIGN_TTL) refreshForeignChain(chainQ);
           return send(res, 200, {
-            chain: chainQ, chains: CHAINS,
+            chain: chainQ, chains: PUBLIC_CHAINS,
             pairs: st.pairs.filter(identifiedPair),
             updatedAt: st.updatedAt, ttl: FOREIGN_TTL,
             building: !st.updatedAt, error: st.pairs.length ? null : st.error,
@@ -4913,7 +4958,7 @@ const server = http.createServer(async (req, res) => {
         const shown = pairsCache.pairs.filter(identifiedPair);   // never serve a token we couldn't name
         const key = pairsCache.updatedAt + '|' + shown.length + '/' + pairsCache.pairs.length + '|' + (building ? 'b' : '') + '|' + (pairsCache.pairs.length ? '' : (pairsCache.error || ''));
         if (pairsRespCache.key !== key) {
-          const json = JSON.stringify({ chain: DEFAULT_CHAIN, chains: CHAINS, deep: true, pairs: shown, updatedAt: pairsCache.updatedAt, ttl: PAIRS_TTL, building, error: pairsCache.pairs.length ? null : pairsCache.error, risk: RISK_PUBLIC });
+          const json = JSON.stringify({ chain: DEFAULT_CHAIN, chains: PUBLIC_CHAINS, deep: true, pairs: shown, updatedAt: pairsCache.updatedAt, ttl: PAIRS_TTL, building, error: pairsCache.pairs.length ? null : pairsCache.error, risk: RISK_PUBLIC });
           pairsRespCache = { key, json, gz: zlib.gzipSync(json), br: brc(Buffer.from(json)) }; // compressed once per cache version
         }
         const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS };
@@ -4931,6 +4976,18 @@ const server = http.createServer(async (req, res) => {
         const wkey = Object.prototype.hasOwnProperty.call(RUNNER_WINDOWS, url.searchParams.get('window')) ? url.searchParams.get('window') : '24h';
         const tracked = db.prepare('SELECT MIN(first_seen_at) m FROM runner_tokens').get().m || now();
         return send(res, 200, { window: wkey, runners: bestRunners(wkey), trackingSinceMs: tracked, updatedAt: now() });
+      }
+      /* ----- live spot price: what the 1-second line poll hits ----- */
+      if (p === '/api/price' && req.method === 'GET') {
+        const pair = String(url.searchParams.get('pair') || '').toLowerCase().trim();
+        const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(pair) || !/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'bad pair or token address');
+        // generous, because this is designed to be polled once a second by every open chart
+        if (!rateLimit('spot:' + clientIp(req), 240, 6e4)) return bad(res, 'slow down', 429);
+        let price = null, why = null;
+        try { price = await spotPrice(pair, token); if (price == null) why = 'could not read the pair reserves'; }
+        catch (e) { why = (e && e.message) || 'chain read failed'; }
+        return send(res, 200, { pair, token, price, why, ethUsd: await ethUsd(), at: now() }, { 'Cache-Control': 'no-store' });
       }
       /* ----- on-chain candles: our own chart, no third-party chart service ----- */
       if (p === '/api/chart' && req.method === 'GET') {
