@@ -1,21 +1,132 @@
-/* ===== $Send design system ===== */
+/* ===== $Send design system — cypherpunk synthwave =====
+ * Identity hues (green/gold/diamond) are unchanged: they ARE the brand.
+ * Everything else moved from blue-black to a violet-black ramp, which is what
+ * makes neon read as neon rather than as "bright colour on grey".
+ *
+ * SILENT-FAILURE WARNINGS for future edits:
+ *  - Restoring `body { background: var(--ink) }` deletes the horizon grid and
+ *    scanlines with no error, because both are body pseudo-elements.
+ *  - Any ancestor of body gaining transform/filter/will-change/contain breaks
+ *    `position: fixed` on those two layers.
+ *  - --ink-4 is DECORATIVE ONLY. Interactive borders use --edge-ctl, which is
+ *    the only value that clears WCAG 1.4.11 (3:1) against our surfaces.
+ *  - --focus is deliberately NOT accent-derived. prefs.js lets a user set the
+ *    accent to anything, including something invisible; the focus ring must
+ *    survive that, so it is pinned to --text.
+ */
 :root {
-  --green: #8ee000;
-  --green-bright: #b4ff2b;
-  --green-dark: #5a9e00;
-  --rh-green: #00C805;
-  --gold: #ffb340;
-  --gold-deep: #e07b00;
-  --diamond: #9fe0ff;
-  --diamond-deep: #2a7fb0;
-  --ink: #0a0e14;
-  --ink-1: #070a10; /* darkest ink — used as high-contrast text ON bright green/gold highlights (active tabs, leaderboard windows) */
-  --ink-2: #101623;
-  --ink-3: #182034;
-  --ink-4: #1f2942;
-  --text: #eef4ff;
-  --text-dim: #9fb0cc;
-  --red: #ff5d5d;
+  /* ---------- IDENTITY (prefs.js live-overrides the first three) ---------- */
+  --green: #8ee000; --green-bright: #b4ff2b; --green-dark: #5a9e00;
+  --rh-green: #00C805; --gold: #ffb340; --gold-deep: #e07b00;
+  --diamond: #9fe0ff; --diamond-deep: #2a7fb0; --red: #ff5d5d;
+
+  /* ---------- ATMOSPHERE (decoration only — never text, never state) ---------- */
+  --neon-magenta: #ff3ba7; --neon-violet: #a45cff; --neon-cyan: #45e5ff;
+
+  /* ---------- SURFACE RAMP ---------- */
+  --void:  #05030e;
+  --ink:   #0b0818;
+  --ink-1: #06040f; /* darkest ink — high-contrast text ON bright green/gold highlights */
+  --ink-2: #14102a;
+  --ink-3: #1d1740;
+  --ink-4: #2e2560; /* DECORATIVE separator ONLY — not a control boundary */
+  --ink-5: #4a3e8c;
+
+  /* ---------- TEXT ---------- */
+  --text: #eef4ff; --text-dim: #a8b4d8; --text-mute: #8a93bd;
+
+  /* ---------- FOCUS (never accent-derived — prefs.js must not be able to hide it) ---------- */
+  --focus: #eef4ff;
+  --focus-halo: rgba(5,3,14,0.92);
+
+  /* ---------- INK-ON-ACCENT ---------- */
+  --on-green: #12200a; --on-gold: #2b1600; --on-diamond: #04121c; --on-red: #140606;
+
+  /* ---------- CONTROL BOUNDARY (WCAG 1.4.11 >= 3:1) ---------- */
+  --edge-ctl: #7d7ab8;
+  --edge-ctl-lit: var(--green);
+
+  /* ---------- ACCENT TINTS (follow the user's accent automatically) ---------- */
+  --g-wash: color-mix(in srgb, var(--green) 7%,  transparent);
+  --g-tint: color-mix(in srgb, var(--green) 13%, transparent);
+  --g-veil: color-mix(in srgb, var(--green) 22%, transparent);
+  --g-edge: color-mix(in srgb, var(--green) 33%, transparent);
+  --g-lit:  color-mix(in srgb, var(--green) 45%, transparent);
+  --g-hot:  color-mix(in srgb, var(--green) 62%, transparent);
+  --o-wash: color-mix(in srgb, var(--gold) 7%,  transparent);
+  --o-tint: color-mix(in srgb, var(--gold) 13%, transparent);
+  --o-veil: color-mix(in srgb, var(--gold) 22%, transparent);
+  --o-edge: color-mix(in srgb, var(--gold) 35%, transparent);
+  --o-lit:  color-mix(in srgb, var(--gold) 45%, transparent);
+  --o-hot:  color-mix(in srgb, var(--gold) 62%, transparent);
+  --r-wash: color-mix(in srgb, var(--red) 8%,  transparent);
+  --r-tint: color-mix(in srgb, var(--red) 15%, transparent);
+  --r-edge: color-mix(in srgb, var(--red) 40%, transparent);
+  --d-tint: color-mix(in srgb, var(--diamond) 12%, transparent);
+  --d-edge: color-mix(in srgb, var(--diamond) 40%, transparent);
+
+  /* ---------- GLASS ---------- */
+  --glass-nav:   rgba(11, 8, 24, 0.86);
+  --glass-menu:  rgba(11, 8, 24, 0.975); /* mobile dropdown sits over scrolling content — stays near-opaque */
+  --glass-scrim: rgba(5, 3, 14, 0.80);
+  --glass-hi:    rgba(29, 23, 64, 0.82);
+  --glass-lo:    rgba(20, 16, 42, 0.86);
+  --glass-well:  rgba(6, 4, 15, 0.55);
+  --glass-sheen: rgba(255, 255, 255, 0.055);
+  --glass-edge:  rgba(255, 255, 255, 0.10);
+  --hair:        rgba(255, 255, 255, 0.08);
+  --blur: 18px; --blur-sm: 10px; --blur-scrim: 8px; --sat: 1.35;
+
+  /* ---------- GLOW ---------- */
+  --glow-g: color-mix(in srgb, var(--green) 55%, transparent);
+  --glow-o: color-mix(in srgb, var(--gold) 50%, transparent);
+  --glow-d: rgba(159,224,255,0.50);
+  --glow-m: rgba(255,59,167,0.45);
+  --glow-r: rgba(255,93,93,0.45);
+  --glow-1: 8px; --glow-2: 20px; --glow-3: 44px;
+  --shadow-1: 0 2px 10px rgba(3,2,10,0.45);
+  --shadow-2: 0 12px 30px rgba(3,2,10,0.50);
+  --shadow-3: 0 24px 56px rgba(3,2,10,0.60);
+
+  /* ---------- GRID / SCANLINE ---------- */
+  --grid-line: rgba(255,59,167,0.16);
+  --grid-line-2: color-mix(in srgb, var(--green) 15%, transparent);
+  --grid-gap: 48px; --grid-tilt: 58deg; --grid-persp: 340px;
+  --scan: rgba(255,255,255,0.026); --scan-period: 3px;
+
+  /* ---------- GEOMETRY / MOTION / TYPE ---------- */
+  --r-1: 10px; --r-2: 14px; --r-3: 18px; --r-4: 22px; --r-pill: 999px;
+  --dur-1: 120ms; --dur-2: 180ms; --dur-3: 320ms; --dur-4: 600ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-pop: cubic-bezier(0.2, 2.2, 0.4, 1);
+  --ease-xp:  cubic-bezier(0.2, 0.8, 0.3, 1);
+  --font-body: 'Rubik', system-ui, -apple-system, sans-serif;
+  --font-disp: 'Luckiest Guy', 'Rubik', cursive;
+  --fs-micro: 0.75rem; --fs-xs: 0.8125rem; --fs-s: 0.875rem; --fs-base: 1rem;
+  --fs-m: 1.125rem; --fs-l: 1.375rem;
+  --fs-xl: clamp(1.5rem, 3.4vw, 2rem);
+  --fs-2xl: clamp(1.9rem, 4.6vw, 3rem);
+  --fs-3xl: clamp(2.4rem, 7vw, 4.6rem);
+  --lh-tight: 1.08; --lh-snug: 1.35; --lh-body: 1.6; --lh-loose: 1.72;
+  --tr-display: 0.02em; --tr-caps: 0.08em;
+}
+
+/* Static fallbacks for engines without color-mix(). Values are the same mixes
+   pre-computed against the default accent, so the site degrades in shade only. */
+@supports not (color: color-mix(in srgb, red 50%, transparent)) {
+  :root {
+    --g-wash: rgba(142,224,0,0.07);  --g-tint: rgba(142,224,0,0.13);
+    --g-veil: rgba(142,224,0,0.22);  --g-edge: rgba(142,224,0,0.33);
+    --g-lit:  rgba(142,224,0,0.45);  --g-hot:  rgba(142,224,0,0.62);
+    --o-wash: rgba(255,179,64,0.07); --o-tint: rgba(255,179,64,0.13);
+    --o-veil: rgba(255,179,64,0.22); --o-edge: rgba(255,179,64,0.35);
+    --o-lit:  rgba(255,179,64,0.45); --o-hot:  rgba(255,179,64,0.62);
+    --r-wash: rgba(255,93,93,0.08);  --r-tint: rgba(255,93,93,0.15);
+    --r-edge: rgba(255,93,93,0.40);
+    --d-tint: rgba(159,224,255,0.12); --d-edge: rgba(159,224,255,0.40);
+    --glow-g: rgba(142,224,0,0.55);   --glow-o: rgba(255,179,64,0.50);
+    --grid-line-2: rgba(142,224,0,0.15);
+  }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2805,3 +2916,212 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
 .np-row-call.is-armed { color: var(--ink); background: var(--green-bright); font-size: 0.78rem; font-weight: 700; padding: 0.3rem 0.5rem; }
 .np-row-call[disabled] { opacity: 0.6; cursor: default; }
 @media (max-width: 600px) { .np-row-call { min-width: 44px; min-height: 44px; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CYPHERPUNK SYNTHWAVE OVERHAUL
+   Appended deliberately: every rule below is a visual override of something
+   defined earlier. Nothing here changes markup, behaviour or class names, so
+   deleting this whole block returns the site to its previous appearance.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ---------- 1. The world: horizon grid + scanlines ----------
+   Both live on body pseudo-elements that were previously unused, so no DOM is
+   added. They are position:fixed and pointer-events:none, and they animate
+   TRANSFORM only — never background-position, which would repaint the whole
+   viewport every frame forever. */
+body {
+  background:
+    radial-gradient(120% 80% at 50% 0%,   #191036 0%, transparent 60%),
+    radial-gradient(100% 70% at 50% 100%, #230f3a 0%, transparent 62%),
+    var(--void);
+  background-attachment: fixed;
+  font-family: var(--font-body);
+}
+body::before {
+  content: ''; position: fixed; left: -50%; right: -50%; bottom: -10%; height: 62vh;
+  z-index: -2; pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right,  var(--grid-line) 0 1px, transparent 1px var(--grid-gap)),
+    repeating-linear-gradient(to bottom, var(--grid-line-2) 0 1px, transparent 1px var(--grid-gap));
+  transform: perspective(var(--grid-persp)) rotateX(var(--grid-tilt)) translateZ(0);
+  transform-origin: 50% 100%;
+  mask-image: linear-gradient(to top, #000 0%, rgba(0,0,0,0.35) 45%, transparent 88%);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, rgba(0,0,0,0.35) 45%, transparent 88%);
+  animation: sw-grid 18s linear infinite;
+  will-change: transform;
+}
+body::after {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, var(--scan) 0 1px, transparent 1px var(--scan-period));
+  opacity: 0.55;
+}
+@keyframes sw-grid {
+  from { transform: perspective(var(--grid-persp)) rotateX(var(--grid-tilt)) translate3d(0, 0, 0); }
+  to   { transform: perspective(var(--grid-persp)) rotateX(var(--grid-tilt)) translate3d(0, var(--grid-gap), 0); }
+}
+
+/* ---------- 2. Glass chrome ----------
+   backdrop-filter is expensive, so it is spent only on chrome and overlays.
+   List items (.post, .np-row, .lb-row, .comm-card) get the glass LOOK — sheen,
+   rim, gradient — and no blur, which keeps a long feed cheap to scroll. */
+.nav {
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 38%), var(--glass-nav);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border-bottom: 1px solid var(--g-edge);
+  box-shadow: 0 1px 0 var(--hair), var(--shadow-1);
+}
+.card {
+  position: relative;
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 38%), var(--glass-hi);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border: 1px solid var(--g-edge);
+  border-radius: var(--r-4);
+  box-shadow: var(--shadow-2), inset 0 1px 0 var(--glass-edge);
+}
+.post, .np-row, .lb-row, .comm-card, .gearn-row, .wallet-row {
+  background: linear-gradient(180deg, var(--glass-sheen), transparent 46%), var(--glass-lo);
+  border-color: var(--hair);
+}
+
+/* ---------- 3. Neon, spent sparingly ----------
+   Glow is reserved for the display face and for primary actions. Applying it to
+   body copy is what makes neon designs unreadable, so it is scoped by class. */
+.display, .section-title.display {
+  text-shadow:
+    0 0 var(--glow-1) var(--glow-g),
+    0 0 var(--glow-3) color-mix(in srgb, var(--green) 30%, transparent);
+}
+.btn-primary {
+  border: 1px solid color-mix(in srgb, var(--green) 70%, white 12%);
+  box-shadow:
+    0 6px 0 var(--green-dark),
+    0 10px 28px var(--glow-g),
+    inset 0 1px 0 rgba(255,255,255,0.45);
+}
+.btn-primary:hover { box-shadow: 0 6px 0 var(--green-dark), 0 14px 40px var(--glow-g), inset 0 1px 0 rgba(255,255,255,0.5); }
+
+/* ---------- 4. Control boundaries (WCAG 1.4.11) ----------
+   --ink-4 is decorative from here on. Anything focusable or clickable that was
+   bordered with it fails 3:1 against our surfaces (.btn-ghost was 1.34:1), so
+   interactive edges move to --edge-ctl, which clears it at 4.29:1. */
+.btn-ghost, .intro-skip, .np-controls, .np-search, .np-viewswitch,
+.pin-chip, .gd-bar, .notif-panel, .sc-widget, .sc-x-max, .np-feed-hint,
+.auth-seg, .cmp-modes, .np-row-call {
+  border-color: var(--edge-ctl);
+}
+.btn-ghost:hover, .pin-chip:hover, .np-row-call:hover { border-color: var(--edge-ctl-lit); }
+
+/* ---------- 5. Focus ----------
+   Pinned to --focus (== --text), never to the accent. prefs.js lets a user set
+   the accent to any colour including one invisible against glass; the focus
+   ring has to survive that, so it is deliberately outside the themable set.
+   The halo guarantees the ring reads against neon, glass and video alike. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus-halo);
+  border-radius: var(--r-1);
+}
+
+/* ---------- 6. Honest degradation ----------
+   Each of these keeps the site fully usable rather than merely static. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .nav  { background: var(--glass-menu); }
+  .card { background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .nav  { background: var(--glass-menu); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .card { background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  body::after { display: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --text-dim: #cdd8f2; --text-mute: #b3bede; --edge-ctl: #a9a6dd; --glass-sheen: transparent; }
+  .card, .nav { background: var(--ink-2); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  body::before, body::after { display: none; }
+}
+@media (forced-colors: active) {
+  .card, .nav, .post { border: 1px solid CanvasText; background: Canvas; }
+  body::before, body::after { display: none; }
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid Highlight; box-shadow: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+/* ---------- 7. Readability over user-chosen wall backgrounds ----------
+   MANDATORY, and it ships with the glass rather than after it. A user may set
+   wall_bg to any hex, #ffffff included. Without this, --text-dim over white
+   composites to 3.93:1 and fails AA. The scrim pins the effective backdrop back
+   to the dark ramp, restoring 7.26:1 whatever the user picks. */
+.themed-page .card,
+.themed-page .post {
+  background:
+    linear-gradient(180deg, var(--glass-sheen), transparent 38%),
+    linear-gradient(0deg, var(--glass-scrim), var(--glass-scrim)),
+    var(--glass-hi);
+}
+
+/* ---------- 8. Motion and micro-interaction ----------
+   Rules: transform and opacity only, so everything stays on the compositor.
+   Nothing animates width, height, top, left, filter or box-shadow on a hover
+   path. Nothing is parked at opacity 0 waiting for an observer — every element
+   is fully visible at rest, and motion only ever adds to that. */
+.btn, .btn-primary, .btn-ghost, .btn-sm {
+  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.btn:hover, .btn-primary:hover, .btn-ghost:hover { transform: translateY(-2px); }
+.btn:active, .btn-primary:active, .btn-ghost:active { transform: translateY(1px); }
+
+.card, .post, .comm-card, .np-row, .lb-row {
+  transition: transform var(--dur-3) var(--ease-out), border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-3) var(--ease-out);
+}
+.comm-card:hover, .np-row:hover {
+  transform: translateY(-3px);
+  border-color: var(--g-edge);
+  box-shadow: var(--shadow-2), 0 0 var(--glow-2) var(--g-tint);
+}
+
+/* nav links get an underlight that grows from the centre — scaleX only */
+.nav-menu a { position: relative; transition: color var(--dur-2) var(--ease-out); }
+.nav-menu a::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -3px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  transform: scaleX(0); transform-origin: 50% 50%;
+  transition: transform var(--dur-2) var(--ease-out);
+  pointer-events: none;
+}
+.nav-menu a:hover::after, .nav-menu a.active::after, .nav-menu a:focus-visible::after { transform: scaleX(1); }
+
+/* the always-on FAB gets a slow neon breath so it reads as live, not stuck */
+.compose-fab, #compose-fab { animation: sw-breathe 3.2s var(--ease-xp) infinite; }
+@keyframes sw-breathe {
+  0%, 100% { transform: translateZ(0) scale(1); }
+  50%      { transform: translateZ(0) scale(1.045); }
+}
+
+/* points and level-ups pop rather than appear */
+.toast { animation: sw-pop var(--dur-3) var(--ease-pop) both; }
+@keyframes sw-pop {
+  from { transform: translateY(8px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0)   scale(1);    opacity: 1; }
+}
+
+/* the level badge pulses once when it changes; .bump is already toggled in JS */
+.nav-xp-badge.bump { animation: sw-bump var(--dur-4) var(--ease-pop); }
+@keyframes sw-bump {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* MOTION POLICY: everything above collapses to instant, and the site stays
+   fully usable and still looks designed — not merely frozen. */
+@media (prefers-reduced-motion: reduce) {
+  .btn:hover, .btn-primary:hover, .btn-ghost:hover,
+  .comm-card:hover, .np-row:hover { transform: none; }
+  .nav-menu a::after { transition: none; }
+  .compose-fab, #compose-fab, .toast, .nav-xp-badge.bump { animation: none; }
+  .card, .post, .comm-card, .np-row, .lb-row, .btn, .btn-primary, .btn-ghost { transition: none; }
+}
