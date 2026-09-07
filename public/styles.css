@@ -3417,3 +3417,15 @@ body.np-mode-feed #main { padding-bottom: 0; }
 body.np-mode-feed .np-feed,
 body.np-mode-feed .np-slide { height: var(--np-feed-h); }
 body.np-mode-feed .np-slide { contain-intrinsic-size: 1px var(--np-feed-h); }
+
+/* ---- footer nav ----
+   The separators used to be literal "·" text nodes between the anchors. .nav-foot is a flex
+   container, so each one was its own flex ITEM: it took a full 1.1rem gap on both sides, and
+   when the row wrapped a lone dot could land at the start of the next line. A CSS-drawn
+   separator fixes the orphan but not the mirror case — the link ending a wrapped row still
+   trails a dot, and no selector can know where the row broke. Column spacing separates the
+   links on its own at this size, so the separator goes entirely: nothing to orphan, nothing
+   to trail, and no decorative glyph for a screen reader to read out. */
+footer .nav-foot { gap: 0.65rem 1.5rem; align-items: center; }
+footer .nav-foot a:focus-visible,
+footer .fine a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
