@@ -2,7 +2,9 @@
 const AVATARS = ['🚀','🦍','🐸','💎','🤝','🧨','🥷','👑','🦖','🌕','💸','🔥'];
 const ACCENTS = ['', '#b4ff2b', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2', '#ffffff'];
 const BGS = ['', '#0a0e14', '#101a10', '#1a1210', '#10121a', '#1a101a', '#000000'];
-const SITE_ACCENTS = ['', '#8ee000', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2'];
+// '#8ee000' is deliberately absent: it looks identical to Default but derives a different
+// bright/dark pair, so the two swatches would look the same and behave differently.
+const SITE_ACCENTS = ['', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2'];
 let chosenAvatar = '🚀', chosenAccent = '', chosenBg = '';
 let myTheme = {};
 
@@ -273,13 +275,74 @@ async function loadMe() {
   } catch {}
 }
 
+
+/* ---------- full colour editor ----------
+   Five controls, named the way a person thinks about a page rather than after CSS variables.
+   Every pick runs through the solver in prefs.js, which may adjust it for readability; when that
+   happens the field shows the value actually applied rather than silently disagreeing with itself. */
+const THEME_CONTROLS = [
+  { key: 'accent',     label: 'Accent',      sub: 'buttons, links, highlights', fallback: '#8ee000' },
+  { key: 'background', label: 'Background',  sub: 'the page itself',            fallback: '#0b0818' },
+  { key: 'text',       label: 'Text',        sub: 'body copy',                  fallback: '#eef4ff' },
+  { key: 'highlight',  label: 'Gold accents', sub: 'prices, OG badges',         fallback: '#ffb340' },
+  { key: 'rare',       label: 'Rare accents', sub: 'diamond tiers',             fallback: '#9fe0ff' },
+];
+function initThemeEditor() {
+  const host = document.getElementById('theme-rows');
+  if (!host) return;
+  const cur = (window.SITE_PREFS && window.SITE_PREFS.colors) || {};
+  host.innerHTML = THEME_CONTROLS.map(c => {
+    const v = cur[c.key] || c.fallback;
+    return '<div class="theme-row">' +
+      '<label class="theme-lab" for="tc-' + c.key + '"><b>' + c.label + '</b><i>' + c.sub + '</i></label>' +
+      '<input type="color" id="tc-' + c.key + '" value="' + v + '" aria-describedby="tc-note-' + c.key + '">' +
+      '<input type="text" class="theme-hex" id="tch-' + c.key + '" value="' + v + '" maxlength="7" spellcheck="false"' +
+        ' aria-label="' + c.label + ' colour as a hex code">' +
+      '<span class="theme-applied" id="tc-note-' + c.key + '" role="status" aria-live="polite"></span>' +
+    '</div>';
+  }).join('');
+
+  THEME_CONTROLS.forEach(c => {
+    const pick = document.getElementById('tc-' + c.key);
+    const hex = document.getElementById('tch-' + c.key);
+    const note = document.getElementById('tc-note-' + c.key);
+    const commit = (val) => {
+      if (!/^#[0-9a-fA-F]{6}$/.test(val)) return;
+      applySitePrefs({ colors: { [c.key]: val } }, true);
+      // Say plainly when the solver moved the colour, and to what.
+      const solved = window.themeFrom ? window.themeFrom((window.SITE_PREFS || {}).colors || {}) : {};
+      const map = { accent: '--green', background: '--ink', text: '--text', highlight: '--gold', rare: '--diamond' };
+      const got = solved[map[c.key]];
+      if (got && got.toLowerCase() !== val.toLowerCase()) {
+        note.textContent = 'Adjusted to ' + got + ' so it stays readable.';
+        pick.value = got; hex.value = got;
+      } else { note.textContent = ''; hex.value = val; pick.value = val; }
+    };
+    pick.addEventListener('input', () => commit(pick.value));
+    hex.addEventListener('change', () => commit(hex.value.trim()));
+  });
+
+  const reset = document.getElementById('theme-reset');
+  if (reset && !reset._wired) {
+    reset._wired = true;
+    reset.addEventListener('click', () => {
+      // colors: null is the replace-with-empty signal — a plain merge of {} would change nothing.
+      applySitePrefs({ colors: null, siteAccent: '' }, true);
+      initThemeEditor();
+      sendToast('Colours reset 🎨');
+    });
+  }
+}
+
 /* ---------- site prefs ---------- */
 function initSitePrefs() {
   const p = window.SITE_PREFS || {};
-  renderSwatches('site-accent-swatches', SITE_ACCENTS, p.siteAccent || '', c => {
-    applySitePrefs({ siteAccent: c }, true);
+  renderSwatches('site-accent-swatches', SITE_ACCENTS, (p.colors && p.colors.accent) || p.siteAccent || '', c => {
+    applySitePrefs({ siteAccent: c, colors: { accent: c || undefined } }, true);
+    initThemeEditor();
     sendToast(c ? 'Site re-themed for you 🖌️' : 'Back to classic green 💚');
   });
+  initThemeEditor();
   const switches = [
     ['pref-confetti', 'confetti'],
     ['pref-ticker', 'ticker'],

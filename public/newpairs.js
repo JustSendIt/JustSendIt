@@ -865,9 +865,14 @@
   }
   async function fetchPairs(manual) {
     try {
-      const res = await fetch('/api/pairs/new', { credentials: 'same-origin' });
+      const res = await fetch('/api/pairs/new' + (CHAIN && CHAIN !== 'robinhood' ? '?chain=' + encodeURIComponent(CHAIN) : ''), { credentials: 'same-origin' });
       const j = await res.json();
       npData.building = !!j.building; npData.error = j.error || null;
+      if (Array.isArray(j.chains) && j.chains.length) { CHAINS = j.chains; renderChains(); }
+      if (chainNote) {
+        if (j.note) { chainNote.textContent = j.note; chainNote.hidden = false; }
+        else { chainNote.textContent = ''; chainNote.hidden = true; }
+      }
       npData.stale = j.updatedAt ? (Date.now() - j.updatedAt > 4 * 60 * 1000) : false;
       state.lastFetch = Date.now();
       if (!j.pairs || !j.pairs.length) { if (!state.all.length) { state.started = true; if (state.mode === 'feed') renderFeedState(); else render(); } else if (state.mode === 'feed') { updateFeedLive(); } else updateStatus(); return; }
@@ -1201,6 +1206,37 @@
   // The ONE feed filter: a perfect score AND the 'ok' triage — i.e. exactly the pairs that carry the
   // 🚀 "Looks Good, Send It" verdict. Same test as verdictOf(), kept in one place so the two can never drift.
   const feedQualifies = (p) => !thinData(p) && triageOf(p) === 'ok' && healthOf(p) >= 100;
+
+  /* ---------- chains ----------
+     Robinhood Chain is the home chain and the only one with a block explorer behind it, so it is
+     the only one where holder counts, contract verification and deployer history exist. Other
+     chains are market-data only; the risk model records the missing signals as unreadable, which
+     is why a foreign-chain token can score 100 on what we CAN see and still never wear the top
+     verdict. The note under the chain bar says this in the open. */
+  let CHAIN = (function () { try { return localStorage.getItem('np:chain') || 'robinhood'; } catch { return 'robinhood'; } })();
+  let CHAINS = [{ slug: 'robinhood', name: 'Robinhood Chain', emoji: '🏹', deep: true }];
+  const chainBar = document.getElementById('np-chainbar');
+  const chainNote = document.getElementById('np-chain-note');
+
+  function renderChains() {
+    if (!chainBar) return;
+    chainBar.innerHTML = CHAINS.map(c =>
+      '<button class="np-chain-btn' + (c.slug === CHAIN ? ' is-on' : '') + '" type="button" role="tab"' +
+      ' aria-selected="' + (c.slug === CHAIN ? 'true' : 'false') + '" tabindex="' + (c.slug === CHAIN ? '0' : '-1') + '"' +
+      ' data-chain="' + esc(c.slug) + '"><span aria-hidden="true">' + esc(c.emoji || '') + '</span> ' + esc(c.name) +
+      (c.deep ? '' : '<i class="np-chain-lite" title="Market data only on this chain">lite</i>') + '</button>'
+    ).join('');
+  }
+  if (chainBar) chainBar.addEventListener('click', (e) => {
+    const b = e.target.closest('.np-chain-btn');
+    if (!b || b.dataset.chain === CHAIN) return;
+    CHAIN = b.dataset.chain;
+    try { localStorage.setItem('np:chain', CHAIN); } catch {}
+    state.all = []; state.byAddr = new Map(); state.started = false; state.feedAddrs = [];
+    renderChains();
+    if (window.announce) announce('Switched to ' + (CHAINS.find(c => c.slug === CHAIN) || {}).name + '. Loading.');
+    fetchPairs(true);
+  });
   const feedMove = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
   function rocketCount(addr) { try { return Number(localStorage.getItem('np:rocket:' + addr)) || 0; } catch { return 0; } }
   function srLine(p) {

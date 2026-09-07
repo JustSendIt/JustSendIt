@@ -2203,6 +2203,97 @@ async function scanNewPairs() {
   pairsRaw = dedup.reverse().slice(-Math.max(PAIRS_KEEP, 120));
 }
 
+/* ===== Multi-chain New Pairs ==========================================================
+   Robinhood Chain is the HOME chain and the only one we analyse deeply: we read PairCreated logs
+   from its factory over its own RPC, and Blockscout gives us holder counts, contract verification
+   and deployer history. None of that exists for other chains here.
+
+   So other chains are supported at the level the data actually supports: Dexscreener gives price,
+   liquidity, volume, transaction counts and pair age for every chain it indexes, and those drive
+   the checks that only need market data. The checks that need an explorer simply cannot run, and
+   are recorded as UNREADABLE rather than as "passed" — which is what dataKnown/thinData already
+   express, so a foreign-chain token can never wear the top verdict on data we never had.
+   That is the honest shape of multi-chain here, and the UI says so. ====================== */
+const CHAINS = [
+  { slug: 'robinhood', name: 'Robinhood Chain', emoji: '🏹', deep: true },
+  { slug: 'solana',    name: 'Solana',          emoji: '◎',  deep: false },
+  { slug: 'base',      name: 'Base',            emoji: '🔵', deep: false },
+  { slug: 'ethereum',  name: 'Ethereum',        emoji: 'Ξ',  deep: false },
+  { slug: 'bsc',       name: 'BNB Chain',       emoji: '🟡', deep: false },
+  { slug: 'arbitrum',  name: 'Arbitrum',        emoji: '🔷', deep: false },
+];
+const CHAIN_BY_SLUG = Object.fromEntries(CHAINS.map(c => [c.slug, c]));
+const DEFAULT_CHAIN = 'robinhood';
+const FOREIGN_TTL = 90 * 1000;
+const foreignCache = new Map();   // slug -> { pairs, updatedAt, building, error }
+
+// Map a Dexscreener pair onto the same shape the radar already renders, so every downstream
+// consumer (risk, sorting, the card, the detail body) works unchanged.
+function pairFromDex(d, slug) {
+  const bt = d.baseToken || {}, qt = d.quoteToken || {};
+  const liq = d.liquidity && d.liquidity.usd != null ? Number(d.liquidity.usd) : null;
+  const createdAt = d.pairCreatedAt || 0;
+  const txns = d.txns || {}, vol = d.volume || {}, pc = d.priceChange || {};
+  const n = (x) => { const v = Number(x); return isFinite(v) ? v : 0; };
+  const nn = (x) => { const v = Number(x); return isFinite(v) ? v : null; };
+  return {
+    token: {
+      address: String(bt.address || ''), name: bt.name || 'Unknown Token', symbol: bt.symbol || '???',
+      decimals: null, totalSupply: null,
+      isVerified: null,     // no explorer for this chain → genuinely unknown, not "unverified"
+      deployer: null, owner: null, renounced: null,
+    },
+    pair: { address: String(d.pairAddress || ''), quoteSymbol: qt.symbol || '?', token0: null, token1: null,
+            createdAt, ageMinutes: createdAt ? Math.max(0, Math.round((now() - createdAt) / 60000)) : null },
+    market: { priceUsd: d.priceUsd ? Number(d.priceUsd) : null, liquidityUsd: liq,
+              fdv: d.fdv != null ? Number(d.fdv) : null, marketCap: d.marketCap != null ? Number(d.marketCap) : null, reserves: null },
+    volume: { m5: n(vol.m5), h1: n(vol.h1), h6: n(vol.h6), h24: n(vol.h24) },
+    txns: { h1: { buys: n(txns.h1 && txns.h1.buys), sells: n(txns.h1 && txns.h1.sells) },
+            h6: { buys: n(txns.h6 && txns.h6.buys), sells: n(txns.h6 && txns.h6.sells) },
+            h24: { buys: n(txns.h24 && txns.h24.buys), sells: n(txns.h24 && txns.h24.sells) } },
+    priceChange: { h1: nn(pc.h1), h6: nn(pc.h6), h24: nn(pc.h24) },
+    holders: { count: null, topHolderPct: null, top10Pct: null, top: [] },  // no explorer → unknown
+    indexed: true,
+    chain: slug,
+    brand: brandFromDex(d),
+    links: { dex: d.url || ('https://dexscreener.com/' + slug + '/' + d.pairAddress), explorer: null },
+    risk: {},
+  };
+}
+
+async function refreshForeignChain(slug) {
+  const st = foreignCache.get(slug) || { pairs: [], updatedAt: 0, building: false, error: null };
+  if (st.building) return st;
+  st.building = true; foreignCache.set(slug, st);
+  try {
+    // Two sources, merged: the cross-chain "latest profiles" feed surfaces genuinely new tokens,
+    // and a broad search backfills so a quiet chain is not an empty page.
+    const seen = new Map();
+    const profiles = await jget('https://api.dexscreener.com/token-profiles/latest/v1');
+    const addrs = (Array.isArray(profiles) ? profiles : []).filter(p => p && p.chainId === slug && p.tokenAddress)
+      .map(p => p.tokenAddress).slice(0, 30);
+    for (let i = 0; i < addrs.length; i += 30) {
+      const arr = await jget('https://api.dexscreener.com/tokens/v1/' + slug + '/' + addrs.slice(i, i + 30).join(','));
+      for (const d of (Array.isArray(arr) ? arr : [])) if (d && d.pairAddress) seen.set(String(d.pairAddress).toLowerCase(), d);
+    }
+    const s = await jget('https://api.dexscreener.com/latest/dex/search?q=' + encodeURIComponent(slug));
+    for (const d of ((s && s.pairs) || [])) {
+      if (d && d.chainId === slug && d.pairAddress) seen.set(String(d.pairAddress).toLowerCase(), d);
+    }
+    const pairs = [...seen.values()]
+      .map(d => pairFromDex(d, slug))
+      .filter(p => p.token.address && p.pair.address)
+      .sort((a, b) => (b.pair.createdAt || 0) - (a.pair.createdAt || 0))
+      .slice(0, 120);
+    // Same risk model, and every explorer-only signal is null, so dataKnown records them as
+    // unreadable and thinData keeps these off the top tier honestly.
+    for (const p of pairs) applyRisk(p, {}, {});
+    st.pairs = pairs; st.updatedAt = now(); st.error = null;
+  } catch (e) { st.error = (e && e.message) || 'refresh failed'; }
+  finally { st.building = false; foreignCache.set(slug, st); }
+  return st;
+}
+
 const RISK = {
   honeypotSuspect: { w: 45, sev: 'critical', label: '🍯 Honeypot risk — buys but no sells' },
   dumping:         { w: 32, sev: 'critical', label: '📉 Price dumping (−50%+ in 1h)' },
@@ -4047,6 +4138,21 @@ const server = http.createServer(async (req, res) => {
         if (b.site_prefs !== undefined) {
           const sp = b.site_prefs || {};
           if (sp.siteAccent !== undefined && sp.siteAccent !== '' && !HEX_COLOR_RE.test(String(sp.siteAccent))) return bad(res, 'site accent must be a hex color');
+          // The colour map is user-controlled and is written straight into a style attribute on the
+          // client, so every value is validated as a strict 6-digit hex here and unknown keys are
+          // dropped. Anything else would be a CSS-injection sink.
+          if (sp.colors !== undefined && sp.colors !== null) {
+            if (typeof sp.colors !== 'object' || Array.isArray(sp.colors)) return bad(res, 'colors must be an object');
+            const ALLOWED = ['accent', 'background', 'text', 'highlight', 'rare'];
+            const clean = {};
+            for (const k of ALLOWED) {
+              const v = sp.colors[k];
+              if (v === undefined || v === null || v === '') continue;
+              if (!HEX_COLOR_RE.test(String(v))) return bad(res, k + ' must be a hex colour like #8ee000');
+              clean[k] = String(v).toLowerCase();
+            }
+            sp.colors = clean;
+          }
           const j = JSON.stringify(sp);
           if (j.length > 4000) return bad(res, 'prefs too large');
           db.prepare('UPDATE users SET site_prefs = ? WHERE id = ?').run(j, me.id);
@@ -4607,6 +4713,24 @@ const server = http.createServer(async (req, res) => {
 
       /* ----- live new-pairs tracker (PUBLIC, server-cached, read-only on-chain data) ----- */
       if (p === '/api/pairs/new' && req.method === 'GET') {
+        // ?chain=<slug> — Robinhood Chain falls through to the deep pipeline below; every other
+        // supported chain is served from the Dexscreener-derived cache, with its own honest limits.
+        const chainQ = String(url.searchParams.get('chain') || DEFAULT_CHAIN);
+        if (chainQ !== DEFAULT_CHAIN) {
+          const ch = CHAIN_BY_SLUG[chainQ];
+          if (!ch) return bad(res, 'unknown chain');
+          const st = foreignCache.get(chainQ) || { pairs: [], updatedAt: 0, building: false, error: null };
+          if (!st.updatedAt || now() - st.updatedAt > FOREIGN_TTL) refreshForeignChain(chainQ);
+          return send(res, 200, {
+            chain: chainQ, chains: CHAINS,
+            pairs: st.pairs.filter(identifiedPair),
+            updatedAt: st.updatedAt, ttl: FOREIGN_TTL,
+            building: !st.updatedAt, error: st.pairs.length ? null : st.error,
+            risk: RISK_PUBLIC,
+            deep: false,
+            note: 'On ' + ch.name + ' we can read market data but not holders, contract verification or deployer history — those come from a block explorer we only have for Robinhood Chain. Checks that need them are shown as unknown rather than passed.',
+          });
+        }
         if (!pairsCache.updatedAt && !pairsRefreshing) { pairsCache.building = true; refreshPairs(); } // lazy first build
         else if (pairsCache.updatedAt && now() - pairsCache.updatedAt > PAIRS_TTL && !pairsRefreshing) refreshPairs(); // stale → refresh in bg, serve current
         // This feed is identical for every user, so serialize + gzip it ONCE per cache version instead of per request
@@ -4615,7 +4739,7 @@ const server = http.createServer(async (req, res) => {
         const shown = pairsCache.pairs.filter(identifiedPair);   // never serve a token we couldn't name
         const key = pairsCache.updatedAt + '|' + shown.length + '/' + pairsCache.pairs.length + '|' + (building ? 'b' : '') + '|' + (pairsCache.pairs.length ? '' : (pairsCache.error || ''));
         if (pairsRespCache.key !== key) {
-          const json = JSON.stringify({ pairs: shown, updatedAt: pairsCache.updatedAt, ttl: PAIRS_TTL, building, error: pairsCache.pairs.length ? null : pairsCache.error, risk: RISK_PUBLIC });
+          const json = JSON.stringify({ chain: DEFAULT_CHAIN, chains: CHAINS, deep: true, pairs: shown, updatedAt: pairsCache.updatedAt, ttl: PAIRS_TTL, building, error: pairsCache.pairs.length ? null : pairsCache.error, risk: RISK_PUBLIC });
           pairsRespCache = { key, json, gz: zlib.gzipSync(json), br: brc(Buffer.from(json)) }; // compressed once per cache version
         }
         const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS };

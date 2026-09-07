@@ -194,6 +194,14 @@
           <div class="setting-body">
             <label class="f-label" style="margin-top:0;">Site color <span style="font-weight:400;">(re-themes the whole site, just for you)</span></label>
             <div class="color-swatches" id="site-accent-swatches" role="radiogroup" aria-label="Site accent color"></div>
+            <div class="theme-editor" id="theme-editor">
+              <p class="p-sub" style="margin:0.6rem 0 0.4rem;">Or set each part of the site yourself. Every colour is checked for readability as you pick it — if a choice would make text or buttons hard to see, it is nudged until it is legible and the applied value is shown.</p>
+              <div class="theme-rows" id="theme-rows"></div>
+              <p class="theme-note warn-box" id="theme-note">Backgrounds are kept dark on purpose. Around forty shadows and overlays across the site are painted with fixed dark values that do not invert, so on a light background text, buttons and focus outlines stop being readable. Light picks are darkened to the lightest ground that still works.</p>
+              <div class="theme-actions">
+                <button class="btn btn-ghost btn-sm" id="theme-reset" type="button">Reset all colours</button>
+              </div>
+            </div>
             <div class="pref-row">
               <div><div class="p-label">Confetti &amp; effects 🎉</div><div class="p-sub">bursts on clicks, reactions, and buys</div></div>
               <button class="switch" id="pref-confetti" role="switch" aria-checked="true" aria-label="Toggle confetti effects"></button>

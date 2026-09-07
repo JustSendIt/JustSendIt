@@ -3125,3 +3125,74 @@ body::after {
   .compose-fab, #compose-fab, .toast, .nav-xp-badge.bump { animation: none; }
   .card, .post, .comm-card, .np-row, .lb-row, .btn, .btn-primary, .btn-ghost { transition: none; }
 }
+
+/* ---------- 9. Colour editor (profile settings) ---------- */
+.theme-editor { margin-top: 0.6rem; }
+.theme-rows { display: grid; gap: 0.55rem; }
+.theme-row {
+  display: grid; grid-template-columns: 1fr 44px 92px; gap: 0.6rem; align-items: center;
+  background: var(--glass-well); border: 1px solid var(--hair); border-radius: var(--r-2); padding: 0.5rem 0.7rem;
+}
+.theme-lab { display: grid; line-height: 1.25; }
+.theme-lab b { font-size: 0.92rem; }
+.theme-lab i { font-style: normal; font-size: 0.76rem; color: var(--text-mute); }
+.theme-row input[type="color"] {
+  width: 44px; height: 34px; padding: 0; border: 1.5px solid var(--edge-ctl);
+  border-radius: var(--r-1); background: none; cursor: pointer;
+}
+/* A hex field beside every swatch, because a native colour picker is unusable with a keyboard
+   alone and impossible with a screen reader. */
+.theme-hex {
+  width: 92px; font-family: var(--mono, monospace); font-size: 0.82rem;
+  background: var(--ink); color: var(--text); border: 1.5px solid var(--edge-ctl);
+  border-radius: var(--r-1); padding: 0.35rem 0.45rem;
+}
+.theme-applied { grid-column: 1 / -1; font-size: 0.78rem; color: var(--gold); }
+.theme-applied:empty { display: none; }
+.theme-note { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; margin: 0.7rem 0 0;
+  background: var(--o-wash); border-left: 3px solid var(--gold); border-radius: 0 var(--r-1) var(--r-1) 0; padding: 0.6rem 0.8rem; }
+.theme-actions { margin-top: 0.7rem; }
+@media (max-width: 520px) {
+  .theme-row { grid-template-columns: 1fr 44px; }
+  .theme-hex { grid-column: 1 / -1; width: 100%; }
+}
+
+/* ---------- 10. Wall density ----------
+   `section { padding: 4.2rem 1.25rem }` is written for the landing page, where big airy bands are
+   the point. A public wall is a feed: the same rule put 67px of dead space above AND below every
+   feature block, so the check-in card alone spanned 302px for 168px of content. These sections are
+   feed furniture, so they get feed spacing. */
+#checkin,
+.wall-pins,
+#panel-posts,
+#panel-calls,
+#panel-lb,
+#pub-pins {
+  padding: 0 0 0.9rem;
+}
+#checkin:empty, .wall-pins:empty { padding: 0; }
+/* the tab panels sit directly under the tab strip, so they need no top gap of their own */
+#panel-posts, #panel-calls, #panel-lb { padding-top: 0.2rem; }
+
+/* ---------- 11. Chain selector (New Pairs) ---------- */
+.np-chainbar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 0.6rem; }
+.np-chain-btn {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: var(--glass-well); color: var(--text-dim);
+  border: 1.5px solid var(--edge-ctl); border-radius: var(--r-pill);
+  padding: 0.38rem 0.8rem; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  transition: transform var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
+}
+.np-chain-btn:hover { transform: translateY(-1px); border-color: var(--edge-ctl-lit); }
+.np-chain-btn.is-on { color: var(--green-bright); border-color: var(--green); background: var(--g-tint); }
+/* "lite" is a real distinction, not decoration: it means the deep on-chain checks cannot run there */
+.np-chain-lite {
+  font-style: normal; font-size: 0.62rem; text-transform: uppercase; letter-spacing: var(--tr-caps);
+  background: var(--o-tint); color: var(--gold); padding: 0.1rem 0.35rem; border-radius: var(--r-1);
+}
+.np-chain-note {
+  font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; margin: 0 0 0.8rem;
+  background: var(--o-wash); border-left: 3px solid var(--gold);
+  border-radius: 0 var(--r-1) var(--r-1) 0; padding: 0.55rem 0.8rem;
+}
+@media (prefers-reduced-motion: reduce) { .np-chain-btn:hover { transform: none; } }
