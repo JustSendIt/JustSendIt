@@ -100,14 +100,14 @@
   /* ---------- the six cards ---------- */
   function biggestSenderCard(d, ctx) {
     const bs = d.biggestSender, n = bs.prize.winners, ladder = bs.prize.ladder || [], rows = mark(bs.top, ctx.username);
-    const pts = u => compact(u.points) + ' SP';
+    const pts = u => compact(u.points) + ' base';   // the race ranks base points: every boost taken out
     let me = '';
     if (!ctx.signedIn) me = 'Everything you earn this week counts toward the prize places. ' + signInBtn();
     else if (bs.me && bs.me.rank) {
       const inside = bs.me.rank <= n, edge = rows[n - 1];
       me = 'You are <b>#' + bs.me.rank + '</b> with <b>' + nf(bs.me.points) + '</b> Send Power' +
         (inside ? ' — inside the prize places: <b>#' + bs.me.rank + ' pays ' + ladder[bs.me.rank - 1] + '×</b>. Hold it. 🏆'
-          : edge ? ' — <b>' + nf(Math.max(1, edge.points - bs.me.points)) + '</b> more draws level with #' + edge.rank + ', and a tie shares the rung.' : '.');
+          : edge ? ' — <b>' + nf(Math.max(1, edge.points - bs.me.points)) + '</b> more draws level with #' + edge.rank + ' (a tie goes to whoever joined first).' : '.');
     } else if (bs.me) me = rows.length < n ? 'The top ' + n + ' is not full yet — your next post, reaction or Send Call puts you on it.' : 'You have not scored this week — your next post, reaction or Send Call counts.';
     if (bs.myBoost && bs.myBoost.boost > 1) me += ' <span class="cmp-carry">🏆 Carrying <b>' + bs.myBoost.boost + '×</b> from week ' + esc(bs.myBoost.wonIn || '') + ' until ' + esc(dateUTC(bs.myBoost.until)) + '.</span>';
     const last = bs.last && bs.last.winners && bs.last.winners.length
@@ -119,7 +119,7 @@
       body: rows.length ? podium(rows, ctx.prev.bs, u => u.points, pts) + list(rows, ctx.prev.bs, pts) : '<p class="cmp-empty">Nobody has scored this week yet. The first post takes the lead. 🚀</p>',
       me: me + last,
       cta: '<a class="btn btn-sm btn-primary" href="wall.html">Post on the Send Wall</a>',
-      how: '<b>A fresh race every week.</b> Every Monday at 00:00 UTC the board resets to zero: only Send Power earned inside the week counts, with any prize you were already carrying taken back out, so last week\'s winners race on the same footing as everyone else. When the week ends the game master pays the top ' + n + ' by finishing place — ' + ladder.map(b => b + '×').join(' · ') + ' — for the whole of the next week; tied places share a rung. Boosts add on top of your other boosts, they don\'t multiply.',
+      how: '<b>A fresh race every week, ranked on base points.</b> Every Monday at 00:00 UTC the board resets to zero: only what you did inside the week counts — every boost (Holder, OG, community, Rocket Run) and any prize taken out — so a whale, an OG and a newcomer race on the same footing. When the week ends the game master pays exactly ' + n + ' prizes by finishing place — ' + ladder.map(b => b + '×').join(' · ') + ' — for the whole of the next week; a tie at the edge goes to whoever joined first. Boosts add on top of your other boosts, they don\'t multiply.',
     });
   }
   function sendCallsCard(d, ctx) {

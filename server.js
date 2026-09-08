@@ -811,14 +811,23 @@ function titleFor(level) {
 // base points per action (before the holder multiplier)
 // Every base value is 3x what it launched at. Same ratios between actions; the level curve is
 // untouched (thresholds are what people experience as progress, and re-levelling everyone is not a
-// tuning change). The effect is on PACE: a maxed social day was 6,890 base, which put Level 100
-// 5.7 years away at 1x for a daily player. It is now 20,670 — 1.9 years at 1x, 70 days at the 10x a
-// live community pays — so the climb is long without being hopeless for someone who never calls.
-const PTS = { post: 75, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 180 };
+// tuning change). PACE, with today's caps (audit 2026-09-08): a purely social day (post, comment,
+// react, vote, follow, check-in, customize, and what others send back) is 5,040 base; with the three
+// real buys a day the swap cap allows, 6,390. At 1x that is Level 100 in ~7.8 years; at the 10x a live
+// community pays, ~285 days — and the SOCIAL_DAY_CAP below means no stack, however large, turns a day
+// of clicks into more than 73,762. The fast lane is meant to be Send Calls held in profit.
+const PTS = { post: 75, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 170 }; // call_x 170: fifty rungs (170 × 1,275 = 216,750) fit inside the ladder's 30% slice of a call's budget, so the documented top rung can actually be paid
 // anti-farm: max awards of this kind per rolling 24h (per recipient user).
 // Every point-earning kind is capped so no single action can be farmed unbounded.
-const DAILY_CAP = { post: 40, first_post: 1, comment: 20, react_give: 40, react_get: 60, vote_give: 60, vote_get: 100, follow: 10, be_followed: 30, track_wallet: 10, watch_token: 30, connect_wallet: 5, customize: 2, swap: 20, send_call: 20, hop_on: 30, community_founder: 1 }; // call_x (milestone payouts) is uncapped — earned by real performance
-const PTS_EVENT_CAP = 1500000; // hard ceiling on any single points event (backstop against the size × holder multiplier stack). 3x with the bases, so it clamps at the same multiplier it always did
+const DAILY_CAP = { post: 40, first_post: 1, comment: 20, react_give: 40, react_get: 20, vote_give: 60, vote_get: 30, follow: 10, be_followed: 10, track_wallet: 3, watch_token: 5, connect_wallet: 1, customize: 1, swap: 3, send_call: 20, hop_on: 30, community_founder: 1 };
+// Economy audit 2026-09-08: the receive-side kinds (react_get / vote_get / be_followed) are what a ring of alts can push into one
+// account, and the once-per-object kinds (connect / track / watch) are free to mint objects for — both cut to what a real day needs. // call_x (milestone payouts) is uncapped — earned by real performance
+const PTS_EVENT_CAP = Math.floor(xpForLevel(70) * 0.1); // 73,762 — no single award may exceed a tenth of a Send Call's lifetime budget. At 1,500,000 it bound only above a 3,000× stack, i.e. never; one clamped event was Level 77 on its own
+// The grind has a ceiling the boosts cannot lift: every daily-capped kind plus the check-in shares ONE rolling-24h budget on
+// the PAID amount. A 400× holder still shows 400× and still earns it on Send Call performance; a day of clicks is worth at
+// most 73,762 to anyone. Level 100 (14.4M) therefore stays a long climb — ≈195 maxed days of grinding, or ≈20 perfect calls.
+const SOCIAL_DAY_CAP = PTS_EVENT_CAP;
+const SOCIAL_KINDS = Object.keys(DAILY_CAP).concat(['daily']);
 // ===== Communities: token-address communities that go live at 10 opt-ins; being in one = a flat 10× Send Power =====
 const COMMUNITY_MULT = 10;       // flat 10× on EVERY action while a verified holder in ≥1 LIVE community (NOT per-community, NOT 10^n)
 
@@ -890,6 +899,9 @@ function arcadeState(userId) {
 const LIVE_THRESHOLD = 10;      // distinct qualified opt-ins to go live
 const FOUNDER_BONUS = 15000;    // one-time base, flows through awardPoints (multiplied + PTS_EVENT_CAP-clamped). 3x with every other base
 const MIN_COMMUNITY_LIQ = 500;  // no communities on a dust pool (same floor as Send Calls)
+const MIN_COMMUNITY_HOLD_USD = 25; // a verified member holds at least this much of the token (1e-9 tokens used to unlock the flat 10×)
+const SWAP_MIN_USD = 10;           // a swap pays Send Power only when the wallet RECEIVES at least this much $SEND/$GWC
+const OG_MIN_HOLD_USD = 25;        // an OG badge needs a real bag of BOTH coins behind it at grant time, not dust
 const COMM_HALFLIFE = 12 * 3600 * 1000;   // grid-activity half-life
 const W_join = 5, W_post = 3, W_react = 1; // activity weights (grid sort)
 const ACT_TIERS = [[0, 'Dormant'], [5, 'Warm'], [25, 'Active'], [75, 'Hot'], [200, 'Blazing']];
@@ -1382,6 +1394,7 @@ async function ogScan(wallet, token, pair, launchMs) {
     firstBuyMs,
     tier: firstBuyMs === null ? OG_TIER.NONE : ogTierForBuy(firstBuyMs, launchMs),
     holds: bal > OG_DUST_WEI,
+    balWei: bal.toString(),   // for the value floor at grant time (strings, never BigInt, so a scan result can be logged/JSON'd)
     dumped,
     // net accumulator, measured the only way that is not a tautology: Σin − Σout IS the balance, so
     // "bought more than you sold" would just re-ask "do you hold any?", which is already required.
@@ -1457,6 +1470,16 @@ async function checkOg(userId) {
       return 0;
     }
     const tier = Math.min(best.SEND.tier, best.GWC.tier);
+    // A badge that pays up to 10× needs a real bag behind it: BOTH coins must be worth at least OG_MIN_HOLD_USD right now
+    // (1e-9 tokens of each used to qualify). Priced at the live market; an unreadable price is no answer — retried, never a "no".
+    let sendPx = null, gwcPx = null;
+    try { sendPx = await sendPriceUsd(); gwcPx = await tokenPriceUsdOf(TOK.GWC); } catch { sendPx = null; }
+    if (!(sendPx > 0) || !(gwcPx > 0)) return 0;
+    const usdSend = Number(best.SEND.balWei || 0) / 1e18 * sendPx, usdGwc = Number(best.GWC.balWei || 0) / 1e18 * gwcPx;
+    if (!(usdSend >= OG_MIN_HOLD_USD && usdGwc >= OG_MIN_HOLD_USD)) {
+      db.prepare('UPDATE users SET og_checked_at = ?, og_dq = 0 WHERE id = ?').run(now(), userId); // a complete read with a real answer: below the floor today; a top-up re-qualifies on the next scan
+      return 0;
+    }
     const buyMs = Math.max(best.SEND.firstBuyMs, best.GWC.firstBuyMs); // when they completed the pair
     // Grant only while the invariant still holds: un-tiered, never revoked, and a wallet is STILL
     // linked — a disconnect landing during this multi-second scan must not leave a wallet-less
@@ -1522,6 +1545,10 @@ function awardPoints(userId, kind, base, ref, maxAmount) {
   const effMult = em.total;
   let amount = Math.min(PTS_EVENT_CAP, Math.max(1, Math.round(base * effMult))); // clamp any single event (size × holder × OG stack) to a sane ceiling
   if (maxAmount != null) amount = Math.min(amount, Math.floor(maxAmount));
+  if (SOCIAL_KINDS.includes(kind)) { // the grind's shared rolling-24h ceiling on what was PAID (see SOCIAL_DAY_CAP)
+    const spent = db.prepare(`SELECT COALESCE(SUM(amount), 0) s FROM points_events WHERE user_id = ? AND created_at > ? AND kind IN (${SOCIAL_KINDS.map(() => '?').join(',')})`).get(userId, now() - 864e5, ...SOCIAL_KINDS).s;
+    amount = Math.min(amount, SOCIAL_DAY_CAP - spent);
+  }
   if (!(amount > 0)) return 0;
   try {
     db.exec('BEGIN');
@@ -1565,17 +1592,23 @@ function convictionTitleFor(level) {
 const HOLDS_TTL = 5 * 60 * 1000;                   // per-(user,token) balance cache
 const tokenHoldCache = new Map();                  // `${uid}:${token}` -> { held, at }
 // Does this user CURRENTLY hold a non-dust balance of an arbitrary token across their linked wallets?
-async function holdsToken(uid, tokenAddr) {
+// minUsd/priceUsd: when both are known the floor is that many dollars of the token at the given price (decimals from the token
+// cache, 18 by default); otherwise the dust floor. A price that cannot be read never lowers the bar below dust, and never raises it.
+function tokenDecimalsOf(addr) { try { const tc = tokenCacheGet(String(addr || '').toLowerCase()); return tc && tc.decimals != null ? (Number(tc.decimals) || 18) : 18; } catch { return 18; } }
+async function tokenPriceUsdOf(addr) { try { const r = await lookupTokenPair(String(addr || '').toLowerCase()); const px = r && r.pair && Number(r.pair.priceUsd); return px > 0 ? px : null; } catch { return null; } }
+async function holdsToken(uid, tokenAddr, minUsd, priceUsd) {
   const t = String(tokenAddr || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(t)) return false;
-  const key = uid + ':' + t;
+  let need = OG_DUST_WEI;
+  if (minUsd > 0 && priceUsd > 0) { const dec = tokenDecimalsOf(t); const n = BigInt(Math.ceil(minUsd / priceUsd * 1e6)) * 10n ** BigInt(Math.max(0, dec - 6)); if (n > need) need = n; }
+  const key = uid + ':' + t + ':' + need.toString();
   const addrs = walletAddresses(uid).slice(0, MAX_LINKED_WALLETS); // EVERY linkable wallet — a bag sitting in wallet #4 must count (refreshHolder reads the same set)
   if (!addrs.length) { tokenHoldCache.delete(key); return false; } // no linked wallet = verifiably holds nothing — and a cached "held" from before a disconnect must not outlive it
   const c = tokenHoldCache.get(key);
   if (c && now() - c.at < HOLDS_TTL) return c.held;
   let held = false, failed = 0;
   for (const a of addrs) {
-    try { if ((await erc20Balance(t, a)) > OG_DUST_WEI) { held = true; break; } } catch { failed++; }
+    try { if ((await erc20Balance(t, a)) >= need) { held = true; break; } } catch { failed++; }
   }
   // a disconnect/link that landed while we were awaiting the chain changed the wallet set → the answer is real for the
   // OLD set only; return it but never cache it under the new set
@@ -1694,7 +1727,7 @@ function qualifyReason(me, c, ip, holds) {
   // skips the holding test AND the per-network anti-sybil cap, which is safe only because a demo
   // membership grants no Send Power multiplier (see joinCommunity) — so there is nothing to farm.
   if (c.demo) return null;
-  if (!holds) return 'You must hold $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
+  if (!holds) return 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
   const ipk = ip ? bidx(ip) : null; // IPs are stored only as blind indexes
   const ipUses = db.prepare("SELECT COUNT(*) n FROM community_members WHERE community_id=? AND qualified=1 AND join_ip=?").get(c.id, ipk).n;
   if (ipUses >= 2) return 'You hold $' + c.symbol + ', but 2 verified members already opted in from your network (the anti-sybil cap). You’re in as a member — posting and the 10× need a verified slot.'; // ≤2 qualifying opt-ins per IP
@@ -1904,7 +1937,7 @@ function joinCommunity(me, cid, ip, holds) {
     const fresh = db.prepare('SELECT creator_id, founder_paid FROM communities WHERE id=?').get(cid);
     if (fresh && !fresh.founder_paid) {
       db.prepare('UPDATE communities SET founder_paid=1 WHERE id=? AND founder_paid=0').run(cid);
-      founderPaid = awardPoints(fresh.creator_id, 'community_founder', FOUNDER_BONUS, 'commfound:' + cid);
+      founderPaid = awardPoints(fresh.creator_id, 'community_founder', FOUNDER_BONUS, 'commfound:u' + fresh.creator_id); // one founder bonus per ACCOUNT, ever — per community it was farmable daily by the same ten wallets
       if (founderPaid > 0) notify(fresh.creator_id, '🏛️', 'Your community went LIVE — +' + founderPaid.toLocaleString('en-US') + ' Send Power founder bonus 👑', 'community');
     }
   }
@@ -2008,9 +2041,9 @@ let communityHolderSweeping = false;
 async function sweepCommunityHolders() {
   if (communityHolderSweeping) return; communityHolderSweeping = true;
   try {
-    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status = 'live' AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
+    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status = 'live' AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
     for (const r of rows) {
-      let holds; try { holds = await holdsToken(r.user_id, r.token_addr); } catch { continue; } // RPC error → skip (never revoke on a transient failure)
+      let holds; try { holds = await holdsToken(r.user_id, r.token_addr, MIN_COMMUNITY_HOLD_USD, r.c_price); } catch { continue; } // RPC error → skip (never revoke on a transient failure)
       const t = now();
       if (holds) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
       try { // no longer holds → revoke qualification, the go-live count, and the 10× flag
@@ -3880,7 +3913,7 @@ const COMP_TTL = 8000;
 // every account's earned-inside-the-window total, ranked; any prize's share already taken out
 function competitionRows(win) {
   return db.prepare(`SELECT u.id, u.username, u.avatar, u.avatar_img, u.accent, u.og_tier,
-      SUM(e.comp_amount) pts, COUNT(*) n
+      SUM(e.base) pts, COUNT(*) n                              -- BASE points: what you did, with every boost (holder, OG, community, arcade, prize) taken out, so the race is proof of work, not a holdings contest
     FROM points_events e JOIN users u ON u.id = e.user_id
     WHERE e.created_at >= ? AND e.created_at < ? AND u.system = 0
       AND e.kind NOT IN ('commxp','convxp','commact')          -- community XP is not Send Power and never scores here
@@ -3916,7 +3949,9 @@ function settleCompetitions() {
       // by RANK, not by list position: everyone whose shared rank is inside the prize places is paid, so two
       // people tied at #10 both get the #10 rung (a positional cut paid only the lower user id while the
       // board told both of them they were inside the prize places)
-      const winners = rows.filter(r => r.rank <= WEEK_WINNERS).map(r => ({
+      // ten prizes, by position: the board is ordered by points then by account age (u.id ASC), so a tie at the edge
+      // goes to whoever joined first — a rank predicate alone paid every identical score, without limit
+      const winners = rows.filter(r => r.rank <= WEEK_WINNERS).slice(0, WEEK_WINNERS).map(r => ({
         user_id: r.id, username: r.username, rank: r.rank, points: r.pts,
         boost: WEEK_PRIZES[Math.min(r.rank, WEEK_PRIZES.length) - 1],   // by rank, descending — tied ranks share a rung; recorded below
       }));
@@ -3972,8 +4007,8 @@ function competitionsPublic() {
   const boosted = db.prepare('SELECT COUNT(*) n FROM users WHERE arcade_boost > 1 AND arcade_boost_until > ?').get(t).n;
   const og = ogCampaign();
   return {
-    biggestSender: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, top: rows.filter(r => r.rank <= WEEK_WINNERS).map(view), entrants: rows.length, // the same predicate the payout uses: a tie at #10 is inside
-      last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, excludedFromStandings: true } },
+    biggestSender: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, top: rows.filter(r => r.rank <= WEEK_WINNERS).slice(0, WEEK_WINNERS).map(view), entrants: rows.length, // exactly what the payout pays: ten places, ties to the older account
+      last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, tiesTo: 'joined first', excludedFromStandings: true, rankedBy: 'base' } },
     sendCalls: { window: 'week', top: calls.slice(0, 10), entrants: calls.length, cap: CALL_X_CAP, minLiq: MIN_CALL_LIQ, all: calls },
     communities: { week: w, board: comms.map((c, i) => { const b = commBrand(c); return { id: c.id, symbol: c.symbol, name: c.name, image: b.imageUrl || null, rank: i + 1, xpWeek: c.xp_week, memberCount: c.member_count, level: levelForXp(c.xp), official: !!c.official, demo: !!c.demo }; }) },
     og: { ...og, tierNowName: OG_TIER_NAME[og.tierNow] || '' },
@@ -4409,7 +4444,7 @@ const callHeadroom = (paid, cap) => Math.min(Math.max(0, cap - (paid || 0)), Mat
 // ── Diamond-hands: reward a call that STAYS in positive Xs, the longer AND higher the more (exponentially) ──
 // hold_x accumulates ∫ min(curX, cap) dt(hours) while curX>0. Points owed grow super-linearly with hold_x, so
 // duration × height compound. Same mechanic rewards hoppers who stay in profit from their hop-in price.
-const HOLD_K = 0.5, HOLD_EXP = 1.5;   // owed = HOLD_K · hold_x^HOLD_EXP  (super-linear ⇒ "exponentially more")
+const HOLD_K = 2, HOLD_EXP = 1.5;      // HOLD_K 2 (was 0.5): a doubled call held a month with no crew now pays ~38,600 base, four times a maxed grind day — holding in profit IS the main event; HOLD_MAX and the budget still bound the top   // owed = HOLD_K · hold_x^HOLD_EXP  (super-linear ⇒ "exponentially more")
 const HOLD_X_CAP = 50;                // cap the per-tick X height so one glitch tick can't spike the integral
 const HOLD_DT_CAP_H = 0.5;            // credit at most 30 min of hold per tick (we never observed the price during a longer gap)
 const HOLD_MAX = 750000;             // ceiling on total BASE hold points per position. 3x with every other base — left at 250,000 it
@@ -4423,6 +4458,7 @@ const MIN_HOLD_AWARD = 20;           // only pay out once ≥ this is owed, so w
    before that cap it would be swallowed by it (0.5h x 3 clamps straight back to 0.5h). The intent
    is the site's: a conviction play that carries other people with it is worth more than a lonely
    one, and the way to earn it is to stay in profit long enough for them to be too. */
+const CREW_MIN_SPEND_USD = 20;       // a Sender counts toward the crew only with at least this much verified in the token
 const CREW_PER_HOPPER = 0.1;
 const CREW_MAX = 3;
 const crewFactor = (hoppersInProfit) => Math.min(CREW_MAX, 1 + CREW_PER_HOPPER * Math.max(0, hoppersInProfit || 0));
@@ -4571,8 +4607,9 @@ async function refreshCalls() {
       // diamond-hands: accrue the caller's hold integral (positive Xs × time) and pay out super-linearly — only while liquid
       // Senders are read once here: the caller's accrual needs to know how many are in profit, and the
       // hopper loop below reuses the same rows
-      const hops = liquid ? db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, points_paid, last_check FROM call_hops WHERE call_id=?').all(r.id) : [];
-      const crewN = hops.filter(h => h.entry_price > 0 && callX(info.price, h.entry_price) > 0).length;
+      const hops = liquid ? db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, points_paid, last_check, spend_usd FROM call_hops WHERE call_id=?').all(r.id) : [];
+      // a crew is people with money in the call, in profit — a tap with no position is not a crew member (twenty free alts tapping once gave the full 3×)
+      const crewN = hops.filter(h => h.entry_price > 0 && (h.spend_usd || 0) >= CREW_MIN_SPEND_USD && callX(info.price, h.entry_price) > 0).length;
       const hc = liquid ? accrueHold(r.hold_x, r.hold_paid, curX, dtH, crewFactor(crewN)) : { holdX: r.hold_x, award: 0, holdPaid: r.hold_paid };
       // Finding 1 fix: advance hold_paid ONLY if the credit actually landed. The integral (hold_x) still advances, so a rolled-back
       // award (SQLITE_BUSY/FULL) is simply retried next tick instead of being silently swallowed. No ref: dedup is the hold_paid delta.
@@ -4608,7 +4645,7 @@ async function refreshCalls() {
         }
         // reward hoppers who are ALSO in positive Xs (from their own hop-in price), same diamond-hands mechanic + same Finding-1-safe advance
         for (const hop of hops) {
-          if (!(hop.entry_price > 0)) continue;
+          if (!(hop.entry_price > 0) || !((hop.spend_usd || 0) > 0)) continue; // the Sender hold bonus rewards a real position held in profit, never a tap
           const ha = accrueHold(hop.hold_x, hop.hold_paid, callX(info.price, hop.entry_price), (t - (hop.last_check || t)) / 3600000);
           let hopPaid = hop.hold_paid, hopPts = hop.points_paid || 0;
           if (ha.award > 0) {
@@ -5457,7 +5494,7 @@ const server = http.createServer(async (req, res) => {
           if (author && author.user_id !== me.id) { // no points for reacting to your own posts
             // dedupe by (post,user,kind) so toggling a reaction off/on can't farm points
             earned = awardPoints(me.id, 'react_give', PTS.react_give, 'react:' + postId + ':' + me.id + ':' + kind);
-            awardPoints(author.user_id, 'react_get', PTS.react_get, 'reactget:' + postId + ':' + me.id + ':' + kind);
+            awardPoints(author.user_id, 'react_get', PTS.react_get, 'reactget:' + postId + ':' + me.id); // once per reactor per post (the kind in the ref let one partner pay twice)
             notifyOnce(author.user_id, kind === 'rocket' ? '🚀' : '🔥', '@' + me.username + ' reacted ' + (kind === 'rocket' ? '🚀' : '🔥') + ' to your post.', 'social', me.id);
           }
           // a reaction on a COMMUNITY wall builds that community too (its own daily caps apply inside these helpers)
@@ -5672,7 +5709,7 @@ const server = http.createServer(async (req, res) => {
         // The opening award comes out of the same per-call budget as the milestones and the hold
         // bonus, so CALL_POINTS_CAP really is everything one call can ever be worth — not a cap on
         // part of it with the rest sitting outside.
-        const earned = awardPoints(me.id, 'send_call', Math.round(PTS.send_call * sm), 'call:' + callId, callHeadroom(0, CALL_POINTS_CAP)); // bigger on-chain buy → bigger Send Power
+        const earned = awardPoints(me.id, 'send_call', Math.round(PTS.send_call * sm), 'callopen:' + me.id + ':' + token, callHeadroom(0, CALL_POINTS_CAP)); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever — the same bag re-called twenty times a day paid twenty openings
         if (earned > 0) db.prepare('UPDATE calls SET points_paid = points_paid + ? WHERE id = ?').run(earned, callId);
         // A Send Call on a community's own token IS participation in that community, so it scores for it — but only
         // from a qualified member. Otherwise anyone could push a community up the weekly board from the outside.
@@ -5729,7 +5766,7 @@ const server = http.createServer(async (req, res) => {
           const pos = await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price)); // what this follower bought / still holds
           const spendUsd = pos.spendUsd;
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop, spendUsd, pos.boughtUsd, pos.heldUsd);
-          earned = awardPoints(me.id, 'hop_on', Math.round(PTS.hop_on * sizeMult(spendUsd)), 'hop:' + me.id + ':' + callId, callHeadroom(0, HOP_POINTS_CAP)); // bigger buy-in → bigger Send Power
+          earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', Math.round(PTS.hop_on * sizeMult(spendUsd)), 'hop:' + me.id + ':' + callId, callHeadroom(0, HOP_POINTS_CAP)) : 0; // paid on a verified buy only — a tap with nothing in the token earns nothing
           if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
           notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' ($' + Math.round(spendUsd) + ' in)' : ''), 'points');
         } else {
@@ -5814,15 +5851,21 @@ const server = http.createServer(async (req, res) => {
         if (head > 0n && head - BigInt(rcpt.blockNumber || '0x0') < 5n) return bad(res, 'give the swap a few blocks to confirm, then try again');
         // require a REAL $Send/$GWC transfer involving the wallet — not just any tx to the router (blocks no-op/dust farming)
         const meTopic = addrTopic(from);
-        const moved = (rcpt.logs || []).some(l => {
+        // the wallet must RECEIVE the coin (a sell moves it the other way and earned the same 450), and it must be a
+        // real buy: the received amount is valued at the live price and must clear SWAP_MIN_USD — 1 wei used to qualify
+        let movedIn = 0n, movedTok = null;
+        for (const l of rcpt.logs || []) {
           const la = (l.address || '').toLowerCase();
-          if (la !== TOK.SEND && la !== TOK.GWC) return false;
-          if (!l.topics || (l.topics[0] || '').toLowerCase() !== TRANSFER_TOPIC) return false;
-          const party = (l.topics[1] || '').toLowerCase() === meTopic || (l.topics[2] || '').toLowerCase() === meTopic;
+          if (la !== TOK.SEND && la !== TOK.GWC) continue;
+          if (!l.topics || (l.topics[0] || '').toLowerCase() !== TRANSFER_TOPIC) continue;
+          if ((l.topics[2] || '').toLowerCase() !== meTopic) continue;
           let val = 0n; try { val = BigInt(l.data || '0x0'); } catch {}
-          return party && val > 0n;
-        });
-        if (!moved) return bad(res, 'that transaction did not move any $Send or $GWC to your wallet');
+          if (val > movedIn) { movedIn = val; movedTok = la; }
+        }
+        if (!(movedIn > 0n)) return bad(res, 'that transaction did not move any $Send or $GWC to your wallet');
+        const px = await tokenPriceUsdOf(movedTok);
+        if (!(px > 0)) return bad(res, 'the coin price cannot be read right now — try again in a minute', 503);
+        if (Number(movedIn) / 1e18 * px < SWAP_MIN_USD) return bad(res, 'that swap brought in under $' + SWAP_MIN_USD + ' of the coin — Send Power is paid on real buys');
         if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('swaptx:' + hash)) return send(res, 200, { awarded: 0, already: true });
         return send(res, 200, { awarded: awardPoints(me.id, 'swap', PTS.swap, 'swaptx:' + hash) });
       }
@@ -5840,7 +5883,7 @@ const server = http.createServer(async (req, res) => {
           me: me ? (mine ? view(mine) : { rank: null, points: 0, actions: 0, username: me.username }) : null,
           myBoost: me ? weekBoostState(me.id) : null,
           last: lastSettledCompetition(),
-          prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, excludedFromStandings: true },
+          prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, tiesTo: 'joined first', excludedFromStandings: true, rankedBy: 'base' },
         });
       }
       if (p === '/api/competitions' && req.method === 'GET') {
@@ -6348,7 +6391,7 @@ const server = http.createServer(async (req, res) => {
             let holds;
             if (c.demo) holds = true;   // the open sandbox: no token, no wallet, no chain call — anyone may walk in
             else {
-              try { holds = await holdsToken(me.id, c.token_addr); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in
+              try { holds = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in — at least $25 of it
               if (!holds) return bad(res, 'You must hold $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
             }
             const j = joinCommunity(me, cid, clientIp(req), holds);
@@ -6384,7 +6427,7 @@ const server = http.createServer(async (req, res) => {
             // posting needs a VERIFIED slot (qualified=1), not just a membership row — the anti-sybil caps must gate the wall too, exactly as the opt-in copy promises
             if (!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? AND qualified=1').get(cid, me.id)) return bad(res, 'posting needs a verified holder slot — opt in (and re-verify if your slot was paused) to post on this wall', 403);
             if (!c.demo) {   // the sandbox has no token to hold, so the holding gate does not apply there
-              let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+              let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); }
               if (!holdsP) return bad(res, 'You need to hold $' + c.symbol + ' to post on its community wall.', 403);
             }
             if (!rateLimit('commpost:' + me.id, 12, 6e5)) return bad(res, 'slow down', 429);

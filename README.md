@@ -94,10 +94,10 @@ Everything you do that helps the community earns **Send Power** (points, also yo
 | Action | Base points | Notes |
 |---|---:|---|
 | Make a Send Call | 120 | **Scaled by your Send size** (see §3.4) |
-| Swap ETH → $Send/$GWC in‑page | 450 | Largest fixed earner |
+| Swap ETH → $Send/$GWC in‑page | 450 | A real buy: your wallet must **receive ≥ $10** of the coin (a sell pays nothing); 3 a day |
 | Connect a wallet holding $Send/$GWC | 150 | Once per address, ever |
 | First‑ever post | 150 | One‑time bonus |
-| Per‑X milestone on a call | 180 × the X hit | **Scaled by the X** — 1x → +180, 2x → +360 … up to 50x. No daily cap, but inside the per‑call budget (below) |
+| Per‑X milestone on a call | 170 × the X hit | **Scaled by the X** — 1x → +170, 2x → +340 … up to 50x → +8,500. No daily cap, but inside the per‑call budget (below): fifty rungs add up to exactly what the ladder's slice can pay |
 | Post on the Send Wall | 75 | |
 | Daily visit bonus | 60 | Once per day |
 | Track a wallet | 45 | Once per address, ever |
@@ -118,15 +118,17 @@ Two more earn types have **no fixed base** — they're computed live from perfor
 
 | Action | Cap / 24h | | Action | Cap / 24h |
 |---|---:|---|---|---:|
-| Upvote received | 100 | | Post | 40 |
-| React received | 60 | | React given | 40 |
-| Vote given | 60 | | Watch token | 30 |
-| Someone follows you | 30 | | "Send It!" (a Send) | 30 |
-| Comment | 20 | | Swap | 20 |
-| Send Call (point events) | 20 | | Track wallet | 10 |
-| Follow someone | 10 | | Connect wallet | 5 |
+| Upvote received | 30 | | Post | 40 |
+| React received | 20 | | React given | 40 |
+| Vote given | 60 | | Watch token | 5 |
+| Someone follows you | 10 | | "Send It!" (a Send) | 30 — paid only on a verified buy |
+| Comment | 20 | | Swap | 3 |
+| Send Call (point events) | 20 | | Track wallet | 3 |
+| Follow someone | 10 | | Connect wallet | 1 |
 
-**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; hold bonus caps at 750,000 base points per position; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A Sender's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And one hard backstop applies to **every** award: after the base is multiplied by your Holder Boost, a single event can never mint more than **1,500,000** points — so the stacked multipliers can never run away.
+**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; hold bonus caps at 750,000 base points per position; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A Sender's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And two hard ceilings apply to **every** award: after the base is multiplied by your boosts, a single event can never mint more than **73,762** points, and everything that is not Send Call performance shares one rolling‑24h budget of the same **73,762** — so the stacked multipliers cannot run away on the grind.
+
+**One ceiling for the grind.** Everything that is not Send Call performance — every daily‑capped kind plus the check‑in — shares **one rolling‑24h budget of 73,762 Send Power on what is paid** (`SOCIAL_DAY_CAP`, a tenth of a call's lifetime budget), and **no single award exceeds 73,762** (`PTS_EVENT_CAP`). Your boosts have no ceiling and still show in full; they pay in full on Send Call performance, and on the grind they pay until the day's ceiling. That is what keeps Level 100 (≈14.4M) a long climb for everyone: ≈195 maxed days of grinding, or ≈20 perfect calls held in profit.
 
 **Levels — an endless climb.** Send Power feeds an exponential XP curve with **no level cap** — each level costs about **10.4% more** than the last.
 
@@ -156,7 +158,7 @@ Holder Boost  = 1 + supplyBoost × diamondFactor
 - A **non‑holder gets exactly 1×** — the boost only ever scales up.
 - Every weighted **1% of supply** adds **10** to your supply boost.
 - **$GWC is weighted ×3** on the supply axis — the same fraction of $GWC gives three times the boost that $Send does.
-- The **supply side is uncapped**; the only cap inside the formula is the Diamond factor's **×100** ceiling (and every award is still bounded by the 1,500,000‑per‑event backstop).
+- The **supply side is uncapped**; the only cap inside the formula is the Diamond factor's **×100** ceiling. The boost itself has no ceiling — what it can turn a day of grinding into does (73,762 per rolling 24h, and 73,762 per single award); on Send Call performance it pays in full.
 
 **Worked examples** (fresh, unbroken streak):
 
@@ -210,7 +212,7 @@ A **Send Call** is you going on the record: a public, timestamped, **permanent**
 
 **Liquidity gate.** A token needs **≥ $500 pooled liquidity** to be callable — thinner pools are rejected, so no one can farm points on a self‑made dust pool.
 
-**Making a call: +40, scaled by your Send size.** The 40 base is multiplied by how much of that token you actually bought and held, then by your Holder Boost:
+**Making a call: +120, scaled by your Send size.** The 120 base is multiplied by how much of that token you actually bought and held, then by your Holder Boost:
 
 ```
 sizeMult = min(100, max(1, yourSpendUSD / 100))
@@ -218,7 +220,7 @@ sizeMult = min(100, max(1, yourSpendUSD / 100))
 
 Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest: your "spend" is credited as **min(tokens you bought from the pool, tokens you still hold) × price**, read best‑effort across up to 3 connected wallets. Taking the *minimum* defeats value spoofing, wash/recycled buys, self‑pool paper value, and airdrops. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The Senders list in this section re‑reads Senders' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
 
-**Per‑X milestone payouts: 180 × the X.** As your call actually runs, each **whole X** it crosses pays **180 × that X** — 1x → +180, 2x → +360 … up to **50x → +9,000** (ladder caps at 50x). No daily cap (pure performance), but every payout draws on the call's lifetime budget (§3.1). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
+**Per‑X milestone payouts: 170 × the X.** As your call actually runs, each **whole X** it crosses pays **170 × that X** — 1x → +170, 2x → +340 … up to **50x → +8,500** (ladder caps at 50x; fifty rungs total 216,750 base, which fits inside the ladder's 30% slice of the budget, so the top rung is actually payable). No daily cap (pure performance), but every payout draws on the call's lifetime budget (§3.1). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
 
 **Diamond‑hands HOLD bonus — the main event.** While your call stays in profit, you keep earning a **super‑linear** bonus: `owed = 0.5 × holdX^1.5` (capped at 750,000 base points per position). It is deliberately where most of a call's Send Power lives: of the per‑call lifetime budget (§3.1), the opening award may take at most 10% and the milestone ladder at most 30% cumulatively, so **at least 60% is reserved for holding in profit**. **Crew factor:** the hold integral accrues faster when the people who Sent It on your call are also in profit from *their own* entry — `rate = 1 + 0.1 × (Senders in profit)`, capped at **3×** (twenty profitable Senders). A conviction play that carries other people with it is worth more than a lonely one. It compounds with both height and duration, accrues **only while the pool is liquid and you're in profit** (underwater/drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
 
@@ -386,9 +388,9 @@ Hold **both $Send and $GWC**, bought from the market, and keep holding both: you
 
 A fresh race every week, run by the server on its own. Every **Monday 00:00 UTC** (the same ISO week the community board uses) the Biggest Sender board resets to zero, so the week's standings are only what you earned **inside** it. When the week ends, the game master settles it without anyone having to visit:
 
-- The **top 10** each take a rung of the prize ladder **by finishing place** — **#1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10** (`WEEK_PRIZES`; tied places share a rung; recorded in the `competitions` row) — added on top of everything they earn for the **whole of the following week**, alongside the Holder Boost, OG, community and arcade boosts.
-- **A prize never counts toward the next week's standings.** Every award records what it would have paid without a prize (`points_events.comp_amount`), and the board ranks that — what you did, with any prize you were carrying taken back out. Last week's winners race on the same footing as everyone else, so the same people can't buy the board with the boost they just won.
-- Ties share a rank, as on the all-time board; the ten prize places are the top ten rows by points, then account age.
+- The **top 10** each take a rung of the prize ladder **by finishing place** — **#1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10** (`WEEK_PRIZES`; exactly ten prizes — a tie at the edge goes to whoever joined first; recorded in the `competitions` row) — added on top of everything they earn for the **whole of the following week**, alongside the Holder Boost, OG, community and arcade boosts.
+- **The race is proof of work.** The board ranks **base points** (`points_events.base`) — what you did, with every boost taken out: Holder, OG, community, Rocket Run and any prize you were carrying. A whale, an OG and a newcomer race on the same footing; the prize pays your level and the all-time board, never your next placing. (`comp_amount` is still recorded per award for the all-time view.)
+- Ties share a rank on the board, as on the all-time one; the ten prize places are the top ten rows by points, then account age (`u.id ASC`), so identical scores can never multiply the prizes.
 - The deploy week is the first race. Nothing is paid retroactively from history, and a week is only ever settled once.
 
 The board is public at `GET /api/competition` — this week's top 20, the clock, your own row, last week's winners and what they drew. On the dashboard, toggle **The Arena** to 🏆 Biggest Senders.

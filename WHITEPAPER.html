@@ -599,31 +599,31 @@ object-src  'none'
             <caption>Every action, its base points, and its daily cap</caption>
             <thead><tr><th>Action</th><th class="num">Points</th><th class="num">Cap per day</th></tr></thead>
             <tbody>
-              <tr><td class="name">Swap for $SEND or $GWC</td><td class="num">450</td><td class="num">20</td></tr>
-              <tr><td class="name">Connect a wallet</td><td class="num">150</td><td class="num">5</td></tr>
+              <tr><td class="name">Swap for $SEND or $GWC (a real buy of $10 or more)</td><td class="num">450</td><td class="num">3</td></tr>
+              <tr><td class="name">Connect a wallet</td><td class="num">150</td><td class="num">1</td></tr>
               <tr><td class="name">Your very first post</td><td class="num">150</td><td class="num">1</td></tr>
               <tr><td class="name">Make a Send Call</td><td class="num">120</td><td class="num">20</td></tr>
-              <tr><td class="name">Each X a call reaches</td><td class="num">180</td><td class="num">none per day</td></tr>
+              <tr><td class="name">Each X a call reaches</td><td class="num">170</td><td class="num">none per day</td></tr>
               <tr><td class="name">Post on the wall</td><td class="num">75</td><td class="num">40</td></tr>
               <tr><td class="name">Daily check-in</td><td class="num">60</td><td class="num">1</td></tr>
-              <tr><td class="name">Track a wallet</td><td class="num">45</td><td class="num">10</td></tr>
-              <tr><td class="name">Send It on someone's call</td><td class="num">30</td><td class="num">30</td></tr>
-              <tr><td class="name">Customise your wall</td><td class="num">30</td><td class="num">2</td></tr>
+              <tr><td class="name">Track a wallet</td><td class="num">45</td><td class="num">3</td></tr>
+              <tr><td class="name">Send It on someone's call (paid on a verified buy)</td><td class="num">30</td><td class="num">30</td></tr>
+              <tr><td class="name">Customise your wall</td><td class="num">30</td><td class="num">1</td></tr>
               <tr><td class="name">Comment</td><td class="num">24</td><td class="num">20</td></tr>
               <tr><td class="name">Follow someone</td><td class="num">18</td><td class="num">10</td></tr>
-              <tr><td class="name">Watch a token</td><td class="num">15</td><td class="num">30</td></tr>
-              <tr><td class="name">Gain a follower</td><td class="num">15</td><td class="num">30</td></tr>
-              <tr><td class="name">Get upvoted</td><td class="num">12</td><td class="num">100</td></tr>
-              <tr><td class="name">Get a reaction</td><td class="num">9</td><td class="num">60</td></tr>
+              <tr><td class="name">Watch a token</td><td class="num">15</td><td class="num">5</td></tr>
+              <tr><td class="name">Gain a follower</td><td class="num">15</td><td class="num">10</td></tr>
+              <tr><td class="name">Get upvoted</td><td class="num">12</td><td class="num">30</td></tr>
+              <tr><td class="name">Get a reaction</td><td class="num">9</td><td class="num">20</td></tr>
               <tr><td class="name">React to a post</td><td class="num">6</td><td class="num">40</td></tr>
               <tr><td class="name">Vote on a post</td><td class="num">6</td><td class="num">60</td></tr>
             </tbody>
           </table>
         </div>
-        <p>There is also a hard ceiling of <strong>1,500,000</strong> points on any single award, no matter how large the multipliers stack up. It is a backstop against a bug or an extreme edge case minting a silly number.</p>
+        <p>Two ceilings sit on top of all of this. No single award can exceed <strong>73,762</strong> points, a tenth of what one Send Call can pay in its lifetime. And everything that is not Send Call performance &mdash; every capped action above plus the check-in &mdash; shares <strong>one budget of 73,762 points per rolling 24 hours</strong>, however large your multipliers. Boosts still show in full and pay in full on Send Calls held in profit; on the daily grind they pay until the day&rsquo;s ceiling. That is what keeps Level 100 a long climb for everyone.</p>
         <h3>Biggest Sender &mdash; a fresh race every week</h3>
         <p>Every Monday at midnight UTC the Biggest Sender board goes back to zero, so a week&rsquo;s standings are only what you earned inside that week. When the week ends the site settles it by itself: the <strong>top ten</strong> each receive a Send Power boost <strong>by finishing place</strong> &mdash; first place 5&times;, then 4.5, 4, 3.5, 3, 2.5, 2, 1.75, 1.5 and 1.25&times; for tenth; tied places share a rung &mdash; added on top of everything they earn for the whole of the following week.</p>
-        <p>The prize can never buy the next win. Every award remembers what it would have paid without a prize, and the board ranks that &mdash; so last week&rsquo;s winners race on the same footing as everyone else, and the same people cannot hold the board with the boost they were just given.</p>
+        <p>The race is proof of work. The board ranks <strong>base points</strong> &mdash; what you did, with every boost taken out: Holder, OG, community, Rocket Run and any prize you were carrying &mdash; so a whale, an OG and a newcomer race on the same footing. Exactly ten prizes are paid; a tie at the edge goes to whoever joined first.</p>
         <h3>Levels and titles</h3>
         <p>Levels get harder as you climb, because each level costs a bit more than the last plus an amount that doubles roughly every seven levels. There is no maximum level.</p>
         <div class="tablewrap">
@@ -793,7 +793,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
         </div>
         <p>Other rules: the explosion point is capped at 50&times;, a round left abandoned expires after 5 minutes and counts as a loss, and the day rolls over at midnight UTC.</p>
         <h3>The daily check-in</h3>
-        <p>Showing up is worth <strong>20</strong> points, once per day, claimed by tapping a button on your own wall. It used to happen silently on page load. Making it a button means it is something you did, not something that happened to you.</p>
+        <p>Showing up is worth <strong>60</strong> points, once per day, claimed by tapping a button on your own wall. It used to happen silently on page load. Making it a button means it is something you did, not something that happened to you.</p>
       </section>
 
       <!-- 13 -->
