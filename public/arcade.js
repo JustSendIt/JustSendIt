@@ -519,7 +519,7 @@
         '<p class="arc-msg-h">💰 Cashed out at ' + fx(o.cashedX) + '×</p>' +
         '<p>That’s a <span class="arc-big">' + fx(o.boost) + '×</span> Send Power boost for the next 24 hours' +
         (o.until ? ' (expires in <span class="arc-count" data-arc-until="' + Math.round(o.until) + '" data-arc-zero="less than a minute"></span>)' : '') +
-        '. It multiplies the Send Power you earn from everything you do, and stacks on your Holder, OG and community multipliers.</p>' +
+        '. It is added on top of the Send Power boost you already have from holding, OG and communities — boosts add, they don\'t multiply.</p>' +
         (o.crashX != null ? '<p>Nerve check: the rocket would have blown at <b>' + fx(o.crashX) + '×</b>.</p>' : '') +
         nextFlightLine() + '</div>';
     } else if (S.mode === 'busted' && S.outcome) {
@@ -653,7 +653,7 @@
         S.last = { crash_x: crashX, cashed_x: cashedX, boost: boost, ended_at: Date.now() };
         S.freeze = { kind: 'cashed', endSec: secFor(cashedX), crashSec: crashX ? secFor(crashX) : secFor(cashedX), viewSec: secFor(crashX || cashedX), viewX: crashX || cashedX };
         // repaint the nav badge immediately — the boost belongs next to the level, and a reload should not be the
-        // only way to see it. j.mult is the server's own whole stack (holder × OG × community × arcade).
+        // only way to see it. j.mult is the server's own whole stack (1 + Σ of each boost above 1: holder, OG, community, arcade, prize).
         if (j.mult && window.AUTH && AUTH.user) {
           AUTH.user.boost = j.mult;
           document.dispatchEvent(new CustomEvent('boost:changed'));

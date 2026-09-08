@@ -73,7 +73,7 @@
         '<p class="comm-gate-msg" id="comm-gate" role="status" aria-live="polite" hidden></p>' +
         '<details class="grules comm-rules"><summary>📖 How points, levels &amp; the 10× work</summary><div class="grules-body"><ul class="comm-rules-list">' +
           '<li>🪙 <b>Holders only:</b> you must <b>hold $' + esc(c.symbol) + '</b> (verified on-chain from a linked wallet) to opt in and post — it keeps communities real.</li>' +
-          '<li>⚡ <b>10× Send Power</b> on <b>everything</b> while you’re in ≥1 live community (flat — five communities is still 10×; stacks on your Holder Boost &amp; OG).</li>' +
+          '<li>⚡ <b>10× Send Power</b> on <b>everything</b> while you’re in ≥1 live community (flat — five communities is still one 10×; it adds on top of your Holder Boost &amp; OG — boosts add, they don’t multiply).</li>' +
           '<li>🏆 <b>Community level</b> climbs with active members posting &amp; reacting (exponential curve, daily-capped so it can’t be farmed).</li>' +
           '<li>💎 <b>Your conviction</b> here rises the longer you stay + the more you post; it shows next to $' + esc(c.symbol) + ' in your public wall’s <b>Convicted In</b> section.</li>' +
           '<li>👑 The starter earns a one-time <b>founder bonus</b> when the community hits ' + c.goLive.need + ' members.</li>' +

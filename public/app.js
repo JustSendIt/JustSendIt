@@ -82,7 +82,7 @@
     var t = window.OG_TIERS[tier];
     if (!t) return '';
     return 'OG ' + t.name + ' — bought BOTH $Send and $GWC ' + t.when + ' and still holds both (checked on-chain). '
-      + 'Permanent badge + a ' + t.mult + '× Send Power bonus on everything. Lost if they sell out of either.';
+      + 'Permanent badge + a ' + t.mult + '× Send Power bonus on everything (+' + (t.mult - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Lost if they sell out of either.';
   };
   // kept for anything still reading the old global; gold is the tier it always described
   window.OG_TIP = window.ogTip(3);

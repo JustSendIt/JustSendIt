@@ -617,6 +617,9 @@ object-src  'none'
           </table>
         </div>
         <p>There is also a hard ceiling of <strong>1,500,000</strong> points on any single award, no matter how large the multipliers stack up. It is a backstop against a bug or an extreme edge case minting a silly number.</p>
+        <h3>Biggest Sender &mdash; a fresh race every week</h3>
+        <p>Every Monday at midnight UTC the Biggest Sender board goes back to zero, so a week&rsquo;s standings are only what you earned inside that week. When the week ends the site settles it by itself: the <strong>top ten</strong> each receive a Send Power boost <strong>by finishing place</strong> &mdash; first place 5&times;, then 4.5, 4, 3.5, 3, 2.5, 2, 1.75, 1.5 and 1.25&times; for tenth; tied places share a rung &mdash; added on top of everything they earn for the whole of the following week.</p>
+        <p>The prize can never buy the next win. Every award remembers what it would have paid without a prize, and the board ranks that &mdash; so last week&rsquo;s winners race on the same footing as everyone else, and the same people cannot hold the board with the boost they were just given.</p>
         <h3>Levels and titles</h3>
         <p>Levels get harder as you climb, because each level costs a bit more than the last plus an amount that doubles roughly every seven levels. There is no maximum level.</p>
         <div class="tablewrap">
@@ -640,14 +643,15 @@ object-src  'none'
       <!-- 9 -->
       <section id="s9">
         <div class="sec-head"><span class="sec-num">09</span><h2>Multipliers</h2></div>
-        <p>Base points are only the start. Four separate bonuses multiply together, and the result is what you are actually paid.</p>
+        <p>Base points are only the start. Five separate bonuses <strong>add together</strong> &mdash; each contributes what it pays above 1&times; &mdash; and that one sum is what your base points are multiplied by. Bonuses never multiply each other: OG Gold at 10&times; plus a community at 10&times; is 19&times;, not 100&times;.</p>
         <div class="figure">
-what you earn = base points
-              &times; Holder Boost
-              &times; OG bonus
-              &times; Community bonus
-              &times; Arcade boost
-          <div class="cap">All four multiply. Someone with none of them earns exactly the base amount, because each bonus is 1&times; when it does not apply.</div>
+what you earn = base points &times; ( 1
+                  + Holder Boost above 1
+                  + OG bonus above 1
+                  + Community bonus above 1
+                  + Arcade boost above 1
+                  + Biggest Sender prize above 1 )
+          <div class="cap">The bonuses add, then the sum scales your base points once. Someone with none of them earns exactly the base amount, because a bonus that does not apply adds nothing.</div>
         </div>
         <h3>Holder Boost &mdash; owning the coins</h3>
         <p>The more of the coin supply you hold, the bigger your bonus. Every weighted 1% of supply adds 10. <strong>$GWC counts three times as much as $SEND</strong> for the same percentage.</p>

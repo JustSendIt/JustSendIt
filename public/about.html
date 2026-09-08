@@ -29,7 +29,7 @@
     { "@type": "Question", "name": "Are you affiliated with Robinhood?", "acceptedAnswer": { "@type": "Answer", "text": "No. This is an independent community project, not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc. Robinhood Chain is the name of the public blockchain network." } },
     { "@type": "Question", "name": "Do I need a wallet or money to use the site?", "acceptedAnswer": { "@type": "Answer", "text": "No. Create a free account with just your email, browse, post, and earn Send Power without ever connecting a wallet or buying anything." } },
     { "@type": "Question", "name": "What can a connected wallet do?", "acceptedAnswer": { "@type": "Answer", "text": "Only be read. Connecting is a free signature that lets the site read your public balances to display them and verify your holder boost. There are no token approvals and no way to spend or move your funds." } },
-    { "@type": "Question", "name": "What is a $Send community and how does the 10x Send Power bonus work?", "acceptedAnswer": { "@type": "Answer", "text": "A community is a fan group for one token. Anyone can start one by pasting its contract address; it goes live once 10 verified holders opt in. Anyone can read a live community's wall, but to post you must join by connecting a wallet and confirming on-chain that you hold that token. While you are in at least one live community, every point of Send Power you earn is multiplied 10× — a flat 10x that stacks on top of your Holder Boost and OG bonus. Posting, reacting and commenting on the wall raises your community member level and levels the community itself up. A community is a fan group, not an endorsement of any token." } }
+    { "@type": "Question", "name": "What is a $Send community and how does the 10x Send Power bonus work?", "acceptedAnswer": { "@type": "Answer", "text": "A community is a fan group for one token. Anyone can start one by pasting its contract address; it goes live once 10 verified holders opt in. Anyone can read a live community's wall, but to post you must join by connecting a wallet and confirming on-chain that you hold that token. While you are in at least one live community, every point of Send Power you earn gets a flat 10× community boost added on top of your Holder Boost and OG bonus — boosts add together, they do not multiply. Posting, reacting and commenting on the wall raises your community member level and levels the community itself up. A community is a fan group, not an endorsement of any token." } }
   ]
 }
 </script>
@@ -203,7 +203,7 @@
         <span class="pillar-plate gwc" aria-hidden="true">🏘️</span>
         <span class="pillar-head"><span class="pillar-title">Token Communities</span><span class="pillar-sub">Go live at 10 · a flat 10× · member levels</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
-        <div class="pillar-body"><p>Rally around any token: paste its contract to <b>start a community</b> — it goes <b>live once 10 real holders opt in</b>, auto-branded from its Dexscreener art. <b>Anyone can read</b> a live community's wall — but to <b>post</b> you must join by <b>connecting a wallet</b> and confirming on-chain that you <b>hold that token</b>, so communities stay real. Members post photos, GIFs and videos just like the Send Wall. Being in a live one earns you a flat <b>⚡ 10× Send Power</b> on everything — every post, reaction and comment inside it is multiplied 10×. Every community lists <b>all its members ranked by member level</b> (Newcomer → Ride-or-Die), and participating raises your level <b>and</b> levels the community itself up exponentially; the starter earns a one-time <b>founder bonus</b> 👑. A community is a fan group, <b>not an endorsement</b> — the person who starts one is a <b>community starter</b>, never a "dev".</p>
+        <div class="pillar-body"><p>Rally around any token: paste its contract to <b>start a community</b> — it goes <b>live once 10 real holders opt in</b>, auto-branded from its Dexscreener art. <b>Anyone can read</b> a live community's wall — but to <b>post</b> you must join by <b>connecting a wallet</b> and confirming on-chain that you <b>hold that token</b>, so communities stay real. Members post photos, GIFs and videos just like the Send Wall. Being in a live one adds a flat <b>⚡ 10× Send Power boost</b> on top of everything you earn — every post, reaction and comment inside it included (boosts add, they don't multiply). Every community lists <b>all its members ranked by member level</b> (Newcomer → Ride-or-Die), and participating raises your level <b>and</b> levels the community itself up exponentially; the starter earns a one-time <b>founder bonus</b> 👑. A community is a fan group, <b>not an endorsement</b> — the person who starts one is a <b>community starter</b>, never a "dev".</p>
         <a class="btn btn-ghost btn-sm" href="communities.html">Browse communities →</a></div>
       </details>
 
@@ -240,11 +240,11 @@
 <section id="power" class="alt-bg-2">
   <div class="wrap">
     <h2 class="section-title display green">Send Power ⚡ — the game</h2>
-    <p class="section-sub">Earn points for taking part, level up on an exponential curve with <b>no cap</b>, and multiply it all by holding and diamond-handing. Play with it below.</p>
+    <p class="section-sub">Earn points for taking part, level up on an exponential curve with <b>no cap</b>, and boost it all by holding and diamond-handing. Play with it below.</p>
 
     <div class="ab-demo card reveal">
       <h3 class="ab-demo-h">Try it: how Send Power works ⚡</h3>
-      <p class="ab-demo-sub">Every action earns base points. Your <b>Holder Boost</b> multiplies them — more supply held × longer diamond-handing = a bigger multiplier, with <b>no cap</b>. Drag the sliders. This is the exact formula the server uses.</p>
+      <p class="ab-demo-sub">Every action earns base points. Your <b>Holder Boost</b> scales them — more supply held × longer diamond-handing = a bigger boost, with <b>no cap</b>. Drag the sliders. This is the exact formula the server uses.</p>
       <div class="ab-row">
         <label class="ab-lbl" for="ab-action">Do this action</label>
         <select id="ab-action" class="ab-select">
@@ -315,7 +315,7 @@
       </div>
       <div class="card gold-card reveal ab-engine">
         <h3 class="ab-eng-h">⚡ Holder Boost — the multiplier</h3>
-        <p>Hold $SEND / $GWC and a boost multiplies <b>every</b> point you earn:</p>
+        <p>Hold $SEND / $GWC and a boost scales <b>every</b> point you earn:</p>
         <div class="ab-formula" aria-hidden="true">
           <span class="ab-f-chip">1 +</span><span class="ab-f-op" aria-hidden="true">(</span>
           <span class="ab-f-chip">10× per weighted 1% of supply ($GWC ×3)</span><span class="ab-f-op">×</span>
@@ -346,17 +346,19 @@
 
     <div class="card reveal ab-engine" style="margin-top:1.4rem;">
       <h3 class="ab-eng-h">🏘️ Communities &amp; Conviction — a flat 10× on top</h3>
-      <p>Join a token's community and <b>every point you earn is multiplied 10×</b> — a flat multiplier that <b>stacks on top of</b> the Holder Boost and OG bonus above. This is the exact stack the server multiplies:</p>
+      <p>Join a token's community and a flat <b>10× boost joins your stack</b> — <b>+9×</b> added on top of the Holder Boost and OG bonus above. <b>Boosts add, they don't multiply:</b> each one contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. This is the exact sum the server pays:</p>
       <div class="ab-formula" aria-hidden="true">
         <span class="ab-f-chip">Base points</span><span class="ab-f-op">×</span>
-        <span class="ab-f-chip ab-f-dia">Holder Boost</span><span class="ab-f-op">×</span>
-        <span class="ab-f-chip">👑 OG (10× / 5× / 3×)</span><span class="ab-f-op">×</span>
-        <span class="ab-f-chip ab-f-out">🏘️ Community 10×</span>
+        <span class="ab-f-chip">1</span><span class="ab-f-op">+</span>
+        <span class="ab-f-chip ab-f-dia">Holder Boost − 1</span><span class="ab-f-op">+</span>
+        <span class="ab-f-chip">👑 OG +9 / +4 / +2</span><span class="ab-f-op">+</span>
+        <span class="ab-f-chip ab-f-out">🏘️ Community +9</span><span class="ab-f-op">+</span>
+        <span class="ab-f-chip">🚀 Arcade · 🏆 Prize</span>
       </div>
-      <p class="sr-only">Your total is base points, times your Holder Boost, times your OG bonus if you have it — ten times for gold, five for silver, three for bronze — times ten while you are in a live community.</p>
+      <p class="sr-only">Your total is base points multiplied once by a sum: one, plus your Holder Boost above one, plus your OG bonus above one if you have it — nine for gold, four for silver, two for bronze — plus nine while you are in a live community, plus any arcade or Biggest Sender prize above one. The boosts add together; they do not multiply each other.</p>
       <ul class="ab-mini-list" style="margin-top:0.9rem;">
         <li><b>🔟 Go live at 10 — real holders only.</b> Paste a contract to start a community; it establishes once <b>10 people who actually hold that token</b> opt in (verified on-chain from a linked wallet, ≤2 per network). Holding is re-checked continuously, so botting it takes <b>real, sustained capital, not throwaway accounts</b>.</li>
-        <li><b>⚡ Flat 10×.</b> While you're in <b>≥1 live community</b>, every point is multiplied 10× — including every post, reaction and comment inside the community. Being in five is still 10× — it doesn't stack with itself.</li>
+        <li><b>⚡ Flat 10×.</b> While you're in <b>≥1 live community</b>, a 10× community boost (+9× on top of your base) is added to every point — including every post, reaction and comment inside the community. Being in five is still one 10× — it doesn't stack with itself.</li>
         <li><b>👑 Founder bonus.</b> Whoever starts a community and grows it to 10 members earns a one-time Send Power bonus when it goes live.</li>
         <li><b>🏆 Community level.</b> Climbs as <b>distinct members</b> stay active on the wall — daily-capped so one person can't farm it. The most active communities float to the top of the grid.</li>
         <li><b>💎 Conviction (per community).</b> Grows the longer you're a member and the more you post there, and shows as a badge next to that token in the <b>Convicted In</b> section of your public wall.</li>
@@ -475,7 +477,7 @@
       <details class="reassure"><summary>Do I need a wallet or money to use the site?</summary><div class="reassure-body">No. Make a free account with just your email, browse, post, and earn Send Power without ever connecting a wallet or buying anything.</div></details>
       <details class="reassure"><summary>What can a connected wallet actually do?</summary><div class="reassure-body">Only be read. We fetch your public balances to display them and verify your holder boost. No token approvals, no way to spend or transfer your funds.</div></details>
       <details class="reassure"><summary>How do I actually buy $Send or $GWC?</summary><div class="reassure-body">Follow the <a href="index.html#guide">beginner buying guide</a>: get an EVM wallet, secure your seed phrase, add Robinhood Chain (ID 4663), bridge ETH, then swap. Start small.</div></details>
-      <details class="reassure"><summary>What is a community and how does the 10× work?</summary><div class="reassure-body">Anyone can <a href="communities.html">start a token community</a> by pasting its contract; it goes live once 10 people opt in. While you're in at least one live community, every point of Send Power you earn is multiplied 10× — a flat 10× that stacks on your Holder Boost and OG bonus. Anyone can read a live community's wall; to post you connect a wallet and confirm you hold the token, and participating raises your member level. A community is a fan group, not an endorsement of any token.</div></details>
+      <details class="reassure"><summary>What is a community and how does the 10× work?</summary><div class="reassure-body">Anyone can <a href="communities.html">start a token community</a> by pasting its contract; it goes live once 10 people opt in. While you're in at least one live community, every point of Send Power you earn gets a flat 10× community boost added on top of your Holder Boost and OG bonus — boosts add, they don't multiply. Anyone can read a live community's wall; to post you connect a wallet and confirm you hold the token, and participating raises your member level. A community is a fan group, not an endorsement of any token.</div></details>
       <details class="reassure"><summary>How is my data protected?</summary><div class="reassure-body">Personal data — your email, which wallets are yours, 2FA secrets, tracked wallets, tracker reports — is stored <b>encrypted (AES-256-GCM)</b> under a key that lives outside the database; session cookies are kept only as hashes and passwords only as scrypt hashes, so a stolen database is unreadable on its own. Wallet sign-in messages are <b>domain-bound</b>: they name this site, so a signature phished on another site can't open a session here. You can add an authenticator app, a wallet signature, or (for wallet accounts that add an email + password) your password as two-factor. Nothing is sold or shared; the site never asks for a seed phrase. Read the details in the project README.</div></details>
       <details class="reassure"><summary>Can I hide someone?</summary><div class="reassure-body">Yes. Open their public wall → <b>Moderation ▾ → Mute</b>. Their posts, calls and comments disappear from your feeds; wherever they still show up their name turns red with a 🔇 you can tap to unmute. It's private — they're never told.</div></details>
     </div>

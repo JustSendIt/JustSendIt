@@ -119,22 +119,29 @@
   const GWC_W = 3; // $GWC weighted heavier than $SEND (mirror server GWC_SUPPLY_WEIGHT)
   // supply-boost term exactly as the server computes it: +10× per weighted 1% of supply ($GWC counts ×3)
   function supplyTermOf(h) { return 10 * ((h.pctSend || 0) + GWC_W * (h.pctGwc || 0)); }
-  // the multiplier the server actually applies to every point: Holder Boost × OG × Community (mirror awardPoints)
+  // the boost the server actually pays every point at: 1 + (Holder−1) + (OG−1) + (Community−1) + (Arcade−1) + (Prize−1) — boosts add (mirror effectiveMult)
   function effMult(g) {
     const holder = g.multiplier || 1;
     const h = g.holder;
     const ogOn = !!(g.og && h && h.fresh !== false && (h.sendTok || 0) > 0 && (h.gwcTok || 0) > 0); // OG pays only while freshly verified & still holding both
-    // No `|| 10` fallback: ogBonus is now the USER'S tier multiplier (10/5/3), so falling back to
-    // 10 would show a bronze holder four times the bonus they are actually paid. If the server
-    // did not send one, the honest display is no OG term at all.
+    // No `|| 10` fallback: ogBonus is the USER'S tier multiplier (10/5/3), so falling back to 10 would
+    // show a bronze holder four times the bonus they are actually paid.
     const og = ogOn ? (Number(g.ogBonus) || 1) : 1;
     const comm = g.communityMult || 1;
+    const arcade = (g.arcade && g.arcade.boost > 1) ? g.arcade.boost : 1;
+    const weekly = (g.weekBoost && g.weekBoost.boost > 1) ? g.weekBoost.boost : 1;
+    // Boosts ADD, they do not multiply — mirror of effectiveMult() on the server: 1 + Σ(each boost − 1).
+    const plus = x => (Math.round((x - 1) * 100) / 100) + '×';
     const parts = [];
-    if (holder > 1) parts.push('Holder ' + holder.toFixed(2) + '×');
-    if (og > 1) parts.push('OG ' + og + '×');
-    if (comm > 1) parts.push('Community ' + comm + '×');
-    return { holder, og, comm, eff: Math.round(holder * og * comm * 100) / 100, parts };
+    if (holder > 1) parts.push('Holder ' + plus(holder));
+    if (og > 1) parts.push('OG ' + plus(og));
+    if (comm > 1) parts.push('Community ' + plus(comm));
+    if (arcade > 1) parts.push('Arcade ' + plus(arcade));
+    if (weekly > 1) parts.push('Prize ' + plus(weekly));
+    const eff = Math.round((1 + (holder - 1) + (og - 1) + (comm - 1) + (arcade - 1) + (weekly - 1)) * 100) / 100;
+    return { holder, og, comm, arcade, weekly, eff, parts };
   }
+
 
   /* ---------- animation plumbing ---------- */
   const rafs = new Set();
@@ -164,6 +171,7 @@
   }
 
   let leaderboard = null;
+  let competition = null;   // this week's Biggest Sender board, from /api/competition
   let _lg = null;             // last gamify summary (for re-rendering the loot log on toggle)
   let _lootMode = 'today';    // achievement log resets every 24h by default; toggle to 'all' for all-time
 
@@ -177,6 +185,7 @@
     }
     try { lb = await (await fetch('/api/leaderboard', { credentials: 'same-origin' })).json(); } catch { lb = { top: [], me: null }; }
     leaderboard = lb;
+    try { competition = await (await fetch('/api/competition', { credentials: 'same-origin' })).json(); } catch { competition = null; }
     render(g, lb);
   }
 
@@ -200,9 +209,9 @@
     const diaPct = (h && h.diamond) ? Math.round((h.diamond.progress || 0) * 100) : 0;
     const em = effMult(g);
     const mult = em.eff; // what every point is really multiplied by (Holder × OG × Community), not the holder term alone
-    const rankTxt = g.rank === 1 ? '🏆 Biggest Sender' : '#' + g.rank + ' Biggest Sender';
+    const rankTxt = g.rank === 1 ? '👑 #1 all time' : '#' + g.rank + ' all time';
     const boosted = mult > 1;
-    const multParts = em.parts.length > 1 ? em.parts.join(' × ') + ' = ' + mult.toFixed(2) + '×' : '';
+    const multParts = em.parts.length > 1 ? '1× + ' + em.parts.join(' + ') + ' = ' + mult.toFixed(2) + '×' : '';
     return '<div class="pc-hero">' +
       '<div class="pc-core" aria-hidden="true">' +
         '<svg viewBox="0 0 120 120" class="pc-svg">' +
@@ -226,6 +235,7 @@
         '<div class="pc-chips">' +
           (boosted ? '<span class="pc-mult">⚡ ' + mult.toFixed(2) + '× boost</span>' : '<span class="pc-mult pc-mult-off">⚡ 1× · unlock boost ↓</span>') +
           (g.todayPoints ? '<span class="pc-today">+' + nf(g.todayPoints) + ' today</span>' : '') +
+          (g.weekBoost && g.weekBoost.boost > 1 ? '<span class="pc-week" title="Biggest Sender prize — the boost your finishing place won last week, added to everything you earn until ' + esc(new Date(g.weekBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC">🏆 ' + g.weekBoost.boost + '× prize</span>' : '') +
         '</div>' +
         (multParts ? '<div class="pc-mult-parts">' + esc(multParts) + ' on every point</div>' : '') +
       '</div>' +
@@ -285,7 +295,7 @@
     const tile = (ico, val, sub, cls) => '<div class="kpi ' + (cls || '') + '"><div class="kpi-ico" aria-hidden="true">' + ico + '</div><div class="kpi-val">' + val + '</div><div class="kpi-sub">' + sub + '</div></div>';
     return '<div class="kpi-strip">' +
       tile('🪙', nf(g.points), 'Send Power' + (g.todayPoints ? ' · <span class="kpi-up">+' + nf(g.todayPoints) + '</span>' : ''), 'kpi-gold') +
-      tile('🏆', '#' + g.rank, 'Biggest Sender', 'kpi-green') +
+      tile('👑', '#' + g.rank, 'All-time rank', 'kpi-green') +
       tile('🔥', days, 'Day hold streak', 'kpi-flame') +
       tile('💎', 'Lv ' + dLv, esc(dName), 'kpi-dia') +
     '</div>';
@@ -327,7 +337,7 @@
     const factor = h.diamond ? h.diamond.factor : 1;
     const mult = g.multiplier || 1;
     const em = effMult(g);
-    const stacked = em.og > 1 || em.comm > 1; // OG / Community multiply the Holder Boost again — show the full chain, not just the holder term
+    const stacked = em.og > 1 || em.comm > 1 || em.arcade > 1 || em.weekly > 1; // other boosts ADD onto the Holder Boost — show the whole sum, not just the holder term
     // while the boost is paused (stale holdings) the server pays 1× — show the value the displayed terms WOULD give, labelled paused,
     // so the strip never reads "1 + 30 × 2 = 1.00×"
     const paused = stale ? Math.round((1 + supplyTerm * factor) * 100) / 100 : null;
@@ -342,8 +352,10 @@
         (stale
           ? '<span class="eq-chip eq-out">⏸ ' + paused.toFixed(2) + '×<small>PAUSED · paying 1× until you refresh</small></span>'
           : '<span class="eq-chip eq-out">⚡ ' + mult.toFixed(2) + '×<small>' + (stacked ? 'HOLDER BOOST' : 'SEND POWER') + '</small></span>') +
-        (em.og > 1 ? '<span class="eq-op">×</span><span class="eq-chip eq-og' + ogVariant(g) + '">🏅 ×' + em.og + '<small>OG' + (g.ogTierName ? ' ' + g.ogTierName.toUpperCase() : '') + '</small></span>' : '') +
-        (em.comm > 1 ? '<span class="eq-op">×</span><span class="eq-chip eq-comm">🏘️ ×' + em.comm + '<small>community</small></span>' : '') +
+        (em.og > 1 ? '<span class="eq-op">+</span><span class="eq-chip eq-og' + ogVariant(g) + '">🏅 +' + (em.og - 1) + '<small>OG' + (g.ogTierName ? ' ' + g.ogTierName.toUpperCase() : '') + ' · ' + em.og + '× alone</small></span>' : '') +
+        (em.comm > 1 ? '<span class="eq-op">+</span><span class="eq-chip eq-comm">🏘️ +' + (em.comm - 1) + '<small>community · ' + em.comm + '× alone</small></span>' : '') +
+        (em.arcade > 1 ? '<span class="eq-op">+</span><span class="eq-chip eq-comm">🚀 +' + (Math.round((em.arcade - 1) * 100) / 100) + '<small>arcade · ' + em.arcade + '× alone</small></span>' : '') +
+        (em.weekly > 1 ? '<span class="eq-op">+</span><span class="eq-chip eq-og">🏆 +' + (Math.round((em.weekly - 1) * 100) / 100) + '<small>prize · ' + em.weekly + '× alone</small></span>' : '') +
         (stacked ? '<span class="eq-op">=</span><span class="eq-chip eq-out">⚡ ' + em.eff.toFixed(2) + '×<small>SEND POWER</small></span>' : '') +
       '</div>' +
       '<p class="eq-note">' + (stale ? '⏸ Paused until you Refresh — we re-verify your bags on-chain.' : '<b>$GWC counts ×3</b>, and holding $GWC longer levels your Diamond faster — bigger bags held longer scale this up with <b>no cap</b> · every point ×your Power · <b>resets when you sell</b>.') + '</p>' +
@@ -373,7 +385,7 @@
       const v = ogVariant(g);
       return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">🏅 OG ' + (g.ogTierName || '') + '</span>'
         + '<div class="og-block-body"><b>You’re an OG ' + (g.ogTierName || '') + '.</b> You bought <b>both $Send and $GWC</b> '
-        + when + ' (checked on-chain) — a permanent <b>' + (Number(g.ogBonus) || 1) + '× Send Power</b> bonus on <b>everything</b> you do. '
+        + when + ' (checked on-chain) — a permanent <b>' + (Number(g.ogBonus) || 1) + '× Send Power</b> bonus on <b>everything</b> you do (+' + ((Number(g.ogBonus) || 1) - 1) + '× on top of any other boosts — boosts add, they don’t multiply). '
         + 'Keep holding <b>both</b>: sell out of either and it’s gone for good.</div></div>';
     }
     if (g.ogRevoked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> OG requires holding <b>both</b> $Send and $GWC, and you sold out of one — your badge and its Send Power bonus are gone, and can’t be reclaimed.</div></div>';
@@ -405,7 +417,7 @@
     const live = (g.communities || []).filter(c => c.status === 'live');
     if (!live.length) {
       return '<div class="og-block comm-invite"><span class="og-block-badge">🏘️</span>' +
-        '<div class="og-block-body"><b>Join a community for a flat 10× Send Power.</b> Rally around any token — a community goes <b>live at 10 members</b>, and while you’re in <b>≥1 live</b> one, <b>every point you earn is multiplied 10×</b> (stacks on your Holder Boost &amp; OG). Post, react &amp; comment on its wall to raise your <b>community member level</b> and help the community level up. ' +
+        '<div class="og-block-body"><b>Join a community for a flat 10× Send Power.</b> Rally around any token — a community goes <b>live at 10 members</b>, and while you’re in <b>≥1 live</b> one, <b>a flat 10× boost (+9×) is added to every point you earn</b>, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Post, react &amp; comment on its wall to raise your <b>community member level</b> and help the community level up. ' +
         '<a class="gobj-link" href="communities.html">Browse communities →</a></div></div>';
     }
     const bar = (label, lvl, into, span, cls) => {
@@ -420,7 +432,7 @@
         bar('💎 ' + esc(c.conviction.title), c.conviction.level, c.conviction.into, c.conviction.span, 'comm-xp-conv') +
       '</a>').join('');
     return '<div class="og-block comm-block"><span class="og-block-badge comm-block-badge">⚡ 10×</span>' +
-      '<div class="og-block-body"><b>10× Send Power active.</b> You’re in ' + live.length + ' live communit' + (live.length === 1 ? 'y' : 'ies') + ' — every point you earn is <b>multiplied 10×</b>, on top of your Holder Boost &amp; OG. Keep posting, reacting &amp; commenting on their walls to raise your <b>member level</b> and help each community level up.' +
+      '<div class="og-block-body"><b>10× Send Power active.</b> You’re in ' + live.length + ' live communit' + (live.length === 1 ? 'y' : 'ies') + ' — a flat <b>10× boost (+9×)</b> is added to every point you earn, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Keep posting, reacting &amp; commenting on their walls to raise your <b>member level</b> and help each community level up.' +
       '<div class="comm-mini-grid">' + rows + '</div></div></div>';
   }
 
@@ -686,6 +698,77 @@
   /* =========================================================================
      SECTION 9 — CODEX (rules)
      ========================================================================= */
+  /* ---------- The Arena: two boards behind one toggle ----------
+     All time is the classic points board. Biggest Senders is THIS WEEK's race: what each account earned
+     inside the week with any previous prize divided back out, the clock to the reset, last week's winners
+     and the boost each of them drew. The choice is remembered per browser. */
+  let _arenaTab = (() => { try { return localStorage.getItem('sendit_arena_tab') || 'all'; } catch { return 'all'; } })();
+  function fmtLeftLong(ms) {
+    if (!(ms > 0)) return 'any moment now';
+    const d = Math.floor(ms / 864e5), h = Math.floor((ms % 864e5) / 36e5), m = Math.floor((ms % 36e5) / 6e4);
+    return d > 0 ? d + 'd ' + h + 'h' : h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+  }
+  // Switching boards repaints ONLY the Arena column: a full render() dropped keyboard focus, replayed every
+  // count-up and rebuilt the loot log for a tab click. Focus returns to the chosen tab; arrows move between tabs.
+  function wireArena() {
+    const col = document.getElementById('arena-col'); if (!col) return;
+    const tabs = Array.from(col.querySelectorAll('.arena-tab'));
+    const pick = (key) => {
+      _arenaTab = key === 'week' ? 'week' : 'all';
+      try { localStorage.setItem('sendit_arena_tab', _arenaTab); } catch {}
+      col.innerHTML = arenaBlock(leaderboard, competition, AUTH.user && AUTH.user.username);
+      wireArena();
+      const t = col.querySelector('.arena-tab[data-arena="' + _arenaTab + '"]'); if (t) t.focus();
+    };
+    tabs.forEach(b => {
+      b.addEventListener('click', () => pick(b.dataset.arena));
+      b.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return;
+        e.preventDefault();
+        const i = tabs.indexOf(b);
+        const j = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+        pick(tabs[j].dataset.arena);
+      });
+    });
+  }
+  function arenaBlock(lb, comp, myUsername) {
+    const week = _arenaTab === 'week';
+    const tab = (key, label, on) => '<button class="arena-tab' + (on ? ' is-on' : '') + '" type="button" role="tab" id="arena-tab-' + key + '" aria-selected="' + on + '" aria-controls="arena-panel" tabindex="' + (on ? '0' : '-1') + '" data-arena="' + key + '">' + label + '</button>';
+    return '<div class="arena-head"><h3 class="gsub">🏟️ The Arena</h3>' +
+      '<div class="arena-tabs" role="tablist" aria-label="Which board">' + tab('all', '👑 All time', !week) + tab('week', '🏆 Biggest Senders', week) + '</div></div>' +
+      '<div id="arena-panel" role="tabpanel" aria-labelledby="arena-tab-' + (week ? 'week' : 'all') + '">' + (week ? compBoard(comp, myUsername) : boardList(lb, myUsername)) + '</div>';
+  }
+  function compRow(u, myUsername, ptsLabel) {
+    const medal = ['🥇', '🥈', '🥉'];
+    const me = myUsername && u.username && u.username.toLowerCase() === myUsername.toLowerCase();
+    const av = u.avatar_img ? window.avatarHTML(u.avatar_img, 'gb-ava') : '<span class="gb-ava" aria-hidden="true">' + esc(u.avatar || '🚀') + '</span>';
+    return '<li class="' + (me ? 'gb-me' : '') + '">' +
+      '<span class="gb-rank">' + (medal[u.rank - 1] || ('#' + u.rank)) + '</span>' + av +
+      '<a class="gb-name" href="/u/' + encodeURIComponent(u.username) + '"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + '</a>' + (window.ogBadge ? ogBadge(u.og) : '') +
+      (u.boost ? '<span class="gb-prize" title="the boost this place won">' + u.boost + '×</span>' : '') +
+      '<span class="gb-pts">' + ptsLabel + '</span>' +
+    '</li>';
+  }
+  function compBoard(comp, myUsername) {
+    if (!comp || !comp.week) return '<p class="modal-note">The Biggest Sender board is loading — or could not be reached. Refresh to try again.</p>';
+    const n = comp.prize ? comp.prize.winners : 10, ladder = (comp.prize && comp.prize.ladder) || [];
+    let html = '<p class="comp-clock">Week ' + esc(comp.week.key) + ' · resets in <b>' + fmtLeftLong(comp.week.msLeft) + '</b> · top <b>' + n + '</b> win a boost, biggest for #1</p>';
+    if (!comp.top || !comp.top.length) html += '<p class="modal-note">Nobody has scored this week yet — every point you earn from now counts. 🚀</p>';
+    else html += '<ol class="gboard">' + comp.top.filter(u => u.rank <= n).map(u => compRow(u, myUsername, compact(u.points))).join('') + '</ol>';
+    if (comp.me) {
+      html += '<p class="modal-note" style="text-align:center; margin-top:0.5rem;">' + (comp.me.rank
+        ? 'You\'re <b>#' + comp.me.rank + '</b> this week with <b>' + nf(comp.me.points) + '</b> Send Power' + (comp.me.rank <= n ? ' — inside the prize places. Hold it. 🏆' : ' — top ' + n + ' wins a boost.')
+        : 'You haven\'t scored this week yet — anything you earn from now counts.') + '</p>';
+    }
+    if (comp.myBoost && comp.myBoost.boost > 1) html += '<p class="comp-mine">🏆 Your prize from week ' + esc(comp.myBoost.wonIn || '') + ': <b>' + comp.myBoost.boost + '×</b> on everything you earn until ' + esc(new Date(comp.myBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC. It does not count toward this week\'s standings — that\'s what keeps the race fair.</p>';
+    if (comp.last && comp.last.winners && comp.last.winners.length) {
+      html += '<h4 class="comp-last">Last week (' + esc(comp.last.key) + ') — winners and their prizes</h4>' +
+        '<ol class="gboard gboard-compact">' + comp.last.winners.map(w => compRow(w, myUsername, compact(w.points))).join('') + '</ol>';
+    }
+    html += '<p class="comp-rules">Every Monday 00:00 UTC the board resets to zero and the game master pays the top ' + n + ' a Send Power boost by finishing place' +
+      (ladder.length ? ' — <b>#1 gets ' + ladder[0] + '×</b>, down to ' + ladder[ladder.length - 1] + '× for #' + ladder.length + ' (' + ladder.map(b => b + '×').join(' · ') + '); tied places share a rung —' : '') + ' for the whole of the next week. It adds on top of your Holder, OG, community and arcade boosts (boosts add, they don\'t multiply). A winner\'s prize never counts toward next week\'s standings, so the same people can\'t buy the board with it.</p>';
+    return html;
+  }
   // OG rules for the rules card. Dates are read from g.ogCampaign (the server's OG_LAUNCH + OG_TIER_END),
   // never typed here, so this card cannot drift from what checkOg() actually enforces.
   function ogRulesHtml(g) {
@@ -716,7 +799,7 @@
           '<li>The two combine as <b>1 + (supply × diamond)</b>, with <b>no cap</b> — big bags held long enough scale your boost without limit.</li>' +
           '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — that\'s what makes it a <i>diamond hands</i> reward. They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
         '</ul>' +
-        '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes <b>live at 10 members</b>). While you’re in <b>≥1 live community</b>, <b>every point you earn is multiplied 10×</b> — a flat <b>10×</b> that stacks on top of your Holder Boost and OG bonus, on every post, reaction and comment inside the community too. Being in five communities is still 10× (it doesn’t stack with itself). Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
+        '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes <b>live at 10 members</b>). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
         '<ul>' +
           '<li><b>🪙 Real holders only:</b> to start, join, or post in a community you must <b>hold that token</b> (verified on-chain from a linked wallet). Sell or move it out and your 10× for that community is revoked.</li>' +
           '<li><b>🏆 Community level</b> climbs as its <b>distinct members</b> stay active — posting and reacting on the community wall. It uses the same exponential curve and is <b>daily-capped</b> so it can’t be farmed by one person.</li>' +
@@ -725,6 +808,7 @@
         '</ul>' +
         ogRulesHtml(g) +
         '<p><b>📣 Send Calls — what one call can pay.</b> A call pays three ways: an opening award (bigger for a bigger on-chain buy), a milestone for each whole X it hits (180 × the X, up to 50x), and a <b>diamond-hands hold bonus</b> that compounds the longer and higher it stays in profit. Everything one call ever pays you comes out of <b>one lifetime budget — the Send Power it takes to reach Level 70 (≈737,627)</b> — and that budget is carved on purpose: the opening award may take at most a tenth, the ladder at most three tenths, and <b>at least 60% is reserved for holding in profit</b>. Your hold bonus also accrues faster when the people who Sent It on your call are in profit too: <b>+10% per Sender in the green, up to 3×</b>. Level 100 is about twenty perfect calls; no single call can carry anyone to the top.</p>' +
+        '<p><b>🏆 Biggest Sender — a fresh race every week.</b> Every Monday at 00:00 UTC the Biggest Sender board resets to zero, so the week\'s standings are only what you earned inside it. When the week ends, the game master pays the <b>top 10</b> a Send Power boost <b>by finishing place</b> — #1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10; tied places share a rung — on everything they earn for the whole of the following week, added on top of their other boosts. A prize never counts toward the next week\'s standings: the board ranks what you did, with any prize you were already carrying taken back out of your stack, so last week\'s winners race on the same footing as everyone else. Toggle the Arena to 🏆 Biggest Senders to watch it.</p>' +
         '<p><b>🔒 Fair &amp; safe.</b> Your holdings, and whether you\'ve sold, are read straight from the blockchain and re-verified — so no one can fake diamond hands to cheat their level. Connecting your wallet is a <b>free signature — never a transaction</b>, and this site can never touch or move your funds.</p>' +
       '</div>' +
     '</details>';
@@ -788,7 +872,7 @@
       lootLog(g) +
       '<div class="gdash-cols">' +
         '<div class="gcol"><h3 class="gsub">🗺️ Quest Board</h3>' + earnList(g.perAction, mult) + '<p class="modal-note" style="margin-top:0.4rem;">Tap any quest to go do it. Points × your ⚡ Power. Daily caps keep it fair.</p></div>' +
-        '<div class="gcol"><h3 class="gsub">🏟️ The Arena</h3>' + boardList(lb, AUTH.user && AUTH.user.username) + '</div>' +
+        '<div class="gcol" id="arena-col">' + arenaBlock(lb, competition, AUTH.user && AUTH.user.username) + '</div>' +
       '</div>' +
       rulesBlock(g);
 
@@ -817,6 +901,7 @@
       document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
     }
     wireLootToggle(); // achievement-log window toggle (Today resets every 24h · All time)
+    wireArena();
     dash.querySelectorAll('.js-refresh').forEach(b => b.addEventListener('click', doRefresh));
     dash.querySelectorAll('.js-connect').forEach(b => b.addEventListener('click', () => {
       const sec = document.getElementById('sec-security'); if (sec) { sec.open = true; sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' }); }
@@ -834,6 +919,7 @@
       const g = await api('/api/gamify/refresh', { method: 'POST' });
       let lb; try { lb = await (await fetch('/api/leaderboard', { credentials: 'same-origin' })).json(); } catch { lb = leaderboard; }
       leaderboard = lb;
+      try { competition = await (await fetch('/api/competition', { credentials: 'same-origin' })).json(); } catch {}
       render(g, lb); // render() runs celebrate() → confetti only on a real level/tier increase
       if (window.sendToast) sendToast(g.holderLive && g.holderLive.multiplier > 1 ? ('Holder Boost live: ' + g.holderLive.multiplier.toFixed(2) + '× 🔥') : 'Holdings refreshed ✓');
     } catch (e) {

@@ -483,7 +483,12 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN og_dq INTEGER NOT NULL DEFAULT 0",            // 1 = failed the dump / net-accumulator standard (distinct from og_revoked, which is a later sell-out)
   "ALTER TABLE calls ADD COLUMN points_paid INTEGER NOT NULL DEFAULT 0",     // lifetime Send Power this ONE call has paid its caller (post-multiplier) — the basis for CALL_POINTS_CAP
   "ALTER TABLE call_hops ADD COLUMN points_paid INTEGER NOT NULL DEFAULT 0", // same, per hopper on that call
-  "ALTER TABLE users ADD COLUMN og_try_at INTEGER NOT NULL DEFAULT 0",        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "ALTER TABLE users ADD COLUMN og_try_at INTEGER NOT NULL DEFAULT 0",
+  // Biggest Sender weekly competition: the prize is a Send Power boost, by finishing rank, that lasts the following week
+  "ALTER TABLE users ADD COLUMN week_boost REAL NOT NULL DEFAULT 0",          // the prize boost, by last week's finishing rank (0 = none)
+  "ALTER TABLE users ADD COLUMN week_boost_until INTEGER NOT NULL DEFAULT 0", // when it expires — the end of the week after the one it was won in
+  "ALTER TABLE users ADD COLUMN week_boost_key TEXT",                         // which competition week it was won in
+  "ALTER TABLE points_events ADD COLUMN comp_amount INTEGER NOT NULL DEFAULT 0", // what the award would have paid without a Biggest Sender prize — what the weekly board ranks        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 // Performance indices — added AFTER the migrations so the score/points columns they reference exist.
@@ -499,6 +504,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_posts_comm ON posts(community_id, id DESC) WHERE community_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_runner_snaps_at ON runner_snaps(at);            -- the 60s prune sweep was full-scanning the table
 CREATE INDEX IF NOT EXISTS idx_notif_actor ON notifications(user_id, actor_id, created_at); -- notifyOnce dedupe + per-actor flood cap
+CREATE INDEX IF NOT EXISTS idx_pe_created ON points_events(created_at);         -- the Biggest Sender week window scans by time, not by user
 `);
 // idx_hops_call duplicated call_hops' own PRIMARY KEY index — pure write overhead, so drop the one already on disk
 try { db.exec('DROP INDEX IF EXISTS idx_hops_call'); } catch {}
@@ -510,11 +516,24 @@ db.exec('PRAGMA optimize;'); // let SQLite build/refresh stat samples for the qu
 // them and no chain re-scan is needed. The `og_tier = 0` predicate makes it idempotent and stops it
 // ever demoting a tier the new checkOg() has since assigned.
 try { db.prepare('UPDATE users SET og_tier = 3 WHERE og = 1 AND og_tier = 0').run(); } catch {}
+// Send Power awards made before comp_amount existed count at face value on the weekly board (no prize
+// existed to take out). Community XP, conviction XP and activity rows share this table but are NOT Send
+// Power — they never touch users.points — so they are excluded here and in the standings query; without
+// that exclusion a restart promoted them onto the board and the settled winner depended on deploy timing.
+try { db.prepare("UPDATE points_events SET comp_amount = amount WHERE comp_amount = 0 AND amount > 0 AND kind NOT IN ('commxp','convxp','commact')").run(); } catch {}
 // The repair has to clear the tier too, or a wallet-less account keeps a stale tier (and its payout).
 try { db.prepare("UPDATE users SET og = 0, og_tier = 0 WHERE og = 1 AND og_revoked = 0 AND id NOT IN (SELECT user_id FROM identities WHERE type = 'wallet')").run(); } catch {}
 
 // Moderation (mutes) + per-user wallet-tracker report cache (encrypted at rest)
 db.exec(`
+CREATE TABLE IF NOT EXISTS competitions (
+  week_key   TEXT PRIMARY KEY,                       -- ISO week, same key the community board uses
+  starts_at  INTEGER NOT NULL,
+  ends_at    INTEGER NOT NULL,
+  status     TEXT NOT NULL DEFAULT 'open',           -- open | settled
+  settled_at INTEGER,
+  winners    TEXT                                    -- JSON [{user_id, username, rank, points, boost}] once settled
+);
 CREATE TABLE IF NOT EXISTS mutes (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   muted_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -771,7 +790,7 @@ const COMMUNITY_MULT = 10;       // flat 10× on EVERY action while a verified h
    One run per UTC day. The rocket's multiplier is a pure function of ELAPSED SERVER TIME, and the crash point is
    generated server-side and never sent to the browser until the run is over — so the client can animate freely but
    can never know (or fake) when it blows. Cashing out converts the multiplier you stopped at into a Send Power
-   boost that stacks on your Holder/OG/community multipliers for 24 hours. No stakes, no money — a daily bonus game. */
+   boost added on top of your Holder/OG/community boosts for 24 hours (boosts add, they do not multiply). No stakes, no money — a daily bonus game. */
 const ARCADE_GROWTH = 0.06;          // multiplier(t) = e^(0.06 · seconds) → 1.8× at 10s, 6× at 30s, 36× at 60s
 const ARCADE_MAX_X = 50;             // hard ceiling on the crash point (bounds the boost and the round length)
 const ARCADE_BOOST_MAX = 5;          // a cash-out can never buy more than a 5× day
@@ -787,7 +806,7 @@ function isTokenDev(userId, tok) {
   if (!dev.size) return false;
   return walletAddresses(userId).some(w => dev.has(String(w).toLowerCase()));
 }
-// THE multiplier every point is paid at — the single source of truth for awardPoints, the dashboard and the nav badge,
+// THE boost every point is paid at (boosts add, they do not multiply) — the single source of truth for awardPoints, the dashboard and the nav badge,
 // so the number a user sees can never drift from the number they're actually paid.
 function effectiveMult(userId) {
   const holder = holderMultiplier(userId);
@@ -803,8 +822,18 @@ function effectiveMult(userId) {
   }
   const community = (row && row.live_comm_count > 0) ? COMMUNITY_MULT : 1; // flat, not per-community and not 10^n
   const arcade = arcadeBoostOf(userId);                                    // today's Rocket Run cash-out, until it expires
-  const total = holder * og * community * arcade;
-  return { holder, og, community, arcade, total: Math.round(total * 100) / 100 };
+  const weekly = weekBoostOf(userId);                                      // last week's Biggest Sender prize, until the week it covers ends
+  // Boosts ADD, they do not multiply. Each active boost contributes what it pays over the base 1x, so
+  // a boost on its own still pays exactly its advertised x (OG Gold alone is 10x), OG 10x plus a
+  // community 10x is 19x rather than 100x, and an inactive boost (1x) adds nothing. This is the one
+  // formula every point is paid at — the dashboard mirrors it, the nav badge reads its total.
+  const total = 1 + (holder - 1) + (og - 1) + (community - 1) + (arcade - 1) + (weekly - 1);
+  return { holder, og, community, arcade, weekly, total: Math.round(total * 100) / 100 };
+}
+function weekBoostOf(userId) {
+  const u = db.prepare('SELECT week_boost, week_boost_until FROM users WHERE id = ?').get(userId);
+  if (!u || !(u.week_boost > 1) || !(u.week_boost_until > now())) return 1;
+  return u.week_boost;
 }
 function arcadeBoostOf(userId) {
   const u = db.prepare('SELECT arcade_boost, arcade_boost_until FROM users WHERE id = ?').get(userId);
@@ -1401,7 +1430,7 @@ async function checkOg(userId) {
     db.prepare('UPDATE users SET og_dq = 0 WHERE id = ?').run(userId); // qualified — clear any earlier disqualification note
     notify(userId, '🏅', 'OG ' + OG_TIER_NAME[tier] + ' unlocked! You bought BOTH $SEND and $GWC inside the ' +
       OG_TIER_NAME[tier].toLowerCase() + ' window and still hold both (checked on-chain) — a permanent badge and a ' +
-      OG_TIER_MULT[tier] + '× Send Power bonus on everything. Keep holding both: sell out of either and it goes.', 'og');
+      OG_TIER_MULT[tier] + '× Send Power bonus on everything (+' + (OG_TIER_MULT[tier] - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Keep holding both: sell out of either and it goes.', 'og');
     return tier;
   } finally {
     _ogScanning.delete(userId);
@@ -1452,15 +1481,25 @@ function awardPoints(userId, kind, base, ref, maxAmount) {
     const cnt = db.prepare('SELECT COUNT(*) n FROM points_events WHERE user_id=? AND kind=? AND created_at>?').get(userId, kind, now() - 864e5).n;
     if (cnt >= DAILY_CAP[kind]) return 0;
   }
-  const effMult = effectiveMult(userId).total;
+  const em = effectiveMult(userId);
+  const effMult = em.total;
   let amount = Math.min(PTS_EVENT_CAP, Math.max(1, Math.round(base * effMult))); // clamp any single event (size × holder × OG stack) to a sane ceiling
   if (maxAmount != null) amount = Math.min(amount, Math.floor(maxAmount));
   if (!(amount > 0)) return 0;
   try {
     db.exec('BEGIN');
-    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, ref, created_at) VALUES (?,?,?,?,?,?,?)').run(userId, kind, amount, base, effMult, ref || null, now());
+    // comp_amount is what this award would have paid WITHOUT the Biggest Sender prize — the same base,
+    // the same caps, the prize's share taken back out of the (additive) stack. The competition ranks
+    // that, so last week's winners race on the same footing as everyone else: the prize pays their
+    // level and the all-time board, never their next placing. Equal to amount when there is no prize.
+    const compMult = Math.max(1, effMult - ((em.weekly || 1) - 1));
+    let compAmount = Math.min(PTS_EVENT_CAP, Math.max(1, Math.round(base * compMult)));
+    if (maxAmount != null) compAmount = Math.min(compAmount, Math.floor(maxAmount));
+    compAmount = Math.min(compAmount, amount);
+    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, comp_amount, ref, created_at) VALUES (?,?,?,?,?,?,?,?)').run(userId, kind, amount, base, effMult, compAmount, ref || null, now());
     db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(amount, userId);
     db.exec('COMMIT');
+    compCache.rows = null; // standings changed — never let a user's own fresh award lag behind the cached board
   } catch { try { db.exec('ROLLBACK'); } catch {} return 0; } // unique-ref collision or crash → neither commits
   // notify on meaningful gains only (level-ups + notable actions) so the bell never floods on micro-actions
   try {
@@ -1916,6 +1955,7 @@ function gamifySummary(u) {
     ogCampaign: ogCampaign(),                  // live windows + multipliers, so no deadline is hard-coded in the UI
     communityMult: (db.prepare('SELECT live_comm_count c FROM users WHERE id=?').get(u.id).c > 0) ? COMMUNITY_MULT : 1, // 10× while in ≥1 live community
     arcade: arcadeState(u.id),        // today's Rocket Run boost — stacks on Holder × OG × community
+    weekBoost: weekBoostState(u.id),  // last week's Biggest Sender prize, if any — stacks the same way
     checkedInToday: !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + u.id + ':' + ymd()),
     communities: db.prepare('SELECT c.id, c.name, c.symbol, c.token_addr, c.xp, c.status, cm.conviction_xp FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ? AND cm.qualified = 1 ORDER BY cm.conviction_xp DESC').all(u.id).map(c => {
       const cl = commLevelInfo(c.xp), cv = commLevelInfo(c.conviction_xp);
@@ -3695,6 +3735,98 @@ function serveFile(req, res, filePath, extraHeaders = {}) {
   });
 }
 
+/* ===== Biggest Sender — the weekly competition and its game master ==================================
+   A fresh race every ISO week (Monday 00:00 UTC, the same weekWindow() the community board runs on).
+   Standings are what you EARNED inside the week: SUM(comp_amount), each award taken at what it would
+   have paid without a previous week's prize. Taking the prize back out is the fairness mechanism —
+   last week's winners race on the same footing as everyone else, so the prize pays their level and the
+   all-time board but can never buy the next placing. When the week ends the game master settles it on
+   its own: the top WEEK_WINNERS each take a rung of the WEEK_PRIZES ladder by finishing rank — #1 the
+   largest, #10 the smallest, recorded in the competitions row — that adds on top of everything they earn
+   for the whole of the following week, then the next week opens. It runs from a timer, so it settles whether or not anyone
+   visits, and it only ever settles a week it recorded as open — the deploy week is the first race, and
+   nothing is retro-paid from history. */
+const WEEK_WINNERS = 10;
+// The prize ladder, by finishing rank: #1 draws the top of it, #10 the bottom. Tied ranks share a rung.
+// The top rung equals ARCADE_BOOST_MAX, so no weekly prize outruns the stack's other bonuses.
+const WEEK_PRIZES = [5, 4.5, 4, 3.5, 3, 2.5, 2, 1.75, 1.5, 1.25];
+let compCache = { at: 0, key: null, rows: null };
+const COMP_TTL = 8000;
+// every account's earned-inside-the-window total, ranked; any prize's share already taken out
+function competitionRows(win) {
+  return db.prepare(`SELECT u.id, u.username, u.avatar, u.avatar_img, u.accent, u.og_tier,
+      SUM(e.comp_amount) pts, COUNT(*) n
+    FROM points_events e JOIN users u ON u.id = e.user_id
+    WHERE e.created_at >= ? AND e.created_at < ? AND u.system = 0
+      AND e.kind NOT IN ('commxp','convxp','commact')          -- community XP is not Send Power and never scores here
+    GROUP BY e.user_id HAVING pts > 0 ORDER BY pts DESC, u.id ASC`).all(win.startsAt, win.endsAt)
+    .map((r, i, arr) => { // competition ranking: ties share a rank, as the all-time board does
+      let rank = i + 1; while (rank > 1 && arr[rank - 2].pts === r.pts) rank--;
+      return { ...r, rank };
+    });
+}
+function competitionStandings() {
+  const win = weekWindow();
+  if (compCache.rows && compCache.key === win.key && now() - compCache.at < COMP_TTL) return { win, rows: compCache.rows };
+  const rows = competitionRows(win);
+  compCache = { at: now(), key: win.key, rows };
+  return { win, rows };
+}
+function weekBoostState(userId) {
+  const u = db.prepare('SELECT week_boost, week_boost_until, week_boost_key FROM users WHERE id = ?').get(userId) || {};
+  const active = !!(u.week_boost > 1 && u.week_boost_until > now());
+  return active ? { boost: u.week_boost, until: u.week_boost_until, wonIn: u.week_boost_key } : null;
+}
+function ensureCompetitionRow() {
+  const w = weekWindow();
+  db.prepare("INSERT OR IGNORE INTO competitions (week_key, starts_at, ends_at, status) VALUES (?,?,?,'open')").run(w.key, w.startsAt, w.endsAt);
+}
+let compSettling = false;
+function settleCompetitions() {
+  if (compSettling) return; compSettling = true;
+  try {
+    const due = db.prepare("SELECT * FROM competitions WHERE status = 'open' AND ends_at <= ? ORDER BY ends_at ASC").all(now());
+    for (const c of due) {
+      const rows = competitionRows({ startsAt: c.starts_at, endsAt: c.ends_at });
+      // by RANK, not by list position: everyone whose shared rank is inside the prize places is paid, so two
+      // people tied at #10 both get the #10 rung (a positional cut paid only the lower user id while the
+      // board told both of them they were inside the prize places)
+      const winners = rows.filter(r => r.rank <= WEEK_WINNERS).map(r => ({
+        user_id: r.id, username: r.username, rank: r.rank, points: r.pts,
+        boost: WEEK_PRIZES[Math.min(r.rank, WEEK_PRIZES.length) - 1],   // by rank, descending — tied ranks share a rung; recorded below
+      }));
+      // The prize covers the week after the one won. If the server was down long enough that that week has
+      // already passed, it covers the rest of the current week instead — a prize must never be paid already
+      // expired while the notification and the board say otherwise.
+      const until = Math.max(c.ends_at + 7 * 864e5, weekWindow().endsAt);
+      const untilTxt = new Date(until).toUTCString().slice(0, 16) + ' 00:00 UTC';
+      db.exec('BEGIN');
+      try {
+        for (const w of winners) db.prepare('UPDATE users SET week_boost = ?, week_boost_until = ?, week_boost_key = ? WHERE id = ?').run(w.boost, until, c.week_key, w.user_id);
+        db.prepare("UPDATE competitions SET status = 'settled', settled_at = ?, winners = ? WHERE week_key = ? AND status = 'open'").run(now(), JSON.stringify(winners), c.week_key);
+        // inside the transaction, so a crash can never pay a prize without telling its winner
+        for (const w of winners) {
+          notify(w.user_id, '🏆', 'Biggest Sender: you finished #' + w.rank + ' this week with ' + Number(w.points).toLocaleString('en-US') +
+            ' Send Power. Your prize: a ' + w.boost + '× Send Power boost added on top of everything you earn until ' + untilTxt + '. The board has reset — the race is on again. 🚀', 'points');
+        }
+        db.exec('COMMIT');
+      } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+      console.log('🏆 Biggest Sender ' + c.week_key + ' settled: ' + winners.length + ' winner(s)');
+    }
+    ensureCompetitionRow();
+  } catch (e) { console.error('settleCompetitions', e); }
+  finally { compSettling = false; }
+}
+function lastSettledCompetition() {
+  const c = db.prepare("SELECT week_key, starts_at, ends_at, settled_at, winners FROM competitions WHERE status = 'settled' ORDER BY ends_at DESC LIMIT 1").get();
+  if (!c) return null;
+  let winners = []; try { winners = JSON.parse(c.winners || '[]'); } catch {}
+  // usernames can change; resolve fresh, and carry the avatar so the board can draw the row
+  const users = {}; for (const u of db.prepare(`SELECT id, username, avatar, avatar_img, accent, og_tier FROM users WHERE id IN (${winners.map(() => '?').join(',') || 'NULL'})`).all(...winners.map(w => w.user_id))) users[u.id] = u;
+  return { key: c.week_key, startsAt: c.starts_at, endsAt: c.ends_at, settledAt: c.settled_at,
+    winners: winners.map(w => { const u = users[w.user_id]; return { rank: w.rank, points: w.points, boost: w.boost,
+      username: u ? u.username : w.username, avatar: u ? u.avatar : '🚀', avatar_img: u && u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u ? (u.accent || '') : '', og: u ? (u.og_tier || 0) : 0 }; }) };
+}
 let lbCache = { at: 0, top: null };   // leaderboard top-20 cache (identical for everyone → serve for LB_TTL)
 const LB_TTL = 8000;
 const RISK_PUBLIC = Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])); // static → build once
@@ -5250,6 +5382,23 @@ const server = http.createServer(async (req, res) => {
         if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('swaptx:' + hash)) return send(res, 200, { awarded: 0, already: true });
         return send(res, 200, { awarded: awardPoints(me.id, 'swap', PTS.swap, 'swaptx:' + hash) });
       }
+      // The Biggest Sender board: this week's standings (earned inside the week, prize factor divided out),
+      // the clock, last week's winners and what they drew, and the caller's own row. Public — the board is
+      // the same for everyone; only `me` needs a session.
+      if (p === '/api/competition' && req.method === 'GET') {
+        const { win, rows } = competitionStandings();
+        const view = r => ({ rank: r.rank, username: r.username, avatar: r.avatar, avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null,
+          accent: r.accent || '', og: r.og_tier || 0, points: r.pts, actions: r.n });
+        const mine = me ? rows.find(r => r.id === me.id) : null;
+        return send(res, 200, {
+          week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt, msLeft: Math.max(0, win.endsAt - now()) },
+          top: rows.slice(0, 20).map(view),
+          me: me ? (mine ? view(mine) : { rank: null, points: 0, actions: 0, username: me.username }) : null,
+          myBoost: me ? weekBoostState(me.id) : null,
+          last: lastSettledCompetition(),
+          prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, excludedFromStandings: true },
+        });
+      }
       if (p === '/api/leaderboard' && req.method === 'GET') {
         // The top-20 list is identical for everyone, so cache it briefly (it also runs a publicDiamond() query
         // per row). Only the per-user `me` block is computed fresh. Huge win when many users hit the board at once.
@@ -6091,6 +6240,12 @@ const ogGrantTimer = setInterval(async () => {
   } catch {} finally { ogGrantSweeping = false; }
 }, 15 * 60 * 1000);
 ogGrantTimer.unref();
+
+// Biggest Sender game master. Once a minute: settle any week that has ended, then make sure the current
+// week has its open row. Cheap when nothing is due (one indexed SELECT), and it never depends on a visit.
+try { ensureCompetitionRow(); } catch {}
+const compTimer = setInterval(() => { try { settleCompetitions(); } catch {} }, 60 * 1000);
+compTimer.unref();
 
 // Re-verify qualified community members still hold the community's token; revoke the 10× on a sell / recycled-bag move.
 const commHolderTimer = setInterval(() => { sweepCommunityHolders().catch(() => {}); }, 10 * 60 * 1000);

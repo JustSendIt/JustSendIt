@@ -73,7 +73,7 @@ This is verified on-chain (the contract source is verified on the explorer, Soli
 | **Convicted In** | Pin tokens you believe in to your public wall — by pasting a contract or from any token's detail. Each chip shows its **live market cap** and **how many Xs it's up since you convicted** (baseline captured at pin time); hovering shows, when a wallet is linked, how much you hold and how long (read‑only, on‑chain, coarsened for privacy). A 💎 conviction badge appears when you're a member of that token's community. |
 | **Send Power (gamification)** | Earn points for nearly everything you do, level up endlessly (no cap — Level 100 = Biggest Sender, then Send Deity and beyond), and multiply it all with your Holder Boost and Diamond Hands. |
 | **🕹️ Arcade — Rocket Run** | One free flight per UTC day on `arcade.html`. A rocket climbs at `e^(0.06·s)`; the crash point is rolled **server‑side at launch and never sent to the browser** until the round resolves. Cash out any time for a **Send Power boost** of `min(5, 1 + (x−1)/4)` lasting 24h; don't cash out before it blows and you get nothing. Nothing is at stake, nothing is for sale, entertainment only. |
-| **⚡ Boost in the nav badge** | Your live multiplier rides in the same badge as your level: **Lv 12 · 1,683 · ⚡1.03×**. It repaints the moment a boost starts, and drops itself when one expires. |
+| **⚡ Boost in the nav badge** | Your live boost rides in the same badge as your level: **Lv 12 · 1,683 · ⚡1.03×**. It repaints the moment a boost starts, and drops itself when one expires. |
 | **🏆 Weekly community competition** | On `communities.html`: which community's members earned it the most points **this week** (Mon 00:00 → Mon 00:00 UTC, reset server‑side). Scored purely on activity inside a community — joins, posts, reactions, comments, and its members' Send Calls on its own token, each daily‑capped per member. **Market cap counts for nothing.** No prize, just bragging rights. |
 | **📅 Daily check‑in** | The daily bonus is something you *do*: a check‑in button at the top of your own wall, idempotent per UTC day, with a live countdown to the next one. |
 | **Dev‑wallet communities** | The wallet that deployed (or owns) a token can start that token's community **without holding any of it** — confirmed on‑chain from a linked read‑only wallet. |
@@ -87,7 +87,7 @@ Everything below is exactly how the platform works — the same numbers the serv
 
 ### 3.1 Send Points, Levels & Titles
 
-Everything you do that helps the community earns **Send Power** (points, also your XP). Every action has a fixed base value; holders multiply that base (see §3.2), and a few actions scale further by how much you bought and held.
+Everything you do that helps the community earns **Send Power** (points, also your XP). Every action has a fixed base value; your boosts scale that base (see §3.2 — they add together, they do not multiply), and a few actions scale further by how much you bought and held.
 
 **Point values**
 
@@ -141,9 +141,9 @@ Two more earn types have **no fixed base** — they're computed live from perfor
 
 Fresh Sender (`<5`) → Coin Curious (5) → Send Apprentice (10) → Rocket Rider 🚀 (20) → Send Sergeant (30) → Diamond Hands 💎 (40) → Rocket Commander (50) → Send Sensei (60) → Wealth Wizard (70) → Send Lord (80) → Send God (90) → **Biggest Sender 👑 (100)** → Send Deity ✨ (110) → Eternal Sender ♾️ (125) → Sender Singularity 🌌 (150+).
 
-### 3.2 The Holder Boost — hold to multiply everything
+### 3.2 The Holder Boost — hold to boost everything
 
-This is the heart of the game: **holding $Send and $GWC multiplies every point you earn.** Your boost is one number:
+This is the heart of the game: **holding $Send and $GWC boosts every point you earn.** Your Holder Boost is one number, and it is the first term of a sum — every boost on the platform **adds** what it pays above 1× (`1 + (Holder − 1) + (OG − 1) + (Community − 1) + (Arcade − 1) + (Prize − 1)`); boosts never multiply each other:
 
 ```
 weightedPct   = yourSend% + 3 × yourGWC%        // $GWC is weighted 3× per % of supply
@@ -328,7 +328,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - **Only members can post.** Posting requires opting in, and opting in requires **connecting a wallet and confirming on‑chain that you hold the community's token**. Members post exactly what the Send Wall supports — text, **photos, GIFs and videos** — through the same compressed, streaming upload pipeline.
 
 **The 10× multiplier (Send Power bonus)**
-- While you're a qualified member of **≥ 1 live community**, **every point you earn is multiplied 10×** — a flat **10×** applied in the same `awardPoints` path as everything else, so it stacks *on top of* your Holder Boost and OG bonus. The full stack the server multiplies is: `base × HolderBoost × OG × Community`. Every action you take **inside a community** (posting, reacting, commenting on its wall) earns Send Power at that 10×, and your dashboard shows the bonus as an achievement you can unlock.
+- While you're a qualified member of **≥ 1 live community**, **a flat 10× community boost is added to every point you earn** — applied in the same `awardPoints` path as everything else, on top of your Holder Boost and OG bonus. The full sum the server pays is `base × (1 + (HolderBoost − 1) + (OG − 1) + (Community − 1) + (Arcade − 1) + (Prize − 1))` — boosts add, they do not multiply, so OG Gold 10× plus a community 10× is 19×, not 100×. Every action you take **inside a community** (posting, reacting, commenting on its wall) earns Send Power at that 10×, and your dashboard shows the bonus as an achievement you can unlock.
 - It's a **flat 10×** — being in five live communities is still 10× (it doesn't stack with itself).
 
 **Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+15,000 base Send Power**, itself run through the normal multiplier path like any award (so a starter who is now in their own live community receives it ×10, and more with a Holder Boost/OG). It's **idempotent** — it can never be paid twice, even on rejoins.
@@ -362,7 +362,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 
 ### 3.11 OG tiers — being early, three ways 🏅
 
-Hold **both $Send and $GWC**, bought from the market, and keep holding both: you earn a **permanent OG badge** and a Send Power multiplier that stacks with everything above. There is **one standard**; only *when* you got in changes the size.
+Hold **both $Send and $GWC**, bought from the market, and keep holding both: you earn a **permanent OG badge** and a Send Power boost that adds on top of everything above. There is **one standard**; only *when* you got in changes the size.
 
 | Tier | Multiplier | Entry window (days from each coin's launch) | Binding close* |
 |---|---:|---|---|
@@ -382,12 +382,23 @@ Hold **both $Send and $GWC**, bought from the market, and keep holding both: you
 
 **Fail‑closed, always.** Every scan replays your wallet's full transfer history for the coin and must reconcile exactly with the chain's `balanceOf` before anything is written. A read that cannot be completed — explorer throttling, a dropped page — is retried later, never recorded as an answer, so nobody is denied a badge by an outage. Verification stays open for **90 days after the last window closes** for the same reason; what you *earned* is fixed by your buy timestamp, so late scanning can never manufacture a tier.
 
+### 3.12 Biggest Sender — the weekly competition 🏆
+
+A fresh race every week, run by the server on its own. Every **Monday 00:00 UTC** (the same ISO week the community board uses) the Biggest Sender board resets to zero, so the week's standings are only what you earned **inside** it. When the week ends, the game master settles it without anyone having to visit:
+
+- The **top 10** each take a rung of the prize ladder **by finishing place** — **#1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10** (`WEEK_PRIZES`; tied places share a rung; recorded in the `competitions` row) — added on top of everything they earn for the **whole of the following week**, alongside the Holder Boost, OG, community and arcade boosts.
+- **A prize never counts toward the next week's standings.** Every award records what it would have paid without a prize (`points_events.comp_amount`), and the board ranks that — what you did, with any prize you were carrying taken back out. Last week's winners race on the same footing as everyone else, so the same people can't buy the board with the boost they just won.
+- Ties share a rank, as on the all-time board; the ten prize places are the top ten rows by points, then account age.
+- The deploy week is the first race. Nothing is paid retroactively from history, and a week is only ever settled once.
+
+The board is public at `GET /api/competition` — this week's top 20, the clock, your own row, last week's winners and what they drew. On the dashboard, toggle **The Arena** to 🏆 Biggest Senders.
+
 ## 4. How to participate — in 4 steps
 
 1. **Get a wallet** and add Robinhood Chain (Robinhood Wallet supports it natively; any EVM wallet works).
 2. **Grab some $SEND / $GWC** using the how‑to‑buy guide and the in‑page swap — always verify the contract address first.
 3. **Create your account** (wallet, email, Google, Facebook, X, or Instagram), connect your wallet read‑only, and claim your unique @handle.
-4. **Send it.** Post on the Send Wall, join or start a **community** for a flat 10×, make and follow Send Calls, react and vote, track wallets, ride the New Pairs Radar, and stack Send Power — hold and diamond‑hand to multiply it all.
+4. **Send it.** Post on the Send Wall, join or start a **community** for a flat 10×, make and follow Send Calls, react and vote, track wallets, ride the New Pairs Radar, and stack Send Power — hold and diamond‑hand to boost it all.
 
 ---
 
