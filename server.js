@@ -493,7 +493,9 @@ for (const col of [
   "ALTER TABLE api_keys ADD COLUMN wallets_idx TEXT",
   "ALTER TABLE api_keys ADD COLUMN expires_at INTEGER",                        // one year from mint for burn-backed keys; NULL = never (Gold OG)
   "ALTER TABLE api_keys ADD COLUMN source TEXT NOT NULL DEFAULT 'burn'",       // burn | og_gold
-  "ALTER TABLE api_keys ADD COLUMN consumed_wei TEXT",                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "ALTER TABLE api_keys ADD COLUMN consumed_wei TEXT",
+  "CREATE INDEX IF NOT EXISTS idx_arcade_day ON arcade_rounds(day)",                                        // the hub counts today's flights every 8 s
+  "CREATE INDEX IF NOT EXISTS idx_users_arcade_boost ON users(arcade_boost_until) WHERE arcade_boost > 1", // …and the pilots boosted right now                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 // Performance indices — added AFTER the migrations so the score/points columns they reference exist.
@@ -1067,7 +1069,7 @@ async function resolveTokensInText(text) {
 }
 // community for a token (cheap: communities are few) — used to tag tokens site-wide
 function communityForToken(addr) {
-  const c = db.prepare('SELECT id, status, member_count, qual_count, official FROM communities WHERE token_addr = ? COLLATE NOCASE').get(String(addr || '').toLowerCase());
+  const c = db.prepare('SELECT id, status, member_count, qual_count, official, demo FROM communities WHERE token_addr = ? COLLATE NOCASE AND demo = 0').get(String(addr || '').toLowerCase()); // the sandbox has no token: it tags nothing
   return c ? { id: c.id, status: c.status, memberCount: c.member_count, qualCount: c.qual_count, official: !!c.official, demo: !!c.demo } : null;
 }
 async function rpc(method, params) {
@@ -1708,7 +1710,9 @@ function communityCardView(c, me) {
     id: c.id, token: c.token_addr, pair: c.pair_addr, symbol: c.symbol, name: c.name,
     image: b.imageUrl || null, banner: b.header || null,
     status: c.status, memberCount: c.member_count, qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count),
-    holders: c.c_holders, mcap: c.c_mc, price: c.c_price, priceChange: c.c_pc24, liq: c.c_liq,
+    // the sandbox has no token: its market fields are null and the company's stock quote rides in `stock`
+    holders: c.demo ? null : c.c_holders, mcap: c.demo ? null : c.c_mc, price: c.demo ? null : c.c_price, priceChange: c.demo ? null : c.c_pc24, liq: c.demo ? null : c.c_liq,
+    stock: c.demo ? stockView() : null,
     level: levelForXp(c.xp), activity: Math.round(act * 10) / 10, activityTier: actTier(act),
     official: !!c.official, // the $Send / $GWC house communities — pinned first, always live
     demo: !!c.demo,         // the open sandbox: joinable with no tokens, and grants no multiplier
@@ -1722,20 +1726,105 @@ let officialSeedTimer = null;
 // tokens at all, so a newcomer can try posting, proposing, voting and snapshots before they own
 // anything. It is pointed at the chain's WETH contract so the snapshot feature reads real on-chain
 // holders rather than inventing data. Deliberately grants no Send Power multiplier — see joinCommunity.
-const demoToken = () => WETH_ADDR.toLowerCase();   // resolved lazily: WETH_ADDR is declared further down
+/* ===== The sandbox's brand: the listed company behind the chain, not a token ==========================
+   The open sandbox is branded for Robinhood Markets, Inc. (NASDAQ: HOOD) — the public company whose app and
+   chain this site runs on — and the numbers it shows are the STOCK's, read from public quote endpoints,
+   never a token's (the first version keyed it to WETH and so wore WETH's price, cap and holder count as if
+   they were its own). Sources are tried in order and parsed to one shape; a quote that cannot be read is
+   null, never guessed, and one that could not be re-read says it is stale. No Robinhood artwork or marks are
+   used anywhere: the site brands it with its own emoji and plain naming, and every view carries the
+   not-affiliated line. A stock cannot be bought, held or swapped here, and nothing about it is advice. */
+const DEMO_STOCK = { symbol: 'HOOD', name: 'Robinhood Markets', longName: 'Robinhood Markets, Inc.', exchange: 'NASDAQ',
+  quoteUrl: 'https://www.nasdaq.com/market-activity/stocks/hood', irUrl: 'https://investors.robinhood.com' };
+// a synthetic key: no contract lives at this address, so no real token's tag or market data can ever attach to the sandbox
+const DEMO_TOKEN = '0x' + crypto.createHash('sha256').update('justsendit:sandbox:' + DEMO_STOCK.symbol).digest('hex').slice(0, 40);
+const demoToken = () => DEMO_TOKEN;
+const STOCK_TTL = 5 * 60e3, STOCK_STALE_MAX = 24 * 36e5;
+let stockCache = { at: 0, val: null, fetching: false, lastErr: 0 };
+const qnum = s => { if (s == null) return null; const t = String(s).replace(/[$,%\s]/g, ''); if (t === '' || t === '-' || t === '+') return null; const n = Number(t); return isFinite(n) ? n : null; }; // a blank field is no figure, not zero
+const qcap = s => { const m = /^([\d.]+)([KMBT])?$/i.exec(String(s || '').replace(/[$,\s]/g, '')); if (!m) return null; const mult = { K: 1e3, M: 1e6, B: 1e9, T: 1e12 }[(m[2] || '').toUpperCase()] || 1; return Number(m[1]) * mult; };
+function parseCnbcQuote(j) {
+  const q = j && j.FormattedQuoteResult && j.FormattedQuoteResult.FormattedQuote && j.FormattedQuoteResult.FormattedQuote[0];
+  if (!q || !(qnum(q.last) > 0)) return null;
+  const t = q.last_time ? Date.parse(q.last_time) : NaN;
+  return { price: qnum(q.last), change: qnum(q.change), changePct: qnum(q.change_pct), prevClose: qnum(q.previous_day_closing), open: qnum(q.open), high: qnum(q.high), low: qnum(q.low), volume: qnum(q.volume), marketCap: qcap(q.mktcapView),
+    week52High: qnum(q.yrhiprice), week52Low: qnum(q.yrloprice), marketState: q.curmktstatus === 'REG_MKT' ? 'Open' : 'Closed', asOfText: q.last_timedate || null, asOf: isFinite(t) ? t : null,
+    exchange: q.exchange || null, currency: q.currencyCode || 'USD', source: 'CNBC' };
+}
+function parseYahooQuote(j) {
+  const r = j && j.chart && j.chart.result && j.chart.result[0], m = r && r.meta; if (!m || !(Number(m.regularMarketPrice) > 0)) return null;
+  const prev = m.chartPreviousClose != null ? Number(m.chartPreviousClose) : (m.previousClose != null ? Number(m.previousClose) : null);
+  const price = Number(m.regularMarketPrice), change = prev != null ? price - prev : null;
+  const n = v => (v != null && isFinite(Number(v)) ? Number(v) : null);
+  return { price, change, changePct: change != null && prev ? change / prev * 100 : null, prevClose: prev, open: null, high: n(m.regularMarketDayHigh), low: n(m.regularMarketDayLow), volume: n(m.regularMarketVolume), marketCap: null,
+    week52High: n(m.fiftyTwoWeekHigh), week52Low: n(m.fiftyTwoWeekLow), marketState: null, asOfText: null, asOf: m.regularMarketTime ? Number(m.regularMarketTime) * 1000 : null,
+    exchange: /NMS|NASDAQ/i.test(m.exchangeName || '') ? 'NASDAQ' : (m.fullExchangeName || m.exchangeName || null), currency: m.currency || 'USD', source: 'Yahoo Finance' };
+}
+// The site asks for the quote AS ITSELF: a truthful User-Agent, no forged Origin/Referer, no browser impersonation.
+// Nasdaq's endpoint only answers requests dressed up as nasdaq.com's own web app, so it is not used. These two answer
+// an honest identity today; they are still undocumented, browser-facing feeds, so the source is credited wherever the
+// figure appears and the operator can turn the live figure off with STOCK_QUOTE=0 (the page then shows no price at
+// all — never a stale or invented one). For production, a licensed quote feed is the right long-term source.
+const STOCK_QUOTE_LIVE = process.env.STOCK_QUOTE !== '0';
+const STOCK_SOURCES = [
+  { url: 'https://quote.cnbc.com/quote-html-webservice/restQuote/symbolType/symbol?symbols=' + DEMO_STOCK.symbol + '&requestMethod=itv&noform=1&partnerId=2&fund=1&exthrs=1&output=json', parse: parseCnbcQuote },
+  { url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + DEMO_STOCK.symbol + '?range=1d&interval=1d', parse: parseYahooQuote },
+];
+const QUOTE_MAX_BYTES = 256 * 1024;
+async function fetchQuoteJson(url) {
+  const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(url, { headers: { 'User-Agent': 'JustSendIt/1.0 (+' + BASE_URL + '; one stock quote for one page, at most once per 5 minutes)', Accept: 'application/json' }, signal: ac.signal, redirect: 'error' });
+    if (!r.ok) return null;
+    const len = Number(r.headers.get('content-length') || 0); if (len > QUOTE_MAX_BYTES) return null;
+    const txt = await r.text(); if (txt.length > QUOTE_MAX_BYTES) return null;
+    return JSON.parse(txt);
+  } catch { return null; } finally { clearTimeout(tm); }
+}
+async function refreshStock() {
+  if (stockCache.fetching) return;
+  stockCache.fetching = true;
+  try {
+    for (const src of STOCK_SOURCES) {
+      const j = await fetchQuoteJson(src.url); let q = null;
+      try { q = j && src.parse(j); } catch { q = null; }
+      if (q && q.price > 0) { stockCache = { at: now(), val: { ...q, fetchedAt: now() }, fetching: false, lastErr: 0 }; return; }
+    }
+    stockCache.lastErr = now();           // every source failed: keep whatever we had, and say so
+  } finally { stockCache.fetching = false; }
+}
+function maybeRefreshStock() { if (STOCK_QUOTE_LIVE && now() - stockCache.at > STOCK_TTL && !stockCache.fetching && now() - stockCache.lastErr > 60e3) refreshStock().catch(() => {}); }
+// what the sandbox's views carry: the company facts always, the quote only when one was actually read
+function stockView() {
+  maybeRefreshStock();
+  const v = stockCache.val && now() - stockCache.val.fetchedAt <= STOCK_STALE_MAX ? stockCache.val : null;
+  // stale = a re-read was attempted and every source failed since this quote was taken (the refresh is lazy, so
+  // simply being the first viewer after a quiet spell is not staleness — the as-of time already says how old it is)
+  if (!STOCK_QUOTE_LIVE) return { ...DEMO_STOCK, price: null, stale: false, live: false };   // the operator turned the live figure off
+  return v ? { ...DEMO_STOCK, ...v, stale: stockCache.lastErr > v.fetchedAt, live: true } : { ...DEMO_STOCK, price: null, stale: false, live: true };
+}
 function seedDemoCommunity() {
   try {
     let owner = db.prepare('SELECT id FROM users WHERE system = 1').get();
     if (!owner) return; // the official seeder creates the system account; it runs first
-    const ex = db.prepare('SELECT id FROM communities WHERE token_addr = ? COLLATE NOCASE').get(demoToken());
-    if (ex) { db.prepare("UPDATE communities SET demo=1, official=1, status='live' WHERE id=?").run(ex.id); return; }
+    // an existing sandbox (by flag, or by the WETH key the first version used) is re-branded in place, and the
+    // token-shaped market fields a real token once filled are cleared — the stock quote replaces them
+    const ex = db.prepare('SELECT id FROM communities WHERE demo = 1').get() || db.prepare('SELECT id FROM communities WHERE token_addr = ? COLLATE NOCASE').get(WETH_ADDR.toLowerCase());
+    if (ex) {
+      // demo, not official: the 🏠 Official badge means "run by the site" beside a token you hold for 10× — neither is true here,
+      // and a listed company's name must not sit under anything that reads as an endorsement either way
+      db.prepare("UPDATE communities SET demo=1, official=0, status='live', symbol=?, name=?, token_addr=?, pair_addr=?, c_price=NULL, c_mc=NULL, c_pc24=NULL, c_liq=NULL, c_holders=NULL WHERE id=?")
+        .run(DEMO_STOCK.symbol, DEMO_STOCK.name, demoToken(), demoToken(), ex.id);
+      maybeRefreshStock(); return;
+    }
     db.prepare(`INSERT INTO communities (creator_id, token_addr, pair_addr, symbol, name, brand, status, official, demo,
                 founder_paid, went_live_at, creator_ip, created_at)
-                VALUES (?,?,?,?,?,?,'live',1,1,1,?,NULL,?)`)
-      .run(owner.id, demoToken(), demoToken(), 'RHC', 'Robinhood Chain',
+                VALUES (?,?,?,?,?,?,'live',0,1,1,?,NULL,?)`)
+      .run(owner.id, demoToken(), demoToken(), DEMO_STOCK.symbol, DEMO_STOCK.name,
            JSON.stringify({ enhanced: false, boosted: 0, imageUrl: null, header: null, websites: [], socials: [] }),
            now(), now());
-    console.log('🏘️ seeded the open Robinhood Chain sandbox community');
+    console.log('🏘️ seeded the open sandbox community — branded for ' + DEMO_STOCK.longName + ' (' + DEMO_STOCK.exchange + ': ' + DEMO_STOCK.symbol + ')');
+    maybeRefreshStock();
   } catch (e) { console.error('demo community seed failed:', e && e.message); }
 }
 async function seedOfficialCommunities() {
@@ -1826,7 +1915,7 @@ function joinCommunity(me, cid, ip, holds) {
 let lastCommRefresh = 0, commRefreshing = false;
 function maybeRefreshCommunities() { if (now() - lastCommRefresh > 45000 && !commRefreshing) { lastCommRefresh = now(); commRefreshing = true; refreshCommunities().catch(() => {}).finally(() => { commRefreshing = false; }); } }
 async function refreshCommunities() {
-  const rows = db.prepare("SELECT id, token_addr FROM communities").all();
+  const rows = db.prepare("SELECT id, token_addr FROM communities WHERE demo = 0").all(); // the sandbox has no token to price
   const tokens = [...new Set(rows.map(r => r.token_addr.toLowerCase()))];
   if (!tokens.length) return;
   const byToken = {};
@@ -1992,9 +2081,9 @@ function gamifySummary(u) {
     arcade: arcadeState(u.id),        // today's Rocket Run boost — stacks on Holder × OG × community
     weekBoost: weekBoostState(u.id),  // last week's Biggest Sender prize, if any — stacks the same way
     checkedInToday: !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + u.id + ':' + ymd()),
-    communities: db.prepare('SELECT c.id, c.name, c.symbol, c.token_addr, c.xp, c.status, cm.conviction_xp FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ? AND cm.qualified = 1 ORDER BY cm.conviction_xp DESC').all(u.id).map(c => {
+    communities: db.prepare('SELECT c.id, c.name, c.symbol, c.token_addr, c.xp, c.status, c.demo, cm.conviction_xp FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ? AND cm.qualified = 1 ORDER BY cm.conviction_xp DESC').all(u.id).map(c => {
       const cl = commLevelInfo(c.xp), cv = commLevelInfo(c.conviction_xp);
-      return { id: c.id, name: c.name, symbol: c.symbol, status: c.status, commLevel: cl.level, commInto: cl.intoLevel, commSpan: cl.spanLevel, conviction: { level: cv.level, title: convictionTitleFor(cv.level), into: cv.intoLevel, span: cv.spanLevel } };
+      return { id: c.id, name: c.name, symbol: c.symbol, status: c.status, demo: !!c.demo, commLevel: cl.level, commInto: cl.intoLevel, commSpan: cl.spanLevel, conviction: { level: cv.level, title: convictionTitleFor(cv.level), into: cv.intoLevel, span: cv.spanLevel } };
     }),
     callAllowance: callAllowance(u), // dynamic daily Send Call allowance (earned limit × diamond boost, minus today's used)
     holder: h ? {
@@ -3882,7 +3971,7 @@ function competitionsPublic() {
   const boosted = db.prepare('SELECT COUNT(*) n FROM users WHERE arcade_boost > 1 AND arcade_boost_until > ?').get(t).n;
   const og = ogCampaign();
   return {
-    biggestSender: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, top: rows.slice(0, WEEK_WINNERS).map(view), entrants: rows.length,
+    biggestSender: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, top: rows.filter(r => r.rank <= WEEK_WINNERS).map(view), entrants: rows.length, // the same predicate the payout uses: a tie at #10 is inside
       last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, excludedFromStandings: true } },
     sendCalls: { window: 'week', top: calls.slice(0, 10), entrants: calls.length, cap: CALL_X_CAP, minLiq: MIN_CALL_LIQ, all: calls },
     communities: { week: w, board: comms.map((c, i) => { const b = commBrand(c); return { id: c.id, symbol: c.symbol, name: c.name, image: b.imageUrl || null, rank: i + 1, xpWeek: c.xp_week, memberCount: c.member_count, level: levelForXp(c.xp), official: !!c.official, demo: !!c.demo }; }) },
@@ -6205,7 +6294,7 @@ const server = http.createServer(async (req, res) => {
             bumpActivity(cid, W_prop);
             // tell the roll a vote has opened — capped, and only people who can actually vote
             const voters = db.prepare('SELECT user_id FROM community_members WHERE community_id=? AND qualified=1 AND user_id<>? LIMIT ?').all(cid, me.id, PROP_NOTIFY_CAP);
-            for (const v of voters) notify(v.user_id, '\uD83D\uDDF3\uFE0F', 'New $' + c.symbol + ' proposal open for your vote: ' + pr.title, 'community');
+            for (const v of voters) notify(v.user_id, '\uD83D\uDDF3\uFE0F', 'New ' + (c.demo ? 'sandbox' : '$' + c.symbol) + ' proposal open for your vote: ' + pr.title, 'community');
             const fresh = db.prepare('SELECT * FROM proposals WHERE id=?').get(pid);
             return send(res, 200, { proposal: proposalView(fresh, me, c, cmRow) });
           }
@@ -6347,12 +6436,13 @@ const server = http.createServer(async (req, res) => {
           }
           if (sub === 'snapshots' && req.method === 'GET') {
             const rows = db.prepare('SELECT * FROM holder_snapshots WHERE community_id=? ORDER BY id DESC LIMIT 40').all(cid);
-            return send(res, 200, { snapshots: rows.map(s => snapshotView(s, false)) });   // newest first
+            return send(res, 200, { snapshots: rows.map(s => snapshotView(s, false)), sandbox: !!c.demo });   // newest first; the sandbox has no token, so its page hides the feature
           }
           if (sub === 'snapshots' && req.method === 'POST') {
             if (!me) return bad(res, 'sign in first', 401);
             if (blockReadOnly(res, me)) return;
             if (c.status !== 'live') return bad(res, 'this community is not live yet', 403);
+            if (c.demo) return bad(res, 'the sandbox has no token, so there is nothing to snapshot', 400); // a walk of a synthetic address would end in a stored record blaming the explorer
             const cmS = db.prepare('SELECT qualified FROM community_members WHERE community_id=? AND user_id=?').get(cid, me.id);
             if (!cmS || !cmS.qualified) return bad(res, 'only verified members of this community can take a snapshot', 403);
             if (snapRunning.has(cid)) return bad(res, 'a snapshot is already running for this community', 409);

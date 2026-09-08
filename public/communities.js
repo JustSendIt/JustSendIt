@@ -12,24 +12,36 @@
 
   function cardHTML(c) {
     const banner = c.banner ? '<span class="comm-card-banner" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></span>' : '<span class="comm-card-banner comm-card-banner-none"></span>';
-    const logo = c.image ? '<img class="comm-card-logo" src="' + esc(c.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="comm-card-logo comm-card-logo-none" aria-hidden="true">🪙</span>';
+    const logo = c.image ? '<img class="comm-card-logo" src="' + esc(c.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="comm-card-logo comm-card-logo-none" aria-hidden="true">' + (c.demo ? '📈' : '🪙') + '</span>';
+    // the sandbox is branded for a listed company: its numbers are the stock's, labelled as such, never a token's
+    const st = c.demo && c.stock ? c.stock : null, hasQ = !!(st && st.price != null);
     const tierClass = 'tier-' + String(c.activityTier || 'Dormant').toLowerCase();
-    const statusPill = (c.official ? '<span class="comm-pill comm-pill-official" title="Run by the site itself">🏠 Official</span> ' : '') + (c.status === 'live'
+    const statusPill = (c.demo ? '<span class="comm-pill comm-pill-sandbox" title="Open to everyone — no token, no wallet, and no multiplier">🧪 Sandbox · stock, not a token</span> ' : '') + (c.official ? '<span class="comm-pill comm-pill-official" title="Run by the site itself">🏠 Official</span> ' : '') + (c.status === 'live'
       ? '<span class="comm-pill comm-pill-live">🟢 LIVE · Lv ' + c.level + '</span>'
       : '<span class="comm-pill comm-pill-pending" role="progressbar" aria-valuenow="' + c.qualCount + '" aria-valuemin="0" aria-valuemax="' + c.need + '" aria-label="' + c.qualCount + ' of ' + c.need + ' to go live">⏳ ' + c.qualCount + '/' + c.need + ' to LIVE</span>');
     const goLiveBar = c.status === 'live' ? '' :
       '<span class="comm-golive" aria-hidden="true"><span class="comm-golive-fill" style="width:' + Math.min(100, Math.round(c.qualCount / c.need * 100)) + '%"></span></span>';
     return '<li class="comm-card ' + tierClass + (c.official ? ' comm-card-official' : '') + '">' +
-      '<a class="comm-card-link" href="community.html?id=' + c.id + '" aria-label="' + esc(c.name) + ' $' + esc(c.symbol) + ' community, ' + c.memberCount + ' members, ' + fmtNum(c.holders) + ' holders, ' + fmtUsd(c.mcap) + ' market cap, ' + (c.priceChange != null ? (c.priceChange >= 0 ? 'up ' : 'down ') + Math.abs(c.priceChange).toFixed(1) + '% 24h, ' : '') + (c.status === 'live' ? 'live level ' + c.level : c.qualCount + ' of ' + c.need + ' to go live') + '">' +
+      '<a class="comm-card-link" href="community.html?id=' + c.id + '" aria-label="' + esc(c.name) + ' $' + esc(c.symbol) + (c.demo
+        ? ' sandbox community, ' + c.memberCount + ' members, stock ' + (hasQ ? '$' + Number(st.price).toFixed(2) + (st.changePct != null ? ', ' + (st.changePct >= 0 ? 'up ' : 'down ') + Math.abs(st.changePct).toFixed(2) + '% today' : '') : 'quote unavailable') + ', '
+        : ' community, ' + c.memberCount + ' members, ' + fmtNum(c.holders) + ' holders, ' + fmtUsd(c.mcap) + ' market cap, ' + (c.priceChange != null ? (c.priceChange >= 0 ? 'up ' : 'down ') + Math.abs(c.priceChange).toFixed(1) + '% 24h, ' : '')) + (c.status === 'live' ? 'live level ' + c.level : c.qualCount + ' of ' + c.need + ' to go live') + '">' +
         banner +
         '<span class="comm-card-body">' +
           '<span class="comm-card-head">' + logo + '<span class="comm-card-id"><b class="comm-card-sym">$' + esc(c.symbol) + '</b><span class="comm-card-name">' + esc(c.name) + '</span></span></span>' +
-          '<span class="comm-card-metrics">' +
+          (c.demo
+            ? '<span class="comm-card-metrics">' +
+              '<span title="Members">👥 <b>' + fmtNum(c.memberCount) + '</b><span class="sr-only"> members</span></span>' +
+              '<span title="Stock price (not a token)">📈 <b>' + (hasQ ? '$' + Number(st.price).toFixed(2) : '—') + '</b><span class="sr-only"> ' + esc(c.symbol) + ' stock price</span></span>' +
+              '<span title="Listed on">🏦 <b>' + esc((st && st.exchange) || 'NASDAQ') + '</b><span class="sr-only"> listed stock, not a token</span></span>' +
+              '<span title="Change today">' + (hasQ && st.changePct != null ? chgChip(st.changePct) : '<span class="price-chip">—</span>') + '<span class="sr-only"> change today</span></span>' +
+            '</span>'
+            : '<span class="comm-card-metrics">' +
             '<span title="Members">👥 <b>' + fmtNum(c.memberCount) + '</b><span class="sr-only"> members</span></span>' +
             '<span title="Holders">🪙 <b>' + fmtNum(c.holders) + '</b><span class="sr-only"> holders</span></span>' +
             '<span title="Market cap">💰 <b>' + fmtUsd(c.mcap) + '</b><span class="sr-only"> market cap</span></span>' +
             '<span title="Price change (24h)">' + chgChip(c.priceChange) + '<span class="sr-only"> price change, 24 hours</span></span>' +
-          '</span>' +
+          '</span>') +
+          (c.demo ? '<span class="comm-card-stockline">' + (hasQ ? 'Stock · quote from ' + esc(st.source) + (st.asOfText ? ' · as of ' + esc(st.asOfText) : (st.asOf ? ' · as of ' + esc(new Date(st.asOf).toUTCString().slice(0, 22)) + ' UTC' : '')) + (st.stale ? ' · <b>stale</b>' : '') : (st && st.live === false ? 'Stock · the live quote is switched off' : 'Stock · quote unavailable right now')) + ' · not affiliated with Robinhood Markets, Inc.</span>' : '') +
           '<span class="comm-card-foot">' +
             '<span class="comm-pulse ' + tierClass + '" title="Community activity"><i></i> ' + esc(c.activityTier) + '</span>' +
             statusPill +
@@ -111,9 +123,9 @@
     const tierClass = 'tier-' + (String(c.activityTier || 'Dormant').toLowerCase().replace(/[^a-z]/g, '') || 'dormant');
     const medal = WK_MEDAL[rank] ? '<span class="wk-medal" aria-hidden="true">' + WK_MEDAL[rank] + '</span>' : '';
     const logo = c.image ? '<img class="wk-logo" src="' + esc(c.image) + '" alt="" loading="lazy" decoding="async">'
-                         : '<span class="wk-logo wk-logo-none" aria-hidden="true">🪙</span>';
+                         : '<span class="wk-logo wk-logo-none" aria-hidden="true">' + (c.demo ? '📈' : '🪙') + '</span>'; // the sandbox is a stock, not a coin
     const you = c.joined ? '<span class="wk-you">✅ you’re in</span>' : '';
-    const label = '#' + rank + ' ' + c.name + ' $' + c.symbol + ' — ' + fmtNum(xp) + ' points this week, community level '
+    const label = '#' + rank + ' ' + c.name + ' $' + c.symbol + (c.demo ? ' (sandbox — a listed stock, not a token; no multiplier)' : '') + ' — ' + fmtNum(xp) + ' points this week, community level '
       + c.level + ', activity ' + c.activityTier + (c.joined ? ', you’re a member' : '');
     return '<li class="wk-item' + (top ? ' wk-top wk-r' + rank : '') + '">' +
       '<a class="wk-link" href="community.html?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +

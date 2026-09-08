@@ -414,11 +414,13 @@
 
   // 🏘️ Communities & Conviction — the flat 10× status + your community/conviction levels
   function communityBlock(g) {
-    const live = (g.communities || []).filter(c => c.status === 'live');
+    const all = g.communities || [], live = all.filter(c => c.status === 'live' && !c.demo), sandbox = all.find(c => c.demo);
+    // the sandbox is a membership, not a multiplier: it is named, and never counted toward "10× active"
+    const sandboxLine = sandbox ? '<p class="comm-sandbox-line">🧪 You are also in the <a href="community.html?id=' + sandbox.id + '">sandbox</a> ($' + esc(sandbox.symbol) + ' — a listed stock, not a token) — it grants no multiplier.</p>' : '';
     if (!live.length) {
       return '<div class="og-block comm-invite"><span class="og-block-badge">🏘️</span>' +
         '<div class="og-block-body"><b>Join a community for a flat 10× Send Power.</b> Rally around any token — a community goes <b>live at 10 members</b>, and while you’re in <b>≥1 live</b> one, <b>a flat 10× boost (+9×) is added to every point you earn</b>, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Post, react &amp; comment on its wall to raise your <b>community member level</b> and help the community level up. ' +
-        '<a class="gobj-link" href="communities.html">Browse communities →</a></div></div>';
+        '<a class="gobj-link" href="communities.html">Browse communities →</a>' + sandboxLine + '</div></div>';
     }
     const bar = (label, lvl, into, span, cls) => {
       const pct = span ? Math.min(100, Math.round(into / span * 100)) : 100;
@@ -433,7 +435,7 @@
       '</a>').join('');
     return '<div class="og-block comm-block"><span class="og-block-badge comm-block-badge">⚡ 10×</span>' +
       '<div class="og-block-body"><b>10× Send Power active.</b> You’re in ' + live.length + ' live communit' + (live.length === 1 ? 'y' : 'ies') + ' — a flat <b>10× boost (+9×)</b> is added to every point you earn, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Keep posting, reacting &amp; commenting on their walls to raise your <b>member level</b> and help each community level up.' +
-      '<div class="comm-mini-grid">' + rows + '</div></div></div>';
+      '<div class="comm-mini-grid">' + rows + '</div>' + sandboxLine + '</div></div>';
   }
 
   /* =========================================================================

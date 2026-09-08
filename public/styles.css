@@ -3565,3 +3565,12 @@ video.post-avatar, video.c-ava, video.cm-ava, video.gb-ava, video.lb-ava, video.
 .dk-note { font-size: 0.86rem; color: var(--text-dim); line-height: 1.55; }
 pre.dk-pre { overflow-x: auto; padding: 0.75rem 0.9rem; border-radius: var(--r-2); background: var(--ink); border: 1px solid var(--hair); font-size: 0.8rem; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .np-caret-btn, .dk-bar > span { transition: none; } }
+
+/* ===== 21. The sandbox community — branded for a listed company, not a token ===== */
+.comm-stock-note { margin: 0 0 0.9rem; font-size: 0.8rem; line-height: 1.55; color: var(--text-dim); padding: 0.55rem 0.7rem; border-radius: var(--r-2); background: rgba(159,224,255,0.06); border: 1px solid rgba(159,224,255,0.28); }
+.comm-stock-note b { color: var(--text); }
+.comm-pill-sandbox { background: rgba(159,224,255,0.12); color: var(--diamond); border-color: rgba(159,224,255,0.4); }
+.comm-card-stockline { display: block; font-size: 0.72rem; line-height: 1.45; color: var(--text-dim); margin: 0.35rem 0 0.2rem; }
+.comm-card-stockline b { color: var(--gold); }
+.comm-sandbox-line { margin: 0.6rem 0 0; font-size: 0.8rem; line-height: 1.5; color: var(--text-dim); }
+.comm-sandbox-line a { color: var(--diamond); }

@@ -72,7 +72,7 @@
     }).join('') + '</ol>';
   }
   function list(rows, prev, label) {
-    const rest = rows.filter(u => u.rank > 3); if (!rest.length) return '';
+    const rest = rows.slice(3); if (!rest.length) return '';   // positional, like the podium — a shared rank in the top three must not drop a row
     return '<ol class="cmp-list" aria-label="Places ' + rest[0].rank + ' to ' + rest[rest.length - 1].rank + '">' + rest.map(u =>
       '<li' + (u.me ? ' class="is-me"' : '') + '><span class="cmp-rank">#' + u.rank + '</span>' + ava(u, 'cmp-ava cmp-ava--sm') + nameLink(u) + ogb(u) + move(prev, u) + '<span class="cmp-val">' + label(u) + '</span></li>').join('') + '</ol>';
   }
@@ -83,8 +83,9 @@
         '<h3 class="cmp-card-h" id="cmp-' + id + '-h"><span class="cmp-card-ico" aria-hidden="true">' + o.emoji + '</span>' + esc(o.title) + '</h3>' +
         '<span class="cmp-head-tools">' +
           (o.live ? '<span class="cmp-live-pill"><i aria-hidden="true"></i>' + esc(o.live) + '</span>' : '') +
-          (o.how ? '<span class="cmp-tipwrap"><button class="cmp-info" type="button" aria-expanded="false" aria-controls="cmp-' + id + '-tip" aria-label="How ' + esc(o.title) + ' works">ⓘ</button><div class="cmp-tip" role="tooltip" id="cmp-' + id + '-tip">' + o.how + '</div></span>' : '') +
+          (o.how ? '<button class="cmp-info" id="cmp-' + id + '-info" type="button" aria-expanded="false" aria-controls="cmp-' + id + '-tip" aria-describedby="cmp-' + id + '-tip" aria-label="How ' + esc(o.title) + ' works">ⓘ</button>' : '') +
         '</span>' +
+        (o.how ? '<div class="cmp-tip" role="tooltip" id="cmp-' + id + '-tip">' + o.how + '</div>' : '') +
       '</header>' +
       (o.clock ? '<p class="cmp-clock">' + esc(o.clock.label) + ' <b class="cmp-count" data-ends="' + o.clock.endsAt + '">' + fmtLeft(o.clock.endsAt - now) + '</b>' +
         (o.clock.startsAt ? '<span class="cmp-prog" aria-hidden="true"><span style="width:' + Math.max(0, Math.min(100, Math.round((now - o.clock.startsAt) / (o.clock.endsAt - o.clock.startsAt) * 100))) + '%"></span></span>' : '') + '</p>' : '') +
@@ -106,7 +107,7 @@
       const inside = bs.me.rank <= n, edge = rows[n - 1];
       me = 'You are <b>#' + bs.me.rank + '</b> with <b>' + nf(bs.me.points) + '</b> Send Power' +
         (inside ? ' — inside the prize places: <b>#' + bs.me.rank + ' pays ' + ladder[bs.me.rank - 1] + '×</b>. Hold it. 🏆'
-          : edge ? ' — <b>' + nf(edge.points - bs.me.points + 1) + '</b> more breaks into the top ' + n + '.' : '.');
+          : edge ? ' — <b>' + nf(Math.max(1, edge.points - bs.me.points)) + '</b> more draws level with #' + edge.rank + ', and a tie shares the rung.' : '.');
     } else if (bs.me) me = rows.length < n ? 'The top ' + n + ' is not full yet — your next post, reaction or Send Call puts you on it.' : 'You have not scored this week — your next post, reaction or Send Call counts.';
     if (bs.myBoost && bs.myBoost.boost > 1) me += ' <span class="cmp-carry">🏆 Carrying <b>' + bs.myBoost.boost + '×</b> from week ' + esc(bs.myBoost.wonIn || '') + ' until ' + esc(dateUTC(bs.myBoost.until)) + '.</span>';
     const last = bs.last && bs.last.winners && bs.last.winners.length
@@ -126,42 +127,50 @@
     const val = u => '<b>' + xf(u.totalX) + '</b> <small>' + u.calls + ' call' + (u.calls === 1 ? '' : 's') + (u.bestGrade ? ' · best ' + esc(u.bestGrade.emoji) : '') + '</small>';
     let me = '';
     if (!ctx.signedIn) me = 'Call a token in public and get paid as it climbs. ' + signInBtn('Sign in to call');
-    else if (sc.me && sc.me.rank) me = 'You are <b>#' + sc.me.rank + '</b> this week at <b>' + xf(sc.me.totalX) + '</b> across ' + sc.me.calls + ' call' + (sc.me.calls === 1 ? '' : 's') + (sc.me.bestGrade ? ' — best ' + esc(sc.me.bestGrade.emoji) + ' ' + esc(sc.me.bestGrade.label) : '') + '.';
-    else if (sc.me) me = 'No call of yours is on this week\'s board. Paste a contract on the Send Wall to make one.';
+    else if (sc.me && sc.me.rank) me = 'You are <b>#' + sc.me.rank + '</b> on the 7-day board at <b>' + xf(sc.me.totalX) + '</b> across ' + sc.me.calls + ' call' + (sc.me.calls === 1 ? '' : 's') + (sc.me.bestGrade ? ' — best ' + esc(sc.me.bestGrade.emoji) + ' ' + esc(sc.me.bestGrade.label) : '') + '.';
+    else if (sc.me) me = 'No call of yours is on the 7-day board. Paste a contract on the Send Wall to make one.';
     return card('calls', {
       emoji: '📣', title: 'Send Calls', live: 'Last 7 days',
       prize: 'Ranked by <b>total peak gain</b> across every call made in the last 7 days (each call counted up to ' + sc.cap + 'x) — a rolling window, so a call drops off the board a week after it was made. A call pays Send Power as it climbs, and most of it for <b>holding in profit</b>.',
-      body: rows.length ? podium(rows, ctx.prev.calls, u => Math.max(0, u.totalX), val) + list(rows, ctx.prev.calls, val) : '<p class="cmp-empty">No calls on the board this week. The first good call leads. 📣</p>',
+      body: rows.length ? podium(rows, ctx.prev.calls, u => Math.max(0, u.totalX), val) + list(rows, ctx.prev.calls, val) : '<p class="cmp-empty">No call on the board in the last 7 days. The first good call leads. 📣</p>',
       me,
       cta: '<a class="btn btn-sm btn-primary" href="wall.html">Make a Send Call</a>',
       how: '<b>A Send Call is a public call on a token.</b> Its gain is tracked from your entry price to its peak, and it is graded: 💪 Solid from +2x, 🔥 Big from +5x, 🚀 Massive from +10x, 🏆 Legendary from +20x. The board adds up every call you made in the last 7 days, each counted up to +' + sc.cap + 'x, so one lucky call cannot carry the week alone. Tokens need at least $' + nf(sc.minLiq) + ' of pooled liquidity to be callable. Calls pay an opening award, a milestone for each whole X, and a hold bonus that grows the longer they stay in profit — bigger still when the people who Sent It on your call are in profit too.',
     });
   }
   function communitiesCard(d, ctx) {
-    const cm = d.communities, board = cm.board || [], max = Math.max(1, ...board.map(c => c.xpWeek));
+    const cm = d.communities, board = cm.board || [], max = Math.max(1, ...board.map(c => c.xpWeek)), hasDemo = board.some(c => c.demo);
     const body = board.length ? '<ol class="cmp-comms" aria-label="Top communities this week">' + board.map(c =>
       '<li' + (c.joined ? ' class="is-me"' : '') + '><span class="cmp-rank">' + (medal[c.rank - 1] || '#' + c.rank) + '</span>' +
-        (c.image ? '<img class="cmp-cava" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="cmp-cava cmp-cava--txt" aria-hidden="true">' + esc(String(c.symbol || '?').slice(0, 3)) + '</span>') +
-        '<span class="cmp-comm-main"><a class="cmp-name" href="community.html?id=' + encodeURIComponent(c.id) + '">$' + esc(c.symbol) + '</a><small>' + esc(c.name) + ' · ' + nf(c.memberCount) + ' member' + (c.memberCount === 1 ? '' : 's') + ' · Lv ' + c.level + (c.joined ? ' · <b>joined ✓</b>' : '') + '</small>' +
+        (c.image ? '<img class="cmp-cava" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="cmp-cava cmp-cava--txt" aria-hidden="true">' + (c.demo ? '📈' : esc(String(c.symbol || '?').slice(0, 3))) + '</span>') +
+        '<span class="cmp-comm-main"><a class="cmp-name" href="community.html?id=' + encodeURIComponent(c.id) + '">$' + esc(c.symbol) + '</a>' +
+          (c.demo ? '<span class="cmp-sandbox" title="Open to everyone: no token, no wallet, no multiplier">🧪 Sandbox · stock, not a token · no 10×</span>' : '') +
+          '<small>' + esc(c.name) + ' · ' + nf(c.memberCount) + ' member' + (c.memberCount === 1 ? '' : 's') + ' · Lv ' + c.level + (c.joined ? ' · <b>joined ✓</b>' : '') + '</small>' +
         '<span class="cmp-xpbar" aria-hidden="true"><span style="width:' + Math.max(4, Math.round(c.xpWeek / max * 100)) + '%"></span></span></span>' +
-        '<span class="cmp-val">' + compact(c.xpWeek) + ' XP</span></li>').join('') + '</ol>'
+        '<span class="cmp-val">' + compact(c.xpWeek) + ' XP</span></li>').join('') + '</ol>' +
+      (hasDemo ? '<p class="cmp-fine">$HOOD is a listed stock, not a token: the sandbox is open to everyone and grants no boost. This site is not affiliated with, endorsed by or sponsored by Robinhood Markets, Inc.</p>' : '')
       : '<p class="cmp-empty">No community has scored this week yet. The first post on a community wall leads. 🏘️</p>';
+    const joinedTok = board.filter(c => c.joined && !c.demo), joinedDemo = board.some(c => c.joined && c.demo);
     return card('comm', {
       emoji: '🏘️', title: 'Community Race', live: 'Week ' + cm.week.key,
       clock: { label: 'Resets in', endsAt: cm.week.endsAt, startsAt: cm.week.startsAt },
       prize: 'Which community earned the most <b>community XP</b> this week. A board, not a payout — the prize is the community\'s level, which is permanent.',
       body,
-      me: ctx.signedIn ? (board.some(c => c.joined) ? 'You are in <b>' + board.filter(c => c.joined).map(c => '$' + esc(c.symbol)).join(', ') + '</b> — every post and reaction there counts for the race.' : 'Join a live community and post there — every member action adds to its week.') : 'Rally around a token: join its community and post there. ' + signInBtn('Sign in to join'),
+      me: ctx.signedIn
+        ? (joinedTok.length ? 'You are in <b>' + joinedTok.map(c => '$' + esc(c.symbol)).join(', ') + '</b> — every post and reaction there counts for the race.' + (joinedDemo ? ' The sandbox races on its own row but pays no boost.' : '')
+          : joinedDemo ? 'You are in the sandbox — it races here but grants no boost. A live <b>token</b> community is what pays the 10×.'
+          : 'Join a live token community and post there — every member action adds to its week.')
+        : 'Rally around a token: join its community and post there. ' + signInBtn('Sign in to join'),
       cta: '<a class="btn btn-sm btn-primary" href="communities.html">Browse communities</a>',
-      how: '<b>Communities level up as their members show up.</b> Posting, reacting and commenting on a community wall earns it community XP, capped per member per day so one person cannot carry it. The weekly bucket resets on its own every Monday at 00:00 UTC; the all-time XP — and the level it buys — stays. Being in at least one live community adds a 10× community boost to your own Send Power stack.',
+      how: '<b>Communities level up as their members show up.</b> Posting, reacting and commenting on a community wall earns it community XP, capped per member per day so one person cannot carry it. The weekly bucket resets on its own every Monday at 00:00 UTC; the all-time XP — and the level it buys — stays. Being in at least one live <i>token</i> community adds a 10× community boost to your own Send Power stack; the sandbox grants none.',
     });
   }
   function ogCard(d, ctx) {
     const o = d.og, now = serverNow(), tiers = [['gold', 3], ['silver', 2], ['bronze', 1]];
-    const rowsHtml = '<ol class="cmp-og" aria-label="OG windows">' + tiers.map(([k, t]) => {
-      const closes = o.closes[k], state = closes <= now ? 'closed' : o.tierNow === t ? 'open' : 'later';
+    const rowsHtml = '<ol class="cmp-og" aria-label="OG windows">' + tiers.map(([k, t], i) => {
+      const closes = o.closes[k], state = closes <= now ? 'closed' : o.tierNow === t ? 'open' : 'later', opensAt = i > 0 ? o.closes[tiers[i - 1][0]] : null;
       return '<li class="cmp-og-row is-' + state + '"><span class="cmp-og-medal" aria-hidden="true">' + medal[3 - t] + '</span><b>OG ' + esc(o.name[t]) + '</b><span class="cmp-og-mult">' + o.mult[t] + '×</span>' +
-        '<span class="cmp-og-state">' + (state === 'closed' ? 'closed ' + esc(dateShort(closes)) : state === 'open' ? '<b>open now</b> · closes ' + esc(dateShort(closes)) : 'opens next · until ' + esc(dateShort(closes))) + '</span></li>';
+        '<span class="cmp-og-state">' + (state === 'closed' ? 'closed ' + esc(dateShort(closes)) : state === 'open' ? '<b>open now</b> · closes ' + esc(dateShort(closes)) : (t === o.tierNow - 1 ? 'opens next, ' : 'opens ') + esc(dateShort(opensAt)) + ' · until ' + esc(dateShort(closes))) + '</span></li>';
     }).join('') + '</ol>';
     const cur = tiers.find(([k, t]) => o.tierNow === t);
     let me = '';
@@ -222,7 +231,7 @@
   function buildHTML(d, ctx) {
     const cards = [biggestSenderCard, sendCallsCard, communitiesCard, ogCard, rocketCard, hallCard].map(f => f(d, ctx)).join('');
     const chips = [['bs', '🏆', 'Biggest Sender'], ['calls', '📣', 'Send Calls'], ['comm', '🏘️', 'Community Race'], ['og', '🏅', 'OG Campaign'], ['rocket', '🚀', 'Rocket Run'], ['all', '👑', 'Hall of Fame']]
-      .map(([id, e, l]) => '<a class="cmp-chip" href="#cmp-' + id + '"><span aria-hidden="true">' + e + '</span>' + l + '</a>').join('');
+      .map(([id, e, l]) => '<a class="cmp-chip" id="cmp-chip-' + id + '" href="#cmp-' + id + '"><span aria-hidden="true">' + e + '</span>' + l + '</a>').join('');
     return { cards, chips };
   }
   window.cmpBuildHTML = buildHTML; // exposed for the headless render probe
@@ -237,23 +246,35 @@
   const prev = (function () { const s = readSnap(); return { bs: s.bs || null, calls: s.calls || null, all: s.all || null }; })();
 
   /* ---------- state ---------- */
-  let data = null, lastJSON = '', pollTimer = null, tickTimer = null, refetchAt = 0, cheered = null;
+  let data = null, painted = null, pending = false, lastJSON = '', pollTimer = null, tickTimer = null, refetchAt = 0, cheered = null;
 
   function ctxNow() {
     const u = (window.AUTH && AUTH.user) ? AUTH.user : null;
     return { signedIn: !!u, username: u ? u.username : null, prev };
   }
+  // A repaint replaces the boards wholesale, so it never happens under someone's hands: not while an ⓘ tip is open and
+  // not while keyboard focus is inside the hub. The update waits (pending) and lands the moment they leave, and the
+  // live region speaks only about a board that was actually painted.
+  // focus on a control with a stable id (an ⓘ button, a jump chip) survives a repaint — it is handed straight back
+  function focusInside() { const a = document.activeElement; return a && a !== root && root.contains(a) ? a : null; }
+  function busy() { const a = focusInside(); return !!root.querySelector('.cmp-card-head.is-open') || !!(a && !a.id); }
   function render() {
-    if (!data) return;
-    const focusId = root.contains(document.activeElement) ? document.activeElement.id : null;
-    const openTip = root.querySelector('.cmp-tipwrap.is-open'); if (openTip) return; // never yank a tip someone is reading
+    if (!data) return false;
+    if (painted && busy()) { pending = true; return false; }
+    const keep = focusInside(); const keepId = keep ? keep.id : null;
+    const dismissed = [...root.querySelectorAll('.cmp-card-head.is-dismissed')].map(h => h.closest('.cmp-card').id); // an Esc'd tip stays parked across the repaint
     const { cards, chips } = buildHTML(data, ctxNow());
     grid.innerHTML = cards; jump.innerHTML = chips;
     root.setAttribute('aria-busy', 'false');
-    if (focusId) { const el = document.getElementById(focusId); if (el) el.focus({ preventScroll: true }); }
+    dismissed.forEach(id => { const h = document.querySelector('#' + id + ' .cmp-card-head'); if (h) h.classList.add('is-dismissed'); });
+    if (keepId) { const el = document.getElementById(keepId); if (el) el.focus({ preventScroll: true }); }
+    pending = false;
+    announceDiff(painted, data); painted = data;
     writeSnap(data);
     cheer();
+    return true;
   }
+  function flush() { if (pending && !busy()) render(); }
   // once per week: confetti if you are sitting inside the prize places when you open the page
   function cheer() {
     const bs = data.biggestSender; if (!bs.me || !bs.me.rank || bs.me.rank > bs.prize.winners) return;
@@ -280,8 +301,8 @@
       offset = (Number(j.serverNow) || Date.now()) - Date.now();
       const txt = JSON.stringify(j, (k, v) => (k === 'serverNow' || k === 'msLeft' ? undefined : v));
       if (txt === lastJSON) return;                    // nothing moved — leave the DOM (and focus) alone
-      const old = data; lastJSON = txt; data = j;
-      render(); announceDiff(old, j);
+      lastJSON = txt; data = j;
+      render();
     } catch (e) {
       if (!data) { grid.innerHTML = '<p class="cmp-empty cmp-err" role="alert">The boards could not be reached — <button class="btn btn-sm btn-ghost" type="button" data-cmp-retry>try again</button></p>'; root.setAttribute('aria-busy', 'false'); }
     }
@@ -293,19 +314,28 @@
       const t = fmtLeft(ends - now); if (el.textContent !== t) el.textContent = t;
       if (ends <= now) due = true;
     });
-    if (due && now > refetchAt) { refetchAt = now + 15000; load(); }   // a clock hit zero → the board has rolled over
+    if (due && !document.hidden && now > refetchAt) { refetchAt = now + 15000; load(); }   // a clock hit zero → the board has rolled over (a hidden tab waits for its visible turn)
   }
 
   /* ---------- interaction ---------- */
-  function closeTips() { root.querySelectorAll('.cmp-tipwrap.is-open').forEach(w => { w.classList.remove('is-open'); const b = w.querySelector('.cmp-info'); if (b) b.setAttribute('aria-expanded', 'false'); }); }
+  function closeTips() {
+    root.querySelectorAll('.cmp-card-head.is-open').forEach(h => { h.classList.remove('is-open'); const b = h.querySelector('.cmp-info'); if (b) b.setAttribute('aria-expanded', 'false'); });
+    setTimeout(flush, 0);
+  }
+  // Esc must dismiss a tip however it was shown (WCAG 1.4.13): a hover/focus-shown one is CSS-driven, so it is parked
+  // behind .is-dismissed until the pointer or focus leaves the header
+  function dismissTips() { closeTips(); root.querySelectorAll('.cmp-card-head').forEach(h => h.classList.add('is-dismissed')); }
+  root.addEventListener('mouseout', e => { const h = e.target.closest('.cmp-card-head'); if (h && !h.contains(e.relatedTarget)) h.classList.remove('is-dismissed'); });
+  root.addEventListener('focusout', e => { const h = e.target.closest('.cmp-card-head'); if (h && !h.contains(e.relatedTarget)) h.classList.remove('is-dismissed'); setTimeout(flush, 0); });
   root.addEventListener('click', e => {
     const info = e.target.closest('.cmp-info');
     if (info) {
-      const w = info.closest('.cmp-tipwrap'), open = !w.classList.contains('is-open');
-      closeTips(); if (open) { w.classList.add('is-open'); info.setAttribute('aria-expanded', 'true'); } else info.blur();
+      const h = info.closest('.cmp-card-head'), open = !h.classList.contains('is-open');
+      closeTips(); h.classList.remove('is-dismissed');
+      if (open) { h.classList.add('is-open'); info.setAttribute('aria-expanded', 'true'); } else info.blur();
       return;
     }
-    if (!e.target.closest('.cmp-tipwrap')) closeTips();
+    if (!e.target.closest('.cmp-tip')) closeTips();
     if (e.target.closest('[data-cmp-signin]')) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
     if (e.target.closest('[data-cmp-retry]')) { grid.innerHTML = '<p class="cmp-loading">Loading the boards…</p>'; load(); return; }
     if (e.target.closest('[data-cmp-launch]')) {
@@ -315,7 +345,7 @@
       if (target) { if (!target.hasAttribute('tabindex') && target.tagName !== 'BUTTON') target.setAttribute('tabindex', '-1'); setTimeout(() => target.focus({ preventScroll: true }), reduced() ? 0 : 450); }
     }
   });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') dismissTips(); });
 
   /* ---------- lifecycle ---------- */
   function startTimers() {

@@ -110,6 +110,7 @@
     if (!cid()) return;
     try {
       const j = await window.api('/api/communities/' + cid() + '/snapshots');
+      if (j.sandbox) { sec.hidden = true; return; }   // no token, nothing to snapshot — the section stays out of the sandbox
       snaps = j.snapshots || [];
       sec.hidden = false;
       const me = window.AUTH && AUTH.user;

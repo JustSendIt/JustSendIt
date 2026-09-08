@@ -6,6 +6,8 @@
   function fmtUsd(n) { if (n == null || isNaN(n)) return '—'; const a = Math.abs(n); if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'k'; if (a >= 1) return '$' + n.toFixed(2); if (a > 0) return '$' + n.toPrecision(2); return '$0'; }
   function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('en-US'); }
   function chgChip(v) { if (v == null || isNaN(v)) return ''; const up = v >= 0; return '<span class="price-chip ' + (up ? 'up' : 'down') + '">' + (up ? '▲ +' : '▼ ') + Math.abs(v).toFixed(1) + '% (24h)</span>'; }
+  // a stock moves by the trading day, not a rolling 24h — say so, and carry the dollar move when the source gave it
+  function stockChip(pct, chg) { const up = pct >= 0; return '<span class="price-chip ' + (up ? 'up' : 'down') + '">' + (up ? '▲ +' : '▼ ') + Math.abs(pct).toFixed(2) + '% today' + (chg != null && !isNaN(chg) ? ' (' + (chg >= 0 ? '+' : '−') + '$' + Math.abs(chg).toFixed(2) + ')' : '') + '</span>'; }
   const ogB = (og) => (window.ogBadge ? window.ogBadge(og) : '');
 
   const id = Number(new URLSearchParams(location.search).get('id') || 0);
@@ -28,10 +30,27 @@
     C = c;
     document.title = c.name + ' ($' + c.symbol + ') Community — $Send 🏘️';
     const banner = c.banner ? '<div class="comm-hero-banner" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></div>' : '';
-    const logo = c.image ? '<img class="comm-hero-logo" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="comm-hero-logo comm-hero-logo-none" aria-hidden="true">🪙</span>';
+    const logo = c.image ? '<img class="comm-hero-logo" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="comm-hero-logo comm-hero-logo-none" aria-hidden="true">' + (c.demo ? '📈' : '🪙') + '</span>'; // the sandbox wears the site's own mark, never a company's
     const live = c.status === 'live';
     const joined = c.mine && c.mine.joined;
-    const metrics = '<div class="comm-hero-metrics">' +
+    // The sandbox is branded for the listed company behind the chain, so its figures are the STOCK's — labelled as
+    // such, with the source and time the quote was read, and null (never a guess) when no source could be read.
+    const st = c.demo && c.stock ? c.stock : null, hasQ = !!(st && st.price != null);
+    const metrics = c.demo
+      ? '<div class="comm-hero-metrics">' +
+          '<span>👥 <b>' + fmtNum(c.memberCount) + '</b> members</span>' +
+          (hasQ
+            ? '<span>📈 <b>$' + Number(st.price).toFixed(2) + '</b> ' + esc(st.symbol) + '</span>' +
+              (st.changePct != null ? '<span>' + stockChip(st.changePct, st.change) + '</span>' : '') +
+              (st.marketCap ? '<span>🏦 <b>' + fmtUsd(st.marketCap) + '</b> market cap</span>' : '') +
+              '<span>' + esc(st.exchange || 'NASDAQ') + (st.marketState ? ' · ' + esc(st.marketState) : '') + '</span>'
+            : '<span>📈 <b>$' + esc(c.symbol) + '</b> ' + (st && st.live === false ? 'live quote switched off' : 'quote unavailable right now') + '</span>') +
+        '</div>' +
+        '<p class="comm-stock-note">' +
+          (hasQ ? 'Quote from ' + esc(st.source) + (st.asOfText ? ', as of ' + esc(st.asOfText) : (st.asOf ? ', as of ' + esc(new Date(st.asOf).toUTCString().slice(0, 22)) + ' UTC' : '')) + (st.stale ? ' — <b>stale</b>: the source could not be re-read' : '') + '. ' : '') +
+          '<b>$' + esc(c.symbol) + ' is a stock, not a token</b> — ' + esc((st && st.longName) || 'Robinhood Markets, Inc.') + ' (' + esc((st && st.exchange) || 'NASDAQ') + ': ' + esc(c.symbol) + ') is the listed company whose app and chain this site runs on. It cannot be bought, held or swapped here, and nothing on this page is investment advice. This site is not affiliated with, endorsed by or sponsored by Robinhood Markets, Inc.' +
+        '</p>'
+      : '<div class="comm-hero-metrics">' +
       '<span>👥 <b>' + fmtNum(c.memberCount) + '</b> members</span>' +
       '<span>🪙 <b>' + fmtNum(c.holders) + '</b> holders</span>' +
       '<span>💰 <b>' + fmtUsd(c.mcap) + '</b> MC</span>' +
@@ -65,17 +84,21 @@
       '<div class="comm-hero-body">' +
         '<div class="comm-hero-top">' + logo +
           '<div class="comm-hero-id"><h1 class="comm-hero-name">' + esc(c.name) + ' <b>$' + esc(c.symbol) + '</b></h1>' +
-          '<p class="comm-hero-sub">Community · started by @' + esc(c.creator || '—') + ' · <button class="linklike comm-viewtoken" type="button">View token on-chain ↗</button></p></div>' +
+          (c.demo
+            ? '<p class="comm-hero-sub">The open sandbox · started by @' + esc(c.creator || '—') + ' · <a href="' + esc((st && st.quoteUrl) || 'https://www.nasdaq.com/market-activity/stocks/hood') + '" target="_blank" rel="noopener nofollow">' + esc((st && st.exchange) || 'NASDAQ') + ': ' + esc(c.symbol) + ' ↗</a></p></div>'
+            : '<p class="comm-hero-sub">Community · started by @' + esc(c.creator || '—') + ' · <button class="linklike comm-viewtoken" type="button">View token on-chain ↗</button></p></div>') +
           twoX +
         '</div>' +
         metrics + panel + conv +
         '<div class="comm-hero-actions">' + optBtn + '</div>' +
         '<p class="comm-gate-msg" id="comm-gate" role="status" aria-live="polite" hidden></p>' +
         '<details class="grules comm-rules"><summary>📖 How points, levels &amp; the 10× work</summary><div class="grules-body"><ul class="comm-rules-list">' +
-          '<li>🪙 <b>Holders only:</b> you must <b>hold $' + esc(c.symbol) + '</b> (verified on-chain from a linked wallet) to opt in and post — it keeps communities real.</li>' +
-          '<li>⚡ <b>10× Send Power</b> on <b>everything</b> while you’re in ≥1 live community (flat — five communities is still one 10×; it adds on top of your Holder Boost &amp; OG — boosts add, they don’t multiply).</li>' +
+          (c.demo
+            ? '<li>🧪 <b>The sandbox:</b> there is no token to hold — anyone can opt in with no wallet and try everything (posting, proposals and voting). It grants <b>no Send Power multiplier</b>; live token communities do.</li>'
+            : '<li>🪙 <b>Holders only:</b> you must <b>hold $' + esc(c.symbol) + '</b> (verified on-chain from a linked wallet) to opt in and post — it keeps communities real.</li>') +
+          '<li>⚡ <b>10× Send Power</b> on <b>everything</b> while you’re in ≥1 live <b>token</b> community (flat — five communities is still one 10×; it adds on top of your Holder Boost &amp; OG — boosts add, they don’t multiply).</li>' +
           '<li>🏆 <b>Community level</b> climbs with active members posting &amp; reacting (exponential curve, daily-capped so it can’t be farmed).</li>' +
-          '<li>💎 <b>Your conviction</b> here rises the longer you stay + the more you post; it shows next to $' + esc(c.symbol) + ' in your public wall’s <b>Convicted In</b> section.</li>' +
+          '<li>💎 <b>Your conviction</b> here rises the longer you stay + the more you post' + (c.demo ? ' — a member level for this page and its members list; the sandbox has no token to pin on your wall.' : '; it shows next to $' + esc(c.symbol) + ' in your public wall’s <b>Convicted In</b> section.') + '</li>' +
           '<li>👑 The starter earns a one-time <b>founder bonus</b> when the community hits ' + c.goLive.need + ' members.</li>' +
         '</ul></div></details>' +
       '</div>';
@@ -102,7 +125,7 @@
       // not repeat the standard copy — that would be telling people something untrue about it.
       document.getElementById('comm-wall-locked').innerHTML = joined ? ''
         : ((C && C.demo)
-          ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no tokens and no wallet</b> and try everything — posting, proposals, voting and snapshots. It is for learning, so it earns <b>no Send Power multiplier</b>.'
+          ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no tokens and no wallet</b> and try everything — posting, proposals and voting. It is for learning, so it earns <b>no Send Power multiplier</b>.'
           : '👀 <b>Anyone can read this wall.</b> To post, <b>opt in</b> above — that means <b>connecting a wallet</b> and confirming you <b>hold this token</b> on-chain. Members also earn <b>10× Send Power</b>. ⚡');
     }
   }
@@ -158,7 +181,7 @@
       const members = j.members || [];
       if (!members.length) { memEl.hidden = true; return; }
       memEl.hidden = false;
-      memSubEl.textContent = '· ' + fmtNum(j.memberCount != null ? j.memberCount : members.length) + (j.qualCount != null ? ' (' + fmtNum(j.qualCount) + ' verified holders)' : '');
+      memSubEl.textContent = '· ' + fmtNum(j.memberCount != null ? j.memberCount : members.length) + (j.qualCount != null && !(C && C.demo) ? ' (' + fmtNum(j.qualCount) + ' verified holders)' : ''); // the sandbox verifies nobody's holdings
       memListEl.innerHTML = members.map(memberRow).join('');
     } catch (e) { memEl.hidden = true; }
   }
@@ -190,7 +213,7 @@
           if (!r.ok) {
             if (window.sendToast) sendToast(j.error || 'Could not update');
             const gate = document.getElementById('comm-gate'); // holder-gate (403) → persistent notice + buy/recheck actions
-            if (gate && r.status === 403 && C) {
+            if (gate && r.status === 403 && C && !C.demo) { // the sandbox has no holder gate: a 403 there is the read-only restriction, already toasted
               const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
               gate.hidden = false;
               gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'You must hold this token to join.') +
