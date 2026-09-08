@@ -33,7 +33,7 @@ describes mechanisms, not promises.
   it is public. Two deliberate exceptions keep a wallet next to an account in the clear: the wallet
   a Send Call publicly shows, and the record of the connect award.
 - **The Data API returns a key holder's own data and public data only.** A key is minted for a
-  verified on-chain burn; it never opens another user's private fields. Reports of any path that
+  verified on-chain burn (or free for a live OG Gold badge); it never opens another user's private fields. Reports of any path that
   does are especially welcome.
 - **Wallet sign-in is domain-bound, not phishing-proof.** The message you sign names this site, so a
   signature harvested elsewhere does not match what this server stored. That only helps if you read

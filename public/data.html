@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Data API 🔑 — $Send</title>
-<meta name="description" content="The $Send Data API: bulk, structured access to the platform's public data and your own account data for AI and bots — keyed, and minted only for a wallet that has burned $1,000 of $SEND. Entertainment only.">
+<meta name="description" content="The $Send Data API: bulk, structured access to the platform's public data and your own account data for AI and bots — keyed: a year costs a $1,000 burn of $SEND, less with an OG discount, free and unending for OG Gold. Entertainment only.">
 <meta name="robots" content="noindex">
 <link rel="icon" href="assets/logo-128.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,7 +40,7 @@
 <header class="np-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Data API 🔑</h1>
   <p class="section-sub" style="margin-bottom:0.5rem;">Everything the site shows in public, and everything your own account holds — in bulk, as JSON, for your AI, your bots, your spreadsheets. One key, one door.</p>
-  <p class="np-hero-warn">⚠️ A key is minted only for a wallet that has <b>burned $1,000 of $SEND</b>. Burning is permanent and buys nothing but this key. Not a reason to buy — just how the door works. <b>Entertainment only.</b></p>
+  <p class="np-hero-warn">⚠️ A key costs a <b>$1,000 burn of $SEND per year</b> — half that for OG Silver, three-quarters for OG Bronze, <b>free and unending for OG Gold</b>. Burning is permanent and buys nothing but this key. Not a reason to buy — just how the door works. <b>Entertainment only.</b></p>
 </header>
 
 <main id="main">
@@ -56,7 +56,9 @@
       <ul class="ab-mini-list">
         <li><b>Link the wallet</b> you burn from to this account (read-only signature — never a transaction).</li>
         <li><b>Send $SEND to the burn address</b> <code class="dk-addr">0x000000000000000000000000000000000000dEaD</code> from that wallet. The total across all your linked wallets counts.</li>
-        <li>The burn is <b>read straight from the chain</b> and valued, at the moment you mint, at <b>the lower of the live $SEND price and the median of the last 24 hours</b> of on-chain trading — so a momentary price spike cannot inflate it, and a live price far above the day's median simply refuses to value anything until it settles. When it reaches <b>$1,000</b>, you can mint a key. A burn is irreversible; the price is whatever the day makes it — nothing here is advice about either. <b>A burn backs one live key at a time</b>: the same wallet on another account is refused until that key is revoked.</li>
+        <li>The burn is <b>read straight from the chain</b> and valued, at the moment you mint, at <b>the lower of the live $SEND price and the median of the last 24 hours</b> of on-chain trading — so a momentary price spike cannot inflate it, and a live price far above the day's median simply refuses to value anything until it settles. When your <b>unspent</b> burn reaches your price — <b>$1,000</b>, or <b>$500</b> as OG Silver, <b>$750</b> as OG Bronze — you can mint a key. A burn is irreversible; the price is whatever the day makes it — nothing here is advice about either. <b>A burn backs one live key at a time</b>: the same wallet on another account is refused until that key is revoked.</li>
+        <li><b>A key lasts one year.</b> Minting spends the tokens that were worth your price that day, from your wallets' unspent burn; what is left stays banked for later years. Renewing takes another burn of your price and <b>adds a year to your current expiry</b>. Revoking a key does not refund a spent burn — so <b>if a key leaks, rotate it</b>: a new secret with the same expiry, nothing spent.</li>
+        <li><b>OG Gold pays nothing:</b> the key is free and never expires, for as long as the Gold badge is live. If that badge is ever revoked for selling out, the key stops working with it — except that any time you had already paid for on a burn key still counts, to the day.</li>
         <li>If the chain or the price can't be read completely, nothing is assumed: you're told to try again, never told you burned $0.</li>
       </ul>
     </section>
@@ -65,7 +67,7 @@
       <h2 class="ab-eng-h" id="dk-what-h">What the key opens — and what it never will</h2>
       <p><b>Opens:</b> every public surface of the site in bulk, structured form — profiles, the Send Wall, comments, Send Calls, communities, the all-time board and the Biggest Sender race — plus <b>your own</b> account: your preferences, linked wallets, tracked wallets, watchlist, pins, communities, follows, and your most recent 1,000 points events and 500 each of your posts, comments, Sends and notifications, decrypted for you.</p>
       <p><b>Never opens:</b> anyone else's private data. Other people's emails, linked wallets, 2FA, tracked wallets and preferences are encrypted so that <b>only their owner</b> can read them, and a burn does not change whose data it is. Public data is public on the site already; the key changes the <i>shape</i> you get it in, not what is public.</p>
-      <p class="dk-note"><b>Encryption, plainly.</b> Every private field is stored scrambled (AES-256-GCM) with a key held outside the database — emails, wallets, 2FA secrets, tracked wallets and your preference blobs. Public content is stored readable, because search, sorting and every wall need to read it. Your API key is stored only as a hash: it is shown once, and if it leaks, revoke it here.</p>
+      <p class="dk-note"><b>Encryption, plainly.</b> Every private field is stored scrambled (AES-256-GCM) with a key held outside the database — emails, wallets, 2FA secrets, tracked wallets and your preference blobs. Public content is stored readable, because search, sorting and every wall need to read it. Your API key is stored only as a hash: it is shown once, and if it leaks, rotate it here — the old secret dies, the new one keeps your paid time.</p>
     </section>
 
     <section class="card reveal" aria-labelledby="dk-use-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">

@@ -490,7 +490,10 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN week_boost_until INTEGER NOT NULL DEFAULT 0", // when it expires — the end of the week after the one it was won in
   "ALTER TABLE users ADD COLUMN week_boost_key TEXT",                         // which competition week it was won in
   "ALTER TABLE points_events ADD COLUMN comp_amount INTEGER NOT NULL DEFAULT 0", // what the award would have paid without a Biggest Sender prize — what the weekly board ranks
-  "ALTER TABLE api_keys ADD COLUMN wallets_idx TEXT",                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "ALTER TABLE api_keys ADD COLUMN wallets_idx TEXT",
+  "ALTER TABLE api_keys ADD COLUMN expires_at INTEGER",                        // one year from mint for burn-backed keys; NULL = never (Gold OG)
+  "ALTER TABLE api_keys ADD COLUMN source TEXT NOT NULL DEFAULT 'burn'",       // burn | og_gold
+  "ALTER TABLE api_keys ADD COLUMN consumed_wei TEXT",                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 // Performance indices — added AFTER the migrations so the score/points columns they reference exist.
@@ -528,6 +531,8 @@ try { for (const r of db.prepare("SELECT id, tracker_prefs, site_prefs FROM user
 // Power — they never touch users.points — so they are excluded here and in the standings query; without
 // that exclusion a restart promoted them onto the board and the settled winner depended on deploy timing.
 try { db.prepare("UPDATE points_events SET comp_amount = amount WHERE comp_amount = 0 AND amount > 0 AND kind NOT IN ('commxp','convxp','commact')").run(); } catch {}
+// A burn-backed key always carries an expiry: any row minted before expiries existed gets its year from its mint.
+try { db.prepare("UPDATE api_keys SET expires_at = minted_at + 31536000000 WHERE expires_at IS NULL AND source = 'burn'").run(); } catch {}
 // The repair has to clear the tier too, or a wallet-less account keeps a stale tier (and its payout).
 try { db.prepare("UPDATE users SET og = 0, og_tier = 0 WHERE og = 1 AND og_revoked = 0 AND id NOT IN (SELECT user_id FROM identities WHERE type = 'wallet')").run(); } catch {}
 
@@ -551,9 +556,18 @@ CREATE TABLE IF NOT EXISTS api_keys (
   minted_at    INTEGER NOT NULL,
   last_used_at INTEGER,
   revoked_at   INTEGER,
-  wallets_idx  TEXT                                  -- JSON of blind indexes of every linked wallet at mint: a burn backs ONE live key at a time, on any account
+  wallets_idx  TEXT,                                 -- JSON of blind indexes of every linked wallet at mint: a burn backs ONE live key at a time, on any account
+  expires_at   INTEGER,                              -- burn-backed keys live one year from mint (renewal adds a year); NULL = never (Gold OG)
+  source       TEXT NOT NULL DEFAULT 'burn',         -- burn | og_gold
+  consumed_wei TEXT                                  -- the $SEND this key spent (worth its threshold on mint day); the ledger below says from which wallets
 );
 CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id, revoked_at);
+CREATE TABLE IF NOT EXISTS api_key_burns (
+  key_hash   TEXT NOT NULL,                          -- never deleted: a spent burn stays spent even after the key is revoked
+  wallet_idx TEXT NOT NULL,                          -- blind index of the wallet the burn came from
+  wei        TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_api_key_burns_wallet ON api_key_burns(wallet_idx);
 CREATE TABLE IF NOT EXISTS mutes (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   muted_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -3859,18 +3873,50 @@ function lastSettledCompetition() {
    them, and a burn does not change whose data it is. */
 const DATA_BURN_ADDR = '0x000000000000000000000000000000000000dead';
 const DATA_BURN_USD = 1000;
+const DATA_KEY_LIFE_MS = 365 * 864e5;      // a burn-backed key lives a year; renewing adds a year
+// OG discounts on the burn: Gold is free forever, Silver pays half, Bronze pays three quarters
+const DATA_TIER_DISCOUNT = { 3: 1, 2: 0.5, 1: 0.25, 0: 0 };
+function dataThresholdFor(u) {
+  const tier = (u && u.og && u.og_tier) || 0;          // an OG discount needs the badge to be LIVE, not just once earned
+  const off = DATA_TIER_DISCOUNT[tier] || 0;
+  return { tier, tierName: OG_TIER_NAME[tier] || '', discountPct: Math.round(off * 100), free: off >= 1, usd: Math.round(DATA_BURN_USD * (1 - off) * 100) / 100 };
+}
+// Pure: what each wallet still has unspent, given what earlier keys already consumed from it.
+function applyConsumption(byWallet, consumedByIdx) {
+  return byWallet.map(w => { const spent = consumedByIdx[w.idx] || 0n; const avail = w.wei > spent ? w.wei - spent : 0n; return { ...w, spent, available: avail }; });
+}
+// Pure: the wei a mint will spend for `usd` at `priceUsd` — rounded UP to the next micro-token, so a key can never
+// be under-paid. Eligibility and the mint gate on THIS number, so the page never says "eligible" for a mint that refuses.
+const needWeiFor = (usd, priceUsd) => BigInt(Math.ceil(usd / priceUsd * 1e6)) * 10n ** 12n;
+// Pure: spend `needWei` across wallets, largest unspent first. Returns the allocation, or null if short.
+function allocateBurn(byWallet, needWei) {
+  const alloc = []; let left = needWei;
+  for (const w of [...byWallet].sort((x, y) => (y.available > x.available ? 1 : y.available < x.available ? -1 : 0))) {
+    if (left <= 0n) break;
+    const take = w.available < left ? w.available : left;
+    if (take > 0n) { alloc.push({ idx: w.idx, wei: take }); left -= take; }
+  }
+  return left > 0n ? null : alloc;
+}
+// Pure: a renewal adds a year to a still-live expiry; a fresh mint (or a lapsed one) starts the year now.
+const nextExpiry = (prevExpiresAt, t) => (prevExpiresAt && prevExpiresAt > t ? prevExpiresAt : t) + DATA_KEY_LIFE_MS;
 const DATA_KEY_RATE = 120;                 // requests per minute, per key
 const DATA_PAGE_MAX = 200;
 const DATA_BURN_TTL = 5 * 60 * 1000;
 const burnCache = new Map();               // userId -> { at, val }
 const _minting = new Set();                // accounts with a mint in flight
+const burnBump = new Map();                // userId -> when their unspent balance last changed (a read that started earlier must not be cached)
 // Every $SEND transfer from any linked wallet to the burn address, summed. Throws (never guesses) when
 // the chain cannot be read completely — the OG walker's own rule.
 async function burnedSend(userId, fresh) {
   const hit = burnCache.get(userId);
   if (!fresh && hit && now() - hit.at < DATA_BURN_TTL) return hit.val;
+  const startedAt = now();
   const wallets = walletAddresses(userId).slice(0, MAX_LINKED_WALLETS);
   let wei = 0n, topWallet = null, topWei = -1n; const byWallet = [];
+  const idxs = wallets.map(w => bidx(w.toLowerCase()));
+  const consumedByIdx = {};
+  if (idxs.length) for (const r of db.prepare(`SELECT wallet_idx, wei FROM api_key_burns WHERE wallet_idx IN (${idxs.map(() => '?').join(',')})`).all(...idxs)) consumedByIdx[r.wallet_idx] = (consumedByIdx[r.wallet_idx] || 0n) + BigInt(r.wei);
   for (const w of wallets) {
     // a person is waiting on this one, and the explorer's throttle was measured at ~45s: 3, 6, 12, 24, 48s
     // of backoff outlasts it, where the background sweep's short schedule would just report "try again"
@@ -3880,13 +3926,18 @@ async function burnedSend(userId, fresh) {
       const from = ((r.from && r.from.hash) || '').toLowerCase(), to = ((r.to && r.to.hash) || '').toLowerCase();
       if (from === wl && to === DATA_BURN_ADDR && r.total && r.total.value != null) { ww += BigInt(r.total.value); txs++; }
     }
-    byWallet.push({ wallet: w, tokens: Number(ww) / 1e18, txs });
+    byWallet.push({ wallet: w, idx: bidx(wl), wei: ww, tokens: Number(ww) / 1e18, txs });
     wei += ww; if (ww > topWei) { topWei = ww; topWallet = w; }
   }
+  const spent = applyConsumption(byWallet, consumedByIdx);
+  const availableWei = spent.reduce((t, w) => t + w.available, 0n);
   const priceUsd = await sendPriceUsd();                    // null when unknown → usd null → not eligible, never "0 burned"
   const tokens = Number(wei) / 1e18;
-  const val = { wallets: wallets.length, byWallet, wei: wei.toString(), tokens, priceUsd, usd: priceUsd == null ? null : tokens * priceUsd, topWallet };
-  burnCache.set(userId, { at: now(), val });
+  const availableTokens = Number(availableWei) / 1e18;
+  const val = { wallets: wallets.length, byWallet: spent.map(w => ({ wallet: w.wallet, idx: w.idx, wei: w.wei.toString(), available: w.available.toString(), tokens: w.tokens, spentTokens: Number(w.spent) / 1e18, txs: w.txs })), // strings, never BigInt: this object is JSON.stringify'd by the eligibility route
+    wei: wei.toString(), tokens, priceUsd, usd: priceUsd == null ? null : tokens * priceUsd,
+    availableWei: availableWei.toString(), availableTokens, availableUsd: priceUsd == null ? null : availableTokens * priceUsd, topWallet };
+  if ((burnBump.get(userId) || 0) <= startedAt) burnCache.set(userId, { at: now(), val }); // a mint landed mid-read → this value is already stale, do not cache it
   return val;
 }
 // The $SEND price in dollars, from the pair's own reserves. spotPrice() gives quote-units per token;
@@ -3926,8 +3977,12 @@ async function sendPriceUsd() {
 function dataKeyOf(req) {
   const m = /^Bearer\s+(sk_[0-9a-f]{48})$/i.exec(String(req.headers.authorization || '').trim());
   if (!m) return null;
-  const row = db.prepare('SELECT key_hash, user_id, last_used_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL').get(hashToken(m[1]));
+  const row = db.prepare('SELECT k.key_hash, k.user_id, k.last_used_at, k.expires_at, k.source, u.og, u.og_tier FROM api_keys k JOIN users u ON u.id = k.user_id WHERE k.key_hash = ? AND k.revoked_at IS NULL').get(hashToken(m[1]));
   if (!row) return null;
+  if (row.expires_at != null && row.expires_at <= now()) return null;                 // a year is a year
+  // A Gold key is free WHILE the badge is live. If it replaced a paid key, the paid remainder rides along as
+  // expires_at, and that remainder is honoured even after the badge goes — nobody loses time they paid for.
+  if (row.source === 'og_gold' && !(row.og && row.og_tier === OG_TIER.GOLD) && !(row.expires_at != null && row.expires_at > now())) return null;
   if (now() - (row.last_used_at || 0) > 60000) db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?').run(now(), row.key_hash);
   return row;
 }
@@ -4537,13 +4592,18 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/data/eligibility' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('dkelig:' + me.id, 30, 6e5) || (url.searchParams.get('fresh') === '1' && !rateLimit('dkfresh:' + me.id, 6, 6e5))) return bad(res, 'checking too often — try again shortly', 429);
-        const key = db.prepare('SELECT wallet, burned_usd, price_usd, minted_at, last_used_at FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(me.id) || null;
+        const key = db.prepare('SELECT wallet, burned_usd, price_usd, minted_at, last_used_at, expires_at, source FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(me.id) || null;
+        const th = dataThresholdFor(me);
         let burn = null, error = null;
-        try { burn = await burnedSend(me.id, url.searchParams.get('fresh') === '1'); } catch { error = 'could not read the chain completely right now — nothing is assumed; try again in a minute'; }
+        if (!th.free) { try { burn = await burnedSend(me.id, url.searchParams.get('fresh') === '1'); } catch { error = 'could not read the chain completely right now — nothing is assumed; try again in a minute'; } }
+        const keyLive = !!(key && (key.expires_at == null || key.expires_at > now()) && (key.source !== 'og_gold' || th.free || (key.expires_at != null && key.expires_at > now())));
         return send(res, 200, {
-          threshold: DATA_BURN_USD, burnAddress: DATA_BURN_ADDR, token: TOK.SEND, burn, error,
-          eligible: !!(burn && burn.usd != null && burn.usd >= DATA_BURN_USD),
-          key: key ? { wallet: key.wallet ? decField(key.wallet) : null, burnedUsd: key.burned_usd, priceUsd: key.price_usd, mintedAt: key.minted_at, lastUsedAt: key.last_used_at } : null,
+          threshold: th.usd, baseThreshold: DATA_BURN_USD, tier: th.tier, tierName: th.tierName, discountPct: th.discountPct, free: th.free,
+          lifeDays: 365, burnAddress: DATA_BURN_ADDR, token: TOK.SEND, burn, error,
+          eligible: th.free || !!(burn && burn.priceUsd != null && BigInt(burn.availableWei) >= needWeiFor(th.usd, burn.priceUsd)),
+          needTokens: (!th.free && burn && burn.priceUsd != null) ? Number(needWeiFor(th.usd, burn.priceUsd)) / 1e18 : null,
+          key: key ? { wallet: key.wallet ? decField(key.wallet) : null, burnedUsd: key.burned_usd, priceUsd: key.price_usd, mintedAt: key.minted_at, lastUsedAt: key.last_used_at,
+            expiresAt: key.expires_at, source: key.source, live: keyLive, rotatable: keyLive, daysLeft: key.expires_at == null ? null : Math.max(0, Math.floor((key.expires_at - now()) / 864e5)) } : null,
         });
       }
       if (p === '/api/data/key' && req.method === 'POST') {
@@ -4559,25 +4619,71 @@ const server = http.createServer(async (req, res) => {
         // unlinking the burned wallet and relinking it to a fresh account minted another live key for the
         // same burn, without limit — every key multiplying the per-key rate limit.
         const myIdx = walletAddresses(me.id).map(w => bidx(w.toLowerCase()));
-        const clash = db.prepare('SELECT user_id, wallets_idx FROM api_keys WHERE revoked_at IS NULL AND user_id != ?').all(me.id)
+        const clash = db.prepare('SELECT user_id, wallets_idx FROM api_keys WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) AND user_id != ?').all(now(), me.id) // an expired key backs nothing
           .find(k => { try { return (JSON.parse(k.wallets_idx || '[]')).some(i => myIdx.includes(i)); } catch { return false; } });
         if (clash) return bad(res, 'a wallet linked here already backs a live key on another account — revoke that key first; a burn backs one key at a time', 409);
+        const th = dataThresholdFor(me);
+        const prev = db.prepare('SELECT expires_at FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(me.id);
+        const plain = 'sk_' + rand(24), t = now();
+        if (th.free) {
+          // Gold OG: free, and no expiry — for as long as the badge is live (dataKeyOf re-checks that on every call)
+          // carry over a live paid key's remaining time as a fallback expiry (NULL when there is none)
+          const carry = prev && prev.expires_at != null && prev.expires_at > t ? prev.expires_at : null;
+          db.exec('BEGIN');
+          try {
+            db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(t, me.id);
+            db.prepare("INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx, expires_at, source, consumed_wei) VALUES (?,?,?,?,?,?,?,?,?,'og_gold','0')")
+              .run(hashToken(plain), me.id, null, '0', 0, 0, t, '[]', carry);
+            db.exec('COMMIT');
+          } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not mint a key', 500); }
+          notify(me.id, '🔑', 'Data API key minted — free with your OG Gold, and it never expires while you stay Gold.' + (carry ? ' The time you had already paid for (until ' + new Date(carry).toUTCString() + ') is kept as a fallback if the badge ever goes.' : '') + ' It was shown once and is not stored anywhere readable; anyone holding it can read your own private data, so keep it secret.', 'wallet');
+          return send(res, 200, { key: plain, source: 'og_gold', expiresAt: null, paidUntil: carry, spentUsd: 0, priceUsd: null, wallet: null });
+        }
         let burn;
         try { burn = await burnedSend(me.id, true); } catch { return bad(res, 'could not read the chain completely right now — try again in a minute', 502); }
         if (!burn.wallets) return bad(res, 'link a wallet first — the burn is read from your linked wallets', 403);
-        if (burn.usd == null) return bad(res, 'the $SEND price cannot be read right now, so the burn cannot be valued — try again', 503);
-        if (burn.usd < DATA_BURN_USD) return bad(res, 'not eligible: $' + burn.usd.toFixed(2) + ' of $SEND burned across your linked wallets; $' + DATA_BURN_USD + ' is required', 403);
+        if (burn.availableUsd == null) return bad(res, 'the $SEND price cannot be read right now, so the burn cannot be valued — try again', 503);
+        // Spend the burn: the tokens worth the threshold at today's price, largest unspent wallet first. The
+        // gate and the allocation use the same wei, so "eligible" on the page always means the mint succeeds.
+        const needWei = needWeiFor(th.usd, burn.priceUsd);
+        if (BigInt(burn.availableWei) < needWei) return bad(res, 'not eligible: $' + burn.availableUsd.toFixed(2) + ' of unspent $SEND burn across your linked wallets; $' + th.usd + ' is required' + (th.discountPct ? ' (your OG ' + th.tierName + ' discount of ' + th.discountPct + '% is already applied)' : ''), 403);
+        const alloc = allocateBurn(burn.byWallet.map(w => ({ idx: w.idx, available: BigInt(w.available) })), needWei);
+        if (!alloc) return bad(res, 'not eligible: the unspent burn does not cover $' + th.usd + ' at the current price', 403);
+        const expiresAt = nextExpiry(prev ? prev.expires_at : null, t);
+        db.exec('BEGIN');
+        try {
+          db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(t, me.id); // one live key per account
+          db.prepare("INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx, expires_at, source, consumed_wei) VALUES (?,?,?,?,?,?,?,?,?,'burn',?)")
+            .run(hashToken(plain), me.id, burn.topWallet ? encField(burn.topWallet) : null, burn.wei, th.usd, burn.priceUsd, t, JSON.stringify(myIdx), expiresAt, needWei.toString()); // the wallet is a wallet↔account link: encrypted like every other one
+          for (const a of alloc) db.prepare('INSERT INTO api_key_burns (key_hash, wallet_idx, wei) VALUES (?,?,?)').run(hashToken(plain), a.idx, a.wei.toString());
+          db.exec('COMMIT');
+        } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not mint a key', 500); }
+        burnCache.delete(me.id); burnBump.set(me.id, now());   // the unspent balance just changed — and any read already in flight must not re-cache the old one
+        notify(me.id, '🔑', 'Data API key ' + (prev && prev.expires_at != null && prev.expires_at > t ? 'renewed — a year added, now good until ' : 'minted for a year, until ') + new Date(expiresAt).toUTCString() + ' — it spent $' + th.usd + ' of your $SEND burn. It was shown once and is not stored anywhere readable; anyone holding it can read your own private data, so keep it secret.', 'wallet');
+        return send(res, 200, { key: plain, source: 'burn', expiresAt, spentUsd: th.usd, spentTokens: Number(needWei) / 1e18, priceUsd: burn.priceUsd, wallet: burn.topWallet, discountPct: th.discountPct });
+        } finally { _minting.delete(me.id); }
+      }
+      // The answer to a leaked key is a NEW SECRET, not a new purchase: the same expiry, the same source,
+      // nothing spent. Revoking and minting again would have cost the paid remainder.
+      if (p === '/api/data/key/rotate' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('dkrot:' + me.id, 10, 36e5)) return bad(res, 'rotating too often — try again later', 429);
+        const cur = db.prepare('SELECT * FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(me.id);
+        if (!cur) return bad(res, 'no key to rotate', 404);
+        const th = dataThresholdFor(me), t = now();
+        const live = (cur.expires_at == null || cur.expires_at > t) && (cur.source !== 'og_gold' || th.free || (cur.expires_at != null && cur.expires_at > t));
+        if (!live) return bad(res, 'that key is no longer active — mint a new one', 409);
         const plain = 'sk_' + rand(24);
         db.exec('BEGIN');
         try {
-          db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now(), me.id); // one live key per account
-          db.prepare('INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx) VALUES (?,?,?,?,?,?,?,?)')
-            .run(hashToken(plain), me.id, burn.topWallet ? encField(burn.topWallet) : null, burn.wei, burn.usd, burn.priceUsd, now(), JSON.stringify(myIdx)); // the wallet is a wallet↔account link: encrypted like every other one
+          db.prepare('UPDATE api_keys SET revoked_at = ? WHERE key_hash = ?').run(t, cur.key_hash);
+          db.prepare('INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx, expires_at, source, consumed_wei) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+            .run(hashToken(plain), me.id, cur.wallet, cur.burned_wei, cur.burned_usd, cur.price_usd, cur.minted_at, cur.wallets_idx, cur.expires_at, cur.source, cur.consumed_wei);
+          db.prepare('UPDATE api_key_burns SET key_hash = ? WHERE key_hash = ?').run(hashToken(plain), cur.key_hash); // the ledger follows the key
           db.exec('COMMIT');
-        } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not mint a key', 500); }
-        notify(me.id, '🔑', 'Data API key minted. It was shown once on the Data API page and is not stored anywhere readable — anyone holding it can read your own private data, so keep it secret. Revoke it there if it ever leaks.', 'wallet');
-        return send(res, 200, { key: plain, burnedUsd: burn.usd, priceUsd: burn.priceUsd, wallet: burn.topWallet });
-        } finally { _minting.delete(me.id); }
+        } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not rotate the key', 500); }
+        notify(me.id, '🔑', 'Data API key rotated — the old secret stops working now; the new one keeps the same expiry and spent nothing. Shown once on the Data API page.', 'wallet');
+        return send(res, 200, { key: plain, source: cur.source, expiresAt: cur.expires_at });
       }
       if (p === '/api/data/key/revoke' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
