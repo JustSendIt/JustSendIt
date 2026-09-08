@@ -83,7 +83,7 @@
     watch_token: 'Save a token to your watchlist from New Pairs (☆). Once per token, capped 30/day.',
     send_call: 'Call any token (📣) from New Pairs — it needs ≥$500 liquidity so nobody can farm a dust pool. It posts a permanent, live widget to your wall that tracks its Xs forever. +120 Send Power (📥 boosted by the value of the tokens you bought & still hold — every $100 held = ×1, so $1,000 = ×10; best-effort, on-chain), 5 calls/day to start (rolling 24h — it floats with your call quality, and Diamond holders get more). Calls are FINAL — they can never be deleted.',
     call_x: 'The payoff: each whole X your call hits pays Send Power that grows with the multiple — 1x → +180, 2x → +360, 3x → +540 … up to 50x — awarded once per milestone as it runs, with no daily cap. Everything one call ever pays you shares one lifetime budget (about the Send Power it takes to reach Level 70), so a great call is a big prize but never the whole game. Remember +100% = 1x.',
-    call_hold: '💎 Diamond hands: a call that STAYS in profit earns more the longer AND higher it holds — the bonus compounds (grows faster than the Xs alone), accruing automatically every few minutes while it’s above your entry price. This is where most of a call’s Send Power lives: at least 60% of everything a call can ever pay is reserved for holding in profit. And it accrues faster when the people who Sent It on your call are in profit too — +10% per hopper in the green, up to 3×.',
+    call_hold: '💎 Diamond hands: a call that STAYS in profit earns more the longer AND higher it holds — the bonus compounds (grows faster than the Xs alone), accruing automatically every few minutes while it’s above your entry price. This is where most of a call’s Send Power lives: at least 60% of everything a call can ever pay is reserved for holding in profit. And it accrues faster when the people who Sent It on your call are in profit too — +10% per Sender in the green, up to 3×.',
     hop_on: 'Send It! (🚀) on someone else’s Send Call from the Send Wall to ride it with them. +30 Send Power, up to 30/day.',
     hop_hold: '💎 If you Send It on someone’s call and stay in profit from your entry price, you earn the same compounding diamond-hands bonus the caller does — the longer you hold in the green and the higher it runs, the more.',
     daily: 'Tap ✅ Check in for today on your own wall. Once per UTC day, multiplied by your boosts.',
@@ -348,6 +348,12 @@
     '</div>';
   }
 
+  // how long is left in a window, coarse on purpose — this is a rules card, not the homepage countdown
+  function fmtLeft(ms) {
+    if (!(ms > 0)) return '';
+    const d = Math.floor(ms / 864e5), h = Math.floor((ms % 864e5) / 36e5);
+    return d >= 1 ? d + ' day' + (d === 1 ? '' : 's') : h + ' hour' + (h === 1 ? '' : 's');
+  }
   // which tier's colour a block/chip wears — '' is gold, which the base rules already paint
   function ogVariant(g) {
     const t = Number(g.ogTier || g.og) || 0;
@@ -375,6 +381,20 @@
     // named a single cause and a single remedy, both of which could be wrong for the reader, and the
     // remedy pointed at a purchase, which is not something this site tells anyone to make.
     if (g.ogDq) return '<div class="og-block og-block-lost"><span class="og-block-badge">⚠️</span><div class="og-block-body"><b>One of your wallets didn’t meet the OG standard.</b> It bought inside a window, but it sold its whole holding to nothing inside its first month <b>and</b> holds less now than it did at the end of that month. That is not the only thing OG needs — it also requires having bought <b>both</b> $Send and $GWC and still holding both. Nothing here is permanent: your wallets are re-read from the chain on a schedule while the windows are open.</div></div>';
+    // No badge, nothing lost: say which window is open and what it pays, from the server's own clock.
+    // Every number here is the campaign the server serves — none is written into this file.
+    const c = g.ogCampaign;
+    if (c && c.open && c.tierNow && c.name && c.mult) {
+      const name = c.name[c.tierNow] || '', mult = c.mult[c.tierNow];
+      const closes = c.closes && c.closes[name.toLowerCase()];
+      const left = closes ? fmtLeft(closes - Date.now()) : '';
+      const v = c.tierNow === 2 ? '--silver' : c.tierNow === 1 ? '--bronze' : '';
+      return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">🏅 OG ' + esc(name) + '</span>'
+        + '<div class="og-block-body"><b>The OG ' + esc(name) + ' window is open' + (left ? ' — it closes in ' + left : '') + '.</b> '
+        + 'Anyone who holds <b>both $Send and $GWC</b> bought inside this window, and keeps holding both, earns a permanent badge and <b>' + mult + '× Send Power</b> on everything. '
+        + 'The standard is identical in every window — gold 10×, silver 5×, bronze 3× — only <b>when</b> you got in changes the size. Sell out of either and it’s gone for good. '
+        + 'Not a reason to buy — just how the badge works.</div></div>';
+    }
     return '';
   }
 
@@ -658,7 +678,24 @@
   /* =========================================================================
      SECTION 9 — CODEX (rules)
      ========================================================================= */
-  function rulesBlock() {
+  // OG rules for the rules card. Dates are read from g.ogCampaign (the server's OG_LAUNCH + OG_TIER_END),
+  // never typed here, so this card cannot drift from what checkOg() actually enforces.
+  function ogRulesHtml(g) {
+    const c = g && g.ogCampaign;
+    const dt = (ms) => { try { return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
+    const closes = (k) => (c && c.closes && c.closes[k]) ? ' (closes ' + dt(c.closes[k]) + ')' : '';
+    const state = !c ? '' : !c.open ? ' <b>Every window has now closed; no new OG badges are granted.</b>' : c.tierNow ? ' <b>Right now the ' + esc((c.name && c.name[c.tierNow]) || '').toLowerCase() + ' window is open.</b>' : '';
+    return '<p><b>🏅 OG — being early, three ways.</b> Hold <b>both $Send and $GWC</b>, bought from the market, and keep holding both: you earn a permanent OG badge and a Send Power multiplier. There is <b>one standard</b>; only when you got in changes the size. Windows are counted from each coin’s own launch, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.' + state + '</p>' +
+      '<ul>' +
+        '<li><b>🥇 Gold — 10×.</b> Bought both inside the first month' + closes('gold') + '.</li>' +
+        '<li><b>🥈 Silver — 5×.</b> Bought both in the two months after gold closed' + closes('silver') + '.</li>' +
+        '<li><b>🥉 Bronze — 3×.</b> Bought both in the nine months after silver closed' + closes('bronze') + '.</li>' +
+        '<li><b>After that:</b> no badge, whatever you buy. Twelve 30-day months in all.</li>' +
+        '<li><b>Two things disqualify a wallet, the same way in every window:</b> if it dumped its whole holding to nothing inside its own first month <b>and</b> it holds less today than it did at the end of that month, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place.</li>' +
+        '<li><b>Sell out of either coin entirely, ever, and the badge is revoked for good.</b> The badge follows your wallet: unlink it and the badge pauses until you relink. Everything is read from the chain, and a read that cannot be completed is retried rather than guessed — nobody loses a badge to an outage.</li>' +
+      '</ul>';
+  }
+  function rulesBlock(g) {
     return '<details class="grules">' +
       '<summary>📖 How Send Power works — points, levels, the Holder Boost &amp; Communities</summary>' +
       '<div class="grules-body">' +
@@ -678,6 +715,8 @@
           '<li><b>💎 Your member level</b> (your “conviction”) is <b>per community</b> — it rises the longer you’re a member and the more you post there, and shows as a badge next to that token in the <b>Convicted In</b> section of your public wall.</li>' +
           '<li><b>👑 Founder bonus:</b> whoever starts a community and grows it to 10 members earns a one-time Send Power bonus when it goes live.</li>' +
         '</ul>' +
+        ogRulesHtml(g) +
+        '<p><b>📣 Send Calls — what one call can pay.</b> A call pays three ways: an opening award (bigger for a bigger on-chain buy), a milestone for each whole X it hits (180 × the X, up to 50x), and a <b>diamond-hands hold bonus</b> that compounds the longer and higher it stays in profit. Everything one call ever pays you comes out of <b>one lifetime budget — the Send Power it takes to reach Level 70 (≈737,627)</b> — and that budget is carved on purpose: the opening award may take at most a tenth, the ladder at most three tenths, and <b>at least 60% is reserved for holding in profit</b>. Your hold bonus also accrues faster when the people who Sent It on your call are in profit too: <b>+10% per Sender in the green, up to 3×</b>. Level 100 is about twenty perfect calls; no single call can carry anyone to the top.</p>' +
         '<p><b>🔒 Fair &amp; safe.</b> Your holdings, and whether you\'ve sold, are read straight from the blockchain and re-verified — so no one can fake diamond hands to cheat their level. Connecting your wallet is a <b>free signature — never a transaction</b>, and this site can never touch or move your funds.</p>' +
       '</div>' +
     '</details>';
@@ -743,7 +782,7 @@
         '<div class="gcol"><h3 class="gsub">🗺️ Quest Board</h3>' + earnList(g.perAction, mult) + '<p class="modal-note" style="margin-top:0.4rem;">Tap any quest to go do it. Points × your ⚡ Power. Daily caps keep it fair.</p></div>' +
         '<div class="gcol"><h3 class="gsub">🏟️ The Arena</h3>' + boardList(lb, AUTH.user && AUTH.user.username) + '</div>' +
       '</div>' +
-      rulesBlock();
+      rulesBlock(g);
 
     // clickable quest rows that open the right section / page
     dash.querySelectorAll('[data-earn]').forEach(btn => btn.addEventListener('click', () => {

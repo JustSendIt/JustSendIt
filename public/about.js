@@ -172,3 +172,24 @@
     }).catch(function () {});
   })();
 })();
+
+/* ---------- OG rules card: dates from the server's campaign clock ----------
+   The homepage banner links to #og-rules promising "how it works". The closing dates are the server's
+   own OG_LAUNCH + OG_TIER_END, fetched rather than written here, so this card and checkOg() can never
+   disagree. On any failure the em-dashes stay: a missing date is better than a wrong one. */
+(function ogRulesDates() {
+  const cells = document.querySelectorAll('[data-og-close]');
+  const state = document.getElementById('ab-og-state');
+  if (!cells.length && !state) return;
+  fetch('/api/og/campaign', { credentials: 'same-origin' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(c => {
+      if (!c || !c.closes) return;
+      const fmt = ms => new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+      cells.forEach(el => { const at = c.closes[el.dataset.ogClose]; if (at) el.textContent = fmt(at); });
+      if (!state) return;
+      if (!c.open) state.textContent = 'Every window has now closed; no new OG badges are granted.';
+      else if (c.tierNow && c.name) state.textContent = 'Right now the ' + String(c.name[c.tierNow] || '').toLowerCase() + ' window is open.';
+    })
+    .catch(() => {});
+})();

@@ -112,7 +112,7 @@ Everything you do that helps the community earns **Send Power** (points, also yo
 | Someone follows you | 15 | |
 | You follow someone | 18 | Once per unique person |
 
-Two more earn types have **no fixed base** — they're computed live from performance and shown as "⚡ scales": the **caller diamond‑hands hold bonus** and the **hopper hold bonus** (see §3.4).
+Two more earn types have **no fixed base** — they're computed live from performance and shown as "⚡ scales": the **caller diamond‑hands hold bonus** and the **Sender hold bonus** (see §3.4).
 
 **Daily caps (anti‑farm).** Cheap, repeatable social actions are capped over a **rolling 24 hours** (not a midnight reset — a slot frees exactly 24h after you used it). Hit the cap and further events of that kind pay 0 until the window rolls.
 
@@ -121,12 +121,12 @@ Two more earn types have **no fixed base** — they're computed live from perfor
 | Upvote received | 100 | | Post | 40 |
 | React received | 60 | | React given | 40 |
 | Vote given | 60 | | Watch token | 30 |
-| Someone follows you | 30 | | "Send It!" (hop) | 30 |
+| Someone follows you | 30 | | "Send It!" (a Send) | 30 |
 | Comment | 20 | | Swap | 20 |
 | Send Call (point events) | 20 | | Track wallet | 10 |
 | Follow someone | 10 | | Connect wallet | 5 |
 
-**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; hold bonus caps at 750,000 base points per position; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A hopper's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And one hard backstop applies to **every** award: after the base is multiplied by your Holder Boost, a single event can never mint more than **1,500,000** points — so the stacked multipliers can never run away.
+**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; hold bonus caps at 750,000 base points per position; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A Sender's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And one hard backstop applies to **every** award: after the base is multiplied by your Holder Boost, a single event can never mint more than **1,500,000** points — so the stacked multipliers can never run away.
 
 **Levels — an endless climb.** Send Power feeds an exponential XP curve with **no level cap** — each level costs about **10.4% more** than the last.
 
@@ -216,13 +216,13 @@ A **Send Call** is you going on the record: a public, timestamped, **permanent**
 sizeMult = min(100, max(1, yourSpendUSD / 100))
 ```
 
-Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest: your "spend" is credited as **min(tokens you bought from the pool, tokens you still hold) × price**, read best‑effort across up to 3 connected wallets. Taking the *minimum* defeats value spoofing, wash/recycled buys, self‑pool paper value, and airdrops. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The senders list in this section re‑reads hoppers' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
+Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest: your "spend" is credited as **min(tokens you bought from the pool, tokens you still hold) × price**, read best‑effort across up to 3 connected wallets. Taking the *minimum* defeats value spoofing, wash/recycled buys, self‑pool paper value, and airdrops. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The Senders list in this section re‑reads Senders' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
 
 **Per‑X milestone payouts: 180 × the X.** As your call actually runs, each **whole X** it crosses pays **180 × that X** — 1x → +180, 2x → +360 … up to **50x → +9,000** (ladder caps at 50x). No daily cap (pure performance), but every payout draws on the call's lifetime budget (§3.1). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
 
-**Diamond‑hands HOLD bonus — the main event.** While your call stays in profit, you keep earning a **super‑linear** bonus: `owed = 0.5 × holdX^1.5` (capped at 750,000 base points per position). It is deliberately where most of a call's Send Power lives: of the per‑call lifetime budget (§3.1), the opening award may take at most 10% and the milestone ladder at most 30% cumulatively, so **at least 60% is reserved for holding in profit**. **Crew factor:** the hold integral accrues faster when the people who Sent It on your call are also in profit from *their own* entry — `rate = 1 + 0.1 × (hoppers in profit)`, capped at **3×** (twenty profitable hoppers). A conviction play that carries other people with it is worth more than a lonely one. It compounds with both height and duration, accrues **only while the pool is liquid and you're in profit** (underwater/drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
+**Diamond‑hands HOLD bonus — the main event.** While your call stays in profit, you keep earning a **super‑linear** bonus: `owed = 0.5 × holdX^1.5` (capped at 750,000 base points per position). It is deliberately where most of a call's Send Power lives: of the per‑call lifetime budget (§3.1), the opening award may take at most 10% and the milestone ladder at most 30% cumulatively, so **at least 60% is reserved for holding in profit**. **Crew factor:** the hold integral accrues faster when the people who Sent It on your call are also in profit from *their own* entry — `rate = 1 + 0.1 × (Senders in profit)`, capped at **3×** (twenty profitable Senders). A conviction play that carries other people with it is worth more than a lonely one. It compounds with both height and duration, accrues **only while the pool is liquid and you're in profit** (underwater/drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
 
-**Send It! — following a call.** Tap **"Send It!"** to hop on someone else's call: base **30**, scaled by *your* Send size and Holder Boost, capped at 30 hops/day. Points pay only on your **first** hop per call; you can't hop your own. Your Xs are measured from the price when *you* hopped, and **hoppers earn the same diamond‑hands HOLD bonus** the caller does.
+**Send It! — following a call.** Tap **"Send It!"** to Send It on someone else's call: base **30**, scaled by *your* Send size and Holder Boost, capped at 30 Sends/day. Points pay only on your **first** Send per call; you can't Send It on your own. Your Xs are measured from the price when *you* Sent It, and **Senders earn the same diamond‑hands HOLD bonus** the caller does.
 
 **The senders list.** Each call shows who's behind it, ranked by conviction: `$ put in × (1 + days held) × (1 + your Xs)`. Anyone **not holding** any more drops below every current holder. Top 3 show inline; "Show all" pulls the full ranked list.
 
@@ -301,7 +301,7 @@ It's a purely lexical scan (a token can dodge a flag by renaming a function, or 
 The whole economy rests on holdings being **real**, so JustSendIt reads them straight from the blockchain, server‑side — the client never supplies a balance.
 
 - **Holder Boost & Diamond tier** are computed from on‑chain balance and total‑supply reads on your linked wallets. You cannot type in a fake number.
-- **Send size** on calls/hops is a best‑effort read of `min(tokens bought from the pool, tokens still held) × price` across up to 3 wallets — the minimum defeats spoofing, wash buys, self‑pool value, and airdrops.
+- **Send size** on calls and Sends is a best‑effort read of `min(tokens bought from the pool, tokens still held) × price` across up to 3 wallets — the minimum defeats spoofing, wash buys, self‑pool value, and airdrops.
 - **The boost pauses when stale** (holdings unverified for 26h) — otherwise someone could refresh once, sell, and keep the boost forever. Opening the dashboard re‑verifies automatically.
 - **Fail‑closed reads:** if an on‑chain read errors, the system refuses rather than treating it as a zero balance, so a transient RPC outage can't wrongly reset an honest holder's streak.
 
@@ -331,7 +331,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - While you're a qualified member of **≥ 1 live community**, **every point you earn is multiplied 10×** — a flat **10×** applied in the same `awardPoints` path as everything else, so it stacks *on top of* your Holder Boost and OG bonus. The full stack the server multiplies is: `base × HolderBoost × OG × Community`. Every action you take **inside a community** (posting, reacting, commenting on its wall) earns Send Power at that 10×, and your dashboard shows the bonus as an achievement you can unlock.
 - It's a **flat 10×** — being in five live communities is still 10× (it doesn't stack with itself).
 
-**Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+5,000 base Send Power**, itself run through the normal multiplier path like any award (so a starter who is now in their own live community receives it ×10, and more with a Holder Boost/OG). It's **idempotent** — it can never be paid twice, even on rejoins.
+**Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+15,000 base Send Power**, itself run through the normal multiplier path like any award (so a starter who is now in their own live community receives it ×10, and more with a Holder Boost/OG). It's **idempotent** — it can never be paid twice, even on rejoins.
 
 **Members & member levels** — every community page lists **all of its members**, ranked by their **community member level** (the conviction level below), with the top three medalled and the starter crowned 👑. Participating raises your own member level *and* contributes XP to the community itself — so an active member is literally what levels a community up.
 
@@ -359,6 +359,28 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - Market stats on community cards are cached (~45s refresh) and are **display only** — nothing about a community implies the token is safe or a good buy. **Most tokens go to zero.**
 
 ---
+
+### 3.11 OG tiers — being early, three ways 🏅
+
+Hold **both $Send and $GWC**, bought from the market, and keep holding both: you earn a **permanent OG badge** and a Send Power multiplier that stacks with everything above. There is **one standard**; only *when* you got in changes the size.
+
+| Tier | Multiplier | Entry window (days from each coin's launch) | Binding close* |
+|---|---:|---|---|
+| 🥇 Gold | **10×** | days 0–30 — the first month | 2026‑09‑18 |
+| 🥈 Silver | **5×** | days 30–90 — the two months after gold | 2026‑11‑17 |
+| 🥉 Bronze | **3×** | days 90–360 — the nine months after silver | 2027‑08‑14 |
+| — | 1× | after day 360: no badge, whatever you buy | — |
+
+\* Windows are measured from **each coin's own launch** (`OG_LAUNCH` in `server.js`, the on‑chain pair‑creation timestamps: $GWC 2026‑08‑19, $SEND 2026‑08‑25), and your tier is the **lower** of your two coins, because the rule is that you held both. So the binding date is $GWC's, six days ahead of $SEND's. Twelve 30‑day months in all — 30 days is what "a month" has always meant here. Nothing schedules this: a tier is a pure function of an on‑chain buy timestamp, so the campaign advances and closes by itself. The live clock is served at `GET /api/og/campaign`; the homepage banner, the About page and the dashboard all read it rather than hard‑coding a date.
+
+**The standard, identical in every window.** Verified read‑only from your linked wallets, across all of them:
+- You **bought** each coin from the market — tokens leaving the LP pool, or the measured router, for your wallet. Your first such buy of the *later* coin is the moment you "completed the pair", and that timestamp decides your tier. A transfer from another wallet is not a buy.
+- You **still hold both** now, across any linked wallet (moving your bag to a hardware wallet is fine).
+- **Two things disqualify a wallet:** if it dumped its whole holding to nothing inside *its own* first 30 days **and** it holds less today than it did at the end of those 30 days, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place. ("Net accumulator" is measured this way on purpose: a wallet's total bought minus total sold *is* its balance, so "bought more than sold" would only re‑ask "do you hold any", which is already required.)
+
+**Losing it.** Sell out of either coin entirely, at any time, and the badge is revoked **for good**. The badge follows your wallet: unlink it and the badge pauses until you relink and are re‑verified. Like every holding‑based bonus, it pays only while your holdings were re‑checked on‑chain within the last 26 hours.
+
+**Fail‑closed, always.** Every scan replays your wallet's full transfer history for the coin and must reconcile exactly with the chain's `balanceOf` before anything is written. A read that cannot be completed — explorer throttling, a dropped page — is retried later, never recorded as an answer, so nobody is denied a badge by an outage. Verification stays open for **90 days after the last window closes** for the same reason; what you *earned* is fixed by your buy timestamp, so late scanning can never manufacture a tier.
 
 ## 4. How to participate — in 4 steps
 

@@ -3935,7 +3935,7 @@ const CALL_X_CAP = 50;      // cap the milestone ladder so a manipulated/glitche
    xpForLevel(100) / xpForLevel(70) = about 20 of those, so a great caller genuinely can climb to the
    top on calls — the leaderboard is meant to reward exactly that — but no single call can put anyone
    there, and twenty perfect calls is a career, not a trick. For scale, one perfect call is worth about
-   36 days of maxed-out social play at 1x. Hoppers get a quarter of the caller's budget, matching the
+   36 days of maxed-out social play at 1x. Senders get a quarter of the caller's budget, matching the
    ratio the opening awards already use (hop_on 30 vs send_call 120). */
 const CALL_POINTS_CAP = xpForLevel(70);                       // 737,627 — lifetime Send Power cap for one call, for its caller
 const HOP_POINTS_CAP = Math.round(CALL_POINTS_CAP / 4);       // 184,407 — same, per hopper on that call
@@ -4118,7 +4118,7 @@ async function refreshCalls() {
       const curX = callX(info.price, r.entry_price);
       const dtH = (t - (r.last_check || t)) / 3600000;
       // diamond-hands: accrue the caller's hold integral (positive Xs × time) and pay out super-linearly — only while liquid
-      // hoppers are read once here: the caller's accrual needs to know how many are in profit, and the
+      // Senders are read once here: the caller's accrual needs to know how many are in profit, and the
       // hopper loop below reuses the same rows
       const hops = liquid ? db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, points_paid, last_check FROM call_hops WHERE call_id=?').all(r.id) : [];
       const crewN = hops.filter(h => h.entry_price > 0 && callX(info.price, h.entry_price) > 0).length;
@@ -5138,7 +5138,7 @@ const server = http.createServer(async (req, res) => {
       }
       cm = /^\/api\/calls\/(\d+)\/hop$/.exec(p);
       if (cm && req.method === 'POST') {
-        if (!me) return bad(res, 'sign in to hop on', 401);
+        if (!me) return bad(res, 'sign in to Send It', 401);
         if (blockReadOnly(res, me)) return;
         if (!rateLimit('hop:' + me.id, 40, 6e5)) return bad(res, 'slow down', 429);
         const callId = Number(cm[1]);

@@ -297,6 +297,22 @@
     </div>
 
     <div class="ab-engines">
+      <!-- The OG banner on the homepage links here promising "tap to read how it works". The dates are
+           filled by about.js from /api/og/campaign — the same OG_LAUNCH + OG_TIER_END the server enforces —
+           so this card cannot drift from the rule. The em-dashes are what shows if that request fails. -->
+      <div class="card gold-card reveal ab-engine" id="og-rules">
+        <h3 class="ab-eng-h">🏅 OG — being early, three ways</h3>
+        <p>Hold <b>both $SEND and $GWC</b>, bought from the market, and keep holding both: a <b>permanent OG badge</b> and a Send Power multiplier on everything. There is <b>one standard</b>; only <b>when</b> you got in changes the size. <span id="ab-og-state" role="status"></span></p>
+        <ul class="ab-mini-list">
+          <li><b>🥇 Gold — 10×.</b> Bought both inside the first month. Closes <b data-og-close="gold">—</b>.</li>
+          <li><b>🥈 Silver — 5×.</b> Bought both in the two months after gold closed. Closes <b data-og-close="silver">—</b>.</li>
+          <li><b>🥉 Bronze — 3×.</b> Bought both in the nine months after silver closed. Closes <b data-og-close="bronze">—</b>.</li>
+          <li><b>After that,</b> no badge, whatever you buy — twelve 30-day months in all. Windows count from <b>each coin's own launch</b>, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.</li>
+          <li><b>Two things disqualify a wallet, identically in every window:</b> if it dumped its whole holding to nothing inside its own first month <b>and</b> holds less today than it did at the end of that month, it earns nothing. Sold out but bought back past where you stood? You keep your place.</li>
+          <li><b>Sell out of either coin entirely, ever, and it's revoked for good.</b> The badge follows your wallet — unlink it and the badge pauses until you relink. Everything is read from the chain; a read that can't be completed is retried, never guessed.</li>
+        </ul>
+        <p class="ab-fine">Not a reason to buy — just how the badge works. Entertainment only.</p>
+      </div>
       <div class="card gold-card reveal ab-engine">
         <h3 class="ab-eng-h">⚡ Holder Boost — the multiplier</h3>
         <p>Hold $SEND / $GWC and a boost multiplies <b>every</b> point you earn:</p>
@@ -368,7 +384,7 @@
         <span class="ab-f-chip">Send size (up to ×100)</span><span class="ab-f-op">×</span>
         <span class="ab-f-chip ab-f-dia">Holder Boost</span>
       </div>
-      <p style="margin-top:0.8rem;"><b>Send size:</b> every <b>$100</b> of the token you actually buy and hold = <b>×1</b> Send Power on the call (cap ×100). It's read on‑chain as <b>min(bought, still‑held) × price</b> so it's hard to fake, and it's <b>locked in at call time</b>. As your call runs, <b>each whole X pays 180 × that X</b> (1x → +180 … up to 50x → +9,000), and while it stays in profit you earn a compounding <b>💎 diamond‑hands hold bonus</b> that grows the longer and higher it holds — and faster still when the people who Sent It on your call are in profit too. Every call has one lifetime budget, and at least 60% of it is reserved for that hold bonus: holding in profit is the main event, not the ladder.</p>
+      <p style="margin-top:0.8rem;"><b>Send size:</b> every <b>$100</b> of the token you actually buy and hold = <b>×1</b> Send Power on the call (cap ×100). It's read on‑chain as <b>min(bought, still‑held) × price</b> so it's hard to fake, and it's <b>locked in at call time</b>. As your call runs, <b>each whole X pays 180 × that X</b> (1x → +180 … up to 50x → +9,000), and while it stays in profit you earn a compounding <b>💎 diamond‑hands hold bonus</b> that grows the longer and higher it holds — and faster still when the people who Sent It on your call are in profit too. Every call has <b>one lifetime budget — the Send Power it takes to reach Level 70 (≈737,627)</b>: the opening award may take at most a tenth of it, the ladder at most three tenths, and <b>at least 60% is reserved for that hold bonus</b>. Holding in profit is the main event, not the ladder — and Level 100 is about twenty perfect calls, so no single call carries anyone to the top.</p>
     </div>
 
     <div class="pillar-grid">
@@ -378,7 +394,7 @@
         <span class="pillar-head"><span class="pillar-title">"Send It!" &amp; the senders list</span><span class="pillar-sub">Follow a call · +10 · same hold bonus</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
         <div class="pillar-body">
-          <p>Tap <b>🚀 Send It!</b> to hop on someone else's call: <b>+10</b> (scaled by your own Send size and Holder Boost), paid on your first hop per call, capped at 30/day — you can't hop your own call. Your Xs count from the price when <b>you</b> hopped, and you earn the <b>same diamond‑hands hold bonus</b> the caller does. Each call shows who's behind it, ranked by conviction — <b>$ put in × how long held × how many Xs up</b> — and anyone who has <b>sold out drops below every current holder</b>. The card shows the top 3; expand for everyone.</p>
+          <p>Tap <b>🚀 Send It!</b> to Send It on someone else's call: <b>+30</b> (scaled by your own Send size and Holder Boost), paid on your first Send per call, capped at 30/day — you can't Send It on your own call. Your Xs count from the price when <b>you</b> Sent It, and you earn the <b>same diamond‑hands hold bonus</b> the caller does. Each call shows who's behind it, ranked by conviction — <b>$ put in × how long held × how many Xs up</b> — and anyone who has <b>sold out drops below every current holder</b>. The card shows the top 3; expand for everyone.</p>
         </div>
       </details>
 
