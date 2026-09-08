@@ -3429,3 +3429,56 @@ body.np-mode-feed .np-slide { contain-intrinsic-size: 1px var(--np-feed-h); }
 footer .nav-foot { gap: 0.65rem 1.5rem; align-items: center; }
 footer .nav-foot a:focus-visible,
 footer .fine a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   16. OG tiers — gold / silver / bronze
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Nothing in the palette read as silver or bronze, so both are new. They are deliberately FIXED
+   rather than derived from --gold: --gold is user-overridable through the colour picker (prefs.js
+   GROUPS.highlight), and three tiers mixed from one accent would all shift together and stop being
+   distinguishable the moment somebody picked a custom highlight. --diamond was the other candidate
+   for silver and is rejected on meaning, not looks: it already belongs to the Diamond Hands hold
+   streak, and a Silver OG wearing the Diamond colour would collide with an unrelated status.
+   Each tier carries its own ink token so the label stays legible on its own fill. */
+:root {
+  --silver: #cfd6e4; --silver-deep: #8e99ad; --on-silver: #14161c;
+  --bronze: #e2a465; --bronze-deep: #a06a30; --on-bronze: #1c0f04;  /* measured 6.11:1 against its own fill; the first pick sat at 4.60, passing but with no margin at the badge's 0.62rem */
+}
+
+/* The base .og-badge rule still paints gold, so gold needs no variant — but it does need its ink
+   taken off the hardcoded #0a0e14 it has always used, which goes near-black-on-near-black under a
+   dark custom highlight. */
+.og-badge--gold { color: var(--on-gold); }
+.og-badge--silver {
+  color: var(--on-silver);
+  background: linear-gradient(180deg, var(--silver) 0%, var(--silver-deep) 100%);
+  border-color: color-mix(in srgb, var(--silver) 65%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--silver) 40%, transparent);
+}
+.og-badge--silver:hover { box-shadow: 0 0 13px color-mix(in srgb, var(--silver) 70%, transparent); }
+.og-badge--bronze {
+  color: var(--on-bronze);
+  background: linear-gradient(180deg, var(--bronze) 0%, var(--bronze-deep) 100%);
+  border-color: color-mix(in srgb, var(--bronze) 65%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--bronze) 40%, transparent);
+}
+.og-badge--bronze:hover { box-shadow: 0 0 13px color-mix(in srgb, var(--bronze) 70%, transparent); }
+/* the existing reduced-motion rule drops the gold glow; the variants need the same treatment */
+@media (prefers-reduced-motion: reduce) { .og-badge--silver, .og-badge--bronze { box-shadow: none; } }
+
+/* The dashboard block. .og-block is reused as a generic layout class by the community and arcade
+   cards (gamify.js builds `og-block comm-invite` and `og-block comm-block`), so tier colour goes on
+   a modifier and never on .og-block itself — restyling the base would bleed into those cards. */
+.og-block--silver { background: linear-gradient(100deg, color-mix(in srgb, var(--silver) 14%, transparent), color-mix(in srgb, var(--silver) 5%, transparent)); border-color: color-mix(in srgb, var(--silver) 50%, transparent); }
+.og-block--silver .og-block-badge { background: linear-gradient(180deg, var(--silver), var(--silver-deep)); color: var(--on-silver); box-shadow: 0 0 10px color-mix(in srgb, var(--silver) 50%, transparent); }
+.og-block--silver .og-block-body b { color: var(--silver); }
+.og-block--bronze { background: linear-gradient(100deg, color-mix(in srgb, var(--bronze) 14%, transparent), color-mix(in srgb, var(--bronze) 5%, transparent)); border-color: color-mix(in srgb, var(--bronze) 50%, transparent); }
+.og-block--bronze .og-block-badge { background: linear-gradient(180deg, var(--bronze), var(--bronze-deep)); color: var(--on-bronze); box-shadow: 0 0 10px color-mix(in srgb, var(--bronze) 50%, transparent); }
+.og-block--bronze .og-block-body b { color: var(--bronze); }
+
+/* .eq-og had no rule at all — the OG chip in the Send Power equation fell back to neutral .eq-chip.
+   Now it carries the tier, so the chip and the badge agree at a glance. */
+.eq-og { background: color-mix(in srgb, var(--gold) 16%, transparent); border-color: color-mix(in srgb, var(--gold) 45%, transparent); color: var(--gold); }
+.eq-og--silver { background: color-mix(in srgb, var(--silver) 16%, transparent); border-color: color-mix(in srgb, var(--silver) 45%, transparent); color: var(--silver); }
+.eq-og--bronze { background: color-mix(in srgb, var(--bronze) 16%, transparent); border-color: color-mix(in srgb, var(--bronze) 45%, transparent); color: var(--bronze); }

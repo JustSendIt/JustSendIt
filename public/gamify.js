@@ -122,7 +122,10 @@
     const holder = g.multiplier || 1;
     const h = g.holder;
     const ogOn = !!(g.og && h && h.fresh !== false && (h.sendTok || 0) > 0 && (h.gwcTok || 0) > 0); // OG pays only while freshly verified & still holding both
-    const og = ogOn ? (g.ogBonus || 10) : 1;
+    // No `|| 10` fallback: ogBonus is now the USER'S tier multiplier (10/5/3), so falling back to
+    // 10 would show a bronze holder four times the bonus they are actually paid. If the server
+    // did not send one, the honest display is no OG term at all.
+    const og = ogOn ? (Number(g.ogBonus) || 1) : 1;
     const comm = g.communityMult || 1;
     const parts = [];
     if (holder > 1) parts.push('Holder ' + holder.toFixed(2) + '×');
@@ -337,7 +340,7 @@
         (stale
           ? '<span class="eq-chip eq-out">⏸ ' + paused.toFixed(2) + '×<small>PAUSED · paying 1× until you refresh</small></span>'
           : '<span class="eq-chip eq-out">⚡ ' + mult.toFixed(2) + '×<small>' + (stacked ? 'HOLDER BOOST' : 'SEND POWER') + '</small></span>') +
-        (em.og > 1 ? '<span class="eq-op">×</span><span class="eq-chip eq-og">🏅 ×' + em.og + '<small>OG</small></span>' : '') +
+        (em.og > 1 ? '<span class="eq-op">×</span><span class="eq-chip eq-og' + ogVariant(g) + '">🏅 ×' + em.og + '<small>OG' + (g.ogTierName ? ' ' + g.ogTierName.toUpperCase() : '') + '</small></span>' : '') +
         (em.comm > 1 ? '<span class="eq-op">×</span><span class="eq-chip eq-comm">🏘️ ×' + em.comm + '<small>community</small></span>' : '') +
         (stacked ? '<span class="eq-op">=</span><span class="eq-chip eq-out">⚡ ' + em.eff.toFixed(2) + '×<small>SEND POWER</small></span>' : '') +
       '</div>' +
@@ -345,10 +348,33 @@
     '</div>';
   }
 
-  // OG status banner on your own dashboard (verified early buyer → permanent 10× Send Power)
+  // which tier's colour a block/chip wears — '' is gold, which the base rules already paint
+  function ogVariant(g) {
+    const t = Number(g.ogTier || g.og) || 0;
+    return t === 2 ? '--silver' : t === 1 ? '--bronze' : '';
+  }
+  // OG status banner on your own dashboard. Every number and every window phrase comes from the
+  // server's own tier record — none of it is written into this file, because the three tiers pay
+  // three different multipliers and a hardcoded one would be a number the user is not earning.
   function ogBlock(g) {
-    if (g.og) return '<div class="og-block"><span class="og-block-badge">🏅 OG</span><div class="og-block-body"><b>You’re an OG.</b> You bought <b>both $Send and $GWC</b> in their first month (verified on-chain) — a permanent <b>' + (g.ogBonus || 10) + '× Send Power</b> bonus on <b>everything</b> you do. Keep holding <b>both</b>: sell out of either and OG is gone for good.</div></div>';
-    if (g.ogRevoked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> OG requires holding <b>both</b> $Send and $GWC, and you sold out of one — your badge and 10× bonus are gone, and can’t be reclaimed.</div></div>';
+    const tier = Number(g.ogTier || g.og) || 0;
+    if (tier) {
+      const when = tier === 3 ? 'in their first month'
+        : tier === 2 ? 'in the two months after the gold window closed'
+        : 'in the nine months after the silver window closed';
+      const v = ogVariant(g);
+      return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">🏅 OG ' + (g.ogTierName || '') + '</span>'
+        + '<div class="og-block-body"><b>You’re an OG ' + (g.ogTierName || '') + '.</b> You bought <b>both $Send and $GWC</b> '
+        + when + ' (checked on-chain) — a permanent <b>' + (Number(g.ogBonus) || 1) + '× Send Power</b> bonus on <b>everything</b> you do. '
+        + 'Keep holding <b>both</b>: sell out of either and it’s gone for good.</div></div>';
+    }
+    if (g.ogRevoked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> OG requires holding <b>both</b> $Send and $GWC, and you sold out of one — your badge and its Send Power bonus are gone, and can’t be reclaimed.</div></div>';
+    // ogDq is one bit for the whole account: it says at least one wallet was ruled out by the dump
+    // standard, NOT that this is the only reason there is no badge (the other coin may simply never
+    // have been bought). So it states what it actually knows and stops there — the earlier wording
+    // named a single cause and a single remedy, both of which could be wrong for the reader, and the
+    // remedy pointed at a purchase, which is not something this site tells anyone to make.
+    if (g.ogDq) return '<div class="og-block og-block-lost"><span class="og-block-badge">⚠️</span><div class="og-block-body"><b>One of your wallets didn’t meet the OG standard.</b> It bought inside a window, but it sold its whole holding to nothing inside its first month <b>and</b> holds less now than it did at the end of that month. That is not the only thing OG needs — it also requires having bought <b>both</b> $Send and $GWC and still holding both. Nothing here is permanent: your wallets are re-read from the chain on a schedule while the windows are open.</div></div>';
     return '';
   }
 

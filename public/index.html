@@ -117,19 +117,23 @@
 </div>
 
 <main id="main" tabindex="-1">
-<a class="og-banner" href="about.html#power" aria-label="OG status — anyone who holds BOTH $SEND and $GWC from their first month earns a permanent OG badge and 10x Send Power. Tap to read how it works. Not a recommendation to buy.">
+<!-- The deadlines used to be hardcoded epochs in this file, duplicating the server's OG_LAUNCH +
+     OG_TIER_END constants. With three windows per coin that is six numbers to keep in sync by hand,
+     so home.js now fills them from /api/og/campaign and there is one source of truth. The `—`
+     placeholders are what shows if that request fails: no number is better than a stale one. -->
+<a class="og-banner" href="about.html#power" aria-label="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Three windows: gold in the first month for a 10 times Send Power bonus, silver in the two months after for 5 times, bronze in the nine months after that for 3 times. Tap to read how it works. Not a recommendation to buy.">
   <span class="og-shine" aria-hidden="true"></span>
   <span class="og-confetti" aria-hidden="true"><span>✨</span><span>🏆</span><span>💎</span><span>🚀</span><span>✨</span><span>👑</span></span>
   <span class="og-banner-badge" aria-hidden="true"><span class="og-medal">🏅</span></span>
   <span class="og-banner-copy">
     <span class="og-banner-title">Become an <span class="og-word">OG</span> <span class="og-tag">legend</span></span>
-    <span class="og-banner-sub">Hold <b>both $SEND &amp; $GWC</b> from their first month → a <b>forever badge + 10× Send Power</b> on everything. The window closes with the month; sell out of either and it's gone <b>for good</b>. Not a reason to buy — just how the badge works.</span>
+    <span class="og-banner-sub">Hold <b>both $SEND &amp; $GWC</b> → a <b>forever badge</b> and a Send Power bonus on everything. Same standard in all three windows — only <b>when</b> you got in changes the size: <b>gold 10×</b> in the first month, <b>silver 5×</b> for the two months after, <b>bronze 3×</b> for the nine months after that. Sell out of either and it's gone <b>for good</b>. Not a reason to buy — just how the badge works.</span>
   </span>
   <span class="og-banner-timers">
-    <span class="og-timer"><i>⏳ $GWC closes in</i><b data-og-deadline="1789749963000">—</b></span>
-    <span class="og-timer"><i>⏳ $SEND closes in</i><b data-og-deadline="1790276270000">—</b></span>
+    <span class="og-timer"><i>⏳ <b class="og-tier-label">this window</b> closes in</i><b data-og-deadline="" data-og-window="current">—</b></span>
+    <span class="og-timer"><i>⏳ everything closes</i><b data-og-deadline="" data-og-window="bronze">—</b></span>
   </span>
-  <span class="og-banner-cta" aria-hidden="true">Buy &amp; Claim OG <span class="og-cta-arrow">→</span></span>
+  <span class="og-banner-cta" aria-hidden="true">How OG works <span class="og-cta-arrow">→</span></span>
 </a>
 <header class="hero">
   <video class="hero-bg-video" src="assets/hero-banner.mp4" autoplay muted loop playsinline aria-hidden="true"></video>

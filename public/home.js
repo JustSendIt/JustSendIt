@@ -1,11 +1,35 @@
 /* ===== Homepage: market cap, swap, MoonPay, celebrations ===== */
 initTokenCards();
 
-/* ---------- OG banner: live countdown to each token's "first month" claim deadline ---------- */
+/* ---------- OG banner: live countdown to the tier windows ----------
+   The deadlines come from /api/og/campaign, not from this file and not from the HTML. They used to be
+   hardcoded epochs in index.html sitting beside the same constants on the server; with three windows
+   per coin that is six numbers to hand-maintain, and a countdown that is confidently wrong is worse
+   than no countdown. Each element names the window it wants (data-og-window) and the server answers
+   with the binding date — the EARLIER of the two coins', since a tier requires holding both. */
 (function ogBannerTimers() {
   const els = document.querySelectorAll('[data-og-deadline]');
   if (!els.length) return;
   const banner = document.querySelector('.og-banner');
+  const label = document.querySelector('.og-tier-label');
+  let loaded = false;   // three states, not two: open, closed, and "we don't know yet"
+  fetch('/api/og/campaign', { credentials: 'same-origin' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(c => {
+      if (!c || !c.closes) return;                   // leave the em-dash rather than invent a date
+      // "current" resolves to whichever window is actually open. Hardcoding it to gold while the
+      // LABEL followed c.tierNow meant that from day 31 the banner read "silver closes in closed" —
+      // the label and the number describing two different windows for 330 of the campaign's 360 days.
+      const openKey = (c.name && c.name[c.tierNow] || '').toLowerCase();
+      els.forEach(el => {
+        const w = el.dataset.ogWindow === 'current' ? openKey : el.dataset.ogWindow;
+        if (w && c.closes[w]) el.dataset.ogDeadline = String(c.closes[w]);
+      });
+      if (label && openKey) label.textContent = openKey;
+      loaded = true;
+      tick();
+    })
+    .catch(() => {});
   function fmt(ms) {
     if (ms <= 0) return 'closed';
     const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
@@ -17,13 +41,22 @@ initTokenCards();
     const now = Date.now();
     let allClosed = true;
     els.forEach(el => {
-      const left = Number(el.dataset.ogDeadline) - now;
+      const at = Number(el.dataset.ogDeadline);
+      if (!at) { el.textContent = '—'; return; }     // not filled in yet (or the request failed)
+      const left = at - now;
       el.textContent = fmt(left);
       el.classList.toggle('og-timer-closed', left <= 0);
-      if (el.parentElement) el.parentElement.classList.toggle('og-timer-soon', left > 0 && left < 3 * 86400 * 1000); // last 3 days → red urgency pulse
+      // The urgency pulse is deliberately limited to the LAST window. It used to fire in the final
+      // three days of any deadline, which was fine when there was one month-long window; across a
+      // year of staggered tiers it would flash red three separate times, which is a pressure device
+      // rather than information.
+      if (el.parentElement) el.parentElement.classList.toggle('og-timer-soon', el.dataset.ogWindow === 'bronze' && left > 0 && left < 3 * 86400 * 1000);
       if (left > 0) allClosed = false;
     });
-    if (banner) banner.classList.toggle('og-banner-closed', allClosed); // both windows past → subdue the banner
+    // Only claim the campaign is over once we actually know. Before the fetch resolves (and forever
+    // if it fails) every deadline is empty, which made allClosed true and greyed the banner out —
+    // presenting a live campaign as expired on every page load and on every flaky connection.
+    if (banner && loaded) banner.classList.toggle('og-banner-closed', allClosed);
   }
   tick();
   setInterval(() => { if (!document.hidden) tick(); }, 1000); // a countdown nobody can see doesn't need repainting

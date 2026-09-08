@@ -62,13 +62,41 @@
   zone.setAttribute('aria-live', 'polite');
   zone.setAttribute('aria-atomic', 'true');
   document.body.appendChild(zone);
-  // Shared OG badge — rendered next to an OG's username everywhere. Hover shows a simple explanation (native title).
-  // OG = verified early buyer of $Send/$GWC (first month), permanent + 10× Send Power, lost only on a full sell-out.
-  window.OG_TIP = 'OG — bought BOTH $Send and $GWC in their first month and still holds both (verified on-chain). Permanent OG badge + a 10× Send Power bonus on everything. Lost if they sell out of either.';
+  /* Shared OG badge — rendered next to an OG's username everywhere. Hover shows a simple explanation
+     (native title). OG = verified early buyer of BOTH $Send and $GWC who still holds both, in one of
+     three entry windows: gold (first month, ×10), silver (the two months after, ×5), bronze (the nine
+     months after that, ×3). Lost only on a full sell-out.
+
+     The argument is the TIER (0-3), which is what every `og` field now carries from the server. It
+     used to be a boolean and every label here was hardcoded to gold's "10×" — passing a silver holder
+     through that printed a multiplier they are not paid, in the badge, the tooltip AND the screen
+     reader label. Nothing about the number is hardcoded any more; unknown values render nothing
+     rather than guessing a tier. 0 is falsy, so every existing `if (u.og)` call site still gates
+     correctly with no change. */
+  window.OG_TIERS = {
+    3: { name: 'Gold', mult: 10, when: 'in the first month' },
+    2: { name: 'Silver', mult: 5, when: 'in the two months after the gold window closed' },
+    1: { name: 'Bronze', mult: 3, when: 'in the nine months after the silver window closed' },
+  };
+  window.ogTip = function (tier) {
+    var t = window.OG_TIERS[tier];
+    if (!t) return '';
+    return 'OG ' + t.name + ' — bought BOTH $Send and $GWC ' + t.when + ' and still holds both (checked on-chain). '
+      + 'Permanent badge + a ' + t.mult + '× Send Power bonus on everything. Lost if they sell out of either.';
+  };
+  // kept for anything still reading the old global; gold is the tier it always described
+  window.OG_TIP = window.ogTip(3);
   window.ogBadge = function (og) {
     // native title = hover explanation (browser-positioned, never clips); aria-label = screen readers.
     // No tabindex: many badges on a leaderboard shouldn't each become an empty keyboard tab-stop.
-    return og ? '<span class="og-badge" role="img" aria-label="OG, verified early buyer with a 10 times Send Power bonus" title="' + window.OG_TIP + '">OG</span>' : '';
+    var tier = Number(og) || 0;
+    var t = window.OG_TIERS[tier];
+    if (!t) return '';
+    // every tier keeps the base `og-badge` class: profile.js, wall.js and upage.js each find and
+    // remove a stale badge by that selector before re-inserting, and a variant-only class would
+    // leave them behind to duplicate.
+    return '<span class="og-badge og-badge--' + t.name.toLowerCase() + '" role="img" aria-label="OG ' + t.name
+      + ', verified early buyer with a ' + t.mult + ' times Send Power bonus" title="' + window.ogTip(tier) + '">OG</span>';
   };
 
   window.sendToast = function (msg) {

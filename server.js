@@ -476,6 +476,12 @@ for (const col of [
   "ALTER TABLE pinned_tokens ADD COLUMN pin_mc REAL",                         // market cap at pin time (for reference)
   "ALTER TABLE community_members ADD COLUMN qual_check_at INTEGER",           // last time we re-verified this member still holds the community's token (drives the holder-continuity sweep)
   "ALTER TABLE users ADD COLUMN upload_bytes INTEGER NOT NULL DEFAULT 0",     // running total of stored upload bytes for this user (per-account media quota)
+  // OG tiers: the same standard, three entry windows. `og` stays as the boolean every existing read
+  // depends on; og_tier is the payout. Appended at the tail so no existing statement's position moves.
+  "ALTER TABLE users ADD COLUMN og_tier INTEGER NOT NULL DEFAULT 0",          // 0 none · 1 bronze (3×) · 2 silver (5×) · 3 gold (10×)
+  "ALTER TABLE users ADD COLUMN og_buy_ms INTEGER NOT NULL DEFAULT 0",        // earliest verified market acquisition of the LATER of the two coins — the timestamp the tier was derived from
+  "ALTER TABLE users ADD COLUMN og_dq INTEGER NOT NULL DEFAULT 0",            // 1 = failed the dump / net-accumulator standard (distinct from og_revoked, which is a later sell-out)
+  "ALTER TABLE users ADD COLUMN og_try_at INTEGER NOT NULL DEFAULT 0",        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 // Performance indices — added AFTER the migrations so the score/points columns they reference exist.
@@ -497,7 +503,13 @@ try { db.exec('DROP INDEX IF EXISTS idx_hops_call'); } catch {}
 db.exec('PRAGMA optimize;'); // let SQLite build/refresh stat samples for the query planner on boot
 // One-time repair: OG badges left on accounts with NO linked wallet (the badge now follows the wallet — see /api/wallet/disconnect).
 // Not a revoke: relinking the early-buyer wallet re-verifies on-chain and re-grants.
-try { db.prepare("UPDATE users SET og = 0 WHERE og = 1 AND og_revoked = 0 AND id NOT IN (SELECT user_id FROM identities WHERE type = 'wallet')").run(); } catch {}
+// Backfill first, repair second — in that order. Every existing og=1 row was granted by checkOg()
+// under the 30-day rule, which is exactly the gold window, so gold is the correct tier for all of
+// them and no chain re-scan is needed. The `og_tier = 0` predicate makes it idempotent and stops it
+// ever demoting a tier the new checkOg() has since assigned.
+try { db.prepare('UPDATE users SET og_tier = 3 WHERE og = 1 AND og_tier = 0').run(); } catch {}
+// The repair has to clear the tier too, or a wallet-less account keeps a stale tier (and its payout).
+try { db.prepare("UPDATE users SET og = 0, og_tier = 0 WHERE og = 1 AND og_revoked = 0 AND id NOT IN (SELECT user_id FROM identities WHERE type = 'wallet')").run(); } catch {}
 
 // Moderation (mutes) + per-user wallet-tracker report cache (encrypted at rest)
 db.exec(`
@@ -772,11 +784,15 @@ function isTokenDev(userId, tok) {
 // so the number a user sees can never drift from the number they're actually paid.
 function effectiveMult(userId) {
   const holder = holderMultiplier(userId);
-  const row = db.prepare('SELECT og, live_comm_count FROM users WHERE id = ?').get(userId);
-  let og = 1; // OGs earn 10× — but ONLY while their holdings are recently on-chain-verified AND non-zero (still holding both)
-  if (row && row.og) {
+  const row = db.prepare('SELECT og, og_tier, live_comm_count FROM users WHERE id = ?').get(userId);
+  // The tier decides the bonus — gold 10×, silver 5×, bronze 3× — and ONLY while the holdings behind
+  // it are recently on-chain-verified AND non-zero (still holding both). Reading `og` here instead of
+  // `og_tier` would pay every silver and bronze the gold multiplier.
+  let og = 1;
+  const tier = row ? (row.og_tier || 0) : 0;
+  if (tier > 0) {
     const h = db.prepare('SELECT send_tok, gwc_tok, last_check FROM holder_state WHERE user_id = ?').get(userId);
-    if (h && h.last_check && now() - h.last_check <= HOLDER_TTL && (h.send_tok || 0) > OG_DUST && (h.gwc_tok || 0) > OG_DUST) og = OG_BONUS;
+    if (h && h.last_check && now() - h.last_check <= HOLDER_TTL && (h.send_tok || 0) > OG_DUST && (h.gwc_tok || 0) > OG_DUST) og = OG_TIER_MULT[tier] || 1;
   }
   const community = (row && row.live_comm_count > 0) ? COMMUNITY_MULT : 1; // flat, not per-community and not 10^n
   const arcade = arcadeBoostOf(userId);                                    // today's Rocket Run cash-out, until it expires
@@ -1179,10 +1195,11 @@ async function refreshHolder(userId) {
   // removes OG. These balances are real — rpc() throws on failure (we'd never reach here on a transient error), so a
   // zero here is a true zero, not a glitch.
   if (sendTok <= OG_DUST || gwcTok <= OG_DUST) {
-    const cur = db.prepare('SELECT og FROM users WHERE id = ?').get(userId);
-    if (cur && cur.og) {
-      db.prepare('UPDATE users SET og = 0, og_revoked = 1 WHERE id = ?').run(userId);
-      notify(userId, '💔', 'OG status removed — OG requires holding BOTH $SEND and $GWC, and you sold out of one of them. It can’t be reclaimed.', 'og');
+    const cur = db.prepare('SELECT og, og_tier FROM users WHERE id = ?').get(userId);
+    if (cur && (cur.og || cur.og_tier)) {
+      const lost = OG_TIER_NAME[cur.og_tier] || '';
+      db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1 WHERE id = ?').run(userId);
+      notify(userId, '💔', 'OG' + (lost ? ' ' + lost : '') + ' removed — OG requires holding BOTH $SEND and $GWC, and you sold out of one of them. It can’t be reclaimed.', 'og');
     }
   }
   const freshH = { streak_start: streakStart, gwc_streak_start: gwcStreak, last_check: now() };
@@ -1190,66 +1207,203 @@ async function refreshHolder(userId) {
   return { hasWallet: true, multiplier: holderMultiplier(userId), pct: score, pctSend, pctGwc, holdDays: hd, gwcDays: gwcDaysOf(freshH), sendTok, gwcTok, streakStart, fresh: true, diamond: diamondInfo(effHoldDays(freshH)) };
 }
 
-// ===== OG detection: did any of the user's linked wallets BUY $SEND/$GWC in its first month? (read-only, on-chain) =====
-// A "buy" = an ERC-20 transfer of the token OUT of its LP pool TO the wallet, timestamped within [launch, launch+30d].
-async function boughtInFirstMonth(wallet, token, pair, launchMs) {
-  const w = wallet.toLowerCase(), pl = pair.toLowerCase(), end = launchMs + OG_WINDOW_MS;
-  const base = BLOCKSCOUT + '/api/v2/addresses/' + w + '/token-transfers?type=ERC-20&filter=to&token=' + token;
+/* ===== OG scan: replay a wallet's whole history of one coin, on-chain, read-only ==================
+   The old scan asked one yes/no question ("was there a pool buy inside 30 days?") and could answer it
+   from the newest page. A tier needs the EARLIEST acquisition, not any acquisition — Blockscout pages
+   newest-first, so returning the first match found returned the LATEST qualifying buy and would have
+   scored a genuine day-one buyer by their month-eight top-up. And neither new disqualifier is
+   answerable from inbound transfers alone: "dumped their whole supply" is a statement about the
+   running balance, which needs both directions.
+
+   So this walks the wallet's full transfer list for the coin and replays it oldest-first in BigInt.
+   Three facts measured against this explorer drive the details:
+     · the amount is at `it.total.value`, NOT `it.value` (which is undefined here). Reading the wrong
+       field makes every transfer parse as 0 and every wallet look like a clean non-dumper.
+     · rows come strictly newest-first by (block_number, log_index) and the page cursor is exclusive,
+       but the replay sorts ascending anyway rather than trusting arrival order.
+     · page size is capped at 50 and asking for more is a hard HTTP 422 here — unlike the holders
+       endpoint, which answers an oversized request with a silent empty 200.
+
+   FAIL-CLOSED, and it matters more here than anywhere else on the site: this scan can permanently
+   deny a badge. Every failure path throws rather than returning a negative. The keystone is the
+   balance cross-check in ogScan() — the replayed balance must equal what the chain says the wallet
+   holds, read from the RPC, a different host on a different rate limit. Truncated paging, a dropped
+   page, or a throttled empty 200 all move that total, so the mismatch catches them without having to
+   recognise each failure shape individually. */
+/* 20 pages = 1,000 transfers per (wallet, coin). Every real holder sampled fitted in ONE page, so
+   this is ~1000× headroom on the measured case — but the cap is not a soft limit: a wallet past it
+   cannot be reconciled against its chain balance, so it cannot be judged at all and earns nothing.
+   That is the safe direction, and with per-page retries the extra pages actually complete now, but
+   it does mean a very high-frequency trader on a single linked wallet is out of reach. Raising this
+   moves the threshold; it does not remove the class of problem. */
+const OG_SCAN_PAGES = 20;
+const OG_SCAN_GAP_MS = 220;      // politeness gap between pages — a burst of back-to-back calls gets a 429
+// A market acquisition is tokens leaving the pool for you. Measured on this chain, most buys arrive
+// via a router that forwards from the pool, so a pool-only test misses them: on one sampled wallet
+// 65.9% of inbound $GWC by value came from RelayRouterV3, not the pair. This list is measured, not
+// exhaustive — a buy through some other router is invisible here and simply earns no tier, which is
+// the safe direction to be wrong in for something that grants a reward.
+const OG_ROUTERS = ['0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f']; // RelayRouterV3 (verified contract)
+const OG_PAGE_TRIES = 4;         // this explorer 429s readily; one shot per page meant almost no scan ever finished
+async function ogTransfers(wallet, token) {
+  const w = wallet.toLowerCase();
+  const base = BLOCKSCOUT + '/api/v2/addresses/' + w + '/token-transfers?type=ERC-20&token=' + token;
+  const rows = [];
   let url = base;
-  for (let page = 0; page < 12 && url; page++) {          // transfers come newest-first; page back until we pass the window
-    const j = await jget(url);
-    if (!j || !Array.isArray(j.items)) throw new Error('og scan incomplete'); // a Blockscout hiccup must NOT read as "no early buy" — let checkOg retry instead of locking in the wrong answer
-    for (const it of j.items) {
-      const to = ((it.to && it.to.hash) || '').toLowerCase();
-      const from = ((it.from && it.from.hash) || '').toLowerCase();
-      const ts = Date.parse(it.timestamp || it.block_timestamp || '') || 0;
-      if (to === w && from === pl && ts >= launchMs && ts <= end) return true;   // a genuine pool buy inside the first month
-      if (ts && ts < launchMs - 864e5) return false;      // paged a full day past the window's start → no earlier buys exist
+  for (let page = 0; page < OG_SCAN_PAGES; page++) {
+    if (page) await new Promise(r => setTimeout(r, OG_SCAN_GAP_MS));
+    // Retry each page like snapPage() does. Measured driving this endpoint at OG_SCAN_GAP_MS from a
+    // cold client: 8 of 8 requests came back 429. A single un-retried jget per page meant a full scan
+    // (up to 10 sequential pages) essentially never completed, so the campaign would have granted
+    // almost nobody while still spending the requests. Backoff is seconds, not milliseconds, because
+    // the throttle here stays cross for tens of seconds.
+    let j = null;
+    for (let attempt = 0; attempt < OG_PAGE_TRIES && !j; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, 1500 * Math.pow(2, attempt - 1) + Math.random() * 400));
+      j = await jget(url);
+      if (j && !Array.isArray(j.items)) j = null;    // a shape we don't recognise is a failure, not an empty history
     }
-    const np = j.next_page_params;
-    url = np ? base + '&' + new URLSearchParams(np).toString() : null;
+    if (!j) throw new Error('og scan: explorer unavailable'); // exhausted retries → never a negative answer
+    rows.push(...j.items);
+    if (!j.next_page_params) return rows;
+    url = base + '&' + new URLSearchParams(j.next_page_params).toString();
   }
-  return false;
+  throw new Error('og scan: history longer than the page budget'); // unverifiable ≠ disqualified
+}
+// Replay one (wallet, coin) into the facts the tier rules need. Throws unless the replay reconciles
+// with the chain. `launchMs` is that coin's own launch — tier windows are per-coin.
+async function ogScan(wallet, token, pair, launchMs) {
+  const w = wallet.toLowerCase(), pl = pair.toLowerCase();
+  const isAcquisition = (from) => from === pl || OG_ROUTERS.includes(from);
+  const rows = await ogTransfers(wallet, token);
+  rows.sort((a, b) => (Number(a.block_number) - Number(b.block_number)) || (Number(a.log_index) - Number(b.log_index)));
+  let bal = 0n, firstBuyMs = null, dumped = false, balAtMonthEnd = null;
+  for (const r of rows) {
+    const from = ((r.from && r.from.hash) || '').toLowerCase();
+    const to = ((r.to && r.to.hash) || '').toLowerCase();
+    const raw = r.total && r.total.value;
+    if (raw == null) throw new Error('og scan: transfer with no value');   // never silently read as 0
+    const ts = Date.parse(r.timestamp || r.block_timestamp || '') || 0;
+    if (!ts) throw new Error('og scan: unparseable timestamp');
+    let v;
+    try { v = BigInt(raw); } catch { throw new Error('og scan: unparseable value'); }
+    if (to === w) {
+      bal += v;
+      if (firstBuyMs === null && isAcquisition(from)) firstBuyMs = ts;      // EARLIEST market acquisition — the tier basis
+    }
+    if (from === w) bal -= v;
+    if (firstBuyMs !== null) {
+      // "dumped their whole supply within the first month": the balance reached ~zero at some point
+      // inside the 30 days after this wallet's own first buy. Anchoring to the wallet's own first buy
+      // rather than to launch is what makes the standard identical for gold, silver and bronze — a
+      // bronze buyer measured against launch+30d could never trip it.
+      if (ts <= firstBuyMs + OG_MONTH_MS && bal <= OG_DUST_WEI) dumped = true;
+      if (ts <= firstBuyMs + OG_MONTH_MS) balAtMonthEnd = bal;             // last balance still inside month one
+    }
+  }
+  // The keystone. erc20Balance() throws on a failed read (it never reports a failure as 0n), so a
+  // transient RPC error throws here too rather than inventing a disqualification.
+  const onChain = await erc20Balance(token, wallet);
+  if (onChain !== bal) throw new Error('og scan: replay did not reconcile with chain balance');
+  return {
+    firstBuyMs,
+    tier: firstBuyMs === null ? OG_TIER.NONE : ogTierForBuy(firstBuyMs, launchMs),
+    holds: bal > OG_DUST_WEI,
+    dumped,
+    // net accumulator, measured the only way that is not a tautology: Σin − Σout IS the balance, so
+    // "bought more than you sold" would just re-ask "do you hold any?", which is already required.
+    // This asks the question that has an answer — are you above where you stood at the end of month one?
+    notAccumulator: balAtMonthEnd !== null && bal < balAtMonthEnd,
+  };
 }
 const _ogScanning = new Set(); // coalesce concurrent scans of the same user
+/* Decide (or re-decide) a user's OG tier from chain history. Returns the tier, 0 for none.
+
+   Both coins are scanned across every linked wallet, and the user's tier is the LOWER of the two —
+   the standard is "bought BOTH", so the later coin is what you actually qualified on. A wallet only
+   contributes its BEST tier for a coin; the disqualifiers are evaluated on the wallet that supplied
+   that tier, since the rule is written about "that wallet".
+
+   The short-circuit is on og_tier, not on og. Keying it to `og` (as it used to) would mean an account
+   already holding the legacy boolean could never be scanned again, so no tier could ever be derived
+   for it — the backfill at boot handles the ones granted before tiers existed, and this handles the
+   rest. A tier can never improve on a re-scan (it is fixed by when you bought), so re-entry is safe. */
 async function checkOg(userId) {
-  const u = db.prepare('SELECT og, og_revoked FROM users WHERE id = ?').get(userId);
-  if (!u || u.og) return !!(u && u.og);         // already an OG — permanent unless revoked by a full sell-out
-  if (u.og_revoked) return false;               // sold out completely once → OG is gone for good, never re-granted
-  if (_ogScanning.has(userId)) return false;
+  const u = db.prepare('SELECT og, og_tier, og_revoked FROM users WHERE id = ?').get(userId);
+  if (!u) return 0;
+  if (u.og_tier > 0) return u.og_tier;          // already tiered — permanent unless revoked by a full sell-out
+  if (u.og_revoked) return 0;                   // sold out completely once → gone for good, never re-granted
+  if (now() > OG_GRANT_UNTIL_MS) return 0;      // past the windows AND past the grace — stop paying the explorer
+  if (_ogScanning.has(userId)) return 0;
   _ogScanning.add(userId);
   try {
-    const addrs = walletAddresses(userId).slice(0, OG_MAX_WALLETS); // must have a connected (read-only) wallet; cap the scan
-    if (!addrs.length) return false;
-    // OG requires holding BOTH $SEND AND $GWC now (not either/or). Read current balances first; if they don't hold
-    // both, don't grant. Fail-closed: an errored read returns WITHOUT stamping → retried later.
-    let holdsSend = false, holdsGwc = false;
-    try {
+    // Every linked wallet, the same set refreshHolder() sums for revocation. They used to differ
+    // (grant read 3, revocation read 5), which let a user qualify on wallets 1-3, park dust in wallet
+    // 4 and then dump everything without ever being revoked.
+    const addrs = walletAddresses(userId).slice(0, OG_MAX_WALLETS);
+    if (!addrs.length) return 0;
+    const COINS = [
+      { key: 'SEND', token: TOK.SEND, pair: OG_PAIR.SEND, launch: OG_LAUNCH.SEND },
+      { key: 'GWC', token: TOK.GWC, pair: OG_PAIR.GWC, launch: OG_LAUNCH.GWC },
+    ];
+    const best = {};                 // coin -> the best qualifying scan across this user's wallets
+    const holdsAny = {};             // coin -> does ANY linked wallet still hold it
+    let sawDq = false;               // a wallet bought in a window and still holds, but failed the standard
+    let scanFailed = false;          // at least one (wallet, coin) could not be read completely
+    for (const c of COINS) {
       for (const a of addrs) {
-        if (!holdsSend && (await erc20Balance(TOK.SEND, a)) > OG_DUST_WEI) holdsSend = true;
-        if (!holdsGwc && (await erc20Balance(TOK.GWC, a)) > OG_DUST_WEI) holdsGwc = true;
-        if (holdsSend && holdsGwc) break;
+        let s;
+        // Isolate the failure to this ONE wallet-and-coin. Aborting the whole account here (which is
+        // what `return 0` did) meant a single 429 on wallet 3 threw away clean results for wallets 1
+        // and 2 — and since nothing is then written, the grant sweep re-selected the same account
+        // forever and never reached anyone behind it. The pre-tier code isolated failures this way
+        // too; losing that was a regression, not a tightening.
+        try { s = await ogScan(a, c.token, c.pair, c.launch); }
+        catch { scanFailed = true; continue; }
+        // "Still holds" is asked across the WALLET SET, not of the wallet that bought — the same way
+        // refreshHolder() sums holdings for revocation. Requiring one wallet to both buy and still
+        // hold denied anyone who moved their bag to a hardware wallet after buying, which the rules
+        // never said and the previous behaviour allowed.
+        if (s.holds) holdsAny[c.key] = true;
+        if (s.tier === OG_TIER.NONE) continue;
+        // this wallet bought inside a window, but fails the standard for this coin
+        if (ogDisqualified(s)) { sawDq = true; continue; }
+        if (!best[c.key] || s.tier > best[c.key].tier) best[c.key] = s;
       }
-    } catch { return false; }
-    if (!(holdsSend && holdsGwc)) { db.prepare('UPDATE users SET og_checked_at = ? WHERE id = ?').run(now(), userId); return false; }
-    // ...and must have BOUGHT BOTH within their first month (across any linked wallet).
-    let boughtSend = false, boughtGwc = false, scanFailed = false;
-    for (const a of addrs) {
-      if (!boughtSend) { try { if (await boughtInFirstMonth(a, TOK.SEND, OG_PAIR.SEND, OG_LAUNCH.SEND)) boughtSend = true; } catch { scanFailed = true; } }
-      if (!boughtGwc) { try { if (await boughtInFirstMonth(a, TOK.GWC, OG_PAIR.GWC, OG_LAUNCH.GWC)) boughtGwc = true; } catch { scanFailed = true; } }
-      if (boughtSend && boughtGwc) break;
     }
-    if (boughtSend && boughtGwc) {
-      // grant only while the invariant holds: still un-granted, never revoked, and a wallet is STILL linked — a disconnect that
-      // landed during this multi-second scan must not leave a wallet-less account wearing the badge
-      const g = db.prepare("UPDATE users SET og = 1, og_checked_at = ? WHERE id = ? AND og = 0 AND og_revoked = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')").run(now(), userId);
-      if (!g.changes) return false;
-      notify(userId, '🏅', 'OG unlocked! You bought BOTH $SEND and $GWC in their first month and still hold both — permanent OG badge + a 10× Send Power bonus on everything. 🚀', 'og');
-      return true;
+    const qualifies = (k) => best[k] && holdsAny[k];
+    if (!qualifies('SEND') || !qualifies('GWC')) {
+      // Only a COMPLETE read may be recorded as a real "did not qualify" — an incomplete one writes
+      // nothing at all, so it is retried rather than frozen in as an answer.
+      if (scanFailed) return 0;
+      // og_dq records that a wallet was disqualified, so the dashboard can say something rather than
+      // leave a window buyer guessing. It is deliberately NOT permanent — unlike og_revoked it is
+      // rewritten by every scan, because a wallet that fails the net-accumulator test today can pass
+      // it tomorrow by buying back. It never blocks a future grant on its own.
+      db.prepare('UPDATE users SET og_checked_at = ?, og_dq = ? WHERE id = ?').run(now(), sawDq ? 1 : 0, userId);
+      return 0;
     }
-    if (!scanFailed) db.prepare('UPDATE users SET og_checked_at = ? WHERE id = ?').run(now(), userId); // only record a CLEAN "not both" result
-    return false;
-  } finally { _ogScanning.delete(userId); }
+    const tier = Math.min(best.SEND.tier, best.GWC.tier);
+    const buyMs = Math.max(best.SEND.firstBuyMs, best.GWC.firstBuyMs); // when they completed the pair
+    // Grant only while the invariant still holds: un-tiered, never revoked, and a wallet is STILL
+    // linked — a disconnect landing during this multi-second scan must not leave a wallet-less
+    // account wearing a badge.
+    const g = db.prepare("UPDATE users SET og = 1, og_tier = ?, og_buy_ms = ?, og_checked_at = ? WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')")
+      .run(tier, buyMs, now(), userId);
+    if (!g.changes) return 0;   // the invariant moved under us (disconnect / concurrent grant) — change nothing else
+    db.prepare('UPDATE users SET og_dq = 0 WHERE id = ?').run(userId); // qualified — clear any earlier disqualification note
+    notify(userId, '🏅', 'OG ' + OG_TIER_NAME[tier] + ' unlocked! You bought BOTH $SEND and $GWC inside the ' +
+      OG_TIER_NAME[tier].toLowerCase() + ' window and still hold both (checked on-chain) — a permanent badge and a ' +
+      OG_TIER_MULT[tier] + '× Send Power bonus on everything. Keep holding both: sell out of either and it goes.', 'og');
+    return tier;
+  } finally {
+    _ogScanning.delete(userId);
+    // Stamped on EVERY attempt, success or failure. og_checked_at deliberately still means "last
+    // clean result" (a failed read must never look like an answer), but ordering the sweep by that
+    // alone meant an account whose scan always fails — a wallet past the page budget, say — stayed
+    // at the front of the queue permanently and nobody behind it was ever scanned.
+    try { db.prepare('UPDATE users SET og_try_at = ? WHERE id = ?').run(now(), userId); } catch {}
+  }
 }
 
 // in-app notifications (bounded per user so history can't grow without limit)
@@ -1738,8 +1892,14 @@ function gamifySummary(u) {
     rank: userRank(u.id),
     todayPoints: db.prepare('SELECT COALESCE(SUM(amount),0) t FROM points_events WHERE user_id=? AND created_at>?').get(u.id, now() - 864e5).t,
     multiplier: holderMultiplier(u.id),
-    og: !!u.og, ogBonus: OG_BONUS, // verified OG (early buyer) → 10× Send Power on everything
+    // ogBonus is derived from THIS user's tier, never a constant — the dashboard prints it verbatim,
+    // so a fixed 10 here would show a silver holder a multiplier they are not being paid.
+    og: u.og_tier || 0, ogTier: u.og_tier || 0, ogTierName: OG_TIER_NAME[u.og_tier || 0],
+    ogBonus: OG_TIER_MULT[u.og_tier || 0] || 1,
+    ogBuyMs: u.og_buy_ms || null,              // when they completed the pair — what the tier was derived from
     ogRevoked: !!u.og_revoked, // lost OG by selling out completely (can't be reclaimed)
+    ogDq: !!u.og_dq,           // last clean scan found a wallet that bought in a window but failed the standard (not permanent)
+    ogCampaign: ogCampaign(),                  // live windows + multipliers, so no deadline is hard-coded in the UI
     communityMult: (db.prepare('SELECT live_comm_count c FROM users WHERE id=?').get(u.id).c > 0) ? COMMUNITY_MULT : 1, // 10× while in ≥1 live community
     arcade: arcadeState(u.id),        // today's Rocket Run boost — stacks on Holder × OG × community
     checkedInToday: !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + u.id + ':' + ymd()),
@@ -1800,10 +1960,92 @@ const OG_PAIR = { SEND: '0xf30bb531d0255969be155533abac34b22bd63414', GWC: '0x22
 const OG_LAUNCH = { SEND: 1787684270000, GWC: 1787157963000 }; // on-chain pair-creation timestamps (SEND 2026-08-25, GWC 2026-08-19)
 const OG_WINDOW_MS = 30 * 24 * 3600 * 1000; // "first month" — a buy within 30 days of launch earns OG
 const OG_BONUS = 10;                          // OGs earn 10× Send Power on every gamified action
+/* ===== OG tiers: one standard, three entry windows, twelve 30-day months ==========================
+   A "month" here is 30 days — the meaning OG_WINDOW_MS has always had on this site, kept so the word
+   means one thing everywhere. Windows are measured from EACH TOKEN'S OWN launch, which is how the
+   gold rule has always worked (the scan takes launchMs per coin), so nobody's existing
+   gold changes. $GWC launched 6 days before $SEND, so its windows sit 6 days earlier.
+
+     gold    days   0 –  30   ×10   (unchanged: the original OG window)
+     silver  days  30 –  90   ×5    (the two months after gold closes)
+     bronze  days  90 – 360   ×3    (the nine months after silver closes)
+     after   day  360+        ×1    no tier is granted, ever
+
+   Your tier is the LOWER of your two coins' tiers, because the standard requires both: buying $SEND
+   on day 2 and $GWC on day 100 makes you bronze, not gold. Nothing schedules this — a tier is a pure
+   function of an on-chain timestamp, so the campaign advances on its own and closes on its own. */
+const OG_MONTH_MS = OG_WINDOW_MS;
+const OG_TIER = { GOLD: 3, SILVER: 2, BRONZE: 1, NONE: 0 };
+const OG_TIER_END = { 3: 1 * OG_MONTH_MS, 2: 3 * OG_MONTH_MS, 1: 12 * OG_MONTH_MS }; // ms after launch each tier stops accepting entries
+const OG_TIER_MULT = { 3: OG_BONUS, 2: 5, 1: 3, 0: 1 };
+const OG_TIER_NAME = { 3: 'Gold', 2: 'Silver', 1: 'Bronze', 0: '' };
+// Two different "ends", and conflating them would be wrong in both directions.
+// OG_LAST_CHANCE_MS is the honest public deadline: a tier is the LOWER of your two coins' tiers, so
+// once the EARLIER coin's bronze window shuts nobody can earn anything, whatever $SEND still says.
+// OG_CAMPAIGN_END_MS is the internal stop-scanning guard and takes the LATER close, so the sweep can
+// never cut a still-earnable window short by six days.
+const OG_LAST_CHANCE_MS = Math.min(OG_LAUNCH.SEND, OG_LAUNCH.GWC) + OG_TIER_END[OG_TIER.BRONZE];
+const OG_CAMPAIGN_END_MS = Math.max(OG_LAUNCH.SEND, OG_LAUNCH.GWC) + OG_TIER_END[OG_TIER.BRONZE];
+// Earning and VERIFYING are separate deadlines, and conflating them would quietly punish people for
+// our own outages. What you earned is decided by ogTierForBuy() from your buy timestamp, so no
+// amount of late scanning can manufacture a tier — a buy after the window scores NONE forever.
+// The only thing a time gate here buys is not paying the explorer forever, so verification stays
+// open for a further 90 days: someone who qualified on the last day, but whose scan kept failing
+// because the explorer was throttling, still gets the badge they actually earned.
+const OG_VERIFY_GRACE_MS = 90 * 864e5;
+const OG_GRANT_UNTIL_MS = OG_CAMPAIGN_END_MS + OG_VERIFY_GRACE_MS;
+// Which tier a market acquisition at `tsMs` earns for a token launched at `launchMs`. Never consults
+// now() — a tier is decided by when you bought, so re-running this years later gives the same answer.
+function ogTierForBuy(tsMs, launchMs) {
+  const age = tsMs - launchMs;
+  if (!(age >= 0)) return OG_TIER.NONE;                 // before launch (or an unparseable stamp) earns nothing
+  if (age <= OG_TIER_END[OG_TIER.GOLD]) return OG_TIER.GOLD;
+  if (age <= OG_TIER_END[OG_TIER.SILVER]) return OG_TIER.SILVER;
+  if (age <= OG_TIER_END[OG_TIER.BRONZE]) return OG_TIER.BRONZE;
+  return OG_TIER.NONE;
+}
+// The live campaign clock, for the UI. Serving this is what stops the countdown drifting: the
+// homepage used to hard-code the deadline epochs in HTML beside these constants.
+function ogCampaign() {
+  const t = now();
+  const win = (tok, launch) => ({
+    token: tok,
+    gold: launch + OG_TIER_END[OG_TIER.GOLD],
+    silver: launch + OG_TIER_END[OG_TIER.SILVER],
+    bronze: launch + OG_TIER_END[OG_TIER.BRONZE],
+  });
+  const s = win('SEND', OG_LAUNCH.SEND);
+  const g = win('GWC', OG_LAUNCH.GWC);
+  return {
+    open: t <= OG_LAST_CHANCE_MS,
+    // the tier a buyer of BOTH coins right now would earn — the lower of the two, as the rule requires
+    tierNow: Math.min(ogTierForBuy(t, OG_LAUNCH.SEND), ogTierForBuy(t, OG_LAUNCH.GWC)),
+    endsAt: OG_LAST_CHANCE_MS,
+    // the binding deadline per tier is the EARLIER of the two coins', because you need both
+    closes: { gold: Math.min(s.gold, g.gold), silver: Math.min(s.silver, g.silver), bronze: Math.min(s.bronze, g.bronze) },
+    mult: OG_TIER_MULT,
+    name: OG_TIER_NAME,
+    windows: { SEND: s, GWC: g },
+  };
+}
+/* The two disqualifiers, applied identically at every tier.
+   dumped         = the balance hit ~zero at some point inside the 30 days after that wallet's first
+                    market acquisition of the coin — "caught dumping their whole supply in month one".
+   notAccumulator = the balance today is BELOW what it was 30 days after that first acquisition —
+                    net distributor since month one rather than net accumulator.
+   OG_DQ_REQUIRE_BOTH follows the rule as written ("dumping ... AND was not a net accumulator"), so a
+   wallet that dumped in month one but has since bought back past its month-one level is forgiven.
+   Set it to false to disqualify on EITHER, which is the stricter reading of the same sentence. */
+const OG_DQ_REQUIRE_BOTH = true;
+const ogDisqualified = (f) => OG_DQ_REQUIRE_BOTH ? (f.dumped && f.notAccumulator) : (f.dumped || f.notAccumulator);
 const OG_DUST = 1e-9;                          // treat balances at/under this (in tokens) as fully sold out (OG revocation)
 const OG_DUST_WEI = 1000000000n;               // same threshold in wei (1e9 wei = 1e-9 tokens) — keeps checkOg's "holds" test consistent with refreshHolder's revocation, so a dust balance can't be granted-then-whipsaw-revoked
 const MAX_LINKED_WALLETS = 5;                   // cap wallets per account: every holder refresh / balance read iterates them (bounds RPC load + sweep time)
-const OG_MAX_WALLETS = 3;                      // cap wallets scanned per OG check (bounds latency + Blockscout load)
+// Must equal MAX_LINKED_WALLETS. The grant used to scan 3 wallets while revocation summed 5, and that
+// gap was an exit hatch: qualify on wallets 1-3, leave dust in wallet 4, then dump 1-3 entirely — the
+// revocation sum never reached zero, so the badge and its multiplier survived the sell-out it exists
+// to punish. Both sides now read the same wallets. The cost is latency on a rare path, not on a hot one.
+const OG_MAX_WALLETS = MAX_LINKED_WALLETS;     // cap wallets scanned per OG check (bounds latency + Blockscout load)
 const PIN_MAX = 12;                            // how many tokens a user can pin to their public wall ("Convicted In")
 const PAIRS_KEEP = 48;      // how many newest pairs to track/enrich
 const PAIRS_TTL = 30 * 1000; // background refresh cadence (demand-driven: re-sweeps on the next request once stale)
@@ -3152,13 +3394,13 @@ function postView(p, me) {
   for (const r of db.prepare('SELECT kind, COUNT(*) n FROM reactions WHERE post_id = ? GROUP BY kind').all(p.id)) counts[r.kind] = r.n;
   const mine = me ? db.prepare('SELECT kind FROM reactions WHERE post_id = ? AND user_id = ?').all(p.id, me.id).map(r => r.kind) : [];
   const cc = db.prepare('SELECT COUNT(*) n FROM comments WHERE post_id = ?').get(p.id).n;
-  const author = db.prepare('SELECT username, avatar, avatar_img, accent, og FROM users WHERE id = ?').get(p.user_id);
+  const author = db.prepare('SELECT username, avatar, avatar_img, accent, og, og_tier FROM users WHERE id = ?').get(p.user_id);
   const myVote = me ? (db.prepare('SELECT value FROM post_votes WHERE post_id = ? AND user_id = ?').get(p.id, me.id) || {}).value || 0 : 0;
   const out = {
     id: p.id, text: p.text, image: p.image ? '/uploads/' + p.image : null, created_at: p.created_at,
     username: author.username, avatar: author.avatar,
     avatar_img: author.avatar_img ? '/uploads/' + author.avatar_img : null,
-    accent: author.accent || '', og: !!author.og,
+    accent: author.accent || '', og: author.og_tier || 0,
     reactions: counts, myReactions: mine, comments: cc,
     score: p.score || 0, myVote,
     mine: !!(me && me.id === p.user_id),
@@ -3180,7 +3422,7 @@ function postsView(rows, me) {
   for (const r of db.prepare(`SELECT post_id, COUNT(*) n FROM comments WHERE post_id IN (${ph}) GROUP BY post_id`).all(...ids)) cc[r.post_id] = r.n;
   const authorIds = [...new Set(rows.map(r => r.user_id))];
   const authors = {};
-  for (const a of db.prepare(`SELECT id, username, avatar, avatar_img, accent, og FROM users WHERE id IN (${authorIds.map(() => '?').join(',')})`).all(...authorIds)) authors[a.id] = a;
+  for (const a of db.prepare(`SELECT id, username, avatar, avatar_img, accent, og, og_tier FROM users WHERE id IN (${authorIds.map(() => '?').join(',')})`).all(...authorIds)) authors[a.id] = a;
   const myR = {}, myV = {};
   if (me) {
     for (const r of db.prepare(`SELECT post_id, kind FROM reactions WHERE post_id IN (${ph}) AND user_id = ?`).all(...ids, me.id)) (myR[r.post_id] || (myR[r.post_id] = [])).push(r.kind);
@@ -3192,7 +3434,7 @@ function postsView(rows, me) {
       id: p.id, text: p.text, image: p.image ? '/uploads/' + p.image : null, created_at: p.created_at,
       username: a.username, avatar: a.avatar,
       avatar_img: a.avatar_img ? '/uploads/' + a.avatar_img : null,
-      accent: a.accent || '', og: !!a.og,
+      accent: a.accent || '', og: a.og_tier || 0,
       reactions: { fire: (rc[p.id] && rc[p.id].fire) || 0, rocket: (rc[p.id] && rc[p.id].rocket) || 0 },
       myReactions: myR[p.id] || [], comments: cc[p.id] || 0,
       score: p.score || 0, myVote: myV[p.id] || 0,
@@ -3700,7 +3942,7 @@ function holderScore(s) {
 function callSenders(row, limit) {
   const price = row.cur_price > 0 ? row.cur_price : row.entry_price;
   const rows = db.prepare(
-    'SELECT h.user_id, h.entry_price, h.spend_usd, h.bought_usd, h.held_usd, h.created_at, u.username, u.avatar, u.avatar_img, u.og ' +
+    'SELECT h.user_id, h.entry_price, h.spend_usd, h.bought_usd, h.held_usd, h.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier ' +
     'FROM call_hops h JOIN users u ON u.id = h.user_id WHERE h.call_id = ?'
   ).all(row.id);
   const supply = (row.entry_mc != null && row.entry_price > 0) ? row.entry_mc / row.entry_price : null;
@@ -3710,7 +3952,7 @@ function callSenders(row, limit) {
     const everBought = (h.bought_usd || 0) > 0 || (h.spend_usd || 0) > 0;
     return {
       _uid: h.user_id,                                     // diamond level is looked up AFTER the slice (see below)
-      username: h.username, avatar: h.avatar, avatarImg: h.avatar_img ? '/uploads/' + h.avatar_img : null, og: !!h.og,
+      username: h.username, avatar: h.avatar, avatarImg: h.avatar_img ? '/uploads/' + h.avatar_img : null, og: h.og_tier || 0,
       entryMc: (supply != null && h.entry_price > 0) ? h.entry_price * supply : null,
       sentUsd: (h.bought_usd || h.spend_usd) || 0,         // what they put into the coin
       heldUsd: h.held_usd || 0,
@@ -3855,7 +4097,7 @@ const CALL_WINDOWS = { '24h': 864e5, 'week': 7 * 864e5, 'month': 30 * 864e5, 'ye
 function callLeaderboard(windowKey) {
   const ms = CALL_WINDOWS[windowKey]; const since = ms ? now() - ms : 0;
   const rows = db.prepare(`
-    SELECT c.user_id, u.username, u.avatar, u.avatar_img, u.accent, u.og,
+    SELECT c.user_id, u.username, u.avatar, u.avatar_img, u.accent, u.og, u.og_tier,
            COUNT(*) calls, MAX(MIN(c.peak_price / c.entry_price - 1, ?)) best,
            SUM(MIN(c.peak_price / c.entry_price - 1, ?)) totalX
     FROM calls c JOIN users u ON u.id = c.user_id
@@ -3864,7 +4106,7 @@ function callLeaderboard(windowKey) {
   let rank = 0;
   return rows.map(r => ({
     rank: ++rank, username: r.username, avatar: r.avatar,
-    avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, accent: r.accent || '', og: !!r.og,
+    avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, accent: r.accent || '', og: r.og_tier || 0,
     calls: r.calls, bestX: r.best, totalX: r.totalX, bestGrade: callGrade(r.best),
   }));
 }
@@ -3940,6 +4182,10 @@ const server = http.createServer(async (req, res) => {
         presenceTouch(key);
         return send(res, 200, { active: presenceCount() });
       }
+      // The OG campaign clock. Public and unauthenticated — the homepage banner used to hard-code the
+      // deadline epochs in its HTML beside the server constants, which is exactly the kind of duplicated
+      // truth that drifts. Serving them means there is one source: OG_LAUNCH + OG_TIER_END.
+      if (p === '/api/og/campaign' && req.method === 'GET') return send(res, 200, ogCampaign());
       if (p === '/api/me' && req.method === 'GET') {
         if (!me) return bad(res, 'not signed in', 401);
         return send(res, 200, {
@@ -3953,7 +4199,7 @@ const server = http.createServer(async (req, res) => {
             site_prefs: JSON.parse(me.site_prefs || '{}'),
             twitter: me.twitter_handle || null, instagram: me.ig_handle || null,
             points: me.points, level: levelForXp(me.points), title: titleFor(levelForXp(me.points)), // for the nav badge
-            og: !!me.og, // permanent OG badge + 10× Send Power (verified early buyer)
+            og: me.og_tier || 0, // permanent OG badge + 10× Send Power (verified early buyer)
             restriction: restrictionOf(me), // read-only banner state (null when free to act)
             probation: probationOf(me), // "hold your bought $SEND" window after a redemption (null when none)
             callAllowance: callAllowance(me), // dynamic Send Call allowance (limit/used/remaining/resetAt + diamond boost)
@@ -4094,7 +4340,9 @@ const server = http.createServer(async (req, res) => {
           // the badge follows the WALLET: it always comes off on disconnect (relinking re-verifies on-chain via checkOg and
           // re-grants honestly), and is only marked permanently revoked when the wallet was found to have sold out.
           // Otherwise one early-buyer wallet could be linked → disconnected → relinked on unlimited accounts, cloning OG.
-          db.prepare('UPDATE users SET og = 0' + (revokeOg ? ', og_revoked = 1' : '') + ' WHERE id = ?').run(me.id);
+          // og_tier clears with og: the tier IS the badge, and leaving it set would keep paying the
+          // multiplier through effectiveMult() after the wallet behind it is gone.
+          db.prepare('UPDATE users SET og = 0, og_tier = 0' + (revokeOg ? ', og_revoked = 1' : '') + ' WHERE id = ?').run(me.id);
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet'").run(me.id);
           forgetHoldings(me.id); // no cached "holds $X" may survive the wallets it was read from
           db.prepare('DELETE FROM holder_state WHERE user_id = ?').run(me.id); // boost was verified against those wallets → reset it honestly
@@ -4603,9 +4851,9 @@ const server = http.createServer(async (req, res) => {
       m = /^\/api\/posts\/(\d+)\/comments$/.exec(p);
       if (m && req.method === 'GET') {
         const rows = me
-          ? db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY c.id ASC LIMIT 100').all(Number(m[1]), me.id)
-          : db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? ORDER BY c.id ASC LIMIT 100').all(Number(m[1]));
-        return send(res, 200, { comments: rows.map(c => ({ ...c, tokens: parseTokens(c.tokens), avatar_img: c.avatar_img ? '/uploads/' + c.avatar_img : null, og: !!c.og })) });
+          ? db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY c.id ASC LIMIT 100').all(Number(m[1]), me.id)
+          : db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? ORDER BY c.id ASC LIMIT 100').all(Number(m[1]));
+        return send(res, 200, { comments: rows.map(c => ({ ...c, tokens: parseTokens(c.tokens), avatar_img: c.avatar_img ? '/uploads/' + c.avatar_img : null, og: c.og_tier || 0 })) });
       }
       if (m && req.method === 'POST') {
         if (!me) return bad(res, 'sign in to comment', 401);
@@ -4651,7 +4899,7 @@ const server = http.createServer(async (req, res) => {
           twitter: u.twitter_handle || null, instagram: u.ig_handle || null, // public social links
           points: u.points || 0, level, title: titleFor(level), rank: userRank(u.id), // public gamified score
           diamond: publicDiamond(u.id), // public diamond-hands badge (tier only)
-          og: !!u.og, // permanent OG badge (verified early buyer of $SEND/$GWC)
+          og: u.og_tier || 0, // permanent OG badge (verified early buyer of $SEND/$GWC)
         } });
       }
       m = /^\/api\/users\/([^/]+)\/follow$/.exec(p);
@@ -4693,7 +4941,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { users: rows.map(u => ({
           username: u.username, avatar: u.avatar, bio: u.bio,
           avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null,
-          accent: u.accent || '', posts: u.posts, followers: u.followers, og: !!u.og,
+          accent: u.accent || '', posts: u.posts, followers: u.followers, og: u.og_tier || 0,
         })) });
       }
 
@@ -4853,7 +5101,7 @@ const server = http.createServer(async (req, res) => {
         try { holder = await refreshHolder(me.id); }
         catch { return bad(res, 'could not read the chain right now — try again', 502); }
         // opportunistically verify OG status (early $SEND/$GWC buyer): instant for existing OGs, and at most a once-per-6h historical scan for others
-        try { const o = db.prepare('SELECT og, og_revoked, og_checked_at FROM users WHERE id=?').get(me.id); if (o && !o.og && !o.og_revoked && now() - (o.og_checked_at || 0) > 6 * 3600 * 1000) await checkOg(me.id); } catch {}
+        try { const o = db.prepare('SELECT og_tier, og_revoked, og_checked_at FROM users WHERE id=?').get(me.id); if (o && !o.og_tier && !o.og_revoked && now() <= OG_GRANT_UNTIL_MS && now() - (o.og_checked_at || 0) > 6 * 3600 * 1000) await checkOg(me.id); } catch {}
         const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id); // SELECT * so gamifySummary sees call_limit/call_eval_at for callAllowance
         return send(res, 200, { ...gamifySummary(fresh), holderLive: holder });
       }
@@ -4920,11 +5168,11 @@ const server = http.createServer(async (req, res) => {
         // The top-20 list is identical for everyone, so cache it briefly (it also runs a publicDiamond() query
         // per row). Only the per-user `me` block is computed fresh. Huge win when many users hit the board at once.
         if (!lbCache.top || now() - lbCache.at > LB_TTL) {
-          const rows = db.prepare('SELECT id, username, avatar, avatar_img, accent, points, og FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT 20').all();
+          const rows = db.prepare('SELECT id, username, avatar, avatar_img, accent, points, og, og_tier FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT 20').all();
           let rank = 0, prevPts = null, seen = 0; // competition ranking (ties share a rank) so it matches userRank() everywhere
           lbCache = { at: now(), top: rows.map(u => {
             seen++; if (u.points !== prevPts) { rank = seen; prevPts = u.points; }
-            return { rank, username: u.username, avatar: u.avatar, avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u.accent || '', points: u.points, level: levelForXp(u.points), title: titleFor(levelForXp(u.points)), diamond: publicDiamond(u.id), og: !!u.og };
+            return { rank, username: u.username, avatar: u.avatar, avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u.accent || '', points: u.points, level: levelForXp(u.points), title: titleFor(levelForXp(u.points)), diamond: publicDiamond(u.id), og: u.og_tier || 0 };
           }) };
         }
         return send(res, 200, { top: lbCache.top, me: me ? { rank: userRank(me.id), points: me.points, level: levelForXp(me.points) } : null });
@@ -5392,12 +5640,12 @@ const server = http.createServer(async (req, res) => {
           if (!sub && req.method === 'GET') return send(res, 200, { community: communityDetailView(c, me, clientIp(req)) });
           // PUBLIC: the full member roster, ranked by each member's community level (conviction earned by participating).
           if (sub === 'members' && req.method === 'GET') {
-            const rows = db.prepare(`SELECT cm.user_id, cm.conviction_xp, cm.qualified, cm.joined_at, u.username, u.avatar, u.avatar_img, u.og, u.accent
+            const rows = db.prepare(`SELECT cm.user_id, cm.conviction_xp, cm.qualified, cm.joined_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier, u.accent
               FROM community_members cm JOIN users u ON u.id = cm.user_id
               WHERE cm.community_id = ? ORDER BY cm.conviction_xp DESC, cm.joined_at ASC LIMIT 200`).all(cid);
             const members = rows.map(r => {
               const lvl = levelForXp(r.conviction_xp);
-              return { username: r.username, avatar: r.avatar, avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, og: !!r.og, accent: r.accent || '',
+              return { username: r.username, avatar: r.avatar, avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, og: r.og_tier || 0, accent: r.accent || '',
                 level: lvl, title: convictionTitleFor(lvl), xp: r.conviction_xp, qualified: !!r.qualified, isCreator: r.user_id === c.creator_id };
             });
             return send(res, 200, { members, memberCount: c.member_count, qualCount: c.qual_count, status: c.status });
@@ -5701,19 +5949,62 @@ const probationTimer = setInterval(async () => {
 }, 5 * 60 * 1000);
 probationTimer.unref();
 
-// OG sweep: re-read on-chain holdings for OGs (stalest first) so a full sell-out is caught — badge + 10× removed —
-// even if they never re-open the site, and so active OGs stay "fresh" enough to keep the bonus. refreshHolder()
-// revokes on a confirmed full sell-out. Bounded per tick (a worker/queue is the real answer at large scale).
-const OG_SWEEP_CAP = 25;
+/* OG freshness sweep: re-read on-chain holdings for tiered users (stalest first) so a full sell-out is
+   caught — badge and multiplier removed — even if they never re-open the site, and so active OGs stay
+   "fresh" enough to keep the bonus. refreshHolder() revokes on a confirmed full sell-out.
+
+   CAPACITY, because this is a real ceiling and not a tuning knob: effectiveMult() only pays the bonus
+   while holder_state.last_check is inside HOLDER_TTL (26h). At CAP per tick every 10 minutes the sweep
+   refreshes CAP × 144 accounts/day, so it can keep about CAP × 144 × (26/24) accounts inside that
+   window. At 25 that was ~3,900 — fine for one gold cohort, but silver and bronze are exactly the
+   tiers that grow the population past it, and past it a tiered user who does not visit silently drops
+   to 1× with nothing in the UI to explain why. 60 lifts the ceiling to ~9,360. Each refresh costs up
+   to MAX_LINKED_WALLETS × 2 eth_calls, so 60/tick is ~8,640 refreshes/day ≈ 1 RPC/sec sustained.
+   Beyond that ceiling the honest answer is a worker/queue, not a bigger number here. */
+const OG_SWEEP_CAP = 60;
 let ogSweeping = false;
 const ogTimer = setInterval(async () => {
   if (ogSweeping) return; ogSweeping = true;
   try {
-    const rows = db.prepare('SELECT u.id FROM users u LEFT JOIN holder_state h ON h.user_id = u.id WHERE u.og = 1 ORDER BY COALESCE(h.last_check, 0) ASC LIMIT ?').all(OG_SWEEP_CAP);
+    const rows = db.prepare('SELECT u.id FROM users u LEFT JOIN holder_state h ON h.user_id = u.id WHERE u.og_tier > 0 ORDER BY COALESCE(h.last_check, 0) ASC LIMIT ?').all(OG_SWEEP_CAP);
     for (const r of rows) { try { await refreshHolder(r.id); } catch {} }
   } catch {} finally { ogSweeping = false; }
 }, 10 * 60 * 1000);
 ogTimer.unref();
+
+/* Campaign sweep — this is what "auto-run over the next year" actually means in code.
+   The tier windows are pure functions of time, so nothing has to schedule them opening or closing.
+   What does need a heartbeat is granting: a user who linked a wallet, qualified, and then never came
+   back would otherwise wait for their next visit to be scanned. This walks wallet-holding, un-tiered,
+   un-revoked accounts oldest-checked-first and runs the same checkOg() the site runs interactively.
+
+   It stops itself. Once now() passes OG_CAMPAIGN_END_MS no tier can be granted, checkOg() returns 0
+   immediately, and the sweep stops scheduling scans rather than burning explorer calls forever. The
+   batch is small because each scan is up to MAX_LINKED_WALLETS × 2 explorer walks plus the same
+   number of RPC reconciliation reads, and Blockscout rate-limits per IP across all its endpoints. */
+const OG_GRANT_SWEEP_CAP = 3;
+const OG_RESCAN_MS = 6 * 3600 * 1000;    // re-test a clean "did not qualify" this often (same as the interactive path)
+const OG_RETRY_MS = 3600 * 1000;         // but retry a FAILED scan within the hour
+let ogGrantSweeping = false;
+const ogGrantTimer = setInterval(async () => {
+  if (ogGrantSweeping) return;
+  if (now() > OG_GRANT_UNTIL_MS) return;                  // windows closed and the grace is up — nothing left to verify
+  ogGrantSweeping = true;
+  try {
+    // Ordered by og_try_at, not og_checked_at. A scan that fails writes no og_checked_at (by design —
+    // a failed read is not an answer), so ordering by it put every permanently-failing account at the
+    // head of the queue forever. og_try_at moves on every attempt, so failures rotate to the back and
+    // the queue always drains. The two windows differ on purpose: a clean "did not qualify" is worth
+    // re-testing every 6h, but a failure is worth retrying within the hour.
+    const rows = db.prepare(`SELECT u.id FROM users u
+      WHERE u.og_tier = 0 AND u.og_revoked = 0 AND u.system = 0
+        AND u.og_checked_at < ? AND u.og_try_at < ?
+        AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.type = 'wallet')
+      ORDER BY u.og_try_at ASC LIMIT ?`).all(now() - OG_RESCAN_MS, now() - OG_RETRY_MS, OG_GRANT_SWEEP_CAP);
+    for (const r of rows) { try { await checkOg(r.id); } catch {} }
+  } catch {} finally { ogGrantSweeping = false; }
+}, 15 * 60 * 1000);
+ogGrantTimer.unref();
 
 // Re-verify qualified community members still hold the community's token; revoke the 10× on a sell / recycled-bag move.
 const commHolderTimer = setInterval(() => { sweepCommunityHolders().catch(() => {}); }, 10 * 60 * 1000);
