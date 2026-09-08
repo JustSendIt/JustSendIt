@@ -217,7 +217,7 @@
               const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
               gate.hidden = false;
               gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'You must hold this token to join.') +
-                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile.html#link-wallet">Connect a wallet →</a> (a free signature — never a transaction) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
+                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile.html#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
                 ' <button class="linklike comm-viewtoken" type="button">Get $' + esc(C.symbol) + ' ↗</button>';
             }
             join.disabled = false; return;

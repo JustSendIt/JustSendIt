@@ -46,11 +46,10 @@ initTokenCards();
       const left = at - now;
       el.textContent = fmt(left);
       el.classList.toggle('og-timer-closed', left <= 0);
-      // The urgency pulse is deliberately limited to the LAST window. It used to fire in the final
-      // three days of any deadline, which was fine when there was one month-long window; across a
-      // year of staggered tiers it would flash red three separate times, which is a pressure device
-      // rather than information.
-      if (el.parentElement) el.parentElement.classList.toggle('og-timer-soon', el.dataset.ogWindow === 'bronze' && left > 0 && left < 3 * 86400 * 1000);
+      // The urgency pulse marks the last three days of the window that is OPEN NOW — the deadline for the
+      // tier being earned today, which is a fact the reader needs — and never the "everything closes" timer,
+      // so at most one element pulses, and only three times across the whole year, each at a real cut-off.
+      if (el.parentElement) el.parentElement.classList.toggle('og-timer-soon', el.dataset.ogWindow === 'current' && left > 0 && left < 3 * 86400 * 1000);
       if (left > 0) allClosed = false;
     });
     // Only claim the campaign is over once we actually know. Before the fetch resolves (and forever
@@ -61,6 +60,29 @@ initTokenCards();
   tick();
   setInterval(() => { if (!document.hidden) tick(); }, 1000); // a countdown nobody can see doesn't need repainting
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+
+  /* ---------- the CTA: the one action the site can honestly offer, by who is looking ----------
+     Signed out → read the rules. Signed in → get your linked wallet checked (the badge is earned by holding,
+     and checking is the only step this site performs). Already OG → your badge. Never "buy": the banner says
+     itself that it is not a reason to buy, and a CTA must not contradict the sentence beside it. */
+  const cta = document.getElementById('og-banner-cta');
+  const TIER = { 3: ['Gold', 10], 2: ['Silver', 5], 1: ['Bronze', 3] };
+  function paintCta() {
+    if (!banner || !cta) return;
+    const u = (window.AUTH && AUTH.user) ? AUTH.user : null;
+    const base = banner.dataset.ariaBase || '';
+    let text, href, tail;
+    const tier = u ? (Number(u.og) || 0) : 0;   // /api/me reports `og` as the tier (3 gold · 2 silver · 1 bronze · 0 none)
+    if (u && TIER[tier]) { text = 'You are OG ' + TIER[tier][0] + ' · ' + TIER[tier][1] + '×'; href = 'profile.html'; tail = 'You hold OG ' + TIER[tier][0] + '. Tap to open your profile.'; }
+    else if (u) { text = 'Check my wallet for OG'; href = 'profile.html#connected-wallet'; tail = 'Tap to link a wallet and have it checked on-chain. Not a recommendation to buy.'; }
+    else { text = 'How OG works'; href = 'about.html#og-rules'; tail = 'Tap to read how it works. Not a recommendation to buy.'; }
+    cta.innerHTML = text + ' <span class="og-cta-arrow">→</span>';
+    banner.setAttribute('href', href);
+    if (base) banner.setAttribute('aria-label', base + ' ' + tail);
+  }
+  paintCta();
+  if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(paintCta, paintCta);
+  document.addEventListener('auth:change', paintCta);
 })();
 
 const _reduced = () => (window.prefersReduced ? window.prefersReduced() : false);

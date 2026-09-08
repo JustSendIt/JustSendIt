@@ -2211,9 +2211,10 @@ function ogCampaign() {
                     market acquisition of the coin — "caught dumping their whole supply in month one".
    notAccumulator = the balance today is BELOW what it was 30 days after that first acquisition —
                     net distributor since month one rather than net accumulator.
-   OG_DQ_REQUIRE_BOTH follows the rule as written ("dumping ... AND was not a net accumulator"), so a
-   wallet that dumped in month one but has since bought back past its month-one level is forgiven.
-   Set it to false to disqualify on EITHER, which is the stricter reading of the same sentence. */
+   DECIDED (2026-09-08): both are required, as the rule is written ("dumping ... AND was not a net
+   accumulator") — a wallet that dumped in month one but has since bought back past its month-one level
+   keeps its place. This is the standard every tier applies and every rules page describes; it is a named
+   constant only so the test harness can read it, not a toggle. */
 const OG_DQ_REQUIRE_BOTH = true;
 const ogDisqualified = (f) => OG_DQ_REQUIRE_BOTH ? (f.dumped && f.notAccumulator) : (f.dumped || f.notAccumulator);
 const OG_DUST = 1e-9;                          // treat balances at/under this (in tokens) as fully sold out (OG revocation)

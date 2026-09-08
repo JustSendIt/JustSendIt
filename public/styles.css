@@ -1609,7 +1609,8 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .og-banner-closed .og-medal, .og-banner-closed .og-banner-cta, .og-banner-closed .og-cta-arrow { animation: none; }
 @media (max-width: 760px) {
   .og-banner { font-size: 0.82rem; padding: 0.7rem 0.9rem; }
-  .og-banner-cta { display: none; }
+  /* the CTA used to vanish below 760px — no button at all on a phone. It now takes its own full-width row. */
+  .og-banner-cta { flex: 1 0 100%; text-align: center; margin-top: 0.25rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; }
   .og-medal { font-size: 1.7rem; }
   .og-banner-title { font-size: 1.04rem; }
 }

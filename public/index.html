@@ -121,7 +121,7 @@
      OG_TIER_END constants. With three windows per coin that is six numbers to keep in sync by hand,
      so home.js now fills them from /api/og/campaign and there is one source of truth. The `—`
      placeholders are what shows if that request fails: no number is better than a stale one. -->
-<a class="og-banner" href="about.html#power" aria-label="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Three windows: gold in the first month for a 10 times Send Power bonus, silver in the two months after for 5 times, bronze in the nine months after that for 3 times. Tap to read how it works. Not a recommendation to buy.">
+<a class="og-banner" id="og-banner" href="about.html#og-rules" aria-label="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Three windows: gold in the first month for a 10 times Send Power bonus, silver in the two months after for 5 times, bronze in the nine months after that for 3 times. Tap to read how it works. Not a recommendation to buy." data-aria-base="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Three windows: gold in the first month for a 10 times Send Power bonus, silver in the two months after for 5 times, bronze in the nine months after that for 3 times.">
   <span class="og-shine" aria-hidden="true"></span>
   <span class="og-confetti" aria-hidden="true"><span>✨</span><span>🏆</span><span>💎</span><span>🚀</span><span>✨</span><span>👑</span></span>
   <span class="og-banner-badge" aria-hidden="true"><span class="og-medal">🏅</span></span>
@@ -133,7 +133,10 @@
     <span class="og-timer"><i>⏳ <b class="og-tier-label">this window</b> closes in</i><b data-og-deadline="" data-og-window="current">—</b></span>
     <span class="og-timer"><i>⏳ everything closes</i><b data-og-deadline="" data-og-window="bronze">—</b></span>
   </span>
-  <span class="og-banner-cta" aria-hidden="true">How OG works <span class="og-cta-arrow">→</span></span>
+  <!-- the CTA is the one action the site can honestly offer, chosen by home.js: read the rules (signed out), get your linked
+       wallet checked (signed in), or see your badge (already OG). It never says "buy" — the badge is earned by holding, and
+       the banner already says it is not a reason to buy. -->
+  <span class="og-banner-cta" id="og-banner-cta" aria-hidden="true">How OG works <span class="og-cta-arrow">→</span></span>
 </a>
 <header class="hero">
   <video class="hero-bg-video" src="assets/hero-banner.mp4" autoplay muted loop playsinline aria-hidden="true"></video>
