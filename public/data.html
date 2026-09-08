@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data API 🔑 — $Send</title>
+<meta name="description" content="The $Send Data API: bulk, structured access to the platform's public data and your own account data for AI and bots — keyed, and minted only for a wallet that has burned $1,000 of $SEND. Entertainment only.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="about.html">About</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="communities.html">Communities</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="index.html#tokens">Tokens</a>
+    <a href="watchlist.html">Watchlist</a>
+
+    <span id="nav-search-slot"></span>
+  </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="np-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">Data API 🔑</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Everything the site shows in public, and everything your own account holds — in bulk, as JSON, for your AI, your bots, your spreadsheets. One key, one door.</p>
+  <p class="np-hero-warn">⚠️ A key is minted only for a wallet that has <b>burned $1,000 of $SEND</b>. Burning is permanent and buys nothing but this key. Not a reason to buy — just how the door works. <b>Entertainment only.</b></p>
+</header>
+
+<main id="main">
+  <div class="np-wrap">
+
+    <section class="card gold-card reveal" id="dk-status" aria-labelledby="dk-status-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
+      <h2 class="ab-eng-h" id="dk-status-h">Your status</h2>
+      <div class="dk-card" id="dk-card"><p class="dk-note">Checking…</p></div>
+    </section>
+
+    <section class="card reveal" aria-labelledby="dk-how-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
+      <h2 class="ab-eng-h" id="dk-how-h">How to qualify</h2>
+      <ul class="ab-mini-list">
+        <li><b>Link the wallet</b> you burn from to this account (read-only signature — never a transaction).</li>
+        <li><b>Send $SEND to the burn address</b> <code class="dk-addr">0x000000000000000000000000000000000000dEaD</code> from that wallet. The total across all your linked wallets counts.</li>
+        <li>The burn is <b>read straight from the chain</b> and valued, at the moment you mint, at <b>the lower of the live $SEND price and the median of the last 24 hours</b> of on-chain trading — so a momentary price spike cannot inflate it, and a live price far above the day's median simply refuses to value anything until it settles. When it reaches <b>$1,000</b>, you can mint a key. A burn is irreversible; the price is whatever the day makes it — nothing here is advice about either. <b>A burn backs one live key at a time</b>: the same wallet on another account is refused until that key is revoked.</li>
+        <li>If the chain or the price can't be read completely, nothing is assumed: you're told to try again, never told you burned $0.</li>
+      </ul>
+    </section>
+
+    <section class="card reveal" aria-labelledby="dk-what-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
+      <h2 class="ab-eng-h" id="dk-what-h">What the key opens — and what it never will</h2>
+      <p><b>Opens:</b> every public surface of the site in bulk, structured form — profiles, the Send Wall, comments, Send Calls, communities, the all-time board and the Biggest Sender race — plus <b>your own</b> account: your preferences, linked wallets, tracked wallets, watchlist, pins, communities, follows, and your most recent 1,000 points events and 500 each of your posts, comments, Sends and notifications, decrypted for you.</p>
+      <p><b>Never opens:</b> anyone else's private data. Other people's emails, linked wallets, 2FA, tracked wallets and preferences are encrypted so that <b>only their owner</b> can read them, and a burn does not change whose data it is. Public data is public on the site already; the key changes the <i>shape</i> you get it in, not what is public.</p>
+      <p class="dk-note"><b>Encryption, plainly.</b> Every private field is stored scrambled (AES-256-GCM) with a key held outside the database — emails, wallets, 2FA secrets, tracked wallets and your preference blobs. Public content is stored readable, because search, sorting and every wall need to read it. Your API key is stored only as a hash: it is shown once, and if it leaks, revoke it here.</p>
+    </section>
+
+    <section class="card reveal" aria-labelledby="dk-use-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
+      <h2 class="ab-eng-h" id="dk-use-h">Using it</h2>
+      <p class="dk-note">Send the key as a bearer token. Every list is newest-first and pages with <code>before=&lt;last id&gt;</code>; <code>limit</code> is 100 by default, 200 at most. <b>120 requests per minute per key.</b> Responses are JSON: <code>{ data, next, limit }</code>.</p>
+<pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
+  "https://YOUR-HOST/api/data/v1/posts?limit=200"</pre>
+      <div style="overflow-x:auto;">
+      <table class="dk-endpoints">
+        <thead><tr><th>GET /api/data/v1/…</th><th>Returns</th></tr></thead>
+        <tbody>
+          <tr><td><code>me</code></td><td>Your own account, decrypted for you: profile, prefs, wallets, watchlist, tracked wallets, pins, communities, follows, mutes, and your most recent 1,000 points events, 200 calls and 500 each of posts, comments, Sends and notifications.</td></tr>
+          <tr><td><code>users</code></td><td>Public profiles — what a wall already shows anyone.</td></tr>
+          <tr><td><code>posts</code></td><td>Send Wall and community posts, with reactions and comment counts.</td></tr>
+          <tr><td><code>comments</code></td><td>Comments, with the post they belong to.</td></tr>
+          <tr><td><code>calls</code></td><td>Send Calls: entry, peak, current Xs, grade, size, Senders.</td></tr>
+          <tr><td><code>communities</code></td><td>Communities, their status, level, activity and market snapshot.</td></tr>
+          <tr><td><code>leaderboard</code></td><td>The all-time Send Power board.</td></tr>
+          <tr><td><code>competition</code></td><td>This week's Biggest Sender standings, last week's winners and the prize ladder.</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
+    <div class="sr-only" id="dk-sr" aria-live="polite"></div>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    Burning tokens is permanent and is not an investment, a purchase, or advice. Data is best-effort from public on-chain sources — not a guarantee, not an audit. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+    <a href="about.html">About</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="communities.html">Communities</a>
+    <a href="index.html">Home</a>
+    <a href="index.html#guide">How to Buy</a>
+    <a href="profile.html">My Profile</a>
+    <a href="newpairs.html">New Pairs</a>
+    <a href="wall.html">Send Wall</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="index.html#tokens">Tokens</a>
+    <a href="watchlist.html">Watchlist</a>
+  </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="notifications.js"></script>
+<script src="data.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

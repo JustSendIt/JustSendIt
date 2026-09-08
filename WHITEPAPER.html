@@ -503,6 +503,10 @@ Expiration Time: &lt;10 minutes later&gt;
         <div class="sec-head"><span class="sec-num">05</span><h2>Scrambling your data</h2></div>
         <p>Everything personal is stored scrambled, using a method called <strong>AES-256-GCM</strong>. Think of it as a safe that also has a tamper seal: without the key you cannot read what is inside, and if anyone alters the contents the seal breaks and the site refuses to trust it.</p>
         <p>The key lives outside the database. In a proper deployment it is set as an environment variable. On a developer's machine the server makes one and writes it to a file only the owner can read.</p>
+        <p>Your preference settings are scrambled the same way. What is <em>not</em> scrambled is what is already public &mdash; usernames, posts, comments, calls and the boards &mdash; because searching, sorting and drawing every wall needs to read it, and scrambling it would hide nothing.</p>
+        <h3>The Data API &mdash; one door, one key</h3>
+        <p>Anyone who wants the site&rsquo;s data in bulk &mdash; for an AI, a bot, a spreadsheet &mdash; goes through one door. A key is minted only for an account whose linked wallets have sent at least <strong>$1,000 of $SEND</strong> to the burn address, checked on the blockchain and valued at the lower of the live price and the day&rsquo;s median, so a momentary spike cannot inflate it. One burn backs one key at a time. Burning is permanent and buys nothing but the key; the site does not tell anyone to do it.</p>
+        <p>The key opens everything that is already public, in bulk, and everything in the holder&rsquo;s <em>own</em> account, unscrambled for them. It never opens anyone else&rsquo;s private data &mdash; a burn does not change whose data it is. The key itself is shown once and stored only as a fingerprint, so a stolen database does not contain it.</p>
         <div class="tablewrap">
           <table>
             <caption>How each kind of data is stored</caption>

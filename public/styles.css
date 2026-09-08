@@ -3539,3 +3539,29 @@ video.post-avatar, video.c-ava, video.cm-ava, video.gb-ava, video.lb-ava, video.
 .comp-rules b { color: var(--text); }
 .pc-week { display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 900; font-size: 0.78rem; color: var(--on-gold); background: linear-gradient(180deg, var(--gold), var(--gold-deep)); border-radius: var(--r-pill); padding: 0.2rem 0.6rem; cursor: help; }
 @media (prefers-reduced-motion: reduce) { .arena-tab { transition: none; } }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   20. Nav account control: name is a link, caret is the menu · Data API page
+   ══════════════════════════════════════════════════════════════════════════ */
+.nav-profile > .profile-link { border-radius: 999px 0 0 999px; padding-right: 0.55rem; } /* only the split chip — the signed-out Sign In pill shares the class */
+.nav-profile:hover > .profile-link, .nav-profile:hover > .np-caret-btn { transform: translateY(-1px); } /* the two halves lift together */
+.np-caret-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 40px; min-width: 44px; padding: 0 0.7rem 0 0.45rem; margin-left: -1px; /* 44px: on touch it is the only route into the menu */
+  border: none; border-radius: 0 999px 999px 0; cursor: pointer; color: #12200a; font: inherit;
+  background: linear-gradient(180deg, var(--gold), var(--gold-deep)); transition: transform 0.15s ease;
+}
+.np-caret-btn:hover { transform: translateY(-1px); }
+#main .ab-mini-list code, .dk-addr { word-break: break-all; overflow-wrap: anywhere; } /* a 42-char address must wrap on a phone, not clip */
+.np-caret-btn:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.dk-card { display: grid; gap: 0.7rem; }
+.dk-stat { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--hair); font-size: 0.92rem; }
+.dk-stat b { font-variant-numeric: tabular-nums; }
+.dk-bar { height: 12px; border-radius: 999px; background: var(--ink); border: 1px solid var(--hair); overflow: hidden; }
+.dk-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--green), var(--green-bright)); width: 0; transition: width 0.4s ease; }
+.dk-key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92rem; word-break: break-all; padding: 0.7rem 0.8rem; border-radius: var(--r-2); background: var(--ink); border: 1px solid var(--edge-ctl); color: var(--text); }
+.dk-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+.dk-endpoints td, .dk-endpoints th { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--hair); vertical-align: top; font-size: 0.86rem; }
+.dk-endpoints code { font-size: 0.82rem; }
+.dk-note { font-size: 0.86rem; color: var(--text-dim); line-height: 1.55; }
+pre.dk-pre { overflow-x: auto; padding: 0.75rem 0.9rem; border-radius: var(--r-2); background: var(--ink); border: 1px solid var(--hair); font-size: 0.8rem; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { .np-caret-btn, .dk-bar > span { transition: none; } }

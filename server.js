@@ -69,6 +69,7 @@ function decField(s) {
 }
 const bidx = (s) => crypto.createHmac('sha256', IDX_KEY).update(String(s == null ? '' : s)).digest('hex'); // equality lookups only
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');                     // session cookie → stored form
+const safeJson = (s) => { try { const v = JSON.parse(s || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 /* ---------- DB ---------- */
@@ -488,7 +489,8 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN week_boost REAL NOT NULL DEFAULT 0",          // the prize boost, by last week's finishing rank (0 = none)
   "ALTER TABLE users ADD COLUMN week_boost_until INTEGER NOT NULL DEFAULT 0", // when it expires — the end of the week after the one it was won in
   "ALTER TABLE users ADD COLUMN week_boost_key TEXT",                         // which competition week it was won in
-  "ALTER TABLE points_events ADD COLUMN comp_amount INTEGER NOT NULL DEFAULT 0", // what the award would have paid without a Biggest Sender prize — what the weekly board ranks        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "ALTER TABLE points_events ADD COLUMN comp_amount INTEGER NOT NULL DEFAULT 0", // what the award would have paid without a Biggest Sender prize — what the weekly board ranks
+  "ALTER TABLE api_keys ADD COLUMN wallets_idx TEXT",                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 // Performance indices — added AFTER the migrations so the score/points columns they reference exist.
@@ -516,6 +518,11 @@ db.exec('PRAGMA optimize;'); // let SQLite build/refresh stat samples for the qu
 // them and no chain re-scan is needed. The `og_tier = 0` predicate makes it idempotent and stops it
 // ever demoting a tier the new checkOg() has since assigned.
 try { db.prepare('UPDATE users SET og_tier = 3 WHERE og = 1 AND og_tier = 0').run(); } catch {}
+// Private per-user preference blobs join the encrypted-at-rest set (they were the last private fields
+// stored in the clear). One-shot per row: decField() passes legacy plaintext through, so a row is only
+// rewritten while it still lacks the v1: prefix.
+try { for (const r of db.prepare("SELECT id, tracker_prefs, site_prefs FROM users WHERE tracker_prefs NOT LIKE 'v1:%' OR site_prefs NOT LIKE 'v1:%'").all())
+  db.prepare('UPDATE users SET tracker_prefs = ?, site_prefs = ? WHERE id = ?').run(String(r.tracker_prefs || '').startsWith('v1:') ? r.tracker_prefs : encField(r.tracker_prefs || '{}'), String(r.site_prefs || '').startsWith('v1:') ? r.site_prefs : encField(r.site_prefs || '{}'), r.id); } catch {}
 // Send Power awards made before comp_amount existed count at face value on the weekly board (no prize
 // existed to take out). Community XP, conviction XP and activity rows share this table but are NOT Send
 // Power — they never touch users.points — so they are excluded here and in the standings query; without
@@ -534,6 +541,19 @@ CREATE TABLE IF NOT EXISTS competitions (
   settled_at INTEGER,
   winners    TEXT                                    -- JSON [{user_id, username, rank, points, boost}] once settled
 );
+CREATE TABLE IF NOT EXISTS api_keys (
+  key_hash     TEXT PRIMARY KEY,                     -- sha256 of the key; the key itself is shown once and never stored
+  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  wallet       TEXT,                                 -- the linked wallet whose burn qualified it — encField()ed, like every wallet↔account link
+  burned_wei   TEXT NOT NULL,                        -- total $SEND sent to the burn address across linked wallets, at mint
+  burned_usd   REAL NOT NULL,                        -- its value at mint, at the $SEND price then
+  price_usd    REAL NOT NULL,
+  minted_at    INTEGER NOT NULL,
+  last_used_at INTEGER,
+  revoked_at   INTEGER,
+  wallets_idx  TEXT                                  -- JSON of blind indexes of every linked wallet at mint: a burn backs ONE live key at a time, on any account
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id, revoked_at);
 CREATE TABLE IF NOT EXISTS mutes (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   muted_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -1281,7 +1301,8 @@ const OG_SCAN_GAP_MS = 220;      // politeness gap between pages — a burst of 
 // the safe direction to be wrong in for something that grants a reward.
 const OG_ROUTERS = ['0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f']; // RelayRouterV3 (verified contract)
 const OG_PAGE_TRIES = 4;         // this explorer 429s readily; one shot per page meant almost no scan ever finished
-async function ogTransfers(wallet, token) {
+async function ogTransfers(wallet, token, opts) {
+  const tries = (opts && opts.tries) || OG_PAGE_TRIES, backoff = (opts && opts.backoffMs) || 1500;
   const w = wallet.toLowerCase();
   const base = BLOCKSCOUT + '/api/v2/addresses/' + w + '/token-transfers?type=ERC-20&token=' + token;
   const rows = [];
@@ -1294,8 +1315,8 @@ async function ogTransfers(wallet, token) {
     // almost nobody while still spending the requests. Backoff is seconds, not milliseconds, because
     // the throttle here stays cross for tens of seconds.
     let j = null;
-    for (let attempt = 0; attempt < OG_PAGE_TRIES && !j; attempt++) {
-      if (attempt) await new Promise(r => setTimeout(r, 1500 * Math.pow(2, attempt - 1) + Math.random() * 400));
+    for (let attempt = 0; attempt < tries && !j; attempt++) {
+      if (attempt) await new Promise(r => setTimeout(r, backoff * Math.pow(2, attempt - 1) + Math.random() * 400));
       j = await jget(url);
       if (j && !Array.isArray(j.items)) j = null;    // a shape we don't recognise is a failure, not an empty history
     }
@@ -3827,6 +3848,118 @@ function lastSettledCompetition() {
     winners: winners.map(w => { const u = users[w.user_id]; return { rank: w.rank, points: w.points, boost: w.boost,
       username: u ? u.username : w.username, avatar: u ? u.avatar : '🚀', avatar_img: u && u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u ? (u.accent || '') : '', og: u ? (u.og_tier || 0) : 0 }; }) };
 }
+/* ===== Data API — the one sanctioned door to bulk data, behind a burn ================================
+   A key is minted only for an account whose LINKED wallets have, between them, sent at least
+   DATA_BURN_USD worth of $SEND to the burn address — read on-chain with the same fail-closed walker
+   the OG scan uses, and valued at the $SEND price at the moment of minting (a burn is irreversible;
+   the price is what it is that day). The key is shown once and stored only as a hash, exactly like a
+   session cookie. What it opens: every PUBLIC surface of the site in bulk, structured form, and the
+   key holder's OWN private data. What it never opens: anyone else's private fields — emails, linked
+   wallets, 2FA, tracked wallets, preferences. Those are encrypted so nobody but their owner can read
+   them, and a burn does not change whose data it is. */
+const DATA_BURN_ADDR = '0x000000000000000000000000000000000000dead';
+const DATA_BURN_USD = 1000;
+const DATA_KEY_RATE = 120;                 // requests per minute, per key
+const DATA_PAGE_MAX = 200;
+const DATA_BURN_TTL = 5 * 60 * 1000;
+const burnCache = new Map();               // userId -> { at, val }
+const _minting = new Set();                // accounts with a mint in flight
+// Every $SEND transfer from any linked wallet to the burn address, summed. Throws (never guesses) when
+// the chain cannot be read completely — the OG walker's own rule.
+async function burnedSend(userId, fresh) {
+  const hit = burnCache.get(userId);
+  if (!fresh && hit && now() - hit.at < DATA_BURN_TTL) return hit.val;
+  const wallets = walletAddresses(userId).slice(0, MAX_LINKED_WALLETS);
+  let wei = 0n, topWallet = null, topWei = -1n; const byWallet = [];
+  for (const w of wallets) {
+    // a person is waiting on this one, and the explorer's throttle was measured at ~45s: 3, 6, 12, 24, 48s
+    // of backoff outlasts it, where the background sweep's short schedule would just report "try again"
+    const rows = await ogTransfers(w, TOK.SEND, { tries: 6, backoffMs: 3000 });
+    const wl = w.toLowerCase(); let ww = 0n, txs = 0;
+    for (const r of rows) {
+      const from = ((r.from && r.from.hash) || '').toLowerCase(), to = ((r.to && r.to.hash) || '').toLowerCase();
+      if (from === wl && to === DATA_BURN_ADDR && r.total && r.total.value != null) { ww += BigInt(r.total.value); txs++; }
+    }
+    byWallet.push({ wallet: w, tokens: Number(ww) / 1e18, txs });
+    wei += ww; if (ww > topWei) { topWei = ww; topWallet = w; }
+  }
+  const priceUsd = await sendPriceUsd();                    // null when unknown → usd null → not eligible, never "0 burned"
+  const tokens = Number(wei) / 1e18;
+  const val = { wallets: wallets.length, byWallet, wei: wei.toString(), tokens, priceUsd, usd: priceUsd == null ? null : tokens * priceUsd, topWallet };
+  burnCache.set(userId, { at: now(), val });
+  return val;
+}
+// The $SEND price in dollars, from the pair's own reserves. spotPrice() gives quote-units per token;
+// which leg is the quote decides what that means — a dollar stable is dollars already, WETH needs
+// ETH/USD. Anything else, or any failed read, returns null: a burn is then "cannot be valued", never
+// "worth nothing".
+/* The spot is a single reserves read on a small pool, and a momentary pump is cheap — measured, a 10x
+   spike on the $SEND pair costs a few hundred dollars in tax, fees and gas. So the gate is valued at
+   the LOWER of the live spot and the median close of the last 24 hours of on-chain candles, and it
+   refuses outright when the spot is more than 3x that median (a pump in progress) or when there are
+   too few candles to know. A burner cannot make their burn worth more by moving the price for a
+   minute; they can only ever be valued at what the coin has actually traded around all day. */
+const PRICE_MEDIAN_HOURS = 24, PRICE_MIN_CANDLES = 6, PRICE_MAX_SPIKE = 3;
+async function sendPriceUsd() {
+  try {
+    const [spot, t0raw, t1raw, chart] = await Promise.all([spotPrice(OG_PAIR.SEND, TOK.SEND), ethCall(OG_PAIR.SEND, '0x0dfe1681'), ethCall(OG_PAIR.SEND, '0xd21220a7'), buildCandles(OG_PAIR.SEND, TOK.SEND, '1h', PRICE_MEDIAN_HOURS).catch(() => null)]);
+    if (!(spot > 0) || !t0raw || !t1raw) return null;
+    const candles = Array.isArray(chart) ? chart : (chart && (chart.candles || chart.data)) || [];
+    const closes = candles.map(c => Number(c && c.c)).filter(v => v > 0).sort((x, y) => x - y);
+    if (closes.length < PRICE_MIN_CANDLES) return null;                       // not enough history to know what it trades around
+    const median = closes[Math.floor(closes.length / 2)];
+    if (spot > median * PRICE_MAX_SPIKE) return null;                         // a spike is in progress — refuse to value anything against it
+    const q = Math.min(spot, median);
+    const leg = (h) => ('0x' + String(h).slice(-40)).toLowerCase();
+    const quote = leg(t0raw) === TOK.SEND.toLowerCase() ? leg(t1raw) : leg(t0raw);
+    if (quote === String(USDG_ADDR).toLowerCase()) return q;
+    if (quote === String(WETH_ADDR).toLowerCase()) {
+      const eth = await ethUsd();
+      // ethUsd() deliberately serves its last good value when CoinGecko is down; for a dollar gate that
+      // value must be recent, or the burn cannot be valued at all
+      if (!(eth > 0) || now() - (ethUsdCache.at || 0) > 10 * 60 * 1000) return null;
+      return q * eth;
+    }
+    return null;
+  } catch { return null; }
+}
+function dataKeyOf(req) {
+  const m = /^Bearer\s+(sk_[0-9a-f]{48})$/i.exec(String(req.headers.authorization || '').trim());
+  if (!m) return null;
+  const row = db.prepare('SELECT key_hash, user_id, last_used_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL').get(hashToken(m[1]));
+  if (!row) return null;
+  if (now() - (row.last_used_at || 0) > 60000) db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?').run(now(), row.key_hash);
+  return row;
+}
+// the public shape of an account — what its wall already shows anyone
+function publicUserView(u) {
+  const level = levelForXp(u.points || 0);
+  return { id: u.id, username: u.username, avatar: u.avatar, avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null, bio: u.bio || '', accent: u.accent || '',
+    joined: u.created_at, points: u.points || 0, level, title: titleFor(level), og: u.og_tier || 0, twitter: u.twitter_handle || null, instagram: u.ig_handle || null };
+}
+// everything the key holder's own account holds, decrypted for them and nobody else
+function ownDataView(u) {
+  const level = levelForXp(u.points || 0);
+  return {
+    profile: { ...publicUserView(u), theme: themeOf(u), wallets: walletAddresses(u.id), methods: identityTypes(u.id), twofa: u.twofa_method || null,
+      tracker_prefs: safeJson(decField(u.tracker_prefs)), site_prefs: safeJson(decField(u.site_prefs)), rank: userRank(u.id), boost: effectiveMult(u.id),
+      ogTier: u.og_tier || 0, ogBuyMs: u.og_buy_ms || null, ogRevoked: !!u.og_revoked, weekBoost: weekBoostState(u.id), arcade: arcadeState(u.id),
+      restriction: restrictionOf(u), probation: probationOf(u), callAllowance: callAllowance(u) },
+    pointsEvents: db.prepare('SELECT id, kind, amount, base, mult, comp_amount, ref, created_at FROM points_events WHERE user_id = ? ORDER BY id DESC LIMIT 1000').all(u.id),
+    posts: db.prepare('SELECT * FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(p => postView(p, null)),
+    comments: db.prepare('SELECT id, post_id, text, tokens, created_at FROM comments WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(c => ({ ...c, tokens: parseTokens(c.tokens) })),
+    calls: db.prepare('SELECT * FROM calls WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(u.id).map(r => callView(r, null)),
+    sends: db.prepare('SELECT call_id, created_at, entry_price, spend_usd, bought_usd, held_usd, hold_paid, points_paid FROM call_hops WHERE user_id = ? ORDER BY created_at DESC LIMIT 500').all(u.id),
+    watchlist: db.prepare('SELECT pair_addr, token_addr, token0, token1, quote_symbol, added_at FROM watchlist WHERE user_id = ? ORDER BY added_at DESC').all(u.id),
+    trackedWallets: db.prepare('SELECT id, address_enc, label, created_at FROM tracked_wallets WHERE user_id = ? ORDER BY id').all(u.id).map(t => ({ id: t.id, address: decField(t.address_enc), label: t.label, created_at: t.created_at })),
+    pinnedTokens: db.prepare('SELECT token_addr, pair_addr, symbol, name, added_at, pin_price, pin_mc FROM pinned_tokens WHERE user_id = ? ORDER BY added_at').all(u.id),
+    communities: db.prepare('SELECT c.id, c.symbol, c.name, c.token_addr, c.status, cm.joined_at, cm.conviction_xp, cm.qualified FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ?').all(u.id),
+    following: db.prepare('SELECT u.username, f.created_at FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ?').all(u.id),
+    followers: db.prepare('SELECT u.username, f.created_at FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ?').all(u.id),
+    notifications: db.prepare('SELECT id, kind, icon, text, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id),
+    mutes: mutedNames(u.id),
+  };
+}
 let lbCache = { at: 0, top: null };   // leaderboard top-20 cache (identical for everyone → serve for LB_TTL)
 const LB_TTL = 8000;
 const RISK_PUBLIC = Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])); // static → build once
@@ -4399,6 +4532,80 @@ const server = http.createServer(async (req, res) => {
       // deadline epochs in its HTML beside the server constants, which is exactly the kind of duplicated
       // truth that drifts. Serving them means there is one source: OG_LAUNCH + OG_TIER_END.
       if (p === '/api/og/campaign' && req.method === 'GET') return send(res, 200, ogCampaign());
+
+      /* ===== Data API ===== */
+      if (p === '/api/data/eligibility' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('dkelig:' + me.id, 30, 6e5) || (url.searchParams.get('fresh') === '1' && !rateLimit('dkfresh:' + me.id, 6, 6e5))) return bad(res, 'checking too often — try again shortly', 429);
+        const key = db.prepare('SELECT wallet, burned_usd, price_usd, minted_at, last_used_at FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(me.id) || null;
+        let burn = null, error = null;
+        try { burn = await burnedSend(me.id, url.searchParams.get('fresh') === '1'); } catch { error = 'could not read the chain completely right now — nothing is assumed; try again in a minute'; }
+        return send(res, 200, {
+          threshold: DATA_BURN_USD, burnAddress: DATA_BURN_ADDR, token: TOK.SEND, burn, error,
+          eligible: !!(burn && burn.usd != null && burn.usd >= DATA_BURN_USD),
+          key: key ? { wallet: key.wallet ? decField(key.wallet) : null, burnedUsd: key.burned_usd, priceUsd: key.price_usd, mintedAt: key.minted_at, lastUsedAt: key.last_used_at } : null,
+        });
+      }
+      if (p === '/api/data/key' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (blockReadOnly(res, me)) return;
+        if (!rateLimit('dkmint:' + me.id, 5, 36e5)) return bad(res, 'too many attempts — try again later', 429);
+        if (_minting.has(me.id)) return bad(res, 'a mint is already in progress — wait for it', 409); // two tabs must not hand out a key that the other tab's mint has already revoked
+        _minting.add(me.id);
+        try {
+        // Checked BEFORE the chain read: it is one database query, and a request it refuses must not
+        // spend explorer calls first.
+        // A burn backs ONE live key at a time, whichever account the wallet is linked to. Without this,
+        // unlinking the burned wallet and relinking it to a fresh account minted another live key for the
+        // same burn, without limit — every key multiplying the per-key rate limit.
+        const myIdx = walletAddresses(me.id).map(w => bidx(w.toLowerCase()));
+        const clash = db.prepare('SELECT user_id, wallets_idx FROM api_keys WHERE revoked_at IS NULL AND user_id != ?').all(me.id)
+          .find(k => { try { return (JSON.parse(k.wallets_idx || '[]')).some(i => myIdx.includes(i)); } catch { return false; } });
+        if (clash) return bad(res, 'a wallet linked here already backs a live key on another account — revoke that key first; a burn backs one key at a time', 409);
+        let burn;
+        try { burn = await burnedSend(me.id, true); } catch { return bad(res, 'could not read the chain completely right now — try again in a minute', 502); }
+        if (!burn.wallets) return bad(res, 'link a wallet first — the burn is read from your linked wallets', 403);
+        if (burn.usd == null) return bad(res, 'the $SEND price cannot be read right now, so the burn cannot be valued — try again', 503);
+        if (burn.usd < DATA_BURN_USD) return bad(res, 'not eligible: $' + burn.usd.toFixed(2) + ' of $SEND burned across your linked wallets; $' + DATA_BURN_USD + ' is required', 403);
+        const plain = 'sk_' + rand(24);
+        db.exec('BEGIN');
+        try {
+          db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now(), me.id); // one live key per account
+          db.prepare('INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx) VALUES (?,?,?,?,?,?,?,?)')
+            .run(hashToken(plain), me.id, burn.topWallet ? encField(burn.topWallet) : null, burn.wei, burn.usd, burn.priceUsd, now(), JSON.stringify(myIdx)); // the wallet is a wallet↔account link: encrypted like every other one
+          db.exec('COMMIT');
+        } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not mint a key', 500); }
+        notify(me.id, '🔑', 'Data API key minted. It was shown once on the Data API page and is not stored anywhere readable — anyone holding it can read your own private data, so keep it secret. Revoke it there if it ever leaks.', 'wallet');
+        return send(res, 200, { key: plain, burnedUsd: burn.usd, priceUsd: burn.priceUsd, wallet: burn.topWallet });
+        } finally { _minting.delete(me.id); }
+      }
+      if (p === '/api/data/key/revoke' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        const r = db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now(), me.id);
+        return send(res, 200, { ok: true, revoked: r.changes });
+      }
+      const dm = /^\/api\/data\/v1\/([a-z]+)$/.exec(p);
+      if (dm && req.method === 'GET') {
+        const k = dataKeyOf(req);
+        if (!k) return bad(res, 'a valid Data API key is required — Authorization: Bearer sk_…', 401);
+        if (!rateLimit('dk:' + k.key_hash, DATA_KEY_RATE, 60000)) return bad(res, 'rate limit: ' + DATA_KEY_RATE + ' requests per minute per key', 429);
+        const limit = Math.min(DATA_PAGE_MAX, Math.max(1, Number(url.searchParams.get('limit')) || 100));
+        const before = Number(url.searchParams.get('before')) || Number.MAX_SAFE_INTEGER;
+        const page = (rows, idOf) => ({ data: rows, next: rows.length === limit ? idOf(rows[rows.length - 1]) : null, limit });
+        const owner = db.prepare('SELECT * FROM users WHERE id = ?').get(k.user_id);
+        if (!owner) return bad(res, 'key owner no longer exists', 401);
+        switch (dm[1]) {
+          case 'me': return send(res, 200, { data: ownDataView(owner), generatedAt: now() });
+          case 'users': { const rows = db.prepare('SELECT * FROM users WHERE system = 0 AND id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(publicUserView), r => r.id)); }
+          case 'posts': { const rows = db.prepare('SELECT * FROM posts WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(p => ({ ...postView(p, null), community_id: p.community_id || null })), r => r.id)); }
+          case 'comments': { const rows = db.prepare('SELECT c.id, c.post_id, c.text, c.tokens, c.created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id < ? ORDER BY c.id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(c => ({ ...c, tokens: parseTokens(c.tokens) })), r => r.id)); }
+          case 'calls': { const rows = db.prepare('SELECT c.*, u.username FROM calls c JOIN users u ON u.id = c.user_id WHERE c.id < ? ORDER BY c.id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(r => ({ username: r.username, ...callView(r, null) })), r => r.id)); }
+          case 'communities': { const rows = db.prepare('SELECT * FROM communities WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(c => communityCardView(c, null)), r => r.id)); }
+          case 'leaderboard': { const rows = db.prepare('SELECT * FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT ?').all(limit); return send(res, 200, { data: rows.map((u, i) => ({ rank: i + 1, ...publicUserView(u) })), limit }); }
+          case 'competition': { const { win, rows } = competitionStandings(); return send(res, 200, { data: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, standings: rows.slice(0, 20).map(r => ({ rank: r.rank, username: r.username, points: r.pts })), last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES } } }); } // top 20 only — the same window the public board shows; the key changes the shape, never the scope
+          default: return bad(res, 'unknown resource — one of: me, users, posts, comments, calls, communities, leaderboard, competition', 404);
+        }
+      }
       if (p === '/api/me' && req.method === 'GET') {
         if (!me) return bad(res, 'not signed in', 401);
         return send(res, 200, {
@@ -4408,8 +4615,8 @@ const server = http.createServer(async (req, res) => {
             twofa: me.twofa_method || null,
             mutes: mutedNames(me.id), // usernames this user has muted (private to them)
             theme: themeOf(me),
-            tracker_prefs: JSON.parse(me.tracker_prefs || '{}'),
-            site_prefs: JSON.parse(me.site_prefs || '{}'),
+            tracker_prefs: safeJson(decField(me.tracker_prefs)),
+            site_prefs: safeJson(decField(me.site_prefs)),
             twitter: me.twitter_handle || null, instagram: me.ig_handle || null,
             points: me.points, level: levelForXp(me.points), title: titleFor(levelForXp(me.points)), // for the nav badge
             og: me.og_tier || 0, // permanent OG badge + 10× Send Power (verified early buyer)
@@ -4801,7 +5008,7 @@ const server = http.createServer(async (req, res) => {
         if (b.tracker_prefs !== undefined) {
           const j = JSON.stringify(b.tracker_prefs || {});
           if (j.length > 4000) return bad(res, 'prefs too large');
-          db.prepare('UPDATE users SET tracker_prefs = ? WHERE id = ?').run(j, me.id);
+          db.prepare('UPDATE users SET tracker_prefs = ? WHERE id = ?').run(encField(j), me.id);
         }
         if (b.site_prefs !== undefined) {
           const sp = b.site_prefs || {};
@@ -4823,7 +5030,7 @@ const server = http.createServer(async (req, res) => {
           }
           const j = JSON.stringify(sp);
           if (j.length > 4000) return bad(res, 'prefs too large');
-          db.prepare('UPDATE users SET site_prefs = ? WHERE id = ?').run(j, me.id);
+          db.prepare('UPDATE users SET site_prefs = ? WHERE id = ?').run(encField(j), me.id);
         }
         const czEarned = awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd()); // once/day for tuning your profile
         const u2 = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);

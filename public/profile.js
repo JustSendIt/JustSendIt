@@ -173,14 +173,18 @@ async function saveProfile() {
     if (wasClaim && back && /^\/(?![\/\\])/.test(back) && !/\/profile\.html/.test(back)) { sendToast('Taking you back to where you were… ↩'); setTimeout(() => { location.href = back; }, 1400); }
     sendConfetti(innerWidth / 2, 200, { count: 30, emojiRatio: 0.4 });
     if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned);
-    // keep the nav account-menu trigger's name + accessible label in sync after a rename/claim (the trigger is a <button>
-    // with a .pl-name span + caret — update only the name text so the caret/OG badge/menu affordance survive)
+    // keep the nav account control in sync after a rename/claim: the name is a LINK to the public wall
+    // (href + label follow the new name), the caret beside it is the menu button (its label follows too)
     const navTrg = document.querySelector('#nav-auth .profile-link');
     if (navTrg) {
       const nm = navTrg.querySelector('.pl-name');
       if (nm) nm.textContent = j.user.avatar + ' @' + j.user.username; else navTrg.textContent = j.user.avatar + ' @' + j.user.username;
-      navTrg.setAttribute('aria-label', 'Account menu for @' + j.user.username);
+      navTrg.setAttribute('href', '/u/' + encodeURIComponent(j.user.username));
+      navTrg.setAttribute('aria-label', 'Your public Send Wall — @' + j.user.username);
+      const wallItem = document.querySelector('#nav-profile-menu a[href^="/u/"]'); if (wallItem) wallItem.href = '/u/' + encodeURIComponent(j.user.username);
     }
+    const navCaret = document.querySelector('#nav-auth .np-caret-btn');
+    if (navCaret) navCaret.setAttribute('aria-label', 'Account menu for @' + j.user.username);
   } catch (e) { sendToast('⚠️ ' + e.message); }
 }
 function setWallLinks(name) {

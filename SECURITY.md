@@ -26,9 +26,15 @@ describes mechanisms, not promises.
 
 - **No claim that the site has never been compromised**, and no claim it cannot be.
 - **Encryption at rest protects a stolen database, not a stolen server.** Emails, linked wallets,
-  two-factor secrets and tracked wallets are AES-256-GCM encrypted under a key held outside the
-  database. If the key is taken along with the data, that protection is gone. Public content —
-  usernames, posts, comments, the follow graph — is stored in the clear, because it is public.
+  two-factor secrets, tracked wallets and per-user preference blobs are AES-256-GCM encrypted under
+  a key held outside the database; passwords are scrypt-hashed, never stored; Data API keys are
+  stored only as SHA-256 hashes. If the key is taken along with the data, that protection is gone.
+  Public content — usernames, posts, comments, the follow graph — is stored in the clear, because
+  it is public. Two deliberate exceptions keep a wallet next to an account in the clear: the wallet
+  a Send Call publicly shows, and the record of the connect award.
+- **The Data API returns a key holder's own data and public data only.** A key is minted for a
+  verified on-chain burn; it never opens another user's private fields. Reports of any path that
+  does are especially welcome.
 - **Wallet sign-in is domain-bound, not phishing-proof.** The message you sign names this site, so a
   signature harvested elsewhere does not match what this server stored. That only helps if you read
   the first line before signing. The mechanism reduces a class of attack; it does not eliminate it.

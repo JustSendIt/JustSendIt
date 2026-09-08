@@ -292,7 +292,7 @@
     const j = await api('/api/wallet/disconnect', { method: 'POST' }); // throws with a clear message on a guarded refusal
     try { if (window.WALLET) WALLET.forget(); } catch {}               // also forget the client-side connection
     await refresh(); onAuthChange();                                    // nav re-renders: balances pill + Disconnect item drop
-    const t = document.getElementById('nav-profile-trigger'); if (t && document.activeElement === document.body) t.focus(); // keep keyboard focus on the rebuilt trigger (the disabled button dropped it to <body>)
+    const t = document.getElementById('nav-profile-caret'); if (t && document.activeElement === document.body) t.focus(); // keep keyboard focus on the rebuilt trigger (the disabled button dropped it to <body>)
     return j;
   };
 
@@ -301,24 +301,30 @@
     if (!wrap) return;
     if (!open) { const d = wrap.querySelector('#npm-disconnect'); if (d && d._resetArm) d._resetArm(); } // disarm the two-tap disconnect on ANY close (outside-click, Esc, focusout, hover-out)
     wrap.classList.toggle('open', open);
-    const trg = wrap.querySelector('.profile-link'), menu = wrap.querySelector('.nav-profile-menu');
+    const trg = wrap.querySelector('.np-caret-btn'), menu = wrap.querySelector('.nav-profile-menu');
     if (trg) trg.setAttribute('aria-expanded', String(open));
     if (menu) menu.hidden = !open;
   }
   function profileMenuItems(wrap) { return Array.from(wrap.querySelectorAll('.nav-profile-menu .npm-item:not([disabled])')); }
   // once-only: outside-click and Escape close whichever account menu is open (menu is rebuilt on every renderNav)
   document.addEventListener('click', (e) => { const w = document.querySelector('.nav-profile.open'); if (w && !w.contains(e.target)) setProfileOpen(w, false); });
-  document.addEventListener('keydown', (e) => { if (e.key !== 'Escape' && e.key !== 'Esc') return; const w = document.querySelector('.nav-profile.open'); if (w) { setProfileOpen(w, false); const t = w.querySelector('.profile-link'); if (t) t.focus(); } });
+  document.addEventListener('keydown', (e) => { if (e.key !== 'Escape' && e.key !== 'Esc') return; const w = document.querySelector('.nav-profile.open'); if (w) { setProfileOpen(w, false); const t = w.querySelector('.np-caret-btn'); if (t) t.focus(); } });
   // Build the logged-in account control: the @name is a menu trigger (hover on desktop, click/keyboard anywhere) exposing
   // My Wall · Dashboard · Disconnect wallet (if linked) · Sign out. Fully keyboard-navigable + ARIA-menu semantics.
   function mountProfileMenu(slot, user) {
     const wrap = document.createElement('div');
     wrap.className = 'nav-profile';
-    const trg = document.createElement('button');
-    trg.type = 'button'; trg.className = 'profile-link'; trg.id = 'nav-profile-trigger';
-    trg.setAttribute('aria-haspopup', 'true'); trg.setAttribute('aria-expanded', 'false'); trg.setAttribute('aria-controls', 'nav-profile-menu');
-    trg.setAttribute('aria-label', 'Account menu for @' + user.username);
-    trg.innerHTML = '<span class="pl-name">' + roEsc(user.avatar + ' @' + user.username) + '</span>' + ((user.og && window.ogBadge) ? ogBadge(user.og) : '') + '<span class="np-caret" aria-hidden="true">▾</span>';
+    // The name is a plain link to your public Send Wall; the caret beside it is the menu button. Hovering
+    // anywhere on the control (desktop mouse) still reveals the menu, so the tabs are visible on hover.
+    const trg = document.createElement('a');
+    trg.className = 'profile-link'; trg.id = 'nav-profile-trigger'; trg.href = '/u/' + encodeURIComponent(user.username);
+    trg.setAttribute('aria-label', 'Your public Send Wall — @' + user.username);
+    trg.innerHTML = '<span class="pl-name">' + roEsc(user.avatar + ' @' + user.username) + '</span>' + ((user.og && window.ogBadge) ? ogBadge(user.og) : '');
+    const caret = document.createElement('button');
+    caret.type = 'button'; caret.className = 'np-caret-btn'; caret.id = 'nav-profile-caret';
+    caret.setAttribute('aria-haspopup', 'true'); caret.setAttribute('aria-expanded', 'false'); caret.setAttribute('aria-controls', 'nav-profile-menu');
+    caret.setAttribute('aria-label', 'Account menu for @' + user.username);
+    caret.innerHTML = '<span class="np-caret" aria-hidden="true">▾</span>';
     const menu = document.createElement('div');
     menu.className = 'nav-profile-menu'; menu.id = 'nav-profile-menu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
     menu.setAttribute('aria-label', 'Account menu');
@@ -331,7 +337,10 @@
     const trk = document.createElement('a');
     trk.className = 'npm-item'; trk.setAttribute('role', 'menuitem'); trk.tabIndex = -1; trk.href = '/tracker.html';
     trk.innerHTML = '<span class="npm-ico" aria-hidden="true">💼</span> Wallet Tracker';
-    menu.appendChild(wall); menu.appendChild(dash); menu.appendChild(trk);
+    const dat = document.createElement('a');
+    dat.className = 'npm-item'; dat.setAttribute('role', 'menuitem'); dat.tabIndex = -1; dat.href = '/data.html';
+    dat.innerHTML = '<span class="npm-ico" aria-hidden="true">🔑</span> Data API';
+    menu.appendChild(wall); menu.appendChild(dash); menu.appendChild(trk); menu.appendChild(dat);
     if (user.wallets && user.wallets.length) {
       const sep = document.createElement('div'); sep.className = 'npm-sep'; sep.setAttribute('role', 'separator'); menu.appendChild(sep);
       const disc = document.createElement('button');
@@ -355,14 +364,14 @@
     out.innerHTML = '<span class="npm-ico" aria-hidden="true">🚪</span> Sign out';
     out.addEventListener('click', () => { setProfileOpen(wrap, false); AUTH.logout(); });
     menu.appendChild(out);
-    wrap.appendChild(trg); wrap.appendChild(menu);
+    wrap.appendChild(trg); wrap.appendChild(caret); wrap.appendChild(menu);
 
     // ----- interaction wiring -----
     let hoverT = null;
     const open = (focusFirst) => { setProfileOpen(wrap, true); if (focusFirst) { const it = profileMenuItems(wrap)[0]; if (it) it.focus(); } };
     const close = () => setProfileOpen(wrap, false);
-    trg.addEventListener('click', () => { wrap.classList.contains('open') ? close() : open(false); });
-    trg.addEventListener('keydown', (e) => {
+    caret.addEventListener('click', () => { wrap.classList.contains('open') ? close() : open(false); });
+    caret.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); open(true); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); open(true); const items = profileMenuItems(wrap); if (items.length) items[items.length - 1].focus(); }
     });
@@ -378,7 +387,7 @@
       else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
       else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
       else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
-      else if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); close(); trg.focus(); }
+      else if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); close(); caret.focus(); }
     });
     // keyboard tab-out closes (focus left the whole control)
     wrap.addEventListener('focusout', () => { setTimeout(() => { if (!wrap.contains(document.activeElement)) close(); }, 0); });

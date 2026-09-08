@@ -393,6 +393,16 @@ A fresh race every week, run by the server on its own. Every **Monday 00:00 UTC*
 
 The board is public at `GET /api/competition` — this week's top 20, the clock, your own row, last week's winners and what they drew. On the dashboard, toggle **The Arena** to 🏆 Biggest Senders.
 
+### 3.13 Data API — the burn key 🔑
+
+One sanctioned door to bulk data, for AI, bots and spreadsheets. A key is minted only for an account whose **linked wallets** have, between them, sent at least **$1,000 of $SEND to the burn address** `0x000000000000000000000000000000000000dEaD` — read on‑chain with the same fail‑closed walker the OG scan uses, and **valued at the lower of the live $SEND price and the median of the last 24 hours of on‑chain candle closes** at the moment of minting — a momentary pump cannot inflate a burn, and a live price more than 3× the day's median refuses to value anything. If the chain, the candles or the price cannot be read completely, nothing is assumed and you are told to try again. **A burn backs one live key at a time**, on whichever account its wallet is linked to; the same wallet on another account is refused until that key is revoked.
+
+- **What it opens:** every public surface in bulk, structured JSON — `users`, `posts`, `comments`, `calls`, `communities`, `leaderboard`, `competition` — plus **your own** account in full at `me` (preferences, wallets, tracked wallets, watchlist, every points event, notifications, follows, posts), decrypted for you.
+- **What it never opens:** anyone else's private fields. Emails, linked wallets, 2FA, tracked wallets and preferences are encrypted so that only their owner can read them; a burn does not change whose data it is. Public data is already public on the site — the key changes the shape, not the scope.
+- **Mechanics:** `GET /api/data/v1/<resource>` with `Authorization: Bearer sk_…`; newest‑first, `before=<last id>` paging, `limit` ≤ 200, **120 requests/minute per key**. One live key per account; minting again replaces it. The key is shown **once** and stored only as a SHA‑256 hash (`api_keys.key_hash`), like a session cookie; revoke it from the Data API page if it leaks. Manage it at `/data.html` — reachable from the account menu.
+
+**Encryption at rest, precisely.** Emails, wallet identifiers, 2FA secrets, tracked wallets and — as of this section — the per‑user preference blobs (`tracker_prefs`, `site_prefs`) are AES‑256‑GCM encrypted under `DATA_KEY`. Public content (usernames, posts, comments, calls, boards) is stored readable because search, sorting and every wall must read it; encrypting it would break the site without hiding anything that is not already public.
+
 ## 4. How to participate — in 4 steps
 
 1. **Get a wallet** and add Robinhood Chain (Robinhood Wallet supports it natively; any EVM wallet works).
