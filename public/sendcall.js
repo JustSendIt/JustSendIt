@@ -130,7 +130,7 @@
         '<ul class="sc-rules">' +
           '<li>📣 <b>+40</b> for making a call (the token needs ≥$500 liquidity, so no one can farm a dust pool).</li>' +
           '<li>📥 <b>Send-size boost:</b> we read on-chain the value of the tokens you bought from the pool <b>and still hold</b> — <b>every $100 = ×1 Send Power</b> (so $1,000 still held = ×10). Sell and it drops. The same applies when you 🚀 Send It on someone else’s call. The card shows what the caller and all followers put in. (Best-effort — only pool buys you still hold count.)</li>' +
-          '<li>🚀 <b>Per whole X it hits:</b> 1x → +60, 2x → +120, 3x → +180 … all the way to 50x. The bigger the call, the more — no daily cap.</li>' +
+          '<li>🚀 <b>Per whole X it hits:</b> 1x → +180, 2x → +360, 3x → +540 … all the way to 50x. The bigger the call, the more — no daily cap, though everything one call ever pays shares one lifetime budget, and most of it is reserved for holding.</li>' +
           '<li>💎 <b>Diamond hands:</b> a call that <b>stays in profit</b> earns even more the <b>longer and higher</b> it holds — this bonus <b>compounds</b> over time, accruing automatically every few minutes it’s above entry.</li>' +
           '<li>🚀 <b>+10</b> to <b>Send It!</b> on someone else’s call — and if you stay in profit from your entry price, you earn the <b>same 💎 diamond-hands bonus</b> the caller does.</li>' +
         '</ul>' +

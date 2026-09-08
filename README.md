@@ -93,24 +93,24 @@ Everything you do that helps the community earns **Send Power** (points, also yo
 
 | Action | Base points | Notes |
 |---|---:|---|
-| Make a Send Call | 40 | **Scaled by your Send size** (see §3.4) |
-| Swap ETH → $Send/$GWC in‑page | 150 | Largest fixed earner |
-| Connect a wallet holding $Send/$GWC | 50 | Once per address, ever |
-| First‑ever post | 50 | One‑time bonus |
-| Per‑X milestone on a call | 60 × the X hit | **Scaled by the X** — 1x → +60, 2x → +120 … up to 50x. No daily cap |
-| Post on the Send Wall | 25 | |
-| Daily visit bonus | 20 | Once per day |
-| Track a wallet | 15 | Once per address, ever |
-| Customize your wall | 10 | Effectively once per day |
-| "Send It!" on a call | 10 | **Scaled by your Send size** |
-| Reply / comment | 8 | |
-| Your post gets upvoted | 4 | Only an upvote pays the author |
-| Your post receives a 🔥/🚀 reaction | 3 | |
-| You react to a post | 2 | |
-| You up/downvote a post | 2 | |
-| Watch a token | 5 | Once per token, ever |
-| Someone follows you | 5 | |
-| You follow someone | 6 | Once per unique person |
+| Make a Send Call | 120 | **Scaled by your Send size** (see §3.4) |
+| Swap ETH → $Send/$GWC in‑page | 450 | Largest fixed earner |
+| Connect a wallet holding $Send/$GWC | 150 | Once per address, ever |
+| First‑ever post | 150 | One‑time bonus |
+| Per‑X milestone on a call | 180 × the X hit | **Scaled by the X** — 1x → +180, 2x → +360 … up to 50x. No daily cap, but inside the per‑call budget (below) |
+| Post on the Send Wall | 75 | |
+| Daily visit bonus | 60 | Once per day |
+| Track a wallet | 45 | Once per address, ever |
+| Customize your wall | 30 | Effectively once per day |
+| "Send It!" on a call | 30 | **Scaled by your Send size** |
+| Reply / comment | 24 | |
+| Your post gets upvoted | 12 | Only an upvote pays the author |
+| Your post receives a 🔥/🚀 reaction | 9 | |
+| You react to a post | 6 | |
+| You up/downvote a post | 6 | |
+| Watch a token | 15 | Once per token, ever |
+| Someone follows you | 15 | |
+| You follow someone | 18 | Once per unique person |
 
 Two more earn types have **no fixed base** — they're computed live from performance and shown as "⚡ scales": the **caller diamond‑hands hold bonus** and the **hopper hold bonus** (see §3.4).
 
@@ -126,7 +126,7 @@ Two more earn types have **no fixed base** — they're computed live from perfor
 | Send Call (point events) | 20 | | Track wallet | 10 |
 | Follow someone | 10 | | Connect wallet | 5 |
 
-**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; hold bonus caps at 250,000 base points per position; and everything pauses when a pool loses liquidity). And one hard backstop applies to **every** award: after the base is multiplied by your Holder Boost, a single event can never mint more than **500,000** points — so the stacked multipliers can never run away.
+**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; hold bonus caps at 750,000 base points per position; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A hopper's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And one hard backstop applies to **every** award: after the base is multiplied by your Holder Boost, a single event can never mint more than **1,500,000** points — so the stacked multipliers can never run away.
 
 **Levels — an endless climb.** Send Power feeds an exponential XP curve with **no level cap** — each level costs about **10.4% more** than the last.
 
@@ -156,7 +156,7 @@ Holder Boost  = 1 + supplyBoost × diamondFactor
 - A **non‑holder gets exactly 1×** — the boost only ever scales up.
 - Every weighted **1% of supply** adds **10** to your supply boost.
 - **$GWC is weighted ×3** on the supply axis — the same fraction of $GWC gives three times the boost that $Send does.
-- The **supply side is uncapped**; the only cap inside the formula is the Diamond factor's **×100** ceiling (and every award is still bounded by the 500,000‑per‑event backstop).
+- The **supply side is uncapped**; the only cap inside the formula is the Diamond factor's **×100** ceiling (and every award is still bounded by the 1,500,000‑per‑event backstop).
 
 **Worked examples** (fresh, unbroken streak):
 
@@ -218,11 +218,11 @@ sizeMult = min(100, max(1, yourSpendUSD / 100))
 
 Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest: your "spend" is credited as **min(tokens you bought from the pool, tokens you still hold) × price**, read best‑effort across up to 3 connected wallets. Taking the *minimum* defeats value spoofing, wash/recycled buys, self‑pool paper value, and airdrops. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The senders list in this section re‑reads hoppers' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
 
-**Per‑X milestone payouts: 60 × the X.** As your call actually runs, each **whole X** it crosses pays **60 × that X** — 1x → +60, 2x → +120 … up to **50x → +3,000** (ladder caps at 50x). No daily cap (pure performance). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
+**Per‑X milestone payouts: 180 × the X.** As your call actually runs, each **whole X** it crosses pays **180 × that X** — 1x → +180, 2x → +360 … up to **50x → +9,000** (ladder caps at 50x). No daily cap (pure performance), but every payout draws on the call's lifetime budget (§3.1). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
 
-**Diamond‑hands HOLD bonus.** While your call stays in profit, you keep earning a **super‑linear** bonus: `owed = 0.5 × holdX^1.5` (capped at 250,000 base points per position). It compounds with both height and duration, accrues **only while the pool is liquid and you're in profit** (underwater/drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
+**Diamond‑hands HOLD bonus — the main event.** While your call stays in profit, you keep earning a **super‑linear** bonus: `owed = 0.5 × holdX^1.5` (capped at 750,000 base points per position). It is deliberately where most of a call's Send Power lives: of the per‑call lifetime budget (§3.1), the opening award may take at most 10% and the milestone ladder at most 30% cumulatively, so **at least 60% is reserved for holding in profit**. **Crew factor:** the hold integral accrues faster when the people who Sent It on your call are also in profit from *their own* entry — `rate = 1 + 0.1 × (hoppers in profit)`, capped at **3×** (twenty profitable hoppers). A conviction play that carries other people with it is worth more than a lonely one. It compounds with both height and duration, accrues **only while the pool is liquid and you're in profit** (underwater/drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
 
-**Send It! — following a call.** Tap **"Send It!"** to hop on someone else's call: base **10**, scaled by *your* Send size and Holder Boost, capped at 30 hops/day. Points pay only on your **first** hop per call; you can't hop your own. Your Xs are measured from the price when *you* hopped, and **hoppers earn the same diamond‑hands HOLD bonus** the caller does.
+**Send It! — following a call.** Tap **"Send It!"** to hop on someone else's call: base **30**, scaled by *your* Send size and Holder Boost, capped at 30 hops/day. Points pay only on your **first** hop per call; you can't hop your own. Your Xs are measured from the price when *you* hopped, and **hoppers earn the same diamond‑hands HOLD bonus** the caller does.
 
 **The senders list.** Each call shows who's behind it, ranked by conviction: `$ put in × (1 + days held) × (1 + your Xs)`. Anyone **not holding** any more drops below every current holder. Top 3 show inline; "Show all" pulls the full ranked list.
 

@@ -481,6 +481,8 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN og_tier INTEGER NOT NULL DEFAULT 0",          // 0 none · 1 bronze (3×) · 2 silver (5×) · 3 gold (10×)
   "ALTER TABLE users ADD COLUMN og_buy_ms INTEGER NOT NULL DEFAULT 0",        // earliest verified market acquisition of the LATER of the two coins — the timestamp the tier was derived from
   "ALTER TABLE users ADD COLUMN og_dq INTEGER NOT NULL DEFAULT 0",            // 1 = failed the dump / net-accumulator standard (distinct from og_revoked, which is a later sell-out)
+  "ALTER TABLE calls ADD COLUMN points_paid INTEGER NOT NULL DEFAULT 0",     // lifetime Send Power this ONE call has paid its caller (post-multiplier) — the basis for CALL_POINTS_CAP
+  "ALTER TABLE call_hops ADD COLUMN points_paid INTEGER NOT NULL DEFAULT 0", // same, per hopper on that call
   "ALTER TABLE users ADD COLUMN og_try_at INTEGER NOT NULL DEFAULT 0",        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
@@ -752,11 +754,16 @@ function titleFor(level) {
   return 'Fresh Sender';
 }
 // base points per action (before the holder multiplier)
-const PTS = { post: 25, first_post: 50, comment: 8, react_give: 2, react_get: 3, vote_give: 2, vote_get: 4, follow: 6, be_followed: 5, track_wallet: 15, watch_token: 5, connect_wallet: 50, customize: 10, daily: 20, swap: 150, send_call: 40, hop_on: 10, call_x: 60 };
+// Every base value is 3x what it launched at. Same ratios between actions; the level curve is
+// untouched (thresholds are what people experience as progress, and re-levelling everyone is not a
+// tuning change). The effect is on PACE: a maxed social day was 6,890 base, which put Level 100
+// 5.7 years away at 1x for a daily player. It is now 20,670 — 1.9 years at 1x, 70 days at the 10x a
+// live community pays — so the climb is long without being hopeless for someone who never calls.
+const PTS = { post: 75, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 180 };
 // anti-farm: max awards of this kind per rolling 24h (per recipient user).
 // Every point-earning kind is capped so no single action can be farmed unbounded.
 const DAILY_CAP = { post: 40, first_post: 1, comment: 20, react_give: 40, react_get: 60, vote_give: 60, vote_get: 100, follow: 10, be_followed: 30, track_wallet: 10, watch_token: 30, connect_wallet: 5, customize: 2, swap: 20, send_call: 20, hop_on: 30, community_founder: 1 }; // call_x (milestone payouts) is uncapped — earned by real performance
-const PTS_EVENT_CAP = 500000; // hard ceiling on any single points event (backstop against the size × holder multiplier stack)
+const PTS_EVENT_CAP = 1500000; // hard ceiling on any single points event (backstop against the size × holder multiplier stack). 3x with the bases, so it clamps at the same multiplier it always did
 // ===== Communities: token-address communities that go live at 10 opt-ins; being in one = a flat 10× Send Power =====
 const COMMUNITY_MULT = 10;       // flat 10× on EVERY action while a verified holder in ≥1 LIVE community (NOT per-community, NOT 10^n)
 
@@ -816,7 +823,7 @@ function arcadeState(userId) {
   };
 }
 const LIVE_THRESHOLD = 10;      // distinct qualified opt-ins to go live
-const FOUNDER_BONUS = 5000;     // one-time base, flows through awardPoints (multiplied + PTS_EVENT_CAP-clamped)
+const FOUNDER_BONUS = 15000;    // one-time base, flows through awardPoints (multiplied + PTS_EVENT_CAP-clamped). 3x with every other base
 const MIN_COMMUNITY_LIQ = 500;  // no communities on a dust pool (same floor as Send Calls)
 const COMM_HALFLIFE = 12 * 3600 * 1000;   // grid-activity half-life
 const W_join = 5, W_post = 3, W_react = 1; // activity weights (grid sort)
@@ -1433,15 +1440,22 @@ function notifyOnce(userId, icon, text, kind, actorId, windowMs = 10 * 60 * 1000
 }
 
 // award points (holder-multiplied), deduped by ref, capped per kind/day
-function awardPoints(userId, kind, base, ref) {
+function awardPoints(userId, kind, base, ref, maxAmount) {
   if (!userId || !(base > 0)) return 0;
+  // maxAmount is a caller-supplied ceiling on the FINAL, post-multiplier amount. It exists for
+  // payouts that recur against one long-lived object (a Send Call pays its caller over and over as
+  // the price holds up), where capping the base is not enough: the multiplier stack sits on top of
+  // it, and the number of payouts is unbounded. Undefined means no extra ceiling.
+  if (maxAmount != null && !(maxAmount > 0)) return 0;
   if (ref && db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(ref)) return 0;
   if (DAILY_CAP[kind]) {
     const cnt = db.prepare('SELECT COUNT(*) n FROM points_events WHERE user_id=? AND kind=? AND created_at>?').get(userId, kind, now() - 864e5).n;
     if (cnt >= DAILY_CAP[kind]) return 0;
   }
   const effMult = effectiveMult(userId).total;
-  const amount = Math.min(PTS_EVENT_CAP, Math.max(1, Math.round(base * effMult))); // clamp any single event (size × holder × OG stack) to a sane ceiling
+  let amount = Math.min(PTS_EVENT_CAP, Math.max(1, Math.round(base * effMult))); // clamp any single event (size × holder × OG stack) to a sane ceiling
+  if (maxAmount != null) amount = Math.min(amount, Math.floor(maxAmount));
+  if (!(amount > 0)) return 0;
   try {
     db.exec('BEGIN');
     db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, ref, created_at) VALUES (?,?,?,?,?,?,?)').run(userId, kind, amount, base, effMult, ref || null, now());
@@ -3907,17 +3921,63 @@ const MIN_CALL_LIQ = 500;   // a token must have ≥ this pooled liquidity (USD)
 const RUG_LIQ_FLOOR = 100;  // a called token whose live liquidity collapses below this (it started ≥ $500) = liquidity pulled → RUGGED
 const RUG_PENALTY = 2;      // calls the caller's daily limit drops when one of their calls rugs
 const CALL_X_CAP = 50;      // cap the milestone ladder so a manipulated/glitched peak can't mint unbounded points or spin the loop
+/* ===== What ONE Send Call can ever be worth =========================================================
+   Everything a call pays — the opening award, the milestone ladder, and the diamond-hands hold bonus —
+   comes out of a single lifetime budget per call. Without one the hold bonus is unbounded in practice:
+   HOLD_MAX caps the BASE, but it is paid out in chunks of MIN_HOLD_AWARD, so a position can generate
+   HOLD_MAX/MIN_HOLD_AWARD separate events (37,500 today), and the multiplier stack sits on top of every
+   one of them. PTS_EVENT_CAP bounds each event and not the count — before this budget existed, with
+   HOLD_MAX then at 250,000 and the event cap then at 500,000, that was 12,500 x 500,000 = 6.25 BILLION
+   Send Power from a single call, or 434x what Level 100 requires.
+
+   The budget is a level rather than a round number so it stays meaningful if the curve ever changes:
+   one perfect call is worth at most what it takes to reach Level 70. Level 100 is
+   xpForLevel(100) / xpForLevel(70) = about 20 of those, so a great caller genuinely can climb to the
+   top on calls — the leaderboard is meant to reward exactly that — but no single call can put anyone
+   there, and twenty perfect calls is a career, not a trick. For scale, one perfect call is worth about
+   36 days of maxed-out social play at 1x. Hoppers get a quarter of the caller's budget, matching the
+   ratio the opening awards already use (hop_on 30 vs send_call 120). */
+const CALL_POINTS_CAP = xpForLevel(70);                       // 737,627 — lifetime Send Power cap for one call, for its caller
+const HOP_POINTS_CAP = Math.round(CALL_POINTS_CAP / 4);       // 184,407 — same, per hopper on that call
+/* A single payout may also take at most CALL_EVENT_SHARE of the whole budget. Without this, the
+   budget alone quietly destroys the incentive it is protecting: at a 500x multiplier stack the
+   OPENING award already exceeds the entire cap, so one event swallows it and the milestone ladder
+   and the diamond-hands hold bonus pay literally nothing for the rest of the call's life. Bounding
+   each event to a tenth means a call takes at least ten payouts to exhaust, so holding still pays a
+   whale something, while a normal 1x user is nowhere near the per-event bound and sees the reward
+   curve they always saw. */
+const CALL_EVENT_SHARE = 0.1;
+/* The budget is also carved by SOURCE, and the carve is the priority order the site wants: the
+   opening award is one event, so it is bounded to a tenth by CALL_EVENT_SHARE; the milestone ladder
+   may take at most CALL_X_BUDGET_SHARE cumulatively; everything else — never less than 60% of what a
+   call can ever pay — is reserved for the diamond-hands hold bonus, i.e. for staying in profit. Without
+   the carve a high-multiplier caller exhausted the whole budget on the ladder in the first hour the
+   coin ran and then earned nothing for holding it, which is exactly backwards. */
+const CALL_X_BUDGET_SHARE = 0.3;
+const callHeadroom = (paid, cap) => Math.min(Math.max(0, cap - (paid || 0)), Math.floor(cap * CALL_EVENT_SHARE));
 // ── Diamond-hands: reward a call that STAYS in positive Xs, the longer AND higher the more (exponentially) ──
 // hold_x accumulates ∫ min(curX, cap) dt(hours) while curX>0. Points owed grow super-linearly with hold_x, so
 // duration × height compound. Same mechanic rewards hoppers who stay in profit from their hop-in price.
 const HOLD_K = 0.5, HOLD_EXP = 1.5;   // owed = HOLD_K · hold_x^HOLD_EXP  (super-linear ⇒ "exponentially more")
 const HOLD_X_CAP = 50;                // cap the per-tick X height so one glitch tick can't spike the integral
 const HOLD_DT_CAP_H = 0.5;            // credit at most 30 min of hold per tick (we never observed the price during a longer gap)
-const HOLD_MAX = 250000;             // ceiling on total base hold points per position (bounded even for legendary holds)
+const HOLD_MAX = 750000;             // ceiling on total BASE hold points per position. 3x with every other base — left at 250,000 it
+                                     // bound BEFORE the 60% of the call budget reserved for holding (442,576), so a 1x holder was
+                                     // clipped at 250,000 and could never fill the slice that exists for them. The budget, not this,
+                                     // is what bounds a whale; this only needs to sit above the reserved slice at 1x.
 const MIN_HOLD_AWARD = 20;           // only pay out once ≥ this is owed, so we don't spam tiny points_events rows
-function accrueHold(holdX, holdPaid, curX, dtH) {
+/* CREW: the caller's hold accrues faster when the people who Sent It on the call are ALSO in profit
+   from their own entry. 1 + 0.1 per hopper in the green, capped at 3x (twenty profitable hoppers).
+   It multiplies the RATE the hold integral grows at, after the per-tick time cap — applied to dtH
+   before that cap it would be swallowed by it (0.5h x 3 clamps straight back to 0.5h). The intent
+   is the site's: a conviction play that carries other people with it is worth more than a lonely
+   one, and the way to earn it is to stay in profit long enough for them to be too. */
+const CREW_PER_HOPPER = 0.1;
+const CREW_MAX = 3;
+const crewFactor = (hoppersInProfit) => Math.min(CREW_MAX, 1 + CREW_PER_HOPPER * Math.max(0, hoppersInProfit || 0));
+function accrueHold(holdX, holdPaid, curX, dtH, rate) {
   let nx = holdX;
-  if (curX > 0 && dtH > 0) nx += Math.min(dtH, HOLD_DT_CAP_H) * Math.min(curX, HOLD_X_CAP);
+  if (curX > 0 && dtH > 0) nx += Math.min(dtH, HOLD_DT_CAP_H) * Math.min(curX, HOLD_X_CAP) * (rate > 0 ? rate : 1);
   const owed = Math.min(HOLD_MAX, HOLD_K * Math.pow(nx, HOLD_EXP));
   const award = (owed - holdPaid >= MIN_HOLD_AWARD) ? Math.floor(owed - holdPaid) : 0;
   return { holdX: nx, award, holdPaid: holdPaid + award };
@@ -4022,7 +4082,7 @@ async function refreshCalls() {
     // Track EVERY call — calls are permanent, so their Xs keep updating and their peak (the final record) is
     // preserved forever. (At very large scale this moves to a background worker per SCALING.md; the peak is
     // never lost regardless.) Newest first so the most-relevant calls refresh even if a batch is throttled.
-    const rows = db.prepare('SELECT id, user_id, token_addr, symbol, entry_price, peak_price, awarded_x, dead, rugged, hold_x, hold_paid, last_check FROM calls ORDER BY id DESC').all();
+    const rows = db.prepare('SELECT id, user_id, token_addr, symbol, entry_price, peak_price, awarded_x, dead, rugged, hold_x, hold_paid, points_paid, last_check FROM calls ORDER BY id DESC').all();
     if (!rows.length) return;
     const tokens = [...new Set(rows.map(r => r.token_addr))];
     const byToken = {};
@@ -4058,33 +4118,54 @@ async function refreshCalls() {
       const curX = callX(info.price, r.entry_price);
       const dtH = (t - (r.last_check || t)) / 3600000;
       // diamond-hands: accrue the caller's hold integral (positive Xs × time) and pay out super-linearly — only while liquid
-      const hc = liquid ? accrueHold(r.hold_x, r.hold_paid, curX, dtH) : { holdX: r.hold_x, award: 0, holdPaid: r.hold_paid };
+      // hoppers are read once here: the caller's accrual needs to know how many are in profit, and the
+      // hopper loop below reuses the same rows
+      const hops = liquid ? db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, points_paid, last_check FROM call_hops WHERE call_id=?').all(r.id) : [];
+      const crewN = hops.filter(h => h.entry_price > 0 && callX(info.price, h.entry_price) > 0).length;
+      const hc = liquid ? accrueHold(r.hold_x, r.hold_paid, curX, dtH, crewFactor(crewN)) : { holdX: r.hold_x, award: 0, holdPaid: r.hold_paid };
       // Finding 1 fix: advance hold_paid ONLY if the credit actually landed. The integral (hold_x) still advances, so a rolled-back
       // award (SQLITE_BUSY/FULL) is simply retried next tick instead of being silently swallowed. No ref: dedup is the hold_paid delta.
-      let holdPaid = r.hold_paid;
-      if (hc.award > 0 && awardPoints(r.user_id, 'call_hold', hc.award) > 0) holdPaid = hc.holdPaid;
+      let holdPaid = r.hold_paid, paidPts = r.points_paid || 0;
+      if (hc.award > 0) {
+        const got = awardPoints(r.user_id, 'call_hold', hc.award, null, callHeadroom(paidPts, CALL_POINTS_CAP));
+        // hold_paid advances only if the credit landed, so a rolled-back award is retried rather than
+        // swallowed — but a refusal because the call is CAPPED must still advance it, or the same
+        // award is re-attempted forever on every 45s refresh for the life of the position.
+        if (got > 0) { holdPaid = hc.holdPaid; paidPts += got; }
+        else if (callHeadroom(paidPts, CALL_POINTS_CAP) <= 0) holdPaid = hc.holdPaid;
+      }
       // peak (the permanent ATH record + leaderboard basis) only advances on a trustworthy price, so a drained-pool pump can't set a fake ATH
       const peak = liquid ? Math.max(r.peak_price, info.price) : r.peak_price, newPeak = peak > r.peak_price;
-      if (newPeak) db.prepare('UPDATE calls SET cur_price=?, cur_mc=?, peak_price=?, peak_at=?, dead=0, hold_x=?, hold_paid=?, last_check=? WHERE id=?').run(info.price, info.mc, peak, t, hc.holdX, holdPaid, t, r.id);
-      else db.prepare('UPDATE calls SET cur_price=?, cur_mc=?, dead=0, hold_x=?, hold_paid=?, last_check=? WHERE id=?').run(info.price, info.mc, hc.holdX, holdPaid, t, r.id);
+      if (newPeak) db.prepare('UPDATE calls SET cur_price=?, cur_mc=?, peak_price=?, peak_at=?, dead=0, hold_x=?, hold_paid=?, points_paid=?, last_check=? WHERE id=?').run(info.price, info.mc, peak, t, hc.holdX, holdPaid, paidPts, t, r.id);
+      else db.prepare('UPDATE calls SET cur_price=?, cur_mc=?, dead=0, hold_x=?, hold_paid=?, points_paid=?, last_check=? WHERE id=?').run(info.price, info.mc, hc.holdX, holdPaid, paidPts, t, r.id);
       if (liquid) {
         // milestone points off the price SUSTAINED across the last two samples (min of prev cur-price and now), capped — this
         // defeats a one-trade peak spike: a level must survive a full refresh interval with real liquidity before it pays.
         const sustained = Math.min(r.cur_price > 0 ? r.cur_price : info.price, info.price);
         const newMax = Math.min(Math.floor(callX(sustained, r.entry_price)), CALL_X_CAP);
         if (newMax > r.awarded_x && newMax >= 1) {
-          for (let m = Math.max(1, r.awarded_x + 1); m <= newMax; m++) awardPoints(r.user_id, 'call_x', PTS.call_x * m, 'callx:' + r.id + ':' + m); // bigger call → more points
-          db.prepare('UPDATE calls SET awarded_x=? WHERE id=?').run(newMax, r.id);
+          // what the ladder has already taken from this call, read off the refs it was paid under. A
+          // range on the ref index rather than LIKE, so it stays cheap as points_events grows.
+          const xSpent = db.prepare("SELECT COALESCE(SUM(amount),0) s FROM points_events WHERE ref >= ? AND ref < ?").get('callx:' + r.id + ':', 'callx:' + r.id + ';').s;
+          let xRoom = Math.max(0, Math.floor(CALL_POINTS_CAP * CALL_X_BUDGET_SHARE) - xSpent);
+          for (let m = Math.max(1, r.awarded_x + 1); m <= newMax; m++) {
+            const got = awardPoints(r.user_id, 'call_x', PTS.call_x * m, 'callx:' + r.id + ':' + m, Math.min(callHeadroom(paidPts, CALL_POINTS_CAP), xRoom)); // bigger call → more points, out of the ladder's slice of the budget
+            paidPts += got; xRoom -= got;
+          }
+          db.prepare('UPDATE calls SET awarded_x=?, points_paid=? WHERE id=?').run(newMax, paidPts, r.id);
           notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + ' Send Call hit ' + newMax + 'x! Send Power for the call.', 'points');
         }
         // reward hoppers who are ALSO in positive Xs (from their own hop-in price), same diamond-hands mechanic + same Finding-1-safe advance
-        const hops = db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, last_check FROM call_hops WHERE call_id=?').all(r.id);
         for (const hop of hops) {
           if (!(hop.entry_price > 0)) continue;
           const ha = accrueHold(hop.hold_x, hop.hold_paid, callX(info.price, hop.entry_price), (t - (hop.last_check || t)) / 3600000);
-          let hopPaid = hop.hold_paid;
-          if (ha.award > 0 && awardPoints(hop.user_id, 'hop_hold', ha.award) > 0) hopPaid = ha.holdPaid;
-          db.prepare('UPDATE call_hops SET hold_x=?, hold_paid=?, last_check=? WHERE call_id=? AND user_id=?').run(ha.holdX, hopPaid, t, r.id, hop.user_id);
+          let hopPaid = hop.hold_paid, hopPts = hop.points_paid || 0;
+          if (ha.award > 0) {
+            const got = awardPoints(hop.user_id, 'hop_hold', ha.award, null, callHeadroom(hopPts, HOP_POINTS_CAP));
+            if (got > 0) { hopPaid = ha.holdPaid; hopPts += got; }
+            else if (callHeadroom(hopPts, HOP_POINTS_CAP) <= 0) hopPaid = ha.holdPaid;   // capped, not failed — don't retry forever
+          }
+          db.prepare('UPDATE call_hops SET hold_x=?, hold_paid=?, points_paid=?, last_check=? WHERE call_id=? AND user_id=?').run(ha.holdX, hopPaid, hopPts, t, r.id, hop.user_id);
         }
       }
     }
@@ -5012,7 +5093,11 @@ const server = http.createServer(async (req, res) => {
           db.prepare('UPDATE calls SET post_id = ? WHERE id = ?').run(postId, callId);
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not save the call'); }
-        const earned = awardPoints(me.id, 'send_call', Math.round(PTS.send_call * sm), 'call:' + callId); // bigger on-chain buy → bigger Send Power
+        // The opening award comes out of the same per-call budget as the milestones and the hold
+        // bonus, so CALL_POINTS_CAP really is everything one call can ever be worth — not a cap on
+        // part of it with the rest sitting outside.
+        const earned = awardPoints(me.id, 'send_call', Math.round(PTS.send_call * sm), 'call:' + callId, callHeadroom(0, CALL_POINTS_CAP)); // bigger on-chain buy → bigger Send Power
+        if (earned > 0) db.prepare('UPDATE calls SET points_paid = points_paid + ? WHERE id = ?').run(earned, callId);
         // A Send Call on a community's own token IS participation in that community, so it scores for it — but only
         // from a qualified member. Otherwise anyone could push a community up the weekly board from the outside.
         const callComm = communityForToken(token);
@@ -5068,7 +5153,8 @@ const server = http.createServer(async (req, res) => {
           const pos = await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price)); // what this follower bought / still holds
           const spendUsd = pos.spendUsd;
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop, spendUsd, pos.boughtUsd, pos.heldUsd);
-          earned = awardPoints(me.id, 'hop_on', Math.round(PTS.hop_on * sizeMult(spendUsd)), 'hop:' + me.id + ':' + callId); // bigger buy-in → bigger Send Power
+          earned = awardPoints(me.id, 'hop_on', Math.round(PTS.hop_on * sizeMult(spendUsd)), 'hop:' + me.id + ':' + callId, callHeadroom(0, HOP_POINTS_CAP)); // bigger buy-in → bigger Send Power
+          if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
           notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' ($' + Math.round(spendUsd) + ' in)' : ''), 'points');
         } else {
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check) VALUES (?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop);
