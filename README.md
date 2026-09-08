@@ -405,6 +405,16 @@ One sanctioned door to bulk data, for AI, bots and spreadsheets. A **year** of a
 
 **Encryption at rest, precisely.** Emails, wallet identifiers, 2FA secrets, tracked wallets and — as of this section — the per‑user preference blobs (`tracker_prefs`, `site_prefs`) are AES‑256‑GCM encrypted under `DATA_KEY`. Public content (usernames, posts, comments, calls, boards) is stored readable because search, sorting and every wall must read it; encrypting it would break the site without hiding anything that is not already public.
 
+### 3.14 The Arcade competitions hub
+
+The Arcade page (`arcade.html`) shows **every competition running on the site in one place**, under Rocket Run: this week's Biggest Sender race, this week's Send Calls board, the community race, the OG campaign's windows, today's Rocket Run in aggregate, and the all-time Hall of Fame. Each card carries the live clock, the prize exactly as the game master pays it, the top of the board as a podium, where *you* stand (and, for the weekly race, how many points would break you into the prize places), a one-tap way in, and an ⓘ explanation of how to win — hover or focus shows it, a tap toggles it for touch, Esc closes it.
+
+- One read feeds every card: `GET /api/competitions` (`server.js`, `competitionsPublic()`), whose public half is cached for 8 s like the boards it is built from; the per-user blocks (your rank, your prize, your flight) are computed per request. Nothing on the page is typed in — every ladder, window and date is the constant the server enforces.
+- Rocket Run appears as **today's totals only** (flights, cash-outs, best cash-out, pilots boosted right now) — never who flew.
+- Movement chips (▲2 · ▼1 · NEW) compare a board with the one *this browser* saw the last time the page was opened, from `localStorage`; they are labelled as "since your last visit" and never claim anything the server did not rank.
+- The page re-reads every 45 s while visible, ticks its clocks from the server's own clock, and re-renders only when something moved — never while an ⓘ tip is open or while your focus is inside a board. Confetti fires once a week, only if you open the page sitting inside the prize places.
+- Accessibility: podiums are ordered 1-2-3 in the DOM and arranged 2-1-3 only visually; every board is a labelled list; countdowns are plain text; the live region announces only real changes (a new top three, or your own rank); reduced motion turns every animation off.
+
 ## 4. How to participate — in 4 steps
 
 1. **Get a wallet** and add Robinhood Chain (Robinhood Wallet supports it natively; any EVM wallet works).

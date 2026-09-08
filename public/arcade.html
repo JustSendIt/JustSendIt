@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arcade 🕹️ — $Send</title>
-<meta name="description" content="Rocket Run — the $Send arcade. One free flight a day: ride the multiplier and cash out for a temporary Send Power boost. Free bonus game, nothing at stake, entertainment only.">
+<meta name="description" content="The $Send arcade: Rocket Run, one free flight a day, plus every competition running on the site — Biggest Sender, Send Calls, the community race, the OG campaign and the Hall of Fame. Free, nothing at stake, entertainment only.">
 <link rel="icon" href="assets/logo-128.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,9 +13,11 @@
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="arcade.css">
+<link rel="stylesheet" href="compete.css">
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to the game</a>
+<a class="skip-link" href="#cmp">Skip to the competitions</a>
 
 <nav class="nav" aria-label="Main">
   <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
@@ -39,7 +41,7 @@
 
 <header class="np-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Arcade 🕹️</h1>
-  <p class="section-sub" style="margin-bottom:0.5rem;"><b>Rocket Run</b> — one free flight a day. Ride the multiplier as high as your nerve holds, then cash out for a 24-hour Send&nbsp;Power boost.</p>
+  <p class="section-sub" style="margin-bottom:0.5rem;"><b>Rocket Run</b> — one free flight a day. Ride the multiplier as high as your nerve holds, then cash out for a 24-hour Send&nbsp;Power boost. Below it, <a href="#cmp"><b>every competition running on the site</b></a> — who is winning, what it pays and how to get in.</p>
   <p class="np-hero-warn">🎮 <b>A free daily bonus game.</b> Nothing is at stake, nothing is for sale and no money is involved — the only thing you can come away with is a temporary Send&nbsp;Power boost. Entertainment only.</p>
 </header>
 
@@ -47,7 +49,7 @@
   <div class="wrap arc-wrap">
 
     <!-- ===== the game ===== -->
-    <section class="card arc-game" aria-labelledby="arc-game-h">
+    <section class="card arc-game" id="arc-game" aria-labelledby="arc-game-h">
       <h2 class="arc-game-h" id="arc-game-h">🚀 Rocket Run</h2>
 
       <!-- status badges: boost active / today's flight -->
@@ -76,6 +78,17 @@
 
       <!-- sparse polite announcements: whole multipliers, then the outcome -->
       <p class="sr-only" id="arc-live" role="status" aria-live="polite" aria-atomic="true"></p>
+    </section>
+
+    <!-- ===== every competition running on the site, in one place ===== -->
+    <section class="cmp" id="cmp" aria-labelledby="cmp-h" aria-busy="true">
+      <div class="cmp-head">
+        <h2 class="arc-game-h cmp-h" id="cmp-h">🏟️ Live competitions</h2>
+        <p class="cmp-sub">Every race running right now — who is winning, what it pays and how to get in. The prizes are <b>Send Power boosts</b>; nothing here costs anything and nothing is at stake.</p>
+      </div>
+      <nav class="cmp-jump" id="cmp-jump" aria-label="Jump to a competition"></nav>
+      <div class="cmp-grid" id="cmp-grid"><p class="cmp-loading">Loading the boards…</p></div>
+      <p class="sr-only" id="cmp-live" role="status" aria-live="polite" aria-atomic="true"></p>
     </section>
 
     <!-- ===== how it works ===== -->
@@ -147,5 +160,6 @@
 <script src="notifications.js"></script>
 <script src="compose.js"></script>
 <script src="arcade.js"></script>
+<script src="compete.js"></script>
 </body>
 </html>

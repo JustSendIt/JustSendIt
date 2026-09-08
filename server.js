@@ -3862,6 +3862,36 @@ function lastSettledCompetition() {
     winners: winners.map(w => { const u = users[w.user_id]; return { rank: w.rank, points: w.points, boost: w.boost,
       username: u ? u.username : w.username, avatar: u ? u.avatar : '🚀', avatar_img: u && u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u ? (u.accent || '') : '', og: u ? (u.og_tier || 0) : 0 }; }) };
 }
+/* ===== Arcade hub: every competition on the site in one read =========================================
+   The public half (boards, clocks, prizes, today's Rocket Run aggregates) is identical for everyone and
+   cached for HUB_TTL; the per-user blocks (your rank, your boosts, your flight) are computed fresh per
+   request. Nothing here is typed in — every prize, window and date is the constant the game master pays. */
+let hubCache = { at: 0, val: null };
+const HUB_TTL = 8000;
+function nextUtcMidnight(t) { const d = new Date(t == null ? now() : t); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); }
+function competitionsPublic() {
+  const { win, rows } = competitionStandings();
+  const view = r => ({ rank: r.rank, username: r.username, avatar: r.avatar, avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, accent: r.accent || '', og: r.og_tier || 0, points: r.pts, actions: r.n });
+  maybeRefreshCalls();
+  const calls = callLeaderboard('week');
+  const w = weekWindow();
+  const comms = db.prepare("SELECT * FROM communities WHERE status='live' AND week_key = ? AND xp_week > 0 ORDER BY xp_week DESC, member_count DESC, id ASC LIMIT 5").all(w.key);
+  const day = ymd(), t = now();
+  // today's Rocket Run, in aggregate only: counts and the best cash-out, never who flew
+  const rr = db.prepare('SELECT COUNT(*) flights, SUM(CASE WHEN cashed_x IS NOT NULL THEN 1 ELSE 0 END) cashed, MAX(cashed_x) bestX, MAX(boost) bestBoost FROM arcade_rounds WHERE day = ?').get(day) || {};
+  const boosted = db.prepare('SELECT COUNT(*) n FROM users WHERE arcade_boost > 1 AND arcade_boost_until > ?').get(t).n;
+  const og = ogCampaign();
+  return {
+    biggestSender: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, top: rows.slice(0, WEEK_WINNERS).map(view), entrants: rows.length,
+      last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, excludedFromStandings: true } },
+    sendCalls: { window: 'week', top: calls.slice(0, 10), entrants: calls.length, cap: CALL_X_CAP, minLiq: MIN_CALL_LIQ, all: calls },
+    communities: { week: w, board: comms.map((c, i) => { const b = commBrand(c); return { id: c.id, symbol: c.symbol, name: c.name, image: b.imageUrl || null, rank: i + 1, xpWeek: c.xp_week, memberCount: c.member_count, level: levelForXp(c.xp), official: !!c.official, demo: !!c.demo }; }) },
+    og: { ...og, tierNowName: OG_TIER_NAME[og.tierNow] || '' },
+    rocketRun: { day, resetsAt: nextUtcMidnight(t), flightsToday: rr.flights || 0, cashedToday: rr.cashed || 0, bestXToday: rr.bestX == null ? null : Math.round(rr.bestX * 100) / 100, bestBoostToday: rr.bestBoost == null ? null : Math.round(rr.bestBoost * 100) / 100,
+      boostedNow: boosted, growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, maxBoost: ARCADE_BOOST_MAX },
+    allTime: { top: allTimeTop().slice(0, 10) },
+  };
+}
 /* ===== Data API — the one sanctioned door to bulk data, behind a burn ================================
    A key is minted only for an account whose LINKED wallets have, between them, sent at least
    DATA_BURN_USD worth of $SEND to the burn address — read on-chain with the same fail-closed walker
@@ -4017,6 +4047,17 @@ function ownDataView(u) {
 }
 let lbCache = { at: 0, top: null };   // leaderboard top-20 cache (identical for everyone → serve for LB_TTL)
 const LB_TTL = 8000;
+function allTimeTop() {
+  if (!lbCache.top || now() - lbCache.at > LB_TTL) {
+    const rows = db.prepare('SELECT id, username, avatar, avatar_img, accent, points, og, og_tier FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT 20').all();
+    let rank = 0, prevPts = null, seen = 0; // competition ranking (ties share a rank) so it matches userRank() everywhere
+    lbCache = { at: now(), top: rows.map(u => {
+      seen++; if (u.points !== prevPts) { rank = seen; prevPts = u.points; }
+      return { rank, username: u.username, avatar: u.avatar, avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u.accent || '', points: u.points, level: levelForXp(u.points), title: titleFor(levelForXp(u.points)), diamond: publicDiamond(u.id), og: u.og_tier || 0 };
+    }) };
+  }
+  return lbCache.top;
+}
 const RISK_PUBLIC = Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])); // static → build once
 let pairsRespCache = { key: null, json: null, gz: null }; // serialized + gzipped /api/pairs/new body, rebuilt only when the cache version changes
 const buckets = new Map();
@@ -5712,18 +5753,29 @@ const server = http.createServer(async (req, res) => {
           prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, excludedFromStandings: true },
         });
       }
+      if (p === '/api/competitions' && req.method === 'GET') {
+        if (!hubCache.val || now() - hubCache.at > HUB_TTL) hubCache = { at: now(), val: competitionsPublic() };
+        const pub = hubCache.val;
+        const mine = me ? competitionStandings().rows.find(r => r.id === me.id) : null;
+        const myCall = me ? pub.sendCalls.all.find(r => r.username.toLowerCase() === me.username.toLowerCase()) : null; // the board's top 25 — beyond that, unranked
+        const { all, ...sendCalls } = pub.sendCalls;
+        return send(res, 200, {
+          serverNow: now(),
+          biggestSender: { ...pub.biggestSender,
+            me: me ? (mine ? { rank: mine.rank, points: mine.pts, actions: mine.n } : { rank: null, points: 0, actions: 0 }) : null,
+            myBoost: me ? weekBoostState(me.id) : null },
+          sendCalls: { ...sendCalls, me: me ? (myCall ? { rank: myCall.rank, calls: myCall.calls, bestX: myCall.bestX, totalX: myCall.totalX, bestGrade: myCall.bestGrade } : { rank: null }) : null },
+          communities: { ...pub.communities, board: pub.communities.board.map(c => ({ ...c, joined: me ? !!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=?').get(c.id, me.id) : false })) },
+          og: { ...pub.og, mine: me ? { og: !!me.og, tier: me.og_tier || 0, name: OG_TIER_NAME[me.og_tier || 0] || '' } : null },
+          rocketRun: { ...pub.rocketRun, me: me ? arcadeState(me.id) : null },
+          allTime: { ...pub.allTime, me: me ? { rank: userRank(me.id), points: me.points, level: levelForXp(me.points) } : null },
+          me: me ? { username: me.username, boost: effectiveMult(me.id) } : null,
+        });
+      }
       if (p === '/api/leaderboard' && req.method === 'GET') {
         // The top-20 list is identical for everyone, so cache it briefly (it also runs a publicDiamond() query
         // per row). Only the per-user `me` block is computed fresh. Huge win when many users hit the board at once.
-        if (!lbCache.top || now() - lbCache.at > LB_TTL) {
-          const rows = db.prepare('SELECT id, username, avatar, avatar_img, accent, points, og, og_tier FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT 20').all();
-          let rank = 0, prevPts = null, seen = 0; // competition ranking (ties share a rank) so it matches userRank() everywhere
-          lbCache = { at: now(), top: rows.map(u => {
-            seen++; if (u.points !== prevPts) { rank = seen; prevPts = u.points; }
-            return { rank, username: u.username, avatar: u.avatar, avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null, accent: u.accent || '', points: u.points, level: levelForXp(u.points), title: titleFor(levelForXp(u.points)), diamond: publicDiamond(u.id), og: u.og_tier || 0 };
-          }) };
-        }
-        return send(res, 200, { top: lbCache.top, me: me ? { rank: userRank(me.id), points: me.points, level: levelForXp(me.points) } : null });
+        return send(res, 200, { top: allTimeTop(), me: me ? { rank: userRank(me.id), points: me.points, level: levelForXp(me.points) } : null });
       }
 
       /* ----- live new-pairs tracker (PUBLIC, server-cached, read-only on-chain data) ----- */

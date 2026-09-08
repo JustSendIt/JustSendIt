@@ -1,0 +1,168 @@
+/* ===== compete.css — the Arcade's competitions hub. Brand tokens/utilities come from styles.css. =====
+ * Owns only .cmp-*. Never edit styles.css or arcade.css for this block. */
+
+.cmp { padding: 0 0 1.6rem; }
+.cmp-head { text-align: center; max-width: 720px; margin: 0 auto 0.9rem; }
+.cmp-h { margin-bottom: 0.35rem; }
+.cmp-sub { margin: 0; color: var(--text-dim); font-size: 0.95rem; line-height: 1.55; }
+.cmp-sub b { color: var(--text); }
+
+/* ---------- jump chips: one per board, in-page links ---------- */
+.cmp-jump { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.45rem; margin: 0 0 1.1rem; }
+.cmp-jump:empty { display: none; }
+.cmp-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0.35rem 0.9rem;
+  border-radius: var(--r-pill); border: 1.5px solid var(--edge-ctl); background: var(--glass-well);
+  color: var(--text); font-weight: 800; font-size: 0.86rem; text-decoration: none; line-height: 1.2;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.cmp-chip:hover { border-color: var(--green); transform: translateY(-2px); box-shadow: 0 6px 18px var(--glow-g); }
+.cmp-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+/* ---------- the grid ---------- */
+.cmp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 1.2rem; align-items: start; }
+.cmp-loading, .cmp-empty { margin: 0; color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; text-align: center; padding: 0.8rem 0.4rem; }
+.cmp-err { grid-column: 1 / -1; }
+.cmp-card { padding: 1.15rem 1.15rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; scroll-margin-top: 84px; position: relative; overflow: visible; }
+.cmp-card:target { outline: 3px solid var(--green-bright); outline-offset: 4px; }
+.cmp-card-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.cmp-card-h {
+  margin: 0; font-family: 'Luckiest Guy', 'Rubik', cursive; letter-spacing: 0.03em; font-size: 1.3rem;
+  color: var(--green-bright); display: inline-flex; align-items: center; gap: 0.45rem;
+}
+.cmp-card-ico { font-size: 1.35em; line-height: 1; }
+.cmp-head-tools { display: inline-flex; align-items: center; gap: 0.5rem; }
+.cmp-live-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem; border-radius: var(--r-pill);
+  padding: 0.25rem 0.65rem; font-size: 0.74rem; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+  border: 1.5px solid rgba(142,224,0,0.5); background: rgba(142,224,0,0.1); color: var(--green-bright); white-space: nowrap;
+}
+.cmp-live-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--green-bright); box-shadow: 0 0 0 0 rgba(142,224,0,0.7); animation: cmp-pulse 1.8s ease-out infinite; }
+@keyframes cmp-pulse { 0% { box-shadow: 0 0 0 0 rgba(142,224,0,0.7); } 70% { box-shadow: 0 0 0 8px rgba(142,224,0,0); } 100% { box-shadow: 0 0 0 0 rgba(142,224,0,0); } }
+
+/* ---------- the clock + week progress ---------- */
+.cmp-clock { margin: 0; font-size: 0.84rem; color: var(--text-dim); display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.5rem; }
+.cmp-count { color: var(--gold); font-variant-numeric: tabular-nums; font-weight: 900; }
+.cmp-prog { flex: 1 0 100%; height: 6px; border-radius: 999px; background: var(--ink-3); overflow: hidden; }
+.cmp-prog > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--green), var(--green-bright)); transition: width 0.6s ease; }
+.cmp-prize { margin: 0; font-size: 0.86rem; line-height: 1.5; color: var(--text-dim); }
+.cmp-prize b { color: var(--gold); }
+
+/* ---------- podium: DOM order 1-2-3; visually 2-1-3 with #1 tallest ---------- */
+/* flex, not a 3-column grid: with one or two entrants the steps still sit centred instead of hugging the left */
+.cmp-podium { list-style: none; margin: 0.2rem 0 0; padding: 0; display: flex; justify-content: center; gap: 0.5rem; align-items: flex-end; }
+.cmp-step { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-width: 0; flex: 1 1 0; max-width: calc((100% - 1rem) / 3); }
+.cmp-step--1 { order: 2; } .cmp-step--2 { order: 1; } .cmp-step--3 { order: 3; }
+.cmp-step-who { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; min-width: 0; max-width: 100%; }
+.cmp-step-name { display: inline-flex; align-items: center; gap: 0.25rem; max-width: 100%; min-width: 0; flex-wrap: wrap; justify-content: center; }
+.cmp-ava { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: var(--ink-3); display: grid; place-items: center; font-size: 1.4rem; flex-shrink: 0; border: 2px solid var(--ink-4); }
+.cmp-step--1 .cmp-ava { width: 56px; height: 56px; border-color: var(--gold); box-shadow: 0 0 22px rgba(255,179,64,0.35); }
+.cmp-ava--sm { width: 28px; height: 28px; font-size: 0.95rem; border-width: 1.5px; }
+.cmp-bar {
+  width: 100%; height: var(--h, 40%); min-height: 44px; border-radius: 12px 12px 4px 4px;
+  background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 1.5px solid var(--ink-4); border-bottom: none;
+  display: grid; place-items: start center; padding-top: 0.35rem; font-size: 1.4rem; line-height: 1;
+  transform-origin: bottom; animation: cmp-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.cmp-podium { min-height: 150px; }
+.cmp-step--1 .cmp-bar { background: linear-gradient(180deg, rgba(255,179,64,0.35), rgba(255,179,64,0.08)); border-color: rgba(255,179,64,0.6); }
+.cmp-step--2 .cmp-bar { background: linear-gradient(180deg, rgba(200,210,230,0.28), rgba(200,210,230,0.06)); border-color: rgba(200,210,230,0.5); }
+.cmp-step--3 .cmp-bar { background: linear-gradient(180deg, rgba(205,127,50,0.32), rgba(205,127,50,0.07)); border-color: rgba(205,127,50,0.55); }
+.cmp-step.is-me .cmp-bar { outline: 2px solid var(--green-bright); outline-offset: 2px; }
+@keyframes cmp-rise { from { transform: scaleY(0.15); opacity: 0.4; } to { transform: scaleY(1); opacity: 1; } }
+.cmp-step-val { font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; font-size: 0.9rem; text-align: center; line-height: 1.3; }
+.cmp-step-val small, .cmp-val small { display: block; color: var(--text-dim); font-weight: 600; font-size: 0.74rem; }
+
+/* ---------- places 4+ ---------- */
+.cmp-list, .cmp-comms, .cmp-og { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.cmp-list { margin-top: 0.4rem; }
+.cmp-list li, .cmp-comms li { display: flex; align-items: center; gap: 0.5rem; background: var(--ink); border-radius: 10px; padding: 0.4rem 0.6rem; min-width: 0; }
+.cmp-list li.is-me, .cmp-comms li.is-me { border: 1.5px solid var(--green); background: rgba(142,224,0,0.08); }
+.cmp-rank { min-width: 30px; text-align: center; font-weight: 900; font-size: 0.86rem; color: var(--text-dim); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cmp-name { font-weight: 800; font-size: 0.88rem; text-decoration: none; color: var(--green-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cmp-list .cmp-name { flex: 1 1 auto; }
+.cmp-name:hover { text-decoration: underline; }
+.cmp-name:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.cmp-val { margin-left: auto; font-weight: 900; color: var(--gold); font-size: 0.86rem; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; flex-shrink: 0; }
+.cmp-val b { color: var(--gold); }
+
+/* ---------- movement since your last visit ---------- */
+.cmp-move { font-size: 0.68rem; font-weight: 900; border-radius: var(--r-pill); padding: 0.1rem 0.4rem; line-height: 1.3; white-space: nowrap; flex-shrink: 0; }
+.cmp-move--up { color: var(--on-green); background: var(--green-bright); }
+.cmp-move--down { color: #fff; background: var(--red); }
+.cmp-move--new { color: var(--on-diamond); background: var(--diamond); }
+
+/* ---------- prize chips + "you" line ---------- */
+.cmp-prizechip { font-weight: 900; font-size: 0.72rem; color: var(--on-gold); background: linear-gradient(180deg, var(--gold), var(--gold-deep)); border-radius: var(--r-pill); padding: 0.1rem 0.45rem; white-space: nowrap; }
+.cmp-me { margin: 0; font-size: 0.86rem; line-height: 1.55; padding: 0.6rem 0.75rem; border-radius: var(--r-2); background: rgba(142,224,0,0.07); border: 1px solid rgba(142,224,0,0.3); color: var(--text); }
+.cmp-me:empty { display: none; }
+.cmp-me b { color: var(--green-bright); }
+.cmp-me .btn { margin-left: 0.35rem; vertical-align: middle; }
+.cmp-carry { display: block; margin-top: 0.35rem; color: var(--text-dim); }
+.cmp-carry b { color: var(--gold); }
+.cmp-last { display: block; margin: 0.45rem 0 0; font-size: 0.8rem; color: var(--text-dim); line-height: 1.6; }
+.cmp-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: auto; }
+.cmp-actions:empty { display: none; }
+
+/* ---------- communities ---------- */
+.cmp-cava { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; background: var(--ink-3); flex-shrink: 0; }
+.cmp-cava--txt { display: grid; place-items: center; font-weight: 900; font-size: 0.68rem; color: var(--text-dim); letter-spacing: 0.02em; }
+.cmp-comm-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.cmp-comm-main small { color: var(--text-dim); font-size: 0.74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-comm-main small b { color: var(--green-bright); }
+.cmp-xpbar { display: block; height: 4px; border-radius: 999px; background: var(--ink-3); overflow: hidden; margin-top: 0.2rem; }
+.cmp-xpbar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--diamond-deep), var(--diamond)); animation: cmp-grow 0.7s ease-out both; transform-origin: left; }
+@keyframes cmp-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ---------- OG windows ---------- */
+.cmp-og-row { display: grid; grid-template-columns: auto auto auto 1fr; align-items: center; gap: 0.55rem; background: var(--ink); border-radius: 10px; padding: 0.45rem 0.6rem; font-size: 0.86rem; }
+.cmp-og-row.is-closed { opacity: 0.62; }
+.cmp-og-row.is-open { border: 1.5px solid var(--gold); background: rgba(255,179,64,0.08); }
+.cmp-og-medal { font-size: 1.1rem; line-height: 1; }
+.cmp-og-mult { font-weight: 900; color: var(--gold); font-variant-numeric: tabular-nums; }
+.cmp-og-state { color: var(--text-dim); text-align: right; font-size: 0.8rem; }
+.cmp-og-state b { color: var(--green-bright); }
+
+/* ---------- Rocket Run tiles ---------- */
+.cmp-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; }
+.cmp-tile { background: var(--ink); border-radius: 12px; padding: 0.6rem 0.65rem; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.cmp-tile b { font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1.5rem; line-height: 1; color: var(--green-bright); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.cmp-tile span { font-size: 0.74rem; color: var(--text-dim); line-height: 1.35; }
+
+/* ---------- ⓘ tips: hover or focus shows, tap toggles (mobile has no hover), Esc closes ---------- */
+.cmp-tipwrap { position: relative; display: inline-flex; }
+.cmp-info {
+  width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+  border: 1.5px solid var(--edge-ctl); background: var(--ink); color: var(--text-dim);
+  font-weight: 800; font-size: 1rem; line-height: 1; display: inline-grid; place-items: center;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.cmp-info:hover, .cmp-info[aria-expanded="true"] { border-color: var(--green); color: var(--green-bright); }
+.cmp-info:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.cmp-tip {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; width: min(340px, 86vw);
+  background: var(--ink-2); border: 1.5px solid var(--green); border-radius: 12px;
+  padding: 0.65rem 0.8rem; font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; text-align: left;
+  box-shadow: 0 14px 32px rgba(0,0,0,0.55);
+  opacity: 0; transform: translateY(-4px); pointer-events: none; transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.cmp-tip::before { content: ''; position: absolute; bottom: 100%; right: 12px; border: 7px solid transparent; border-bottom-color: var(--green); }
+.cmp-tip b { color: var(--text); }
+.cmp-tip i { color: var(--text); font-style: normal; font-weight: 800; }
+.cmp-tipwrap:hover .cmp-tip, .cmp-tipwrap:focus-within .cmp-tip, .cmp-tipwrap.is-open .cmp-tip { opacity: 1; transform: translateY(0); }
+.cmp-tipwrap.is-open .cmp-tip { pointer-events: auto; }
+
+/* ---------- focus + motion ---------- */
+.cmp :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+@media (max-width: 420px) {
+  .cmp-card { padding: 0.95rem 0.85rem 1rem; }
+  .cmp-ava { width: 38px; height: 38px; font-size: 1.2rem; }
+  .cmp-step--1 .cmp-ava { width: 48px; height: 48px; }
+  .cmp-og-row { grid-template-columns: auto 1fr auto; }
+  .cmp-og-state { grid-column: 1 / -1; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmp-live-pill i, .cmp-bar, .cmp-xpbar > span { animation: none; }
+  .cmp-chip, .cmp-info, .cmp-tip, .cmp-prog > span { transition: none; }
+  .cmp-chip:hover { transform: none; }
+}
