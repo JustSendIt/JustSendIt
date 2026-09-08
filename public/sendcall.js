@@ -18,7 +18,7 @@
   // one line per sender: avatar + 💎level + @name · entry MC · $ put in · PNL in Xs · holding-for / sold
   function senderAva(s) {
     return s.avatarImg
-      ? '<img class="sc-sender-ava" src="' + esc(s.avatarImg) + '" alt="" width="20" height="20" loading="lazy">'
+      ? window.avatarHTML(s.avatarImg, 'sc-sender-ava', 'width="20" height="20" loading="lazy"')
       : '<span class="sc-sender-ava sc-sender-ava-emoji" aria-hidden="true">' + esc(s.avatar || '🚀') + '</span>';
   }
   function shortDur(ms) { const s = Math.max(0, ms / 1000); if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm'; if (s < 86400) return Math.round(s / 3600) + 'h'; return Math.round(s / 86400) + 'd'; }

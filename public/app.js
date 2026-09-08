@@ -99,6 +99,47 @@
       + ', verified early buyer with a ' + t.mult + ' times Send Power bonus" title="' + window.ogTip(tier) + '">OG</span>';
   };
 
+  /* ===== Shared avatar renderer =====================================================================
+     A profile picture can be a still image, an animated GIF, or a short video (mp4/webm). A GIF animates
+     inside a plain <img> — nothing else needed. A video cannot load into an <img> at all, which is why a
+     video avatar silently fell back to the emoji everywhere except the profile page's own preview. So the
+     element is chosen by the file, in ONE place, and every site that shows a profile picture goes through
+     it. Videos are muted, looped and inline — the only combination browsers will autoplay — never autoplay
+     under reduced motion, and pause while the tab is hidden so a wall full of them costs nothing unseen. */
+  const AVATAR_VIDEO = /\.(mp4|webm)(\?.*)?$/i;
+  window.avatarHTML = function (src, cls, attrs) {
+    if (!src) return '';
+    const s = String(src).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    const a = attrs ? ' ' + attrs : '';
+    if (AVATAR_VIDEO.test(String(src))) {
+      const auto = (window.prefersReduced && window.prefersReduced()) ? '' : ' autoplay';
+      return '<video class="' + cls + '" src="' + s + '" muted loop playsinline preload="metadata" aria-hidden="true" data-avatar-video="1"' + auto + a + '></video>';
+    }
+    return '<img class="' + cls + '" src="' + s + '" alt=""' + a + '>';
+  };
+  // DOM form, for the places that build elements rather than strings (the wall header)
+  window.avatarNode = function (src, cls, attrs) {
+    const t = document.createElement('template'); t.innerHTML = window.avatarHTML(src, cls, attrs);
+    const n = t.content.firstElementChild;
+    if (n && n.tagName === 'VIDEO') n.muted = true; // the property as well as the attribute — autoplay policy checks the property
+    return n;
+  };
+  // Start playback ourselves once a frame is ready. The `autoplay` attribute alone was not enough:
+  // measured in-app, every avatar video reached readyState 4 and stayed paused. Media events do not
+  // bubble, but a CAPTURING listener on the document still sees them, so one listener covers every
+  // avatar any page ever inserts via innerHTML — no per-site wiring, no observer. Reduced motion is
+  // honoured by never calling play(); the first frame simply shows as a still.
+  const avatarWantsMotion = () => !(window.prefersReduced && window.prefersReduced());
+  document.addEventListener('loadeddata', (e) => {
+    const v = e.target;
+    if (!v || v.tagName !== 'VIDEO' || !v.hasAttribute('data-avatar-video')) return;
+    v.muted = true; // the property, not only the attribute — autoplay policy checks the property
+    if (avatarWantsMotion() && v.paused && !document.hidden) v.play().catch(() => {});
+  }, true);
+  document.addEventListener('visibilitychange', () => {
+    document.querySelectorAll('video[data-avatar-video]').forEach(v => { try { if (document.hidden) v.pause(); else if (avatarWantsMotion()) v.play().catch(() => {}); } catch {} });
+  });
+
   window.sendToast = function (msg) {
     const t = document.createElement('div');
     t.className = 'toast'; t.textContent = msg;

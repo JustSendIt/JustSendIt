@@ -173,10 +173,21 @@ function applyTheme(t) {
   }
   // avatar: the wrap owns the circle; toggle the permanent img/emoji children (show the image only once it proves it loaded)
   const aimg = document.getElementById('pub-avatar-img'), aemo = document.getElementById('pub-avatar');
-  if (t.avatar_img) {
+  if (t.avatar_img && /\.(mp4|webm)(\?.*)?$/i.test(t.avatar_img) && window.avatarNode) {
+    // A video avatar: an <img> can't load it, so this used to fall straight through to the emoji. Swap
+    // in the shared <video> (muted, looped, inline, no autoplay under reduced motion) and reveal it
+    // only once it has a frame to show, exactly as the image path reveals on load.
+    const v = window.avatarNode(t.avatar_img, 'wall-avatar-img');
+    v.id = aimg.id; v.hidden = true;
+    v.addEventListener('loadeddata', () => { v.hidden = false; aemo.hidden = true; }, { once: true });
+    v.addEventListener('error', () => { v.hidden = true; aemo.hidden = false; }, { once: true });
+    aimg.replaceWith(v);
+  } else if (t.avatar_img) {
     aimg.addEventListener('load', () => { aimg.hidden = false; aemo.hidden = true; }, { once: true });
     aimg.addEventListener('error', () => { aimg.hidden = true; aemo.hidden = false; }, { once: true });
     aimg.src = t.avatar_img;
+    // a cached image can be complete before the listener above is attached, and then 'load' never fires
+    if (aimg.complete && aimg.naturalWidth > 0) { aimg.hidden = false; aemo.hidden = true; }
   } else { aimg.hidden = true; aemo.hidden = false; }
 }
 
@@ -192,7 +203,7 @@ function postEl(p) {
   const uHref = '/u/' + encodeURIComponent(p.username);
   if (p.accent) el.style.borderColor = p.accent + '55';
   const ava = p.avatar_img
-    ? '<a href="' + uHref + '" aria-hidden="true" tabindex="-1"><img class="post-avatar" src="' + esc(p.avatar_img) + '" alt="" style="object-fit:cover;"></a>'
+    ? '<a href="' + uHref + '" aria-hidden="true" tabindex="-1">' + window.avatarHTML(p.avatar_img, 'post-avatar', 'style="object-fit:cover;"') + '</a>'
     : '<a class="post-avatar" href="' + uHref + '" aria-hidden="true" tabindex="-1" style="text-decoration:none;">' + esc(p.avatar) + '</a>';
   const up = p.myVote === 1, down = p.myVote === -1, sTxt = fmtScore(p.score);
   // own posts show a read-only score (no self-voting); everyone else gets the interactive up/down arrows
@@ -302,7 +313,7 @@ async function renderComments(post, id) {
     for (const c of j.comments) {
       const d = document.createElement('div');
       d.className = 'comment';
-      const cAva = c.avatar_img ? '<img class="c-ava" src="' + esc(c.avatar_img) + '" alt="" style="width:22px; height:22px; border-radius:50%; object-fit:cover;">' : '<span class="c-ava" aria-hidden="true">' + esc(c.avatar) + '</span>';
+      const cAva = c.avatar_img ? window.avatarHTML(c.avatar_img, 'c-ava', 'style="width:22px; height:22px; border-radius:50%; object-fit:cover;"') : '<span class="c-ava" aria-hidden="true">' + esc(c.avatar) + '</span>';
       d.innerHTML = cAva + '<div><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '" style="text-decoration:none;">@' + esc(c.username) + '</a>' + (window.ogBadge ? ogBadge(c.og) : '') + ' <span class="c-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span></div>';
       zone.appendChild(d);
     }
@@ -526,7 +537,7 @@ async function loadLeaderboard(win) {
     const j = await api('/api/calls/leaderboard?window=' + win);
     if (!j.top.length) { listEl.innerHTML = '<li class="lb-empty">No Send Calls in this window yet — be the first! 🚀</li>'; return; }
     listEl.innerHTML = j.top.map(t => {
-      const ava = t.avatar_img ? '<img class="lb-ava" src="' + esc(t.avatar_img) + '" alt="">' : '<span class="lb-ava lb-ava-emo" aria-hidden="true">' + esc(t.avatar) + '</span>';
+      const ava = t.avatar_img ? window.avatarHTML(t.avatar_img, 'lb-ava') : '<span class="lb-ava lb-ava-emo" aria-hidden="true">' + esc(t.avatar) + '</span>';
       return '<li class="lb-row' + (t.rank <= 3 ? ' lb-top' : '') + '"><span class="lb-rank">' + t.rank + '</span>' + ava +
         '<a class="lb-name" href="/u/' + encodeURIComponent(t.username) + '" style="' + (t.accent ? 'color:' + esc(t.accent) : '') + '">@' + esc(t.username) + '</a>' + (window.ogBadge ? ogBadge(t.og) : '') +
         '<span class="lb-grade" title="Best call">' + (t.bestGrade ? t.bestGrade.emoji : '') + '</span>' +

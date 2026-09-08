@@ -109,7 +109,7 @@
 
   // ---- wall posts ----
   function postCard(p) {
-    const ava = p.avatar_img ? '<img class="post-avatar" src="' + esc(p.avatar_img) + '" alt="" style="object-fit:cover;">' : '<span class="post-avatar" aria-hidden="true">' + esc(p.avatar || '🚀') + '</span>';
+    const ava = p.avatar_img ? window.avatarHTML(p.avatar_img, 'post-avatar', 'style="object-fit:cover;"') : '<span class="post-avatar" aria-hidden="true">' + esc(p.avatar || '🚀') + '</span>';
     const fire = (p.reactions && p.reactions.fire) || 0, rocket = (p.reactions && p.reactions.rocket) || 0;
     const myR = p.myReactions || [];
     return '<article class="post" data-id="' + p.id + '">' +
@@ -139,7 +139,7 @@
 
   // ---- members roster (public; ranked by community level = conviction earned by participating) ----
   function memberRow(m, i) {
-    const ava = m.avatar_img ? '<img class="cm-ava" src="' + esc(m.avatar_img) + '" alt="" loading="lazy">' : '<span class="cm-ava cm-ava-emoji" aria-hidden="true">' + esc(m.avatar || '🚀') + '</span>';
+    const ava = m.avatar_img ? window.avatarHTML(m.avatar_img, 'cm-ava', 'loading="lazy"') : '<span class="cm-ava cm-ava-emoji" aria-hidden="true">' + esc(m.avatar || '🚀') + '</span>';
     const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
     const rankLbl = i < 3 ? ('rank ' + (i + 1)) : String(i + 1);
     const crown = m.isCreator ? '<span class="cm-crown" title="Community starter" aria-label="community starter">👑</span>' : '';

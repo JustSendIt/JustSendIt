@@ -49,6 +49,7 @@
     react_get: ['💚', 'Get a reaction'],
     vote_get: ['🔺', 'Get upvoted'],
     follow: ['👀', 'Follow a sender'],
+    community_founder: ['👑', 'Founded a community'],
   };
   const ORDER = ['swap', 'send_call', 'call_x', 'call_hold', 'hop_on', 'hop_hold', 'connect_wallet', 'first_post', 'post', 'track_wallet', 'watch_token', 'daily', 'customize', 'comment', 'react_give', 'vote_give', 'follow', 'be_followed'];
   const VARIABLE = new Set(['call_x', 'call_hold', 'hop_hold']); // points scale with real performance — shown as "⚡ scales", not a fixed number
@@ -95,6 +96,7 @@
     be_followed: 'Earned automatically when someone follows you. Up to 30/day.',
     react_get: 'Earned when your post gets a reaction. Up to 60/day.',
     vote_get: 'Earned when your post gets upvoted. Up to 100/day.',
+    community_founder: 'A one-time bonus for starting a community and growing it to the 10 verified holders that take it live. Paid once, when it flips live.',
   };
   // Diamond tiers — MUST mirror server.js DIAMOND_TIERS exactly (used only for "next tier" labels)
   const DIA_TIERS = [
@@ -584,9 +586,15 @@
     let rows = '';
     bd.forEach((x, i) => {
       const meta = ACTION_LABEL[x.kind] || ['🪙', x.kind];
-      rows += '<li style="--i:' + i + '" aria-label="' + esc(meta[1]) + ': ' + nf(x.total) + ' points from ' + x.n + ' action' + (x.n === 1 ? '' : 's') + '">' +
+      // The tip is the Quest Board's own explanation of this kind, plus what THIS row adds up to — so
+      // "Diamond hands · 4,120" reads as "paid while a call you made stayed in profit: 12 payouts". A kind
+      // with no description still gets the totals line rather than a blank bubble.
+      const why = (EARN_DESC[x.kind] ? esc(EARN_DESC[x.kind]) + ' ' : '') + '<b>' + nf(x.total) + ' Send Power</b> from ' + x.n + ' payout' + (x.n === 1 ? '' : 's') + (_lootMode === 'today' ? ' in the last 24h.' : ' all time.');
+      rows += '<li class="ll-li" style="--i:' + i + '" aria-label="' + esc(meta[1]) + ': ' + nf(x.total) + ' points from ' + x.n + ' action' + (x.n === 1 ? '' : 's') + '">' +
         '<span class="ll-ico" aria-hidden="true">' + meta[0] + '</span>' +
-        '<span class="ll-label">' + esc(meta[1]) + (i === 0 ? ' <span class="ll-top">⭐ Top</span>' : '') + '<span class="ll-n">×' + x.n + '</span></span>' +
+        '<span class="ll-label">' + esc(meta[1]) + (i === 0 ? ' <span class="ll-top">⭐ Top</span>' : '') + '<span class="ll-n">×' + x.n + '</span>' +
+          '<button class="ll-info" type="button" aria-expanded="false" aria-label="What ' + esc(meta[1]) + ' points are for">ⓘ</button></span>' +
+        '<span class="ge-tip" role="tooltip">' + why + '</span>' +
         '<span class="ll-track" aria-hidden="true"><span class="ll-fill" data-fill="' + (x.total / max * 100).toFixed(1) + '" style="width:0;background:' + RAMP[i % RAMP.length] + '"></span></span>' +
         '<span class="ll-pts">' + nf(x.total) + '</span>' +
       '</li>';
@@ -652,7 +660,7 @@
     let html = '<ol class="gboard">';
     for (const u of lb.top.slice(0, 6)) {
       const me = myUsername && u.username.toLowerCase() === myUsername.toLowerCase();
-      const av = u.avatar_img ? '<img class="gb-ava" src="' + esc(u.avatar_img) + '" alt="">' : '<span class="gb-ava" aria-hidden="true">' + esc(u.avatar) + '</span>';
+      const av = u.avatar_img ? window.avatarHTML(u.avatar_img, 'gb-ava') : '<span class="gb-ava" aria-hidden="true">' + esc(u.avatar) + '</span>';
       html += '<li class="' + (me ? 'gb-me' : '') + '">' +
         '<span class="gb-rank">' + (medal[u.rank - 1] || ('#' + u.rank)) + '</span>' + av +
         '<a class="gb-name" href="/u/' + encodeURIComponent(u.username) + '"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + '</a>' + (window.ogBadge ? ogBadge(u.og) : '') +
@@ -794,9 +802,9 @@
       }
     }));
     // quest-rule ⓘ toggles: one open at a time; state exposed via aria-expanded; Escape / a click elsewhere closes
-    const closeTips = () => dash.querySelectorAll('.gearn-li.is-open').forEach(o => { o.classList.remove('is-open'); const ob = o.querySelector('.ge-info'); if (ob) ob.setAttribute('aria-expanded', 'false'); });
-    dash.querySelectorAll('.ge-info').forEach(b => b.addEventListener('click', () => {
-      const li = b.closest('.gearn-li');
+    const closeTips = () => dash.querySelectorAll('.gearn-li.is-open, .ll-li.is-open').forEach(o => { o.classList.remove('is-open'); const ob = o.querySelector('.ge-info, .ll-info'); if (ob) ob.setAttribute('aria-expanded', 'false'); });
+    dash.querySelectorAll('.ge-info, .ll-info').forEach(b => b.addEventListener('click', () => {
+      const li = b.closest('.gearn-li, .ll-li');
       const open = !li.classList.contains('is-open');
       closeTips();
       li.classList.toggle('is-open', open);
@@ -805,7 +813,7 @@
     }));
     if (!dash._tipDismiss) {
       dash._tipDismiss = true;
-      dash.addEventListener('click', e => { if (!e.target.closest('.gearn-li')) closeTips(); });
+      dash.addEventListener('click', e => { if (!e.target.closest('.gearn-li, .ll-li')) closeTips(); });
       document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
     }
     wireLootToggle(); // achievement-log window toggle (Today resets every 24h · All time)

@@ -3482,3 +3482,35 @@ footer .fine a:focus-visible { outline: 2px solid var(--focus); outline-offset: 
 .eq-og { background: color-mix(in srgb, var(--gold) 16%, transparent); border-color: color-mix(in srgb, var(--gold) 45%, transparent); color: var(--gold); }
 .eq-og--silver { background: color-mix(in srgb, var(--silver) 16%, transparent); border-color: color-mix(in srgb, var(--silver) 45%, transparent); color: var(--silver); }
 .eq-og--bronze { background: color-mix(in srgb, var(--bronze) 16%, transparent); border-color: color-mix(in srgb, var(--bronze) 45%, transparent); color: var(--bronze); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   17. Video profile pictures
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Every avatar class is written on the class, not on img, so a <video> wearing the same class already
+   gets the circle, the size and object-fit: cover. What a video does NOT get from those rules is a
+   ground to sit on while the first frame decodes, or a guarantee it can't overflow its circle on the
+   one class that sets display:grid for the emoji fallback — so both are pinned here for every site. */
+video.post-avatar, video.c-ava, video.cm-ava, video.gb-ava, video.lb-ava, video.h-ava, video.sc-sender-ava, video.wall-avatar-img {
+  display: block; object-fit: cover; object-position: center; background: var(--ink-3); overflow: hidden;
+}
+.wall-avatar video.wall-avatar-img { grid-area: 1 / 1; width: 100%; height: 100%; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   18. Loot Log explanations
+   ══════════════════════════════════════════════════════════════════════════ */
+/* The Quest Board already explains every action in a .ge-tip that appears on hover and goes when the
+   cursor leaves, with a ⓘ for keyboard and touch. The Loot Log lists the SAME kinds but only showed a
+   label and a number, so the reader had to guess what "Diamond hands" was paid for. It now borrows the
+   exact same tip, anchored on the row; the ⓘ lives inside the label cell so the row's 4-column grid is
+   untouched, and the tip is absolutely positioned so it takes no cell either. */
+.loot-list li.ll-li { position: relative; }
+.ll-info {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: 0.35rem; border-radius: 50%;
+  border: 1.5px solid var(--ink-4); background: var(--ink); color: var(--text-dim); font: inherit; font-size: 0.7rem; font-weight: 800; line-height: 1;
+  cursor: pointer; vertical-align: middle; transition: border-color 0.15s ease, color 0.15s ease;
+}
+.ll-info:hover, .ll-info[aria-expanded="true"] { border-color: var(--green); color: var(--green-bright); }
+.ll-info:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.ll-li:hover .ge-tip, .ll-li.is-open .ge-tip, .ll-li:has(> .ll-label > .ll-info:focus-visible) .ge-tip { opacity: 1; transform: translateY(0); }
+.ll-li.is-open .ge-tip { pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .ll-info { transition: none; } }

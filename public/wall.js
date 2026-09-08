@@ -25,7 +25,7 @@ function postEl(p) {
   const uHref = '/u/' + encodeURIComponent(p.username);
   if (p.accent) el.style.borderColor = p.accent + '55';
   const ava = p.avatar_img
-    ? '<a href="' + uHref + '" aria-hidden="true" tabindex="-1"><img class="post-avatar" src="' + esc(p.avatar_img) + '" alt="" style="object-fit:cover;"></a>'
+    ? '<a href="' + uHref + '" aria-hidden="true" tabindex="-1">' + window.avatarHTML(p.avatar_img, 'post-avatar', 'style="object-fit:cover;"') + '</a>'
     : '<a class="post-avatar" href="' + uHref + '" aria-hidden="true" tabindex="-1" style="text-decoration:none;">' + esc(p.avatar) + '</a>';
   const up = p.myVote === 1, down = p.myVote === -1, sTxt = fmtScore(p.score);
   // own posts show a read-only score (no self-voting); everyone else gets the interactive up/down arrows
@@ -199,7 +199,7 @@ async function renderComments(post, id) {
     for (const c of j.comments) {
       const d = document.createElement('div');
       d.className = 'comment';
-      const cAva = c.avatar_img ? '<img class="c-ava" src="' + esc(c.avatar_img) + '" alt="" style="width:22px; height:22px; border-radius:50%; object-fit:cover;">' : '<span class="c-ava" aria-hidden="true">' + esc(c.avatar) + '</span>';
+      const cAva = c.avatar_img ? window.avatarHTML(c.avatar_img, 'c-ava', 'style="width:22px; height:22px; border-radius:50%; object-fit:cover;"') : '<span class="c-ava" aria-hidden="true">' + esc(c.avatar) + '</span>';
       d.innerHTML = cAva + '<div><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '" style="text-decoration:none;">@' + esc(c.username) + '</a>' + (window.ogBadge ? ogBadge(c.og) : '') + ' <span class="c-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span></div>';
       zone.appendChild(d);
     }

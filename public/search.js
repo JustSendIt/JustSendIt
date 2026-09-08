@@ -34,7 +34,7 @@
           a.href = '/u/' + encodeURIComponent(u.username);
           a.setAttribute('role', 'option');
           const ava = u.avatar_img
-            ? '<img class="h-ava" src="' + esc(u.avatar_img) + '" alt="">'
+            ? window.avatarHTML(u.avatar_img, 'h-ava')
             : '<span class="h-ava" aria-hidden="true">' + esc(u.avatar) + '</span>';
           a.innerHTML = ava +
             '<div><div class="h-name"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + (window.ogBadge ? ogBadge(u.og) : '') + '</div>' +
