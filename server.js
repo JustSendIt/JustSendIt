@@ -2062,7 +2062,11 @@ async function refreshRunners() {
    a viewer may not read is answered 404, never 403 — a 403 would confirm the post exists. */
 function canReadPrivateWall(userId, cid) {
   if (!userId || !cid) return false;
-  return !!db.prepare('SELECT 1 FROM community_members WHERE community_id = ? AND user_id = ? AND qualified = 1').get(cid, userId);
+  // `qualified` means "verified holder" everywhere EXCEPT the sandbox, which hands it to anyone who taps
+  // Join with no wallet and no token. A holders-only wall there would be open to the whole internet while
+  // the page promised an on-chain check — so the sandbox simply has no private wall.
+  return !!db.prepare(`SELECT 1 FROM community_members cm JOIN communities c ON c.id = cm.community_id
+                       WHERE cm.community_id = ? AND cm.user_id = ? AND cm.qualified = 1 AND c.demo = 0`).get(cid, userId);
 }
 // The author always keeps sight of their own post (they wrote it, and they may still delete it) even if
 // their holder slot lapses; everyone else needs a live slot in that community.
@@ -5922,7 +5926,7 @@ const server = http.createServer(async (req, res) => {
       if (m && req.method === 'DELETE') {
         if (!me) return bad(res, 'sign in first', 401);
         const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(m[1]));
-        if (!row) return bad(res, 'not found', 404);
+        if (!row || !postVisible(row, me)) return bad(res, 'not found', 404); // a post you may not read is absent on EVERY verb, or the 403 tells you it exists
         if (row.user_id !== me.id) return bad(res, 'you can only delete your own posts', 403);
         if (row.call_id) return bad(res, 'Send Calls are final — a call can’t be deleted once it’s posted.', 403); // calls are permanent + immutable
         deleteUpload(row.image, row.user_id);
@@ -6907,12 +6911,13 @@ const server = http.createServer(async (req, res) => {
             const canHolders = canReadPrivateWall(me && me.id, cid);
             const holders = url.searchParams.get('wall') === 'holders';
             // the private feed is refused outright, not filtered — a non-holder never receives one of these rows
+            if (holders && c.demo) return bad(res, 'the sandbox has no token, so it has no holders-only wall — everything here is public', 400);
             if (holders && !canHolders) return bad(res, 'the holders-only wall is for verified holders of $' + c.symbol + ' — opt in with the token in a linked wallet to read it', 403);
             const before = beforeId ? Number(beforeId) : Number.MAX_SAFE_INTEGER, priv = holders ? 1 : 0;
             const rows = me
               ? db.prepare('SELECT * FROM posts WHERE community_id = ? AND private = ? AND id < ? AND user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY id DESC LIMIT 30').all(cid, priv, before, me.id)
               : db.prepare('SELECT * FROM posts WHERE community_id = ? AND private = ? AND id < ? ORDER BY id DESC LIMIT 30').all(cid, priv, before);
-            return send(res, 200, { posts: postsView(rows, me), status: c.status, wall: holders ? 'holders' : 'public', canReadHolders: canHolders });
+            return send(res, 200, { posts: postsView(rows, me), status: c.status, wall: holders ? 'holders' : 'public', canReadHolders: canHolders, hasPrivateWall: !c.demo });
           }
           if (sub === 'posts' && req.method === 'POST') {
             if (!me) return bad(res, 'sign in first', 401);
@@ -6937,7 +6942,7 @@ const server = http.createServer(async (req, res) => {
             if (!text && !image) return bad(res, 'write something or attach a photo, GIF or video');
             // the holders-only wall needs exactly what posting already needs (a verified slot + a live holding, both
             // checked above), so no extra gate — only the flag
-            const isPrivate = (b.private === true || b.private === 1 || b.private === '1') ? 1 : 0;
+            const isPrivate = (!c.demo && (b.private === true || b.private === 1 || b.private === '1')) ? 1 : 0; // the sandbox has no holders-only wall to post to
             const info = db.prepare('INSERT INTO posts (user_id, text, image, score, created_at, community_id, tokens, private) VALUES (?,?,?,?,?,?,?,?)').run(me.id, text, image, 0, now(), cid, rt.tokens, isPrivate);
             const earned = awardPoints(me.id, 'post', PTS.post, 'post:' + info.lastInsertRowid); // gets the community 10× via commMult
             awardCommunityXp(cid, me.id, 'wall_post', COMM_XP.wall_post, 'c' + cid + ':wall_post:' + info.lastInsertRowid);

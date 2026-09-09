@@ -3595,8 +3595,10 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .comm-back { font-size: 0.92rem; }
 .comm-back .btn { text-decoration: none; }   /* an <a> styled as a button must not also wear a link underline */
 .comm-hero-top-page { text-align: center; padding: 3rem 1.25rem 1.5rem; }
-.comm-hero-top-page > .comm-start, .comm-hero-top-page > .comm-start-msg, .comm-hero-top-page > .comm-rules { margin-left: auto; margin-right: auto; }
-.comm-more-row { text-align: center; }
+/* auto side margins on a flex item make it shrink-to-fit, so the rules disclosure jumped 448px → 620px the
+   moment it opened. Full width inside the column instead, with each item's own max-width still deciding. */
+.comm-hero-top-page > .comm-start, .comm-hero-top-page > .comm-start-msg, .comm-hero-top-page > .comm-rules { width: 100%; }
+.comm-more-row { text-align: center; margin-top: 1.2rem; }   /* the button must not sit flush against the last post */
 .comm-more-row:has(> [hidden]) { display: none; }           /* no empty band under the last post */
 
 /* the start form: the placeholder was cut off mid-word at ~600px, so the field takes its own row before that */

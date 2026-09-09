@@ -371,7 +371,7 @@ Every live community has **two walls**:
 | 🌐 **Public wall** | anyone, signed in or not | verified holders |
 | 🔒 **Holders‑only wall** | **verified holders of that token, and nobody else** | verified holders |
 
-"Verified holder" is the same slot everything else in a community uses (`community_members.qualified = 1`): at least **$25 of the token**, read from a linked wallet on‑chain, and re‑checked continuously by the holder sweep — **sell the token and the wall closes with it.** The composer posts to whichever wall you are looking at, so there is no separate "who can see this" setting to get wrong.
+"Verified holder" is the same slot everything else in a community uses (`community_members.qualified = 1`): at least **$25 of the token**, read from a linked wallet on‑chain, and re‑checked continuously by the holder sweep — **sell the token and the wall closes with it.** The **sandbox has no private wall**: it grants that slot to anyone who taps Join with no wallet and no token, so a "holders‑only" wall there would be open to everyone while the page promised an on‑chain check. `canReadPrivateWall` requires `communities.demo = 0`, the wall route refuses `wall=holders` there, and the tabs do not render. The composer posts to whichever wall you are looking at, so there is no separate "who can see this" setting to get wrong.
 
 **The gate is on the server, on every path that can return a post** — not a filter in the page:
 

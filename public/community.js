@@ -17,6 +17,7 @@
   const emptyEl = document.getElementById('comm-empty');
   const memEl = document.getElementById('comm-members'), memListEl = document.getElementById('comm-members-list'), memSubEl = document.getElementById('comm-members-sub');
   let C = null, oldest = null, wall = 'public';   // which wall is on screen: the public one, or the holders-only one
+  let wallGen = 0;                                // bumped on every switch/reset: a late response for the wall you left is dropped
 
   function xpBar(label, lvl, into, span, cls) {
     const pct = span ? Math.min(100, Math.round(into / span * 100)) : 100;
@@ -108,8 +109,8 @@
     // a persistent, honest explanation for a member blocked by the anti-sybil caps (the toast alone vanished in 2.6 s)
     if (blockReason) { const g = document.getElementById('comm-gate'); if (g) { g.hidden = false; g.textContent = '🛡️ ' + blockReason; } }
     // wall visibility
-    if (live) { wallEl.hidden = false; paintWallTabs(); setupComposer(qualified); loadWall(true); }
-    else { wallEl.hidden = false; document.getElementById('comm-composer').hidden = true; feedEl.innerHTML = ''; emptyEl.style.display = 'none';
+    if (live) { wallEl.hidden = false; paintWallTabs(); setupComposer(qualified); loadWall(true); }   // paintWallTabs hides the tabs where there is no second wall
+    else { wallEl.hidden = false; paintWallTabs(); document.getElementById('comm-composer').hidden = true; feedEl.innerHTML = ''; emptyEl.style.display = 'none';
       const lk = document.getElementById('comm-wall-locked'); lk.hidden = false; lk.innerHTML = '🔒 <b>The wall opens when the community goes LIVE</b> (' + c.goLive.qualCount + '/' + c.goLive.need + '). Opt in above to help it get there.'; }
     loadMembers();
     wire();
@@ -117,8 +118,21 @@
 
   // The two walls, in one place: which tab is live, what the note says, and whether the composer can be open.
   // `qualified` is the same verified-holder slot the server checks, so the UI and the gate can never disagree.
+  // A community has a second wall only when it is LIVE and has a token to hold. The sandbox hands its
+  // "verified holder" slot to anyone who taps Join, so a holders-only wall there would be open to everyone
+  // while the copy promised an on-chain check — it simply does not have one, and the tabs do not appear.
+  function hasPrivateWall() { return !!(C && C.status === 'live' && !C.demo); }
   function paintWallTabs() {
     const qual = !!(C && C.mine && C.mine.qualified), sym = C ? esc(C.symbol) : '';
+    const tabsEl = document.querySelector('.cw-tabs'), noteEl = document.getElementById('cw-note');
+    if (!hasPrivateWall()) {
+      if (tabsEl) tabsEl.hidden = true;
+      if (noteEl) { noteEl.hidden = true; noteEl.textContent = ''; }
+      wall = 'public';
+      return;
+    }
+    if (tabsEl) tabsEl.hidden = false;
+    if (noteEl) noteEl.hidden = false;
     for (const b of document.querySelectorAll('.cw-tab')) {
       const on = b.dataset.wall === wall;
       b.classList.toggle('is-on', on);
@@ -179,8 +193,12 @@
 
   async function loadWall(reset) {
     if (reset) { oldest = null; feedEl.innerHTML = ''; }
+    const gen = ++wallGen, forWall = wall;
+    const more = document.getElementById('comm-more');
+    if (more) more.disabled = true;
     try {
       const j = await window.api('/api/communities/' + id + '/posts?wall=' + wall + (oldest ? '&before=' + oldest : ''));
+      if (gen !== wallGen || forWall !== wall) return;         // the reader moved on; this page belongs to a wall they left
       const posts = j.posts || [];
       if (!posts.length && !feedEl.children.length) {
         emptyEl.style.display = 'block';
@@ -192,16 +210,18 @@
       posts.forEach(p => { feedEl.insertAdjacentHTML('beforeend', postCard(p)); oldest = p.id; });
       document.getElementById('comm-more').hidden = posts.length < 30;
     } catch (e) {
-      // A refusal is the honest answer, not an empty wall: a slot can lapse between loading the page and
-      // opening this tab (the sweep re-checks holdings continuously), and the reader deserves to know why.
-      if (wall === 'holders' && !feedEl.children.length) {
+      // A refusal is the honest answer, not an empty wall — and not a silent dead "Load more" either: a slot
+      // can lapse between loading the page and opening this tab (the sweep re-checks holdings continuously).
+      if (gen !== wallGen || forWall !== wall) return;
+      if (wall === 'holders') {
         document.getElementById('comm-composer').hidden = true;
         const lk = document.getElementById('comm-wall-locked');
         lk.hidden = false;
         lk.innerHTML = '🔒 <b>' + esc((e && e.message) || 'This wall is for verified holders.') + '</b>';
         emptyEl.style.display = 'none';
+        if (more) more.hidden = true;
       }
-    }
+    } finally { if (more) more.disabled = false; }
   }
 
   // ---- members roster (public; ranked by community level = conviction earned by participating) ----
@@ -332,7 +352,14 @@
     // private feed — the server would refuse it anyway; this just shows them what it is and how to get in.
     const tabs = [...document.querySelectorAll('.cw-tab')];
     function pick(which, focus) {
-      if (wall === which) return;
+      if (wall === which || !hasPrivateWall()) return;
+      // A draft written under "only verified holders will see this" must never be posted in public because
+      // the reader changed tabs. Switching audience clears the composer, and says so.
+      const ta = document.getElementById('comm-c-text');
+      if (ta && (ta.value.trim() || img)) {
+        ta.value = ''; clearCommMedia(); setCommCount(500);
+        if (window.sendToast) sendToast('Draft cleared — it was written for the other wall');
+      }
       wall = which;
       const qual = !!(C && C.mine && C.mine.qualified);
       const open = which === 'public' || qual;
