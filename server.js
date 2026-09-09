@@ -2102,11 +2102,19 @@ function bestRunners(wkey) {
   const rows = db.prepare('SELECT * FROM runner_tokens WHERE cur_price > 0 AND cur_liq >= ?').all(RUNNER_MIN_LIQ); // unknown-liquidity tokens are untrusted for ranking
   const scored = [];
   for (const r of rows) {
+    // "since the scanner caught it" — the first moment we recorded a price we trust for this token. first_price is
+    // only written on a trustworthy sighting and the first snapshot is written in the same pass, so the earliest
+    // snapshot IS that moment. (Snapshots past RUNNER_SNAP_MAX_AGE are pruned; then we fall back to the row's own
+    // baseline, which is the same price.) first_seen_at is NOT used as the moment: on a token first seen with a
+    // dust pool we saw it before we could price it, and dating the multiple from then would overstate the run.
+    const earliest = db.prepare('SELECT price, at FROM runner_snaps WHERE token_addr=? ORDER BY at ASC LIMIT 1').get(r.token_addr);
+    const caughtPrice = earliest ? earliest.price : (r.first_price || 0);
+    const caughtAt = earliest ? earliest.at : r.first_seen_at;
+    const sinceX = caughtPrice > 0 ? r.cur_price / caughtPrice - 1 : null;   // call convention: +100% = 1x
     let gain, baseAt, exact;
     if (wkey === '24h' && r.cur_pc24 != null) { gain = r.cur_pc24 / 100; baseAt = now() - 864e5; exact = true; }
     else {
       const snap = ms ? db.prepare('SELECT price, at FROM runner_snaps WHERE token_addr=? AND at >= ? ORDER BY at ASC LIMIT 1').get(r.token_addr, since) : null;
-      const earliest = db.prepare('SELECT price, at FROM runner_snaps WHERE token_addr=? ORDER BY at ASC LIMIT 1').get(r.token_addr);
       const brow = snap || earliest;
       const baseline = brow ? brow.price : (r.first_price || 0);
       baseAt = brow ? brow.at : r.first_seen_at;
@@ -2117,8 +2125,8 @@ function bestRunners(wkey) {
     }
     if (!(gain > 0)) continue;
     if (!namedToken(r.symbol, r.name)) continue;   // same rule as the radar: nothing unidentifiable on this page
-    const ath = (r.peak_price > 0 && r.first_price > 0) ? (r.peak_price / r.first_price - 1) : null; // all-time-high multiple since first seen (peak vs the all-time baseline)
-    scored.push({ token: r.token_addr, pair: r.pair_addr, symbol: r.symbol, name: r.name, brand: runnerBrand(r.brand), mcap: r.cur_mc, liq: r.cur_liq, holders: r.cur_holders, health: r.cur_health, priceChange24: r.cur_pc24, gain, ath, exact, depthDays: Math.max(0, Math.round((now() - baseAt) / 864e5)), firstSeenAt: r.first_seen_at });
+    const ath = (r.peak_price > 0 && caughtPrice > 0) ? (r.peak_price / caughtPrice - 1) : null; // peak since we caught it — same baseline as sinceX, so "peak" can never read below "now"
+    scored.push({ token: r.token_addr, pair: r.pair_addr, symbol: r.symbol, name: r.name, brand: runnerBrand(r.brand), mcap: r.cur_mc, liq: r.cur_liq, holders: r.cur_holders, health: r.cur_health, priceChange24: r.cur_pc24, gain, ath, sinceX, caughtAt, exact, depthDays: Math.max(0, Math.round((now() - baseAt) / 864e5)), firstSeenAt: r.first_seen_at });
   }
   scored.sort((a, b) => b.gain - a.gain); // rank by the TRUE (uncapped) gain — the liquidity floor above is the dust guard, so no display cap is needed
   return scored.slice(0, 50);

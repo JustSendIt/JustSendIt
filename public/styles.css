@@ -2278,6 +2278,11 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .np-runner-gain.down { color: var(--red); }
 .np-runner-metrics { grid-column: 3 / 5; display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; font-size: 0.78rem; color: var(--text-dim); font-weight: 600; margin-top: 0.1rem; }
 .np-runner-metrics b { color: var(--text); }
+/* Xs since the scanner caught it — the number carries the colour, so it overrides the neutral `b` above */
+.np-runner-since { white-space: nowrap; }
+.np-runner-since i { font-style: normal; font-weight: 600; color: var(--text-dim); }
+.np-runner-metrics .np-runner-since.up b { color: var(--green-bright); }
+.np-runner-metrics .np-runner-since.down b { color: var(--red); }
 .np-runner-note { color: var(--gold); font-weight: 700; }
 .np-runner-actions { grid-column: 3 / 5; display: flex; gap: 0.4rem; margin-top: 0.35rem; }
 .np-runner-pin, .np-runner-chart { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: var(--ink); border: 1.5px solid var(--ink-4); color: var(--text); font-size: 1rem; cursor: pointer; text-decoration: none; }

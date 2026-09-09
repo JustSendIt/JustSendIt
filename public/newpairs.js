@@ -1445,6 +1445,13 @@
     return String(x < 10 ? +x.toFixed(1) : Math.round(x));
   }
   function fmtFullX(x) { return x >= 10 ? Math.round(x).toLocaleString('en-US') : (+x.toFixed(1)).toString(); } // exact, thousands-grouped (for the hover tooltip)
+  // Send Call convention — each +100% = 1x, so a token at 4.4× its entry price reads "+3.40x". Identical maths and
+  // wording to a call card (sendcall.js), because it answers the same question; only the entry differs — a call's
+  // entry is the moment a person called it, this one is the moment OUR scanner first put a price on it.
+  function callX(x) { const a = Math.abs(x), s = x >= 0 ? '+' : '−'; return s + (a < 10 ? a.toFixed(2) : a < 100 ? a.toFixed(1) : fmtX(a)) + 'x'; }
+  // the tooltip figure must never be blunter than the chip it explains: 3 significant figures under 10x, so a
+  // barely-moved token reads +0.0055x rather than rounding away to +0x
+  function callXFull(x) { const a = Math.abs(x), s = x >= 0 ? '+' : '−'; return s + (a < 10 ? String(+a.toPrecision(3)) : fmtFullX(a)) + 'x'; }
   function runnerGain(gain) {
     if (gain >= 1) return '▲ ' + fmtX(gain) + 'x';
     if (gain >= 0) return '▲ +' + Math.round(gain * 100) + '%';
@@ -1457,10 +1464,22 @@
     const health = r.health != null ? '<span class="np-runner-health" role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
     // hover/SR detail: the EXACT (uncapped) current multiple + the all-time high — the visible chip stays abbreviated
     const curFull = r.gain >= 1 ? fmtFullX(r.gain) + '×' : (r.gain >= 0 ? '+' + Math.round(r.gain * 100) + '%' : '−' + Math.round(Math.abs(r.gain) * 100) + '%');
-    // ATH is peak-vs-first-seen; only surface it when it's actually HIGHER than the number shown (else we started tracking
-    // mid-run and our observed peak is below the window move — showing it would read as a smaller, contradictory "ATH").
-    const athPart = (r.ath != null && r.ath > r.gain) ? ' · all-time high ' + (r.ath >= 1 ? fmtFullX(r.ath) + '×' : '+' + Math.round(r.ath * 100) + '%') : ''; // same unit convention as the gain (× vs +%)
-    const gainDetail = esc((r.gain >= 0 ? 'Up ' : 'Down ') + curFull + ' — ' + RUN_WIN_LABEL[state.runWin] + athPart);
+    // How many Xs it has done since the scanner caught it — the same live number a Send Call card shows, with our
+    // own first recorded price standing in for the caller's entry. The peak since then rides in the tooltip (it
+    // shares the same baseline as the number, so it can never read lower). Left out entirely when we never got a
+    // price we trusted for it, rather than printing a multiple off a baseline we don't have.
+    // It is also left out when it would only restate the gain already on the row: in the all-time view, and in any
+    // window we have less history than, the window baseline IS our first sighting. Printing the one number twice at
+    // two roundings ("▲ 12x" beside "+11.87x") reads as two different figures.
+    const sameAsGain = r.sinceX != null && Math.abs(r.sinceX - r.gain) <= Math.abs(r.gain) * 1e-9;
+    const gainDetail = esc((r.gain >= 0 ? 'Up ' : 'Down ') + curFull + ' — ' + RUN_WIN_LABEL[state.runWin] +
+      (sameAsGain ? ', measured from the price our scanner first recorded for it' : ''));
+    const caughtAge = r.caughtAt ? npFmtAge(Math.max(0, Math.round((Date.now() - r.caughtAt) / 60000))) : null;
+    const sinceTip = (r.sinceX == null || sameAsGain) ? '' : esc((r.sinceX > 0 ? 'Up ' : r.sinceX < 0 ? 'Down ' : 'Flat at ') + callXFull(r.sinceX) +
+      ' since our scanner first priced it' + (caughtAge ? ', ' + caughtAge + ' ago' : '') +
+      ((r.ath != null && r.ath > r.sinceX) ? ' · peak since then ' + callXFull(r.ath) : '') +
+      ' — where +100% = 1x, the same as a Send Call. That is our first sighting, not a call and not a recommendation.');
+    const since = (r.sinceX == null || sameAsGain) ? '' : '<span class="np-runner-since ' + (r.sinceX > 0 ? 'up' : r.sinceX < 0 ? 'down' : 'flat') + '" role="img" aria-label="' + sinceTip + '" title="' + sinceTip + '">🔎 <b>' + callX(r.sinceX) + '</b> <i>since we caught it</i></span>';
     const pin = '<button class="np-pin np-runner-pin" type="button" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
     const comm = commSlot(r.token, r.symbol); // 🏘️ Community / ＋ Start community (filled by tokentext.js)
@@ -1474,7 +1493,7 @@
       '<span class="np-runner-metrics">' +
         '<span class="np-runner-mc" role="img" aria-label="Market cap ' + npFmtUsd(r.mcap) + '" title="Current market cap">💰 ' + npFmtUsd(r.mcap) + '</span>' +
         '<span class="np-runner-gain ' + (r.gain >= 0 ? 'up' : 'down') + '" role="img" aria-label="' + gainDetail + '" title="' + gainDetail + '">' + runnerGain(r.gain) + '</span>' +
-        health + note +
+        since + health + note +
       '</span>' +
       '<span class="np-runner-actions">' + pin + chart + '</span>' +
     '</li>';
