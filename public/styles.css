@@ -3593,6 +3593,7 @@ pre.dk-pre { overflow-x: auto; padding: 0.75rem 0.9rem; border-radius: var(--r-2
    thing setting vertical space here; left/right margins are untouched, so a max-width block still centres */
 div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .comm-back { font-size: 0.92rem; }
+.comm-back .btn { text-decoration: none; }   /* an <a> styled as a button must not also wear a link underline */
 .comm-hero-top-page { text-align: center; padding: 3rem 1.25rem 1.5rem; }
 .comm-hero-top-page > .comm-start, .comm-hero-top-page > .comm-start-msg, .comm-hero-top-page > .comm-rules { margin-left: auto; margin-right: auto; }
 .comm-more-row { text-align: center; }
