@@ -53,7 +53,43 @@ function renderPins(u) {
       const empty = (!pins.length && u.isMe) ? '<p class="wall-pins-empty">Convict a token to show it here — paste its contract below, or open any token’s on-chain details anywhere and tap <b>📌 Pin to my wall</b>.</p>' : '';
       const adder = u.isMe ? '<form class="pin-add" autocomplete="off"><label class="sr-only" for="pin-add-input">Token contract address to convict</label><input class="addr-input pin-add-input" id="pin-add-input" type="text" inputmode="text" spellcheck="false" placeholder="Paste a contract to convict (0x…)" pattern="0x[0-9a-fA-F]{40}"><button class="btn btn-primary btn-sm pin-add-go" type="submit">💎 Convict</button></form><p class="pin-add-msg" role="status" aria-live="polite"></p>' : '';
       box.innerHTML = head + list + empty + adder;
+      livePins(box);
     }).catch(() => { box.hidden = true; });
+}
+
+/* The Xs on convicted tokens are the same live chain reading a Send Call shows, so they belong on the
+   same clock — until now they were frozen at whatever they were when the page loaded. Only the market
+   cap and the multiple move; the chip's identity, its 💎 level badge and its 🏘️ community tag do not,
+   so those are left alone and just the two figures are rewritten. */
+function livePins(box) {
+  if (!window.LiveX || !box) return;
+  LiveX.watch(box, '.pin-chip[data-token]');
+  LiveX.source('pins', {
+    collect() {
+      const chips = LiveX.visible('.pin-chip[data-token]');
+      const owner = chips.length ? chips[0].dataset.owner : null;
+      return owner ? owner : null;   // one wall is shown at a time, so one owner covers every chip on it
+    },
+    async fetch(owner) {
+      const r = await fetch('/api/pins?user=' + encodeURIComponent(owner), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+      if (!r.ok) throw new Error('pins http ' + r.status);
+      return r.json();
+    },
+    apply(j) {
+      (j.pins || []).forEach(p => {
+        document.querySelectorAll('.pin-chip[data-token="' + (window.CSS && CSS.escape ? CSS.escape(p.token) : p.token) + '"]').forEach(chip => {
+          const stats = chip.querySelector('.pin-chip-stats');
+          if (!stats) return;
+          const wasX = (stats.querySelector('.pin-chip-xs') || {}).textContent;
+          const wasMc = (stats.querySelector('.pin-chip-mc') || {}).textContent;
+          stats.innerHTML = (p.curMc != null ? '<span class="pin-chip-mc" role="img" aria-label="Market cap ' + pinUsd(p.curMc) + '" title="Current market cap">💰 ' + pinUsd(p.curMc) + '</span>' : '') + pinXsChip(p.xs);
+          const x = stats.querySelector('.pin-chip-xs'), mc = stats.querySelector('.pin-chip-mc');
+          if (x && wasX != null && x.textContent !== wasX) LiveX.pulse(x);
+          if (mc && wasMc != null && mc.textContent !== wasMc) LiveX.pulse(mc);
+        });
+      });
+    },
+  });
 }
 (function wirePins() {
   const box = document.getElementById('pub-pins');

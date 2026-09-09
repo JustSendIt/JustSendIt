@@ -1183,7 +1183,7 @@
     }));
     // arrow-key navigation + single tab stop for the composite widgets (radiogroup / tablist promise this model)
     // ←/→/↑/↓/Home/End on the time-window radiogroup + view tablist are handled by the shared delegated handler in app.js (local handlers double-fired)
-    setInterval(() => { const tm = document.getElementById('token-modal'); if (!document.hidden && state.mode === 'runners' && (!tm || tm.hasAttribute('hidden'))) loadRunners(); }, 60000); // keep Best Runners fresh — but not while the detail popup is open (a re-render would detach its focused trigger)
+    liveRunners();   // Best Runners now rides the shared LiveX clock (12s, in place) instead of a 60s re-render
     feedEl.addEventListener('click', e => {
       const w = e.target.closest('.np-watch');
       if (w) { e.preventDefault(); e.stopPropagation(); const p = state.byAddr.get(w.dataset.wpair); if (p && window.Watchlist) Watchlist.toggle(p); return; }
@@ -1457,9 +1457,11 @@
     if (gain >= 0) return '▲ +' + Math.round(gain * 100) + '%';
     return '▼ ' + Math.round(Math.abs(gain) * 100) + '%';
   }
-  function runnerRow(r, i) {
-    const logo = (r.brand && r.brand.imageUrl) ? '<img class="np-runner-logo-img" src="' + esc(r.brand.imageUrl) + '" alt="" loading="lazy" decoding="async">' : '<span class="np-runner-logo-none" aria-hidden="true">🪙</span>';
-    const sym = r.symbol ? '$' + esc(r.symbol) : 'Token';
+  /* Every figure on a runner row, in one place — the row builder uses it once and the live tick reuses it
+     to repaint just this span, so a number that moves on-chain never costs the reader their scroll
+     position, their focus or an open detail. Nothing interactive lives in here, which is what makes
+     repainting it wholesale safe. */
+  function runnerMetricsHTML(r) {
     const note = !r.exact ? '<span class="np-runner-note" title="Tracked for ' + r.depthDays + ' days — shorter than this window, so it’s measured since we first saw it, not the full window.">since ' + r.depthDays + 'd</span>' : '';
     const health = r.health != null ? '<span class="np-runner-health" role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
     // hover/SR detail: the EXACT (uncapped) current multiple + the all-time high — the visible chip stays abbreviated
@@ -1480,6 +1482,13 @@
       ((r.ath != null && r.ath > r.sinceX) ? ' · peak since then ' + callXFull(r.ath) : '') +
       ' — where +100% = 1x, the same as a Send Call. That is our first sighting, not a call and not a recommendation.');
     const since = (r.sinceX == null || sameAsGain) ? '' : '<span class="np-runner-since ' + (r.sinceX > 0 ? 'up' : r.sinceX < 0 ? 'down' : 'flat') + '" role="img" aria-label="' + sinceTip + '" title="' + sinceTip + '">🔎 <b>' + callX(r.sinceX) + '</b> <i>since scanned</i></span>';
+    return '<span class="np-runner-mc" role="img" aria-label="Market cap ' + npFmtUsd(r.mcap) + '" title="Current market cap">💰 ' + npFmtUsd(r.mcap) + '</span>' +
+      '<span class="np-runner-gain ' + (r.gain >= 0 ? 'up' : 'down') + '" role="img" aria-label="' + gainDetail + '" title="' + gainDetail + '">' + runnerGain(r.gain) + '</span>' +
+      since + health + note;
+  }
+  function runnerRow(r, i) {
+    const logo = (r.brand && r.brand.imageUrl) ? '<img class="np-runner-logo-img" src="' + esc(r.brand.imageUrl) + '" alt="" loading="lazy" decoding="async">' : '<span class="np-runner-logo-none" aria-hidden="true">🪙</span>';
+    const sym = r.symbol ? '$' + esc(r.symbol) : 'Token';
     const pin = '<button class="np-pin np-runner-pin" type="button" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
     const comm = commSlot(r.token, r.symbol); // 🏘️ Community / ＋ Start community (filled by tokentext.js)
@@ -1490,11 +1499,7 @@
       // the 🏘️ community tag lives on the full-width name row (grid-column 1/-1), NOT in .np-runner-metrics: at ≥560px
       // metrics share grid cell 3 with the symbol, so a pill there would overlap a long ticker. Emit the row even with no name.
       ((r.name || comm) ? '<span class="np-runner-name"' + (r.name ? ' title="' + esc(r.name) + '"' : '') + '>' + esc(r.name || '') + comm + '</span>' : '') +
-      '<span class="np-runner-metrics">' +
-        '<span class="np-runner-mc" role="img" aria-label="Market cap ' + npFmtUsd(r.mcap) + '" title="Current market cap">💰 ' + npFmtUsd(r.mcap) + '</span>' +
-        '<span class="np-runner-gain ' + (r.gain >= 0 ? 'up' : 'down') + '" role="img" aria-label="' + gainDetail + '" title="' + gainDetail + '">' + runnerGain(r.gain) + '</span>' +
-        since + health + note +
-      '</span>' +
+      '<span class="np-runner-metrics">' + runnerMetricsHTML(r) + '</span>' +
       '<span class="np-runner-actions">' + pin + chart + '</span>' +
     '</li>';
   }
@@ -1521,6 +1526,52 @@
     try { const j = await fetch('/api/runners?window=' + encodeURIComponent(state.runWin), { credentials: 'same-origin' }).then(r => r.json()); if (state.mode === 'runners') renderRunners(j); }
     catch { if (runStatus) runStatus.textContent = 'Couldn’t load runners — try again.'; }
     finally { state.runnersLoading = false; }
+  }
+
+  /* Best Runners on the shared LiveX clock. Two different things can change between reads and they are
+     NOT handled the same way:
+       · the figures move — repaint each row's metrics span in place. No reflow, nothing detaches, and
+         the reader keeps their place in the list.
+       · the ranking itself changes, or a token enters or drops out of the board — that needs a real
+         re-render, because a row labelled "1" sitting above a bigger number is simply wrong. Held back
+         while the token detail popup is open: re-rendering underneath it would detach the trigger the
+         popup restores focus to when it closes.
+     In practice the top rows sit orders of magnitude apart (343x, 178x, 112x) so a re-rank is rare, and
+     the common tick is the quiet in-place one. */
+  function paintRunnerMetrics(li, r) {
+    const box = li.querySelector('.np-runner-metrics');
+    if (!box) return;
+    const was = { g: txtOf(box, '.np-runner-gain'), s: txtOf(box, '.np-runner-since b'), m: txtOf(box, '.np-runner-mc') };
+    box.innerHTML = runnerMetricsHTML(r);
+    if (!window.LiveX) return;
+    ['.np-runner-gain', '.np-runner-since b', '.np-runner-mc'].forEach((sel, i) => {
+      const el = box.querySelector(sel), prev = [was.g, was.s, was.m][i];
+      if (el && prev != null && el.textContent !== prev) LiveX.pulse(el);   // pulse only what the chain actually moved
+    });
+  }
+  function txtOf(root, sel) { const e = root.querySelector(sel); return e ? e.textContent : null; }
+  function liveRunners() {
+    if (!window.LiveX || !runList) return;
+    LiveX.source('runners', {
+      collect() { return (state.mode === 'runners' && runList.children.length) ? state.runWin : null; },
+      async fetch(win) {
+        const r = await fetch('/api/runners?window=' + encodeURIComponent(win), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        if (!r.ok) throw new Error('runners http ' + r.status);
+        return r.json();
+      },
+      apply(j, win) {
+        if (state.mode !== 'runners' || state.runWin !== win) return;   // the reader changed window mid-flight
+        const rs = (j && j.runners) || [];
+        const rows = [...runList.querySelectorAll('.np-runner')];
+        const order = rows.map(li => String(li.dataset.token || '').toLowerCase());
+        const fresh = rs.map(r => String(r.token).toLowerCase());
+        const reorder = order.length !== fresh.length || order.some((t, i) => t !== fresh[i]);
+        const tm = document.getElementById('token-modal');
+        if (reorder && (!tm || tm.hasAttribute('hidden'))) { renderRunners(j); return; }
+        const by = new Map(rs.map(r => [String(r.token).toLowerCase(), r]));
+        rows.forEach(li => { const r = by.get(String(li.dataset.token || '').toLowerCase()); if (r) paintRunnerMetrics(li, r); });
+      },
+    });
   }
 
   function setMode(mode) {

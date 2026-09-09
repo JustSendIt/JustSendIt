@@ -4942,6 +4942,7 @@ function accrueHold(holdX, holdPaid, curX, dtH, rate) {
   const award = (owed - holdPaid >= MIN_HOLD_AWARD) ? Math.floor(owed - holdPaid) : 0;
   return { holdX: nx, award, holdPaid: holdPaid + award };
 }
+const LIVE_BATCH_MAX = 40;   // Send Calls answered in one /api/calls/live read — more than fit on any screen
 function callGrade(maxX) {
   if (maxX >= 20) return { g: 'S', label: 'Legendary', emoji: '🏆' };
   if (maxX >= 10) return { g: 'A', label: 'Massive', emoji: '🚀' };
@@ -6124,6 +6125,20 @@ const server = http.createServer(async (req, res) => {
         const w = url.searchParams.get('window') || 'all';
         if (!Object.prototype.hasOwnProperty.call(CALL_WINDOWS, w)) return bad(res, 'bad window');
         return send(res, 200, { window: w, top: callLeaderboard(w) });
+      }
+      /* One read for every Send Call currently on a reader's screen. The card widgets used to poll
+         /api/calls/:id one at a time — eight visible cards meant eight round-trips every tick, which is
+         why the refresh had to be slow. This answers the whole screen at once, so the Xs can move often
+         without the request count moving with them. The payload is the SAME callView the single-call
+         route returns, so the client's in-place updater needs no second shape to understand. */
+      if (p === '/api/calls/live' && req.method === 'GET') {
+        if (!rateLimit('callslive:' + clientIp(req), 150, 60000)) return bad(res, 'slow down', 429);
+        const ids = [...new Set(String(url.searchParams.get('ids') || '').split(',')
+          .map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0))].slice(0, LIVE_BATCH_MAX);
+        if (!ids.length) return send(res, 200, { calls: [], at: now() });
+        maybeRefreshCalls();   // same 45s-throttled on-chain re-read the single-call route triggers
+        const rows = db.prepare('SELECT * FROM calls WHERE id IN (' + ids.map(() => '?').join(',') + ')').all(...ids);
+        return send(res, 200, { calls: rows.map(r => callView(r, me)), at: now() });
       }
       if (p === '/api/calls' && req.method === 'GET') {
         maybeRefreshCalls();

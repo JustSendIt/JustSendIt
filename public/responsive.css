@@ -132,3 +132,19 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 }
 @media (pointer: coarse) { .np-runner-sym::after { height: max(100%, 44px); } }
 .np-runner-name .tok-comm { padding-block: 0.3rem; }
+
+/* ===== live Xs (livex.js) ================================================================
+   Every X on the site re-reads the chain on a shared clock. When a figure actually moves it
+   gets one brief lift — enough to notice out of the corner of an eye, not enough to pull you
+   off what you were reading. Only on a real change: a pulse on an unchanged number would be a
+   lie about new data. Motion-sensitive readers get a fade with no movement instead. */
+@keyframes livex-pulse {
+  0%   { transform: translateY(0);      filter: brightness(1); }
+  28%  { transform: translateY(-2px);   filter: brightness(1.55); }
+  100% { transform: translateY(0);      filter: brightness(1); }
+}
+.livex-pulse { animation: livex-pulse 0.75s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  @keyframes livex-pulse { 0% { opacity: 0.45; } 100% { opacity: 1; } }
+  .livex-pulse { animation: livex-pulse 0.5s ease-out; }
+}

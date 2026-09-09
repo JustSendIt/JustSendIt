@@ -145,8 +145,10 @@
     const g = call.grade || {};
     el.className = 'sc-widget sc-g' + (g.g || 'E') + (el.classList.contains('sc-expanded') ? ' sc-expanded' : '') + (call.rugged ? ' sc-is-rugged' : ''); // preserve the open/closed toggle state through a live refresh
     if (call.rugged && !el.querySelector('.sc-rugged')) el.insertAdjacentHTML('afterbegin', '<div class="sc-rugged" role="alert">💀 RUGGED! <span>Liquidity was pulled — DO NOT BUY.</span></div>'); // a call that just rugged mid-refresh
-    const nowEl = el.querySelector('.sc-xnow'); if (nowEl) { nowEl.textContent = call.stale ? '—' : xFmt(call.curX); nowEl.parentElement.className = 'sc-x ' + (call.stale ? 'sc-flat' : xClass(call.curX)); }
-    const maxEl = el.querySelector('.sc-xmax'); if (maxEl) { maxEl.textContent = xFmt(call.maxX); maxEl.parentElement.className = 'sc-x sc-x-max ' + xClass(call.maxX); }
+    // the two Xs pulse when the chain actually moved them, so a reader can see the card is live
+    const setX = (n, t) => { if (!n) return; if (window.LiveX) LiveX.setText(n, t); else n.textContent = t; };
+    const nowEl = el.querySelector('.sc-xnow'); if (nowEl) { setX(nowEl, call.stale ? '—' : xFmt(call.curX)); nowEl.parentElement.className = 'sc-x ' + (call.stale ? 'sc-flat' : xClass(call.curX)); }
+    const maxEl = el.querySelector('.sc-xmax'); if (maxEl) { setX(maxEl, xFmt(call.maxX)); maxEl.parentElement.className = 'sc-x sc-x-max ' + xClass(call.maxX); }
     const cm = el.querySelector('.sc-curmc'); if (cm) cm.textContent = call.stale ? '—' : fmtUsd(call.curMc);
     const pm = el.querySelector('.sc-peakmc'); if (pm) pm.textContent = fmtUsd(call.peakMc);
     const gr = el.querySelector('.sc-grade'); if (gr) { gr.firstChild.textContent = g.emoji || '➖'; const i = gr.querySelector('i'); if (i) i.textContent = g.g || 'E'; }
@@ -262,26 +264,34 @@
     });
   }
 
-  // live refresh: a SINGLE shared observer + visible-set + timer for the whole page, so every widget in any
-  // container keeps its Xs current (across feed reloads and secondary lists) without a page reload.
-  const _vis = new Set();      // ids currently on screen
-  const _seen = new WeakSet(); // widgets already observed
-  let _io = null, _timer = null;
+  /* live refresh — one source on the shared LiveX clock (livex.js). Every card on screen, in any
+     container and on any page, is read in ONE request per tick and updated in place. This used to be a
+     private timer here that fetched /api/calls/:id once per visible card, so eight cards on screen cost
+     eight round-trips every 25s; the batch is why the Xs can now move every 12s instead. */
+  let _ensured = false;
   function ensureLive() {
-    if (!('IntersectionObserver' in window)) return;
-    if (!_io) _io = new IntersectionObserver((entries) => { entries.forEach(en => { const id = en.target.dataset.call; if (!id) return; if (en.isIntersecting) _vis.add(id); else _vis.delete(id); }); }, { rootMargin: '80px' });
-    if (!_timer) _timer = setInterval(async () => {
-      if (document.hidden) return;
-      for (const id of [..._vis].slice(0, 8)) { // cap concurrent refreshes
-        try {
-          const r = await fetch('/api/calls/' + encodeURIComponent(id), { credentials: 'same-origin' });
-          if (!r.ok) continue; const j = await r.json();
-          document.querySelectorAll('.sc-widget[data-call="' + id + '"]').forEach(w => updateWidget(w, j.call));
-        } catch {}
-      }
-    }, 25000);
+    if (_ensured || !window.LiveX) return;
+    _ensured = true;
+    LiveX.source('calls', {
+      collect() {
+        // capped at what the server answers in one read; without IntersectionObserver "visible" means every
+        // widget on the page, and an endless wall would otherwise build an endless query string
+        const ids = [...new Set(LiveX.visible('.sc-widget[data-call]').map(w => w.dataset.call).filter(Boolean))].slice(0, 40);
+        return ids.length ? ids : null;
+      },
+      async fetch(ids) {
+        const r = await fetch('/api/calls/live?ids=' + encodeURIComponent(ids.join(',')), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        if (!r.ok) throw new Error('calls live http ' + r.status);
+        return r.json();
+      },
+      apply(j) {
+        (j.calls || []).forEach(call => {
+          document.querySelectorAll('.sc-widget[data-call="' + call.id + '"]').forEach(w => updateWidget(w, call));
+        });
+      },
+    });
   }
-  function observe(root) { if (!_io || !root) return; root.querySelectorAll('.sc-widget[data-call]').forEach(w => { if (!_seen.has(w)) { _seen.add(w); _io.observe(w); } }); }
+  function observe(root) { if (window.LiveX && root) LiveX.watch(root, '.sc-widget[data-call]'); }
   function live(root) { ensureLive(); observe(root); } // set up the shared machinery, then observe this container's widgets
 
   window.SendCall = { widgetHTML, updateWidget, wire, live, observe };
