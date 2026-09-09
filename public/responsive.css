@@ -1,0 +1,134 @@
+/* ===== responsive.css — the responsive & touch layer, loaded LAST on every page ==========
+   The site is built from ten stylesheets: styles.css first, then the per-feature ones
+   (moderation, tokentext, tracker, arcade, compete, weekly, checkin, governance, rocketize).
+   The later sheets win at equal specificity, so this layer has to load after all of them —
+   otherwise a component sheet quietly undoes a rule meant to hold everywhere. Nothing in here
+   is a new look: it is the floor the rest of the site is allowed to sit on.
+
+   Measuring every page at 320 / 375 / 767 / 1024 / 1280 found three causes behind almost all of
+   what was wrong:
+
+   a. Touch sizing keyed off VIEWPORT WIDTH (`max-width: 560px` / `600px`). An iPad is a touch
+      device 768–1024px wide, so it fell through every one of those rules and got the desktop's
+      28px controls. What decides whether a finger or a mouse is doing the pointing is the
+      POINTER, not the width — so everything here keys off `pointer: coarse` and holds at any
+      width, iPad and touch laptop included.
+   b. Two bottom-fixed overlays — the music player (bottom-left) and the ✏️ compose button
+      (bottom-right) — floated over the page with nothing reserved for them, so the last rows of
+      every list, and the whole footer, sat permanently underneath them.
+   c. Controls styled as text carried no hit area at all: an 18×12px copy button, 16–19px link
+      buttons, 17px footer links. WCAG 2.5.8 (AA) asks 24×24 CSS px; a finger wants 44. Where the
+      design wants a small mark, the mark KEEPS its size and an invisible ::after does the
+      catching — so none of this changes what the page looks like.
+
+   One deliberate exception: the ::after trick is never used on an element that clips its own
+   overflow (`.gb-name`, `.cmp-name`, the token name in a radar row all ellipsis-truncate). The
+   clip would cut the hit area off with the text, so those get real padding instead.
+   ======================================================================================== */
+
+/* --- a. Nothing is stranded under the two fixed bottom buttons ------------------------- */
+:root { --fab-reserve: calc(4.75rem + env(safe-area-inset-bottom, 0px)); }
+body { padding-bottom: var(--fab-reserve); }   /* player and FAB both stand ~70px off the bottom */
+
+/* --- b. A finger gets 44px, at every width -------------------------------------------- */
+@media (pointer: coarse) {
+  .np-chip, .np-den, .np-more, .np-refresh, .np-seg, .np-sort, .np-search-input, .np-vs-btn,
+  .copy-btn, .sort-btn, .cw-tab, .wl-tab, .risk-chip, .np-pin, .np-runner-pin, .np-runner-chart,
+  .b0-conn summary, .feed-tab, .arena-tab, .gearn-row, .mp-hint,
+  #music-player .mp-btn, .theme-hex, input[type="color"] { min-height: 44px; }
+  .copy-btn, .np-refresh, .np-pin, .np-runner-pin, .np-runner-chart,
+  #music-player .mp-btn, input[type="color"] { min-width: 44px; }
+  .np-search-input { padding-block: 0.5rem; }   /* a bare input in a flex row laid out 19px tall */
+}
+
+/* Small by design, still a full target. Only where no ancestor clips overflow. */
+.nav-logo, .notif-bell, .nav-xp, .nav-live, .profile-link, .np-caret-btn, .np-hidden-link,
+.linklike, .gobj-link, .trk-sel-link, .comm-viewtoken, .ge-info, .ll-info { position: relative; }
+.nav-logo::after, .notif-bell::after, .nav-xp::after, .nav-live::after, .profile-link::after,
+.np-caret-btn::after, .np-hidden-link::after, .linklike::after, .gobj-link::after,
+.trk-sel-link::after, .comm-viewtoken::after, .ge-info::after, .ll-info::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(100%, 24px); height: max(100%, 24px);
+}
+@media (pointer: coarse) {
+  .nav-logo::after, .notif-bell::after, .nav-xp::after, .nav-live::after, .profile-link::after,
+  .np-caret-btn::after, .np-hidden-link::after, .linklike::after, .gobj-link::after,
+  .trk-sel-link::after, .comm-viewtoken::after, .ge-info::after, .ll-info::after {
+    width: max(100%, 44px); height: max(100%, 44px);
+  }
+}
+.ll-info { width: 24px; height: 24px; }   /* was 20×20 — under the AA floor even with a mouse */
+
+/* The ones that ellipsis-truncate: padding, because a phantom box would be clipped away. */
+.gb-name, .cmp-name { padding-block: 0.25rem; }
+@media (pointer: coarse) { .gb-name, .cmp-name { padding-block: 0.8rem; } }
+
+/* The 📋 copy-contract button lives INSIDE the token name, which truncates — same reason. */
+.np-tickcopy { min-width: 24px; min-height: 24px; padding: 0.2rem 0.3rem;
+  display: inline-flex; align-items: center; justify-content: center; }
+
+/* Footer navigation is navigation: eight 17px-tall links in a row is not a tap target. */
+footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px; padding-inline: 0.35rem; }
+
+/* --- c. Readable type, and no iOS focus-zoom ------------------------------------------ */
+/* iOS Safari zooms the whole page when a focused field is under 16px, which throws the layout
+   off-screen mid-typing. 16px is also simply the floor for something you type into. */
+@media (pointer: coarse) { input, select, textarea { font-size: max(16px, 1em); } }
+
+/* Nothing below ~11.5px. Each of these was measured under it on a phone. */
+.og-tag { font-size: 0.72rem; }                          /* was 0.58rem ≈ 9.3px */
+.og-timer i { font-size: 0.7rem; }                       /* was 0.57rem ≈ 9.1px */
+.notif-badge { font-size: 0.72rem; }                     /* was 0.62rem ≈ 9.9px */
+.np-stat-lbl, .np-liq-lbl { font-size: 0.72rem; }        /* was 0.66rem ≈ 10.6px */
+.np-slide-newtag { font-size: 0.72rem; }
+.np-badge--dex { font-size: 0.72rem; }
+.pc-lbl { font-size: 11px; }                             /* SVG chart axis labels, were 9px */
+.kpi-sub, .kpi-up { font-size: 0.72rem; }
+.ll-top { font-size: 0.72rem; }
+.cmp-cava--txt, .cmp-sandbox, .cmp-move { font-size: 0.72rem; }
+.wk-you, .wk-xp-l { font-size: 0.72rem; }
+.tok-comm, .np-runner-name .tok-comm, .pin-chip .tok-comm { font-size: 0.72rem; }
+
+/* --- d. 320px phones: the ticker and its copy button were eaten by the ellipsis -------- */
+/* $SYMBOL and the 📋 button sit inside .np-name, which is nowrap + ellipsis. Below ~400px the
+   truncation was swallowing a working control, so the name wraps to a second line instead. */
+@media (max-width: 400px) {
+  .np-name { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+
+/* stragglers the second sweep turned up.
+   NOTE .switch uses ::before, not ::after: its ::after is already the sliding knob
+   (styles.css:991), and taking that over would leave the toggle with nothing to slide. */
+.switch, .ll-toggle button { position: relative; }
+.switch::before, .ll-toggle button::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(100%, 24px); height: max(100%, 24px);
+}
+@media (pointer: coarse) {
+  .switch::before, .ll-toggle button::after { width: max(100%, 44px); height: max(100%, 44px); }
+  .gobj-primary a, .gobj-primary .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+}
+.wall-stat, .pin-chip-open, .pin-chip-rm { position: relative; }
+.wall-stat::after, .pin-chip-open::after, .pin-chip-rm::after {
+  content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: max(100%, 24px); height: max(100%, 24px);
+}
+@media (pointer: coarse) {
+  .wall-stat::after, .pin-chip-open::after, .pin-chip-rm::after { width: max(100%, 44px); height: max(100%, 44px); }
+  .wall-tab { min-height: 44px; }
+}
+
+/* The radar's search field is a bare <input> in a flex row with no padding of its own, so it laid
+   out 19px tall — under the 24px AA floor with a mouse too, not just under a finger. */
+.np-search-input { padding-block: 0.25rem; }
+
+/* The Best Runners rows: the $SYMBOL button is the way into a token's detail and laid out 18px
+   tall, and the 🏘️ tag is 19px inside the name strip. The strip clips its own overflow, so the
+   tag gets padding while the symbol takes the phantom box. */
+.np-runner-sym { position: relative; }
+.np-runner-sym::after {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 100%; height: max(100%, 24px);
+}
+@media (pointer: coarse) { .np-runner-sym::after { height: max(100%, 44px); } }
+.np-runner-name .tok-comm { padding-block: 0.3rem; }
