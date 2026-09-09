@@ -114,9 +114,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS nonces (
-  address TEXT PRIMARY KEY,
+  address TEXT NOT NULL,
+  purpose TEXT NOT NULL DEFAULT 'signin',    -- what the signature is allowed to authorise (see NONCE_PURPOSES)
   nonce TEXT NOT NULL,
-  expires_at INTEGER NOT NULL
+  expires_at INTEGER NOT NULL,
+  PRIMARY KEY (address, purpose)             -- one live challenge per wallet PER JOB, not one per wallet
 );
 CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -495,6 +497,12 @@ for (const col of [
   // of a parallel table means comments, voting, muting, reporting, moderation and deletion all work there on
   // day one, with no second implementation to keep in step.
   "ALTER TABLE posts ADD COLUMN board TEXT",
+  /* Wallet challenges are bound to WHAT they authorise. One generic "Read-only sign-in" message used to be
+     accepted for signing in, enabling wallet 2FA, DISABLING two-factor and adding an email — so a signature a
+     wallet truthfully rendered as a read-only sign-in could strip an account's second factor, and the person
+     signing had no way to tell the difference. The purpose is now in the text the wallet shows AND checked on
+     the way back in. Keyed per (address, purpose) so a sign-in challenge no longer clobbers a management one. */
+
   "CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, score DESC, id DESC)",
   // Convicted In: reference price/mcap captured when the token was pinned (basis for "Xs up since you convicted")
   "ALTER TABLE pinned_tokens ADD COLUMN pin_price REAL",                      // USD price at pin time (0/NULL = no baseline, e.g. legacy pin)
@@ -521,6 +529,20 @@ for (const col of [
   "CREATE INDEX IF NOT EXISTS idx_arcade_day ON arcade_rounds(day)",                                        // the hub counts today's flights every 8 s
   "CREATE INDEX IF NOT EXISTS idx_users_arcade_boost ON users(arcade_boost_until) WHERE arcade_boost > 1", // …and the pilots boosted right now                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
+
+/* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
+   REPLACED the first. That is why one generic "Read-only sign-in" signature was accepted for signing in, for
+   arming two-factor and for turning it off: there was only ever one row, so there was nothing to tell them
+   apart. Purposes cannot coexist until the key does, and a column cannot be added to a primary key in place,
+   so the table is rebuilt once. Dropping it costs nothing — every row is a single-use challenge that expires
+   in ten minutes, so the worst case is someone taps "sign" again. */
+try {
+  const t = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='nonces'").get();
+  if (t && !/PRIMARY KEY \(address, purpose\)/.test(t.sql)) {
+    db.exec("DROP TABLE IF EXISTS nonces; CREATE TABLE nonces (address TEXT NOT NULL, purpose TEXT NOT NULL DEFAULT 'signin', nonce TEXT NOT NULL, expires_at INTEGER NOT NULL, msg TEXT, PRIMARY KEY (address, purpose));");
+    console.log('🔑 rebuilt the wallet-challenge table keyed on (address, purpose)');
+  }
+} catch (e) { console.error('nonces rebuild failed:', e.message); }
 
 // Performance indices — added AFTER the migrations so the score/points columns they reference exist.
 // These cover the hottest read paths: the Send Wall (Top = score, New = id), profile walls (user_id),
@@ -745,7 +767,7 @@ function getUser(req) {
   const s = db.prepare('SELECT * FROM sessions WHERE token = ? AND expires_at > ?').get(hashToken(cookies.sid), now()); // only the hash is stored
   if (!s) return null;
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id);
-  return u ? { ...u, sid: cookies.sid } : null;
+  return u ? { ...u, sid: cookies.sid, sid_at: s.created_at } : null;   // sid_at: credential changes check what predates this session
 }
 function themeOf(u) {
   return {
@@ -791,21 +813,33 @@ function signInMessage(address, nonce, statement) {
     `Issued At: ${new Date(at).toISOString()}\n` +
     `Expiration Time: ${new Date(at + 6e5).toISOString()}`;
 }
-function issueNonce(address, statement) {
-  const nonce = rand(16), message = signInMessage(address, nonce, statement);
-  db.prepare('INSERT INTO nonces (address, nonce, expires_at, msg) VALUES (?,?,?,?) ON CONFLICT(address) DO UPDATE SET nonce=excluded.nonce, expires_at=excluded.expires_at, msg=excluded.msg')
-    .run(bidx(address), nonce, now() + 6e5, encField(message));
+/* What a wallet signature is allowed to do. The statement is the sentence the WALLET puts in front of the
+   person — it has to name the consequence, because that sentence is the only thing they actually see. */
+const NONCE_PURPOSES = {
+  signin:  'Read-only sign-in to JustSendIt. This signature never moves funds and grants no token approvals.',
+  link:    'Link this wallet to your JustSendIt account. This signature never moves funds and grants no token approvals.',
+  '2fa-on':  'Turn ON two-factor for JustSendIt, using THIS wallet. After this you will need this wallet to sign in — if you lose it, you lose the account. This signature never moves funds.',
+  manage:  'Confirm a security change on your JustSendIt account — two-factor, or how you sign in. This signature never moves funds and grants no token approvals.',
+};
+function issueNonce(address, purpose) {
+  const use = Object.prototype.hasOwnProperty.call(NONCE_PURPOSES, purpose) ? purpose : 'signin';
+  const nonce = rand(16), message = signInMessage(address, nonce, NONCE_PURPOSES[use]);
+  db.prepare('INSERT INTO nonces (address, purpose, nonce, expires_at, msg) VALUES (?,?,?,?,?) ON CONFLICT(address, purpose) DO UPDATE SET nonce=excluded.nonce, expires_at=excluded.expires_at, msg=excluded.msg')
+    .run(bidx(address), use, nonce, now() + 6e5, encField(message));
   return message;
 }
 // verify a signature against the message we issued for this address; returns the recovered address or an error string
-function consumeNonce(address, signature) {
-  const n = db.prepare('SELECT * FROM nonces WHERE address = ? AND expires_at > ?').get(bidx(address), now());
+// `purpose` is REQUIRED to match what the challenge was issued for: a signature collected for one job can
+// never be replayed to do a different, more dangerous one.
+function consumeNonce(address, signature, purpose = 'signin') {
+  const use = Object.prototype.hasOwnProperty.call(NONCE_PURPOSES, purpose) ? purpose : 'signin';
+  const n = db.prepare('SELECT * FROM nonces WHERE address = ? AND purpose = ? AND expires_at > ?').get(bidx(address), use, now());
   if (!n) return { error: 'request a wallet signature first — it may have expired' };
   const message = decField(n.msg); if (!message) return { error: 'request a wallet signature first' };
   let recovered;
   try { recovered = verifyMessage(message, String(signature || '')).toLowerCase(); } catch { return { error: 'bad signature' }; }
   if (recovered !== address) return { error: 'signature does not match that address' };
-  db.prepare('DELETE FROM nonces WHERE address = ?').run(bidx(address));
+  db.prepare('DELETE FROM nonces WHERE address = ? AND purpose = ?').run(bidx(address), use);
   return { recovered };
 }
 function mutedNames(userId) { return db.prepare('SELECT u.username FROM mutes m JOIN users u ON u.id = m.muted_id WHERE m.user_id = ? ORDER BY u.username').all(userId).map(r => r.username); }
@@ -3429,6 +3463,10 @@ function numN(x) { const n = Number(x); return isFinite(n) ? n : null; }
 
 // --- extra read-only on-chain reads for the tracker (all cached in the 90s pairs refresh) ---
 async function ethCall(to, data) { return rpc('eth_call', [{ to, data }, 'latest']).catch(() => null); }
+/* Same read, but a failure THROWS instead of becoming null. Callers that must distinguish "the chain says no"
+   from "the chain did not answer" need this: with the swallowing version, an RPC outage is indistinguishable
+   from an authoritative negative, which is how a node being down became "no pool exists for this token". */
+async function ethCallStrict(to, data) { return rpc('eth_call', [{ to, data }, 'latest']); }
 async function tokenDecimals(token) {                         // decimals() 0x313ce567 — null on failure (never cache/scale a miss)
   const r = await ethCall(token, '0x313ce567');
   if (!r || r === '0x') return null;
@@ -3651,8 +3689,10 @@ async function enrichPairs() {
       const prev = (pairsCache.pairs || []).find(x => x && x.pair && x.pair.address && x.pair.address.toLowerCase() === t.pair.toLowerCase());
       if (prev && prev.indexed) {
         p.indexed = true; p.market = prev.market; p.priceChange = prev.priceChange; p.volume = prev.volume;
+        p.txns = prev.txns;                       // trade counts drive the honeypot check — carrying price without them was the bug below
         p.holders = p.holders && p.holders.count != null ? p.holders : prev.holders;
         p.priceStale = true; p.priceAsOf = prev.priceAsOf || pairsCache.updatedAt || null;
+        p._prevRisk = prev.risk;                  // the verdict this token last EARNED, on data we actually read
       }
       p.priceUnread = dexReason || 'price feed unreachable';
     }
@@ -3666,7 +3706,15 @@ async function enrichPairs() {
     deployerCounts[d] = (deployerCounts[d] || 0) + 1;
     if (looksDead(e)) deployerDied[d] = (deployerDied[d] || 0) + 1;
   }
-  for (const e of enriched) applyRisk(e, deployerCounts, deployerDied);
+  /* Never let an outage IMPROVE a token's verdict. Re-scoring a carried row would run the checks against
+     whatever the failed refresh left absent — and a check that cannot see sells does not report a honeypot, it
+     reports nothing, which scores better than the truth. So a carried row keeps the verdict it last earned on
+     data we actually read, and is marked stale rather than re-judged on the absence of evidence. */
+  for (const e of enriched) {
+    if (e.priceStale && e._prevRisk) { e.risk = e._prevRisk; delete e._prevRisk; continue; }
+    delete e._prevRisk;
+    applyRisk(e, deployerCounts, deployerDied);
+  }
   // A carried-forward price must never set a Best Runners baseline, a peak, or a snapshot — the store would
   // record an old price as if it were a new observation and bend every "since scanned" X measured against it.
   try { recordRunners(enriched.filter(e => !e.priceStale)); } catch {}
@@ -3785,10 +3833,16 @@ async function pairTokens(pairAddr) {                          // token0() 0x0df
   const [t0, t1] = await Promise.all([ethCall(pairAddr, '0x0dfe1681'), ethCall(pairAddr, '0xd21220a7')]);
   return { token0: dec(t0), token1: dec(t1) };
 }
-async function factoryGetPair(a, b) {                          // getPair(address,address) 0xe6a43905 → pool addr or null
+// strict: throw when the chain could not be read, so only a real zero address means "no such pool"
+async function factoryGetPair(a, b, strict) {                  // getPair(address,address) 0xe6a43905 → pool addr or null
   const enc = (x) => x.replace(/^0x/, '').toLowerCase().padStart(64, '0');
-  const r = await ethCall(FACTORY, '0xe6a43905' + enc(a) + enc(b));
-  if (!r || r.length < 66) return null;
+  const r = strict
+    ? await ethCallStrict(FACTORY, '0xe6a43905' + enc(a) + enc(b))
+    : await ethCall(FACTORY, '0xe6a43905' + enc(a) + enc(b));
+  if (!r || r.length < 66) {
+    if (strict) throw new Error('the chain did not answer');   // unreadable ≠ "no pool"
+    return null;
+  }
   const addr = ('0x' + r.slice(26, 66)).toLowerCase();
   return /^0x0{40}$/.test(addr) ? null : addr;                 // zero address = no such pool
 }
@@ -3877,7 +3931,7 @@ async function _doLookup(tokenAddr) {
   let factoryErr = null;
   if (!pairAddr) {
     try {
-      const fb = (await factoryGetPair(tokenAddr, WETH_ADDR)) || (await factoryGetPair(tokenAddr, USDG_ADDR));
+      const fb = (await factoryGetPair(tokenAddr, WETH_ADDR, true)) || (await factoryGetPair(tokenAddr, USDG_ADDR, true));
       if (fb) { pairAddr = fb; tokenIsBase = true; }
     } catch (e) { factoryErr = (e && e.message) || 'chain unreachable'; }
   }
@@ -4803,7 +4857,9 @@ async function verifyCurrentFactor(me, b) {
     const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(address));
     if (!w) return 'sign with a linked wallet first';
     if (w.linked_at && me.twofa_enabled_at && w.linked_at > me.twofa_enabled_at) return 'that wallet was linked after two-factor was turned on — sign with the wallet you enabled it with';
-    const sig = consumeNonce(address, b.signature); // domain-bound message we issued for this address
+    // this proves the CURRENT factor for a security change (disable 2FA, swap factor, add an email, link a
+    // wallet), so a plain sign-in signature must not satisfy it
+    const sig = consumeNonce(address, b.signature, 'manage');
     if (sig.error) return sig.error;
   }
   return null;
@@ -5690,17 +5746,45 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!walletAddresses(me.id).length) return bad(res, 'link a wallet to your account first');
         let b = {}; try { b = await readBody(req); } catch {}
-        // switching from TOTP to wallet 2FA must pass the current factor (else a hijacked session could flip it to a wallet it controls)
-        if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
-        /* Turning wallet 2FA ON must prove control of the wallet, with a signature, right now. It used to need
-           only that SOME address was on file — but from that moment every exit (disable, and disconnecting the
-           wallet) demands a signature from it. So a wallet added from a since-lost seed, or one linked and then
-           lost, locked the owner out of their own account with a single click and no warning. Proving control
-           at the door is what makes the lock safe to close. */
         const addr = String(b.address || '').toLowerCase();
         if (!walletAddresses(me.id).includes(addr)) return bad(res, 'sign with a wallet linked to this account to turn wallet two-factor on', 400);
-        const proof = consumeNonce(addr, b.signature);   // the EIP-4361 message we issued for this address
-        if (proof.error) return bad(res, proof.error, 401);
+
+        /* This is the most destructive switch on the site: once it is on, signing in, turning it off and
+           disconnecting the wallet ALL require a signature from a qualifying wallet, and there is no password
+           reset. So it must be provable that the person flipping it is the account's owner and not somebody
+           holding a borrowed session — asking only for a signature from "a linked wallet" is not that, because
+           attaching a wallet is itself something a session can do.
+             · an account with a password proves it with the password (or its current factor, if it has one)
+             · a wallet-only account proves it with a wallet that PREDATES the session making the request,
+               so a wallet attached by a stolen cookie can never be the one that locks the door
+           Both are checked before anything is written. */
+        let alreadyProved = false;   // the current-factor check may itself have proved this exact wallet
+        if (me.twofa_method) {
+          const cur = b.current || b;
+          const err = await verifyCurrentFactor(me, cur); if (err) return bad(res, err, 401);
+          // wallet→wallet: verifyCurrentFactor consumed the nonce for this address, and nonces are one row per
+          // address, so asking for a second signature here could never succeed. That proof already stands.
+          if (me.twofa_method === 'wallet' && String(cur.address || '').toLowerCase() === addr) alreadyProved = true;
+        } else if (emailIdentity(me.id)) {
+          const e = emailIdentity(me.id);
+          if (!checkPassword(String((b.current && b.current.password) || b.password || ''), e.secret)) {
+            return bad(res, 'enter your account password to turn wallet two-factor on', 401);
+          }
+        } else {
+          const w0 = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(addr));
+          if (w0 && w0.linked_at && me.sid_at && w0.linked_at > me.sid_at) {
+            return bad(res, 'that wallet was linked during this session — sign in again with it first, so a borrowed session can never lock you out of your own account', 401);
+          }
+        }
+
+        /* And prove control of the wallet being bound, right now. Without this, one click bound a wallet whose
+           seed might already be gone — locking the owner out with no warning. Note the fresh signature is read
+           from b.signature; when the account already had wallet 2FA, verifyCurrentFactor above consumed its own
+           nonce, so this takes a separate one issued for this address. */
+        if (!alreadyProved) {
+          const proof = consumeNonce(addr, b.signature, '2fa-on');   // a sign-in signature cannot arm the lock
+          if (proof.error) return bad(res, proof.error, 401);
+        }
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
         return send(res, 200, { ok: true });
       }
@@ -5785,14 +5869,15 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('nonce:' + clientIp(req), 60, 9e5)) return bad(res, 'slow down', 429);
         const address = String(url.searchParams.get('address') || '').toLowerCase();
         if (!/^0x[0-9a-f]{40}$/.test(address)) return bad(res, 'bad address');
-        return send(res, 200, { message: issueNonce(address) }); // domain-bound (SIWE-style), stored encrypted, 10-minute expiry
+        // the purpose decides the sentence the wallet shows AND what the resulting signature may be used for
+        return send(res, 200, { message: issueNonce(address, String(url.searchParams.get('purpose') || 'signin')) }); // EIP-4361, stored encrypted, 10-minute expiry
       }
       if (p === '/api/auth/wallet/verify' && req.method === 'POST') {
         if (!rateLimit('wverify:' + clientIp(req), 60, 9e5)) return bad(res, 'slow down', 429);
         const b = await readBody(req);
         const address = String(b.address || '').toLowerCase();
         if (!/^0x[0-9a-f]{40}$/.test(address)) return bad(res, 'bad address');
-        const sig = consumeNonce(address, b.signature);
+        const sig = consumeNonce(address, b.signature, me ? 'link' : 'signin');   // signed in ⇒ this is a link, not a sign-in
         if (sig.error) return bad(res, sig.error, 401);
         let ident = findIdentity('wallet', address);
         // a SIGNED-IN user linking a wallet that already belongs to an account must never be silently switched to that
@@ -5807,6 +5892,12 @@ const server = http.createServer(async (req, res) => {
           username = db.prepare('SELECT username FROM users WHERE id = ?').get(userId).username;
         } else if (me) {
           if (walletAddresses(me.id).length >= MAX_LINKED_WALLETS) return bad(res, 'you can link up to ' + MAX_LINKED_WALLETS + ' wallets — tap Disconnect wallet to start over');
+          /* Linking a wallet ADDS A WAY INTO THE ACCOUNT, so it has to pass whatever already guards the account.
+             Without this, a stolen session cookie was enough to attach an attacker's own wallet — and from there
+             to enable wallet 2FA with it and lock the real owner out for good, since every exit then demands a
+             signature only the attacker can produce. /api/account/email is gated for exactly this reason; the
+             wallet door was not. A curl request sends no Origin header, so the CSRF check never covered it. */
+          if (me.twofa_method) { const err = await verifyCurrentFactor(me, b.current || {}); if (err) return bad(res, 'to link a wallet, ' + err, 401); }
           insertIdentity(me.id, 'wallet', address);
           forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
           // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
@@ -5835,11 +5926,22 @@ const server = http.createServer(async (req, res) => {
         // an existing account with a NON-wallet second factor (authenticator / password) must still pass it — a wallet
         // signature alone is the first factor here, not both
         if (ident) {
-          const u2 = db.prepare('SELECT twofa_method FROM users WHERE id = ?').get(userId);
+          const u2 = db.prepare('SELECT twofa_method, twofa_enabled_at FROM users WHERE id = ?').get(userId);
           if (u2 && u2.twofa_method && u2.twofa_method !== 'wallet') {
             const pend = rand(16);
             pendingLogins.set(pend, { userId, expires: now() + 3e5 });
             return send(res, 200, { twofa: u2.twofa_method, pending: pend, username });
+          }
+          /* On a wallet-2FA account the wallet IS the factor — but only a wallet linked BEFORE two-factor was
+             switched on. verifyCurrentFactor and /api/auth/login/wallet2fa both enforce that; this door did not,
+             so a wallet attached with a stolen cookie stayed a factor-free way in long after the session that
+             attached it was revoked. Same shape as the OAuth hole: a second factor with an unguarded side
+             entrance is not a second factor. */
+          if (u2 && u2.twofa_method === 'wallet' && u2.twofa_enabled_at) {
+            const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(userId, bidx(address));
+            if (w && w.linked_at && w.linked_at > u2.twofa_enabled_at) {
+              return bad(res, 'that wallet was linked after two-factor was turned on — sign in with the wallet you enabled it with', 401);
+            }
           }
         }
         return send(res, 200, { ok: true, username, newAccount: !ident }, { 'Set-Cookie': sessionCookie(createSession(userId)) });

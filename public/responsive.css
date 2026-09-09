@@ -162,3 +162,6 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .sup-note { color: var(--text-dim); margin: 0.5rem 0 0; line-height: 1.5; }
 .sup-foot { text-align: center; color: var(--text-dim); font-size: 0.88rem; margin: 2rem auto 0; max-width: 52ch; line-height: 1.6; }
 .sup-foot a { font-weight: 800; }
+
+/* a carried-forward price (the feed could not be read) is labelled, never drawn as a live one */
+.np-mc .np-stat-lbl { white-space: nowrap; }

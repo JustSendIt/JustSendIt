@@ -194,12 +194,36 @@ function setWallLinks(name) {
 }
 
 /* ---------- security ---------- */
+/* Proof of the account's CURRENT second factor, for changes that add or remove a way in. Linking a wallet is
+   one of those: a wallet on the account can sign in with it, so attaching one from a borrowed session was
+   enough to take the account permanently. Returns {} when the account has no factor to prove. */
+async function currentFactorBody(note) {
+  const m = AUTH.user && AUTH.user.twofa;
+  if (!m) return {};
+  if (m === 'password') {
+    const pw = prompt((note || 'Confirm this change') + '\n\nEnter your account password:');
+    if (!pw) throw new Error('cancelled');
+    return { password: pw };
+  }
+  if (m === 'totp') {
+    const code = prompt((note || 'Confirm this change') + '\n\nEnter the 6-digit code from your authenticator app:');
+    if (!code) throw new Error('cancelled');
+    return { code: code.trim() };
+  }
+  // wallet 2FA: sign a management challenge with a wallet ALREADY on the account
+  sendToast('Connect the wallet your two-factor is set to, and sign to confirm ✍️');
+  const { provider, address } = await WALLET.connect();
+  const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
+  const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+  return { address, signature };
+}
 async function linkWallet() {
   try {
+    const current = await currentFactorBody('Linking a wallet adds a new way to sign in to this account.');
     const { provider, address } = await WALLET.connect();
-    const { message } = await api('/api/auth/wallet/nonce?address=' + address);
+    const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
     const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature } });
+    const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature, current } });
     if (j.alreadyLinked) { sendToast('That wallet is already linked to your account ✅'); return; } // nothing changed — don't re-fetch everything
     if (j.linked) { sendToast('Wallet linked 🔗'); await loadMe(); loadConnectedWallet(); if (window.loadGamify) loadGamify(); if (window.refreshNavBalances) refreshNavBalances(); }
     // a wallet owned by ANOTHER account now comes back as a 409 and surfaces through the catch below
@@ -229,10 +253,18 @@ async function enableWallet2fa() {
        right now. One click used to be enough, and a wallet whose seed was already gone locked the account
        permanently with no warning at all. */
     if (!confirm('Turn on wallet two-factor?\n\nFrom now on, signing in will need a signature from this wallet — and so will turning two-factor back off. If you lose access to the wallet, you lose access to the account.\n\nYou will be asked to sign now to prove you can.')) return;
+    const current = await currentFactorBody('Turning on wallet two-factor changes how you sign in.');
     const { provider, address } = await WALLET.connect();
-    const { message } = await api('/api/auth/wallet/nonce?address=' + address);
+    const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    await api('/api/2fa/wallet/enable', { method: 'POST', body: { address, signature } });
+    const body = { address, signature, current };
+    // an account with a password proves it with the password, so a borrowed session alone can never arm the lock
+    if (!(AUTH.user && AUTH.user.twofa) && AUTH.user && (AUTH.user.methods || []).includes('email')) {
+      const pw = prompt('Turning on wallet two-factor means this wallet becomes required to sign in.\n\nEnter your account password to confirm:');
+      if (!pw) throw new Error('cancelled');
+      body.password = pw;
+    }
+    await api('/api/2fa/wallet/enable', { method: 'POST', body });
     sendToast('Wallet 2FA is ON 🔐');
     loadMe();
   } catch (e) { sendToast('⚠️ ' + (e.message || 'cancelled')); }
@@ -251,7 +283,7 @@ async function addEmail(e) {
     try {
       st.textContent = 'Sign with your linked wallet to confirm… ✍️';
       const { provider, address } = await WALLET.connect();
-      const { message } = await api('/api/auth/wallet/nonce?address=' + address);
+      const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
       body.address = address; body.signature = await provider.request({ method: 'personal_sign', params: [message, address] });
     } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + (err.message || 'cancelled'); return; }
   }
@@ -276,7 +308,7 @@ async function disable2fa() {
     } else if (AUTH.user && AUTH.user.twofa === 'wallet') {
       // wallet 2FA can only be removed by signing with a linked wallet
       const { provider, address } = await WALLET.connect();
-      const { message } = await api('/api/auth/wallet/nonce?address=' + address);
+      const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
       const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
       await api('/api/2fa/disable', { method: 'POST', body: { address, signature } });
     } else {

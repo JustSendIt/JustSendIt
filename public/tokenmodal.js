@@ -68,8 +68,11 @@
       }
       // "delisted or rugged" is a claim about someone's money. It is only said when the chain itself told us
       // there is no pool — never when we simply could not reach the price feed, which used to read the same.
-      else if (j && j.unavailable) { const m = document.createElement('p'); m.className = 'tm-msg'; m.textContent = '⏳ ' + (j.message || 'We couldn’t check this token just now — nothing here is a judgement about it. Try again in a moment.'); body.innerHTML = comm; body.insertAdjacentElement('afterbegin', m); }
-      else body.innerHTML = '<p class="tm-msg">🤷 No trading pool exists for this token on Robinhood Chain — the chain itself says so, so there is nothing to price. It may never have launched, or its pool may be gone.</p>' + comm;
+      // The hard verdict requires the server to have actually SAID notFound. Every other non-OK answer — a 429,
+      // a 502, a timeout, a busy 503 — is us failing to check, and must not be dressed up as a fact about the token.
+      else if (!r.ok || (j && j.unavailable)) { const m = document.createElement('p'); m.className = 'tm-msg'; m.textContent = '⏳ ' + ((j && (j.message || j.error)) || 'We couldn’t check this token just now — nothing here is a judgement about it. Try again in a moment.'); body.innerHTML = comm; body.insertAdjacentElement('afterbegin', m); }
+      else if (j && j.notFound) body.innerHTML = '<p class="tm-msg">🤷 No trading pool exists for this token on Robinhood Chain — the chain itself says so, so there is nothing to price. It may never have launched, or its pool may be gone.</p>' + comm;
+      else { const m = document.createElement('p'); m.className = 'tm-msg'; m.textContent = '⏳ We couldn’t read this token just now. Nothing here is a judgement about it — reopen in a moment.'; body.innerHTML = comm; body.insertAdjacentElement('afterbegin', m); }
       if (window.decorateTokenCommunities) decorateTokenCommunities(body);
     } catch (e) { if (my === seq) body.innerHTML = '<p class="tm-msg">Couldn’t load the detail — close and try again.</p>'; }
   }

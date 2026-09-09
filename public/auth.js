@@ -261,7 +261,7 @@
         status.textContent = 'Choose your wallet… 👛';
         const { provider, address } = await WALLET.connect();
         status.textContent = 'Approve the signature in your wallet… ✍️';
-        const { message } = await api('/api/auth/wallet/nonce?address=' + address);
+        const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
         const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
         const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature } });
         status.textContent = '';

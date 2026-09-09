@@ -428,7 +428,8 @@
         badgesHTML(p) +
       '</span>' +
       '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
-      '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">MC</i></span>' +
+      // a carried price must never draw identically to a live one — the label says which it is
+      '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">' + (p.priceStale ? '⏳ last read' : 'MC') + '</i></span>' +
       '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
       '<span class="np-chg-slot">' + chgChipHTML(p.priceChange.h1) + '</span>' +
       callBtnHTML(p) +
@@ -747,7 +748,8 @@
     if (state.safety === 'safer' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhidden">' + hidden + ' hidden (risky or under ' + SAFER_MIN + '%)</button>';
     else if (state.safety === 'all' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhigh">🛡️ ' + hidden + ' high-risk hidden ☠️</button>';
     if (ago != null) txt += ' · <span class="np-ago">updated ' + (ago < 60 ? ago + 's' : Math.round(ago / 60) + 'm') + ' ago</span>';
-    if (npData.stale) txt = '<span class="np-live-dot stale" aria-hidden="true"></span> ⚠️ Feed may be stale · ' + txt.replace(/^<span[^>]*><\/span> /, '');
+    if (npData.degraded) txt = '<span class="np-live-dot stale" aria-hidden="true"></span> ⚠️ Price feed unreachable (' + esc(npData.degraded) + ') — showing the last reading we actually took · ' + txt.replace(/^<span[^>]*><\/span> /, '');
+    else if (npData.stale) txt = '<span class="np-live-dot stale" aria-hidden="true"></span> ⚠️ Feed may be stale · ' + txt.replace(/^<span[^>]*><\/span> /, '');
     statusEl.innerHTML = txt;
   }
 
@@ -866,7 +868,7 @@
   }
 
   /* ---------- data ---------- */
-  let npData = { building: true, error: null, stale: false };
+  let npData = { building: true, error: null, stale: false, degraded: null };
   function ingest(all) {
     const pairs = all.filter(identified);      // an unidentifiable token never enters the radar's state at all
     const map = new Map(); pairs.forEach(p => map.set(p.pair.address, p));
@@ -892,7 +894,11 @@
         if (j.note) { chainNote.textContent = j.note; chainNote.hidden = false; }
         else { chainNote.textContent = ''; chainNote.hidden = true; }
       }
-      npData.stale = j.updatedAt ? (Date.now() - j.updatedAt > 4 * 60 * 1000) : false;
+      /* A degraded sweep republishes with a FRESH updatedAt — the scan really did just run — so the age test
+         alone would call an outage "live". The server says so directly; take it. Without this the carried
+         prices from the previous read would draw exactly like current ones. */
+      npData.degraded = j.degraded || null;
+      npData.stale = !!j.degraded || (j.updatedAt ? (Date.now() - j.updatedAt > 4 * 60 * 1000) : false);
       state.lastFetch = Date.now();
       if (!j.pairs || !j.pairs.length) { if (!state.all.length) { state.started = true; if (state.mode === 'feed') renderFeedState(); else render(); } else if (state.mode === 'feed') { updateFeedLive(); } else updateStatus(); return; }
       const firstLoad = !state.started;
@@ -1490,6 +1496,7 @@
       ' — where +100% = 1x, the same as a Send Call. That is our first sighting, not a call and not a recommendation.');
     const since = (r.sinceX == null || sameAsGain) ? '' : '<span class="np-runner-since ' + (r.sinceX > 0 ? 'up' : r.sinceX < 0 ? 'down' : 'flat') + '" role="img" aria-label="' + sinceTip + '" title="' + sinceTip + '">🔎 <b>' + callX(r.sinceX) + '</b> <i>since scanned</i></span>';
     return '<span class="np-runner-mc" role="img" aria-label="Market cap ' + npFmtUsd(r.mcap) + '" title="Current market cap">💰 ' + npFmtUsd(r.mcap) + '</span>' +
+
       '<span class="np-runner-gain ' + (r.gain >= 0 ? 'up' : 'down') + '" role="img" aria-label="' + gainDetail + '" title="' + gainDetail + '">' + runnerGain(r.gain) + '</span>' +
       since + health + note;
   }
