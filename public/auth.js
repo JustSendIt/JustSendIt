@@ -70,7 +70,7 @@
         <button class="btn btn-primary" id="wallet2fa-submit" style="width:100%;">Sign With Wallet 🦊</button>
       </div>
       <div id="twofa-password" hidden>
-        <p class="modal-note">🔐 Two-factor is on for this account. Enter your account password to finish signing in with your wallet.</p>
+        <p class="modal-note">🔐 Two-factor is on for this account. Enter your account password to finish signing in.</p>
         <label class="f-label" for="f-2fa-pw">Account password</label>
         <input class="addr-input" id="f-2fa-pw" type="password" autocomplete="current-password" placeholder="••••••••">
         <button class="btn btn-primary" id="pw2fa-submit" style="width:100%;">Verify ✅</button>
