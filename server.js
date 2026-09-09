@@ -6779,6 +6779,33 @@ const server = http.createServer(async (req, res) => {
           ...(data || {}),
         });
       }
+      /* ----- Telegram scanner ----- */
+      // Public: what the New Pairs page needs to offer the bot honestly — including saying it is not set up.
+      if (p === '/api/telegram/info' && req.method === 'GET') {
+        const uname = tgMe && tgMe.username ? tgMe.username : null;
+        return send(res, 200, {
+          enabled: !!(TG_ON && uname),
+          username: uname,
+          bot: uname ? 'https://t.me/' + uname : null,
+          addToGroup: uname ? 'https://t.me/' + uname + '?startgroup=scan' : null,
+          scanPrefix: uname ? 'https://t.me/' + uname + '?start=' : null,   // + a token address
+        });
+      }
+      /* Telegram POSTs updates here. The secret header is the only thing that makes this endpoint ours:
+         the URL is guessable, so without it anyone could feed the bot fabricated updates. Compared in
+         constant time, and the route stays closed entirely unless a bot token is configured. */
+      if (p === '/api/telegram/webhook' && req.method === 'POST') {
+        if (!TG_ON) return bad(res, 'not found', 404);
+        const got = String(req.headers['x-telegram-bot-api-secret-token'] || '');
+        const want = TG_SECRET;
+        const ok = got.length === want.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+        if (!ok) return bad(res, 'not found', 404);
+        let u = null; try { u = await readBody(req, 1024 * 1024); } catch { return bad(res, 'bad update'); }
+        // answer Telegram immediately; a scan takes seconds and it retries anything it thinks timed out
+        send(res, 200, { ok: true });
+        handleTgUpdate(u).catch((e) => console.error('telegram update failed:', e.message));
+        return;
+      }
       if (p === '/api/pairs/lookup' && req.method === 'GET') {
         const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
         if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'enter a valid 0x token address');
@@ -7577,6 +7604,229 @@ propTimer.unref();
 commHolderTimer.unref();
 
 // Reap upload-then-abandon media (never attached to a post) so they don't leak disk + quota.
+
+/* ===== Telegram: the scanner, in anyone's chat ==========================================================
+   The radar's whole value is reading a token BEFORE someone buys it, and the moment that decision gets made
+   is usually in a Telegram group where a contract address just landed — not on a website someone remembers
+   to open. So the same scan the New Pairs page runs is available as a bot that anyone can add to any group.
+
+   It is the SAME scan: lookupTokenPair → the identical risk engine, the identical verdict rule, the identical
+   refusal to guess. Nothing is softened for chat. In particular the bot inherits the two rules that matter:
+   "Looks Good, Send It" needs a clean block-0 result, and an upstream we could not read is reported as
+   unknown, never as a verdict about someone's token.
+
+   Off unless TELEGRAM_BOT_TOKEN is set, exactly like the OAuth providers. Two ways to receive updates:
+   a webhook when the site has a public https origin, long-polling otherwise (which is what works from a
+   laptop with no domain — the state this project is in today). Both feed one handler.
+   ======================================================================================================== */
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TG_ON = /^\d{6,}:[A-Za-z0-9_-]{30,}$/.test(TG_TOKEN);
+// Telegram signs webhook deliveries with a header we choose. Derived from the bot token so an operator has
+// nothing extra to configure, and never sent anywhere except back to us by Telegram.
+const TG_SECRET = TG_ON ? crypto.createHash('sha256').update('tgwh:' + TG_TOKEN).digest('hex').slice(0, 32) : '';
+const TG_PUBLIC = TG_ON && /^https:\/\//i.test(BASE_URL) && !/localhost|127\.0\.0\.1|yourdomain\.com/i.test(BASE_URL);
+let tgMe = null;                  // { id, username } once getMe answers
+let tgOffset = 0;                 // long-poll cursor
+let tgPolling = false;
+const TG_SCAN_CAP = 6;            // scans per chat per minute — a scan costs real upstream reads
+
+async function tgApi(method, params, timeoutMs = 12000) {
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/' + method, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params || {}), signal: ctrl.signal,
+    });
+    const j = await r.json();
+    // never let the bot token reach a log line — it is the whole credential
+    if (!j.ok) throw new Error(method + ': ' + (j.description || 'telegram refused'));
+    return j.result;
+  } finally { clearTimeout(to); }
+}
+const tgEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function tgSend(chatId, html, extra) {
+  return tgApi('sendMessage', {
+    chat_id: chatId, text: html, parse_mode: 'HTML',
+    link_preview_options: { is_disabled: true },
+    ...(extra || {}),
+  }).catch((e) => { console.error('telegram send failed:', e.message); });
+}
+
+/* The verdict rule, server-side. It mirrors verdictOf() in public/newpairs.js deliberately — the two must
+   agree, because the same token read in a group and on the site giving different answers would make both
+   untrustworthy. If you change one, change the other. */
+function scanVerdict(p) {
+  const r = p.risk || {};
+  const health = Math.round(r.health || 0);
+  if (r.thinData) return { emoji: '🌫️', word: 'Not enough data yet', note: 'Too little is readable about this token to judge it. That is not a pass — it is an unknown.' };
+  if (r.triage === 'ok' && health >= 100 && r.sniperOk !== true) {
+    const st = r.snipers && r.snipers.status;
+    return (st === 'done' || st === 'partial')
+      ? { emoji: '🎯', word: 'Block-0 snipers sold', note: 'Everything else looks clean, but the wallets that bought in the very first block are net sellers.' }
+      : { emoji: '🌫️', word: 'Checking block 0…', note: 'Everything else looks clean; the first-block check has not finished, so the top verdict is withheld.' };
+  }
+  if (r.triage === 'ok' && health >= 100 && r.sniperOk === true) return { emoji: '🚀', word: 'Looks Good, Send It', note: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' };
+  if (r.triage === 'ok') return { emoji: '🙂', word: 'Nothing obvious tripped', note: '' };
+  if (r.triage === 'caution') return { emoji: '⚠️', word: 'Be careful', note: '' };
+  if (r.triage === 'high') return { emoji: '🚨', word: 'High risk', note: '' };
+  return { emoji: '☠️', word: 'Avoid', note: '' };
+}
+
+const tgUsd = (n) => n == null ? 'unknown' : (n >= 1e9 ? '$' + (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + (n / 1e3).toFixed(1) + 'k' : '$' + n.toFixed(2));
+const tgAge = (m) => m == null ? 'unknown' : m < 60 ? Math.round(m) + 'm old' : m < 1440 ? Math.round(m / 60) + 'h old' : Math.round(m / 1440) + 'd old';
+
+function tgScanMessage(p) {
+  const r = p.risk || {}, v = scanVerdict(p);
+  const sym = p.token.symbol ? '$' + p.token.symbol : 'this token';
+  const L = [];
+  L.push('<b>' + tgEsc(p.token.name || 'Unnamed token') + ' ' + tgEsc(sym) + '</b>');
+  L.push(v.emoji + ' <b>' + tgEsc(v.word) + '</b> · health ' + Math.round(r.health || 0) + '/100');
+  if (v.note) L.push('<i>' + tgEsc(v.note) + '</i>');
+  L.push('');
+  L.push('💰 Market cap: ' + tgEsc(tgUsd(p.market.marketCap)) + '   💧 Liquidity: ' + tgEsc(tgUsd(p.market.liquidityUsd)));
+  L.push('👥 Holders: ' + (p.holders.count == null ? 'unknown' : p.holders.count) + '   🕐 ' + tgEsc(tgAge(p.pair.ageMinutes)));
+
+  // every flag that actually tripped, in the site's own words
+  const tripped = Object.keys(RISK).filter(k => r[k]);
+  if (tripped.length) {
+    L.push('');
+    L.push('<b>What tripped:</b>');
+    for (const k of tripped.slice(0, 8)) L.push('• ' + tgEsc(RISK[k].label));
+  }
+
+  /* What we could NOT read, said out loud. A check that did not run is not a check that passed, and a chat
+     is exactly where that difference gets lost. */
+  const unknown = [];
+  const dk = r.dataKnown || {};
+  if (!dk.liquidity) unknown.push('liquidity');
+  if (!dk.holders) unknown.push('holder count');
+  if (!dk.concentration) unknown.push('holder concentration');
+  if (!dk.verified) unknown.push('contract verification');
+  if (!dk.snipers) unknown.push('the block-0 buyers');
+  if (unknown.length) {
+    L.push('');
+    L.push('❓ <b>Could not read:</b> ' + tgEsc(unknown.join(', ')) + ' — treated as unknown, not as passed.');
+  }
+  if (p.priceStale) L.push('⏳ The price feed was unreachable on the last sweep; the figures above are the last reading we actually took.');
+
+  L.push('');
+  L.push('<code>' + tgEsc(p.token.address) + '</code>');
+  const site = BASE_URL.replace(/\/+$/, '');
+  L.push('🔎 <a href="' + tgEsc(site + '/newpairs.html') + '">Full scan on the radar</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
+  L.push('');
+  L.push('<i>🎉 Entertainment only — not financial advice, and never a signal to buy. Most new tokens go to zero. Do your own research.</i>');
+  return L.join('\n');
+}
+
+/* One scan, shared by every entry point. Returns the message text. */
+async function tgScan(addr) {
+  let out;
+  try { out = await lookupTokenPair(addr); }
+  catch (e) {
+    return '⏳ Couldn’t read that token just now (' + tgEsc((e && e.message) || 'upstream error') +
+      '). Nothing here is a judgement about it — try again in a moment.';
+  }
+  if (out && out.unavailable) return '⏳ ' + tgEsc(out.reason ? 'Couldn’t reach the price feed or the chain (' + out.reason + ').' : 'Couldn’t check that token just now.') + ' Nothing here is a judgement about it — try again in a moment.';
+  if (out && out.notFound) return '🤷 No trading pool exists for that address on Robinhood Chain — the chain itself says so. It may never have launched, or its pool may be gone.';
+  if (!out || !out.pair) return '⏳ Couldn’t read that token just now. Nothing here is a judgement about it — try again in a moment.';
+  return tgScanMessage(out.pair);
+}
+
+const TG_HELP = [
+  '👋 <b>I scan tokens on Robinhood Chain.</b>',
+  '',
+  'Send me a contract address — or use <code>/scan &lt;address&gt;</code> — and I’ll read it straight from the chain: liquidity, holders, who bought in the very first block, and the traps worth knowing about.',
+  '',
+  '<b>In a group:</b> add me and I’ll answer <code>/scan &lt;address&gt;</code> for anyone. I only reply when asked, and I never read anything else.',
+  '',
+  'I say what I <i>could not</i> check as clearly as what I did. A check that did not run is never reported as one that passed.',
+  '',
+  '<i>🎉 Entertainment only — not financial advice, and never a signal to buy.</i>',
+].join('\n');
+
+const TG_ADDR_RE = /0x[0-9a-fA-F]{40}/;
+
+async function handleTgUpdate(u) {
+  const msg = u && (u.message || u.channel_post || u.edited_message);
+  if (!msg || !msg.chat) return;
+  const chatId = msg.chat.id;
+  const text = String(msg.text || msg.caption || '').trim();
+  if (!text) return;
+
+  // /command, /command@thisbot — ignore a command explicitly aimed at a DIFFERENT bot in the same group
+  const cmd = /^\/([a-z_]+)(?:@([A-Za-z0-9_]+))?\b\s*(.*)$/s.exec(text);
+  if (cmd && cmd[2] && tgMe && cmd[2].toLowerCase() !== String(tgMe.username || '').toLowerCase()) return;
+  const name = cmd ? cmd[1].toLowerCase() : null;
+  const rest = cmd ? cmd[3] : '';
+
+  if (name === 'start' || name === 'help') {
+    // a deep link (t.me/bot?start=<address>) arrives as /start <address> — scan it straight away
+    const deep = TG_ADDR_RE.exec(rest || '');
+    if (name === 'start' && deep) return void tgSend(chatId, await tgScanGuarded(chatId, deep[0]));
+    return void tgSend(chatId, TG_HELP);
+  }
+
+  let addr = null;
+  if (name === 'scan') {
+    const m = TG_ADDR_RE.exec(rest || '');
+    if (!m) return void tgSend(chatId, 'Send it like this: <code>/scan 0x…</code> — a token contract address on Robinhood Chain.');
+    addr = m[0];
+  } else if (!cmd && msg.chat.type === 'private') {
+    // in a DM, a bare address is obviously a scan request; in a group it is not — groups must ask
+    const m = TG_ADDR_RE.exec(text);
+    if (m) addr = m[0];
+  }
+  if (!addr) return;
+  return void tgSend(chatId, await tgScanGuarded(chatId, addr));
+}
+
+// per-chat budget: a scan costs real upstream reads, and the bot can be in any number of groups
+async function tgScanGuarded(chatId, addr) {
+  if (!rateLimit('tgscan:' + chatId, TG_SCAN_CAP, 60000)) {
+    return '🧊 That’s a lot of scans at once — give me a minute. (Each one is a fresh read of the chain.)';
+  }
+  return tgScan(addr.toLowerCase());
+}
+
+/* Long-poll loop: the only mode that works without a public https origin, which is where this project is
+   today. getUpdates holds the connection open for up to 50s, so this is one idle request at a time, not a
+   busy loop. Switched off automatically when a webhook is in use. */
+async function tgPoll() {
+  if (!TG_ON || tgPolling || TG_PUBLIC) return;
+  tgPolling = true;
+  try {
+    const ups = await tgApi('getUpdates', { offset: tgOffset, timeout: 50, allowed_updates: ['message', 'channel_post'] }, 60000);
+    for (const u of ups || []) {
+      tgOffset = Math.max(tgOffset, u.update_id + 1);
+      try { await handleTgUpdate(u); } catch (e) { console.error('telegram update failed:', e.message); }
+    }
+  } catch (e) {
+    if (!/aborted|abort/i.test(e.message || '')) console.error('telegram poll:', e.message);
+    await new Promise(r => setTimeout(r, 5000));   // back off before the next attempt
+  } finally { tgPolling = false; }
+}
+
+async function tgStart() {
+  if (!TG_ON) return;
+  try {
+    tgMe = await tgApi('getMe');
+    console.log('🤖 Telegram scanner live as @' + tgMe.username + (TG_PUBLIC ? ' (webhook)' : ' (polling)'));
+    if (TG_PUBLIC) {
+      await tgApi('setWebhook', {
+        url: BASE_URL.replace(/\/+$/, '') + '/api/telegram/webhook',
+        secret_token: TG_SECRET,
+        allowed_updates: ['message', 'channel_post'],
+      });
+    } else {
+      await tgApi('deleteWebhook', {}).catch(() => {});   // polling and a webhook are mutually exclusive
+      setInterval(() => { tgPoll().catch(() => {}); }, 1000).unref();
+    }
+  } catch (e) {
+    console.error('⚠️  Telegram bot could not start:', e.message, '— the site runs fine without it.');
+  }
+}
+
 const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();
 
@@ -7621,7 +7871,7 @@ function productionChecks() {
   }
 }
 
-server.listen(PORT, () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
+server.listen(PORT, () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
 
 // New Pairs Radar is hidden (unlinked from the nav) — no background refresher runs so we don't hit the
 // RPC/Blockscout/Dexscreener every 90s for a page nobody can reach. The /api/pairs/new endpoint still

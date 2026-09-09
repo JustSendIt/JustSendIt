@@ -634,6 +634,7 @@
       // the first buyers this pool ever had — filled in by block0.js wherever this body is inserted
       group('block0', '🎯 Block 0 — the first buyers', S.block0 !== false, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
       group('contract', '📄 Contract &amp; copy', S.contract, contractInner) +
+      (tgTokenLink(p.token.address) ? '<p class="np-tg-row">' + tgTokenLink(p.token.address) + '</p>' : '') +
       '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p></div>';
   }
   function rowHTML(p) {
@@ -1588,12 +1589,43 @@
     });
   }
 
+  /* The Telegram scanner offer. Fetched rather than hardcoded so the page can be honest when the bot is not
+     configured on this server: a dead t.me link that 404s would be worse than saying so. Shown on the Best
+     Runners and DEX List views; the Hot Feed is a full-screen player and nothing else belongs in it. */
+  let tgInfo = null;
+  async function loadTelegram() {
+    const box = document.getElementById('np-tg');
+    if (!box || tgInfo) return;
+    try { tgInfo = await fetch('/api/telegram/info', { credentials: 'same-origin' }).then(r => r.json()); }
+    catch { return; }
+    const sub = document.getElementById('np-tg-sub'), actions = document.getElementById('np-tg-actions');
+    if (tgInfo.enabled) {
+      sub.textContent = 'Add @' + tgInfo.username + ' to any group and anyone there can scan a contract address the moment it lands — without leaving the chat.';
+      actions.innerHTML =
+        '<a class="btn btn-primary" href="' + esc(tgInfo.addToGroup) + '" target="_blank" rel="noopener">➕ Add to a group</a>' +
+        '<a class="btn btn-ghost" href="' + esc(tgInfo.bot) + '" target="_blank" rel="noopener">💬 Try it in a DM</a>' +
+        '<code class="np-tg-cmd">/scan 0x…</code>';
+    } else {
+      // no bot token on this server — say that, rather than offering a link that goes nowhere
+      sub.textContent = 'The scanner can run as a Telegram bot you add to your own group, so anyone can check a contract address without leaving the chat. It isn’t switched on for this site yet.';
+      actions.innerHTML = '<p class="np-tg-off">Not configured on this server — no bot to add yet.</p>';
+    }
+    box.hidden = false;
+  }
+  // a per-token deep link: opens the bot with THIS token already scanned
+  function tgTokenLink(addr) {
+    if (!tgInfo || !tgInfo.enabled || !addr) return '';
+    return '<a class="np-tg-token" href="' + esc(tgInfo.scanPrefix + addr) + '" target="_blank" rel="noopener" title="Scan this token in Telegram">📡 Scan in Telegram</a>';
+  }
+
   function setMode(mode) {
     const m = (mode === 'list' || mode === 'feed' || mode === 'runners') ? mode : 'runners';
     state.mode = m; persist();
     document.body.classList.toggle('np-mode-feed', m === 'feed');
     document.body.classList.toggle('np-mode-list', m === 'list');
     document.body.classList.toggle('np-mode-runners', m === 'runners');
+    const tgBox = document.getElementById('np-tg');
+    if (tgBox) { if (m === 'feed') tgBox.hidden = true; else loadTelegram(); }
     [['np-vs-feed', 'feed'], ['np-vs-list', 'list'], ['np-vs-runners', 'runners']].forEach(([id, mm]) => { const b = document.getElementById(id); if (b) { b.setAttribute('aria-selected', String(m === mm)); b.tabIndex = m === mm ? 0 : -1; } }); // roving tabindex: one tab stop for the tablist
     const runEl = document.getElementById('np-runners');
     const teardownFeed = () => { feedEl.hidden = true; if (feedObserver) { feedObserver.disconnect(); feedObserver = null; } feedTrack.innerHTML = ''; state.feedAddrs = []; state.activeAddr = null; };

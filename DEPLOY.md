@@ -125,6 +125,38 @@ project's `data/` path**, or the DB and uploads vanish on redeploy.
 
 ---
 
+## Telegram scanner bot (optional)
+
+The token scanner can run as a Telegram bot that anyone can add to their own group, so a contract address
+pasted into a chat can be checked without leaving it. It is off unless you configure it, and the site is
+completely unaffected either way.
+
+1. Message **@BotFather** on Telegram, send `/newbot`, and follow the prompts.
+2. Put the token it gives you in `.env`:
+
+   ```
+   TELEGRAM_BOT_TOKEN=1234567890:AA...
+   ```
+
+3. Still in @BotFather, run `/setjoingroups` for your bot and **allow** groups. Leave **privacy mode ON**
+   (the default): the bot then only ever receives messages addressed to it, not everything said in the group.
+4. Restart. The log will say `🤖 Telegram scanner live as @yourbot`.
+
+**Webhook vs polling is automatic.** With a public `https://` `BASE_URL` the bot registers a webhook at
+`/api/telegram/webhook`, authenticated with a secret header derived from the bot token — there is nothing
+extra to set. Without one (local dev, or before you have a domain) it long-polls instead, which needs no
+public URL at all. The two are mutually exclusive and the app handles the switch.
+
+**Usage:** `/scan <address>` in any chat, or just send an address in a DM. `t.me/yourbot?start=<address>`
+deep-links straight to a scan of that token — the New Pairs page uses this for its per-token
+"📡 Scan in Telegram" link.
+
+**Limits:** 6 scans per chat per minute, because each one is a real read of the chain and the explorer.
+
+**Note on the token:** it is the entire credential for the bot. It lives only in `.env` (git-ignored), is
+never written to a log line, and is never sent anywhere but Telegram. If it leaks, run `/revoke` in
+@BotFather immediately.
+
 ## Operate
 
 - **Health:** `GET /healthz` → `200 {"ok":true}` (answered before any DB work — perfect for LB/uptime probes).
