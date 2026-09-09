@@ -50,13 +50,13 @@
   <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
-<header class="profile-hero" style="padding-bottom:0.8rem;">
-  <h1 class="section-title display green" style="margin-bottom:0.4rem;">Communities 🏘️</h1>
-  <p class="section-sub" style="margin-bottom:0.9rem;">Rally around a token. Paste a contract to <b>start a community</b> — it goes <b>LIVE at 10 members</b>. Anyone can read a live community's wall; <b>members</b> (verified holders) post photos, GIFs &amp; videos there and earn a <b>⚡ 10× Send Power</b> multiplier on everything. Every community lists its members ranked by <b>member level</b> — and participating levels both you <b>and</b> the community up, exponentially.</p>
+<header class="profile-hero comm-page comm-hero-top-page">
+  <h1 class="section-title display green">Communities 🏘️</h1>
+  <p class="section-sub">Rally around a token. Paste a contract to <b>start a community</b> — it goes <b>LIVE at 10 members</b>. Anyone can read a live community's public wall, and every community also has a <b>🔒 holders-only wall</b> that only its verified holders can see. <b>Members</b> (verified holders) post photos, GIFs &amp; videos on both and earn a <b>⚡ 10× Send Power</b> multiplier on everything. Every community lists its members ranked by <b>member level</b> — and participating levels both you <b>and</b> the community up, exponentially.</p>
 
   <form class="comm-start" id="comm-start" autocomplete="off">
     <label class="sr-only" for="comm-addr">Token contract address</label>
-    <input class="addr-input" id="comm-addr" type="text" inputmode="text" spellcheck="false" placeholder="Paste a token contract address (0x…)" pattern="0x[0-9a-fA-F]{40}" aria-describedby="comm-start-msg">
+    <input class="addr-input" id="comm-addr" type="text" inputmode="text" spellcheck="false" placeholder="Token contract address (0x…)" pattern="0x[0-9a-fA-F]{40}" aria-describedby="comm-start-msg">
     <button class="btn btn-primary" id="comm-start-go" type="submit">🏛️ Start a community</button>
   </form>
   <p class="comm-start-msg" id="comm-start-msg" role="status" aria-live="polite"></p>
@@ -68,6 +68,7 @@
         <li>🏛️ <b>Anyone can start one</b> by pasting a token's contract address (needs ≥ $500 liquidity). A community is <b>not an endorsement</b> — the person who starts it is a <b>community starter</b>, never a "dev".</li>
         <li>🔟 A community goes <b>LIVE once 10 real holders opt in</b>. To start, join, or post you must <b>actually hold that token</b> — verified on-chain from a linked (read-only) wallet — plus no more than 2 counting opt-ins per network. Holding is checked on an <b>ongoing</b> basis: sell or move the tokens out and your spot (and the 10×) is revoked.</li>
         <li>🛠️ <b>One exception to "you must hold":</b> the token's own <b>deployer/owner wallet</b> (verified on-chain, from a wallet you've signed for) may start that token's community <b>without holding it</b> — devs often keep a clean wallet. That opt-in does <b>not</b> count as one of the 10 verified holders, so a dev can't tip their own community live.</li>
+        <li>🔒 <b>Two walls.</b> Every live community has a <b>public wall</b> anyone can read, and a <b>holders-only wall</b> only its verified holders can see — refused by the server to everyone else, and never shown on the Send Wall, on a profile, or in the public data feed. Sell the token and the private wall closes again.</li>
         <li>⚡ <b>10× Send Power:</b> while you're in <b>≥1 live community</b>, <b>a flat 10× boost is added to everything you earn</b> — every post, reaction and comment inside it included. Being in five communities is still one 10×, and it adds <b>on top of</b> your Holder Boost and OG bonus — boosts add, they don't multiply.</li>
         <li>👑 <b>Founder bonus:</b> the person whose community reaches 10 members earns a big <b>one-time Send Power bonus</b>.</li>
         <li>🏆 <b>Community level</b> (exponential curve) rises as <b>distinct members</b> stay active — posting, reacting, and calling the token. The most active communities float to the top.</li>
@@ -78,7 +79,7 @@
 </header>
 
 <main id="main" style="padding:0.4rem 1.25rem 4rem;">
-  <div class="wrap" style="max-width:1000px;">
+  <div class="wrap comm-page" style="max-width:1000px;">
     <section class="comm-officials" id="comm-officials" aria-labelledby="comm-officials-h" hidden>
       <h2 class="comm-officials-h" id="comm-officials-h">🏠 The official communities — jump in</h2>
       <p class="modal-note comm-officials-note">$Send and $GWC have their own communities from day one, run by the site itself. They're the easiest way to see what participating looks like: read the wall, then hold the token to opt in and earn <b>10× Send Power</b> on everything you do there.</p>

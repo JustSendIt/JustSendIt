@@ -472,6 +472,7 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN live_comm_count INTEGER NOT NULL DEFAULT 0",  // # of LIVE communities this user qualifies in (drives the flat 10× flag)
   "ALTER TABLE communities ADD COLUMN demo INTEGER NOT NULL DEFAULT 0",       // 1 = open sandbox community: no token required, and deliberately grants no 10×
   "ALTER TABLE posts ADD COLUMN community_id INTEGER",                        // NULL = Send Wall / profile; set = a community wall
+  "ALTER TABLE posts ADD COLUMN private INTEGER NOT NULL DEFAULT 0",          // 1 = the community's holders-only wall: readable ONLY by its verified holders
   // Convicted In: reference price/mcap captured when the token was pinned (basis for "Xs up since you convicted")
   "ALTER TABLE pinned_tokens ADD COLUMN pin_price REAL",                      // USD price at pin time (0/NULL = no baseline, e.g. legacy pin)
   "ALTER TABLE pinned_tokens ADD COLUMN pin_mc REAL",                         // market cap at pin time (for reference)
@@ -2034,6 +2035,23 @@ async function refreshRunners() {
     const n = db.prepare('SELECT COUNT(*) n FROM runner_tokens').get().n;
     if (n > RUNNER_KEEP) { const cut = db.prepare('SELECT last_seen_at FROM runner_tokens ORDER BY last_seen_at DESC LIMIT 1 OFFSET ?').get(RUNNER_KEEP); if (cut) { db.prepare('DELETE FROM runner_snaps WHERE token_addr IN (SELECT token_addr FROM runner_tokens WHERE last_seen_at < ?)').run(cut.last_seen_at); db.prepare('DELETE FROM runner_tokens WHERE last_seen_at < ?').run(cut.last_seen_at); } }
   } catch {}
+}
+/* ===== The holders-only wall ==========================================================================
+   A community has two walls: the public one anyone can read, and a private one only its VERIFIED holders
+   can see. "Verified holder" is the site's existing slot (community_members.qualified = 1) — at least
+   $25 of the token, read on-chain, and re-checked continuously by sweepCommunityHolders, so selling the
+   token takes the wall with it. The gate lives on the SERVER, on every path that can return a post: the
+   wall feed, the single-post route, comments, reactions and votes, and the Data API. A private post that
+   a viewer may not read is answered 404, never 403 — a 403 would confirm the post exists. */
+function canReadPrivateWall(userId, cid) {
+  if (!userId || !cid) return false;
+  return !!db.prepare('SELECT 1 FROM community_members WHERE community_id = ? AND user_id = ? AND qualified = 1').get(cid, userId);
+}
+// The author always keeps sight of their own post (they wrote it, and they may still delete it) even if
+// their holder slot lapses; everyone else needs a live slot in that community.
+function postVisible(row, me) {
+  if (!row || !row.private) return true;
+  return !!(me && (me.id === row.user_id || canReadPrivateWall(me.id, row.community_id)));
 }
 // Continuously re-verify qualified community members STILL hold the community's token — a sell or a recycled-bag move
 // revokes their qualification + the flat 10×, so holding is an ongoing requirement, not a one-time point-in-time check.
@@ -3617,6 +3635,7 @@ function postView(p, me) {
     score: p.score || 0, myVote,
     mine: !!(me && me.id === p.user_id),
     call_id: p.call_id || null,
+    private: !!p.private,          // a holders-only community post — the client badges it 🔒
     tokens: parseTokens(p.tokens), // [{addr,symbol,name}] → the client renders each $TICKER as a token chip
   };
   attachCalls([out], me); // if this post is a Send Call, attach its live widget data
@@ -3652,6 +3671,7 @@ function postsView(rows, me) {
       score: p.score || 0, myVote: myV[p.id] || 0,
       mine: !!(me && me.id === p.user_id),
       call_id: p.call_id || null,
+      private: !!p.private,          // a holders-only community post — the client badges it 🔒
       tokens: parseTokens(p.tokens), // $TICKER chips in feeds too, not just single-post views
     };
   });
@@ -4875,8 +4895,10 @@ const server = http.createServer(async (req, res) => {
         switch (dm[1]) {
           case 'me': return send(res, 200, { data: ownDataView(owner), generatedAt: now() });
           case 'users': { const rows = db.prepare('SELECT * FROM users WHERE system = 0 AND id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(publicUserView), r => r.id)); }
-          case 'posts': { const rows = db.prepare('SELECT * FROM posts WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(p => ({ ...postView(p, null), community_id: p.community_id || null })), r => r.id)); }
-          case 'comments': { const rows = db.prepare('SELECT c.id, c.post_id, c.text, c.tokens, c.created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id < ? ORDER BY c.id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(c => ({ ...c, tokens: parseTokens(c.tokens) })), r => r.id)); }
+          // a holders-only post is another user's private data: the key opens public data in bulk plus the key
+          // holder's OWN private data, so the owner's own posts come through and nobody else's do
+          case 'posts': { const rows = db.prepare('SELECT * FROM posts WHERE id < ? AND (private = 0 OR user_id = ?) ORDER BY id DESC LIMIT ?').all(before, owner.id, limit); return send(res, 200, page(rows.map(p => ({ ...postView(p, null), community_id: p.community_id || null })), r => r.id)); }
+          case 'comments': { const rows = db.prepare('SELECT c.id, c.post_id, c.text, c.tokens, c.created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id JOIN posts po ON po.id = c.post_id WHERE c.id < ? AND (po.private = 0 OR po.user_id = ?) ORDER BY c.id DESC LIMIT ?').all(before, owner.id, limit); return send(res, 200, page(rows.map(c => ({ ...c, tokens: parseTokens(c.tokens) })), r => r.id)); } // the discussion under a holders-only post is private too
           case 'calls': { const rows = db.prepare('SELECT c.*, u.username FROM calls c JOIN users u ON u.id = c.user_id WHERE c.id < ? ORDER BY c.id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(r => ({ username: r.username, ...callView(r, null) })), r => r.id)); }
           case 'communities': { const rows = db.prepare('SELECT * FROM communities WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(c => communityCardView(c, null)), r => r.id)); }
           case 'leaderboard': { const rows = db.prepare('SELECT * FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT ?').all(limit); return send(res, 200, { data: rows.map((u, i) => ({ rank: i + 1, ...publicUserView(u) })), limit }); }
@@ -5467,7 +5489,7 @@ const server = http.createServer(async (req, res) => {
       let m = /^\/api\/posts\/(\d+)$/.exec(p);
       if (m && req.method === 'GET') { // a single post (for deep-linking to it on the wall)
         const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(m[1]));
-        if (!row) return bad(res, 'post not found', 404);
+        if (!row || !postVisible(row, me)) return bad(res, 'post not found', 404); // a holders-only post does not exist for anyone else
         return send(res, 200, { post: postView(row, me) });
       }
       if (m && req.method === 'DELETE') {
@@ -5488,7 +5510,8 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const kind = b.kind === 'rocket' ? 'rocket' : 'fire';
         const postId = Number(m[1]);
-        if (!db.prepare('SELECT 1 FROM posts WHERE id = ?').get(postId)) return bad(res, 'not found', 404);
+        const pr = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(postId);
+        if (!pr || !postVisible(pr, me)) return bad(res, 'not found', 404);
         const existing = db.prepare('SELECT 1 FROM reactions WHERE post_id = ? AND user_id = ? AND kind = ?').get(postId, me.id, kind);
         let earned = 0;
         if (existing) db.prepare('DELETE FROM reactions WHERE post_id = ? AND user_id = ? AND kind = ?').run(postId, me.id, kind);
@@ -5521,8 +5544,8 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const dir = b.dir === 'down' ? -1 : (b.dir === 'up' ? 1 : 0);
         const postId = Number(m[1]);
-        const post = db.prepare('SELECT id, user_id FROM posts WHERE id = ?').get(postId);
-        if (!post) return bad(res, 'not found', 404);
+        const post = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(postId);
+        if (!post || !postVisible(post, me)) return bad(res, 'not found', 404);
         if (post.user_id === me.id) return bad(res, "you can't vote on your own post", 400); // keep score authoritative (no self-inflation)
         const prev = db.prepare('SELECT value FROM post_votes WHERE post_id = ? AND user_id = ?').get(postId, me.id);
         const prevVal = prev ? prev.value : 0;
@@ -5548,6 +5571,8 @@ const server = http.createServer(async (req, res) => {
       }
       m = /^\/api\/posts\/(\d+)\/comments$/.exec(p);
       if (m && req.method === 'GET') {
+        const cvp = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(Number(m[1]));
+        if (!cvp || !postVisible(cvp, me)) return bad(res, 'not found', 404); // the discussion under a holders-only post is holders-only too
         const rows = me
           ? db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY c.id ASC LIMIT 100').all(Number(m[1]), me.id)
           : db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? ORDER BY c.id ASC LIMIT 100').all(Number(m[1]));
@@ -5561,7 +5586,8 @@ const server = http.createServer(async (req, res) => {
         const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 300));
         const text = rt.text;
         if (!text) return bad(res, 'empty comment');
-        if (!db.prepare('SELECT 1 FROM posts WHERE id = ?').get(Number(m[1]))) return bad(res, 'not found', 404);
+        const cPost = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(Number(m[1]));
+        if (!cPost || !postVisible(cPost, me)) return bad(res, 'not found', 404);
         const cr = db.prepare('INSERT INTO comments (post_id, user_id, text, tokens, created_at) VALUES (?,?,?,?,?)').run(Number(m[1]), me.id, text, rt.tokens, now());
         const cEarned = awardPoints(me.id, 'comment', PTS.comment, 'comment:' + Number(cr.lastInsertRowid));
         const pa = db.prepare('SELECT user_id FROM posts WHERE id = ?').get(Number(m[1]));
@@ -6427,10 +6453,15 @@ const server = http.createServer(async (req, res) => {
           }
           if (sub === 'posts' && req.method === 'GET') {
             const beforeId = url.searchParams.get('before');
+            const canHolders = canReadPrivateWall(me && me.id, cid);
+            const holders = url.searchParams.get('wall') === 'holders';
+            // the private feed is refused outright, not filtered — a non-holder never receives one of these rows
+            if (holders && !canHolders) return bad(res, 'the holders-only wall is for verified holders of $' + c.symbol + ' — opt in with the token in a linked wallet to read it', 403);
+            const before = beforeId ? Number(beforeId) : Number.MAX_SAFE_INTEGER, priv = holders ? 1 : 0;
             const rows = me
-              ? db.prepare('SELECT * FROM posts WHERE community_id = ? AND id < ? AND user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY id DESC LIMIT 30').all(cid, beforeId ? Number(beforeId) : Number.MAX_SAFE_INTEGER, me.id)
-              : db.prepare('SELECT * FROM posts WHERE community_id = ? AND id < ? ORDER BY id DESC LIMIT 30').all(cid, beforeId ? Number(beforeId) : Number.MAX_SAFE_INTEGER);
-            return send(res, 200, { posts: postsView(rows, me), status: c.status });
+              ? db.prepare('SELECT * FROM posts WHERE community_id = ? AND private = ? AND id < ? AND user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY id DESC LIMIT 30').all(cid, priv, before, me.id)
+              : db.prepare('SELECT * FROM posts WHERE community_id = ? AND private = ? AND id < ? ORDER BY id DESC LIMIT 30').all(cid, priv, before);
+            return send(res, 200, { posts: postsView(rows, me), status: c.status, wall: holders ? 'holders' : 'public', canReadHolders: canHolders });
           }
           if (sub === 'posts' && req.method === 'POST') {
             if (!me) return bad(res, 'sign in first', 401);
@@ -6453,7 +6484,10 @@ const server = http.createServer(async (req, res) => {
             const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 500));
             const text = rt.text;
             if (!text && !image) return bad(res, 'write something or attach a photo, GIF or video');
-            const info = db.prepare('INSERT INTO posts (user_id, text, image, score, created_at, community_id, tokens) VALUES (?,?,?,?,?,?,?)').run(me.id, text, image, 0, now(), cid, rt.tokens);
+            // the holders-only wall needs exactly what posting already needs (a verified slot + a live holding, both
+            // checked above), so no extra gate — only the flag
+            const isPrivate = (b.private === true || b.private === 1 || b.private === '1') ? 1 : 0;
+            const info = db.prepare('INSERT INTO posts (user_id, text, image, score, created_at, community_id, tokens, private) VALUES (?,?,?,?,?,?,?,?)').run(me.id, text, image, 0, now(), cid, rt.tokens, isPrivate);
             const earned = awardPoints(me.id, 'post', PTS.post, 'post:' + info.lastInsertRowid); // gets the community 10× via commMult
             awardCommunityXp(cid, me.id, 'wall_post', COMM_XP.wall_post, 'c' + cid + ':wall_post:' + info.lastInsertRowid);
             awardConviction(cid, me.id, 'wall_post', CONV_XP.wall_post, 'v' + cid + ':wall_post:' + info.lastInsertRowid);

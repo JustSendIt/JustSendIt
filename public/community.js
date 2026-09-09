@@ -16,7 +16,7 @@
   const feedEl = document.getElementById('comm-feed');
   const emptyEl = document.getElementById('comm-empty');
   const memEl = document.getElementById('comm-members'), memListEl = document.getElementById('comm-members-list'), memSubEl = document.getElementById('comm-members-sub');
-  let C = null, oldest = null;
+  let C = null, oldest = null, wall = 'public';   // which wall is on screen: the public one, or the holders-only one
 
   function xpBar(label, lvl, into, span, cls) {
     const pct = span ? Math.min(100, Math.round(into / span * 100)) : 100;
@@ -29,7 +29,9 @@
     if (!c) return; // a noop/degenerate response must never blow away the rendered hero
     C = c;
     document.title = c.name + ' ($' + c.symbol + ') Community — $Send 🏘️';
-    const banner = c.banner ? '<div class="comm-hero-banner" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></div>' : '';
+    // always rendered: an empty one paints the gradient fallback. When it was omitted for a community with no
+    // banner image, the hero body's negative offset pulled the name up into nothing and the card clipped it away.
+    const banner = c.banner ? '<div class="comm-hero-banner has-img" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></div>' : '<div class="comm-hero-banner"></div>';
     const logo = c.image ? '<img class="comm-hero-logo" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="comm-hero-logo comm-hero-logo-none" aria-hidden="true">' + (c.demo ? '📈' : '🪙') + '</span>'; // the sandbox wears the site's own mark, never a company's
     const live = c.status === 'live';
     const joined = c.mine && c.mine.joined;
@@ -106,15 +108,38 @@
     // a persistent, honest explanation for a member blocked by the anti-sybil caps (the toast alone vanished in 2.6 s)
     if (blockReason) { const g = document.getElementById('comm-gate'); if (g) { g.hidden = false; g.textContent = '🛡️ ' + blockReason; } }
     // wall visibility
-    if (live) { wallEl.hidden = false; setupComposer(qualified); loadWall(true); }
+    if (live) { wallEl.hidden = false; paintWallTabs(); setupComposer(qualified); loadWall(true); }
     else { wallEl.hidden = false; document.getElementById('comm-composer').hidden = true; feedEl.innerHTML = ''; emptyEl.style.display = 'none';
       const lk = document.getElementById('comm-wall-locked'); lk.hidden = false; lk.innerHTML = '🔒 <b>The wall opens when the community goes LIVE</b> (' + c.goLive.qualCount + '/' + c.goLive.need + '). Opt in above to help it get there.'; }
     loadMembers();
     wire();
   }
 
+  // The two walls, in one place: which tab is live, what the note says, and whether the composer can be open.
+  // `qualified` is the same verified-holder slot the server checks, so the UI and the gate can never disagree.
+  function paintWallTabs() {
+    const qual = !!(C && C.mine && C.mine.qualified), sym = C ? esc(C.symbol) : '';
+    for (const b of document.querySelectorAll('.cw-tab')) {
+      const on = b.dataset.wall === wall;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    const panel = document.getElementById('comm-wall-panel');
+    if (panel) panel.setAttribute('aria-labelledby', 'cw-tab-' + wall);
+    const note = document.getElementById('cw-note');
+    if (note) note.innerHTML = wall === 'holders'
+      ? '🔒 <b>Holders only.</b> Everything here is visible <b>only to verified holders of $' + sym + '</b> — it is never served to anyone else, never appears on the Send Wall or a profile, and is not in the public data feed.' + (qual ? ' You are in.' : '')
+      : '🌐 <b>Public.</b> Anyone can read this wall. To post you must hold $' + sym + '. Switch to <b>🔒 Holders only</b> for the wall only verified holders can see.';
+  }
   function setupComposer(joined) {
     const comp = document.getElementById('comm-composer'), lk = document.getElementById('comm-wall-locked');
+    const ta = document.getElementById('comm-c-text'), sendBtn = document.getElementById('comm-c-send');
+    if (ta) ta.placeholder = wall === 'holders'
+      ? 'Post to the holders-only wall 🔒 — only verified holders of $' + (C ? C.symbol : '') + ' will ever see this'
+      : 'Post to the community 🏘️ Paste a contract address → it becomes a clickable $TICKER';
+    if (sendBtn) sendBtn.textContent = wall === 'holders' ? 'Post to holders 🔒' : 'Post 🚀';
+    if (comp) comp.classList.toggle('is-private', wall === 'holders');
     if (joined && window.AUTH && AUTH.user) {
       comp.hidden = false; lk.hidden = true;
       document.getElementById('comm-c-ava').textContent = AUTH.user.avatar;
@@ -123,7 +148,9 @@
       comp.hidden = true; lk.hidden = false;
       // The sandbox community has no token to hold and deliberately grants no multiplier, so it must
       // not repeat the standard copy — that would be telling people something untrue about it.
-      document.getElementById('comm-wall-locked').innerHTML = joined ? ''
+      document.getElementById('comm-wall-locked').innerHTML = wall === 'holders'
+        ? '🔒 <b>This wall is for verified holders of $' + (C ? esc(C.symbol) : '') + '.</b> Its posts are never sent to anyone else — not to this page, not to the Send Wall, not to the public data feed. To read it, <b>opt in</b> above: connect a wallet (a free signature, never a transaction) and hold the token, checked on-chain. Sell it and the wall closes again.'
+        : joined ? ''
         : ((C && C.demo)
           ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no tokens and no wallet</b> and try everything — posting, proposals and voting. It is for learning, so it earns <b>no Send Power multiplier</b>.'
           : '👀 <b>Anyone can read this wall.</b> To post, <b>opt in</b> above — that means <b>connecting a wallet</b> and confirming you <b>hold this token</b> on-chain. Members also earn <b>10× Send Power</b>. ⚡');
@@ -135,8 +162,10 @@
     const ava = p.avatar_img ? window.avatarHTML(p.avatar_img, 'post-avatar', 'style="object-fit:cover;"') : '<span class="post-avatar" aria-hidden="true">' + esc(p.avatar || '🚀') + '</span>';
     const fire = (p.reactions && p.reactions.fire) || 0, rocket = (p.reactions && p.reactions.rocket) || 0;
     const myR = p.myReactions || [];
-    return '<article class="post" data-id="' + p.id + '">' +
-      '<div class="post-head">' + ava + '<div><div class="who"><a class="handle" href="/u/' + encodeURIComponent(p.username) + '" style="text-decoration:none;' + (p.accent ? 'color:' + esc(p.accent) : '') + '">@' + esc(p.username) + '</a>' + ogB(p.og) + '</div><div class="when">' + timeAgo(p.created_at) + '</div></div></div>' +
+    return '<article class="post' + (p.private ? ' post-private' : '') + '" data-id="' + p.id + '">' +
+      '<div class="post-head">' + ava + '<div><div class="who"><a class="handle" href="/u/' + encodeURIComponent(p.username) + '" style="text-decoration:none;' + (p.accent ? 'color:' + esc(p.accent) : '') + '">@' + esc(p.username) + '</a>' + ogB(p.og) +
+        (p.private ? '<span class="post-lock" title="Holders only — only verified holders of this token can see this post">🔒 Holders only</span>' : '') +
+      '</div><div class="when">' + timeAgo(p.created_at) + '</div></div></div>' +
       (p.text ? '<p class="post-body">' + (window.richText ? richText(p.text, p.tokens) : esc(p.text)) + '</p>' : '') + // $TICKERs → token chips (tokentext.js)
       (p.image ? window.mediaTag(esc(p.image), esc(p.username)) : '') +
       '<div class="post-actions">' +
@@ -151,13 +180,28 @@
   async function loadWall(reset) {
     if (reset) { oldest = null; feedEl.innerHTML = ''; }
     try {
-      const j = await window.api('/api/communities/' + id + '/posts' + (oldest ? '?before=' + oldest : ''));
+      const j = await window.api('/api/communities/' + id + '/posts?wall=' + wall + (oldest ? '&before=' + oldest : ''));
       const posts = j.posts || [];
-      if (!posts.length && !feedEl.children.length) { emptyEl.style.display = 'block'; return; }
+      if (!posts.length && !feedEl.children.length) {
+        emptyEl.style.display = 'block';
+        const line = emptyEl.querySelector('p');
+        if (line) line.textContent = wall === 'holders' ? 'Nothing on the holders-only wall yet — say the first thing.' : 'No posts yet — be the first to send it here.';
+        return;
+      }
       emptyEl.style.display = 'none';
       posts.forEach(p => { feedEl.insertAdjacentHTML('beforeend', postCard(p)); oldest = p.id; });
       document.getElementById('comm-more').hidden = posts.length < 30;
-    } catch (e) {}
+    } catch (e) {
+      // A refusal is the honest answer, not an empty wall: a slot can lapse between loading the page and
+      // opening this tab (the sweep re-checks holdings continuously), and the reader deserves to know why.
+      if (wall === 'holders' && !feedEl.children.length) {
+        document.getElementById('comm-composer').hidden = true;
+        const lk = document.getElementById('comm-wall-locked');
+        lk.hidden = false;
+        lk.innerHTML = '🔒 <b>' + esc((e && e.message) || 'This wall is for verified holders.') + '</b>';
+        emptyEl.style.display = 'none';
+      }
+    }
   }
 
   // ---- members roster (public; ranked by community level = conviction earned by participating) ----
@@ -274,15 +318,40 @@
       if (!text && !img) { document.getElementById('comm-c-status').textContent = 'Say something first 🤌'; return; }
       send.disabled = true;
       try {
-        const j = await window.api('/api/communities/' + id + '/posts', { method: 'POST', body: { text, image: img } });
+        const j = await window.api('/api/communities/' + id + '/posts', { method: 'POST', body: { text, image: img, private: wall === 'holders' } });
         ta.value = ''; img = null; setCommCount(500); window.setMediaPreview(document.getElementById('comm-c-preview'), null); document.getElementById('comm-c-img').value = ''; document.getElementById('comm-c-status').textContent = '';
         feedEl.insertAdjacentHTML('afterbegin', postCard(j.post)); emptyEl.style.display = 'none';
         if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
-        if (window.sendToast) sendToast('Posted to the community 🚀');
+        if (window.sendToast) sendToast(wall === 'holders' ? 'Posted to the holders-only wall 🔒' : 'Posted to the community 🚀');
       } catch (err) { document.getElementById('comm-c-status').textContent = '⚠️ ' + ((err && err.message) || 'could not post'); }
       send.disabled = false;
     });
     document.getElementById('comm-more').addEventListener('click', () => loadWall());
+
+    // Switching walls repaints only the wall block. A viewer without a verified slot never triggers a fetch for the
+    // private feed — the server would refuse it anyway; this just shows them what it is and how to get in.
+    const tabs = [...document.querySelectorAll('.cw-tab')];
+    function pick(which, focus) {
+      if (wall === which) return;
+      wall = which;
+      const qual = !!(C && C.mine && C.mine.qualified);
+      const open = which === 'public' || qual;
+      paintWallTabs();
+      setupComposer(open && qual);
+      feedEl.innerHTML = ''; oldest = null; emptyEl.style.display = 'none';
+      document.getElementById('comm-more').hidden = true;
+      if (open) loadWall(true);
+      if (focus) { const b = tabs.find(t => t.dataset.wall === which); if (b) b.focus(); }
+    }
+    tabs.forEach((b, i) => {
+      b.addEventListener('click', () => pick(b.dataset.wall, false));
+      b.addEventListener('keydown', e => {
+        const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        pick(tabs[(i + d + tabs.length) % tabs.length].dataset.wall, true);
+      });
+    });
   }
 
   async function toggleComments(post) {

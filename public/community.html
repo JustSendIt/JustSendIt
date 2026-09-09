@@ -48,8 +48,8 @@
 </nav>
 
 <main id="main" style="padding:0.5rem 1.25rem 4rem;">
-  <div class="wrap" style="max-width:680px;">
-    <p style="margin:0 0 0.6rem;"><a class="linklike" href="communities.html">← All communities</a></p>
+  <div class="wrap comm-page" style="max-width:680px;">
+    <p class="comm-back"><a class="linklike" href="communities.html">← All communities</a></p>
     <header class="comm-hero card" id="comm-hero"><p class="modal-note" style="text-align:center; padding:1.5rem;">Loading community… 🏘️</p></header>
 
     <section class="comm-members card" id="comm-members" aria-labelledby="comm-members-h" hidden>
@@ -92,6 +92,16 @@
     </section>
 
     <section class="comm-wall" id="comm-wall" hidden>
+      <!-- Two walls, one community: the public one anyone can read, and a holders-only one only its verified
+           holders can see. The composer posts to whichever wall you are looking at, so "who will see this"
+           is never a separate thing to get wrong. The server refuses the private feed outright to anyone
+           without a verified slot — this control is the door, not the lock. -->
+      <div class="cw-tabs" role="tablist" aria-label="Which wall">
+        <button class="cw-tab is-on" id="cw-tab-public" type="button" role="tab" aria-selected="true" aria-controls="comm-wall-panel" tabindex="0" data-wall="public">🌐 Public wall</button>
+        <button class="cw-tab" id="cw-tab-holders" type="button" role="tab" aria-selected="false" aria-controls="comm-wall-panel" tabindex="-1" data-wall="holders">🔒 Holders only</button>
+      </div>
+      <p class="cw-note" id="cw-note"></p>
+      <div id="comm-wall-panel" role="tabpanel" aria-labelledby="cw-tab-public">
       <div class="composer card" id="comm-composer" hidden>
         <div class="composer-id"><span class="composer-ava" id="comm-c-ava" aria-hidden="true">🚀</span><span class="composer-handle">@<span id="comm-c-handle"></span></span></div>
         <label for="comm-c-text" class="sr-only">Post to the community wall</label>
@@ -107,7 +117,8 @@
       <div class="comm-wall-locked" id="comm-wall-locked" hidden></div>
       <div class="wall-feed" id="comm-feed" role="feed" aria-label="Community posts"></div>
       <div class="empty-wall" id="comm-empty" style="display:none;"><div style="font-size:3rem;" aria-hidden="true">🦗</div><p>No posts yet — be the first to send it here.</p></div>
-      <div style="text-align:center; margin-top:1.2rem;"><button class="btn btn-ghost btn-sm" id="comm-more" hidden>Load more ⬇️</button></div>
+      <div class="comm-more-row"><button class="btn btn-ghost btn-sm" id="comm-more" hidden>Load more ⬇️</button></div>
+      </div>
     </section>
   </div>
 </main>

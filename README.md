@@ -362,6 +362,26 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 
 ---
 
+### 3.10b The holders‑only wall 🔒
+
+Every live community has **two walls**:
+
+| | Who can read it | Who can post |
+|---|---|---|
+| 🌐 **Public wall** | anyone, signed in or not | verified holders |
+| 🔒 **Holders‑only wall** | **verified holders of that token, and nobody else** | verified holders |
+
+"Verified holder" is the same slot everything else in a community uses (`community_members.qualified = 1`): at least **$25 of the token**, read from a linked wallet on‑chain, and re‑checked continuously by the holder sweep — **sell the token and the wall closes with it.** The composer posts to whichever wall you are looking at, so there is no separate "who can see this" setting to get wrong.
+
+**The gate is on the server, on every path that can return a post** — not a filter in the page:
+
+- `GET /api/communities/:id/posts?wall=holders` is **refused outright** (403) to anyone without a live slot; no rows are sent. The public feed selects `private = 0`, so a private post is not in it to begin with.
+- `GET /api/posts/:id`, its comments, and the react / vote / comment endpoints all answer **404** for a viewer who may not read it — never 403, because a 403 would confirm the post exists.
+- The **Data API** (`/v1/posts`, `/v1/comments`) follows the same boundary as everything else it serves: public data in bulk, plus the key holder's **own** private posts — never anyone else's.
+- Community posts of either kind have never appeared on the Send Wall or a profile wall (both select `community_id IS NULL`), so nothing changes there.
+
+The author keeps sight of **their own** post if their slot lapses (they wrote it, and they can still delete it); the feed itself closes for them until they re‑qualify.
+
 ### 3.11 OG tiers — being early, three ways 🏅
 
 Hold **both $Send and $GWC**, bought from the market, and keep holding both: you earn a **permanent OG badge** and a Send Power boost that adds on top of everything above. There is **one standard**; only *when* you got in changes the size.
