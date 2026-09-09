@@ -32,7 +32,8 @@
 (function () {
   'use strict';
 
-  var BASE_MS = 12000;         // how often a visible surface is re-read
+  var BASE_MS = 12000;         // default interval for a source that does not ask for its own
+  var TICK_MS = 1000;          // the shared timer's granularity — the floor any source can ask for
   var MAX_BACKOFF_MS = 120000; // a failing source is left alone for at most this long
   var sources = [];
   var timer = null;
@@ -69,15 +70,21 @@
     return out;
   }
 
+  /* spec.every (ms) lets one surface run faster or slower than the shared clock. The tick itself stays a
+     single timer — a source simply declines to run until its own interval has elapsed. A Send Call's X is a
+     price, and a price is the one thing on this site that must not visibly lag the chain, so it asks for a
+     much shorter interval than a payload of hop counts and grades needs. */
   function source(name, spec) {
     if (!name || !spec || typeof spec.collect !== 'function' || typeof spec.fetch !== 'function' || typeof spec.apply !== 'function') return;
     for (var i = 0; i < sources.length; i++) if (sources[i].name === name) return; // registering twice must not double the traffic
-    sources.push({ name: name, spec: spec, busy: false, backoff: 0, nextAt: 0, fails: 0 });
+    var every = Math.max(TICK_MS, Number(spec.every) || BASE_MS);
+    sources.push({ name: name, spec: spec, every: every, busy: false, backoff: 0, nextAt: 0, fails: 0, ranAt: 0 });
     start();
   }
 
   async function runSource(s, at) {
-    if (s.busy || at < s.nextAt) return;
+    if (s.busy || at < s.nextAt || at - s.ranAt < s.every) return;
+    s.ranAt = at;
     var what;
     try { what = s.spec.collect(); } catch { return; }
     if (what == null || (Array.isArray(what) && !what.length)) return;
@@ -113,8 +120,8 @@
     for (var i = 0; i < sources.length; i++) runSource(sources[i], at);
   }
 
-  function start() { if (!timer) timer = setInterval(tick, BASE_MS); }
-  function refreshNow() { for (var i = 0; i < sources.length; i++) { sources[i].nextAt = 0; } tick(); }
+  function start() { if (!timer) timer = setInterval(tick, TICK_MS); }
+  function refreshNow() { for (var i = 0; i < sources.length; i++) { sources[i].nextAt = 0; sources[i].ranAt = 0; } tick(); }
 
   document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshNow(); });
   window.addEventListener('online', refreshNow);
@@ -146,7 +153,7 @@
   // what is registered and how each source is faring — for checking from a console that the surfaces on
   // this page actually joined the clock, and that none of them is quietly sitting in a backoff
   function status() {
-    return { hidden: document.hidden, awake: awake(), base: BASE_MS, sources: sources.map(s => ({ name: s.name, busy: s.busy, fails: s.fails, backoffMs: s.backoff, waitingMs: Math.max(0, s.nextAt - Date.now()) })) };
+    return { hidden: document.hidden, awake: awake(), base: BASE_MS, tick: TICK_MS, sources: sources.map(s => ({ name: s.name, everyMs: s.every, busy: s.busy, fails: s.fails, backoffMs: s.backoff, waitingMs: Math.max(0, s.nextAt - Date.now()) })) };
   }
 
   window.LiveX = { source: source, watch: watch, visible: visible, refreshNow: refreshNow, setText: setText, pulse: pulse, status: status, BASE_MS: BASE_MS };

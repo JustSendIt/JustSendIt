@@ -91,7 +91,12 @@
   function widgetHTML(call) {
     const g = call.grade || { g: 'E', emoji: '➖', label: 'Flat' };
     const chart = (call.links && call.links.dex) || ('https://dexscreener.com/robinhood/' + call.pair);
-    return '<div class="sc-widget sc-g' + esc(g.g) + (call.rugged ? ' sc-is-rugged' : '') + '" data-call="' + call.id + '" data-token="' + esc(call.token) + '" style="--tok:hsl(' + hue(call.token) + ' 72% 60%)">' +
+    /* entry price + pair travel with the card so the X can be recomputed from a live on-chain spot price
+       between server refreshes — the X is price ÷ entry, and the entry never changes. */
+    return '<div class="sc-widget sc-g' + esc(g.g) + (call.rugged ? ' sc-is-rugged' : '') + '" data-call="' + call.id + '" data-token="' + esc(call.token) + '"' +
+      ' data-pair="' + esc(call.pair || '') + '" data-entry="' + esc(call.entryPrice == null ? '' : String(call.entryPrice)) + '"' +
+      ' data-entrymc="' + esc(call.entryMc == null ? '' : String(call.entryMc)) + '"' +
+      ' style="--tok:hsl(' + hue(call.token) + ' 72% 60%)">' +
       (call.rugged ? '<div class="sc-rugged" role="alert">💀 RUGGED! <span>Liquidity was pulled — DO NOT BUY.</span></div>' : '') +
       '<div class="sc-top">' + logo(call) +
         '<div class="sc-id"><span class="sc-name">' + esc(call.name || 'Token') + ' <b>$' + esc(call.symbol || '?') + '</b></span>' +
@@ -147,9 +152,19 @@
     if (call.rugged && !el.querySelector('.sc-rugged')) el.insertAdjacentHTML('afterbegin', '<div class="sc-rugged" role="alert">💀 RUGGED! <span>Liquidity was pulled — DO NOT BUY.</span></div>'); // a call that just rugged mid-refresh
     // the two Xs pulse when the chain actually moved them, so a reader can see the card is live
     const setX = (n, t) => { if (!n) return; if (window.LiveX) LiveX.setText(n, t); else n.textContent = t; };
-    const nowEl = el.querySelector('.sc-xnow'); if (nowEl) { setX(nowEl, call.stale ? '—' : xFmt(call.curX)); nowEl.parentElement.className = 'sc-x ' + (call.stale ? 'sc-flat' : xClass(call.curX)); }
-    const maxEl = el.querySelector('.sc-xmax'); if (maxEl) { setX(maxEl, xFmt(call.maxX)); maxEl.parentElement.className = 'sc-x sc-x-max ' + xClass(call.maxX); }
-    const cm = el.querySelector('.sc-curmc'); if (cm) cm.textContent = call.stale ? '—' : fmtUsd(call.curMc);
+    /* This payload's price came through a 45-second server refresh; the spot source reads the pool directly
+       every 2 seconds. When a live read is recent, it is simply the better number — letting the slower one
+       land on top would make the X visibly jump backwards on every payload tick. */
+    const spotFresh = Date.now() - Number(el.dataset.spotAt || 0) < 15000;
+    const nowEl = el.querySelector('.sc-xnow');
+    if (nowEl && (!spotFresh || call.stale)) { setX(nowEl, call.stale ? '—' : xFmt(call.curX)); nowEl.parentElement.className = 'sc-x ' + (call.stale ? 'sc-flat' : xClass(call.curX)); }
+    const maxEl = el.querySelector('.sc-xmax');
+    if (maxEl) {
+      // the peak only ever rises; a server value below what the live price already reached would be a regression
+      const shown = parseFloat(String(maxEl.textContent).replace('−', '-').replace(/[+x]/g, ''));
+      if (!(spotFresh && isFinite(shown) && shown > call.maxX)) { setX(maxEl, xFmt(call.maxX)); maxEl.parentElement.className = 'sc-x sc-x-max ' + xClass(call.maxX); }
+    }
+    const cm = el.querySelector('.sc-curmc'); if (cm && (!spotFresh || call.stale)) cm.textContent = call.stale ? '—' : fmtUsd(call.curMc);
     const pm = el.querySelector('.sc-peakmc'); if (pm) pm.textContent = fmtUsd(call.peakMc);
     const gr = el.querySelector('.sc-grade'); if (gr) { gr.firstChild.textContent = g.emoji || '➖'; const i = gr.querySelector('i'); if (i) i.textContent = g.g || 'E'; }
     const hn = el.querySelector('.sc-hopn'); if (hn) hn.textContent = call.hops || 0;
@@ -293,8 +308,63 @@
       },
     });
   }
+  /* The X, straight off the chain.
+     A card's X is price ÷ entry. The payload above carries a price that came from Dexscreener via a
+     45-second server refresh, so the number could sit a minute behind a chain the card claims to be reading —
+     on a token moving fast, that is the difference between what someone sees and what is true. The entry
+     price never changes, so the X can be recomputed locally from a live spot read of the pool's own reserves.
+     One batched request covers every card on screen, every 2 seconds.
+
+     Only "Now" is recomputed here. The peak, the grade, the spend and the sender list stay server-owned —
+     they are a permanent record that feeds points and leaderboards, and a client must not author them. The
+     one exception is a peak that the live price has just exceeded: showing a "Now" above the "Peak since
+     call" would be visibly wrong, so the peak is allowed to follow it up (never down) until the server's next
+     tick confirms it. */
+  function liveSpot() {
+    if (!window.LiveX) return;
+    LiveX.source('callspot', {
+      every: 2000,
+      collect() {
+        const keys = [];
+        LiveX.visible('.sc-widget[data-call]').forEach(w => {
+          const pair = w.dataset.pair, entry = Number(w.dataset.entry);
+          if (!pair || !(entry > 0) || w.classList.contains('sc-is-rugged')) return;
+          const k = pair.toLowerCase() + ':' + String(w.dataset.token || '').toLowerCase();
+          if (keys.indexOf(k) < 0) keys.push(k);
+        });
+        return keys.length ? keys.slice(0, 40) : null;
+      },
+      async fetch(keys) {
+        const r = await fetch('/api/spot?pairs=' + encodeURIComponent(keys.join(',')), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        if (!r.ok) throw new Error('spot http ' + r.status);
+        return r.json();
+      },
+      apply(j) {
+        const prices = (j && j.prices) || {};
+        document.querySelectorAll('.sc-widget[data-call]').forEach(w => {
+          const entry = Number(w.dataset.entry);
+          if (!(entry > 0) || w.classList.contains('sc-is-rugged')) return;
+          const price = prices[String(w.dataset.pair || '').toLowerCase() + ':' + String(w.dataset.token || '').toLowerCase()];
+          if (price == null || !isFinite(price) || price <= 0) return;   // unreadable: leave the last good number alone
+          const curX = price / entry - 1;
+          const nowEl = w.querySelector('.sc-xnow');
+          if (nowEl) { LiveX.setText(nowEl, xFmt(curX)); nowEl.parentElement.className = 'sc-x ' + xClass(curX); }
+          w.dataset.spotAt = String(Date.now());   // tells the 12s payload not to overwrite this with an older price
+          const mcEl = w.querySelector('.sc-curmc'), entryMc = Number(w.dataset.entrymc);
+          if (mcEl && entryMc > 0) mcEl.textContent = fmtUsd(entryMc * (price / entry));   // MC scales with price
+          // let the peak follow a live number that has passed it, so "Now" can never read above "Peak"
+          const maxEl = w.querySelector('.sc-xmax');
+          if (maxEl) {
+            const shown = parseFloat(String(maxEl.textContent).replace('−', '-').replace(/[+x]/g, ''));
+            if (isFinite(shown) && curX > shown) { LiveX.setText(maxEl, xFmt(curX)); maxEl.parentElement.className = 'sc-x sc-x-max ' + xClass(curX); }
+          }
+        });
+      },
+    });
+  }
+
   function observe(root) { if (window.LiveX && root) LiveX.watch(root, '.sc-widget[data-call]'); }
-  function live(root) { ensureLive(); observe(root); } // set up the shared machinery, then observe this container's widgets
+  function live(root) { ensureLive(); liveSpot(); observe(root); } // shared machinery + the fast spot read, then observe this container
 
   window.SendCall = { widgetHTML, updateWidget, wire, live, observe };
 })();

@@ -2858,6 +2858,31 @@ function swapPrice(log, tokenIsZero, decToken, decQuote) {
 const spotCache = new Map();      // pair -> { at, val }
 const spotInflight = new Map();
 const SPOT_TTL = 900;
+const SPOT_BATCH_MAX = 40;        // pairs answered in one /api/spot read — more than fit on any screen
+const pairQuoteCache = new Map(); // pair -> quote token address; a pool's two sides never change
+/* Which side of the pool is the money side. Needed because spotPrice returns a price DENOMINATED IN THE QUOTE
+   ASSET, while every price this site stores and compares against — a Send Call's entry, a market cap — is in
+   USD. Dividing one by the other silently produces a number thousands of times wrong, which is exactly the
+   sort of figure this site must never put in front of anyone. */
+async function pairQuote(pairAddr, tokenAddr) {
+  const k = lcAddr(pairAddr);
+  if (pairQuoteCache.has(k)) return pairQuoteCache.get(k);
+  const { token0, token1 } = await pairTokens(pairAddr);
+  if (!token0 || !token1) return null;
+  const q = lcAddr(token0) === lcAddr(tokenAddr) ? lcAddr(token1) : lcAddr(token0);
+  pairQuoteCache.set(k, q);
+  return q;
+}
+/* The live spot price in USD, or null. Null when the pool is unreadable OR when its quote asset is one we
+   cannot price — an unknown quote is reported as unknown rather than passed off as dollars. */
+async function spotPriceUsd(pairAddr, tokenAddr) {
+  const p = await spotPrice(pairAddr, tokenAddr);
+  if (p == null) return null;
+  const q = await pairQuote(pairAddr, tokenAddr);
+  if (q === WETH_ADDR) { const e = await ethUsd(); return e > 0 ? p * e : null; }
+  if (q === USDG_ADDR) return p;               // a dollar stablecoin quote is already in dollars
+  return null;
+}
 async function spotPrice(pairAddr, tokenAddr) {
   const key = pairAddr + ':' + tokenAddr;
   const hit = spotCache.get(key);
@@ -6822,6 +6847,26 @@ const server = http.createServer(async (req, res) => {
         try { price = await spotPrice(pair, token); if (price == null) why = 'could not read the pair reserves'; }
         catch (e) { why = (e && e.message) || 'chain read failed'; }
         return send(res, 200, { pair, token, price, why, ethUsd: await ethUsd(), at: now() }, { 'Cache-Control': 'no-store' });
+      }
+      /* Spot price for many pairs at once, straight from the pool reserves.
+         A Send Call's X is price ÷ entry, and until now the price behind it came from Dexscreener through a
+         45-second server refresh — so a card could sit a minute behind a chain it claims to be reading. This
+         is the same read the live chart already polls once a second, batched so a wall of cards costs one
+         request instead of one each. spotPrice is cached (900ms) and single-flighted, so ten cards on the
+         same token collapse to one chain read. Returned in USD, so no caller has to know that a pool prices
+         its token in WETH while every stored price on this site is in dollars. */
+      if (p === '/api/spot' && req.method === 'GET') {
+        if (!rateLimit('spotb:' + clientIp(req), 240, 6e4)) return bad(res, 'slow down', 429);
+        const want = String(url.searchParams.get('pairs') || '').split(',').map(x => x.trim().toLowerCase())
+          .filter(x => /^0x[0-9a-f]{40}:0x[0-9a-f]{40}$/.test(x));
+        const uniq = [...new Set(want)].slice(0, SPOT_BATCH_MAX);
+        const prices = {};
+        await Promise.all(uniq.map(async (k) => {
+          const [pair, token] = k.split(':');
+          // a pair we cannot read is reported as null, never as a stale or invented number
+          try { prices[k] = await spotPriceUsd(pair, token); } catch { prices[k] = null; }
+        }));
+        return send(res, 200, { prices, at: now() }, { 'Cache-Control': 'no-store' });
       }
       /* ----- on-chain candles: our own chart, no third-party chart service ----- */
       if (p === '/api/chart' && req.method === 'GET') {
