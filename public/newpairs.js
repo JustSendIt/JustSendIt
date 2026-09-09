@@ -567,11 +567,107 @@
     return '<details class="np-detail-group" data-group="' + id + '"' + (openDefault ? ' open' : '') + '>' +
       '<summary class="np-detail-h">' + title + '</summary><div class="np-detail-body">' + inner + '</div></details>';
   }
+  /* ===== The audit summary — the whole token in plain English, at the top of every detail =============
+     Everything below this in the panel is accurate and none of it is readable at a glance: a reader has to
+     already know that "top holder 38%" is alarming and "liquidity $900" is fatal, and has to assemble the
+     picture themselves from six separate sections. This says it in sentences instead, and it says the
+     uncomfortable parts first.
+
+     Every clause is conditional on the data actually being there. A figure we could not read produces NO
+     sentence about it — it goes in the "couldn't check" line instead, because a confident summary that
+     quietly omits what it does not know is worse than no summary. Nothing here is new information; it is the
+     same numbers the sections below show, said the way a person would say them. */
+  function auditHTML(p) {
+    const r = p.risk || {}, m = p.market || {}, h = p.holders || {}, t = p.token || {};
+    const T = verdictOf(p), flags = activeFlags(p), health = healthOf(p);
+    const sym = t.symbol ? '$' + esc(t.symbol) : 'This token';
+
+    // ---- the bottom line, in one sentence ----
+    const age = p.pair && p.pair.ageMinutes != null ? npFmtAge(p.pair.ageMinutes) + ' old' : 'of unknown age';
+    let line = sym + ' is ' + esc(age) + (p.pair && p.pair.quoteSymbol ? ', trading against ' + esc(p.pair.quoteSymbol) : '') + '. ';
+    if (r.thinData) {
+      line += 'We cannot say much about it yet — too little of it is readable to judge, which is an unknown, not a pass.';
+    } else if (flags.length) {
+      line += 'Our checks score it <b>' + health + '/100</b> and ' + (flags.length === 1 ? 'one thing tripped' : flags.length + ' things tripped') + ', listed below.';
+    } else {
+      line += 'Our checks score it <b>' + health + '/100</b> and nothing tripped — which is not the same as safe.';
+    }
+
+    const rows = [];
+    // ---- the money ----
+    if (m.marketCap != null || m.liquidityUsd != null) {
+      let s = '';
+      if (m.marketCap != null) s += 'Valued at <b>' + npFmtUsd(m.marketCap) + '</b>';
+      if (m.liquidityUsd != null) {
+        s += (s ? ' on ' : 'There is ') + '<b>' + npFmtUsd(m.liquidityUsd) + '</b> of liquidity';
+        // the number people cannot read on their own: what the pool is worth RELATIVE to the claim
+        if (m.marketCap != null && m.marketCap > 0) {
+          const ratio = m.liquidityUsd / m.marketCap * 100;
+          s += ' — about <b>' + pctPlain(ratio) + '</b> of the market cap';
+          s += ratio < 2 ? '. A pool that thin cannot pay everyone out; getting back to cash may not be possible at the price shown.'
+             : ratio < 8 ? '. Thin enough that a large sell moves the price a long way.'
+             : '. Deep enough to trade in and out of at something near the price shown.';
+        } else s += '.';
+      } else s += ', but the pool behind it could not be read.';
+      if (p.volume && p.volume.h24 != null) s += ' <b>' + npFmtUsd(p.volume.h24) + '</b> changed hands in the last 24 hours.';
+      rows.push(['💰', 'Money', s]);
+    }
+    // ---- who owns it ----
+    if (h.count != null || h.topHolderPct != null) {
+      let s = '';
+      if (h.count != null) s += '<b>' + npNum(h.count) + '</b> wallet' + (h.count === 1 ? '' : 's') + ' hold it' + (h.count < 25 ? ' — few enough that a handful of people set the price' : '') + '. ';
+      if (h.topHolderPct != null) {
+        s += 'The largest holds <b>' + pctPlain(h.topHolderPct) + '</b>';
+        if (h.top10Pct != null) s += ' and the top ten hold <b>' + pctPlain(h.top10Pct) + '</b>';
+        s += h.topHolderPct >= 30 ? ' — one wallet alone can move the price against you.'
+           : h.topHolderPct >= 15 ? ' — concentrated enough that one seller matters.'
+           : ' — no single wallet dominates.';
+      }
+      rows.push(['👥', 'Who owns it', s]);
+    }
+    // ---- the contract ----
+    {
+      const bits = [];
+      if (t.isVerified === true) bits.push('The source code is published, so it can be read and checked.');
+      else if (t.isVerified === false) bits.push('The source code is <b>not published</b>, so nobody outside can see what it actually does.');
+      if (t.renounced === true) bits.push('Ownership is renounced — the rules can no longer be changed.');
+      else if (t.renounced === false) bits.push('Ownership is <b>not renounced</b>: whoever holds it can still change how the token behaves.');
+      if (bits.length) rows.push(['📄', 'The contract', bits.join(' ')]);
+    }
+    // ---- what tripped, named plainly ----
+    if (flags.length) {
+      rows.push(['🚩', flags.length === 1 ? 'What tripped' : 'What tripped (' + flags.length + ')',
+        flags.map(k => '<b>' + esc(FLAG[k].word(p)) + '</b> — ' + esc(FLAG[k].say(p))).join('<br>')]);
+    }
+    // ---- and, always, what we could not check ----
+    const dk = r.dataKnown || {}, gaps = [];
+    if (!dk.liquidity) gaps.push('the liquidity');
+    if (!dk.holders) gaps.push('the holder count');
+    if (!dk.concentration) gaps.push('how concentrated it is');
+    if (!dk.verified) gaps.push('whether the contract is verified');
+    if (!dk.snipers) gaps.push('who bought first');
+    rows.push(['❓', 'What we could not check',
+      gaps.length ? 'We could not read ' + esc(gaps.join(', ')) + '. That is missing information, <b>not a pass</b> — every check above is only as good as the data behind it.'
+                  : 'Nothing — every check above had the data it needed.']);
+
+    return '<section class="np-audit">' +
+      '<h3 class="np-audit-h">📋 The short version</h3>' +
+      '<p class="np-audit-lead">' + line + '</p>' +
+      '<dl class="np-audit-rows">' +
+        rows.map(([ico, k, v]) => '<div class="np-audit-row"><dt><span aria-hidden="true">' + ico + '</span> ' + esc(k) + '</dt><dd>' + v + '</dd></div>').join('') +
+      '</dl>' +
+      '<p class="np-audit-fine">Read from public on-chain data and automated heuristics — not an audit, not a guarantee, and never advice to buy. Most new tokens go to zero.</p>' +
+    '</section>';
+  }
+
   function bodyHTML(p, sections, opts) {
     const S = sections || state.sections; opts = opts || {}; // S = which sections start open; opts.hideCall hides the "Make a Send Call" CTA (e.g. inside a Send Call widget)
     const tri = triageOf(p), T = verdictOf(p);
     const flags = activeFlags(p);
     const h = p.holders, m = p.market, r = p.risk || {};
+
+    // A0. The audit summary — the whole token in sentences, before any of the sections below
+    const audit = auditHTML(p);
 
     // A. Why verdict (always shown)
     let why;
@@ -652,7 +748,7 @@
         '<a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' +
       '</div>';
 
-    return '<div class="np-body">' + brandHeadHTML(p) + why +
+    return '<div class="np-body">' + brandHeadHTML(p) + audit + why +
       group('chart', '📈 Chart', S.chart !== false, chartHTML(p)) +
       group('score', '🎯 Score breakdown', S.score, breakdownHTML(p)) +
       group('market', '📊 Market', S.market, marketInner) +

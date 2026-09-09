@@ -53,6 +53,59 @@
     '</li>';
   }
 
+  /* An early buyer's row. Same cluster facts as a block-0 row, plus the three things only the wider window
+     can say: WHEN they got in, what they did with the pool AFTER that first buy, and whether any of the
+     supply they sold was never bought here at all. */
+  function earlyRow(w, supply, float) {
+    const n = NET[w.net] || NET.unknown;
+    const conn = (w.connected || []).slice(0, 8);
+    const boughtMore = w.clusterBought != null && BigInt(w.clusterBought) > BigInt(w.sniped);
+    return '<li class="b0-w b0-e">' +
+      '<div class="b0-w-head">' +
+        '<span class="b0-rank" title="Which of the first buys this wallet made">#' + w.ranks.join(', #') + '</span>' +
+        '<code class="b0-addr" title="' + esc(w.addr) + '">' + esc(short(w.addr)) + '</code>' +
+        (w.atBlock0 ? '<span class="b0-tag b0-atzero" title="This wallet was in the very first block">block 0</span>'
+                    : '<span class="b0-tag b0-later" title="Blocks after the pool first paid out">+' + w.blocksAfterZero.toLocaleString('en-US') + ' blocks</span>') +
+        '<span class="b0-tag ' + n.cls + '" title="' + esc(n.why) + '">' + n.word + '</span>' +
+      '</div>' +
+      '<div class="b0-w-stats">' +
+        '<span>took <b>' + pct(share(w.sniped, supply)) + '</b> <i>of supply</i></span>' +
+        '<span>bought in total <b>' + pct(share(w.clusterBought, supply)) + '</b>' + (boughtMore ? ' <i>kept buying after</i>' : '') + '</span>' +
+        '<span>holds now <b>' + (w.clusterHolds == null ? '—' : pct(share(w.clusterHolds, supply))) + '</b></span>' +
+        '<span>sold to the pool <b>' + pct(share(w.clusterSold, supply)) + '</b></span>' +
+        '<span>PNL <b class="' + (w.pnlWei == null ? '' : Number(BigInt(w.pnlWei)) >= 0 ? 'b0-up' : 'b0-down') + '">' + signedWeth(w.pnlWei) + '</b> <i>WETH</i></span>' +
+      '</div>' +
+      (w.notFromPool && BigInt(w.notFromPool) > 0n
+        ? '<p class="b0-note">Sold at least <b>' + pct(share(w.notFromPool, supply)) + '</b> of supply more than it ever bought here — that much came from somewhere other than this pool.</p>'
+        : '') +
+      (w.connectedCount
+        ? '<details class="b0-conn"><summary>' + w.connectedCount + ' wallet' + (w.connectedCount === 1 ? '' : 's') + ' it moved tokens to</summary><ul>' +
+            conn.map(c => '<li><code title="' + esc(c.addr) + '">' + esc(short(c.addr)) + '</code>' +
+              '<span>hop ' + c.hop + '</span>' +
+              '<span>holds <b>' + (c.holds == null ? '—' : pct(share(c.holds, supply))) + '</b></span>' +
+              '<span>sold <b>' + pct(share(c.soldToPool, supply)) + '</b></span></li>').join('') +
+            (w.connectedCount > conn.length ? '<li class="b0-more">…and ' + (w.connectedCount - conn.length) + ' more</li>' : '') +
+          '</ul></details>'
+        : '<p class="b0-none">Sent tokens to no other wallet.</p>') +
+      (w.capped ? '<p class="b0-note">This cluster hit a read limit, so it may be larger than shown.</p>' : '') +
+    '</li>';
+  }
+
+  /* When block 0 reads clean but the wider cohort does not, say so where the reader is looking.
+     The verdict on this token is decided by block 0 alone — that is deliberate and unchanged — so a token can
+     carry a green badge while most of its first ten buyers have already gone. Leaving the reader to notice
+     that by comparing two tables would be the site quietly letting a badge overstate what it knows. */
+  function contradiction(d, E) {
+    const t = d.totals || {}, et = E.totals || {};
+    const b0Clean = d.verdict && d.verdict.ok === true;
+    const earlyOut = et.netSellers > 0 && et.netSellers >= et.netAccumulators;
+    if (!b0Clean || !earlyOut) return '';
+    return '<p class="b0-note b0-contra">⚠️ Read these two together. Block 0 is clean — that is what the token\'s ' +
+      'verdict is based on — but <b>' + et.netSellers + ' of the first ' + E.wallets.length + ' buyer' +
+      (E.wallets.length === 1 ? '' : 's') + '</b> ' + (et.netSellers === 1 ? 'is' : 'are') +
+      ' net sellers of what they took. The badge reflects block 0 only.</p>';
+  }
+
   function render(d) {
     if (!d) return '<p class="b0-msg">Could not read the first block for this token.</p>';
     if (d.status === 'queued' || d.status === 'running' || d.status === 'unscanned') {
@@ -100,6 +153,33 @@
       html += '<ul class="b0-wallets">' + d.snipers.map(s => walletRow(s, supply, float)).join('') + '</ul>';
     } else {
       html += '<p class="b0-msg b0-good">No wallet bought this token in the first block its pool traded.</p>';
+    }
+
+    /* The first N buys. Block 0 answers "who got in at the very first opportunity"; it does not answer "who
+       got in early", and the gap between the two is often the whole story — a token can have one clean
+       block-0 buyer still holding, and eight of its next nine buyers already gone. Block 0 stays the verdict
+       gate; this is the wider read underneath it. */
+    if (d.early && d.early.wallets && d.early.wallets.length) {
+      const E = d.early, et = E.totals || {};
+      const eSupply = share(et.sniped, supply), eFloat = share(et.sniped, float);
+      const eHolds = et.holdsKnown ? share(et.holds, supply) : null;
+      html += '<div class="b0-early">' +
+        '<h4>The first ' + E.buys + ' buy' + (E.buys === 1 ? '' : 's') + ' this pool ever paid out</h4>' +
+        '<p class="b0-fine">' + E.wallets.length + ' wallet' + (E.wallets.length === 1 ? '' : 's') +
+          ', across ' + (E.spanBlocks === 0 ? 'a single block' : E.spanBlocks.toLocaleString('en-US') + ' blocks') +
+          '. Block 0 is buy #1, so the wallets above are part of this group — each row says which.</p>' +
+        '<div class="b0-tiles">' +
+          '<div class="b0-tile"><b>' + pct(eSupply) + '</b><span>of total supply they took</span></div>' +
+          '<div class="b0-tile"><b>' + pct(eFloat) + '</b><span>of the circulating float</span></div>' +
+          '<div class="b0-tile"><b>' + (eHolds == null ? '—' : pct(eHolds)) + '</b><span>they still hold today</span></div>' +
+          '<div class="b0-tile"><b>' + et.connectedWallets + '</b><span>wallet' + (et.connectedWallets === 1 ? '' : 's') + ' they moved tokens to</span></div>' +
+          '<div class="b0-tile"><b class="' + (et.netSellers ? 'b0-down' : 'b0-up') + '">' + et.netAccumulators + ' / ' + et.netSellers + '</b><span>accumulators / sellers</span></div>' +
+          '<div class="b0-tile"><b class="' + (Number(BigInt(et.pnlWei || '0')) >= 0 ? 'b0-up' : 'b0-down') + '">' + signedWeth(et.pnlWei) + '</b><span>total P&amp;L, WETH</span></div>' +
+        '</div>' +
+        contradiction(d, E) +
+        '<ul class="b0-wallets">' + E.wallets.map(w => earlyRow(w, supply, float)).join('') + '</ul>' +
+        (E.untraced > 0 ? '<p class="b0-note">' + E.untraced + ' more early wallet' + (E.untraced === 1 ? '' : 's') + ' were found but not traced — the scan reached its read budget.</p>' : '') +
+      '</div>';
     }
 
     if (Number(d.systemTook || 0) > 0) {

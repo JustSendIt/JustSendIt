@@ -3111,6 +3111,7 @@ const SNIPE = {
   BACKOFF_MS: 1500,       // grows linearly with each attempt
   GAP_MS: 45 * 1000,      // rest between whole scans, so the chain is never hammered
   FEED_GAP_MS: 4 * 60e3,  // how often ONE unscanned token from the radar feed is added to the queue
+  EARLY_N: 10,            // buys in the "first N" window — block 0 is buy #1, so it stays a subset of this
 };
 const DEAD_ADDRS = ['0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead'];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -3189,21 +3190,77 @@ async function blockAtTime(B, tsSec, head) {
   return lo;
 }
 
-/* Block 0 = the block of the FIRST transfer of the token OUT of the pool: the first moment anyone could
-   buy. Not the block the pair contract was created in, and not the block the token was minted in — on this
-   chain those were 0.07 and 0.11 days apart for $GWC and $SEND. */
-async function findBlockZero(B, token, pair, createdAtMs, head) {
+/* The first N buys a pool ever paid out, in chain order.
+   Block 0 answers "who got in at the very first opportunity". It does not answer "who got in early" — a wallet
+   that bought in block 1, or was the 4th buy of the first minute, is the same kind of actor and was invisible
+   here. This widens the window to the first N payouts while keeping block 0 exactly as it was: buy #1 is by
+   definition in block 0, so the block-0 view is a subset of this one and every existing verdict is unchanged.
+
+   System payouts (a taxed token pays its own contract straight out of the pool) are counted toward the tax
+   total but never toward the N — they are plumbing, not buyers, and letting them consume the window would
+   hide real ones. */
+async function findFirstBuys(B, token, pair, createdAtMs, head, want) {
   let from = 1;
   if (createdAtMs > 0) from = Math.max(1, await blockAtTime(B, Math.floor(createdAtMs / 1000), head) - 5000);
   const topics = [TRANSFER_TOPIC, topicAddr(pair)];
-  for (let b = from; b <= head; b += SNIPE.WINDOW) {
+  const buys = [];
+  let block = null, systemTook = 0n, block0Logs = [], scanned = false;
+  for (let b = from; b <= head && buys.length < want; b += SNIPE.WINDOW) {
     const logs = await sniperLogs(B, token, topics, b, Math.min(b + SNIPE.WINDOW - 1, head));
-    if (logs.length) {
-      const block = Math.min(...logs.map(l => parseInt(l.blockNumber, 16)));
-      return { block, logs: logs.filter(l => parseInt(l.blockNumber, 16) === block) };
+    if (!logs.length) { if (scanned) break; continue; }   // nothing yet: keep walking forward
+    scanned = true;
+    // chain order: block, then position within the block. A payout's rank is only meaningful in this order.
+    logs.sort((x, y) => (parseInt(x.blockNumber, 16) - parseInt(y.blockNumber, 16)) || (parseInt(x.logIndex, 16) - parseInt(y.logIndex, 16)));
+    if (block == null) {
+      block = parseInt(logs[0].blockNumber, 16);
+      block0Logs = logs.filter(l => parseInt(l.blockNumber, 16) === block);
+    }
+    for (const l of logs) {
+      if (buys.length >= want) break;
+      const to = addrFromTopic(l.topics[2]), v = BigInt(l.data);
+      if (isSystemAddr(to, token, pair)) { systemTook += v; continue; }   // the tax leg never consumes a slot
+      buys.push({ to, value: v, block: parseInt(l.blockNumber, 16), tx: l.transactionHash });
     }
   }
-  return { block: null, logs: [] };
+  return { block, block0Logs, buys, systemTook };
+}
+
+/* One traced wallet, rendered against whatever amount we are measuring it by — the block-0 view measures the
+   cluster against what it took in block 0, the first-N view against what it took across those N buys. Same
+   cluster, same ledger, two honest denominators. */
+function sniperEntry(addr, took, cl, legs, price, extra) {
+  const holdsKnown = cl.wallets.every(w => w.holds != null);
+  const clusterHolds = cl.wallets.reduce((s, w) => s + (w.holds || 0n), 0n);
+  const clusterSold = cl.wallets.reduce((s, w) => s + w.sentToPool, 0n);
+  const clusterBought = cl.wallets.reduce((s, w) => s + w.boughtFromPool, 0n);
+  const unrealised = price != null && holdsKnown ? BigInt(Math.round(Number(clusterHolds) * price)) : null;
+  return {
+    addr,
+    sniped: took.toString(),
+    holds: cl.wallets[0] && cl.wallets[0].holds != null ? cl.wallets[0].holds.toString() : null,
+    clusterHolds: holdsKnown ? clusterHolds.toString() : null,
+    clusterSold: clusterSold.toString(),
+    /* Everything the cluster EVER bought from this pool, not just its early buy. The difference between this
+       and `sniped` is the part of the story block 0 could never tell: a wallet that took a small amount early
+       and then kept buying is a different actor from one that took the same amount and stopped. */
+    clusterBought: clusterBought.toString(),
+    /* Supply this cluster sold that it demonstrably never bought here. Selling more than you ever bought from
+       the pool is only possible if the tokens arrived some other way — a pre-allocation, an airdrop, a hand-off
+       from the deployer. It is a FLOOR, not a total: it says "at least this much came from somewhere else",
+       which is provable from these two numbers alone, and claims nothing about where. Measured live on $SEND,
+       where the second buyer sold 0.784% of float having bought 0.730%. */
+    notFromPool: (clusterSold > clusterBought ? clusterSold - clusterBought : 0n).toString(),
+    connected: cl.wallets.filter(w => w.hop > 0).map(w => ({ addr: w.addr, hop: w.hop, holds: w.holds == null ? null : w.holds.toString(), soldToPool: w.sentToPool.toString() })),
+    connectedCount: cl.wallets.length - 1,
+    // net over the WHOLE cluster: does it still hold at least what it took?
+    net: !holdsKnown ? 'unknown' : clusterHolds >= took ? 'accumulator' : clusterHolds === 0n ? 'fully out' : 'seller',
+    costWei: legs.cost.toString(),
+    proceedsWei: legs.proceeds.toString(),
+    unrealisedWei: unrealised == null ? null : unrealised.toString(),
+    pnlWei: unrealised == null ? null : (legs.proceeds + unrealised - legs.cost).toString(),
+    capped: cl.capped || legs.capped,
+    ...(extra || {}),
+  };
 }
 
 /* The float the percentages are measured against. Total supply flatters a token that keeps most of its
@@ -3318,10 +3375,10 @@ async function scanSnipers(token, pair, createdAtMs) {
   const head = parseInt(await B.call('eth_blockNumber', []), 16);
   const supply = await totalSupply(token);
   if (!(supply > 0n)) throw new Error('total supply unreadable');
-  const { block, logs } = await findBlockZero(B, token, pair, createdAtMs, head);
+  const { block, block0Logs, buys, systemTook: sysEarly } = await findFirstBuys(B, token, pair, createdAtMs, head, SNIPE.EARLY_N);
   if (block == null) {
     return { block0: null, block0At: null, supply: supply.toString(), float: supply.toString(), systemTook: '0',
-      snipers: [], totals: sniperTotals([]), priceWeth: null, capped: false, calls: B.used,
+      snipers: [], totals: sniperTotals([]), early: null, priceWeth: null, capped: false, calls: B.used,
       notes: ['This pool has never paid a token out — nobody has bought yet.'] };
   }
   const blockAt = parseInt((await B.call('eth_getBlockByNumber', [hexBlock(block), false])).timestamp, 16) * 1000;
@@ -3329,51 +3386,81 @@ async function scanSnipers(token, pair, createdAtMs) {
   let price = null;
   try { price = await sniperPriceWeth(B, pair, token); } catch { price = null; }
 
+  // block 0, exactly as before — this is what the verdict gate reads, and its meaning must not drift
   const got = new Map();
   let systemTook = 0n;
-  for (const l of logs) {
+  for (const l of block0Logs) {
     const to = addrFromTopic(l.topics[2]), v = BigInt(l.data);
     if (isSystemAddr(to, token, pair)) { systemTook += v; continue; }
     got.set(to, (got.get(to) || 0n) + v);
   }
-  const ranked = [...got.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0));
-  const traced = ranked.slice(0, SNIPE.MAX_SNIPERS);
-  let capped = ranked.length > traced.length;
-  if (capped) notes.push('Traced the ' + traced.length + ' largest of ' + ranked.length + ' block-0 wallets.');
+  if (sysEarly > systemTook) systemTook = sysEarly;   // tax taken across the whole first-N window
 
-  const seenGlobal = new Set(traced.map(([a]) => a));
-  const snipers = [];
-  for (const [addr, sniped] of traced) {
+  /* The first N buys, folded per wallet. One wallet can occupy several of the N slots — that is itself worth
+     showing, so the ranks it took are kept rather than collapsed to a count. */
+  const early = new Map();
+  buys.forEach((b, i) => {
+    const e = early.get(b.to) || { addr: b.to, took: 0n, ranks: [], firstBlock: b.block, lastBlock: b.block };
+    e.took += b.value; e.ranks.push(i + 1); e.lastBlock = b.block;
+    if (b.block < e.firstBlock) e.firstBlock = b.block;
+    early.set(b.to, e);
+  });
+
+  /* Every wallet worth tracing, block-0 first so a tight budget always covers the verdict before the extras.
+     Each is traced ONCE and then read two ways: against what it took in block 0, and against what it took
+     across the first N. Tracing them twice would double the chain reads to say the same thing. */
+  const order = [...new Set([
+    ...[...got.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0)).map(([a]) => a),
+    ...[...early.values()].sort((a, b) => (b.took > a.took ? 1 : b.took < a.took ? -1 : 0)).map(e => e.addr),
+  ])];
+  const traced = order.slice(0, SNIPE.MAX_SNIPERS);
+  let capped = order.length > traced.length;
+  if (capped) notes.push('Traced the ' + traced.length + ' largest of ' + order.length + ' early wallets.');
+
+  const seenGlobal = new Set(traced);
+  const cache = new Map();                       // addr -> { cl, legs }
+  for (const addr of traced) {
     const cl = await traceCluster(B, token, pair, addr, block, head, seenGlobal);
     if (cl.capped) capped = true;
     const txs = [...new Set([].concat(...cl.wallets.map(w => w.buyTxs.concat(w.sellTxs))))];
     const legs = await sniperEthLegs(B, pair, txs);
     if (legs.capped) capped = true;
-    const holdsKnown = cl.wallets.every(w => w.holds != null);
-    const clusterHolds = cl.wallets.reduce((s, w) => s + (w.holds || 0n), 0n);
-    const clusterSold = cl.wallets.reduce((s, w) => s + w.sentToPool, 0n);
-    const unrealised = price != null && holdsKnown ? BigInt(Math.round(Number(clusterHolds) * price)) : null;
-    snipers.push({
-      addr,
-      sniped: sniped.toString(),
-      holds: cl.wallets[0] && cl.wallets[0].holds != null ? cl.wallets[0].holds.toString() : null,
-      clusterHolds: holdsKnown ? clusterHolds.toString() : null,
-      clusterSold: clusterSold.toString(),
-      connected: cl.wallets.filter(w => w.hop > 0).map(w => ({ addr: w.addr, hop: w.hop, holds: w.holds == null ? null : w.holds.toString(), soldToPool: w.sentToPool.toString() })),
-      connectedCount: cl.wallets.length - 1,
-      // net over the WHOLE cluster: does it still hold at least what the block-0 wallet took?
-      net: !holdsKnown ? 'unknown' : clusterHolds >= sniped ? 'accumulator' : clusterHolds === 0n ? 'fully out' : 'seller',
-      costWei: legs.cost.toString(),
-      proceedsWei: legs.proceeds.toString(),
-      unrealisedWei: unrealised == null ? null : unrealised.toString(),
-      pnlWei: unrealised == null ? null : (legs.proceeds + unrealised - legs.cost).toString(),
-      capped: cl.capped || legs.capped,
-    });
-    if (B.spent()) { capped = true; notes.push('The scan reached its read budget; the remaining block-0 wallets were not traced.'); break; }
+    cache.set(addr, { cl, legs });
+    if (B.spent()) { capped = true; notes.push('The scan reached its read budget; the remaining early wallets were not traced.'); break; }
   }
+
+  // view 1 — block 0. Same shape, same semantics, same consumers.
+  const snipers = [];
+  for (const [addr, sniped] of [...got.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0))) {
+    const c = cache.get(addr); if (!c) continue;
+    snipers.push(sniperEntry(addr, sniped, c.cl, c.legs, price));
+  }
+
+  // view 2 — the first N buys, block 0 included and labelled as such
+  const earlyWallets = [];
+  for (const e of [...early.values()].sort((a, b) => a.ranks[0] - b.ranks[0])) {
+    const c = cache.get(e.addr); if (!c) continue;
+    earlyWallets.push(sniperEntry(e.addr, e.took, c.cl, c.legs, price, {
+      ranks: e.ranks,                       // which of the first N buys were this wallet's
+      firstBlock: e.firstBlock,
+      blocksAfterZero: e.firstBlock - block,
+      atBlock0: got.has(e.addr),
+    }));
+  }
+  const earlyOut = {
+    want: SNIPE.EARLY_N,
+    buys: buys.length,
+    wallets: earlyWallets,
+    lastBlock: buys.length ? buys[buys.length - 1].block : block,
+    spanBlocks: buys.length ? buys[buys.length - 1].block - block : 0,
+    totals: sniperTotals(earlyWallets),
+    traced: earlyWallets.length,
+    untraced: early.size - earlyWallets.length,
+  };
+
   return { block0: block, block0At: blockAt, supply: supply.toString(), float: float.toString(),
-    systemTook: systemTook.toString(), snipers, totals: sniperTotals(snipers), priceWeth: price,
-    notes, capped, calls: B.used };
+    systemTook: systemTook.toString(), snipers, totals: sniperTotals(snipers), early: earlyOut,
+    priceWeth: price, notes, capped, calls: B.used };
 }
 
 /* The scan store. One row per token; block 0 is written once and never re-derived. Reads are synchronous

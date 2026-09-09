@@ -198,3 +198,26 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .np-row-pin.is-pinned { color: var(--gold); border-color: rgba(255,179,64,0.5); background: rgba(255,179,64,0.1); }
 .np-row-pin:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 1px; }
 @media (pointer: coarse) { .np-runner-call, .np-row-pin { min-height: 44px; min-width: 44px; } }
+
+/* ===== Token audit summary — the whole token in sentences, atop every detail ============= */
+.np-audit { background: var(--ink); border: 1.5px solid var(--ink-4); border-left: 3px solid var(--green); border-radius: 14px; padding: 0.9rem 1rem; margin: 0 0 0.9rem; }
+.np-audit-h { font-family: 'Luckiest Guy', cursive; font-size: 1rem; color: var(--green-bright); margin: 0 0 0.45rem; letter-spacing: 0.02em; }
+.np-audit-lead { font-size: 0.95rem; line-height: 1.6; color: var(--text); margin: 0 0 0.8rem; }
+.np-audit-lead b { color: var(--green-bright); }
+.np-audit-rows { margin: 0; display: grid; gap: 0.6rem; }
+.np-audit-row { display: grid; grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr); gap: 0.2rem 0.9rem; align-items: start; }
+.np-audit-row dt { font-weight: 800; font-size: 0.82rem; color: var(--text-dim); }
+.np-audit-row dd { margin: 0; font-size: 0.88rem; line-height: 1.6; color: var(--text-dim); }
+.np-audit-row dd b { color: var(--text); font-weight: 800; }
+.np-audit-fine { margin: 0.85rem 0 0; font-size: 0.76rem; line-height: 1.55; color: var(--text-dim); }
+@media (max-width: 560px) { .np-audit-row { grid-template-columns: 1fr; gap: 0.1rem; } }
+
+/* first-N buyers: the rank, when they got in, and the block-0 subset marked as such */
+.b0-early { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px solid var(--ink-4); }
+.b0-early h4 { margin: 0 0 0.3rem; font-size: 0.92rem; color: var(--text); }
+.b0-rank { font-family: ui-monospace, Menlo, monospace; font-size: 0.76rem; font-weight: 800; color: var(--text-dim);
+  background: var(--ink-2); border: 1px solid var(--ink-4); border-radius: 6px; padding: 0.05rem 0.35rem; }
+.b0-atzero { background: rgba(255,179,64,0.16); color: var(--gold); }
+.b0-later { background: var(--ink-2); color: var(--text-dim); }
+.b0-e .b0-w-stats { row-gap: 0.3rem; }
+.b0-contra { border-left: 3px solid var(--gold); padding-left: 0.6rem; }
