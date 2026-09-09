@@ -66,7 +66,10 @@
         if (window.NPCard.animateRings) window.NPCard.animateRings(body);
         if (window.mountOnChainCharts) mountOnChainCharts(body);   // our own chart, not an embedded one
       }
-      else body.innerHTML = '<p class="tm-msg">🤷 This token isn’t priced on Dexscreener right now — it may have delisted or rugged.</p>' + comm;
+      // "delisted or rugged" is a claim about someone's money. It is only said when the chain itself told us
+      // there is no pool — never when we simply could not reach the price feed, which used to read the same.
+      else if (j && j.unavailable) { const m = document.createElement('p'); m.className = 'tm-msg'; m.textContent = '⏳ ' + (j.message || 'We couldn’t check this token just now — nothing here is a judgement about it. Try again in a moment.'); body.innerHTML = comm; body.insertAdjacentElement('afterbegin', m); }
+      else body.innerHTML = '<p class="tm-msg">🤷 No trading pool exists for this token on Robinhood Chain — the chain itself says so, so there is nothing to price. It may never have launched, or its pool may be gone.</p>' + comm;
       if (window.decorateTokenCommunities) decorateTokenCommunities(body);
     } catch (e) { if (my === seq) body.innerHTML = '<p class="tm-msg">Couldn’t load the detail — close and try again.</p>'; }
   }

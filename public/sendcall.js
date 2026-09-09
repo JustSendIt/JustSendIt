@@ -188,8 +188,10 @@
       // live lookup failed (delisted/rugged) → fall back to the call-time snapshot so the detail never dead-ends
       let snap = null;
       try { const sr = await fetch('/api/calls/' + encodeURIComponent(id), { credentials: 'same-origin' }); const sj = await sr.json(); snap = sj && sj.snapshot; } catch {}
-      if (snap && snap.token) renderDetail(snap, '<p class="sc-detail-msg" style="text-align:left;margin:0 0 .6rem">⚠︎ Not priced on Dexscreener right now — showing the on-chain detail from when it was called.</p>');
-      else detail.innerHTML = '<p class="sc-detail-msg">🤷 This token isn’t priced on Dexscreener anymore — it may have delisted or rugged. The Xs above are the final record.</p>';
+      if (snap && snap.token) renderDetail(snap, '<p class="sc-detail-msg" style="text-align:left;margin:0 0 .6rem">⚠︎ Not priced right now — showing the on-chain detail from when it was called.</p>');
+      // only the chain saying "no pool" justifies the harder wording; an outage gets the honest one
+      else if (j && j.unavailable) detail.innerHTML = '<p class="sc-detail-msg">⏳ We couldn’t reach the price feed or the chain just now, so we can’t show the current detail. Nothing here is a judgement about this token — reopen in a moment.</p>';
+      else detail.innerHTML = '<p class="sc-detail-msg">🤷 No trading pool exists for this token any more — the chain says so. The Xs above are the final record.</p>';
     } catch { detail.innerHTML = '<p class="sc-detail-msg">Couldn’t load the full detail — collapse and open it again to retry.</p>'; }
     finally { delete detail.dataset.loading; }
   }

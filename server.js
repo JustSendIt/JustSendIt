@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { DatabaseSync, backup: sqliteBackup } = require('node:sqlite'); // backup() = online, consistent, non-blocking snapshot (Node ≥ 23.8)
-const { verifyMessage } = require('ethers');
+const { verifyMessage, getAddress } = require('ethers');   // getAddress: EIP-55 checksum, required by the EIP-4361 parser in wallets
 const QRCode = require('qrcode');
 
 // Load a local .env if present (dependency-free) — real environment variables always win over the file.
@@ -718,10 +718,10 @@ function createSession(userId) {
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(hashToken(token), userId, now(), now() + 30 * 864e5); // a DB leak never yields a usable cookie
   return token;
 }
+// Secure whenever we serve https OR are told we sit behind TLS termination (COOKIE_SECURE=1)
+const cookieSecure = () => (BASE_URL.startsWith('https') || process.env.COOKIE_SECURE === '1') ? '; Secure' : '';
 function sessionCookie(token) {
-  // Secure whenever we serve https OR are told we sit behind TLS termination (COOKIE_SECURE=1)
-  const secure = (BASE_URL.startsWith('https') || process.env.COOKIE_SECURE === '1') ? '; Secure' : '';
-  return `sid=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}${secure}`;
+  return `sid=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${30 * 86400}${cookieSecure()}`;
 }
 function parseCookies(header) {
   const out = {};
@@ -763,10 +763,27 @@ function insertIdentity(userId, type, value, secret) {
 }
 function emailIdentity(userId) { return db.prepare("SELECT * FROM identities WHERE type = 'email' AND user_id = ?").get(userId); }
 const SITE_HOST = (() => { try { return new URL(BASE_URL).host; } catch { return 'localhost'; } })();
-// SIWE-style, domain-bound messages: a wallet shows the user WHICH site is asking, so a signature phished on another
-// site can never open a session here (the server only accepts the exact message it issued, and that names this host)
+/* Domain-bound sign-in messages, in the EXACT EIP-4361 (Sign-In with Ethereum) layout.
+   The format is not cosmetic. Naming the host inside the text only helps a reader who stops to read raw
+   hex-prefixed text in a signing dialog, which nobody does. What actually protects them is the wallet
+   RECOGNISING the message: MetaMask and friends parse it, and only when it parses do they draw the
+   "Sign-in request" panel and — the part that stops the attack — warn when the site asking does not match
+   the domain named in the message. A near-miss string gets none of that and renders as an opaque blob.
+
+   So every byte here matters to the parser: line 1 must end "wants you to sign in with your Ethereum
+   account:", line 2 must be the bare EIP-55 checksummed address, and `Version: 1` is mandatory. Field
+   order is fixed by the ABNF. The server still accepts only the exact string it issued and stores it
+   encrypted with a 10-minute expiry, so this changes what the WALLET can tell the user, not what we trust. */
 function signInMessage(address, nonce, statement) {
-  return `${SITE_HOST} wants you to sign in with your wallet.\n\n${statement || 'Read-only sign-in to JustSendIt. This signature never moves funds and grants no token approvals.'}\n\nURI: ${BASE_URL.replace(/\/+$/, '')}\nAddress: ${address}\nChain ID: 4663\nNonce: ${nonce}\nIssued At: ${new Date(now()).toISOString()}\nExpiration Time: ${new Date(now() + 6e5).toISOString()}`;
+  const at = now();
+  return `${SITE_HOST} wants you to sign in with your Ethereum account:\n${getAddress(address)}\n\n` +
+    `${statement || 'Read-only sign-in to JustSendIt. This signature never moves funds and grants no token approvals.'}\n\n` +
+    `URI: ${BASE_URL.replace(/\/+$/, '')}\n` +
+    `Version: 1\n` +
+    `Chain ID: 4663\n` +
+    `Nonce: ${nonce}\n` +
+    `Issued At: ${new Date(at).toISOString()}\n` +
+    `Expiration Time: ${new Date(at + 6e5).toISOString()}`;
 }
 function issueNonce(address, statement) {
   const nonce = rand(16), message = signInMessage(address, nonce, statement);
@@ -2335,16 +2352,26 @@ function jgetCached(url, ttl) {
   return pr;
 }
 
-async function jget(url) {
+/* Two different answers used to collapse into the same `null`:
+     "the upstream answered, and there is nothing there"   → the token really is unlisted
+     "we could not ask"  (429, 5xx, timeout, DNS, offline)  → we know NOTHING about this token
+   Reading the second as the first is how the site ended up telling people a token "may have delisted or
+   rugged" when the truth was that Dexscreener rate-limited us — a statement about someone's money that we
+   had no evidence for. jgetR keeps them apart; jget stays as the thin wrapper for the many callers that
+   genuinely only want the data. */
+async function jgetR(url) {
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json' }, signal: ctrl.signal });
     clearTimeout(to);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch { return null; }
+    if (!res.ok) return { ok: false, data: null, reason: res.status === 429 ? 'rate-limited' : 'upstream ' + res.status };
+    return { ok: true, data: await res.json(), reason: null };
+  } catch (e) {
+    return { ok: false, data: null, reason: (e && e.name === 'AbortError') ? 'timed out' : 'unreachable' };
+  }
 }
+async function jget(url) { return (await jgetR(url)).data; }
 /* ===== Community holder snapshots ==================================================================
    Walks Blockscout's paginated holders endpoint and freezes the full holder list at a moment in time.
 
@@ -3583,12 +3610,19 @@ async function enrichPairs() {
     t.quoteSymbol = q ? QUOTE_SYMBOL[q] : '?';
     valid.push(t);
   }
-  // Dexscreener batch (up to 30 tokens/call), matched back by pair address
+  /* Dexscreener batch (up to 30 tokens/call), matched back by pair address.
+     A batch that FAILED is recorded, not silently treated as "none of these are listed". Without this the
+     radar answered a rate-limit by blanking every price, liquidity and holder count it had, marking the rows
+     unindexed, and — because the whole snapshot was replaced — serving that blank to every reader. */
   const dexByPair = {};
+  const dexFailed = new Set();
+  let dexReason = null;
   const toks = valid.map(t => t.token);
   for (let i = 0; i < toks.length; i += 30) {
-    const arr = await jget('https://api.dexscreener.com/tokens/v1/robinhood/' + toks.slice(i, i + 30).join(',')) || [];
-    for (const pr of arr) if (pr && pr.pairAddress) dexByPair[pr.pairAddress.toLowerCase()] = pr;
+    const slice = toks.slice(i, i + 30);
+    const r = await jgetR('https://api.dexscreener.com/tokens/v1/robinhood/' + slice.join(','));
+    if (!r.ok) { for (const tk of slice) dexFailed.add(tk); dexReason = dexReason || r.reason; continue; }
+    for (const pr of (r.data || [])) if (pr && pr.pairAddress) dexByPair[pr.pairAddress.toLowerCase()] = pr;
   }
   if (usdgDecimals == null) { const d = await tokenDecimals(USDG_ADDR); if (d != null) usdgDecimals = d; } // cache only a successful read (retry next refresh)
   const enriched = (await mapLimit(valid, 6, async (t) => {
@@ -3602,6 +3636,20 @@ async function enrichPairs() {
       tokenDecimals(t.token),     // authoritative decimals (read-only)
     ]);
     const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec);
+    /* The price feed could not be asked about this token. Carry forward the last reading we actually took
+       rather than publishing zeros: a blank row is not neutral, it reads as "dead token" to every reader and
+       to our own scoring. The carried numbers are labelled with when they were true, and `priceStale` stops
+       anything downstream treating them as current. If we have nothing to carry, the row stays honestly
+       unpriced — it is never invented. */
+    if (dexFailed.has(t.token)) {
+      const prev = (pairsCache.pairs || []).find(x => x && x.pair && x.pair.address && x.pair.address.toLowerCase() === t.pair.toLowerCase());
+      if (prev && prev.indexed) {
+        p.indexed = true; p.market = prev.market; p.priceChange = prev.priceChange; p.volume = prev.volume;
+        p.holders = p.holders && p.holders.count != null ? p.holders : prev.holders;
+        p.priceStale = true; p.priceAsOf = prev.priceAsOf || pairsCache.updatedAt || null;
+      }
+      p.priceUnread = dexReason || 'price feed unreachable';
+    }
     if (DEXTOOLS_ON) p.brand.dextools = await dextoolsInfo(t.token); // opt-in; no-op unless DEXTOOLS_API_KEY+CHAIN set
     return p;
   })).filter(Boolean);
@@ -3613,10 +3661,14 @@ async function enrichPairs() {
     if (looksDead(e)) deployerDied[d] = (deployerDied[d] || 0) + 1;
   }
   for (const e of enriched) applyRisk(e, deployerCounts, deployerDied);
-  try { recordRunners(enriched); } catch {} // feed the Best Runners store (baseline + snapshots)
-  try { cacheTokensFromPairs(enriched); } catch {} // persist each to the token-detail cache → the popup opens any of them instantly
+  // A carried-forward price must never set a Best Runners baseline, a peak, or a snapshot — the store would
+  // record an old price as if it were a new observation and bend every "since scanned" X measured against it.
+  try { recordRunners(enriched.filter(e => !e.priceStale)); } catch {}
+  try { cacheTokensFromPairs(enriched.filter(e => !e.priceStale && !e.priceUnread)); } catch {} // never overwrite a good cached price with an unread one
   enriched.sort((a, b) => (b.pair.createdAt || 0) - (a.pair.createdAt || 0));
-  pairsCache = { pairs: enriched, updatedAt: now(), building: false, error: null };
+  // `degraded` is what the page needs to say "this is the last reading, taken at HH:MM" instead of implying
+  // these are live numbers — or worse, that an unpriced token is a dead one.
+  pairsCache = { pairs: enriched, updatedAt: now(), building: false, error: null, degraded: dexFailed.size ? (dexReason || 'price feed unreachable') : null };
 }
 
 async function refreshPairs() {
@@ -3712,7 +3764,11 @@ function fetchAndStore(tok, opts = {}) {           // single-flight live lookup 
   const startedAt = now();
   pr = _doLookup(tok).then(res => {
     const cur = tokenCacheGet(tok);
-    if (!(cur && cur.updated_at > startedAt)) tokenCachePut(tok, res); // don't clobber a row refreshed (e.g. by the radar) while we were fetching
+    // An "unavailable" answer is the absence of knowledge, not knowledge. Caching it would freeze a transient
+    // outage into a stored fact and keep serving it long after the upstream recovered.
+    if (!res || !res.unavailable) {
+      if (!(cur && cur.updated_at > startedAt)) tokenCachePut(tok, res); // don't clobber a row refreshed (e.g. by the radar) while we were fetching
+    }
     return res;
   }).finally(() => { liveLookups--; lookupInflight.delete(tok); });
   lookupInflight.set(tok, pr);
@@ -3795,7 +3851,8 @@ async function _doLookup(tokenAddr) {
   if (QUOTE_SET.has(tokenAddr)) return { notFound: true, reason: 'quote' };
   // 1) Dexscreener: prefer the most-liquid pair where this token is the BASE side (its price/FDV describe the base).
   let pairAddr = null, bestLiq = -1, tokenIsBase = false;
-  const arr = await jget('https://api.dexscreener.com/tokens/v1/robinhood/' + tokenAddr) || [];
+  const dexr = await jgetR('https://api.dexscreener.com/tokens/v1/robinhood/' + tokenAddr);
+  const arr = dexr.data || [];
   for (const pr of arr) {
     if (!pr || !pr.pairAddress) continue;
     const base = ((pr.baseToken && pr.baseToken.address) || '').toLowerCase();
@@ -3806,9 +3863,22 @@ async function _doLookup(tokenAddr) {
     if (isBase && !tokenIsBase) { pairAddr = pr.pairAddress.toLowerCase(); bestLiq = liq; tokenIsBase = true; }        // first base-side pool wins over any quote-side
     else if (isBase === tokenIsBase && liq > bestLiq) { pairAddr = pr.pairAddress.toLowerCase(); bestLiq = liq; }      // else most-liquid on the same side
   }
-  // 2) fallback: ask the factory directly for a token/WETH or token/USDG pool (token is the base there by construction)
-  if (!pairAddr) { const fb = (await factoryGetPair(tokenAddr, WETH_ADDR)) || (await factoryGetPair(tokenAddr, USDG_ADDR)); if (fb) { pairAddr = fb; tokenIsBase = true; } }
-  if (!pairAddr) return { notFound: true };
+  /* 2) fallback: ask the factory directly for a token/WETH or token/USDG pool (token is the base there by
+     construction). This read is on-chain, so it is independent of Dexscreener — and it is the only one of the
+     two that can AUTHORITATIVELY say "there is no pool". "Not found" is a statement about someone's token, so
+     it is only made when the chain itself said so. If neither source could be read we say we could not check,
+     which is the difference between "this token does not exist" and "ask again in a minute". */
+  let factoryErr = null;
+  if (!pairAddr) {
+    try {
+      const fb = (await factoryGetPair(tokenAddr, WETH_ADDR)) || (await factoryGetPair(tokenAddr, USDG_ADDR));
+      if (fb) { pairAddr = fb; tokenIsBase = true; }
+    } catch (e) { factoryErr = (e && e.message) || 'chain unreachable'; }
+  }
+  if (!pairAddr) {
+    if (factoryErr) return { unavailable: true, reason: dexr.ok ? factoryErr : (dexr.reason + ', and the chain was unreachable') };
+    return { notFound: true };   // the factory answered: there really is no pool
+  }
   const { token0, token1 } = await pairTokens(pairAddr);
   const q = (token0 && QUOTE_SET.has(token0)) ? token0 : ((token1 && QUOTE_SET.has(token1)) ? token1 : null);
   const p = await enrichOne(
@@ -4163,6 +4233,7 @@ const OAUTH = {
     scope: 'instagram_business_basic', accessTokenQuery: true, subField: 'id',
   },
 };
+const csrfWarned = new Set();   // one CSRF-reject log line per offending origin, not one per request
 const oauthStates = new Map();
 const pendingLogins = new Map(); // token -> {userId, expires}
 
@@ -4196,6 +4267,28 @@ async function oauthCallback(provider, code, verifier, res) {
   else {
     userId = createUser(autoUsername(), true);
     insertIdentity(userId, provider, sub);
+  }
+  /* Two-factor has to gate THIS door too. Until now a session cookie was issued here the moment the provider
+     said who you were, so an account that had switched 2FA on — and whose profile said "Two-factor is
+     protecting this account" — could be opened by anyone who got into its Google/X/Facebook/Instagram
+     account, second factor never asked for. A factor with an unguarded side entrance is not a factor.
+     Only an EXISTING identity is challenged: an account being created right here has no factor yet.
+     The pending token rides in a short-lived HttpOnly cookie rather than the redirect URL, so it never
+     lands in browser history, a referrer header, or a screenshot of the address bar. */
+  const u2 = db.prepare('SELECT twofa_method FROM users WHERE id = ?').get(userId);
+  if (ident && u2 && u2.twofa_method) {
+    const pend = rand(16);
+    const entry = { userId, expires: now() + 3e5 };
+    if (u2.twofa_method === 'wallet') {
+      entry.messages = {};
+      for (const w of walletAddresses(userId)) entry.messages[w] = signInMessage(w, pend, 'Two-factor confirmation for JustSendIt. This signature never moves funds and grants no token approvals.');
+    }
+    pendingLogins.set(pend, entry);
+    res.writeHead(302, {
+      'Set-Cookie': [`oauth_2fa=${pend}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=300${cookieSecure()}`, CLEAR_OAUTH_STATE],
+      Location: '/?twofa=1',
+    });
+    return res.end();
   }
   const token = createSession(userId);
   res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile.html' });
@@ -5198,7 +5291,17 @@ const server = http.createServer(async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers.origin) {
     let ok = false;
     try { ok = new URL(req.headers.origin).host === new URL(BASE_URL).host; } catch {}
-    if (!ok) return bad(res, 'cross-origin request rejected', 403);
+    // A misconfigured BASE_URL rejects every write on the site — signup, login, posting, all of it — and used
+    // to do it in total silence, which reads to the operator as "the app is broken" rather than "one env var
+    // is wrong". Say exactly what did not match, in the log, once per offending origin.
+    if (!ok) {
+      // bounded: the key is an attacker-supplied header, so this must never grow without limit
+      if (!csrfWarned.has(req.headers.origin) && csrfWarned.size < 50) {
+        csrfWarned.add(req.headers.origin);
+        console.warn(`⚠️  CSRF reject: Origin ${req.headers.origin} != BASE_URL host ${(() => { try { return new URL(BASE_URL).host; } catch { return BASE_URL; } })()} — ${req.method} ${p}. If that origin is really this site, BASE_URL is wrong.`);
+      }
+      return bad(res, 'cross-origin request rejected', 403);
+    }
   }
 
   try {
@@ -5424,7 +5527,15 @@ const server = http.createServer(async (req, res) => {
           const extra = {};
           if (u.twofa_method === 'wallet') {
             extra.wallets = walletAddresses(u.id);
-            entry.message = extra.message = `${SITE_HOST} wants you to confirm your sign-in with your wallet.\n\nTwo-factor confirmation for JustSendIt — never moves funds.\n\nURI: ${BASE_URL.replace(/\/+$/, '')}\nPending: ${pend}\nIssued At: ${new Date(now()).toISOString()}`;
+            /* One EIP-4361 challenge per linked wallet, because the format binds the address in line 2 and any
+               of this account's wallets may be the one connected. The client picks the message matching the
+               wallet it connected; the server then verifies against THAT message, so a signature for one
+               address can never be replayed as another. (Previously this was a single hand-rolled string —
+               domain-bound in its text but unparseable, so the wallet drew an opaque blob instead of a
+               sign-in panel.) pendingLogins is in-memory, so there is nothing to migrate. */
+            entry.messages = {};
+            for (const w of extra.wallets) entry.messages[w] = signInMessage(w, pend, 'Two-factor confirmation for JustSendIt. This signature never moves funds and grants no token approvals.');
+            extra.messages = entry.messages;
           }
           pendingLogins.set(pend, entry);
           return send(res, 200, { twofa: u.twofa_method, pending: pend, ...extra });
@@ -5446,6 +5557,19 @@ const server = http.createServer(async (req, res) => {
         pendingLogins.delete(String(b.pending));
         return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id)) });
       }
+      /* An OAuth sign-in that hit a second factor parked its challenge in an HttpOnly cookie and bounced the
+         browser to /?twofa=1. This hands that challenge to the page so the SAME 2FA panel the email/password
+         flow uses can finish it. The cookie is cleared on read: one redirect, one pickup. */
+      if (p === '/api/auth/2fa/pending' && req.method === 'GET') {
+        const clear = { 'Set-Cookie': `oauth_2fa=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0${cookieSecure()}` };
+        const pend = parseCookies(req.headers.cookie).oauth_2fa || '';
+        const entry = pend && pendingLogins.get(pend);
+        if (!entry || entry.expires < now()) return send(res, 200, { twofa: null }, clear);
+        const u = db.prepare('SELECT twofa_method, username FROM users WHERE id = ?').get(entry.userId);
+        if (!u || !u.twofa_method) return send(res, 200, { twofa: null }, clear);
+        const extra = u.twofa_method === 'wallet' ? { wallets: walletAddresses(entry.userId), messages: entry.messages } : {};
+        return send(res, 200, { twofa: u.twofa_method, pending: pend, username: u.username, ...extra }, clear);
+      }
       if (p === '/api/auth/login/wallet2fa' && req.method === 'POST') {
         if (!rateLimit('w2fa:' + clientIp(req), 30, 9e5)) return bad(res, 'too many attempts — slow down', 429);
         const b = await readBody(req);
@@ -5453,10 +5577,15 @@ const server = http.createServer(async (req, res) => {
         if (!pend || pend.expires < now()) return bad(res, '2FA session expired — sign in again', 401);
         const u = db.prepare('SELECT * FROM users WHERE id = ?').get(pend.userId);
         if (!u || u.twofa_method !== 'wallet') return bad(res, 'wallet 2FA not enabled', 400);
-        const message = pend.message; if (!message) return bad(res, '2FA session expired — sign in again', 401); // the exact domain-bound text we issued
+        // the exact EIP-4361 text we issued FOR THIS ADDRESS — a signature made for one wallet's challenge
+        // cannot be presented as another's, because each carries its own address in line 2
+        const addr = String(b.address || '').toLowerCase();
+        const message = pend.messages && pend.messages[addr];
+        if (!message) return bad(res, 'sign with a wallet linked to this account', 401);
         let recovered;
         try { recovered = verifyMessage(message, String(b.signature || '')).toLowerCase(); }
         catch { return bad(res, 'bad signature'); }
+        if (recovered !== addr) return bad(res, 'signature does not match that wallet', 401);
         if (!walletAddresses(u.id).includes(recovered)) return bad(res, 'that wallet is not linked to this account', 401);
         // Same rule the 2FA-management path enforces (verifyCurrentFactor): only a wallet linked BEFORE
         // two-factor was switched on counts as the second factor. Without this, an attacker holding a
@@ -5551,8 +5680,18 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/2fa/wallet/enable' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
         if (!walletAddresses(me.id).length) return bad(res, 'link a wallet to your account first');
+        let b = {}; try { b = await readBody(req); } catch {}
         // switching from TOTP to wallet 2FA must pass the current factor (else a hijacked session could flip it to a wallet it controls)
-        if (me.twofa_method) { let b = {}; try { b = await readBody(req); } catch {} const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
+        if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
+        /* Turning wallet 2FA ON must prove control of the wallet, with a signature, right now. It used to need
+           only that SOME address was on file — but from that moment every exit (disable, and disconnecting the
+           wallet) demands a signature from it. So a wallet added from a since-lost seed, or one linked and then
+           lost, locked the owner out of their own account with a single click and no warning. Proving control
+           at the door is what makes the lock safe to close. */
+        const addr = String(b.address || '').toLowerCase();
+        if (!walletAddresses(me.id).includes(addr)) return bad(res, 'sign with a wallet linked to this account to turn wallet two-factor on', 400);
+        const proof = consumeNonce(addr, b.signature);   // the EIP-4361 message we issued for this address
+        if (proof.error) return bad(res, proof.error, 401);
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
         return send(res, 200, { ok: true });
       }
@@ -6439,9 +6578,11 @@ const server = http.createServer(async (req, res) => {
         // (it's ~90KB → re-gzipping it on every hit would burn CPU on the event loop under load).
         const building = pairsCache.building && !pairsCache.updatedAt;
         const shown = pairsCache.pairs.filter(identifiedPair);   // never serve a token we couldn't name
-        const key = pairsCache.updatedAt + '|' + shown.length + '/' + pairsCache.pairs.length + '|' + (building ? 'b' : '') + '|' + (pairsCache.pairs.length ? '' : (pairsCache.error || ''));
+        // `degraded` is part of the cache key: an outage must produce a NEW payload, or readers keep getting
+        // the pre-outage body from the compressed cache with no sign anything is stale.
+        const key = pairsCache.updatedAt + '|' + shown.length + '/' + pairsCache.pairs.length + '|' + (building ? 'b' : '') + '|' + (pairsCache.degraded || '') + '|' + (pairsCache.pairs.length ? '' : (pairsCache.error || ''));
         if (pairsRespCache.key !== key) {
-          const json = JSON.stringify({ chain: DEFAULT_CHAIN, chains: PUBLIC_CHAINS, deep: true, pairs: shown, updatedAt: pairsCache.updatedAt, ttl: PAIRS_TTL, building, error: pairsCache.pairs.length ? null : pairsCache.error, risk: RISK_PUBLIC });
+          const json = JSON.stringify({ chain: DEFAULT_CHAIN, chains: PUBLIC_CHAINS, deep: true, pairs: shown, updatedAt: pairsCache.updatedAt, ttl: PAIRS_TTL, building, error: pairsCache.pairs.length ? null : pairsCache.error, degraded: pairsCache.degraded || null, risk: RISK_PUBLIC });
           pairsRespCache = { key, json, gz: zlib.gzipSync(json), br: brc(Buffer.from(json)) }; // compressed once per cache version
         }
         const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS };
@@ -6521,6 +6662,11 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('lookup:' + clientIp(req), 60, 6e4)) return bad(res, 'too many lookups — slow down', 429);
         try {
           const r = await lookupTokenPair(token);
+          // "we couldn't check" is not "this token is dead" — the client renders these very differently
+          if (r.unavailable) return send(res, 200, {
+            unavailable: true, reason: r.reason || null,
+            message: 'We couldn\u2019t reach the price feed or the chain just now, so we can\u2019t tell you anything about this token yet. Nothing here is a judgement about it \u2014 try again in a moment.',
+          });
           if (r.notFound) return send(res, 200, {
             notFound: true, reason: r.reason || null,
             message: r.reason === 'quote'
@@ -7339,6 +7485,12 @@ function productionChecks() {
   // any production signal counts — an operator who set COOKIE_SECURE/TRUST_PROXY but forgot BASE_URL is exactly who needs the warning
   const prod = IS_HTTPS || process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === '1' || !!TRUST_PROXY_HOPS;
   const warn = (m) => console.warn('⚠️  ' + m);
+  // The .env.example placeholder is the single likeliest deploy mistake, and its symptom is silent: every
+  // browser POST is rejected as cross-origin, so signup and login just fail with no clue why. Checked
+  // unconditionally — a placeholder is wrong in every environment.
+  if (/yourdomain\.com|example\.com|justsendit\.example/i.test(BASE_URL)) {
+    warn('BASE_URL is still the .env.example placeholder (' + BASE_URL + ') — every browser POST will be rejected as cross-origin (403), so nobody can sign up or log in. Set it to your real https origin.');
+  }
   if (prod) {
     if (BASE_URL.includes('localhost')) warn('BASE_URL is still localhost — OAuth redirects and Secure cookies will be wrong in production. Set BASE_URL=https://yourdomain.');
     if (!IS_HTTPS && process.env.COOKIE_SECURE !== '1') warn('Serving over http and COOKIE_SECURE!=1 — session cookies will NOT be marked Secure. Set COOKIE_SECURE=1 behind TLS termination.');

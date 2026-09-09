@@ -213,14 +213,21 @@
           try {
             status.textContent = 'Choose your wallet… 👛';
             const { provider, address } = await WALLET.connect();
+            // one challenge per linked wallet (each names its own address, as EIP-4361 requires) — pick the
+            // one for the wallet they actually connected, and say so plainly if it isn't on the account
+            const msg = j.messages && j.messages[String(address).toLowerCase()];
+            if (!msg) throw new Error('that wallet isn’t linked to this account — connect the one you turned two-factor on with');
             status.textContent = 'Approve the signature… ✍️';
-            const signature = await provider.request({ method: 'personal_sign', params: [j.message, address] });
-            const r = await api('/api/auth/login/wallet2fa', { method: 'POST', body: { pending: j.pending, signature } });
+            const signature = await provider.request({ method: 'personal_sign', params: [msg, address] });
+            const r = await api('/api/auth/login/wallet2fa', { method: 'POST', body: { pending: j.pending, address, signature } });
             loginSuccess(r);
           } catch (err) { status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'); }
         };
       }
     }
+    // show2fa lives in this DOMContentLoaded closure; the OAuth pickup at the bottom of the file runs
+    // outside it, so expose it the same way _reset2fa is exposed
+    AUTH._show2fa = show2fa;
     AUTH._reset2fa = function () {
       modal.querySelector('.auth-tabs').hidden = false;
       modal.querySelector('#pane-2fa').hidden = true;
@@ -655,6 +662,22 @@
     await refresh();
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onAuthChange);
     else onAuthChange();
+    /* An OAuth sign-in on an account with two-factor on comes back here as /?twofa=1 instead of a session —
+       the challenge itself is in an HttpOnly cookie the page cannot read, so we ask the server for it and
+       finish in exactly the same panel the email/password flow uses. The marker is stripped from the URL
+       either way, so a reload or a shared link never re-triggers it. */
+    if (/[?&]twofa=1\b/.test(location.search)) {
+      try { history.replaceState(null, '', location.pathname + location.search.replace(/([?&])twofa=1&?/, '$1').replace(/[?&]$/, '') + location.hash); } catch {}
+      const pickup = async () => {
+        try {
+          const j = await api('/api/auth/2fa/pending');
+          if (j && j.twofa && AUTH._show2fa) { openModal(); AUTH._show2fa(j); }
+        } catch {}
+      };
+      // the panel is built in the DOMContentLoaded handler above — wait for it rather than racing it
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', pickup);
+      else pickup();
+    }
     return AUTH.user;
   })();
 })();

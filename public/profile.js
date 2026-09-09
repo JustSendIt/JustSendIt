@@ -224,10 +224,18 @@ async function confirmTotp() {
 }
 async function enableWallet2fa() {
   try {
-    await api('/api/2fa/wallet/enable', { method: 'POST' });
+    /* Turning this on makes THIS wallet the only way back in — disabling it and disconnecting it both need its
+       signature. So say that in words before anything happens, and then make them prove they can sign with it
+       right now. One click used to be enough, and a wallet whose seed was already gone locked the account
+       permanently with no warning at all. */
+    if (!confirm('Turn on wallet two-factor?\n\nFrom now on, signing in will need a signature from this wallet — and so will turning two-factor back off. If you lose access to the wallet, you lose access to the account.\n\nYou will be asked to sign now to prove you can.')) return;
+    const { provider, address } = await WALLET.connect();
+    const { message } = await api('/api/auth/wallet/nonce?address=' + address);
+    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    await api('/api/2fa/wallet/enable', { method: 'POST', body: { address, signature } });
     sendToast('Wallet 2FA is ON 🔐');
     loadMe();
-  } catch (e) { sendToast('⚠️ ' + e.message); }
+  } catch (e) { sendToast('⚠️ ' + (e.message || 'cancelled')); }
 }
 // wallet-first accounts add an email + password (a second way in; unlocks password-2FA and safe wallet disconnect)
 async function addEmail(e) {
