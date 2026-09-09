@@ -41,6 +41,8 @@
     hop_on: ['🚀', 'Send It! on a call'],
     hop_hold: ['💎', 'Diamond-hand a Send in profit'],
     daily: ['📅', 'Check in daily'],
+    // the only entry that takes rather than gives — it must be named, or a shrinking balance is a mystery
+    decay: ['📉', 'Send Power decayed (away, read-only, or calls underwater)'],
     customize: ['🎨', 'Customize your wall'],
     comment: ['💬', 'Comment on a post'],
     react_give: ['🔥', 'React to a post'],

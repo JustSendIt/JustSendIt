@@ -497,6 +497,9 @@ for (const col of [
   // of a parallel table means comments, voting, muting, reporting, moderation and deletion all work there on
   // day one, with no second implementation to keep in step.
   "ALTER TABLE posts ADD COLUMN board TEXT",
+  // Send Power decay: when it was last applied, and how many consecutive days of absence it has seen
+  "ALTER TABLE users ADD COLUMN decay_at INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN decay_streak INTEGER NOT NULL DEFAULT 0",
   /* Wallet challenges are bound to WHAT they authorise. One generic "Read-only sign-in" message used to be
      accepted for signing in, enabling wallet 2FA, DISABLING two-factor and adding an email — so a signature a
      wallet truthfully rendered as a read-only sign-in could strip an account's second factor, and the person
@@ -5187,6 +5190,16 @@ const callHeadroom = (paid, cap) => Math.min(Math.max(0, cap - (paid || 0)), Mat
 // ── Diamond-hands: reward a call that STAYS in positive Xs, the longer AND higher the more (exponentially) ──
 // hold_x accumulates ∫ min(curX, cap) dt(hours) while curX>0. Points owed grow super-linearly with hold_x, so
 // duration × height compound. Same mechanic rewards hoppers who stay in profit from their hop-in price.
+/* SEND CALL BONUSES ADD, THEY DO NOT MULTIPLY — the same rule effectiveMult() already applies to the boost
+   stack, now applied to the call's own bonuses too. Each contributes what it pays OVER the base 1x, so a call
+   with a 4x size bonus and a 3x crew bonus pays 1 + 3 + 2 = 6x its base rather than 12x. Compounding was how
+   a single good call could pay a number nobody could justify: size × crew × milestone × the boost stack are
+   four factors, and four factors multiplied get away from you fast. */
+const addBonus = (...factors) => 1 + factors.reduce((s, f) => s + Math.max(0, (Number(f) || 1) - 1), 0);
+/* The X ladder used to pay rung m a multiple of m — so the total to 50x was 1+2+…+50 = 1,275 bases, growing
+   with the SQUARE of the call. Now each rung adds a fixed step instead, so the ladder grows in a straight
+   line: rung 50 pays 5.9x a rung rather than 50x, and the whole ladder to 50x is ~172 bases, not 1,275. */
+const CALL_X_STEP = 0.1;
 const HOLD_K = 2, HOLD_EXP = 1.5;      // HOLD_K 2 (was 0.5): a doubled call held a month with no crew now pays ~38,600 base, four times a maxed grind day — holding in profit IS the main event; HOLD_MAX and the budget still bound the top   // owed = HOLD_K · hold_x^HOLD_EXP  (super-linear ⇒ "exponentially more")
 const HOLD_X_CAP = 50;                // cap the per-tick X height so one glitch tick can't spike the integral
 const HOLD_DT_CAP_H = 0.5;            // credit at most 30 min of hold per tick (we never observed the price during a longer gap)
@@ -5207,8 +5220,12 @@ const CREW_MAX = 3;
 const crewFactor = (hoppersInProfit) => Math.min(CREW_MAX, 1 + CREW_PER_HOPPER * Math.max(0, hoppersInProfit || 0));
 function accrueHold(holdX, holdPaid, curX, dtH, rate) {
   let nx = holdX;
-  if (curX > 0 && dtH > 0) nx += Math.min(dtH, HOLD_DT_CAP_H) * Math.min(curX, HOLD_X_CAP) * (rate > 0 ? rate : 1);
-  const owed = Math.min(HOLD_MAX, HOLD_K * Math.pow(nx, HOLD_EXP));
+  if (curX > 0 && dtH > 0) nx += Math.min(dtH, HOLD_DT_CAP_H) * Math.min(curX, HOLD_X_CAP);
+  /* The crew bonus is applied to the PAYOUT, not folded into the integral. Inside the integral it went
+     through the ^1.5 exponent, so a 3x crew was really worth 3^1.5 = 5.2x — a bonus paying 74% more than it
+     said it did. Outside it, a 3x crew is worth exactly 3x, which is what the card promises. */
+  const bonus = addBonus(rate);
+  const owed = Math.min(HOLD_MAX, HOLD_K * Math.pow(nx, HOLD_EXP) * bonus);
   const award = (owed - holdPaid >= MIN_HOLD_AWARD) ? Math.floor(owed - holdPaid) : 0;
   return { holdX: nx, award, holdPaid: holdPaid + award };
 }
@@ -5381,7 +5398,8 @@ async function refreshCalls() {
           const xSpent = db.prepare("SELECT COALESCE(SUM(amount),0) s FROM points_events WHERE ref >= ? AND ref < ?").get('callx:' + r.id + ':', 'callx:' + r.id + ';').s;
           let xRoom = Math.max(0, Math.floor(CALL_POINTS_CAP * CALL_X_BUDGET_SHARE) - xSpent);
           for (let m = Math.max(1, r.awarded_x + 1); m <= newMax; m++) {
-            const got = awardPoints(r.user_id, 'call_x', PTS.call_x * m, 'callx:' + r.id + ':' + m, Math.min(callHeadroom(paidPts, CALL_POINTS_CAP), xRoom)); // bigger call → more points, out of the ladder's slice of the budget
+            const rung = Math.round(PTS.call_x * addBonus(1 + (m - 1) * CALL_X_STEP)); // additive rung, not m× the base
+            const got = awardPoints(r.user_id, 'call_x', rung, 'callx:' + r.id + ':' + m, Math.min(callHeadroom(paidPts, CALL_POINTS_CAP), xRoom)); // bigger call → more points, out of the ladder's slice of the budget
             paidPts += got; xRoom -= got;
           }
           db.prepare('UPDATE calls SET awarded_x=?, points_paid=? WHERE id=?').run(newMax, paidPts, r.id);
@@ -6641,7 +6659,7 @@ const server = http.createServer(async (req, res) => {
             : await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price)); // what this follower bought / still holds
           const spendUsd = pos.spendUsd;
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop, spendUsd, pos.boughtUsd, pos.heldUsd);
-          const hopBase = Math.round(PTS.hop_on * sizeMult(spendUsd));
+          const hopBase = Math.round(PTS.hop_on * addBonus(sizeMult(spendUsd)));   // one factor today, but the same rule as the rest
           earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX)) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
           if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
           notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' ($' + Math.round(spendUsd) + ' in)' : ''), 'points');
@@ -7959,6 +7977,125 @@ async function tgStart() {
   }
 }
 
+
+/* ===== Send Power decays when you stop showing up ==========================================================
+   Send Power only ever went up. That makes it a record of what someone did once, not of what they are doing —
+   an account that made three good calls a year ago outranks one that shows up daily, forever, and there is no
+   way for the second to catch up except by out-grinding a number that never moves.
+
+   So it leaks. A day missed costs a little; each further consecutive day costs a little more, because the
+   point is to make coming back matter, not to punish one quiet afternoon. Three things drain it:
+     · not checking in — the everyday one, and the only one that accelerates
+     · being in read-only mode — you are not participating, by the site's own decision
+     · calls that went underwater — a bad call should cost something, or a call is a free lottery ticket
+
+   Deliberate limits, because this takes something away from people:
+     · GRACE_DAYS of absence cost nothing at all. A weekend is not a lapse.
+     · MAX_PCT caps a single day, however long the streak, so nobody loses a level overnight.
+     · FLOOR protects a beginner's balance entirely — there is nothing to gain by draining someone who has
+       barely started, and plenty to lose.
+     · Every drain is written to points_events as a NEGATIVE amount, so the dashboard's own maths still adds
+       up and a user can see exactly what happened and when.
+     · One notification per drain. Losing Send Power silently would be the worst version of this.
+   ======================================================================================================== */
+const DECAY = {
+  GRACE_DAYS: 2,        // consecutive days away before anything is taken
+  BASE_PCT: 0.4,        // % of the balance lost on the first day past grace
+  ACCEL_PCT: 0.2,       // added per further consecutive day away
+  MAX_PCT: 4,           // ceiling for one day's total drain, however long the absence
+  READONLY_PCT: 1.0,    // added while the account is in read-only mode
+  BAD_CALL_PCT: 0.3,    // added per call currently underwater, up to BAD_CALL_MAX
+  BAD_CALL_MAX: 1.5,
+  FLOOR: 5000,          // balances at or under this are never touched
+  MIN_DRAIN: 1,         // below one whole point, take nothing rather than round up
+};
+
+// UTC day number — the same clock the daily check-in ref uses, so "a day" means one thing across the site
+const dayNo = (t) => Math.floor((t || now()) / 864e5);
+
+/* One account's decay for today. Returns what was taken (0 if nothing). Idempotent per UTC day: decay_at
+   records the last day applied, so a restart, a double-fire or a manual run can never charge twice. */
+function decayUser(u, today) {
+  if (!u || !(u.points > DECAY.FLOOR)) {
+    // still advance the marker so a beginner who crosses the floor later doesn't get charged for the
+    // whole quiet stretch behind them in one go
+    db.prepare('UPDATE users SET decay_at = ?, decay_streak = 0 WHERE id = ?').run(today, u.id);
+    return 0;
+  }
+  const checkedInToday = !!db.prepare('SELECT 1 FROM points_events WHERE user_id = ? AND kind = ? AND created_at > ?')
+    .get(u.id, 'daily', now() - 864e5);
+  if (checkedInToday) {
+    db.prepare('UPDATE users SET decay_at = ?, decay_streak = 0 WHERE id = ?').run(today, u.id);
+    return 0;   // showed up: the streak resets and nothing is taken
+  }
+
+  const streak = (u.decay_streak || 0) + 1;
+  let pct = 0;
+  if (streak > DECAY.GRACE_DAYS) pct += DECAY.BASE_PCT + (streak - DECAY.GRACE_DAYS - 1) * DECAY.ACCEL_PCT;
+
+  // read-only: the site has already judged this account is not participating
+  const readOnly = !!restrictionOf(u);
+  if (readOnly) pct += DECAY.READONLY_PCT;
+
+  /* Underwater calls. Only calls still open and still below their entry count — a call that recovered is not
+     a bad call, and one already written off as rugged is charged once through this same route rather than
+     twice. Counted from the stored prices, so this costs no chain reads. */
+  const bad = db.prepare(`SELECT COUNT(*) n FROM calls
+                          WHERE user_id = ? AND cur_price > 0 AND entry_price > 0 AND cur_price < entry_price`).get(u.id).n;
+  if (bad > 0) pct += Math.min(DECAY.BAD_CALL_MAX, bad * DECAY.BAD_CALL_PCT);
+
+  pct = Math.min(DECAY.MAX_PCT, pct);
+  if (!(pct > 0)) {
+    db.prepare('UPDATE users SET decay_at = ?, decay_streak = ? WHERE id = ?').run(today, streak, u.id);
+    return 0;   // inside the grace window with nothing else against the account
+  }
+
+  // never below the floor, and never a fractional nibble
+  const drain = Math.min(Math.floor(u.points * pct / 100), u.points - DECAY.FLOOR);
+  if (!(drain >= DECAY.MIN_DRAIN)) {
+    db.prepare('UPDATE users SET decay_at = ?, decay_streak = ? WHERE id = ?').run(today, streak, u.id);
+    return 0;
+  }
+  try {
+    db.exec('BEGIN');
+    db.prepare('UPDATE users SET points = MAX(0, points - ?), decay_at = ?, decay_streak = ? WHERE id = ?')
+      .run(drain, today, streak, u.id);
+    // negative amount, so every dashboard that sums this ledger stays correct without knowing about decay
+    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, ref, created_at) VALUES (?,?,?,?,?,?,?)')
+      .run(u.id, 'decay', -drain, -drain, 1, 'decay:' + u.id + ':' + today, now());
+    db.exec('COMMIT');
+  } catch { try { db.exec('ROLLBACK'); } catch {} return 0; }
+
+  const why = [];
+  if (streak > DECAY.GRACE_DAYS) why.push(streak + ' days without checking in');
+  if (readOnly) why.push('read-only mode');
+  if (bad > 0) why.push(bad + ' call' + (bad === 1 ? '' : 's') + ' underwater');
+  notify(u.id, '📉', 'Send Power decayed by ' + drain.toLocaleString('en-US') + ' (' + (Math.round(pct * 10) / 10) +
+    '%) — ' + why.join(', ') + '. Check in to stop it.', 'points');
+  return drain;
+}
+
+/* The sweep. Bounded per run so one pass can never lock the database for long, and it only ever looks at
+   accounts that have not already been charged today. */
+const DECAY_BATCH = 200;
+let decayRunning = false;
+function runDecaySweep() {
+  if (decayRunning) return { users: 0, drained: 0 };
+  decayRunning = true;
+  const today = dayNo();
+  let users = 0, drained = 0;
+  try {
+    const rows = db.prepare(`SELECT id, points, decay_streak, restricted_until, restrict_level
+                             FROM users WHERE decay_at < ? AND system = 0 ORDER BY id LIMIT ?`).all(today, DECAY_BATCH);
+    for (const u of rows) {
+      try { const d = decayUser(u, today); users++; drained += d; } catch {}
+    }
+  } catch (e) { console.error('decay sweep', e.message); }
+  finally { decayRunning = false; }
+  return { users, drained };
+}
+
+const decayTimer = setInterval(() => { try { runDecaySweep(); } catch {} }, 5 * 60 * 1000);
 const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();
 
