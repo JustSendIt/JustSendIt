@@ -148,3 +148,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
   @keyframes livex-pulse { 0% { opacity: 0.45; } 100% { opacity: 1; } }
   .livex-pulse { animation: livex-pulse 0.5s ease-out; }
 }
+
+/* the wall's loading / error block: the retry button needs room from the copy above it */
+.empty-wall .btn { margin-top: 0.9rem; }
+.empty-wall .modal-note { margin: 0.4rem auto 0; max-width: 46ch; }

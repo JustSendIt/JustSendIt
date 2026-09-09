@@ -1191,10 +1191,12 @@
       if (cl) { e.preventDefault(); e.stopPropagation(); makeSendCall(cl); return; }
       const react = e.target.closest('.np-feed-react');
       if (react) {
-        const c = react.querySelector('.np-rail-count'); const n = (Number(c.textContent) || 0) + 1; c.textContent = n;
+        const c = react.querySelector('.np-rail-count');
+        const n = Math.min(9, rocketCount(react.dataset.addr) + 1);   // capped: this is a fidget, not a score
+        c.textContent = 'you \u00d7' + n;                              // never a bare integer — see rocketCount
         try { localStorage.setItem('np:rocket:' + react.dataset.addr, String(n)); } catch {}
         if (!reduced()) { react.classList.remove('pop'); void react.offsetWidth; react.classList.add('pop'); }
-        if (window.sendToast) sendToast('Hyped 🚀 — still DYOR, not advice'); return;
+        if (window.sendToast) sendToast('Hyped \ud83d\ude80 — a private tap only you see. Still DYOR, not advice.'); return;
       }
       const exp = e.target.closest('.np-slide-expand');
       if (exp) { const d = exp.closest('.np-slide').querySelector('.np-slide-details'); if (d) d.open = !d.open; }
@@ -1260,7 +1262,12 @@
     fetchPairs(true);
   });
   const feedMove = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
+  /* The 🚀 tally is stored in THIS browser's localStorage and goes nowhere near the server — nobody else can
+     ever see it. Rendered as a bare green integer beside the server-backed watchlist star it read as a social
+     count, which is a number the site was inventing about other people's interest. It now renders as "you ×N"
+     and shows nothing at all at zero, so it can never be mistaken for a crowd. */
   function rocketCount(addr) { try { return Number(localStorage.getItem('np:rocket:' + addr)) || 0; } catch { return 0; } }
+  function rocketLabel(addr) { const n = rocketCount(addr); return n ? 'you \u00d7' + n : ''; }
   function srLine(p) {
     const T = verdictOf(p), health = healthOf(p);
     return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + T.word + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
@@ -1304,7 +1311,7 @@
       '</div>' +
       '<div class="np-slide-rail" aria-label="Actions">' +
         (window.Watchlist ? Watchlist.btnHTML(p, 'np-rail-btn') : '') +
-        '<button class="np-rail-btn np-feed-react" type="button" data-addr="' + esc(p.pair.address) + '" aria-label="Hype this token (a fun reaction, not advice)">🚀<span class="np-rail-count">' + rocketCount(p.pair.address) + '</span></button>' +
+        '<button class="np-rail-btn np-feed-react" type="button" data-addr="' + esc(p.pair.address) + '" aria-label="Hype this token — a private tap only you can see, not advice">🚀<span class="np-rail-count">' + rocketLabel(p.pair.address) + '</span></button>' +
         '<a class="np-rail-btn" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" aria-label="Open chart">📈</a>' +
         '<a class="np-rail-btn" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" aria-label="Open explorer">🔍</a>' +
         '<button class="copy-btn np-rail-btn" type="button" data-copy="' + esc(p.token.address) + '" aria-label="Copy contract address">📋</button>' +

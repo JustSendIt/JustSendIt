@@ -83,8 +83,13 @@ async function loadFeed(reset = true) {
     params.push('before=' + oldestId);
     if (currentSort === 'top' && lastScore != null) params.push('beforeScore=' + lastScore); // composite (score,id) keyset
   }
+  /* A first paint with nothing in it is not neutral: an empty wall says "nobody has posted", and a blank one
+     after a failed request says "this site is broken" — with only a toast, already gone, to say otherwise.
+     So the feed says what it is doing, and says what went wrong with a way to try again. */
+  if (reset && !feedEl.children.length) { feedEl.setAttribute('aria-busy', 'true'); feedEl.innerHTML = '<p class="empty-wall">Loading the wall…</p>'; }
   try {
     const j = await api('/api/posts' + (params.length ? '?' + params.join('&') : ''));
+    feedEl.removeAttribute('aria-busy');
     if (reset) { feedEl.innerHTML = ''; oldestId = null; lastScore = null; }
     for (const p of j.posts) {
       if (!feedEl.querySelector('.post[data-id="' + p.id + '"]')) feedEl.appendChild(postEl(p)); // skip a post already shown (e.g. a just-prepended one)
@@ -97,7 +102,32 @@ async function loadFeed(reset = true) {
       ? 'Nothing here yet — follow some senders and their posts land here.'
       : 'Nothing on the wall yet. Be the first to send it.';
     document.getElementById('load-more').hidden = j.posts.length < 30;
-  } catch (e) { sendToast(e.message || 'Could not load the feed 😬'); }
+  } catch (e) {
+    feedEl.removeAttribute('aria-busy');
+    const msg = (e && e.message) || 'Could not load the feed';
+    if (reset) {
+      feedEl.innerHTML = '';
+      const box = document.createElement('div');
+      box.className = 'empty-wall';
+      box.setAttribute('role', 'status');
+      const p1 = document.createElement('p');
+      p1.textContent = '😬 ' + msg;
+      const p2 = document.createElement('p');
+      p2.className = 'modal-note';
+      p2.textContent = 'The wall could not be loaded — this is about the connection, not about anything anyone posted.';
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm';
+      btn.type = 'button';
+      btn.textContent = '↻ Try again';
+      btn.addEventListener('click', () => loadFeed(true));
+      box.append(p1, p2, btn);
+      feedEl.appendChild(box);
+      const empty = document.getElementById('empty');
+      if (empty) empty.style.display = 'none';   // the "nothing posted yet" copy would contradict the error
+    } else {
+      sendToast(msg);   // a failed "load more" keeps what is already on screen
+    }
+  }
 }
 
 /* feed tabs (WHO) */
