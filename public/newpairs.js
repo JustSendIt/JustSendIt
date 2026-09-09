@@ -1479,7 +1479,7 @@
       ' since our scanner first priced it' + (caughtAge ? ', ' + caughtAge + ' ago' : '') +
       ((r.ath != null && r.ath > r.sinceX) ? ' · peak since then ' + callXFull(r.ath) : '') +
       ' — where +100% = 1x, the same as a Send Call. That is our first sighting, not a call and not a recommendation.');
-    const since = (r.sinceX == null || sameAsGain) ? '' : '<span class="np-runner-since ' + (r.sinceX > 0 ? 'up' : r.sinceX < 0 ? 'down' : 'flat') + '" role="img" aria-label="' + sinceTip + '" title="' + sinceTip + '">🔎 <b>' + callX(r.sinceX) + '</b> <i>since we caught it</i></span>';
+    const since = (r.sinceX == null || sameAsGain) ? '' : '<span class="np-runner-since ' + (r.sinceX > 0 ? 'up' : r.sinceX < 0 ? 'down' : 'flat') + '" role="img" aria-label="' + sinceTip + '" title="' + sinceTip + '">🔎 <b>' + callX(r.sinceX) + '</b> <i>since scanned</i></span>';
     const pin = '<button class="np-pin np-runner-pin" type="button" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
     const comm = commSlot(r.token, r.symbol); // 🏘️ Community / ＋ Start community (filled by tokentext.js)
