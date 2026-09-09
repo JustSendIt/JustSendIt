@@ -182,3 +182,19 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
   color: var(--diamond); text-decoration: none; border: 1px solid rgba(159,224,255,0.4); border-radius: var(--r-pill); padding: 0.3rem 0.7rem; }
 .np-tg-token:hover { border-color: var(--diamond); background: rgba(159,224,255,0.1); }
 @media (pointer: coarse) { .np-tg-token { min-height: 44px; } }
+
+/* 🚀 Send Call and 📌 Convict, straight off a row. Both are compact icon buttons in a tight action rail, so
+   they take the rail's own sizing — and the touch floor from §b above still applies to them. */
+.np-runner-call { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: var(--ink); border: 1.5px solid var(--ink-4); color: var(--text);
+  font-size: 1rem; cursor: pointer; }
+.np-runner-call:hover { border-color: var(--green); color: var(--green-bright); }
+.np-runner-call:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 1px; }
+/* armed = "press again to post". A Send Call is permanent, so the confirm state has to be unmissable. */
+.np-runner-call.is-armed, .np-row-pin.is-armed { width: auto; padding: 0 0.6rem; border-color: var(--gold); color: var(--gold); background: rgba(255,179,64,0.12); font-weight: 800; }
+.np-row-pin { background: none; border: 1.5px solid transparent; color: var(--text-dim); font-size: 0.95rem;
+  cursor: pointer; border-radius: 8px; padding: 0.2rem 0.35rem; line-height: 1; }
+.np-row-pin:hover { color: var(--gold); border-color: rgba(255,179,64,0.4); }
+.np-row-pin.is-pinned { color: var(--gold); border-color: rgba(255,179,64,0.5); background: rgba(255,179,64,0.1); }
+.np-row-pin:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 1px; }
+@media (pointer: coarse) { .np-runner-call, .np-row-pin { min-height: 44px; min-width: 44px; } }

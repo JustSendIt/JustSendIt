@@ -192,9 +192,9 @@
       <p class="np-runners-foot">🎉 Entertainment only · a big run is not a recommendation — most tokens round-trip to zero. DYOR.</p>
     </section>
 
-    <!-- The scanner, wherever the decision actually gets made. Rendered by newpairs.js from
-         /api/telegram/info so it can say plainly when the bot is not configured, instead of
-         showing a link that goes nowhere. -->
+    <!-- HIDDEN — the Telegram scanner offer. Rendered by newpairs.js from /api/telegram/info, but only
+         when TG_UI is true there; it is false, so this section never unhides and nothing here is reachable.
+         Left in place so turning the feature back on is one constant, not a rebuild. -->
     <section class="np-tg" id="np-tg" aria-labelledby="np-tg-h" hidden>
       <h2 class="np-tg-h" id="np-tg-h">📡 Take the scanner to Telegram</h2>
       <p class="np-tg-sub" id="np-tg-sub"></p>

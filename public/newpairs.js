@@ -63,7 +63,21 @@
         if (window.sendToast) sendToast('📌 Pinned $' + (btn.dataset.sym || '') + ' to your wall!');
       }
       const sel = '.np-pin[data-pin="' + (window.CSS && CSS.escape ? CSS.escape(btn.dataset.pin) : btn.dataset.pin) + '"]';
-      document.querySelectorAll(sel).forEach(b => { const on = isPinned(token); b.classList.toggle('is-pinned', on); b.setAttribute('aria-pressed', String(on)); b.textContent = on ? '📌 Pinned to wall' : '📌 Pin to my wall'; b.disabled = false; });
+      // Compact buttons (the runner row, the DEX row) are icon-only by design and live in tight action rails —
+      // rewriting them to "📌 Pinned to wall" would blow the row apart. They carry data-pin-ico and keep the pin.
+      document.querySelectorAll(sel).forEach(b => {
+        const on = isPinned(token);
+        b.classList.toggle('is-pinned', on);
+        b.setAttribute('aria-pressed', String(on));
+        if (b.dataset.pinIco) {
+          const sy = b.dataset.sym ? '$' + b.dataset.sym : 'this token';
+          b.title = on ? 'Convicted — tap to remove' : 'Convict — pin to your wall';
+          b.setAttribute('aria-label', (on ? 'Remove ' : 'Convict ') + sy + (on ? ' from your convictions' : ' — pin to your wall'));
+        } else {
+          b.textContent = on ? '📌 Pinned to wall' : '📌 Pin to my wall';
+        }
+        b.disabled = false;
+      });
       document.dispatchEvent(new CustomEvent('pins:changed', { detail: { token } })); // let the public wall's "Convicted In" re-render live
     } catch { if (window.sendToast) sendToast('Could not update pin'); btn.disabled = false; }
   });
@@ -433,6 +447,7 @@
       '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
       '<span class="np-chg-slot">' + chgChipHTML(p.priceChange.h1) + '</span>' +
       callBtnHTML(p) +
+      rowPinHTML(p) +
       (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
       '<span class="sr-only">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + T.word + ', health ' + health + ' of 100. Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.</span>' +
@@ -456,15 +471,27 @@
   function callBtnHTML(p) {
     const liq = p.market && p.market.liquidityUsd;
     if (!(liq != null && liq >= CALL_MIN_LIQ)) return '';
-    return '<button class="np-row-call" type="button" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '"' +
+    return '<button class="np-row-call" type="button" data-call-ico="📣" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '"' +
       ' title="Make a Send Call on $' + esc(p.token.symbol) + '" aria-label="Make a Send Call on ' + esc(p.token.symbol) + '. Press once to confirm — a Send Call is permanent.">📣</button>';
+  }
+  /* Convict straight from a DEX-list row. The full "📌 Pin to my wall" button already lives inside the
+     expanded detail; this is the same action without having to open the row first, the way the Best Runners
+     rows already offer it. The shared [data-pin] handler picks it up — nothing new to wire. */
+  function rowPinHTML(p) {
+    const on = isPinned(p.token.address);
+    const sy = p.token.symbol ? '$' + p.token.symbol : 'this token';
+    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-pin-ico="1"' +
+      ' data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' +
+      (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') +
+      ' aria-pressed="' + on + '" title="' + (on ? 'Convicted — tap to remove' : 'Convict — pin to your wall') + '"' +
+      ' aria-label="' + (on ? 'Remove ' + esc(sy) + ' from your convictions' : 'Convict ' + esc(sy) + ' — pin to your wall') + '">📌</button>';
   }
   let callArmed = null, callArmTimer = 0;
   function disarmCall() {
     clearTimeout(callArmTimer);
     if (callArmed) {
       callArmed.classList.remove('is-armed');
-      callArmed.textContent = '📣';
+      callArmed.textContent = callArmed.dataset.callIco || '📣';   // the runner row's button is 🚀, the list's is 📣
       callArmed.setAttribute('aria-label', 'Make a Send Call on ' + (callArmed.dataset.callSym || '') + '. Press once to confirm — a Send Call is permanent.');
       callArmed = null;
     }
@@ -475,7 +502,7 @@
     disarmCall();
     callArmed = btn;
     btn.classList.add('is-armed');
-    btn.textContent = '📣 Sure?';
+    btn.textContent = (btn.dataset.callIco || '📣') + ' Sure?';
     btn.setAttribute('aria-label', 'Confirm the Send Call on ' + (btn.dataset.callSym || '') + '. It is permanent and can never be deleted.');
     if (window.announce) announce('Press again to post a permanent Send Call on ' + (btn.dataset.callSym || '') + '.');
     callArmTimer = setTimeout(disarmCall, 5000);
@@ -1444,6 +1471,9 @@
   // the DEX list / convicted-in chips). The token symbol is a real <button> so it's keyboard-accessible; this delegation
   // is the mouse-anywhere convenience. TokenModal is Esc/✕/backdrop-closable.
   if (runList) runList.addEventListener('click', (e) => {
+    const rc = e.target.closest('.np-runner-call');
+    if (rc) { e.preventDefault(); e.stopPropagation(); armCall(rc); return; }   // arm, then send on the second press
+    if (callArmed) disarmCall();                                               // any other click on the board stands it down
     if (e.target.closest('[data-pin]') || e.target.closest('.np-runner-chart') || e.target.closest('.tok-comm')) return; // the 🏘️ community tag is a real link
     const row = e.target.closest('.np-runner'); if (!row || !row.dataset.token) return;
     if (!window.TokenModal) return;
@@ -1504,8 +1534,16 @@
   function runnerRow(r, i) {
     const logo = (r.brand && r.brand.imageUrl) ? '<img class="np-runner-logo-img" src="' + esc(r.brand.imageUrl) + '" alt="" loading="lazy" decoding="async">' : '<span class="np-runner-logo-none" aria-hidden="true">🪙</span>';
     const sym = r.symbol ? '$' + esc(r.symbol) : 'Token';
-    const pin = '<button class="np-pin np-runner-pin" type="button" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
+    const pin = '<button class="np-pin np-runner-pin" type="button" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
+    /* Send Call straight off a runner. Same permanence, so the same two-press confirm the DEX list uses — a
+       call can never be edited or deleted, and one tap on a scrolling list is not consent. Hidden below the
+       same liquidity floor the server enforces, so the button is never offered for a call that would be
+       refused. Note this path skips the on-chain detail, so the call is honestly recorded as un-researched. */
+    const call = (r.liq != null && r.liq >= CALL_MIN_LIQ)
+      ? '<button class="np-runner-call np-row-call" type="button" data-call-ico="🚀" data-call-token="' + esc(r.token) + '" data-call-sym="' + esc(r.symbol || '') + '"' +
+        ' title="Make a Send Call on ' + sym + '" aria-label="Make a Send Call on ' + sym + '. Press once to confirm — a Send Call is permanent.">🚀</button>'
+      : '';
     const comm = commSlot(r.token, r.symbol); // 🏘️ Community / ＋ Start community (filled by tokentext.js)
     return '<li class="np-runner" data-token="' + esc(r.token) + '" data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '">' +
       '<span class="np-runner-rank">' + (i + 1) + '</span>' +
@@ -1515,7 +1553,7 @@
       // metrics share grid cell 3 with the symbol, so a pill there would overlap a long ticker. Emit the row even with no name.
       ((r.name || comm) ? '<span class="np-runner-name"' + (r.name ? ' title="' + esc(r.name) + '"' : '') + '>' + esc(r.name || '') + comm + '</span>' : '') +
       '<span class="np-runner-metrics">' + runnerMetricsHTML(r) + '</span>' +
-      '<span class="np-runner-actions">' + pin + chart + '</span>' +
+      '<span class="np-runner-actions">' + call + pin + chart + '</span>' +
     '</li>';
   }
   function renderRunners(data) {
@@ -1592,8 +1630,14 @@
   /* The Telegram scanner offer. Fetched rather than hardcoded so the page can be honest when the bot is not
      configured on this server: a dead t.me link that 404s would be worse than saying so. Shown on the Best
      Runners and DEX List views; the Hot Feed is a full-screen player and nothing else belongs in it. */
+  /* HIDDEN. Flip TG_UI to true to bring every Telegram surface back — the section on this page and the
+     per-token "Scan in Telegram" link. Nothing else needs changing: the bot itself is separately gated on
+     TELEGRAM_BOT_TOKEN, so with this false and no token set, there is no Telegram anywhere on the site.
+     (Same pattern as the radar's own background refresher, which is parked the same way in server.js.) */
+  const TG_UI = false;
   let tgInfo = null;
   async function loadTelegram() {
+    if (!TG_UI) return;
     const box = document.getElementById('np-tg');
     if (!box || tgInfo) return;
     try { tgInfo = await fetch('/api/telegram/info', { credentials: 'same-origin' }).then(r => r.json()); }
@@ -1614,7 +1658,7 @@
   }
   // a per-token deep link: opens the bot with THIS token already scanned
   function tgTokenLink(addr) {
-    if (!tgInfo || !tgInfo.enabled || !addr) return '';
+    if (!TG_UI || !tgInfo || !tgInfo.enabled || !addr) return '';
     return '<a class="np-tg-token" href="' + esc(tgInfo.scanPrefix + addr) + '" target="_blank" rel="noopener" title="Scan this token in Telegram">📡 Scan in Telegram</a>';
   }
 
@@ -1625,7 +1669,7 @@
     document.body.classList.toggle('np-mode-list', m === 'list');
     document.body.classList.toggle('np-mode-runners', m === 'runners');
     const tgBox = document.getElementById('np-tg');
-    if (tgBox) { if (m === 'feed') tgBox.hidden = true; else loadTelegram(); }
+    if (tgBox) { if (!TG_UI || m === 'feed') tgBox.hidden = true; else loadTelegram(); }
     [['np-vs-feed', 'feed'], ['np-vs-list', 'list'], ['np-vs-runners', 'runners']].forEach(([id, mm]) => { const b = document.getElementById(id); if (b) { b.setAttribute('aria-selected', String(m === mm)); b.tabIndex = m === mm ? 0 : -1; } }); // roving tabindex: one tab stop for the tablist
     const runEl = document.getElementById('np-runners');
     const teardownFeed = () => { feedEl.hidden = true; if (feedObserver) { feedObserver.disconnect(); feedObserver = null; } feedTrack.innerHTML = ''; state.feedAddrs = []; state.activeAddr = null; };
