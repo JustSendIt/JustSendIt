@@ -337,6 +337,23 @@ CREATE TABLE IF NOT EXISTS holder_snapshots (
   top20          TEXT                           -- JSON [[addr, rawValue]] so the header renders without unzipping
 );
 CREATE INDEX IF NOT EXISTS idx_snap_comm ON holder_snapshots(community_id, id DESC);
+
+/* Block-0 sniper scans, one row per token. block0 is IMMUTABLE once found (the first block a pool ever paid
+   a token out cannot change), so it is never re-derived; only the balances and the ledger are re-read. */
+CREATE TABLE IF NOT EXISTS sniper_scans (
+  token_addr   TEXT PRIMARY KEY,
+  pair_addr    TEXT,
+  status       TEXT NOT NULL DEFAULT 'queued',   -- queued | running | done | partial | failed
+  reason       TEXT,                             -- why it is partial or failed, in plain words
+  block0       INTEGER,
+  block0_at    INTEGER,
+  data         TEXT,                             -- the JSON payload the API and the panel render
+  calls        INTEGER,
+  started_at   INTEGER,
+  finished_at  INTEGER,
+  attempts     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_sniper_status ON sniper_scans(status, finished_at);
 CREATE TABLE IF NOT EXISTS holder_snapshot_chunks (
   snapshot_id INTEGER NOT NULL REFERENCES holder_snapshots(id) ON DELETE CASCADE,
   chunk       INTEGER NOT NULL,
@@ -2983,7 +3000,374 @@ const RISK = {
   lowHolders:      { w: 15, sev: 'medium',   label: '👤 Very few holders' },
   sellPressure:    { w: 12, sev: 'medium',   label: '🔻 Heavy sell pressure' },
   deadVolume:      { w: 12, sev: 'low',      label: '🥱 Almost no volume' },
+  sniperDump:      { w: 28, sev: 'high',     label: '🎯 Block-0 snipers sold out' },
+  sniperHeavy:     { w: 14, sev: 'medium',   label: '🎯 Block-0 snipers took a big share' },
 };
+
+/* ===== Block-0 snipers: who bought in the very first block, and what they did with it ==================
+   The question that decides whether a launch was fair: in the FIRST block the pool ever traded, how many
+   wallets got in, how much of the supply they took, and — following the TOKENS, not just the wallet — did
+   they keep them or get rid of them?
+
+   Following the tokens is the whole point. A real $GWC block-0 wallet took 2.65% of supply and never sent
+   a single token to the pool: it split the bag across five fresh wallets, and those wallets hold zero today.
+   "Did this wallet sell?" calls that wallet clean. So a sniper is analysed as a CLUSTER — the block-0
+   wallet, everyone it moved tokens to, and everyone they moved to (two hops).
+
+   Everything is read from the chain; nothing is estimated. A read that cannot be completed is recorded as
+   partial WITH ITS REASON, and a partial scan can never award the top verdict — it also never takes one
+   away, because "we could not read it" is not evidence of anything. The work is bounded and runs in the
+   background, never on a request: block 0 is immutable once found, so only balances and the ledger re-read. */
+const SNIPE = {
+  MAX_SNIPERS: 30,        // block-0 wallets traced in full (any beyond this are counted, never guessed at)
+  MAX_CONNECTED: 12,      // wallets followed per hop, per wallet
+  MAX_CLUSTER: 150,       // total wallets across every cluster for one token
+  MAX_RECEIPTS: 80,       // transaction receipts read for the ETH legs of buys and sells
+  HOPS: 2,                // sniper → wallet → wallet
+  CALL_BUDGET: 600,       // hard ceiling on RPC calls for one token scan
+  WINDOW: 4000000,        // blocks per eth_getLogs window when walking forward to block 0
+  TTL: 6 * 3600 * 1000,   // balances and the ledger are re-read this often; block 0 never is
+  RETRY_MS: 30 * 60 * 1000, // a failed scan waits this long before another attempt
+  TRIES: 6,               // attempts per read when the node is congested (it answers 429 under load)
+  BACKOFF_MS: 1500,       // grows linearly with each attempt
+  GAP_MS: 45 * 1000,      // rest between whole scans, so the chain is never hammered
+  FEED_GAP_MS: 4 * 60e3,  // how often ONE unscanned token from the radar feed is added to the queue
+};
+const DEAD_ADDRS = ['0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead'];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const lcAddr = a => String(a || '').toLowerCase();
+const topicAddr = a => '0x' + '0'.repeat(24) + lcAddr(a).slice(2);
+const addrFromTopic = t => lcAddr('0x' + String(t).slice(26));
+const hexBlock = n => '0x' + Number(n).toString(16);
+
+// Addresses that are plumbing, not people. On a taxed token the CONTRACT ITSELF appears as a block-0 buyer
+// (it takes its tax straight out of the pool) — counting it as a sniper would put a fair launch's own tax
+// mechanism at the top of its own sniper list.
+function isSystemAddr(a, token, pair) {
+  const x = lcAddr(a);
+  return !x || DEAD_ADDRS.includes(x) || x === lcAddr(token) || x === lcAddr(pair)
+    || x === SWAP_ROUTER || x === FACTORY || x === WETH_ADDR;
+}
+
+/* The shared rpc() is deliberately fail-fast — the pairs refresher must not stall behind a slow node. A
+   sniper scan is the opposite: it is a background job with nobody waiting, and the public RPC answers 429
+   under load, so it waits and tries again rather than recording "no snipers" for a read it never made. */
+function sniperBudget() {
+  let n = 0;
+  return {
+    get used() { return n; },
+    spent() { return n >= SNIPE.CALL_BUDGET; },
+    async call(m, p) {
+      n++;
+      if (n > SNIPE.CALL_BUDGET) throw Object.assign(new Error('read budget spent'), { budget: true });
+      let last;
+      for (let i = 0; i < SNIPE.TRIES; i++) {
+        try { return await rpc(m, p); } catch (e) {
+          last = e;
+          const msg = String((e && e.message) || '');
+          if (!/429|timed out|timeout|abort|http 5|ECONNRESET|fetch failed/i.test(msg)) throw e;   // a real error, not congestion
+          await sleep(SNIPE.BACKOFF_MS * (i + 1));
+        }
+      }
+      throw last;
+    },
+  };
+}
+
+// eth_getLogs with an explicit topic array, halving on a node timeout: the node's limit is on the work a
+// query does, not on the block range, so the same range usually succeeds once split.
+async function sniperLogs(B, address, topics, from, to) {
+  try {
+    return await B.call('eth_getLogs', [{ fromBlock: hexBlock(from), toBlock: hexBlock(to), address, topics }]);
+  } catch (e) {
+    if (e.budget || to - from < 20000) throw e;
+    const mid = Math.floor((from + to) / 2);
+    const a = await sniperLogs(B, address, topics, from, mid);
+    const b = await sniperLogs(B, address, topics, mid + 1, to);
+    return a.concat(b);
+  }
+}
+
+// the first block at or after a timestamp, by binary search on block headers (~26 reads on this chain)
+async function blockAtTime(B, tsSec, head) {
+  let lo = 1, hi = head;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const b = await B.call('eth_getBlockByNumber', [hexBlock(mid), false]);
+    if (!b) throw new Error('block header unreadable');
+    if (parseInt(b.timestamp, 16) < tsSec) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+/* Block 0 = the block of the FIRST transfer of the token OUT of the pool: the first moment anyone could
+   buy. Not the block the pair contract was created in, and not the block the token was minted in — on this
+   chain those were 0.07 and 0.11 days apart for $GWC and $SEND. */
+async function findBlockZero(B, token, pair, createdAtMs, head) {
+  let from = 1;
+  if (createdAtMs > 0) from = Math.max(1, await blockAtTime(B, Math.floor(createdAtMs / 1000), head) - 5000);
+  const topics = [TRANSFER_TOPIC, topicAddr(pair)];
+  for (let b = from; b <= head; b += SNIPE.WINDOW) {
+    const logs = await sniperLogs(B, token, topics, b, Math.min(b + SNIPE.WINDOW - 1, head));
+    if (logs.length) {
+      const block = Math.min(...logs.map(l => parseInt(l.blockNumber, 16)));
+      return { block, logs: logs.filter(l => parseInt(l.blockNumber, 16) === block) };
+    }
+  }
+  return { block: null, logs: [] };
+}
+
+/* The float the percentages are measured against. Total supply flatters a token that keeps most of its
+   supply in the pool or has burned some, so both are reported: the raw supply, and the float actually in
+   circulation — supply minus the pool, the burn addresses and the token's own tax balance. */
+async function tokenFloat(token, pair, supply) {
+  let held = 0n;
+  for (const a of [pair, token, ...DEAD_ADDRS]) {
+    try { held += await erc20Balance(token, a); } catch { /* one unreadable balance must not zero the float */ }
+  }
+  const f = supply - held;
+  return f > 0n && f <= supply ? f : supply;
+}
+
+// one cluster: a block-0 wallet, everyone it moved tokens to, and everyone they moved to
+async function traceCluster(B, token, pair, root, fromBlock, head, seenGlobal) {
+  const wallets = new Map();
+  let capped = false, frontier = [root];
+  const seen = new Set([root]);
+  for (let hop = 0; hop <= SNIPE.HOPS && frontier.length; hop++) {
+    const next = [];
+    for (const addr of frontier) {
+      if (B.spent()) { capped = true; break; }
+      const [out, inFromPool] = await Promise.all([
+        sniperLogs(B, token, [TRANSFER_TOPIC, topicAddr(addr)], fromBlock, head),
+        sniperLogs(B, token, [TRANSFER_TOPIC, topicAddr(pair), topicAddr(addr)], fromBlock, head),
+      ]);
+      const rec = { addr, hop, boughtFromPool: 0n, buyTxs: [], sentToPool: 0n, sellTxs: [], sentOn: 0n, holds: null, to: [] };
+      for (const l of inFromPool) { rec.boughtFromPool += BigInt(l.data); rec.buyTxs.push(l.transactionHash); }
+      const dests = new Map();
+      for (const l of out) {
+        const d = addrFromTopic(l.topics[2]), v = BigInt(l.data);
+        if (d === lcAddr(pair)) { rec.sentToPool += v; rec.sellTxs.push(l.transactionHash); continue; }
+        if (isSystemAddr(d, token, pair)) continue;      // the tax leg is not a hop
+        rec.sentOn += v;
+        dests.set(d, (dests.get(d) || 0n) + v);
+      }
+      try { rec.holds = await erc20Balance(token, addr); } catch { rec.holds = null; }   // null = unread, never 0
+      const ranked = [...dests.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0));
+      rec.to = ranked.map(([a, v]) => ({ addr: a, amount: v.toString() }));
+      wallets.set(addr, rec);
+      if (hop < SNIPE.HOPS) {
+        if (ranked.length > SNIPE.MAX_CONNECTED) capped = true;
+        for (const [d] of ranked.slice(0, SNIPE.MAX_CONNECTED)) {
+          if (seen.has(d) || seenGlobal.has(d)) continue;
+          if (seenGlobal.size >= SNIPE.MAX_CLUSTER) { capped = true; break; }
+          seen.add(d); seenGlobal.add(d); next.push(d);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return { wallets: [...wallets.values()], capped };
+}
+
+/* The ETH side of the ledger, read from the WETH legs of the very transactions the cluster's token moves
+   appear in: WETH into the pool is what they paid, WETH out of it is what they were paid. Exact, and in the
+   quote asset — no historical USD price is invented anywhere. */
+async function sniperEthLegs(B, pair, txHashes) {
+  let cost = 0n, proceeds = 0n, read = 0, capped = false;
+  for (const h of txHashes) {
+    if (read >= SNIPE.MAX_RECEIPTS || B.spent()) { capped = true; break; }
+    let rc;
+    try { rc = await B.call('eth_getTransactionReceipt', [h]); read++; } catch { capped = true; break; }
+    for (const l of (rc && rc.logs) || []) {
+      if (lcAddr(l.address) !== WETH_ADDR || lcAddr(l.topics[0]) !== TRANSFER_TOPIC) continue;
+      if (addrFromTopic(l.topics[2]) === lcAddr(pair)) cost += BigInt(l.data);
+      else if (addrFromTopic(l.topics[1]) === lcAddr(pair)) proceeds += BigInt(l.data);
+    }
+  }
+  return { cost, proceeds, read, capped };
+}
+
+// price of one token in WETH, from the pool's own reserves
+async function sniperPriceWeth(B, pair, token) {
+  const [r, t0] = await Promise.all([
+    B.call('eth_call', [{ to: pair, data: '0x0902f1ac' }, 'latest']),
+    B.call('eth_call', [{ to: pair, data: '0x0dfe1681' }, 'latest']),
+  ]);
+  if (!r || r === '0x' || !t0) return null;
+  const body = r.slice(2);
+  const r0 = BigInt('0x' + body.slice(0, 64)), r1 = BigInt('0x' + body.slice(64, 128));
+  const token0 = lcAddr('0x' + t0.slice(26));
+  const [tokRes, wethRes] = token0 === lcAddr(token) ? [r0, r1] : [r1, r0];
+  if (tokRes === 0n) return null;
+  return Number(wethRes) / Number(tokRes);
+}
+
+function sniperTotals(snipers) {
+  const sum = f => snipers.reduce((s, x) => s + (x[f] == null ? 0n : BigInt(x[f])), 0n);
+  const known = snipers.filter(s => s.clusterHolds != null);
+  return {
+    wallets: snipers.length,
+    sniped: sum('sniped').toString(),
+    holds: known.reduce((s, x) => s + BigInt(x.clusterHolds), 0n).toString(),
+    holdsKnown: known.length === snipers.length,
+    sold: sum('clusterSold').toString(),
+    connectedWallets: snipers.reduce((s, x) => s + x.connectedCount, 0),
+    costWei: sum('costWei').toString(),
+    proceedsWei: sum('proceedsWei').toString(),
+    unrealisedWei: sum('unrealisedWei').toString(),
+    pnlWei: sum('pnlWei').toString(),
+    netSellers: snipers.filter(s => s.net === 'seller' || s.net === 'fully out').length,
+    netAccumulators: snipers.filter(s => s.net === 'accumulator').length,
+    unknown: snipers.filter(s => s.net === 'unknown').length,
+  };
+}
+
+async function scanSnipers(token, pair, createdAtMs) {
+  const B = sniperBudget();
+  const notes = [];
+  const head = parseInt(await B.call('eth_blockNumber', []), 16);
+  const supply = await totalSupply(token);
+  if (!(supply > 0n)) throw new Error('total supply unreadable');
+  const { block, logs } = await findBlockZero(B, token, pair, createdAtMs, head);
+  if (block == null) {
+    return { block0: null, block0At: null, supply: supply.toString(), float: supply.toString(), systemTook: '0',
+      snipers: [], totals: sniperTotals([]), priceWeth: null, capped: false, calls: B.used,
+      notes: ['This pool has never paid a token out — nobody has bought yet.'] };
+  }
+  const blockAt = parseInt((await B.call('eth_getBlockByNumber', [hexBlock(block), false])).timestamp, 16) * 1000;
+  const float = await tokenFloat(token, pair, supply);
+  let price = null;
+  try { price = await sniperPriceWeth(B, pair, token); } catch { price = null; }
+
+  const got = new Map();
+  let systemTook = 0n;
+  for (const l of logs) {
+    const to = addrFromTopic(l.topics[2]), v = BigInt(l.data);
+    if (isSystemAddr(to, token, pair)) { systemTook += v; continue; }
+    got.set(to, (got.get(to) || 0n) + v);
+  }
+  const ranked = [...got.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0));
+  const traced = ranked.slice(0, SNIPE.MAX_SNIPERS);
+  let capped = ranked.length > traced.length;
+  if (capped) notes.push('Traced the ' + traced.length + ' largest of ' + ranked.length + ' block-0 wallets.');
+
+  const seenGlobal = new Set(traced.map(([a]) => a));
+  const snipers = [];
+  for (const [addr, sniped] of traced) {
+    const cl = await traceCluster(B, token, pair, addr, block, head, seenGlobal);
+    if (cl.capped) capped = true;
+    const txs = [...new Set([].concat(...cl.wallets.map(w => w.buyTxs.concat(w.sellTxs))))];
+    const legs = await sniperEthLegs(B, pair, txs);
+    if (legs.capped) capped = true;
+    const holdsKnown = cl.wallets.every(w => w.holds != null);
+    const clusterHolds = cl.wallets.reduce((s, w) => s + (w.holds || 0n), 0n);
+    const clusterSold = cl.wallets.reduce((s, w) => s + w.sentToPool, 0n);
+    const unrealised = price != null && holdsKnown ? BigInt(Math.round(Number(clusterHolds) * price)) : null;
+    snipers.push({
+      addr,
+      sniped: sniped.toString(),
+      holds: cl.wallets[0] && cl.wallets[0].holds != null ? cl.wallets[0].holds.toString() : null,
+      clusterHolds: holdsKnown ? clusterHolds.toString() : null,
+      clusterSold: clusterSold.toString(),
+      connected: cl.wallets.filter(w => w.hop > 0).map(w => ({ addr: w.addr, hop: w.hop, holds: w.holds == null ? null : w.holds.toString(), soldToPool: w.sentToPool.toString() })),
+      connectedCount: cl.wallets.length - 1,
+      // net over the WHOLE cluster: does it still hold at least what the block-0 wallet took?
+      net: !holdsKnown ? 'unknown' : clusterHolds >= sniped ? 'accumulator' : clusterHolds === 0n ? 'fully out' : 'seller',
+      costWei: legs.cost.toString(),
+      proceedsWei: legs.proceeds.toString(),
+      unrealisedWei: unrealised == null ? null : unrealised.toString(),
+      pnlWei: unrealised == null ? null : (legs.proceeds + unrealised - legs.cost).toString(),
+      capped: cl.capped || legs.capped,
+    });
+    if (B.spent()) { capped = true; notes.push('The scan reached its read budget; the remaining block-0 wallets were not traced.'); break; }
+  }
+  return { block0: block, block0At: blockAt, supply: supply.toString(), float: float.toString(),
+    systemTook: systemTook.toString(), snipers, totals: sniperTotals(snipers), priceWeth: price,
+    notes, capped, calls: B.used };
+}
+
+/* The scan store. One row per token; block 0 is written once and never re-derived. Reads are synchronous
+   and cheap (a primary-key lookup) because applyRisk runs for every pair on every refresh; the scanning
+   itself is a background queue that does one token at a time so the chain is never hammered. */
+function sniperRow(token) {
+  try { return db.prepare('SELECT * FROM sniper_scans WHERE token_addr = ?').get(lcAddr(token)) || null; } catch { return null; }
+}
+function sniperData(row) {
+  if (!row || !row.data) return null;
+  try { return JSON.parse(row.data); } catch { return null; }
+}
+const sniperQueue = [];                 // [{ token, pair, createdAtMs }] waiting to be scanned
+const SNIPE_QUEUE_MAX = 200;
+let sniperScanning = false;
+function queueSniperScan(token, pair, createdAtMs) {
+  const t = lcAddr(token), pr = lcAddr(pair);
+  if (!/^0x[0-9a-f]{40}$/.test(t) || !/^0x[0-9a-f]{40}$/.test(pr)) return;
+  if (sniperQueue.length >= SNIPE_QUEUE_MAX || sniperQueue.some(q => q.token === t)) return;
+  const row = sniperRow(t);
+  const age = row && row.finished_at ? now() - row.finished_at : Infinity;
+  // re-scan a finished token on the TTL, retry a failure after a pause, and never re-enter one in flight
+  if (row) {
+    if (row.status === 'running' || row.status === 'queued') return;
+    if ((row.status === 'done' || row.status === 'partial') && age < SNIPE.TTL) return;
+    if (row.status === 'failed' && age < SNIPE.RETRY_MS) return;
+  }
+  try {
+    db.prepare(`INSERT INTO sniper_scans (token_addr, pair_addr, status, started_at) VALUES (?,?,'queued',?)
+                ON CONFLICT(token_addr) DO UPDATE SET pair_addr = excluded.pair_addr, status = 'queued'`).run(t, pr, now());
+  } catch { return; }
+  sniperQueue.push({ token: t, pair: pr, createdAtMs: Number(createdAtMs) || 0 });
+}
+async function runSniperQueue() {
+  if (sniperScanning) return;
+  const job = sniperQueue.shift();
+  if (!job) return;
+  sniperScanning = true;
+  const t0 = now();
+  try {
+    db.prepare("UPDATE sniper_scans SET status = 'running', started_at = ?, attempts = attempts + 1 WHERE token_addr = ?").run(t0, job.token);
+    // block 0 never changes, so a re-scan reuses the one already found and only re-reads the wallets
+    const prev = sniperRow(job.token);
+    const data = await scanSnipers(job.token, job.pair, prev && prev.block0_at ? prev.block0_at : job.createdAtMs);
+    db.prepare(`UPDATE sniper_scans SET status = ?, reason = ?, block0 = ?, block0_at = ?, data = ?, calls = ?, finished_at = ?
+                WHERE token_addr = ?`)
+      .run(data.capped ? 'partial' : 'done', data.notes.length ? data.notes.join(' ') : null,
+           data.block0, data.block0At, JSON.stringify(data), data.calls, now(), job.token);
+  } catch (e) {
+    // a failed read is recorded as a failure with its reason — never as "no snipers found"
+    db.prepare("UPDATE sniper_scans SET status = 'failed', reason = ?, finished_at = ? WHERE token_addr = ?")
+      .run(String((e && e.message) || 'the chain could not be read').slice(0, 200), now(), job.token);
+  } finally {
+    // rest before the next scan even if this one failed — the chain is shared with every other read here
+    setTimeout(() => { sniperScanning = false; }, SNIPE.GAP_MS).unref();
+  }
+}
+
+/* The verdict this feeds into. The three ways a token can still earn the top "Looks Good, Send It":
+     · nobody sniped block 0 at all;
+     · every block-0 cluster still holds at least what it took (net accumulators);
+     · the block-0 clusters are immaterial — they took under 1% of the float AND hold under 1% of it.
+   The third is the strict reading of both senses of "less than 1%", so a cluster that took a big share and
+   dumped it can never pass on the grounds that it now holds nothing. A scan that is missing or partial
+   answers `null` — not checked — which withholds the top verdict without inventing a penalty. */
+const SNIPE_MATERIAL_PCT = 1;      // a block-0 cluster under this share of the float is immaterial
+const SNIPE_HEAVY_PCT = 5;         // block-0 wallets took this much of the float or more
+function sniperVerdict(d) {
+  if (!d || d.block0 === undefined) return { ok: null, heavy: false, dump: false };
+  const float = Number(d.float || 0) || 0;
+  const t = d.totals || {};
+  const pct = v => (float > 0 ? Number(v || 0) / float * 100 : null);
+  const snipedPct = pct(t.sniped), holdsPct = t.holdsKnown ? pct(t.holds) : null;
+  const complete = !d.capped && t.unknown === 0 && t.holdsKnown;
+  const immaterial = snipedPct != null && holdsPct != null && snipedPct < SNIPE_MATERIAL_PCT && holdsPct < SNIPE_MATERIAL_PCT;
+  const ok = t.wallets === 0 ? true : !complete ? null : (t.netSellers === 0 || immaterial);
+  return {
+    ok,
+    heavy: !!(snipedPct != null && snipedPct >= SNIPE_HEAVY_PCT),
+    dump: !!(complete && t.netSellers > 0 && snipedPct != null && snipedPct >= SNIPE_MATERIAL_PCT),
+    snipedPct, holdsPct,
+  };
+}
 
 function num(x) { const n = Number(x); return isFinite(n) ? n : 0; }
 function numN(x) { const n = Number(x); return isFinite(n) ? n : null; }
@@ -3094,6 +3478,7 @@ function applyRisk(e, deployerCounts, deployerDied) {
   const dep = e.token.deployer;
   r.serialDeployer = !!(dep && deployerCounts[dep] >= 3);
   if (r.serialDeployer) { r.deployerLaunches = deployerCounts[dep]; r.deployerDied = deployerDied[dep] || 0; }
+  applySniperFlags(e, r);
   const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
   r.health = Math.max(0, Math.min(100, 100 - penalty));
   r.triage = r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid';
@@ -3108,8 +3493,9 @@ function applyRisk(e, deployerCounts, deployerDied) {
     holders:   e.holders.count != null,
     concentration: e.holders.topHolderPct != null,
     verified:  e.token.isVerified != null,
+    snipers:   r.sniperOk != null,       // the block-0 scan finished and could answer
   };
-  r.dataScore = Object.values(r.dataKnown).filter(Boolean).length;   // 0..5
+  r.dataScore = Object.values(r.dataKnown).filter(Boolean).length;   // 0..6
   // liquidity + holders + an index entry are the minimum needed to say anything at all
   r.thinData = !(r.dataKnown.indexed && r.dataKnown.liquidity && r.dataKnown.holders);
   if (r.thinData && r.triage === 'ok') r.triage = 'caution';
@@ -3118,6 +3504,47 @@ function applyRisk(e, deployerCounts, deployerDied) {
   const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
   if (worst >= 3 && r.triage === 'ok') r.triage = 'caution';
   e.risk = r;
+}
+
+/* Block-0 snipers, read from the cached scan — a synchronous primary-key lookup, because this runs for
+   every pair on every refresh. A token that has not been scanned yet is `sniperOk: null`: NOT CHECKED,
+   which withholds the top verdict without inventing a penalty for a read we have not made. */
+function applySniperFlags(e, r) {
+  const snipeRow = sniperRow(e.token.address);
+  const snipeData = sniperData(snipeRow);
+  const sv = sniperVerdict(snipeData);
+  r.sniperOk = sv.ok;
+  r.sniperDump = sv.dump;
+  r.sniperHeavy = sv.heavy;
+  r.snipers = snipeData ? {
+    status: snipeRow.status, block0: snipeData.block0, block0At: snipeData.block0At,
+    wallets: snipeData.totals.wallets, snipedPct: sv.snipedPct, holdsPct: sv.holdsPct,
+    netSellers: snipeData.totals.netSellers, netAccumulators: snipeData.totals.netAccumulators,
+    connectedWallets: snipeData.totals.connectedWallets, capped: !!snipeData.capped,
+  } : { status: snipeRow ? snipeRow.status : 'unscanned', wallets: null };
+}
+/* Re-score a pair that came out of the token cache. The cached JSON carries the risk flags computed when it
+   was written, but a block-0 scan that finished since then must change the verdict immediately — a viewer
+   should not have to wait for the market data to age out before the sniper answer appears. Every input this
+   needs is already on the cached object, and re-running it changes nothing else. */
+function rescoreCachedPair(pair) {
+  try {
+    if (!pair || !pair.risk || !pair.token) return pair;
+    const before = pair.risk.sniperOk;
+    applySniperFlags(pair, pair.risk);
+    if (before === pair.risk.sniperOk && pair.risk.dataKnown && 'snipers' in pair.risk.dataKnown) return pair;
+    const r = pair.risk;
+    const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
+    r.health = Math.max(0, Math.min(100, 100 - penalty));
+    r.triage = r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid';
+    r.dataKnown = { ...(r.dataKnown || {}), snipers: r.sniperOk != null };
+    r.dataScore = Object.values(r.dataKnown).filter(Boolean).length;
+    if (r.thinData && r.triage === 'ok') r.triage = 'caution';
+    const SEV_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
+    const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
+    if (worst >= 3 && r.triage === 'ok') r.triage = 'caution';
+  } catch {}
+  return pair;
 }
 
 async function enrichPairs() {
@@ -3223,7 +3650,7 @@ const tokenTouchAt = new Map();                   // tokenAddr(lc) -> last last_
 function tokenCacheRes(row) {                      // reconstruct a lookup result from a cached row
   if (!row) return null;
   if (!row.found) return { notFound: true, reason: row.reason || null };
-  try { const pair = JSON.parse(row.pair_json); return pair ? { pair } : null; } catch { return null; } // corrupt row → treat as miss
+  try { const pair = JSON.parse(row.pair_json); return pair ? { pair: rescoreCachedPair(pair) } : null; } catch { return null; } // corrupt row → treat as miss
 }
 function tokenCacheTouch(tok) { // coalesced: at most one write per token per TOKEN_CACHE_TOUCH_COALESCE, so a read flood can't write-amplify
   const last = tokenTouchAt.get(tok) || 0;
@@ -6027,6 +6454,30 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('contract:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
         return send(res, 200, await analyzeContract(token, /^0x[0-9a-f]{40}$/.test(pair) ? pair : null));
       }
+      /* The block-0 sniper report for one token: who bought in the first block the pool ever traded, what
+         they did with it, and the ledger. Served from the cached scan; a token nobody has asked about yet
+         is queued and answers `queued` rather than blocking the request on 30-90 chain reads. */
+      if (p === '/api/token/snipers' && req.method === 'GET') {
+        const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'enter a valid 0x token address');
+        if (!rateLimit('snipers:' + clientIp(req), 90, 6e4)) return bad(res, 'slow down', 429);
+        const row = sniperRow(token);
+        const data = sniperData(row);
+        if (!row || (!data && row.status !== 'running')) {
+          // find the pair from whatever we already know, so asking never costs a lookup the caller did not pay for
+          let pair = row && row.pair_addr ? row.pair_addr : null, createdAt = 0;
+          if (!pair) { try { const tc = tokenCacheGet(token); const pj = tc && tc.found ? JSON.parse(tc.pair_json || 'null') : null; if (pj && pj.pair && pj.pair.address) { pair = lcAddr(pj.pair.address); createdAt = Number(pj.pair.createdAt) || 0; } } catch {} }
+          if (pair) queueSniperScan(token, pair, createdAt);
+          return send(res, 200, { status: pair ? 'queued' : 'unknown', token, snipers: null,
+            message: pair ? 'Reading the first block of this pool now — check back in a moment.' : 'No indexed pool for this token, so there is no first block to read.' });
+        }
+        return send(res, 200, {
+          status: row.status, token, reason: row.reason || null,
+          scannedAt: row.finished_at || null, calls: row.calls || null,
+          verdict: data ? sniperVerdict(data) : null,
+          ...(data || {}),
+        });
+      }
       if (p === '/api/pairs/lookup' && req.method === 'GET') {
         const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
         if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'enter a valid 0x token address');
@@ -6797,6 +7248,24 @@ const commHolderTimer = setInterval(() => { sweepCommunityHolders().catch(() => 
 // Close proposals whose round has ended, even if nobody visits that community. Cheap: idx_prop_due
 // is a PARTIAL index over rows that still have a deadline, so a settled proposal costs nothing.
 const propTimer = setInterval(() => { try { resolveDueProposals(null); } catch {} }, 60 * 1000);
+// one block-0 scan at a time, with a gap between them — the chain is shared with every other read on the site
+const sniperTimer = setInterval(() => { runSniperQueue().catch(() => {}); }, 20 * 1000);
+sniperTimer.unref();
+/* Every token in the radar feed gets scanned eventually, but ONE at a time and slowly: a page render must
+   never schedule a hundred chain scans, and a viewer who opens a token jumps the queue through the API. */
+const sniperFeedTimer = setInterval(() => {
+  try {
+    if (sniperQueue.length) return;
+    for (const e of (pairsCache.pairs || [])) {
+      if (!e || !e.token || !e.pair || !e.pair.address) continue;
+      const row = sniperRow(e.token.address);
+      if (row && (row.status === 'done' || row.status === 'partial') && now() - (row.finished_at || 0) < SNIPE.TTL) continue;
+      queueSniperScan(e.token.address, e.pair.address, e.pair.createdAt);
+      if (sniperQueue.length) break;      // exactly one per tick
+    }
+  } catch {}
+}, SNIPE.FEED_GAP_MS);
+sniperFeedTimer.unref();
 propTimer.unref();
 commHolderTimer.unref();
 

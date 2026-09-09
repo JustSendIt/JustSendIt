@@ -134,10 +134,21 @@
   // unknown. Without this it would trip no flags, score 100, and carry the greenest verdict on the site,
   // which would make "we could not check" look identical to "we checked and it is fine".
   const thinData = (p) => !!(p.risk && p.risk.thinData);
+  /* The block-0 test, in one place. "Looks Good, Send It" is only ever given to a token whose FIRST block
+     is clean: nobody sniped it, or every block-0 cluster still holds what it took, or those clusters are
+     immaterial (under 1% of the float, taken and held). `sniperOk` is null until the scan finishes — not
+     checked is not the same as checked and fine, so it withholds the badge rather than granting it. */
+  const sniperOk = (p) => !!(p.risk && p.risk.sniperOk === true);
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
     if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
-    if (tri === 'ok' && health >= 100) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' };
+    if (tri === 'ok' && health >= 100 && !sniperOk(p)) {
+      const st = p.risk && p.risk.snipers ? p.risk.snipers.status : null;
+      return st === 'done' || st === 'partial'
+        ? { cls: 'np-t-caution np-t-snipe', ico: '🎯', word: 'Block-0 snipers sold' }
+        : { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Checking block 0…' };
+    }
+    if (tri === 'ok' && health >= 100 && sniperOk(p)) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' };
     return TRI[tri];
   }
   const FLAG = {
@@ -1211,7 +1222,7 @@
   const healthOf = (p) => Math.round((p.risk && p.risk.health) || 0);
   // The ONE feed filter: a perfect score AND the 'ok' triage — i.e. exactly the pairs that carry the
   // 🚀 "Looks Good, Send It" verdict. Same test as verdictOf(), kept in one place so the two can never drift.
-  const feedQualifies = (p) => !thinData(p) && triageOf(p) === 'ok' && healthOf(p) >= 100;
+  const feedQualifies = (p) => !thinData(p) && triageOf(p) === 'ok' && healthOf(p) >= 100 && sniperOk(p);
 
   /* ---------- chains ----------
      Robinhood Chain is the home chain and the only one with a block explorer behind it, so it is
