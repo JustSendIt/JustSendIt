@@ -490,6 +490,12 @@ for (const col of [
   "ALTER TABLE communities ADD COLUMN demo INTEGER NOT NULL DEFAULT 0",       // 1 = open sandbox community: no token required, and deliberately grants no 10×
   "ALTER TABLE posts ADD COLUMN community_id INTEGER",                        // NULL = Send Wall / profile; set = a community wall
   "ALTER TABLE posts ADD COLUMN private INTEGER NOT NULL DEFAULT 0",          // 1 = the community's holders-only wall: readable ONLY by its verified holders
+  // Support board: the same posts/comments/votes machinery under its own namespace. NULL = the Send Wall
+  // (every existing feed query filters on that), 'support' = a question on the help desk. One column instead
+  // of a parallel table means comments, voting, muting, reporting, moderation and deletion all work there on
+  // day one, with no second implementation to keep in step.
+  "ALTER TABLE posts ADD COLUMN board TEXT",
+  "CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, score DESC, id DESC)",
   // Convicted In: reference price/mcap captured when the token was pinned (basis for "Xs up since you convicted")
   "ALTER TABLE pinned_tokens ADD COLUMN pin_price REAL",                      // USD price at pin time (0/NULL = no baseline, e.g. legacy pin)
   "ALTER TABLE pinned_tokens ADD COLUMN pin_mc REAL",                         // market cap at pin time (for reference)
@@ -4234,6 +4240,9 @@ const OAUTH = {
   },
 };
 const csrfWarned = new Set();   // one CSRF-reject log line per offending origin, not one per request
+/* Boards that live in the posts table alongside the Send Wall. Allowlisted, never interpolated from raw
+   input — the value reaches SQL, so the set IS the validation. */
+const BOARDS = new Set(['support']);
 const oauthStates = new Map();
 const pendingLogins = new Map(); // token -> {userId, expires}
 
@@ -5965,19 +5974,23 @@ const server = http.createServer(async (req, res) => {
         const beforeScoreRaw = url.searchParams.get('beforeScore');
         const byUser = url.searchParams.get('user');
         const feed = url.searchParams.get('feed');
+        // Boards are separate rooms: a question asked on the help desk must never surface on the Send Wall,
+        // a profile timeline or the following feed, and a wall post must never appear among the questions.
+        const board = BOARDS.has(String(url.searchParams.get('board') || '')) ? String(url.searchParams.get('board')) : null;
         // profile walls read chronologically (X-style timeline); the Send Wall defaults to Top (most-upvoted)
         const sort = url.searchParams.get('sort') === 'new' ? 'new' : (byUser ? 'new' : 'top');
         let rows;
         if (byUser) {
           const u = db.prepare('SELECT id FROM users WHERE username = ?').get(byUser);
           if (!u) return bad(res, 'no such user', 404);
-          rows = db.prepare('SELECT * FROM posts WHERE user_id = ? AND community_id IS NULL AND id < ? ORDER BY id DESC LIMIT 30').all(u.id, beforeId || Number.MAX_SAFE_INTEGER);
+          rows = db.prepare('SELECT * FROM posts WHERE user_id = ? AND community_id IS NULL AND board IS NULL AND id < ? ORDER BY id DESC LIMIT 30').all(u.id, beforeId || Number.MAX_SAFE_INTEGER);
         } else {
           const following = feed === 'following';
           if (following && !me) return bad(res, 'sign in to see your following feed', 401);
+          const boardSql = board ? " AND po.board = '" + board + "'" : ' AND po.board IS NULL';   // board is allowlisted above, never raw input
           const base = (following // community-wall posts (community_id set) stay OFF the Send Wall / following / profile feeds
-            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.community_id IS NULL AND f.follower_id = ?'
-            : 'FROM posts po WHERE po.community_id IS NULL')
+            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.community_id IS NULL' + boardSql + ' AND f.follower_id = ?'
+            : 'FROM posts po WHERE po.community_id IS NULL' + boardSql)
             + (me ? ' AND po.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?)' : ''); // muted senders vanish from the feed
           const args = following ? [me.id] : [];
           if (me) args.push(me.id);
@@ -5995,7 +6008,7 @@ const server = http.createServer(async (req, res) => {
           }
           rows = db.prepare('SELECT po.* ' + base + where + ' ' + order + ' LIMIT 30').all(...args);
         }
-        return send(res, 200, { posts: postsView(rows, me), sort });
+        return send(res, 200, { posts: postsView(rows, me), sort, board });
       }
       if (p === '/api/upload' && req.method === 'POST') { // STREAMING binary media upload (raw body → disk, no base64/JSON)
         if (!me) return bad(res, 'sign in first', 401);
@@ -6065,13 +6078,21 @@ const server = http.createServer(async (req, res) => {
         try { b = await readBody(req, 12 * 1024 * 1024); if (b.image) image = resolvePostMedia(b.image, me.id); } // media is normally a pre-uploaded /uploads URL; data: URIs still accepted
         catch (e) { return bad(res, e.message || 'could not read your post', (e && e.status) || 400); }
         finally { if (bigUpload) mediaInFlight--; }
+        const board = BOARDS.has(String(b.board || '')) ? String(b.board) : null;
         const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 500));
         const text = rt.text;
-        if (!text && !image) return bad(res, 'say something or add a photo, GIF or video');
-        const r = db.prepare('INSERT INTO posts (user_id, text, image, tokens, created_at) VALUES (?,?,?,?,?)').run(me.id, text, image, rt.tokens, now());
+        if (!text && !image) return bad(res, board ? 'write your question first' : 'say something or add a photo, GIF or video');
+        const r = db.prepare('INSERT INTO posts (user_id, text, image, tokens, board, created_at) VALUES (?,?,?,?,?,?)').run(me.id, text, image, rt.tokens, board, now());
         const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(r.lastInsertRowid));
-        const first = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ?').get(me.id).n === 1;
-        const earned = awardPoints(me.id, 'post', PTS.post, 'post:' + row.id) + (first ? awardPoints(me.id, 'first_post', PTS.first_post, 'firstpost:' + me.id) : 0);
+        /* A question earns no Send Power. The help desk has to stay free to use — nobody should hesitate to
+           ask because they are unsure it "counts" — and paying for posts on a board with no editorial bar
+           would make asking the cheapest farm on the site. The page says this plainly rather than leaving
+           people to notice their balance did not move. */
+        let earned = 0;
+        if (!board) {
+          const first = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND board IS NULL').get(me.id).n === 1;
+          earned = awardPoints(me.id, 'post', PTS.post, 'post:' + row.id) + (first ? awardPoints(me.id, 'first_post', PTS.first_post, 'firstpost:' + me.id) : 0);
+        }
         scanWriteAction(me.id, 'post', text);
         return send(res, 200, { post: postView(row, me), pointsEarned: earned });
       }

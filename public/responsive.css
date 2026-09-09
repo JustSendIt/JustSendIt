@@ -152,3 +152,13 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 /* the wall's loading / error block: the retry button needs room from the copy above it */
 .empty-wall .btn { margin-top: 0.9rem; }
 .empty-wall .modal-note { margin: 0.4rem auto 0; max-width: 46ch; }
+
+/* ===== Support board (support.html) ===================================================== */
+.sup-contact { padding: 0.9rem 1.1rem; margin-bottom: 1rem; border-left: 3px solid var(--gold); }
+.sup-contact p { margin: 0 0 0.4rem; }
+.sup-contact p:last-child { margin-bottom: 0; }
+.sup-contact a { font-weight: 800; }
+.sup-contact .hint { color: var(--text-dim); font-size: 0.82rem; line-height: 1.5; }
+.sup-note { color: var(--text-dim); margin: 0.5rem 0 0; line-height: 1.5; }
+.sup-foot { text-align: center; color: var(--text-dim); font-size: 0.88rem; margin: 2rem auto 0; max-width: 52ch; line-height: 1.6; }
+.sup-foot a { font-weight: 800; }

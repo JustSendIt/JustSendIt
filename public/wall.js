@@ -1,7 +1,13 @@
-/* ===== The Send Wall: shared feed, tabs, votes, reactions, comments ===== */
+/* ===== The Send Wall: shared feed, tabs, votes, reactions, comments =====
+   Also drives the Support board (support.html), which is the same feed under its own namespace: same post
+   card, same voting, same comment thread, same moderation. The page declares which room it is with
+   <body data-board="support">; everything below reads that one value. Building a second copy of this file
+   for questions would have meant two implementations of voting and comments drifting apart from day one. */
 let oldestId = null, lastScore = null;
 let currentFeed = 'all';
 let currentSort = 'top'; // matches the server default for the Send Wall (most-upvoted first)
+const BOARD = document.body.dataset.board || '';        // '' = the Send Wall, 'support' = the help desk
+const boardQ = BOARD ? 'board=' + encodeURIComponent(BOARD) : '';
 const feedEl = document.getElementById('feed');
 
 // attribute-safe HTML escape (also encodes quotes so it's safe inside src="…"/style="…")
@@ -77,6 +83,7 @@ function setVote(post, score, myVote) {
 
 async function loadFeed(reset = true) {
   const params = [];
+  if (boardQ) params.push(boardQ);
   if (currentFeed === 'following') params.push('feed=following');
   if (currentSort === 'new') params.push('sort=new');
   if (!reset && oldestId != null) {
@@ -98,9 +105,11 @@ async function loadFeed(reset = true) {
     if (window.SendCall) { SendCall.wire(feedEl); SendCall.live(feedEl); SendCall.observe(feedEl); } // Send Call widgets: actions + live Xs
     const empty = document.getElementById('empty');
     empty.style.display = feedEl.children.length ? 'none' : '';
-    empty.querySelector('p').textContent = currentFeed === 'following'
-      ? 'Nothing here yet — follow some senders and their posts land here.'
-      : 'Nothing on the wall yet. Be the first to send it.';
+    empty.querySelector('p').textContent = BOARD === 'support'
+      ? 'No questions yet. Ask the first one — someone else probably has the same one.'
+      : currentFeed === 'following'
+        ? 'Nothing here yet — follow some senders and their posts land here.'
+        : 'Nothing on the wall yet. Be the first to send it.';
     document.getElementById('load-more').hidden = j.posts.length < 30;
   } catch (e) {
     feedEl.removeAttribute('aria-busy');
@@ -278,11 +287,11 @@ postImgEl.addEventListener('change', async (e) => {
 async function publishPost() {
   const text = ta.value.trim();
   if (postImgEl._busy) { sendToast('Hang on — still uploading your media ⏳'); return; }
-  if (!text && !pendingImg) { sendToast('Say something or drop a meme first 🤌'); return; }
+  if (!text && !pendingImg) { sendToast(BOARD === 'support' ? 'Write your question first 🙂' : 'Say something or drop a meme first 🤌'); return; }
   const btn = document.getElementById('publish-btn');
   btn.disabled = true;
   try {
-    const j = await api('/api/posts', { method: 'POST', body: { text, image: pendingImg } });
+    const j = await api('/api/posts', { method: 'POST', body: { text, image: pendingImg, board: BOARD || undefined } });
     ta.value = ''; setCharCount(500); if (wallStatus) wallStatus.textContent = '';
     pendingImg = null;
     window.setMediaPreview(document.getElementById('img-preview'), null);
@@ -292,8 +301,8 @@ async function publishPost() {
     document.getElementById('empty').style.display = 'none';
     if (j.post && j.post.id) history.replaceState(null, '', '#p' + j.post.id);
     flashPost(node);
-    sendConfetti(innerWidth / 2, 240, { count: 46, emojiRatio: 0.4 });
-    sendToast('SENT! 🚀');
+    if (BOARD === 'support') sendToast('Question posted — others can answer and vote on it 🙌');
+    else { sendConfetti(innerWidth / 2, 240, { count: 46, emojiRatio: 0.4 }); sendToast('SENT! 🚀'); }
     if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned);
   } catch (err) { sendToast(err.message); }
   btn.disabled = false;
@@ -330,16 +339,22 @@ window.addEventListener('hashchange', focusFromHash);
 setTimeout(focusFromHash, 500); // on load, after the feed starts populating
 
 window.onAuthReady = function (user) {
-  document.getElementById('composer-signedout').hidden = !!user;
-  document.getElementById('composer-signedin').hidden = !user;
-  document.getElementById('tab-following').hidden = false; // visible to all; prompts sign-in
-  const myWall = document.getElementById('my-wall-link');
+  // the Support board reuses this file but has no Everyone/Following tabs, so every wall-only node is optional
+  const byId = (id) => document.getElementById(id);
+  const so = byId('composer-signedout'), si = byId('composer-signedin');
+  if (so) so.hidden = !!user;
+  if (si) si.hidden = !user;
+  const tf = byId('tab-following'); if (tf) tf.hidden = false; // visible to all; prompts sign-in
+  const myWall = byId('my-wall-link');
   if (myWall) { myWall.hidden = !user; if (user) myWall.href = '/u/' + encodeURIComponent(user.username); } // jump to your own public Send Wall
   if (user) {
-    document.getElementById('my-avatar').textContent = user.avatar;
-    const mh = document.getElementById('my-handle'); mh.textContent = user.username;
-    const oldOg = mh.parentElement.querySelector('.og-badge'); if (oldOg) oldOg.remove();
-    if (user.og && window.ogBadge) mh.insertAdjacentHTML('afterend', ogBadge(user.og));
+    const av = byId('my-avatar'); if (av) av.textContent = user.avatar;
+    const mh = byId('my-handle');
+    if (mh) {
+      mh.textContent = user.username;
+      const oldOg = mh.parentElement.querySelector('.og-badge'); if (oldOg) oldOg.remove();
+      if (user.og && window.ogBadge) mh.insertAdjacentHTML('afterend', ogBadge(user.og));
+    }
   } else if (currentFeed === 'following') {
     currentFeed = 'all';
     document.querySelectorAll('.feed-tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.feed === 'all')));

@@ -3,22 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>The Send Wall 🧱 — Post Your Sends</title>
-<meta name="description" content="The Send Wall — the $Send &amp; $GWC meme community feed on Robinhood Chain. Post your sends, crypto memes, gains and pain, make Send Calls on tokens, react, comment, and follow other senders. Entertainment only, not financial advice.">
-<meta name="keywords" content="Send Wall, crypto community, memecoin community, crypto memes, meme coin feed, $Send, GWC, Robinhood Chain, Send Calls, crypto social, memecoin, cryptocurrency">
-<meta name="robots" content="index, follow, max-image-preview:large">
+<title>Support 🛟 — Ask a Question</title>
+<meta name="description" content="The $Send support board — ask a question, answer someone else's, and vote so the questions most people have rise to the top. Public and searchable, so an answer helps everyone who comes next.">
+<meta name="keywords" content="$Send support, help, questions, FAQ, Robinhood Chain, GWC, community support">
+<meta name="robots" content="index, follow">
 <meta name="theme-color" content="#8ee000">
-<link rel="canonical" href="https://justsendit.example/wall.html">
+<link rel="canonical" href="https://justsendit.example/support.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="$Send — Just Send It">
-<meta property="og:url" content="https://justsendit.example/wall.html">
-<meta property="og:title" content="The Send Wall 🧱 — the $Send meme community feed">
-<meta property="og:description" content="Post your sends, memes, gains and pain. React, comment, follow, and make Send Calls on tokens. The $Send / $GWC community on Robinhood Chain. Entertainment only.">
+<meta property="og:url" content="https://justsendit.example/support.html">
+<meta property="og:title" content="Support 🛟 — ask a question, get an answer">
+<meta property="og:description" content="Ask a question, answer someone else's, and vote so what most people need rises to the top.">
 <meta property="og:image" content="https://justsendit.example/assets/logo.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@senditrh">
-<meta name="twitter:title" content="The Send Wall 🧱 — $Send community feed">
-<meta name="twitter:description" content="Post your sends, memes and gains. React, comment, follow, and make Send Calls. Entertainment only.">
+<meta name="twitter:title" content="Support 🛟 — $Send">
+<meta name="twitter:description" content="Ask a question, answer someone else's, vote what matters up.">
 <meta name="twitter:image" content="https://justsendit.example/assets/logo.png">
 <link rel="icon" href="assets/logo-128.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,8 +29,8 @@
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="responsive.css">
 </head>
-<body>
-<a class="skip-link" href="#main">Skip to feed</a>
+<body data-board="support">
+<a class="skip-link" href="#main">Skip to questions</a>
 
 <nav class="nav" aria-label="Main">
   <a class="nav-logo" href="index.html"><img src="assets/logo-128.png" alt="$Send home"><span>$Send</span></a>
@@ -40,8 +40,8 @@
     <a href="communities.html">Communities</a>
     <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
     <a href="newpairs.html">New&nbsp;Pairs</a>
-    <a class="active" href="wall.html" aria-current="page">Send&nbsp;Wall</a>
-    <a href="support.html">Support</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a class="active" href="support.html" aria-current="page">Support</a>
     <a href="index.html#swap">Swap</a>
     <a href="index.html#tokens">Tokens</a>
     <a href="watchlist.html">Watchlist</a>
@@ -54,23 +54,23 @@
 </nav>
 
 <header class="profile-hero">
-  <h1 class="section-title display green" style="margin-bottom:0.4rem;">The Send Wall 🧱</h1>
-  <p class="section-sub" style="margin-bottom:0;">The public feed — everyone's sends, live. Sign in to post, react, and talk your talk.</p>
-  <a class="btn btn-primary btn-sm my-wall-btn" id="my-wall-link" href="/profile.html" hidden>🧱 Go to My Send Wall →</a>
+  <h1 class="section-title display green" style="margin-bottom:0.4rem;">Support 🛟</h1>
+  <p class="section-sub" style="margin-bottom:0;">Ask a question here and anyone can answer it. Vote on the ones you also want answered — the questions most people have rise to the top, so the next person finds the answer instead of asking again.</p>
 </header>
 
 <main id="main" style="padding:1.2rem 1.25rem 4rem;">
   <div class="wrap">
 
-    <div class="feed-tabs" role="tablist" aria-label="Feed filter">
-      <button class="feed-tab" role="tab" data-feed="all" aria-selected="true">🌍 Everyone</button>
-      <button class="feed-tab" role="tab" data-feed="following" id="tab-following" aria-selected="false">⭐ Following</button>
+    <div class="sup-contact card" role="note">
+      <p><b>🛟 Need help that doesn't belong in public?</b></p>
+      <p>Anything account-specific, or anything you'd rather not post — email <a href="mailto:GWCRH@atomicmail.io">GWCRH@atomicmail.io</a> and we'll pick it up from there.</p>
+      <p class="hint">Please don't put a password, a seed phrase or a private key in a question here or in an email. Nobody from $Send will ever ask you for one, and no real support question needs it.</p>
     </div>
 
-    <div class="feed-sort" role="group" aria-label="Sort posts">
-      <button class="sort-btn is-on" type="button" data-sort="top" aria-pressed="true">🔝 Top</button>
-      <button class="sort-btn" type="button" data-sort="new" aria-pressed="false">🕒 New</button>
-      <p class="sort-caption" id="sort-caption" role="status" aria-live="polite">Ranked by community upvotes — top sends float up. 🔥🚀 are just for vibes.</p>
+    <div class="feed-sort" role="group" aria-label="Sort questions">
+      <button class="sort-btn is-on" type="button" data-sort="top" aria-pressed="true">🔝 Most&nbsp;asked</button>
+      <button class="sort-btn" type="button" data-sort="new" aria-pressed="false">🕒 Newest</button>
+      <p class="sort-caption" id="sort-caption" role="status" aria-live="polite">Sorted by votes — if a question is already here, vote it up instead of asking it again.</p>
     </div>
     <div class="resort-nudge" id="resort-nudge" hidden>
       <button class="btn btn-ghost btn-sm" type="button" id="resort-btn">↕ Ranking changed — refresh</button>
@@ -78,34 +78,37 @@
 
     <div class="composer card" id="composer-card">
       <div id="composer-signedout" style="text-align:center; padding:0.6rem 0;">
-        <p style="color:var(--text-dim); margin-bottom:0.9rem;">You're seeing the live feed. Want in on it?</p>
-        <button class="btn btn-primary" id="signin-cta">Sign In To Post 🚀</button>
+        <p style="color:var(--text-dim); margin-bottom:0.9rem;">You can read every question without an account. Sign in to ask one, answer, or vote.</p>
+        <button class="btn btn-primary" id="signin-cta">Sign In To Ask 🛟</button>
       </div>
       <div id="composer-signedin" hidden>
         <div style="display:flex; gap:0.7rem; margin-bottom:0.7rem; align-items:center;">
           <span style="font-size:1.6rem;" id="my-avatar" aria-hidden="true">🚀</span>
           <span style="font-weight:800;">@<span id="my-handle"></span></span>
         </div>
-        <label for="post-text" class="f-label" style="position:absolute; left:-9999px;">Write a post</label>
-        <textarea id="post-text" maxlength="500" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
-        <div id="img-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
+        <label for="post-text" class="f-label" style="position:absolute; left:-9999px;">Write your question</label>
+        <textarea id="post-text" maxlength="500" placeholder="What are you stuck on? The more specific the question, the better the answer — say what you tried and what happened."></textarea>
+        <div id="img-preview" class="media-preview" hidden aria-label="Attached screenshot preview"></div>
         <div class="composer-bar">
-          <label class="file-label">📷 Photo / GIF / Video<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
-          <button class="btn btn-primary btn-sm" id="publish-btn">SEND IT 🚀</button>
+          <label class="file-label">📷 Add a screenshot<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a screenshot or short clip"></label>
+          <button class="btn btn-primary btn-sm" id="publish-btn">Ask 🛟</button>
           <span class="hint" id="char-count" aria-hidden="true">500</span>
         </div>
         <p class="hint" id="wall-c-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
+        <p class="hint sup-note">Questions are public, and asking one earns no Send Power — this is a help desk, not the wall. Ask freely.</p>
       </div>
     </div>
 
-    <div class="wall-feed" id="feed" role="feed" aria-label="Send Wall posts"></div>
+    <div class="wall-feed" id="feed" role="feed" aria-label="Support questions"></div>
     <div class="empty-wall" id="empty" style="display:none;">
-      <div style="font-size:3rem;" aria-hidden="true">🦗</div>
-      <p>Nothing on the wall yet. Be the first to send it.</p>
+      <div style="font-size:3rem;" aria-hidden="true">🛟</div>
+      <p>No questions yet. Ask the first one — someone else probably has the same one.</p>
     </div>
     <div style="text-align:center; margin-top:1.4rem;">
       <button class="btn btn-ghost btn-sm" id="load-more" hidden>Load more ⬇️</button>
     </div>
+
+    <p class="sup-foot">Still stuck after all that? Email <a href="mailto:GWCRH@atomicmail.io">GWCRH@atomicmail.io</a>.</p>
 
   </div>
 </main>
@@ -113,7 +116,7 @@
 <footer>
   <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
   <p class="fine">
-    Posts are user content — keep it fun, keep it legal, no financial advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Questions and answers here are user content — other senders helping each other, not official support or financial advice. Not affiliated with Robinhood Markets, Inc.<br>
     Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
   </p>
    <div class="nav-foot">
