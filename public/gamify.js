@@ -83,8 +83,8 @@
     track_wallet: 'Save a new wallet to your private tracker. Capped 10/day.',
     watch_token: 'Save a token to your watchlist from New Pairs (☆). Once per token, capped 30/day.',
     send_call: 'Call any token (📣) from New Pairs — it needs ≥$500 liquidity so nobody can farm a dust pool. It posts a permanent, live widget to your wall that tracks its Xs forever. +120 Send Power (📥 boosted by the value of the tokens you bought & still hold — every $100 held = ×1, so $1,000 = ×10; best-effort, on-chain), 5 calls/day to start (rolling 24h — it floats with your call quality, and Diamond holders get more). Calls are FINAL — they can never be deleted.',
-    call_x: 'The payoff: each whole X your call hits pays Send Power that grows with the multiple — 1x → +180, 2x → +360, 3x → +540 … up to 50x — awarded once per milestone as it runs, with no daily cap. Everything one call ever pays you shares one lifetime budget (about the Send Power it takes to reach Level 70), so a great call is a big prize but never the whole game. Remember +100% = 1x.',
-    call_hold: '💎 Diamond hands: a call that STAYS in profit earns more the longer AND higher it holds — the bonus compounds (grows faster than the Xs alone), accruing automatically every few minutes while it’s above your entry price. This is where most of a call’s Send Power lives: at least 60% of everything a call can ever pay is reserved for holding in profit. And it accrues faster when the people who Sent It on your call are in profit too — +10% per Sender in the green, up to 3×.',
+    call_x: 'The payoff: each whole X your call hits pays Send Power that grows with the multiple — 1x → +170, 2x → +340, 3x → +510 … up to 50x → +8,500 — awarded once per milestone as it runs, with no daily cap. Everything one call ever pays you shares one lifetime budget (about the Send Power it takes to reach Level 70), so a great call is a big prize but never the whole game. Remember +100% = 1x.',
+    call_hold: '💎 Diamond hands: a call that STAYS in profit earns more the longer AND higher it holds — the bonus compounds (grows faster than the Xs alone), accruing automatically every few minutes while it’s above your entry price. This is where most of a call’s Send Power lives: at least 60% of everything a call can ever pay is reserved for holding in profit. And it accrues faster when the people who Sent It on your call are in profit too — +10% per Sender in the green with at least $20 of their own in the token, up to 3×.',
     hop_on: 'Send It! (🚀) on someone else’s Send Call from the Send Wall to ride it with them. +30 Send Power, up to 30/day.',
     hop_hold: '💎 If you Send It on someone’s call and stay in profit from your entry price, you earn the same compounding diamond-hands bonus the caller does — the longer you hold in the green and the higher it runs, the more.',
     daily: 'Tap ✅ Check in for today on your own wall. Once per UTC day, multiplied by your boosts.',
@@ -616,7 +616,7 @@
     // nudge an untried high-value action
     if (!bd.find(x => x.kind === 'swap')) {
       rows += '<li class="ll-nudge"><span class="ll-ico" aria-hidden="true">🚀</span>' +
-        '<a class="ll-label" href="/index.html#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+150 each →</span></a></li>';
+        '<a class="ll-label" href="/index.html#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
     }
     return '<div class="loot">' + head +
       '<div class="loot-bar" role="img" aria-label="Points by source: ' + esc(legend) + '">' + segs + '</div>' +

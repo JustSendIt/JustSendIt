@@ -4425,6 +4425,10 @@ const CALL_X_CAP = 50;      // cap the milestone ladder so a manipulated/glitche
    ratio the opening awards already use (hop_on 30 vs send_call 120). */
 const CALL_POINTS_CAP = xpForLevel(70);                       // 737,627 — lifetime Send Power cap for one call, for its caller
 const HOP_POINTS_CAP = Math.round(CALL_POINTS_CAP / 4);       // 184,407 — same, per hopper on that call
+// The opening award is a participation award, not performance: it scales with the position you actually put in, and a
+// boost stack may multiply it at most this much. The 10% budget slice alone was sized for a 1× user — under a large
+// stack a $0 call reached the whole 73,762 slice with nothing in the token and no market move at all.
+const OPEN_STACK_MAX = 10;
 /* A single payout may also take at most CALL_EVENT_SHARE of the whole budget. Without this, the
    budget alone quietly destroys the incentive it is protecting: at a 500x multiplier stack the
    OPENING award already exceeds the entire cap, so one event swallows it and the milestone ladder
@@ -5709,7 +5713,8 @@ const server = http.createServer(async (req, res) => {
         // The opening award comes out of the same per-call budget as the milestones and the hold
         // bonus, so CALL_POINTS_CAP really is everything one call can ever be worth — not a cap on
         // part of it with the rest sitting outside.
-        const earned = awardPoints(me.id, 'send_call', Math.round(PTS.send_call * sm), 'callopen:' + me.id + ':' + token, callHeadroom(0, CALL_POINTS_CAP)); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever — the same bag re-called twenty times a day paid twenty openings
+        const openBase = Math.round(PTS.send_call * sm);
+        const earned = awardPoints(me.id, 'send_call', openBase, 'callopen:' + me.id + ':' + token, Math.min(callHeadroom(0, CALL_POINTS_CAP), openBase * OPEN_STACK_MAX)); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever, and at most 10× the size-scaled base
         if (earned > 0) db.prepare('UPDATE calls SET points_paid = points_paid + ? WHERE id = ?').run(earned, callId);
         // A Send Call on a community's own token IS participation in that community, so it scores for it — but only
         // from a qualified member. Otherwise anyone could push a community up the weekly board from the outside.
@@ -5759,21 +5764,28 @@ const server = http.createServer(async (req, res) => {
         if (!c) return bad(res, 'call not found', 404);
         if (c.user_id === me.id) return bad(res, 'that’s your own Send Call');
         const isNew = !db.prepare('SELECT 1 FROM call_hops WHERE call_id = ? AND user_id = ?').get(callId, me.id);
-        const hopEntry = (c.cur_price > 0 ? c.cur_price : c.entry_price) || null; // hopper's Xs basis = the price when they hopped on
+        // ONE paying Sender position per token, mirroring the caller's one-call-per-token rule. Without it, N calls on the
+        // same token (free alt accounts can mint them on demand) gave one account N independent hold budgets off a single
+        // real buy. A second Send on the same token still counts socially — it just has no entry price, so it never accrues
+        // and never counts toward anyone's crew.
+        const dupTok = !!db.prepare('SELECT 1 FROM call_hops h JOIN calls c2 ON c2.id = h.call_id WHERE h.user_id = ? AND c2.token_addr = ? AND h.call_id != ? AND h.entry_price IS NOT NULL').get(me.id, c.token_addr, callId);
+        const hopEntry = dupTok ? null : ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null); // hopper's Xs basis = the price when they hopped on
         const tHop = now();
         let earned = 0;
         if (isNew) {
-          const pos = await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price)); // what this follower bought / still holds
+          const pos = dupTok ? { spendUsd: 0, boughtUsd: 0, heldUsd: 0 } // already holding a paying position on this token — no chain read needed
+            : await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price)); // what this follower bought / still holds
           const spendUsd = pos.spendUsd;
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop, spendUsd, pos.boughtUsd, pos.heldUsd);
-          earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', Math.round(PTS.hop_on * sizeMult(spendUsd)), 'hop:' + me.id + ':' + callId, callHeadroom(0, HOP_POINTS_CAP)) : 0; // paid on a verified buy only — a tap with nothing in the token earns nothing
+          const hopBase = Math.round(PTS.hop_on * sizeMult(spendUsd));
+          earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX)) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
           if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
           notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' ($' + Math.round(spendUsd) + ' in)' : ''), 'points');
         } else {
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check) VALUES (?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop);
         }
         const hops = db.prepare('SELECT COUNT(*) n FROM call_hops WHERE call_id = ?').get(callId).n;
-        return send(res, 200, { ok: true, hops, hopped: true, wallet: c.wallet || null, symbol: c.symbol, pointsEarned: earned });
+        return send(res, 200, { ok: true, hops, hopped: true, wallet: c.wallet || null, symbol: c.symbol, pointsEarned: earned, paying: !dupTok });
       }
 
       /* ----- gamification ----- */
