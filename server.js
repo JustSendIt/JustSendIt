@@ -3078,6 +3078,16 @@ function sniperBudget() {
   };
 }
 
+/* A balance read on the scan's own budget. erc20Balance() goes through the fail-fast rpc(), which is right
+   for the pairs refresher and wrong here: one 429 on one wallet made that wallet "not readable", and since
+   balances decide accumulator-vs-seller, a single congested moment turned a clean answer into "unknown". */
+async function sniperBalance(B, token, addr) {
+  const data = '0x70a08231' + lcAddr(addr).replace('0x', '').padStart(64, '0');
+  const r = await B.call('eth_call', [{ to: token, data }, 'latest']);
+  if (r == null || r === '0x') throw new Error('balance read failed');   // never let an empty read read as zero
+  return BigInt(r);
+}
+
 // eth_getLogs with an explicit topic array, halving on a node timeout: the node's limit is on the work a
 // query does, not on the block range, so the same range usually succeeds once split.
 async function sniperLogs(B, address, topics, from, to) {
@@ -3124,10 +3134,10 @@ async function findBlockZero(B, token, pair, createdAtMs, head) {
 /* The float the percentages are measured against. Total supply flatters a token that keeps most of its
    supply in the pool or has burned some, so both are reported: the raw supply, and the float actually in
    circulation — supply minus the pool, the burn addresses and the token's own tax balance. */
-async function tokenFloat(token, pair, supply) {
+async function tokenFloat(B, token, pair, supply) {
   let held = 0n;
   for (const a of [pair, token, ...DEAD_ADDRS]) {
-    try { held += await erc20Balance(token, a); } catch { /* one unreadable balance must not zero the float */ }
+    try { held += await sniperBalance(B, token, a); } catch { /* one unreadable balance must not zero the float */ }
   }
   const f = supply - held;
   return f > 0n && f <= supply ? f : supply;
@@ -3156,7 +3166,7 @@ async function traceCluster(B, token, pair, root, fromBlock, head, seenGlobal) {
         rec.sentOn += v;
         dests.set(d, (dests.get(d) || 0n) + v);
       }
-      try { rec.holds = await erc20Balance(token, addr); } catch { rec.holds = null; }   // null = unread, never 0
+      try { rec.holds = await sniperBalance(B, token, addr); } catch { rec.holds = null; }   // null = unread, never 0
       const ranked = [...dests.entries()].sort((a, b) => (b[1] > a[1] ? 1 : b[1] < a[1] ? -1 : 0));
       rec.to = ranked.map(([a, v]) => ({ addr: a, amount: v.toString() }));
       wallets.set(addr, rec);
@@ -3240,7 +3250,7 @@ async function scanSnipers(token, pair, createdAtMs) {
       notes: ['This pool has never paid a token out — nobody has bought yet.'] };
   }
   const blockAt = parseInt((await B.call('eth_getBlockByNumber', [hexBlock(block), false])).timestamp, 16) * 1000;
-  const float = await tokenFloat(token, pair, supply);
+  const float = await tokenFloat(B, token, pair, supply);
   let price = null;
   try { price = await sniperPriceWeth(B, pair, token); } catch { price = null; }
 

@@ -106,6 +106,7 @@
       (activeFlags(p).length ? '<section class="np-why"><ul class="np-why-list">' + activeFlags(p).map(k => '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].word) + '</li>').join('') + '</ul></section>' : '') +
       group('chart', '📈 Chart', true, chartHTML(p)) +
       group('market', '📊 Market', true, market) + group('activity', '🔁 Activity', false, activity) + group('holders', '👥 Holders', false, holders) + group('contract', '📄 Contract &amp; copy', false, contract) +
+      group('block0', '🎯 Block 0 — the first buyers', true, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
       '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p></div>';
   }
   function rowHTML(p) {

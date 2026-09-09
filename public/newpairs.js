@@ -630,6 +630,8 @@
       group('market', '📊 Market', S.market, marketInner) +
       group('activity', '🔁 Activity', S.activity, activityInner) +
       group('holders', '👥 Holders', S.holders, holdersInner) +
+      // the first buyers this pool ever had — filled in by block0.js wherever this body is inserted
+      group('block0', '🎯 Block 0 — the first buyers', S.block0 !== false, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
       group('contract', '📄 Contract &amp; copy', S.contract, contractInner) +
       '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p></div>';
   }

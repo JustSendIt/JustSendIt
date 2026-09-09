@@ -206,11 +206,28 @@
 
   // start-a-community form
   const form = document.getElementById('comm-start'), addr = document.getElementById('comm-addr'), msg = document.getElementById('comm-start-msg'), goBtn = document.getElementById('comm-start-go');
+  // Pasting the wrong contract should not mean selecting 42 characters by hand. The ✕ shows only when there
+  // is something to clear, wipes the message and the invalid state with it, and puts the caret back in the
+  // field so the next paste just works.
+  const clearBtn = document.getElementById('comm-addr-clear');
+  function paintClear() { if (clearBtn) clearBtn.hidden = !addr.value; }
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      addr.value = '';
+      addr.removeAttribute('aria-invalid');
+      msg.textContent = '';
+      paintClear();
+      addr.focus();
+    });
+    addr.addEventListener('input', paintClear);
+    paintClear();
+  }
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
     const token = addr.value.trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { msg.textContent = '⚠️ Paste a valid 0x token contract address.'; return; }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { msg.textContent = '⚠️ Paste a valid 0x token contract address.'; addr.setAttribute('aria-invalid', 'true'); addr.focus(); return; }
+    addr.removeAttribute('aria-invalid');
     goBtn.disabled = true; msg.textContent = '🔎 Reading the token on-chain…';
     try {
       const r = await fetch('/api/communities', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });

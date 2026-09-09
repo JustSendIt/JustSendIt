@@ -3603,7 +3603,19 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 
 /* the start form: the placeholder was cut off mid-word at ~600px, so the field takes its own row before that */
 .comm-start { justify-content: center; }   /* when the field takes its own row, the button stays under the middle of it */
-.comm-start .addr-input { flex: 1 1 340px; min-width: 0; margin: 0; }
+.comm-start .addr-field { position: relative; display: flex; flex: 1 1 340px; min-width: 0; }
+.comm-start .addr-field .addr-input { flex: 1 1 auto; min-width: 0; margin: 0; padding-right: 3rem; }
+.addr-clear {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+  border: 1.5px solid var(--edge-ctl); background: var(--ink-2); color: var(--text-dim);
+  font-size: 0.95rem; line-height: 1; display: grid; place-items: center; padding: 0;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.addr-clear:hover { border-color: var(--green); color: var(--green-bright); }
+.addr-clear:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.addr-input[aria-invalid="true"] { border-color: var(--red); }
+@media (prefers-reduced-motion: reduce) { .addr-clear { transition: none; } }
 .comm-start .btn { flex: 0 0 auto; }
 
 /* ---------- the two walls ---------- */
@@ -3626,3 +3638,48 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   background: rgba(159,224,255,0.14); color: var(--diamond); border: 1px solid rgba(159,224,255,0.42);
 }
 @media (prefers-reduced-motion: reduce) { .cw-tab { transition: none; } }
+
+/* ===== 23. Block 0 — the first buyers, on every token detail (public/block0.js) ===== */
+.np-b0 { display: block; }
+.b0-msg { margin: 0; font-size: 0.88rem; line-height: 1.6; color: var(--text-dim); padding: 0.7rem 0.85rem; border-radius: var(--r-2); background: var(--ink); border: 1px solid var(--ink-4); }
+.b0-wait { border-color: rgba(159,224,255,0.35); color: var(--diamond); }
+.b0-fail { border-color: rgba(255,179,64,0.45); color: var(--gold); }
+.b0-good { border-color: rgba(142,224,0,0.4); color: var(--green-bright); }
+.b0-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.8rem; margin-bottom: 0.7rem; }
+.b0-verdict { font-weight: 900; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; border-radius: var(--r-pill); padding: 0.25rem 0.7rem; white-space: nowrap; }
+.b0-acc { background: rgba(142,224,0,0.14); color: var(--green-bright); border: 1px solid rgba(142,224,0,0.45); }
+.b0-sell, .b0-out { background: rgba(255,93,93,0.13); color: var(--red); border: 1px solid rgba(255,93,93,0.45); }
+.b0-unk { background: rgba(159,224,255,0.12); color: var(--diamond); border: 1px solid rgba(159,224,255,0.4); }
+.b0-block { font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.b0-block b { color: var(--text); }
+.b0-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; margin-bottom: 0.8rem; }
+.b0-tile { background: var(--ink); border-radius: 12px; padding: 0.6rem 0.7rem; display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.b0-tile b { font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1.35rem; line-height: 1.1; color: var(--green-bright); letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.b0-tile span { font-size: 0.73rem; color: var(--text-dim); line-height: 1.35; }
+.b0-up { color: var(--green-bright); }
+.b0-down { color: var(--red); }
+.b0-ledger { background: var(--ink); border: 1px solid var(--ink-4); border-radius: 12px; padding: 0.7rem 0.85rem; margin-bottom: 0.8rem; }
+.b0-ledger h4 { margin: 0 0 0.5rem; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); font-weight: 800; }
+.b0-led-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-size: 0.86rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.b0-led-row b { color: var(--text); font-weight: 800; }
+.b0-pnl b { font-size: 1rem; }
+.b0-wallets { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.b0-w { background: var(--ink); border: 1px solid var(--ink-4); border-radius: 12px; padding: 0.6rem 0.75rem; }
+.b0-w-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem; }
+.b0-addr { font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem; color: var(--text); }
+.b0-tag { font-size: 0.68rem; font-weight: 900; border-radius: var(--r-pill); padding: 0.1rem 0.45rem; white-space: nowrap; }
+.b0-w-stats { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.8rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.b0-w-stats b { color: var(--text); font-weight: 800; }
+.b0-w-stats i { font-style: normal; opacity: 0.75; }
+.b0-conn { margin-top: 0.45rem; }
+.b0-conn summary { cursor: pointer; font-size: 0.8rem; color: var(--diamond); font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+.b0-conn summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.b0-conn ul { list-style: none; margin: 0.35rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.b0-conn li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; font-size: 0.78rem; color: var(--text-dim); background: var(--ink-2); border-radius: 8px; padding: 0.3rem 0.5rem; font-variant-numeric: tabular-nums; }
+.b0-conn code { font-family: ui-monospace, Menlo, monospace; color: var(--text); }
+.b0-none { margin: 0.35rem 0 0; font-size: 0.78rem; color: var(--text-dim); }
+.b0-more { opacity: 0.7; }
+.b0-note { margin: 0.6rem 0 0; font-size: 0.78rem; line-height: 1.5; color: var(--gold); }
+.b0-fine { margin: 0.6rem 0 0; font-size: 0.75rem; line-height: 1.55; color: var(--text-dim); }
+.b0-fine b { color: var(--text); }
+@media (max-width: 420px) { .b0-tiles { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); } }
