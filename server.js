@@ -6280,16 +6280,18 @@ const server = http.createServer(async (req, res) => {
              the SQL rather than in the view, because postsView() maps rows without filtering: anything this
              query returns is already considered publishable by everything downstream. The Send Wall shows
              public posts, wall and community alike; the private wall stays exactly as private as it was. */
-          /* The open sandbox is excluded. It exists so someone with no token can practise posting, so it has
-             no holdings gate, no go-live threshold and deliberately grants no multiplier — and it keeps its
-             own rate-limit bucket. Putting it on the front page would hand every tokenless account a second
-             dozen posts per ten minutes through the one door on the site with no cost of entry, which is the
-             exact opposite of what a sandbox is for. Real communities need the wall to be found; this one
-             does not. */
-          const roomSql = ' AND (po.community_id IS NULL OR po.community_id NOT IN (SELECT id FROM communities WHERE demo = 1))';
+          /* EVERY public community post reaches the wall — sandbox included. The only thing held back is a
+             HOLDERS-ONLY post, and `po.private = 0` is that boundary. It lives in the SQL rather than the
+             view because postsView() maps rows without filtering, so anything this query returns is already
+             treated as publishable by everything downstream.
+             (An earlier pass excluded the sandbox, because its posts cost nothing to make and arrived on a
+             SECOND rate-limit bucket — two dozen front-page posts per ten minutes per account instead of
+             one. That was a real hole, but excluding a whole room was the wrong patch for it: the fix is the
+             shared bucket at the community-post route, so the wall's per-account cap is the cap wherever a
+             post is written.) */
           const base = (following
-            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.private = 0' + boardSql + roomSql + ' AND f.follower_id = ?'
-            : 'FROM posts po WHERE po.private = 0' + boardSql + roomSql)
+            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.private = 0' + boardSql + ' AND f.follower_id = ?'
+            : 'FROM posts po WHERE po.private = 0' + boardSql)
             + (me ? ' AND po.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?)' : ''); // muted senders vanish from the feed
           const args = following ? [me.id] : [];
           if (me) args.push(me.id);
@@ -7481,7 +7483,11 @@ const server = http.createServer(async (req, res) => {
               let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); }
               if (!holdsP) return bad(res, 'You need to hold $' + c.symbol + ' to post on its community wall.', 403);
             }
-            if (!rateLimit('commpost:' + me.id, 12, 6e5)) return bad(res, 'slow down', 429);
+            /* The SAME bucket the Send Wall uses, not a second one. A community post now lands on the public
+               wall, so two buckets meant two dozen front-page posts per ten minutes per account — and on the
+               sandbox, which needs no token and no wallet, the second dozen was free. One allowance per
+               person, wherever they choose to write it. */
+            if (!rateLimit('post:' + me.id, 12, 6e5)) return bad(res, 'posting too fast — take a breath 😅', 429);
             const bigUpload = Number(req.headers['content-length'] || 0) > MEDIA_GATE_BYTES;
             if (bigUpload && mediaInFlight >= MEDIA_CONCURRENCY) return bad(res, 'lots of uploads right now — try again in a moment', 503);
             let b, image = null;
