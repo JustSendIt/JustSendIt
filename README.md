@@ -278,9 +278,11 @@ Tripping the spam trap mutes your account, escalating with each **distinct** off
 
 **Strikes are for life.** The counter only ever increments — nothing ages it out, forgives it, or resets it, and there is **no appeal endpoint and no admin who can lift a restriction**. Three offences years apart still land on permanent. The only route back is buying your way out (below), which is why that path exists at all.
 
-**Blocked while muted:** making calls, Sending It, posting, commenting, reacting, voting, following, tracking wallets, customizing — **and the daily check‑in**. Also blocked, though the in‑app list doesn't enumerate them: minting a Data API key, flying Rocket Run, starting a community, joining one, posting in one, and opening or voting on a community proposal. **Still allowed:** buying & holding $Send/$GWC (your Holder Boost keeps compounding), swapping (points still count), connecting/refreshing a wallet, and browsing everything. *(Connecting works, but the **150‑point connect award is withheld** while you're restricted, and linking a wallet mid‑restriction raises your redemption baseline to whatever it already holds.)*
+**Blocked while muted:** making calls, Sending It, posting, commenting, reacting, voting, following, tracking wallets, customizing. Also blocked, though the in‑app list doesn't enumerate them: minting a Data API key, flying Rocket Run, starting a community, joining one, posting in one, and opening or voting on a community proposal. **Still allowed:** **the daily check‑in**, buying & holding $Send/$GWC (your Holder Boost keeps compounding), swapping (points still count), connecting/refreshing a wallet, and browsing everything. *(Connecting works, but the **150‑point connect award is withheld** while you're restricted, and linking a wallet mid‑restriction raises your redemption baseline to whatever it already holds.)*
 
-**Read‑only costs points, not just actions.** Two things bite at once (§3.6b): the mute adds a flat **+1.0 percentage point** to your daily Send Power decay, *and* — because the check‑in is blocked — your absence streak keeps climbing, so the absence component keeps accelerating on top of it. A long mute therefore walks up to the **4%/day** ceiling and stays there. Redeeming early (below) is the only way to stop it, short of the timer running out.
+**The check‑in stays open on purpose.** Read‑only pauses what you can *make*; it does not lock you out of protecting what you already earned. Since the check‑in is the switch that stops the escalating absence decay (§3.6b), gating it would have turned a mute into a compounding penalty a muted account could do nothing about — a different and much harsher thing than pausing posting.
+
+**A mute still costs points, just not runaway ones.** While restricted you're charged a flat **+1.0 percentage point** of Send Power per day, and — unlike every other decay component — **checking in does not cancel it**. That's what keeps the restriction a penalty rather than an inconvenience. But it is *all* you pay: check in daily and your absence streak stays at zero and your underwater calls cost nothing, so the bleed is a steady 1%/day instead of climbing to the 4% ceiling. Ignore the site while muted and both components stack.
 
 **Redeem with $Send — buy your way out early.** Any restriction can be lifted by **buying and then holding** enough $Send, verified on‑chain:
 
@@ -310,15 +312,17 @@ Send Power is **not** a permanent record of what you once did. It is a balance, 
 | Component | Rate | When |
 |---|---:|---|
 | **Absence** | **0.4%** on the first day past grace, **+0.2 points** per further consecutive day away | Only after **2 consecutive days** (`GRACE_DAYS`) with no check‑in — two days off costs nothing |
-| **Read‑only** | **+1.0 point** | Every day the account is muted (§3.6) |
+| **Read‑only** | **+1.0 point** | Every day the account is muted (§3.6) — the **only** component a check‑in does not cancel |
 | **Bad calls** | **+0.3 points** per call currently **underwater**, up to **+1.5** | Any of your calls whose current price is below its entry |
 | **Ceiling** | **4%** in one day, total | However long you've been gone |
 
 So: away 3 days → 0.4%. Away 7 days → 1.2%. Away 21 days → 4% (the cap). Away *and* muted *with* three sinking calls → the cap, immediately.
 
-**What stops it.** A **daily check‑in** — and nothing else. Holding coins doesn't stop it; neither does a high level.
+**What stops it.** A **daily check‑in** — and nothing else. Holding coins doesn't stop it; neither does a high level. **Anyone can check in, including a muted account** — read‑only pauses what you can *make*, not your ability to defend what you already earned.
 
-**And it stops *all* of it.** A check‑in inside the last 24 hours returns before any component is computed, so on a day you show up, underwater calls and everything else cost you **nothing**. The read‑only and bad‑call rates only ever apply on a day you were *already* absent — they make absence more expensive, they aren't a separate charge. The one account that can't use this is a restricted one, because read‑only blocks the check‑in itself.
+**It stops two of the three components.** A check‑in inside the last 24 hours sets your absence streak to zero *and* skips the underwater‑call charge entirely, so on a day you show up those cost you **nothing**. The bad‑call rate only ever applies on a day you were *already* away: a call that went down is a market outcome, not misconduct, and billing someone daily for one while they are actively participating would be a far harsher rule than the one intended.
+
+**The read‑only charge is the exception.** It is the one component a check‑in does **not** cancel — while restricted you pay its flat 1.0 point per day regardless. A penalty that stops costing anything the moment you tap a button is not a penalty. But it is *all* you pay if you keep showing up: a steady 1%/day, instead of that plus an absence rate climbing toward the 4% ceiling.
 
 **Old bad calls never stop counting.** The underwater count is `cur_price < entry_price` over *all* your calls, and since nothing ever closes a call, one you made a year ago that never recovered still adds its 0.3% to any day you're absent. It costs nothing on a day you check in.
 

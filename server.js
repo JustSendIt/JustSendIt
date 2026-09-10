@@ -5082,17 +5082,17 @@ function redeemHoldMs(u) { // how long they must then hold that $SEND (permanent
 }
 function humanDur(ms) { const h = Math.round(ms / 3600000); if (h < 48) return h + ' hours'; const d = Math.round(ms / DAY_MS); if (d < 14) return d + ' days'; return Math.round(d / 7) + ' weeks'; }
 // This list is shown to a restricted account as a promise, so it must match what the routes actually do.
-// The daily check-in is NOT on it: POST /api/checkin calls blockReadOnly and 403s. That is deliberate —
-// the check-in is what resets the decay streak, so leaving it open would let a muted account hold its
-// Send Power steady while muted — but it does mean read-only costs points as well as actions, and the
-// warning below has to say so rather than let someone discover it from their balance.
+// The daily check-in IS on it and the route is deliberately not gated: read-only pauses what you can
+// make, not your ability to protect what you already earned. Checking in keeps the absence side of
+// decay at zero; the mute itself still costs READONLY_PCT a day, which is what keeps it a penalty.
 const READONLY_ALLOWED = [
+  'Earn your daily "show up" bonus 📅 — and it stops the absence side of Send Power decay',
   'Buy & hold $SEND / $GWC — your Holder Boost keeps compounding 💎',
   'Swap for $SEND / $GWC — those points still count 🚀',
   'Connect or refresh your wallet 🔗',
   'Browse the Send Wall, profiles, charts & New Pairs Radar 👀',
 ];
-const READONLY_BLOCKED = ['Making Send Calls', 'Sending It on others’ calls', 'Posting', 'Commenting', 'Reacting', 'Upvoting / downvoting', 'Following', 'Tracking wallets', 'Customizing your wall', 'The daily check-in — so your Send Power keeps decaying while you are muted'];
+const READONLY_BLOCKED = ['Making Send Calls', 'Sending It on others’ calls', 'Posting', 'Commenting', 'Reacting', 'Upvoting / downvoting', 'Following', 'Tracking wallets', 'Customizing your wall'];
 
 // in-memory behavioral windows (the durable restriction lives in the DB). Heavy = content creation
 // (post/comment/track); light = one-tap engagement (react/vote/follow). They have separate, much higher
@@ -6776,9 +6776,13 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, gamifySummary(fresh));
       }
       /* ----- daily check-in: showing up is a thing you DO, not something that happens to you ----- */
+      /* Deliberately NOT behind blockReadOnly. Showing up is not a gameable write — it pays once per UTC
+         day whatever you do — and it is the one switch that stops Send Power decaying. Gating it made a
+         mute a compounding penalty a muted account could do nothing about, which is a different and much
+         harsher thing than pausing what someone can create. Read-only pauses making; it does not lock
+         someone out of protecting what they already earned. */
       if (p === '/api/checkin' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
-        if (blockReadOnly(res, me)) return;
         if (!rateLimit('checkin:' + me.id, 20, 6e5)) return bad(res, 'slow down', 429);
         const ref = 'daily:' + me.id + ':' + ymd();
         if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(ref)) return send(res, 200, { already: true, awarded: 0, checkedInToday: true });
@@ -8128,12 +8132,15 @@ function decayUser(u, today) {
   }
   const checkedInToday = !!db.prepare('SELECT 1 FROM points_events WHERE user_id = ? AND kind = ? AND created_at > ?')
     .get(u.id, 'daily', now() - 864e5);
-  if (checkedInToday) {
-    db.prepare('UPDATE users SET decay_at = ?, decay_streak = 0 WHERE id = ?').run(today, u.id);
-    return 0;   // showed up: the streak resets and nothing is taken
-  }
 
-  const streak = (u.decay_streak || 0) + 1;
+  /* Showing up zeroes the absence streak. It does NOT zero the mute: read-only is a penalty the site
+     imposed, and a penalty that stops costing anything the moment you tap one button is not a penalty.
+     Muted accounts can check in (the route is deliberately ungated) — that protects them from the
+     escalating absence charge, which they could otherwise do nothing about, while the flat READONLY_PCT
+     keeps the restriction meaningful. Underwater calls are charged only on days you were ALREADY away:
+     a call that went down is a market outcome, not misconduct, and billing someone daily for it while
+     they are actively showing up would be a different and much harsher rule than the one intended. */
+  const streak = checkedInToday ? 0 : (u.decay_streak || 0) + 1;
   let pct = 0;
   if (streak > DECAY.GRACE_DAYS) pct += DECAY.BASE_PCT + (streak - DECAY.GRACE_DAYS - 1) * DECAY.ACCEL_PCT;
 
@@ -8144,9 +8151,12 @@ function decayUser(u, today) {
   /* Underwater calls. Only calls still open and still below their entry count — a call that recovered is not
      a bad call, and one already written off as rugged is charged once through this same route rather than
      twice. Counted from the stored prices, so this costs no chain reads. */
-  const bad = db.prepare(`SELECT COUNT(*) n FROM calls
-                          WHERE user_id = ? AND cur_price > 0 AND entry_price > 0 AND cur_price < entry_price`).get(u.id).n;
-  if (bad > 0) pct += Math.min(DECAY.BAD_CALL_MAX, bad * DECAY.BAD_CALL_PCT);
+  let bad = 0;
+  if (!checkedInToday) {
+    bad = db.prepare(`SELECT COUNT(*) n FROM calls
+                      WHERE user_id = ? AND cur_price > 0 AND entry_price > 0 AND cur_price < entry_price`).get(u.id).n;
+    if (bad > 0) pct += Math.min(DECAY.BAD_CALL_MAX, bad * DECAY.BAD_CALL_PCT);
+  }
 
   pct = Math.min(DECAY.MAX_PCT, pct);
   if (!(pct > 0)) {
@@ -8174,8 +8184,13 @@ function decayUser(u, today) {
   if (streak > DECAY.GRACE_DAYS) why.push(streak + ' days without checking in');
   if (readOnly) why.push('read-only mode');
   if (bad > 0) why.push(bad + ' call' + (bad === 1 ? '' : 's') + ' underwater');
+  // Don't tell someone who just checked in to check in. If the mute is the only thing left charging them,
+  // the honest advice is that it stops when the restriction does.
+  const advice = checkedInToday
+    ? (readOnly ? ' This part stops when your restriction lifts — checking in is already holding the rest at zero.' : '')
+    : ' Check in to stop it.';
   notify(u.id, '📉', 'Send Power decayed by ' + drain.toLocaleString('en-US') + ' (' + (Math.round(pct * 10) / 10) +
-    '%) — ' + why.join(', ') + '. Check in to stop it.', 'points');
+    '%) — ' + why.join(', ') + '.' + advice, 'points');
   return drain;
 }
 
