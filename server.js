@@ -46,9 +46,30 @@ const DATA_KEY = (() => {
   if (/^[0-9a-f]{64}$/i.test(hex)) return Buffer.from(hex, 'hex');
   const kf = path.join(DATA_DIR, '.data_key');
   try { const t = fs.readFileSync(kf, 'utf8').trim(); if (/^[0-9a-f]{64}$/i.test(t)) return Buffer.from(t, 'hex'); } catch {}
+  /* GENERATING A KEY IN PRODUCTION IS A REFUSAL, NOT A WARNING.
+     Every path above failed, so this boot is about to invent a key. On a laptop that is convenient. On a
+     production host it is one of two things, and both are worse than not starting:
+       · a first deploy with no DATA_KEY set — the key is then written INTO the data volume, so the key and
+         the data it protects share a single point of failure, and nobody learns that until the day they
+         restore a backup and find every email, wallet link and 2FA secret undecryptable;
+       · a redeploy whose volume did not mount — in which case the real key still exists somewhere and this
+         process is about to start a SECOND, empty database and quietly serve it as if it were the site.
+     A container that exits loudly gets noticed. One that starts and silently loses its memory does not. */
+  const prod = process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === '1' || /^https:/i.test(BASE_URL);
+  if (prod) {
+    console.error('\n🔴 REFUSING TO START: no DATA_KEY.\n' +
+      '   This looks like production (NODE_ENV/COOKIE_SECURE/https BASE_URL) and there is no key in the\n' +
+      '   environment and none at ' + kf + '.\n' +
+      '   Generating one now would either put the key inside the same volume as the data it protects, or —\n' +
+      '   if your volume simply failed to mount — start an EMPTY database and serve it as if it were the site.\n\n' +
+      '   Generate one:  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"\n' +
+      '   Set it as DATA_KEY, and store it somewhere your database backups are NOT.\n' +
+      '   Already have data? Then your volume did not mount — fix that instead; a new key cannot read old rows.\n');
+    process.exit(1);
+  }
   const k = crypto.randomBytes(32);
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(kf, k.toString('hex') + '\n', { mode: 0o600 }); } catch (e) { console.error('could not persist the data key:', e.message); }
-  console.warn('🔐 Generated a new DATA_KEY at ' + kf + ' — back it up SEPARATELY from data/app.db (in production set DATA_KEY in the environment instead). Losing it makes every encrypted field unreadable.');
+  console.warn('🔐 Generated a new DATA_KEY at ' + kf + ' — fine for local development. In production set DATA_KEY in the environment instead, and back it up SEPARATELY from data/app.db. Losing it makes every encrypted field unreadable.');
   return k;
 })();
 const IDX_KEY = crypto.createHmac('sha256', DATA_KEY).update('blind-index').digest();
@@ -4580,7 +4601,7 @@ function assetVer(rel) {
 const ASSET_REF = /(\s(?:src|href)=")([^"?#:]+\.(?:js|mjs|css|png|jpe?g|webp|svg|ico|gif|woff2?|mp4|m4v|webm|mov|m4a|mp3|ogg|wav))(")/g;
 // Absolute SEO/share URLs (canonical, og:*, twitter:*, JSON-LD, sitemap, robots) are authored against a placeholder
 // origin and swapped for the real BASE_URL at serve time — so a deploy never ships a non-resolving og:image.
-const SITE_PLACEHOLDER = 'https://justsendit.example';
+const SITE_PLACEHOLDER = 'https://www.sendrh.com';
 const SITE_ORIGIN = BASE_URL.replace(/\/+$/, '');
 const swapOrigin = (s) => s.split(SITE_PLACEHOLDER).join(SITE_ORIGIN);
 function rewriteHtml(buf) {

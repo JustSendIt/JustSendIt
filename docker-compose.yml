@@ -1,0 +1,26 @@
+# One box, one process, one volume. `docker compose up -d` and put Caddy or Cloudflare in front for TLS.
+#
+# The volume is the whole point: /app/data holds the SQLite file, its WAL, uploaded media, the encryption
+# key and the daily backups. Lose it and you lose the site's memory — and if DATA_KEY is not set below,
+# you also lose the key that decrypts emails, wallet links and 2FA secrets, which nothing can recover.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8642:8642"     # bound to loopback: the reverse proxy in front terminates TLS
+    volumes:
+      - senddata:/app/data
+    environment:
+      NODE_ENV: production
+      BASE_URL: https://www.sendrh.com
+      COOKIE_SECURE: "1"          # TLS is terminated in front of this container, so say so
+      TRUST_PROXY: "1"            # one proxy hop; without it every rate limit keys on the proxy's IP
+      # DATA_KEY: set this. See .env.example for how to generate it, and back it up somewhere the
+      # database backups are NOT. Left unset, the app generates one into the volume on first boot —
+      # survivable, but it means the key and the data it protects live in the same place.
+    env_file:
+      - path: .env
+        required: false
+volumes:
+  senddata:

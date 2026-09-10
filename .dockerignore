@@ -1,0 +1,28 @@
+# Never build these into the image.
+#
+# NOTE: Docker does not support trailing comments here. A line like `data  # the database` is read as a
+# pattern named "data  # the database" and matches nothing — so every comment below sits on its own line.
+.git
+.gitignore
+node_modules
+
+# The live database, key, uploads and backups. These belong on a VOLUME, never in a layer.
+data
+
+*.log
+server.log
+
+.env
+.env.*
+!.env.example
+
+# 143 findings including exploit repros — must not ship inside a container either.
+audit-2026-09-05.csv
+
+# Large media, kept out of the repo and out of the image.
+public/assets/justsendit-full.mp4
+public/assets/justsendit-audio.m4a
+JustSendIt-Whitepaper.pdf
+WHITEPAPER.pdf
+
+.DS_Store

@@ -1,0 +1,35 @@
+# Fly.io: always-on, one machine, one volume. The three hard requirements this app has — Node 24, a
+# persistent disk, and a process that never sleeps — are all expressed here.
+app = "sendrh"
+primary_region = "iad"          # put it near your users; a single region is right until it is not
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  BASE_URL = "https://www.sendrh.com"
+  COOKIE_SECURE = "1"           # Fly terminates TLS in front of the app
+  TRUST_PROXY = "1"             # one hop; without it every rate limit keys on Fly's edge IP
+  NODE_ENV = "production"
+  PORT = "8642"
+
+# DATA_KEY is a secret, never an env entry:  fly secrets set DATA_KEY=...
+# The app refuses to boot in production without it.
+
+[mounts]
+  source = "senddata"
+  destination = "/app/data"     # database, WAL, uploads, key, backups
+
+[http_service]
+  internal_port = 8642
+  force_https = true
+  auto_stop_machines = false    # NOT "stop when idle": 17 background timers record price history that
+  auto_start_machines = true    # cannot be backfilled, so a sleeping machine loses data silently
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "40s"
+    method = "GET"
+    path = "/healthz"

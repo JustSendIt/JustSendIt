@@ -4,4 +4,4 @@ Disallow: /profile.html
 Disallow: /watchlist.html
 Disallow: /api/
 
-Sitemap: https://justsendit.example/sitemap.xml
+Sitemap: https://www.sendrh.com/sitemap.xml

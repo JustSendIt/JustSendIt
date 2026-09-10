@@ -24,7 +24,7 @@ Two good paths: **(A) a small VPS + Caddy** (recommended, cheapest, full control
 | **A domain name** | Yes | Point its DNS at your server. |
 | **A host** | Yes | VPS ($6–12/mo) or a PaaS with a persistent disk. |
 | `BASE_URL` | Yes | Your `https://` origin. Drives OAuth redirects + Secure cookies. |
-| Social login keys | Optional | Google / Facebook / X / Instagram OAuth app IDs + secrets. Each provider is **auto-enabled only if both its ID and secret are set**. Redirect URL to register: `https://yourdomain.com/api/auth/<provider>/callback`. Providers require moving the app from "testing" to "published/verified" before the public can log in — **start that review early**. |
+| Social login keys | Optional | Google / Facebook / X / Instagram OAuth app IDs + secrets. Each provider is **auto-enabled only if both its ID and secret are set**. Redirect URL to register: `https://www.sendrh.com/api/auth/<provider>/callback`. Providers require moving the app from "testing" to "published/verified" before the public can log in — **start that review early**. |
 | `MOONPAY_API_KEY` | Optional | Enables the in-page fiat "Buy" widget; without it the site links to MoonPay's generic buy page. Requires a MoonPay account. |
 
 Everything else (wallet login, email/password, 2FA, the whole app) works with **zero** third-party keys.
@@ -56,7 +56,7 @@ cp .env.example .env && nano .env
 Set at least:
 ```
 DATA_KEY=<64 hex chars — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
-BASE_URL=https://yourdomain.com
+BASE_URL=https://www.sendrh.com
 NODE_ENV=production
 PORT=8642
 COOKIE_SECURE=1
@@ -105,7 +105,7 @@ yourdomain.com {
 }
 ```
 `sudo systemctl reload caddy` — Caddy fetches and auto-renews a Let's Encrypt cert. Done: the site
-is live at `https://yourdomain.com`. (Caddy sets `X-Forwarded-For`, which the app reads because
+is live at `https://www.sendrh.com`. (Caddy sets `X-Forwarded-For`, which the app reads because
 `TRUST_PROXY=1`.)
 
 ---
@@ -123,7 +123,69 @@ project's `data/` path**, or the DB and uploads vanish on redeploy.
 - **Scaling:** keep it at **exactly one instance** — multiple instances would each get their own SQLite
   file and in-memory caches (see below).
 
+`fly.toml` in the repo is a working Fly config with all of that already set. Two lines in it are load-bearing
+and easy to "optimize" into a bug: `auto_stop_machines = false` and `min_machines_running = 1`. Seventeen
+background timers record price and runner history on a clock; a machine asleep at 3am does not miss requests,
+it misses **history**, and nothing can backfill it. On Fly, set the key as a secret rather than an env entry:
+
+```bash
+fly secrets set DATA_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+```
+
 ---
+
+## C. Docker / Compose
+
+`Dockerfile`, `.dockerignore` and `docker-compose.yml` are in the repo. On a box with Docker:
+
+```bash
+cp .env.example .env    # set DATA_KEY at minimum
+docker compose up -d --build
+```
+
+That publishes the app on `127.0.0.1:8642` only — put Caddy (section A.6) or Cloudflare in front for TLS —
+and keeps `/app/data` on a named volume. A few things worth knowing before you change any of it:
+
+- **The volume is the site.** Database, WAL, uploads, the encryption key and the backups all live there.
+  `docker compose down -v` deletes it. There is no undo.
+- **The container starts as root and immediately drops to `node`.** That is not sloppiness: a fresh volume
+  or bind mount arrives root-owned, and a container that has already dropped privileges cannot fix it, so
+  `scripts/entrypoint.sh` chowns `/app/data` and then `exec gosu node`. Nothing that serves traffic is root.
+- **tini is PID 1** so `docker stop` sends a SIGTERM that actually reaches node, which is what lets SQLite
+  checkpoint instead of dying mid-write.
+- **One container.** Scaling the service to 2 gives you two databases, not twice the capacity.
+
+---
+
+## Backups that survive losing the box
+
+The app already snapshots SQLite hourly, safely (an online backup between 256-page steps, so requests never
+stall), keeping the last 7 days. By default those land in `data/backups` — **on the same volume as the
+database they protect**. That covers corruption and a bad migration. It does not cover losing the volume,
+which is the failure that actually ends a site.
+
+Point `BACKUP_DIR` at something outside the volume and copy it off the host:
+
+```
+BACKUP_DIR=/backups
+```
+
+Then, whichever of these fits your host:
+
+```bash
+# object storage (S3, Cloudflare R2, Backblaze) — cheapest and least to go wrong
+0 * * * * rclone sync /backups remote:sendrh-backups --max-age 8d
+
+# or pull them somewhere else entirely
+0 * * * * rsync -az --delete user@host:/backups/ /local/sendrh-backups/
+```
+
+**Back up `DATA_KEY` separately, somewhere the database backups are not.** A backup you cannot decrypt is
+not a backup — emails, wallet links, tracked wallets and 2FA secrets are all encrypted at rest with it. If
+the key sits in the same bucket as the dump, one leaked credential loses both halves at once.
+
+**Test a restore before you need one.** Copy a snapshot to a scratch host, set the same `DATA_KEY`, boot it,
+and sign in. An untested backup is a hypothesis.
 
 ## Telegram scanner bot (optional)
 
