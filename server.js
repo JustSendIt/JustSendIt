@@ -1659,7 +1659,14 @@ function awardPoints(userId, kind, base, ref, maxAmount) {
 
 /* ===== Communities: XP + conviction + activity + anti-sybil helpers ===== */
 const decayedActivity = (c) => (c.activity || 0) * Math.pow(0.5, (now() - (c.activity_at || now())) / COMM_HALFLIFE);
-function bumpActivity(id, w) { const c = db.prepare('SELECT activity, activity_at FROM communities WHERE id=?').get(id); if (c) db.prepare('UPDATE communities SET activity=?, activity_at=? WHERE id=?').run(decayedActivity(c) + w, now(), id); }
+/* Activity ranks the community grid, so it only counts for a community that has actually gone live — the
+   same rule awardCommunityXp() already applies to XP. Without it, now that pending communities appear on the
+   public wall, anyone could push one up the grid by reacting to its posts from the wall. */
+function bumpActivity(id, w) {
+  const c = db.prepare('SELECT activity, activity_at, status FROM communities WHERE id=?').get(id);
+  if (!c || c.status !== 'live') return;
+  db.prepare('UPDATE communities SET activity=?, activity_at=? WHERE id=?').run(decayedActivity(c) + w, now(), id);
+}
 const actTier = (v) => { let t = 'Dormant'; for (const [n, l] of ACT_TIERS) if (v >= n) t = l; return t; };
 function convictionTitleFor(level) {
   if (level >= 99) return 'Ride-or-Die 🪦'; if (level >= 90) return 'True Believer'; if (level >= 75) return 'Zealot';
@@ -6273,9 +6280,16 @@ const server = http.createServer(async (req, res) => {
              the SQL rather than in the view, because postsView() maps rows without filtering: anything this
              query returns is already considered publishable by everything downstream. The Send Wall shows
              public posts, wall and community alike; the private wall stays exactly as private as it was. */
+          /* The open sandbox is excluded. It exists so someone with no token can practise posting, so it has
+             no holdings gate, no go-live threshold and deliberately grants no multiplier — and it keeps its
+             own rate-limit bucket. Putting it on the front page would hand every tokenless account a second
+             dozen posts per ten minutes through the one door on the site with no cost of entry, which is the
+             exact opposite of what a sandbox is for. Real communities need the wall to be found; this one
+             does not. */
+          const roomSql = ' AND (po.community_id IS NULL OR po.community_id NOT IN (SELECT id FROM communities WHERE demo = 1))';
           const base = (following
-            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.private = 0' + boardSql + ' AND f.follower_id = ?'
-            : 'FROM posts po WHERE po.private = 0' + boardSql)
+            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.private = 0' + boardSql + roomSql + ' AND f.follower_id = ?'
+            : 'FROM posts po WHERE po.private = 0' + boardSql + roomSql)
             + (me ? ' AND po.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?)' : ''); // muted senders vanish from the feed
           const args = following ? [me.id] : [];
           if (me) args.push(me.id);
@@ -6375,7 +6389,11 @@ const server = http.createServer(async (req, res) => {
            people to notice their balance did not move. */
         let earned = 0;
         if (!board) {
-          const first = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND board IS NULL').get(me.id).n === 1;
+          /* Counts only posts the user actually WROTE ON THE WALL. The community invite the site posts on
+             their behalf is a posts row under their id, so counting it meant their real first post found
+             n === 2 and the one-time bonus was silently forfeited forever — for something they never wrote.
+             Same predicate the profile timeline already uses. */
+          const first = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND board IS NULL AND community_id IS NULL').get(me.id).n === 1;
           earned = awardPoints(me.id, 'post', PTS.post, 'post:' + row.id) + (first ? awardPoints(me.id, 'first_post', PTS.first_post, 'firstpost:' + me.id) : 0);
         }
         scanWriteAction(me.id, 'post', text);
