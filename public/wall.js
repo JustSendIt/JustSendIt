@@ -53,12 +53,18 @@ function postEl(p) {
      to it — so someone reading the public wall can see where this came from and go and join it. Holders-only
      posts never reach this feed at all (the server's query excludes them), so a badge here always means a
      community anyone can look at. */
+  /* The sandbox gets the same badge as any other community, in the diamond blue it already wears everywhere
+     else on the site rather than the green a token community uses — and it says "anyone can join", because
+     the one thing a reader needs to know about it is that it costs nothing to walk into. A token community's
+     badge instead tells them whether it is live yet. Neither claims a logo the site does not have: a
+     community with no branding image falls back to 🏘️. */
   const comm = p.community
-    ? '<a class="post-comm" href="/community.html?id=' + encodeURIComponent(p.community.id) + '" title="Go to the ' +
-        esc('$' + p.community.symbol) + ' community">' +
-        (p.community.image ? '<img class="post-comm-logo" src="' + esc(p.community.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="post-comm-logo-none" aria-hidden="true">🏘️</span>') +
+    ? '<a class="post-comm' + (p.community.demo ? ' post-comm-sandbox' : '') + '" href="/community.html?id=' + encodeURIComponent(p.community.id) + '"' +
+        ' title="Go to the ' + esc('$' + p.community.symbol) + ' community">' +
+        (p.community.image ? '<img class="post-comm-logo" src="' + esc(p.community.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="post-comm-logo-none" aria-hidden="true">' + (p.community.demo ? '🧪' : '🏘️') + '</span>') +
         '<span class="post-comm-name">' + esc('$' + p.community.symbol) + '</span>' +
-        '<span class="post-comm-sub">' + (p.community.status === 'live' ? 'community' : 'community · not live yet') + '</span>' +
+        '<span class="post-comm-sub">' + (p.community.demo ? 'sandbox · anyone can join'
+          : p.community.status === 'live' ? 'community' : 'community · not live yet') + '</span>' +
         '<span class="post-comm-go" aria-hidden="true">→</span>' +
       '</a>'
     : '';

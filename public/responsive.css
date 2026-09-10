@@ -236,3 +236,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .post-comm-sub { font-size: 0.75rem; color: var(--text-dim); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .post-comm-go { margin-left: auto; color: var(--text-dim); font-weight: 800; flex: 0 0 auto; }
 @media (pointer: coarse) { .post-comm { min-height: 44px; } }
+/* the sandbox wears the diamond blue it already uses on the community pages, never the token-community green */
+.post-comm-sandbox { background: linear-gradient(90deg, rgba(159,224,255,0.12), transparent); border-color: rgba(159,224,255,0.35); }
+.post-comm-sandbox:hover { border-color: var(--diamond); background: linear-gradient(90deg, rgba(159,224,255,0.2), transparent); }
+.post-comm-sandbox .post-comm-name { color: var(--diamond); }
