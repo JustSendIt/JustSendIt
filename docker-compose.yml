@@ -13,7 +13,7 @@ services:
       - senddata:/app/data
     environment:
       NODE_ENV: production
-      BASE_URL: https://www.sendrh.com
+      BASE_URL: https://sendrh.com
       COOKIE_SECURE: "1"          # TLS is terminated in front of this container, so say so
       TRUST_PROXY: "1"            # one proxy hop; without it every rate limit keys on the proxy's IP
       # DATA_KEY: set this. See .env.example for how to generate it, and back it up somewhere the

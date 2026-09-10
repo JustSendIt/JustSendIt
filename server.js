@@ -915,7 +915,7 @@ function titleFor(level) {
 // real buys a day the swap cap allows, 6,390. At 1x that is Level 100 in ~7.8 years; at the 10x a live
 // community pays, ~285 days — and the SOCIAL_DAY_CAP below means no stack, however large, turns a day
 // of clicks into more than 73,762. The fast lane is meant to be Send Calls held in profit.
-const PTS = { post: 75, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 170 }; // call_x 170: fifty rungs (170 × 1,275 = 216,750) fit inside the ladder's 30% slice of a call's budget, so the documented top rung can actually be paid
+const PTS = { post: 75, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 170 }; // call_x 170 is the FIRST rung of an additive ladder (see CALL_X_STEP): rung m pays 170 + 17×(m−1), so 1x=170, 2x=187, 50x=1,003 and all fifty rungs total 29,325 base — 13% of the ladder's 30% slice, leaving the room for the hold bonus
 // anti-farm: max awards of this kind per rolling 24h (per recipient user).
 // Every point-earning kind is capped so no single action can be farmed unbounded.
 const DAILY_CAP = { post: 40, first_post: 1, comment: 20, react_give: 40, react_get: 20, vote_give: 60, vote_get: 30, follow: 10, be_followed: 10, track_wallet: 3, watch_token: 5, connect_wallet: 1, customize: 1, swap: 3, send_call: 20, hop_on: 30, community_founder: 1 };
@@ -4601,7 +4601,7 @@ function assetVer(rel) {
 const ASSET_REF = /(\s(?:src|href)=")([^"?#:]+\.(?:js|mjs|css|png|jpe?g|webp|svg|ico|gif|woff2?|mp4|m4v|webm|mov|m4a|mp3|ogg|wav))(")/g;
 // Absolute SEO/share URLs (canonical, og:*, twitter:*, JSON-LD, sitemap, robots) are authored against a placeholder
 // origin and swapped for the real BASE_URL at serve time — so a deploy never ships a non-resolving og:image.
-const SITE_PLACEHOLDER = 'https://www.sendrh.com';
+const SITE_PLACEHOLDER = 'https://sendrh.com';
 const SITE_ORIGIN = BASE_URL.replace(/\/+$/, '');
 const swapOrigin = (s) => s.split(SITE_PLACEHOLDER).join(SITE_ORIGIN);
 function rewriteHtml(buf) {
@@ -5081,14 +5081,18 @@ function redeemHoldMs(u) { // how long they must then hold that $SEND (permanent
   return (u.restrict_level || 0) >= 3 ? PERM_HOLD_MS : (u.redeem_dur || DAY_MS);
 }
 function humanDur(ms) { const h = Math.round(ms / 3600000); if (h < 48) return h + ' hours'; const d = Math.round(ms / DAY_MS); if (d < 14) return d + ' days'; return Math.round(d / 7) + ' weeks'; }
+// This list is shown to a restricted account as a promise, so it must match what the routes actually do.
+// The daily check-in is NOT on it: POST /api/checkin calls blockReadOnly and 403s. That is deliberate —
+// the check-in is what resets the decay streak, so leaving it open would let a muted account hold its
+// Send Power steady while muted — but it does mean read-only costs points as well as actions, and the
+// warning below has to say so rather than let someone discover it from their balance.
 const READONLY_ALLOWED = [
-  'Earn your daily "show up" bonus 📅',
   'Buy & hold $SEND / $GWC — your Holder Boost keeps compounding 💎',
   'Swap for $SEND / $GWC — those points still count 🚀',
   'Connect or refresh your wallet 🔗',
   'Browse the Send Wall, profiles, charts & New Pairs Radar 👀',
 ];
-const READONLY_BLOCKED = ['Making Send Calls', 'Sending It on others’ calls', 'Posting', 'Commenting', 'Reacting', 'Upvoting / downvoting', 'Following', 'Tracking wallets', 'Customizing your wall'];
+const READONLY_BLOCKED = ['Making Send Calls', 'Sending It on others’ calls', 'Posting', 'Commenting', 'Reacting', 'Upvoting / downvoting', 'Following', 'Tracking wallets', 'Customizing your wall', 'The daily check-in — so your Send Power keeps decaying while you are muted'];
 
 // in-memory behavioral windows (the durable restriction lives in the DB). Heavy = content creation
 // (post/comment/track); light = one-tap engagement (react/vote/follow). They have separate, much higher

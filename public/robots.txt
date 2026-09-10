@@ -4,4 +4,4 @@ Disallow: /profile.html
 Disallow: /watchlist.html
 Disallow: /api/
 
-Sitemap: https://www.sendrh.com/sitemap.xml
+Sitemap: https://sendrh.com/sitemap.xml

@@ -7,7 +7,7 @@ primary_region = "iad"          # put it near your users; a single region is rig
   dockerfile = "Dockerfile"
 
 [env]
-  BASE_URL = "https://www.sendrh.com"
+  BASE_URL = "https://sendrh.com"
   COOKIE_SECURE = "1"           # Fly terminates TLS in front of the app
   TRUST_PROXY = "1"             # one hop; without it every rate limit keys on Fly's edge IP
   NODE_ENV = "production"
@@ -15,6 +15,13 @@ primary_region = "iad"          # put it near your users; a single region is rig
 
 # DATA_KEY is a secret, never an env entry:  fly secrets set DATA_KEY=...
 # The app refuses to boot in production without it.
+
+# ONE hostname, and BASE_URL above names it. Issue a certificate for the apex only:
+#   fly certs add sendrh.com
+# Do NOT also point www at this app. Fly has no redirect rule, so a www certificate would serve the same
+# app on a second hostname — and because the app checks every write request's Origin against BASE_URL,
+# the pages would load on www and then every POST would 403. Send www to the apex somewhere in front
+# (Cloudflare redirect rule, or the Caddy block in DEPLOY.md), or simply do not create the record.
 
 [mounts]
   source = "senddata"

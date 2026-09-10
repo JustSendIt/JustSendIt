@@ -24,7 +24,7 @@ Two good paths: **(A) a small VPS + Caddy** (recommended, cheapest, full control
 | **A domain name** | Yes | Point its DNS at your server. |
 | **A host** | Yes | VPS ($6–12/mo) or a PaaS with a persistent disk. |
 | `BASE_URL` | Yes | Your `https://` origin. Drives OAuth redirects + Secure cookies. |
-| Social login keys | Optional | Google / Facebook / X / Instagram OAuth app IDs + secrets. Each provider is **auto-enabled only if both its ID and secret are set**. Redirect URL to register: `https://www.sendrh.com/api/auth/<provider>/callback`. Providers require moving the app from "testing" to "published/verified" before the public can log in — **start that review early**. |
+| Social login keys | Optional | Google / Facebook / X / Instagram OAuth app IDs + secrets. Each provider is **auto-enabled only if both its ID and secret are set**. Redirect URL to register: `https://sendrh.com/api/auth/<provider>/callback`. Providers require moving the app from "testing" to "published/verified" before the public can log in — **start that review early**. |
 | `MOONPAY_API_KEY` | Optional | Enables the in-page fiat "Buy" widget; without it the site links to MoonPay's generic buy page. Requires a MoonPay account. |
 
 Everything else (wallet login, email/password, 2FA, the whole app) works with **zero** third-party keys.
@@ -56,7 +56,7 @@ cp .env.example .env && nano .env
 Set at least:
 ```
 DATA_KEY=<64 hex chars — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
-BASE_URL=https://www.sendrh.com
+BASE_URL=https://sendrh.com
 NODE_ENV=production
 PORT=8642
 COOKIE_SECURE=1
@@ -97,16 +97,31 @@ sudo chown -R www-data:www-data /opt/justsendit/data && sudo systemctl enable --
 Check: `sudo systemctl status justsendit` and `curl localhost:8642/healthz` → `{"ok":true}`.
 
 ### 6. TLS + domain with Caddy
-Point an **A record** for your domain at the server's IP. Install Caddy, then `/etc/caddy/Caddyfile`:
+Point an **A record** for `sendrh.com` at the server's IP, and a second one (or a CNAME) for
+`www.sendrh.com`. Install Caddy, then `/etc/caddy/Caddyfile`:
 ```
-yourdomain.com {
+sendrh.com {
 	encode zstd gzip
 	reverse_proxy localhost:8642
 }
+
+# One canonical hostname, and it is the apex. Do not skip this block.
+www.sendrh.com {
+	redir https://sendrh.com{uri} permanent
+}
 ```
-`sudo systemctl reload caddy` — Caddy fetches and auto-renews a Let's Encrypt cert. Done: the site
-is live at `https://www.sendrh.com`. (Caddy sets `X-Forwarded-For`, which the app reads because
+`sudo systemctl reload caddy` — Caddy fetches and auto-renews a Let's Encrypt cert for both names. Done: the
+site is live at `https://sendrh.com`. (Caddy sets `X-Forwarded-For`, which the app reads because
 `TRUST_PROXY=1`.)
+
+**Why the `www` redirect is not optional.** `BASE_URL` is the site's single identity: the app compares every
+write request's `Origin` header against it and rejects a mismatch as cross-origin. So if someone reaches the
+app on `www.sendrh.com` while `BASE_URL=https://sendrh.com`, the pages render fine and then **every POST
+returns 403** — no signup, no login, no posting — which looks like the site is broken rather than like a DNS
+problem. Serving both names is the failure; redirecting one to the other is the fix. (It is also what keeps
+Google from indexing two copies and splitting the ranking between them.) If you would rather have `www` be
+the canonical name, that is fine too — just flip both the redirect and `BASE_URL` together, and never run
+them on different hostnames.
 
 ---
 

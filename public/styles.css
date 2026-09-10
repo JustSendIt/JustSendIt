@@ -2115,6 +2115,49 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 .ab-dia-top .ab-dia-n { color: var(--gold); }
 .ab-dia-top .ab-dia-x { color: var(--green-bright); }
 
+/* --- Send Power decay ---------------------------------------------------
+   The counterweight to the levels card. Deliberately amber rather than red:
+   decay is a rule of the game, not an error state, and a red card here would
+   read as "something has gone wrong with your account". Every meaning is
+   carried by words as well as colour, so it survives greyscale and colour
+   blindness — the rate table's ceiling row says "The ceiling" in text. */
+.ab-decay { max-width: 980px; margin: 1.4rem auto 0; border-color: color-mix(in srgb, var(--gold) 32%, transparent); }
+.ab-decay > p { color: var(--text-dim); line-height: 1.65; }
+.ab-decay > p b { color: var(--text); }
+.ab-decay-cols { display: grid; grid-template-columns: 1fr; gap: 1.1rem; margin-top: 1.1rem; }
+@media (min-width: 880px) { .ab-decay-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: start; } }
+
+/* The rate ladder is a real <table>: it is tabular data, and a screen reader
+   should announce "Days away 7, taken that day 1.2%" rather than read a grid
+   of loose spans. It scrolls inside its own box so a narrow phone never
+   scrolls the whole page sideways. */
+.ab-decay-rates { overflow-x: auto; }
+.ab-decay-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.ab-decay-table caption { text-align: left; font-weight: 800; color: var(--gold); padding-bottom: 0.5rem; font-size: 0.95rem; }
+.ab-decay-table th, .ab-decay-table td { text-align: left; padding: 0.55rem 0.7rem 0.55rem 0; border-bottom: 1px solid var(--ink-4); }
+.ab-decay-table thead th { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); font-weight: 700; }
+.ab-decay-table tbody th { font-weight: 800; color: var(--text); white-space: nowrap; }
+.ab-decay-table tbody td:nth-child(2) { font-weight: 800; color: var(--gold); white-space: nowrap; }
+.ab-decay-table tbody td:last-child { color: var(--text-dim); font-size: 0.84rem; padding-right: 0; }
+.ab-decay-table tbody tr:last-child th, .ab-decay-table tbody tr:last-child td { border-bottom: none; }
+/* These two must out-rank the `tbody td:nth-child(2)` gold above, which is a
+   more specific selector than a bare `td.class` — hence the tbody here. The
+   colour is reinforcement only: the "why" column states "free" and "the
+   ceiling" in words, so the table still reads correctly in greyscale. */
+.ab-decay-table tbody td.ab-decay-free { color: var(--green-bright); }
+.ab-decay-table tbody td.ab-decay-max { color: var(--red); }
+
+.ab-decay-side { display: grid; gap: 0.9rem; align-content: start; }
+.ab-decay-stop { background: color-mix(in srgb, var(--green) 9%, transparent); border: 1.5px solid color-mix(in srgb, var(--green) 34%, transparent); border-radius: 12px; padding: 0.8rem 0.95rem; }
+.ab-decay-stop-h { margin: 0 0 0.35rem; font-weight: 800; color: var(--green-bright); font-size: 0.95rem; }
+.ab-decay-stop p { margin: 0; color: var(--text-dim); line-height: 1.6; font-size: 0.9rem; }
+.ab-decay-stop p b { color: var(--text); }
+.ab-decay-adds { font-size: 0.88rem; }
+.ab-decay-adds li { color: var(--text-dim); }
+.ab-decay-adds b { color: var(--text); }
+.ab-note-gwc { background: color-mix(in srgb, var(--gold) 10%, transparent); border: 1.5px solid color-mix(in srgb, var(--gold) 32%, transparent); border-radius: 12px; padding: 0.65rem 0.85rem; font-size: 0.87rem; margin: 0.7rem 0 0; line-height: 1.55; }
+.ab-note-gwc b { color: var(--gold); }
+
 /* --- Fair & Safe --- */
 .safe-grid { display: grid; grid-template-columns: 1fr; gap: 1.1rem; max-width: 980px; margin: 0 auto 2.4rem; }
 @media (min-width: 820px) { .safe-grid { grid-template-columns: repeat(3, 1fr); } }

@@ -410,6 +410,7 @@
         <li><a href="#s6"><span class="n">06</span><span>Locking the doors</span></a></li>
         <li><a href="#s7"><span class="n">07</span><span>Your wallet stays yours</span></a></li>
         <li><a href="#s8"><span class="n">08</span><span>Send Power</span></a></li>
+        <li><a href="#s8b"><span class="n">08b</span><span>Send Power goes down too</span></a></li>
         <li><a href="#s9"><span class="n">09</span><span>Multipliers</span></a></li>
         <li><a href="#s10"><span class="n">10</span><span>Send Calls</span></a></li>
         <li><a href="#s11"><span class="n">11</span><span>Communities</span></a></li>
@@ -592,7 +593,7 @@ object-src  'none'
       <section id="s8">
         <div class="sec-head"><span class="sec-num">08</span><h2>Send Power</h2></div>
         <p><strong>Send Power</strong> is the points system. Almost everything useful earns some. Points are also experience, so earning them raises your level.</p>
-        <p>Two rules keep it fair. <strong>Nearly every action has a daily cap</strong>, so it cannot be repeated forever for points. And every award is recorded with a unique tag, so the same action can never be paid twice.</p>
+        <p>Three rules keep it fair. <strong>Nearly every action has a daily cap</strong>, so it cannot be repeated forever for points. Every award is recorded with a unique tag, so the same action can never be paid twice. And the balance <strong>decays</strong> when you stop showing up, so the number describes the present rather than the past &mdash; that is Section 8b, and it is the one people are most often surprised by.</p>
         <p>One exception, and one limit that stands in for it. A call&rsquo;s milestones have <strong>no daily cap</strong>, because they are earned by a coin&rsquo;s real performance rather than by repeating an action. But <strong>everything a single call ever pays its caller</strong> &mdash; the opening award, every milestone and the hold bonus together &mdash; comes out of one lifetime budget: the Send Power it takes to reach <strong>Level 70</strong>, about 737,000. No single payout may take more than a tenth of it. Someone who Sends It on your call has a budget of a quarter of yours. A great call is a big prize; it cannot be the whole game.</p>
         <div class="tablewrap">
           <table>
@@ -603,7 +604,7 @@ object-src  'none'
               <tr><td class="name">Connect a wallet</td><td class="num">150</td><td class="num">1</td></tr>
               <tr><td class="name">Your very first post</td><td class="num">150</td><td class="num">1</td></tr>
               <tr><td class="name">Make a Send Call</td><td class="num">120</td><td class="num">20</td></tr>
-              <tr><td class="name">Each X a call reaches</td><td class="num">170</td><td class="num">none per day</td></tr>
+              <tr><td class="name">Each X a call reaches (first rung; +17 per rung after)</td><td class="num">170</td><td class="num">none per day</td></tr>
               <tr><td class="name">Post on the wall</td><td class="num">75</td><td class="num">40</td></tr>
               <tr><td class="name">Daily check-in</td><td class="num">60</td><td class="num">1</td></tr>
               <tr><td class="name">Track a wallet</td><td class="num">45</td><td class="num">3</td></tr>
@@ -620,7 +621,8 @@ object-src  'none'
             </tbody>
           </table>
         </div>
-        <p>Two ceilings sit on top of all of this. No single award can exceed <strong>73,762</strong> points, a tenth of what one Send Call can pay in its lifetime. And everything that is not Send Call performance &mdash; every capped action above plus the check-in &mdash; shares <strong>one budget of 73,762 points per rolling 24 hours</strong>, however large your multipliers. Boosts still show in full and pay in full on Send Calls held in profit; on the daily grind they pay until the day&rsquo;s ceiling. That is what keeps Level 100 a long climb for everyone.</p>
+        <p>Two ceilings sit on top of all of this. No single award can exceed <strong>73,762</strong> points, a tenth of what one Send Call can pay in its lifetime. And <strong>every capped action in the table above, plus the check-in</strong>, shares <strong>one budget of 73,762 points per rolling 24 hours</strong>, however large your multipliers. Note what that includes: opening a Send Call and tapping Send It both have daily caps, so they draw on the same shared budget as posting. Only three things sit outside it &mdash; the milestone ladder and the two hold bonuses. Boosts pay in full on a call held in profit; on everything else they pay until the day&rsquo;s ceiling. That is what keeps Level 100 a long climb for everyone.</p>
+        <p>There is also a quieter ceiling worth knowing: the opening award for a call, and the Send It award, are each capped at <strong>ten times</strong> their size-scaled base no matter how large the boost stack behind them. Someone calling a coin with no position of their own can never be paid more than 1,200 for opening it. Boosts are for the grind and for holding in profit; they cannot turn the act of making a call into a payday.</p>
         <h3>Biggest Sender &mdash; a fresh race every week</h3>
         <p>Every Monday at midnight UTC the Biggest Sender board goes back to zero, so a week&rsquo;s standings are only what you earned inside that week. When the week ends the site settles it by itself: the <strong>top ten</strong> each receive a Send Power boost <strong>by finishing place</strong> &mdash; first place 5&times;, then 4.5, 4, 3.5, 3, 2.5, 2, 1.75, 1.5 and 1.25&times; for tenth; tied places share a rung &mdash; added on top of everything they earn for the whole of the following week.</p>
         <p>The race is proof of work. The board ranks <strong>base points</strong> &mdash; what you did, with every boost taken out: Holder, OG, community, Rocket Run and any prize you were carrying &mdash; so a whale, an OG and a newcomer race on the same footing. Exactly ten prizes are paid; a tie at the edge goes to whoever joined first.</p>
@@ -641,6 +643,39 @@ object-src  'none'
               <tr><td class="num">&nbsp;</td><td>&nbsp;</td><td class="num">150</td><td>Sender Singularity</td></tr>
             </tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- 8b -->
+      <section id="s8b">
+        <div class="sec-head"><span class="sec-num">08b</span><h2>Send Power goes down too</h2></div>
+        <p>Everything above describes how the number grows. It also shrinks. <strong>Send Power is a balance, not a trophy</strong> &mdash; it drains a little every day you do not show up, and levels can go down as well as up.</p>
+        <p>This is the part most people will find surprising, so here is the reasoning. A score that only ever climbs stops describing anything after a year. Someone who played hard for a month and left outranks someone playing every day now, permanently, and no amount of present effort can catch a large enough head start. A leaderboard like that is a history book. Making the number decay is what keeps it a description of who is actually here.</p>
+        <h3>What is taken, and when</h3>
+        <p><strong>Two days off cost nothing.</strong> After that, each day without a check-in takes <strong>0.4%</strong> of the balance, and the rate climbs by <strong>0.2 percentage points</strong> for every further consecutive day away. Two other things add to the same daily rate: being in read-only mode adds <strong>1 point</strong>, and every Send Call of yours currently below its entry price adds <strong>0.3 points</strong>, up to 1.5. Whatever the total, <strong>one day can never take more than 4%</strong>.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>What a day of absence actually costs</caption>
+            <thead><tr><th class="num">Days away</th><th class="num">Taken that day</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td class="num">1&ndash;2</td><td class="num">nothing</td><td>The grace period &mdash; a weekend away is free</td></tr>
+              <tr><td class="num">3</td><td class="num">0.4%</td><td>The first day past grace</td></tr>
+              <tr><td class="num">7</td><td class="num">1.2%</td><td>0.4 plus 0.2 for each further day</td></tr>
+              <tr><td class="num">14</td><td class="num">2.6%</td><td>Still climbing</td></tr>
+              <tr><td class="num">21+</td><td class="num">4%</td><td>The ceiling, however long you stay away</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>What stops it</h3>
+        <p>The daily check-in, and nothing else. Holding coins does not stop it, and neither does having a high level.</p>
+        <p>But it stops <em>all</em> of it. A check-in in the last 24 hours ends the day's calculation before any of the three components is worked out &mdash; so on a day you show up, underwater calls cost you nothing at all. The extra rates for bad calls and read-only only ever apply on a day you were already absent; they make absence more expensive rather than charging you for something else. The one account that cannot use this is a restricted one, because read-only blocks the check-in itself (Section 15).</p>
+        <p>One consequence worth stating: since a Send Call can never be closed or deleted, a call that is still below its entry price a year later still counts as underwater. Old bad calls keep making <em>absence</em> more expensive, permanently. They cost nothing on any day you check in.</p>
+        <h3>The floors, so it cannot ruin anyone</h3>
+        <p>A balance at or below <strong>5,000</strong> is never touched at all, and the drain can never take you through that floor or below zero. If a day's drain works out to less than one whole point it takes nothing rather than rounding up. Someone who stops playing does not have their account emptied; they settle toward the floor and stay there.</p>
+        <p>Decay only ever moves the points balance. It does not touch your Holder Boost, your Diamond level, your OG tier, your badges, your community memberships, or any call's recorded history. What you did stays on the record; what you are currently worth on the board is what moves.</p>
+        <div class="note">
+          <span class="lbl">Nothing happens silently</span>
+          <p>Every drain writes a negative line to your points history tagged <span class="mono">decay</span>, and sends you a 📉 notification saying it happened. A drop is always explained and always auditable afterwards. The one thing the site does <em>not</em> currently do is warn you before it starts &mdash; there is no countdown in the app saying &ldquo;your Send Power starts draining tomorrow&rdquo;, so the first signal is the notification telling you it already has. That is a real rough edge and it is listed here rather than left to be discovered.</p>
         </div>
       </section>
 
@@ -679,6 +714,7 @@ what you earn = base points &times; ( 1
             </tbody>
           </table>
         </div>
+        <p class="callout"><strong>$GWC days count double.</strong> The &ldquo;days held&rdquo; that pick your row are not simply the days since you last sold. They are the <em>larger</em> of two numbers: how long you have held overall, and <strong>twice</strong> how long you have held $GWC. So sixty real days of $GWC reads as a hundred and twenty, which is Flawless Diamond at &times;16 rather than Diamond Hands at &times;10 &mdash; two rows higher than the table alone would suggest. $GWC is weighted twice on time in the same spirit that it is weighted three times on supply.</p>
         <h3>OG &mdash; being early</h3>
         <p>If you bought <em>both</em> coins and you still hold both, you earn an OG badge and a bonus on everything. There is one standard for everybody &mdash; the only thing that changes the size of the bonus is <em>when</em> you got in:</p>
         <ul>
@@ -687,10 +723,15 @@ what you earn = base points &times; ( 1
           <li><strong>Bronze &mdash; 3&times;.</strong> You bought both in the nine months after the silver window closed.</li>
         </ul>
         <p>After that the windows are shut and no badge is given, whatever you buy. Twelve 30-day months in total, counted from each coin&rsquo;s own launch. Your tier is the <em>lower</em> of your two coins, because the rule is that you held both.</p>
+        <p><strong>Each bag has to be worth at least $25</strong> when the badge is granted &mdash; both of them, measured independently at the live price. Buying inside the gold window and keeping ten dollars of each earns nothing. The badge is meant to sit behind a real position rather than a dust balance kept alive to hold a tier, and since the badge is permanent once granted, the floor is the only moment that can ask for proof.</p>
         <p>Two things also disqualify a wallet, and they apply the same way in every window. If it dumped its whole holding to nothing inside its first month <em>and</em> it is not a net accumulator &mdash; meaning it holds less today than it did at the end of that first month &mdash; it does not earn a badge. A wallet that sold out but bought back past where it started keeps its place.</p>
         <p>All of this is read from the blockchain, and the check is refused rather than guessed if the data cannot be read completely. Sell out of either coin entirely, at any time, and the badge is revoked for good.</p>
         <h3>Community &mdash; taking part</h3>
-        <p>Being a verified holder in at least one live community is a flat <strong>10&times;</strong>. It is not per community. Joining five communities does not give you fifty times anything.</p>
+        <p>Being a verified holder in at least one live community is a flat <strong>10&times;</strong>. It is not per community. Joining five communities does not give you fifty times anything. A verified slot means <strong>at least $25</strong> of that community's coin, read from a linked wallet, and re-checked continuously &mdash; sell it and the slot and the bonus go with it.</p>
+        <div class="note">
+          <span class="lbl">The bonuses add; they do not multiply</span>
+          <p>Every bonus above contributes only what it pays <em>over</em> one, and those amounts are added together. OG Gold at 10&times; alongside a community at 10&times; is <strong>19&times;</strong>, not 100&times;. This matters more than it sounds: multiplied, four stacked bonuses would reach five figures and one person's number would stop being comparable to anyone else's. Added, the stack stays legible &mdash; and every extra bonus is still worth having.</p>
+        </div>
         <h3>Arcade &mdash; today's game</h3>
         <p>Cashing out of Rocket Run gives a bonus of up to <strong>5&times;</strong> lasting 24 hours. Section 12 explains it.</p>
         <div class="note">
@@ -705,10 +746,12 @@ what you earn = base points &times; ( 1
         <p>A <strong>Send Call</strong> is a public prediction. You pick a coin, and a permanent scorecard appears on your wall tracking how it does from that moment on. It is a way of putting your reputation where your mouth is.</p>
         <p><strong>A call can never be edited or deleted.</strong> That is the whole point. A prediction you can delete after it goes wrong is worthless. Its best-ever result is kept forever, even if the coin later dies.</p>
         <h3>How results are counted</h3>
-        <p>Results are counted in <strong>Xs</strong>. Doubling in price is 1X. Going up 340% is 3.4X. Every whole X pays <span class="mono">180 &times; that X</span>, so hitting 1X pays 180, hitting 3X pays 540, and the ladder stops at 50X.</p>
+        <p>Results are counted in <strong>Xs</strong>. Doubling in price is 1X. Going up 340% is 3.4X. Every whole X a call crosses pays a rung, and the rungs climb in a <strong>straight line</strong>: <span class="mono">170 + 17 &times; (X &minus; 1)</span>. So 1X pays <strong>170</strong>, 2X pays <strong>187</strong>, 10X pays <strong>323</strong>, and the ladder stops at 50X, which pays <strong>1,003</strong>.</p>
+        <p>That is deliberately modest, and it used to be otherwise. An earlier version paid the X <em>times</em> the base, so 50X paid 8,500 and the whole ladder was worth more than twenty patient calls put together. Rewarding the size of a single lucky number is not the game this is trying to be, so the ladder was flattened into a straight line. All fifty rungs together now come to 29,325 &mdash; about an eighth of what the ladder is even allowed to spend.</p>
         <h3>Holding is the main event</h3>
-        <p>The ladder is the smaller prize. While a call <em>stays</em> in profit it keeps earning a <strong>diamond-hands hold bonus</strong> that grows faster than the Xs alone &mdash; higher and longer both count, and they compound. Every call has one lifetime budget (Section 8), and it is carved on purpose: the opening award may take at most a tenth of it, the ladder at most three tenths, and <strong>at least six tenths are reserved for holding in profit</strong>. Cash a coin at 50X and walk away and you leave most of the budget on the table.</p>
-        <p>It also pays more when you are not alone. When the people who tapped Send It on your call are <em>themselves</em> in profit from their own entry, your hold bonus accrues faster: one tenth extra per profitable Sender, up to three times the base rate. A conviction play that carries other people with it is worth more than a lonely one, and the only way to earn that is to stay in profit long enough for them to be too.</p>
+        <p>The ladder is the smaller prize. While a call <em>stays</em> in profit it keeps earning a <strong>diamond-hands hold bonus</strong> that grows faster than the Xs alone &mdash; higher and longer both count, and they compound, up to two limits: height above 50X adds nothing more, and at most half an hour of holding is credited per check (a longer gap between price readings is not paid retroactively, because nobody watched the price during it). Every call has one lifetime budget (Section 8), and it is carved on purpose: the opening award may take at most a tenth of it, the ladder at most three tenths, and <strong>at least six tenths are reserved for holding in profit</strong>.</p>
+        <p>It also pays more when you are not alone. When the people who tapped Send It on your call are <em>themselves</em> in profit from their own entry, your hold bonus is larger: one tenth extra per profitable Sender, up to three times. That multiplier is applied to the <em>payout</em>, after the curve &mdash; folded into the running total instead, as it once was, a three-times crew would really have been worth 5.2 times. A conviction play that carries other people with it is worth more than a lonely one, by three, not by five.</p>
+        <p class="callout"><strong>One honest caveat about the name.</strong> &ldquo;Holding&rdquo; here means <em>the price</em> holds. The bonus is worked out from the call's current price against its entry price, and nothing re-reads the caller's wallet after the call is made. Someone who sells their whole position keeps earning the diamond-hands bonus for as long as the coin stays up. The size you had when you called is checked on-chain and hard to fake; whether you are still holding is not checked at all. It is a name for the pattern the bonus rewards, not a claim about the person.</p>
         <div class="tablewrap">
           <table>
             <caption>Call grades</caption>
@@ -728,6 +771,7 @@ what you earn = base points &times; ( 1
         <ul>
           <li><strong>A coin needs at least $500 of trading liquidity to be callable.</strong> Otherwise someone could create a fake coin, trade with themselves, and farm a huge score.</li>
           <li><strong>You get 5 calls a day to start</strong>, counted over a rolling 24 hours so midnight is not a reset to abuse. A day where one of your matured calls doubled earns you an extra slot, up to 5. A day where they all flopped costs you one, down to a floor of 1.</li>
+          <li><strong>Then your Diamond level doubles it, once per level.</strong> That earned number of 1 to 5 is multiplied by two to the power of your Diamond level (Section 9), so a level 10 holder is multiplied by 1,024. In practice the allowance runs from 5 a day to 5,120 a day. Holding the coins for two years without selling is what buys the right to call that often, and selling resets it to 1&times; the same day.</li>
           <li><strong>A call is only judged after 24 hours</strong>, so it gets a fair chance to run.</li>
           <li><strong>If a coin you called gets rugged</strong> &mdash; its liquidity pulled by the creator &mdash; your daily allowance drops by 2.</li>
           <li><strong>Burning a full day's allowance inside one hour</strong> is treated as spam, and only counts if your allowance was 3 or more, so a one-call-a-day user is never punished for using it.</li>
@@ -746,6 +790,16 @@ what you earn = base points &times; ( 1
         <p>There is one exception to holding: the wallet that <em>created</em> the coin can start its community without holding any, because the chain already proves who they are.</p>
         <h3>Community XP and conviction</h3>
         <p>Communities level up from what their members do inside them. Members separately earn <strong>conviction</strong>, which is personal loyalty to that one community.</p>
+        <p>Conviction is earned <em>only by doing things</em> &mdash; there is no accrual for time. Staying a member for a year without posting leaves your conviction exactly where it was on the day you joined. It is a measure of participation wearing the word loyalty, and it is worth being clear about which of the two it actually is.</p>
+
+        <h3>The public wall reaches the Send Wall</h3>
+        <p>A community nobody can see is a community that never fills, so <strong>every public community post also appears on the main Send Wall</strong>, carrying its community's name, symbol and picture and linking back to it. Someone scrolling the front page can see a community is alive, tap through, and join on the spot if they hold the coin. The sandbox posts there too, badged as the sandbox.</p>
+        <p>The holders-only wall is the exact opposite and stays that way: those posts are filtered out in the database query itself, not hidden in the page, so they are never in the result to begin with.</p>
+        <p>Posting inside a community draws on the <em>same</em> allowance as posting on the wall &mdash; twelve posts in ten minutes, wherever you write them &mdash; so a community is not a second lane to the front page.</p>
+        <p>The site also writes two posts of its own per community, in the founder's name and earning nothing: one when it is started, saying how many holders it still needs, and one when it goes live. Each can only ever be written once. Because the one-time first-post bonus counts only posts you wrote to the wall yourself, the site posting in your name does not consume it.</p>
+
+        <h3>Deciding things together</h3>
+        <p>A live community can put a question to its holders, and only verified holders may open a proposal or vote. It runs in two rounds so a handful of people cannot rush something through: round one lasts <strong>three days</strong> and needs a simple majority to promote it; round two lasts <strong>two days</strong> and needs a <strong>three-quarters</strong> majority to pass. Quorum is 20% of qualified members in round one (at least 5, at most 50) and 30% in round two (at least 6, at most 60). One open proposal per person, five per community. Voting earns community XP like any other participation.</p>
         <h3>Two walls</h3>
         <p>Every live token community has a <strong>public wall</strong> that anyone can read, and a <strong>holders-only wall</strong> that only its verified holders can see. Anyone may read the public one; posting to either, and reading the private one, needs a verified holding — at least $25 of the token, read from a linked wallet on-chain and re-checked continuously, so selling it closes the private wall again. The open sandbox has no token to hold, so it has no private wall at all.</p>
         <p>The private wall is enforced by the server on every route that can return a post &mdash; the feed itself is refused to anyone without a verified place, and a single post, its comments, its reactions and its votes all answer &ldquo;not found&rdquo; rather than &ldquo;not allowed&rdquo;, because &ldquo;not allowed&rdquo; would confirm the post is there. Nothing written on it appears on the Send Wall, on a profile, or in the public data feed; the only private posts the data key returns are the key holder&rsquo;s own.</p>
@@ -797,6 +851,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
         <p>Other rules: the explosion point is capped at 50&times;, a round left abandoned expires after 5 minutes and counts as a loss, and the day rolls over at midnight UTC.</p>
         <h3>The daily check-in</h3>
         <p>Showing up is worth <strong>60</strong> points, once per day, claimed by tapping a button on your own wall. It used to happen silently on page load. Making it a button means it is something you did, not something that happened to you.</p>
+        <p>It is also the switch that stops your Send Power draining (Section 8b), which makes it the single most valuable button on the site &mdash; worth far more than its 60 points to anyone with a large balance. The two clocks are deliberately different: the 60 points are once per calendar day in UTC, but decay is held off by any check-in within the last <strong>24 hours</strong>, so a late-night check-in still protects you even though the calendar day has turned.</p>
       </section>
 
       <!-- 13 -->
@@ -818,14 +873,30 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
               <tr><td class="name sev-med">Very few holders</td><td>A handful of wallets control the price</td><td class="num">&minus;15</td></tr>
               <tr><td class="name sev-med">Heavy selling</td><td>Sells outnumber buys</td><td class="num">&minus;12</td></tr>
               <tr><td class="name sev-med">No volume</td><td>Almost nothing is trading</td><td class="num">&minus;12</td></tr>
+              <tr><td class="name sev-high">Block-0 snipers sold out</td><td>The wallets that bought in the pool's very first block have since dumped</td><td class="num">&minus;28</td></tr>
+              <tr><td class="name sev-med">Block-0 snipers took a big share</td><td>Those first-block wallets took a large share of the tradeable supply</td><td class="num">&minus;14</td></tr>
             </tbody>
           </table>
         </div>
+        <p>The last two come from a separate and much deeper check, described below. &ldquo;Snipers sold out&rdquo; is the third-heaviest penalty on the whole table, above both serial deployers and thin liquidity, because it is the clearest evidence on the chain that the earliest money has already exited into whoever is buying now.</p>
         <p>The score sorts coins into bands, and the radar has three views: <strong>Best Runners</strong> for biggest gainers, the <strong>Hot Feed</strong> for the highest-scoring new coins one at a time, and the <strong>DEX List</strong> with every filter. A coin whose name and symbol cannot be read from the chain is hidden from all three, because a coin nobody can identify is not something to show anyone.</p>
-        <div class="note crit">
-          <span class="lbl">An important weakness, stated openly</span>
-          <p>A warning can only trip on data the site could actually read. If a coin is so new that its liquidity, holder and verification data have not been indexed yet, <strong>nothing trips, and it scores 100 out of 100</strong> &mdash; the same score as a coin that genuinely passed every check. A perfect score can mean &ldquo;all clear&rdquo; or it can mean &ldquo;we could not see anything&rdquo;, and today the display does not distinguish them. Treat a 100 on a very fresh coin as unknown, not as safe.</p>
+        <div class="note">
+          <span class="lbl">A weakness that has since been fixed</span>
+          <p>A warning can only trip on data the site could actually read, so a coin too new to have been indexed used to score 100 out of 100 &mdash; the same as a coin that genuinely passed every check. A perfect score could mean &ldquo;all clear&rdquo; or &ldquo;we could not see anything&rdquo;, and nothing on screen told them apart.</p>
+          <p>The scanner now tracks <em>which</em> of six things it managed to read &mdash; indexing, liquidity, holders, concentration, verification and the early-buyer trace. If the first three are not all readable the coin is marked <strong>thin data</strong>, its band is pulled down from &ldquo;looks OK&rdquo; to &ldquo;caution&rdquo; whatever the number says, and its verdict reads <strong>&ldquo;Not enough data yet&rdquo;</strong> with a 🌫️ rather than a green rocket. A coin can no longer look clean because nobody could see it.</p>
         </div>
+
+        <h3>Who bought first, and did they stay?</h3>
+        <p>The deepest check on the site does something a price chart cannot: it replays the pool's own history and finds the wallets that got in before anyone could have reacted &mdash; then asks whether they are still holding, or whether they sold into the people buying now.</p>
+        <p>It looks at two windows. <strong>Block 0</strong> is the very first block in which the pool ever paid a coin out; anyone in it was a bot. <strong>The first ten buys</strong> is the wider view, and since block 0's buyers are the earliest of them, the two windows nest.</p>
+        <p>Every early wallet is followed as a <strong>cluster</strong> rather than an address, because moving coins to a fresh wallet is the oldest way to look clean. The trace follows the wallet, everyone it sent coins to, and everyone <em>they</em> sent to &mdash; two hops, up to twelve destinations each, up to a hundred and fifty wallets per coin, and the thirty largest early wallets in full. Anything beyond that is counted and said out loud rather than quietly dropped.</p>
+        <p>For each cluster it reports what it took, what it <em>still</em> holds as a live balance read fresh from the chain, whether it kept buying afterwards, how much supply it sold that it demonstrably never bought here, and a profit-and-loss built from the actual transactions the coins moved in. Then it labels the cluster: <strong>accumulator</strong>, <strong>seller</strong>, <strong>fully out</strong>, or <strong>unknown</strong>.</p>
+        <div class="note">
+          <span class="lbl">Unknown is an answer, not a zero</span>
+          <p>A balance that cannot be read is stored as nothing at all, never as zero, and if any wallet in a cluster is unreadable the whole cluster reports <strong>unknown</strong>. This is the single most important rule in the whole scanner. A tool that quietly recorded an unreadable balance as &ldquo;sold everything&rdquo; would be inventing rugs that never happened &mdash; and it would be most likely to do it exactly when the chain was congested, which is when people are most anxious to check.</p>
+          <p>The same care governs the green verdict. A coin whose scan has not finished is <em>not</em> treated as clean: the verdict stays unanswered, and the Hot Feed asks for a positive all-clear rather than merely the absence of a problem. An unfinished check is an open question, not a pass.</p>
+        </div>
+        <p>Two limits worth knowing. The green verdict is gated on <strong>block 0 only</strong>: the first-ten cohort is shown to you but does not change the score, so a coin with a clean first block whose next nine buyers all dumped still shows a rocket, with the contradiction visible in the panel for anyone who opens it. And the per-wallet percentages are shares of <em>total supply</em> while the summary and the verdict use <em>tradeable float</em> &mdash; two denominators on one screen, so compare like with like.</p>
         <p>The data comes from three public sources: the chain's own node, a block explorer, and a price service. The score is a set of quick heuristics on public data. It is <strong>not</strong> an audit, not a guarantee, and not advice.</p>
       </section>
 
@@ -857,11 +928,14 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
       <section id="s15">
         <div class="sec-head"><span class="sec-num">15</span><h2>The bot catcher</h2></div>
         <p>A points game invites scripts. The site watches how fast accounts create things and whether they post the same thing repeatedly. Accounts acting faster than a human is capable of are put into <strong>read-only</strong> mode.</p>
-        <p>Read-only is not a ban. You can still browse everything, check in daily, connect a wallet, buy and hold coins, and keep earning from your Holder Boost. What stops is creating things: posting, commenting, reacting, voting, following, calling, and customising.</p>
+        <p>Read-only is not a ban. You can still browse everything, connect a wallet, buy and hold coins, and keep earning from your Holder Boost. What stops is creating things: posting, commenting, reacting, voting, following, calling, customising, joining or starting a community, opening or voting on a proposal, minting an API key, and flying Rocket Run.</p>
+        <p><strong>It also costs points, and that is worth saying plainly.</strong> The daily check-in is blocked too &mdash; and since checking in is the one thing that stops Send Power decaying (Section 8b), a restricted account's balance keeps draining the whole time, at a rate that climbs the longer the restriction lasts. Read-only adds a full percentage point a day on its own, on top of the absence rate it can no longer reset. A long restriction therefore walks up to the four-percent-a-day ceiling and stays there.</p>
+        <p>That is a genuinely harsh design, so here is the reasoning rather than a justification. If a muted account could still check in, the mute would cost nothing but inconvenience, and the fastest way to farm Send Power would be to spam until muted and then wait it out. Making the balance bleed is what gives the restriction teeth. But it does mean a mute is a compounding penalty rather than a pause, and someone who walks away for a month while restricted will come back to a much smaller number.</p>
         <p>The punishment escalates: <strong>24 hours</strong> the first time, <strong>one week</strong> if it happens again, and permanent after that. The thresholds are set far above ordinary enthusiastic use.</p>
         <div class="note warn">
           <span class="lbl">One design choice you should judge for yourself</span>
-          <p>A restriction can be lifted early by buying and holding $SEND: <strong>$25 worth per 24 hours</strong> of the restriction, or a flat <strong>$1,000</strong> to clear a permanent one, which must then be held for 40 days. The money goes into the coin, not to the site, and the coins stay yours. It is still a mechanic where spending money removes a penalty, and anyone reading this should weigh that for themselves rather than take our framing for it.</p>
+          <p>A restriction can be lifted early by buying and holding $SEND: <strong>$25 worth per 24 hours</strong> of the restriction, or a flat <strong>$1,000</strong> to clear a permanent one. <strong>Every</strong> lift then starts a holding period, not just the permanent one &mdash; a timed restriction must be held out for its own length, a permanent one for 40 days. Sell during it and a timed restriction returns with its timer doubled, and a permanent one goes back to permanent. During that period an <em>unreadable</em> wallet counts as a sale, so keep it linked. The money goes into the coin, not to the site, and the coins stay yours. It is still a mechanic where spending money removes a penalty, and anyone reading this should weigh that for themselves rather than take our framing for it.</p>
+          <p>Strikes are also permanent. Nothing ages them out or forgives them, there is no appeal route and no administrator who can lift a restriction, so three offences years apart still reach the permanent tier. Buying out is the only exit that exists, which is precisely why the paragraph above deserves the scepticism it asks for.</p>
         </div>
       </section>
 

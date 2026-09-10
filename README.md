@@ -69,10 +69,10 @@ This is verified on-chain (the contract source is verified on the explorer, Soli
 | **Notifications** | The 🔔 bell covers level‑ups, holder/OG events and Send Call outcomes **and social activity** — new followers, comments, 🔥/🚀 reactions and upvotes on your posts (each identical message is throttled to once per 10 min, so toggling can't spam you). |
 | **Token Communities** | Rally around any token: paste a contract to **start a community** (goes live at 10 members), auto‑branded from its Dexscreener art. Each has its own wall, gives members a flat **10× Send Power**, and levels up — both the community and your per‑community **conviction** — exponentially. See §3.10. |
 | **Send Calls** | Go on the record: call a token you believe in and a permanent, live, on‑chain scorecard tracks how far it runs. Others can "Send It!" to follow. |
-| **New Pairs Radar** | A live, honest scanner of brand‑new tokens on Robinhood Chain with plain‑English risk flags (honeypot, dumping, thin liquidity, whale‑concentration, unverified contract, serial deployer) so you can spot traps. Three views: **📈 Best Runners** (top gainers, default; 24h from real Dexscreener data, or 1W/1M/1Y/All from a persistent price‑history store — windows longer than the tracked history are honestly labeled "since Nd"), **🎬 Hot Feed** (only tokens scoring a full **100/100** — the 🚀 *Looks Good, Send It* verdict), and **📋 DEX List** (every filter, plus a two‑press 📣 Send Call button on each row). A token whose name/symbol don't resolve on‑chain ("Unknown Token" / `???`) is withheld from every radar view, server‑side and client‑side. Every on‑chain detail body opens with a **live Dexscreener chart**. |
+| **New Pairs Radar** | A live, honest scanner of brand‑new tokens on Robinhood Chain with plain‑English risk flags (honeypot, dumping, thin liquidity, whale‑concentration, unverified contract, serial deployer) so you can spot traps. Three views: **📈 Best Runners** (the top **50** gainers among tokens holding at least **$300** of liquidity — the same floor decides whether a sighting is trustworthy enough to set a baseline or move a peak; 24h from real Dexscreener data, or 1W/1M/1Y/All from a persistent price‑history store, with windows longer than the tracked history honestly labeled "since Nd", and a **🔎 *since scanned*** chip giving the multiple from the earliest price we ever retained for that token, in the Send Call convention where +100% = 1x), **🎬 Hot Feed** (a full **100/100**, no tripped flag, enough data to judge, **and** a completed block‑0 scan that came back clean — four conditions, not one; a token with a perfect score whose sniper scan hasn't finished is held back rather than promoted), and **📋 DEX List** (every filter, plus a two‑press 📣 Send Call button on each row). A token whose name/symbol don't resolve on‑chain ("Unknown Token" / `???`) is withheld from every radar view, server‑side and client‑side. Every on‑chain detail body opens with a **live Dexscreener chart**. |
 | **Conviction Plays** | Pin tokens you believe in to your public wall — by pasting a contract or from any token's detail. Each chip shows its **live market cap** and **how many Xs it's up since you convicted** (baseline captured at pin time); hovering shows, when a wallet is linked, how much you hold and how long (read‑only, on‑chain, coarsened for privacy). A 💎 conviction badge appears when you're a member of that token's community. |
 | **Send Power (gamification)** | Earn points for nearly everything you do, level up endlessly (no cap — Level 100 = Biggest Sender, then Send Deity and beyond), and multiply it all with your Holder Boost and Diamond Hands. |
-| **🕹️ Arcade — Rocket Run** | One free flight per UTC day on `arcade.html`. A rocket climbs at `e^(0.06·s)`; the crash point is rolled **server‑side at launch and never sent to the browser** until the round resolves. Cash out any time for a **Send Power boost** of `min(5, 1 + (x−1)/4)` lasting 24h; don't cash out before it blows and you get nothing. Nothing is at stake, nothing is for sale, entertainment only. |
+| **🕹️ Arcade — Rocket Run** | One free flight per UTC day on `arcade.html`. A rocket climbs at `e^(0.06·s)`; the crash point is rolled **server‑side at launch and never sent to the browser** until the round resolves. Cash out any time for a **Send Power boost** of `min(5, 1 + (x−1)/4)` lasting 24h; don't cash out before it blows and you get nothing. **Your daily go is spent at takeoff, not at cash‑out** — and a round left open for more than **5 minutes** is force‑expired ("the rocket flew off without you"), with no boost and no second flight that day. So don't launch and walk away. Nothing is at stake, nothing is for sale, entertainment only. |
 | **⚡ Boost in the nav badge** | Your live boost rides in the same badge as your level: **Lv 12 · 1,683 · ⚡1.03×**. It repaints the moment a boost starts, and drops itself when one expires. |
 | **🏆 Weekly community competition** | On `communities.html`: which community's members earned it the most points **this week** (Mon 00:00 → Mon 00:00 UTC, reset server‑side). Scored purely on activity inside a community — joins, posts, reactions, comments, and its members' Send Calls on its own token, each daily‑capped per member. **Market cap counts for nothing.** No prize, just bragging rights. |
 | **📅 Daily check‑in** | The daily bonus is something you *do*: a check‑in button at the top of your own wall, idempotent per UTC day, with a live countdown to the next one. |
@@ -97,7 +97,7 @@ Everything you do that helps the community earns **Send Power** (points, also yo
 | Swap ETH → $Send/$GWC in‑page | 450 | A real buy: your wallet must **receive ≥ $10** of the coin (a sell pays nothing); 3 a day |
 | Connect a wallet holding $Send/$GWC | 150 | Once per address, ever |
 | First‑ever post | 150 | One‑time bonus |
-| Per‑X milestone on a call | 170 × the X hit | **Scaled by the X** — 1x → +170, 2x → +340 … up to 50x → +8,500. No daily cap, but inside the per‑call budget (below): fifty rungs add up to exactly what the ladder's slice can pay |
+| Per‑X milestone on a call | 170 + 17 × (X − 1) | **A straight line, not a multiplier** — 1x → +170, 2x → +187, 10x → +323, 50x → +1,003 (ladder caps at 50x). No daily cap, but inside the per‑call budget (below) |
 | Post on the Send Wall | 75 | |
 | Daily visit bonus | 60 | Once per day |
 | Track a wallet | 45 | Once per address, ever |
@@ -126,7 +126,7 @@ Two more earn types have **no fixed base** — they're computed live from perfor
 | Send Call (point events) | 20 | | Track wallet | 3 |
 | Follow someone | 10 | | Connect wallet | 1 |
 
-**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; the hold bonus is bounded by whatever the call's budget has left — up to about **737,600** for the caller and **184,407** for a Sender, after boosts; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A Sender's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And two hard ceilings apply to **every** award: after the base is multiplied by your boosts, a single event can never mint more than **73,762** points, and everything that is not Send Call performance shares one rolling‑24h budget of the same **73,762** — so the stacked multipliers cannot run away on the grind.
+**Three earn types are deliberately uncapped by count**, because they reward real market performance rather than clicks: per‑X call milestones, the diamond‑hands hold bonuses, and the once‑per‑day visit bonus. Each is fenced by its own structural limit instead (milestone ladder caps at 50x; the hold bonus is bounded by whatever the call's budget has left — up to about **737,600** for the caller and **184,407** for a Sender, after boosts; and everything pauses when a pool loses liquidity). **Every Send Call also has a lifetime budget.** Everything one call ever pays its caller — the opening award, every milestone and the hold bonus together, after multipliers — is capped at the Send Power it takes to reach **Level 70 (≈ 737,627)**, and no single payout can take more than a tenth of that. A Sender's budget on that call is a quarter of the caller's. Level 100 is about 20 perfect calls; a single call cannot reach the top of the leaderboard on its own. And two hard ceilings apply to **every** award: after the base is multiplied by your boosts, a single event can never mint more than **73,762** points, and a shared rolling‑24h budget of the same **73,762** covers **every kind that has a daily cap plus the daily check‑in** — which includes opening a Send Call, tapping Send It, a verified swap and the founder bonus. Only three kinds sit outside it: the per‑X milestones (`call_x`) and the two hold bonuses (`call_hold`, `hop_hold`). So "Send Call performance pays in full" is true of the ladder and the hold bonus, but **not** of the opening award — that one draws on the same shared grind budget as posting.
 
 **One ceiling for the grind.** Everything that is not Send Call performance — every daily‑capped kind plus the check‑in — shares **one rolling‑24h budget of 73,762 Send Power on what is paid** (`SOCIAL_DAY_CAP`, a tenth of a call's lifetime budget), and **no single award exceeds 73,762** (`PTS_EVENT_CAP`). Your boosts have no ceiling and still show in full; they pay in full on Send Call performance, and on the grind they pay until the day's ceiling. That is what keeps Level 100 (≈14.4M) a long climb for everyone: ≈195 maxed days of grinding, or ≈20 perfect calls held in profit.
 
@@ -197,7 +197,7 @@ Your Diamond level (0–10) drives three systems: the Holder Boost factor (§3.2
 
 ### 3.4 Send Calls — the core game
 
-A **Send Call** is you going on the record: a public, timestamped, **permanent** claim that a token is going to run. Once posted, *a call can never be edited or deleted* — it's on the record forever, and its all‑time high is preserved even if the token later dies. One active call per token.
+A **Send Call** is you going on the record: a public, timestamped, **permanent** claim that a token is going to run. Once posted, *a call can never be edited or deleted* — it's on the record forever, and its all‑time high is preserved even if the token later dies. **One call per caller per token, permanently** (`UNIQUE(user_id, token_addr)`): nothing closes a call and deleting its post is refused, so your first call on a token is your only one, ever. Two different people can each call the same token.
 
 **The Xs rule.** Performance is measured in **Xs**, where **+100% = 1x**: `X = current price / your entry − 1`. So +100% = 1x, +340% = 3.4x. Each call shows **Now** (live) and **Peak** (its permanent all‑time high since the call); "Now" can never display above "Peak."
 
@@ -208,7 +208,8 @@ A **Send Call** is you going on the record: a public, timestamped, **permanent**
 | 🏆 S Legendary | 20 | | 💪 C Solid | 2 |
 | 🚀 A Massive | 10 | | 🌱 D Small | 0.5 |
 | 🔥 B Big | 5 | | ➖ E Flat | 0 |
-| | | | 💀 F Underwater | below entry |
+
+**There is no F.** The grade is computed from the call's **peak**, and `peak_price` is seeded at the entry price and only ever revised upward — so peak X is never negative and **E is the floor**. A call that is currently 90% underwater still grades E, because at some point it was at least worth its entry. What tells you a call went badly is the **live** X on the card and the 💀 RUGGED marker, not the grade.
 
 **Liquidity gate.** A token needs **≥ $500 pooled liquidity** to be callable — thinner pools are rejected, so no one can farm points on a self‑made dust pool.
 
@@ -220,11 +221,42 @@ sizeMult = min(100, max(1, yourSpendUSD / 100))
 
 Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest: your "spend" is credited as **min(tokens you bought from the pool, tokens you still hold) × price**, read best‑effort across up to 3 connected wallets. Taking the *minimum* defeats value spoofing, wash/recycled buys, self‑pool paper value, and airdrops. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The Senders list in this section re‑reads Senders' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
 
-**Per‑X milestone payouts: 170 × the X.** As your call actually runs, each **whole X** it crosses pays **170 × that X** — 1x → +170, 2x → +340 … up to **50x → +8,500** (ladder caps at 50x; fifty rungs total 216,750 base, which fits inside the ladder's 30% slice of the budget, so the top rung is actually payable). No daily cap (pure performance), but every payout draws on the call's lifetime budget (§3.1). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
+**The stack cap on the opening award: ×10 (`OPEN_STACK_MAX`).** However large your boost stack gets, the *paid* opening award is capped at **ten times the size‑scaled base**:
 
-**Diamond‑hands HOLD bonus — the main event.** While your call stays in profit, you keep earning a **super‑linear** bonus: `owed = 2 × holdX^1.5`, bounded by what the call's budget has left (the 750,000 base‑point `HOLD_MAX` is a backstop that the budget always reaches first). It is deliberately where most of a call's Send Power lives: of the per‑call lifetime budget (§3.1), the opening award may take at most 10% and the milestone ladder at most 30% cumulatively, so **at least 60% is reserved for holding in profit**. **Crew factor:** the hold integral accrues faster when the people who Sent It on your call are also in profit from *their own* entry — `rate = 1 + 0.1 × (Senders in profit with ≥ $20 of their own in the token)`, capped at **3×** (twenty profitable Senders — real positions, not taps). A conviction play that carries other people with it is worth more than a lonely one. It compounds with both height and duration, accrues **only while the pool is liquid and you're in profit** (underwater/drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
+```
+paid = min( callHeadroom, round(120 × sizeMult) × 10 )
+```
 
-**Send It! — following a call.** Tap **"Send It!"** to Send It on someone else's call: base **30**, scaled by *your* Send size and Holder Boost, capped at 30 Sends/day. Points pay only on your **first** Send per call; you can't Send It on your own. Your Xs are measured from the price when *you* Sent It, and **Senders earn the same diamond‑hands HOLD bonus** the caller does.
+So a caller with no on‑chain position (sizeMult ×1) can never be paid more than **1,200** for opening a call, and $1,000 held (×10) caps at 12,000 — no matter whether the stack behind it is 11× or 60×. Anyone in a live community (+9) plus one other boost is already past the bound. **The same ×10 cap applies to the "Send It!" award**, so a Send with no position pays at most 300. This is why the opening award is not the way to climb: the cap bites almost immediately, and the hold bonus does not have one.
+
+**Per‑X milestone payouts: an additive ladder.** As your call actually runs, each **whole X** it crosses pays a rung, and the rungs climb in a **straight line, not by the X**:
+
+```
+rung(m) = round(170 × (1 + (m − 1) × 0.1))   →   170 + 17 × (m − 1)
+```
+
+1x → **+170**, 2x → **+187**, 3x → **+204**, 10x → **+323**, 20x → **+493**, 50x → **+1,003** (ladder caps at 50x). All fifty rungs together come to **29,325 base** — about **13%** of the ladder's own 30% slice of a call's budget (221,288). That headroom is the point: the ladder is deliberately *not* where a call's Send Power lives, because paying by the X would hand a single lucky 50x more than twenty patient calls. Holding in profit is the main event (below). No daily cap on the ladder (it's pure performance), but every payout draws on the call's lifetime budget (§3.1). Each milestone pays once, ever, and only on a price **sustained** across two samples with live liquidity still ≥ $500 — a single wick can't pay.
+
+**Diamond‑hands HOLD bonus — the main event.** While your call stays in profit, you keep earning a **super‑linear** bonus:
+
+```
+holdX  += min(hoursSinceLastTick, 0.5) × min(currentX, 50)     ← the integral
+owed    = min(750000, 2 × holdX^1.5 × crewBonus)               ← the payout
+```
+
+It is deliberately where most of a call's Send Power lives: of the per‑call lifetime budget (§3.1), the opening award may take at most 10% and the milestone ladder at most 30% cumulatively, so **at least 60% is reserved for holding in profit**. (`HOLD_MAX` = 750,000 base is a backstop the budget always reaches first.)
+
+**Two clamps inside the integral.** Height above **50X** credits nothing extra, and at most **30 minutes** of holding is credited per sweep tick — so a long gap between price samples is not back‑credited. "Compounds with height and duration" is true up to those two bounds, not beyond them.
+
+**Crew factor — applied to the payout, not the integral.** The bonus is larger when the people who Sent It on your call are also in profit from *their own* entry: `rate = 1 + 0.1 × (Senders in profit with ≥ $20 of their own in the token)`, capped at **3×** (twenty profitable Senders — real positions, not taps). It multiplies `owed` **after** the `^1.5` exponent, which matters: folded into the integral instead, a 3× crew would really have been worth 3^1.5 ≈ 5.2×. A conviction play that carries other people with it is worth more than a lonely one — but by 3×, not 5×.
+
+It accrues **only while the pool is liquid and the price is above your entry** (underwater or drained ticks earn nothing and are never back‑credited), and pays out once at least 20 points are owed.
+
+**⚠️ The honest caveat: "holding" here means the *price* holds, not that *you* do.** The accrual reads the call's current price against its entry and nothing else — no code path re‑reads the caller's wallet after the call is opened, and the recorded position size is written once at call time and never updated. A caller who sells their entire bag keeps collecting the diamond‑hands bonus for as long as the price stays up. The name describes the pattern it rewards, not a verified fact about the caller. Your *size* at call time is spoof‑proof; your continued holding is not checked.
+
+**Send It! — following a call.** Tap **"Send It!"** to Send It on someone else's call: base **30**, scaled by *your* Send size and Holder Boost (and capped at **10×** that size‑scaled base, exactly like the opening award), capped at 30 Sends/day. Points pay only on your **first** Send per call; you can't Send It on your own. Your Xs are measured from the price when *you* Sent It, and **Senders earn a diamond‑hands HOLD bonus of their own** — the same shape as the caller's, on a smaller scale and without the crew factor: a Sender's hold accrual gets **no crew bonus** (only the caller's does), and it is paid against a budget of **184,407** (a quarter of the caller's) with a per‑event ceiling of **18,440**.
+
+**One paying Send per token, not per call.** If you have already Sent It on *this same token* through some other call, the new Send is recorded but **earns nothing and never accrues a hold bonus** — it is stored with no entry price and zero size. You still appear on the senders list; you just don't get paid twice for the same position. Without this, one token called by ten people would be ten payouts for a single buy.
 
 **The senders list.** Each call shows who's behind it, ranked by conviction: `$ put in × (1 + days held) × (1 + your Xs)`. Anyone **not holding** any more drops below every current holder. Top 3 show inline; "Show all" pulls the full ranked list.
 
@@ -244,7 +276,11 @@ Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+).
 
 Tripping the spam trap mutes your account, escalating with each **distinct** offense: **1st → 24 hours**, **2nd → 1 week**, **3rd+ → permanent**.
 
-**Blocked while muted:** making calls, Sending It, posting, commenting, reacting, voting, following, tracking wallets, customizing. **Still allowed:** your daily visit bonus, buying & holding $Send/$GWC (your Holder Boost keeps compounding), swapping (points still count), connecting/refreshing a wallet, and browsing everything.
+**Strikes are for life.** The counter only ever increments — nothing ages it out, forgives it, or resets it, and there is **no appeal endpoint and no admin who can lift a restriction**. Three offences years apart still land on permanent. The only route back is buying your way out (below), which is why that path exists at all.
+
+**Blocked while muted:** making calls, Sending It, posting, commenting, reacting, voting, following, tracking wallets, customizing — **and the daily check‑in**. Also blocked, though the in‑app list doesn't enumerate them: minting a Data API key, flying Rocket Run, starting a community, joining one, posting in one, and opening or voting on a community proposal. **Still allowed:** buying & holding $Send/$GWC (your Holder Boost keeps compounding), swapping (points still count), connecting/refreshing a wallet, and browsing everything. *(Connecting works, but the **150‑point connect award is withheld** while you're restricted, and linking a wallet mid‑restriction raises your redemption baseline to whatever it already holds.)*
+
+**Read‑only costs points, not just actions.** Two things bite at once (§3.6b): the mute adds a flat **+1.0 percentage point** to your daily Send Power decay, *and* — because the check‑in is blocked — your absence streak keeps climbing, so the absence component keeps accelerating on top of it. A long mute therefore walks up to the **4%/day** ceiling and stays there. Redeeming early (below) is the only way to stop it, short of the timer running out.
 
 **Redeem with $Send — buy your way out early.** Any restriction can be lifted by **buying and then holding** enough $Send, verified on‑chain:
 
@@ -257,7 +293,42 @@ Tripping the spam trap mutes your account, escalating with each **distinct** off
 
 Only $Send you buy **after** your baseline (recorded when the restriction was applied, or on your first redeem tap if no wallet was linked) counts — a pre‑existing bag can't fake a buy, and pricing is fail‑closed (no price ⇒ no redemption).
 
-**Post‑redemption probation — hold, or it comes back doubled.** Lifting a restriction starts a hold: keep the $Send you bought for the restriction's own length (timed) or **40 days** (permanent). "Sold" = dropping >2% below the balance floor. Sell during a **timed** hold → it returns with the **timer doubled** (and the next buy‑out costs double); sell during a **permanent** hold → back to permanent. Hold to term and it's fully cleared. Sells are caught by a throttled recheck before your next action **and** a background sweep every 5 minutes.
+**Post‑redemption probation — hold, or it comes back doubled.** Lifting a restriction starts a hold: keep the $Send you bought for the restriction's own length (timed) or **40 days** (permanent). "Sold" = dropping >2% below the balance floor. Sell during a **timed** hold → it returns with the **timer doubled** (and the next buy‑out costs double); sell during a **permanent** hold → back to permanent. Hold to term and it's fully cleared.
+
+**How a sell is caught, precisely.** A background sweep every **5 minutes**, plus a throttled recheck (at most once a minute) triggered by exactly two actions: **making a Send Call** and **joining a community**. Posting, commenting, reacting, voting, following, tracking and customizing do *not* trigger it — so in practice the 5‑minute sweep is what finds most sells.
+
+**During probation, an unreadable wallet counts as a sell.** If the sweep cannot read your balance — you unlinked the wallet, or the read fails — it is treated as a balance of zero and the restriction comes back (doubled if timed, permanent if it was permanent). This is the opposite of how the OG badge behaves, where an unreadable read merely *pauses* the badge and is retried. Probation is deliberately fail‑closed: it's the one place where "we couldn't check" resolves against you, because it is the exit from a penalty rather than an entry to a reward. **Keep the wallet linked for the whole hold.**
+
+### 3.6b Send Power decay — the score is a stock, not a trophy 📉
+
+Send Power is **not** a permanent record of what you once did. It is a balance, and it **drains every day you don't show up**. Levels can go *down*. The design goal is that a leaderboard reflects who is playing now, not who was early — a number that only ever climbs makes an inactive Level 90 permanently outrank an active Level 60, and after a year the board stops meaning anything.
+
+**One drain per UTC day, per account.** A background sweep runs every **5 minutes** and takes up to **200** accounts whose next decay stamp has come due. System accounts are exempt.
+
+**The daily rate is a sum of three things, then capped:**
+
+| Component | Rate | When |
+|---|---:|---|
+| **Absence** | **0.4%** on the first day past grace, **+0.2 points** per further consecutive day away | Only after **2 consecutive days** (`GRACE_DAYS`) with no check‑in — two days off costs nothing |
+| **Read‑only** | **+1.0 point** | Every day the account is muted (§3.6) |
+| **Bad calls** | **+0.3 points** per call currently **underwater**, up to **+1.5** | Any of your calls whose current price is below its entry |
+| **Ceiling** | **4%** in one day, total | However long you've been gone |
+
+So: away 3 days → 0.4%. Away 7 days → 1.2%. Away 21 days → 4% (the cap). Away *and* muted *with* three sinking calls → the cap, immediately.
+
+**What stops it.** A **daily check‑in** — and nothing else. Holding coins doesn't stop it; neither does a high level.
+
+**And it stops *all* of it.** A check‑in inside the last 24 hours returns before any component is computed, so on a day you show up, underwater calls and everything else cost you **nothing**. The read‑only and bad‑call rates only ever apply on a day you were *already* absent — they make absence more expensive, they aren't a separate charge. The one account that can't use this is a restricted one, because read‑only blocks the check‑in itself.
+
+**Old bad calls never stop counting.** The underwater count is `cur_price < entry_price` over *all* your calls, and since nothing ever closes a call, one you made a year ago that never recovered still adds its 0.3% to any day you're absent. It costs nothing on a day you check in.
+
+**Two clocks, deliberately.** Decay is held off by a check‑in within a **rolling 24 hours**, while the 60‑point award is once per **UTC calendar day** — so a late‑night check‑in still protects you even after the calendar day turns.
+
+**Floors, so it can't wipe you out.** Balances at or below **5,000** are never touched, and the drain is `min(balance × rate, balance − 5,000)` — decay can take you down toward the floor but never through it, and never negative. If the computed drain is **less than one whole point** it takes nothing rather than rounding up.
+
+**It is on the record.** Every drain writes a negative row to your points ledger (`kind: 'decay'`) and sends you a **📉** notification, so a drop is always explained and always auditable. Nothing happens silently.
+
+**What decay does *not* touch:** your Holder Boost, Diamond level, OG tier, badges, community memberships, or any call's recorded history. It only ever moves the points balance.
 
 ### 3.7 Safety tools
 
@@ -291,12 +362,42 @@ It's a purely lexical scan (a token can dodge a flag by renaming a function, or 
 | 👤 Low holders | 15 | Fewer than 25 holders |
 | 🔻 Sell pressure | 12 | Sells > 2× buys, and ≥12 sells |
 | 🥱 Dead volume | 12 | 24h volume < $300 and older than 60 min |
+| 🎯 Block‑0 snipers sold out | 28 | The wallets that bought in the pool's very first block have since dumped |
+| 🎯 Block‑0 snipers took a big share | 14 | Those first‑block wallets took a large share of the float |
 
 **Triage:** ≥70 "Looks OK" · ≥40 "Caution" · ≥15 "High risk" · else "Avoid." Anti‑greenwashing: if any high/critical flag trips, a token can *never* show the green tier. Four sub‑scores (Liquidity · Holders · Trading · Contract) each get a letter grade to show *how* the score was reached.
 
 **Safety filter** — three views, and **Safer** is the default on every visit (never persisted, so protection is always the arrival default): **🛡️ Safer** shows a token only if it's **not risky and scores ≥ 75** (honeypot/serial‑deployer tokens are *always* hidden there); **🌐 All** shows everything *except* tokens flagged risky or with too little liquidity to trade; **☠️ Risky** shows only those hidden ones, so nothing is ever silently unreachable.
 
 **Watchlist:** save up to **500** tokens, each with the same live score/flags. **Read‑only wallet tracker:** track wallets and get a browser‑computed PNL report (average‑cost basis, realized + unrealized) — it never signs, sends, or moves funds. If the explorer's balance read fails, the report says so instead of quietly showing $0. 10 wallets free; a fresh $GWC diamond‑holder at tier ≥1 unlocks `min(1000, level × 100)`. It reads a bounded history and flags "PNL is partial" for very active wallets — an approximation, not accounting.
+
+**🎯 The early-buyer engine — who got in first, and did they stay?** The deepest check on the site. It replays a pool's own history from the chain and answers one question a price chart cannot: *the wallets that got in before anyone else — are they still holding, or did they sell into you?*
+
+Two views of the same trace:
+
+- **Block 0** — the very first block in which the pool ever paid a token out. Anyone in it bought before a human could have reacted.
+- **The first 10 buys** (`EARLY_N`) — the first ten payouts the pool ever made, in chain order. Block 0's buyers are by definition inside this set, so the two views nest; a wallet in both is traced **once** and shown twice, against two different denominators.
+
+**Every early wallet is followed as a cluster, not a single address.** Moving tokens to a fresh wallet is the oldest way to look clean, so the trace follows the wallet, everyone it sent tokens to, and everyone *they* sent to — **2 hops**, at most **12** destinations per wallet per hop and **150** wallets per token. The largest **30** early wallets are traced; beyond that they're counted and the panel says so rather than pretending the list is complete.
+
+**What each cluster reports:**
+
+| Reading | What it means |
+|---|---|
+| **Took** | Tokens the cluster received from the pool in the window (block 0, or the first 10) |
+| **Still holds** | The summed **live** balance of every wallet in the cluster, read fresh |
+| **Kept buying after** | Its lifetime buying from this pool exceeds its early take |
+| **Sold supply it never bought here** | A floor on tokens it sold that it demonstrably never bought from this pool |
+| **Cost / proceeds / P&L** | A WETH ledger built from the actual transactions the tokens moved in, plus the current holding valued at the pool price |
+| **Net label** | **accumulator** (holds ≥ what it took) · **seller** · **fully out** (holds exactly zero) · **unknown** |
+
+**"Unknown" is a real answer, not a zero.** A balance that cannot be read is stored as `null`, never `0`, and if any wallet in a cluster is unreadable the whole cluster reports **unknown** rather than guessing low. That distinction is the whole point — a scanner that reports an unreadable balance as "sold everything" would be inventing a rug.
+
+**How it gates the green verdict.** `sniperOk` is **true** when nobody sniped block 0 at all. Otherwise it stays **null** — deliberately not `false` — until the scan is *complete* (nothing capped, no unknown wallets, every balance readable). Only then does it resolve: **true** if there are zero net sellers, or if the block-0 clusters are immaterial; **false** otherwise. **Immaterial requires both** the share taken *and* the share still held to be under **1%** of float — so a cluster that took a big share and dumped it can never qualify as immaterial on the grounds that it now holds nothing.
+
+The **Hot Feed asks for `true`**, not "not false" — a token whose scan hasn't finished is held back rather than promoted. An unfinished scan is treated as an unanswered question, which is the honest reading of it.
+
+**Two caveats worth stating plainly.** The first-10 cohort is **reported but does not gate** the verdict — `sniperOk` is a block-0 test only, so a token whose block 0 is clean and whose buys #2–#10 all dumped still shows the rocket, with the contradiction visible in the panel. And the per-wallet percentages in the panel are shares of **total supply**, while the summary tiles and the verdict gate use **float** — two different denominators on one screen, so compare like with like.
 
 ### 3.8 Fair & spoof‑proof
 
@@ -323,7 +424,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 **Starting & going live**
 - **Anyone can start one** by pasting a token's contract address. The token needs **≥ $500 liquidity** (same floor as Send Calls — no communities on a dust pool), and there's one community per token. The starter is auto‑opted‑in as the first member.
 - Each community is **auto‑branded** from its Dexscreener/on‑chain art (logo + banner), with live market cap, holders, and 24h price change on its card and page.
-- A community **goes LIVE once 10 members opt in — and only real holders count.** To start, join, or post in a community you must **hold that community's own token**, verified on‑chain from a linked (read‑only) wallet. On top of holding, **no more than 2 counting opt‑ins per network address** (the starter's own network is excluded). Holding is an **ongoing** requirement, not a one‑time check: a background sweep re‑reads each qualified member's balance and **revokes their qualification + the 10×** if they sell or move the tokens out — so you can't qualify once and keep the boost forever.
+- A community **goes LIVE once 10 members opt in — and only real holders count.** To start, join, or post in a community you must **hold that community's own token**, verified on‑chain from a linked (read‑only) wallet. On top of holding, **no more than 2 counting opt‑ins per network address** (the starter's own network is excluded). Holding is an **ongoing** requirement, not a one‑time check: a background sweep re‑reads qualified members' balances and **revokes their qualification + the 10×** if they sell or move the tokens out — so you can't qualify once and keep the boost forever. **The sweep's real throughput:** every **10 minutes** it takes the **40** least‑recently‑checked qualified rows **site‑wide** (not per community), oldest first. So revocation is certain but not instant — across a large site a given member is re‑read on the order of hours, not minutes.
 
 **Who can see vs. who can post**
 - **Anyone can read a live community's wall** — click any community card and browse its posts, photos, GIFs and videos without an account.
@@ -333,13 +434,13 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - While you're a qualified member of **≥ 1 live community**, **a flat 10× community boost is added to every point you earn** — applied in the same `awardPoints` path as everything else, on top of your Holder Boost and OG bonus. The full sum the server pays is `base × (1 + (HolderBoost − 1) + (OG − 1) + (Community − 1) + (Arcade − 1) + (Prize − 1))` — boosts add, they do not multiply, so OG Gold 10× plus a community 10× is 19×, not 100×. Every action you take **inside a community** (posting, reacting, commenting on its wall) earns Send Power at that 10×, and your dashboard shows the bonus as an achievement you can unlock.
 - It's a **flat 10×** — being in five live communities is still 10× (it doesn't stack with itself).
 
-**Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+15,000 base Send Power**, itself run through the normal multiplier path like any award (so a starter who is now in their own live community receives it ×10, and more with a Holder Boost/OG). It's **idempotent** — it can never be paid twice, even on rejoins.
+**Founder bonus** — when a community reaches 10 members and flips to live, its starter earns a **one‑time founder bonus** of **+15,000 base Send Power**, run through the normal multiplier path like any award — but it hits the per‑event ceiling almost immediately: 15,000 × 10 would be 150,000, and no single award may exceed **73,762**, so a founder who is in their own live community is paid **73,762**, an effective ×4.92. A Holder Boost or OG tier on top of that adds **nothing** — the ceiling is already binding. It's **once per account, ever** — the dedupe key is the founder's user id, not the community, so starting and growing a second community pays nothing. (Community creation is capped at 3/day, so without this one person could farm the bonus.)
 
-**Members & member levels** — every community page lists **all of its members**, ranked by their **community member level** (the conviction level below), with the top three medalled and the starter crowned 👑. Participating raises your own member level *and* contributes XP to the community itself — so an active member is literally what levels a community up.
+**Members & member levels** — every community page lists its members (**up to 200**, so a very large community does not show every one), ranked by their **community member level** (the conviction level below), with the top three medalled and the starter crowned 👑. Participating raises your own member level *and* contributes XP to the community itself — so an active member is literally what levels a community up.
 
-**Community level (exponential curve)** — a community earns XP when its **distinct members** are active on its wall (join, post, react, comment). XP is **daily‑capped per community** *and* **capped per member per day** (so a single spammer can't level it), and only accrues while the community is **live**. Its level uses the same `levelForXp` curve as personal levels. The most active communities (a time‑decayed activity score, ~12h half‑life) float to the top of the grid.
+**Community level (exponential curve)** — a community earns XP when its **distinct members** are active on its wall (join, post, react, comment). XP is **daily‑capped per community** *and* **capped per member per day** (so a single spammer can't level it), and only accrues while the community is **live**. The exact ceilings: **250 XP per member per community per day**, and per community per day a cap on the *number of awards* of each kind — **400 posts, 300 reactions‑received, 200 comments, 200 Send Calls**. Its level uses the same `levelForXp` curve as personal levels. The most active communities (a time‑decayed activity score, ~12h half‑life) float to the top of the grid.
 
-**Conviction (per member, per community)** — your **member level** (your "conviction") in a community rises the longer you're a qualified member and the more you post/comment/react there (daily‑capped at 150 conviction XP/community/day). It surfaces as a **💎 Lv N badge next to that token** in the **Conviction Plays** section of your public wall, titled Newcomer → … → Ride‑or‑Die.
+**Conviction (per member, per community)** — your **member level** (your "conviction") in a community rises **only when you do something there**, never for elapsed time. There is no timer or sweep that accrues conviction for months held; every point comes from an action, at these rates: **join 40**, **post 20**, **Send Call 30**, **comment 6**, **reaction given 2** (daily‑capped at 150 conviction XP/community/day). Staying a member without participating leaves your conviction exactly where it was. It surfaces as a **💎 Lv N badge next to that token** in the **Conviction Plays** section of your public wall, titled Newcomer → … → Ride‑or‑Die.
 
 **Making a Send Call from anywhere** — the floating ✏️ button's **📣 Send Call** tab takes a pasted contract address, resolves it on-chain (symbol, name, market cap, liquidity) and posts the call. The button stays disabled until the token resolves and clears the **$500 liquidity** floor, it shows how many calls you have left today, and a "see the full on-chain detail first" link opens the same token popup used everywhere else — calls made without opening it are flagged on your wall, exactly as they are from the radar.
 
@@ -356,7 +457,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 **Posting from a community page** — once you're a qualified member, the floating ✏️ *Send it* button posts to *that* community's wall (it scrolls to and focuses the community composer). Anywhere else — or on a community you haven't joined — it opens the global Send Wall composer and, after posting, offers a *View on the Wall* link instead of yanking you off the page.
 
 **Honest residual risks / limitations**
-- The anti‑sybil gate is **on‑chain holding of the community token + a ≤2‑per‑network cap + continuous re‑verification**, not proof‑of‑personhood. A determined actor could still buy the token across several funded wallets and rotate IPs to manufacture a go‑live — but it now costs **real, sustained capital** (the sweep revokes qualification the moment the tokens leave a wallet), not a free throwaway account. The dust floor for "holds" is the same tiny `OG_DUST_WEI` used elsewhere.
+- The anti‑sybil gate is **on‑chain holding of the community token + a ≤2‑per‑network cap + continuous re‑verification**, not proof‑of‑personhood. A determined actor could still buy the token across several funded wallets and rotate IPs to manufacture a go‑live — but it now costs **real, sustained capital** (the sweep revokes qualification the moment the tokens leave a wallet), not a free throwaway account. **A slot that counts needs $25 of the token** (`MIN_COMMUNITY_HOLD_USD`), verified on‑chain, so ten qualified members is $250 of standing exposure — not ten dust balances. The tiny `OG_DUST_WEI` floor is only the fallback used when no USD price is available, and for *creating* a community (where any non‑dust balance is enough).
 - Going live is **one‑way** — leaving a live community never un‑lives it and never claws back the founder bonus.
 - Market stats on community cards are cached (~45s refresh) and are **display only** — nothing about a community implies the token is safe or a good buy. **Most tokens go to zero.**
 
@@ -378,9 +479,42 @@ Every live community has **two walls**:
 - `GET /api/communities/:id/posts?wall=holders` is **refused outright** (403) to anyone without a live slot; no rows are sent. The public feed selects `private = 0`, so a private post is not in it to begin with.
 - `GET /api/posts/:id`, its comments, and the react / vote / comment endpoints all answer **404** for a viewer who may not read it — never 403, because a 403 would confirm the post exists.
 - The **Data API** (`/v1/posts`, `/v1/comments`) follows the same boundary as everything else it serves: public data in bulk, plus the key holder's **own** private posts — never anyone else's.
-- Community posts of either kind have never appeared on the Send Wall or a profile wall (both select `community_id IS NULL`), so nothing changes there.
+- **Public** community posts *do* appear on the Send Wall and the following feed — that is the point of them (§3.10c) — carrying their community's name, symbol and image so the wall links back. A **holders‑only** post never does: the wall query selects `private = 0`, so it is not in the result to begin with. Profile walls are the exception that still filters community posts out entirely (`community_id IS NULL`), so a profile shows only what its owner posted to the wall itself.
 
 The author keeps sight of **their own** post if their slot lapses (they wrote it, and they can still delete it); the feed itself closes for them until they re‑qualify.
+
+### 3.10c Communities on the Send Wall — one timeline, branded 🧱
+
+A community that nobody can see is a community that never fills. So **every public community post also lands on the public Send Wall**, badged with the community it came from and linking back to it.
+
+**What travels with a post.** Each post carries its community as `{ id, symbol, name, image, status, demo, token }`, so the wall can render the badge, show whether it's live yet, and link straight to the community page — where a reader who holds the token can join on the spot.
+
+**What never travels.** A **holders‑only** post. The wall query filters `private = 0` in SQL, so a private post is not in the result at all — there is no view‑layer filter to get wrong. This is the boundary the whole feature rests on: public community posts are a front door, holders‑only posts stay behind it.
+
+**The sandbox posts to the wall too.** The demo community is a community like any other here — its public posts reach the wall, badged as the sandbox, so the feature can be seen working before a real community exists. (It has no holders‑only wall at all; see §3.10b.)
+
+**One posting allowance, wherever you write.** A community post is charged against the *same* per‑account bucket as a wall post — **12 posts per 10 minutes** — so posting from inside a community is not a second lane for reaching the front page.
+
+**Auto‑invite posts.** The site writes exactly two posts per community, as the creator, always public, both earning **zero** Send Power:
+
+| When | What it says |
+|---|---|
+| The day it's started | 🏘️ *Started a community for $SYM. It needs 10 holders to go live — if you hold $SYM, come and join.* |
+| The day it goes live | 🎉 *The $SYM community is LIVE. Come say something — hold $SYM and you are in.* |
+
+Each is deduped through a zero‑amount marker row (`cinvite:<id>:new` / `:live`), so a restart or a second go‑live transition can never repost it. And because the one‑time **first‑post bonus** counts only posts you wrote to the wall yourself, the site writing an invite in your name **does not burn it**.
+
+### 3.10d Community proposals — deciding things together 🗳️
+
+A **live** community can put a question to its holders. Only a **verified holder** of that community's token can open one or vote, and the whole thing runs on a two‑round clock so a handful of people can't rush a decision through.
+
+| | Round 1 | Round 2 |
+|---|---|---|
+| **Runs for** | 3 days | 2 days |
+| **Passes when** | yes × 2 ≥ yes + no (a **simple majority**, promoting it to round 2) | yes × 4 ≥ (yes + no) × 3 (a **three‑quarters supermajority**) |
+| **Quorum** | 20% of qualified members, min 5, max 50 | 30%, min 6, max 60 |
+
+**Limits.** One open proposal per person, five per community; a draft that is never opened expires after 24 hours; new proposals are rate‑limited to 5 per window. **Voting earns community XP** at the reaction rate, so taking part in governance counts toward the community's level like anything else. Selling the token ends your standing to vote along with everything else.
 
 ### 3.11 OG tiers — being early, three ways 🏅
 
@@ -398,9 +532,10 @@ Hold **both $Send and $GWC**, bought from the market, and keep holding both: you
 **The standard, identical in every window.** Verified read‑only from your linked wallets, across all of them:
 - You **bought** each coin from the market — tokens leaving the LP pool, or the measured router, for your wallet. Your first such buy of the *later* coin is the moment you "completed the pair", and that timestamp decides your tier. A transfer from another wallet is not a buy.
 - You **still hold both** now, across any linked wallet (moving your bag to a hardware wallet is fine).
+- **Each bag is worth at least $25** at the moment the badge is granted (`OG_MIN_HOLD_USD = 25`, checked against the live price of *both* coins independently). Buying inside the window and keeping $10 of each earns nothing — the badge is meant to sit behind a real position, not a dust balance kept alive to hold a tier.
 - **Two things disqualify a wallet:** if it dumped its whole holding to nothing inside *its own* first 30 days **and** it holds less today than it did at the end of those 30 days, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place. ("Net accumulator" is measured this way on purpose: a wallet's total bought minus total sold *is* its balance, so "bought more than sold" would only re‑ask "do you hold any", which is already required.)
 
-**Losing it.** Sell out of either coin entirely, at any time, and the badge is revoked **for good**. The badge follows your wallet: unlink it and the badge pauses until you relink and are re‑verified. Like every holding‑based bonus, it pays only while your holdings were re‑checked on‑chain within the last 26 hours.
+**Losing it.** Sell out of either coin entirely, at any time, and the badge is revoked **for good**. The badge follows your wallet: unlink it and the badge pauses until you relink and are re‑verified — **but disconnecting is not always just a pause.** Before unlinking, the server reads the chain one more time; if it can see that you no longer hold both coins, that counts as selling out and the badge is revoked permanently rather than paused. Disconnecting a wallet you have already emptied does not preserve the tier. Like every holding‑based bonus, it pays only while your holdings were re‑checked on‑chain within the last 26 hours.
 
 **Fail‑closed, always.** Every scan replays your wallet's full transfer history for the coin and must reconcile exactly with the chain's `balanceOf` before anything is written. A read that cannot be completed — explorer throttling, a dropped page — is retried later, never recorded as an answer, so nobody is denied a badge by an outage. Verification stays open for **90 days after the last window closes** for the same reason; what you *earned* is fixed by your buy timestamp, so late scanning can never manufacture a tier.
 
@@ -437,6 +572,26 @@ The Arcade page (`arcade.html`) shows **every competition running on the site in
 - Movement chips (▲2 · ▼1 · NEW) compare a board with the one *this browser* saw the last time the page was opened, from `localStorage`; they are labelled as "since your last visit" and never claim anything the server did not rank.
 - The page re-reads every 45 s while visible, ticks its clocks from the server's own clock, and re-renders only when something moved — never while an ⓘ tip is open or while your focus is inside a board. Confetti fires once a week, only if you open the page sitting inside the prize places.
 - Accessibility: podiums are ordered 1-2-3 in the DOM and arranged 2-1-3 only visually; every board is a labelled list; countdowns are plain text; the live region announces only real changes (a new top three, or your own rank); reduced motion turns every animation off.
+
+### 3.14b The Send Calls board — how the weekly caller race is scored
+
+The Arcade's Send Calls card ranks **callers**, not calls, over a rolling window (24h / week / month / all):
+
+- Your score is the **sum of every call's peak X** in the window, each capped at **50x** so one freak run can't decide the board.
+- Ties break on your **single best** call's peak X.
+- Only calls opened inside the window count, and only ones whose pool had **≥ $500** liquidity at call time.
+- The board shows the **top 25**.
+
+Peak, not current: the board measures how high your calls got, so a call that ran and retraced still scores what it reached.
+
+### 3.14c The Support board — a help desk, not the wall 🛟
+
+`support.html` is the same posting machinery pointed at a separate room (`posts.board = 'support'`), and the difference that matters is economic: **asking, answering and voting there earn no Send Power at all.** The post award sits behind a check that the post has no board, so support questions pay nothing — deliberately, so nobody farms points by asking questions nobody needed answered, and so the sort order reflects what people actually want answered.
+
+- Questions sort by **votes** (most‑asked first) or newest; voting is what surfaces the common ones.
+- It shares the wall's posting allowance (12 per 10 minutes) — one bucket, wherever you write.
+- There is **no accepted‑answer, resolved, or official‑answer mechanic**, and no moderator pinning — votes are the only ranking signal.
+- Support posts never appear on the Send Wall, and wall posts never appear there.
 
 ### 3.15 The sandbox community — branded for a listed company, not a token
 

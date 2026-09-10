@@ -102,8 +102,15 @@
       var pct = (+supply.value) / 100;               // slider 0..500 → 0.00..5.00 (percent)
       var lvl = diaLevel(+days.value);
       var factor = DIA_FACTOR[lvl];
-      var mult = Math.round((1 + (10 * pct) * factor) * 100) / 100;   // UNCAPPED — matches the server
-      var pts = Math.round(base * mult);
+      var mult = Math.round((1 + (10 * pct) * factor) * 100) / 100;   // the multiplier itself is uncapped — matches the server
+      /* But the PAYOUT is not. The server clamps every single award to PTS_EVENT_CAP
+         (Math.floor(xpForLevel(70) * 0.1) = 73,762) AFTER the multiplier. Without this the demo
+         happily displayed 375,075 for a 75-base post the server would pay 73,762 for — a number
+         nobody could ever actually earn. A demo that overstates the reward is worse than no demo. */
+      var PTS_EVENT_CAP = 73762;
+      var raw = Math.round(base * mult);
+      var pts = Math.min(PTS_EVENT_CAP, raw);
+      var clamped = pts < raw;
       if (supplyOut) supplyOut.textContent = pct.toFixed(2) + '%';
       supply.setAttribute('aria-valuetext', pct.toFixed(2) + '% of supply');   // announce the % not the raw 0-500
       if (daysOut) daysOut.textContent = String(days.value);
@@ -112,7 +119,16 @@
       if (eqBase) eqBase.textContent = String(base);
       if (eqMult) eqMult.textContent = '×' + mult.toFixed(2);
       if (eqTotal) eqTotal.textContent = pts.toLocaleString('en-US');
-      if (cap) cap.hidden = mult < 500;   // no cap now — just a fun "whale territory" flag at big multipliers
+      /* Say so when the ceiling is what you are looking at, rather than letting the number sit there
+         looking like the multiplier stopped working. */
+      if (cap) {
+        cap.hidden = !clamped && mult < 500;
+        cap.innerHTML = clamped
+          ? '🧢 <b>Capped.</b> That stack works out to ' + raw.toLocaleString('en-US') +
+            ', but no single award can ever exceed <b>73,762</b> — a tenth of one Send Call’s lifetime budget. ' +
+            'Everything that isn’t Send Call performance shares one budget of the same 73,762 per rolling 24h.'
+          : '🐋 Whale territory — and the boost has <b>no ceiling</b>. (The payout does: any single award stops at <b>73,762</b>.) Absolute unit.';
+      }
     }
     [action, supply, days].forEach(function (el) { el.addEventListener('input', recompute); });
     action.addEventListener('change', recompute);
