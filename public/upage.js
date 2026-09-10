@@ -11,7 +11,7 @@ function timeAgo(ts) {
   return Math.floor(s / 86400) + 'd ago';
 }
 
-// ===== "Convicted In" — pinned tokens: live mcap, Xs since conviction, paste-to-convict, hover holdings =====
+// ===== "Conviction Plays" — pinned tokens: live mcap, Xs since conviction, paste-to-convict, hover holdings =====
 function pinUsd(n) { if (n == null || isNaN(n)) return '—'; const a = Math.abs(n); if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'k'; if (a >= 1) return '$' + n.toFixed(2); if (a > 0) return '$' + n.toPrecision(2); return '$0'; }
 function pinNum(n) { if (n == null || isNaN(n)) return '—'; const a = Math.abs(n); if (a >= 1e9) return (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return (n / 1e3).toFixed(1) + 'k'; return String(Math.round(n)); }
 function pinDur(ms) { if (!ms) return ''; const s = Math.max(0, (Date.now() - ms) / 1000), d = s / 86400; if (d >= 365) return (d / 365 >= 10 ? Math.round(d / 365) : (d / 365).toFixed(1)) + 'y'; if (d >= 30) return Math.round(d / 30) + 'mo'; if (d >= 1) return Math.round(d) + 'd'; if (s >= 3600) return Math.round(s / 3600) + 'h'; return Math.max(1, Math.round(s / 60)) + 'm'; }
@@ -48,7 +48,7 @@ function renderPins(u) {
       if (!pins.length && !u.isMe) { box.hidden = true; box.innerHTML = ''; return; }
       box.hidden = false;
       const sub = u.isMe ? 'tokens you’re convicted in — hover to see your holdings' : 'tokens @' + esc(u.username) + ' is convicted in — hover a token';
-      const head = '<div class="wall-pins-head">💎 Convicted In <span class="wall-pins-sub">' + sub + '</span></div>';
+      const head = '<div class="wall-pins-head">💎 Conviction Plays <span class="wall-pins-sub">' + sub + '</span></div>';
       const list = pins.length ? '<div class="wall-pins-list">' + pins.map(p => pinChip(p, u.isMe, u.username)).join('') + '</div>' : '';
       const empty = (!pins.length && u.isMe) ? '<p class="wall-pins-empty">Convict a token to show it here — paste its contract below, or open any token’s on-chain details anywhere and tap <b>📌 Pin to my wall</b>.</p>' : '';
       const adder = u.isMe ? '<form class="pin-add" autocomplete="off"><label class="sr-only" for="pin-add-input">Token contract address to convict</label><input class="addr-input pin-add-input" id="pin-add-input" type="text" inputmode="text" spellcheck="false" placeholder="Paste a contract to convict (0x…)" pattern="0x[0-9a-fA-F]{40}"><button class="btn btn-primary btn-sm pin-add-go" type="submit">💎 Convict</button></form><p class="pin-add-msg" role="status" aria-live="polite"></p>' : '';
@@ -94,7 +94,7 @@ function livePins(box) {
 (function wirePins() {
   const box = document.getElementById('pub-pins');
   if (!box) return;
-  // a pin toggled from anywhere on the page (e.g. inside the detail popup) → refresh "Convicted In" live
+  // a pin toggled from anywhere on the page (e.g. inside the detail popup) → refresh "Conviction Plays" live
   document.addEventListener('pins:changed', () => { if (box._uname) renderPins({ username: box._uname, isMe: box._isMe }); });
   // lazily fetch the owner's on-chain holding (amount + how long held) into the chip's hover tooltip
   async function loadHold(chip) {
@@ -438,7 +438,7 @@ async function loadPage() {
       soc.innerHTML = sh; soc.hidden = !sh;
     }
     if (window.WallCheckin) WallCheckin.paint(!!u.isMe); // daily check-in card (own wall only)
-    renderPins(u); // "Convicted In" pinned tokens
+    renderPins(u); // "Conviction Plays" pinned tokens
     document.getElementById('st-posts').textContent = u.posts;
     document.getElementById('st-followers').textContent = u.followers;
     document.getElementById('st-following').textContent = u.following;

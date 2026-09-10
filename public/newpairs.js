@@ -78,7 +78,7 @@
         }
         b.disabled = false;
       });
-      document.dispatchEvent(new CustomEvent('pins:changed', { detail: { token } })); // let the public wall's "Convicted In" re-render live
+      document.dispatchEvent(new CustomEvent('pins:changed', { detail: { token } })); // let the public wall's "Conviction Plays" re-render live
     } catch { if (window.sendToast) sendToast('Could not update pin'); btn.disabled = false; }
   });
 

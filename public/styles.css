@@ -1633,7 +1633,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .tm-loading, .tm-msg { text-align: center; color: var(--text-dim); padding: 1.6rem 0.5rem; }
 @media (max-width: 560px) { .tm-dialog { max-height: 94vh; } }
 
-/* ===== "Convicted In" pinned tokens on the public wall ===== */
+/* ===== "Conviction Plays" pinned tokens on the public wall ===== */
 .wall-pins { margin: 0.5rem 0; } /* tight: same 0.5rem rhythm as the gap between the convicted chips */
 .wall-pins-head { display: flex; align-items: center; gap: 0.45rem; font-weight: 800; color: var(--text); margin-bottom: 0.5rem; font-size: 0.95rem; }
 .wall-pins-sub { font-weight: 600; color: var(--text-dim); font-size: 0.78rem; }

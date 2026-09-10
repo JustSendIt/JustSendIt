@@ -807,7 +807,7 @@
         '<ul>' +
           '<li><b>🪙 Real holders only:</b> to start, join, or post in a community you must <b>hold that token</b> (verified on-chain from a linked wallet). Sell or move it out and your 10× for that community is revoked.</li>' +
           '<li><b>🏆 Community level</b> climbs as its <b>distinct members</b> stay active — posting and reacting on the community wall. It uses the same exponential curve and is <b>daily-capped</b> so it can’t be farmed by one person.</li>' +
-          '<li><b>💎 Your member level</b> (your “conviction”) is <b>per community</b> — it rises the longer you’re a member and the more you post there, and shows as a badge next to that token in the <b>Convicted In</b> section of your public wall.</li>' +
+          '<li><b>💎 Your member level</b> (your “conviction”) is <b>per community</b> — it rises the longer you’re a member and the more you post there, and shows as a badge next to that token in the <b>Conviction Plays</b> section of your public wall.</li>' +
           '<li><b>👑 Founder bonus:</b> whoever starts a community and grows it to 10 members earns a one-time Send Power bonus when it goes live.</li>' +
         '</ul>' +
         ogRulesHtml(g) +

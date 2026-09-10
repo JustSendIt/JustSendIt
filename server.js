@@ -1814,6 +1814,49 @@ function qualifyReason(me, c, ip, holds) {
 }
 function qualifyOptIn(me, c, ip, holds) { return !qualifyReason(me, c, ip, holds); }
 function commBrand(c) { try { return JSON.parse(c.brand || 'null') || {}; } catch { return {}; } }
+/* The community a post came from, in the shape the Send Wall needs to badge it. Public community posts now
+   appear on the public wall, so each one has to carry enough of its community to be recognised and followed
+   back to — otherwise it lands among strangers' posts with no explanation of where it came from. */
+/* An invite on the public Send Wall, so a new community is not a room nobody knows exists.
+   Posted AS THE CREATOR and tagged with the community, so it renders with the community's branding and links
+   straight back — the same treatment every other community post now gets on the wall.
+
+   Two moments earn one: the day it is started (when it needs people to reach the go-live threshold, which is
+   exactly when being seen matters most) and the day it goes live. Each fires once, ever, deduped through a
+   marker row in points_events — the same idiom the join/activity markers already use — so a restart, a
+   re-join or a second go-live transition cannot repost it.
+
+   It earns no Send Power. It is the site announcing something on a user's behalf, not something they did. */
+function communityInvitePost(cid, kind) {
+  const ref = 'cinvite:' + cid + ':' + kind;
+  try { if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(ref)) return 0; } catch { return 0; }
+  const c = db.prepare('SELECT * FROM communities WHERE id = ?').get(cid);
+  if (!c) return 0;
+  const sym = '$' + c.symbol;
+  const text = kind === 'live'
+    ? '🎉 The ' + sym + ' community is LIVE. Come say something — hold ' + sym + ' and you are in.'
+    : '🏘️ Started a community for ' + sym + '. It needs ' + LIVE_THRESHOLD + ' holders to go live — if you hold ' + sym + ', come and join.';
+  try {
+    db.exec('BEGIN');
+    const r = db.prepare('INSERT INTO posts (user_id, text, community_id, private, created_at) VALUES (?,?,?,0,?)')
+      .run(c.creator_id, text, cid, now());
+    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, ref, created_at) VALUES (?,?,0,0,1,?,?)')
+      .run(c.creator_id, 'cinvite', ref, now());
+    db.exec('COMMIT');
+    return Number(r.lastInsertRowid);
+  } catch { try { db.exec('ROLLBACK'); } catch {} return 0; }
+}
+function postCommunities(ids) {
+  const out = {};
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return out;
+  const rows = db.prepare(`SELECT id, symbol, name, brand, status, demo, token_addr FROM communities WHERE id IN (${uniq.map(() => '?').join(',')})`).all(...uniq);
+  for (const c of rows) {
+    const b = commBrand(c);
+    out[c.id] = { id: c.id, symbol: c.symbol, name: c.name, image: b.imageUrl || null, status: c.status, demo: !!c.demo, token: c.token_addr };
+  }
+  return out;
+}
 function commLevelInfo(xp) { const lvl = levelForXp(xp); const base = xpForLevel(lvl), next = xpForLevel(lvl + 1); return { level: lvl, xp: xp, intoLevel: xp - base, spanLevel: next != null ? next - base : null }; }
 function communityCardView(c, me) {
   const b = commBrand(c), act = decayedActivity(c);
@@ -1999,6 +2042,8 @@ function joinCommunity(me, cid, ip, holds) {
     }
     db.exec('COMMIT');
   } catch (e) { try { db.exec('ROLLBACK'); } catch {} return { error: 'join failed' }; }
+  // announced only after the go-live actually committed — never for a transaction that rolled back
+  if (wentLive) { try { communityInvitePost(cid, 'live'); } catch {} }
   // XP + activity (each its own txn, ref-deduped)
   awardCommunityXp(cid, me.id, 'join', COMM_XP.join, 'c' + cid + ':join:' + me.id);
   if (qual) awardConviction(cid, me.id, 'join', CONV_XP.join, 'v' + cid + ':join:' + me.id);
@@ -4330,6 +4375,7 @@ function postView(p, me) {
     mine: !!(me && me.id === p.user_id),
     call_id: p.call_id || null,
     private: !!p.private,          // a holders-only community post — the client badges it 🔒
+    community: p.community_id ? (postCommunities([p.community_id])[p.community_id] || null) : null,
     tokens: parseTokens(p.tokens), // [{addr,symbol,name}] → the client renders each $TICKER as a token chip
   };
   attachCalls([out], me); // if this post is a Send Call, attach its live widget data
@@ -4345,6 +4391,7 @@ function postsView(rows, me) {
   for (const r of db.prepare(`SELECT post_id, kind, COUNT(*) n FROM reactions WHERE post_id IN (${ph}) GROUP BY post_id, kind`).all(...ids)) (rc[r.post_id] || (rc[r.post_id] = {}))[r.kind] = r.n;
   const cc = {}; // post_id -> comment count
   for (const r of db.prepare(`SELECT post_id, COUNT(*) n FROM comments WHERE post_id IN (${ph}) GROUP BY post_id`).all(...ids)) cc[r.post_id] = r.n;
+  const comms = postCommunities(rows.map(r => r.community_id));   // one lookup for the page, not one per post
   const authorIds = [...new Set(rows.map(r => r.user_id))];
   const authors = {};
   for (const a of db.prepare(`SELECT id, username, avatar, avatar_img, accent, og, og_tier FROM users WHERE id IN (${authorIds.map(() => '?').join(',')})`).all(...authorIds)) authors[a.id] = a;
@@ -4366,6 +4413,7 @@ function postsView(rows, me) {
       mine: !!(me && me.id === p.user_id),
       call_id: p.call_id || null,
       private: !!p.private,          // a holders-only community post — the client badges it 🔒
+      community: p.community_id ? (comms[p.community_id] || null) : null,
       tokens: parseTokens(p.tokens), // $TICKER chips in feeds too, not just single-post views
     };
   });
@@ -6220,9 +6268,14 @@ const server = http.createServer(async (req, res) => {
           const following = feed === 'following';
           if (following && !me) return bad(res, 'sign in to see your following feed', 401);
           const boardSql = board ? " AND po.board = '" + board + "'" : ' AND po.board IS NULL';   // board is allowlisted above, never raw input
-          const base = (following // community-wall posts (community_id set) stay OFF the Send Wall / following / profile feeds
-            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.community_id IS NULL' + boardSql + ' AND f.follower_id = ?'
-            : 'FROM posts po WHERE po.community_id IS NULL' + boardSql)
+          /* Community posts now DO appear on the public Send Wall — that is the point of a community being
+             public — but a HOLDERS-ONLY post never does. `po.private = 0` is that boundary, and it lives in
+             the SQL rather than in the view, because postsView() maps rows without filtering: anything this
+             query returns is already considered publishable by everything downstream. The Send Wall shows
+             public posts, wall and community alike; the private wall stays exactly as private as it was. */
+          const base = (following
+            ? 'FROM posts po JOIN follows f ON f.followee_id = po.user_id WHERE po.private = 0' + boardSql + ' AND f.follower_id = ?'
+            : 'FROM posts po WHERE po.private = 0' + boardSql)
             + (me ? ' AND po.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?)' : ''); // muted senders vanish from the feed
           const args = following ? [me.id] : [];
           if (me) args.push(me.id);
@@ -7163,6 +7216,8 @@ const server = http.createServer(async (req, res) => {
         // a member and does NOT count toward the 10 verified holders needed to go live
         joinCommunity(me, info.lastInsertRowid, ip, holdsC);
         const c = db.prepare('SELECT * FROM communities WHERE id=?').get(info.lastInsertRowid);
+        // announce it on the public wall — a brand-new community needs holders to find it to go live at all
+        try { communityInvitePost(c.id, 'new'); } catch {}
         return send(res, 200, { id: c.id, community: communityDetailView(c, me, clientIp(req)) });
       }
       /* ----- Arcade · Rocket Run: one crash run per UTC day, cashed out for a 24h Send Power boost ----- */

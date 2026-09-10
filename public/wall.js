@@ -49,7 +49,20 @@ function postEl(p) {
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 15L4 7h12z"/></svg></button>' +
         '<span class="sr-only" role="status" data-vote-status></span>' +
       '</div>';
-  el.innerHTML =
+  /* A post from a community wears its community: the badge names it, carries its logo, and links straight
+     to it — so someone reading the public wall can see where this came from and go and join it. Holders-only
+     posts never reach this feed at all (the server's query excludes them), so a badge here always means a
+     community anyone can look at. */
+  const comm = p.community
+    ? '<a class="post-comm" href="/community.html?id=' + encodeURIComponent(p.community.id) + '" title="Go to the ' +
+        esc('$' + p.community.symbol) + ' community">' +
+        (p.community.image ? '<img class="post-comm-logo" src="' + esc(p.community.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="post-comm-logo-none" aria-hidden="true">🏘️</span>') +
+        '<span class="post-comm-name">' + esc('$' + p.community.symbol) + '</span>' +
+        '<span class="post-comm-sub">' + (p.community.status === 'live' ? 'community' : 'community · not live yet') + '</span>' +
+        '<span class="post-comm-go" aria-hidden="true">→</span>' +
+      '</a>'
+    : '';
+  el.innerHTML = comm +
     '<div class="post-head">' + ava +
       '<div><div class="who"><a class="handle" href="' + uHref + '" style="text-decoration:none;' + (p.accent ? 'color:' + esc(p.accent) : '') + '">@' + esc(p.username) + '</a>' + (window.ogBadge ? ogBadge(p.og) : '') + '</div>' +
       '<div class="when">' + timeAgo(p.created_at) + '</div></div>' +
