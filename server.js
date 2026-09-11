@@ -566,7 +566,38 @@ for (const col of [
   "ALTER TABLE identities ADD COLUMN label TEXT",       // a name the owner gives a linked wallet, so a list of 0x… is readable
   "ALTER TABLE calls ADD COLUMN ip TEXT",               // bidx of the IP a call was made from — the signal for same-IP rings on one token
   "CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip)",
-  "CREATE INDEX IF NOT EXISTS idx_calls_ip_token ON calls(ip, token_addr)",                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "CREATE INDEX IF NOT EXISTS idx_calls_ip_token ON calls(ip, token_addr)",
+
+  /* ── Invite-only access ────────────────────────────────────────────────────────────────────────────
+     One code lets one person in, and gives that person INVITE_GRANT codes of their own to hand out. A
+     redeemed code is bound to a browser "pass" first (so someone can accept the terms and look around
+     before they have an account) and to a user id later, when they make one. Nothing about the code is
+     reversible: used_at is stamped once and a used code is never re-issued. */
+  `CREATE TABLE IF NOT EXISTS invite_codes (
+     code TEXT PRIMARY KEY,
+     owner_id INTEGER,            -- who it was minted for (NULL = a seed code, minted by the site)
+     created_at INTEGER NOT NULL,
+     used_at INTEGER,             -- when it was redeemed at the gate
+     pass TEXT,                   -- sha256 of the gate-pass cookie that redeemed it
+     user_id INTEGER,             -- the account that claimed the redemption (set when they sign up)
+     tos_at INTEGER,              -- when the terms were accepted on this pass
+     tos_version TEXT             -- which version of the terms was accepted
+   )`,
+  "CREATE INDEX IF NOT EXISTS idx_invite_owner ON invite_codes(owner_id)",
+  "CREATE INDEX IF NOT EXISTS idx_invite_pass ON invite_codes(pass)",
+  "CREATE INDEX IF NOT EXISTS idx_invite_user ON invite_codes(user_id)",
+  "ALTER TABLE users ADD COLUMN invited_by INTEGER",        // the account whose code let them in
+  "ALTER TABLE users ADD COLUMN tos_at INTEGER",            // when this account accepted the terms
+  "ALTER TABLE users ADD COLUMN tos_version TEXT",
+
+  /* ── The 90-day beta campaign ───────────────────────────────────────────────────────────────────────
+     The beta runs from launch to the moment Silver OG closes — 90 days to the minute — and ends with
+     every Send Power balance set back to zero, so the economy that ships to everyone afterwards starts
+     level instead of inheriting whatever the beta's rules happened to reward. The top ten keep a badge
+     and a permanent 2x, which is the point: the reset costs them their number, not their place. */
+  "ALTER TABLE users ADD COLUMN beta_rank INTEGER",    // 1-10 for the top ten at the reset, else NULL
+  "ALTER TABLE users ADD COLUMN beta_points INTEGER",  // what they finished on, kept so the reset is auditable
+  "ALTER TABLE users ADD COLUMN beta_settled_at INTEGER",                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
@@ -1008,7 +1039,7 @@ function isTokenDev(userId, tok) {
 // so the number a user sees can never drift from the number they're actually paid.
 function effectiveMult(userId) {
   const holder = holderMultiplier(userId);
-  const row = db.prepare('SELECT og, og_tier, live_comm_count FROM users WHERE id = ?').get(userId);
+  const row = db.prepare('SELECT og, og_tier, live_comm_count, beta_rank FROM users WHERE id = ?').get(userId);
   // The tier decides the bonus — gold 10×, silver 5×, bronze 3× — and ONLY while the holdings behind
   // it are recently on-chain-verified AND non-zero (still holding both). Reading `og` here instead of
   // `og_tier` would pay every silver and bronze the gold multiplier.
@@ -1025,8 +1056,11 @@ function effectiveMult(userId) {
   // a boost on its own still pays exactly its advertised x (OG Gold alone is 10x), OG 10x plus a
   // community 10x is 19x rather than 100x, and an inactive boost (1x) adds nothing. This is the one
   // formula every point is paid at — the dashboard mirrors it, the nav badge reads its total.
-  const total = 1 + (holder - 1) + (og - 1) + (community - 1) + (arcade - 1) + (weekly - 1);
-  return { holder, og, community, arcade, weekly, total: Math.round(total * 100) / 100 };
+  // A beta top-ten badge pays BETA_BADGE_MULT forever. It joins the same additive stack as everything
+  // else, so it is worth exactly what it says (+1 over the base) and never multiplies with OG.
+  const beta = (row && row.beta_rank > 0) ? BETA_BADGE_MULT : 1;
+  const total = 1 + (holder - 1) + (og - 1) + (community - 1) + (arcade - 1) + (weekly - 1) + (beta - 1);
+  return { holder, og, community, arcade, weekly, beta, total: Math.round(total * 100) / 100 };
 }
 function weekBoostOf(userId) {
   const u = db.prepare('SELECT week_boost, week_boost_until FROM users WHERE id = ?').get(userId);
@@ -4553,7 +4587,7 @@ const pendingLogins = new Map(); // token -> {userId, expires}
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const CLEAR_OAUTH_STATE = 'oauth_state=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0';
 
-async function oauthCallback(provider, code, verifier, res, ipIdxVal) {
+async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
   const p = OAUTH[provider];
   const redirect = `${BASE_URL}/api/auth/${provider}/callback`;
   // token exchange — Basic-auth clients (X) send credentials in the header + PKCE verifier in the body;
@@ -4584,6 +4618,7 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal) {
     if (oaBlock) throw new HttpError(oaBlock, 429);
     userId = createUser(autoUsername(), true, ipIdxVal);
     insertIdentity(userId, provider, sub);
+    if (gateReq) claimInvite(gateReq, userId);
   }
   /* Two-factor has to gate THIS door too. Until now a session cookie was issued here the moment the provider
      said who you were, so an account that had switched 2FA on — and whose profile said "Two-factor is
@@ -5188,6 +5223,162 @@ function probationOf(u) {
 }
 const isReadOnly = (u) => !!restrictionOf(u);
 
+/* ===== The beta campaign ============================================================================
+   Ends exactly when Silver OG closes, which is 90 days after the first coin launched. At that moment the
+   standings are frozen, the top ten are badged, and EVERY balance goes to zero. */
+const BETA_TOP_N = 10;
+const BETA_BADGE_MULT = 2;              // what a badge is worth afterwards, forever
+const betaEndsAt = () => { try { return ogCampaign().closes.silver; } catch { return null; } };
+const betaOver = () => { const e = betaEndsAt(); return e != null && now() >= e; };
+
+function betaStandings(n) {
+  return db.prepare(`SELECT id, username, avatar, points FROM users
+                     WHERE system = 0 AND points > 0 ORDER BY points DESC, id ASC LIMIT ?`).all(n || BETA_TOP_N);
+}
+
+/* Runs once, ever. Badges the top ten, records what everyone finished on, then zeroes every balance.
+   One transaction: a half-applied reset would leave some people with a beta score and some without,
+   which is exactly the unfairness the reset exists to remove. */
+let betaSettling = false;
+function settleBeta() {
+  if (betaSettling || !betaOver()) return false;
+  const done = db.prepare('SELECT COUNT(*) n FROM users WHERE beta_settled_at IS NOT NULL').get().n;
+  if (done > 0) return false;
+  betaSettling = true;
+  try {
+    const top = betaStandings(BETA_TOP_N);
+    const t = now();
+    db.exec('BEGIN');
+    // everyone's final score is kept, so the board can be shown after the reset and the reset can be checked
+    db.prepare('UPDATE users SET beta_points = points, beta_settled_at = ? WHERE system = 0').run(t);
+    top.forEach((u, i) => db.prepare('UPDATE users SET beta_rank = ? WHERE id = ?').run(i + 1, u.id));
+    db.prepare('UPDATE users SET points = 0 WHERE system = 0').run();
+    db.exec('COMMIT');
+    for (const [i, u] of top.entries()) {
+      notify(u.id, ['🥇', '🥈', '🥉'][i] || '🏅',
+        'Beta over — you finished #' + (i + 1) + ' of the whole site. Your badge is permanent and it pays ' +
+        BETA_BADGE_MULT + '× on everything you earn from here. Send Power is back to zero for everyone, including you.', 'points');
+    }
+    console.log('beta settled: ' + top.length + ' badged, all balances reset');
+    return true;
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch {}
+    console.error('settleBeta', e.message);
+    return false;
+  } finally { betaSettling = false; }
+}
+
+/* ===== Invite-only gate =============================================================================
+   The site is closed. A visitor needs a code; redeeming one gives them a pass cookie, and accepting the
+   terms on that pass opens the door. When they later make an account the code binds to it, they are
+   given INVITE_GRANT codes of their own, and their user id becomes their place in line.
+
+   Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
+   are for. This decides who may see the site at all. */
+const TOS_VERSION = '2026-09-11';
+const INVITE_GRANT = 10;                 // codes each admitted person gets to hand out
+const SEED_CODE = process.env.SEED_INVITE_CODE || '12345';
+const PASS_COOKIE = 'jsi_pass';
+const PASS_MS = 365 * DAY_MS;
+// Unambiguous alphabet: no O/0, I/1, S/5, B/8 — these get read aloud and typed in by hand.
+const CODE_ALPHABET = 'ACDEFGHJKLMNPQRTUVWXYZ2346789';
+function newCode() {
+  let s = '';
+  for (let i = 0; i < 8; i++) s += CODE_ALPHABET[crypto.randomInt(0, CODE_ALPHABET.length)];
+  return s;
+}
+const normCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
+const passHash = (t) => crypto.createHash('sha256').update(String(t || '')).digest('hex');
+
+function mintCodes(ownerId, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    for (let tries = 0; tries < 6; tries++) {
+      const c = newCode();
+      try { db.prepare('INSERT INTO invite_codes (code, owner_id, created_at) VALUES (?,?,?)').run(c, ownerId, now()); out.push(c); break; }
+      catch { /* astronomically unlikely collision — draw again */ }
+    }
+  }
+  return out;
+}
+// The one code that exists before anybody has been let in. Idempotent.
+try { db.prepare('INSERT OR IGNORE INTO invite_codes (code, owner_id, created_at) VALUES (?,NULL,?)').run(normCode(SEED_CODE), now()); } catch {}
+
+function passRow(req) {
+  const c = parseCookies(req.headers.cookie);
+  if (!c[PASS_COOKIE]) return null;
+  return db.prepare('SELECT * FROM invite_codes WHERE pass = ?').get(passHash(c[PASS_COOKIE])) || null;
+}
+const passCookie = (tok) => `${PASS_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(PASS_MS / 1000)}${cookieSecure()}`;
+
+/* May this request see the site? A signed-in account always may — it is already inside, and locking out
+   the people who are already here is not a gate, it is an outage. Otherwise: a pass that has accepted
+   the terms. */
+/* The ticket: who they are, what number they were through the door, and how long Gold OG has left.
+   "Number in line" is deliberately the user id — it is already monotonic, already unique, and already
+   means "how early you were", so inventing a second counter would only create a way for the two to
+   disagree. */
+function ticketFor(u) {
+  if (!u) return null;
+  const codes = db.prepare('SELECT code, used_at FROM invite_codes WHERE owner_id = ? ORDER BY rowid').all(u.id);
+  const inviter = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
+  const camp = (() => { try { return ogCampaign(); } catch { return null; } })();
+  return {
+    number: u.id,
+    username: u.username,
+    avatar: u.avatar || '🚀',
+    avatarImg: u.avatar_img ? '/uploads/' + u.avatar_img : null,
+    joinedAt: u.created_at,
+    invitedBy: inviter ? inviter.username : null,
+    codes: codes.map(c => ({ code: c.code, used: !!c.used_at })),
+    codesLeft: codes.filter(c => !c.used_at).length,
+    // the binding Gold deadline is the EARLIER of the two coins' windows, because the tier is the lower
+    // of the two — ogCampaign already does that arithmetic, so the ticket never re-derives it
+    goldEndsAt: (camp && camp.closes && camp.closes.gold != null) ? camp.closes.gold : null,
+    goldOpen: !!(camp && camp.tierNow === 3),
+    tosVersion: TOS_VERSION,
+  };
+}
+
+/* Bind a redeemed pass to the account that just signed up, and hand that account its own codes. Called
+   from every door that creates a user. Idempotent: a user who already has codes is never given more. */
+function claimInvite(req, userId) {
+  try {
+    const r = passRow(req);
+    if (r && !r.user_id) {
+      db.prepare('UPDATE invite_codes SET user_id = ? WHERE code = ? AND user_id IS NULL').run(userId, r.code);
+      if (r.owner_id) db.prepare('UPDATE users SET invited_by = ? WHERE id = ?').run(r.owner_id, userId);
+      if (r.tos_at) db.prepare('UPDATE users SET tos_at = ?, tos_version = ? WHERE id = ?').run(r.tos_at, r.tos_version || TOS_VERSION, userId);
+    }
+    const have = db.prepare('SELECT COUNT(*) n FROM invite_codes WHERE owner_id = ?').get(userId).n;
+    if (have === 0) mintCodes(userId, INVITE_GRANT);
+  } catch (e) { console.error('claimInvite', e.message); }
+}
+
+function passOk(req) {           // a redeemed pass that has accepted the terms — one indexed lookup
+  const r = passRow(req);
+  return !!(r && r.tos_at);
+}
+function hasAccess(req, user) {
+  if (user) return true;
+  return passOk(req);
+}
+
+/* Paths that must answer before the gate, or the gate cannot be shown, redeemed, or crawled. Kept
+   deliberately short and exact — every entry here is a hole in the door. */
+const GATE_OPEN_EXACT = new Set([
+  '/gate.html', '/gate.css', '/gate.js', '/terms.html',
+  '/styles.css', '/responsive.css', '/tokentext.css',
+  '/robots.txt', '/sitemap.xml', '/favicon.ico',
+]);
+const GATE_OPEN_API = new Set(['/api/gate/state', '/api/gate/redeem', '/api/gate/accept', '/api/og/campaign', '/api/config']);
+function gateOpenPath(p) {
+  if (GATE_OPEN_EXACT.has(p) || GATE_OPEN_API.has(p)) return true;
+  if (p.startsWith('/assets/')) return true;   // the logo and artwork the gate itself renders
+  if (p.startsWith('/uploads/')) return true;  // a ticket shows the holder's own picture
+  return false;
+}
+
 /* ===== Sybil rings: many accounts, one person, one coin ===============================================
    One account may link several wallets, and everything they hold counts toward one Send Power score.
    That is the honest use. The dishonest one wears the same clothes: a handful of accounts on one
@@ -5719,8 +5910,69 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  /* ---- the door ----------------------------------------------------------------------------------
+     Everything below this point is behind an invite code. A signed-in account passes automatically; a
+     visitor needs a redeemed pass that has accepted the terms. HTML gets sent to the gate so a person
+     sees a door rather than a dead end; an API call gets a machine-readable 403 so the client can tell
+     "locked" apart from "broken". */
+  // Order matters for cost: the pass is ONE indexed lookup, a session is two. Static assets behind the
+  // door are hit ~20× per page load, so the cheap check goes first and getUser is a fallback.
+  const gateOk = gateOpenPath(p) || !!me || passOk(req) || !!getUser(req);
+  if (!gateOk) {
+    if (p.startsWith('/api/')) return bad(res, 'this site is invite-only — redeem a code to come in', 403);
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      res.writeHead(302, { Location: '/gate.html', 'Cache-Control': 'no-store' });
+      return res.end();
+    }
+    return bad(res, 'this site is invite-only', 403);
+  }
+
   try {
     if (p.startsWith('/api/')) {
+      /* ---- gate API (open before the door) ---- */
+      if (p === '/api/gate/state' && req.method === 'GET') {
+        const r = passRow(req);
+        const u = me || getUser(req);
+        return send(res, 200, {
+          access: hasAccess(req, u),
+          redeemed: !!r,
+          tosAccepted: !!(r && r.tos_at) || !!(u && u.tos_at),
+          tosVersion: TOS_VERSION,
+          signedIn: !!u,
+          ticket: u ? ticketFor(u) : null,
+        });
+      }
+      if (p === '/api/gate/redeem' && req.method === 'POST') {
+        if (!rateLimit('gate:' + clientIp(req), 20, 6e5)) return bad(res, 'too many tries — wait a few minutes', 429);
+        const b = await readBody(req);
+        const code = normCode(b.code);
+        if (!code) return bad(res, 'enter your code');
+        const already = passRow(req);
+        if (already) return send(res, 200, { ok: true, already: true, tosAccepted: !!already.tos_at });
+        const row = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(code);
+        if (!row) return bad(res, 'that code is not one of ours — check it and try again');
+        if (row.used_at) return bad(res, 'that code has already been used. Every code works once — ask whoever sent it for a spare.');
+        const tok = rand();
+        db.prepare('UPDATE invite_codes SET used_at = ?, pass = ? WHERE code = ? AND used_at IS NULL').run(now(), passHash(tok), code);
+        // re-read: if two people raced on the same code, only the winner's pass is on the row
+        const after = db.prepare('SELECT pass FROM invite_codes WHERE code = ?').get(code);
+        if (!after || after.pass !== passHash(tok)) return bad(res, 'that code was just used by someone else — ask for another');
+        return send(res, 200, { ok: true, tosAccepted: false }, { 'Set-Cookie': passCookie(tok) });
+      }
+      if (p === '/api/gate/invites' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        claimInvite(req, me.id);   // a pre-existing account opening this for the first time gets its codes
+        return send(res, 200, { ticket: ticketFor(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id)) });
+      }
+      if (p === '/api/gate/accept' && req.method === 'POST') {
+        const r = passRow(req);
+        const u = me || getUser(req);
+        if (!r && !u) return bad(res, 'redeem a code first', 403);
+        if (r) db.prepare('UPDATE invite_codes SET tos_at = ?, tos_version = ? WHERE code = ?').run(now(), TOS_VERSION, r.code);
+        if (u) db.prepare('UPDATE users SET tos_at = ?, tos_version = ? WHERE id = ?').run(now(), TOS_VERSION, u.id);
+        return send(res, 200, { ok: true, access: true });
+      }
+
       if (p === '/api/config' && req.method === 'GET') {
         return send(res, 200, {
           auth: {
@@ -5747,6 +5999,20 @@ const server = http.createServer(async (req, res) => {
       // deadline epochs in its HTML beside the server constants, which is exactly the kind of duplicated
       // truth that drifts. Serving them means there is one source: OG_LAUNCH + OG_TIER_END.
       if (p === '/api/og/campaign' && req.method === 'GET') return send(res, 200, ogCampaign());
+      /* The beta board. Public and uncached-by-design: it is a live scoreboard during the beta, and
+         after the reset it is the record of how it finished. */
+      if (p === '/api/beta' && req.method === 'GET') {
+        const over = betaOver();
+        const settled = db.prepare('SELECT COUNT(*) n FROM users WHERE beta_settled_at IS NOT NULL').get().n > 0;
+        const rows = settled
+          ? db.prepare('SELECT id, username, avatar, beta_points AS points, beta_rank FROM users WHERE beta_rank > 0 ORDER BY beta_rank').all()
+          : betaStandings(BETA_TOP_N).map((u, i) => ({ ...u, beta_rank: i + 1 }));
+        return send(res, 200, {
+          endsAt: betaEndsAt(), over, settled, topN: BETA_TOP_N, badgeMult: BETA_BADGE_MULT,
+          top: rows.map(r => ({ rank: r.beta_rank, username: r.username, avatar: r.avatar, points: r.points })),
+          me: me ? { rank: me.beta_rank || null, points: settled ? (me.beta_points || 0) : me.points } : null,
+        });
+      }
 
       /* ===== Data API ===== */
       if (p === '/api/data/eligibility' && req.method === 'GET') {
@@ -5925,6 +6191,7 @@ const server = http.createServer(async (req, res) => {
         if (regBlock) return bad(res, regBlock, 429);
         const userId = createUser(username, false, regIp);
         insertIdentity(userId, 'email', email, hashPassword(password));
+        claimInvite(req, userId);   // bind the code that let them in, and mint their own to hand out
         return send(res, 200, { ok: true, username }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
       }
       if (p === '/api/auth/login' && req.method === 'POST') {
@@ -6337,6 +6604,7 @@ const server = http.createServer(async (req, res) => {
           username = autoUsername();
           userId = createUser(username, true, wIp);
           insertIdentity(userId, 'wallet', address);
+          claimInvite(req, userId);
           db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
           awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + address);
           checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
@@ -6392,7 +6660,7 @@ const server = http.createServer(async (req, res) => {
         const st = oauthStates.get(qState);
         if (!st || st.provider !== provider || st.expires < now() || !cookieState || cookieState !== qState) return bad(res, 'sign-in link is invalid or expired — please start again', 400);
         oauthStates.delete(qState);
-        try { await oauthCallback(provider, url.searchParams.get('code'), st.verifier, res, ipIdx(req)); }
+        try { await oauthCallback(provider, url.searchParams.get('code'), st.verifier, res, ipIdx(req), req); }
         // Carry a refusal we can explain (the per-IP account cap) back to the page. Anything else stays a
         // generic failure on purpose: an OAuth exception can contain provider internals, and a redirect
         // URL is the last place to put those. Nothing read `autherror` before, so a failed sign-in used to
@@ -8460,7 +8728,7 @@ function runDecaySweep() {
   return { users, drained };
 }
 
-const decayTimer = setInterval(() => { try { runDecaySweep(); } catch {} }, 5 * 60 * 1000);
+const decayTimer = setInterval(() => { try { settleBeta(); } catch {} try { runDecaySweep(); } catch {} }, 5 * 60 * 1000);
 const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();
 

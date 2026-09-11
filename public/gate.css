@@ -1,0 +1,270 @@
+/* ===== The door: a synthwave screen, a holographic ticket, and the terms ==================
+ * Loaded only by gate.html. Deliberately self-contained — the gate has to render for someone
+ * who has never been inside, so it must not depend on anything the rest of the site defines.
+ *
+ * Palette: a synthwave sunset (deep indigo ground, hot magenta, cyan) with the site's own
+ * $GWC green as the one thing that glows. Gold is reserved for the OG countdown, so "time is
+ * running out" never shares a colour with "this is yours".
+ */
+
+:root {
+  --g-ink:      #070312;   /* the far end of the grid */
+  --g-ink-2:    #120a26;
+  --g-violet:   #2a1250;
+  --g-magenta:  #ff2e88;
+  --g-cyan:     #38e8ff;
+  --g-green:    #8ee000;   /* $GWC */
+  --g-green-hi: #b4ff2b;
+  --g-gold:     #ffb340;
+  --g-text:     #f2eaff;
+  --g-dim:      #b9a8dd;
+  --g-paper:    #140b28;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.gate {
+  min-height: 100vh;
+  background: var(--g-ink);
+  color: var(--g-text);
+  font-family: 'Rubik', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow-x: hidden;
+}
+
+/* ---- the screen: matrix rain, a sun, and a horizon grid ---- */
+/* Above the sky, below everything else. Both are fixed, so without this the sky — which comes
+   later in the DOM — paints its opaque gradient straight over the rain and hides it completely. */
+#gate-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; display: block; }
+.gate-sky {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(120% 80% at 50% 78%, rgba(255,46,136,0.26) 0%, transparent 60%),
+    radial-gradient(90% 60% at 50% 100%, rgba(56,232,255,0.18) 0%, transparent 65%),
+    linear-gradient(180deg, #070312 0%, #130a2a 45%, #2a1250 78%, #3d1a5e 100%);
+}
+/* scanlines: the CRT the whole thing is supposedly on */
+.gate-scan {
+  position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: 0.16;
+  background: repeating-linear-gradient(180deg, rgba(0,0,0,0) 0 2px, rgba(0,0,0,0.55) 2px 4px);
+}
+.gate-vig { position: fixed; inset: 0; z-index: 3; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 45%, rgba(0,0,0,0.65) 100%); }
+
+/* ---- layout ---- */
+.gate-wrap {
+  position: relative; z-index: 4;
+  min-height: 100vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1.4rem; padding: 2.2rem 1.1rem 3rem; text-align: center;
+}
+.gate-kicker {
+  font-size: 0.72rem; letter-spacing: 0.34em; text-transform: uppercase;
+  color: var(--g-cyan); margin: 0; font-weight: 700;
+  text-shadow: 0 0 14px rgba(56,232,255,0.6);
+}
+.gate-title {
+  font-family: 'Luckiest Guy', cursive; margin: 0;
+  font-size: clamp(2rem, 8vw, 3.6rem); line-height: 1.02; letter-spacing: 0.012em;
+  color: #fff; text-wrap: balance;
+  text-shadow: 0 0 18px rgba(255,46,136,0.55), 0 0 46px rgba(255,46,136,0.3), 0 3px 0 #a4155a;
+}
+.gate-title .hl { color: var(--g-green-hi); text-shadow: 0 0 18px rgba(142,224,0,0.6), 0 3px 0 #4d7a00; }
+.gate-sub { margin: 0; max-width: 34rem; color: var(--g-dim); line-height: 1.6; font-size: 0.96rem; }
+.gate-sub b { color: var(--g-text); }
+
+/* ---- the ticket ------------------------------------------------------
+   A real ticket: a body, a perforation, and a stub. The notches are two
+   circles punched out of the background colour at the seam. */
+.ticket-stage { perspective: 1400px; width: min(100%, 46rem); }
+.ticket {
+  position: relative; width: 100%;
+  display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem;
+  border-radius: 16px; overflow: hidden;
+  background: linear-gradient(135deg, #1b1036 0%, #241247 45%, #1a0f33 100%);
+  box-shadow: 0 30px 70px -20px rgba(0,0,0,0.85), 0 0 0 1.5px rgba(255,255,255,0.10),
+              0 0 42px rgba(255,46,136,0.22);
+  transform-style: preserve-3d;
+  transition: transform 220ms ease;
+  animation: ticket-float 7s ease-in-out infinite;
+  cursor: pointer;
+  text-align: left;
+  color: inherit; font: inherit; border: 0; padding: 0;
+}
+@keyframes ticket-float {
+  0%, 100% { transform: translateY(0) rotateX(0deg); }
+  50%      { transform: translateY(-12px) rotateX(1.4deg); }
+}
+.ticket:focus-visible { outline: 3px solid var(--g-cyan); outline-offset: 5px; }
+
+/* the holographic sheen — a slow sweep of spectrum across the face */
+.ticket::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  background: linear-gradient(115deg,
+    transparent 18%, rgba(56,232,255,0.16) 30%, rgba(255,46,136,0.20) 42%,
+    rgba(142,224,0,0.18) 52%, rgba(255,255,255,0.28) 58%, transparent 74%);
+  background-size: 260% 260%;
+  animation: holo 6.5s linear infinite;
+  mix-blend-mode: screen;
+}
+@keyframes holo { 0% { background-position: 120% 0; } 100% { background-position: -60% 0; } }
+
+.tk-body { display: block; position: relative; z-index: 2; padding: 1.15rem 1.25rem; min-width: 0; }
+.tk-stub {
+  position: relative; z-index: 2; padding: 1.15rem 0.8rem;
+  background: rgba(0,0,0,0.26);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;
+  text-align: center;
+}
+/* the perforation between body and stub */
+.tk-perf {
+  position: absolute; top: 0; bottom: 0; right: 10.5rem; z-index: 3; width: 0;
+  border-left: 2.5px dashed rgba(255,255,255,0.30);
+}
+.tk-notch { position: absolute; right: calc(10.5rem - 9px); z-index: 3; width: 18px; height: 18px;
+  border-radius: 50%; background: var(--g-ink); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,0.12); }
+.tk-notch.top { top: -9px; } .tk-notch.bot { bottom: -9px; }
+
+.tk-top { display: flex; align-items: center; gap: 0.55rem; }
+/* The ticket lives inside a <button>, whose content model is phrasing only — so every box in it is a
+   <span> and has to be given a display explicitly. Forgetting one collapses its children onto one line. */
+.tk-logo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; }
+.tk-brand { font-family: 'Luckiest Guy', cursive; font-size: 1.05rem; color: var(--g-green-hi); letter-spacing: 0.02em; }
+.tk-admit { display: inline-block; margin-left: auto; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--g-ink); background: var(--g-green-hi);
+  padding: 0.22rem 0.5rem; border-radius: 4px; white-space: nowrap; }
+
+.tk-head { display: block; font-family: 'Luckiest Guy', cursive; font-size: clamp(1.3rem, 4.4vw, 1.9rem);
+  margin: 0.7rem 0 0.1rem; color: #fff; line-height: 1.08; }
+.tk-head .hl { color: var(--g-green-hi); }
+.tk-line { display: block; margin: 0; font-size: 0.8rem; color: var(--g-dim); line-height: 1.5; }
+
+.tk-holder { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.9rem; }
+.tk-face { width: 52px; height: 52px; border-radius: 12px; flex: 0 0 auto; object-fit: cover;
+  background: rgba(255,255,255,0.07); box-shadow: 0 0 0 2px rgba(142,224,0,0.5);
+  display: grid; place-items: center; font-size: 1.7rem; overflow: hidden; }
+.tk-face img, .tk-face video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tk-who { display: block; min-width: 0; }
+.tk-name { display: block; font-weight: 800; font-size: 1rem; color: #fff; overflow-wrap: anywhere; }
+.tk-role { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-cyan); font-weight: 700; }
+
+.tk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.9rem; }
+.tk-cell { display: block; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.09); border-radius: 9px; padding: 0.45rem 0.6rem; min-width: 0; }
+.tk-k { display: block; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
+.tk-v { display: block; font-weight: 800; font-size: 0.95rem; color: #fff; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tk-v.gold { color: var(--g-gold); }
+
+/* the rocket countdown rail */
+.tk-launch { display: block; margin-top: 0.9rem; background: rgba(0,0,0,0.34); border: 1px solid rgba(255,179,64,0.35);
+  border-radius: 10px; padding: 0.5rem 0.65rem; }
+.tk-launch-top { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+.tk-launch-k { font-size: 0.58rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--g-gold); font-weight: 800; }
+.tk-launch-v { font-weight: 800; font-size: 0.92rem; color: var(--g-gold); font-variant-numeric: tabular-nums; margin-left: auto; }
+.tk-rail { display: block; position: relative; height: 16px; margin-top: 0.35rem; }
+.tk-rail-line { position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%);
+  background: linear-gradient(90deg, rgba(255,179,64,0.15), rgba(255,179,64,0.55)); border-radius: 2px; }
+.tk-rocket { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 0.95rem;
+  filter: drop-shadow(0 0 6px rgba(255,179,64,0.8)); transition: left 600ms ease; }
+
+.tk-stub-n { display: block; font-family: 'Luckiest Guy', cursive; font-size: 1.7rem; color: var(--g-green-hi); line-height: 1; }
+.tk-stub-k { display: block; font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
+.tk-code { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.62rem;
+  color: var(--g-dim); letter-spacing: 0.05em; overflow-wrap: anywhere; }
+.tk-bars { display: flex; gap: 2px; align-items: flex-end; height: 30px; margin-top: 0.1rem; }
+.tk-bars i { display: block; width: 2px; background: rgba(255,255,255,0.75); border-radius: 1px; }
+
+.tk-cta { margin: 0; font-size: 0.78rem; color: var(--g-dim); }
+.tk-cta b { color: var(--g-green-hi); }
+
+@media (max-width: 560px) {
+  .ticket { grid-template-columns: 1fr; }
+  .tk-perf { right: 0; left: 0; top: auto; bottom: 7.2rem; width: auto; height: 0;
+    border-left: 0; border-top: 2.5px dashed rgba(255,255,255,0.30); }
+  .tk-notch { right: auto; bottom: calc(7.2rem - 9px); top: auto; }
+  .tk-notch.top { left: -9px; } .tk-notch.bot { right: -9px; left: auto; }
+  .tk-stub { flex-direction: row; justify-content: space-around; padding: 0.85rem; }
+}
+
+/* ---- buttons ---- */
+.g-btn {
+  font: inherit; font-weight: 800; cursor: pointer; border-radius: 999px;
+  padding: 0.72rem 1.5rem; border: 2px solid transparent; min-height: 46px;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+.g-btn:active { transform: translateY(1px); }
+.g-btn-primary { background: linear-gradient(180deg, var(--g-green-hi), var(--g-green)); color: #16210a;
+  box-shadow: 0 0 26px rgba(142,224,0,0.45); }
+.g-btn-primary:hover { box-shadow: 0 0 38px rgba(142,224,0,0.65); }
+.g-btn-ghost { background: rgba(255,255,255,0.05); color: var(--g-text); border-color: rgba(255,255,255,0.22); }
+.g-btn-ghost:hover { background: rgba(255,255,255,0.11); }
+.g-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+.g-btn:focus-visible { outline: 3px solid var(--g-cyan); outline-offset: 3px; }
+
+/* ---- modal ---- */
+.g-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 1rem;
+  background: rgba(4,2,10,0.82); backdrop-filter: blur(7px); }
+.g-overlay[hidden] { display: none; }
+.g-modal { width: min(100%, 40rem); max-height: min(88vh, 60rem); display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #170d2e, #100823); color: var(--g-text);
+  border: 1.5px solid rgba(255,255,255,0.14); border-radius: 16px;
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,0.9); overflow: hidden; }
+.g-modal-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1); }
+.g-modal-h { margin: 0; font-family: 'Luckiest Guy', cursive; font-size: 1.15rem; color: var(--g-green-hi); }
+.g-x { margin-left: auto; background: none; border: 0; color: var(--g-dim); font-size: 1.4rem;
+  cursor: pointer; line-height: 1; padding: 0.2rem 0.4rem; border-radius: 8px; }
+.g-x:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.g-modal-body { padding: 1.1rem; overflow-y: auto; }
+.g-modal-foot { padding: 0.9rem 1.1rem; border-top: 1px solid rgba(255,255,255,0.1);
+  display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+
+.g-code-in {
+  width: 100%; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: clamp(1.2rem, 6vw, 1.9rem); font-weight: 800; letter-spacing: 0.32em; text-align: center;
+  text-transform: uppercase; padding: 0.8rem 0.6rem; border-radius: 12px;
+  background: rgba(0,0,0,0.42); color: var(--g-green-hi);
+  border: 2px solid rgba(142,224,0,0.4); caret-color: var(--g-green-hi);
+}
+.g-code-in:focus { outline: none; border-color: var(--g-green-hi); box-shadow: 0 0 24px rgba(142,224,0,0.35); }
+.g-note { font-size: 0.85rem; color: var(--g-dim); line-height: 1.55; }
+.g-note b { color: var(--g-text); }
+.g-err { color: #ff8a8a; font-size: 0.88rem; min-height: 1.2em; margin: 0.5rem 0 0; }
+.g-ok { color: var(--g-green-hi); }
+
+/* ---- terms ---- */
+.g-terms { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
+  padding: 0.9rem 1rem; max-height: 46vh; overflow-y: auto; font-size: 0.86rem; line-height: 1.62; color: #ddd2f2; }
+.g-terms h3 { color: var(--g-green-hi); font-size: 0.95rem; margin: 1.2rem 0 0.35rem; }
+.g-terms h3:first-child { margin-top: 0; }
+.g-terms p, .g-terms li { margin: 0.45rem 0; }
+.g-terms ul { padding-left: 1.1rem; }
+.g-terms b, .g-terms strong { color: #fff; }
+.g-readmark { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--g-dim);
+  margin-top: 0.6rem; }
+.g-readbar { flex: 1 1 auto; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.g-readfill { display: block; height: 100%; width: 0; border-radius: 3px;
+  background: linear-gradient(90deg, var(--g-cyan), var(--g-green-hi)); transition: width 140ms linear; }
+.g-agree { display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 0.9rem; font-size: 0.9rem;
+  line-height: 1.5; cursor: pointer; }
+.g-agree input { width: 20px; height: 20px; margin: 0.1rem 0 0; flex: 0 0 auto; accent-color: var(--g-green); }
+.g-agree input:disabled { cursor: not-allowed; }
+.g-agree.is-locked { opacity: 0.55; cursor: not-allowed; }
+
+/* ---- invite codes ---- */
+.g-codes { list-style: none; margin: 0.7rem 0 0; padding: 0; display: grid; gap: 0.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr)); }
+.g-code { display: flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.6rem; min-height: 44px;
+  background: rgba(0,0,0,0.34); border: 1px solid rgba(255,255,255,0.12); border-radius: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; font-weight: 700;
+  color: var(--g-green-hi); cursor: pointer; }
+.g-code:hover { border-color: var(--g-green); }
+.g-code.is-used { color: var(--g-dim); text-decoration: line-through; cursor: default; opacity: 0.6; }
+.g-code .c-tag { margin-left: auto; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase;
+  font-family: 'Rubik', sans-serif; color: var(--g-dim); }
+
+.gate-foot { font-size: 0.76rem; color: var(--g-dim); line-height: 1.6; max-width: 40rem; }
+.gate-foot a { color: var(--g-cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket, .ticket::after { animation: none !important; }
+  .tk-rocket { transition: none; }
+}

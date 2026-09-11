@@ -3773,3 +3773,29 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .b0-fine { margin: 0.6rem 0 0; font-size: 0.75rem; line-height: 1.55; color: var(--text-dim); }
 .b0-fine b { color: var(--text); }
 @media (max-width: 420px) { .b0-tiles { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); } }
+
+/* --- The 90-day beta campaign banner ------------------------------------
+   Amber for the deadline, green for what you keep — the two things a reader
+   needs to tell apart at a glance. Never colour alone: the countdown says
+   "ends", the badge column says "keep". */
+.beta-card { max-width: 980px; margin: 0 auto; border-color: color-mix(in srgb, var(--gold) 34%, transparent); }
+.beta-head { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap;
+  padding-bottom: 0.85rem; border-bottom: 1px solid var(--ink-4); }
+.beta-k { font-size: 0.66rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--gold); font-weight: 800; }
+.beta-when { font-weight: 800; color: var(--text); font-size: 1rem; font-variant-numeric: tabular-nums; }
+.beta-count { margin-left: auto; font-family: 'Luckiest Guy', cursive; font-size: clamp(1.3rem, 5vw, 2rem);
+  color: var(--gold); font-variant-numeric: tabular-nums; text-shadow: 0 0 18px rgba(255,179,64,0.45); }
+.beta-cols { display: grid; grid-template-columns: 1fr; gap: 1rem; margin-top: 1rem; }
+@media (min-width: 780px) { .beta-cols { grid-template-columns: 1fr 1fr; gap: 1.6rem; } }
+.beta-h { margin: 0 0 0.4rem; font-size: 1rem; color: var(--green-bright); }
+.beta-live { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-mute); font-weight: 700; }
+.beta-board { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.35rem; counter-reset: b; }
+.beta-row { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.65rem; min-width: 0;
+  background: var(--ink-2); border: 1px solid var(--ink-4); border-radius: 9px; font-size: 0.9rem; }
+.beta-row.is-top { border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 8%, var(--ink-2)); }
+.beta-pl { font-weight: 800; color: var(--gold); min-width: 2.1rem; font-variant-numeric: tabular-nums; }
+.beta-av { font-size: 1.05rem; }
+.beta-nm { font-weight: 700; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.beta-pt { margin-left: auto; font-weight: 800; color: var(--green-bright); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.beta-empty { color: var(--text-dim); font-size: 0.9rem; padding: 0.5rem 0; }

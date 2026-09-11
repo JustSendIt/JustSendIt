@@ -341,3 +341,53 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   let ticks = 0;
   const iv = setInterval(() => { if (++ticks > 8) return clearInterval(iv); render(); }, 400);
 })();
+
+/* ===== The 90-day beta campaign banner ==================================================
+   Countdown to the reset plus the live top ten. Everything comes from /api/beta so the page
+   can never disagree with what the server will actually do at settlement. */
+(function () {
+  const when = document.getElementById('beta-when');
+  const count = document.getElementById('beta-count');
+  const board = document.getElementById('beta-board');
+  if (!when || !board) return;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const DAY = 86400000;
+  let endsAt = null, settled = false;
+
+  function tick() {
+    if (endsAt == null) return;
+    const left = endsAt - Date.now();
+    if (left <= 0) { count.textContent = settled ? 'Reset complete' : 'Resetting…'; return; }
+    const d = Math.floor(left / DAY), h = Math.floor((left % DAY) / 3600000), m = Math.floor((left % 3600000) / 60000);
+    count.textContent = d + 'd ' + h + 'h ' + m + 'm';
+  }
+
+  async function load() {
+    try {
+      const r = await fetch('/api/beta', { credentials: 'same-origin' });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || 'failed');
+      endsAt = j.endsAt; settled = !!j.settled;
+      when.textContent = endsAt ? new Date(endsAt).toUTCString().replace(' GMT', ' UTC') : '—';
+      document.getElementById('beta-live').textContent = settled ? 'final' : 'live';
+      tick();
+      board.innerHTML = (j.top || []).length
+        ? j.top.map(t => '<li class="beta-row' + (t.rank <= 3 ? ' is-top' : '') + '">' +
+            '<span class="beta-pl">' + (['🥇', '🥈', '🥉'][t.rank - 1] || ('#' + t.rank)) + '</span>' +
+            '<span class="beta-av" aria-hidden="true">' + esc(t.avatar || '🚀') + '</span>' +
+            '<span class="beta-nm">@' + esc(t.username) + '</span>' +
+            '<span class="beta-pt">' + Number(t.points || 0).toLocaleString('en-US') + '</span></li>').join('')
+        : '<li class="beta-empty">Nobody on the board yet — every point counts from here.</li>';
+      const meEl = document.getElementById('beta-me');
+      if (j.me && meEl) {
+        meEl.innerHTML = j.me.rank
+          ? '🏅 You finished <b>#' + j.me.rank + '</b> — your badge pays <b>' + j.badgeMult + '×</b> on everything from here.'
+          : 'You have <b>' + Number(j.me.points || 0).toLocaleString('en-US') + '</b> Send Power. Top ' + j.topN + ' at the reset keeps a badge and a permanent ' + j.badgeMult + '×.';
+      }
+    } catch {
+      board.innerHTML = '<li class="beta-empty">Board unavailable right now.</li>';
+    }
+  }
+  load();
+  setInterval(tick, 30000);
+})();
