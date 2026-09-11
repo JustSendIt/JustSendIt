@@ -277,3 +277,67 @@ document.getElementById('swap-go').addEventListener('click', async () => {
 document.querySelectorAll('[data-watch-token]').forEach(b =>
   b.addEventListener('click', () => watchToken(b.dataset.watchToken)));
 document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodChain);
+
+/* ===== How-to-Buy step 1: pick a wallet, then connect or link ==========================
+   The list is rendered from WALLET.known() — the same curated registry the wallet picker
+   uses — so the guide can never drift from what the picker actually offers. Detected
+   wallets are marked "installed" so someone who already has one is told to press the
+   button rather than download it again. */
+(function () {
+  const list = document.getElementById('g1-wallets');
+  const btn = document.getElementById('g1-connect');
+  const hint = document.getElementById('g1-hint');
+  if (!list || !btn || !window.WALLET) return;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  function installedKeys() {
+    // WALLET.list() is what EIP-6963 actually announced in this browser
+    try {
+      const names = (WALLET.list() || []).map(w => ((w.info && (w.info.name + ' ' + (w.info.rdns || ''))) || '').toLowerCase());
+      return (k) => names.some(n => n.includes(k.key) || n.includes(k.name.toLowerCase().split(' ')[0]));
+    } catch { return () => false; }
+  }
+
+  function render() {
+    const has = installedKeys();
+    list.innerHTML = (WALLET.known() || []).map(k => {
+      const here = has(k);
+      return '<li class="g1-w">' +
+        '<a class="g1-w-link" href="' + esc(k.get) + '" target="_blank" rel="noopener">' +
+          '<span class="g1-w-ico" aria-hidden="true">' + esc(k.emoji) + '</span>' +
+          '<span class="g1-w-name">' + esc(k.name) + '</span>' +
+          (k.chain ? '<span class="g1-w-tag">native to this chain</span>' : '') +
+          (here ? '<span class="g1-w-tag is-here">installed</span>' : '') +
+        '</a></li>';
+    }).join('');
+  }
+
+  // Signed out → the sign-in modal (its wallet button signs you in and makes the account).
+  // Signed in → link this wallet to the account you already have. Same server route either way.
+  async function go() {
+    const signedIn = !!(window.AUTH && AUTH.user);
+    if (!signedIn) { if (window.AUTH) AUTH.open(); return; }
+    btn.disabled = true;
+    hint.textContent = 'Choose your wallet…';
+    try {
+      const j = await AUTH.linkWallet('Linking a wallet adds it to the account you are signed in to.');
+      if (j.alreadyLinked) { hint.textContent = '✅ Already linked to your account.'; sendToast('That wallet is already linked ✅'); }
+      else { hint.textContent = '✅ Linked — it now counts toward your Send Power.'; sendToast('Wallet linked 🔗'); }
+    } catch (e) {
+      hint.textContent = (e.message === 'cancelled') ? '' : '⚠️ ' + (e.message || 'could not link that wallet');
+    } finally { btn.disabled = false; }
+  }
+
+  function paintBtn() {
+    const signedIn = !!(window.AUTH && AUTH.user);
+    btn.textContent = signedIn ? 'Link this wallet to my account 🔗' : 'Connect my wallet 🔗';
+  }
+
+  btn.addEventListener('click', go);
+  document.addEventListener('auth:change', paintBtn);
+  if (window.AUTH && AUTH.ready) AUTH.ready.then(paintBtn); else paintBtn();
+  render();
+  // wallets announce themselves asynchronously — repaint briefly so "installed" appears
+  let ticks = 0;
+  const iv = setInterval(() => { if (++ticks > 8) return clearInterval(iv); render(); }, 400);
+})();

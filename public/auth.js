@@ -283,6 +283,45 @@
     });
   });
 
+  /* Proving the CURRENT second factor, for any page that needs to make a credential change. This lived in
+     profile.js, which meant only the profile page could link a wallet; the How-to-Buy guide needs it too,
+     and two copies of a security check is one copy too many. Returns the body fields the server expects,
+     or throws 'cancelled'. */
+  AUTH.currentFactor = async function (note) {
+    const m = AUTH.user && AUTH.user.twofa;
+    if (!m) return {};
+    if (m === 'password') {
+      const pw = prompt((note || 'Confirm this change') + '\n\nEnter your account password:');
+      if (!pw) throw new Error('cancelled');
+      return { password: pw };
+    }
+    if (m === 'totp') {
+      const code = prompt((note || 'Confirm this change') + '\n\nEnter the 6-digit code from your authenticator app:');
+      if (!code) throw new Error('cancelled');
+      return { code: code.trim() };
+    }
+    // wallet 2FA: sign a management challenge with the wallet the account's two-factor is set to
+    sendToast('Connect the wallet your two-factor is set to, and sign to confirm ✍️');
+    const { provider, address } = await WALLET.connect();
+    const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
+    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    return { address, signature };
+  };
+
+  /* Link another wallet to the account you are already signed in to. Read-only: one personal_sign, no
+     transaction, no approval. Resolves to the server's answer so a caller can tell linked from
+     already-linked; throws with the server's own message on a refusal (wallet cap, wallet owned by
+     another account, second factor not proven). */
+  AUTH.linkWallet = async function (note) {
+    const current = await AUTH.currentFactor(note || 'Linking a wallet adds a new way to sign in to this account.');
+    const { provider, address } = await WALLET.connect();
+    const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
+    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature, current } });
+    if (j.linked) { await refresh(); onAuthChange(); }
+    return j;
+  };
+
   AUTH.logout = async function () {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
     AUTH.user = null;

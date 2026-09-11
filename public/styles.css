@@ -2115,6 +2115,29 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 .ab-dia-top .ab-dia-n { color: var(--gold); }
 .ab-dia-top .ab-dia-x { color: var(--green-bright); }
 
+/* --- How-to-Buy step 1: the wallet list ---------------------------------
+   Rendered from the same registry the picker uses. Each entry is a real link
+   to an official download page, so it works with JS off and reads correctly
+   to a screen reader as a list of links. */
+.g1-alt { margin-top: 0.7rem; }
+.g1-wallets { list-style: none; margin: 0.6rem 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 0.45rem; }
+/* wrap allowed so a badge drops to its own line instead of squeezing the name */
+.g1-w-link { display: flex; align-items: center; gap: 0.4rem 0.5rem; flex-wrap: wrap; min-height: 44px; padding: 0.5rem 0.7rem;
+  background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 10px;
+  text-decoration: none; color: var(--text); font-size: 0.88rem; font-weight: 600; }
+.g1-w-link:hover, .g1-w-link:focus-visible { border-color: var(--green); background: var(--ink-3); }
+.g1-w-ico { font-size: 1.05rem; line-height: 1; }
+.g1-w-name { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
+.g1-w-tag { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 0.15rem 0.4rem; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--gold) 22%, transparent); color: var(--gold); }
+.g1-w-tag.is-here { background: color-mix(in srgb, var(--green) 22%, transparent); color: var(--green-bright); }
+.g1-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.8rem; }
+.g1-hint { font-size: 0.85rem; color: var(--text-dim); }
+.g1-safe { margin-top: 0.8rem; font-size: 0.85rem; color: var(--text-dim); line-height: 1.55; }
+.g1-safe b { color: var(--text); }
+
 /* --- Linked wallets list (Profile → Security) ---------------------------
    One row per linked wallet. The 2FA wallet is marked with a word as well as
    a colour, because "which of these is my key" is exactly the question you

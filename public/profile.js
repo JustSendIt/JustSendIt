@@ -197,26 +197,8 @@ function setWallLinks(name) {
 /* Proof of the account's CURRENT second factor, for changes that add or remove a way in. Linking a wallet is
    one of those: a wallet on the account can sign in with it, so attaching one from a borrowed session was
    enough to take the account permanently. Returns {} when the account has no factor to prove. */
-async function currentFactorBody(note) {
-  const m = AUTH.user && AUTH.user.twofa;
-  if (!m) return {};
-  if (m === 'password') {
-    const pw = prompt((note || 'Confirm this change') + '\n\nEnter your account password:');
-    if (!pw) throw new Error('cancelled');
-    return { password: pw };
-  }
-  if (m === 'totp') {
-    const code = prompt((note || 'Confirm this change') + '\n\nEnter the 6-digit code from your authenticator app:');
-    if (!code) throw new Error('cancelled');
-    return { code: code.trim() };
-  }
-  // wallet 2FA: sign a management challenge with a wallet ALREADY on the account
-  sendToast('Connect the wallet your two-factor is set to, and sign to confirm ✍️');
-  const { provider, address } = await WALLET.connect();
-  const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
-  const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-  return { address, signature };
-}
+// One implementation, in auth.js, so every page proves the second factor the same way.
+const currentFactorBody = (note) => AUTH.currentFactor(note);
 async function linkWallet() {
   try {
     const current = await currentFactorBody('Linking a wallet adds a new way to sign in to this account.');

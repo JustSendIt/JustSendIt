@@ -199,5 +199,8 @@
 
   function forget() { selected = null; try { localStorage.removeItem(LS_KEY); } catch {} }
 
-  window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected };
+  /* The curated registry, exposed so other surfaces (the How-to-Buy guide) can render the SAME list the
+     picker shows. Copied, not shared, so a caller cannot mutate the registry the picker depends on. */
+  function known() { return KNOWN.map(k => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '' })); }
+  window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected, known };
 })();
