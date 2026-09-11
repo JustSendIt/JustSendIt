@@ -52,6 +52,9 @@
             '<div id="compose-call-preview" class="cmp-call-preview" role="status" aria-live="polite"></div>' +
             '<label class="sr-only" for="compose-call-note">Why are you calling it? (optional)</label>' +
             '<textarea id="compose-call-note" maxlength="280" placeholder="Why this one? (optional)"></textarea>' +
+            // Publishing your wallet address next to your username is a real, permanent disclosure, so it
+            // is a choice you make rather than something the call does to you. Off unless ticked.
+            '<label class="cmp-call-share"><input type="checkbox" id="compose-call-wallet"> <span>Show my wallet on this call <small>— anyone can then see and track this address. Off by default; you can remove it later.</small></span></label>' +
             '<div class="composer-bar">' +
               '<button class="btn btn-primary btn-sm" id="compose-call-go" disabled>📣 Make the call</button>' +
               '<span class="hint" id="compose-call-left"></span>' +
@@ -129,6 +132,7 @@
     // Send Call side
     modal.querySelector('#compose-call-addr').value = '';
     modal.querySelector('#compose-call-note').value = '';
+    const shareBox = modal.querySelector('#compose-call-wallet'); if (shareBox) shareBox.checked = false; // never carries over to the next call
     callPreview(''); setCallReady(false); callLookupSeq++; viewedDetail = false;
     setStatus('');
   }
@@ -215,7 +219,8 @@
     const note = modal.querySelector('#compose-call-note').value.trim();
     btn.disabled = true; setStatus('Calling it… 📣');
     try {
-      const j = await window.api('/api/calls', { method: 'POST', body: { token: callTok.addr, note, viewedDetail } });
+      const shareWallet = !!(modal.querySelector('#compose-call-wallet') || {}).checked;
+      const j = await window.api('/api/calls', { method: 'POST', body: { token: callTok.addr, note, viewedDetail, shareWallet } });
       // a call that tripped the anti-spam guard comes back with a fresh restriction — surface the banner immediately
       if (j.restriction && window.AUTH) {
         AUTH.user.restriction = j.restriction; AUTH.user.probation = null;

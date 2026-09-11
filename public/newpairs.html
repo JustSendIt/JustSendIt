@@ -55,7 +55,10 @@
 
 <header class="np-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">New Pairs Radar 📡</h1>
-  <p class="section-sub" style="margin-bottom:0.5rem;">Every new token launched on Robinhood Chain — read straight from the chain, with honest flags on the ones to avoid.</p>
+  <!-- The radar reads ONE UniswapV2-style factory. "Every new token on the chain" was a claim the code
+       cannot support: launches on other venues (pools.trade among them) never appear here at all, and a
+       scanner that says it sees everything makes an absence look like a verdict. -->
+  <p class="section-sub" style="margin-bottom:0.5rem;">New pools on Robinhood Chain’s main Uniswap-V2 factory — read straight from the chain, with honest flags on the ones to avoid. <span class="section-sub-note">Not every venue: launches on other DEXes won’t show up here, so a token missing from this list hasn’t been judged — it just hasn’t been seen.</span></p>
   <p class="np-hero-warn">⚠️ Fresh tokens are dangerous by default. Most go to zero. We flag the obvious traps — but never do we tell you to buy. <b>Do your own research.</b></p>
 </header>
 

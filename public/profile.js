@@ -598,4 +598,26 @@ window.onAuthReady = function (user) {
   initSitePrefs();
   loadMe();
   loadConnectedWallet();
+  loadInvites();
 };
+
+/* Your ticket and your ten codes, on the page you already know. invite.js owns the rendering (it also
+   draws them inside the modal, and one copy of "which codes are spent" is one copy too many); this just
+   loads it on demand and hands it the slot. #invites in the URL scrolls straight to it, which is where
+   the modal's "see all my codes" button points. */
+async function loadInvites() {
+  const host = document.getElementById('invites-body');
+  if (!host || !window.AUTH || !AUTH.loadInvite) return;
+  try {
+    const inv = await AUTH.loadInvite();
+    await inv.mountDashboard(host);
+    if (location.hash === '#invites') {
+      const card = document.getElementById('invites-card');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch {
+    // the ticket assets failed to load — say where the codes are rather than leaving an empty card
+    host.innerHTML = '<h3 style="margin:0 0 0.4rem;">🎟️ Your invite codes</h3>' +
+      '<p class="modal-note" style="margin:0;">Couldn’t load your codes just now — refresh the page to try again.</p>';
+  }
+}

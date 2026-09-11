@@ -1,0 +1,147 @@
+/* ===== The ticket, as a modal ==============================================================
+ * The door used to be the whole site: a redirect that sent every signed-out visitor — and every
+ * crawler — to gate.html. That closed the landing page, and with it every canonical, sitemap
+ * entry and og: tag the site has. So the door moved to where it was always actually needed:
+ * the moment someone tries to JOIN. Reading is open; joining takes a ticket.
+ *
+ * This file is the shell — the overlay, the step flow, the codes list and the dashboard panel.
+ * gate.css supplies the ticket itself and the synthwave screen, loaded alongside this one, on
+ * demand, the first time the modal is opened. Both are scoped: everything here lives under
+ * #invite-overlay, which is its own stacking context, so nothing leaks onto the page behind it.
+ */
+
+/* z-index 9000: above every overlay on the site (the highest is the intro at 999) and deliberately BELOW
+   the rocket cursor at 9998/9999. The cursor layer is the one thing that must stay on top of everything,
+   and `.rk-on *` hides the native pointer everywhere — so an overlay painted over the rocket does not
+   merely lose the rocket, it leaves the modal with NO visible cursor at all. Anything added above this
+   later has to clear 9999 or reckon with the same thing. */
+#invite-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  display: none; isolation: isolate;
+  background: var(--g-ink, #070312);
+  color: var(--g-text, #f2eaff);
+  font-family: 'Rubik', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  overflow-y: auto; overscroll-behavior: contain;
+}
+#invite-overlay[data-open] { display: block; }
+/* gate.css fixes these to the viewport, which is right for a full page and wrong inside a modal:
+   absolute keeps them inside the overlay's own box so they can never paint over anything else. */
+#invite-overlay #gate-bg,
+#invite-overlay .gate-sky,
+#invite-overlay .gate-scan,
+#invite-overlay .gate-vig { position: absolute; width: 100%; height: 100%; }
+
+.inv-wrap {
+  position: relative; z-index: 3;
+  max-width: 720px; margin: 0 auto;
+  padding: clamp(1rem, 4vh, 2.4rem) 1rem clamp(2rem, 6vh, 3rem);
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  min-height: 100%;
+}
+/* Closing is a first-class action, not an escape hatch: someone who does not have a code has to be
+   able to get back to the site they were reading, immediately and obviously. */
+.inv-close {
+  position: absolute; top: 0.9rem; right: 0.9rem; z-index: 6;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: rgba(255,255,255,0.07); color: var(--g-text, #f2eaff);
+  border: 1px solid rgba(255,255,255,0.18); border-radius: 999px;
+  padding: 0.5rem 0.95rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+}
+.inv-close:hover { background: rgba(255,255,255,0.14); }
+.inv-close:focus-visible { outline: 2px solid var(--g-cyan, #38e8ff); outline-offset: 2px; }
+
+.inv-kicker { margin: 0; font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g-cyan, #38e8ff); }
+.inv-title { margin: 0.2rem 0 0; font-size: clamp(1.6rem, 5.2vw, 2.5rem); line-height: 1.1; text-align: center; font-weight: 800; }
+.inv-title .hl { color: var(--g-green-hi, #b4ff2b); }
+.inv-sub { margin: 0; max-width: 48ch; text-align: center; color: var(--g-dim, #b9a8dd); font-size: 0.95rem; line-height: 1.55; }
+
+.inv-step { display: none; width: 100%; flex-direction: column; align-items: center; gap: 1rem; }
+.inv-step[data-active] { display: flex; }
+
+.inv-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; }
+/* The read-only exit, stated as a real option rather than a refusal. */
+.inv-browse {
+  background: none; border: 0; padding: 0.35rem 0.2rem; font: inherit; font-size: 0.88rem;
+  color: var(--g-dim, #b9a8dd); text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+}
+.inv-browse:hover { color: var(--g-text, #f2eaff); }
+
+.inv-panel {
+  width: 100%; max-width: 560px;
+  background: rgba(20,11,40,0.86); border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 16px; padding: 1.1rem 1.15rem;
+}
+.inv-panel h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+
+/* ---- the codes: the thing people came for ---- */
+.inv-codes { list-style: none; margin: 0.8rem 0 0; padding: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.inv-codes li { margin: 0; }
+.inv-code {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.62rem 0.8rem; border-radius: 10px; cursor: pointer; overflow: hidden;
+  background: rgba(142,224,0,0.10); border: 1px solid rgba(142,224,0,0.40);
+  color: var(--g-green-hi, #b4ff2b);
+  font-family: ui-monospace, Menlo, monospace; font-size: 1rem; font-weight: 700; letter-spacing: 0.08em;
+}
+/* Both halves must be allowed to shrink. min-width:0 is the load-bearing part: a flex item's default
+   min-width is auto, so without it the code characters refuse to compress, and a long "used · @handle"
+   tag pushes the whole row out of its grid cell and straight over the code beside it. */
+.inv-chars { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-code:hover { background: rgba(142,224,0,0.18); }
+.inv-code:focus-visible { outline: 2px solid var(--g-cyan, #38e8ff); outline-offset: 2px; }
+/* A spent code has nothing to copy — it will never work again — so it does not look or behave like
+   something you can hand to a friend. The characters are withheld by the server, not just hidden here. */
+.inv-code.is-used,
+.inv-code.is-used:hover {
+  background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.13);
+  color: rgba(242,234,255,0.42); cursor: default;
+}
+/* struck through on the CHARACTERS only — a line through the "used · @who" label made it unreadable */
+.inv-code.is-used .inv-chars { text-decoration: line-through; }
+.inv-tag {
+  flex: 0 1 auto; min-width: 0; max-width: 55%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'Rubik', system-ui, sans-serif; font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 999px;
+  background: rgba(0,0,0,0.35); color: inherit; text-decoration: none;
+}
+.inv-code.is-used .inv-tag { background: rgba(255,255,255,0.07); }
+.inv-note { margin: 0.65rem 0 0; font-size: 0.84rem; color: var(--g-dim, #b9a8dd); line-height: 1.5; }
+.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: 0.88rem; color: #ff8aa8; }
+.inv-err.is-ok { color: var(--g-green-hi, #b4ff2b); }
+
+.inv-in {
+  width: 100%; padding: 0.85rem 1rem; border-radius: 12px; margin-top: 0.5rem;
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.22); color: var(--g-text, #f2eaff);
+  font-family: ui-monospace, Menlo, monospace; font-size: 1.25rem; letter-spacing: 0.22em; text-align: center;
+  text-transform: uppercase;
+}
+.inv-in:focus-visible { outline: 2px solid var(--g-green, #8ee000); outline-offset: 2px; border-color: var(--g-green, #8ee000); }
+
+/* ═══ the same codes, on the dashboard ═══════════════════════════════════════════════════════
+   Uses the site's own surface tokens rather than the gate palette: this one lives on a page the
+   person already knows, so it should look like the rest of it. */
+.inv-dash { margin-top: 1.4rem; }
+.inv-dash-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+.inv-dash-head h3 { margin: 0; font-size: 1.05rem; }
+.inv-dash-count { font-size: 0.82rem; color: var(--text-dim, #9aa); font-variant-numeric: tabular-nums; }
+.inv-dash .inv-codes { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+.inv-dash .inv-code {
+  background: rgba(142,224,0,0.09); border-color: rgba(142,224,0,0.35); color: var(--green-bright, #b4ff2b);
+}
+.inv-dash .inv-code.is-used { background: rgba(127,127,127,0.08); border-color: rgba(127,127,127,0.22); color: var(--text-dim, #8a8a99); }
+.inv-dash .inv-note { color: var(--text-dim, #9aa); }
+.inv-sendid {
+  display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0.3rem 0.7rem; border-radius: 999px;
+  background: rgba(142,224,0,0.12); border: 1px solid rgba(142,224,0,0.35); color: var(--green-bright, #b4ff2b);
+  font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.inv-sendid small { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
+
+@media (max-width: 560px) {
+  .inv-codes { grid-template-columns: 1fr 1fr; }
+  .inv-code { font-size: 0.9rem; padding: 0.55rem 0.6rem; letter-spacing: 0.05em; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #invite-overlay * { animation: none !important; transition: none !important; }
+}

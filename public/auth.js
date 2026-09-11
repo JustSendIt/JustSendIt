@@ -11,7 +11,12 @@
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error || ('request failed (' + res.status + ')'));
+    if (!res.ok) {
+      const e = new Error(j.error || ('request failed (' + res.status + ')'));
+      e.status = res.status;
+      e.code = j.code;      // machine-readable refusals (need_invite, need_tos, code_spent, daily_limit…)
+      throw e;
+    }
     return j;
   }
   window.api = api;
@@ -91,6 +96,10 @@
           <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><path fill="url(#ig-g)" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 01-1.38-.9 3.7 3.7 0 01-.9-1.38c-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0 1.62c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19a3.6 3.6 0 00-.88-1.35 3.6 3.6 0 00-1.35-.88c-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 2.76a5.46 5.46 0 110 10.92 5.46 5.46 0 010-10.92zm0 9a3.54 3.54 0 100-7.08 3.54 3.54 0 000 7.08zm6.95-9.22a1.28 1.28 0 11-2.55 0 1.28 1.28 0 012.55 0z"/></svg></span><span class="oauth-name">Instagram</span></a>
       </div>
     </div>
+    <!-- The way in for somebody who was handed a code. Without it, a person holding an invite has to
+         guess that "Sign up" is what opens the ticket — and this line also tells everyone else, in one
+         sentence, that they can read the whole site without any of this. -->
+    <p class="auth-invite">New here? Joining is by invite — <button type="button" class="linklike" id="auth-ticket">get your ticket 🎟️</button>. You can read the whole site without an account.</p>
   </div>`;
 
   let lastFocus = null, releaseTrap = null;
@@ -111,6 +120,69 @@
     document.dispatchEvent(new CustomEvent('jsi:modalclose'));
   }
   AUTH.open = openModal;
+
+  /* ═══ the invite ticket ═══════════════════════════════════════════════════════════════════════
+     Reading this site takes nothing; JOINING it takes a code. The ticket therefore lives here rather
+     than in front of the whole site — a whole-site redirect closed the landing page and every
+     canonical, sitemap entry and og: tag with it, to guard a door that only ever stood in one place.
+     invite.js and its CSS are fetched the first time somebody actually needs them, so a reader who
+     never tries to join never downloads them. */
+  let invitePromise = null;
+  function loadInvite() {
+    if (window.INVITE) return Promise.resolve(window.INVITE);
+    if (invitePromise) return invitePromise;
+    invitePromise = new Promise((resolve, reject) => {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet'; link.href = '/gate.css'; document.head.appendChild(link);
+      const link2 = document.createElement('link');
+      link2.rel = 'stylesheet'; link2.href = '/invite.css'; document.head.appendChild(link2);
+      const sc = document.createElement('script');
+      sc.src = '/invite.js';
+      sc.onload = () => window.INVITE ? resolve(window.INVITE) : reject(new Error('invite failed to load'));
+      sc.onerror = () => reject(new Error('invite failed to load'));
+      document.head.appendChild(sc);
+    });
+    return invitePromise;
+  }
+  // Open the ticket. Falls back to the plain account modal if the ticket itself cannot load, so a
+  // failed asset can never make signing up impossible.
+  async function openInvite(opts) {
+    try { const inv = await loadInvite(); await inv.open(opts || {}); }
+    catch { openModal(); }
+  }
+  AUTH.openInvite = openInvite;
+  AUTH.loadInvite = loadInvite;
+  // Does this visitor already hold a ticket? Cached for the page's life — it only ever changes
+  // through the ticket itself, which updates this when it does.
+  let gateState = null;
+  async function gate(force) {
+    if (gateState && !force) return gateState;
+    try { gateState = await api('/api/gate/state'); } catch { gateState = { access: false, signedIn: false }; }
+    return gateState;
+  }
+  AUTH.gate = gate;
+  /* The one function the rest of the site calls to start a sign-up. A visitor holding a ticket goes
+     straight to the account modal; one without sees the ticket first. */
+  AUTH.openSignup = function (opts) {
+    openModal();
+    const seg = modal.querySelector('#seg-signup');
+    if (seg) seg.click();
+    if (opts && opts.tab === 'wallet') { const t = modal.querySelector('#tab-wallet'); if (t) t.click(); }
+  };
+  AUTH.startJoin = async function (opts) {
+    const g = await gate();
+    if (g.signedIn) return;
+    if (g.access) { AUTH.openSignup(opts); return; }
+    openInvite(opts);
+  };
+  /* Any signup door refusing for want of an invite raises the ticket instead of an error message.
+     This is the safety net under startJoin: it catches the paths that reach the server anyway — a
+     wallet signature that turns out to be a new account, a stale tab, an OAuth round trip. */
+  AUTH.needsInvite = function (err) {
+    const code = err && (err.code || err.gateCode);
+    if (code === 'need_invite' || code === 'need_tos' || code === 'code_spent') { openInvite(); return true; }
+    return false;
+  };
 
   document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(modal);
@@ -146,8 +218,17 @@
       segSignup.classList.toggle('active', regMode); segSignup.setAttribute('aria-pressed', String(regMode));
       modal.querySelector('#email-status').textContent = '';
     }
+    const ticketLink = modal.querySelector('#auth-ticket');
+    if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite(); });
     segLogin.addEventListener('click', () => setRegMode(false));
-    segSignup.addEventListener('click', () => setRegMode(true));
+    /* Choosing "Sign up" is the moment the ticket is needed, so that is where it appears — before
+       anyone fills in a form that was always going to be refused at the end of it. Someone who
+       already holds a ticket never sees it. */
+    segSignup.addEventListener('click', async () => {
+      setRegMode(true);
+      const g = await gate();
+      if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
+    });
     setRegMode(false); // login-first
 
     // live username availability
@@ -213,9 +294,12 @@
           try {
             status.textContent = 'Choose your wallet… 👛';
             const { provider, address } = await WALLET.connect();
-            // one challenge per linked wallet (each names its own address, as EIP-4361 requires) — pick the
-            // one for the wallet they actually connected, and say so plainly if it isn't on the account
-            const msg = j.messages && j.messages[String(address).toLowerCase()];
+            // Ask for the challenge for THIS wallet only. The server used to hand back a challenge for
+            // every linked wallet the moment the password was right, which told anyone with the password
+            // exactly which on-chain addresses belong to this account — the one thing wallet two-factor
+            // is there to keep out of their hands. Each message names its own address, as EIP-4361 requires.
+            const ch = await api('/api/auth/login/wallet2fa/challenge', { method: 'POST', body: { pending: j.pending, address } });
+            const msg = ch && ch.message;
             if (!msg) throw new Error('that wallet isn’t linked to this account — connect the one you turned two-factor on with');
             status.textContent = 'Approve the signature… ✍️';
             const signature = await provider.request({ method: 'personal_sign', params: [msg, address] });
@@ -251,7 +335,11 @@
         status.textContent = '';
         if (j.twofa) { show2fa(j); return; }
         loginSuccess(j);
-      } catch (err) { status.textContent = '⚠️ ' + err.message; status.style.color = 'var(--red)'; }
+      } catch (err) {
+        // "you need a ticket" is not an error to read, it is a door to open
+        if (AUTH.needsInvite(err)) { status.textContent = ''; closeModal(); return; }
+        status.textContent = '⚠️ ' + err.message; status.style.color = 'var(--red)';
+      }
     });
 
     // wallet sign-in
@@ -279,8 +367,26 @@
         else sendToast('Welcome back, @' + j.username + '! 🚀');
         if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
         onAuthChange();
-      } catch (err) { status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'); }
+      } catch (err) {
+        // A wallet nobody has signed in with before is a NEW ACCOUNT, so the server asks for a ticket
+        // here too. Somebody who connected expecting to sign in gets the door, not a refusal.
+        if (AUTH.needsInvite(err)) { status.textContent = ''; closeModal(); return; }
+        status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled');
+      }
     });
+
+    /* An OAuth round trip that was refused for want of an invite comes back as ?needinvite=1 (the
+       provider redirect is the only way that refusal can reach the page). Open the ticket and tidy the
+       URL, so a reload does not re-trigger it. */
+    try {
+      const q = new URLSearchParams(location.search);
+      if (q.get('needinvite') === '1' || q.get('invite') === '1') {
+        openInvite();
+        q.delete('needinvite'); q.delete('invite'); q.delete('autherror'); q.delete('autherrmsg');
+        const rest = q.toString();
+        history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+      }
+    } catch {}
   });
 
   /* Proving the CURRENT second factor, for any page that needs to make a credential change. This lived in
@@ -524,9 +630,15 @@
     const whyPaused = perm
       ? 'Because this kept happening, your account is now <b>permanently in read-only mode</b>.'
       : 'To keep Send Power 100% organic for everyone, your account is paused for <b>' + tier + '</b>.';
+    /* The APPEAL — the route that costs nothing. A permanent mute whose only stated remedy is "buy $1,000
+       of $SEND" reads as a price rather than a penalty, so the free option is named first, in the same
+       breath, with a real address a real person reads. */
+    const appeal = r.appealEmail
+      ? ' If you think it\'s a mistake, <b>appeal it</b> — email <a href="mailto:' + roEsc(r.appealEmail) + '?subject=' + encodeURIComponent('Read-only appeal') + '">' + roEsc(r.appealEmail) + '</a> and a person will look at your account. That costs nothing.'
+      : '';
     const foot = perm
-      ? 'This is a permanent restriction after repeated abuse. If you think it\'s a mistake, reach out on Telegram or X.'
-      : 'This lifts automatically when the timer runs out — just keep it organic. If it happens again after you\'re unpaused, the pause gets longer (a week, then permanent).';
+      ? 'This is a permanent restriction after repeated abuse.' + appeal
+      : 'This lifts automatically when the timer runs out — just keep it organic. If it happens again after you\'re unpaused, the pause gets longer (a week, then permanent).' + appeal;
     const allowed = (r.allowed || []).map(a => '<li>' + roEsc(a) + '</li>').join('');
     const blocked = (r.blocked || []).map(a => '<li>' + roEsc(a) + '</li>').join('');
     const redeemHtml = r.redeemable

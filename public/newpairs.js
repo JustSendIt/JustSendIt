@@ -175,8 +175,14 @@
     unverified: { ico: '📄', word: () => 'Unverified', sev: 'warn', say: () => `Contract source isn't published — nobody can audit what it does.` },
     sellPressure: { ico: '🔻', word: () => 'Heavy selling', sev: 'warn', say: p => `Sells outnumber buys (${npNum(p.txns.h24.sells)} vs ${npNum(p.txns.h24.buys)}).` },
     deadVolume: { ico: '💤', word: () => 'No volume', sev: 'note', say: p => `Almost no trading in 24h (${npFmtUsd(p.volume.h24)}).` },
+    /* The two block-0 flags the SERVER scores (RISK.sniperDump 28, RISK.sniperHeavy 14) but this panel
+       used to leave out entirely — so a token whose health had been cut by up to 42 points for them was
+       shown a breakdown in which every section read "nothing tripped", and the two numbers disagreed with
+       no explanation visible anywhere on the page. */
+    sniperDump: { ico: '🎯', word: () => 'Snipers sold out', sev: 'bad', say: p => { const sn = p.risk && p.risk.snipers; return sn && sn.wallets ? `Of the ${npNum(sn.wallets)} wallet${sn.wallets === 1 ? '' : 's'} that bought in the very first block, most have already sold out.` : 'Wallets that bought in the very first block have already sold out.'; } },
+    sniperHeavy: { ico: '🎯', word: () => 'Sniped launch', sev: 'warn', say: p => { const sn = p.risk && p.risk.snipers; return sn && sn.snipedPct != null ? `Block-0 wallets took ${pctPlain(sn.snipedPct)} of the supply in the first block${sn.holdsPct != null ? ` and still hold ${pctPlain(sn.holdsPct)}` : ''} — they got in before anyone else could.` : 'Wallets buying in the very first block took a large share of the supply.'; } },
   };
-  const FLAG_ORDER = ['honeypotSuspect', 'dumping', 'serialDeployer', 'lowLiquidity', 'lowHolders', 'concentrated', 'unverified', 'sellPressure', 'deadVolume'];
+  const FLAG_ORDER = ['honeypotSuspect', 'dumping', 'serialDeployer', 'lowLiquidity', 'sniperDump', 'lowHolders', 'concentrated', 'unverified', 'sniperHeavy', 'sellPressure', 'deadVolume'];
   const activeFlags = (p) => FLAG_ORDER.filter(k => p.risk && p.risk[k]);
   function goodSigns(p) {
     const g = [];
@@ -191,11 +197,15 @@
 
   /* ---------- score breakdown: show HOW the health score was assessed, section by section ---------- */
   // penalty weights mirror the server risk model (applyRisk); health = 100 − sum of tripped penalties.
-  const WEIGHTS = { honeypotSuspect: 45, dumping: 32, serialDeployer: 26, lowLiquidity: 26, concentrated: 20, unverified: 15, lowHolders: 15, sellPressure: 12, deadVolume: 12 };
+  // Every weight here must match the server's RISK table exactly, sniper flags included — this breakdown
+  // claims to explain the same health score the server computed, and a flag missing from it is a chunk of
+  // that score with no stated reason.
+  const WEIGHTS = { honeypotSuspect: 45, dumping: 32, serialDeployer: 26, lowLiquidity: 26, sniperDump: 28, concentrated: 20, unverified: 15, lowHolders: 15, sniperHeavy: 14, sellPressure: 12, deadVolume: 12 };
   const SECTIONS = [
     { key: 'liquidity', label: 'Liquidity & volume', ico: '💧', flags: ['lowLiquidity', 'deadVolume'] },
     { key: 'holders', label: 'Holders & spread', ico: '👥', flags: ['lowHolders', 'concentrated'] },
     { key: 'trading', label: 'Trading activity', ico: '🔁', flags: ['honeypotSuspect', 'dumping', 'sellPressure'] },
+    { key: 'launch', label: 'Launch fairness', ico: '🎯', flags: ['sniperDump', 'sniperHeavy'] },
     { key: 'contract', label: 'Contract & trust', ico: '📄', flags: ['unverified', 'serialDeployer'] },
   ];
   const gradeOf = (s) => s >= 85 ? 'A' : s >= 70 ? 'B' : s >= 50 ? 'C' : s >= 30 ? 'D' : 'F';
@@ -204,6 +214,7 @@
     if (key === 'liquidity') { if (m.liquidityUsd != null && m.liquidityUsd >= 25000) g.push('Deep liquidity ($25k+)'); if (p.volume.h24 >= 1000) g.push('Real 24h volume'); }
     else if (key === 'holders') { if (h.topHolderPct != null && h.topHolderPct < 15) g.push('Top wallet under 15%'); if (h.count != null && h.count >= 200) g.push('200+ holders'); }
     else if (key === 'trading') { const b = p.txns.h24.buys, s = p.txns.h24.sells; if (b > 0 && b >= s) g.push('Buys keeping up with sells'); if (p.priceChange.h1 != null && p.priceChange.h1 > 0) g.push('Up in the last hour'); }
+    else if (key === 'launch') { const sn = p.risk && p.risk.snipers; if (sn && sn.wallets === 0) g.push('Nobody sniped block 0'); else if (sn && sn.snipedPct != null && sn.snipedPct < 5) g.push('Block-0 buyers took under 5%'); }
     else if (key === 'contract') { if (p.token.isVerified === true) g.push('Verified source'); if (p.token.renounced === true) g.push('Ownership renounced'); }
     return g;
   }

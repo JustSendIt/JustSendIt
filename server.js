@@ -32,7 +32,12 @@ const PORT = process.env.PORT || 8642;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const DATA_DIR = path.join(ROOT, 'data');
+/* JSI_DATA_DIR moves the database, uploads and key somewhere else. It exists for one reason: `npm test`
+   starts a REAL server (the suites drive the real HTTP API, because the bugs worth catching live in the
+   seams a mock papers over) and points it at a throwaway directory. Without it, running the tests meant
+   running them against production data and trusting every suite's cleanup to be perfect. In production
+   this is unset and the path is what it always was. */
+const DATA_DIR = process.env.JSI_DATA_DIR || path.join(ROOT, 'data');
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 /* ===== Encryption at rest =====
@@ -141,6 +146,24 @@ CREATE TABLE IF NOT EXISTS nonces (
   expires_at INTEGER NOT NULL,
   PRIMARY KEY (address, purpose)             -- one live challenge per wallet PER JOB, not one per wallet
 );
+/* SEVERAL live challenges per (wallet, job), not one. Issuing a challenge needs no account and no
+   signature — it is the first step of signing in — so with one row per (address, purpose) anybody could
+   request a challenge for SOMEONE ELSE'S wallet and overwrite the one that person was in the middle of
+   signing. Their wallet returns a signature over a message the server has just thrown away, sign-in
+   fails, and repeating it locks a chosen wallet out of the site indefinitely, from an unauthenticated
+   request, with no account needed at all.
+   A bounded pool fixes it without weakening anything: each issue ADDS a row, verification accepts a
+   signature matching ANY live row, and the row that was used is deleted immediately — so replay
+   protection, the 10-minute expiry and the per-purpose binding are all exactly as they were. */
+CREATE TABLE IF NOT EXISTS wallet_challenges (
+  address TEXT NOT NULL,                     -- blind index, never the address
+  purpose TEXT NOT NULL,
+  nonce TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  msg TEXT,                                  -- the exact EIP-4361 text we issued, encrypted
+  PRIMARY KEY (address, purpose, nonce)
+);
+CREATE INDEX IF NOT EXISTS idx_challenges_exp ON wallet_challenges(expires_at);
 CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -203,6 +226,19 @@ CREATE TABLE IF NOT EXISTS holder_state (
   last_check INTEGER,
   updated_at INTEGER
 );
+/* Which WALLET earned an OG badge, and for whom. A badge is a statement about a wallet's history — it
+   buys a 10x multiplier and a free Data API key — so one early-buyer wallet must be able to mint exactly
+   one of them, ever. Without this the badge lived only on the account: link the wallet, take the badge,
+   unlink it (single-wallet unlink revokes nothing unless the wallet SOLD OUT), link it to the next
+   account, repeat. Claims are deliberately NOT released on unlink or disconnect — releasing them is what
+   made the loop go round. Blind index only; the address itself is never stored here. */
+CREATE TABLE IF NOT EXISTS og_claims (
+  addr_idx TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tier INTEGER NOT NULL,
+  claimed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ogclaims_user ON og_claims(user_id);
 CREATE TABLE IF NOT EXISTS watchlist (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   pair_addr TEXT NOT NULL,
@@ -470,6 +506,13 @@ for (const col of [
   "ALTER TABLE holder_state ADD COLUMN gwc_bp INTEGER NOT NULL DEFAULT 0",  // %GWC of supply * 10000
   "ALTER TABLE holder_state ADD COLUMN gwc_streak_start INTEGER",           // start of the $GWC-only no-sell streak (reward holding $GWC longer, independent of $SEND)
   "ALTER TABLE holder_state ADD COLUMN gwc_base_bp INTEGER NOT NULL DEFAULT 0", // peak %GWC during that streak (for $GWC sell detection)
+  // The $100 hold floor (MIN_HOLD_USD). USD value at the last on-chain read, and whether that cleared the floor.
+  // qual is a tri-state carried as NULL when the price could not be read, so an upstream outage never strips a
+  // real holder's streak — it just leaves the last verified answer standing until a price is readable again.
+  "ALTER TABLE holder_state ADD COLUMN send_usd REAL",
+  "ALTER TABLE holder_state ADD COLUMN gwc_usd REAL",
+  "ALTER TABLE holder_state ADD COLUMN send_qual INTEGER",
+  "ALTER TABLE holder_state ADD COLUMN gwc_qual INTEGER",
   "ALTER TABLE posts ADD COLUMN score INTEGER NOT NULL DEFAULT 0",          // denormalized net vote score (up − down) for Top sorting
   "ALTER TABLE posts ADD COLUMN call_id INTEGER",                           // if set, this post is a Send Call widget (references calls.id)
   "ALTER TABLE calls ADD COLUMN entry_liq REAL",                            // pooled liquidity (USD) at call time — anti-farm floor + leaderboard filter
@@ -521,6 +564,20 @@ for (const col of [
   // Send Power decay: when it was last applied, and how many consecutive days of absence it has seen
   "ALTER TABLE users ADD COLUMN decay_at INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE users ADD COLUMN decay_streak INTEGER NOT NULL DEFAULT 0",
+  /* When this account last checked in, recorded whether or not the check-in PAID. "Did you show up today"
+     used to be answered by looking for a points_events row — but 'daily' shares the rolling social points
+     ceiling, so a busy day could reduce the award to zero, awardPoints would write no row, and decay then
+     read an active user as absent and charged them the escalating away-from-the-site rate. Showing up is
+     an act, not a payment: it is now recorded as one. */
+  "ALTER TABLE users ADD COLUMN checkin_at INTEGER NOT NULL DEFAULT 0",
+  /* The base the WEEKLY RACE counts, which is not always the base that was paid. `base` is described as
+     "what you did, with every boost taken out" and the Biggest Sender board sums it on exactly that
+     promise — but the call bases are pre-multiplied by position size before they ever reach awardPoints
+     (send_call pays PTS.send_call x sizeMult, up to 100x for $10k held), so the board was ranking money
+     in a wallet under the banner of proof of work. comp_base carries the unscaled figure for those, and
+     equals base for everything else. */
+  "ALTER TABLE points_events ADD COLUMN comp_base REAL",
+  "ALTER TABLE sessions ADD COLUMN last_seen INTEGER", // so the sessions list can say which one is the phone you lost
   /* Wallet challenges are bound to WHAT they authorise. One generic "Read-only sign-in" message used to be
      accepted for signing in, enabling wallet 2FA, DISABLING two-factor and adding an email — so a signature a
      wallet truthfully rendered as a read-only sign-in could strip an account's second factor, and the person
@@ -841,6 +898,9 @@ function getUser(req) {
   if (!cookies.sid) return null;
   const s = db.prepare('SELECT * FROM sessions WHERE token = ? AND expires_at > ?').get(hashToken(cookies.sid), now()); // only the hash is stored
   if (!s) return null;
+  // Coarse last-seen (one write per 5 min per session) so the sessions list can tell a live device from a
+  // forgotten one, without a DB write on literally every request.
+  if (!s.last_seen || now() - s.last_seen > 3e5) { try { db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), s.token); } catch {} }
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id);
   return u ? { ...u, sid: cookies.sid, sid_at: s.created_at } : null;   // sid_at: credential changes check what predates this session
 }
@@ -930,11 +990,21 @@ const NONCE_PURPOSES = {
   '2fa-on':  'Turn ON two-factor for JustSendIt, using THIS wallet. After this you will need this wallet to sign in — if you lose it, you lose the account. This signature never moves funds.',
   manage:  'Confirm a security change on your JustSendIt account — two-factor, or how you sign in. This signature never moves funds and grants no token approvals.',
 };
+const CHALLENGE_POOL = 5;   // live challenges kept per (wallet, job) — enough for a reload or a second tab, bounded so it can't grow
 function issueNonce(address, purpose) {
   const use = Object.prototype.hasOwnProperty.call(NONCE_PURPOSES, purpose) ? purpose : 'signin';
   const nonce = rand(16), message = signInMessage(address, nonce, NONCE_PURPOSES[use]);
-  db.prepare('INSERT INTO nonces (address, purpose, nonce, expires_at, msg) VALUES (?,?,?,?,?) ON CONFLICT(address, purpose) DO UPDATE SET nonce=excluded.nonce, expires_at=excluded.expires_at, msg=excluded.msg')
-    .run(bidx(address), use, nonce, now() + 6e5, encField(message));
+  const idx = bidx(address);
+  try { db.prepare('DELETE FROM wallet_challenges WHERE expires_at <= ?').run(now()); } catch {}
+  db.prepare('INSERT INTO wallet_challenges (address, purpose, nonce, expires_at, msg) VALUES (?,?,?,?,?)')
+    .run(idx, use, nonce, now() + 6e5, encField(message));
+  // keep only the newest few for this wallet+job, so issuing challenges (which needs no account) can
+  // never be used to grow the table
+  try {
+    db.prepare(`DELETE FROM wallet_challenges WHERE address = ? AND purpose = ? AND nonce NOT IN
+                (SELECT nonce FROM wallet_challenges WHERE address = ? AND purpose = ? ORDER BY expires_at DESC LIMIT ?)`)
+      .run(idx, use, idx, use, CHALLENGE_POOL);
+  } catch {}
   return message;
 }
 // verify a signature against the message we issued for this address; returns the recovered address or an error string
@@ -942,14 +1012,23 @@ function issueNonce(address, purpose) {
 // never be replayed to do a different, more dangerous one.
 function consumeNonce(address, signature, purpose = 'signin') {
   const use = Object.prototype.hasOwnProperty.call(NONCE_PURPOSES, purpose) ? purpose : 'signin';
-  const n = db.prepare('SELECT * FROM nonces WHERE address = ? AND purpose = ? AND expires_at > ?').get(bidx(address), use, now());
-  if (!n) return { error: 'request a wallet signature first — it may have expired' };
-  const message = decField(n.msg); if (!message) return { error: 'request a wallet signature first' };
-  let recovered;
-  try { recovered = verifyMessage(message, String(signature || '')).toLowerCase(); } catch { return { error: 'bad signature' }; }
-  if (recovered !== address) return { error: 'signature does not match that address' };
-  db.prepare('DELETE FROM nonces WHERE address = ? AND purpose = ?').run(bidx(address), use);
-  return { recovered };
+  const idx = bidx(address);
+  const rows = db.prepare('SELECT * FROM wallet_challenges WHERE address = ? AND purpose = ? AND expires_at > ? ORDER BY expires_at DESC')
+    .all(idx, use, now());
+  if (!rows.length) return { error: 'request a wallet signature first — it may have expired' };
+  const sig = String(signature || '');
+  // Try every live challenge for this wallet+job. Each one is still single-use and still bound to this
+  // address and this purpose; there is simply more than one of them outstanding, so a stranger asking for
+  // a challenge cannot invalidate the one somebody is signing right now.
+  for (const n of rows) {
+    const message = decField(n.msg); if (!message) continue;
+    let recovered;
+    try { recovered = verifyMessage(message, sig).toLowerCase(); } catch { continue; }
+    if (recovered !== address) continue;
+    db.prepare('DELETE FROM wallet_challenges WHERE address = ? AND purpose = ? AND nonce = ?').run(idx, use, n.nonce);
+    return { recovered };
+  }
+  return { error: 'signature does not match that address — request a new wallet signature and try again' };
 }
 function mutedNames(userId) { return db.prepare('SELECT u.username FROM mutes m JOIN users u ON u.id = m.muted_id WHERE m.user_id = ? ORDER BY u.username').all(userId).map(r => r.username); }
 
@@ -1086,9 +1165,23 @@ function arcadeState(userId) {
 const LIVE_THRESHOLD = 10;      // distinct qualified opt-ins to go live
 const FOUNDER_BONUS = 15000;    // one-time base, flows through awardPoints (multiplied + PTS_EVENT_CAP-clamped). 3x with every other base
 const MIN_COMMUNITY_LIQ = 500;  // no communities on a dust pool (same floor as Send Calls)
-const MIN_COMMUNITY_HOLD_USD = 25; // a verified member holds at least this much of the token (1e-9 tokens used to unlock the flat 10×)
+/* ═══ THE HOLD FLOOR ═══════════════════════════════════════════════════════════════════════════════
+   One number, one rule, every token on the site: a bag is only a bag at $100 or more, priced live.
+   Below it you hold dust, and dust earns no holder status of any kind — no Diamond level, no Diamond
+   factor, no no-sell streak, no community verification, no conviction standing.
+
+   It exists because every holder reward on this site is TIME-based and the balance was only ever checked
+   for "> 0". One cent of $GWC held for thirty days reached Diamond Forming and applied a ×6.3 factor to
+   the whole account — and at two years, ×100 — so the cheapest route to the largest multiplier on the
+   platform was dust plus patience. A floor in dollars (not tokens) is the only floor that survives a
+   token's own price moving, and $100 is the same unit the Send Call size ladder already counts in
+   ($100 held = 1×), so the site now has ONE definition of "you actually hold this".
+
+   Applies to $SEND, $GWC, community tokens, and any token a conviction play is measured on. */
+const MIN_HOLD_USD = 100;
+const MIN_COMMUNITY_HOLD_USD = MIN_HOLD_USD; // a verified member holds at least this much of the token, priced live
 const SWAP_MIN_USD = 10;           // a swap pays Send Power only when the wallet RECEIVES at least this much $SEND/$GWC
-const OG_MIN_HOLD_USD = 25;        // an OG badge needs a real bag of BOTH coins behind it at grant time, not dust
+const OG_MIN_HOLD_USD = MIN_HOLD_USD; // an OG badge needs a real bag of BOTH coins behind it at grant time, not dust
 const COMM_HALFLIFE = 12 * 3600 * 1000;   // grid-activity half-life
 const W_join = 5, W_post = 3, W_react = 1; // activity weights (grid sort)
 const ACT_TIERS = [[0, 'Dormant'], [5, 'Warm'], [25, 'Active'], [75, 'Hot'], [200, 'Blazing']];
@@ -1352,19 +1445,24 @@ const TRACK_BASE = 10;
 function trackLimit(userId) {
   const h = db.prepare('SELECT * FROM holder_state WHERE user_id = ?').get(userId);
   const fresh = h && h.last_check && now() - h.last_check <= HOLDER_TTL;
-  if (h && h.gwc_tok > 0 && h.streak_start && fresh) {
+  if (h && h.gwc_tok > 0 && h.gwc_qual !== 0 && h.streak_start && fresh) {   // $100+ of $GWC, same floor as every other holder reward
     const lvl = diamondInfo(effHoldDays(h)).level;
     if (lvl >= 1) return Math.min(1000, lvl * 100);
   }
   return TRACK_BASE;
 }
 
+// The bp a coin contributes to the boost: zero unless its bag cleared the $100 floor at the last read.
+// Rows written before the floor existed carry qual = NULL; they keep counting until their next refresh
+// re-reads them against a live price, which every dashboard visit does.
+const qualSendBp = (h) => (h.send_qual === 0 ? 0 : (h.send_bp || 0));
+const qualGwcBp = (h) => (h.gwc_qual === 0 ? 0 : (h.gwc_bp || 0));
 // multiplier from STORED holder state (fast, no RPC) — used when awarding points
 function holderMultiplier(userId) {
   const h = db.prepare('SELECT * FROM holder_state WHERE user_id = ?').get(userId);
   if (!h || !h.streak_start || h.score_bp <= 0) return 1;
   if (!h.last_check || now() - h.last_check > HOLDER_TTL) return 1; // stale → no boost until re-verified on-chain
-  const weightedPct = ((h.send_bp || 0) + GWC_SUPPLY_WEIGHT * (h.gwc_bp || 0)) / 10000; // $GWC weighted heavier than $SEND
+  const weightedPct = (qualSendBp(h) + GWC_SUPPLY_WEIGHT * qualGwcBp(h)) / 10000; // $GWC weighted heavier than $SEND; dust counts for nothing
   const supplyBoost = 10 * weightedPct;                           // 10× for each weighted 1% of supply you hold
   const diamondFactor = diamondInfo(effHoldDays(h)).factor;       // Diamond level (boosted by holding $GWC longer) → up to ×100
   return Math.round((1 + supplyBoost * diamondFactor) * 100) / 100; // UNCAPPED — scales with (weighted) supply held × Diamond factor
@@ -1442,25 +1540,41 @@ async function refreshHolder(userId) {
   const sendTok = Number(sendWei) / 1e18, gwcTok = Number(gwcWei) / 1e18;
   const pctSend = Number(sendWei) / Number(ss) * 100;
   const pctGwc = Number(gwcWei) / Number(gs) * 100;
-  const score = pctSend + pctGwc;
-  const scoreBp = Math.round(score * 10000);
   const sendBp = Math.round(pctSend * 10000), gwcBp = Math.round(pctGwc * 10000);
+  /* THE $100 HOLD FLOOR. Priced live, per coin, and the two coins are judged separately because they carry
+     separate streaks. A price we cannot read is not an answer: qual stays NULL and the previous verdict
+     stands, so a Dexscreener outage can never reset an honest holder's months-long streak — while a first-
+     ever read with no price simply does not start one yet (fail-closed for new, fail-safe for existing). */
+  let sendPx = null, gwcPx = null;
+  try { [sendPx, gwcPx] = await Promise.all([sendPriceUsd().catch(() => null), tokenPriceUsdOf(TOK.GWC).catch(() => null)]); } catch {}
+  const sendUsd = sendPx > 0 ? sendTok * sendPx : null;
+  const gwcUsd = gwcPx > 0 ? gwcTok * gwcPx : null;
+  const qualOf = (usd, before) => usd == null ? (before == null ? null : (before ? 1 : 0)) : (usd >= MIN_HOLD_USD ? 1 : 0);
+  const sendQual = qualOf(sendUsd, prev ? prev.send_qual : null);
+  const gwcQual = qualOf(gwcUsd, prev ? prev.gwc_qual : null);
+  /* Only a coin that clears the floor contributes to a streak or to the boost. The raw %s are still stored
+     (the holdings viz shows what you really hold), but the QUALIFYING score is what the streak logic and
+     holderMultiplier run on — so dust is visible and worth nothing, rather than invisible and worth ×100. */
+  const qSendBp = sendQual === 1 ? sendBp : 0;
+  const qGwcBp = gwcQual === 1 ? gwcBp : 0;
+  const score = (sendQual === 1 ? pctSend : 0) + (gwcQual === 1 ? pctGwc : 0);
+  const scoreBp = qSendBp + qGwcBp;
   let streakStart = prev && prev.streak_start ? prev.streak_start : null;
   let baseBp = prev ? (prev.base_bp || 0) : 0;                     // peak %supply held during this streak
-  if (scoreBp <= 0) { streakStart = null; baseBp = 0; }            // holds nothing → no streak
+  if (scoreBp <= 0) { streakStart = null; baseBp = 0; }            // holds nothing that clears the floor → no streak
   else if (!streakStart) { streakStart = now(); baseBp = scoreBp; }             // (re)start a streak
   else if (scoreBp < baseBp * 0.98) { streakStart = now(); baseBp = scoreBp; }  // sold >2% below the streak's peak → reset
   else if (scoreBp > baseBp) baseBp = scoreBp;                     // accumulated more → raise the peak, keep the streak
   // separate $GWC-only no-sell streak (resets only when you sell $GWC, not $SEND) — rewards holding $GWC for longer
   let gwcStreak = prev && prev.gwc_streak_start ? prev.gwc_streak_start : null;
   let gwcBase = prev ? (prev.gwc_base_bp || 0) : 0;
-  if (gwcBp <= 0) { gwcStreak = null; gwcBase = 0; }
-  else if (!gwcStreak) { gwcStreak = now(); gwcBase = gwcBp; }
-  else if (gwcBp < gwcBase * 0.98) { gwcStreak = now(); gwcBase = gwcBp; }      // sold $GWC → reset the $GWC streak
-  else if (gwcBp > gwcBase) gwcBase = gwcBp;
-  db.prepare(`INSERT INTO holder_state (user_id, score_bp, base_bp, send_tok, gwc_tok, send_bp, gwc_bp, streak_start, gwc_streak_start, gwc_base_bp, last_check, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    ON CONFLICT(user_id) DO UPDATE SET score_bp=excluded.score_bp, base_bp=excluded.base_bp, send_tok=excluded.send_tok, gwc_tok=excluded.gwc_tok, send_bp=excluded.send_bp, gwc_bp=excluded.gwc_bp, streak_start=excluded.streak_start, gwc_streak_start=excluded.gwc_streak_start, gwc_base_bp=excluded.gwc_base_bp, last_check=excluded.last_check, updated_at=excluded.updated_at`)
-    .run(userId, scoreBp, baseBp, sendTok, gwcTok, sendBp, gwcBp, streakStart, gwcStreak, gwcBase, now(), now());
+  if (qGwcBp <= 0) { gwcStreak = null; gwcBase = 0; }              // dropping below $100 of $GWC ends the $GWC streak
+  else if (!gwcStreak) { gwcStreak = now(); gwcBase = qGwcBp; }
+  else if (qGwcBp < gwcBase * 0.98) { gwcStreak = now(); gwcBase = qGwcBp; }    // sold $GWC → reset the $GWC streak
+  else if (qGwcBp > gwcBase) gwcBase = qGwcBp;
+  db.prepare(`INSERT INTO holder_state (user_id, score_bp, base_bp, send_tok, gwc_tok, send_bp, gwc_bp, streak_start, gwc_streak_start, gwc_base_bp, send_usd, gwc_usd, send_qual, gwc_qual, last_check, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    ON CONFLICT(user_id) DO UPDATE SET score_bp=excluded.score_bp, base_bp=excluded.base_bp, send_tok=excluded.send_tok, gwc_tok=excluded.gwc_tok, send_bp=excluded.send_bp, gwc_bp=excluded.gwc_bp, streak_start=excluded.streak_start, gwc_streak_start=excluded.gwc_streak_start, gwc_base_bp=excluded.gwc_base_bp, send_usd=excluded.send_usd, gwc_usd=excluded.gwc_usd, send_qual=excluded.send_qual, gwc_qual=excluded.gwc_qual, last_check=excluded.last_check, updated_at=excluded.updated_at`)
+    .run(userId, scoreBp, baseBp, sendTok, gwcTok, sendBp, gwcBp, streakStart, gwcStreak, gwcBase, sendUsd, gwcUsd, sendQual, gwcQual, now(), now());
   checkProbation(userId, sendTok); // enforce any active "hold your bought $SEND" redemption deal against this fresh balance
   // OG revocation: OG requires holding BOTH $SEND and $GWC, so selling out of EITHER (dropping it to ~0) permanently
   // removes OG. These balances are real — rpc() throws on failure (we'd never reach here on a transient error), so a
@@ -1475,7 +1589,10 @@ async function refreshHolder(userId) {
   }
   const freshH = { streak_start: streakStart, gwc_streak_start: gwcStreak, last_check: now() };
   const hd = streakStart ? (now() - streakStart) / 864e5 : 0;
-  return { hasWallet: true, multiplier: holderMultiplier(userId), pct: score, pctSend, pctGwc, holdDays: hd, gwcDays: gwcDaysOf(freshH), sendTok, gwcTok, streakStart, fresh: true, diamond: diamondInfo(effHoldDays(freshH)) };
+  return { hasWallet: true, multiplier: holderMultiplier(userId), pct: score, pctSend, pctGwc, holdDays: hd, gwcDays: gwcDaysOf(freshH), sendTok, gwcTok, streakStart, fresh: true, diamond: diamondInfo(effHoldDays(freshH)),
+    // the floor, and exactly where this account sits against it, so the dashboard can say why a bag earns nothing
+    minHoldUsd: MIN_HOLD_USD, sendUsd, gwcUsd,
+    sendQualifies: sendQual == null ? null : !!sendQual, gwcQualifies: gwcQual == null ? null : !!gwcQual };
 }
 
 /* ===== OG scan: replay a wallet's whole history of one coin, on-chain, read-only ==================
@@ -1641,7 +1758,7 @@ async function checkOg(userId) {
         if (s.tier === OG_TIER.NONE) continue;
         // this wallet bought inside a window, but fails the standard for this coin
         if (ogDisqualified(s)) { sawDq = true; continue; }
-        if (!best[c.key] || s.tier > best[c.key].tier) best[c.key] = s;
+        if (!best[c.key] || s.tier > best[c.key].tier) best[c.key] = { ...s, wallet: a };   // remember WHICH wallet earned it — a badge is claimed by a wallet, once
       }
     }
     const qualifies = (k) => best[k] && holdsAny[k];
@@ -1668,13 +1785,37 @@ async function checkOg(userId) {
       return 0;
     }
     const buyMs = Math.max(best.SEND.firstBuyMs, best.GWC.firstBuyMs); // when they completed the pair
+    /* ONE BADGE PER WALLET, EVER. A wallet that has already earned OG for some other account cannot earn
+       it again here. Without this the badge was cloneable without limit: link an early-buyer wallet, take
+       the tier, unlink it (a single-wallet unlink only revokes when the wallet has SOLD OUT, and this one
+       hasn't), link it to the next account. Every copy kept the 10x multiplier and a Data API key.
+       The claim survives unlinking on purpose — that is the whole point. */
+    const claimAddrs = [...new Set([best.SEND.wallet, best.GWC.wallet].filter(Boolean))];
+    for (const a of claimAddrs) {
+      const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a));
+      if (prior && prior.user_id !== userId) {
+        db.prepare('UPDATE users SET og_checked_at = ?, og_dq = 1 WHERE id = ?').run(now(), userId);
+        return 0;    // this wallet's badge is already spent on another account
+      }
+    }
     // Grant only while the invariant still holds: un-tiered, never revoked, and a wallet is STILL
     // linked — a disconnect landing during this multi-second scan must not leave a wallet-less
-    // account wearing a badge.
-    const g = db.prepare("UPDATE users SET og = 1, og_tier = ?, og_buy_ms = ?, og_checked_at = ? WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')")
-      .run(tier, buyMs, now(), userId);
+    // account wearing a badge. The claims are written in the SAME transaction as the grant, so a
+    // crash can never leave a badge with no claim behind it (or a claim with no badge).
+    let g;
+    try {
+      db.exec('BEGIN');
+      g = db.prepare("UPDATE users SET og = 1, og_tier = ?, og_buy_ms = ?, og_checked_at = ? WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')")
+        .run(tier, buyMs, now(), userId);
+      if (g.changes) {
+        // INSERT (not INSERT OR REPLACE): a row already held by another account makes the whole grant
+        // fail rather than quietly stealing their claim.
+        for (const a of claimAddrs) db.prepare('INSERT INTO og_claims (addr_idx, user_id, tier, claimed_at) VALUES (?,?,?,?) ON CONFLICT(addr_idx) DO UPDATE SET tier = excluded.tier WHERE og_claims.user_id = excluded.user_id').run(bidx(a), userId, tier, now());
+        db.prepare('UPDATE users SET og_dq = 0 WHERE id = ?').run(userId); // qualified — clear any earlier disqualification note
+      }
+      db.exec('COMMIT');
+    } catch { try { db.exec('ROLLBACK'); } catch {} return 0; }
     if (!g.changes) return 0;   // the invariant moved under us (disconnect / concurrent grant) — change nothing else
-    db.prepare('UPDATE users SET og_dq = 0 WHERE id = ?').run(userId); // qualified — clear any earlier disqualification note
     notify(userId, '🏅', 'OG ' + OG_TIER_NAME[tier] + ' unlocked! You bought BOTH $SEND and $GWC inside the ' +
       OG_TIER_NAME[tier].toLowerCase() + ' window and still hold both (checked on-chain) — a permanent badge and a ' +
       OG_TIER_MULT[tier] + '× Send Power bonus on everything (+' + (OG_TIER_MULT[tier] - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Keep holding both: sell out of either and it goes.', 'og');
@@ -1716,7 +1857,9 @@ function notifyOnce(userId, icon, text, kind, actorId, windowMs = 10 * 60 * 1000
 }
 
 // award points (holder-multiplied), deduped by ref, capped per kind/day
-function awardPoints(userId, kind, base, ref, maxAmount) {
+// compBase: what this action is worth to the weekly RACE, when that differs from the base being paid.
+// Defaults to base. Pass it wherever base has already been scaled by how much money is in a wallet.
+function awardPoints(userId, kind, base, ref, maxAmount, compBase) {
   if (!userId || !(base > 0)) return 0;
   // maxAmount is a caller-supplied ceiling on the FINAL, post-multiplier amount. It exists for
   // payouts that recur against one long-lived object (a Send Call pays its caller over and over as
@@ -1747,7 +1890,10 @@ function awardPoints(userId, kind, base, ref, maxAmount) {
     let compAmount = Math.min(PTS_EVENT_CAP, Math.max(1, Math.round(base * compMult)));
     if (maxAmount != null) compAmount = Math.min(compAmount, Math.floor(maxAmount));
     compAmount = Math.min(compAmount, amount);
-    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, comp_amount, ref, created_at) VALUES (?,?,?,?,?,?,?,?)').run(userId, kind, amount, base, effMult, compAmount, ref || null, now());
+    // Never more than what was actually paid: a compBase above base would let the race score an action
+    // higher than the site valued it.
+    const cb = Math.min(base, (compBase != null && compBase > 0) ? compBase : base);
+    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, comp_amount, comp_base, ref, created_at) VALUES (?,?,?,?,?,?,?,?,?)').run(userId, kind, amount, base, effMult, compAmount, cb, ref || null, now());
     db.prepare('UPDATE users SET points = points + ? WHERE id = ?').run(amount, userId);
     db.exec('COMMIT');
     compCache.rows = null; // standings changed — never let a user's own fresh award lag behind the cached board
@@ -1789,7 +1935,14 @@ const tokenHoldCache = new Map();                  // `${uid}:${token}` -> { hel
 // minUsd/priceUsd: when both are known the floor is that many dollars of the token at the given price (decimals from the token
 // cache, 18 by default); otherwise the dust floor. A price that cannot be read never lowers the bar below dust, and never raises it.
 function tokenDecimalsOf(addr) { try { const tc = tokenCacheGet(String(addr || '').toLowerCase()); return tc && tc.decimals != null ? (Number(tc.decimals) || 18) : 18; } catch { return 18; } }
-async function tokenPriceUsdOf(addr) { try { const r = await lookupTokenPair(String(addr || '').toLowerCase()); const px = r && r.pair && Number(r.pair.priceUsd); return px > 0 ? px : null; } catch { return null; } }
+/* lookupTokenPair returns { pair: P } where P is the ENRICHED object — and P has its own `pair` key
+   holding the pool descriptor (address / quoteSymbol / token0 / token1 / createdAt). The price lives at
+   P.market.priceUsd. Reading r.pair.priceUsd therefore read the POOL descriptor's non-existent price and
+   returned undefined for every token that has ever existed, so this function answered null always. It is
+   the sole price source for checkOg's "$25 of BOTH coins" floor, which meant no OG badge could be granted
+   at all, and for the $GWC leg of the swap reward. Silent because null is also the honest answer for a
+   token with no market — nothing ever threw. */
+async function tokenPriceUsdOf(addr) { try { const r = await lookupTokenPair(String(addr || '').toLowerCase()); const px = r && r.pair && r.pair.market && Number(r.pair.market.priceUsd); return px > 0 ? px : null; } catch { return null; } }
 async function holdsToken(uid, tokenAddr, minUsd, priceUsd) {
   const t = String(tokenAddr || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(t)) return false;
@@ -2301,7 +2454,13 @@ let communityHolderSweeping = false;
 async function sweepCommunityHolders() {
   if (communityHolderSweeping) return; communityHolderSweeping = true;
   try {
-    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status = 'live' AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
+    /* PENDING communities are swept too. Restricting this to live ones left the one place the count
+       actually decides something — the ten qualified opt-ins that flip a community live — checked exactly
+       once per member and never again. So a single bag could be walked through ten accounts, qualifying
+       each in turn, and the community went live permanently on holdings that no longer existed by the
+       time it did. Proposals inherit the same rows, so the same bag could also cast N votes. Re-verifying
+       before go-live is the only point at which the threshold means anything. */
+    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price, c.status FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status IN ('live','pending') AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
     for (const r of rows) {
       let holds; try { holds = await holdsToken(r.user_id, r.token_addr, MIN_COMMUNITY_HOLD_USD, r.c_price); } catch { continue; } // RPC error → skip (never revoke on a transient failure)
       const t = now();
@@ -2310,7 +2469,9 @@ async function sweepCommunityHolders() {
         db.exec('BEGIN');
         db.prepare('UPDATE community_members SET qualified=0, qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id);
         db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id=?').run(r.community_id);
-        db.prepare('UPDATE users SET live_comm_count = MAX(live_comm_count-1,0) WHERE id=?').run(r.user_id);
+        // Only a LIVE community ever granted the flat 10×, so only a live one takes it back. Decrementing
+        // for a pending community would charge a member for a multiplier they were never given.
+        if (r.status === 'live') db.prepare('UPDATE users SET live_comm_count = MAX(live_comm_count-1,0) WHERE id=?').run(r.user_id);
         db.exec('COMMIT');
       } catch { try { db.exec('ROLLBACK'); } catch {} }
     }
@@ -2381,7 +2542,7 @@ function gamifySummary(u) {
     communityMult: (db.prepare('SELECT live_comm_count c FROM users WHERE id=?').get(u.id).c > 0) ? COMMUNITY_MULT : 1, // 10× while in ≥1 live community
     arcade: arcadeState(u.id),        // today's Rocket Run boost — stacks on Holder × OG × community
     weekBoost: weekBoostState(u.id),  // last week's Biggest Sender prize, if any — stacks the same way
-    checkedInToday: !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + u.id + ':' + ymd()),
+    checkedInToday: checkedInToday(u.id, u),
     communities: db.prepare('SELECT c.id, c.name, c.symbol, c.token_addr, c.xp, c.status, c.demo, cm.conviction_xp FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ? AND cm.qualified = 1 ORDER BY cm.conviction_xp DESC').all(u.id).map(c => {
       const cl = commLevelInfo(c.xp), cv = commLevelInfo(c.conviction_xp);
       return { id: c.id, name: c.name, symbol: c.symbol, status: c.status, demo: !!c.demo, commLevel: cl.level, commInto: cl.intoLevel, commSpan: cl.spanLevel, conviction: { level: cv.level, title: convictionTitleFor(cv.level), into: cv.intoLevel, span: cv.spanLevel } };
@@ -2394,6 +2555,11 @@ function gamifySummary(u) {
       holdDays: holdDaysOf(h), gwcDays: gwcDaysOf(h), // real combined streak + the $GWC-only streak (weighted ×2 toward the level)
       fresh: !!(h.last_check && now() - h.last_check <= HOLDER_TTL),
       diamond: diamondInfo(effHoldDays(h)), // level/factor reward holding $GWC longer
+      // the $100 floor, and where this account sits against it per coin — so the dashboard can say
+      // "your $4 of $GWC isn't counting yet" instead of quietly paying nothing
+      minHoldUsd: MIN_HOLD_USD,
+      sendUsd: h.send_usd == null ? null : h.send_usd, gwcUsd: h.gwc_usd == null ? null : h.gwc_usd,
+      sendQualifies: h.send_qual == null ? null : !!h.send_qual, gwcQualifies: h.gwc_qual == null ? null : !!h.gwc_qual,
     } : null,
     breakdown: db.prepare('SELECT kind, SUM(amount) total, COUNT(*) n FROM points_events WHERE user_id=? GROUP BY kind ORDER BY total DESC').all(u.id),
     // "today" achievement log (resets every 24h); the client toggles between this and the all-time breakdown
@@ -2403,6 +2569,14 @@ function gamifySummary(u) {
   };
 }
 function ymd() { const d = new Date(now()); return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate(); }
+/* Did this account show up today? Read from users.checkin_at, which /api/checkin stamps whether or not the
+   award paid — never from points_events, which only records a check-in that was WORTH something. Falls back
+   to the ledger so accounts that checked in before this column existed are not read as absent on day one. */
+function checkedInToday(userId, row) {
+  const u = row && row.checkin_at !== undefined ? row : db.prepare('SELECT checkin_at FROM users WHERE id = ?').get(userId);
+  if (u && u.checkin_at && dayNo(u.checkin_at) === dayNo()) return true;
+  return !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + userId + ':' + ymd());
+}
 // ISO-ish UTC week key ("2026-W36") — the bucket the weekly community competition scores into
 function weekKey(t) {
   const d = new Date(t == null ? now() : t);
@@ -2735,7 +2909,8 @@ const SIZE_MULT_CAP = 100;               // cap the size boost at 100× ($10k+ s
 const SIZE_MAX_WALLETS = MAX_LINKED_WALLETS;
 function sizeMult(spendUsd) { return Math.min(SIZE_MULT_CAP, Math.max(1, (spendUsd || 0) / 100)); } // each $100 held-from-buys = 1×, floor 1×
 // full on-chain position: what they BOUGHT from the pool, what they still HOLD, and spend = min(both) (the anti-cheat basis).
-async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd) {
+const POS_PAGES = 4;                     // transfer pages walked per wallet (~200 transfers) before we stop
+async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd, liqUsd) {
   const addrs = walletAddresses(userId);
   if (!addrs.length || !pairAddr || !(priceUsd > 0)) return { boughtUsd: 0, heldUsd: 0, spendUsd: 0 };
   const pair = pairAddr.toLowerCase();
@@ -2743,27 +2918,57 @@ async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd) {
   for (const a of addrs.slice(0, SIZE_MAX_WALLETS)) {
     try {
       const me = a.toLowerCase();
-      const j = await jget(BLOCKSCOUT + '/api/v2/addresses/' + a + '/token-transfers?token=' + tokenAddr);
-      const items = (j && j.items) || [];
-      let boughtRaw = 0n, dec = 18;
+      /* Walk more than one page. A single default page is ~50 transfers; a wallet that has traded the
+         token at all can push its own buys off the end of it, and the netting below is only honest over
+         the whole history we can see. Bounded, and a failed page simply ends the walk with what we have. */
+      const base = BLOCKSCOUT + '/api/v2/addresses/' + a + '/token-transfers?token=' + tokenAddr;
+      const items = [];
+      let url = base;
+      for (let page = 0; page < POS_PAGES; page++) {
+        const j = await jget(url);
+        if (!j || !Array.isArray(j.items)) break;
+        items.push(...j.items);
+        if (!j.next_page_params) break;
+        url = base + '&' + new URLSearchParams(j.next_page_params).toString();
+      }
+      let inRaw = 0n, outRaw = 0n, dec = 18;
       for (const it of items) {
         if (it.token && it.token.decimals != null) dec = Number(it.token.decimals) || 18;
         const from = ((it.from && it.from.hash) || '').toLowerCase();
         const to = ((it.to && it.to.hash) || '').toLowerCase();
-        if (to === me && from === pair) { try { boughtRaw += BigInt((it.total && it.total.value) || '0'); } catch {} } // token amount received in a buy
+        let v = 0n; try { v = BigInt((it.total && it.total.value) || '0'); } catch { continue; }
+        if (to === me && from === pair) inRaw += v;        // tokens the POOL sent this wallet
+        else if (from === me && to === pair) outRaw += v;  // tokens this wallet sent the POOL
       }
+      /* NET, not gross. "Anything the pair sent me is a buy" is not true of a Uniswap V2 pair: skim(to)
+         and burn(to) both transfer pair → you with no purchase behind them. So a token deployer pulling
+         their own liquidity was credited for the tokens they took back out — up to the full 100x size
+         multiplier — and so was anyone who donated tokens to a pool and skimmed them straight back.
+         Netting closes both, because each attack has to move tokens INTO the pair first:
+           · skim  — you can only skim what you donated, so out >= in and the net is zero.
+           · burn  — the LP position was minted by sending tokens in, so removing it nets back to zero.
+           · wash  — buy, sell to the pool, repeat: the sells cancel the buys instead of stacking.
+         A genuine buyer who later took some profit nets down to what they actually still put in, which
+         is what "how much did you send into this coin" was always supposed to mean. */
+      const netRaw = inRaw > outRaw ? inRaw - outRaw : 0n;
       let heldRaw = 0n; try { heldRaw = await erc20Balance(tokenAddr, a); } catch {}
       const div = Math.pow(10, dec);
-      boughtTok += Number(boughtRaw) / div;
+      boughtTok += Number(netRaw) / div;
       heldTok += Number(heldRaw) / div;
-      spendTok += Number(boughtRaw < heldRaw ? boughtRaw : heldRaw) / div; // bought AND still held
+      spendTok += Number(netRaw < heldRaw ? netRaw : heldRaw) / div; // net-bought AND still held
     } catch {}
   }
-  return { boughtUsd: boughtTok * priceUsd, heldUsd: heldTok * priceUsd, spendUsd: spendTok * priceUsd };
+  /* Valued at the live price — which a thin pool's owner sets. The position can never be worth more than
+     the pool it is priced against holds, so a self-made $600 pool pumped to a paper million credits $600,
+     not a million. Only applied when the caller knows the pool's liquidity; MIN_CALL_LIQ is the floor
+     underneath it either way. */
+  const cap = (liqUsd != null && liqUsd > 0) ? liqUsd : Infinity;
+  const val = (tok) => Math.min(tok * priceUsd, cap);
+  return { boughtUsd: val(boughtTok), heldUsd: val(heldTok), spendUsd: val(spendTok) };
 }
 // USD they bought & still hold (the size-multiplier basis) — thin wrapper so the size feature is unchanged
-async function callSpendUsd(userId, tokenAddr, pairAddr, priceUsd) {
-  return (await walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd)).spendUsd;
+async function callSpendUsd(userId, tokenAddr, pairAddr, priceUsd, liqUsd) {
+  return (await walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd, liqUsd)).spendUsd;
 }
 
 /* ===== Honeypot & contract read =====
@@ -2811,16 +3016,37 @@ function contractSummaryOf(o) {
   if (!o.powers.length) return 'Heuristic read of the verified source: no obvious owner powers to mint, blacklist, pause, toggle trading, or change taxes were found — the usual honeypot/rug levers weren’t detected. Still DYOR; a scan isn’t an audit.';
   return 'Heuristic read of the verified source — the owner’s code appears able to ' + o.powers.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders.';
 }
+/* The pair is supplied by whoever asked, and the answer used to be cached under the TOKEN alone — so
+   asking about token X while naming some unrelated pool whose LP happens to be burned wrote "Liquidity
+   looks locked" into the risk panel for token X, for everyone, for the next half hour. Two things fix it,
+   and both are needed: the pool has to actually BE a pool for this token (checked on-chain, not taken on
+   the caller's word), and the cache is keyed on the pair as well, so one caller's question can never
+   become another caller's answer. */
+const _pairHasTokenCache = new Map();
+async function pairContainsToken(pairAddr, tokenAddr) {
+  const k = pairAddr + ':' + tokenAddr;
+  const hit = _pairHasTokenCache.get(k);
+  if (hit !== undefined) return hit;              // a pool's two sides never change
+  let ok = false;
+  try { const { token0, token1 } = await pairTokens(pairAddr); ok = (token0 === tokenAddr || token1 === tokenAddr); }
+  catch { return false; }                          // unreadable → not verified, and not cached
+  pruneCache(_pairHasTokenCache, 20000);
+  _pairHasTokenCache.set(k, ok);
+  return ok;
+}
 async function analyzeContract(tokenAddr, pairAddr) {
-  const key = tokenAddr.toLowerCase();
+  const tok = tokenAddr.toLowerCase();
+  const pair = pairAddr ? pairAddr.toLowerCase() : null;
+  const key = tok + '|' + (pair || '');
   const cached = _contractCache.get(key);
   if (cached && now() - cached.t < CONTRACT_TTL) return cached.v;
   const out = { verified: null, name: null, powers: [], liquidity: { known: false }, summary: '' };
   try {
-    const sc = await jget(BLOCKSCOUT + '/api/v2/smart-contracts/' + tokenAddr);
+    const sc = await jget(BLOCKSCOUT + '/api/v2/smart-contracts/' + tok);
     if (sc) { out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); const src = String(sc.source_code || ''); if (out.verified && src) out.powers = scanContractSource(src); }
   } catch {}
-  out.liquidity = await checkLpLock(pairAddr);
+  if (pair && await pairContainsToken(pair, tok)) out.liquidity = await checkLpLock(pair);
+  else if (pair) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
   out.summary = contractSummaryOf(out);
   _contractCache.set(key, { t: now(), v: out });
   return out;
@@ -3024,9 +3250,11 @@ function swapPrice(log, tokenIsZero, decToken, decQuote) {
    Coalesced and cached for 900ms, so a hundred viewers of the same pair cost the chain one call per
    second, not a hundred. The chain runs ~0.1s blocks, so a 1s cadence is a real refresh rather than
    a spinning wheel showing the same number. */
-const spotCache = new Map();      // pair -> { at, val }
+const spotCache = new Map();      // "pair:token" -> { at, val, neg }
 const spotInflight = new Map();
 const SPOT_TTL = 900;
+const SPOT_NEG_TTL = 60 * 1000;   // a definite "that is not a pool" is remembered too, so junk lookups cost one chain read, not one per request
+const SPOT_CACHE_MAX = 20000;     // hard cap: the key is caller-supplied, so this map must never be allowed to grow freely
 const SPOT_BATCH_MAX = 40;        // pairs answered in one /api/spot read — more than fit on any screen
 const pairQuoteCache = new Map(); // pair -> quote token address; a pool's two sides never change
 /* Which side of the pool is the money side. Needed because spotPrice returns a price DENOMINATED IN THE QUOTE
@@ -3055,7 +3283,7 @@ async function spotPriceUsd(pairAddr, tokenAddr) {
 async function spotPrice(pairAddr, tokenAddr) {
   const key = pairAddr + ':' + tokenAddr;
   const hit = spotCache.get(key);
-  if (hit && now() - hit.at < SPOT_TTL) return hit.val;
+  if (hit && now() - hit.at < (hit.neg ? SPOT_NEG_TTL : SPOT_TTL)) return hit.val;
   const flying = spotInflight.get(key);
   if (flying) return flying;
   const pr = (async () => {
@@ -3076,17 +3304,60 @@ async function spotPrice(pairAddr, tokenAddr) {
     if (!(t > 0) || !(q > 0)) return null;
     return q / t;
   })().then((val) => {
-    if (val != null) spotCache.set(key, { at: now(), val });   // never cache a failure
+    /* Cache the NO as well as the yes. "Never cache a failure" is right for a transient error and wrong
+       for a definite answer: a (pair, token) combination that does not name a pool answers null every
+       time, and leaving it uncached meant each repeat cost three fresh chain reads. /api/spot takes 40
+       pairs per request at 240 requests a minute, so a caller feeding it addresses that are merely
+       well-formed could drive ~480 RPC calls a second through this server indefinitely — with no account,
+       and while staying inside the rate limit. A definite null is now remembered for SPOT_NEG_TTL; a
+       thrown error still caches nothing, because that one really is transient. */
+    spotCache.set(key, { at: now(), val, neg: val == null });
     spotInflight.delete(key);
     return val;
   }).catch((e) => { spotInflight.delete(key); throw e; });
   spotInflight.set(key, pr);
   return pr;
 }
+/* The cache is keyed by whatever addresses a caller sends, so it is a map an anonymous client can grow.
+   Swept on the maintenance tick and hard-capped: expired entries go first, then the oldest, so a flood of
+   junk lookups costs bounded memory instead of unbounded. */
+/* Every in-memory cache whose KEY comes from the request rather than from our own data — a token address,
+   a pair address, a block number. SCALING.md promises these are cleaned up; these were the ones that
+   never were, which is backwards: a map an anonymous caller chooses the keys of is precisely the map that
+   needs a ceiling. Entries with a timestamp expire on their own TTL; the rest are simply capped, oldest
+   insertion first (JS Maps iterate in insertion order, so deleting from the front is the oldest). */
+function pruneCache(map, max, ttl, stampOf) {
+  if (ttl && stampOf) { const t = now(); for (const [k, v] of map) { const at = stampOf(v); if (at && t - at > ttl) map.delete(k); } }
+  if (map.size > max) { let over = map.size - max; for (const k of map.keys()) { map.delete(k); if (--over <= 0) break; } }
+}
+function sweepOpenCaches() {
+  pruneCache(chartCache, 2000, CHART_TTL * 20, v => v.at);
+  pruneCache(_contractCache, 2000, CONTRACT_TTL, v => v.t);
+  pruneCache(dextoolsCache, 2000, 60 * 60 * 1000, v => v.at);
+  pruneCache(marketCache, 5000, 60 * 60 * 1000, v => v.at);
+  pruneCache(wlEnrichCache, 5000, 60 * 60 * 1000, v => v.t);
+  pruneCache(tokenHoldCache, 20000, HOLDS_TTL, v => v.at);
+  pruneCache(heldCache, 20000, HOLDS_TTL, v => v.at);
+  pruneCache(blockTsCache, 50000);   // block → timestamp never changes, so these only need a ceiling
+  pruneCache(pairQuoteCache, 20000); // a pool's two sides never change either
+}
+function sweepSpotCache() {
+  const t = now();
+  for (const [k, v] of spotCache) if (t - v.at > (v.neg ? SPOT_NEG_TTL : SPOT_TTL)) spotCache.delete(k);
+  if (spotCache.size > SPOT_CACHE_MAX) {
+    const byAge = [...spotCache.entries()].sort((a, b) => a[1].at - b[1].at);
+    for (let i = 0; i < byAge.length - SPOT_CACHE_MAX; i++) spotCache.delete(byAge[i][0]);
+  }
+}
 
 async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
   const tf = CHART_TF[tfKey] || 3600;
-  const key = pairAddr + ':' + tfKey;
+  /* Every input the candles depend on has to be in the key. It was (pair, timeframe) only — while the
+     output also depends on WHICH SIDE of the pool is being priced and on how far back the window
+     reaches. So one anonymous request naming the opposite side of a pool wrote an inverted price series
+     into the cache under the same key everyone else reads, and a 1-hour window served whatever span the
+     previous caller happened to ask for. */
+  const key = pairAddr + ':' + tokenAddr + ':' + tfKey + ':' + hours;
   const hit = chartCache.get(key);
   if (hit && now() - hit.at < CHART_TTL) return hit.data;
 
@@ -3667,18 +3938,32 @@ function sniperData(row) {
   if (!row || !row.data) return null;
   try { return JSON.parse(row.data); } catch { return null; }
 }
-const sniperQueue = [];                 // [{ token, pair, createdAtMs }] waiting to be scanned
+const sniperQueue = [];                 // [{ token, pair, createdAtMs }] waiting to be scanned — IN MEMORY, so it does not survive a restart
 const SNIPE_QUEUE_MAX = 200;
+const SNIPE_STALE_MS = 10 * 60 * 1000;  // a queued/running claim older than this belonged to a process that is gone
 let sniperScanning = false;
+/* Clear claims left behind by the previous process. Without this every token that happened to be queued
+   or mid-scan when the server stopped was frozen at "queued" in the database, and queueSniperScan's
+   in-flight guard then refused to ever pick it up again — one deploy, and those tokens answered
+   "check back in a moment" permanently. */
+try {
+  const orphans = db.prepare("UPDATE sniper_scans SET status = 'failed', reason = 'interrupted by a restart', finished_at = 0 WHERE status IN ('queued','running')").run();
+  if (orphans.changes) console.log('sniper scans: re-opened ' + orphans.changes + ' interrupted by the last shutdown');
+} catch {}
 function queueSniperScan(token, pair, createdAtMs) {
   const t = lcAddr(token), pr = lcAddr(pair);
   if (!/^0x[0-9a-f]{40}$/.test(t) || !/^0x[0-9a-f]{40}$/.test(pr)) return;
   if (sniperQueue.length >= SNIPE_QUEUE_MAX || sniperQueue.some(q => q.token === t)) return;
   const row = sniperRow(t);
   const age = row && row.finished_at ? now() - row.finished_at : Infinity;
-  // re-scan a finished token on the TTL, retry a failure after a pause, and never re-enter one in flight
+  /* "In flight" is a claim about THIS process, and the queue holding it lives in memory — so a restart
+     (a deploy, a crash, an OOM) left rows marked queued/running that nothing was working on, and this
+     guard then refused to re-enter them for good. The page said "check back in a moment" forever. Two
+     changes: a stale claim is no longer believed (SNIPE_STALE_MS), and boot clears the orphans outright
+     (see the reset below the queue runner). */
   if (row) {
-    if (row.status === 'running' || row.status === 'queued') return;
+    const claimAge = now() - (row.started_at || 0);
+    if ((row.status === 'running' || row.status === 'queued') && claimAge < SNIPE_STALE_MS) return;
     if ((row.status === 'done' || row.status === 'partial') && age < SNIPE.TTL) return;
     if (row.status === 'failed' && age < SNIPE.RETRY_MS) return;
   }
@@ -3772,17 +4057,30 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
   const holdersVal = meta ? (meta.holders_count != null ? meta.holders_count : meta.holders) : null;
   // treat 0 as "not indexed yet" (unknown), not a real zero — brand-new tokens lag Blockscout's holder count
   const count = holdersVal != null && Number(holdersVal) > 0 ? Number(holdersVal) : null;
+  /* NOT A HOLDER: the pool itself, the burn address, and the zero address. Blockscout returns them in the
+     holders list like anything else, and counting them made "top holder owns 78% of supply" the normal
+     reading of a HEALTHY token — the liquidity pool is usually the largest single balance, and a token
+     whose supply is mostly burned looks like one whale by the same arithmetic. Both point the
+     concentration warning at exactly the wrong tokens, and hide the real whale behind them. */
+  const NON_HOLDERS = new Set([
+    '0x0000000000000000000000000000000000000000',
+    '0x000000000000000000000000000000000000dead',
+    String((t && t.pair) || '').toLowerCase(),
+  ].filter(Boolean));
+  const realHolders = (holdersData && Array.isArray(holdersData.items))
+    ? holdersData.items.filter(h => !NON_HOLDERS.has(String((h.address && h.address.hash) || h.address || '').toLowerCase()))
+    : null;
   let topHolderPct = null, top10Pct = null;
-  if (holdersData && Array.isArray(holdersData.items) && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
+  if (realHolders && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
     const ts0 = Number(totalSupplyRaw);
-    const vals = holdersData.items.map(h => Number(h.value) || 0);
+    const vals = realHolders.map(h => Number(h.value) || 0);
     if (vals.length) { topHolderPct = vals[0] / ts0 * 100; top10Pct = vals.slice(0, 10).reduce((a, b) => a + b, 0) / ts0 * 100; }
   }
   // top-10 holder list (no extra network call — reuses the holders fetch already made)
   let topHolders = [];
-  if (holdersData && Array.isArray(holdersData.items) && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
+  if (realHolders && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
     const ts0 = Number(totalSupplyRaw);
-    topHolders = holdersData.items.slice(0, 10).map(h => ({
+    topHolders = realHolders.slice(0, 10).map(h => ({
       address: String((h.address && h.address.hash) || h.address || '').toLowerCase(),
       pct: ts0 ? (Number(h.value) || 0) / ts0 * 100 : null,
     })).filter(x => x.address);
@@ -4131,7 +4429,16 @@ function livePairFor(tok) {                        // is this token currently in
   for (const p of (pairsCache.pairs || [])) if (p && p.token && String(p.token.address || '').toLowerCase() === tok) return p;
   return null;
 }
-async function lookupTokenPair(tokenAddr) {
+/* opts.maxAgeMs: refuse to answer from a cached row older than this — BLOCK on a live refetch instead.
+   The default path deliberately serves any cached row instantly however old it is (a display price that
+   is a few minutes stale is fine, and revalidation happens behind it). That is the wrong trade when the
+   price is MONEY: opening a Send Call stamps entry_price, every X, every milestone and the whole
+   leaderboard basis off this number. A token that has aged out of the live radar could be opened at a
+   saved price from hours ago, so a caller could pick a coin whose cached price sat below the live one and
+   collect the Xs for a move that had already happened. Callers that write a price into the ledger pass
+   PRICE_MAX_AGE_MS; callers that merely draw it do not. */
+const PRICE_MAX_AGE_MS = 90 * 1000;
+async function lookupTokenPair(tokenAddr, opts = {}) {
   tokenAddr = tokenAddr.toLowerCase();
   // 1) freshest: the token is in the live radar feed right now → use it, and keep the persistent copy warm for when it ages out
   const live = livePairFor(tokenAddr);
@@ -4143,7 +4450,8 @@ async function lookupTokenPair(tokenAddr) {
   }
   // 2) persistent cache hit → serve INSTANTLY (survives restarts, no TTL eviction); revalidate in the background if stale
   const row = tokenCacheGet(tokenAddr);
-  if (row) {
+  const tooOld = opts.maxAgeMs != null && (!row || now() - row.updated_at > opts.maxAgeMs);
+  if (row && !tooOld) {
     tokenCacheTouch(tokenAddr);
     const ttl = row.found ? TOKEN_CACHE_FRESH : TOKEN_CACHE_NOTFOUND_TTL;
     if (now() - row.updated_at > ttl && !lookupInflight.has(tokenAddr)) fetchAndStore(tokenAddr).catch(() => {}); // non-blocking refresh
@@ -4275,16 +4583,19 @@ const IS_HTTPS = BASE_URL.startsWith('https');
 // appended — NEVER the leftmost token, which is fully client-controllable and would otherwise let a
 // spoofed X-Forwarded-For defeat rate-limits and the community anti-sybil IP gate.
 const TRUST_PROXY_HOPS = /^\d+$/.test(process.env.TRUST_PROXY || '') ? Number(process.env.TRUST_PROXY) : 0;
+// Returns the NORMALISED unit of "one connection" (see ipKey): the IPv4 address, or the IPv6 /64.
+// Every caller — rate limits, the per-IP account cap, the anti-sybil ring check, the community gate —
+// wants that unit rather than the literal address, and normalising here means none of them can forget.
 function clientIp(req) {
   if (TRUST_PROXY_HOPS > 0) {
     const xff = req.headers['x-forwarded-for'];
     if (xff) {
       const parts = String(xff).split(',').map(s => s.trim()).filter(Boolean);
       const ip = parts[parts.length - TRUST_PROXY_HOPS]; // the real client is the hop our own proxy appended
-      if (ip) return ip;
+      if (ip) return ipKey(ip) || 'unknown';
     }
   }
-  return req.socket.remoteAddress || 'unknown';
+  return ipKey(req.socket.remoteAddress) || 'unknown';
 }
 const SEC_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
@@ -4335,15 +4646,26 @@ const bad = (res, msg, code = 400) => send(res, code, { error: msg });
 class HttpError extends Error {
   constructor(msg, code) { super(msg); this.status = code; }
 }
-function readBody(req, limit = 8 * 1024 * 1024) {
+/* 256 KB, not 8 MB. Every JSON route on the site shares this one function, including the ones that need
+   no sign-in, and JSON.parse is a single blocking step on the only event loop this process has — so the
+   old default handed any anonymous client an 8 MB parse per request to spend the server's time on, on
+   routes whose real bodies are a few hundred bytes. The handful that genuinely carry media pass their own
+   (larger) limit explicitly; 256 KB is still far above any text body the site sends.
+
+   A slow body is bounded too: the socket has BODY_TIMEOUT_MS to finish, so a connection that opens a POST
+   and then trickles bytes cannot hold a request slot (or an upload slot) open indefinitely. */
+const BODY_TIMEOUT_MS = 30000;
+function readBody(req, limit = 256 * 1024) {
   return new Promise((resolve, reject) => {
-    let size = 0; const chunks = [];
-    req.on('data', c => { size += c.length; if (size > limit) { reject(new HttpError('request too large', 413)); req.destroy(); } else chunks.push(c); });
+    let size = 0, done = false; const chunks = [];
+    const finish = (fn, arg) => { if (done) return; done = true; clearTimeout(timer); fn(arg); };
+    const timer = setTimeout(() => { finish(reject, new HttpError('request body timed out', 408)); req.destroy(); }, BODY_TIMEOUT_MS);
+    req.on('data', c => { size += c.length; if (size > limit) { finish(reject, new HttpError('request too large', 413)); req.destroy(); } else chunks.push(c); });
     req.on('end', () => {
-      try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}); }
-      catch { reject(new HttpError('malformed JSON body', 400)); }
+      try { finish(resolve, chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}); }
+      catch { finish(reject, new HttpError('malformed JSON body', 400)); }
     });
-    req.on('error', () => reject(new HttpError('request stream error', 400)));
+    req.on('error', () => finish(reject, new HttpError('request stream error', 400)));
   });
 }
 
@@ -4351,6 +4673,9 @@ function readBody(req, limit = 8 * 1024 * 1024) {
 // balloon RSS / stall the single event loop. Small (text) posts are never gated.
 let mediaInFlight = 0;
 const MEDIA_CONCURRENCY = 4;
+const mediaByUser = new Map();            // userId -> uploads currently streaming, so one account can't take every slot
+const MEDIA_PER_USER = 2;                 // at most half the site's slots to any one account
+const UPLOAD_DEADLINE_MS = 5 * 60 * 1000; // absolute wall-clock cap on one upload, whatever the idle timer says
 const MEDIA_GATE_BYTES = 400 * 1024;
 // Profile media (avatar/header/bg) — intentionally OUTSIDE the upload_bytes quota + orphan sweep: it's bounded to 3
 // replaceable slots per user (the old file is unlinked on replace, see /api/profile/image), so it can't grow unbounded.
@@ -4612,8 +4937,11 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
   let userId;
   if (ident) userId = ident.user_id;
   else {
-    // Signing in with Google/Facebook/X for the first time creates an account, so the per-IP cap has to
-    // apply at this door too. Throwing here lands in the caller's catch, which redirects with an error.
+    // Signing in with Google/Facebook/X for the first time creates an account, so the invite and the
+    // per-IP cap both apply at this door too. Throwing here lands in the caller's catch, which redirects
+    // with an error the page turns back into the ticket.
+    const oaGate = gateReq ? signupRefusal(gateReq) : { error: 'You need an invite code to join.', code: 'need_invite' };
+    if (oaGate) throw new HttpError(oaGate.error, 403);
     const oaBlock = ipSignupBlocked(ipIdxVal);
     if (oaBlock) throw new HttpError(oaBlock, 429);
     userId = createUser(autoUsername(), true, ipIdxVal);
@@ -4826,11 +5154,19 @@ let compCache = { at: 0, key: null, rows: null };
 const COMP_TTL = 8000;
 // every account's earned-inside-the-window total, ranked; any prize's share already taken out
 function competitionRows(win) {
+  /* comp_base, not base. `base` is pre-multiplied by position size for the call kinds — PTS.send_call x
+     sizeMult, up to 100x for a $10,000 bag — so summing it ranked the biggest wallet, not the busiest
+     player, under a banner that says proof of work. comp_base carries the unscaled figure and equals base
+     everywhere else; COALESCE keeps rows written before the column existed scoring exactly as they did.
+
+     'decay' is excluded because it is a NEGATIVE base: a penalty for being away was being subtracted from
+     the race total as though the account had done negative work that week, on top of the Send Power it
+     had already cost them. A week's standing counts what you did, and doing nothing is worth zero. */
   return db.prepare(`SELECT u.id, u.username, u.avatar, u.avatar_img, u.accent, u.og_tier,
-      SUM(e.base) pts, COUNT(*) n                              -- BASE points: what you did, with every boost (holder, OG, community, arcade, prize) taken out, so the race is proof of work, not a holdings contest
+      SUM(COALESCE(e.comp_base, e.base)) pts, COUNT(*) n       -- what you DID: every boost, prize and position-size scaling taken out
     FROM points_events e JOIN users u ON u.id = e.user_id
     WHERE e.created_at >= ? AND e.created_at < ? AND u.system = 0
-      AND e.kind NOT IN ('commxp','convxp','commact')          -- community XP is not Send Power and never scores here
+      AND e.kind NOT IN ('commxp','convxp','commact','decay')  -- community XP is not Send Power; decay is not an action
     GROUP BY e.user_id HAVING pts > 0 ORDER BY pts DESC, u.id ASC`).all(win.startsAt, win.endsAt)
     .map((r, i, arr) => { // competition ranking: ties share a rank, as the all-time board does
       let rank = i + 1; while (rank > 1 && arr[rank - 2].pts === r.pts) rank--;
@@ -5131,6 +5467,13 @@ function presenceSweep() { // called from the 5-min maintenance tick so the per-
 // 2FA: any change of method (enable another, replace the secret, disable) must pass the CURRENT factor, so a hijacked
 // session cookie alone can never strip or swap it. Returns null when the factor passes, else the error message.
 async function verifyCurrentFactor(me, b) {
+  /* Guess budget. The SIGN-IN doors have always burned a try per attempt and killed the pending token
+     after five — but these management routes had no counter at all, so a stolen session cookie could sit
+     on /api/2fa/disable and walk all 1,000,000 authenticator codes (or every password) as fast as the
+     loop would answer, which turns the second factor into a formality. The password branch is also a
+     deliberately slow hash, so the same requests were a CPU-exhaustion lever on the single event loop.
+     Keyed per account, not per IP: the attacker chooses their IP, never their victim's account id. */
+  if (!rateLimit('factor:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
   if (me.twofa_method === 'totp') {
     return totpVerify(decField(me.twofa_secret), b.code) ? null : 'enter a valid code from your authenticator app first';
   }
@@ -5155,6 +5498,35 @@ async function verifyCurrentFactor(me, b) {
     if (sig.error) return sig.error;
   }
   return null;
+}
+/* Prove you OWN this account, for a security change on an account that has no second factor yet.
+   verifyCurrentFactor answers "did you pass the factor" and returns null when there ISN'T one — which is
+   correct for what it asks, and was being read as "this change is fine" by every route that guarded
+   itself with `if (me.twofa_method) …`. So on the accounts with no 2FA at all — the ones with the least
+   protection — turning ON an authenticator or attaching an email+password took nothing but the session
+   cookie, and either of those is a permanent second way in that the real owner cannot see or remove.
+   The rule mirrors /api/2fa/wallet/enable, which already got this right:
+     · has a password        → the password
+     · wallet-only           → a wallet that PREDATES this session, so a wallet attached by a borrowed
+                               cookie can never be the thing that authorises the next step
+   Returns null when it passes, else the reason. */
+async function ownershipRefusal(me, b) {
+  if (me.twofa_method) return verifyCurrentFactor(me, b);
+  if (!rateLimit('own:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
+  const e = emailIdentity(me.id);
+  if (e) {
+    const pw = String((b && b.current && b.current.password) || (b && b.password) || '');
+    return checkPassword(pw, e.secret) ? null : 'enter your account password to make this change';
+  }
+  const addr = String((b && b.address) || (b && b.current && b.current.address) || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(addr)) return 'sign with the wallet you signed in with to make this change';
+  if (!walletAddresses(me.id).includes(addr)) return 'sign with a wallet linked to this account';
+  const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(addr));
+  if (w && w.linked_at && me.sid_at && w.linked_at > me.sid_at) {
+    return 'that wallet was linked during this session — sign in again with it first, so a borrowed session can never change how you sign in';
+  }
+  const sig = consumeNonce(addr, (b && b.signature) || (b && b.current && b.current.signature), 'manage');
+  return sig.error || null;
 }
 function presenceCount() {
   const cutoff = now() - PRESENCE_WINDOW; let n = 0;
@@ -5204,6 +5576,13 @@ const actHeavy = new Map(); // userId -> [ts,...]
 const actLight = new Map(); // userId -> [ts,...]
 const postLog = new Map();  // userId -> [{t,h},...] long-post fingerprints (dup/copypasta detection)
 
+/* A permanent restriction stays permanent — it is the third strike, and an automatic expiry would make the
+   ladder end in nothing. But it must not be true that the ONLY way a person can ever be heard is to spend
+   $1,000, on a site whose every other page says it never tells anyone to buy anything. So there are two
+   routes out and they are different in kind: the buy-out (fast, on-chain, automatic) and an APPEAL to a
+   human, which costs nothing. The appeal address is carried in the restriction object so the banner can
+   put it in front of the person it concerns, rather than leaving them to hunt for it. */
+const APPEAL_EMAIL = 'GWCRH@atomicmail.io';
 function restrictionOf(u) {
   if (!u || !u.restricted_until || u.restricted_until <= now()) return null;
   return {
@@ -5212,6 +5591,7 @@ function restrictionOf(u) {
     redeemable: true,                        // ANY restriction can be lifted early by buying & holding enough $SEND
     redeemUsd: redeemCostUsd(u),             // $ of $SEND to buy: $25 per 24h (timed) or $1000 flat (permanent)
     holdMs: redeemHoldMs(u),                 // how long the bought $SEND must then be held to clear it for good
+    appealEmail: APPEAL_EMAIL,               // the free route: ask a person to look at it. Costs nothing, ever.
     reason: u.restrict_reason || 'Unusual, automation-like activity was detected on your account.',
     allowed: READONLY_ALLOWED, blocked: READONLY_BLOCKED,
   };
@@ -5320,18 +5700,32 @@ const passCookie = (tok) => `${PASS_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=L
    disagree. */
 function ticketFor(u) {
   if (!u) return null;
-  const codes = db.prepare('SELECT code, used_at FROM invite_codes WHERE owner_id = ? ORDER BY rowid').all(u.id);
+  const codes = db.prepare('SELECT code, used_at, user_id FROM invite_codes WHERE owner_id = ? ORDER BY rowid').all(u.id);
+  // who each spent code actually let in, so the list reads as a record of people rather than dead strings
+  const takenBy = {};
+  for (const c of codes) {
+    if (!c.user_id) continue;
+    const who = db.prepare('SELECT username FROM users WHERE id = ?').get(c.user_id);
+    if (who) takenBy[c.code] = who.username;
+  }
   const inviter = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
   const camp = (() => { try { return ogCampaign(); } catch { return null; } })();
   return {
     number: u.id,
+    sendId: u.id,               // the same number, under the name the ticket prints: your Send ID
     username: u.username,
     avatar: u.avatar || '🚀',
     avatarImg: u.avatar_img ? '/uploads/' + u.avatar_img : null,
     joinedAt: u.created_at,
     invitedBy: inviter ? inviter.username : null,
-    codes: codes.map(c => ({ code: c.code, used: !!c.used_at })),
+    /* A spent code is REPORTED as spent and its characters are withheld. There is nothing to copy — it
+       will never work again — and leaving it copyable is how someone ends up sending a friend a code
+       that bounces. */
+    codes: codes.map(c => c.used_at
+      ? { used: true, usedAt: c.used_at, usedBy: takenBy[c.code] || null, hint: c.code.slice(0, 2) + '••••••' }
+      : { used: false, code: c.code }),
     codesLeft: codes.filter(c => !c.used_at).length,
+    codesTotal: codes.length,
     // the binding Gold deadline is the EARLIER of the two coins' windows, because the tier is the lower
     // of the two — ogCampaign already does that arithmetic, so the ticket never re-derives it
     goldEndsAt: (camp && camp.closes && camp.closes.gold != null) ? camp.closes.gold : null,
@@ -5363,20 +5757,15 @@ function hasAccess(req, user) {
   if (user) return true;
   return passOk(req);
 }
-
-/* Paths that must answer before the gate, or the gate cannot be shown, redeemed, or crawled. Kept
-   deliberately short and exact — every entry here is a hole in the door. */
-const GATE_OPEN_EXACT = new Set([
-  '/gate.html', '/gate.css', '/gate.js', '/terms.html',
-  '/styles.css', '/responsive.css', '/tokentext.css',
-  '/robots.txt', '/sitemap.xml', '/favicon.ico',
-]);
-const GATE_OPEN_API = new Set(['/api/gate/state', '/api/gate/redeem', '/api/gate/accept', '/api/og/campaign', '/api/config']);
-function gateOpenPath(p) {
-  if (GATE_OPEN_EXACT.has(p) || GATE_OPEN_API.has(p)) return true;
-  if (p.startsWith('/assets/')) return true;   // the logo and artwork the gate itself renders
-  if (p.startsWith('/uploads/')) return true;  // a ticket shows the holder's own picture
-  return false;
+/* THE ONE PLACE THE INVITE IS ENFORCED. Every door that can create a user calls this; nothing else does.
+   Returns null to allow, or the sentence to refuse with. The `code` field is what the client keys on to
+   open the ticket rather than showing a bare error. */
+function signupRefusal(req) {
+  const r = passRow(req);
+  if (!r) return { error: 'You need an invite code to join. Browsing is open to everyone — joining is by ticket.', code: 'need_invite' };
+  if (!r.tos_at) return { error: 'Read and accept the terms to finish joining.', code: 'need_tos' };
+  if (r.user_id) return { error: 'That invite code has already been used to make an account. Ask whoever sent it for a spare.', code: 'code_spent' };
+  return null;
 }
 
 /* ===== Sybil rings: many accounts, one person, one coin ===============================================
@@ -5399,7 +5788,36 @@ function gateOpenPath(p) {
 const MAX_ACCOUNTS_PER_IP = 3;
 const SYBIL_RING_ACCOUNTS = 3;            // this many distinct accounts on one IP calling one token = a ring
 const SYBIL_WINDOW_MS = 7 * DAY_MS;       // how far back the ring is measured
-const ipIdx = (req) => { try { const ip = clientIp(req); return ip ? bidx('ip:' + ip) : null; } catch { return null; } };
+/* THE UNIT OF "ONE CONNECTION". For IPv4 that is the address; for IPv6 it is the /64, because a /64 is
+   what a single residential line, phone or VPS is handed — every one of its 18 quintillion addresses
+   belongs to the same subscriber, and they can pick a fresh one per request for free. Keying anything on
+   the full IPv6 address therefore made every per-IP limit on the site unenforceable from v6: the signup
+   cap, the anti-sybil ring check, and every rate limiter all counted one household as an unlimited supply
+   of strangers. Ports, zone ids and v4-mapped forms are normalised off first so the same client can never
+   present as two. */
+function ipKey(raw) {
+  let ip = String(raw || '').trim();
+  if (!ip) return '';
+  if (ip.startsWith('[')) ip = ip.slice(1, ip.indexOf(']') > 0 ? ip.indexOf(']') : undefined); // [::1]:443
+  ip = ip.split('%')[0];                                              // fe80::1%eth0 → fe80::1
+  if (/^::ffff:\d+\.\d+\.\d+\.\d+$/i.test(ip)) ip = ip.slice(7);      // v4-mapped v6 → the v4 address
+  if (/^\d+\.\d+\.\d+\.\d+:\d+$/.test(ip)) ip = ip.split(':')[0];     // 1.2.3.4:5678
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(ip)) return ip.toLowerCase();       // IPv4: the address is the unit
+  if (!ip.includes(':')) return ip.toLowerCase();                     // not an address we recognise — use it verbatim
+  // IPv6 → the /64. Expand :: only as far as the first four groups, which is all the prefix needs.
+  const [head, tail] = ip.toLowerCase().split('::', 2);
+  const hg = head ? head.split(':').filter(Boolean) : [];
+  let groups;
+  if (tail === undefined) groups = hg;
+  else {
+    const tg = tail ? tail.split(':').filter(Boolean) : [];
+    groups = hg.concat(Array(Math.max(0, 8 - hg.length - tg.length)).fill('0')).concat(tg);
+  }
+  const prefix = groups.slice(0, 4).map(g => (parseInt(g, 16) || 0).toString(16));
+  while (prefix.length < 4) prefix.push('0');
+  return prefix.join(':') + '::/64';
+}
+const ipIdx = (req) => { try { const ip = clientIp(req); return (ip && ip !== 'unknown') ? bidx('ip:' + ip) : null; } catch { return null; } };
 
 function accountsFromIp(idx) {            // how many accounts already exist behind this address
   if (!idx) return 0;
@@ -5641,6 +6059,10 @@ function accrueHold(holdX, holdPaid, curX, dtH, rate) {
   return { holdX: nx, award, holdPaid: holdPaid + award };
 }
 const LIVE_BATCH_MAX = 40;   // Send Calls answered in one /api/calls/live read — more than fit on any screen
+/* Calls re-priced per refreshCalls() pass. At one pass per 45s this re-examines 600 calls a minute, so a
+   few thousand live calls all stay inside a couple of minutes of fresh — while one pass stays a bounded
+   amount of synchronous work on the single event loop no matter how many calls the site accumulates. */
+const CALLS_REFRESH_BATCH = 450;
 function callGrade(maxX) {
   if (maxX >= 20) return { g: 'S', label: 'Legendary', emoji: '🏆' };
   if (maxX >= 10) return { g: 'A', label: 'Massive', emoji: '🚀' };
@@ -5658,7 +6080,17 @@ function holderScore(s) {
 }
 // the people who Sent It on a call — each with: $ they put in, the MC they got in at, their PNL in Xs, their $SEND/$GWC
 // diamond level, how long they've held, and whether they're still holding or sold out. Ranked as top HOLDERS (holderScore).
-function callSenders(row, limit) {
+/* Public money numbers are ROUNDED, exact only for the person they belong to. This list pairs a username
+   with the exact dollar value of what that account bought and what it still holds — and, on a call that
+   also carries a wallet address, with the address itself. Two significant figures keeps the list doing its
+   job (who put the most in, who is still holding) without publishing anyone's balance to the decimal. */
+const senderUsdPublic = (v) => {
+  const n = Number(v) || 0;
+  if (n <= 0) return 0;
+  const mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
+  return Math.max(mag, Math.round(n / mag) * mag);   // 2 significant figures
+};
+function callSenders(row, limit, me) {
   const price = row.cur_price > 0 ? row.cur_price : row.entry_price;
   const rows = db.prepare(
     'SELECT h.user_id, h.entry_price, h.spend_usd, h.bought_usd, h.held_usd, h.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier ' +
@@ -5686,7 +6118,12 @@ function callSenders(row, limit) {
   // holderScore() never reads .diamond, so resolve the badge only for the senders we actually return — this used to be
   // one holder_state query PER HOP (hundreds per /api/posts) to fill a field all but ~3 rows then threw away.
   const out = limit ? list.slice(0, limit) : list;
-  for (const x of out) { const d = publicDiamond(x._uid); x.diamond = d ? d.level : 0; delete x._uid; }
+  for (const x of out) {
+    const d = publicDiamond(x._uid); x.diamond = d ? d.level : 0;
+    const isSelf = !!(me && me.id === x._uid);
+    if (!isSelf) { x.sentUsd = senderUsdPublic(x.sentUsd); x.heldUsd = senderUsdPublic(x.heldUsd); x.rounded = true; }
+    delete x._uid;
+  }
   return out;
 }
 // demand-driven, throttled, bounded re-read of who's put in what on-chain (freshens spend_usd for the senders list)
@@ -5717,7 +6154,7 @@ function callView(row, me) {
     peakMc: (row.entry_mc != null && entry > 0) ? row.entry_mc * (peak / entry) : null, // MC scales with price (supply ~constant)
     curX, maxX, grade: callGrade(maxX), hops, hopped, peakAt: row.peak_at || null, lastCheck: row.last_check || null,
     callerSpend, hopSpend, totalSpend: callerSpend + hopSpend, sizeMult: sizeMult(callerSpend), // Send-size: $ in + the caller's Send-Power multiplier
-    senders: callSenders(row, 3), // top 3 Send-It senders (ranked by $ in) — expand fetches all via /api/calls/:id/senders
+    senders: callSenders(row, 3, me), // top 3 Send-It senders (ranked by $ in) — expand fetches all via /api/calls/:id/senders
     holdEarned: Math.round(row.hold_paid || 0), // diamond-hands bonus the caller has earned so far for keeping it in profit
     noDyor: !!row.no_dyor, // caller made this call without opening the token's full on-chain detail first
     rugged: !!row.rugged, // the token's liquidity was pulled — a rug
@@ -5741,7 +6178,16 @@ async function refreshCalls() {
     // Track EVERY call — calls are permanent, so their Xs keep updating and their peak (the final record) is
     // preserved forever. (At very large scale this moves to a background worker per SCALING.md; the peak is
     // never lost regardless.) Newest first so the most-relevant calls refresh even if a batch is throttled.
-    const rows = db.prepare('SELECT id, user_id, token_addr, symbol, entry_price, peak_price, awarded_x, dead, rugged, hold_x, hold_paid, points_paid, last_check FROM calls ORDER BY id DESC').all();
+    /* cur_price is SELECTed because the milestone ladder needs it: the "sustained across two samples"
+       rule below reads r.cur_price, and without the column it was undefined on every row, so
+       `r.cur_price > 0` was always false and `sustained` collapsed to the single live price. The check
+       the README describes — a level must survive a full refresh interval before it pays — has therefore
+       never actually run, and one trade's spike paid the whole ladder up to it.
+
+       CALLS_REFRESH_BATCH bounds the sweep. This ran over every call ever made, in one synchronous loop,
+       on a 45-second timer that an anonymous visit to any profile wall can trigger — so the cost grew
+       without limit as the site did. Oldest-checked first, so nothing is starved. */
+    const rows = db.prepare('SELECT id, user_id, token_addr, symbol, entry_price, cur_price, peak_price, awarded_x, dead, rugged, hold_x, hold_paid, points_paid, last_check FROM calls ORDER BY COALESCE(last_check, 0) ASC, id DESC LIMIT ?').all(CALLS_REFRESH_BATCH);
     if (!rows.length) return;
     const tokens = [...new Set(rows.map(r => r.token_addr))];
     const byToken = {};
@@ -5877,13 +6323,41 @@ function bestEnc(ae) {
   const has = (name) => ae.split(',').some(p => { const s = p.trim().split(';'); if (s[0].trim() !== name) return false; const q = s.slice(1).find(x => x.trim().startsWith('q=')); return !q || parseFloat(q.trim().slice(2)) > 0; });
   return has('br') ? 'br' : has('gzip') ? 'gzip' : null;
 }
+/* What /healthz actually checks: can this process still WRITE. A read is not enough — a full volume,
+   a read-only remount and a corrupt WAL all leave SELECTs working perfectly while every write silently
+   rolls back. So: free space above the same margin uploads respect, and a real (immediately rolled back)
+   write against the live database. Cached for HEALTH_TTL because a load balancer polls this constantly. */
+const HEALTH_TTL = 5000;
+let healthCache = { at: 0, val: null };
+function healthCheck() {
+  if (healthCache.val && now() - healthCache.at < HEALTH_TTL) return healthCache.val;
+  const out = { ok: true, db: 'ok', disk: 'ok' };
+  try {
+    const st = fs.statfsSync(DATA_DIR);
+    const free = st.bavail * st.bsize;
+    out.freeBytes = free;
+    if (free < DISK_SAFETY_MARGIN) { out.ok = false; out.disk = 'low'; }
+  } catch { out.disk = 'unknown'; }   // statfs unavailable on this platform is not a failure
+  try {
+    db.exec('BEGIN'); db.exec('CREATE TABLE IF NOT EXISTS _health_probe (x INTEGER)'); db.exec('ROLLBACK');
+  } catch { out.ok = false; out.db = 'readonly'; }
+  healthCache = { at: now(), val: out };
+  return out;
+}
 const server = http.createServer(async (req, res) => {
   res._gzip = acceptsGzip(req.headers['accept-encoding']); // whether we may gzip this response (read by send/serveFile)
   res._enc = bestEnc(req.headers['accept-encoding']);      // best static-asset encoding (br | gzip | null)
-  // ultra-cheap health check for load balancers / uptime monitors — answered before any parsing or DB work
+  /* Health check for load balancers / uptime monitors. It answers before any parsing or session work and
+     it must stay cheap — but it also has to be TRUE. A hard-coded {"ok":true} reported a healthy process
+     on a full disk, which is the single most likely way this site fails: every points award, every post
+     and every call is a SQLite write, they fail silently by design (awardPoints rolls back and returns
+     0), and the monitor watching for exactly that was answering yes regardless. healthCheck() is cached
+     for a few seconds so a per-second poll costs nothing, and an unhealthy answer returns 503 so the
+     monitor actually fires. */
   if (req.url === '/healthz' || req.url === '/api/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    return res.end('{"ok":true}');
+    const h = healthCheck();
+    res.writeHead(h.ok ? 200 : 503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(h));
   }
   const url = new URL(req.url, BASE_URL);
   const p = url.pathname;
@@ -5910,23 +6384,17 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  /* ---- the door ----------------------------------------------------------------------------------
-     Everything below this point is behind an invite code. A signed-in account passes automatically; a
-     visitor needs a redeemed pass that has accepted the terms. HTML gets sent to the gate so a person
-     sees a door rather than a dead end; an API call gets a machine-readable 403 so the client can tell
-     "locked" apart from "broken". */
-  // Order matters for cost: the pass is ONE indexed lookup, a session is two. Static assets behind the
-  // door are hit ~20× per page load, so the cheap check goes first and getUser is a fallback.
-  const gateOk = gateOpenPath(p) || !!me || passOk(req) || !!getUser(req);
-  if (!gateOk) {
-    if (p.startsWith('/api/')) return bad(res, 'this site is invite-only — redeem a code to come in', 403);
-    if (req.method === 'GET' || req.method === 'HEAD') {
-      res.writeHead(302, { Location: '/gate.html', 'Cache-Control': 'no-store' });
-      return res.end();
-    }
-    return bad(res, 'this site is invite-only', 403);
-  }
+  /* ---- the door -----------------------------------------------------------------------------------
+     THE GATE GUARDS SIGNING UP, NOT LOOKING. Reading the site needs nothing: the landing page, the walls,
+     the radar, a profile, a Send Call are all open to anyone, exactly as they were before invites existed.
+     Crawlers get the real pages back, so every canonical, sitemap entry and og: tag on this site means
+     something again — a whole-site redirect made all of it unreachable, and blocking search engines is a
+     large, permanent cost to pay for a door that only ever needed to stand in one place.
 
+     The invite is required at the three doors that CREATE AN ACCOUNT, and nowhere else — see
+     signupRefusal(), which /api/auth/register, the wallet sign-in's new-account branch and the OAuth
+     callback all call. A visitor with no code browses read-only for as long as they like; the moment they
+     try to join, the ticket appears. */
   try {
     if (p.startsWith('/api/')) {
       /* ---- gate API (open before the door) ---- */
@@ -6076,8 +6544,28 @@ const server = http.createServer(async (req, res) => {
         const alloc = allocateBurn(burn.byWallet.map(w => ({ idx: w.idx, available: BigInt(w.available) })), needWei);
         if (!alloc) return bad(res, 'not eligible: the unspent burn does not cover $' + th.usd + ' at the current price', 403);
         const expiresAt = nextExpiry(prev ? prev.expires_at : null, t);
-        db.exec('BEGIN');
+        db.exec('BEGIN IMMEDIATE');
         try {
+          /* Re-decide both gates under the write lock. Everything above — the clash check AND the
+             per-wallet unspent balance the allocation was built from — was computed before a chain read
+             that takes seconds. Two accounts sharing one burned wallet could therefore both pass, both
+             allocate the same wei, and both walk away with a live key: one burn, two keys, double the
+             rate limit, repeatable for as many accounts as the wallet is linked to. node:sqlite is
+             synchronous and there is no await in this block, so re-asking here is genuinely atomic. */
+          const clashNow = db.prepare('SELECT user_id, wallets_idx FROM api_keys WHERE revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?) AND user_id != ?').all(t, me.id)
+            .find(k => { try { return (JSON.parse(k.wallets_idx || '[]')).some(i => myIdx.includes(i)); } catch { return false; } });
+          if (clashNow) { db.exec('ROLLBACK'); return bad(res, 'a wallet linked here already backs a live key on another account — revoke that key first; a burn backs one key at a time', 409); }
+          const grossByIdx = {};
+          for (const w of burn.byWallet) grossByIdx[w.idx] = BigInt(w.wei);
+          const consumedNow = {};
+          for (const r of db.prepare(`SELECT wallet_idx, wei FROM api_key_burns WHERE wallet_idx IN (${myIdx.map(() => '?').join(',') || 'NULL'})`).all(...myIdx))
+            consumedNow[r.wallet_idx] = (consumedNow[r.wallet_idx] || 0n) + BigInt(r.wei);
+          for (const a of alloc) {
+            if ((consumedNow[a.idx] || 0n) + a.wei > (grossByIdx[a.idx] || 0n)) {
+              db.exec('ROLLBACK');
+              return bad(res, 'that burn has just been spent on another key — burn more $SEND, or revoke the key that spent it', 409);
+            }
+          }
           db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(t, me.id); // one live key per account
           db.prepare("INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx, expires_at, source, consumed_wei) VALUES (?,?,?,?,?,?,?,?,?,'burn',?)")
             .run(hashToken(plain), me.id, burn.topWallet ? encField(burn.topWallet) : null, burn.wei, th.usd, burn.priceUsd, t, JSON.stringify(myIdx), expiresAt, needWei.toString()); // the wallet is a wallet↔account link: encrypted like every other one
@@ -6160,7 +6648,7 @@ const server = http.createServer(async (req, res) => {
             restriction: restrictionOf(me), // read-only banner state (null when free to act)
             probation: probationOf(me), // "hold your bought $SEND" window after a redemption (null when none)
             callAllowance: callAllowance(me), // dynamic Send Call allowance (limit/used/remaining/resetAt + diamond boost)
-            checkedInToday: !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + me.id + ':' + ymd()),
+            checkedInToday: checkedInToday(me.id, me),
             arcade: arcadeState(me.id),        // today's Rocket Run boost (nav badge + arcade page)
             boost: effectiveMult(me.id),       // {holder, og, community, arcade, total} — the nav badge shows total
           },
@@ -6186,6 +6674,9 @@ const server = http.createServer(async (req, res) => {
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
         if (findIdentity('email', email)) return bad(res, 'that email already has an account — sign in instead');
+        // The invite, enforced where it belongs: at the moment an account comes into existence.
+        const regGate = signupRefusal(req);
+        if (regGate) return send(res, 403, regGate);
         const regIp = ipIdx(req);
         const regBlock = ipSignupBlocked(regIp);
         if (regBlock) return bad(res, regBlock, 429);
@@ -6213,18 +6704,14 @@ const server = http.createServer(async (req, res) => {
           const pend = rand(16);
           const entry = { userId: u.id, expires: now() + 3e5 };
           const extra = {};
-          if (u.twofa_method === 'wallet') {
-            extra.wallets = walletAddresses(u.id);
-            /* One EIP-4361 challenge per linked wallet, because the format binds the address in line 2 and any
-               of this account's wallets may be the one connected. The client picks the message matching the
-               wallet it connected; the server then verifies against THAT message, so a signature for one
-               address can never be replayed as another. (Previously this was a single hand-rolled string —
-               domain-bound in its text but unparseable, so the wallet drew an opaque blob instead of a
-               sign-in panel.) pendingLogins is in-memory, so there is nothing to migrate. */
-            entry.messages = {};
-            for (const w of extra.wallets) entry.messages[w] = signInMessage(w, pend, 'Two-factor confirmation for JustSendIt. This signature never moves funds and grants no token approvals.');
-            extra.messages = entry.messages;
-          }
+          /* The wallet list used to be returned HERE, to every caller who got the password right — which
+             is the one party wallet-2FA exists to stop. Knowing the password is not knowing the wallet,
+             and handing over every address on the account links a username to a real on-chain identity
+             and hands an attacker the exact wallets to go after. The challenge is now issued on demand
+             instead (/api/auth/login/wallet2fa/challenge), for one address at a time, and only for an
+             address the caller already controls — which tells them nothing they did not already know.
+             entry.messages stays server-side as the record of what was issued under this pending token. */
+          if (u.twofa_method === 'wallet') entry.messages = {};
           pendingLogins.set(pend, entry);
           return send(res, 200, { twofa: u.twofa_method, pending: pend, ...extra });
         }
@@ -6255,8 +6742,27 @@ const server = http.createServer(async (req, res) => {
         if (!entry || entry.expires < now()) return send(res, 200, { twofa: null }, clear);
         const u = db.prepare('SELECT twofa_method, username FROM users WHERE id = ?').get(entry.userId);
         if (!u || !u.twofa_method) return send(res, 200, { twofa: null }, clear);
-        const extra = u.twofa_method === 'wallet' ? { wallets: walletAddresses(entry.userId), messages: entry.messages } : {};
-        return send(res, 200, { twofa: u.twofa_method, pending: pend, username: u.username, ...extra }, clear);
+        if (u.twofa_method === 'wallet' && !entry.messages) entry.messages = {};   // challenges are fetched one address at a time, see below
+        return send(res, 200, { twofa: u.twofa_method, pending: pend, username: u.username }, clear);
+      }
+      /* The EIP-4361 challenge for ONE wallet, mid-sign-in. The caller says which wallet they have
+         connected; we answer only if that wallet is on the account. That reveals nothing — they hold the
+         key to the address they asked about — while the old shape handed every linked address to anybody
+         who knew the password. Each message names its own address in line 2, so a signature collected for
+         one wallet still cannot be presented as another's. */
+      if (p === '/api/auth/login/wallet2fa/challenge' && req.method === 'POST') {
+        if (!rateLimit('w2fac:' + clientIp(req), 60, 9e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        const pend = pendingLogins.get(String(b.pending || ''));
+        if (!pend || pend.expires < now()) return bad(res, '2FA session expired — sign in again', 401);
+        const u = db.prepare('SELECT twofa_method FROM users WHERE id = ?').get(pend.userId);
+        if (!u || u.twofa_method !== 'wallet') return bad(res, 'wallet 2FA not enabled', 400);
+        const addr = String(b.address || '').toLowerCase();
+        if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'bad address');
+        if (!walletAddresses(pend.userId).includes(addr)) return bad(res, 'that wallet isn’t linked to this account — connect the one you turned two-factor on with', 401);
+        if (!pend.messages) pend.messages = {};
+        if (!pend.messages[addr]) pend.messages[addr] = signInMessage(addr, String(b.pending), 'Two-factor confirmation for JustSendIt. This signature never moves funds and grants no token approvals.');
+        return send(res, 200, { message: pend.messages[addr] });
       }
       if (p === '/api/auth/login/wallet2fa' && req.method === 'POST') {
         if (!rateLimit('w2fa:' + clientIp(req), 30, 9e5)) return bad(res, 'too many attempts — slow down', 429);
@@ -6304,6 +6810,48 @@ const server = http.createServer(async (req, res) => {
         if (me) db.prepare('DELETE FROM sessions WHERE token = ?').run(hashToken(me.sid));
         return send(res, 200, { ok: true }, { 'Set-Cookie': 'sid=; Path=/; HttpOnly; Max-Age=0' });
       }
+      /* Who else is signed in as you. Sessions last 30 days and nothing has ever been able to end one
+         early except the browser holding it, so a cookie copied off a shared machine was simply valid
+         for a month with no way for the owner to see it or stop it. Tokens are stored hashed and are
+         never returned; a session is identified to the user by when it started and when it was last
+         seen, which is all they need to recognise one that is not theirs. */
+      if (p === '/api/auth/sessions' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        const mine = hashToken(me.sid);
+        const rows = db.prepare('SELECT token, created_at, expires_at, last_seen FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC LIMIT 50').all(me.id, now());
+        return send(res, 200, { sessions: rows.map(r => ({
+          current: r.token === mine,
+          id: r.token.slice(0, 12),                 // a stable handle for the row; not a credential (it is half of a hash)
+          startedAt: r.created_at, lastSeen: r.last_seen || r.created_at, expiresAt: r.expires_at,
+        })) });
+      }
+      // End every OTHER session. Deliberately keeps the caller signed in, so the honest use (a lost
+      // phone, a shared laptop) does not also log you out of the device you are fixing it from.
+      if (p === '/api/auth/sessions' && req.method === 'DELETE') {
+        if (!me) return bad(res, 'sign in first', 401);
+        const r = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid));
+        return send(res, 200, { ok: true, endedOthers: r.changes });
+      }
+      /* Change the account password. There is no reset — this site can send no email — so this is the only
+         way a password ever changes, and it needs the old one plus whatever second factor is on. Every
+         other session is dropped: changing the password because you think someone has it is pointless if
+         the session they already hold survives it. */
+      if (p === '/api/account/password' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('pwchange:' + me.id, 10, 36e5)) return bad(res, 'too many attempts — try again later', 429);
+        const b = await readBody(req);
+        const e = emailIdentity(me.id);
+        if (!e) return bad(res, 'this account has no password yet — add an email + password first');
+        if (!checkPassword(String(b.current || ''), e.secret)) return bad(res, 'that is not your current password', 401);
+        const next = String(b.password || '');
+        if (next.length < 8) return bad(res, 'password needs at least 8 characters');
+        if (next.length > MAX_PW) return bad(res, 'password is too long');
+        if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
+        db.prepare('UPDATE identities SET secret = ? WHERE id = ?').run(hashPassword(next), e.id);
+        const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
+        notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended.' : '.'), 'wallet');
+        return send(res, 200, { ok: true, endedOthers: dropped });
+      }
       // Unlink ALL linked wallets from the account (the nav "Disconnect wallet"). Guarded so it can't lock you out or
       // strand wallet-2FA. Reversible — the user can re-link by signing again. Holder streak resets (we can no longer
       // verify holdings), which the boost logic already treats as honest.
@@ -6347,8 +6895,9 @@ const server = http.createServer(async (req, res) => {
       /* ----- 2FA management ----- */
       if (p === '/api/2fa/totp/setup' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
-        // replacing an existing factor must pass the current one (a stolen cookie alone can't swap the authenticator)
-        if (me.twofa_method) { let b = {}; try { b = await readBody(req); } catch {} const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
+        // Replacing an existing factor must pass the current one; ARMING the first one must still prove
+        // ownership, or a borrowed cookie could bind an authenticator the real owner does not hold.
+        { let b = {}; try { b = await readBody(req); } catch {} const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
         const secret = b32encode(crypto.randomBytes(20));
         db.prepare('UPDATE users SET twofa_pending = ? WHERE id = ?').run(encField(secret), me.id); // staged (encrypted) — the live secret is untouched until /enable proves a code
         const uri = `otpauth://totp/JustSendIt:${encodeURIComponent(me.username)}?secret=${secret}&issuer=JustSendIt&digits=6&period=30`;
@@ -6357,6 +6906,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/2fa/totp/enable' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('totpenable:' + me.id, 12, 9e5)) return bad(res, 'too many attempts — wait 15 minutes and try again', 429);
         const b = await readBody(req);
         if (!me.twofa_pending) return bad(res, 'run setup first');
         if (!totpVerify(decField(me.twofa_pending), b.code)) return bad(res, 'wrong code — check your authenticator app');
@@ -6365,6 +6915,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/2fa/wallet/enable' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('w2faon:' + me.id, 12, 9e5)) return bad(res, 'too many attempts — wait 15 minutes and try again', 429); // the password branch below is a slow hash
         if (!walletAddresses(me.id).length) return bad(res, 'link a wallet to your account first');
         let b = {}; try { b = await readBody(req); } catch {}
         const addr = String(b.address || '').toLowerCase();
@@ -6479,6 +7030,9 @@ const server = http.createServer(async (req, res) => {
       // Password as the second factor for WALLET sign-ins (wallet-first users who added an email + password)
       if (p === '/api/2fa/password/enable' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
+        // checkPassword is a deliberately slow hash; unmetered, it is both a guessing oracle and a way to
+        // spend the single event loop's CPU a request at a time.
+        if (!rateLimit('pwenable:' + me.id, 12, 9e5)) return bad(res, 'too many attempts — wait 15 minutes and try again', 429);
         const b = await readBody(req);
         const e = emailIdentity(me.id);
         if (!e) return bad(res, 'add an email + password to your account first (Profile → Security)');
@@ -6498,7 +7052,9 @@ const server = http.createServer(async (req, res) => {
         if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
-        if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); } // adding a login credential = a 2FA-gated change
+        // Adding an email+password is adding a PERMANENT second way into the account, so it takes proof of
+        // ownership whether or not two-factor is on — not just on the accounts that already have 2FA.
+        { const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
         if (findIdentity('email', email)) return bad(res, 'that email already belongs to another account');
         insertIdentity(me.id, 'email', email, hashPassword(password));
         return send(res, 200, { ok: true, methods: identityTypes(me.id) });
@@ -6584,7 +7140,12 @@ const server = http.createServer(async (req, res) => {
           // while read-only — so an empty throwaway keypair (or a flagged account) can't farm the bonus.
           let sendBal = 0, gwcHeld = false;
           try { sendBal = Number(await erc20Balance(TOK.SEND, address)) / 1e18; gwcHeld = (await erc20Balance(TOK.GWC, address)) > 0n; } catch {}
-          if ((sendBal > 0 || gwcHeld) && !restrictionOf(me)) awardPoints(me.id, 'connect_wallet', PTS.connect_wallet, 'connect:' + address); // once per address ever
+          // bidx, not the address. The ref only has to be a stable unique key for the once-per-address
+          // dedup — and writing the raw address here undid the encryption everywhere else: identities and
+          // tracked_wallets store addresses encrypted with a blind index precisely so a database leak does
+          // not map usernames to on-chain wallets, and the points ledger was publishing them in clear text
+          // beside the user_id that owns them. The blind index dedupes identically and reveals nothing.
+          if ((sendBal > 0 || gwcHeld) && !restrictionOf(me)) awardPoints(me.id, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address)); // once per address ever
           // if this wallet is linked mid-restriction/probation, its $SEND is PRE-EXISTING — fold it into the redemption
           // baseline (so linking a bag can't fake the "buy $SEND" requirement) and into any active hold floor (so its
           // balance must be maintained too). Only when the baseline is already known (>=0); an unknown baseline is set at redeem.
@@ -6596,8 +7157,11 @@ const server = http.createServer(async (req, res) => {
           checkOg(me.id).catch(() => {}); // a newly linked wallet might be an early buyer → verify OG in the background
           return send(res, 200, { ok: true, linked: true, username: me.username });
         } else {
-          // A brand-new account from a wallet signature is still a new account, so the per-IP cap applies
-          // here exactly as it does to email signup — otherwise the cheapest way past it would be a wallet.
+          // A brand-new account from a wallet signature is still a new account, so BOTH the invite and the
+          // per-IP cap apply here exactly as they do to email signup — otherwise the cheapest way past
+          // either of them would be a wallet.
+          const wGate = signupRefusal(req);
+          if (wGate) return send(res, 403, wGate);
           const wIp = ipIdx(req);
           const wBlock = ipSignupBlocked(wIp);
           if (wBlock) return bad(res, wBlock, 429);
@@ -6606,7 +7170,7 @@ const server = http.createServer(async (req, res) => {
           insertIdentity(userId, 'wallet', address);
           claimInvite(req, userId);
           db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
-          awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + address);
+          awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address));   // blind index, never the address — see the link path above
           checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
         }
         // an existing account with a NON-wallet second factor (authenticator / password) must still pass it — a wallet
@@ -6618,16 +7182,20 @@ const server = http.createServer(async (req, res) => {
             pendingLogins.set(pend, { userId, expires: now() + 3e5 });
             return send(res, 200, { twofa: u2.twofa_method, pending: pend, username });
           }
-          /* On a wallet-2FA account the wallet IS the factor — but only a wallet linked BEFORE two-factor was
-             switched on. verifyCurrentFactor and /api/auth/login/wallet2fa both enforce that; this door did not,
-             so a wallet attached with a stolen cookie stayed a factor-free way in long after the session that
-             attached it was revoked. Same shape as the OAuth hole: a second factor with an unguarded side
-             entrance is not a second factor. */
-          if (u2 && u2.twofa_method === 'wallet' && u2.twofa_enabled_at) {
-            const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(userId, bidx(address));
-            if (w && w.linked_at && w.linked_at > u2.twofa_enabled_at) {
-              return bad(res, 'that wallet was linked after two-factor was turned on — sign in with the wallet you enabled it with', 401);
-            }
+          /* On a wallet-2FA account the wallet IS the factor, and WHICH wallet is decided in exactly one
+             place: walletFactorRefusal. This door used to re-implement half of it — the legacy
+             "linked before 2FA was switched on" rule — and ignored the explicitly chosen 2FA wallet
+             entirely. Two ways that broke:
+               · /api/2fa/wallet/primary moves the key to another wallet without touching
+                 twofa_enabled_at, so a wallet the owner had DEMOTED still opened the front door with no
+                 second factor, while the wallet they promoted was refused at it.
+               · the owner could then unlink the demoted wallet — /api/wallet/unlink only protects the
+                 CHOSEN key — and a wallet-only account was locked out of itself permanently.
+             One helper, every door: the sign-in path, verifyCurrentFactor and /api/auth/login/wallet2fa
+             now all ask the same question and get the same answer. */
+          if (u2 && u2.twofa_method === 'wallet') {
+            const refusal = walletFactorRefusal({ id: userId, twofa_enabled_at: u2.twofa_enabled_at }, address);
+            if (refusal) return bad(res, refusal, 401);
           }
         }
         return send(res, 200, { ok: true, username, newAccount: !ident }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
@@ -6666,8 +7234,12 @@ const server = http.createServer(async (req, res) => {
         // URL is the last place to put those. Nothing read `autherror` before, so a failed sign-in used to
         // land on the home page having silently done nothing at all.
         catch (e) {
-          const msg = (e instanceof HttpError && e.status === 429) ? e.message : '';
-          res.writeHead(302, { Location: '/?autherror=' + encodeURIComponent(provider) + (msg ? '&autherrmsg=' + encodeURIComponent(msg) : ''), 'Set-Cookie': CLEAR_OAUTH_STATE });
+          // 429 = the per-IP account cap, 403 = no invite. Both are refusals we can explain, and the
+          // invite one carries a flag the page turns straight back into the ticket rather than an error.
+          const explain = e instanceof HttpError && (e.status === 429 || e.status === 403);
+          const msg = explain ? e.message : '';
+          const needs = (e instanceof HttpError && e.status === 403) ? '&needinvite=1' : '';
+          res.writeHead(302, { Location: '/?autherror=' + encodeURIComponent(provider) + (msg ? '&autherrmsg=' + encodeURIComponent(msg) : '') + needs, 'Set-Cookie': CLEAR_OAUTH_STATE });
           res.end();
         }
         return;
@@ -6734,8 +7306,15 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (blockReadOnly(res, me)) return;
         if (!rateLimit('img:' + me.id, 20, 36e5)) return bad(res, 'too many uploads — try later', 429);
-        const b = await readBody(req);
-        const kind = { avatar: 'avatar_img', header: 'header_img', background: 'bg_img' }[b.kind];
+        const b = await readBody(req, 6 * 1024 * 1024); // a 3.5 MB image arrives base64'd (~4.7 MB) — this route is the reason the default is not enough
+        /* __proto__: null matters here. A plain object literal inherits from Object.prototype, so
+           kind='constructor' (or 'toString', or '__proto__') looked up a truthy inherited value and sailed
+           past the guard — then saveImage() wrote up to 3.5 MB to disk before the interpolated UPDATE threw
+           on a column named "function Object() { [native code] }". The file was never recorded in `uploads`,
+           so the orphan sweeper could not see it either: one unauthenticated-shaped request, one permanent
+           3.5 MB leak, repeatable. A null-prototype map has no inherited keys to find. */
+        const IMG_KINDS = { __proto__: null, avatar: 'avatar_img', header: 'header_img', background: 'bg_img' };
+        const kind = typeof b.kind === 'string' ? IMG_KINDS[b.kind] : undefined;
         if (!kind) return bad(res, 'kind must be avatar, header, or background');
         if (b.remove) {
           deleteUpload(me[kind]);
@@ -6825,6 +7404,13 @@ const server = http.createServer(async (req, res) => {
         if (blockReadOnly(res, me)) return;
         if (!rateLimit('upload:' + me.id, 40, 6e5) || !rateLimit('uploadip:' + clientIp(req), 60, 6e5)) return bad(res, 'uploading too fast — slow down 😅', 429);
         if (mediaInFlight >= MEDIA_CONCURRENCY) return bad(res, 'lots of uploads right now — try again in a moment', 503);
+        /* One account may not hold every slot. There are only MEDIA_CONCURRENCY of them for the whole
+           site, and the idle timer below is rearmed on every chunk — so a client trickling one byte
+           every nineteen seconds keeps its slot indefinitely, and four such connections from one account
+           made uploads (and any post over 400 KB) fail for everybody. Two limits close it: a ceiling on
+           how many slots a single account can occupy, and the absolute deadline further down that no
+           amount of dribbling can extend. */
+        if ((mediaByUser.get(me.id) || 0) >= MEDIA_PER_USER) return bad(res, 'you already have ' + MEDIA_PER_USER + ' uploads in flight — let them finish first', 429);
         const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         const spec = UPLOAD_KINDS[mime];
         if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4 or WebM', 415);
@@ -6837,15 +7423,24 @@ const server = http.createServer(async (req, res) => {
         // end-of-stream check alone fires only after the bytes are already on disk).
         try { const st = fs.statfsSync(DATA_DIR); if (st.bavail * st.bsize < DISK_SAFETY_MARGIN + spec.cap * (mediaInFlight + 1)) return bad(res, 'storage is full right now — try again later', 507); } catch {}
         mediaInFlight++;
+        mediaByUser.set(me.id, (mediaByUser.get(me.id) || 0) + 1);
         const tmp = path.join(UPLOAD_DIR, 'tmp_' + rand(16) + '.part');
         const ws = fs.createWriteStream(tmp);
         let size = 0, head = Buffer.alloc(0), settled = false, idle = null;
         const clearIdle = () => { if (idle) { clearTimeout(idle); idle = null; } };
-        const finish = () => { if (!settled) { settled = true; mediaInFlight--; clearIdle(); } };
+        const finish = () => {
+          if (settled) return;
+          settled = true; mediaInFlight--; clearIdle(); clearTimeout(hardStop);
+          const n = (mediaByUser.get(me.id) || 1) - 1;
+          if (n > 0) mediaByUser.set(me.id, n); else mediaByUser.delete(me.id);
+        };
         const fail = (code, msg) => { finish(); try { ws.destroy(); } catch {} try { fs.unlinkSync(tmp); } catch {} try { req.destroy(); } catch {} if (!res.headersSent) bad(res, msg, code); };
         // Idle-timeout the upload so a stalled / slow-loris client can't pin a mediaInFlight slot (which would 503 every
         // upload AND every >400KB post). Rearmed on each chunk, so a slow-but-progressing large upload is never killed.
         const armIdle = () => { clearIdle(); idle = setTimeout(() => fail(408, 'upload stalled — try again'), 20000); };
+        // The absolute deadline the idle timer cannot be dribbled past. A 20 MB video on a poor connection
+        // has minutes to arrive; nothing has longer.
+        const hardStop = setTimeout(() => fail(408, 'upload took too long — try again on a better connection'), UPLOAD_DEADLINE_MS);
         ws.on('error', () => fail(500, 'write failed'));
         req.on('error', () => fail(400, 'upload stream error')); // an aborted body emits 'error' on Node ≥24; the idle timer + requestTimeout are the backstops for a stall
         req.on('data', (chunk) => {
@@ -7143,7 +7738,8 @@ const server = http.createServer(async (req, res) => {
             code: 'daily_limit', used: allow.used, limit: allow.limit, remaining: 0, resetAt: allow.resetAt,
           });
         }
-        let r; try { r = await lookupTokenPair(token); } catch { return bad(res, 'could not price that token — try again', 502); }
+        // A LIVE price, never a saved one: this number becomes entry_price and every X the call ever pays.
+        let r; try { r = await lookupTokenPair(token, { maxAgeMs: PRICE_MAX_AGE_MS }); } catch { return bad(res, 'could not price that token right now — try again in a moment', 502); }
         if (!r || r.notFound || !r.pair) return bad(res, (r && r.reason === 'quote') ? 'that is a base asset (WETH/USDG), not a callable token' : 'no trading pair found for that token');
         const p2 = r.pair, price = p2.market && p2.market.priceUsd;
         if (!(price > 0)) return bad(res, 'no live price for that token yet — can’t track Xs');
@@ -7151,12 +7747,19 @@ const server = http.createServer(async (req, res) => {
         if (!(liq >= MIN_CALL_LIQ)) return bad(res, 'this token’s pool is too thin to call ($' + Math.round(liq) + ' liquidity, need $' + MIN_CALL_LIQ + '+). Thin pools can be manipulated — call it once it has real liquidity.'); // anti-farm floor
         const mc = (p2.market && p2.market.marketCap != null) ? p2.market.marketCap : null;
         const sym = (p2.token.symbol || '?').slice(0, 16), name = (p2.token.name || 'Token').slice(0, 60);
-        const wallet = walletAddresses(me.id)[0] || null; // caller's public wallet (for one-tap tracking), if any
+        /* OPT-IN, and only opt-in. This used to take walletAddresses(me.id)[0] unconditionally and publish
+           it on a post the site describes as permanent and uneditable — so making one Send Call tied a
+           username to a real on-chain address forever, with no checkbox, no warning, and nothing that
+           could take it back. Everywhere else on the site an address is stored encrypted behind a blind
+           index specifically so that link cannot be made. Now the caller has to ask for it, and
+           DELETE /api/calls/:id/wallet lets them undo it: the CALL is permanent, a wallet address
+           attached to it is not the call. */
+        const wallet = (b.shareWallet === true) ? (walletAddresses(me.id)[0] || null) : null;
         const note = String(b.note || '').trim().slice(0, 280);
         const text = note || ('📣 Called $' + sym + ' — Just Send It.');
         const t = now();
         // Send Call SIZE: value of tokens the caller bought & still holds → each $100 = 1× Send Power (fail-open to 0)
-        const spendUsd = await callSpendUsd(me.id, token, p2.pair.address, price);
+        const spendUsd = await callSpendUsd(me.id, token, p2.pair.address, price, liq);
         const sm = sizeMult(spendUsd);
         const noDyor = b.viewedDetail ? 0 : 1; // flag calls made WITHOUT opening the token's full on-chain detail first
         const callIp = ipIdx(req);             // blind index only — enough to spot a ring, never enough to read the IP
@@ -7170,6 +7773,10 @@ const server = http.createServer(async (req, res) => {
           // two near-simultaneous calls can't both slip past the pre-await remaining>0 check and exceed the daily limit.
           const cntNow = db.prepare('SELECT COUNT(*) n FROM calls WHERE user_id=? AND created_at > ?').get(me.id, now() - CALL_WINDOW_MS).n;
           if (cntNow > allow.limit) { db.exec('ROLLBACK'); return bad(res, 'You’ve just used your last Send Call for now — it frees up soon.', 429); }
+          // Same shape, same fix: one call per token per caller was checked before a multi-second price
+          // lookup and a chain read, so two taps could both pass it and open two calls on one token.
+          const dupNow = db.prepare('SELECT COUNT(*) n FROM calls WHERE user_id = ? AND token_addr = ?').get(me.id, token).n;
+          if (dupNow > 1) { db.exec('ROLLBACK'); return bad(res, 'you already have an active Send Call on this token'); }
           const pr = db.prepare('INSERT INTO posts (user_id, text, created_at, call_id) VALUES (?,?,?,?)').run(me.id, text, t, callId);
           postId = Number(pr.lastInsertRowid);
           db.prepare('UPDATE calls SET post_id = ? WHERE id = ?').run(postId, callId);
@@ -7179,7 +7786,9 @@ const server = http.createServer(async (req, res) => {
         // bonus, so CALL_POINTS_CAP really is everything one call can ever be worth — not a cap on
         // part of it with the rest sitting outside.
         const openBase = Math.round(PTS.send_call * sm);
-        const earned = awardPoints(me.id, 'send_call', openBase, 'callopen:' + me.id + ':' + token, Math.min(callHeadroom(0, CALL_POINTS_CAP), openBase * OPEN_STACK_MAX)); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever, and at most 10× the size-scaled base
+        // compBase = the unscaled PTS.send_call: making a call is one action's worth of work in the weekly
+        // race however large the position behind it is. The PAID award still scales with the position.
+        const earned = awardPoints(me.id, 'send_call', openBase, 'callopen:' + me.id + ':' + token, Math.min(callHeadroom(0, CALL_POINTS_CAP), openBase * OPEN_STACK_MAX), PTS.send_call); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever, and at most 10× the size-scaled base
         if (earned > 0) db.prepare('UPDATE calls SET points_paid = points_paid + ? WHERE id = ?').run(earned, callId);
         // A Send Call on a community's own token IS participation in that community, so it scores for it — but only
         // from a qualified member. Otherwise anyone could push a community up the weekly board from the outside.
@@ -7214,7 +7823,16 @@ const server = http.createServer(async (req, res) => {
         }
         return send(res, 200, { post: postView(db.prepare('SELECT * FROM posts WHERE id = ?').get(postId), me), pointsEarned: earned, restriction });
       }
-      let cm = /^\/api\/calls\/(\d+)$/.exec(p);
+      // Take the wallet address back off one of your own calls. The call, its entry price and its record
+      // stay exactly as they are — this only unpublishes the address attached to it.
+      let cm = /^\/api\/calls\/(\d+)\/wallet$/.exec(p);
+      if (cm && req.method === 'DELETE') {
+        if (!me) return bad(res, 'sign in first', 401);
+        const r = db.prepare('UPDATE calls SET wallet = NULL WHERE id = ? AND user_id = ?').run(Number(cm[1]), me.id);
+        if (!r.changes) return bad(res, 'that is not your call', 404);
+        return send(res, 200, { ok: true, wallet: null });
+      }
+      cm = /^\/api\/calls\/(\d+)$/.exec(p);
       if (cm && req.method === 'GET') {
         maybeRefreshCalls();
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(Number(cm[1]));
@@ -7228,7 +7846,7 @@ const server = http.createServer(async (req, res) => {
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(Number(cm[1]));
         if (!c) return bad(res, 'call not found', 404);
         refreshSenderSpends(c).catch(() => {}); // fire-and-forget: keeps the amounts current without blocking the expand
-        return send(res, 200, { senders: callSenders(c, null) });
+        return send(res, 200, { senders: callSenders(c, null, me) });
       }
       cm = /^\/api\/calls\/(\d+)\/hop$/.exec(p);
       if (cm && req.method === 'POST') {
@@ -7244,24 +7862,38 @@ const server = http.createServer(async (req, res) => {
         // same token (free alt accounts can mint them on demand) gave one account N independent hold budgets off a single
         // real buy. A second Send on the same token still counts socially — it just has no entry price, so it never accrues
         // and never counts toward anyone's crew.
-        const dupTok = !!db.prepare('SELECT 1 FROM call_hops h JOIN calls c2 ON c2.id = h.call_id WHERE h.user_id = ? AND c2.token_addr = ? AND h.call_id != ? AND h.entry_price IS NOT NULL').get(me.id, c.token_addr, callId);
-        const hopEntry = dupTok ? null : ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null); // hopper's Xs basis = the price when they hopped on
+        const dupSql = 'SELECT 1 FROM call_hops h JOIN calls c2 ON c2.id = h.call_id WHERE h.user_id = ? AND c2.token_addr = ? AND h.call_id != ? AND h.entry_price IS NOT NULL';
+        const dupTok = !!db.prepare(dupSql).get(me.id, c.token_addr, callId);
         const tHop = now();
-        let earned = 0;
+        let earned = 0, paying = !dupTok;
         if (isNew) {
           const pos = dupTok ? { spendUsd: 0, boughtUsd: 0, heldUsd: 0 } // already holding a paying position on this token — no chain read needed
-            : await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price)); // what this follower bought / still holds
-          const spendUsd = pos.spendUsd;
-          db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop, spendUsd, pos.boughtUsd, pos.heldUsd);
+            : await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price), c.entry_liq); // what this follower bought / still holds
+          /* ONE PAYING POSITION PER TOKEN, decided under the write lock. The dup check above ran BEFORE a
+             multi-second chain read, so N taps fired at once on N different calls of the same token all
+             saw "no paying position yet" and all inserted one — turning a single real buy into N
+             independent hold budgets, which is exactly what the rule exists to prevent. node:sqlite is
+             synchronous, so re-asking inside a transaction with no await in it is genuinely atomic:
+             whoever commits first owns the paying slot and the rest become social taps. */
+          try {
+            db.exec('BEGIN IMMEDIATE');
+            paying = !db.prepare(dupSql).get(me.id, c.token_addr, callId);
+            const hopEntry = paying ? ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null) : null; // hopper's Xs basis = the price when they hopped on
+            db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING')
+              .run(callId, me.id, tHop, hopEntry, tHop, paying ? pos.spendUsd : 0, paying ? pos.boughtUsd : 0, paying ? pos.heldUsd : 0);
+            db.exec('COMMIT');
+          } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not record that — try again', 500); }
+          const spendUsd = paying ? pos.spendUsd : 0;
           const hopBase = Math.round(PTS.hop_on * addBonus(sizeMult(spendUsd)));   // one factor today, but the same rule as the rest
-          earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX)) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
+          earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX), PTS.hop_on) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
           if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
           notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' ($' + Math.round(spendUsd) + ' in)' : ''), 'points');
         } else {
+          const hopEntry = dupTok ? null : ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null);
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check) VALUES (?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop);
         }
         const hops = db.prepare('SELECT COUNT(*) n FROM call_hops WHERE call_id = ?').get(callId).n;
-        return send(res, 200, { ok: true, hops, hopped: true, wallet: c.wallet || null, symbol: c.symbol, pointsEarned: earned, paying: !dupTok });
+        return send(res, 200, { ok: true, hops, hopped: true, wallet: c.wallet || null, symbol: c.symbol, pointsEarned: earned, paying });
       }
 
       /* ----- gamification ----- */
@@ -7281,7 +7913,11 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('checkin:' + me.id, 20, 6e5)) return bad(res, 'slow down', 429);
         const ref = 'daily:' + me.id + ':' + ymd();
-        if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(ref)) return send(res, 200, { already: true, awarded: 0, checkedInToday: true });
+        const already = checkedInToday(me.id);
+        // Stamp the visit FIRST and unconditionally. The award may legitimately pay 0 (the rolling social
+        // ceiling), and that must never make the day look like an absence to decay.
+        db.prepare('UPDATE users SET checkin_at = ? WHERE id = ?').run(now(), me.id);
+        if (already) return send(res, 200, { already: true, awarded: 0, checkedInToday: true });
         const awarded = awardPoints(me.id, 'daily', PTS.daily, ref);          // idempotent per UTC day via the ref
         return send(res, 200, { already: false, awarded, checkedInToday: true });
       }
@@ -7313,7 +7949,11 @@ const server = http.createServer(async (req, res) => {
           db.prepare('UPDATE users SET redeem_base_send=? WHERE id=?').run(newSend, me.id);
           return send(res, 400, { error: 'We’ve recorded your current $SEND. Now buy at least $' + need + ' more and tap again to lift your read-only.', code: 'baseline_set' });
         }
-        let price = 0; try { const sp = await lookupTokenPair(TOK.SEND); price = (sp && sp.pair && sp.pair.market && sp.pair.market.priceUsd) || 0; } catch {}
+        // sendPriceUsd(), not a raw lookup: it values at the LOWER of spot and the 24h median and refuses
+        // outright during a spike. A pumped price makes a buy-out cheaper (fewer dollars of new $SEND
+        // clear the bar), which is the same manipulation the Data API gate is already hardened against —
+        // and this gate decides whether a sanction is lifted, so it gets the same protection.
+        let price = 0; try { price = (await sendPriceUsd()) || 0; } catch {}
         if (!(price > 0)) return bad(res, 'couldn’t verify the $SEND price right now — try again', 502); // fail-closed: never lift without confirming a real buy
         const buyUsd = Math.max(0, newSend - base) * price;
         if (buyUsd < need) {
@@ -7740,14 +8380,16 @@ const server = http.createServer(async (req, res) => {
         if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'paste a valid 0x token contract address');
         const existing = db.prepare('SELECT id FROM communities WHERE token_addr = ? COLLATE NOCASE').get(token);
         if (existing) return send(res, 409, { error: 'a community already exists for this token', existingId: existing.id });
-        let r; try { r = await lookupTokenPair(token); } catch { return bad(res, 'couldn’t read that token on-chain — try again', 502); }
+        // live price: c_price is stored and later becomes the basis of the $100 holder floor for this community
+        let r; try { r = await lookupTokenPair(token, { maxAgeMs: PRICE_MAX_AGE_MS }); } catch { return bad(res, 'couldn’t read that token on-chain — try again', 502); }
         if (r.notFound || !r.pair || r._quoteSide || (r.pair && r.pair._quoteSide)) return bad(res, 'no tradeable pair found for that address (or it’s a base asset like WETH)');
         const pr = r.pair;
         if (!(pr.market && pr.market.priceUsd > 0)) return bad(res, 'that token isn’t priced on Dexscreener');
         if (!(pr.market.liquidityUsd != null && pr.market.liquidityUsd >= MIN_COMMUNITY_LIQ)) return bad(res, 'needs at least $' + MIN_COMMUNITY_LIQ + ' pooled liquidity to start a community');
         const brand = JSON.stringify(sanitizeBrand(pr.brand || {}));
         const sym = String(pr.token.symbol || '?').slice(0, 16), name = String(pr.token.name || 'Token').slice(0, 60);
-        let holdsC; try { holdsC = await holdsToken(me.id, token); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+        // Starting a community is a holder claim like any other, so it takes the same floor: $100 of the token, priced live.
+        let holdsC; try { holdsC = await holdsToken(me.id, token, MIN_HOLD_USD, Number(pr.market.priceUsd)); } catch { return bad(res, RPC_DOWN_MSG, 503); }
         // The token's own deployer/owner wallet may start the community WITHOUT holding — a dev often keeps a clean
         // wallet. Verified on-chain (the creator address from the explorer, and owner() from the contract), and only
         // against a wallet they proved control of by signature. It grants the community, NOT a qualified member slot:
@@ -8175,7 +8817,7 @@ const server = http.createServer(async (req, res) => {
         if (count >= limit) return bad(res, `you can track up to ${limit} wallets right now — hold $GWC and diamond-hand it to unlock more`);
         try {
           const r = db.prepare('INSERT INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(me.id, bidx(address), encField(address), String(b.label || '').slice(0, 40), now());
-          const tEarned = awardPoints(me.id, 'track_wallet', PTS.track_wallet, 'track:' + me.id + ':' + address); // once per address ever
+          const tEarned = awardPoints(me.id, 'track_wallet', PTS.track_wallet, 'track:' + me.id + ':' + bidx(address)); // once per address ever
           scanWriteAction(me.id, 'track');
           return send(res, 200, { wallet: { id: Number(r.lastInsertRowid), address, label: String(b.label || '').slice(0, 40) }, pointsEarned: tEarned });
         } catch { return bad(res, 'you are already tracking that wallet'); }
@@ -8230,6 +8872,10 @@ const walTimer = setInterval(() => {
   const cutoff = now() - 3600000; // older than the longest rate-limit window (1h)
   for (const [k, b] of buckets) if (b.t < cutoff) buckets.delete(k);
   presenceSweep();
+  // Caches keyed on addresses an anonymous caller supplies. SCALING.md says every in-memory cache is
+  // cleaned up; these three were the exceptions, and they are exactly the ones a stranger can grow.
+  sweepSpotCache();
+  sweepOpenCaches();
 }, 5 * 60 * 1000);
 walTimer.unref();
 
@@ -8238,7 +8884,13 @@ walTimer.unref();
 // written to .part and renamed so a crash can't leave a half-written snapshot. RESTORE: stop the server, copy the
 // snapshot over data/app.db, delete any app.db-wal / app.db-shm beside it, start. data/uploads still needs its own copy.
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
-const BACKUP_KEEP = 7;
+/* Seven copies on the SAME volume as the database was about nine times the database in space, protecting
+   against nothing that volume failing wouldn't take with it. Off-volume (BACKUP_DIR pointing elsewhere)
+   is a real backup and keeps seven; on-volume is a rollback convenience and keeps three. Either way the
+   snapshot is skipped when the disk is tight — a backup that fills the volume takes the live site down to
+   protect a copy of it, which is exactly the wrong trade. */
+const BACKUP_OFF_VOLUME = !!process.env.BACKUP_DIR && !path.resolve(process.env.BACKUP_DIR).startsWith(path.resolve(DATA_DIR) + path.sep);
+const BACKUP_KEEP = BACKUP_OFF_VOLUME ? 7 : 3;
 async function snapshotDb() {
   if (typeof sqliteBackup !== 'function') return;
   try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
@@ -8246,6 +8898,12 @@ async function snapshotDb() {
   const tmp = f + '.part';
   try { for (const n of fs.readdirSync(BACKUP_DIR)) if (n.endsWith('.db.part') && path.join(BACKUP_DIR, n) !== tmp) fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} // a .part orphaned by a hard kill on an earlier day
   if (fs.existsSync(f)) return; // today's snapshot already exists
+  // Need room for a whole extra copy of the DB plus the live site's own headroom, or don't start.
+  try {
+    const dbBytes = fs.statSync(path.join(DATA_DIR, 'app.db')).size;
+    const st = fs.statfsSync(BACKUP_DIR);
+    if (st.bavail * st.bsize < dbBytes + DISK_SAFETY_MARGIN) { console.warn('db snapshot skipped: not enough free space for a copy'); return; }
+  } catch {}
   try {
     await sqliteBackup(db, tmp, { rate: 256 });
     fs.renameSync(tmp, f);
@@ -8308,6 +8966,38 @@ const ogTimer = setInterval(async () => {
   } catch {} finally { ogSweeping = false; }
 }, 10 * 60 * 1000);
 ogTimer.unref();
+
+/* ===== Holder sweep: the boost is re-read whether or not you come back ================================
+   The Holder Boost is verified on-chain, but only ever when the ACCOUNT asked — the dashboard re-reads on
+   every visit and nothing else did. With a 26-hour staleness window, that left two holes open for a full
+   day at a time:
+
+     · ONE BAG, MANY ACCOUNTS. Hold $100, refresh (the boost is now live for 26h), move the bag to a
+       wallet on the next account, refresh there, repeat. Every account in the chain carries a live,
+       "on-chain-verified" boost off a single bag that only one of them still holds.
+     · SELLING BETWEEN READS. Refresh while holding, sell, and the Diamond streak never sees it — the
+       next read is up to 26 hours later, and a streak the site describes as "reset when you sell" was
+       only reset when you sold AND came back.
+
+   OG accounts already had exactly this sweep (above). This gives it to everyone carrying a boost, which
+   is who it was always for. Oldest-checked first, so the queue drains evenly and nobody is starved;
+   bounded per tick, because each account is up to MAX_LINKED_WALLETS × 2 balance reads plus two supply
+   reads, and the chain rate-limits per IP. Idle-cheap: an empty SELECT does nothing. */
+const HOLDER_SWEEP_CAP = 20;              // accounts re-read per tick
+const HOLDER_SWEEP_MS = 5 * 60 * 1000;    // ⇒ up to 5,760 accounts a day, and no live boost older than its own turn in the queue
+let holderSweeping = false;
+const holderTimer = setInterval(async () => {
+  if (holderSweeping) return; holderSweeping = true;
+  try {
+    // only accounts that currently claim something: a boost, a streak, or a community slot that holdings gate
+    const rows = db.prepare(`SELECT h.user_id FROM holder_state h JOIN users u ON u.id = h.user_id
+                             WHERE u.system = 0 AND (h.score_bp > 0 OR h.streak_start IS NOT NULL)
+                             ORDER BY COALESCE(h.last_check, 0) ASC LIMIT ?`).all(HOLDER_SWEEP_CAP);
+    for (const r of rows) { try { await refreshHolder(r.user_id); } catch {} }
+  } catch (e) { console.error('holder sweep', e && e.message); }
+  finally { holderSweeping = false; }
+}, HOLDER_SWEEP_MS);
+holderTimer.unref();
 
 /* Campaign sweep — this is what "auto-run over the next year" actually means in code.
    The tier windows are pure functions of time, so nothing has to schedule them opening or closing.
@@ -8644,8 +9334,10 @@ function decayUser(u, today) {
     db.prepare('UPDATE users SET decay_at = ?, decay_streak = 0 WHERE id = ?').run(today, u.id);
     return 0;
   }
-  const checkedInToday = !!db.prepare('SELECT 1 FROM points_events WHERE user_id = ? AND kind = ? AND created_at > ?')
-    .get(u.id, 'daily', now() - 864e5);
+  /* Read from the stamp, not the ledger. A check-in whose award the rolling social ceiling reduced to zero
+     writes no points_events row, and this used to read that as "never showed up" — so the most active
+     accounts on the site were the ones decay charged for being away. */
+  const showedUp = checkedInToday(u.id, u);
 
   /* Showing up zeroes the absence streak. It does NOT zero the mute: read-only is a penalty the site
      imposed, and a penalty that stops costing anything the moment you tap one button is not a penalty.
@@ -8654,7 +9346,7 @@ function decayUser(u, today) {
      keeps the restriction meaningful. Underwater calls are charged only on days you were ALREADY away:
      a call that went down is a market outcome, not misconduct, and billing someone daily for it while
      they are actively showing up would be a different and much harsher rule than the one intended. */
-  const streak = checkedInToday ? 0 : (u.decay_streak || 0) + 1;
+  const streak = showedUp ? 0 : (u.decay_streak || 0) + 1;
   let pct = 0;
   if (streak > DECAY.GRACE_DAYS) pct += DECAY.BASE_PCT + (streak - DECAY.GRACE_DAYS - 1) * DECAY.ACCEL_PCT;
 
@@ -8666,7 +9358,7 @@ function decayUser(u, today) {
      a bad call, and one already written off as rugged is charged once through this same route rather than
      twice. Counted from the stored prices, so this costs no chain reads. */
   let bad = 0;
-  if (!checkedInToday) {
+  if (!showedUp) {
     bad = db.prepare(`SELECT COUNT(*) n FROM calls
                       WHERE user_id = ? AND cur_price > 0 AND entry_price > 0 AND cur_price < entry_price`).get(u.id).n;
     if (bad > 0) pct += Math.min(DECAY.BAD_CALL_MAX, bad * DECAY.BAD_CALL_PCT);
@@ -8700,7 +9392,7 @@ function decayUser(u, today) {
   if (bad > 0) why.push(bad + ' call' + (bad === 1 ? '' : 's') + ' underwater');
   // Don't tell someone who just checked in to check in. If the mute is the only thing left charging them,
   // the honest advice is that it stops when the restriction does.
-  const advice = checkedInToday
+  const advice = showedUp
     ? (readOnly ? ' This part stops when your restriction lifts — checking in is already holding the rest at zero.' : '')
     : ' Check in to stop it.';
   notify(u.id, '📉', 'Send Power decayed by ' + drain.toLocaleString('en-US') + ' (' + (Math.round(pct * 10) / 10) +
@@ -8710,7 +9402,7 @@ function decayUser(u, today) {
 
 /* The sweep. Bounded per run so one pass can never lock the database for long, and it only ever looks at
    accounts that have not already been charged today. */
-const DECAY_BATCH = 200;
+const DECAY_BATCH = 500;
 let decayRunning = false;
 function runDecaySweep() {
   if (decayRunning) return { users: 0, drained: 0 };
@@ -8718,8 +9410,15 @@ function runDecaySweep() {
   const today = dayNo();
   let users = 0, drained = 0;
   try {
-    const rows = db.prepare(`SELECT id, points, decay_streak, restricted_until, restrict_level
-                             FROM users WHERE decay_at < ? AND system = 0 ORDER BY id LIMIT ?`).all(today, DECAY_BATCH);
+    /* MOST OVERDUE FIRST. Ordering by id meant the queue was served in account-creation order every
+       single tick: the accounts at the front were re-examined (and skipped, already charged today) while
+       everyone past the day's throughput was never reached at all — a permanent decay exemption handed
+       out by account number. decay_at ASC drains the backlog oldest-first instead, so no account can be
+       starved however far behind the sweep falls, and the batch is large enough that the ceiling
+       (500 × 288 ticks/day = 144,000 accounts/day) sits well above any plausible active roster.
+       checkin_at is selected because decayUser needs it to tell showing up from being away. */
+    const rows = db.prepare(`SELECT id, points, decay_streak, restricted_until, restrict_level, checkin_at
+                             FROM users WHERE decay_at < ? AND system = 0 ORDER BY decay_at ASC, id ASC LIMIT ?`).all(today, DECAY_BATCH);
     for (const u of rows) {
       try { const d = decayUser(u, today); users++; drained += d; } catch {}
     }

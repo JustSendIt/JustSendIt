@@ -5,6 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning server.js",
+    "test": "node --disable-warning=ExperimentalWarning tests/run.mjs",
+    "check": "node scripts/check.mjs",
     "whitepaper": "bash scripts/build-whitepaper.sh"
   },
   "engines": {

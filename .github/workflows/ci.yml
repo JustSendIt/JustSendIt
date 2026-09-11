@@ -1,0 +1,35 @@
+# The cheap check, then the real one. Both run on every push and pull request.
+#
+# `npm run check` parses every file that ships and asserts the whole-file invariants that have actually
+# broken this site before (an inline script the CSP silently refuses to run, an asset renamed out from
+# under a page, a .dockerignore line with a trailing comment, client risk weights drifting from the
+# server's). It takes about a second, so it runs first and fails fast.
+#
+# `npm test` starts a real server against a throwaway data directory and drives the real HTTP API.
+# There is no mock of this site on purpose: the bugs worth catching live in the seams a mock would
+# paper over.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'      # node:sqlite and the built-in backup API both require >= 24
+          cache: npm
+      - run: npm ci
+      - name: Parse and invariant check
+        run: npm run check
+      - name: Test suites
+        run: npm test
+        env:
+          # No key on disk in CI, and the server refuses to start in production without one — this
+          # makes the test run explicitly non-production and supplies a throwaway key.
+          NODE_ENV: test

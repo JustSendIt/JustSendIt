@@ -156,9 +156,26 @@ Holder Boost  = 1 + supplyBoost × diamondFactor
 ```
 
 - A **non‑holder gets exactly 1×** — the boost only ever scales up.
+- **A bag only counts at $100 or more.** See §3.2.1 — this is the floor, and it applies to every token on the site.
 - Every weighted **1% of supply** adds **10** to your supply boost.
 - **$GWC is weighted ×3** on the supply axis — the same fraction of $GWC gives three times the boost that $Send does.
 - The **supply side is uncapped**; the only cap inside the formula is the Diamond factor's **×100** ceiling. The boost itself has no ceiling — what it can turn a day of grinding into does (73,762 per rolling 24h, and 73,762 per single award); on Send Call performance it pays in full.
+
+#### 3.2.1 The $100 hold floor — dust is not a bag
+
+**One number, one rule, every token on this site: a holding only counts at $100 or more, priced live.**
+
+Below it you hold dust, and dust earns **no holder status of any kind** — no Diamond level, no Diamond factor, no no‑sell streak, no supply boost, no community verification, no conviction standing, no extra tracker slots.
+
+Why it exists: every holder reward here is **time‑based**, and the balance behind it used to be checked only for "greater than zero". One cent of $GWC held for thirty days reached Diamond Forming and applied a **×6.3** factor to the whole account; at two years it reached **×100**. The cheapest route to the largest multiplier on the platform was dust plus patience, which is not conviction — it is a calendar.
+
+- The floor is in **dollars, not tokens**, so it survives a token's own price moving.
+- It is **$100** because that is already the unit the Send Call size ladder counts in (`$100 held = 1×`), so the site has exactly one definition of "you actually hold this".
+- Each coin is judged **separately**: $100 of $Send and $100 of $GWC are two different bags clearing two different floors, and they carry two different streaks.
+- It applies to **$Send, $GWC, community tokens, and any token a conviction play is measured on** — there is no token on this site with a different rule.
+- Your dashboard shows the live dollar value of each bag against the floor, so a bag that isn't counting says so rather than quietly paying nothing.
+- **A price we cannot read is not an answer.** If the market is unreadable, your previous verified status stands — an upstream outage can never reset an honest holder's months‑long streak.
+- Dropping **below** $100 of a coin ends that coin's streak, the same as selling would.
 
 **Worked examples** (fresh, unbroken streak):
 
@@ -188,6 +205,8 @@ The longer you hold **without selling**, the higher your Diamond tier climbs —
 | 8 | 365 | 🏆 Diamond Legend | ×40 |
 | 9 | 550 | 👑 Unbreakable | ×63 |
 | 10 | 730 | 🔥 Immortal Diamond | ×100 |
+
+**The $100 floor comes first.** A coin worth less than **$100** contributes nothing to a streak and nothing to your Diamond level — the clock does not start, and if a bag falls below the floor its streak ends (§3.2.1).
 
 **What counts as "not selling":** your no‑sell streak tracks the **peak** percentage of supply you reached. **Selling = dropping more than 2% below that peak**, which resets your streak clock and collapses your Diamond factor to 1. A small wobble within 2% doesn't count; buying more only raises the peak. Because the baseline is your all‑time streak peak (not your last reading), you can't slowly bleed tokens out just under the threshold to dodge a reset.
 
@@ -219,7 +238,19 @@ A **Send Call** is you going on the record: a public, timestamped, **permanent**
 sizeMult = min(100, max(1, yourSpendUSD / 100))
 ```
 
-Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest: your "spend" is credited as **min(tokens you bought from the pool, tokens you still hold) × price**, read best‑effort across up to 3 connected wallets. Taking the *minimum* defeats value spoofing, wash/recycled buys, self‑pool paper value, and airdrops. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The Senders list in this section re‑reads Senders' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
+Every **$100** of tokens bought and still held = **×1**, cap **×100** ($10k+). So $1,000 held = ×10. The anti‑cheat that makes it honest is a **net** figure, not a gross one: your "spend" is credited as **min(net bought from the pool, tokens you still hold) × price**, where *net bought* is everything the pool sent you **minus everything you sent the pool**, read best‑effort across every linked wallet.
+
+The netting is what makes each of these worth nothing:
+
+| Trick | Why it nets to zero |
+|---|---|
+| **`skim()`** — donate tokens to a pool, then skim them back out | You can only skim what you donated, so what you sent in cancels what came out |
+| **`burn()`** — pull your own liquidity and receive tokens from the pair | The LP position was minted by sending tokens *in*, so removing it nets back to where it started |
+| **Wash buys** — buy, sell back to the pool, repeat | The sells cancel the buys instead of stacking |
+| **Value spoofing** — a router refund with a huge `tx.value` | Delivers no tokens, so nothing was bought |
+| **Airdrops and transfers in** | Never came from the pool at all |
+
+A genuine buyer who later takes some profit nets down to what they actually still put in, which is what "how much did you send into this coin" was always supposed to mean. And because a thin pool's owner sets its price, **the credited position can never exceed the pool's own liquidity** — a self‑made $600 pool pumped to a paper million credits $600, not a million. **The caller's size is captured once, at call time, and locked in** for that call's award (it fails open to $0 so it never blocks a call). *(The Senders list in this section re‑reads Senders' holdings on demand, throttled to at most once every ~5 minutes, so their "still holding" status stays current — the caller's own recorded size does not change afterward.)*
 
 **The stack cap on the opening award: ×10 (`OPEN_STACK_MAX`).** However large your boost stack gets, the *paid* opening award is capped at **ten times the size‑scaled base**:
 
@@ -461,7 +492,7 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 **Posting from a community page** — once you're a qualified member, the floating ✏️ *Send it* button posts to *that* community's wall (it scrolls to and focuses the community composer). Anywhere else — or on a community you haven't joined — it opens the global Send Wall composer and, after posting, offers a *View on the Wall* link instead of yanking you off the page.
 
 **Honest residual risks / limitations**
-- The anti‑sybil gate is **on‑chain holding of the community token + a ≤2‑per‑network cap + continuous re‑verification**, not proof‑of‑personhood. A determined actor could still buy the token across several funded wallets and rotate IPs to manufacture a go‑live — but it now costs **real, sustained capital** (the sweep revokes qualification the moment the tokens leave a wallet), not a free throwaway account. **A slot that counts needs $25 of the token** (`MIN_COMMUNITY_HOLD_USD`), verified on‑chain, so ten qualified members is $250 of standing exposure — not ten dust balances. The tiny `OG_DUST_WEI` floor is only the fallback used when no USD price is available, and for *creating* a community (where any non‑dust balance is enough).
+- The anti‑sybil gate is **on‑chain holding of the community token + a ≤2‑per‑network cap + continuous re‑verification**, not proof‑of‑personhood. A determined actor could still buy the token across several funded wallets and rotate IPs to manufacture a go‑live — but it now costs **real, sustained capital** (the sweep revokes qualification the moment the tokens leave a wallet), not a free throwaway account. **A slot that counts needs $100 of the token** (`MIN_COMMUNITY_HOLD_USD`, which is the site‑wide `MIN_HOLD_USD` floor of §3.2.1), verified on‑chain, so ten qualified members is **$1,000** of standing exposure — not ten dust balances. Creating a community takes the same $100. The tiny `OG_DUST_WEI` floor is only the fallback used when no USD price is available. Qualification is re‑verified continuously for **pending** communities as well as live ones, so a single bag can no longer be walked through ten accounts to tip one live.
 - Going live is **one‑way** — leaving a live community never un‑lives it and never claws back the founder bonus.
 - Market stats on community cards are cached (~45s refresh) and are **display only** — nothing about a community implies the token is safe or a good buy. **Most tokens go to zero.**
 
@@ -476,7 +507,7 @@ Every live community has **two walls**:
 | 🌐 **Public wall** | anyone, signed in or not | verified holders |
 | 🔒 **Holders‑only wall** | **verified holders of that token, and nobody else** | verified holders |
 
-"Verified holder" is the same slot everything else in a community uses (`community_members.qualified = 1`): at least **$25 of the token**, read from a linked wallet on‑chain, and re‑checked continuously by the holder sweep — **sell the token and the wall closes with it.** The **sandbox has no private wall**: it grants that slot to anyone who taps Join with no wallet and no token, so a "holders‑only" wall there would be open to everyone while the page promised an on‑chain check. `canReadPrivateWall` requires `communities.demo = 0`, the wall route refuses `wall=holders` there, and the tabs do not render. The composer posts to whichever wall you are looking at, so there is no separate "who can see this" setting to get wrong.
+"Verified holder" is the same slot everything else in a community uses (`community_members.qualified = 1`): at least **$100 of the token** (the §3.2.1 floor), read from a linked wallet on‑chain, and re‑checked continuously by the holder sweep — **sell the token and the wall closes with it.** The **sandbox has no private wall**: it grants that slot to anyone who taps Join with no wallet and no token, so a "holders‑only" wall there would be open to everyone while the page promised an on‑chain check. `canReadPrivateWall` requires `communities.demo = 0`, the wall route refuses `wall=holders` there, and the tabs do not render. The composer posts to whichever wall you are looking at, so there is no separate "who can see this" setting to get wrong.
 
 **The gate is on the server, on every path that can return a post** — not a filter in the page:
 
@@ -536,7 +567,8 @@ Hold **both $Send and $GWC**, bought from the market, and keep holding both: you
 **The standard, identical in every window.** Verified read‑only from your linked wallets, across all of them:
 - You **bought** each coin from the market — tokens leaving the LP pool, or the measured router, for your wallet. Your first such buy of the *later* coin is the moment you "completed the pair", and that timestamp decides your tier. A transfer from another wallet is not a buy.
 - You **still hold both** now, across any linked wallet (moving your bag to a hardware wallet is fine).
-- **Each bag is worth at least $25** at the moment the badge is granted (`OG_MIN_HOLD_USD = 25`, checked against the live price of *both* coins independently). Buying inside the window and keeping $10 of each earns nothing — the badge is meant to sit behind a real position, not a dust balance kept alive to hold a tier.
+- **Each bag is worth at least $100** at the moment the badge is granted (`OG_MIN_HOLD_USD = MIN_HOLD_USD`, the §3.2.1 floor, checked against the live price of *both* coins independently). Buying inside the window and keeping $10 of each earns nothing — the badge is meant to sit behind a real position, not a dust balance kept alive to hold a tier.
+- **One badge per wallet, ever.** The tier is a statement about a wallet's history, so a wallet that has already earned OG for one account can never earn it again for another (`og_claims`). The claim is deliberately *not* released when the wallet is unlinked — otherwise link → claim → unlink → relink on the next account would clone the badge, and its 10× multiplier, without limit.
 - **Two things disqualify a wallet:** if it dumped its whole holding to nothing inside *its own* first 30 days **and** it holds less today than it did at the end of those 30 days, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place. ("Net accumulator" is measured this way on purpose: a wallet's total bought minus total sold *is* its balance, so "bought more than sold" would only re‑ask "do you hold any", which is already required.)
 
 **Losing it.** Sell out of either coin entirely, at any time, and the badge is revoked **for good**. The badge follows your wallet: unlink it and the badge pauses until you relink and are re‑verified — **but disconnecting is not always just a pause.** Before unlinking, the server reads the chain one more time; if it can see that you no longer hold both coins, that counts as selling out and the badge is revoked permanently rather than paused. Disconnecting a wallet you have already emptied does not preserve the tier. Like every holding‑based bonus, it pays only while your holdings were re‑checked on‑chain within the last 26 hours.
@@ -548,7 +580,8 @@ Hold **both $Send and $GWC**, bought from the market, and keep holding both: you
 A fresh race every week, run by the server on its own. Every **Monday 00:00 UTC** (the same ISO week the community board uses) the Biggest Sender board resets to zero, so the week's standings are only what you earned **inside** it. When the week ends, the game master settles it without anyone having to visit:
 
 - The **top 10** each take a rung of the prize ladder **by finishing place** — **#1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10** (`WEEK_PRIZES`; exactly ten prizes — a tie at the edge goes to whoever joined first; recorded in the `competitions` row) — added on top of everything they earn for the **whole of the following week**, alongside the Holder Boost, OG, community and arcade boosts.
-- **The race is proof of work.** The board ranks **base points** (`points_events.base`) — what you did, with every boost taken out: Holder, OG, community, Rocket Run and any prize you were carrying. A whale, an OG and a newcomer race on the same footing; the prize pays your level and the all-time board, never your next placing. (`comp_amount` is still recorded per award for the all-time view.)
+- **The race is proof of work.** The board ranks `points_events.comp_base` — what you *did*, with every boost taken out (Holder, OG, community, Rocket Run and any prize you were carrying) **and with position size taken out too**. That second part matters: the call bases are pre‑multiplied by how much money is in your wallet (`send_call` pays `120 × sizeMult`, up to ×100 for a $10,000 bag), so ranking the raw base would have ranked the biggest wallet under a banner that says proof of work. `comp_base` carries the unscaled figure — a call is one call's worth of work whatever is behind it — and equals `base` for everything else. A whale, an OG and a newcomer race on the same footing; the prize pays your level and the all-time board, never your next placing. (`comp_amount` is still recorded per award for the all-time view.)
+- **Decay is not negative work.** `decay` events are excluded from the race. They carry a negative base, so counting them subtracted a penalty for being away from the week's standings on top of the Send Power it had already cost.
 - Ties share a rank on the board, as on the all-time one; the ten prize places are the top ten rows by points, then account age (`u.id ASC`), so identical scores can never multiply the prizes.
 - The deploy week is the first race. Nothing is paid retroactively from history, and a week is only ever settled once.
 
@@ -605,12 +638,42 @@ The open sandbox (joinable with no token and no wallet, grants no multiplier) is
 - The sandbox is keyed to a synthetic address (`DEMO_TOKEN`), so no real token's market data or community tag can attach to it; the first version was keyed to WETH and wore WETH's price, cap and holder count.
 - No Robinhood artwork or marks are used — the site brands it with its own 📈 mark and plain naming — and the sandbox is `demo`, never `official`, so a listed company's name never sits under the 🏠 Official badge. Where the brand appears: the community page carries the full line (a stock, not a token; cannot be bought, held or swapped here; not investment advice; not affiliated with, endorsed by or sponsored by Robinhood Markets, Inc.) plus the quote's source and time; the grid card carries a `Sandbox · stock, not a token` pill and a source/time/not-affiliated line; the Arcade hub row carries the Sandbox chip and the not-affiliated note; the profile names the sandbox as a membership that grants no multiplier; proposal notifications say *sandbox*, not `$HOOD`. Snapshots are refused for the sandbox (there is no token to walk) and its member count is never labelled *verified holders*.
 
+### 3.16 The ticket — reading is open, joining is by invite 🎟️
+
+**You do not need anything to read this site.** The landing page, the Send Wall, the New Pairs Radar, the Arcade, profiles, Send Calls and the terms are all open to anyone, signed in or not, crawler or person. That is deliberate and it is load‑bearing: this site's whole SEO surface — every canonical, every sitemap entry, every `og:` tag — only means something if the pages behind them can actually be fetched.
+
+**You do need a ticket to JOIN.** An invite code is required at exactly three doors, the three that can create an account:
+
+| Door | Where |
+|---|---|
+| Email + password sign‑up | `POST /api/auth/register` |
+| A wallet signing in for the first time | `POST /api/auth/wallet/verify`, new‑account branch |
+| Google / Facebook / X / Instagram, first time | the OAuth callback |
+
+All three call one function (`signupRefusal`), and nothing else on the site calls it. It answers one of three things: `need_invite`, `need_tos`, or `code_spent` — machine‑readable, so the client turns a refusal into the ticket rather than an error message.
+
+**How it works for a person:**
+
+1. They browse. Nothing is in the way.
+2. They tap **Sign up** — from anywhere on the site. The ticket opens over the page they were on.
+3. **They can close it.** "No code? Keep browsing read‑only →" is on every step, Esc works throughout, and closing it puts them back exactly where they were. A door that cannot be walked away from is a wall.
+4. They enter a code. **Each code works once.**
+5. They read the terms. The box unlocks when the text has been scrolled to the end *and* twelve seconds have passed — jumping to the bottom is not enough. **18+ is a separate tick**, because the terms assert it and nothing was otherwise asking.
+6. They make their account. Their **Send ID** — their place in line — is set at that moment and never changes. It is the user id: already monotonic, already unique, already means "how early you were", so a second counter would only be a way for the two to disagree.
+7. They get **ten codes of their own**, shown immediately, one tap each to copy.
+
+**Their codes live on their dashboard too** (`/profile.html#invites`), so "where are my codes" has an answer that is not "reopen the modal you closed". A code that has been used is shown there **for the record but cannot be copied** — the server withholds its characters entirely and returns only a two‑character hint plus who took it. There is nothing to copy: it will never work again, and handing someone a dead code is worse than handing them none.
+
+**The ticket is downloadable** — a 1200×630 PNG painted on a canvas (no library, same output on every browser) carrying the holder's profile picture, their @handle, their Send ID, who invited them, the live Gold OG countdown, and the entertainment‑only disclaimer painted in, so a ticket shared on social carries it.
+
+---
+
 ## 4. How to participate — in 4 steps
 
-1. **Get a wallet** and add Robinhood Chain (Robinhood Wallet supports it natively; any EVM wallet works).
-2. **Grab some $SEND / $GWC** using the how‑to‑buy guide and the in‑page swap — always verify the contract address first.
-3. **Create your account** (wallet, email, Google, Facebook, X, or Instagram), connect your wallet read‑only, and claim your unique @handle.
-4. **Send it.** Post on the Send Wall, join or start a **community** for a flat 10×, make and follow Send Calls, react and vote, track wallets, ride the New Pairs Radar, and stack Send Power — hold and diamond‑hand to boost it all.
+1. **Get a ticket.** Someone already inside sends you one of their ten invite codes. You can read the whole site without one — you need it to make an account (§3.16).
+2. **Get a wallet** and add Robinhood Chain (Robinhood Wallet supports it natively; any EVM wallet works).
+3. **Grab some $SEND / $GWC** using the how‑to‑buy guide and the in‑page swap — always verify the contract address first. Remember the **$100 hold floor** (§3.2.1): below it, a bag earns no holder status at all.
+4. **Create your account** (wallet, email, Google, Facebook, X, or Instagram), connect your wallet read‑only, claim your unique @handle — then **send it.** Post on the Send Wall, join or start a **community** for a flat 10×, make and follow Send Calls, react and vote, track wallets, ride the New Pairs Radar, and stack Send Power.
 
 ---
 

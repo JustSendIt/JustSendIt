@@ -6,4 +6,5 @@
   <url><loc>https://sendrh.com/newpairs.html</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
   <url><loc>https://sendrh.com/tracker.html</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://sendrh.com/arcade.html</loc><changefreq>daily</changefreq><priority>0.6</priority></url>
+  <url><loc>https://sendrh.com/terms.html</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
 </urlset>

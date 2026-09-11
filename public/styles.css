@@ -377,6 +377,8 @@ section { padding: 4.2rem 1.25rem; position: relative; }
 }
 .section-title.green { color: var(--green-bright); text-shadow: 0 3px 0 #223300, 0 0 30px rgba(142,224,0,0.35); }
 .section-sub { text-align: center; color: var(--text-dim); font-size: 1.05rem; margin-bottom: 2.4rem; max-width: 60ch; margin-left: auto; margin-right: auto; }
+/* A limit-of-the-data caveat sitting inside a section subtitle — present, readable, not shouting. */
+.section-sub-note { display: block; margin-top: 0.35rem; font-size: 0.88rem; opacity: 0.8; }
 
 .alt-bg { background: linear-gradient(180deg, var(--ink), var(--ink-2)); }
 .alt-bg-2 { background: var(--ink-2); }
@@ -692,6 +694,9 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 
 /* ===== Auth modal ===== */
 #auth-modal { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 1rem; }
+/* The invite line under the sign-in modal: quiet, but the only signpost a person holding a code has. */
+.auth-invite { margin: 1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--border, rgba(255,255,255,0.1));
+  font-size: 0.83rem; line-height: 1.55; color: var(--text-dim); text-align: center; }
 #auth-modal[hidden] { display: none; }
 .modal-backdrop { position: absolute; inset: 0; background: rgba(4,6,10,0.78); backdrop-filter: blur(6px); }
 .modal-card {
@@ -2075,6 +2080,12 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 .ab-eq-total { background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); border-color: transparent; color: #12200a; }
 .ab-eq-total b { color: #12200a; }
 .ab-cap { text-align: center; margin-top: 0.9rem; font-weight: 800; color: var(--gold); }
+/* The $100 hold floor: a rule, not fine print, so it is lifted out of the small type above it. */
+.ab-floor {
+  margin-top: 1.1rem; padding: 0.85rem 1rem; border-radius: 12px; font-size: 0.9rem; line-height: 1.6;
+  background: rgba(142, 224, 0, 0.08); border: 1px solid rgba(142, 224, 0, 0.28); color: var(--text);
+}
+.ab-floor b { color: var(--green-bright); }
 .ab-fine { margin-top: 1.2rem; font-size: 0.8rem; line-height: 1.6; color: var(--text-dim); }
 .ab-fine b { color: var(--text); }
 
@@ -2972,6 +2983,10 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
 .cmp-nudge { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0 0; padding: 0.5rem 0.7rem; border-radius: 12px; font-size: 0.85rem; color: var(--text-dim); background: rgba(255,179,64,0.1); border: 1.5px solid rgba(255,179,64,0.4); }
 .cmp-call-preview:empty { display: none; }
 .cmp-call-preview { margin: 0.6rem 0; }
+/* Opt-in to publishing your wallet on a Send Call. Deliberately quiet — it is a choice, not a prompt. */
+.cmp-call-share { display: flex; align-items: flex-start; gap: 0.55rem; margin: 0.6rem 0 0; font-size: 0.86rem; line-height: 1.45; color: var(--muted); cursor: pointer; }
+.cmp-call-share input { margin-top: 0.2rem; flex: none; accent-color: var(--accent); }
+.cmp-call-share small { display: block; font-size: 0.78rem; opacity: 0.85; }
 .cmp-call-tok { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; padding: 0.7rem; border-radius: 14px; background: var(--ink-2); border: 1.5px solid var(--ink-4); }
 .cmp-call-logo { width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto; object-fit: cover; }
 .cmp-call-logo-none { display: grid; place-items: center; background: var(--ink-3); font-size: 1.2rem; }
