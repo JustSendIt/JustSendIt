@@ -2115,6 +2115,25 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 .ab-dia-top .ab-dia-n { color: var(--gold); }
 .ab-dia-top .ab-dia-x { color: var(--green-bright); }
 
+/* --- Linked wallets list (Profile → Security) ---------------------------
+   One row per linked wallet. The 2FA wallet is marked with a word as well as
+   a colour, because "which of these is my key" is exactly the question you
+   cannot afford to answer wrong. Rows wrap rather than truncate the address
+   on a phone: a half-shown address invites signing from the wrong wallet. */
+.wl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.wl-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 12px; padding: 0.6rem 0.75rem; }
+.wl-row.is-2fa { border-color: color-mix(in srgb, var(--green) 45%, transparent); background: color-mix(in srgb, var(--green) 7%, var(--ink-2)); }
+.wl-ico { font-size: 1.1rem; line-height: 1; }
+.wl-addr { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; color: var(--text);
+  overflow-wrap: anywhere; flex: 1 1 12rem; min-width: 0; }
+.wl-tag { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 0.2rem 0.5rem; border-radius: 999px; white-space: nowrap;
+  background: color-mix(in srgb, var(--green) 22%, transparent); color: var(--green-bright); }
+.wl-acts { display: flex; gap: 0.4rem; margin-left: auto; flex-wrap: wrap; }
+.wl-acts .btn { white-space: nowrap; }
+@media (max-width: 460px) { .wl-acts { margin-left: 0; width: 100%; } .wl-acts .btn { flex: 1 1 auto; } }
+
 /* --- Send Power decay ---------------------------------------------------
    The counterweight to the levels card. Deliberately amber rather than red:
    decay is a rule of the game, not an error state, and a red card here would

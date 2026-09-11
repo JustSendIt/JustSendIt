@@ -551,7 +551,22 @@ for (const col of [
   "ALTER TABLE api_keys ADD COLUMN source TEXT NOT NULL DEFAULT 'burn'",       // burn | og_gold
   "ALTER TABLE api_keys ADD COLUMN consumed_wei TEXT",
   "CREATE INDEX IF NOT EXISTS idx_arcade_day ON arcade_rounds(day)",                                        // the hub counts today's flights every 8 s
-  "CREATE INDEX IF NOT EXISTS idx_users_arcade_boost ON users(arcade_boost_until) WHERE arcade_boost > 1", // …and the pilots boosted right now                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "CREATE INDEX IF NOT EXISTS idx_users_arcade_boost ON users(arcade_boost_until) WHERE arcade_boost > 1", // …and the pilots boosted right now
+
+  /* ── Multi-wallet, and the sybil ring that multi-wallet makes possible ──────────────────────────────
+     An account may hold several wallets so that everything it owns counts toward one Send Power score.
+     The same freedom is how someone fakes a crowd: N accounts, N wallets, all buying one coin so the
+     chart looks like organic interest. These columns are what tell the two apart. Every IP is stored
+     as a blind index (bidx), never in the clear — enough to count accounts behind one address, never
+     enough to read the address back out. */
+  "ALTER TABLE users ADD COLUMN signup_ip TEXT",        // bidx of the IP the account was created from
+  "ALTER TABLE users ADD COLUMN last_ip TEXT",          // bidx of the IP it was last seen signing in from
+  "ALTER TABLE users ADD COLUMN redeem_mult REAL NOT NULL DEFAULT 1", // >1 makes buying out of read-only cost more (sybil rings pay double)
+  "ALTER TABLE identities ADD COLUMN is_2fa INTEGER NOT NULL DEFAULT 0", // exactly one wallet per account may be the sign-in second factor
+  "ALTER TABLE identities ADD COLUMN label TEXT",       // a name the owner gives a linked wallet, so a list of 0x… is readable
+  "ALTER TABLE calls ADD COLUMN ip TEXT",               // bidx of the IP a call was made from — the signal for same-IP rings on one token
+  "CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip)",
+  "CREATE INDEX IF NOT EXISTS idx_calls_ip_token ON calls(ip, token_addr)",                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
 ]) { try { db.exec(col); } catch {} }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
@@ -761,13 +776,18 @@ function autoUsername() {
   }
   return 'sender_' + rand(6);
 }
-function createUser(username, autoNamed) {
-  const r = db.prepare('INSERT INTO users (username, auto_named, created_at) VALUES (?,?,?)').run(username, autoNamed ? 1 : 0, now());
+function createUser(username, autoNamed, ipIdxVal) {
+  // signup_ip is a blind index, recorded once and never updated — it is what the per-IP account cap counts.
+  const r = db.prepare('INSERT INTO users (username, auto_named, created_at, signup_ip, last_ip) VALUES (?,?,?,?,?)')
+    .run(username, autoNamed ? 1 : 0, now(), ipIdxVal || null, ipIdxVal || null);
   return Number(r.lastInsertRowid);
 }
-function createSession(userId) {
+function createSession(userId, ipIdxVal) {
   const token = rand();
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(hashToken(token), userId, now(), now() + 30 * 864e5); // a DB leak never yields a usable cookie
+  // Where an account is USED matters as much as where it was made: a ring that signs up on mobile data and
+  // then operates from one room is still a ring. Blind index only.
+  if (ipIdxVal) { try { db.prepare('UPDATE users SET last_ip = ? WHERE id = ?').run(ipIdxVal, userId); } catch {} }
   return token;
 }
 // Secure whenever we serve https OR are told we sit behind TLS termination (COOKIE_SECURE=1)
@@ -807,6 +827,40 @@ function identityTypes(userId) {
 }
 function walletAddresses(userId) {
   return db.prepare("SELECT identifier_enc FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id").all(userId).map(r => decField(r.identifier_enc)).filter(Boolean);
+}
+/* Every linked wallet, with the detail a settings screen needs to show a real list rather than a row of
+   anonymous 0x…. Oldest first, matching walletAddresses. */
+function walletList(userId) {
+  return db.prepare("SELECT id, identifier_enc, label, linked_at, is_2fa FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id")
+    .all(userId)
+    .map(r => ({ id: r.id, address: decField(r.identifier_enc), label: r.label || '', linkedAt: r.linked_at || null, is2fa: !!r.is_2fa }))
+    .filter(w => w.address);
+}
+/* THE wallet that satisfies two-factor, when one has been chosen. Returns null for accounts that enabled
+   wallet 2FA before a choice existed — those keep the old rule (any wallet linked before 2FA was turned
+   on), because retro-fitting a pick they never made could lock them out of their own account. */
+function twofaWalletAddress(userId) {
+  const r = db.prepare("SELECT identifier_enc FROM identities WHERE user_id = ? AND type = 'wallet' AND is_2fa = 1 LIMIT 1").get(userId);
+  return r ? decField(r.identifier_enc) : null;
+}
+/* Shared by the sign-in door and by every credential change: may THIS address act as the second factor?
+   Returns null when it may, or the reason it may not. */
+function walletFactorRefusal(user, address) {
+  const pick = twofaWalletAddress(user.id);
+  if (pick) {
+    return pick === address ? null
+      : 'that is not your two-factor wallet — sign with the one you chose in Profile → Security (you can change it there).';
+  }
+  const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(user.id, bidx(address));
+  if (w && w.linked_at && user.twofa_enabled_at && w.linked_at > user.twofa_enabled_at) {
+    return 'that wallet was linked after two-factor was turned on — sign with the wallet you enabled it with';
+  }
+  return null;
+}
+// Exactly one wallet may hold the flag; setting a new one clears the rest in the same statement pair.
+function setTwofaWallet(userId, address) {
+  db.prepare("UPDATE identities SET is_2fa = 0 WHERE user_id = ? AND type = 'wallet'").run(userId);
+  if (address) db.prepare("UPDATE identities SET is_2fa = 1 WHERE user_id = ? AND type = 'wallet' AND identifier = ?").run(userId, bidx(address));
 }
 // identities are looked up by blind index and stored encrypted — the real value never sits in the clear in the DB
 function findIdentity(type, value) { return db.prepare('SELECT * FROM identities WHERE type = ? AND identifier = ?').get(type, bidx(value)); }
@@ -2639,7 +2693,12 @@ async function jgetH(url, headers) { // jget with custom headers (for the option
    live aggregated price), seasoned-then-dumped wallets, and airdrops/transfers-in (not counted — only pool buys). You have
    to actually still be holding what you claim to have sent. Best-effort + fail-open to 0 so it never blocks a call. */
 const SIZE_MULT_CAP = 100;               // cap the size boost at 100× ($10k+ still held) so one whale call can't mint unbounded points
-const SIZE_MAX_WALLETS = 3;              // cap wallets scanned per call
+/* Must equal MAX_LINKED_WALLETS, for the same reason OG_MAX_WALLETS must. This was 3 while the Holder
+   Boost read 5, so a bag sitting in wallet #4 raised your boost but was invisible to Send Call size —
+   the user sees one "linked wallets" list and is told everything in it counts, so a quieter second cap
+   reads as a bug whichever way it falls. It costs a little latency (each wallet is a transfer scan plus a
+   balance read), which is the honest price of the promise. */
+const SIZE_MAX_WALLETS = MAX_LINKED_WALLETS;
 function sizeMult(spendUsd) { return Math.min(SIZE_MULT_CAP, Math.max(1, (spendUsd || 0) / 100)); } // each $100 held-from-buys = 1×, floor 1×
 // full on-chain position: what they BOUGHT from the pool, what they still HOLD, and spend = min(both) (the anti-cheat basis).
 async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd) {
@@ -4494,7 +4553,7 @@ const pendingLogins = new Map(); // token -> {userId, expires}
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const CLEAR_OAUTH_STATE = 'oauth_state=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0';
 
-async function oauthCallback(provider, code, verifier, res) {
+async function oauthCallback(provider, code, verifier, res, ipIdxVal) {
   const p = OAUTH[provider];
   const redirect = `${BASE_URL}/api/auth/${provider}/callback`;
   // token exchange — Basic-auth clients (X) send credentials in the header + PKCE verifier in the body;
@@ -4519,7 +4578,11 @@ async function oauthCallback(provider, code, verifier, res) {
   let userId;
   if (ident) userId = ident.user_id;
   else {
-    userId = createUser(autoUsername(), true);
+    // Signing in with Google/Facebook/X for the first time creates an account, so the per-IP cap has to
+    // apply at this door too. Throwing here lands in the caller's catch, which redirects with an error.
+    const oaBlock = ipSignupBlocked(ipIdxVal);
+    if (oaBlock) throw new HttpError(oaBlock, 429);
+    userId = createUser(autoUsername(), true, ipIdxVal);
     insertIdentity(userId, provider, sub);
   }
   /* Two-factor has to gate THIS door too. Until now a session cookie was issued here the moment the provider
@@ -4544,7 +4607,7 @@ async function oauthCallback(provider, code, verifier, res) {
     });
     return res.end();
   }
-  const token = createSession(userId);
+  const token = createSession(userId, ipIdxVal);
   res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile.html' });
   res.end();
 }
@@ -5047,7 +5110,10 @@ async function verifyCurrentFactor(me, b) {
     // "any linked wallet" would be no factor at all. Pre-migration rows (NULL timestamps) keep the legacy behaviour.
     const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(address));
     if (!w) return 'sign with a linked wallet first';
-    if (w.linked_at && me.twofa_enabled_at && w.linked_at > me.twofa_enabled_at) return 'that wallet was linked after two-factor was turned on — sign with the wallet you enabled it with';
+    // Same rule as the sign-in door, from the same helper: the chosen 2FA wallet when there is one, and
+    // otherwise any wallet that predates 2FA being switched on.
+    const refusal = walletFactorRefusal(me, address);
+    if (refusal) return refusal;
     // this proves the CURRENT factor for a security change (disable 2FA, swap factor, add an email, link a
     // wallet), so a plain sign-in signature must not satisfy it
     const sig = consumeNonce(address, b.signature, 'manage');
@@ -5073,9 +5139,11 @@ const PERM_UNTIL = 32503680000000; // year 3000 sentinel — a "permanent" read-
 const REDEEM_RATE_USD = 25;        // $ of $SEND to buy per 24h of a timed restriction
 const PERM_REDEEM_USD = 1000;      // flat $ to buy out a PERMANENT (indefinite) restriction
 const PERM_HOLD_MS = (PERM_REDEEM_USD / REDEEM_RATE_USD) * DAY_MS; // hold for a permanent buy-out (40 days = $1000 at $25/day)
+const SYBIL_REDEEM_MULT = 2;       // a same-IP ring faking volume pays DOUBLE to buy its way back
+function redeemMult(u) { const m = Number(u && u.redeem_mult); return m > 1 ? m : 1; }
 function redeemCostUsd(u) { // how much MORE $SEND they must buy to lift THIS restriction
-  if ((u.restrict_level || 0) >= 3) return PERM_REDEEM_USD;
-  return REDEEM_RATE_USD * Math.max(1, Math.round((u.redeem_dur || DAY_MS) / DAY_MS));
+  if ((u.restrict_level || 0) >= 3) return PERM_REDEEM_USD * redeemMult(u);
+  return REDEEM_RATE_USD * Math.max(1, Math.round((u.redeem_dur || DAY_MS) / DAY_MS)) * redeemMult(u);
 }
 function redeemHoldMs(u) { // how long they must then hold that $SEND (permanent → 40d; timed → the restriction length)
   return (u.restrict_level || 0) >= 3 ? PERM_HOLD_MS : (u.redeem_dur || DAY_MS);
@@ -5120,7 +5188,74 @@ function probationOf(u) {
 }
 const isReadOnly = (u) => !!restrictionOf(u);
 
-function flagUser(userId, reason) {
+/* ===== Sybil rings: many accounts, one person, one coin ===============================================
+   One account may link several wallets, and everything they hold counts toward one Send Power score.
+   That is the honest use. The dishonest one wears the same clothes: a handful of accounts on one
+   connection, each with its own wallet, all calling and buying the same coin so the wall shows a crowd
+   and the chart shows demand that does not exist. The people it costs are the ones who read that as
+   interest and buy in.
+
+   Two limits, deliberately chosen to be generous, because shared IPs are ordinary life — a family, a
+   flat, an office, a phone network putting thousands of people behind one address:
+
+     • MAX_ACCOUNTS_PER_IP — how many accounts may be CREATED from one address. Three is above any
+       honest household and well below a useful ring.
+     • SYBIL_RING_ACCOUNTS — how many accounts on one address may call the SAME coin inside
+       SYBIL_WINDOW_MS. Sharing a connection is not suspicious; sharing a connection and independently
+       arriving at the same coin, repeatedly, is the actual signal.
+
+   Every IP is a blind index. We can count accounts behind one address and never learn the address. */
+const MAX_ACCOUNTS_PER_IP = 3;
+const SYBIL_RING_ACCOUNTS = 3;            // this many distinct accounts on one IP calling one token = a ring
+const SYBIL_WINDOW_MS = 7 * DAY_MS;       // how far back the ring is measured
+const ipIdx = (req) => { try { const ip = clientIp(req); return ip ? bidx('ip:' + ip) : null; } catch { return null; } };
+
+function accountsFromIp(idx) {            // how many accounts already exist behind this address
+  if (!idx) return 0;
+  return db.prepare('SELECT COUNT(*) n FROM users WHERE signup_ip = ? AND system = 0').get(idx).n;
+}
+// Called at every door that creates an account. Returns an error string to refuse with, or null to allow.
+function ipSignupBlocked(idx) {
+  if (!idx) return null;                  // no readable IP (direct local, or a proxy we do not trust) → never guess
+  const n = accountsFromIp(idx);
+  if (n < MAX_ACCOUNTS_PER_IP) return null;
+  return `that's ${n} accounts already from this connection, which is the limit (${MAX_ACCOUNTS_PER_IP}). ` +
+         `If several people really do share it, sign in to the account you have — one account can link up to ${MAX_LINKED_WALLETS} wallets, ` +
+         `and every one of them counts toward the same Send Power.`;
+}
+
+/* Does this call complete a same-IP ring on this token? Returns the colluding user ids (including the
+   caller) when it does, otherwise null. Reads only stored blind indexes — no chain calls, no IP in the clear. */
+function sybilRing(userId, idx, tokenAddr) {
+  if (!idx || !tokenAddr) return null;
+  const since = now() - SYBIL_WINDOW_MS;
+  const rows = db.prepare(`SELECT DISTINCT c.user_id FROM calls c JOIN users u ON u.id = c.user_id
+                           WHERE c.ip = ? AND c.token_addr = ? COLLATE NOCASE AND c.created_at > ? AND u.system = 0`)
+    .all(idx, tokenAddr, since);
+  const ids = new Set(rows.map((r) => r.user_id));
+  ids.add(userId);
+  return ids.size >= SYBIL_RING_ACCOUNTS ? [...ids] : null;
+}
+
+/* Restrict a whole ring at once. The ring IS the offence — flagging only whoever happened to act last
+   would leave the other accounts free to carry on, which is the opposite of the point. Each account
+   still walks its own 3-strike ladder (24h → 1 week → permanent); what differs is the buy-out price. */
+function flagSybilRing(ids, symbol) {
+  const reason = `Several accounts on one connection were pushing the same coin${symbol ? ' ($' + symbol + ')' : ''} — ` +
+                 `that makes a handful of people look like a crowd, so it reads as demand that is not there.`;
+  const hit = [];
+  for (const id of ids) {
+    if (flagUser(id, reason, SYBIL_REDEEM_MULT)) {
+      hit.push(id);
+      notify(id, '🚫', 'Your account is read-only: several accounts on your connection were pushing the same coin. ' +
+        'Linking more wallets to ONE account is fine and always counts toward the same Send Power — running several accounts to fake interest is not. ' +
+        'Buying out of this restriction costs double.', 'points');
+    }
+  }
+  return hit;
+}
+
+function flagUser(userId, reason, costMult) {
   const u = db.prepare('SELECT strikes, restricted_until FROM users WHERE id = ?').get(userId);
   if (!u || u.restricted_until > now()) return; // can't accrue new flags while already blocked
   const strikes = (u.strikes || 0) + 1;
@@ -5129,8 +5264,13 @@ function flagUser(userId, reason) {
   const until = level >= 3 ? PERM_UNTIL : now() + dur;
   const hs = db.prepare('SELECT send_tok FROM holder_state WHERE user_id = ?').get(userId); // baseline $SEND (to later detect a genuine redemption buy)
   const baseSend = hs ? (hs.send_tok || 0) : -1; // -1 = baseline UNKNOWN (never read on-chain) → redeem must establish it first
-  db.prepare('UPDATE users SET strikes=?, restrict_level=?, restrict_reason=?, restricted_until=?, flagged_at=?, redeem_base_send=?, redeem_dur=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
-    .run(strikes, level, String(reason).slice(0, 200), until, now(), baseSend, dur, userId);
+  // The ladder (24h → 1 week → permanent) is identical for every offence; only the PRICE of buying out
+  // early differs, so a ring that manufactured fake volume cannot exit as cheaply as someone who posted
+  // too fast once.
+  const mult = Number(costMult) > 1 ? Number(costMult) : 1;
+  db.prepare('UPDATE users SET strikes=?, restrict_level=?, restrict_reason=?, restricted_until=?, flagged_at=?, redeem_base_send=?, redeem_dur=?, redeem_mult=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
+    .run(strikes, level, String(reason).slice(0, 200), until, now(), baseSend, dur, mult, userId);
+  return true;
 }
 // enforce the redemption deal after an on-chain holdings read: hold the bought $SEND to term, or read-only returns doubled.
 function checkProbation(userId, sendTok) {
@@ -5740,6 +5880,9 @@ const server = http.createServer(async (req, res) => {
           user: {
             username: me.username, avatar: me.avatar, bio: me.bio, auto_named: !!me.auto_named,
             methods: identityTypes(me.id), wallets: walletAddresses(me.id),
+            walletList: walletList(me.id),          // [{address,label,linkedAt,is2fa}] — what the settings list renders
+            twofaWallet: twofaWalletAddress(me.id),  // the wallet that actually unlocks sign-in (null = legacy: any pre-2FA wallet)
+            maxWallets: MAX_LINKED_WALLETS,
             twofa: me.twofa_method || null,
             mutes: mutedNames(me.id), // usernames this user has muted (private to them)
             theme: themeOf(me),
@@ -5777,9 +5920,12 @@ const server = http.createServer(async (req, res) => {
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
         if (findIdentity('email', email)) return bad(res, 'that email already has an account — sign in instead');
-        const userId = createUser(username, false);
+        const regIp = ipIdx(req);
+        const regBlock = ipSignupBlocked(regIp);
+        if (regBlock) return bad(res, regBlock, 429);
+        const userId = createUser(username, false, regIp);
         insertIdentity(userId, 'email', email, hashPassword(password));
-        return send(res, 200, { ok: true, username }, { 'Set-Cookie': sessionCookie(createSession(userId)) });
+        return send(res, 200, { ok: true, username }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
       }
       if (p === '/api/auth/login' && req.method === 'POST') {
         if (!rateLimit('login:' + clientIp(req), 20, 9e5)) return bad(res, 'slow down', 429);
@@ -5815,7 +5961,7 @@ const server = http.createServer(async (req, res) => {
           pendingLogins.set(pend, entry);
           return send(res, 200, { twofa: u.twofa_method, pending: pend, ...extra });
         }
-        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id)) });
+        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id, ipIdx(req))) });
       }
       if (p === '/api/auth/login/totp' && req.method === 'POST') {
         if (!rateLimit('totp:' + clientIp(req), 30, 9e5)) return bad(res, 'too many attempts — slow down', 429);
@@ -5830,7 +5976,7 @@ const server = http.createServer(async (req, res) => {
           return bad(res, 'wrong code — try again', 401);
         }
         pendingLogins.delete(String(b.pending));
-        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id)) });
+        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id, ipIdx(req))) });
       }
       /* An OAuth sign-in that hit a second factor parked its challenge in an HttpOnly cookie and bounced the
          browser to /?twofa=1. This hands that challenge to the page so the SAME 2FA panel the email/password
@@ -5866,12 +6012,10 @@ const server = http.createServer(async (req, res) => {
         // two-factor was switched on counts as the second factor. Without this, an attacker holding a
         // stolen session cookie can link a fresh wallet of their own and then use it to satisfy 2FA —
         // which makes the factor worth nothing. Pre-migration rows (NULL timestamps) keep legacy behaviour.
-        const w2 = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(u.id, bidx(recovered));
-        if (w2 && w2.linked_at && u.twofa_enabled_at && w2.linked_at > u.twofa_enabled_at) {
-          return bad(res, 'that wallet was linked after two-factor was turned on — sign with the wallet you enabled it with', 401);
-        }
+        const refusal = walletFactorRefusal(u, recovered);
+        if (refusal) return bad(res, refusal, 401);
         pendingLogins.delete(String(b.pending));
-        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id)) });
+        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id, ipIdx(req))) });
       }
       // second factor = the account password (for wallet-first accounts that added an email + password)
       if (p === '/api/auth/login/password2fa' && req.method === 'POST') {
@@ -5887,7 +6031,7 @@ const server = http.createServer(async (req, res) => {
           return bad(res, 'wrong password — try again', 401);
         }
         pendingLogins.delete(String(b.pending));
-        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id)) });
+        return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id, ipIdx(req))) });
       }
       if (p === '/api/auth/logout' && req.method === 'POST') {
         if (me) db.prepare('DELETE FROM sessions WHERE token = ?').run(hashToken(me.sid));
@@ -5996,7 +6140,8 @@ const server = http.createServer(async (req, res) => {
           if (proof.error) return bad(res, proof.error, 401);
         }
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
-        return send(res, 200, { ok: true });
+        setTwofaWallet(me.id, addr);   // THIS wallet is the key from now on — the others are for holdings only
+        return send(res, 200, { ok: true, twofaWallet: addr });
       }
       if (p === '/api/2fa/disable' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
@@ -6004,7 +6149,65 @@ const server = http.createServer(async (req, res) => {
         // disabling 2FA must itself pass the second factor, so a hijacked session alone can't strip it
         const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401);
         db.prepare('UPDATE users SET twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL WHERE id = ?').run(me.id);
+        setTwofaWallet(me.id, null);   // the wallets stay linked and keep counting for Send Power; none of them is a key any more
         return send(res, 200, { ok: true });
+      }
+      /* Change WHICH linked wallet is the second factor, without turning 2FA off and on again (which would
+         mean a window with no protection at all). Proving the CURRENT factor is required, so someone holding
+         only a stolen cookie cannot point the lock at a wallet they own. */
+      if (p === '/api/2fa/wallet/primary' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (me.twofa_method !== 'wallet') return bad(res, 'wallet two-factor is not on for this account', 400);
+        const b = await readBody(req);
+        const next = String(b.address || '').toLowerCase();
+        if (!/^0x[0-9a-f]{40}$/.test(next)) return bad(res, 'pick one of your linked wallets');
+        if (!walletAddresses(me.id).includes(next)) return bad(res, 'that wallet is not linked to this account');
+        const err2 = await verifyCurrentFactor(me, b); if (err2) return bad(res, err2, 401);
+        // Prove the NEW wallet too, exactly as enabling does — otherwise the lock could be pointed at an
+        // address whose key is already lost, and the owner would find out at the next sign-in.
+        const proof = consumeNonce(next, b.newSignature, '2fa-on');
+        if (proof.error) return bad(res, proof.error, 401);
+        setTwofaWallet(me.id, next);
+        notify(me.id, '🔐', 'Your two-factor wallet changed — sign-ins now need ' + next.slice(0, 6) + '…' + next.slice(-4) + '.', 'wallet');
+        return send(res, 200, { ok: true, twofaWallet: next });
+      }
+      /* Unlink ONE wallet and leave the rest. /api/wallet/disconnect removes every wallet at once, which is
+         the wrong tool when someone simply wants to swap which wallet they hold from. Guards mirror it. */
+      if (p === '/api/wallet/unlink' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        const b = await readBody(req);
+        const addr = String(b.address || '').toLowerCase();
+        if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'which wallet?');
+        const linked = walletAddresses(me.id);
+        if (!linked.includes(addr)) return bad(res, 'that wallet is not linked to this account', 404);
+        // Removing the last wallet from a wallet-only account would lock the owner out for good.
+        if (linked.length === 1 && !identityTypes(me.id).some(t => t !== 'wallet'))
+          return bad(res, 'add an email + password first — this wallet is your only way to sign in, so unlinking it would lock you out');
+        // The 2FA wallet is the key to the account; it may only go once another one is the key, or 2FA is off.
+        if (me.twofa_method === 'wallet' && (twofaWalletAddress(me.id) || linked[0]) === addr)
+          return bad(res, 'that is your two-factor wallet — choose a different one for two-factor first, or turn two-factor off, then unlink it');
+        if (me.twofa_method) { const errU = await verifyCurrentFactor(me, b); if (errU) return bad(res, errU, 401); }
+        /* Same honesty rule as a full disconnect: decide OG from the chain WHILE the wallet is still
+           readable, so selling out and then unlinking cannot launder the badge. A failed read keeps it. */
+        let revokeOg = false;
+        forgetHoldings(me.id);
+        if (me.og && !me.og_revoked) {
+          try { const [hs2, hg2] = await Promise.all([holdsToken(me.id, TOK.SEND), holdsToken(me.id, TOK.GWC)]); if (!hs2 || !hg2) revokeOg = true; } catch {}
+        }
+        try {
+          db.exec('BEGIN');
+          db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").run(me.id, bidx(addr));
+          if (revokeOg) db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1 WHERE id = ?').run(me.id);
+          db.exec('COMMIT');
+        } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not unlink that wallet — try again', 500); }
+        /* Holdings were verified against a wallet set that just changed, so nothing cached may survive it.
+           holder_state is deliberately NOT deleted here (that would reset the no-sell streak for removing a
+           spare wallet); the next refreshHolder re-reads the remaining wallets and moves the streak honestly
+           if the balance really dropped. */
+        forgetHoldings(me.id);
+        balCache.delete(me.id);
+        checkOg(me.id).catch(() => {});
+        return send(res, 200, { ok: true, wallets: walletAddresses(me.id), walletList: walletList(me.id), ogRevoked: revokeOg });
       }
       // Password as the second factor for WALLET sign-ins (wallet-first users who added an email + password)
       if (p === '/api/2fa/password/enable' && req.method === 'POST') {
@@ -6126,8 +6329,13 @@ const server = http.createServer(async (req, res) => {
           checkOg(me.id).catch(() => {}); // a newly linked wallet might be an early buyer → verify OG in the background
           return send(res, 200, { ok: true, linked: true, username: me.username });
         } else {
+          // A brand-new account from a wallet signature is still a new account, so the per-IP cap applies
+          // here exactly as it does to email signup — otherwise the cheapest way past it would be a wallet.
+          const wIp = ipIdx(req);
+          const wBlock = ipSignupBlocked(wIp);
+          if (wBlock) return bad(res, wBlock, 429);
           username = autoUsername();
-          userId = createUser(username, true);
+          userId = createUser(username, true, wIp);
           insertIdentity(userId, 'wallet', address);
           db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
           awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + address);
@@ -6154,7 +6362,7 @@ const server = http.createServer(async (req, res) => {
             }
           }
         }
-        return send(res, 200, { ok: true, username, newAccount: !ident }, { 'Set-Cookie': sessionCookie(createSession(userId)) });
+        return send(res, 200, { ok: true, username, newAccount: !ident }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
       }
 
       /* ----- oauth ----- */
@@ -6184,8 +6392,16 @@ const server = http.createServer(async (req, res) => {
         const st = oauthStates.get(qState);
         if (!st || st.provider !== provider || st.expires < now() || !cookieState || cookieState !== qState) return bad(res, 'sign-in link is invalid or expired — please start again', 400);
         oauthStates.delete(qState);
-        try { await oauthCallback(provider, url.searchParams.get('code'), st.verifier, res); }
-        catch (e) { res.writeHead(302, { Location: '/?autherror=' + encodeURIComponent(provider), 'Set-Cookie': CLEAR_OAUTH_STATE }); res.end(); }
+        try { await oauthCallback(provider, url.searchParams.get('code'), st.verifier, res, ipIdx(req)); }
+        // Carry a refusal we can explain (the per-IP account cap) back to the page. Anything else stays a
+        // generic failure on purpose: an OAuth exception can contain provider internals, and a redirect
+        // URL is the last place to put those. Nothing read `autherror` before, so a failed sign-in used to
+        // land on the home page having silently done nothing at all.
+        catch (e) {
+          const msg = (e instanceof HttpError && e.status === 429) ? e.message : '';
+          res.writeHead(302, { Location: '/?autherror=' + encodeURIComponent(provider) + (msg ? '&autherrmsg=' + encodeURIComponent(msg) : ''), 'Set-Cookie': CLEAR_OAUTH_STATE });
+          res.end();
+        }
         return;
       }
 
@@ -6675,11 +6891,12 @@ const server = http.createServer(async (req, res) => {
         const spendUsd = await callSpendUsd(me.id, token, p2.pair.address, price);
         const sm = sizeMult(spendUsd);
         const noDyor = b.viewedDetail ? 0 : 1; // flag calls made WITHOUT opening the token's full on-chain detail first
+        const callIp = ipIdx(req);             // blind index only — enough to spot a ring, never enough to read the IP
         let callId, postId;
         try {
           db.exec('BEGIN');
-          const cr = db.prepare('INSERT INTO calls (user_id, token_addr, pair_addr, symbol, name, quote_symbol, token0, token1, entry_price, entry_mc, entry_liq, peak_price, cur_price, cur_mc, last_check, wallet, snapshot, created_at, entry_spend_usd, no_dyor) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-            .run(me.id, token, p2.pair.address, sym, name, p2.pair.quoteSymbol || '?', p2.pair.token0 || null, p2.pair.token1 || null, price, mc, liq, price, price, mc, null, wallet, JSON.stringify(p2).slice(0, 40000), t, spendUsd, noDyor); // last_check=NULL: the first sweep stamps it and credits 0 hold for the unobserved pre-sample gap
+          const cr = db.prepare('INSERT INTO calls (user_id, token_addr, pair_addr, symbol, name, quote_symbol, token0, token1, entry_price, entry_mc, entry_liq, peak_price, cur_price, cur_mc, last_check, wallet, snapshot, created_at, entry_spend_usd, no_dyor, ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+            .run(me.id, token, p2.pair.address, sym, name, p2.pair.quoteSymbol || '?', p2.pair.token0 || null, p2.pair.token1 || null, price, mc, liq, price, price, mc, null, wallet, JSON.stringify(p2).slice(0, 40000), t, spendUsd, noDyor, callIp); // last_check=NULL: the first sweep stamps it and credits 0 hold for the unobserved pre-sample gap
           callId = Number(cr.lastInsertRowid);
           // TOCTOU guard: the allowance was checked before the awaited lookups above, so re-verify under the write lock —
           // two near-simultaneous calls can't both slip past the pre-await remaining>0 check and exceed the daily limit.
@@ -6706,9 +6923,20 @@ const server = http.createServer(async (req, res) => {
         }
         scanWriteAction(me.id, 'post', text);
         notify(me.id, '📣', 'Send Call posted on $' + sym + ' — your Xs track live on your wall.', 'points');
-        // anti-spam: did this call complete a full day's allowance (≥3) inside an hour? If so, mute them (escalating: 24h → 1wk → permanent).
+        /* Same-IP ring on the same coin. Checked AFTER the row is committed so this call counts toward its
+           own ring, and only on a token the ring actually shares. Sharing a connection is not the offence
+           — several accounts behind one connection all pushing the SAME coin is, because that is what
+           manufactures the appearance of demand. The whole ring is restricted, not just whoever acted
+           last, and every one of them pays double to buy out. */
         let restriction = null;
-        if (allow.limit >= CALL_SPAM_MIN) {
+        const ring = sybilRing(me.id, callIp, token);
+        if (ring) {
+          const hit = flagSybilRing(ring, sym);
+          if (hit.includes(me.id)) restriction = restrictionOf(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id));
+          console.warn('sybil ring on $' + sym + ': ' + ring.length + ' accounts on one connection, restricted ' + hit.length);
+        }
+        // anti-spam: did this call complete a full day's allowance (≥3) inside an hour? If so, mute them (escalating: 24h → 1wk → permanent).
+        if (!restriction && allow.limit >= CALL_SPAM_MIN) {
           const nth = db.prepare('SELECT created_at FROM calls WHERE user_id=? AND created_at>? ORDER BY created_at DESC LIMIT 1 OFFSET ?').get(me.id, now() - CALL_WINDOW_MS, allow.limit - 1);
           if (nth && now() - nth.created_at < CALL_SPAM_WINDOW_MS) { // all `limit` calls landed inside the last hour → burst
             flagUser(me.id, 'Spamming Send Calls — you used a full day of Send Calls in under an hour. A Send Call is a signal, not a firehose.');

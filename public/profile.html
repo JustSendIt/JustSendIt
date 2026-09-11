@@ -115,7 +115,15 @@
           <div class="setting-body">
             <div class="f-label" style="margin-top:0;">Sign-in methods</div>
             <div id="pf-methods" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin:0.4rem 0 0.7rem;"></div>
-            <button class="btn btn-ghost btn-sm" id="link-wallet-btn">Link a wallet 🔗</button>
+
+            <div id="wl-block" hidden>
+              <div class="f-label" style="margin-top:0.9rem;">Your wallets <span id="wl-count" class="privacy-chip" style="margin-left:0.4rem;"></span></div>
+              <p class="modal-note" style="margin:0.15rem 0 0.6rem;">Every wallet here is <b>read-only</b> — a signature proves it's yours, and that's all it can ever do. <b>All of them add up</b> into one Holder Boost, one Diamond streak and one Send Call size, so there's no reason to spread a bag across accounts.</p>
+              <ul class="wl-list" id="wl-list" aria-label="Linked wallets"></ul>
+              <p class="modal-note" id="wl-status" role="status" aria-live="polite" style="margin:0.4rem 0 0;"></p>
+            </div>
+
+            <button class="btn btn-ghost btn-sm" id="link-wallet-btn" style="margin-top:0.7rem;">Link a wallet 🔗</button>
 
             <div style="margin-top:1.1rem; border-top:1px solid var(--ink-4); padding-top:0.9rem;">
               <div class="f-label" style="margin-top:0;">Two-factor authentication <span id="twofa-state" class="privacy-chip" style="margin-left:0.4rem;">off</span></div>

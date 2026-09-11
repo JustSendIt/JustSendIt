@@ -229,6 +229,80 @@ async function linkWallet() {
     // a wallet owned by ANOTHER account now comes back as a 409 and surfaces through the catch below
   } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + (e.message || 'cancelled')); }
 }
+/* ---------- linked wallets ----------------------------------------------
+   One account, several wallets, one Send Power score. Every control here ends
+   in a `personal_sign` and nothing else: linking, unlinking and choosing the
+   two-factor wallet are all proofs of ownership, never transactions. */
+const shortAddr = (a) => String(a).slice(0, 6) + '…' + String(a).slice(-4);
+
+function renderWallets(me) {
+  const block = document.getElementById('wl-block');
+  const list = document.getElementById('wl-list');
+  if (!block || !list) return;                       // markup not on this page — never throw out of loadMe
+  const ws = (me.walletList && me.walletList.length)
+    ? me.walletList
+    : (me.wallets || []).map((a) => ({ address: a, is2fa: false, label: '' }));
+  block.hidden = !ws.length;
+  if (!ws.length) { list.innerHTML = ''; return; }
+  const count = document.getElementById('wl-count');
+  if (count) count.textContent = ws.length + ' of ' + (me.maxWallets || 5);
+  /* Accounts that turned wallet-2FA on before there was anything to choose have no flagged row; the
+     server falls back to the oldest wallet, so show that as the key rather than leaving every row bare
+     and letting someone unlink what is actually holding their account. */
+  const fallback = (me.twofa === 'wallet' && !me.twofaWallet) ? ws[0].address : null;
+  list.innerHTML = ws.map((w) => {
+    const key = w.is2fa || w.address === fallback;
+    const canPick = me.twofa === 'wallet' && !key;
+    return '<li class="wl-row' + (key ? ' is-2fa' : '') + '">' +
+      '<span class="wl-ico" aria-hidden="true">🦊</span>' +
+      '<span class="wl-addr">' + esc(w.address) + '</span>' +
+      (key ? '<span class="wl-tag">🔐 Sign-in key</span>' : '') +
+      '<span class="wl-acts">' +
+        (canPick ? '<button class="btn btn-ghost btn-sm js-wl-2fa" data-a="' + esc(w.address) + '">Use for 2FA</button>' : '') +
+        '<button class="btn btn-ghost btn-sm js-wl-unlink" data-a="' + esc(w.address) + '">Unlink</button>' +
+      '</span></li>';
+  }).join('');
+}
+
+async function unlinkWallet(address) {
+  if (!confirm('Unlink ' + shortAddr(address) + '?\n\nIt stops counting toward your Holder Boost and Send Call size. Your other wallets are untouched, and you can link it again any time.')) return;
+  const st = document.getElementById('wl-status');
+  if (st) st.textContent = '';
+  try {
+    const current = await currentFactorBody('Unlinking a wallet changes how you sign in.');
+    const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, ...current } });
+    sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: that wallet had sold out' : ''));
+    await loadMe();
+    if (window.loadConnectedWallet) loadConnectedWallet();
+    if (window.loadGamify) loadGamify();
+    if (window.refreshNavBalances) refreshNavBalances();
+  } catch (e) {
+    if (e.message === 'cancelled') return;
+    if (st) st.textContent = '⚠️ ' + e.message;   // the server's refusals here are instructions, so keep them on screen
+    sendToast('⚠️ ' + (e.message || 'could not unlink that wallet'));
+  }
+}
+
+async function makeTwofaWallet(address) {
+  const st = document.getElementById('wl-status');
+  if (st) st.textContent = '';
+  try {
+    const current = await currentFactorBody('Changing which wallet is your two-factor key.');
+    sendToast('Now switch to ' + shortAddr(address) + ' in your wallet and sign ✍️');
+    const { provider, address: got } = await WALLET.connect();
+    if (got !== address) throw new Error('that is ' + shortAddr(got) + ' — switch to ' + shortAddr(address) + ' in your wallet app, then try again');
+    const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
+    const newSignature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    await api('/api/2fa/wallet/primary', { method: 'POST', body: { address, newSignature, ...current } });
+    sendToast('Two-factor wallet is now ' + shortAddr(address) + ' 🔐');
+    await loadMe();
+  } catch (e) {
+    if (e.message === 'cancelled') return;
+    if (st) st.textContent = '⚠️ ' + e.message;
+    sendToast('⚠️ ' + (e.message || 'could not change your two-factor wallet'));
+  }
+}
+
 async function startTotp() {
   try {
     const j = await api('/api/2fa/totp/setup', { method: 'POST' });
@@ -346,6 +420,7 @@ async function loadMe() {
     const aeb = document.getElementById('add-email-block'); if (aeb) { aeb.hidden = hasEmail; const f = document.getElementById('ae-factor'); if (f) f.hidden = me.twofa !== 'totp'; }
     const pwBtn = document.getElementById('pw-2fa-btn'); if (pwBtn) pwBtn.hidden = !(hasEmail && hasWallet); // password-2FA only makes sense for wallet sign-ins
     const pws = document.getElementById('pw2fa-setup'); if (pws) pws.hidden = true;
+    renderWallets(me);
   } catch {}
 }
 
@@ -494,6 +569,20 @@ document.getElementById('add-email-form').addEventListener('submit', addEmail);
 document.getElementById('pw-2fa-btn').addEventListener('click', () => { const b = document.getElementById('pw2fa-setup'); b.hidden = false; document.getElementById('pw2fa-pass').focus(); });
 document.getElementById('pw2fa-confirm-btn').addEventListener('click', confirmPassword2fa);
 document.getElementById('pw2fa-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmPassword2fa(); });
+
+/* Delegated, and guarded: the rows are re-rendered on every loadMe, so per-button listeners would leak,
+   and this block must never throw — the listeners above it have no null guards, and a TypeError here
+   would take the whole settings page down with it. */
+(function () {
+  const list = document.getElementById('wl-list');
+  if (!list) return;
+  list.addEventListener('click', (e) => {
+    const un = e.target.closest('.js-wl-unlink');
+    if (un) { unlinkWallet(un.dataset.a); return; }
+    const pick = e.target.closest('.js-wl-2fa');
+    if (pick) makeTwofaWallet(pick.dataset.a);
+  });
+})();
 
 /* ---------- boot ---------- */
 window.onAuthReady = function (user) {
