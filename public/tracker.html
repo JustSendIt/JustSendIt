@@ -114,6 +114,19 @@
           <h2 class="display trk-h2" id="trk-main-h">Report</h2>
           <button class="btn btn-ghost btn-sm" id="trk-refresh" type="button" hidden>↻ Refresh</button>
         </div>
+        <!-- Everything you own, added up. Sits above the single-wallet report because "what am I worth
+             across all of it" is the question people open this page with. -->
+        <section class="trk-comb" id="trk-comb" hidden aria-labelledby="trk-comb-h">
+          <div class="trk-comb-head">
+            <h3 class="trk-comb-h" id="trk-comb-h">🔗 All your wallets, combined</h3>
+            <button class="btn btn-ghost btn-sm" id="trk-comb-run" type="button">Add it all up 🧮</button>
+          </div>
+          <p class="trk-comb-sub" id="trk-comb-sub">Your linked wallets are always here — you proved they're yours, so they never use a tracked slot.</p>
+          <div class="trk-comb-totals" id="trk-comb-totals" hidden></div>
+          <ul class="trk-comb-rows" id="trk-comb-rows" hidden aria-label="Per-wallet totals"></ul>
+          <p class="trk-comb-note modal-note" id="trk-comb-note" role="status" aria-live="polite"></p>
+        </section>
+
         <p class="trk-selected" id="trk-selected" hidden></p>
         <div class="trk-banner" id="trk-banner" hidden></div>
         <p class="trk-progress" id="trk-progress" role="status" aria-live="polite"></p>

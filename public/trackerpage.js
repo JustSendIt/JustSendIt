@@ -19,6 +19,9 @@
 
   const state = {
     wallets: [], limit: 10, base: 10, diamondLevel: 0, holdsGwc: false,
+    trackedCount: null,   // watch-list size (your own linked wallets are free)
+    comb: null,           // combined totals across your linked wallets
+    combRunning: false,
     loaded: false,        // true once GET /api/wallets has answered for the current identity (boot() must not repaint before then)
     selected: null,       // lowercase address of the wallet whose report is shown
     runId: 0,             // bumps on every select/refresh so a slow, stale run can't paint over a newer one
@@ -56,7 +59,7 @@
   /* ---------- capacity meter (copy mirrors profile.js / watchlist.js) ---------- */
   function updateCap() {
     const cap = $('trk-cap'); if (!cap) return;
-    const used = state.wallets.length, limit = state.limit || 10, full = used >= limit;
+    const used = (state.trackedCount != null) ? state.trackedCount : state.wallets.length, limit = state.limit || 10, full = used >= limit;
     cap.hidden = false;
     $('trk-cap-count').textContent = used + ' / ' + limit + ' tracked';
     const fill = $('trk-cap-fill');
@@ -87,8 +90,9 @@
       '</button>' +
       '<span class="trk-w-actions">' +
         '<button class="copy-btn trk-w-btn" type="button" data-copy="' + esc(w.address) + '" aria-label="Copy address of ' + esc(nameOf(w)) + '">📋</button>' +
-        '<button class="copy-btn trk-w-btn" type="button" data-rename="' + esc(w.id) + '" aria-label="Rename ' + esc(nameOf(w)) + '">✏️</button>' +
-        '<button class="copy-btn trk-w-btn trk-w-rm" type="button" data-remove="' + esc(w.id) + '" aria-label="Stop tracking ' + esc(nameOf(w)) + '">✕</button>' +
+        (w.id != null ? '<button class="copy-btn trk-w-btn" type="button" data-rename="' + esc(w.id) + '" aria-label="Rename ' + esc(nameOf(w)) + '">✏️</button>' : '') +
+        // Your own wallets can't be "untracked" — they're yours by signature. Unlinking lives in Profile → Security.
+        (mine ? '' : '<button class="copy-btn trk-w-btn trk-w-rm" type="button" data-remove="' + esc(w.id) + '" aria-label="Stop tracking ' + esc(nameOf(w)) + '">✕</button>') +
       '</span>' +
     '</li>';
   }
@@ -99,10 +103,14 @@
       wstatus.innerHTML = '';
     } else {
       wlist.innerHTML = state.wallets.map(walletHTML).join('');
-      wstatus.innerHTML = '<span class="np-live-dot" aria-hidden="true"></span> ' + state.wallets.length + ' tracked wallet' + (state.wallets.length === 1 ? '' : 's');
+      const nMine = state.wallets.filter(w => w.mine).length, nOther = state.wallets.length - nMine;
+      wstatus.innerHTML = '<span class="np-live-dot" aria-hidden="true"></span> ' +
+        (nMine ? '<b>' + nMine + '</b> of yours' + (nOther ? ' · ' : '') : '') +
+        (nOther ? nOther + ' watched' : (nMine ? '' : '0 wallets'));
     }
     renderChips();
     updateCap();
+    if (typeof paintCombinedSection === 'function') paintCombinedSection();
   }
   function renderChips() {
     const tracked = new Set(state.wallets.map(w => w.address));
@@ -127,6 +135,8 @@
     try {
       const j = await api('/api/wallets');
       state.wallets = (j.wallets || []).map(w => ({ ...w, address: String(w.address).toLowerCase() }));
+      // Linked wallets arrive merged in and never spend a slot, so the meter counts what the server counts.
+      state.trackedCount = (j.trackedCount != null) ? j.trackedCount : state.wallets.filter(w => !w.mine).length;
       state.limit = j.limit || j.base || 10; state.base = j.base || 10;
       state.diamondLevel = j.diamondLevel || 0; state.holdsGwc = !!j.holdsGwc;
       state.loaded = true;
@@ -474,6 +484,125 @@
   function closeInfo(btn) { btn.setAttribute('aria-expanded', 'false'); const p = reportEl.querySelector('#' + btn.getAttribute('aria-controls')); if (p) p.hidden = true; }
   // renderTracker re-renders itself (innerHTML) when a display toggle is clicked → re-attach the ⓘ buttons
   new MutationObserver(() => { if (!reportEl.querySelector('.trk-skel')) decorateStats(); }).observe(reportEl, { childList: true });
+
+  /* ---------- combined totals across your own wallets ----------------------
+     One person with three wallets has one portfolio, so this answers the question
+     the page is actually opened with. It reuses the same cache-first machinery a
+     single report uses — saved report first so numbers appear at once, then a live
+     read per wallet — and it runs them one at a time on purpose: each report is
+     dozens of explorer calls, and firing five at once is how you get rate-limited
+     into a page full of dashes. */
+  const combTotals = $('trk-comb-totals'), combRows = $('trk-comb-rows'), combNote = $('trk-comb-note'),
+        combRun = $('trk-comb-run'), combSec = $('trk-comb'), combSub = $('trk-comb-sub');
+
+  const portfolioOf = (r) => (r.ethValueUsd || 0) + (r.totalTokenValueUsd || 0);
+  /* Its own formatter rather than trkUsd: these figures sit in a column under tabular-nums, and trkUsd's
+     `maximumFractionDigits` with no minimum renders 12000.30 as "$12,000.3" and 27 as "$27" — so the
+     decimal points do not line up, which is the one thing a totals column has to get right. */
+  const usd = (n) => {
+    if (n == null || isNaN(n)) return '—';
+    const abs = Math.abs(n);
+    const d = abs > 0 && abs < 1 ? 4 : 2;
+    return (n < 0 ? '−' : '') + '$' + abs.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+  };
+  function signed(n) {
+    if (n == null) return '<span class="cmb-v">—</span>';
+    const cls = n > 0 ? 'up' : n < 0 ? 'down' : '';
+    return '<span class="cmb-v ' + cls + '">' + (n > 0 ? '+' : n < 0 ? '−' : '') + usd(Math.abs(n)).replace('−', '') + '</span>';
+  }
+
+  function renderCombined() {
+    const c = state.comb;
+    if (!c || !c.rows.length) { combTotals.hidden = true; combRows.hidden = true; return; }
+    combTotals.hidden = false; combRows.hidden = false;
+    const net = (c.realized == null && c.unrealized == null) ? null : (c.realized || 0) + (c.unrealized || 0);
+    combTotals.innerHTML =
+      '<div class="cmb-stat"><div class="cmb-l">Portfolio value</div><div class="cmb-v big">' + usd(c.portfolio) + '</div></div>' +
+      '<div class="cmb-stat"><div class="cmb-l">Net PNL</div><div>' + signed(net) + '</div></div>' +
+      '<div class="cmb-stat"><div class="cmb-l">Realized</div><div>' + signed(c.realized) + '</div></div>' +
+      '<div class="cmb-stat"><div class="cmb-l">Unrealized</div><div>' + signed(c.unrealized) + '</div></div>';
+    combRows.innerHTML = c.rows.map(r => {
+      const rnet = (r.realized == null && r.unrealized == null) ? null : (r.realized || 0) + (r.unrealized || 0);
+      return '<li class="cmb-row' + (r.pending ? ' is-pending' : '') + '">' +
+        '<button class="cmb-pick" type="button" data-select="' + esc(r.address) + '">' +
+          '<code class="cmb-addr">' + esc(shortAddr(r.address)) + '</code>' +
+          '<span class="cmb-name">' + esc(r.label || '') + '</span>' +
+        '</button>' +
+        '<span class="cmb-cell">' + (r.pending ? '<span class="cmb-wait">reading…</span>' : (r.failed ? '<span class="cmb-wait">unreadable</span>' : usd(r.portfolio))) + '</span>' +
+        '<span class="cmb-cell">' + (r.pending || r.failed ? '' : signed(rnet)) + '</span>' +
+      '</li>';
+    }).join('');
+  }
+
+  // a report for the combined view: memory → saved report → live read. Never paints over the single-wallet UI.
+  async function reportFor(addr) {
+    const mem = state.reports[addr];
+    if (mem && mem.report) return mem.report;
+    try {
+      const c = await api('/api/tracker/cache?address=' + encodeURIComponent(addr));
+      if (c && c.report && typeof c.report === 'object') {
+        state.reports[addr] = { report: c.report, updatedAt: c.updatedAt || Date.now(), source: 'cache' };
+        return c.report;
+      }
+    } catch {}
+    if (typeof trackerReport !== 'function') return null;
+    let p2 = state.inflight[addr];
+    if (!p2) {
+      p2 = state.inflight[addr] = trackerReport(addr, () => {})
+        .then(rep => { if (!rep.holdingsFailed) { state.reports[addr] = { report: rep, updatedAt: Date.now(), source: 'live' }; postCache(addr, rep); } return rep; })
+        .finally(() => { delete state.inflight[addr]; });
+    }
+    return p2;
+  }
+
+  async function runCombined() {
+    if (state.combRunning) return;
+    const mine = state.wallets.filter(w => w.mine);
+    if (!mine.length) return;
+    state.combRunning = true;
+    combRun.disabled = true;
+    state.comb = { portfolio: 0, realized: 0, unrealized: 0, rows: mine.map(w => ({ address: w.address, label: w.label, pending: true })) };
+    renderCombined();
+    let done = 0, failed = 0;
+    for (const w of mine) {
+      const row = state.comb.rows.find(r => r.address === w.address);
+      combNote.textContent = 'Reading ' + (done + 1) + ' of ' + mine.length + '…';
+      try {
+        const rep = await reportFor(w.address);
+        if (!rep) throw new Error('no report');
+        row.pending = false;
+        row.portfolio = portfolioOf(rep);
+        row.realized = rep.totalRealizedUsd;
+        row.unrealized = rep.totalUnrealizedUsd;
+        // A wallet whose balances could not be read contributes its PNL but not a fake $0 portfolio.
+        if (!rep.holdingsFailed) state.comb.portfolio += row.portfolio; else row.failed = true;
+        state.comb.realized += (row.realized || 0);
+        state.comb.unrealized += (row.unrealized || 0);
+      } catch { row.pending = false; row.failed = true; failed++; }
+      done++;
+      renderCombined();
+    }
+    combNote.textContent = failed
+      ? failed + ' of ' + mine.length + ' could not be read — the explorer may be busy. The rest are added up above.'
+      : 'Added up across ' + mine.length + ' wallet' + (mine.length === 1 ? '' : 's') + ' · same average-cost basis as a single report.';
+    combRun.disabled = false; combRun.textContent = '↻ Recheck';
+    state.combRunning = false;
+    say('Combined totals ready');
+  }
+
+  function paintCombinedSection() {
+    const mine = state.wallets.filter(w => w.mine);
+    combSec.hidden = !mine.length;
+    if (!mine.length) return;
+    combSub.textContent = mine.length === 1
+      ? 'Your linked wallet is always here — it never uses a tracked slot.'
+      : 'All ' + mine.length + ' of your linked wallets are always here, and none of them uses a tracked slot.';
+  }
+  combRun.addEventListener('click', runCombined);
+  combRows.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-select]');
+    if (b) select(b.dataset.select, true);
+  });
 
   /* ---------- signed-in / signed-out ---------- */
   function showSignedOut() {

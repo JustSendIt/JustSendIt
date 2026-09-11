@@ -7872,8 +7872,26 @@ const server = http.createServer(async (req, res) => {
         const holderFresh = !!(h && h.last_check && now() - h.last_check <= HOLDER_TTL);
         const activeHolder = !!(h && h.gwc_tok > 0 && holderFresh);
         const dLvl = (activeHolder && h.streak_start) ? diamondInfo(effHoldDays(h)).level : 0;
+        /* Your OWN wallets are always in your tracker. You proved they are yours with a signature, so
+           having to "add" them again was busywork, and it meant the one place that shows your chain data
+           could silently be missing most of it. They are merged in ahead of the watch-list, marked `mine`,
+           and — because they are yours by proof rather than by choice — they never spend a tracked slot. */
+        const tracked = db.prepare('SELECT id, address_enc, label FROM tracked_wallets WHERE user_id = ? ORDER BY id')
+          .all(me.id).map(w => ({ id: w.id, address: decField(w.address_enc), label: w.label || '' })).filter(w => w.address);
+        const linked = walletList(me.id);
+        const linkedSet = new Set(linked.map(w => w.address));
+        const byAddr = new Map(tracked.map(w => [w.address, w]));
+        // A linked wallet may already have a watch-list row (wallet-first signups get one) — keep that row's
+        // id and label so rename/remove still work on it, but list it once, as yours.
+        const mine = linked.map(w => {
+          const row = byAddr.get(w.address);
+          return { id: row ? row.id : null, address: w.address, label: (row && row.label) || w.label || '', mine: true, is2fa: !!w.is2fa };
+        });
+        const others = tracked.filter(w => !linkedSet.has(w.address)).map(w => ({ ...w, mine: false }));
         return send(res, 200, {
-          wallets: db.prepare('SELECT id, address_enc, label FROM tracked_wallets WHERE user_id = ? ORDER BY id').all(me.id).map(w => ({ id: w.id, address: decField(w.address_enc), label: w.label })).filter(w => w.address),
+          wallets: [...mine, ...others],
+          trackedCount: others.length,   // what the capacity meter counts: the watch-list, not your own wallets
+          mineCount: mine.length,
           limit: trackLimit(me.id), base: TRACK_BASE, diamondLevel: dLvl, holdsGwc: activeHolder,
         });
       }

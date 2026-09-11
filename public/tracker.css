@@ -148,3 +148,41 @@
 .wl-trk-card b { color: var(--text); }
 .wl-trk-card .btn { flex: 0 0 auto; }
 @media (max-width: 480px) { .wl-trk-card { flex-direction: column; align-items: stretch; text-align: center; } }
+
+/* ---- combined totals across your own linked wallets --------------------
+   One person with several wallets has one portfolio. This sits above the
+   single-wallet report because it answers the question the page is opened
+   with. Gains/losses are never colour-only: every figure carries a + or −,
+   so the panel reads correctly in greyscale and to anyone colour-blind. */
+.trk-comb { background: var(--ink-2); border: 1.5px solid color-mix(in srgb, var(--green) 30%, var(--ink-4));
+  border-radius: 14px; padding: 0.9rem 1rem; margin: 0 0 1rem; }
+.trk-comb-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.trk-comb-h { margin: 0; font-size: 1rem; color: var(--green-bright); }
+.trk-comb-head .btn { margin-left: auto; }
+.trk-comb-sub { margin: 0.3rem 0 0; font-size: 0.82rem; color: var(--text-dim); line-height: 1.5; }
+
+.trk-comb-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; margin-top: 0.85rem; }
+@media (min-width: 620px) { .trk-comb-totals { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.cmb-stat { background: var(--ink); border: 1px solid var(--ink-4); border-radius: 10px; padding: 0.55rem 0.7rem; min-width: 0; }
+.cmb-l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); font-weight: 700; }
+.cmb-v { font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.cmb-v.big { font-size: 1.15rem; color: var(--text); }
+.cmb-v.up { color: var(--green-bright); }
+.cmb-v.down { color: var(--red); }
+
+.trk-comb-rows { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.cmb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.6rem;
+  background: var(--ink); border: 1px solid var(--ink-4); border-radius: 10px; padding: 0.45rem 0.6rem; }
+.cmb-row.is-pending { opacity: 0.65; }
+.cmb-pick { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit;
+  display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; min-width: 0; font: inherit; }
+.cmb-pick:hover .cmb-addr, .cmb-pick:focus-visible .cmb-addr { color: var(--green-bright); }
+.cmb-addr { font-size: 0.82rem; color: var(--text); }
+.cmb-name { font-size: 0.78rem; color: var(--text-dim); overflow-wrap: anywhere; }
+.cmb-cell { font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cmb-wait { color: var(--text-mute); font-weight: 600; font-size: 0.8rem; }
+.trk-comb-note { margin: 0.6rem 0 0; }
+@media (max-width: 460px) {
+  .cmb-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .cmb-row .cmb-cell:last-child { grid-column: 2; }
+}
