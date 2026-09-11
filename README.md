@@ -26,7 +26,7 @@ player there until you supply footage of your own.
 
 ## 1. What is this?
 
-**$Send / Just Send It** is a fan-built community hub for the **$Send** memecoin (and its sibling **$GWC**, Generational Wealth Coin) living on **Robinhood Chain** — an Ethereum Layer‑2 (chain ID 4663). It turns "watching a memecoin" into something you can actually *do*: connect a wallet (read‑only), track holdings, hang out on a social wall, call the tokens you believe in, discover new pairs safely, and earn **Send Power** for taking part.
+**$Send / Just Send It** is a fan-built community hub for the **$Send** memecoin (and its sibling **$GWC**, Generational Wealth Coin) living on **Robinhood Chain** — an Ethereum Layer‑2 (chain ID 4663). It turns "watching a memecoin" into something you can actually *do*: connect a wallet (read‑only), track holdings, post on a social wall, call the tokens you believe in, discover new pairs safely, and earn **Send Power** for taking part.
 
 It is built to be **fun, clear, mobile‑first, and — above all — honest.** The whole platform is designed so that everything you earn is *organic*: holdings and status are read straight from the blockchain and verified on the server, so nobody can fake their way to the top.
 
