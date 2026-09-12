@@ -118,6 +118,23 @@ try {
     check('css: the strips are laid over exactly the margins the renderer reserves', /\.oc-grab-x \{ left: 8px; right: 70px; bottom: 0; height: 46px/.test(CSS) && /const PAD = \{ l: 8, r: 70, t: 12, b: 46 \}/.test(CHART));
   }
 
+  /* ═══════════ 11a. the early-buyer layer says what the scan actually measured ═══════════
+     SNIPE.EARLY_N is the first ten BUYS with block 0 as buy #1 — on a quiet pool the tenth of those can
+     be a thousand blocks in, and a layer labelled "first 10 blocks" then contradicts its own card. */
+  {
+    check('early buyers: the layer is named for buys, not blocks', /label: 'First 10 buys'/.test(CHART) && !/First 10 blocks/.test(CHART));
+    check('early buyers: the card says how far in they were, not a made-up block count', /' blocks in'/.test(CHART));
+    check('markers: a cluster card is capped so it cannot outgrow the chart it sits in', /const MAX_ROWS = 4;/.test(CHART) && /const more = \(m\.n \|\| all\.length\) - rows\.length/.test(CHART));
+    check('early buyers: the server sends which buy it was', /rank: \(w\.ranks && w\.ranks\.length\) \? w\.ranks\[0\] : null/.test(SRC));
+    check('early buyers: the shared timestamp is explained rather than left to imply a shared moment', /records no separate clock time per buy/.test(CHART));
+    /* The scan stores wei and a `net` word; it has never had tookPct/holdsPct/netSeller. Reading fields
+       off it that do not exist is why this layer rendered a bare address and nothing else. */
+    check('early buyers: shares are computed from the wei the scan actually stores', /const shareOf = \(raw\) =>[\s\S]{0,200}?BigInt\(d\.supply\)/.test(SRC) && /tookPct: shareOf\(w\.sniped\)/.test(SRC));
+    check('early buyers: no invented `sold` flag — the scan\'s own verdict, and unknown stays unknown',
+      /net: \['accumulator', 'seller', 'fully out'\]\.includes\(w\.net\) \? w\.net : null/.test(SRC) && !/sold: w\.netSeller/.test(SRC));
+    check('early buyers: the card uses the same precision ladder as the block-0 panel', /const pct = \(n\) => \(n == null \|\| !isFinite\(n\)\)/.test(CHART));
+  }
+
   /* ═══════════ 11. the markers are drawn where they belong ═══════════ */
   {
     check('client: an entry outside the visible price range goes to the rail, not off the canvas', /m\._offScale = true;/.test(CHART));

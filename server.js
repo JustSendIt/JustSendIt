@@ -3784,9 +3784,14 @@ async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDe
       out.types.dev = []; out.types.block0 = [];
     } else {
       const at = d.block0At || null;
-      // Every wallet the scan traced in the first ten blocks. Addresses are shortened for display —
+      // Every wallet the scan traced in the first ten BUYS. Addresses are shortened for display —
       // they are public, but a chart does not need to be a copy-paste list of them.
       const short = (a) => String(a || '').slice(0, 6) + '…' + String(a || '').slice(-4);
+      /* The same arithmetic and the same vocabulary the block-0 panel uses (public/block0.js), against
+         the same stored scan — so the marker and the panel can never disagree about what a wallet took
+         or what it did with it. The scan stores wei and a `net` word; it does not store percentages, and
+         reading fields off it that it never had is how these markers ended up showing nothing at all. */
+      const shareOf = (raw) => { try { return (raw == null || !d.supply) ? null : Number(BigInt(raw)) / Number(BigInt(d.supply)) * 100; } catch { return null; } };
       const early = ((d.early && d.early.wallets) || []).concat(d.snipers || []);
       const seen = new Set();
       out.types.block0 = at && inWindow(at) ? markerCluster(early.filter(w => {
@@ -3794,10 +3799,17 @@ async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDe
         if (!k || seen.has(k)) return false; seen.add(k); return true;
       }).slice(0, MARKER_MAX).map(w => ({
         kind: 'block0', t: at, addr: short(w.address || w.addr),
-        tookPct: w.tookPct != null ? w.tookPct : null,
-        holdsPct: w.holdsPct != null ? w.holdsPct : null,
-        sold: w.netSeller === true || (w.holdsPct != null && w.tookPct != null && w.holdsPct < w.tookPct * 0.1),
+        tookPct: shareOf(w.sniped),
+        holdsPct: shareOf(w.clusterHolds),
+        // the scan's own word for what they did with it — and `unknown` stays unknown, never "sold"
+        net: ['accumulator', 'seller', 'fully out'].includes(w.net) ? w.net : null,
         blocksAfterZero: w.blocksAfterZero != null ? w.blocksAfterZero : 0,
+        atBlock0: w.atBlock0 === true || w.blocksAfterZero === 0,
+        /* WHICH BUY it was. SNIPE.EARLY_N is the first ten BUYS, not the first ten blocks — block 0 is
+           buy #1 — and on a pool that opened quietly the tenth buy can land well over a thousand blocks
+           in. Sending the rank lets the card say what the scan actually measured instead of a block
+           count the label would then contradict. */
+        rank: (w.ranks && w.ranks.length) ? w.ranks[0] : null,
       })), span) : [];
       out.notes.block0 = at ? null : 'The first traded block for this pool could not be established.';
       out.types.dev = [];

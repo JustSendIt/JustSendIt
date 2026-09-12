@@ -68,6 +68,8 @@
     if (v >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
     return '$' + v.toFixed(0);
   }
+  // the same precision ladder block0.js uses, so a share reads identically on the chart and in the panel
+  const pct = (n) => (n == null || !isFinite(n)) ? '—' : (n >= 10 ? n.toFixed(1) : n >= 1 ? n.toFixed(2) : n.toFixed(3)) + '%';
   const fmtUsd = (v) => v == null ? '—' : (v >= 1000 ? '$' + Math.round(v).toLocaleString('en-US')
     : v >= 1 ? '$' + v.toFixed(0) : '$' + v.toFixed(2));
   // Xs, the site's own convention everywhere else: +100% is 1x
@@ -92,7 +94,10 @@
     sent:       { glyph: '🚀', label: 'Sent Its',        colour: '#38e8ff', pin: 'price' },
     conviction: { glyph: '💠', label: 'Conviction',      colour: '#c9a6ff', pin: 'rail' },
     dev:        { glyph: '🛠️', label: 'Dev wallet',      colour: '#ffb340', pin: 'rail' },
-    block0:     { glyph: '🎯', label: 'First 10 blocks', colour: '#ff2e88', pin: 'rail' },
+    /* "First 10 buys", not "first 10 blocks". The scan's window is SNIPE.EARLY_N = the first ten BUYS
+       with block 0 as buy #1; on a pool that opened quietly the tenth of those can be a thousand blocks
+       in, and the old label made the card beneath it read as a contradiction of itself. */
+    block0:     { glyph: '🎯', label: 'First 10 buys',   colour: '#ff2e88', pin: 'rail' },
   };
   const MARKER_ORDER = ['call', 'sent', 'conviction', 'dev', 'block0'];
   /* Which layers are on, remembered per browser. Defaults to everything on: the markers are the reason
@@ -408,20 +413,44 @@
       if (kind === 'conviction') return '<b>@' + esc(x.who) + '</b> joined the $' + esc(x.community || '') + ' community — verified holder';
       if (kind === 'dev') return '<b>Deployer</b> ' + (x.side === 'buy' ? 'bought' : 'sold') +
         (x.tokens ? ' ' + Math.round(x.tokens).toLocaleString('en-US') + ' tokens' : '');
-      if (kind === 'block0') return '<b>' + esc(x.addr) + '</b> bought in the first ' + ((x.blocksAfterZero || 0) + 1) + ' block' + ((x.blocksAfterZero || 0) === 0 ? '' : 's') +
-        (x.tookPct != null ? ' · took ' + x.tookPct.toFixed(2) + '% of supply' : '') +
-        (x.sold ? ' · <span class="oc-dn">sold out</span>' : (x.holdsPct != null ? ' · still holds ' + x.holdsPct.toFixed(2) + '%' : ''));
+      if (kind === 'block0') {
+        /* Terse on purpose: four of these have to fit in a card that sits inside the chart, and the note
+           underneath already explains what "blocks in" is measured from. */
+        const b = x.blocksAfterZero || 0;
+        const when = x.atBlock0 ? 'the pool’s first block' : b.toLocaleString('en-US') + ' blocks in';
+        // the block-0 panel's own words, so the two surfaces can never describe the same wallet differently
+        const NET = { accumulator: ['oc-up', 'net accumulator'], seller: ['oc-dn', 'net seller'], 'fully out': ['oc-dn', 'fully out'] };
+        const n = NET[x.net];
+        return '<b>' + esc(x.addr) + '</b>' + (x.rank ? ' · buy #' + x.rank : '') + ' · ' + when +
+          (x.tookPct != null ? ' · took ' + pct(x.tookPct) : '') +
+          (x.holdsPct != null ? ' · holds ' + pct(x.holdsPct) : '') +
+          (n ? ' · <span class="' + n[0] + '">' + n[1] + '</span>' : '');
+      }
       return '';
     };
-    const rows = m.members ? m.members : [m];
+    /* A cluster of ten, at a line each, made a hover card taller than the card it lives in — it ran off
+       the bottom of the chart and over the page below. Four is what fits; the rest are counted, and for
+       the chain layer the first-buyers panel on the token's own detail already lists every one of them
+       in full, which is a better place to read ten wallets than a tooltip. */
+    const MAX_ROWS = 4;
+    const all = m.members ? m.members : [m];
+    const rows = all.slice(0, MAX_ROWS);
+    const more = (m.n || all.length) - rows.length;
     const rounded = rows.some(r => r.rounded);
     return '<div class="oc-tip-t">' + spec.glyph + ' ' + esc(spec.label) + ' · ' + esc(fullTime(m.t)) + '</div>' +
       (m.n ? '<div class="oc-tip-row oc-tip-dim"><span>' + m.n + ' in this moment</span><b>showing ' + rows.length + '</b></div>' : '') +
       '<ul class="oc-tip-list">' + rows.map(r => '<li>' + one(r) + '</li>').join('') + '</ul>' +
+      (more > 0 ? '<div class="oc-tip-note">' + more + ' more here' +
+        (kind === 'block0' ? ' — the first-buyers panel on this token lists every one of them, with the full ledger.'
+          : ' — switch to a shorter timeframe to separate them.') + '</div>' : '') +
       /* Kept SHORT on purpose: a card that covers the chart it is describing is worse than one that says
          less. Each of these is load-bearing — where the number came from, and what it is not. */
       (rounded ? '<div class="oc-tip-note">Rounded to two figures — exact only for the person it belongs to.</div>' : '') +
       (m._offScale ? '<div class="oc-tip-note">Entry is outside this window’s price range — pinned to the rail.</div>' : '') +
+      /* These all sit at the moment the pool opened, because that is the only wall-clock time the scan
+         establishes; what it measures per wallet is how many blocks later they bought. Saying so stops
+         the shared timestamp reading as a claim that they all bought at once. */
+      (kind === 'block0' ? '<div class="oc-tip-note">Percentages are of total supply. “Blocks in” counts from the pool’s first paid-out block — the scan records no separate clock time per buy, so all ten sit here. The window is the first ten buys, not the first ten blocks.</div>' : '') +
       (kind === 'sent' || kind === 'call'
         ? '<div class="oc-tip-note">Size read from their linked wallets, read-only. The x is the move from their own entry; the market cap is the one captured then. Measurements, not advice.</div>' : '');
   }
