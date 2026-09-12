@@ -436,11 +436,6 @@ section { padding: 4.2rem 1.25rem; position: relative; }
 
 .token-links { display: flex; gap: 0.6rem; flex-wrap: wrap; }
 
-.chart-frame {
-  margin-top: 1.2rem; border-radius: 16px; overflow: hidden;
-  border: 2px solid rgba(142,224,0,0.3); background: #000; position: relative;
-}
-.chart-frame iframe { display: block; width: 100%; height: 420px; border: 0; }
 
 /* ===== Guide ===== */
 .step-list { display: grid; gap: 1.3rem; max-width: 780px; margin: 0 auto; counter-reset: step; }
@@ -1443,8 +1438,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
   .nav-xp { white-space: nowrap; }
   .profile-link { font-size: 0.82rem; padding: 0.45rem 0.7rem; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .swap-row { grid-template-columns: 1fr; }
-  .chart-frame iframe { height: 340px; }
-}
+  }
 
 /* ===== Universal wallet connect picker ===== */
 .wc-overlay { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 1rem; background: rgba(4,6,10,0.82); backdrop-filter: blur(6px); }
@@ -3329,7 +3323,9 @@ body::after {
 
 /* ---------- 13. On-chain chart (replaces the embedded third-party chart) ---------- */
 .onchain-chart { background: var(--glass-well); border: 1px solid var(--hair); border-radius: var(--r-2); padding: 0.6rem 0.7rem; }
-.oc-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.4rem; }
+/* wrap, not overflow: five timeframe buttons, a live price and a source chip do not fit across a phone,
+   and a row that refuses to wrap makes the whole PAGE scroll sideways rather than just itself */
+.oc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem 0.6rem; margin-bottom: 0.4rem; }
 .oc-tfs { display: flex; gap: 0.25rem; }
 .oc-tf {
   background: transparent; color: var(--text-mute); border: 1px solid transparent;
@@ -3814,3 +3810,106 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .beta-nm { font-weight: 700; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
 .beta-pt { margin-left: auto; font-weight: 800; color: var(--green-bright); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .beta-empty { color: var(--text-dim); font-size: 0.9rem; padding: 0.5rem 0; }
+
+/* ═══ chart: hover readout, marker layers and the toggle row ════════════════════════════════════════
+   The plot is position:relative so the tip is positioned inside the card it belongs to and can never
+   escape it — a tooltip that hangs off the edge of a chart in a list is worse than no tooltip. */
+.oc-plot { position: relative; }
+/* The canvas keeps pan-y so a phone can still scroll the page by dragging over the chart; only the two
+   scale strips below claim the gesture outright. */
+.oc-canvas { touch-action: pan-y; }
+
+/* ---- the two scales, as things you can actually grab ----------------------------------------------
+   Laid exactly over the margins draw() reserves: PAD.b = 46px along the bottom for the time axis, and
+   PAD.r = 70px down the right for the price gutter. The y strip is inset 12px from the plot so it never
+   steals the hover from a marker sitting on the last candle. A cursor change alone would not announce
+   these — the site hides the native cursor while the rocket is on — so they carry a faint arrow that
+   comes up on hover and focus. */
+.oc-grab {
+  position: absolute; z-index: 3; margin: 0; padding: 0;
+  background: transparent; border: 0; border-radius: 6px;
+  color: var(--text-mute); font: inherit; font-size: 0.8rem; line-height: 1;
+  display: grid; place-items: center; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease;
+  touch-action: none; -webkit-user-select: none; user-select: none;
+}
+.oc-grab-x { left: 8px; right: 70px; bottom: 0; height: 46px; cursor: ew-resize; place-items: end; padding: 0 4px 3px 0; }
+.oc-grab-y { top: 12px; bottom: 46px; right: 0; width: 58px; cursor: ns-resize; place-items: start end; padding: 2px 3px 0 0; }
+/* The glyph sits in the same margin as the axis labels, so it carries its own ground rather than
+   printing itself through whatever number happens to be behind it. */
+.oc-grab > span {
+  display: block; padding: 0 0.28rem; border-radius: 5px; line-height: 1.35;
+  background: color-mix(in srgb, var(--bg-1, #10131f) 92%, transparent);
+}
+.oc-plot:hover .oc-grab, .oc-grab:focus-visible, .oc-grab.is-dragging { opacity: 1; }
+/* An edge, not a fill. A tinted block over the axis washes out the very labels you are dragging the
+   scale to read; a line along the edge the strip owns says the same thing and leaves them legible. */
+.oc-grab:hover, .oc-grab.is-dragging { color: var(--green-bright); }
+.oc-grab-x:hover, .oc-grab-x.is-dragging { box-shadow: inset 0 2px 0 0 color-mix(in srgb, var(--green) 70%, transparent); }
+.oc-grab-y:hover, .oc-grab-y.is-dragging { box-shadow: inset -2px 0 0 0 color-mix(in srgb, var(--green) 70%, transparent); }
+.oc-grab:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; opacity: 1; }
+/* Returns the chart to the window it was fetched for. Only present while the view has been moved, so it
+   is never a control that does nothing. */
+.oc-reset {
+  position: absolute; z-index: 5; top: 6px; left: 10px;
+  padding: 0.2rem 0.5rem; border-radius: 999px; cursor: pointer;
+  background: color-mix(in srgb, var(--bg-1, #10131f) 88%, transparent);
+  border: 1px solid var(--hair); color: var(--text-dim);
+  font: inherit; font-size: 0.68rem; font-weight: 700; letter-spacing: var(--tr-caps);
+}
+.oc-reset:hover { color: var(--green-bright); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.oc-reset:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+/* On a phone these strips are the only elements that take the touch outright, so they are kept as small
+   as they can be and still be hit: a 58px-wide band down the right edge that refuses to scroll the page
+   is a worse trade than a slightly harder scale to grab. */
+@media (max-width: 640px) {
+  .oc-grab-y { width: 34px; }
+  .oc-grab-x { height: 30px; }
+  /* the status line under the chart already says where the numbers come from, at more length */
+  .oc-src { display: none; }
+  .oc-live { margin-right: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .oc-grab { transition: none; } }
+.oc-tip {
+  position: absolute; z-index: 4; pointer-events: none;
+  min-width: 190px; max-width: 300px; padding: 0.55rem 0.65rem;
+  background: color-mix(in srgb, var(--bg-1, #10131f) 94%, transparent);
+  border: 1px solid var(--hair); border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+  font-size: 0.8rem; line-height: 1.45; color: var(--text);
+}
+.oc-tip.is-wide { max-width: 360px; }
+.oc-tip-t { font-size: 0.7rem; letter-spacing: var(--tr-caps); text-transform: uppercase; color: var(--text-mute); margin-bottom: 0.35rem; }
+.oc-tip-row { display: flex; justify-content: space-between; gap: 1rem; }
+.oc-tip-row b { font-family: var(--mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.oc-tip-dim, .oc-tip-dim b { color: var(--text-dim); font-weight: 600; }
+.oc-tip-list { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.oc-tip-list li { font-size: 0.78rem; line-height: 1.4; }
+/* The caveat is part of the number, not decoration under it: a market cap built on today's supply, or a
+   figure rounded because it is not yours, has to say so wherever it is read. */
+.oc-tip-note { margin-top: 0.35rem; padding-top: 0.3rem; border-top: 1px solid var(--hair); font-size: 0.64rem; line-height: 1.35; color: var(--text-mute); }
+
+.oc-up { color: var(--green-bright); font-weight: 700; }
+.oc-dn { color: var(--red); font-weight: 700; }
+
+.oc-legend { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
+.oc-mk {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.22rem 0.5rem; border-radius: 999px; cursor: pointer;
+  background: transparent; border: 1px solid var(--hair); color: var(--text-dim);
+  font: inherit; font-size: 0.7rem; font-weight: 600; line-height: 1.6;
+}
+.oc-mk:hover { color: var(--text); border-color: var(--text-mute); }
+.oc-mk.is-on { color: var(--text); border-color: color-mix(in srgb, var(--green) 40%, transparent); background: var(--g-tint); }
+/* A layer with nothing in this window is dimmed rather than hidden — "no Send Calls here" is information,
+   and a control that vanishes when its count is zero just looks broken. It must still read as ON though:
+   at 0.45 an enabled-but-empty layer was indistinguishable from a disabled one, so the toggle stopped
+   telling you what it was actually doing. */
+.oc-mk.is-empty { opacity: 0.72; }
+.oc-mk.is-empty:not(.is-on) { opacity: 0.42; }
+/* a count the current timeframe cannot reach — the events exist, the window does not include them */
+.oc-mk-out { opacity: 0.7; font-size: 0.64rem; }
+.oc-mk-g { font-size: 0.85rem; }
+.oc-mk-n { font-family: var(--mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; opacity: 0.8; }
+.oc-mk-clean { margin-left: auto; }
+@media (max-width: 640px) { .oc-mk-clean { margin-left: 0; } .oc-tip { max-width: 240px; } }
+@media (prefers-reduced-motion: reduce) { .oc-tip { transition: none; } }

@@ -236,9 +236,14 @@
           <a class="btn btn-ghost btn-sm" href="https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" target="_blank" rel="noopener">Explorer ↗</a>
           <button class="btn btn-ghost btn-sm" data-watch-token="SEND">Add to Wallet 👁</button>
         </div>
-        <div class="chart-frame">
-          <iframe title="$Send live chart on Dexscreener" src="https://dexscreener.com/robinhood/0xf30bb531d0255969be155533abac34b22bd63414?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15" loading="lazy"></iframe>
-        </div>
+        <!-- Our own chart, drawn from this pair contract's own Swap logs, with the site's markers on it.
+           It replaces a Dexscreener iframe: same underlying data one step closer to the source, no
+           third-party frame, no rate limit we do not control, and no tracking surface on the landing
+           page. What the iframe did that this does not: TradingView drawing tools, order-book depth,
+           and a trade tape. The Dexscreener link above is kept for anyone who wants those.
+           data-poll="5000": this is a page people read, not one they watch tick. Two charts at one
+           second each is 120 requests a minute from a single visitor; at five seconds it is 24. -->
+        <div class="onchain-chart" data-pair="0xf30bb531d0255969be155533abac34b22bd63414" data-token="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-tf="1h" data-poll="5000"></div>
       </div>
 
       <div class="card gold-card reveal">
@@ -269,9 +274,14 @@
           <a class="btn btn-ghost btn-sm" href="https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" target="_blank" rel="noopener">Explorer ↗</a>
           <button class="btn btn-ghost btn-sm" data-watch-token="GWC">Add to Wallet 👁</button>
         </div>
-        <div class="chart-frame">
-          <iframe title="$GWC live chart on Dexscreener" src="https://dexscreener.com/robinhood/0x22df73eef683a93680dff3b51fdf3ee91e7352d9?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15" loading="lazy"></iframe>
-        </div>
+        <!-- Our own chart, drawn from this pair contract's own Swap logs, with the site's markers on it.
+           It replaces a Dexscreener iframe: same underlying data one step closer to the source, no
+           third-party frame, no rate limit we do not control, and no tracking surface on the landing
+           page. What the iframe did that this does not: TradingView drawing tools, order-book depth,
+           and a trade tape. The Dexscreener link above is kept for anyone who wants those.
+           data-poll="5000": this is a page people read, not one they watch tick. Two charts at one
+           second each is 120 requests a minute from a single visitor; at five seconds it is 24. -->
+        <div class="onchain-chart" data-pair="0x22df73eef683a93680dff3b51fdf3ee91e7352d9" data-token="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-tf="1h" data-poll="5000"></div>
       </div>
 
     </div>

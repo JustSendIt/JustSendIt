@@ -67,10 +67,9 @@
       '</div>' + flagstripHTML(p) + '</summary>';
   }
   // same 📈 chart the New Pairs detail shows — the watchlist renders its own (lighter) body, so it needs its own copy
-  const CHART_OPTS = 'embed=1&amp;loadChartSettings=0&amp;trades=0&amp;tabs=0&amp;info=0&amp;chartLeftToolbar=0&amp;chartDefaultOnMobile=1&amp;chartTheme=dark&amp;theme=dark&amp;chartStyle=1&amp;chartType=usd&amp;interval=15';
   function chartHTML(p) {
     if (!p.indexed || !p.pair || !p.pair.address) return '<p class="np-why-clean">📈 No chart yet — this pair has not traded, so there is nothing to draw.</p>';
-    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h"></div>' +
+    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
       '<p class="np-chart-note">Built live from on-chain swaps. <a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a></p>';
   }
   function detailHTML(p) {

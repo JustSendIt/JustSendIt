@@ -3564,6 +3564,34 @@ async function pairQuote(pairAddr, tokenAddr) {
 }
 /* The live spot price in USD, or null. Null when the pool is unreadable OR when its quote asset is one we
    cannot price — an unknown quote is reported as unknown rather than passed off as dollars. */
+/* What ONE unit of a pool's quote asset is worth in dollars, and what to call it.
+   Every price this chart machinery produces comes out of a pool in that pool's OWN quote units, and the
+   two quote assets on this chain are worth wildly different things: WETH is thousands of dollars, USDG is
+   one. spotPriceUsd already branched on that correctly; buildCandles did not — it labelled every series
+   `quote: 'ETH'` and handed back ethUsd, and the client multiplied. On a USDG-quoted pool that drew the
+   chart roughly three thousand times too high, with a confident axis on it. Returns usd:null when the
+   quote is an asset we cannot value, which the client must render as "no dollar price" rather than zero. */
+/* A rate we last read more than ten minutes ago is not a live rate. ethUsd() only advances its cache on
+   a SUCCESSFUL read, so a CoinGecko outage leaves it handing back the same number indefinitely — and
+   every dollar on a chart (the y-axis, the hover, the market cap, where the markers sit, the live chip)
+   would go on quoting it as current. Returning null instead drops all of them to the pool's own units
+   TOGETHER, which is the honest answer and the one the client already knows how to render. Gating one
+   surface while four others convert is the failure mode; so the gate lives here, at the one place they
+   all read from. Ten minutes is the same bar the OG valuation path uses, so the site has one definition
+   of "too old to quote" rather than two. */
+const ETH_USD_STALE_MS = 10 * 60 * 1000;
+async function ethUsdFresh() {
+  const e = await ethUsd();
+  return (e > 0 && now() - (ethUsdCache.at || 0) < ETH_USD_STALE_MS) ? e : null;
+}
+async function quoteValue(pairAddr, tokenAddr) {
+  const q = await pairQuote(pairAddr, tokenAddr);
+  if (q === WETH_ADDR) return { quote: q, symbol: 'WETH', usd: await ethUsdFresh() };
+  // A dollar stablecoin quote needs no rate at all: every close in that pool already IS dollars, at
+  // every timestamp, so this one never goes stale and never has to fall back.
+  if (q === USDG_ADDR) return { quote: q, symbol: 'USDG', usd: 1 };
+  return { quote: q, symbol: q ? '?' : null, usd: null };
+}
 async function spotPriceUsd(pairAddr, tokenAddr) {
   const p = await spotPrice(pairAddr, tokenAddr);
   if (p == null) return null;
@@ -3642,16 +3670,229 @@ function sweepSpotCache() {
   }
 }
 
+/* ═══ CHART MARKERS ═══════════════════════════════════════════════════════════════════════════════════
+   Five kinds of thing worth seeing on a price chart, in two families that must not be confused:
+
+     PEOPLE ON THIS SITE — a Send Call, a Sent It, a conviction play. Every one of these is already
+       public on the call card and in the Senders list. The marker is a re-presentation, not a new
+       disclosure, and it is held to that: the SAME fields, at the SAME rounding (senderUsdPublic), for
+       the same audience. If the list rounds a number, the chart must not be the place to read it exactly.
+       What a chart does add is plotting — it makes one person's entry easy to find on a timeline. That
+       is real, and it is why nothing here shows a wallet address, and why a position is only ever shown
+       alongside the call it was made on.
+
+     WALLETS ON THE CHAIN — the deployer, and whoever bought in the first ten blocks. These carry no
+       site identity at all: they are public addresses doing public trades, labelled by what they are.
+
+   Cost: the people markers are indexed reads on tables we already keep. The chain markers come from the
+   sniper scan, which is a queued background job — if it has not run for this token the answer is an
+   honest `pending`, never an invented empty. Nothing here starts a scan; a chart is not a reason to
+   spend twenty pages of explorer budget. */
+const MARKER_MAX = 300;                 // per type, newest first — a chart cannot render more than this usefully
+function markerCluster(list, bucketMs) {
+  /* Fifty Sent Its inside one candle is one event to a reader, not fifty overlapping dots. Group by the
+     CANDLE, not by a fraction of the window: a cluster that straddles two candles puts one dot between
+     two prices and belongs to neither. Members are kept so a hover can still name them. */
+  if (!list.length) return [];
+  const bucket = Math.max(60000, Math.round(bucketMs) || 60000);
+  const by = new Map();
+  for (const m of list) {
+    const k = Math.floor(m.t / bucket);
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(m);
+  }
+  return [...by.values()].map(group => {
+    group.sort((a, b) => a.t - b.t);
+    const head = group[0];
+    return group.length === 1 ? head : { ...head, n: group.length, members: group.slice(0, 12) };
+  }).sort((a, b) => a.t - b.t);
+}
+async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDev) {
+  const out = { token: tokenAddr, from: fromMs, to: toMs, types: {}, notes: {} };
+  // cluster on the chart's own candle width when the caller names one; otherwise on a slice of the window
+  const span = Math.max(60000, (Number(tfSec) || 0) * 1000 || Math.round(Math.max(1, toMs - fromMs) / 120));
+  const inWindow = (t) => t >= fromMs && t <= toMs;
+  const mine = me ? me.id : 0;
+  // the same rounding the Senders list uses — exact only for the person it belongs to
+  const money = (v, uid) => (uid && uid === mine) ? (Number(v) || 0) : senderUsdPublic(v);
+
+  /* ---- Send Calls ---- */
+  try {
+    const rows = db.prepare(`SELECT c.id, c.user_id, c.created_at, c.entry_price, c.entry_mc, c.entry_spend_usd,
+                                    c.cur_price, c.symbol, u.username, u.avatar
+                             FROM calls c JOIN users u ON u.id = c.user_id
+                             WHERE c.token_addr = ? AND c.created_at BETWEEN ? AND ?
+                             ORDER BY c.created_at DESC LIMIT ?`).all(tokenAddr, fromMs, toMs, MARKER_MAX);
+    out.types.call = markerCluster(rows.map(r => ({
+      /* priceUsd, not price. calls.entry_price is the DOLLAR price at call time (it comes from
+         market.priceUsd), while the chart's y-axis is in the pool's own quote units — WETH here, which
+         is about 2,500x smaller. Handing the raw number to the plotter drew every call marker far off
+         the top of the canvas, present in the hit-boxes and invisible on screen. The client divides by
+         quoteUsd to land it on the line. */
+      kind: 'call', t: r.created_at, priceUsd: r.entry_price, mc: r.entry_mc,
+      who: r.username, avatar: r.avatar, callId: r.id,
+      usd: money(r.entry_spend_usd, r.user_id), rounded: r.user_id !== mine,
+      // Xs from the caller's own entry, the same basis the call card shows
+      x: (r.entry_price > 0 && r.cur_price > 0) ? (r.cur_price / r.entry_price - 1) : null,
+      /* The dollar move on the position, and ONLY for the person it belongs to. Everyone else's `usd` is
+         already rounded to two figures, so a dollar PNL computed from it would be a rounded number
+         wearing the precision of an exact one — and handing back both would let anyone recover the
+         figure the rounding exists to withhold. The multiple above is the public version. */
+      pnlUsd: (r.user_id === mine && r.entry_spend_usd > 0 && r.entry_price > 0 && r.cur_price > 0)
+        ? r.entry_spend_usd * (r.cur_price / r.entry_price - 1) : null,
+    })), span);
+  } catch { out.types.call = []; }
+
+  /* ---- Sent Its (a follower taking the same play) ---- */
+  try {
+    const rows = db.prepare(`SELECT h.user_id, h.created_at, h.entry_price, h.spend_usd, h.bought_usd, h.held_usd,
+                                    c.id AS call_id, c.entry_mc, c.entry_price AS call_entry, c.cur_price, u.username, u.avatar
+                             FROM call_hops h JOIN calls c ON c.id = h.call_id JOIN users u ON u.id = h.user_id
+                             WHERE c.token_addr = ? AND h.created_at BETWEEN ? AND ? AND h.entry_price IS NOT NULL
+                             ORDER BY h.created_at DESC LIMIT ?`).all(tokenAddr, fromMs, toMs, MARKER_MAX);
+    out.types.sent = markerCluster(rows.map(r => ({
+      kind: 'sent', t: r.created_at, priceUsd: r.entry_price,   // dollars, like calls.entry_price — see above
+      // the market cap THEY got in at: their entry price against the same supply the call's MC implies
+      mc: (r.entry_mc > 0 && r.call_entry > 0 && r.entry_price > 0) ? r.entry_price * (r.entry_mc / r.call_entry) : null,
+      who: r.username, avatar: r.avatar, callId: r.call_id,
+      usd: money(r.spend_usd, r.user_id), rounded: r.user_id !== mine,
+      holding: (r.held_usd || 0) > 0.01,
+      x: (r.entry_price > 0 && r.cur_price > 0) ? (r.cur_price / r.entry_price - 1) : null,
+      pnlUsd: (r.user_id === mine && r.spend_usd > 0 && r.entry_price > 0 && r.cur_price > 0)
+        ? r.spend_usd * (r.cur_price / r.entry_price - 1) : null,   // yours only — see the call layer above
+    })), span);
+  } catch { out.types.sent = []; }
+
+  /* ---- Conviction plays: someone verified as holding this token joined its community ---- */
+  try {
+    const c = db.prepare('SELECT id, symbol FROM communities WHERE token_addr = ? COLLATE NOCASE AND demo = 0').get(tokenAddr);
+    out.types.conviction = c ? markerCluster(db.prepare(
+      `SELECT cm.user_id, cm.joined_at, u.username, u.avatar FROM community_members cm JOIN users u ON u.id = cm.user_id
+       WHERE cm.community_id = ? AND cm.qualified = 1 AND cm.joined_at BETWEEN ? AND ? ORDER BY cm.joined_at DESC LIMIT ?`)
+      .all(c.id, fromMs, toMs, MARKER_MAX)
+      .map(r => ({ kind: 'conviction', t: r.joined_at, who: r.username, avatar: r.avatar, community: c.symbol })), span) : [];
+  } catch { out.types.conviction = []; }
+
+  /* ---- The chain half: the deployer, and the first ten blocks ----
+     Both come out of the block-0 scan, which is a queued background job. If it has not run for this
+     token we say so and draw nothing, rather than an empty layer that reads as "nobody sniped this". */
+  try {
+    const row = sniperRow(tokenAddr);
+    const d = sniperData(row);
+    if (!d) {
+      out.notes.chain = row ? 'The block-0 scan for this token is still ' + row.status + '.' : 'This token has not had its block-0 scan yet.';
+      out.types.dev = []; out.types.block0 = [];
+    } else {
+      const at = d.block0At || null;
+      // Every wallet the scan traced in the first ten blocks. Addresses are shortened for display —
+      // they are public, but a chart does not need to be a copy-paste list of them.
+      const short = (a) => String(a || '').slice(0, 6) + '…' + String(a || '').slice(-4);
+      const early = ((d.early && d.early.wallets) || []).concat(d.snipers || []);
+      const seen = new Set();
+      out.types.block0 = at && inWindow(at) ? markerCluster(early.filter(w => {
+        const k = String(w.address || w.addr || '').toLowerCase();
+        if (!k || seen.has(k)) return false; seen.add(k); return true;
+      }).slice(0, MARKER_MAX).map(w => ({
+        kind: 'block0', t: at, addr: short(w.address || w.addr),
+        tookPct: w.tookPct != null ? w.tookPct : null,
+        holdsPct: w.holdsPct != null ? w.holdsPct : null,
+        sold: w.netSeller === true || (w.holdsPct != null && w.tookPct != null && w.holdsPct < w.tookPct * 0.1),
+        blocksAfterZero: w.blocksAfterZero != null ? w.blocksAfterZero : 0,
+      })), span) : [];
+      out.notes.block0 = at ? null : 'The first traded block for this pool could not be established.';
+      out.types.dev = [];
+    }
+  } catch { out.types.dev = []; out.types.block0 = []; }
+
+  /* The deployer's own trades. The address comes from the explorer's creator field via the token cache;
+     its trades come from the same transfer walk the Send Call size check uses, so this costs one
+     explorer read and only when a deployer is actually known. */
+  /* Only when the layer is actually switched on. This is the one marker type that costs a network read —
+     a token-cache lookup plus a Blockscout transfer walk — and it was being paid on every chart open by
+     everyone, including the charts on the landing page, whether or not anybody was looking at the layer.
+     Every other layer here is an indexed read on a table we already keep. */
+  if (!wantDev) {
+    out.types.dev = [];
+    out.notes.dev = 'Deployer trades load when you switch this layer on.';
+  } else try {
+    let dev = null;
+    try { const r = await lookupTokenPair(tokenAddr); dev = r && r.pair && r.pair.token && r.pair.token.deployer; } catch {}
+    if (dev && pairAddr && /^0x[0-9a-f]{40}$/.test(pairAddr)) {
+      const trades = await devTrades(dev, tokenAddr, pairAddr, fromMs, toMs);
+      out.types.dev = markerCluster(trades, span);
+      out.notes.dev = null;
+    } else if (!dev) {
+      out.notes.dev = 'The explorer does not name a deployer for this token.';
+    }
+  } catch { out.notes.dev = 'The deployer’s trades could not be read just now.'; }
+
+  return out;
+}
+/* The deployer's buys and sells, from the pool's own transfer list. Cached, because a deployer's history
+   does not change fast and a chart is not a reason to re-walk it on every load. */
+const devTradeCache = new Map();
+const devTradeInflight = new Map();          // single flight, for the same reason buildCandles has one
+const DEV_TRADE_TTL = 10 * 60 * 1000;
+async function devTrades(dev, tokenAddr, pairAddr, fromMs, toMs) {
+  const key = dev.toLowerCase() + ':' + tokenAddr;
+  const hit = devTradeCache.get(key);
+  if (!hit || now() - hit.at > DEV_TRADE_TTL) {
+    let job = devTradeInflight.get(key);
+    if (!job) {
+      job = (async () => {
+        const me = dev.toLowerCase(), pool = pairAddr.toLowerCase();
+        const rows = [];
+        const j = await jget(BLOCKSCOUT + '/api/v2/addresses/' + dev + '/token-transfers?type=ERC-20&token=' + tokenAddr);
+        for (const it of (j && j.items) || []) {
+          const f = ((it.from && it.from.hash) || '').toLowerCase(), tt = ((it.to && it.to.hash) || '').toLowerCase();
+          const ts = Date.parse(it.timestamp || it.block_timestamp || '') || 0;
+          if (!ts) continue;
+          let v = 0; try { v = Number(BigInt((it.total && it.total.value) || '0')) / 1e18; } catch {}
+          if (tt === me && f === pool) rows.push({ kind: 'dev', t: ts, side: 'buy', tokens: v });
+          else if (f === me && tt === pool) rows.push({ kind: 'dev', t: ts, side: 'sell', tokens: v });
+        }
+        devTradeCache.set(key, { at: now(), rows });
+        pruneCache(devTradeCache, 500);
+        return rows;
+      })();
+      devTradeInflight.set(key, job);
+      job.catch(() => {}).finally(() => { devTradeInflight.delete(key); });
+    }
+    // an explorer that will not answer must not blank a history we already read once
+    try { await job; } catch { return hit ? hit.rows.filter(r => r.t >= fromMs && r.t <= toMs).slice(0, MARKER_MAX) : []; }
+  }
+  return (devTradeCache.get(key) || { rows: [] }).rows.filter(r => r.t >= fromMs && r.t <= toMs).slice(0, MARKER_MAX);
+}
+
+/* Every input the candles depend on has to be in the key. It was (pair, timeframe) only — while the
+   output also depends on WHICH SIDE of the pool is being priced and on how far back the window reaches.
+   So one anonymous request naming the opposite side of a pool wrote an inverted price series into the
+   cache under the same key everyone else reads, and a 1-hour window served whatever span the previous
+   caller happened to ask for. */
+const candleKey = (pairAddr, tokenAddr, tfKey, hours) => pairAddr + ':' + tokenAddr + ':' + tfKey + ':' + hours;
+/* SINGLE FLIGHT. The cache check and the fill are separated by an await gap that spans eth_blockNumber,
+   one unchunked eth_getLogs, three token reads, up to thirteen eth_getBlockByNumber calls and a supply
+   read. Everyone who arrives inside that gap misses the cache and starts the whole scan again, so four
+   hundred people opening the landing page at once did not cost one scan per pair — it cost four hundred.
+   The per-IP limit stops none of that (they are four hundred different IPs) and `max-age=30` is a hint
+   to a browser, not a bound on our RPC bill. Holding the in-flight promise makes the cost flat in
+   audience size, which is the only version of this that survives the site being busy. */
+const chartInflight = new Map();
 async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
-  const tf = CHART_TF[tfKey] || 3600;
-  /* Every input the candles depend on has to be in the key. It was (pair, timeframe) only — while the
-     output also depends on WHICH SIDE of the pool is being priced and on how far back the window
-     reaches. So one anonymous request naming the opposite side of a pool wrote an inverted price series
-     into the cache under the same key everyone else reads, and a 1-hour window served whatever span the
-     previous caller happened to ask for. */
-  const key = pairAddr + ':' + tokenAddr + ':' + tfKey + ':' + hours;
+  const key = candleKey(pairAddr, tokenAddr, tfKey, hours);
   const hit = chartCache.get(key);
   if (hit && now() - hit.at < CHART_TTL) return hit.data;
+  const live = chartInflight.get(key);
+  if (live) return live;
+  const job = buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours);
+  chartInflight.set(key, job);
+  // attached at creation, not at the first await, so the slot is released no matter who is still waiting
+  job.catch(() => {}).finally(() => { chartInflight.delete(key); });
+  return job;
+}
+async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
+  const tf = CHART_TF[tfKey] || 3600;
+  const key = candleKey(pairAddr, tokenAddr, tfKey, hours);
 
   const headHex = await rpc('eth_blockNumber', []);
   const head = parseInt(headHex, 16);
@@ -3688,7 +3929,8 @@ async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
   // "now" would silently pile every trade into one candle and render a confident-looking chart that
   // is entirely wrong — worse than no chart. Say so instead.
   if (logs.length && !known.length) {
-    return { pair: pairAddr, token: tokenAddr, tf: tfKey, quote: 'ETH', ethUsd: await ethUsd(),
+    const qv0 = await quoteValue(pairAddr, tokenAddr);
+    return { pair: pairAddr, token: tokenAddr, tf: tfKey, tfSec: tf, quote: qv0.symbol, quoteUsd: qv0.usd, ethUsd: await ethUsd(),
              candles: [], swaps: logs.length, source: 'on-chain Swap events',
              note: 'Found ' + logs.length + ' swaps but could not read block times from the chain just now, so they cannot be placed on a timeline. Try again in a moment.' };
   }
@@ -3716,10 +3958,24 @@ async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
     else { c.h = Math.max(c.h, px); c.l = Math.min(c.l, px); c.c = px; c.n++; }
   }
   const candles = [...buckets.values()].sort((a, b) => a.t - b.t);
+  const qv = await quoteValue(pairAddr, tokenAddr);
   const usd = await ethUsd();
+  /* Supply, so the hover can turn a price into a market cap. It is TODAY'S supply, and it is the only
+     one obtainable: this chain's RPC keeps no archival state — eth_call at any past block answers
+     "metadata is not found" — so the supply as it stood at an old candle simply cannot be read. For a
+     fixed-supply token that makes the figure exact; for one that has minted or burned since, it does
+     not, and the client labels it for what it is rather than printing a market cap it cannot stand
+     behind. Cached for an hour by totalSupply(), so this costs nothing per chart. */
+  let supplyTok = null;
+  try { const sup = await totalSupply(tokenAddr); const dec = await tokenDecimals(tokenAddr); if (sup > 0n) supplyTok = Number(sup) / Math.pow(10, dec == null ? 18 : dec); } catch {}
   const data = {
-    pair: pairAddr, token: tokenAddr, tf: tfKey, quote: 'ETH',
+    pair: pairAddr, token: tokenAddr, tf: tfKey,
+    tfSec: tf,                 // how wide one candle is, so the hover can say a SPAN and not an instant
+    quote: qv.symbol,          // what the pool actually prices this token in
+    quoteUsd: qv.usd,          // dollars per unit of that quote — NOT always ethUsd (see quoteValue)
     ethUsd: usd || null,
+    supply: supplyTok,         // today's supply; market cap = price × this. See the comment above.
+    supplyAsOf: supplyTok != null ? now() : null,
     candles,
     swaps: logs.length,
     source: 'on-chain Swap events',
@@ -4907,7 +5163,10 @@ const CSP = [
   "img-src 'self' data: blob: https://cdn.dexscreener.com https://dd.dexscreener.com",
   "media-src 'self' blob: data:",
   "connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://robinhoodchain.blockscout.com https://api.dexscreener.com",
-  "frame-src https://dexscreener.com",
+  /* Nothing on this site embeds a frame any more: the last two were the Dexscreener charts on the
+     landing page, and they are our own on-chain charts now. 'none' is the honest value, and it closes
+     the embedding vector rather than leaving a permission standing for a thing that no longer exists. */
+  "frame-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
@@ -8656,7 +8915,9 @@ const server = http.createServer(async (req, res) => {
         let price = null, why = null;
         try { price = await spotPrice(pair, token); if (price == null) why = 'could not read the pair reserves'; }
         catch (e) { why = (e && e.message) || 'chain read failed'; }
-        return send(res, 200, { pair, token, price, why, ethUsd: await ethUsd(), at: now() }, { 'Cache-Control': 'no-store' });
+        let qv = { symbol: null, usd: null };
+        try { qv = await quoteValue(pair, token); } catch {}
+        return send(res, 200, { pair, token, price, why, quote: qv.symbol, quoteUsd: qv.usd, ethUsd: await ethUsd(), at: now() }, { 'Cache-Control': 'no-store' });
       }
       /* Spot price for many pairs at once, straight from the pool reserves.
          A Send Call's X is price ÷ entry, and until now the price behind it came from Dexscreener through a
@@ -8689,6 +8950,31 @@ const server = http.createServer(async (req, res) => {
         let data; try { data = await buildCandles(pair, token, tf, hours); } catch (e) { return bad(res, 'could not read the chain', 502); }
         if (!data) return bad(res, 'could not read the chain', 502);
         return send(res, 200, data, { 'Cache-Control': 'public, max-age=30' });
+      }
+      /* ===== Chart markers: what PEOPLE did, on the same time axis as the price =======================
+         One request per chart, answered from tables this site already keeps, so a wall of charts costs a
+         wall of cheap indexed reads and not a wall of chain scans. `me` decides precision, not content:
+         everything here is already published on the call card and the Senders list, and it is published
+         at the same rounding — a chart must not become a way to read a number the list rounds. */
+      if (p === '/api/chart/markers' && req.method === 'GET') {
+        const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
+        const pair = String(url.searchParams.get('pair') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'bad token address');
+        if (!rateLimit('mk:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+        /* The window is CLAMPED, not taken. A chart only ever asks for the span it is drawing, but the
+           route answered anything — and `from=0&to=now` turned it into a single machine-readable dump of
+           every Send Call and every Sent It a token has ever had, names and rounded sizes attached, for
+           an anonymous caller. Each of those rows is public on its own call card; three hundred of them
+           in one response, keyed by token, is a different object. 720 hours is the longest window any
+           timeframe button draws (`HOURS` in chart.js), so this costs the real UI nothing. */
+        const MAX_WINDOW_MS = 720 * 3600 * 1000;
+        const to = Math.min(now(), Number(url.searchParams.get('to')) || now());
+        const asked = Number(url.searchParams.get('from')) || 0;
+        const from = Math.max(to - MAX_WINDOW_MS, asked > 0 ? asked : to - MAX_WINDOW_MS);
+        const tfSec = CHART_TF[String(url.searchParams.get('tf') || '')] || 0;
+        // the deployer layer is the only one that costs a chain/explorer read, so it is opt-in per request
+        const wantDev = url.searchParams.get('dev') === '1';
+        return send(res, 200, await chartMarkers(token, pair, from, to, me, tfSec, wantDev), { 'Cache-Control': 'no-store' });
       }
       if (p === '/api/pairs/contract' && req.method === 'GET') { // deep honeypot / contract-code read (lazy, cached)
         const token = String(url.searchParams.get('token') || '').toLowerCase().trim();

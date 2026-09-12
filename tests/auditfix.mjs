@@ -266,8 +266,12 @@ try {
 
   /* ═══════════ 12. caches keyed on caller input ═══════════ */
   {
+    // the key moved into candleKey() when buildCandles gained its single-flight wrapper — the wrapper and
+    // the fill have to agree on it, which is the whole reason it is one function now
     check('the candle cache keys on every input the candles depend on',
-      /const key = pairAddr \+ ':' \+ tokenAddr \+ ':' \+ tfKey \+ ':' \+ hours;/.test(SRC));
+      /const candleKey = \(pairAddr, tokenAddr, tfKey, hours\) => pairAddr \+ ':' \+ tokenAddr \+ ':' \+ tfKey \+ ':' \+ hours;/.test(SRC));
+    check('  ...and the in-flight map is keyed the same way, so a crowd shares one scan',
+      /const key = candleKey\(pairAddr, tokenAddr, tfKey, hours\);[\s\S]{0,400}?chartInflight\.set\(key, job\)/.test(SRC));
     check('the LP-lock verdict keys on the pair the caller named', /const key = tok \+ '\|' \+ \(pair \|\| ''\);/.test(SRC));
     check('  ...and refuses a pool that does not hold the token', /that pool does not hold this token/.test(SRC));
     check('a definite "not a pool" is cached, so junk lookups cost one chain read', /SPOT_NEG_TTL/.test(SRC));

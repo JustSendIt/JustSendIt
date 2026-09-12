@@ -572,10 +572,10 @@ img-src     'self' data: blob: cdn.dexscreener.com dd.dexscreener.com
 connect-src 'self' rpc.mainnet.chain.robinhood.com
                    robinhoodchain.blockscout.com
                    api.dexscreener.com
-frame-src   dexscreener.com               &larr; only price charts
+frame-src   'none'                         &larr; no third-party frames at all
 frame-ancestors 'none'                    &larr; nobody can hide us in their page
 object-src  'none'
-          <div class="cap">The full policy. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking.</div>
+          <div class="cap">The full policy. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking. <span class="mono">frame-src 'none'</span> is newer: the price charts used to be an embedded third-party frame, and now the site draws them itself from each pair contract's own swap events &mdash; so the one exception that line used to carry no longer needs to exist.</div>
         </div>
         <h3>Checking who asked</h3>
         <p>Whenever something changes &mdash; a post, a call, a setting &mdash; the server checks which website the request came from and rejects it unless it came from this one. That stops another site from acting for you while you happen to be logged in.</p>

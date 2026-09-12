@@ -556,20 +556,22 @@
     } catch { el.innerHTML = '<p class="np-contract-load">Couldn’t read the contract right now.</p>'; }
     finally { delete el.dataset.loading; }
   }
-  /* ---------- 📈 live chart (Dexscreener embed) ----------
+  /* ---------- 📈 live chart (ours, drawn from the pair's own Swap logs) ----------
      Rendered inside every on-chain detail body — the DEX list, the Hot Feed's full detail, a pasted-address
-     lookup, the site-wide token popup and the Send Call widget all route through bodyHTML().
-     The <iframe> only exists once a detail body has been inserted (bodies are built on expand), and carries
-     loading="lazy" so a body scrolled out of view doesn't pull a chart nobody is looking at.
-     frame-src in the CSP allows dexscreener.com and nothing else. */
-  const CHART_OPTS = 'embed=1&amp;loadChartSettings=0&amp;trades=0&amp;tabs=0&amp;info=0&amp;chartLeftToolbar=0&amp;chartDefaultOnMobile=1&amp;chartTheme=dark&amp;theme=dark&amp;chartStyle=1&amp;chartType=usd&amp;interval=15';
+     lookup, the site-wide token popup and the Send Call widget all route through bodyHTML(), so one
+     definition here gives every one of them the time axis, the hover readout and the event markers.
+     There is no iframe any more and `frame-src` in the CSP is now 'none'; the constant that held the
+     embed's query string went with it. The host only exists once a detail body has been inserted
+     (bodies are built on expand), and chart.js gates polling on an IntersectionObserver, so a body
+     scrolled out of view asks the server for nothing. data-poll widens the tick: a list can hold a dozen
+     of these, and a dozen charts at one second each is a self-inflicted rate limit. */
   function chartHTML(p) {
     if (!p.indexed || !p.pair || !p.pair.address) {
       return '<p class="np-why-clean">📈 No chart yet — this pair has not traded, so there is nothing to draw.</p>';
     }
     // Our own chart, drawn from this pair's Swap events. No third-party iframe: same underlying data
     // every aggregator uses, minus the rate limit, the tracking surface and the extra hop.
-    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h"></div>' +
+    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
       '<p class="np-chart-note">Built live from on-chain swaps. ' +
       '<a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a></p>';
   }
