@@ -578,6 +578,24 @@ for (const col of [
      equals base for everything else. */
   "ALTER TABLE points_events ADD COLUMN comp_base REAL",
   "ALTER TABLE sessions ADD COLUMN last_seen INTEGER", // so the sessions list can say which one is the phone you lost
+  /* Nothing about a person is published until they press the button that publishes it. The ticket share
+     page and its card 404 for everyone until ticket_public is set, which only /api/gate/ticket/share
+     does, and only for the account that owns the ticket. */
+  "ALTER TABLE users ADD COLUMN ticket_public INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN ticket_shared_at INTEGER",
+  /* ===== The participation gate =====================================================================
+     An account can be MADE with nothing but an email. It just cannot DO anything until a wallet has
+     proved, read-only and on-chain, that this person actually holds the coins and has held them for a
+     week without being a net seller. These five columns are that verdict and its working.
+       state   — 'none' (never asked) | 'pending' (a scan is queued or running) | 'ok' | 'failed'
+       reason  — the plain sentence telling them WHICH test did not pass, so a refusal is never a shrug
+       proof   — the numbers behind the verdict, encrypted at rest like every other on-chain fact we hold
+       at      — last attempt; verified_at — when it last PASSED, which is what the gate reads */
+  "ALTER TABLE users ADD COLUMN holder_state TEXT NOT NULL DEFAULT 'none'",
+  "ALTER TABLE users ADD COLUMN holder_verified_at INTEGER",
+  "ALTER TABLE users ADD COLUMN holder_proof_at INTEGER",
+  "ALTER TABLE users ADD COLUMN holder_proof_reason TEXT",
+  "ALTER TABLE users ADD COLUMN holder_proof TEXT",
   /* Wallet challenges are bound to WHAT they authorise. One generic "Read-only sign-in" message used to be
      accepted for signing in, enabling wallet 2FA, DISABLING two-factor and adding an email — so a signature a
      wallet truthfully rendered as a read-only sign-in could strip an account's second factor, and the person
@@ -1661,12 +1679,24 @@ async function ogTransfers(wallet, token, opts) {
 }
 // Replay one (wallet, coin) into the facts the tier rules need. Throws unless the replay reconciles
 // with the chain. `launchMs` is that coin's own launch — tier windows are per-coin.
-async function ogScan(wallet, token, pair, launchMs) {
+async function ogScan(wallet, token, pair, launchMs, opts) {
   const w = wallet.toLowerCase(), pl = pair.toLowerCase();
-  const isAcquisition = (from) => from === pl || OG_ROUTERS.includes(from);
+  const isMarket = (a) => a === pl || OG_ROUTERS.includes(a);        // the pool, or a router acting for it
+  const isAcquisition = (from) => isMarket(from);
   const rows = await ogTransfers(wallet, token);
   rows.sort((a, b) => (Number(a.block_number) - Number(b.block_number)) || (Number(a.log_index) - Number(b.log_index)));
   let bal = 0n, firstBuyMs = null, dumped = false, balAtMonthEnd = null;
+  /* Extra facts the participation gate needs, gathered in the SAME single pass — a second walk of this
+     history would double the explorer traffic for data we are already holding in our hands.
+       boughtWei / soldWei — what the MARKET sent this wallet and what this wallet sent the market. These
+         are not the same question as the balance: tokens can also arrive from a friend or another of your
+         own wallets, and those are neither a buy nor a sell.
+       balAtSince      — the balance as of opts.sinceMs, so "have you net-sold during the window we are
+         measuring" has an answer that is not just "do you hold any".
+       lastZeroMs      — the last moment the position went to dust, which is where a continuous hold
+         genuinely begins, whatever the first buy says. */
+  const sinceMs = opts && opts.sinceMs ? opts.sinceMs : null;
+  let boughtWei = 0n, soldWei = 0n, balAtSince = null, lastZeroMs = null, firstInMs = null;
   for (const r of rows) {
     const from = ((r.from && r.from.hash) || '').toLowerCase();
     const to = ((r.to && r.to.hash) || '').toLowerCase();
@@ -1676,11 +1706,18 @@ async function ogScan(wallet, token, pair, launchMs) {
     if (!ts) throw new Error('og scan: unparseable timestamp');
     let v;
     try { v = BigInt(raw); } catch { throw new Error('og scan: unparseable value'); }
+    if (sinceMs && balAtSince === null && ts > sinceMs) balAtSince = bal;   // first row past the mark: the balance entering the window
     if (to === w) {
       bal += v;
+      if (firstInMs === null) firstInMs = ts;
+      if (isAcquisition(from)) boughtWei += v;
       if (firstBuyMs === null && isAcquisition(from)) firstBuyMs = ts;      // EARLIEST market acquisition — the tier basis
     }
-    if (from === w) bal -= v;
+    if (from === w) {
+      bal -= v;
+      if (isMarket(to)) soldWei += v;
+    }
+    if (bal <= OG_DUST_WEI) lastZeroMs = ts;                                 // a continuous hold restarts here
     if (firstBuyMs !== null) {
       // "dumped their whole supply within the first month": the balance reached ~zero at some point
       // inside the 30 days after this wallet's own first buy. Anchoring to the wallet's own first buy
@@ -1704,6 +1741,12 @@ async function ogScan(wallet, token, pair, launchMs) {
     // "bought more than you sold" would just re-ask "do you hold any?", which is already required.
     // This asks the question that has an answer — are you above where you stood at the end of month one?
     notAccumulator: balAtMonthEnd !== null && bal < balAtMonthEnd,
+    // ---- participation-gate facts (see holderProof) ----
+    boughtWei: boughtWei.toString(),
+    soldWei: soldWei.toString(),
+    firstInMs,                                             // first inbound of any kind, market or not
+    lastZeroMs,                                            // last time the position was dust — a hold starts after this
+    balAtSinceWei: balAtSince === null ? null : balAtSince.toString(),   // null = no activity after sinceMs
   };
 }
 const _ogScanning = new Set(); // coalesce concurrent scans of the same user
@@ -3053,6 +3096,255 @@ async function analyzeContract(tokenAddr, pairAddr) {
 }
 
 /* ---- Token branding (Dexscreener "Enhanced Token Info" the team paid to add: logo, banner, socials, links) ---- */
+/* ===== A PNG, drawn by the server, with no image library ==============================================
+   The share card has to be a raster PNG: X only unfurls a large-image card for png/jpeg/webp/gif, and
+   this server has no image library, no canvas, and no headless browser on the request path.
+
+   It must ALSO be composed entirely from data the server controls. The obvious shortcut — have the
+   browser render the ticket to a canvas and POST the bitmap up — would mean hosting an arbitrary
+   user-supplied image on the brand domain and putting it in a social card under our own name. A person
+   could upload anything at all and hand out a sendrh.com link that unfurls it. So the card is drawn
+   here, from the username, the Send ID and the join date, and nothing else.
+
+   Text is drawn from a 5x7 bitmap font scaled up. That is not a compromise made for lack of a font
+   rasteriser — at this size it reads as an arcade/LED display, which is exactly the register the rest of
+   the ticket is in. */
+
+// 5x7 glyphs, one byte per row, low 5 bits, MSB-left. Uppercase, digits and the punctuation a username
+// or a date can contain. Anything not here draws as a blank, so an unexpected character never throws.
+const FONT = {
+  A: [0x0E,0x11,0x11,0x1F,0x11,0x11,0x11], B: [0x1E,0x11,0x11,0x1E,0x11,0x11,0x1E],
+  C: [0x0E,0x11,0x10,0x10,0x10,0x11,0x0E], D: [0x1E,0x11,0x11,0x11,0x11,0x11,0x1E],
+  E: [0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F], F: [0x1F,0x10,0x10,0x1E,0x10,0x10,0x10],
+  G: [0x0E,0x11,0x10,0x17,0x11,0x11,0x0F], H: [0x11,0x11,0x11,0x1F,0x11,0x11,0x11],
+  I: [0x0E,0x04,0x04,0x04,0x04,0x04,0x0E], J: [0x07,0x02,0x02,0x02,0x02,0x12,0x0C],
+  K: [0x11,0x12,0x14,0x18,0x14,0x12,0x11], L: [0x10,0x10,0x10,0x10,0x10,0x10,0x1F],
+  M: [0x11,0x1B,0x15,0x15,0x11,0x11,0x11], N: [0x11,0x11,0x19,0x15,0x13,0x11,0x11],
+  O: [0x0E,0x11,0x11,0x11,0x11,0x11,0x0E], P: [0x1E,0x11,0x11,0x1E,0x10,0x10,0x10],
+  Q: [0x0E,0x11,0x11,0x11,0x15,0x12,0x0D], R: [0x1E,0x11,0x11,0x1E,0x14,0x12,0x11],
+  S: [0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E], T: [0x1F,0x04,0x04,0x04,0x04,0x04,0x04],
+  U: [0x11,0x11,0x11,0x11,0x11,0x11,0x0E], V: [0x11,0x11,0x11,0x11,0x11,0x0A,0x04],
+  W: [0x11,0x11,0x11,0x15,0x15,0x15,0x0A], X: [0x11,0x11,0x0A,0x04,0x0A,0x11,0x11],
+  Y: [0x11,0x11,0x0A,0x04,0x04,0x04,0x04], Z: [0x1F,0x01,0x02,0x04,0x08,0x10,0x1F],
+  0: [0x0E,0x11,0x13,0x15,0x19,0x11,0x0E], 1: [0x04,0x0C,0x04,0x04,0x04,0x04,0x0E],
+  2: [0x0E,0x11,0x01,0x02,0x04,0x08,0x1F], 3: [0x1F,0x02,0x04,0x02,0x01,0x11,0x0E],
+  4: [0x02,0x06,0x0A,0x12,0x1F,0x02,0x02], 5: [0x1F,0x10,0x1E,0x01,0x01,0x11,0x0E],
+  6: [0x06,0x08,0x10,0x1E,0x11,0x11,0x0E], 7: [0x1F,0x01,0x02,0x04,0x08,0x08,0x08],
+  8: [0x0E,0x11,0x11,0x0E,0x11,0x11,0x0E], 9: [0x0E,0x11,0x11,0x0F,0x01,0x02,0x0C],
+  '#': [0x0A,0x1F,0x0A,0x0A,0x1F,0x0A,0x00], '.': [0,0,0,0,0,0x0C,0x0C],
+  '-': [0,0,0,0x1F,0,0,0], '_': [0,0,0,0,0,0,0x1F], ':': [0,0x0C,0x0C,0,0x0C,0x0C,0],
+  '@': [0x0E,0x11,0x17,0x15,0x17,0x10,0x0E], '!': [0x04,0x04,0x04,0x04,0x04,0x00,0x04],
+  '?': [0x0E,0x11,0x01,0x02,0x04,0x00,0x04], "'": [0x04,0x04,0,0,0,0,0],
+  ' ': [0,0,0,0,0,0,0],
+  '$': [0x04,0x0F,0x14,0x0E,0x05,0x1E,0x04], '/': [0x01,0x02,0x02,0x04,0x08,0x08,0x10],
+  '+': [0x00,0x04,0x04,0x1F,0x04,0x04,0x00], ',': [0,0,0,0,0x0C,0x04,0x08],
+  '(': [0x02,0x04,0x08,0x08,0x08,0x04,0x02], ')': [0x08,0x04,0x02,0x02,0x02,0x04,0x08],
+  '%': [0x19,0x1A,0x02,0x04,0x08,0x0B,0x13], '&': [0x0C,0x12,0x14,0x08,0x15,0x12,0x0D],
+  '*': [0x00,0x0A,0x04,0x1F,0x04,0x0A,0x00], '=': [0,0,0x1F,0,0x1F,0,0],
+};
+const GLYPH_W = 5, GLYPH_H = 7;
+
+function makeCanvas(w, h) {
+  return { w, h, px: Buffer.alloc(w * h * 4), clip: null };   // RGBA, transparent
+}
+// A clip rectangle. Without one the perspective grid — whose lines are computed to run past the edges on
+// purpose, so they do not visibly stop — draws straight over the ticket's own frame.
+function clip(c, x, y, w, h) { c.clip = (x == null) ? null : { x, y, x2: x + w, y2: y + h }; }
+function px(c, x, y, r, g, b, a) {
+  x |= 0; y |= 0;
+  if (x < 0 || y < 0 || x >= c.w || y >= c.h) return;
+  if (c.clip && (x < c.clip.x || y < c.clip.y || x >= c.clip.x2 || y >= c.clip.y2)) return;
+  const i = (y * c.w + x) * 4;
+  if (a >= 255) { c.px[i] = r; c.px[i + 1] = g; c.px[i + 2] = b; c.px[i + 3] = 255; return; }
+  if (a <= 0) return;
+  const sa = a / 255, da = c.px[i + 3] / 255, oa = sa + da * (1 - sa);   // source-over
+  if (oa <= 0) return;
+  c.px[i]     = Math.round((r * sa + c.px[i]     * da * (1 - sa)) / oa);
+  c.px[i + 1] = Math.round((g * sa + c.px[i + 1] * da * (1 - sa)) / oa);
+  c.px[i + 2] = Math.round((b * sa + c.px[i + 2] * da * (1 - sa)) / oa);
+  c.px[i + 3] = Math.round(oa * 255);
+}
+function rect(c, x, y, w, h, col) {
+  for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) px(c, xx, yy, col[0], col[1], col[2], col[3] == null ? 255 : col[3]);
+}
+// vertical gradient, because a flat fill behind neon type looks like a placeholder
+function vgrad(c, x, y, w, h, top, bot) {
+  for (let yy = 0; yy < h; yy++) {
+    const t = h <= 1 ? 0 : yy / (h - 1);
+    const r = Math.round(top[0] + (bot[0] - top[0]) * t);
+    const g = Math.round(top[1] + (bot[1] - top[1]) * t);
+    const b = Math.round(top[2] + (bot[2] - top[2]) * t);
+    rect(c, x, y + yy, w, 1, [r, g, b, 255]);
+  }
+}
+function line(c, x0, y0, x1, y1, col) {            // integer Bresenham; the horizon grid is all straight lines
+  let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+  let sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+  for (;;) {
+    px(c, x0, y0, col[0], col[1], col[2], col[3] == null ? 255 : col[3]);
+    if (x0 === x1 && y0 === y1) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; x0 += sx; }
+    if (e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+const textWidth = (s, scale, track) => s.length ? s.length * (GLYPH_W * scale + (track == null ? scale : track)) - (track == null ? scale : track) : 0;
+/* The largest scale at which `s` still fits `maxW`. The Send ID is the headline number on the card and it
+   grows without bound: #7 and #1048576 are the same field, and a fixed size would run the later members
+   off the edge of their own ticket. */
+function fitScale(s, maxW, maxScale, minScale) {
+  for (let k = maxScale; k > (minScale || 1); k--) if (textWidth(s, k) <= maxW) return k;
+  return minScale || 1;
+}
+function text(c, s, x, y, scale, col, track) {
+  track = track == null ? scale : track;
+  let cx = x;
+  for (const ch of String(s).toUpperCase()) {
+    const g = FONT[ch];
+    if (g) for (let r = 0; r < GLYPH_H; r++) for (let b = 0; b < GLYPH_W; b++)
+      if (g[r] & (1 << (GLYPH_W - 1 - b))) rect(c, cx + b * scale, y + r * scale, scale, scale, col);
+    cx += GLYPH_W * scale + track;
+  }
+  return cx - track;
+}
+
+function chunk(type, data) {
+  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+  const td = Buffer.concat([Buffer.from(type, 'latin1'), data]);
+  const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(td) >>> 0);
+  return Buffer.concat([len, td, crc]);
+}
+function encodePng(c) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(c.w, 0); ihdr.writeUInt32BE(c.h, 4);
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;   // 8-bit RGBA, no interlace
+  // each scanline is prefixed with its filter byte; 0 (None) keeps the encoder trivial and still
+  // compresses well on flat, banded artwork like this
+  const raw = Buffer.alloc(c.h * (c.w * 4 + 1));
+  for (let y = 0; y < c.h; y++) {
+    raw[y * (c.w * 4 + 1)] = 0;
+    c.px.copy(raw, y * (c.w * 4 + 1) + 1, y * c.w * 4, (y + 1) * c.w * 4);
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+/* The share card: 1200x630 because that is the size X crops a large-image card from. Composed only from
+   the username, the Send ID and the join date — every one of which is already public on the person's own
+   profile. Nothing here touches a wallet, an email or a balance. */
+function renderTicketCard({ username, sendId, joinedAt, invitedBy }) {
+  const W = 1200, H = 630, STUB = 300;
+  const c = makeCanvas(W, H);
+  const GREEN = [180, 255, 43, 255], WHITE = [255, 255, 255, 255], CYAN = [56, 232, 255, 255], DIM = [185, 168, 221, 255];
+  vgrad(c, 0, 0, W, H, [27, 16, 54], [22, 13, 44]);
+
+  // horizon grid, clipped to the inside of the frame
+  clip(c, 30, 30, W - 60, H - 60);
+  const hy = Math.round(H * 0.60);
+  for (let g = 1; g <= 11; g++) line(c, 0, hy + Math.round(Math.pow(g / 11, 2) * (H - hy)), W, hy + Math.round(Math.pow(g / 11, 2) * (H - hy)), [255, 46, 136, 70]);
+  for (let g = -9; g <= 9; g++) line(c, Math.round(W / 2 + g * (W / 11)), hy, Math.round(W / 2 + g * W * 0.55), H, [255, 46, 136, 55]);
+  clip(c, null);
+
+  // frame
+  for (let t = 0; t < 4; t++) {
+    rect(c, 26 + t, 26 + t, W - 52 - 2 * t, 1, GREEN); rect(c, 26 + t, H - 27 - t, W - 52 - 2 * t, 1, GREEN);
+    rect(c, 26 + t, 26 + t, 1, H - 52 - 2 * t, GREEN);  rect(c, W - 27 - t, 26 + t, 1, H - 52 - 2 * t, GREEN);
+  }
+  // perforation, full height between the frame rails
+  for (let y = 34; y < H - 34; y += 22) rect(c, W - STUB, y, 3, 12, [255, 255, 255, 120]);
+  // punched notches, so it reads as a torn ticket rather than a box with a dotted line
+  for (const cy of [30, H - 30]) for (let dy = -13; dy <= 13; dy++) for (let dx = -13; dx <= 13; dx++)
+    if (dx * dx + dy * dy <= 169) px(c, W - STUB + 1 + dx, cy + dy, 27, 16, 54, 255);
+
+  text(c, '$GWC IS YOUR TICKET', 64, 84, 3, GREEN);
+  text(c, 'TICKET TO SEND', 64, 134, 8, WHITE);
+  text(c, '@' + String(username || '').slice(0, 22), 64, 296, 5, WHITE);
+  text(c, invitedBy ? ('INVITED BY @' + String(invitedBy).slice(0, 18)) : 'FOUNDING SENDER', 64, 354, 3, CYAN);
+  text(c, 'JOINED ' + new Date(joinedAt).toISOString().slice(0, 10), 64, 400, 3, DIM);
+  text(c, 'SENDRH.COM', 64, H - 116, 4, [255, 255, 255, 225]);
+  text(c, 'ENTERTAINMENT ONLY - NOT FINANCIAL ADVICE', 64, H - 66, 2, [255, 255, 255, 155]);
+
+  // the stub: the Send ID, centred and scaled to fit however large the number grows
+  const id = '#' + sendId;
+  const sx = W - STUB + 42, sw = STUB - 84;   // clear of the frame rail: nothing on the stub may touch it
+  const lw = textWidth('SEND ID', 3);
+  text(c, 'SEND ID', sx + Math.round((sw - lw) / 2), 148, 3, [255, 255, 255, 160]);
+  const k = fitScale(id, sw, 11, 3);
+  text(c, id, sx + Math.round((sw - textWidth(id, k)) / 2), 210, k, GREEN);
+  const aw = textWidth('ADMIT ONE', 3);
+  text(c, 'ADMIT ONE', sx + Math.round((sw - aw) / 2), 330, 3, [255, 255, 255, 150]);
+  // a barcode seeded from the id, so no two tickets look the same
+  let s = 0; for (const ch of id) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
+  let bx = sx;
+  while (bx < sx + sw - 6) { s = (s * 1103515245 + 12345) >>> 0; const bw = (s >>> 3) % 3 === 0 ? 5 : 3; rect(c, bx, 396, bw, 40 + ((s >>> 8) % 46), [255, 255, 255, 210]); bx += bw + 4; }
+  return encodePng(c);
+}
+
+/* ===== Brand-image proxy: a third party's picture, served from our own origin ==========================
+   The $GWC and $SEND artwork lives on Dexscreener's CDN, and three measured facts decide how it can be used:
+
+     · it sends NO Access-Control-Allow-Origin header at all. So a <canvas> that draws it is TAINTED, and
+       toBlob() then throws a SecurityError — which would break the ticket download outright, not degrade it.
+       crossOrigin="anonymous" does not help; it makes the image fail to load instead.
+     · the assets are multi-megabyte ANIMATED GIFs (the $GWC header is 4.6 MB, the logo 3.0 MB). Having every
+       visitor pull those straight from a third party is slow, and it hands that third party a log of who
+       looked at what and when.
+     · they are immutable: content-addressed ids, Cache-Control one year.
+
+   Proxying fixes all three at once. Same origin means no taint and no CORS to negotiate, one fetch per asset
+   serves everyone, and the user's browser never talks to Dexscreener. The proxy is deliberately narrow: it
+   only ever fetches a URL that dexCdnImg() already vouched for, it checks the bytes really are an image
+   before serving them, and it caps what it will hold. It is a cache in front of two pictures, not an open
+   relay — an SSRF-shaped hole in this shape would be a hole in the whole site. */
+const BRAND_MAX_BYTES = 8 * 1024 * 1024;          // the $GWC header is 4.6 MB; this leaves room without being open-ended
+const BRAND_TTL = 24 * 3600 * 1000;               // re-fetch daily; the upstream says a year, but branding does change
+const BRAND_KINDS = { __proto__: null, header: 'header', logo: 'imageUrl' };   // null-prototype: 'constructor' is not a kind
+const brandCache = new Map();                     // `${token}:${kind}` -> { at, buf, type, etag }
+/* Magic bytes, because Content-Type is the upstream's opinion and this is the byte stream we are about to
+   serve from our own origin under our own CSP. Only still/animated raster formats — never SVG, which is a
+   script container wearing an image's file extension. */
+function imageTypeOf(buf) {
+  if (!buf || buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf.slice(0, 6).toString('latin1') === 'GIF89a' || buf.slice(0, 6).toString('latin1') === 'GIF87a') return 'image/gif';
+  if (buf.slice(0, 4).toString('latin1') === 'RIFF' && buf.slice(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return null;
+}
+async function brandImage(tokenAddr, kind) {
+  const tok = String(tokenAddr || '').toLowerCase();
+  const field = BRAND_KINDS[kind];
+  if (!/^0x[0-9a-f]{40}$/.test(tok) || !field) return null;
+  const key = tok + ':' + kind;
+  const hit = brandCache.get(key);
+  if (hit && now() - hit.at < BRAND_TTL) return hit;
+  // The URL is never taken from the caller — it is read from our own token cache and re-validated by
+  // dexCdnImg, so the only hosts this can ever reach are the two Dexscreener CDN hostnames.
+  let url = null;
+  try { const r = await lookupTokenPair(tok); url = dexCdnImg(r && r.pair && r.pair.brand && r.pair.brand[field]); } catch {}
+  if (!url) return null;
+  try {
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 12000);
+    const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'image/*' }, signal: ctrl.signal, redirect: 'error' });
+    clearTimeout(to);
+    if (!res.ok) return hit || null;                                        // keep serving the last good copy
+    const len = Number(res.headers.get('content-length') || 0);
+    if (len && len > BRAND_MAX_BYTES) return hit || null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > BRAND_MAX_BYTES) return hit || null;                   // the header lied, or there was none
+    const type = imageTypeOf(buf);
+    if (!type) return hit || null;                                          // not an image we recognise → never serve it
+    const entry = { at: now(), buf, type, etag: '"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 20) + '"' };
+    pruneCache(brandCache, 24);                                             // a handful of tokens, not a general store
+    brandCache.set(key, entry);
+    return entry;
+  } catch { return hit || null; }
+}
 function dexCdnImg(u) { // only trust Dexscreener's own CDN so the client CSP img-src stays tight
   return (typeof u === 'string' && /^https:\/\/(cdn|dd)\.dexscreener\.com\//.test(u) && !/["'<>\s]/.test(u)) ? u.slice(0, 400) : null; // no quote/bracket/space chars → can't break out of an attribute even before esc()
 }
@@ -5404,7 +5696,8 @@ function ownDataView(u) {
     profile: { ...publicUserView(u), theme: themeOf(u), wallets: walletAddresses(u.id), methods: identityTypes(u.id), twofa: u.twofa_method || null,
       tracker_prefs: safeJson(decField(u.tracker_prefs)), site_prefs: safeJson(decField(u.site_prefs)), rank: userRank(u.id), boost: effectiveMult(u.id),
       ogTier: u.og_tier || 0, ogBuyMs: u.og_buy_ms || null, ogRevoked: !!u.og_revoked, weekBoost: weekBoostState(u.id), arcade: arcadeState(u.id),
-      restriction: restrictionOf(u), probation: probationOf(u), callAllowance: callAllowance(u) },
+      restriction: restrictionOf(u), probation: probationOf(u), callAllowance: callAllowance(u),
+      holderVerified: !needsHolderProof(u), holderProof: holderProofState(u) },
     pointsEvents: db.prepare('SELECT id, kind, amount, base, mult, comp_amount, ref, created_at FROM points_events WHERE user_id = ? ORDER BY id DESC LIMIT 1000').all(u.id),
     posts: db.prepare('SELECT * FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(p => postView(p, null)),
     comments: db.prepare('SELECT id, post_id, text, tokens, created_at FROM comments WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(c => ({ ...c, tokens: parseTokens(c.tokens) })),
@@ -5698,6 +5991,14 @@ const passCookie = (tok) => `${PASS_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=L
    "Number in line" is deliberately the user id — it is already monotonic, already unique, and already
    means "how early you were", so inventing a second counter would only create a way for the two to
    disagree. */
+/* The coins' own artwork, through our proxy rather than Dexscreener's CDN — see brandImage(). The client
+   never needs to know a token address to draw a ticket, and the pictures are public, so this rides on the
+   gate state as well as the ticket: the ticket somebody sees BEFORE they join should look like the one
+   they get, not a plainer version of it. */
+const coinBrandUrls = () => ({
+  gwcHeader: '/api/brand/' + TOK.GWC + '/header', gwcLogo: '/api/brand/' + TOK.GWC + '/logo',
+  sendHeader: '/api/brand/' + TOK.SEND + '/header', sendLogo: '/api/brand/' + TOK.SEND + '/logo',
+});
 function ticketFor(u) {
   if (!u) return null;
   const codes = db.prepare('SELECT code, used_at, user_id FROM invite_codes WHERE owner_id = ? ORDER BY rowid').all(u.id);
@@ -5730,6 +6031,7 @@ function ticketFor(u) {
     // of the two — ogCampaign already does that arithmetic, so the ticket never re-derives it
     goldEndsAt: (camp && camp.closes && camp.closes.gold != null) ? camp.closes.gold : null,
     goldOpen: !!(camp && camp.tierNow === 3),
+    brand: coinBrandUrls(),
     tosVersion: TOS_VERSION,
   };
 }
@@ -5944,9 +6246,193 @@ function scanWriteAction(userId, kind, text) {
 }
 
 // endpoint guard for gameable write actions; returns true (and 403s) if the user is read-only
+/* Running the check. It CANNOT be done on the button press: ogScan walks up to OG_SCAN_PAGES pages per
+   (wallet, coin) against an explorer that 429s readily, retrying with seconds of backoff — measured in
+   this codebase as "8 of 8 requests came back 429" from a cold client. A synchronous check would hold a
+   request open for minutes and fail most of the time. So the button queues, and the page watches.
+
+   The queue is in memory; the pending state is in the DATABASE. That pairing is deliberate — the block-0
+   scanner had an in-memory queue and a database "running" flag, and a restart left tokens marked running
+   that nothing was working on, permanently. Here the boot below re-opens anything the last process left
+   mid-flight, and a stale claim is never believed. */
+const proofQueue = [];
+const PROOF_QUEUE_MAX = 200;
+const PROOF_STALE_MS = 15 * 60 * 1000;   // a 'pending' older than this belonged to a process that is gone
+let proofRunning = false;
+try {
+  const n = db.prepare("UPDATE users SET holder_state = 'none' WHERE holder_state = 'pending'").run().changes;
+  if (n) console.log('holder proofs: re-opened ' + n + ' interrupted by the last shutdown');
+} catch {}
+
+function queueHolderProof(userId) {
+  if (proofQueue.includes(userId) || proofQueue.length >= PROOF_QUEUE_MAX) return false;
+  db.prepare("UPDATE users SET holder_state = 'pending', holder_proof_at = ? WHERE id = ?").run(now(), userId);
+  proofQueue.push(userId);
+  return true;
+}
+async function runProofQueue() {
+  if (proofRunning) return;
+  const userId = proofQueue.shift();
+  if (!userId) return;
+  proofRunning = true;
+  try {
+    const u = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+    if (!u) return;
+    const addrs = walletAddresses(userId).slice(0, MAX_LINKED_WALLETS);
+    if (!addrs.length) {
+      db.prepare("UPDATE users SET holder_state = 'failed', holder_proof_at = ?, holder_proof_reason = ? WHERE id = ?")
+        .run(now(), 'No wallet is linked to this account yet — connect one and we will check it.', userId);
+      return;
+    }
+    const scans = {};
+    let unreadable = false;
+    for (const c of PROOF_COINS) {
+      scans[c.key] = [];
+      for (const a of addrs) {
+        // One wallet failing is not the account failing: isolate it, and let the verdict decide whether
+        // what we DID read is enough. A transient 429 must never be recorded as "you do not qualify".
+        try { scans[c.key].push(await ogScan(a, c.token, c.pair, c.launch)); }
+        catch { unreadable = true; }
+      }
+    }
+    // Both prices, read together. sendPriceUsd() is the hardened one — it values at the LOWER of spot
+    // and the 24h median and refuses outright during a spike — so a pump cannot buy anyone through the
+    // door, and an unreadable price leaves the door exactly where it was.
+    let prices = {};
+    try {
+      const [sp, gp] = await Promise.all([sendPriceUsd().catch(() => null), tokenPriceUsdOf(TOK.GWC).catch(() => null)]);
+      prices = { SEND: sp, GWC: gp };
+    } catch {}
+    const v = holderProofVerdict(scans, now(), prices);
+    const t = now();
+    if (v.ok) {
+      db.prepare("UPDATE users SET holder_state = 'ok', holder_verified_at = ?, holder_proof_at = ?, holder_proof_reason = NULL, holder_proof = ? WHERE id = ?")
+        .run(t, t, encField(JSON.stringify(v.detail)), userId);
+      notify(userId, '✅', 'Wallet verified — you hold $SEND and $GWC and have held them over a week. The whole site is open to you now. 🚀', 'wallet');
+    } else if (v.unknown || unreadable) {
+      // not a verdict. Leave the door exactly as it was and say so.
+      db.prepare("UPDATE users SET holder_state = 'none', holder_proof_at = ?, holder_proof_reason = ? WHERE id = ?")
+        .run(t, v.reason || 'We could not finish reading the chain. Nothing has been decided — try again in a minute.', userId);
+    } else {
+      db.prepare("UPDATE users SET holder_state = 'failed', holder_proof_at = ?, holder_proof_reason = ?, holder_proof = ? WHERE id = ?")
+        .run(t, v.reason, encField(JSON.stringify(v.detail)), userId);
+    }
+  } catch (e) {
+    console.error('holder proof', e && e.message);
+    try { db.prepare("UPDATE users SET holder_state = 'none', holder_proof_reason = ? WHERE id = ?").run('Something went wrong on our side. Nothing has been decided — try again.', userId); } catch {}
+  } finally { proofRunning = false; }
+}
+const proofTimer = setInterval(() => { runProofQueue().catch(() => {}); }, 4000);
+proofTimer.unref();
+
+/* ═══ THE PARTICIPATION GATE ═══════════════════════════════════════════════════════════════════════
+   Anyone may make an account with an email alone, and anyone may READ the whole site. Doing things —
+   posting, calling, reacting, voting, joining a community — needs one more thing: a wallet that proves,
+   read-only and on-chain, that this person is actually here.
+
+   THREE TESTS, per coin, across every wallet the account has linked:
+
+     1. YOU HOLD IT.        Aggregate balance of $SEND and of $GWC is above dust, right now.
+     2. FOR OVER A WEEK.    The earliest market acquisition across your wallets is at least seven days
+                            old. "Bought it this morning" is not conviction, it is a ticket price.
+     3. YOU ARE NOT A NET SELLER.  Everything you have sold back to the market is no more than everything
+                            you bought from it.
+
+   Test 3 is stated as <= rather than <, and that is deliberate. ogScan's own comment argues that
+   "bought more than sold" is a tautology, and for TOTAL flows it is — sum(in) - sum(out) IS the balance,
+   so asking it again would just re-ask test 1. This asks a different question: of the tokens that moved
+   between you and the MARKET, did more come in than went out? That is not the balance, because tokens
+   also arrive from a friend, from an airdrop, or from another of your own wallets. Two cases show why
+   the shape is right:
+     · gifted 100, never sold  → bought 0, sold 0 → 0 <= 0 passes. They hold and have never sold. Fine.
+     · gifted 100, sold 90     → bought 0, sold 90 → fails. They are a net seller. That is the point.
+
+   WHAT THIS IS NOT: it is not a punishment, and it must never be worded like one. restrictionOf() is
+   the anti-bot sanction with strikes and a buy-out; this is a new account that simply has not shown its
+   hand yet. Same enforcement point, opposite meaning, and the copy has to carry that difference. */
+const PROOF_MIN_HOLD_MS = 7 * DAY_MS;
+const PROOF_COINS = [
+  { key: 'SEND', label: '$SEND', token: TOK.SEND, pair: OG_PAIR.SEND, launch: OG_LAUNCH.SEND },
+  { key: 'GWC', label: '$GWC', token: TOK.GWC, pair: OG_PAIR.GWC, launch: OG_LAUNCH.GWC },
+];
+/* Pure, so it can be tested without a chain. `scans` is { SEND: [scan,...], GWC: [scan,...] } — one
+   ogScan per (wallet, coin). Returns { ok, reason, detail }. A coin whose scans are ALL missing means
+   the chain could not be read, which is not a failure and must never be recorded as one. */
+function holderProofVerdict(scans, nowMs, prices) {
+  const t = nowMs || now();
+  const detail = {};
+  for (const c of PROOF_COINS) {
+    const rows = (scans && scans[c.key]) || [];
+    if (!rows.length) return { ok: false, unknown: true, reason: 'We could not finish reading the chain for ' + c.label + '. Nothing has been decided — try again in a minute.', detail };
+    /* The floor is the site-wide MIN_HOLD_USD, priced live — the same $100 that decides Diamond status,
+       so the site has one definition of "you actually hold this" rather than two. A price we cannot read
+       is NOT a refusal: it is the absence of an answer, and the door stays exactly as it was.
+
+       Worth knowing what this number means on these coins, because it is not obvious: $GWC's whole
+       supply is 1e9 tokens at a ~$11.6k FDV, so $100 is ~0.86% of everything there is, and no more than
+       ~116 wallets can clear this bar at the same time. That is a deliberate choice, made with the
+       arithmetic in hand — it is a small, early community by design, not an accident of a round number. */
+    const px = prices && prices[c.key];
+    if (!(px > 0)) return { ok: false, unknown: true, reason: 'We could not read the ' + c.label + ' price just now, so we cannot value your holding. Nothing has been decided — try again in a minute.', detail };
+    let bal = 0n, bought = 0n, sold = 0n, firstBuyMs = null;
+    for (const r of rows) {
+      try {
+        bal += BigInt(r.balWei || '0');
+        bought += BigInt(r.boughtWei || '0');
+        sold += BigInt(r.soldWei || '0');
+      } catch { return { ok: false, unknown: true, reason: 'We could not read your ' + c.label + ' history cleanly. Nothing has been decided — try again.', detail }; }
+      if (r.firstBuyMs && (firstBuyMs === null || r.firstBuyMs < firstBuyMs)) firstBuyMs = r.firstBuyMs;
+    }
+    const heldMs = firstBuyMs ? t - firstBuyMs : 0;
+    const usd = Number(bal) / 1e18 * px;
+    detail[c.key] = { balWei: bal.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs, heldMs, usd, priceUsd: px };
+    if (bal <= OG_DUST_WEI) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. You need to hold at least $' + MIN_HOLD_USD + ' of both $SEND and $GWC.', detail };
+    if (usd < MIN_HOLD_USD) return { ok: false, short: true, reason: 'You hold about $' + usd.toFixed(2) + ' of ' + c.label + '. It takes $' + MIN_HOLD_USD + ' of each coin — the same floor that counts toward Diamond levels.', detail };
+    if (!firstBuyMs) return { ok: false, reason: 'We can see your ' + c.label + ', but no market buy behind it — we cannot tell how long you have held it.', detail };
+    if (heldMs < PROOF_MIN_HOLD_MS) {
+      const daysIn = Math.floor(heldMs / DAY_MS), left = Math.max(1, Math.ceil((PROOF_MIN_HOLD_MS - heldMs) / DAY_MS));
+      return { ok: false, tooNew: true, reason: 'You have held ' + c.label + ' for ' + daysIn + ' day' + (daysIn === 1 ? '' : 's') + '. It takes a week — come back in ' + left + ' day' + (left === 1 ? '' : 's') + '.', detail };
+    }
+    if (sold > bought) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders — buy back in and the check will pass.', detail };
+  }
+  return { ok: true, reason: null, detail };
+}
+/* Does this account still need to prove itself? Reads only stored state — no chain, no explorer — so it
+   is cheap enough to sit in front of every write on the site. */
+function needsHolderProof(u) {
+  return !!u && !u.system && !u.holder_verified_at;
+}
+function holderProofState(u) {
+  if (!u) return null;
+  if (u.holder_verified_at) return null;                     // verified: nothing to say
+  return {
+    state: u.holder_state || 'none',
+    reason: u.holder_proof_reason || null,
+    checkedAt: u.holder_proof_at || null,
+    minHoldDays: Math.round(PROOF_MIN_HOLD_MS / DAY_MS),
+    coins: PROOF_COINS.map(c => c.label),
+    minUsd: MIN_HOLD_USD,          // the same floor Diamond status uses — one number for the whole site
+    wallets: walletAddresses(u.id).length,
+    /* The assurance, in the words it has to be said in. A signature is not an approval and this site
+       never asks for one: personal_sign puts a sentence in front of you and returns a signature over
+       that sentence. It cannot move a token, and nothing here ever calls eth_sendTransaction. */
+    readOnly: 'Connecting is read-only. You sign a sentence to prove the wallet is yours — that signature moves nothing, approves nothing, and costs no gas. This site can never send your funds anywhere.',
+  };
+}
 function blockReadOnly(res, me) {
   const r = restrictionOf(me);
   if (r) { send(res, 403, { error: "You're in read-only mode — this action is paused. See the banner up top for why and when it lifts.", readOnly: true, restriction: r }); return true; }
+  /* The participation gate rides the same choke point, because it is the same question: may this
+     account create things? It is answered with a DIFFERENT code and a different tone — `needsProof`, not
+     `readOnly` — so the client opens the wallet check rather than a penalty banner. An account that has
+     not proved itself yet has done nothing wrong. */
+  if (needsHolderProof(me)) {
+    send(res, 403, {
+      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND and $GWC, and have held them for a week.',
+      needsProof: true, proof: holderProofState(me),
+    });
+    return true;
+  }
   return false;
 }
 
@@ -6397,6 +6883,65 @@ const server = http.createServer(async (req, res) => {
      try to join, the ticket appears. */
   try {
     if (p.startsWith('/api/')) {
+      /* ---- the participation gate: ask for the check, and watch it ---- */
+      if (p === '/api/holder/state' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        return send(res, 200, {
+          verified: !needsHolderProof(me),
+          verifiedAt: me.holder_verified_at || null,
+          proof: holderProofState(me),
+          queued: proofQueue.includes(me.id),
+        });
+      }
+      if (p === '/api/holder/verify' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (me.holder_verified_at) return send(res, 200, { verified: true });
+        if (!rateLimit('hproof:' + me.id, 12, 6e5)) return bad(res, 'we are already checking — give it a minute', 429);
+        if (!walletAddresses(me.id).length) return bad(res, 'connect a wallet first — that is what we read the chain against', 400);
+        /* A 'pending' from a process that is gone must not block a retry forever. Anything older than
+           PROOF_STALE_MS is treated as abandoned, which is the lesson the block-0 scanner taught. */
+        const stale = me.holder_state === 'pending' && (now() - (me.holder_proof_at || 0)) > PROOF_STALE_MS;
+        if (me.holder_state === 'pending' && !stale && proofQueue.includes(me.id)) return send(res, 200, { queued: true, state: 'pending' });
+        queueHolderProof(me.id);
+        return send(res, 200, { queued: true, state: 'pending', proof: holderProofState(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id)) });
+      }
+
+      /* Publish MY ticket. The only thing that sets ticket_public, and only ever for the caller's own
+         account. Returns the share link and the X composer URL — the tagline is filled in, the link
+         unfurls the card. X's web intent takes text and a url and nothing else: no API parameter
+         attaches an image, so a link that unfurls IS the way the picture gets into the post. */
+      if (p === '/api/gate/ticket/share' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('tshare:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
+        db.prepare('UPDATE users SET ticket_public = 1, ticket_shared_at = COALESCE(ticket_shared_at, ?) WHERE id = ?').run(now(), me.id);
+        const url = SITE_ORIGIN + '/t/' + me.id;
+        const text = 'I just got my ticket to Send on SendRH.com! 🎟️🚀';
+        return send(res, 200, { ok: true, url, text,
+          intent: 'https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url) });
+      }
+      // ...and un-publish it. Consent that cannot be withdrawn is not consent.
+      if (p === '/api/gate/ticket/share' && req.method === 'DELETE') {
+        if (!me) return bad(res, 'sign in first', 401);
+        db.prepare('UPDATE users SET ticket_public = 0 WHERE id = ?').run(me.id);
+        return send(res, 200, { ok: true, shared: false });
+      }
+
+      /* The brand pictures, from our origin instead of Dexscreener's — see brandImage(). Served with a real
+         image Content-Type and the site's nosniff header, so a browser treats it as a picture and nothing
+         else. No session is read and nothing is logged against a person: this is a picture of a coin. */
+      const bm = /^\/api\/brand\/(0x[0-9a-fA-F]{40})\/(header|logo)$/.exec(p);
+      if (bm && (req.method === 'GET' || req.method === 'HEAD')) {
+        if (!rateLimit('brand:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+        const img = await brandImage(bm[1], bm[2]);
+        if (!img) return bad(res, 'no artwork for that token', 404);
+        const head = { 'Content-Type': img.type, 'Content-Length': img.buf.length, 'ETag': img.etag,
+                       'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS };
+        delete head['X-Frame-Options'];                                  // it is embedded in our own pages
+        if (req.headers['if-none-match'] === img.etag) { res.writeHead(304, head); return res.end(); }
+        res.writeHead(200, head);
+        return res.end(req.method === 'HEAD' ? undefined : img.buf);
+      }
+
       /* ---- gate API (open before the door) ---- */
       if (p === '/api/gate/state' && req.method === 'GET') {
         const r = passRow(req);
@@ -6407,6 +6952,7 @@ const server = http.createServer(async (req, res) => {
           tosAccepted: !!(r && r.tos_at) || !!(u && u.tos_at),
           tosVersion: TOS_VERSION,
           signedIn: !!u,
+          brand: coinBrandUrls(),
           ticket: u ? ticketFor(u) : null,
         });
       }
@@ -6646,6 +7192,9 @@ const server = http.createServer(async (req, res) => {
             points: me.points, level: levelForXp(me.points), title: titleFor(levelForXp(me.points)), // for the nav badge
             og: me.og_tier || 0, // permanent OG badge + 10× Send Power (verified early buyer)
             restriction: restrictionOf(me), // read-only banner state (null when free to act)
+            // the participation gate, so the page knows to prompt rather than wait for a 403
+            holderVerified: !needsHolderProof(me),
+            holderProof: holderProofState(me),
             probation: probationOf(me), // "hold your bought $SEND" window after a redemption (null when none)
             callAllowance: callAllowance(me), // dynamic Send Call allowance (limit/used/remaining/resetAt + diamond boost)
             checkedInToday: checkedInToday(me.id, me),
@@ -7155,6 +7704,10 @@ const server = http.createServer(async (req, res) => {
           }
           balCache.delete(me.id); // the linked wallet set grew — recompute nav balances on next fetch
           checkOg(me.id).catch(() => {}); // a newly linked wallet might be an early buyer → verify OG in the background
+          // A wallet is exactly what the participation check needs. Start it without being asked — the
+          // person who just linked one is plainly trying to get in, and making them press a second button
+          // to begin a check they cannot see would be ceremony.
+          if (needsHolderProof(me)) queueHolderProof(me.id);
           return send(res, 200, { ok: true, linked: true, username: me.username });
         } else {
           // A brand-new account from a wallet signature is still a new account, so BOTH the invite and the
@@ -7172,6 +7725,7 @@ const server = http.createServer(async (req, res) => {
           db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
           awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address));   // blind index, never the address — see the link path above
           checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
+          queueHolderProof(userId);        // they signed in WITH a wallet: start the participation check right away
         }
         // an existing account with a NON-wallet second factor (authenticator / password) must still pass it — a wallet
         // signature alone is the first factor here, not both
@@ -8842,6 +9396,79 @@ const server = http.createServer(async (req, res) => {
       // uploaded media is content-addressed by a random name → its bytes never change → cache it forever (immutable, no revalidation)
       return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=31536000, immutable' });
     }
+    /* ===== /t/<sendId> — the ticket share page ========================================================
+       The ONE page on this site rendered per-request rather than served from disk, and it exists for a
+       specific reason: X puts a picture in a post by fetching the shared link and reading its og: tags.
+       Every other page here ships static tags (see /u/<name>, which is why sharing a wall shows the site
+       logo rather than the person). A ticket has to carry ITS OWN card, so its tags have to be built for
+       it. Nothing is published until the owner presses Share — before that this 404s like any other
+       address that is not a page. The only facts on it are ones already public on that person's profile:
+       their handle, their Send ID, when they joined, who invited them. No wallet, no email, no balance. */
+    /* The card itself, at /t/<id>.png — deliberately NOT under /api/.
+       robots.txt carries `Disallow: /api/`, and a social crawler that respects robots.txt (X's does)
+       will not fetch an og:image it is told to stay out of. The card would have rendered perfectly and
+       never once appeared in a post. It lives in the same namespace as the page that references it. */
+    const tc = /^\/t\/(\d+)\.png$/.exec(p);
+    if (tc && (req.method === 'GET' || req.method === 'HEAD')) {
+      if (!rateLimit('tcard:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+      const u = db.prepare('SELECT id, username, created_at, invited_by, ticket_public FROM users WHERE id = ? AND system = 0').get(Number(tc[1]));
+      if (!u || !u.ticket_public) { notFoundPage(res); return; }
+      const inv = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
+      let png; try { png = renderTicketCard({ username: u.username, sendId: u.id, joinedAt: u.created_at, invitedBy: inv && inv.username }); }
+      catch (e) { console.error('ticket card', e && e.message); return bad(res, 'could not draw that ticket', 500); }
+      const etag = '"' + crypto.createHash('sha1').update(png).digest('base64url').slice(0, 20) + '"';
+      const head = { 'Content-Type': 'image/png', 'Content-Length': png.length, 'ETag': etag,
+                     'Cache-Control': 'public, max-age=600', ...SEC_HEADERS };
+      delete head['X-Frame-Options'];   // a social card is fetched by crawlers and shown inside previews
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); }
+      res.writeHead(200, head);
+      return res.end(req.method === 'HEAD' ? undefined : png);
+    }
+    const tp = /^\/t\/(\d+)$/.exec(p);
+    if (tp && (req.method === 'GET' || req.method === 'HEAD')) {
+      const u = db.prepare('SELECT id, username, created_at, invited_by, ticket_public FROM users WHERE id = ? AND system = 0').get(Number(tp[1]));
+      if (!u || !u.ticket_public) { notFoundPage(res); return; }
+      const inv = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
+      const e = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+      const card = SITE_ORIGIN + '/t/' + u.id + '.png';
+      const title = '@' + u.username + ' has ticket #' + u.id + ' to Send';
+      const desc = 'Send ID #' + u.id + ' · joined ' + new Date(u.created_at).toISOString().slice(0, 10) +
+                   (inv ? ' · invited by @' + inv.username : '') + '. JustSendIt is invite-only. Entertainment only — not financial advice.';
+      const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${e(title)} 🎟️</title>
+<meta name="description" content="${e(desc)}">
+<link rel="canonical" href="${e(SITE_ORIGIN + '/t/' + u.id)}">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta property="og:type" content="profile"><meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:url" content="${e(SITE_ORIGIN + '/t/' + u.id)}">
+<meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}">
+<meta property="og:image" content="${e(card)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${e('A holographic ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@senditrh">
+<meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(desc)}">
+<meta name="twitter:image" content="${e(card)}">
+<link rel="icon" href="/assets/logo-128.png">
+<link rel="stylesheet" href="/gate.css"><link rel="stylesheet" href="/invite.css">
+</head><body class="gate">
+<main class="inv-wrap" style="min-height:100vh;">
+  <p class="inv-kicker">Invite only · Live beta</p>
+  <h1 class="inv-title">@${e(u.username)} has <span class="hl">ticket #${u.id}</span></h1>
+  <p class="inv-sub">Send ID <b>#${u.id}</b> — their place in line, set the day they joined${inv ? ', invited by @' + e(inv.username) : ''}.</p>
+  <img src="${e('/t/' + u.id + '.png')}" width="1200" height="630" alt="${e('Ticket #' + u.id + ' belonging to @' + u.username)}" style="max-width:100%;height:auto;border-radius:14px;">
+  <div class="inv-actions"><a class="g-btn g-btn-primary" href="/" style="text-decoration:none;display:inline-flex;align-items:center;">Get your own ticket 🎟️</a></div>
+  <p class="inv-note" style="max-width:52ch;text-align:center;">JustSendIt is invite-only — someone already inside has to hand you a code. 🎉 <b>Entertainment purposes only.</b> Memecoins are extremely volatile and most go to zero. Nothing here is financial advice. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.</p>
+</main>
+</body></html>`;
+      const body = Buffer.from(html, 'utf8');
+      const etag = '"' + crypto.createHash('sha1').update(body).digest('base64url').slice(0, 20) + '"';
+      const head = { 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': body.length, 'ETag': etag,
+                     'Cache-Control': 'public, max-age=300', ...SEC_HEADERS, 'Content-Security-Policy': CSP };
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); }
+      res.writeHead(200, head);
+      return res.end(req.method === 'HEAD' ? undefined : body);
+    }
+
     let rel = p === '/' ? '/index.html' : p;
     if (/^\/u\/[^/]+$/.test(rel)) rel = '/u.html';
     const filePath = path.normalize(path.join(PUBLIC_DIR, rel));

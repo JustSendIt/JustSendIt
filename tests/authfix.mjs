@@ -29,8 +29,12 @@ const api = async (path, opts = {}) => {
   let j = null; try { j = await r.json(); } catch {}
   return { status: r.status, j };
 };
+/* Fixtures here start PAST the participation gate (holder_verified_at set): this suite is testing
+   something other than the gate, and a fixture that trips it would be testing the gate by accident.
+   proofgate.mjs is the suite that tests the gate itself. */
+
 function mkUser(name) {
-  db.prepare('INSERT INTO users (username, created_at, avatar) VALUES (?,?,?)').run(name, Date.now(), '🧪');
+  db.prepare('INSERT INTO users (username, created_at, avatar, holder_verified_at, holder_state) VALUES (?,?,?,?,?)').run(name, Date.now(), '🧪', Date.now(), 'ok');
   const id = db.prepare('SELECT id FROM users WHERE username=?').get(name).id;
   made.users.push(id);
   const raw = 'tok_' + name + '_' + Math.random().toString(16).slice(2);

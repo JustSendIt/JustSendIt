@@ -268,3 +268,17 @@ body.gate {
   .ticket, .ticket::after { animation: none !important; }
   .tk-rocket { transition: none; }
 }
+
+/* The coin's own Dexscreener banner, as a band across the top of the ticket. Served through this site's
+   brand proxy: same origin, so no third party learns who is looking at a ticket, and a <canvas> can draw
+   it without tainting. It is decorative — if the artwork cannot be read the band stays empty and the
+   ticket is simply plainer, never broken. */
+.tk-band { display: block; position: absolute; inset: 0 0 auto 0; height: 30%; overflow: hidden; border-radius: 14px 14px 0 0; opacity: 0.38; pointer-events: none; }
+.tk-band img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The artwork is busy on purpose — it is a banner — and the ticket's own headline has to win. The
+   gradient starts already half-dark rather than clear, so the type sits on a settled ground at every
+   point rather than only below the fold of the band. */
+.tk-band::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,11,40,0.55) 0%, rgba(20,11,40,0.82) 55%, var(--g-paper, #140b28) 100%); }
+/* and the ticket's own content sits above it, never behind */
+.ticket .tk-top, .ticket .tk-head, .ticket .tk-line { position: relative; z-index: 1; }
+.ticket .tk-body { position: relative; }

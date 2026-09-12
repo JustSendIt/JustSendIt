@@ -15,6 +15,12 @@
       const e = new Error(j.error || ('request failed (' + res.status + ')'));
       e.status = res.status;
       e.code = j.code;      // machine-readable refusals (need_invite, need_tos, code_spent, daily_limit…)
+      e.needsProof = !!j.needsProof;   // the participation gate — the client opens the check, not a toast
+      e.proof = j.proof || null;
+      /* Raise the check HERE rather than at each of the ~20 places that write. Every one of them would
+         otherwise have to remember, and the one that forgot would leave a person staring at a refusal
+         with no way to act on it. The error still throws, so callers keep their own error handling. */
+      if (e.needsProof && AUTH.needsProof) { try { AUTH.needsProof(e); } catch {} }
       throw e;
     }
     return j;
@@ -178,6 +184,15 @@
   /* Any signup door refusing for want of an invite raises the ticket instead of an error message.
      This is the safety net under startJoin: it catches the paths that reach the server anyway — a
      wallet signature that turns out to be a new account, a stale tab, an OAuth round trip. */
+  /* A write refused because the account has not proved it holds the coins yet. Distinct from
+     needsInvite (no account at all) and from a read-only SANCTION (which has strikes and a banner):
+     this person has an account and has done nothing wrong, they just have not shown their hand. Any
+     caller that makes a write can hand its error here and get the check opened instead of a toast. */
+  AUTH.needsProof = function (err) {
+    if (!err || !err.needsProof) return false;
+    loadInvite().then(inv => inv.openProof()).catch(() => {});
+    return true;
+  };
   AUTH.needsInvite = function (err) {
     const code = err && (err.code || err.gateCode);
     if (code === 'need_invite' || code === 'need_tos' || code === 'code_spent') { openInvite(); return true; }

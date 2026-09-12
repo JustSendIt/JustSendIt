@@ -36,8 +36,12 @@ const IP_A = 'idx_ring_aaa', IP_B = 'idx_ring_bbb';
 const TOKEN = '0x' + 'ab'.repeat(20);
 const OTHER = '0x' + 'cd'.repeat(20);
 
+/* Fixtures here start PAST the participation gate (holder_verified_at set): this suite is testing
+   something other than the gate, and a fixture that trips it would be testing the gate by accident.
+   proofgate.mjs is the suite that tests the gate itself. */
+
 function mkUser(name, signupIp) {
-  db.prepare('INSERT INTO users (username, created_at, avatar, signup_ip) VALUES (?,?,?,?)').run(name, Date.now(), '🧪', signupIp || null);
+  db.prepare('INSERT INTO users (username, created_at, avatar, signup_ip, holder_verified_at, holder_state) VALUES (?,?,?,?,?,?)').run(name, Date.now(), '🧪', signupIp || null, Date.now(), 'ok');
   const id = db.prepare('SELECT id FROM users WHERE username=?').get(name).id;
   made.push(id);
   return id;

@@ -25,6 +25,10 @@ const api = async (path, opts = {}) => {
    likely to be interrupted — and a half-finished run used to leave its fixed usernames behind, which
    made every later run die on a UNIQUE constraint before a single assertion ran. A test that cannot be
    re-run after a Ctrl-C is a test that stops being run. */
+/* Fixtures here start PAST the participation gate (holder_verified_at set): this suite is testing
+   something other than the gate, and a fixture that trips it would be testing the gate by accident.
+   proofgate.mjs is the suite that tests the gate itself. */
+
 function mkUser(name, points) {
   const stale = db.prepare('SELECT id FROM users WHERE username=?').get(name);
   if (stale) {
@@ -34,7 +38,7 @@ function mkUser(name, points) {
     try { db.prepare('DELETE FROM invite_codes WHERE owner_id=? OR user_id=?').run(stale.id, stale.id); } catch {}
     try { db.prepare('DELETE FROM users WHERE id=?').run(stale.id); } catch {}
   }
-  db.prepare('INSERT INTO users (username, created_at, avatar, points) VALUES (?,?,?,?)').run(name, Date.now(), '🧪', points);
+  db.prepare('INSERT INTO users (username, created_at, avatar, points, holder_verified_at, holder_state) VALUES (?,?,?,?,?,?)').run(name, Date.now(), '🧪', points, Date.now(), 'ok');
   const id = db.prepare('SELECT id FROM users WHERE username=?').get(name).id;
   made.users.push(id);
   const raw = 'tok_' + name + '_' + Math.random().toString(16).slice(2);

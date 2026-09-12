@@ -26,7 +26,7 @@ try {
   if (!sandbox) { console.log('no sandbox community present — skipping'); process.exit(0); }
   console.log('sandbox:', sandbox.id, '$' + sandbox.symbol, '| comparison community:', real && ('$' + real.symbol));
 
-  db.prepare('INSERT INTO users (username, created_at, avatar) VALUES (?,?,?)').run('__sbx__', Date.now(), '🧪');
+  db.prepare('INSERT INTO users (username, created_at, avatar, holder_verified_at, holder_state) VALUES (?,?,?,?,?)').run('__sbx__', Date.now(), '🧪', Date.now(), 'ok');
   const uid = db.prepare("SELECT id FROM users WHERE username='__sbx__'").get().id; made.users.push(uid);
   const raw = 'tok_sbx_' + Math.random().toString(16).slice(2);
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)')

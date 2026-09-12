@@ -110,6 +110,53 @@
           '<button class="inv-browse" id="inv-browse3" type="button">Later — keep browsing →</button>' +
         '</div>' +
 
+        /* step 4b — the participation check. Reached from anywhere on the site the moment a
+           signed-in-but-unproved account tries to DO something. Not a punishment screen: this account
+           has done nothing wrong, it just has not shown its hand yet, and the copy has to carry that. */
+        '<div class="inv-step" id="step-proof">' +
+          '<p class="inv-kicker">One read-only check</p>' +
+          '<h2 class="inv-title">Show us you\'re <span class="hl">actually here</span></h2>' +
+          '<p class="inv-sub">Reading the site is open to everyone. Posting, calling and voting are for people who hold the coins — so we read your wallet, once, and check three things.</p>' +
+          '<div class="inv-panel">' +
+            '<ul class="inv-tests" id="inv-tests">' +
+              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You hold <span id="inv-min">$100</span> of $SEND and $GWC</b><small>Both, priced live, right now, across every wallet you link. Dust does not count.</small></div></li>' +
+              '<li data-t="time"><span class="inv-tick">○</span><div><b>You\'ve held them over a week</b><small>Counted from your first buy on the market. Bought this morning doesn\'t count yet.</small></div></li>' +
+              '<li data-t="net"><span class="inv-tick">○</span><div><b>You\'re not a net seller</b><small>You haven\'t sold more back to the market than you bought from it.</small></div></li>' +
+            '</ul>' +
+            '<p class="inv-safe">🔒 <b>Read-only, and it stays read-only.</b> You sign a sentence to prove the wallet is yours. That signature <b>moves nothing, approves nothing and costs no gas</b> — this site can never send your funds anywhere, and never asks your wallet to.</p>' +
+            '<p class="inv-err" id="inv-proof-err" role="status" aria-live="polite"></p>' +
+            '<div class="inv-actions" style="justify-content:flex-start;">' +
+              '<button class="g-btn g-btn-primary" id="inv-proof-go" type="button">Connect wallet — read-only 🔗</button>' +
+              '<button class="g-btn g-btn-ghost" id="inv-proof-again" type="button" hidden>Check again ↻</button>' +
+            '</div>' +
+          '</div>' +
+          '<button class="inv-browse" id="inv-browse4" type="button">Not yet — keep browsing read-only →</button>' +
+        '</div>' +
+
+        /* step 4c — your profile. Only reachable once the check has passed, which is what "then and only
+           then can they create their profile" means in practice. Everything here except the handle is
+           OPTIONAL and says so: a wallet-only account is a complete account, and pretending otherwise
+           would be dark-patterning people into handing over an email they did not need to give. */
+        '<div class="inv-step" id="step-profile">' +
+          '<p class="inv-kicker">Verified ✅</p>' +
+          '<h2 class="inv-title">Now make it <span class="hl">yours</span></h2>' +
+          '<p class="inv-sub">You are in. Your Send ID is set and it never changes — everything below is yours to shape.</p>' +
+          '<div class="inv-panel">' +
+            '<ul class="inv-tests" id="inv-setup">' +
+              '<li><span class="inv-tick">1</span><div><b>Claim your handle</b><small>The name on your ticket, your wall and every call you make. <b>Required</b> — pick it once.</small></div></li>' +
+              '<li><span class="inv-tick">2</span><div><b>Add an email &amp; password <em>(optional)</em></b><small>A second way in if you ever lose the wallet, and what two-factor is built on. You can skip this and stay wallet-only.</small></div></li>' +
+              '<li><span class="inv-tick">3</span><div><b>Turn on two-factor <em>(optional)</em></b><small>An authenticator app, your password, or a wallet you nominate as the key.</small></div></li>' +
+              '<li><span class="inv-tick">4</span><div><b>Link more wallets <em>(optional)</em></b><small>Every wallet you link counts toward the same Send Power — and all of them stay read-only.</small></div></li>' +
+            '</ul>' +
+            '<p class="inv-safe">🔒 All of it is read-only. Linking a wallet is one signature over a sentence: it moves nothing, approves nothing, and costs no gas.</p>' +
+          '</div>' +
+          '<div class="inv-actions">' +
+            '<button class="g-btn g-btn-primary" id="inv-setup-go" type="button">Set up my profile →</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-setup-ticket" type="button">See my ticket 🎟️</button>' +
+          '</div>' +
+          '<button class="inv-browse" id="inv-browse5" type="button">Later — take me to the site →</button>' +
+        '</div>' +
+
         /* step 5 — the ten codes */
         '<div class="inv-step" id="step-codes">' +
           '<h2 class="inv-title">You are in. <span class="hl">Ten codes</span> are yours.</h2>' +
@@ -121,7 +168,8 @@
             '<p class="inv-note" id="inv-copy-note">Tap a code to copy it, then send it to whoever you want inside.</p>' +
           '</div>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-dl" type="button">Download my ticket 📥</button>' +
+            '<button class="g-btn g-btn-primary" id="inv-share" type="button">Share on 𝕏 🎟️</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-dl" type="button">Download my ticket 📥</button>' +
             '<button class="g-btn g-btn-ghost" id="inv-dash" type="button">See all my codes in my dashboard →</button>' +
           '</div>' +
           '<button class="inv-browse" id="inv-done" type="button">Close and carry on →</button>' +
@@ -141,6 +189,11 @@
         '<span class="tk-notch top" aria-hidden="true"></span>' +
         '<span class="tk-notch bot" aria-hidden="true"></span>' +
         '<span class="tk-body">' +
+          // The $GWC banner the coin's own team published on Dexscreener, served from our origin so the
+          // viewer's browser never talks to a third party (and so a canvas can draw it — see brandImage).
+          // Lazy, and it simply does not appear if the artwork cannot be read: a ticket is not broken by
+          // a missing decoration.
+          '<span class="tk-band" id="' + p + 'tk-band" aria-hidden="true"></span>' +
           '<span class="tk-top">' +
             '<img class="tk-logo" src="/assets/logo-128.png" alt="">' +
             '<span class="tk-brand">$GWC</span>' +
@@ -253,11 +306,32 @@
       }
     }
   }
+  /* The $GWC banner the coin's own team published, across the top of the ticket. Served through this
+     site's brand proxy, so the viewer's browser never talks to a third party. Decorative and optional:
+     if the artwork cannot be read the band stays empty and the ticket is simply plainer, never broken. */
+  function paintBand(p) {
+    const band = $(p + 'tk-band');
+    // the brand urls ride on the gate state as well as the ticket, so the ticket a prospective member
+    // sees carries the same banner as the one they end up with
+    const brand = (state.ticket && state.ticket.brand) || state.brand;
+    if (!band || !brand || !brand.gwcHeader || band.dataset.filled) return;
+    band.dataset.filled = '1';                        // claim it now, so a re-paint cannot start a second load
+    /* Appended BEFORE the src is set, and deliberately not lazy. A detached `new Image()` carrying
+       loading="lazy" never loads at all — it is not in the document, so it is never near the viewport,
+       and the onload that was supposed to append it never fires. In the document it can simply load,
+       and a failure removes it again rather than leaving a broken-image frame on the ticket. */
+    const im = document.createElement('img');
+    im.alt = ''; im.decoding = 'async';
+    im.onerror = () => { im.remove(); band.dataset.filled = ''; };
+    band.appendChild(im);
+    im.src = brand.gwcHeader;
+  }
   function paintTicket() {
     const t = state.ticket;
     for (const p of ['', 'inv-ticket2-']) {
       if (!$(p + 'tk-name')) continue;
       bars($(p + 'tk-bars'), t ? 'SEND-' + t.sendId : 'SEND-UNCLAIMED');
+      paintBand(p);
       if (!t) { $(p + 'tk-serial').textContent = 'SEND·RH · UNCLAIMED'; continue; }
       $(p + 'tk-name').textContent = '@' + t.username;
       $(p + 'tk-role').textContent = t.invitedBy ? 'Invited by @' + t.invitedBy : 'Founding sender';
@@ -381,6 +455,79 @@
       : (reachedEnd ? 'Nearly — take a few more seconds with it.' : 'Scroll to the end to unlock this box.');
     if (!ok) cb.checked = false;
     $('inv-tos-go').disabled = !(ok && cb.checked && $('inv-age').checked);
+  }
+
+  /* ---------- the participation check ----------
+     The scan runs on the server and takes as long as the explorer takes: it walks a wallet's whole
+     transfer history for both coins against an endpoint that rate-limits hard. So this queues it and
+     watches, rather than pretending a button press is instant. */
+  let proofPoll = 0;
+  function paintTests(v) {
+    const set = (k, st) => {
+      const li = root && root.querySelector('#inv-tests li[data-t="' + k + '"]');
+      if (!li) return;
+      li.dataset.state = st;
+      li.querySelector('.inv-tick').textContent = st === 'ok' ? '✓' : st === 'no' ? '✕' : '○';
+    };
+    if (!v) { for (const k of ['hold', 'time', 'net']) set(k, ''); return; }
+    if (v.verified) { for (const k of ['hold', 'time', 'net']) set(k, 'ok'); return; }
+    const r = (v.proof && v.proof.reason) || '';
+    // The server names the test it stopped on. Mark that one and leave the rest unjudged — inventing a
+    // verdict for a check the server never reached would be making a number up.
+    set('hold', /No \$(SEND|GWC) found|no market buy|It takes \$\d+ of each/i.test(r) ? 'no' : '');
+    set('time', /held .* for \d+ day/i.test(r) ? 'no' : '');
+    set('net', /sold back more/i.test(r) ? 'no' : '');
+  }
+  async function refreshProof() {
+    try {
+      const v = await api('/api/holder/state');
+      const err = $('inv-proof-err'), again = $('inv-proof-again'), go = $('inv-proof-go');
+      paintTests(v);
+      if (v.verified) {
+        clearInterval(proofPoll); proofPoll = 0;
+        if (err) { err.className = 'inv-err is-ok'; err.textContent = '✅ Verified. The whole site is open to you now.'; }
+        if (go) go.hidden = true;
+        if (again) again.hidden = true;
+        // AUTH.user still says unverified — refresh it before anything reads it, or the very next write
+        // would re-open the check on an account that has just passed
+        if (window.AUTH && AUTH.refresh) { try { await AUTH.refresh(); } catch {} }
+        setTimeout(() => show('step-profile'), 900);
+        return v;
+      }
+      // the floor comes from the server, so the number on screen can never drift from the one enforced
+      const min = $('inv-min');
+      if (min && v.proof && v.proof.minUsd) min.textContent = '$' + v.proof.minUsd;
+      const st = (v.proof && v.proof.state) || 'none';
+      if (st === 'pending' || v.queued) {
+        if (err) { err.className = 'inv-err'; err.textContent = '⛓️ Reading the chain… this can take a minute — it is your wallet\'s whole history, for both coins.'; }
+        if (go) go.disabled = true;
+        if (!proofPoll) proofPoll = setInterval(() => { refreshProof().catch(() => {}); }, 4000);
+      } else {
+        clearInterval(proofPoll); proofPoll = 0;
+        if (go) { go.disabled = false; go.textContent = (v.proof && v.proof.wallets) ? 'Link another wallet 🔗' : 'Connect wallet — read-only 🔗'; }
+        if (again && v.proof && v.proof.wallets) again.hidden = false;
+        if (err && v.proof && v.proof.reason) { err.className = 'inv-err'; err.textContent = '⚠️ ' + v.proof.reason; }
+      }
+      return v;
+    } catch { return null; }
+  }
+  async function runProof(link) {
+    const err = $('inv-proof-err'), go = $('inv-proof-go');
+    if (err) { err.className = 'inv-err'; err.textContent = ''; }
+    if (go) go.disabled = true;
+    try {
+      if (link) {
+        if (err) err.textContent = 'Choose your wallet and approve the signature… ✍️';
+        // the site's own read-only link: one personal_sign, no transaction, no approval
+        await AUTH.linkWallet('This proves the wallet is yours. It is read-only — nothing moves.');
+      }
+      if (err) err.textContent = 'Queuing the check…';
+      await api('/api/holder/verify', { method: 'POST', body: {} });
+      await refreshProof();
+    } catch (e) {
+      if (go) go.disabled = false;
+      if (err) { err.className = 'inv-err'; err.textContent = (e && e.message === 'cancelled') ? '' : '⚠️ ' + ((e && e.message) || 'could not run the check'); }
+    }
   }
 
   /* ---------- the codes ---------- */
@@ -526,6 +673,28 @@
     }, 'image/png');
   }
 
+  /* ---------- sharing it on X ----------
+     X's web composer takes TEXT and a URL. There is no parameter that attaches an image — media upload
+     needs an authenticated API call, which a share button is not. So the picture gets into the post the
+     only way it can: the link is a page whose og:image is this person's own ticket card, and X fetches
+     and unfurls it. The download stays alongside for anyone who wants the file itself to attach.
+
+     Nothing is published until this button is pressed: /t/<id> and the card both 404 until then. */
+  async function shareOnX() {
+    const btn = $('inv-share');
+    if (btn) { btn.disabled = true; btn.textContent = 'Publishing your ticket…'; }
+    try {
+      const j = await api('/api/gate/ticket/share', { method: 'POST', body: {} });
+      // opened in a new tab from inside the click, so the popup blocker treats it as user-initiated
+      window.open(j.intent, '_blank', 'noopener,noreferrer');
+      const note = $('inv-copy-note');
+      if (note) note.innerHTML = '𝕏 opened with your ticket attached as a card. Your ticket page is <a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.url) + '</a> — anyone with that link sees the card. You can unpublish it any time from your dashboard.';
+    } catch (e) {
+      const err = $('inv-codes-sub');
+      if (err) err.textContent = '⚠️ ' + ((e && e.message) || 'could not publish your ticket');
+    } finally { if (btn) { btn.disabled = false; btn.textContent = 'Share on 𝕏 🎟️'; } }
+  }
+
   /* ---------- wiring ---------- */
   function wire() {
     const on = (id, fn) => { const el = $(id); if (el) el.addEventListener('click', fn); };
@@ -536,7 +705,14 @@
     on('ticket', () => show(state.access ? (state.signedIn ? 'step-codes' : 'step-join') : 'step-code'));
     on('inv-ticket2-ticket', downloadTicket);
     on('inv-go', redeem);
+    on('inv-browse4', close);
+    on('inv-proof-go', () => runProof(true));
+    on('inv-browse5', () => { close(); location.reload(); });
+    on('inv-setup-go', () => { close(); location.href = '/profile.html#claim'; });
+    on('inv-setup-ticket', () => show('step-codes'));
+    on('inv-proof-again', () => runProof(false));
     on('inv-dl', downloadTicket);
+    on('inv-share', shareOnX);
     on('inv-dash', () => { close(); location.href = '/profile.html#invites'; });
     on('inv-join', async () => {
       close();
@@ -599,5 +775,16 @@
     }
   }
 
-  window.INVITE = { open, close, mountDashboard, refresh, download: downloadTicket };
+  /* Open straight on the participation check. This is what a refused write calls: the person was trying
+     to DO something, so the modal explains what is missing and offers the one action that fixes it. */
+  async function openProof() {
+    if (!root) { build(); startScreen(); }
+    lastFocus = document.activeElement;
+    root.setAttribute('data-open', '');
+    document.body.style.overflow = 'hidden';
+    if (!raf) startScreen();
+    show('step-proof');
+    await refreshProof();
+  }
+  window.INVITE = { open, close, openProof, mountDashboard, refresh, download: downloadTicket };
 })();

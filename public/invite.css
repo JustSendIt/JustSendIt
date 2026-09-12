@@ -145,3 +145,29 @@
 @media (prefers-reduced-motion: reduce) {
   #invite-overlay * { animation: none !important; transition: none !important; }
 }
+
+/* ═══ the participation check ═══════════════════════════════════════════════════════════════
+   Three tests, shown as a checklist rather than prose, because the person reading this wants to know
+   which one they fail and what to do about it. A test the server never reached stays neutral (○) —
+   marking it as passed or failed would be inventing a verdict. */
+.inv-tests { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.inv-tests li { display: flex; align-items: flex-start; gap: 0.7rem; }
+/* The direct child only. A bare `li b` also caught the <b> inside the <small> below it, which pushed
+   "Required" onto its own line and split the sentence it belongs to in half. */
+.inv-tests li > div > b { display: block; font-size: 0.95rem; }
+.inv-tests li em { font-style: normal; font-weight: 600; opacity: 0.75; }
+.inv-tests li small { display: block; margin-top: 0.15rem; font-size: 0.82rem; line-height: 1.45; color: var(--g-dim, #b9a8dd); }
+.inv-tick {
+  flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center;
+  font-size: 0.85rem; font-weight: 800; line-height: 1;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); color: var(--g-dim, #b9a8dd);
+}
+.inv-tests li[data-state="ok"] .inv-tick { background: rgba(142,224,0,0.18); border-color: rgba(142,224,0,0.55); color: var(--g-green-hi, #b4ff2b); }
+.inv-tests li[data-state="no"] .inv-tick { background: rgba(255,46,136,0.15); border-color: rgba(255,46,136,0.5); color: #ff8aa8; }
+/* The read-only assurance. It is a statement of what the code does — personal_sign returns a signature
+   over a sentence and nothing else, and this site never calls eth_sendTransaction — not a promise about
+   outcomes, which is not ours to make. */
+.inv-safe {
+  margin: 1rem 0 0; padding: 0.8rem 0.9rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.55;
+  background: rgba(56,232,255,0.08); border: 1px solid rgba(56,232,255,0.28); color: var(--g-text, #f2eaff);
+}

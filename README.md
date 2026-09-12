@@ -638,6 +638,37 @@ The open sandbox (joinable with no token and no wallet, grants no multiplier) is
 - The sandbox is keyed to a synthetic address (`DEMO_TOKEN`), so no real token's market data or community tag can attach to it; the first version was keyed to WETH and wore WETH's price, cap and holder count.
 - No Robinhood artwork or marks are used — the site brands it with its own 📈 mark and plain naming — and the sandbox is `demo`, never `official`, so a listed company's name never sits under the 🏠 Official badge. Where the brand appears: the community page carries the full line (a stock, not a token; cannot be bought, held or swapped here; not investment advice; not affiliated with, endorsed by or sponsored by Robinhood Markets, Inc.) plus the quote's source and time; the grid card carries a `Sandbox · stock, not a token` pill and a source/time/not-affiliated line; the Arcade hub row carries the Sandbox chip and the not-affiliated note; the profile names the sandbox as a membership that grants no multiplier; proposal notifications say *sandbox*, not `$HOOD`. Snapshots are refused for the sandbox (there is no token to walk) and its member count is never labelled *verified holders*.
 
+### 3.15b The participation check — reading is open, *doing* takes a wallet 🔗
+
+**You can make an account with nothing but an email.** No wallet, no signature, no coins. You can read every page, check in daily, and keep your Send Power decay at bay.
+
+**You cannot *do* anything until a wallet proves you are actually here.** Posting, Send Calls, Sending It, comments, reactions, votes, following, tracking, customising, joining a community — all of it waits behind one read-only check. The moment you try, the check opens over whatever page you were on, and it explains itself rather than just refusing.
+
+**Three tests, run across every wallet you have linked, against the chain:**
+
+| | The test | Why it is that and not something else |
+|---|---|---|
+| 1 | **You hold $100+ of $SEND and $100+ of $GWC** | Priced live, both coins, right now. The same `MIN_HOLD_USD` floor Diamond status uses (§3.2.1) — the site has one definition of "you actually hold this", not two. **Dust does not count.** |
+| 2 | **You have held them for over a week** | Measured from your earliest *market* buy across your wallets. Bought this morning is not conviction, it is a ticket price. |
+| 3 | **You are not a net seller** | Of the tokens that moved between you and the market, no more went out than came in. |
+
+**On test 3 and the tautology.** `ogScan`'s own comment argues that "bought more than you sold" is circular, because Σin − Σout *is* the balance — and for *total* flows that is exactly right. This asks a different question: of the tokens that moved between you and **the market**, did more come in than went out? That is not the balance, because tokens also arrive from a friend, an airdrop, or another of your own wallets. Two cases show the shape is right:
+
+- **gifted 100, never sold** → bought 0, sold 0 → `0 ≤ 0` **passes.** They hold, and have never sold a thing.
+- **gifted 100, sold 90** → bought 0, sold 90 → **fails.** They are a net seller. That is the entire point.
+
+**What the $100 means on these coins.** $GWC's whole supply is 1,000,000,000 tokens at roughly an $11,650 FDV, so **$100 is about 0.86% of every $GWC there is** — no more than ~116 wallets can clear that bar at the same time. ($SEND is looser: $100 is ~0.027% of its 10,000,000,000 supply, so ~3,763 wallets.) That is a deliberate choice made with the arithmetic in hand: this is a small, early community by design, not a round number picked without checking what it buys.
+
+**It is not a punishment, and it is not worded like one.** Read-Only Mode (§3.6) is a sanction with strikes, an escalating ladder and a buy-out. This is a new account that simply has not shown its hand yet. Same enforcement point in the code (`blockReadOnly`), deliberately different answer: `needsProof`, never `readOnly`.
+
+**The check runs in the background, and says so.** A full scan walks your entire transfer history for both coins against an explorer that rate-limits hard — it cannot run inside a button press, so it is queued and the page watches it. A restart re-opens anything left mid-flight; a stale claim is never believed.
+
+**A chain we cannot read is never a refusal.** If the explorer times out, or a price cannot be read, nothing is decided and the door stays exactly where it was. The site says "nothing has been decided — try again in a minute", because that is the truth.
+
+**Everything about it is read-only.** You sign a sentence (`personal_sign`) to prove the wallet is yours. That signature moves nothing, approves nothing and costs no gas. This site never calls `eth_sendTransaction` — it cannot send your funds anywhere, and it never asks your wallet to.
+
+**Once you pass**, your profile is yours to make: claim your handle (required, once), add an email and password (**optional** — a wallet-only account is a complete account), turn on two-factor (**optional**), and link more wallets (**optional**, and all of them read-only).
+
 ### 3.16 The ticket — reading is open, joining is by invite 🎟️
 
 **You do not need anything to read this site.** The landing page, the Send Wall, the New Pairs Radar, the Arcade, profiles, Send Calls and the terms are all open to anyone, signed in or not, crawler or person. That is deliberate and it is load‑bearing: this site's whole SEO surface — every canonical, every sitemap entry, every `og:` tag — only means something if the pages behind them can actually be fetched.
@@ -664,7 +695,15 @@ All three call one function (`signupRefusal`), and nothing else on the site call
 
 **Their codes live on their dashboard too** (`/profile.html#invites`), so "where are my codes" has an answer that is not "reopen the modal you closed". A code that has been used is shown there **for the record but cannot be copied** — the server withholds its characters entirely and returns only a two‑character hint plus who took it. There is nothing to copy: it will never work again, and handing someone a dead code is worse than handing them none.
 
-**The ticket is downloadable** — a 1200×630 PNG painted on a canvas (no library, same output on every browser) carrying the holder's profile picture, their @handle, their Send ID, who invited them, the live Gold OG countdown, and the entertainment‑only disclaimer painted in, so a ticket shared on social carries it.
+**The ticket is downloadable** — a 1200×630 PNG painted on a canvas (no library, same output on every browser) carrying the holder's profile picture, their @handle, their Send ID, who invited them, the live Gold OG countdown, and the entertainment‑only disclaimer painted in, so a ticket shared on social carries it. The $GWC banner across the top is the coin's own Dexscreener artwork, served through **this site's** brand proxy rather than the CDN — see below.
+
+**Sharing it on 𝕏.** The share button opens the composer with the tagline already filled in and a link to your ticket page. Worth being exact about what is happening, because it is easy to overclaim: **X's web composer takes text and a URL and nothing else — no parameter at any version attaches an image.** The picture gets into the post the only way it can, by the link unfurling: `/t/<sendId>` is a page whose `og:image` is your own ticket card, and X fetches and renders it as a large‑image card. If you want the file itself to attach by hand, Download gives you the same picture.
+
+**Nothing is published until you press the button.** `/t/<sendId>` and its card both 404 until you share, and un‑sharing takes them down again. What the page carries is only what is already public on your profile — handle, Send ID, join date, who invited you. No wallet, no email, no balance, ever.
+
+**The card is drawn by the server, not uploaded by your browser.** The obvious shortcut — render the ticket to a canvas and POST the bitmap up — would mean hosting an arbitrary user‑supplied image on this domain and putting it in a social card under our own name. Anyone could upload anything and hand out a sendrh.com link that unfurls it. So the card is drawn server‑side from your handle, your Send ID and your join date, with a small built‑in PNG encoder and a 5×7 bitmap font. And it lives at `/t/<id>.png`, **outside `/api/`** — `robots.txt` disallows `/api/`, and a crawler told to stay out of it will not fetch an `og:image` there, so the card would have rendered perfectly and never once appeared in a post.
+
+**The brand proxy.** The $GWC and $SEND artwork is served from `/api/brand/<token>/<header|logo>` rather than straight from Dexscreener's CDN, for three measured reasons: the CDN sends **no `Access-Control-Allow-Origin` header at all**, so a canvas that draws it is tainted and `toBlob()` throws — the download would break outright, not degrade; the assets are multi‑megabyte **animated GIFs** (the $GWC header is 4.6 MB) and every visitor pulling those from a third party is slow and tells that third party who looked at what; and one fetch can serve everyone. The proxy only ever fetches a URL our own token cache already vouched for, checks the bytes really are a raster image before serving them (never SVG, which is a script container wearing an image's extension), and caps what it will hold.
 
 ---
 

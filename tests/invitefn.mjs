@@ -16,7 +16,7 @@ const made = { users: [], comms: [] };
 // invite-only site: a signed-out reader of the wall still needs a pass through the door
 const GATE = await gatePass(BASE);
 try {
-  db.prepare('INSERT INTO users (username, created_at, avatar) VALUES (?,?,?)').run('__ivf__', Date.now(), '🧪');
+  db.prepare('INSERT INTO users (username, created_at, avatar, holder_verified_at, holder_state) VALUES (?,?,?,?,?)').run('__ivf__', Date.now(), '🧪', Date.now(), 'ok');
   const uid = db.prepare("SELECT id FROM users WHERE username='__ivf__'").get().id; made.users.push(uid);
   const tok = '0x' + createHash('sha256').update('ivf' + Date.now()).digest('hex').slice(0, 40);
   db.prepare(`INSERT INTO communities (creator_id, token_addr, pair_addr, symbol, name, brand, status, created_at)
