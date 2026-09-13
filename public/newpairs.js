@@ -1314,6 +1314,30 @@
              hide: { honeypotSuspect: true, dumping: true, sniperDump: true } },
     },
     {
+      /* The one shape the other five never look for, and the one the "early cap vs later cap" question is
+         actually about: a token still small enough that the cap on the card has somewhere to go, with a
+         pool real enough that the number means something. Thresholds are measured against the live board,
+         not picked — the median cap there is about $2.7k and the upper quartile about $156k, so a $250k
+         ceiling keeps most of the genuinely small ones and drops the handful in the millions. */
+      id: 'smallcap', emoji: '💎', name: 'Small Cap, Real Pool',
+      blurb: 'Still small, but trading in a pool deep enough for the number to mean something.',
+      cannot: 'A small cap is a small cap, not an opportunity — most of these are small because nobody wants them, and they can stay that way or go to zero. It also cannot tell a low cap from a token whose supply figure is simply wrong.',
+      set: { mcapMax: 250000, minLiq: 3000, minVol: 500,
+             hide: { honeypotSuspect: true, dumping: true, lowLiquidity: true, sniperDump: true } },
+    },
+    {
+      /* A retrace, described as a shape rather than as an entry. Deliberately NOT called "buy the dip":
+         the site does not tell anyone to buy, and in this data the first minutes of a rug look exactly
+         like a pullback. The floor already excludes anything down 50%+ in the hour, so what is left is
+         cooling rather than collapsing — but "left" is doing a lot of work in that sentence and the
+         cannot line says so. */
+      id: 'cooled', emoji: '📉', name: 'Cooled Off',
+      blurb: 'Down over the last hour with the pool and the volume still there.',
+      cannot: 'Nothing here distinguishes a pullback from the first minutes of an exit. A falling price is a falling price; that it has not fallen far enough to trip the dumping flag is not reassurance, and this shape will surface tokens on their way to zero.',
+      set: { price1h: 'down', minLiq: 5000, minVol: 1000,
+             hide: { honeypotSuspect: true, dumping: true, lowLiquidity: true, sniperDump: true, sellPressure: true } },
+    },
+    {
       id: 'strict', emoji: '🛡️', name: 'Strictest Checks',
       blurb: 'Only tokens where every check actually ran and every one came back clean.',
       cannot: 'It cannot check what an upstream will not answer. Nothing here is a promise that a token is safe — it is the narrowest thing the site can honestly say, and most new tokens still go to zero.',
@@ -1775,7 +1799,9 @@
   function introSlideHTML() {
     return '<article class="np-slide np-slide--intro" aria-roledescription="slide" aria-label="Intro"><div class="np-slide-inner">' +
       '<div class="np-slide-name">🎬 Hot Feed</div>' +
-      '<p>Only the fresh tokens our automatic checks score a full <b>100/100</b> — the 🚀 <b>Looks Good, Send It</b> verdict — one at a time.</p>' +
+      (activeFilterCount() === 0
+        ? '<p>Only the fresh tokens our automatic checks score a full <b>100/100</b> — the 🚀 <b>Looks Good, Send It</b> verdict — one at a time.</p>'
+        : '<p>The fresh tokens that clear <b>your</b> settings — the 🎯 <b>Matches Your Bar</b> verdict — one at a time. Change the settings and this feed changes with them.</p>') +
       '<p class="np-slide-honest">⚠️ Fresh tokens are dangerous by default — most go to zero. These are heuristics from public on-chain data, not an audit and not advice. We never tell you to buy. Entertainment only. <b>Do your own research.</b></p>' +
       '<p class="np-slide-sub">Swipe up ▲ to start</p>' +
       '</div></article>';
@@ -1824,7 +1850,11 @@
   }
   function renderFeedEmpty() {
     state.feedAddrs = [];
-    feedTrack.innerHTML = '<div class="np-feed-msg">🛡️ Nothing is scoring a full 100/100 right now.<br>The 🚀 Looks Good, Send It bar is deliberately hard to clear — check back soon, or switch to 📋 DEX List to see everything.</div>';
+    /* An empty feed means two very different things now, and telling somebody to "check back soon" when
+       the real answer is "your own filter excluded everything" would send them away to wait for nothing. */
+    feedTrack.innerHTML = activeFilterCount() === 0
+      ? '<div class="np-feed-msg">🛡️ Nothing is scoring a full 100/100 right now.<br>The 🚀 Looks Good, Send It bar is deliberately hard to clear — check back soon, or switch to 📋 DEX List to see everything.</div>'
+      : '<div class="np-feed-msg">🎯 Nothing on the board clears your settings right now.<br>Loosen one, pick a different strategy, or switch to 📋 DEX List to see everything — the feed follows whatever you set.</div>';
   }
   function buildFeed() {
     if (!feedTrack) return;

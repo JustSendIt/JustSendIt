@@ -63,9 +63,12 @@ try {
     check('EXTRACT the strategies', !!m);
     const src = m ? m[0] : '';
     const idm = [...src.matchAll(/id: '([a-z0-9]+)'/g)].map(x => x[1]);
-    check('there are exactly five', idm.length === 5, idm.join(', '));
-    check('each one carries what it CANNOT tell you', (src.match(/cannot:/g) || []).length === 5);
-    check('each one carries a plain-English blurb', (src.match(/blurb:/g) || []).length === 5);
+    check('there are seven strategies', idm.length === 7, idm.join(', '));
+    check('each one carries what it CANNOT tell you', (src.match(/cannot:/g) || []).length === 7);
+    check('each one carries a plain-English blurb', (src.match(/blurb:/g) || []).length === 7);
+    // the market-cap band had controls and a model entry but no strategy reaching for it
+    check('a strategy finally uses the market-cap band', /mcapMax: 250000/.test(src));
+    check('a strategy covers the pullback shape', /price1h: 'down'/.test(src));
     for (const id of idm) check('  ...and a button exists for ' + id, HTML.includes('data-strat="' + id + '"'));
     // a strategy may only set fields that exist, or it is a silent no-op
     const setKeys = [...src.matchAll(/set: \{([\s\S]*?)\n    \}/g)].flatMap(b => [...b[1].matchAll(/(\w+):/g)].map(x => x[1]));
@@ -75,8 +78,15 @@ try {
     const unknown = [...new Set(setKeys)].filter(k => !known.has(k));
     check('no strategy sets a field that does not exist', unknown.length === 0, unknown.join(', '));
     check('a strategy REPLACES the settings rather than merging onto them', /function strategyFilters\(id\) \{[\s\S]{0,200}?const f = defaultFilters\(\);/.test(NP));
-    check('no strategy copy reads as a recommendation',
-      !/\b(best|safe|gem|alpha|guaranteed|will pump|buy )\b/i.test(src.replace(/cannot: '[^']*'/g, '')), 'checked blurbs');
+    /* Test the copy a READER sees — the name and the blurb — not the code comments explaining why the
+       copy is worded that way. A comment saying 'deliberately NOT called "buy the dip"' is the rule being
+       followed, and an earlier version of this assertion failed on it, which is a test grading prose it
+       was never meant to read. The `cannot` lines are exempt for the same reason: they exist to say a
+       thing is NOT safe, so they are allowed to contain the word. */
+    const shown = [...src.matchAll(/(?:name|blurb): '((?:[^'\\]|\\.)*)'/g)].map(m => m[1]).join(' ');
+    check('no strategy NAME or BLURB reads as a recommendation',
+      !/\b(best|safest|safe|gem|alpha|guaranteed|moon|pump|buy)\b/i.test(shown), shown.slice(0, 80));
+    check('  ...and every strategy still warns in its own words', (src.match(/cannot: '/g) || []).length === 7);
   }
 
   /* ═══════════ 4. the verdict: reachable, but with a floor nobody can lower ═══════════ */
@@ -94,6 +104,10 @@ try {
     check('  ...and says in words that it is the reader\'s filter speaking', /It is your filter saying so, not us\./.test(NP));
     check('  ...while the site\'s own bar keeps the rocket and its caveat', /word: 'Looks Good, Send It'[\s\S]{0,160}?most new tokens still go to zero/.test(NP));
     check('the Hot Feed uses the same predicate as the tag — they cannot disagree', /const feedQualifies = \(p\) => meetsYourBar\(p\);/.test(NP));
+    /* The feed's own copy has to say which bar it is following, and an empty feed has to say WHY —
+       "check back soon" is the wrong answer when the real one is "your filter excluded everything". */
+    check('  ...and the feed says whose bar it is showing', /The fresh tokens that clear <b>your<\/b> settings/.test(NP));
+    check('  ...and an empty feed blames the right thing', /Nothing on the board clears your settings right now/.test(NP));
   }
 
   /* ═══════════ 5. pressing a strategy shows the settings move ═══════════ */

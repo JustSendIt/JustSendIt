@@ -495,7 +495,7 @@ the hide list, and a **"must actually have been checked"** group — the honest 
 that lets an unreadable signal through. Tick one and a token the site *could not* check is excluded rather
 than quietly counted as fine.
 
-**Five strategies**, each a complete settings configuration rather than a toggle. Pressing one **replaces**
+**Seven strategies**, each a complete settings configuration rather than a toggle. Pressing one **replaces**
 every setting (never merges — a leftover field silently narrowing the board is how you end up believing
 the chain is empty), opens the panel, and **visibly marks every control it changed** so you can fine-tune
 from there. Each carries a plain blurb *and* a "what it can't tell you" line:
@@ -506,6 +506,8 @@ from there. Each carries a plain blurb *and* a "what it can't tell you" line:
 | 💧 **Liquidity First** | ≥$25k liq, ≥$2k vol, turnover ≥0.15 | deep liquidity can still be removed |
 | 👥 **Crowd Forming** | ≥75 holders, top ≤20%, top-10 ≤55% | requires explorer data, so it shows nothing rather than guessing |
 | 🚀 **Moving Right Now** | ≥$1k vol/h, ≥15 buys/h, price up | momentum is the easiest signal to fake |
+| 💎 **Small Cap, Real Pool** | cap ≤$250k, ≥$3k liq, ≥$500 vol | a small cap is a small cap, not an opportunity |
+| 📉 **Cooled Off** | down over 1h, pool and volume intact | a pullback and the first minutes of an exit look identical here |
 | 🛡️ **Strictest Checks** | every check ran *and* came back clean | it cannot check what an upstream will not answer |
 
 **Market cap then → now.** Each token's detail shows the cap the scanner **first saw** it at, the cap it
