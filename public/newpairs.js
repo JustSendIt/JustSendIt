@@ -1502,8 +1502,9 @@
     state.filters = already ? defaultFilters() : strategyFilters(id);
     syncControls();                       // values are correct BEFORE anything animates
     const moved = markChanged(before, state.filters);
-    const panel = document.getElementById('np-filters'), more = document.getElementById('np-more');
-    if (panel && panel.hidden && !already) { panel.hidden = false; if (more) more.setAttribute('aria-expanded', 'true'); }
+    const panel = document.getElementById('np-filters');
+    // one opener, so the backdrop and the focus move with it instead of only the panel
+    if (panel && panel.hidden && !already && window.npSetFiltersOpen) window.npSetFiltersOpen(true, false);
     updateFcount(); persist(); applyView(); render();
     const note = document.getElementById('np-strat-note');
     if (note) {
@@ -1601,8 +1602,31 @@
     q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); qClear && qClear.click(); } }); // Esc also clears
     syncClearBtn();
     // filters panel toggle
-    const more = $('np-more'), filters = $('np-filters');
-    more.addEventListener('click', () => { const open = filters.hidden; filters.hidden = !open; more.setAttribute('aria-expanded', String(open)); });
+    /* ═══ THE SETTINGS POP-DOWN ═════════════════════════════════════════════════════════════════════
+       Four ways out, because a panel this tall is easy to get stuck behind: the ✕, Escape, a tap outside,
+       and the Filters button again. Escape and the ✕ both hand focus back to the trigger rather than
+       dropping it on <body>, which is where a keyboard user ends up whenever a dialog closes carelessly. */
+    const more = $('np-more'), filters = $('np-filters'), backdrop = $('np-sheet-backdrop');
+    function setFiltersOpen(open, refocus) {
+      filters.hidden = !open;
+      if (backdrop) backdrop.hidden = !open;
+      more.setAttribute('aria-expanded', String(open));
+      if (open) {
+        // land inside the panel, on its own heading, so a screen reader is told what just opened
+        const h = $('np-fhead-title');
+        if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
+      } else if (refocus) { try { more.focus(); } catch {} }
+    }
+    window.npSetFiltersOpen = setFiltersOpen;   // applyStrategy opens it after writing the settings
+    more.addEventListener('click', () => setFiltersOpen(filters.hidden, true));
+    const fclose = $('np-fclose');
+    if (fclose) fclose.addEventListener('click', () => setFiltersOpen(false, true));
+    if (backdrop) backdrop.addEventListener('click', () => setFiltersOpen(false, true));
+    document.addEventListener('keydown', (e) => {
+      if (filters.hidden || (e.key !== 'Escape' && e.key !== 'Esc')) return;
+      // only if the panel actually owns the moment — never steal Escape from a search box elsewhere
+      setFiltersOpen(false, true);
+    });
     // quote + code checkboxes (independent multi-select)
     const chk = (id, apply) => { const e = $(id); if (!e) return; e.addEventListener('change', () => { apply(e.checked); commit(); }); };
     chk('f-weth', v => state.filters.quote.weth = v);

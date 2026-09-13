@@ -495,6 +495,13 @@ the hide list, and a **"must actually have been checked"** group — the honest 
 that lets an unreadable signal through. Tick one and a token the site *could not* check is excluded rather
 than quietly counted as fine.
 
+**The settings open as a pop-down.** They used to be an inline block: opening them shoved the whole list
+down the page, and on a panel this tall the rows you were reading disappeared underneath it. It floats over
+the list now, anchored under the controls, scrolling inside itself — and on a phone it becomes a bottom
+sheet over a dimmed page rather than a tall box in a narrow column. **Four ways out**, because a panel this
+size is easy to get stuck behind: the ✕, Escape, a tap outside, or the Filters button again. Every one of
+them hands focus back to the button rather than dropping it on `<body>`.
+
 **Seven strategies**, each a complete settings configuration rather than a toggle. Pressing one **replaces**
 every setting (never merges — a leftover field silently narrowing the board is how you end up believing
 the chain is empty), opens the panel, and **visibly marks every control it changed** so you can fine-tune

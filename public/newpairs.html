@@ -134,7 +134,16 @@
       <button class="np-chip" type="button" data-preset="nohoney"  aria-pressed="false">🍯 Hide honeypots</button>
     </div>
 
-    <div class="np-filters" id="np-filters" hidden>
+    <!-- A pop-down anchored under the controls row, not a block that shoves the list down the page.
+         Closing it is a first-class action: the ✕ here, Escape, a tap outside, or the Filters button
+         again — four ways, because a panel this tall is easy to get stuck behind. -->
+    <div class="np-sheet-backdrop" id="np-sheet-backdrop" hidden></div>
+    <div class="np-filters" id="np-filters" role="dialog" aria-modal="false" aria-labelledby="np-fhead-title" hidden>
+      <div class="np-fhead">
+        <h2 class="np-fhead-title" id="np-fhead-title">⚙️ Scanner settings</h2>
+        <p class="np-fhead-sub" id="np-fhead-sub">Everything here narrows the DEX List <b>and</b> the Hot Feed.</p>
+        <button class="np-fclose" type="button" id="np-fclose" aria-label="Close scanner settings">✕</button>
+      </div>
       <fieldset class="np-fgroup"><legend class="np-fgroup-h">Quote &amp; code</legend>
         <label class="np-f"><input type="checkbox" id="f-weth" checked> Ξ WETH</label>
         <label class="np-f"><input type="checkbox" id="f-usdg" checked> 💵 USDG</label>

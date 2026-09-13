@@ -116,7 +116,7 @@ try {
     check('the controls it changed are marked', /function markChanged\(before, after\)/.test(NP) && /np-f-moved/.test(CSS));
     check('  ...and the mark carries a WORD, not just a colour', /\.np-f-moved::after \{\s*\n?\s*content: 'changed'/.test(CSS));
     check('  ...which survives reduced motion', /@media \(prefers-reduced-motion: no-preference\) \{[\s\S]{0,200}?npMoved/.test(CSS));
-    check('the panel opens so the reader can fine-tune from there', /if \(panel && panel\.hidden && !already\) \{ panel\.hidden = false;/.test(NP));
+    check('the panel opens so the reader can fine-tune from there', /if \(panel && panel\.hidden && !already && window\.npSetFiltersOpen\)/.test(NP));
     check('applying one is announced to a screen reader', /announce\(already[\s\S]{0,200}?setting' \+ \(moved === 1/.test(NP));
     check('pressing the active strategy again clears it', /const already = strategyExact\(id\);/.test(NP));
   }
@@ -132,6 +132,30 @@ try {
     check('  ...and says plainly what the number is NOT',
       /the launch cap, and not an entry: nobody bought at these numbers/.test(NP) && /Measured from the first time this scanner recorded a cap/.test(NP));
     check('  ...and which field it used when marketCap was missing', /the figure is FDV/.test(NP));
+  }
+
+  /* ═══════════ 6b. the settings open as a pop-down, and close four ways ═══════════
+     It used to be an inline block: opening it shoved the whole list down the page, and on a panel this
+     tall the rows you were reading vanished underneath it. */
+  {
+    check('the panel floats over the list instead of pushing it', /\.np-filters \{\s*\n\s*position: absolute;/.test(CSS));
+    check('  ...and scrolls inside itself rather than growing without limit', /max-height: min\(70vh, 620px\); overflow-y: auto/.test(CSS));
+    check('  ...and sits above the sticky controls row', /\.np-controls \{ position: sticky[^}]*z-index: 30/.test(CSS) && /\.np-filters \{[\s\S]{0,120}?z-index: 45/.test(CSS));
+    check('it is announced as a dialog with a name', /role="dialog"[^>]*aria-labelledby="np-fhead-title"/.test(HTML) && /id="np-fhead-title"/.test(HTML));
+    check('there is a visible close button', /id="np-fclose"[^>]*aria-label="Close scanner settings"/.test(HTML));
+    for (const [route, re] of [
+      ['the ✕', /fclose\.addEventListener\('click', \(\) => setFiltersOpen\(false, true\)\)/],
+      ['Escape', /e\.key !== 'Escape' && e\.key !== 'Esc'\)\) return;[\s\S]{0,200}?setFiltersOpen\(false, true\)/],
+      ['a tap outside', /backdrop\.addEventListener\('click', \(\) => setFiltersOpen\(false, true\)\)/],
+      ['the trigger again', /more\.addEventListener\('click', \(\) => setFiltersOpen\(filters\.hidden, true\)\)/],
+    ]) check('  ...closable by ' + route, re.test(NP));
+    check('closing hands focus back to the trigger, never to <body>', /else if \(refocus\) \{ try \{ more\.focus\(\); \} catch \{\} \}/.test(NP));
+    check('opening moves focus into the panel so it is announced', /h\.focus\(\{ preventScroll: true \}\)/.test(NP));
+    check('the backdrop is shown and hidden with the panel', /if \(backdrop\) backdrop\.hidden = !open;/.test(NP));
+    check('on a phone it becomes a bottom sheet rather than a tall box in a narrow column',
+      /@media \(max-width: 760px\) \{[\s\S]{0,400}?position: fixed; left: 0; right: 0; bottom: 0/.test(CSS));
+    check('a strategy opens it through the same opener, so focus and backdrop follow',
+      /window\.npSetFiltersOpen\(true, false\)/.test(NP) && !/panel\.hidden = false; if \(more\)/.test(NP));
   }
 
   /* ═══════════ 7. the bug that made every row after the first fail ═══════════

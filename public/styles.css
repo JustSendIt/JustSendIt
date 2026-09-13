@@ -4131,3 +4131,62 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
    .np-t-perfect: seeing the rocket has to mean the site said so, and nothing a reader configures is
    allowed to borrow that. Both are "this passed"; only one of them is us saying it. */
 .np-t-yours { color: var(--diamond); border-color: color-mix(in srgb, var(--diamond) 45%, transparent); background: color-mix(in srgb, var(--diamond) 12%, transparent); }
+
+/* ═══ SCANNER SETTINGS AS A POP-DOWN ════════════════════════════════════════════════════════════════
+   It used to be an inline block: opening it pushed the whole list down the page, and on a long panel the
+   rows you were reading vanished under it. It is anchored under the controls row now and floats over the
+   list instead, so what you were looking at stays where it was.
+
+   .np-controls is sticky at z-index 30, so this has to sit above it AND be positioned against a container
+   that is not itself the sticky element — the panel is a sibling, absolutely positioned inside the page
+   column, which keeps it out of the sticky stacking context. */
+.np-filters {
+  position: absolute; z-index: 45; left: 0; right: 0;
+  max-height: min(70vh, 620px); overflow-y: auto; overscroll-behavior: contain;
+  margin-top: 0.2rem;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.6);
+  border-color: color-mix(in srgb, var(--green) 30%, var(--ink-4));
+  align-items: flex-start;
+}
+/* the anchor: the page column the controls row already lives in */
+.np-wrap { position: relative; }
+.np-fhead {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.7rem;
+  width: 100%; margin: -0.7rem -0.9rem 0.35rem; padding: 0.6rem 0.9rem 0.5rem;
+  width: calc(100% + 1.8rem);
+  background: var(--ink); border-bottom: 1px solid var(--ink-4);
+}
+.np-fhead-title { margin: 0; font-size: 0.95rem; font-weight: 800; color: var(--text); }
+.np-fhead-sub { margin: 0; font-size: 0.76rem; color: var(--text-mute); flex: 1 1 auto; }
+.np-fhead-sub b { color: var(--text-dim); }
+.np-fclose {
+  margin-left: auto; flex: none; cursor: pointer;
+  width: 34px; height: 34px; border-radius: 9px; font-size: 0.95rem; line-height: 1;
+  background: var(--ink-3); border: 1.5px solid var(--ink-4); color: var(--text-dim);
+}
+.np-fclose:hover { color: var(--text); border-color: var(--red); }
+.np-fclose:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* Tap-outside-to-close needs something to tap. Invisible on a desktop, a real dimmer on a phone where the
+   panel becomes a sheet and the page behind it must read as inert. */
+.np-sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: transparent; }
+
+@media (max-width: 760px) {
+  /* On a phone an anchored pop-down is just a tall box in a narrow column, so it becomes a bottom sheet:
+     thumb-reachable, dismissable by tapping the dimmed page, and it never covers the nav. */
+  .np-filters {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    max-height: 82dvh; margin: 0; border-radius: 18px 18px 0 0;
+    border-bottom: 0; padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .np-sheet-backdrop { background: rgba(4,6,14,0.6); backdrop-filter: blur(2px); }
+  .np-fhead { margin-top: -0.7rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .np-filters { animation: npSheetIn 0.16s ease-out; }
+  @keyframes npSheetIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+  @media (max-width: 760px) {
+    @keyframes npSheetIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  }
+}
