@@ -18,7 +18,7 @@ const SRC = readFileSync(SERVER_JS, 'utf8');
 const P = (f) => readFileSync(path.join(ROOT, 'public', f), 'utf8');
 const GAMIFY = P('gamify.js'), ABOUT = P('about.html'), CSS = P('styles.css');
 const SENDCALL = P('sendcall.js'), COMMUNITY = P('community.js'), COMMUNITIES = P('communities.html');
-const WP = readFileSync(path.join(ROOT, 'WHITEPAPER.html'), 'utf8');
+const WP = P('whitepaper.html');
 const README = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
 
 const results = [];

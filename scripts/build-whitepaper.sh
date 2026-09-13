@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# Render WHITEPAPER.html to a print-ready PDF.
+# Render the served white paper (public/whitepaper.html) to a print-ready PDF.
 #
-#   ./scripts/build-whitepaper.sh              → WHITEPAPER.pdf next to the HTML
+#   ./scripts/build-whitepaper.sh              → JustSendIt-Whitepaper.pdf at the repo root
 #   ./scripts/build-whitepaper.sh ~/Desktop    → writes into that directory instead
 #
 # Uses headless Chrome, which is already on every machine that can run this site's
-# browser tests. The @media print block at the bottom of WHITEPAPER.html is what makes
-# the output paginate properly: it drops the sidebar, forces the light palette so the
-# PDF is printable, and keeps tables and callouts from splitting across pages.
+# browser tests. The @media print block in the page is what makes the output paginate
+# properly: it drops the sidebar and the site nav/ticker/footer, forces the light palette
+# so the PDF is printable, and keeps tables and callouts from splitting across pages.
+#
+# The page is served at /whitepaper.html, so it lives in public/ alongside the assets it
+# names. Every one of those references is relative for exactly this reason: rendered from
+# a file:// URL here, a leading slash would resolve to the filesystem root and 404.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="$ROOT/WHITEPAPER.html"
+SRC="$ROOT/public/whitepaper.html"
 OUT_DIR="${1:-$ROOT}"
 OUT="$OUT_DIR/JustSendIt-Whitepaper.pdf"
 

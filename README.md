@@ -4,7 +4,7 @@
 
 > 🎉 Entertainment purposes only. Not financial advice. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc. "Robinhood Chain" refers to the public blockchain network of that name. Memecoins are extremely volatile — you can lose everything you put in. Always do your own research.
 
-**New here?** [`WHITEPAPER.html`](WHITEPAPER.html) explains the whole project in plain English — what it does, how it protects your data, the full points economy with every number, the games, and an honest list of its limits. Open it in a browser, or run `npm run whitepaper` to render it as a PDF.
+**New here?** [`public/whitepaper.html`](public/whitepaper.html), served at `/whitepaper.html`, explains the whole project in plain English — what it does, how it protects your data, the full points economy with every number, the games, and an honest list of its limits. Open it in a browser, or run `npm run whitepaper` to render it as a PDF.
 
 
 ### What this repository is

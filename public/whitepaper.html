@@ -1,4 +1,34 @@
-<title>JustSendIt White Paper</title>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>White Paper — how $Send works, with every number 📄</title>
+<meta name="description" content="The full written description of the Just Send It economy: every action's Send Power and daily cap, how the balance decays when you stop showing up, Send Calls, communities, the risk scanner, and the honest limits. Entertainment only, not financial advice, not affiliated with Robinhood.">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#070312">
+<link rel="canonical" href="https://sendrh.com/whitepaper.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:url" content="https://sendrh.com/whitepaper.html">
+<meta property="og:title" content="JustSendIt White Paper — the whole economy, stated exactly">
+<meta property="og:description" content="Every action's points and daily cap, how Send Power decays, and what the site admits it cannot do. Entertainment only, not financial advice.">
+<meta property="og:image" content="https://sendrh.com/assets/logo.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:title" content="JustSendIt White Paper 📄">
+<meta name="twitter:description" content="The whole economy, stated exactly — every number read from the server source.">
+<meta name="twitter:image" content="https://sendrh.com/assets/logo.png">
+<link rel="icon" href="assets/logo-128.png">
+
+<!-- Site chrome loads FIRST, on purpose. This document brings its own typography and palette in the
+     <style> block below, and an equal-specificity rule that comes later wins — so styles.css can dress
+     the nav, the ticker and the footer without touching the body of the paper. -->
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="responsive.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -7,7 +37,7 @@
   :root {
     --paper:      #F7F9FB;
     --card:       #FFFFFF;
-    --ink:        #0D1626;
+    --wp-ink:        #0D1626;
     --muted:      #586A85;
     --faint:      #7C8CA3;
     --rule:       #E3E9F0;
@@ -31,7 +61,7 @@
     :root:not([data-theme="light"]) {
       --paper:     #0B1220;
       --card:      #111A2B;
-      --ink:       #E8EEF7;
+      --wp-ink:       #E8EEF7;
       --muted:     #9FB0CC;
       --faint:     #7788A3;
       --rule:      #1F2942;
@@ -48,7 +78,7 @@
   :root[data-theme="dark"] {
     --paper:     #0B1220;
     --card:      #111A2B;
-    --ink:       #E8EEF7;
+    --wp-ink:       #E8EEF7;
     --muted:     #9FB0CC;
     --faint:     #7788A3;
     --rule:      #1F2942;
@@ -66,7 +96,7 @@
 
   body {
     background: var(--paper);
-    color: var(--ink);
+    color: var(--wp-ink);
     font-family: var(--body);
     font-size: 17px;
     line-height: 1.65;
@@ -85,7 +115,7 @@
   /* ---------- masthead ---------- */
   .masthead {
     padding: 72px 0 40px;
-    border-bottom: 2px solid var(--ink);
+    border-bottom: 2px solid var(--wp-ink);
     max-width: var(--measure);
   }
   .eyebrow {
@@ -222,7 +252,7 @@
     background: var(--mono-bg);
     padding: 1.5px 5px;
     border-radius: 3px;
-    color: var(--ink);
+    color: var(--wp-ink);
     word-break: break-word;
   }
 
@@ -299,7 +329,7 @@
     text-transform: uppercase;
     color: var(--faint);
     font-weight: 400;
-    border-bottom: 1.5px solid var(--ink);
+    border-bottom: 1.5px solid var(--wp-ink);
     padding-bottom: 7px;
   }
   tbody tr { border-bottom: 1px solid var(--rule-soft); }
@@ -327,20 +357,23 @@
   }
   hr { border: 0; border-top: 1px solid var(--rule); margin: 34px 0; }
 
-  footer {
+  .wp-colophon {
     margin-top: 64px;
     padding-top: 26px;
-    border-top: 2px solid var(--ink);
+    border-top: 2px solid var(--wp-ink);
     max-width: var(--measure);
     font-size: 14px;
     color: var(--muted);
   }
-  @media (min-width: 1100px) { footer { margin-left: 266px; } }
+  @media (min-width: 1100px) { .wp-colophon { margin-left: 266px; } }
 
   /* ---------- print / PDF ---------- */
   @media print {
+    /* scripts/build-whitepaper.sh renders this same file to PDF. The nav, ticker and site footer are
+       screen furniture: hiding them here keeps the printed paper exactly what it was before it was served. */
+    .skip-link, nav.nav, .ticker, footer, .compose-fab, #nav-notif { display: none !important; }
     :root {
-      --paper: #FFFFFF; --card: #FFFFFF; --ink: #101B2D; --muted: #45566E;
+      --paper: #FFFFFF; --card: #FFFFFF; --wp-ink: #101B2D; --muted: #45566E;
       --faint: #6B7C94; --rule: #C9D4E0; --rule-soft: #E3E9F0;
       --accent: #2A6419; --accent-bg: #F2F8EE;
       --warn: #8A4308; --warn-bg: #FBF6EE; --crit: #96190F; --crit-bg: #FBF0EF;
@@ -352,7 +385,7 @@
     .page { max-width: none; padding: 0; display: block; }
     .body-grid { display: block; }
     .toc { display: none !important; }
-    main, .masthead, footer { max-width: none; margin-left: 0; }
+    main, .masthead, .wp-colophon { max-width: none; margin-left: 0; }
 
     .masthead { padding: 0 0 18px; border-bottom-width: 1.5px; break-after: avoid; }
     h1 { font-size: 30pt; margin-bottom: 12px; }
@@ -378,10 +411,41 @@
     tr { break-inside: avoid; page-break-inside: avoid; }
     th, td { padding: 5px 10px 5px 0; }
 
-    a { color: var(--ink); text-decoration: none; }
-    footer { margin-top: 26px; padding-top: 14px; font-size: 8.5pt; break-inside: avoid; }
+    a { color: var(--wp-ink); text-decoration: none; }
+    .wp-colophon { margin-top: 26px; padding-top: 14px; font-size: 8.5pt; break-inside: avoid; }
   }
 </style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav class="nav" aria-label="Primary">
+  <a class="nav-logo" href="index.html"><img src="assets/logo.png" alt="$Send home"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="about.html">About</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="communities.html">Communities</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="support.html">Support</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="index.html#tokens">Tokens</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a class="active" href="whitepaper.html" aria-current="page">White&nbsp;Paper</a>
+
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    <span>🚀 $SEND</span><span>💸 JUST SEND IT</span><span>🪙 $GWC</span><span>🔥 ON ROBINHOOD CHAIN</span><span>⚡ EARN SEND POWER</span><span>🎉 ENTERTAINMENT ONLY</span><span>🚀 $SEND</span><span>💸 JUST SEND IT</span><span>🪙 $GWC</span><span>🔥 ON ROBINHOOD CHAIN</span><span>⚡ EARN SEND POWER</span><span>🎉 ENTERTAINMENT ONLY</span>
+  </div>
+</div>
 
 <div class="page">
 
@@ -423,7 +487,7 @@
       </ol>
     </nav>
 
-    <main>
+    <main id="main">
 
       <!-- 1 -->
       <section id="s1">
@@ -1010,9 +1074,48 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
     </main>
   </div>
 
-  <footer>
+  <div class="wp-colophon">
     <p><strong>JustSendIt White Paper, version 1.</strong> Every number in this document was read directly from the server source rather than from marketing copy. Where the documentation and the code disagreed, the code was treated as correct.</p>
     <p>JustSendIt is not affiliated with, endorsed by, or connected to Robinhood Markets, Inc. Robinhood Chain is the name of a public blockchain. Nothing here is financial advice. Points, levels, badges and games are entertainment and have no monetary value. Most new tokens lose all their value.</p>
-  </footer>
+  </div>
 
 </div>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    $Send is a vibe, not financial advice. Memecoins are extremely volatile — you can lose everything you put in. Nothing on this site is an offer, solicitation, or recommendation of any kind. Always do your own research.<br>
+    This site is an independent community project and is <b>not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.</b> "Robinhood Chain" refers to the public blockchain network of that name.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+    <a href="about.html">About</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="communities.html">Communities</a>
+    <a href="index.html">Home</a>
+    <a href="index.html#guide">How to Buy</a>
+    <a href="profile.html">My Profile</a>
+    <a href="newpairs.html">New Pairs</a>
+    <a href="wall.html">Send Wall</a>
+    <a href="support.html">Support</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="index.html#tokens">Tokens</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="whitepaper.html">White Paper</a>
+  </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="livex.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="notifications.js"></script>
+</body>
+</html>
