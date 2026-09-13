@@ -26,6 +26,8 @@
     if (!signedIn()) { if (window.AUTH && AUTH.open) AUTH.open(); throw new Error('Sign in to mute senders'); }
     const j = await window.api('/api/mutes/' + encodeURIComponent(String(name).replace(/^@/, '')), { method: on ? 'POST' : 'DELETE' });
     if (AUTH.user) AUTH.user.mutes = Array.isArray(j.mutes) ? j.mutes : [];
+    // muting retires any post alert on the same person, server-side — keep the local copy in step
+    if (AUTH.user && Array.isArray(j.alerts)) AUTH.user.alerts = j.alerts;
     sync(); fire();
     return j;
   }

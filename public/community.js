@@ -191,6 +191,29 @@
     '</article>';
   }
 
+  /* A post alert links to /p/<id>; the server resolves that and sends a community post HERE, as
+     ?id=<cid>#p<id>. Without this the reader arrives at the top of the wall with no indication of which
+     post they were told about — the redirect would be pointing at a page that does not know it was
+     aimed at anything. Same behaviour as the Send Wall and the profile wall: scroll to it and flash it,
+     and page back through the feed until it turns up rather than giving up on the first screen. */
+  function flashPost(el) {
+    if (!el) return;
+    el.classList.remove('post-flash'); void el.offsetWidth; el.classList.add('post-flash');
+    el.scrollIntoView({ behavior: (window.prefersReduced && prefersReduced()) ? 'auto' : 'smooth', block: 'center' });
+  }
+  let hashTries = 0;
+  function focusFromHash() {
+    const m = /^#p(\d+)$/.exec(location.hash || ''); if (!m) return;
+    const el = feedEl.querySelector('.post[data-id="' + Number(m[1]) + '"]');
+    if (el) { hashTries = 0; setTimeout(() => flashPost(el), 60); return; }
+    /* Not on this page of the feed yet. It may be further back, or on the OTHER wall (a holders-only post
+       links here too, and opens on the public tab). Two more pages, then stop and say so rather than
+       paging forever. */
+    if (++hashTries <= 2 && document.getElementById('comm-more') && !document.getElementById('comm-more').hidden) { loadWall(false); return; }
+    if (hashTries === 3 && window.sendToast) sendToast('That post is not on this wall \u2014 it may be older, or on the holders-only wall.');
+  }
+  window.addEventListener('hashchange', () => { hashTries = 0; focusFromHash(); });
+
   async function loadWall(reset) {
     if (reset) { oldest = null; feedEl.innerHTML = ''; }
     const gen = ++wallGen, forWall = wall;
@@ -209,6 +232,7 @@
       emptyEl.style.display = 'none';
       posts.forEach(p => { feedEl.insertAdjacentHTML('beforeend', postCard(p)); oldest = p.id; });
       document.getElementById('comm-more').hidden = posts.length < 30;
+      focusFromHash();   // a notification links to /p/<id>, which lands here as ?id=<cid>#p<id>
     } catch (e) {
       // A refusal is the honest answer, not an empty wall — and not a silent dead "Load more" either: a slot
       // can lapse between loading the page and opening this tab (the sweep re-checks holdings continuously).

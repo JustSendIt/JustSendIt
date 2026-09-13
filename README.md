@@ -404,6 +404,58 @@ negative kind — could never appear in it, while two pages promised "every drai
 points history". Negative rows now render in their own list, and a negative day is signed and coloured as
 a loss instead of printing `+-1,234` in gain green.
 
+### 3.6d Wall alerts — "tell me when this person posts" 🔔
+
+On anyone else's wall, **🔔 Alerts** turns on a private subscription: when they post, make a Send Call, or
+post publicly in a community, a row lands in your 🔔 bell and clicking it takes you **to that post**.
+
+**It is private, and it is not Follow.** Following is public, pays Send Power on both sides and puts
+someone in your feed; an alert rings your bell and nothing else. Conflating the two would either start
+notifying every existing follow or make "quietly keep up with them" impossible. It is modelled on
+**mutes** instead: the target is never told, no count is exposed anywhere, and it pays nobody anything.
+
+**What never fans out.** Support-board questions (the help desk is not a wall, and asking there is meant
+to draw no crowd), holders-only community posts (a private wall is private, even to somebody who could
+open it), the site-written community invite post, and anything to a subscriber who has **muted** the
+author. Muting also **retires** the subscription and clears rows already delivered — and a mute does not
+silently switch alerts back on when it is lifted.
+
+**The row carries no post text.** A notification outlives the post — the author's delete button does not
+reach into strangers' bells — so quoting the body would leave somebody's deleted words in other people's
+notifications. The row is: who, what kind of thing they did, and a link. Token symbols in it are filtered
+the same way a community's symbol is, because a Send Call post can never be deleted, so a symbol chosen by
+a token's deployer would otherwise sit in up to 200 bells permanently.
+
+**The link is `/p/<id>`, not a rendered path.** The server resolves it at click time from the post row:
+it knows whether the post lives on a profile wall, a community wall or the support board, it re-checks
+who may see it, and it survives the author renaming themselves. A post that is gone (or was never yours
+to see) redirects to the wall with one honest line — the same line either way, because distinguishing
+them would confirm to a stranger that a private post exists. The route is rate-limited so the id space
+cannot be walked.
+
+**Four bounds, and each refuses out loud rather than accepting silently:**
+
+| Bound | Value | Why |
+|---|---|---|
+| Subscribers per wall | `ALERT_TARGET_MAX` = **200** (`= PROP_NOTIFY_CAP`) | the fan-out runs synchronously on the author's own request; this is what one request can carry |
+| Walls per account | `ALERT_MAX_PER_USER` = **50** (`= NOTIF_KEEP_ALERT`) | exactly what your bell holds alert rows for — watching more guarantees silent loss |
+| Alerts from one author, per bell | `ALERT_BURST` = **3** per hour (`= SOCIAL_PER_ACTOR`) | one person cannot fill someone else's bell |
+| Fan-outs per author | `ALERT_FANOUT_PER_HOUR` = **4** | bounds the *work*, across all three entry points, before a row is read |
+| Alerts on one wall per connection | `ALERT_IP_PER_TARGET` = **3** | the 200 slots are finite, so they cannot all come from one network |
+
+A cap that accepted the subscription and then quietly stopped delivering would be a switch reading ON that
+never rings. Every one of these refuses with the reason instead.
+
+**Gating.** Setting an alert needs the **participation check** (it commits other people's request time to
+a fan-out, which is doing something here). It is **not** gated by read-only: which bells ring for you is a
+setting on your own account, not something you make, and a muted person must still be able to turn their
+own notifications down. Turning an alert **off** is never gated at all.
+
+**Alerts get their own bucket.** `NOTIF_KEEP_ALERT` = 50, trimmed separately from the 50 social rows and
+the 200 system rows — so a busy wall can never evict a level-up, an OG grant or a restriction notice.
+
+Manage every alert you have set under **Settings → 🔔 Post Alerts** on your profile.
+
 ### 3.7 Safety tools
 
 **Read the honesty rule first: every safety readout is an automated heuristic pattern‑scan of public on‑chain data. It is not an audit, and it never simulates a buy or sell.** It's a starting point for your own research, never a guarantee or a "buy."

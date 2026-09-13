@@ -1023,6 +1023,12 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
           </table>
         </div>
         <p>Note that your <em>Diamond level</em> is public but the holdings behind it are not. Others see that you have held for a long time without seeing how much you own.</p>
+
+        <h3>Alerts</h3>
+        <p>On anyone else&rsquo;s wall there is a <strong>&#128276; Alerts</strong> button. Turn it on and their posts, Send Calls and public community posts arrive in your notification bell, each one linking to the post itself rather than to the top of their wall.</p>
+        <p>It is a separate thing from following, on purpose. Following is public, pays Send Power to both sides and puts somebody in your feed; an alert is private, pays nobody, and only rings your own bell. It is built on the same model as a mute: <strong>the other person is never told</strong>, and no count of who has alerts on a wall is exposed anywhere, to anyone. Muting someone retires any alert on them and clears the rows already delivered, and lifting the mute does not quietly turn them back on.</p>
+        <p>The notification says who posted and what kind of thing it was. It does <em>not</em> carry the post&rsquo;s text. A notification outlives the post it is about &mdash; deleting a post does not reach into other people&rsquo;s bells &mdash; so a preview would leave somebody&rsquo;s deleted words sitting in strangers&rsquo; notifications indefinitely. Help-desk questions and holders-only community posts are never broadcast at all.</p>
+        <p>An alert turns one person&rsquo;s action into up to two hundred notification rows, so it is bounded in five places: two hundred subscribers to a wall, fifty walls to an account, three alerts from any one author per bell per hour, four fan-outs per author per hour, and three alerts on one wall from any one network. Each of those <strong>refuses out loud when it is reached</strong> rather than accepting the subscription and quietly never delivering &mdash; a switch reading ON that never rings would be a lie, and it is the specific failure this design was written to avoid. Alert notifications are also kept in their own bucket, so a busy wall can never push a level-up or a restriction notice out of your bell.</p>
       </section>
 
       <!-- 15 -->

@@ -354,6 +354,18 @@ async function focusPost(id) {
   if (el) setTimeout(() => flashPost(el), 60);
 }
 function focusFromHash() { const m = /^#p(\d+)$/.exec(location.hash || ''); if (m) focusPost(Number(m[1])); }
+/* A notification links to /p/<id>, which the server resolves to wherever the post actually lives — or
+   here, with ?gone=<id>, when it cannot. One sentence covers both cases it can mean, on purpose: saying
+   "deleted" versus "you may not see this" would confirm to a stranger that a private post exists. */
+(function () {
+  const m = /[?&]gone=(\d+)/.exec(location.search || '');
+  if (!m) return;
+  const say = () => { if (window.sendToast) sendToast('That post is gone \u2014 it was deleted, or it is not one you can see.'); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(say, 400));
+  else setTimeout(say, 400);
+  // drop the marker so a refresh or a back-button does not repeat it
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch {}
+})();
 window.addEventListener('hashchange', focusFromHash);
 setTimeout(focusFromHash, 500); // on load, after the feed starts populating
 

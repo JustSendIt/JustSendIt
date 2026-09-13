@@ -599,6 +599,7 @@ window.onAuthReady = function (user) {
   loadMe();
   loadConnectedWallet();
   loadInvites();
+  loadAlertList();
 };
 
 /* Your ticket and your ten codes, on the page you already know. invite.js owns the rendering (it also
@@ -620,4 +621,41 @@ async function loadInvites() {
     host.innerHTML = '<h3 style="margin:0 0 0.4rem;">🎟️ Your invite codes</h3>' +
       '<p class="modal-note" style="margin:0;">Couldn’t load your codes just now — refresh the page to try again.</p>';
   }
+}
+
+/* ═══ 🔔 Post alerts — the list of walls you asked to be told about ═════════════════════════════════
+   The bell says what happened; this says what you SIGNED UP for, and lets you stop without going back to
+   find the wall you set it on. Rendered from AUTH.user.alerts, which the session payload already carries,
+   so opening this card costs nothing. Turning one off is the same route the wall button uses — one
+   endpoint, one behaviour, no second copy of the rule. */
+async function loadAlertList() {
+  const list = document.getElementById('alert-list'), note = document.getElementById('alert-list-note');
+  if (!list || !window.AUTH || !AUTH.user) return;
+  const names = Array.isArray(AUTH.user.alerts) ? AUTH.user.alerts : [];
+  if (!names.length) {
+    list.innerHTML = '';
+    note.textContent = 'No alerts set. Open anyone’s wall and press 🔔 Alerts to be told when they post.';
+    return;
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  list.innerHTML = names.map(n =>
+    '<li class="alert-row">' +
+      '<a class="alert-who" href="/u/' + encodeURIComponent(n) + '">@' + esc(n) + '</a>' +
+      '<button class="btn btn-ghost btn-sm alert-off" type="button" data-off="' + esc(n) + '" aria-label="Turn off alerts for ' + esc(n) + '">Turn off</button>' +
+    '</li>').join('');
+  note.textContent = names.length === 1 ? '1 wall. They are not told.' : names.length + ' walls. They are not told.';
+  if (list._wired) return;
+  list._wired = true;
+  list.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-off]'); if (!b) return;
+    const name = b.dataset.off;
+    b.disabled = true;
+    try {
+      const j = await window.api('/api/alerts/' + encodeURIComponent(name), { method: 'DELETE' });
+      AUTH.user.alerts = Array.isArray(j.alerts) ? j.alerts : [];
+      loadAlertList();
+      if (window.sendToast) sendToast('🔕 Alerts off for @' + name);
+      if (window.announce) announce('Alerts off for ' + name);
+    } catch (err) { b.disabled = false; if (window.sendToast) sendToast(err.message); }
+  });
 }

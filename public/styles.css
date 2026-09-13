@@ -4031,3 +4031,49 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 /* the floor, named on the equation strip: the term shrinks for a reason, and the reason is worth a sentence */
 .eq-dust { margin: 0.35rem 0 0; font-size: 0.78rem; line-height: 1.5; color: var(--gold); }
 .eq-dust a { color: var(--gold); }
+
+/* ---- notification rows that go somewhere ----------------------------------------------------------
+   The panel used to be role="menu" full of plain divs. It is a LIST now, because that is what it is: some
+   rows link to the thing they are about, each has its own dismiss button, and a menu role promised arrow-
+   key behaviour that was never implemented. The whole row is the link so the hit target is the row, not
+   the sentence inside it (WCAG 2.5.8 — a target you can actually hit). */
+.notif-list { list-style: none; margin: 0; padding: 0; }
+.notif-item { display: flex; gap: 0.6rem; align-items: stretch; padding: 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.notif-go {
+  display: flex; gap: 0.6rem; align-items: flex-start; flex: 1 1 auto; min-width: 0;
+  padding: 0.65rem 0.3rem 0.65rem 0.9rem; color: inherit; text-decoration: none;
+}
+.notif-item.is-link .notif-go:hover { background: rgba(142,224,0,0.08); }
+/* --focus, not an accent token. prefs.js re-solves --green-bright / --gold / --accent from the user's own
+   colour choices and clamps them only against --ink, so a focus ring built from one of them can end up
+   near-invisible on this panel for somebody who picked an unlucky theme. A focus ring is the one thing
+   that may never depend on a preference. Inset, because the row is flush to the panel edge. */
+.notif-item.is-link .notif-go:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; border-radius: 8px; }
+/* full opacity: rgba(180,255,43,0.35) composites to roughly 2.8:1 on this panel, under the 3:1 a
+   non-text indicator needs (WCAG 1.4.11) */
+.notif-item.is-link .notif-text { text-decoration: underline; text-decoration-color: var(--green-bright); text-underline-offset: 2px; }
+/* a row scrolled to by the keyboard must not hide under the sticky nav */
+.notif-go { scroll-margin-top: 44px; scroll-margin-bottom: 8px; }
+.notif-body { display: flex; flex-direction: column; min-width: 0; }
+.notif-x { align-self: center; margin-right: 0.5rem; }
+.notif-empty { padding: 1rem 0.9rem; }
+
+/* ---- the alert toggle on someone else's wall ----
+   Reads as off by default and clearly lit when on, with the state in aria-pressed as well as in the
+   label — a bell that only changes colour tells a colour-blind reader nothing, and tells a screen-reader
+   user nothing at all. */
+.btn-alert.on {
+  background: rgba(255,179,64,0.14);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
+  color: var(--gold);
+}
+.btn-alert.on:hover { background: rgba(255,179,64,0.22); }
+
+/* ---- the alert list in Settings ---- */
+.alert-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
+.alert-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 10px; padding: 0.45rem 0.6rem;
+}
+.alert-who { color: var(--green-bright); font-weight: 800; text-decoration: none; }
+.alert-who:hover { text-decoration: underline; }

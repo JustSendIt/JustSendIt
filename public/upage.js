@@ -397,6 +397,88 @@ document.getElementById('follow-btn').addEventListener('click', async () => {
     } else sendToast('Unfollowed');
   } catch (err) { sendToast(err.message); }
 });
+/* ═══ deep links: /u/<name>#p<id> ════════════════════════════════════════════════════════
+   wall.js has had this since Send Calls could be linked; the public wall never did, so a link to a
+   specific post opened the top of that person's wall and left the reader to find it. The same three
+   pieces, kept deliberately identical in behaviour: scroll to it, flash it, and if it is not in the
+   loaded page, fetch that one post and put it at the top rather than paging blindly until it appears.
+   A post that no longer exists, or that the reader may not see, says so instead of failing silently —
+   a notification row outlives the post it points at. */
+function flashPost(el) {
+  if (!el) return;
+  el.classList.remove('post-flash'); void el.offsetWidth; el.classList.add('post-flash');
+  el.scrollIntoView({ behavior: (window.prefersReduced && prefersReduced()) ? 'auto' : 'smooth', block: 'center' });
+}
+async function focusPost(id) {
+  const feed = document.getElementById('feed');
+  if (!id || !feed) return;
+  let el = feed.querySelector('.post[data-id="' + id + '"]');
+  if (!el) {
+    try {
+      const j = await api('/api/posts/' + id);
+      if (j && j.post) {
+        el = postEl(j.post);
+        feed.prepend(el);
+        if (window.SendCall) { SendCall.wire(feed); SendCall.live(feed); SendCall.observe(feed); }
+      }
+    } catch {
+      // 404 covers both "deleted" and "you may not see this" — the server does not distinguish, and neither should we
+      sendToast('That post is gone — it was deleted, or it is not one you can see.');
+      return;
+    }
+  }
+  if (el) setTimeout(() => flashPost(el), 60);
+}
+function focusFromHash() { const m = /^#p(\d+)$/.exec(location.hash || ''); if (m) focusPost(Number(m[1])); }
+window.addEventListener('hashchange', focusFromHash);
+
+/* ═══ alerts: "tell me when they post" ═══════════════════════════════════════════════════════════════
+   Deliberately not folded into Follow. Following is a public signal that puts someone in your feed; an
+   alert is a private preference that rings your bell, and the two want different answers often enough
+   that one button cannot serve both. The target is never told, exactly as with a mute. */
+function alertedNames() {
+  const a = (window.AUTH && AUTH.user && Array.isArray(AUTH.user.alerts)) ? AUTH.user.alerts : [];
+  return new Set(a.map(n => String(n).toLowerCase()));
+}
+function setAlertUI(on) {
+  const btn = document.getElementById('alert-btn'); if (!btn) return;
+  /* A muted author is never fanned out to, so an alert on one would be a switch that turns on and never
+     rings. The server refuses it; the button says why up front rather than letting someone press a
+     control that cannot work. */
+  const muted = !!(window.MUTES && MUTES.has && MUTES.has(uname));
+  btn.classList.toggle('on', !!on && !muted);
+  btn.disabled = muted;
+  btn.textContent = muted ? '🔕 Muted' : (on ? '🔔 Alerts on' : '🔔 Alerts');
+  btn.setAttribute('aria-pressed', String(!!on && !muted));
+  // the label carries the state for a screen reader; the title carries the consequence for everyone else
+  btn.title = muted
+    ? 'You have muted @' + uname + '. Unmute them to be able to set alerts — alerts from a muted account would never arrive.'
+    : on
+      ? 'You get a notification when @' + uname + ' posts or makes a Send Call. They are not told. Press to turn it off.'
+      : 'Get a notification when @' + uname + ' posts or makes a Send Call. Private — they are never told.';
+}
+// muting from the Moderation menu drops the subscription server-side; keep the button honest without a reload
+document.addEventListener('mutes:change', () => {
+  const btn = document.getElementById('alert-btn');
+  if (btn && !btn.hidden) setAlertUI(alertedNames().has(String(uname).toLowerCase()));
+});
+const alertBtn = document.getElementById('alert-btn');
+if (alertBtn) alertBtn.addEventListener('click', async () => {
+  if (!AUTH.user) { AUTH.open(); return; }
+  const on = alertBtn.getAttribute('aria-pressed') === 'true';
+  alertBtn.disabled = true;
+  try {
+    const j = await api('/api/alerts/' + encodeURIComponent(uname), { method: on ? 'DELETE' : 'POST' });
+    if (AUTH.user) AUTH.user.alerts = Array.isArray(j.alerts) ? j.alerts : [];
+    setAlertUI(j.alerted);
+    sendToast(j.alerted
+      ? '🔔 Alerts on for @' + uname + ' — they are not told'
+      : '🔕 Alerts off for @' + uname);
+    if (window.announce) announce(j.alerted ? 'Alerts on for ' + uname : 'Alerts off for ' + uname);
+  } catch (err) { sendToast(err.message); }
+  finally { alertBtn.disabled = false; }
+});
+
 document.getElementById('share-btn').addEventListener('click', async () => {
   const url = location.origin + '/u/' + encodeURIComponent(uname);
   try {
@@ -462,12 +544,18 @@ async function loadPage() {
       const pch = document.getElementById('pc-handle'); pch.textContent = u.username;
       if (u.og && window.ogBadge) pch.insertAdjacentHTML('afterend', ogBadge(u.og));
       document.getElementById('profile-composer').hidden = false;
-    } else { document.getElementById('follow-btn').hidden = false; setFollowUI(u.iFollow); }
+    } else {
+      document.getElementById('follow-btn').hidden = false; setFollowUI(u.iFollow);
+      // signed-out visitors see the button too — pressing it opens sign-in rather than hiding the feature
+      const ab = document.getElementById('alert-btn');
+      if (ab) { ab.hidden = false; setAlertUI(alertedNames().has(String(uname).toLowerCase())); }
+    }
     const f = await api('/api/posts?user=' + encodeURIComponent(uname));
     const feed = document.getElementById('feed');
     feed.innerHTML = '';
     for (const p of f.posts) feed.appendChild(postEl(p));
     if (window.SendCall) { SendCall.wire(feed); SendCall.live(feed); SendCall.observe(feed); }
+    focusFromHash();   // a notification links to /u/<name>#p<id> — land on the post, not the top of the wall
     document.getElementById('empty').style.display = f.posts.length ? 'none' : '';
     setupCallTabs(u); // Send Calls tab + leaderboard
   } catch {

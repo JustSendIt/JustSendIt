@@ -63,6 +63,11 @@
       </div>
       <div class="wall-id-actions">
         <button class="btn-follow" id="follow-btn" hidden>＋ Follow</button>
+        <!-- A separate control from Follow on purpose. Following is public and puts someone in your feed;
+             an alert is private and rings your bell. Conflating them would either start notifying every
+             existing follow, or make "quietly keep up with them" impossible. aria-pressed, not a switch
+             role: it is a two-state button whose label already says what pressing it does. -->
+        <button class="btn btn-ghost btn-sm btn-alert" id="alert-btn" type="button" aria-pressed="false" hidden>🔔 Alerts</button>
         <a class="btn btn-ghost btn-sm" id="edit-btn" href="/profile.html" hidden>Edit profile ✏️</a>
         <button class="btn btn-ghost btn-sm" id="share-btn" aria-label="Copy link to this wall">Share 🔗</button>
         <div class="mod-wrap" id="mod-wrap" hidden>

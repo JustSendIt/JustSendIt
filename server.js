@@ -672,7 +672,24 @@ for (const col of [
      and a permanent 2x, which is the point: the reset costs them their number, not their place. */
   "ALTER TABLE users ADD COLUMN beta_rank INTEGER",    // 1-10 for the top ten at the reset, else NULL
   "ALTER TABLE users ADD COLUMN beta_points INTEGER",  // what they finished on, kept so the reset is auditable
-  "ALTER TABLE users ADD COLUMN beta_settled_at INTEGER",                         // the $SEND this key spent                          // blind indexes of the linked wallets at mint (a burn backs one live key at a time). CREATE TABLE IF NOT EXISTS carries it on a fresh DB; this lands it on an existing one        // last time a scan was ATTEMPTED, win or lose — og_checked_at only records a CLEAN result, so an always-failing account would sort first forever and block the queue
+  "ALTER TABLE users ADD COLUMN beta_settled_at INTEGER",
+  /* Where a notification goes when you click it. Every value is BUILT ON THE SERVER from ids we already
+     hold — it is never read from a request body — and it is re-validated as a site-relative path before
+     it is stored, so a row can never carry an absolute URL, a scheme, or a protocol-relative '//host'.
+     public/notifications.js renders rows through innerHTML; a link that came from anywhere but here would
+     be an injection point and an open redirect in one. */
+  "ALTER TABLE notifications ADD COLUMN href TEXT",   // site-relative path only, built here, validated at notifyLink()
+  /* WHICH POST a row is about. The href is a rendered path; this is the identity, and the difference
+     matters twice over. Usernames change freely through /api/profile, so a stored '/u/<name>#p<id>' is a
+     link that rots on a rename. And a notification's whole content is "X posted, here it is" — with no
+     post there is nothing left to say, so ON DELETE CASCADE (foreign_keys is ON, server.js:115) takes the
+     row out of every stranger's bell the moment the author deletes the post. Contrast calls.post_id,
+     which is SET NULL: a call outlives its post. A notification about one does not. */
+  "ALTER TABLE notifications ADD COLUMN post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE",
+  /* Belt to the CREATE TABLE's braces. A database that already has `alerts` will never re-run its CREATE,
+     so a column added to that statement afterwards never reaches it — which is exactly what happened to
+     the dev database this was written against. Idempotent either way. */
+  "ALTER TABLE alerts ADD COLUMN ip TEXT",
 ]) { try { db.exec(col); } catch {} }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
@@ -767,6 +784,27 @@ CREATE TABLE IF NOT EXISTS mutes (
   created_at INTEGER NOT NULL,
   PRIMARY KEY (user_id, muted_id)
 );
+/* ===== Wall alerts: "tell me when this person posts" =========================================
+   A per-viewer subscription, deliberately SEPARATE from follows. Following is public, pays Send Power on
+   both sides and is a social signal; an alert is a private notification preference with no points
+   attached, so folding one into the other would mean either paying people to fill their own bell or
+   making every existing follow start pushing notifications nobody asked for.
+
+   It is modelled on mutes rather than follows for the same reason: it is a thing the VIEWER sets about
+   someone else, it is nobody else's business, and the person it concerns is never told. Same shape, same
+   cascade, same privacy. */
+CREATE TABLE IF NOT EXISTS alerts (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- who wants to be told
+  target_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,   -- whose posts they want to hear about
+  /* Blind index of the connection that set it, never the address — the same treatment
+     community_members.join_ip gets, and for the same reason. A wall carries a bounded number of alerts,
+     so the slots are a resource: without this a ring on one connection could take all two hundred and
+     lock everybody else out of a popular wall. The cap is per (connection, wall), so sharing a network
+     with two other people who follow the same person is fine and a hundred sockpuppets is not. */
+  ip         TEXT,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, target_id)
+);
 CREATE TABLE IF NOT EXISTS tracker_cache (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   addr_idx   TEXT NOT NULL,                 -- blind index of the tracked address
@@ -775,6 +813,10 @@ CREATE TABLE IF NOT EXISTS tracker_cache (
   PRIMARY KEY (user_id, addr_idx)
 );
 CREATE INDEX IF NOT EXISTS idx_mutes_muted ON mutes(muted_id);
+/* The fan-out reads BY TARGET ("who asked about this author"), which the (user_id, target_id) primary key
+   cannot serve — without it every post would scan the whole subscription table. It belongs in THIS exec,
+   not the performance-index block higher up: that one runs before these tables exist. */
+CREATE INDEX IF NOT EXISTS idx_alerts_target ON alerts(target_id, created_at);
 -- Rocket Run rounds. crash_x is written at START and never leaves the server until the round resolves, so the
 -- browser can animate the climb without ever knowing where it ends. Survives a restart, so a crash mid-round
 -- can't strand a player's one daily go.
@@ -1876,16 +1918,36 @@ async function checkOg(userId) {
 // in-app notifications (bounded per user so history can't grow without limit)
 const NOTIF_KEEP = 50;
 const NOTIF_KEEP_SYSTEM = 200; // level-ups / OG / calls / wallet events are bounded by real events — and must never be evicted by social spam
-function notify(userId, icon, text, kind, actorId) {
+/* A notification's destination. Nothing that reaches this function comes from a request body — every
+   caller builds the path from ids the server already holds — and it is still re-validated here, because
+   the one place a stored string later becomes a live link is exactly where a mistake is expensive:
+   public/notifications.js renders rows with innerHTML, so a value carrying a scheme, a protocol-relative
+   '//evil.example', a quote or an angle bracket would be an open redirect and an injection in one row.
+   A site-relative path with a conservative character set is the whole of what a notification may link to. */
+function notifyLink(href) {
+  const h = String(href == null ? '' : href);
+  if (!h) return null;
+  if (h.length > 200) return null;
+  if (!h.startsWith('/') || h.startsWith('//')) return null;   // same-origin paths only, never '//host'
+  return /^\/[A-Za-z0-9/_\-.~%?#=&+]*$/.test(h) ? h : null;
+}
+/* Alerts get their OWN keep-count. They are user-triggered volume like social rows, so they must not be
+   trimmed against NOTIF_KEEP_SYSTEM, where a busy wall would evict level-ups, OG grants and restriction
+   notices — the rows a person cannot afford to miss. Three buckets, each bounded on its own. */
+const NOTIF_KEEP_ALERT = 50;
+function notify(userId, icon, text, kind, actorId, href, postId) {
   if (!userId || !text) return;
   try {
     const k = kind || 'update';
-    db.prepare('INSERT INTO notifications (user_id, kind, icon, text, created_at, actor_id) VALUES (?,?,?,?,?,?)').run(userId, k, icon || '🔔', String(text).slice(0, 240), now(), actorId || null);
-    // trim social and system rows SEPARATELY so user-triggered notifications can only ever push out other social ones
+    const link = notifyLink(href);
+    db.prepare('INSERT INTO notifications (user_id, kind, icon, text, created_at, actor_id, href, post_id) VALUES (?,?,?,?,?,?,?,?)').run(userId, k, icon || '🔔', String(text).slice(0, 240), now(), actorId || null, link, postId || null);
+    // trim each bucket SEPARATELY so user-triggered notifications can only ever push out their own kind
     if (k === 'social') db.prepare("DELETE FROM notifications WHERE user_id=? AND kind='social' AND id NOT IN (SELECT id FROM notifications WHERE user_id=? AND kind='social' ORDER BY id DESC LIMIT ?)").run(userId, userId, NOTIF_KEEP);
-    else db.prepare("DELETE FROM notifications WHERE user_id=? AND kind<>'social' AND id NOT IN (SELECT id FROM notifications WHERE user_id=? AND kind<>'social' ORDER BY id DESC LIMIT ?)").run(userId, userId, NOTIF_KEEP_SYSTEM);
+    else if (k === 'alert') db.prepare("DELETE FROM notifications WHERE user_id=? AND kind='alert' AND id NOT IN (SELECT id FROM notifications WHERE user_id=? AND kind='alert' ORDER BY id DESC LIMIT ?)").run(userId, userId, NOTIF_KEEP_ALERT);
+    else db.prepare("DELETE FROM notifications WHERE user_id=? AND kind NOT IN ('social','alert') AND id NOT IN (SELECT id FROM notifications WHERE user_id=? AND kind NOT IN ('social','alert') ORDER BY id DESC LIMIT ?)").run(userId, userId, NOTIF_KEEP_SYSTEM);
   } catch {}
 }
+
 // social notifications (follow / react / upvote / comment) — throttled per identical message so a toggle war can't spam
 // the bell, AND capped per actor (3 per window) so distinct-text comments can't flood a victim either
 const SOCIAL_PER_ACTOR = 3;
@@ -1898,6 +1960,116 @@ function notifyOnce(userId, icon, text, kind, actorId, windowMs = 10 * 60 * 1000
   } catch {}
   notify(userId, icon, t, kind, actorId);
 }
+
+/* ═══ Wall alerts: the fan-out ══════════════════════════════════════════════════════════════════════
+   One person posts; everyone who asked to hear about it gets a row in their bell. That is an
+   amplifier, so it is bounded at both ends rather than at one:
+
+   ALERT_TARGET_MAX bounds SUBSCRIBERS PER WALL, which is what makes the fan-out safe by construction.
+   The obvious alternative — let anyone subscribe and cap the fan-out per post — means whoever falls
+   past the cap silently receives nothing while their wall still says alerts are on. A limit you can
+   see refuse you is honest; a limit that quietly stops delivering is not. So the cap is enforced at
+   subscribe time, with a message saying so, and every subscriber who got in is always told.
+
+   ALERT_MAX_PER_USER bounds the other end: one account cannot subscribe to everybody and turn the bell
+   into a firehose, or use it as a change-feed on the whole site.
+
+   ALERT_BURST is the per-author throttle. Without it, twenty posts in a minute is twenty rows in every
+   subscriber's bell, which would make the feature a weapon pointed at the people who opted into it. */
+const ALERT_TARGET_MAX = PROP_NOTIFY_CAP;   // 200 — people who may hold an alert on one wall, and so the
+                                   // ceiling on one post's fan-out. Pinned to the site's existing fan-out
+                                   // bound rather than picked: while this runs synchronously on the
+                                   // author's own request, 200 inserts is what one request can carry, and
+                                   // the number must not move until the work moves off that request.
+const ALERT_MAX_PER_USER = NOTIF_KEEP_ALERT;  // 50 — walls one account may watch. Deliberately the size of
+                                   // the alert bucket itself: watching more walls than your bell can hold
+                                   // rows is asking for notifications you are guaranteed to lose.
+const ALERT_BURST = SOCIAL_PER_ACTOR;   // 3 — alerts one author can put in one bell per window...
+const ALERT_BURST_MS = 60 * 60e3;  // ...per hour. Same shape and the same number the social throttle already
+                                   // uses for one actor, because it is the same problem: one person should
+                                   // not be able to fill somebody else's bell.
+/* And a budget for the AUTHOR, not just for each recipient. The per-recipient throttle bounds what one
+   reader sees; it does nothing about the work, because a prolific poster still triggers a full subscriber
+   query and up to 200 probes per post. This bounds the fan-out itself, across all three entry points at
+   once, and is checked before anything touches the database. */
+const ALERT_FANOUT_PER_HOUR = 4;
+const ALERT_IP_PER_TARGET = 3;     // alerts on ONE wall from one connection — the slots are finite, so they
+                                   // cannot be allowed to concentrate. Same number as MAX_ACCOUNTS_PER_IP.
+
+const alertCount = (userId) => db.prepare('SELECT COUNT(*) n FROM alerts WHERE user_id=?').get(userId).n;
+const alertTargetCount = (targetId) => db.prepare('SELECT COUNT(*) n FROM alerts WHERE target_id=?').get(targetId).n;
+const alertsOf = (userId) => db.prepare(
+  'SELECT u.username FROM alerts a JOIN users u ON u.id = a.target_id WHERE a.user_id = ? ORDER BY a.created_at DESC'
+).all(userId).map(r => r.username);
+
+/* A token symbol is third-party metadata, and a Send Call's alert row carries it into up to
+   ALERT_TARGET_MAX strangers' bells — where it stays, because a Send Call post can never be deleted, so
+   the post_id cascade never fires and only each recipient can clear their own row. It is escaped at
+   render, so this is not an injection; it is somebody else's chosen characters living in a notification
+   that says it carries "who did what". The community-create route already filters a symbol this way
+   (server.js:9435); an alert has a longer reach than a community name, so it gets the same treatment. */
+const alertSymbol = (sym) => String(sym || '').replace(/[^\w.\-]/g, '').slice(0, 16) || '?';
+
+/* Fan a new post out to the people who asked about its author.
+
+   WHAT IS DELIBERATELY NOT SENT:
+   - Support-board questions. The help desk is not a wall, and its whole point is that asking costs
+     nothing and draws no crowd.
+   - Holders-only community posts. A private wall is private; a post that exists for a token's holders
+     should not be pushed into a bell, even one belonging to somebody who could open it. Not alerting is
+     the conservative reading and the only one that cannot leak.
+   - The post's own text. A notification row outlives the post — deleting a post does not delete the
+     notifications about it — so quoting the body would leave somebody's words in strangers' bells after
+     they took them down. The row names the author and the kind of thing they did, and links to it; if
+     the post is gone, the link says so honestly rather than showing a copy.
+   - Anything to somebody who has muted the author. Muting means "I do not want to see this person",
+     and an alert set before a mute must not outrank it.
+
+   Failure here can never fail the post. A bell that did not ring is a small thing; a post that would
+   not save because of it is not. */
+function fanOutAlert(row, kindWord, icon) {
+  try {
+    if (!row || !row.user_id) return 0;
+    if (row.board) return 0;                              // the help desk is not a wall
+    if (row.private) return 0;                            // holders-only posts are never broadcast
+    // the author's own budget, first, before a single row is read
+    if (!rateLimit('alertfan:' + row.user_id, ALERT_FANOUT_PER_HOUR, 36e5)) return 0;
+    const author = db.prepare('SELECT id, username FROM users WHERE id = ?').get(row.user_id);
+    if (!author || !author.username) return 0;
+    /* One query does the whole selection: subscribers, minus anyone who muted this author, oldest
+       subscription first so the cap (if it is ever reached) favours whoever asked first. */
+    const subs = db.prepare(
+      `SELECT a.user_id FROM alerts a
+       WHERE a.target_id = ? AND a.user_id <> ?
+         AND a.user_id NOT IN (SELECT user_id FROM mutes WHERE muted_id = ?)
+       ORDER BY a.created_at ASC LIMIT ?`
+    ).all(author.id, author.id, author.id, ALERT_TARGET_MAX);
+    if (!subs.length) return 0;
+
+    /* THE LINK IS '/p/<id>', NOT '/u/<name>#p<id>'.
+       A rendered path bakes in two things that are not stable. The username changes whenever someone
+       renames, and the row would then point at a wall that no longer exists under that name. And the
+       right destination is not always a profile wall — a public community post lives on the community's
+       wall, so one hardcoded shape would have sent every community alert to a page the post is not on.
+       /p/<id> is resolved server-side at click time from the row itself: it knows where the post lives,
+       it re-checks who may see it, and it can say honestly that a post is gone. */
+    const href = '/p/' + row.id;
+    const text = '@' + author.username + ' ' + kindWord;
+    const since = now() - ALERT_BURST_MS;
+    let sent = 0;
+    for (const sRow of subs) {
+      const uid = sRow.user_id;
+      // idempotent on the post's identity, so a retry cannot double-notify and a rename cannot unpick it
+      if (db.prepare("SELECT 1 FROM notifications WHERE user_id=? AND kind='alert' AND post_id=?").get(uid, row.id)) continue;
+      // and a prolific author cannot fill one person's bell
+      if (db.prepare("SELECT COUNT(*) n FROM notifications WHERE user_id=? AND kind='alert' AND actor_id=? AND created_at>?").get(uid, author.id, since).n >= ALERT_BURST) continue;
+      notify(uid, icon, text, 'alert', author.id, href, row.id);
+      sent++;
+    }
+    return sent;
+  } catch { return 0; }   // a bell is never worth failing a post over
+}
+
 
 // award points (holder-multiplied), deduped by ref, capped per kind/day
 // compBase: what this action is worth to the weekly RACE, when that differs from the base being paid.
@@ -6054,8 +6226,9 @@ function ownDataView(u) {
     communities: db.prepare('SELECT c.id, c.symbol, c.name, c.token_addr, c.status, cm.joined_at, cm.conviction_xp, cm.qualified FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ?').all(u.id),
     following: db.prepare('SELECT u.username, f.created_at FROM follows f JOIN users u ON u.id = f.followee_id WHERE f.follower_id = ?').all(u.id),
     followers: db.prepare('SELECT u.username, f.created_at FROM follows f JOIN users u ON u.id = f.follower_id WHERE f.followee_id = ?').all(u.id),
-    notifications: db.prepare('SELECT id, kind, icon, text, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id),
+    notifications: db.prepare('SELECT id, kind, icon, text, href, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id),
     mutes: mutedNames(u.id),
+    alerts: alertsOf(u.id),
   };
 }
 let lbCache = { at: 0, top: null };   // leaderboard top-20 cache (identical for everyone → serve for LB_TTL)
@@ -6205,6 +6378,8 @@ const READONLY_ALLOWED = [
   // Linking still works, but the 150 for it is withheld until the restriction lifts (see the connect route)
   'Connect or refresh a wallet 🔗 — though the points for linking one are held back until this lifts',
   'Mute anyone you do not want to see 🔇',
+  // which bells ring for you is a setting on your own account, not something you make
+  'Turn post alerts on or off for anyone 🔔',
   'Browse the Send Wall, profiles, charts & New Pairs Radar 👀',
 ];
 /* THE LIST HAD NINE ENTRIES AND THE CODE GUARDS TWENTY ROUTES. The comment above says this list is shown
@@ -7545,6 +7720,7 @@ const server = http.createServer(async (req, res) => {
             maxWallets: MAX_LINKED_WALLETS,
             twofa: me.twofa_method || null,
             mutes: mutedNames(me.id), // usernames this user has muted (private to them)
+            alerts: alertsOf(me.id),  // usernames this user gets post alerts about (private to them too)
             theme: themeOf(me),
             tracker_prefs: safeJson(decField(me.tracker_prefs)),
             site_prefs: safeJson(decField(me.site_prefs)),
@@ -7981,9 +8157,74 @@ const server = http.createServer(async (req, res) => {
         const u = db.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE').get(uname);
         if (!u) return bad(res, 'no such user', 404);
         if (u.id === me.id) return bad(res, 'you cannot mute yourself');
-        if (req.method === 'POST') db.prepare('INSERT OR IGNORE INTO mutes (user_id, muted_id, created_at) VALUES (?,?,?)').run(me.id, u.id, now());
-        else db.prepare('DELETE FROM mutes WHERE user_id = ? AND muted_id = ?').run(me.id, u.id);
-        return send(res, 200, { muted: req.method === 'POST', mutes: mutedNames(me.id) });
+        if (req.method === 'POST') {
+          db.prepare('INSERT OR IGNORE INTO mutes (user_id, muted_id, created_at) VALUES (?,?,?)').run(me.id, u.id, now());
+          /* A mute retires any alert on the same person, and clears the rows already in the bell. The
+             fan-out skips muted authors, so future alerts stop either way — but leaving the subscription
+             sitting there means unmuting six months later silently switches notifications back on for
+             someone the reader had deliberately walked away from. And rows already delivered are exactly
+             the thing "I do not want to see this person" was asking to be rid of. */
+          db.prepare('DELETE FROM alerts WHERE user_id = ? AND target_id = ?').run(me.id, u.id);
+          db.prepare("DELETE FROM notifications WHERE user_id = ? AND kind = 'alert' AND actor_id = ?").run(me.id, u.id);
+        } else db.prepare('DELETE FROM mutes WHERE user_id = ? AND muted_id = ?').run(me.id, u.id);
+        // alerts travel back too: muting retires any alert on the same person, and the client keeps a copy
+        return send(res, 200, { muted: req.method === 'POST', mutes: mutedNames(me.id), alerts: alertsOf(me.id) });
+      }
+      /* ----- wall alerts: "tell me when this person posts" ----------------------------------------
+         Modelled on mutes, and deliberately NOT behind blockReadOnly. Read-only pauses what you can
+         make; deciding which bells ring for you is not something you make, it is a preference about your
+         own account, and a muted person still has to be able to manage their own notifications. Setting
+         one costs the target nothing and tells them nothing. */
+      if (p === '/api/alerts' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        return send(res, 200, { alerts: alertsOf(me.id), max: ALERT_MAX_PER_USER });
+      }
+      const malert = /^\/api\/alerts\/([^/]+)$/.exec(p);
+      if (malert && (req.method === 'POST' || req.method === 'DELETE')) {
+        if (!me) return bad(res, 'sign in first', 401);
+        /* Half of blockReadOnly, deliberately. The PARTICIPATION GATE applies — setting an alert commits
+           other people's request time to a fan-out, which is doing something on the platform, and doing
+           anything here starts with proving the bag. The RESTRICTION does not: read-only pauses what you
+           can make, and which bells ring for you is a setting on your own account, not something you
+           make. A muted person must still be able to turn their own notifications down. Turning one OFF
+           is never gated at all — nobody should need to prove anything to stop being notified. */
+        if (req.method === 'POST' && needsHolderProof(me)) {
+          return send(res, 403, {
+            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND and $GWC, and have held them for a week.',
+            needsProof: true, proof: holderProofState(me),
+          });
+        }
+        if (!rateLimit('alert:' + me.id, 60, 6e5)) return bad(res, 'slow down', 429);
+        let uname; try { uname = decodeURIComponent(malert[1]); } catch { return bad(res, 'bad username', 400); }
+        const u = db.prepare('SELECT id, username FROM users WHERE username = ? COLLATE NOCASE').get(uname);
+        if (!u) return bad(res, 'no such user', 404);
+        if (u.id === me.id) return bad(res, 'you will already know when you post');
+        if (req.method === 'POST') {
+          /* Both caps refuse OUT LOUD rather than accepting the row and quietly not delivering. A limit a
+             person can see is a limit they can act on; one that silently stops ringing is a broken
+             promise wearing a working switch. */
+          /* The fan-out skips a muted author, so this would be a switch that turns on and never rings.
+             Refusing out loud, with the reason, is the only version of this that is not a lie. */
+          if (db.prepare('SELECT 1 FROM mutes WHERE user_id=? AND muted_id=?').get(me.id, u.id)) {
+            return bad(res, 'You have muted @' + (u.username || uname) + '. Unmute them first — alerts from a muted account would never arrive.', 409);
+          }
+          if (!db.prepare('SELECT 1 FROM alerts WHERE user_id=? AND target_id=?').get(me.id, u.id)) {
+            const ipk = bidx(clientIp(req));   // stored as a blind index, never as an address
+            if (ipk && db.prepare('SELECT COUNT(*) n FROM alerts WHERE target_id=? AND ip=?').get(u.id, ipk).n >= ALERT_IP_PER_TARGET) {
+              return bad(res, ALERT_IP_PER_TARGET + ' people on this connection already have alerts on @' + (u.username || uname) + '. That is the anti-sybil cap — a wall only carries so many, and they cannot all come from one network.', 409);
+            }
+            if (alertCount(me.id) >= ALERT_MAX_PER_USER) {
+              return bad(res, 'You are already watching ' + ALERT_MAX_PER_USER + ' walls, which is the limit. Turn one off to add this one.', 409);
+            }
+            if (alertTargetCount(u.id) >= ALERT_TARGET_MAX) {
+              return bad(res, 'This wall already has the most alerts it can carry (' + ALERT_TARGET_MAX + '). Following them still puts their posts in your feed.', 409);
+            }
+          }
+          db.prepare('INSERT OR IGNORE INTO alerts (user_id, target_id, ip, created_at) VALUES (?,?,?,?)').run(me.id, u.id, bidx(clientIp(req)), now());
+        } else {
+          db.prepare('DELETE FROM alerts WHERE user_id = ? AND target_id = ?').run(me.id, u.id);
+        }
+        return send(res, 200, { alerted: req.method === 'POST', alerts: alertsOf(me.id), max: ALERT_MAX_PER_USER });
       }
       /* ----- wallet-tracker report cache: the browser computes a report from chain data; we keep it (encrypted) so the
               next open is instant, then it refreshes live in the background ----- */
@@ -8417,6 +8658,7 @@ const server = http.createServer(async (req, res) => {
           earned = awardPoints(me.id, 'post', PTS.post, 'post:' + row.id) + (first ? awardPoints(me.id, 'first_post', PTS.first_post, 'firstpost:' + me.id) : 0);
         }
         scanWriteAction(me.id, 'post', text);
+        fanOutAlert(row, 'posted on their wall.', '🧱');   // no-op for board posts; see fanOutAlert
         return send(res, 200, { post: postView(row, me), pointsEarned: earned });
       }
       let m = /^\/api\/posts\/(\d+)$/.exec(p);
@@ -8734,6 +8976,16 @@ const server = http.createServer(async (req, res) => {
             restriction = restrictionOf(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id));
             if (restriction) notify(me.id, '🔇', restriction.permanent ? 'Your account is now permanently muted for repeated Send Call spam.' : 'You’ve been muted for spamming Send Calls — see the banner up top for what happened and when it lifts.', 'restriction');
           }
+        }
+        /* The fan-out goes LAST, after the two checks above, and only if neither of them restricted this
+           account. It used to sit before them — which meant the one call that tripped the sybil detector
+           or the spam burst was also the call that got pushed into every subscriber's bell, moments
+           before its author was muted for making it. The whole point of restricting somebody is that
+           their reach stops; broadcasting the offending post first is the opposite of that.
+           The call's own wall post is the link target — it carries the live widget — and it is read back
+           rather than synthesised, so the row the fan-out sees is the row that was committed. */
+        if (postId && !restriction) {
+          try { fanOutAlert(db.prepare('SELECT * FROM posts WHERE id = ?').get(postId), 'made a Send Call on $' + alertSymbol(sym) + '.', '📣'); } catch {}
         }
         return send(res, 200, { post: postView(db.prepare('SELECT * FROM posts WHERE id = ?').get(postId), me), pointsEarned: earned, restriction });
       }
@@ -9616,6 +9868,9 @@ const server = http.createServer(async (req, res) => {
             // checked above), so no extra gate — only the flag
             const isPrivate = (!c.demo && (b.private === true || b.private === 1 || b.private === '1')) ? 1 : 0; // the sandbox has no holders-only wall to post to
             const info = db.prepare('INSERT INTO posts (user_id, text, image, score, created_at, community_id, tokens, private) VALUES (?,?,?,?,?,?,?,?)').run(me.id, text, image, 0, now(), cid, rt.tokens, isPrivate);
+            // a PUBLIC community post also lands on the main Send Wall, so it is a wall post and alerts.
+            // fanOutAlert refuses the holders-only ones on its own — see the private check there.
+            try { fanOutAlert(db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(info.lastInsertRowid)), 'posted in $' + alertSymbol(c.symbol || 'a community') + '.', '🏘️'); } catch {}
             const earned = awardPoints(me.id, 'post', PTS.post, 'post:' + info.lastInsertRowid); // gets the community 10× via commMult
             awardCommunityXp(cid, me.id, 'wall_post', COMM_XP.wall_post, 'c' + cid + ':wall_post:' + info.lastInsertRowid);
             awardConviction(cid, me.id, 'wall_post', CONV_XP.wall_post, 'v' + cid + ':wall_post:' + info.lastInsertRowid);
@@ -9685,7 +9940,7 @@ const server = http.createServer(async (req, res) => {
       /* ----- notifications (header bell dropdown) ----- */
       if (p === '/api/notifications' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
-        return send(res, 200, { items: db.prepare('SELECT id, kind, icon, text, created_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50').all(me.id) });
+        return send(res, 200, { items: db.prepare('SELECT id, kind, icon, text, href, created_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 50').all(me.id) });
       }
       if (p === '/api/notifications' && req.method === 'DELETE') { // clear all
         if (!me) return bad(res, 'sign in first', 401);
@@ -9860,6 +10115,33 @@ const server = http.createServer(async (req, res) => {
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); }
       res.writeHead(200, head);
       return res.end(req.method === 'HEAD' ? undefined : body);
+    }
+
+    /* ═══ /p/<id> — a permalink that knows where the post actually lives ═══════════════════════════
+       Notification rows store this, not a rendered path. Two reasons, both of which bit the first
+       version: a username baked into a link rots the moment someone renames, and a post does not always
+       live on its author's wall — a public community post lives on that community's page. So the
+       destination is resolved HERE, from the row, at the moment somebody clicks.
+
+       It also re-checks visibility at click time rather than at send time. A post can be deleted, or made
+       holders-only, between the bell ringing and the tap; sending someone to a wall that then silently
+       does not contain it is worse than telling them. Both cases answer the same way, deliberately:
+       "gone or not yours to see" is one sentence, because distinguishing them would confirm to a stranger
+       that a private post exists. */
+    const mperma = /^\/p\/(\d+)$/.exec(p);
+    if (mperma && (req.method === 'GET' || req.method === 'HEAD')) {
+      /* Rate-limited, because this route answers a question about an id it is handed. A post's existence
+         is already public through /api/posts/:id, so this discloses nothing new about any ONE post — but
+         it is cheap to walk, and walking it maps the whole id space to where each post lives. A limit
+         leaves a real click (one per notification) untouched and makes enumeration pointless. */
+      if (!rateLimit('perma:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
+      const row = db.prepare('SELECT id, user_id, community_id, board, private FROM posts WHERE id = ?').get(Number(mperma[1]));
+      const to = (!row || !postVisible(row, me)) ? '/wall.html?gone=' + Number(mperma[1])
+        : row.community_id ? '/community.html?id=' + row.community_id + '#p' + row.id
+        : row.board ? '/support.html#p' + row.id
+        : '/u/' + encodeURIComponent((db.prepare('SELECT username FROM users WHERE id = ?').get(row.user_id) || {}).username || '') + '#p' + row.id;
+      res.writeHead(302, { Location: to, 'Cache-Control': 'no-store', ...SEC_HEADERS });
+      return res.end();
     }
 
     let rel = p === '/' ? '/index.html' : p;
