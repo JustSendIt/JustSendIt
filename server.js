@@ -525,7 +525,7 @@ for (const col of [
   "ALTER TABLE call_hops ADD COLUMN last_check INTEGER",                    // last time the hopper's Xs were sampled (for the time integral)
   // anti-gaming / read-only restriction state
   "ALTER TABLE users ADD COLUMN restricted_until INTEGER NOT NULL DEFAULT 0", // read-only until this ms timestamp (0 = free)
-  "ALTER TABLE users ADD COLUMN restrict_level INTEGER NOT NULL DEFAULT 0",   // 0 none · 1 = 24h tier served · 2 = 1-week tier
+  "ALTER TABLE users ADD COLUMN restrict_level INTEGER NOT NULL DEFAULT 0",   // 0 none · 1 = 24h · 2 = 1 week · 3 = permanent (the tier the code writes and reads everywhere, and which this comment used to omit)
   "ALTER TABLE users ADD COLUMN restrict_reason TEXT",                        // human-readable why, shown to the user
   "ALTER TABLE users ADD COLUMN strikes INTEGER NOT NULL DEFAULT 0",          // times flagged (drives 24h→1wk→permanent escalation)
   "ALTER TABLE users ADD COLUMN flagged_at INTEGER NOT NULL DEFAULT 0",       // last flag time
@@ -1204,7 +1204,7 @@ const COMM_HALFLIFE = 12 * 3600 * 1000;   // grid-activity half-life
 const W_join = 5, W_post = 3, W_react = 1; // activity weights (grid sort)
 const ACT_TIERS = [[0, 'Dormant'], [5, 'Warm'], [25, 'Active'], [75, 'Hot'], [200, 'Blazing']];
 const COMM_XP = { join: 200, wall_post: 30, wall_react_get: 4, wall_comment: 10, send_call: 40 };       // community-XP per action
-const COMM_XP_DAILY_CAP = { wall_post: 400, wall_react_get: 300, wall_comment: 200, send_call: 200 };   // per-kind community-XP/day
+const COMM_XP_DAILY_CAP = { wall_post: 400, wall_react_get: 300, wall_comment: 200, send_call: 200 };   // per-kind SCORING EVENTS/day, community-wide (not XP: 400 posts × 30 XP is up to 12,000 XP). The comment used to say XP, which reads 30× tighter than the code is.
 const COMM_XP_PER_USER_DAY = 250;  // max community-XP one member can push into one community/day (anti-solo-inflate)
 const CONV_XP = { join: 40, wall_post: 20, wall_comment: 6, wall_react_give: 2, send_call: 30 };        // per-member conviction XP per action
 const CONV_DAILY_CAP = 150;        // max conviction XP a member earns in one community/day
@@ -1986,11 +1986,30 @@ function tokenDecimalsOf(addr) { try { const tc = tokenCacheGet(String(addr || '
    at all, and for the $GWC leg of the swap reward. Silent because null is also the honest answer for a
    token with no market — nothing ever threw. */
 async function tokenPriceUsdOf(addr) { try { const r = await lookupTokenPair(String(addr || '').toLowerCase()); const px = r && r.pair && r.pair.market && Number(r.pair.market.priceUsd); return px > 0 ? px : null; } catch { return null; } }
+/* THE DOLLAR FLOOR CANNOT SILENTLY BECOME A DUST FLOOR.
+   This used to read: start `need` at OG_DUST_WEI, and raise it to the dollar equivalent only `if (minUsd > 0
+   && priceUsd > 0)`. Every community caller passes `c.c_price`, a NULLABLE cached grid price — so whenever
+   that price was missing or zero, a slot the whole site describes as "at least $100 of the token" was
+   satisfied by 1e-9 tokens, and with it the verified membership, the go-live count and the flat 10x.
+
+   The $SEND/$GWC path never had this hole: qualOf() answers `null` when it cannot read a price, and null
+   means "nothing has been decided" — it keeps the previous verdict rather than falling through to dust.
+   This now behaves the same way. When a dollar floor is ASKED FOR and no price is available, the answer is
+   `null`, not `false` and certainly not "dust will do":
+     - a GRANT path treats null as falsy and refuses, which is the fail-closed direction;
+     - the REVOCATION sweep must check for null explicitly and skip, so an unreadable price never takes a
+       slot away from someone who has done nothing wrong.
+   Callers that pass no dollar floor are unaffected and still get a plain boolean. */
 async function holdsToken(uid, tokenAddr, minUsd, priceUsd) {
   const t = String(tokenAddr || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(t)) return false;
   let need = OG_DUST_WEI;
-  if (minUsd > 0 && priceUsd > 0) { const dec = tokenDecimalsOf(t); const n = BigInt(Math.ceil(minUsd / priceUsd * 1e6)) * 10n ** BigInt(Math.max(0, dec - 6)); if (n > need) need = n; }
+  if (minUsd > 0) {
+    if (!(priceUsd > 0)) return null;          // floor demanded, price unknown → undecided, never "dust passes"
+    const dec = tokenDecimalsOf(t);
+    const n = BigInt(Math.ceil(minUsd / priceUsd * 1e6)) * 10n ** BigInt(Math.max(0, dec - 6));
+    if (n > need) need = n;
+  }
   const key = uid + ':' + t + ':' + need.toString();
   const addrs = walletAddresses(uid).slice(0, MAX_LINKED_WALLETS); // EVERY linkable wallet — a bag sitting in wallet #4 must count (refreshHolder reads the same set)
   if (!addrs.length) { tokenHoldCache.delete(key); return false; } // no linked wallet = verifiably holds nothing — and a cached "held" from before a disconnect must not outlive it
@@ -2117,6 +2136,7 @@ function qualifyReason(me, c, ip, holds) {
   // skips the holding test AND the per-network anti-sybil cap, which is safe only because a demo
   // membership grants no Send Power multiplier (see joinCommunity) — so there is nothing to farm.
   if (c.demo) return null;
+  if (holds === null) return 'We couldn’t read the $' + c.symbol + ' price, so your holding can’t be checked against the $' + MIN_COMMUNITY_HOLD_USD + ' floor yet. You’re in as a member; the verified slot and the 10× follow once we can price it.';
   if (!holds) return 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
   const ipk = ip ? bidx(ip) : null; // IPs are stored only as blind indexes
   const ipUses = db.prepare("SELECT COUNT(*) n FROM community_members WHERE community_id=? AND qualified=1 AND join_ip=?").get(c.id, ipk).n;
@@ -2506,6 +2526,7 @@ async function sweepCommunityHolders() {
     const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price, c.status FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status IN ('live','pending') AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
     for (const r of rows) {
       let holds; try { holds = await holdsToken(r.user_id, r.token_addr, MIN_COMMUNITY_HOLD_USD, r.c_price); } catch { continue; } // RPC error → skip (never revoke on a transient failure)
+      if (holds === null) continue;   // price unreadable → undecided. Same rule as an RPC error: never revoke on a read we did not make.
       const t = now();
       if (holds) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
       try { // no longer holds → revoke qualification, the go-live count, and the 10× flag
@@ -2604,6 +2625,59 @@ function gamifySummary(u) {
       sendUsd: h.send_usd == null ? null : h.send_usd, gwcUsd: h.gwc_usd == null ? null : h.gwc_usd,
       sendQualifies: h.send_qual == null ? null : !!h.send_qual, gwcQualifies: h.gwc_qual == null ? null : !!h.gwc_qual,
     } : null,
+    /* ═══ THE OTHER HALF OF THE LEDGER ═══════════════════════════════════════════════════════════
+       Everything below this line is state the site has always kept about an account and never shown it.
+       A dashboard that lists only the ways to gain is not a dashboard, it is a poster: the same engine
+       takes Send Power away for being absent, for being muted and for leaving calls underwater, it
+       shrinks a caller's daily allowance, it revokes badges on a sell, and it counts strikes that never
+       expire. None of that reached the client, so the first a person heard of any of it was a
+       notification saying it had already happened.
+
+       It is also the ONLY way the numbers can stop drifting. The Quest Board's caps, the X ladder and
+       the boost stack were all retyped by hand into public/gamify.js and four of them were already
+       wrong there — the daily caps for track/watch/react_get/vote_get/be_followed, and an X ladder that
+       promised 8,500 for a 50× where the code pays 1,003. Sending the constants means the client can
+       print them instead of remembering them. */
+    boost: effectiveMult(u.id),   // THE number every point is actually paid at — the client must print this, not recompute it
+    restriction: restrictionOf(u),
+    probation: probationOf(u),
+    strikes: u.strikes || 0,
+    restrictLevel: u.restrict_level || 0,
+    flaggedAt: u.flagged_at || null,
+    holderVerified: !needsHolderProof(u),      // the participation gate — a different read-only from a strike
+    holderProof: holderProofState(u),
+    wallets: walletAddresses(u.id).length,
+    decay: decayState(u),
+    beta: betaState(u),
+    rugged: db.prepare('SELECT COUNT(*) n FROM calls WHERE user_id=? AND rugged=1').get(u.id).n,
+    rugPenalty: RUG_PENALTY,
+    /* The rulebook, as data. Every one of these was previously a number typed into the client. */
+    rules: {
+      dailyCap: DAILY_CAP,
+      socialDayCap: SOCIAL_DAY_CAP,
+      eventCap: PTS_EVENT_CAP,
+      socialKinds: SOCIAL_KINDS,
+      socialSpentToday: db.prepare(`SELECT COALESCE(SUM(amount),0) s FROM points_events WHERE user_id=? AND created_at>? AND kind IN (${SOCIAL_KINDS.map(() => '?').join(',')})`).get(u.id, now() - 864e5, ...SOCIAL_KINDS).s,
+      holdFloorUsd: MIN_HOLD_USD,
+      sizeMultPer: 100, sizeMultCap: SIZE_MULT_CAP,
+      callXFirst: PTS.call_x, callXStep: CALL_X_STEP, callXCap: CALL_X_CAP,
+      callBudget: CALL_POINTS_CAP, hopBudget: HOP_POINTS_CAP,
+      openShare: CALL_EVENT_SHARE, ladderShare: CALL_X_BUDGET_SHARE,
+      callLimitBase: CALL_LIMIT_BASE, callLimitMin: CALL_LIMIT_MIN, callGoodX: CALL_GOOD_X,
+      callSpamMin: CALL_SPAM_MIN, callSpamWindowMin: Math.round(CALL_SPAM_WINDOW_MS / 60000),
+      communityMult: COMMUNITY_MULT, liveThreshold: LIVE_THRESHOLD, founderBonus: FOUNDER_BONUS,
+      betaBadgeMult: BETA_BADGE_MULT, betaTopN: BETA_TOP_N,
+      arcadeMaxBoost: ARCADE_BOOST_MAX,
+      proofMinHoldDays: Math.round(PROOF_MIN_HOLD_MS / DAY_MS),
+      // the two community ladders, which appeared in no served file at all before this
+      commXp: COMM_XP, commXpPerUserDay: COMM_XP_PER_USER_DAY,
+      convXp: CONV_XP, convDailyCap: CONV_DAILY_CAP,
+      appealEmail: APPEAL_EMAIL,
+      /* The same two lists restrictionOf() carries, sent unconditionally — so the dashboard can show what
+         read-only costs BEFORE anyone is in it. Hardcoding a fallback copy in the client is exactly how
+         the nine-item list drifted out of sync with the twenty routes it was describing. */
+      readOnlyAllowed: READONLY_ALLOWED, readOnlyBlocked: READONLY_BLOCKED,
+    },
     breakdown: db.prepare('SELECT kind, SUM(amount) total, COUNT(*) n FROM points_events WHERE user_id=? GROUP BY kind ORDER BY total DESC').all(u.id),
     // "today" achievement log (resets every 24h); the client toggles between this and the all-time breakdown
     todayBreakdown: db.prepare('SELECT kind, SUM(amount) total, COUNT(*) n FROM points_events WHERE user_id=? AND created_at>? GROUP BY kind ORDER BY total DESC').all(u.id, now() - 864e5),
@@ -6128,10 +6202,25 @@ const READONLY_ALLOWED = [
   'Earn your daily "show up" bonus 📅 — and it stops the absence side of Send Power decay',
   'Buy & hold $SEND / $GWC — your Holder Boost keeps compounding 💎',
   'Swap for $SEND / $GWC — those points still count 🚀',
-  'Connect or refresh your wallet 🔗',
+  // Linking still works, but the 150 for it is withheld until the restriction lifts (see the connect route)
+  'Connect or refresh a wallet 🔗 — though the points for linking one are held back until this lifts',
+  'Mute anyone you do not want to see 🔇',
   'Browse the Send Wall, profiles, charts & New Pairs Radar 👀',
 ];
-const READONLY_BLOCKED = ['Making Send Calls', 'Sending It on others’ calls', 'Posting', 'Commenting', 'Reacting', 'Upvoting / downvoting', 'Following', 'Tracking wallets', 'Customizing your wall'];
+/* THE LIST HAD NINE ENTRIES AND THE CODE GUARDS TWENTY ROUTES. The comment above says this list is shown
+   to a restricted account as a promise and must match what the routes actually do — it did not. Missing
+   were: minting a Data API key, playing Rocket Run, editing your profile, uploading media, starting a
+   community, joining one, posting in one, and every proposal action. A person reading the old list would
+   have concluded their daily arcade run and their community were unaffected, tried both, and been
+   refused by a banner that had just told them otherwise. Anything added to blockReadOnly from here has to
+   be added here too. */
+const READONLY_BLOCKED = [
+  'Making Send Calls', 'Sending It on others’ calls',
+  'Posting', 'Commenting', 'Reacting', 'Upvoting / downvoting', 'Following',
+  'Tracking wallets', 'Editing your profile or wall', 'Uploading images or video',
+  'Starting, joining or posting in a community', 'Creating or voting on proposals',
+  'Playing Rocket Run', 'Minting a Data API key',
+];
 
 // in-memory behavioral windows (the durable restriction lives in the DB). Heavy = content creation
 // (post/comment/track); light = one-tap engagement (react/vote/follow). They have separate, much higher
@@ -9242,6 +9331,8 @@ const server = http.createServer(async (req, res) => {
         const sym = String(pr.token.symbol || '?').slice(0, 16), name = String(pr.token.name || 'Token').slice(0, 60);
         // Starting a community is a holder claim like any other, so it takes the same floor: $100 of the token, priced live.
         let holdsC; try { holdsC = await holdsToken(me.id, token, MIN_HOLD_USD, Number(pr.market.priceUsd)); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+        // price unreadable → undecided, not "dust will do" and not "you don't hold it"
+        if (holdsC === null) return bad(res, 'We couldn’t price this token just now, so we can’t check your holding against the $' + MIN_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
         // The token's own deployer/owner wallet may start the community WITHOUT holding — a dev often keeps a clean
         // wallet. Verified on-chain (the creator address from the explorer, and owner() from the contract), and only
         // against a wallet they proved control of by signature. It grants the community, NOT a qualified member slot:
@@ -9457,8 +9548,11 @@ const server = http.createServer(async (req, res) => {
             let holds;
             if (c.demo) holds = true;   // the open sandbox: no token, no wallet, no chain call — anyone may walk in
             else {
-              try { holds = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in — at least $25 of it
-              if (!holds) return bad(res, 'You must hold $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
+              try { holds = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in — at MIN_COMMUNITY_HOLD_USD of it, which is the site-wide $100 floor
+              // `null` is not a refusal, it is the absence of an answer — say which one this is
+              // `null` is not a refusal, it is the absence of an answer — say which one this is
+              if (holds === null) return bad(res, 'We couldn’t read the $' + c.symbol + ' price just now, so we can’t check your holding against the $' + MIN_COMMUNITY_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
+              if (!holds) return bad(res, 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
             }
             const j = joinCommunity(me, cid, clientIp(req), holds);
             if (j.error) return bad(res, j.error === 'not found' ? 'community not found' : 'could not join', j.error === 'not found' ? 404 : 500);
@@ -9500,7 +9594,8 @@ const server = http.createServer(async (req, res) => {
             if (!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? AND qualified=1').get(cid, me.id)) return bad(res, 'posting needs a verified holder slot — opt in (and re-verify if your slot was paused) to post on this wall', 403);
             if (!c.demo) {   // the sandbox has no token to hold, so the holding gate does not apply there
               let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); }
-              if (!holdsP) return bad(res, 'You need to hold $' + c.symbol + ' to post on its community wall.', 403);
+              if (holdsP === null) return bad(res, 'We couldn’t read the $' + c.symbol + ' price just now, so we can’t check your holding against the $' + MIN_COMMUNITY_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
+              if (!holdsP) return bad(res, 'You need to hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' to post on its community wall.', 403);
             }
             /* The SAME bucket the Send Wall uses, not a second one. A community post now lands on the public
                wall, so two buckets meant two dozen front-page posts per ten minutes per account — and on the
@@ -10250,6 +10345,86 @@ const DECAY = {
 // UTC day number — the same clock the daily check-in ref uses, so "a day" means one thing across the site
 const dayNo = (t) => Math.floor((t || now()) / 864e5);
 
+/* ═══ what today costs, and why ══════════════════════════════════════════════════════════════════════
+   Factored out of decayUser so the FORECAST the dashboard shows and the CHARGE the sweep applies are the
+   same arithmetic, not two copies of it. Returns percentages and the reasons behind them; it reads, it
+   never writes, and it never takes anything.
+
+   `streak` is the absence streak as it will stand at the next sweep — zero if they have shown up today,
+   otherwise one more than the last sweep recorded. That is exactly what decayUser computes, so a person
+   reading "tomorrow this costs 0.6%" is reading the number they will actually be charged. */
+function decayReasons(u, showedUp, streak) {
+  const reasons = [];
+  let pct = 0;
+  if (streak > DECAY.GRACE_DAYS) {
+    const p = DECAY.BASE_PCT + (streak - DECAY.GRACE_DAYS - 1) * DECAY.ACCEL_PCT;
+    pct += p;
+    reasons.push({ key: 'away', pct: p, days: streak });
+  }
+  const readOnly = !!restrictionOf(u);
+  if (readOnly) { pct += DECAY.READONLY_PCT; reasons.push({ key: 'readonly', pct: DECAY.READONLY_PCT }); }
+  /* Underwater calls are charged ONLY on a day you were already away. A call that went down is a market
+     outcome, not misconduct, and billing someone for it daily while they are actively showing up would be
+     a different and much harsher rule than the one intended.
+
+     NOTE WHAT THIS QUERY DOES NOT FILTER. There is no `dead = 0` and no `rugged = 0` clause: a call that
+     was delisted or rugged keeps its last-known cur_price, so if that price was below entry it goes on
+     counting on every absent day, indefinitely. That is the behaviour the public docs describe ("an old
+     call still below entry keeps counting") — it is only some code comments that used to claim a
+     filtering this SQL has never done. Changing it would change the economy, so it is documented, not
+     quietly patched. */
+  let bad = 0;
+  if (!showedUp) {
+    bad = db.prepare(`SELECT COUNT(*) n FROM calls
+                      WHERE user_id = ? AND cur_price > 0 AND entry_price > 0 AND cur_price < entry_price`).get(u.id).n;
+    if (bad > 0) {
+      const p = Math.min(DECAY.BAD_CALL_MAX, bad * DECAY.BAD_CALL_PCT);
+      pct += p;
+      reasons.push({ key: 'badcalls', pct: p, n: bad });
+    }
+  }
+  const capped = Math.min(DECAY.MAX_PCT, pct);
+  return { pct: capped, uncapped: pct, hitCeiling: capped < pct, reasons, readOnly, bad, streak, showedUp };
+}
+
+/* The same forecast, dressed for the dashboard: what it would cost at the next sweep if nothing changes,
+   what is protected, and what the person can actually do about each part. Nothing here is a prediction
+   about the future — it is today's rules applied to today's state. */
+function decayState(u) {
+  const showedUp = checkedInToday(u.id, u);
+  const streak = showedUp ? 0 : (u.decay_streak || 0) + 1;
+  const d = decayReasons(u, showedUp, streak);
+  const points = u.points || 0;
+  const safe = points <= DECAY.FLOOR;
+  const drain = safe ? 0 : Math.max(0, Math.min(Math.floor(points * d.pct / 100), points - DECAY.FLOOR));
+  const last = db.prepare("SELECT amount, created_at FROM points_events WHERE user_id=? AND kind='decay' ORDER BY id DESC LIMIT 1").get(u.id);
+  return {
+    ...d,
+    drain: drain >= DECAY.MIN_DRAIN ? drain : 0,   // below a whole point the sweep takes nothing at all
+    protected: safe,
+    floor: DECAY.FLOOR,
+    graceDays: DECAY.GRACE_DAYS,
+    basePct: DECAY.BASE_PCT, accelPct: DECAY.ACCEL_PCT, maxPct: DECAY.MAX_PCT,
+    readOnlyPct: DECAY.READONLY_PCT, badCallPct: DECAY.BAD_CALL_PCT, badCallMax: DECAY.BAD_CALL_MAX,
+    lastDrain: last ? Math.abs(last.amount) : 0,
+    lastAt: last ? last.created_at : null,
+  };
+}
+
+/* Where this account stands in the beta, and what happens to it when the beta ends. Every balance goes to
+   zero at that moment — which is a thing worth telling someone BEFORE it happens rather than after. */
+function betaState(u) {
+  const endsAt = betaEndsAt();
+  return {
+    endsAt, over: betaOver(),
+    settled: !!u.beta_settled_at,
+    rank: u.beta_rank || 0,                                  // 1..BETA_TOP_N once badged, 0 otherwise
+    finalPoints: u.beta_settled_at ? (u.beta_points || 0) : null,
+    badgeMult: BETA_BADGE_MULT,
+    topN: BETA_TOP_N,
+  };
+}
+
 /* One account's decay for today. Returns what was taken (0 if nothing). Idempotent per UTC day: decay_at
    records the last day applied, so a restart, a double-fire or a manual run can never charge twice. */
 function decayUser(u, today) {
@@ -10272,24 +10447,12 @@ function decayUser(u, today) {
      a call that went down is a market outcome, not misconduct, and billing someone daily for it while
      they are actively showing up would be a different and much harsher rule than the one intended. */
   const streak = showedUp ? 0 : (u.decay_streak || 0) + 1;
-  let pct = 0;
-  if (streak > DECAY.GRACE_DAYS) pct += DECAY.BASE_PCT + (streak - DECAY.GRACE_DAYS - 1) * DECAY.ACCEL_PCT;
-
-  // read-only: the site has already judged this account is not participating
-  const readOnly = !!restrictionOf(u);
-  if (readOnly) pct += DECAY.READONLY_PCT;
-
-  /* Underwater calls. Only calls still open and still below their entry count — a call that recovered is not
-     a bad call, and one already written off as rugged is charged once through this same route rather than
-     twice. Counted from the stored prices, so this costs no chain reads. */
-  let bad = 0;
-  if (!showedUp) {
-    bad = db.prepare(`SELECT COUNT(*) n FROM calls
-                      WHERE user_id = ? AND cur_price > 0 AND entry_price > 0 AND cur_price < entry_price`).get(u.id).n;
-    if (bad > 0) pct += Math.min(DECAY.BAD_CALL_MAX, bad * DECAY.BAD_CALL_PCT);
-  }
-
-  pct = Math.min(DECAY.MAX_PCT, pct);
+  /* ONE definition of what a day costs, shared with the forecast the dashboard prints (decayState). It
+     used to be written out twice; the moment the dashboard started quoting a number, two copies of this
+     arithmetic became two rules, and the one the person read would eventually stop being the one they
+     were charged. Counted from stored prices, so it costs no chain reads. */
+  const d = decayReasons(u, showedUp, streak);
+  const pct = d.pct, readOnly = d.readOnly, bad = d.bad;
   if (!(pct > 0)) {
     db.prepare('UPDATE users SET decay_at = ?, decay_streak = ? WHERE id = ?').run(today, streak, u.id);
     return 0;   // inside the grace window with nothing else against the account

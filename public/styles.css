@@ -3913,3 +3913,121 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .oc-mk-clean { margin-left: auto; }
 @media (max-width: 640px) { .oc-mk-clean { margin-left: 0; } .oc-tip { max-width: 240px; } }
 @media (prefers-reduced-motion: reduce) { .oc-tip { transition: none; } }
+
+/* ═══ 💀 REKT + 🗂️ YOUR RECORD ════════════════════════════════════════════════════════════════════════
+   The dashboard used to be one-sided: every block on it was a way to gain, while the engine behind it
+   also drains a balance for absence, mutes accounts on a ladder that never resets, shrinks a caller's
+   allowance and revokes badges on a sell. None of that reached the screen, so the first a person heard
+   of any of it was a notification saying it had already happened.
+
+   Three rules hold this section together:
+   1. RISK IS NEVER COLOUR ALONE. Every row that carries a consequence pairs its colour with a glyph
+      (▲ / ✓ / ○ / ✕) and with words. Someone who cannot separate the red from the green reads exactly
+      the same warning, and so does anyone on a monochrome display or a printed page.
+   2. IT IS NOT BEHIND A DISCLOSURE. The rulebook below it is a <details> because it is reference; a
+      consequence you can be surprised by has to be visible without a click.
+   3. THE STATE SITS NEXT TO THE RULE. Each card states the rule and then this account's standing
+      against it, because a rule with no standing is a poster and a standing with no rule is a telling-off. */
+.grekt, .grec { margin-top: 1.6rem; }
+.grekt-head { margin-bottom: 0.8rem; }
+.grekt-lede { margin: 0.2rem 0 0; color: var(--text-dim); font-size: 0.88rem; line-height: 1.55; max-width: 70ch; }
+
+/* auto-fit, so this is one column on a phone and two or three on a desk without a media query per breakpoint */
+.grekt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.9rem; align-items: start; }
+
+.rekt-card {
+  background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 14px;
+  padding: 0.9rem 1rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+}
+/* something is ACTIVE against this account right now — the left rail is the shape, the word in the
+   pill is the message, and neither depends on the other being perceivable */
+.rekt-card.is-live { border-color: rgba(255,93,93,0.45); box-shadow: inset 3px 0 0 0 var(--red); }
+.rekt-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.rekt-h { margin: 0; font-size: 0.98rem; font-weight: 800; color: var(--text); }
+.rekt-h5 { margin: 0.5rem 0 0.15rem; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-mute); }
+.rekt-lede { margin: 0; font-size: 0.85rem; line-height: 1.55; color: var(--text-dim); }
+.rekt-p { margin: 0.1rem 0 0; font-size: 0.82rem; line-height: 1.55; color: var(--text-dim); }
+.rekt-p b, .rekt-lede b, .rekt-list b { color: var(--text); }
+.rekt-last { margin: 0.2rem 0 0; font-size: 0.76rem; color: var(--text-mute); }
+
+.rekt-state { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.18rem 0.5rem; border-radius: 999px; white-space: nowrap; }
+.rekt-state-safe { color: var(--green-bright); background: rgba(142,224,0,0.13); border: 1px solid rgba(142,224,0,0.38); }
+.rekt-state-bad  { color: #ffb4b4;           background: rgba(255,93,93,0.14); border: 1px solid rgba(255,93,93,0.45); }
+.rekt-state-warn { color: var(--gold);       background: rgba(255,179,64,0.14); border: 1px solid rgba(255,179,64,0.45); }
+
+.rekt-list { list-style: none; margin: 0.15rem 0 0; padding: 0; display: grid; gap: 0.45rem; }
+.rekt-row { display: grid; grid-template-columns: 1.1rem 1fr; gap: 0.5rem; align-items: start; font-size: 0.82rem; line-height: 1.5; color: var(--text-dim); }
+/* the glyph IS the severity — ▲ warns, ✓ confirms, ○ is neutral. Colour only reinforces it. */
+.rekt-dot { font-size: 0.72rem; line-height: 1.5; color: var(--text-mute); text-align: center; }
+.rekt-row-bad .rekt-dot { color: var(--red); }
+.rekt-row-ok  .rekt-dot { color: var(--green-bright); }
+
+.rekt-ladder { list-style: none; counter-reset: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
+.rekt-rung { display: flex; align-items: center; gap: 0.5rem; font-size: 0.82rem; color: var(--text-dim); padding: 0.35rem 0.5rem; border-radius: 9px; background: var(--ink-3); border: 1px solid transparent; }
+.rekt-rung-n { flex: none; width: 1.35rem; height: 1.35rem; border-radius: 50%; display: grid; place-items: center; font-size: 0.72rem; font-weight: 800; background: var(--ink-4); color: var(--text-dim); }
+.rekt-rung.is-on { border-color: rgba(255,93,93,0.5); background: rgba(255,93,93,0.09); color: var(--text); }
+.rekt-rung.is-on .rekt-rung-n { background: var(--red); color: #2a0a0a; }
+.rekt-rung-you { margin-left: auto; font-size: 0.64rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #ffb4b4; }
+
+.rekt-live { border-radius: 10px; padding: 0.6rem 0.7rem; background: rgba(255,93,93,0.09); border: 1px solid rgba(255,93,93,0.4); font-size: 0.82rem; line-height: 1.55; color: var(--text); }
+.rekt-live p { margin: 0 0 0.45rem; }
+.rekt-live p:last-child { margin-bottom: 0; }
+.rekt-live a { color: var(--green-bright); }
+
+.rekt-split { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; margin-top: 0.2rem; }
+.rekt-yes, .rekt-no { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.25rem; font-size: 0.78rem; line-height: 1.45; }
+.rekt-yes li, .rekt-no li { display: grid; grid-template-columns: 0.9rem 1fr; gap: 0.4rem; color: var(--text-dim); }
+.rekt-yes li span[aria-hidden] { color: var(--green-bright); }
+.rekt-no  li span[aria-hidden] { color: var(--red); }
+@media (max-width: 460px) { .rekt-split { grid-template-columns: 1fr; } }
+
+/* ---- the rolling ceiling meter on the Quest Board ---- */
+.gcap { margin-top: 0.7rem; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; padding: 0.6rem 0.7rem; }
+.gcap-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; font-size: 0.8rem; font-weight: 800; color: var(--text-dim); margin-bottom: 0.4rem; }
+.gcap-head b { color: var(--text); font-variant-numeric: tabular-nums; }
+.gcap-fill { background: linear-gradient(90deg, var(--gold), var(--gold-deep)); }
+.gcap-note { margin: 0.4rem 0 0; font-size: 0.75rem; line-height: 1.5; color: var(--text-mute); }
+.gcap-note b { color: var(--text-dim); }
+
+/* ---- losses in the Loot Log ---- */
+.loot-losses { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--ink-4); }
+.ll-pts-loss { color: #ffb4b4; }
+.ll-fill-loss { background: linear-gradient(90deg, #ff5d5d, #8c2020) !important; }
+.loot-foot-loss { color: var(--text-mute); }
+.loot-foot-loss a { color: var(--green-bright); }
+/* a negative day must not be red text sitting in a green chip — the whole chip changes side */
+.pc-today.is-down { color: #ffb4b4; background: rgba(255,93,93,0.14); border-color: rgba(255,93,93,0.45); }
+.kpi-dn { color: #ffb4b4; }
+
+/* ---- 🗂️ your record: name/value pairs, announced as such ---- */
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 0.55rem; margin: 0; }
+.rec { background: var(--ink); border: 1.5px solid var(--ink-4); border-left-width: 3px; border-radius: 11px; padding: 0.55rem 0.65rem; }
+.rec-k { margin: 0; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-mute); }
+.rec-v { margin: 0.15rem 0 0; font-size: 1.02rem; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.rec-sub { display: block; margin-top: 0.15rem; font-size: 0.7rem; font-weight: 600; color: var(--text-dim); letter-spacing: 0; text-transform: none; font-variant-numeric: normal; line-height: 1.4; }
+/* the left border carries the state as a THICKNESS and a POSITION, not only a hue */
+.rec-ok   { border-left-color: var(--green); }
+.rec-bad  { border-left-color: var(--red); }
+.rec-bad .rec-v { color: #ffb4b4; }
+.rec-warn { border-left-color: var(--gold); }
+.rec-warn .rec-v { color: var(--gold); }
+
+@media (prefers-contrast: more) {
+  .rekt-card, .rec { border-color: var(--text-mute); }
+  .rekt-state { border-width: 2px; }
+}
+
+/* ---- the community / conviction XP table in the rulebook ---- */
+.gxp-table-wrap { margin: 0.6rem 0; overflow-x: auto; }   /* a table never makes the page scroll sideways */
+.gxp-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 330px; }
+.gxp-table caption { text-align: left; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-mute); padding-bottom: 0.35rem; }
+.gxp-table th, .gxp-table td { padding: 0.35rem 0.5rem; text-align: left; border-bottom: 1px solid var(--ink-4); }
+.gxp-table thead th { font-size: 0.7rem; font-weight: 800; color: var(--text-mute); white-space: nowrap; }
+.gxp-table tbody th { font-weight: 600; color: var(--text-dim); }
+.gxp-table td { color: var(--green-bright); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gxp-na { color: var(--text-mute); }
+.gxp-foot { margin: 0.45rem 0 0; font-size: 0.78rem; line-height: 1.5; color: var(--text-mute); }
+.gxp-foot b { color: var(--text-dim); }
+/* the floor, named on the equation strip: the term shrinks for a reason, and the reason is worth a sentence */
+.eq-dust { margin: 0.35rem 0 0; font-size: 0.78rem; line-height: 1.5; color: var(--gold); }
+.eq-dust a { color: var(--gold); }

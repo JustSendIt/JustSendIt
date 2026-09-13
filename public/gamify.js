@@ -26,6 +26,10 @@
     return '0';
   }
   const reducedMotion = () => window.prefersReduced && window.prefersReduced();
+  /* todayPoints sums the last 24 hours of the ledger, and the ledger contains DECAY — a negative row. It
+     was printed as '+' + nf(v), so an account whose only event that day was a drain read "+-1,234" in the
+     colour the site uses for gains. A day can genuinely be negative; the number has to be able to say so. */
+  const signed = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + nf(Math.abs(v));
 
   /* ---------- action metadata ---------- */
   const ACTION_LABEL = {
@@ -76,28 +80,38 @@
     follow: { href: '/wall.html' },
     be_followed: { href: '/wall.html' },
   };
-  // hover-popup details for each way to earn (daily caps mirror server.js DAILY_CAP)
+  /* Hover/tap detail for each way to earn.
+     THE DAILY CAPS ARE NOT WRITTEN HERE ANY MORE. They used to be, "mirroring server.js DAILY_CAP" — and
+     five of them had drifted: track said 10/day where the code allows 3, watch said 30 where it allows 5,
+     react_get said 60 where it allows 20, vote_get said 100 where it allows 30, be_followed said 30 where
+     it allows 10. A cap is a promise about what the site will pay you; a wrong one is worse than none.
+     capLine() below appends the real figure from g.rules.dailyCap at render time, so it cannot drift again. */
   const EARN_DESC = {
-    swap: 'Swap ETH for $SEND or $GWC via the in-page swap. Verified on-chain — biggest single earner.',
+    swap: 'Swap ETH for $SEND or $GWC via the in-page swap. Verified on-chain — the biggest fixed award on the board.',
     connect_wallet: 'Link a wallet holding $SEND/$GWC (read-only signature). Once per wallet.',
     first_post: 'A one-time bonus for your very first post on the Send Wall.',
-    post: 'Post on the Send Wall — memes, gains, pain. Capped 40/day.',
-    track_wallet: 'Save a new wallet to your private tracker. Capped 10/day.',
-    watch_token: 'Save a token to your watchlist from New Pairs (☆). Once per token, capped 30/day.',
+    post: 'Post on the Send Wall — memes, gains, pain.',
+    track_wallet: 'Save a new wallet to your private tracker.',
+    watch_token: 'Save a token to your watchlist from New Pairs (☆). Once per token.',
     send_call: 'Call any token (📣) from New Pairs — it needs ≥$500 liquidity so nobody can farm a dust pool. It posts a permanent, live widget to your wall that tracks its Xs forever. +120 Send Power (📥 boosted by the value of the tokens you bought & still hold — every $100 held = ×1, so $1,000 = ×10; best-effort, on-chain), 5 calls/day to start (rolling 24h — it floats with your call quality, and Diamond holders get more). Calls are FINAL — they can never be deleted.',
-    call_x: 'The payoff: each whole X your call hits pays Send Power that grows with the multiple — 1x → +170, 2x → +340, 3x → +510 … up to 50x → +8,500 — awarded once per milestone as it runs, with no daily cap. Everything one call ever pays you shares one lifetime budget (about the Send Power it takes to reach Level 70), so a great call is a big prize but never the whole game. Remember +100% = 1x.',
+    /* The ladder used to be described here as 170 × the X — "2x → +340 … 50x → +8,500". It has not paid
+       that since it was changed to a STRAIGHT LINE: rung m pays the first rung plus a fixed step each
+       time, so a 50× rung is worth about 5.9 rungs, not 50. The promise on this card was eight and a half
+       times what the code pays at the top of the ladder. ladderCopy() below writes this sentence from
+       g.rules, so the numbers come from the same constants awardPoints uses. */
+    call_x: '',
     call_hold: '💎 Diamond hands: a call that STAYS in profit earns more the longer AND higher it holds — the bonus compounds (grows faster than the Xs alone), accruing automatically every few minutes while it’s above your entry price. This is where most of a call’s Send Power lives: at least 60% of everything a call can ever pay is reserved for holding in profit. And it accrues faster when the people who Sent It on your call are in profit too — +10% per Sender in the green with at least $20 of their own in the token, up to 3×.',
     hop_on: 'Send It! (🚀) on someone else’s Send Call from the Send Wall to ride it with them. +30 Send Power, up to 30/day.',
-    hop_hold: '💎 If you Send It on someone’s call and stay in profit from your entry price, you earn the same compounding diamond-hands bonus the caller does — the longer you hold in the green and the higher it runs, the more.',
+    hop_hold: '💎 If you Send It on someone’s call and stay in profit from your entry price, you earn a compounding diamond-hands bonus on the same curve the caller does — the longer you hold in the green and the higher it runs, the more. One difference: the crew multiplier is the caller’s alone. A Sender’s hold bonus is never boosted by how many other Senders are in profit, and a Sender’s lifetime budget for one call is a quarter of the caller’s.',
     daily: 'Tap ✅ Check in for today on your own wall. Once per UTC day, multiplied by your boosts.',
     customize: 'Style your wall (accent, avatar, banner). Once a day.',
-    comment: 'Reply on any post. Capped 20/day.',
-    react_give: 'React 🔥/🚀 to a post. Capped 40/day.',
-    vote_give: 'Upvote or downvote posts on the Send Wall. Capped 60/day.',
-    follow: 'Follow another sender. Capped 10/day.',
-    be_followed: 'Earned automatically when someone follows you. Up to 30/day.',
-    react_get: 'Earned when your post gets a reaction. Up to 60/day.',
-    vote_get: 'Earned when your post gets upvoted. Up to 100/day.',
+    comment: 'Reply on any post.',
+    react_give: 'React 🔥/🚀 to a post.',
+    vote_give: 'Upvote or downvote posts on the Send Wall.',
+    follow: 'Follow another sender.',
+    be_followed: 'Earned automatically when someone follows you.',
+    react_get: 'Earned when your post gets a reaction.',
+    vote_get: 'Earned when your post gets upvoted.',
     community_founder: 'A one-time bonus for starting a community and growing it to the 10 verified holders that take it live. Paid once, when it flips live.',
   };
   // Diamond tiers — MUST mirror server.js DIAMOND_TIERS exactly (used only for "next tier" labels)
@@ -120,7 +134,22 @@
   function fillLog(p) { p = Number(p) || 0; if (p <= 0) return 0; return Math.max(0, Math.min(100, (Math.log10(p) + 4) / 5 * 100)); }
   const GWC_W = 3; // $GWC weighted heavier than $SEND (mirror server GWC_SUPPLY_WEIGHT)
   // supply-boost term exactly as the server computes it: +10× per weighted 1% of supply ($GWC counts ×3)
-  function supplyTermOf(h) { return 10 * ((h.pctSend || 0) + GWC_W * (h.pctGwc || 0)); }
+  /* ONLY COINS THAT CLEAR THE $100 FLOOR COUNT. The server's holderMultiplier runs on qualSendBp/qualGwcBp
+     — a coin under the floor contributes zero — while this used the raw percentages. The equation strip
+     therefore printed its own terms and its own total from two different rules: an account holding $45 of
+     $SEND and $130 of $GWC was shown "1 + 3.9 × 10 = 28.00×", which is not an equation, it is two numbers
+     next to each other. Anyone who did the arithmetic got 40 and was wrong, and had no way to find out why.
+     A coin the server has not priced yet (`null`, not `false`) is left counting, because nothing has been
+     decided about it — that is the same rule refreshHolder uses. */
+  function qualPct(pct, qualifies) { return qualifies === false ? 0 : (pct || 0); }
+  function supplyTermOf(h) { return 10 * (qualPct(h.pctSend, h.sendQualifies) + GWC_W * qualPct(h.pctGwc, h.gwcQualifies)); }
+  // does this account hold anything the floor is currently excluding? the strip says so rather than just shrinking
+  function dustedCoins(h) {
+    const out = [];
+    if (h && h.sendQualifies === false && (h.pctSend || 0) > 0) out.push('$SEND');
+    if (h && h.gwcQualifies === false && (h.pctGwc || 0) > 0) out.push('$GWC');
+    return out;
+  }
   // the boost the server actually pays every point at: 1 + (Holder−1) + (OG−1) + (Community−1) + (Arcade−1) + (Prize−1) — boosts add (mirror effectiveMult)
   function effMult(g) {
     const holder = g.multiplier || 1;
@@ -132,6 +161,11 @@
     const comm = g.communityMult || 1;
     const arcade = (g.arcade && g.arcade.boost > 1) ? g.arcade.boost : 1;
     const weekly = (g.weekBoost && g.weekBoost.boost > 1) ? g.weekBoost.boost : 1;
+    /* The BETA BADGE was missing from this stack entirely. A top-ten beta finisher is paid
+       BETA_BADGE_MULT forever by effectiveMult() on the server, and this file added five terms and not
+       that one — so the ten accounts with the rarest thing on the site were shown a smaller multiplier
+       than they were being paid, on every screen that reads this. */
+    const beta = (g.boost && g.boost.beta > 1) ? g.boost.beta : 1;
     // Boosts ADD, they do not multiply — mirror of effectiveMult() on the server: 1 + Σ(each boost − 1).
     const plus = x => (Math.round((x - 1) * 100) / 100) + '×';
     const parts = [];
@@ -140,8 +174,14 @@
     if (comm > 1) parts.push('Community ' + plus(comm));
     if (arcade > 1) parts.push('Arcade ' + plus(arcade));
     if (weekly > 1) parts.push('Prize ' + plus(weekly));
-    const eff = Math.round((1 + (holder - 1) + (og - 1) + (comm - 1) + (arcade - 1) + (weekly - 1)) * 100) / 100;
-    return { holder, og, comm, arcade, weekly, eff, parts };
+    if (beta > 1) parts.push('Beta badge ' + plus(beta));
+    const local = Math.round((1 + (holder - 1) + (og - 1) + (comm - 1) + (arcade - 1) + (weekly - 1) + (beta - 1)) * 100) / 100;
+    /* THE SERVER'S NUMBER WINS. This function exists to name the parts; the total a person is paid is
+       decided by effectiveMult() and now travels with the payload, so what the dashboard prints is the
+       figure itself rather than a re-derivation of it that has already drifted once. The locally
+       computed value is kept only as the fallback for a payload that predates the field. */
+    const eff = (g.boost && g.boost.total > 0) ? g.boost.total : local;
+    return { holder, og, comm, arcade, weekly, beta, eff, parts };
   }
 
 
@@ -236,7 +276,7 @@
         '<div class="pc-power-lbl">⚡ SEND POWER</div>' +
         '<div class="pc-chips">' +
           (boosted ? '<span class="pc-mult">⚡ ' + mult.toFixed(2) + '× boost</span>' : '<span class="pc-mult pc-mult-off">⚡ 1× · unlock boost ↓</span>') +
-          (g.todayPoints ? '<span class="pc-today">+' + nf(g.todayPoints) + ' today</span>' : '') +
+          (g.todayPoints ? '<span class="pc-today' + (g.todayPoints < 0 ? ' is-down' : '') + '">' + signed(g.todayPoints) + ' today</span>' : '') +
           (g.weekBoost && g.weekBoost.boost > 1 ? '<span class="pc-week" title="Biggest Sender prize — the boost your finishing place won last week, added to everything you earn until ' + esc(new Date(g.weekBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC">🏆 ' + g.weekBoost.boost + '× prize</span>' : '') +
         '</div>' +
         (multParts ? '<div class="pc-mult-parts">' + esc(multParts) + ' on every point</div>' : '') +
@@ -296,7 +336,7 @@
     const dName = h && h.diamond ? h.diamond.name : 'No holdings';
     const tile = (ico, val, sub, cls) => '<div class="kpi ' + (cls || '') + '"><div class="kpi-ico" aria-hidden="true">' + ico + '</div><div class="kpi-val">' + val + '</div><div class="kpi-sub">' + sub + '</div></div>';
     return '<div class="kpi-strip">' +
-      tile('🪙', nf(g.points), 'Send Power' + (g.todayPoints ? ' · <span class="kpi-up">+' + nf(g.todayPoints) + '</span>' : ''), 'kpi-gold') +
+      tile('🪙', nf(g.points), 'Send Power' + (g.todayPoints ? ' · <span class="' + (g.todayPoints < 0 ? 'kpi-dn' : 'kpi-up') + '">' + signed(g.todayPoints) + '</span>' : ''), 'kpi-gold') +
       tile('👑', '#' + g.rank, 'All-time rank', 'kpi-green') +
       tile('🔥', days, 'Day hold streak', 'kpi-flame') +
       tile('💎', 'Lv ' + dLv, esc(dName), 'kpi-dia') +
@@ -343,11 +383,12 @@
     // while the boost is paused (stale holdings) the server pays 1× — show the value the displayed terms WOULD give, labelled paused,
     // so the strip never reads "1 + 30 × 2 = 1.00×"
     const paused = stale ? Math.round((1 + supplyTerm * factor) * 100) / 100 : null;
+    const dust = dustedCoins(h);
     return '<div class="eqstrip' + (stale ? ' eq-stale' : '') + '">' +
       '<div class="eq-row">' +
         '<span class="eq-chip eq-base">⚡ 1</span>' +
         '<span class="eq-op">+</span>' +
-        '<span class="eq-chip eq-supply">📊 ×' + supplyTerm.toFixed(1) + '<small>supply held · $GWC ×' + GWC_W + '</small></span>' +
+        '<span class="eq-chip eq-supply">📊 ×' + supplyTerm.toFixed(1) + '<small>supply that counts · $GWC ×' + GWC_W + '</small></span>' +
         '<span class="eq-op">×</span>' +
         '<span class="eq-chip eq-dia">💎 ×' + factor.toFixed(1) + '<small>Diamond Lv ' + h.diamond.level + (h.gwcDays >= 1 ? ' · $GWC ' + Math.floor(h.gwcDays) + 'd' : '') + '</small></span>' +
         '<span class="eq-op">=</span>' +
@@ -361,6 +402,8 @@
         (stacked ? '<span class="eq-op">=</span><span class="eq-chip eq-out">⚡ ' + em.eff.toFixed(2) + '×<small>SEND POWER</small></span>' : '') +
       '</div>' +
       '<p class="eq-note">' + (stale ? '⏸ Paused until you Refresh — we re-verify your bags on-chain.' : '<b>$GWC counts ×3</b>, and holding $GWC longer levels your Diamond faster — bigger bags held longer scale this up with <b>no cap</b> · every point ×your Power · <b>resets when you sell</b>.') + '</p>' +
+      (dust.length ? '<p class="eq-dust">⚠️ Your ' + dust.join(' and ') + ' ' + (dust.length > 1 ? 'are' : 'is') + ' under the $' + ((g.rules && g.rules.holdFloorUsd) || 100) +
+        ' floor, so ' + (dust.length > 1 ? 'they count' : 'it counts') + ' for nothing in the supply term above. That is why the number is smaller than your holdings suggest — <a href="#rekt-revoke-h">the floor, and where you stand against it</a>.</p>' : '') +
     '</div>';
   }
 
@@ -421,7 +464,7 @@
     const sandboxLine = sandbox ? '<p class="comm-sandbox-line">🧪 You are also in the <a href="community.html?id=' + sandbox.id + '">sandbox</a> ($' + esc(sandbox.symbol) + ' — a listed stock, not a token) — it grants no multiplier.</p>' : '';
     if (!live.length) {
       return '<div class="og-block comm-invite"><span class="og-block-badge">🏘️</span>' +
-        '<div class="og-block-body"><b>Join a community for a flat 10× Send Power.</b> Rally around any token — a community goes <b>live at 10 members</b>, and while you’re in <b>≥1 live</b> one, <b>a flat 10× boost (+9×) is added to every point you earn</b>, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Post, react &amp; comment on its wall to raise your <b>community member level</b> and help the community level up. ' +
+        '<div class="og-block-body"><b>Join a community for a flat 10× Send Power.</b> Rally around any token — a community goes <b>live at 10 verified holder slots</b>, and while you’re in <b>≥1 live</b> one, <b>a flat 10× boost (+9×) is added to every point you earn</b>, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Post, react &amp; comment on its wall to raise your <b>community member level</b> and help the community level up. ' +
         '<a class="gobj-link" href="communities.html">Browse communities →</a>' + sandboxLine + '</div></div>';
     }
     const bar = (label, lvl, into, span, cls) => {
@@ -552,7 +595,12 @@
     const vaultInner = splitKnown
       ? tokenRow('$SEND', 'send', h.sendTok || 0, p.send) +
         tokenRow('$GWC', 'gwc', h.gwcTok || 0, p.gwc) +
-        '<div class="vault-foot">Together <b>' + pctFmt(scorePct) + '%</b> of supply ($GWC counts ×' + GWC_W + ') → feeds your <b>×' + supplyTerm.toFixed(1) + '</b> supply boost</div>'
+        /* The weighted, QUALIFYING percentage — the one that actually produces the number beside it.
+           scorePct is the raw combined %, unweighted and with no floor applied, so pairing it with the
+           supply term read as an equation that does not hold: 0.150% × 10 is 1.5, not 3.9. */
+        '<div class="vault-foot">Together <b>' + pctFmt(supplyTerm / 10) + '%</b> weighted ($GWC counts ×' + GWC_W +
+          (dustedCoins(h).length ? ', and your ' + dustedCoins(h).join(' and ') + ' sits under the $' + ((g.rules && g.rules.holdFloorUsd) || 100) + ' floor so it counts for nothing' : '') +
+          ') → feeds your <b>×' + supplyTerm.toFixed(1) + '</b> supply boost</div>'
       : '<div class="vtok"><span class="token-emblem send vtok-emblem" aria-hidden="true">$</span><div class="vtok-body"><div class="vtok-line"><span class="vtok-amt">' + compact(h.sendTok || 0) + '</span> <span class="vtok-sym">$SEND</span></div></div></div>' +
         '<div class="vtok"><span class="token-emblem gwc vtok-emblem" aria-hidden="true">$</span><div class="vtok-body"><div class="vtok-line"><span class="vtok-amt">' + compact(h.gwcTok || 0) + '</span> <span class="vtok-sym">$GWC</span></div></div></div>' +
         '<div class="vault-foot">You hold <b>' + pctFmt(scorePct) + '%</b> of combined supply → <b>×' + supplyTerm.toFixed(1) + '</b> supply boost · <button class="gobj-link js-refresh" type="button">Refresh to see your $SEND / $GWC split</button></div>';
@@ -588,14 +636,23 @@
     '</div>';
   }
   function lootLog(g) {
-    const bd = ((_lootMode === 'today' ? g.todayBreakdown : g.breakdown) || []).filter(x => x.total > 0);
+    /* `x.total > 0` used to be the filter, which meant a negative kind could never appear here — and
+       'decay' is the only negative kind there is. So the site wrote a ledger line for every drain, kept a
+       📉 label ready for it, told users in two places that "every drain writes a line to your points
+       history", and then filtered that line out of the only history a user can read. Losses belong in the
+       log; the bars below are drawn from magnitudes, so a negative row sizes correctly and is coloured and
+       signed as a loss. */
+    const all = ((_lootMode === 'today' ? g.todayBreakdown : g.breakdown) || []).filter(x => x.total !== 0);
+    const bd = all.filter(x => x.total > 0);
+    const losses = all.filter(x => x.total < 0);
     const head = '<div class="ll-head"><h3 class="gsub">🎒 Loot Log</h3>' + lootToggle() + '</div>';
-    if (!bd.length) {
+    if (!bd.length && !losses.length) {
       return '<div class="loot">' + head +
         '<p class="modal-note">' + (_lootMode === 'today' ? 'No loot today yet — the log resets every 24h. Complete a quest below! 🗺️' : 'No loot yet — complete a quest below to start your log. 🗺️') + '</p></div>';
     }
     const sum = bd.reduce((a, x) => a + x.total, 0);
-    const max = bd[0].total || 1;
+    // bd can now be empty while losses is not (a day whose only event was a drain) — bd[0] would throw
+    const max = (bd[0] && bd[0].total) || 1;
     const legend = bd.map(x => (ACTION_LABEL[x.kind] ? ACTION_LABEL[x.kind][1] : x.kind) + ' ' + Math.round(x.total / sum * 100) + '%').join(', ');
     let segs = '';
     bd.forEach((x, i) => { segs += '<span style="width:' + (x.total / sum * 100).toFixed(2) + '%;background:' + RAMP[i % RAMP.length] + '"></span>'; });
@@ -620,17 +677,79 @@
       rows += '<li class="ll-nudge"><span class="ll-ico" aria-hidden="true">🚀</span>' +
         '<a class="ll-label" href="/index.html#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
     }
+    /* What was taken, listed under what was given rather than left out of the ledger entirely. It is kept
+       visually separate because it is not loot — it is the counterweight, and mixing a loss into the same
+       ranked list as the earnings would make the biggest drain look like the best day. */
+    let lossRows = '';
+    if (losses.length) {
+      const lost = losses.reduce((a, x) => a + Math.abs(x.total), 0);
+      lossRows = '<ul class="loot-list loot-losses" aria-label="Send Power taken back">' + losses.map(x => {
+        const meta = ACTION_LABEL[x.kind] || ['📉', x.kind];
+        return '<li class="ll-li ll-loss" aria-label="' + esc(meta[1]) + ': ' + nf(Math.abs(x.total)) + ' points taken across ' + x.n + ' charge' + (x.n === 1 ? '' : 's') + '">' +
+          '<span class="ll-ico" aria-hidden="true">' + meta[0] + '</span>' +
+          '<span class="ll-label">' + esc(meta[1]) + '<span class="ll-n">×' + x.n + '</span></span>' +
+          '<span class="ll-track" aria-hidden="true"><span class="ll-fill ll-fill-loss" data-fill="' + Math.min(100, Math.abs(x.total) / Math.max(1, max) * 100).toFixed(1) + '" style="width:0"></span></span>' +
+          '<span class="ll-pts ll-pts-loss">−' + nf(Math.abs(x.total)) + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' +
+      '<p class="loot-foot loot-foot-loss">Taken back ' + (_lootMode === 'today' ? 'today' : 'all time') + ': <b>−' + nf(lost) + '</b> · ' +
+      '<a href="#rekt-h">why, and what it costs you next →</a></p>';
+    }
     return '<div class="loot">' + head +
-      '<div class="loot-bar" role="img" aria-label="Points by source: ' + esc(legend) + '">' + segs + '</div>' +
-      '<ul class="loot-list">' + rows + '</ul>' +
-      '<p class="loot-foot">' + (_lootMode === 'today' ? 'Earned today' : 'Total earned') + ': <b>' + nf(sum) + '</b> across ' + bd.length + ' feature' + (bd.length === 1 ? '' : 's') + (_lootMode === 'today' ? ' · resets every 24h' : '') + '</p>' +
+      (bd.length ? '<div class="loot-bar" role="img" aria-label="Points by source: ' + esc(legend) + '">' + segs + '</div>' +
+        '<ul class="loot-list">' + rows + '</ul>' +
+        '<p class="loot-foot">' + (_lootMode === 'today' ? 'Earned today' : 'Total earned') + ': <b>' + nf(sum) + '</b> across ' + bd.length + ' feature' + (bd.length === 1 ? '' : 's') + (_lootMode === 'today' ? ' · resets every 24h' : '') + '</p>'
+        : '<p class="modal-note">' + (_lootMode === 'today' ? 'Nothing earned in the last 24h.' : 'Nothing earned yet.') + '</p>') +
+      lossRows +
     '</div>';
   }
 
   /* =========================================================================
      SECTION 8 — QUEST BOARD + ARENA
      ========================================================================= */
-  function earnList(perAction, mult) {
+  /* ═══ copy built from the server's own constants ═══════════════════════════════════════════════════
+     Anything with a number in it that a user might act on gets written here, from g.rules, rather than
+     typed into a string above. Five daily caps and the whole X ladder had already drifted out of sync
+     doing it the other way. */
+  function capLine(k, rules) {
+    const cap = rules && rules.dailyCap && rules.dailyCap[k];
+    if (!(cap > 0)) return '';
+    if (cap === 1) return ' Once, ever.';
+    return ' Capped ' + cap + '/day.';
+  }
+  function ladderCopy(rules) {
+    if (!rules || !(rules.callXFirst > 0)) return 'Each whole X your call hits pays a Send Power milestone as it runs.';
+    const first = rules.callXFirst, step = rules.callXStep || 0, cap = rules.callXCap || 50;
+    const rung = (m) => Math.round(first * (1 + (m - 1) * step));
+    return 'The payoff: each whole X your call hits pays a milestone, awarded once as it passes, with no daily cap. ' +
+      'The rungs rise in a straight line rather than with the multiple — 1x → +' + nf(first) + ', 2x → +' + nf(rung(2)) +
+      ', 10x → +' + nf(rung(10)) + ', up to ' + cap + 'x → +' + nf(rung(cap)) + ' — so the ladder is a reward for a call that runs, ' +
+      'not the whole prize. Most of what a call can pay is reserved for holding it in profit. ' +
+      'Everything one call ever pays you shares a single lifetime budget of ' + nf(rules.callBudget || 0) + '. Remember +100% = 1x.';
+  }
+
+  /* The rolling ceiling, which nothing on the site used to mention. Every daily-capped kind plus the
+     check-in share ONE 24-hour budget on the PAID amount, so a 400× holder and a 1× newcomer both stop at
+     the same number for a day of clicks. That is the single most consequential rule on the Quest Board and
+     it was not written anywhere a user could read it. */
+  function dayCapLine(g) {
+    const r = g.rules; if (!r || !(r.socialDayCap > 0)) return '';
+    const spent = Math.max(0, r.socialSpentToday || 0), cap = r.socialDayCap;
+    const pct = Math.min(100, Math.round(spent / cap * 100));
+    const left = Math.max(0, cap - spent);
+    return '<div class="gcap" role="group" aria-label="Rolling 24-hour earning ceiling">' +
+      '<div class="gcap-head"><span>🧢 Rolling 24h ceiling</span>' +
+        '<b><span class="cu" data-cu="' + spent + '" data-cufmt="nf" aria-hidden="true">0</span><span class="sr-only">' + nf(spent) + '</span> / ' + nf(cap) + '</b></div>' +
+      '<div class="gxp" role="progressbar" aria-valuemin="0" aria-valuemax="' + cap + '" aria-valuenow="' + spent + '"' +
+        ' aria-valuetext="' + nf(spent) + ' of ' + nf(cap) + ' used, ' + nf(left) + ' left"><span class="gxp-fill gcap-fill" data-fill="' + pct + '" style="width:0"></span></div>' +
+      '<p class="gcap-note">Everything except Send Call performance shares this one ceiling, <b>after</b> your boost. ' +
+      (left > 0 ? '<b>' + nf(left) + '</b> left today.' : '<b>Reached for now</b> — it is a rolling window, so it frees up as the last 24 hours pass.') +
+      ' Calls held in profit are paid outside it: that is the fast lane.</p>' +
+    '</div>' +
+    '<p class="modal-note" style="margin-top:0.4rem;">Tap any quest to go do it. Points × your ⚡ Power, then this ceiling.</p>';
+  }
+
+  function earnList(perAction, mult, rules) {
     mult = mult || 1;
     let html = '<ul class="gearn">';
     for (const k of ORDER) {
@@ -640,16 +759,20 @@
       const variable = VARIABLE.has(k);
       if (!variable && perAction[k] == null) continue; // fixed-point action with no configured value → skip
       const base = perAction[k];
-      const eff = base != null ? Math.min(500000, Math.max(1, Math.round(base * mult))) : 0; // mirrors the server's PTS_EVENT_CAP so an extreme stack isn't overstated
+      // the server's real per-event ceiling. This was hardcoded at 500,000 while PTS_EVENT_CAP is 73,762,
+      // so a large stack was shown a per-action figure up to ~6.8x what it would actually be paid.
+      const evCap = (rules && rules.eventCap > 0) ? rules.eventCap : 73762;
+      const eff = base != null ? Math.min(evCap, Math.max(1, Math.round(base * mult))) : 0;
       const pts = variable
         ? '<span class="ge-pts ge-var" title="Points scale with real performance">⚡ scales</span>'
         : (mult > 1
           ? '<span class="ge-pts">+' + base + ' <span class="ge-eff">→ +' + nf(eff) + ' ⚡</span></span>'
           : '<span class="ge-pts">+' + base + '</span>');
       const inner = '<span class="ge-ico" aria-hidden="true">' + ico + '</span><span class="ge-label">' + label + '</span>' + pts;
-      const aria = label + '. ' + (EARN_DESC[k] || '') + (variable ? ' Points scale with your call’s performance.' : ' Earn ' + (mult > 1 ? eff + ' boosted' : base) + ' points.');
-      const tip = EARN_DESC[k]
-        ? '<span class="ge-tip" role="tooltip">' + esc(EARN_DESC[k]) + (mult > 1 ? ' Your ⚡' + mult.toFixed(2) + '× boost makes it +' + nf(eff) + '.' : '') + '</span>'
+      const desc = (k === 'call_x' ? ladderCopy(rules) : (EARN_DESC[k] || '')) + capLine(k, rules);
+      const aria = label + '. ' + desc + (variable ? ' Points scale with your call’s performance.' : ' Earn ' + (mult > 1 ? eff + ' boosted' : base) + ' points.');
+      const tip = desc
+        ? '<span class="ge-tip" role="tooltip">' + esc(desc) + (mult > 1 ? ' Your ⚡' + mult.toFixed(2) + '× boost makes it +' + nf(eff) + '.' : '') + '</span>'
         : '';
       let row;
       // The daily bonus is a BUTTON on your own wall now, not something that happens to you on page load — so this
@@ -666,8 +789,286 @@
       html += '<li class="gearn-li">' + row + info + tip + '</li>';
     }
     html += '</ul>';
-    html += '<p class="gearn-passive">💚 You also earn passively — a <b>reaction</b>, an <b>upvote</b>, or a <b>new follower</b> on your posts all add Send Power automatically.</p>';
+    const rcv = (k, word) => { const c = rules && rules.dailyCap && rules.dailyCap[k]; return '<b>' + word + '</b>' + (c > 0 ? ' (' + c + '/day)' : ''); };
+    html += '<p class="gearn-passive">💚 You also earn passively — ' + rcv('react_get', 'a reaction') + ', ' +
+      rcv('vote_get', 'an upvote') + ', or ' + rcv('be_followed', 'a new follower') + ' on your posts all add Send Power automatically. ' +
+      'Those are the three a ring of fake accounts could push at you, so they are the tightest caps on the board.</p>';
     return html;
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+     💀 REKT — the other half of the ledger
+     ═══════════════════════════════════════════════════════════════════════════════════════════════════
+     Everything above this point on the dashboard is a way to GAIN. The same engine also takes: it drains
+     a balance for absence, for being muted and for calls left underwater; it shrinks a caller's daily
+     allowance; it revokes badges the moment a bag is sold; and it counts strikes that never expire.
+     None of that was reachable from the client, so the first a person heard of any of it was a
+     notification telling them it had already happened.
+
+     Design rules for this block, which are not decoration:
+       - It states the RULE and then this account's STANDING against it. A rule with no standing is a
+         poster; a standing with no rule is a scolding.
+       - Every number comes from g.rules / g.decay / g.restriction — the server's own constants. Nothing
+         here is retyped, because retyped numbers on this site have drifted every single time.
+       - Danger is never carried by colour alone: every risky row has a word, an icon and a shape.
+       - It is not hidden behind a <details> the way the rulebook is. Consequences a person can be
+         surprised by have to be visible without a click.
+  */
+  function pctTxt(p) { return (Math.round(p * 10) / 10) + '%'; }
+
+  // the live decay forecast: what the next sweep costs this account, and what is holding it there
+  function decayCard(g) {
+    const d = g.decay; if (!d) return '';
+    const at = d.pct > 0;
+    const why = {
+      away: (r) => '<b>' + r.days + ' day' + (r.days === 1 ? '' : 's') + ' without checking in</b> — ' + pctTxt(r.pct) +
+        '. The first ' + d.graceDays + ' days are free; after that it starts at ' + pctTxt(d.basePct) + ' and adds ' + pctTxt(d.accelPct) + ' for every further day away.',
+      readonly: (r) => '<b>Read-only</b> — a flat ' + pctTxt(r.pct) + ' a day for as long as the restriction lasts. Checking in does not stop this part; only the restriction lifting does.',
+      badcalls: (r) => '<b>' + r.n + ' call' + (r.n === 1 ? '' : 's') + ' underwater</b> — ' + pctTxt(r.pct) +
+        ' (' + pctTxt(d.badCallPct) + ' each, capped at ' + pctTxt(d.badCallMax) + '). Only charged on days you were already away.',
+    };
+    const rows = (d.reasons || []).map(r => '<li class="rekt-row rekt-row-bad"><span class="rekt-dot" aria-hidden="true">▲</span><span>' + why[r.key](r) + '</span></li>').join('');
+    const head = d.protected
+      ? '<span class="rekt-state rekt-state-safe">Nothing at risk</span>'
+      : at
+        ? '<span class="rekt-state rekt-state-bad">−' + nf(d.drain) + ' at the next sweep</span>'
+        : '<span class="rekt-state rekt-state-safe">Nothing at risk</span>';
+    const body = d.protected
+      ? '<p class="rekt-p">Balances at or under <b>' + nf(d.floor) + '</b> are never touched, so nothing can be taken from you yet. Decay starts mattering above that.</p>'
+      : at
+        ? '<ul class="rekt-list">' + rows + '</ul>' +
+          '<p class="rekt-p">That is <b>' + pctTxt(d.pct) + '</b> of your balance' + (d.hitCeiling ? ' — the ceiling; one day can never take more than ' + pctTxt(d.maxPct) + ' however long you are away' : '') +
+          ', and it can never take you below <b>' + nf(d.floor) + '</b>.' + (d.showedUp ? '' : ' <b>Checking in today zeroes the absence part immediately.</b>') + '</p>'
+        : '<p class="rekt-p">You have checked in, you are not restricted, and nothing is underwater. ' +
+          'For reference: absence costs nothing for ' + d.graceDays + ' days, then ' + pctTxt(d.basePct) + ' rising by ' + pctTxt(d.accelPct) + ' a day, ' +
+          'read-only adds a flat ' + pctTxt(d.readOnlyPct) + ', underwater calls add ' + pctTxt(d.badCallPct) + ' each up to ' + pctTxt(d.badCallMax) + ', and one day never takes more than ' + pctTxt(d.maxPct) + '.</p>';
+    const last = d.lastDrain > 0
+      ? '<p class="rekt-last">Last charged <b>−' + nf(d.lastDrain) + '</b>' + (d.lastAt ? ' · ' + new Date(d.lastAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '') + '.</p>'
+      : '';
+    return '<section class="rekt-card' + (at && !d.protected ? ' is-live' : '') + '" aria-labelledby="rekt-decay-h">' +
+      '<div class="rekt-head"><h4 class="rekt-h" id="rekt-decay-h">📉 Send Power decay</h4>' + head + '</div>' +
+      '<p class="rekt-lede">Send Power is a balance, not a trophy. It drains while you are away, while you are muted, and while your calls sit underwater.</p>' +
+      body + last +
+    '</section>';
+  }
+
+  // the strike ladder + this account's standing on it, and both ways back
+  function restrictCard(g) {
+    const r = g.restriction, p = g.probation, rules = g.rules || {};
+    const strikes = g.strikes || 0;
+    const rung = (n, label, on) => '<li class="rekt-rung' + (on ? ' is-on' : '') + '"><span class="rekt-rung-n" aria-hidden="true">' + n + '</span>' +
+      '<span>' + label + '</span>' + (on ? '<span class="rekt-rung-you">you are here</span>' : '') + '</li>';
+    const ladder = '<ol class="rekt-ladder" aria-label="The strike ladder">' +
+      rung(1, '<b>First strike</b> — 24 hours read-only', strikes === 1) +
+      rung(2, '<b>Second strike</b> — one week', strikes === 2) +
+      rung(3, '<b>Third strike</b> — permanent', strikes >= 3) +
+    '</ol>';
+    const triggers = '<ul class="rekt-list">' +
+      '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Acting like a bot.</b> Write-action velocity and duplicate/copypasta posting are watched. The thresholds sit far above what a real person does.</span></li>' +
+      '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Burning a whole day of Send Calls in an hour.</b> If every call in your <b>full daily allowance</b> — the boosted number, however large it is — lands inside ' + (rules.callSpamWindowMin || 60) + ' minutes, that reads as spam. It only applies while that allowance is at least ' + (rules.callSpamMin || 3) + ', so nobody down to one or two calls a day is ever punished for using them.</span></li>' +
+      '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>A ring of accounts on one connection pushing the same coin.</b> Everyone in the ring is restricted, and the buy-out costs double.</span></li>' +
+    '</ul>';
+    /* Both lists come from the server, whether or not a restriction is active. They are the same arrays
+       restrictionOf() carries, so a person can read what read-only costs BEFORE they are in it — and the
+       client never keeps its own copy to drift out of date. */
+    const allowed = (r && r.allowed) || rules.readOnlyAllowed || [];
+    const blocked = (r && r.blocked) || rules.readOnlyBlocked || [];
+    const whileMuted = (allowed.length || blocked.length) ? '<div class="rekt-split">' +
+      (allowed.length ? '<div><h5 class="rekt-h5">Still open to you</h5><ul class="rekt-yes">' +
+        allowed.map(x => '<li><span aria-hidden="true">✓</span> ' + esc(String(x).replace(/&amp;/g, '&')) + '</li>').join('') +
+      '</ul></div>' : '') +
+      (blocked.length ? '<div><h5 class="rekt-h5">Paused</h5><ul class="rekt-no">' +
+        blocked.map(x => '<li><span aria-hidden="true">✕</span> ' + esc(x) + '</li>').join('') +
+      '</ul></div>' : '') +
+    '</div>' : '';
+    let live = '';
+    if (r) {
+      const until = r.permanent ? 'indefinitely' : 'until ' + new Date(r.until).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      live = '<div class="rekt-live" role="status">' +
+        '<p><b>Your account is read-only ' + until + '.</b> ' + esc(r.reason) + '</p>' +
+        '<p>Two ways out, and they are different in kind. You can buy and hold <b>$' + nf(Math.round(r.redeemUsd)) + '</b> of $SEND for <b>' +
+        Math.max(1, Math.round(r.holdMs / 864e5)) + ' day' + (Math.round(r.holdMs / 864e5) === 1 ? '' : 's') + '</b> to lift it — sell before that hold is up and it returns, doubled. ' +
+        'Or you can <a href="mailto:' + esc(r.appealEmail) + '">appeal to a person at ' + esc(r.appealEmail) + '</a>, which costs nothing, ever. ' +
+        'We are not telling you to buy anything: the appeal is a real route and it is free.</p>' +
+      '</div>';
+    } else if (p) {
+      live = '<div class="rekt-live" role="status"><p><b>You are on probation until ' +
+        new Date(p.until).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '.</b> ' +
+        'You bought your way out of a restriction; hold that $SEND until then and it clears for good. Sell more than 2% below the floor you set and the restriction returns, doubled.</p></div>';
+    }
+    const strikeLine = strikes > 0
+      ? '<span class="rekt-state rekt-state-bad">' + strikes + ' strike' + (strikes === 1 ? '' : 's') + ' on record</span>'
+      : '<span class="rekt-state rekt-state-safe">No strikes</span>';
+    return '<section class="rekt-card' + (r ? ' is-live' : '') + '" aria-labelledby="rekt-mute-h">' +
+      '<div class="rekt-head"><h4 class="rekt-h" id="rekt-mute-h">🔇 Read-only mode</h4>' + strikeLine + '</div>' +
+      '<p class="rekt-lede">Read-only pauses what you can make, not what you have already earned. <b>Strikes never expire</b> — the ladder only goes one way.</p>' +
+      live + ladder + '<h5 class="rekt-h5">What puts you here</h5>' + triggers + whileMuted +
+    '</section>';
+  }
+
+  // selling, dust, and the things that are revoked rather than drained
+  function revokeCard(g) {
+    const rules = g.rules || {};
+    const floor = rules.holdFloorUsd || 100;
+    const h = g.holder;
+    const q = (label, usd, ok) => {
+      if (ok == null) return '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span><b>' + label + '</b> — not checked yet. Tap <b>Refresh holdings</b>.</span></li>';
+      return '<li class="rekt-row ' + (ok ? 'rekt-row-ok' : 'rekt-row-bad') + '"><span class="rekt-dot" aria-hidden="true">' + (ok ? '✓' : '▲') + '</span><span><b>' + label + '</b> — ' +
+        (usd == null ? 'value unknown' : '$' + Number(usd).toFixed(2)) + (ok ? ' · counting' : ' · under the $' + floor + ' floor, so it counts for nothing') + '.</span></li>';
+    };
+    const floorRows = h
+      ? '<ul class="rekt-list">' + q('$SEND', h.sendUsd, h.sendQualifies) + q('$GWC', h.gwcUsd, h.gwcQualifies) + '</ul>'
+      : '<p class="rekt-p">No holdings read yet — link a wallet and tap <b>Refresh holdings</b> to see where you stand against the floor.</p>';
+    return '<section class="rekt-card" aria-labelledby="rekt-revoke-h">' +
+      '<div class="rekt-head"><h4 class="rekt-h" id="rekt-revoke-h">💔 Revoked, not drained</h4></div>' +
+      '<p class="rekt-lede">Some things are not taken a percent at a time. They are simply gone the moment the thing they were based on stops being true.</p>' +
+      '<ul class="rekt-list">' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell, and your Diamond Level resets to zero.</b> The streak is what the tier measures, so selling ends it — and the factor it was applying to your whole Holder Boost goes with it.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell out of either $SEND or $GWC entirely and the OG badge is revoked for good.</b> It cannot be re-earned. Unlinking the wallet only pauses it; relink and it returns.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell a community’s token and that community’s ' + (rules.communityMult || 10) + '× is revoked,</b> along with your standing in it. Membership is re-checked on-chain, not taken on trust.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Let a holdings check go stale and every holding-based boost pays 1× until it is re-read.</b> Not a punishment — the site will not quote a multiplier it has not verified.</span></li>' +
+      '</ul>' +
+      '<h5 class="rekt-h5">The $' + floor + ' floor — dust earns nothing</h5>' +
+      '<p class="rekt-p">One rule for every token on the site: a bag counts at <b>$' + floor + ' or more</b>, priced live. Below that you hold dust, and dust earns no Diamond level, no Diamond factor, no no-sell streak, no community verification and no conviction standing. It exists because every holder reward here is measured in <b>time</b>, and one cent held for a year would otherwise have out-earned a real bag held for a month.</p>' +
+      floorRows +
+    '</section>';
+  }
+
+  // the call-side penalties: a shrinking allowance, and a rug on the record forever
+  function callRiskCard(g) {
+    const a = g.callAllowance, rules = g.rules || {};
+    const rugged = g.rugged || 0;
+    const state = rugged > 0
+      ? '<span class="rekt-state rekt-state-bad">' + rugged + ' rugged call' + (rugged === 1 ? '' : 's') + ' on record</span>'
+      : a ? '<span class="rekt-state rekt-state-safe">Limit ' + a.earned + '/' + (rules.callLimitBase || 5) + '</span>' : '';
+    return '<section class="rekt-card' + (rugged > 0 ? ' is-live' : '') + '" aria-labelledby="rekt-call-h">' +
+      '<div class="rekt-head"><h4 class="rekt-h" id="rekt-call-h">📣 What bad calls cost</h4>' + state + '</div>' +
+      '<p class="rekt-lede">A Send Call is permanent and public. It can never be deleted, and it keeps scoring long after you make it.</p>' +
+      '<ul class="rekt-list">' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>A day of only duds costs you a call.</b> Your earned daily limit steps down by one, toward a floor of ' + (rules.callLimitMin || 1) + '. Land one call that doubles (' + (rules.callGoodX || 1) + 'x) and it steps back up, to a ceiling of ' + (rules.callLimitBase || 5) + '.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>If a call you made gets rugged, your daily limit drops by ' + (g.rugPenalty || 2) + ' at once</b> — and the call is marked RUGGED on your wall, permanently.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Calls left underwater feed decay</b> — ' + pctTxt((g.decay && g.decay.badCallPct) || 0.3) + ' a day each, up to ' + pctTxt((g.decay && g.decay.badCallMax) || 1.5) + ', but only on days you did not check in.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Using your whole daily allowance inside ' + (rules.callSpamWindowMin || 60) + ' minutes is read as spam</b> and puts the account read-only — but only while that allowance is at least ' + (rules.callSpamMin || 3) + '.</span></li>' +
+      '</ul>' +
+    '</section>';
+  }
+
+  // the participation gate — a read-only that is nobody's fault and is not a punishment
+  function gateCard(g) {
+    if (g.holderVerified) return '';
+    const rules = g.rules || {}, floor = rules.holdFloorUsd || 100, days = rules.proofMinHoldDays || 7;
+    const p = g.holderProof || {};
+    return '<section class="rekt-card is-live" aria-labelledby="rekt-gate-h">' +
+      '<div class="rekt-head"><h4 class="rekt-h" id="rekt-gate-h">🪪 You are in read-only until you prove your bags</h4>' +
+        '<span class="rekt-state rekt-state-warn">Not a strike</span></div>' +
+      '<p class="rekt-lede">This is a different read-only from the one above and it is <b>not a penalty</b>. You can read everything; doing anything needs proof that you hold the coins.</p>' +
+      '<ul class="rekt-list">' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Hold at least <b>$' + floor + '</b> of <b>both</b> $SEND and $GWC.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Have held them for at least <b>' + days + ' days</b>.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Be a <b>net accumulator</b> of each — you have bought more than you have sold.</span></li>' +
+      '</ul>' +
+      '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction. ' + esc(p.reason || '') + '</p>' +
+    '</section>';
+  }
+
+  // the beta reset — everyone goes to zero, and it is better to know beforehand
+  function betaCard(g) {
+    const b = g.beta; if (!b || !b.endsAt) return '';
+    const left = b.endsAt - Date.now();
+    if (b.over || b.settled) {
+      if (!(b.rank > 0)) return '';
+      return '<section class="rekt-card" aria-labelledby="rekt-beta-h">' +
+        '<div class="rekt-head"><h4 class="rekt-h" id="rekt-beta-h">🏅 Beta badge</h4><span class="rekt-state rekt-state-safe">#' + b.rank + '</span></div>' +
+        '<p class="rekt-lede">You finished <b>#' + b.rank + '</b> in the beta with <b>' + nf(b.finalPoints || 0) + '</b>. The badge pays <b>+' + (b.badgeMult - 1) + '×</b> on everything, forever.</p>' +
+      '</section>';
+    }
+    return '<section class="rekt-card" aria-labelledby="rekt-beta-h">' +
+      '<div class="rekt-head"><h4 class="rekt-h" id="rekt-beta-h">🔄 The beta reset</h4>' +
+        '<span class="rekt-state rekt-state-warn">' + fmtLeft(left) + ' left</span></div>' +
+      '<p class="rekt-lede">When the beta ends, <b>every balance on the site goes to zero</b> — including yours. It is not a penalty and nobody is exempt; it is how the real game starts level.</p>' +
+      '<p class="rekt-p">The standings are frozen at that moment and the <b>top ' + b.topN + '</b> keep a permanent badge worth <b>+' + (b.badgeMult - 1) + '×</b> on everything afterwards. Everyone’s final score is kept on record, so the reset can be checked.</p>' +
+    '</section>';
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════════════
+     🗂️ YOUR RECORD — the state the site keeps on this account
+     ═══════════════════════════════════════════════════════════════════════════════════════════════════
+     Every figure here was already being tracked server-side and had no route to the screen. A site that
+     scores you is obliged to show you the scorecard: what rank you hold, how many strikes are on record,
+     how long you have held each coin, whether each bag clears the floor, how many wallets are linked, and
+     what happens to all of it when the beta ends.
+
+     A definition list, not a table: these are name/value pairs, a screen reader announces them as such,
+     and they reflow to one column on a phone without a horizontal scroll. */
+  function recDt(label, value, sub, tone) {
+    return '<div class="rec' + (tone ? ' rec-' + tone : '') + '">' +
+      '<dt class="rec-k">' + label + '</dt>' +
+      '<dd class="rec-v">' + value + (sub ? '<span class="rec-sub">' + sub + '</span>' : '') + '</dd>' +
+    '</div>';
+  }
+  function recordBlock(g) {
+    const rules = g.rules || {}, h = g.holder, d = g.decay || {}, a = g.callAllowance, b = g.beta;
+    const floor = rules.holdFloorUsd || 100;
+    const days = (n) => n == null ? '—' : nf(Math.floor(n)) + (Math.floor(n) === 1 ? ' day' : ' days');
+    const items = [];
+
+    items.push(recDt('Rank', g.rank ? '#' + nf(g.rank) : '—', 'all-time Send Power'));
+    items.push(recDt('Level', 'Lv ' + (g.level || 0), esc(g.title || '')));
+    items.push(recDt('Send Power', nf(g.points || 0), signed(g.todayPoints || 0) + ' in 24h', (g.todayPoints || 0) < 0 ? 'bad' : ''));
+    items.push(recDt('Paid at', '⚡ ' + (effMult(g).eff || 1).toFixed(2) + '×', 'every point, right now'));
+
+    // the two things that decide whether a holding counts at all
+    if (h) {
+      items.push(recDt('$SEND held', h.sendUsd == null ? '—' : '$' + Number(h.sendUsd).toFixed(2),
+        h.sendQualifies == null ? 'not checked' : h.sendQualifies ? 'clears the $' + floor + ' floor' : 'under the $' + floor + ' floor',
+        h.sendQualifies === false ? 'bad' : h.sendQualifies ? 'ok' : ''));
+      items.push(recDt('$GWC held', h.gwcUsd == null ? '—' : '$' + Number(h.gwcUsd).toFixed(2),
+        h.gwcQualifies == null ? 'not checked' : h.gwcQualifies ? 'clears the $' + floor + ' floor' : 'under the $' + floor + ' floor',
+        h.gwcQualifies === false ? 'bad' : h.gwcQualifies ? 'ok' : ''));
+      items.push(recDt('No-sell streak', days(h.holdDays), 'the clock the Diamond tier reads'));
+      items.push(recDt('$GWC streak', days(h.gwcDays), 'counts double toward the tier'));
+      if (h.diamond) items.push(recDt('Diamond tier', (h.diamond.emoji || '💎') + ' Lv ' + h.diamond.level, esc(h.diamond.name || '')));
+      items.push(recDt('Holdings read', h.fresh ? 'Fresh' : 'Stale', h.fresh ? 'boosts are live' : 'boosts pay 1× until re-read', h.fresh ? 'ok' : 'bad'));
+    }
+
+    if (a) {
+      items.push(recDt('Call allowance', nf(a.used) + ' / ' + nf(a.limit), 'earned ' + a.earned + '/' + (rules.callLimitBase || 5) + ' × ' + nf(a.boost) + ' Diamond'));
+    }
+    if (g.rugged > 0) items.push(recDt('Rugged calls', nf(g.rugged), 'permanent, on your wall', 'bad'));
+
+    items.push(recDt('Strikes', nf(g.strikes || 0), (g.strikes || 0) === 0 ? 'none — they never expire' : 'they never expire', (g.strikes || 0) > 0 ? 'bad' : 'ok'));
+    items.push(recDt('Days away', nf(d.streak || 0), (d.streak || 0) > (d.graceDays || 2) ? 'past the free window' : 'grace is ' + (d.graceDays || 2) + ' days', (d.streak || 0) > (d.graceDays || 2) ? 'bad' : 'ok'));
+    items.push(recDt('Wallets linked', nf(g.wallets || 0), (g.wallets || 0) === 0 ? 'boosts need at least one' : 'read-only, signature only', (g.wallets || 0) === 0 ? 'bad' : ''));
+    items.push(recDt('Participation', g.holderVerified ? 'Verified' : 'Read-only', g.holderVerified ? 'you can do everything' : 'prove your bags to act', g.holderVerified ? 'ok' : 'bad'));
+
+    if (g.og) items.push(recDt('OG badge', '🏅 ' + esc(g.ogTierName || ''), (g.ogBonus || 1) + '× — revoked if you sell out'));
+    else if (g.ogRevoked) items.push(recDt('OG badge', 'Revoked', 'sold out of a coin — it cannot come back', 'bad'));
+
+    const live = (g.communities || []).filter(c => c.status === 'live' && !c.demo);
+    items.push(recDt('Communities', nf(live.length), live.length ? 'a flat ' + (rules.communityMult || 10) + '× while in ≥1' : 'no ' + (rules.communityMult || 10) + '× yet'));
+
+    if (b && b.rank > 0) items.push(recDt('Beta finish', '#' + b.rank, 'badge pays +' + (b.badgeMult - 1) + '× forever', 'ok'));
+    else if (b && b.endsAt && !b.over) items.push(recDt('Beta ends', fmtLeft(b.endsAt - Date.now()), 'every balance goes to zero', 'warn'));
+
+    return '<section class="grec" aria-labelledby="rec-h">' +
+      '<div class="grekt-head"><h3 class="gsub" id="rec-h">🗂️ Your record</h3>' +
+      '<p class="grekt-lede">Everything the site keeps on this account, including the parts that count against you. Read from the chain and from your own ledger — nothing here is self-reported.</p></div>' +
+      '<dl class="rec-grid">' + items.join('') + '</dl>' +
+    '</section>';
+  }
+
+  function rektBlock(g) {
+    return '<section class="grekt" aria-labelledby="rekt-h">' +
+      '<div class="grekt-head">' +
+        '<h3 class="gsub" id="rekt-h">💀 Rekt — how you lose it</h3>' +
+        '<p class="grekt-lede">Everything above is a way to gain. This is the other half, with your own standing against each rule. Nothing here is hidden behind a click.</p>' +
+      '</div>' +
+      '<div class="grekt-grid">' +
+        gateCard(g) + restrictCard(g) + decayCard(g) + callRiskCard(g) + revokeCard(g) + betaCard(g) +
+      '</div>' +
+    '</section>';
   }
 
   function boardList(lb, myUsername) {
@@ -790,11 +1191,40 @@
         '<li><b>Sell out of either coin entirely, ever, and the badge is revoked for good.</b> The badge follows your wallet: unlink it and the badge pauses until you relink. Everything is read from the chain, and a read that cannot be completed is retried rather than guessed — nobody loses a badge to an outage.</li>' +
       '</ul>';
   }
+  /* The two community ladders, printed from the server's own tables. Before this, the community-XP rates
+     appeared in NO file a signed-in user could reach — they existed only in the whitepaper, which lives at
+     the repo root and is never served — and the conviction rates only in about.html. A person could
+     therefore see their two bars move and have no way to learn what moved them. */
+  // shared by rulesBlock and xpTable: print the server's constant, fall back only if the payload predates it
+  const nCap = (v, fallback) => nf(v > 0 ? v : fallback);
+  function xpTable(R) {
+    const rows = [
+      ['Join', 'join', 'join'],
+      ['Post on its wall', 'wall_post', 'wall_post'],
+      ['Comment there', 'wall_comment', 'wall_comment'],
+      ['Get a reaction on your post there', 'wall_react_get', null],
+      ['React to a post there', null, 'wall_react_give'],
+      ['Send Call its token', 'send_call', 'send_call'],
+    ];
+    const c = R.commXp || {}, v = R.convXp || {};
+    if (!Object.keys(c).length && !Object.keys(v).length) return '';
+    const cell = (t, k) => (k && t[k] != null) ? '<b>+' + nf(t[k]) + '</b>' : '<span class="gxp-na">—</span>';
+    return '<div class="gxp-table-wrap"><table class="gxp-table">' +
+      '<caption>What moves each bar, per action</caption>' +
+      '<thead><tr><th scope="col">Action in a community</th><th scope="col">🏆 Community XP</th><th scope="col">💎 Your conviction</th></tr></thead><tbody>' +
+      rows.map(r => '<tr><th scope="row">' + r[0] + '</th><td>' + cell(c, r[1]) + '</td><td>' + cell(v, r[2]) + '</td></tr>').join('') +
+      '</tbody></table>' +
+      '<p class="gxp-foot">Two separate ledgers. Community XP levels the <b>community</b> up; conviction levels <b>you</b> up inside it. ' +
+      'A reaction pays community XP to the post’s author and conviction to whoever reacted. Your conviction is capped at <b>' + nCap(R.convDailyCap, 150) + '</b> a day per community, ' +
+      'and it only moves when you <b>do</b> something — never for time served.</p></div>';
+  }
+
   function rulesBlock(g) {
+    const R = g.rules || {};
     return '<details class="grules">' +
       '<summary>📖 How Send Power works — points, levels, the Holder Boost &amp; Communities</summary>' +
       '<div class="grules-body">' +
-        '<p><b>🪙 Send Power (points).</b> You earn points for doing things on the site — posting, reacting, commenting, following, tracking wallets, connecting your wallet, showing up daily, and swapping. Each action is capped per day so it stays fair for everyone — and everything that is not Send Call performance shares <b>one ceiling of 73,762 Send Power per rolling 24 hours</b>, whatever your boosts. Boosts pay in full on calls held in profit; that is the fast lane.</p>' +
+        '<p><b>🪙 Send Power (points).</b> You earn points for doing things on the site — posting, reacting, commenting, following, tracking wallets, connecting your wallet, showing up daily, and swapping. Each action is capped per day so it stays fair for everyone — and everything that is not Send Call performance shares <b>one ceiling of ' + nCap(R.socialDayCap, 73762) + ' Send Power per rolling 24 hours</b>, whatever your boosts. No single award can exceed <b>' + nCap(R.eventCap, 73762) + '</b> either. Boosts pay in full on calls held in profit; that is the fast lane.</p>' +
         '<p><b>🏆 Levels — infinite, exponential.</b> Points level you up on an exponential curve: early levels are quick, and each new level costs about <b>10% more Power than the last</b>, forever — there is <b>no level cap</b> (Level 10 ≈ 1,150 · Level 50 ≈ 101,000 · Level 99 ≈ 13,000,000 · Level 100 ≈ 14,400,000 · and it keeps climbing). Level 100 makes you the <b>Biggest Sender 👑</b>; beyond that lie <b>Send Deity ✨</b>, <b>Eternal Sender ♾️</b> and higher.</p>' +
         '<p><b>🔥 Holder Boost.</b> Hold $SEND / $GWC and <b>every</b> point you earn is multiplied. Your boost is <b>1 + (Supply boost × Diamond boost)</b>:</p>' +
         '<ul>' +
@@ -803,15 +1233,16 @@
           '<li>The two combine as <b>1 + (supply × diamond)</b>, with <b>no cap</b> — big bags held long enough scale your boost without limit.</li>' +
           '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — that\'s what makes it a <i>diamond hands</i> reward. They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
         '</ul>' +
-        '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes <b>live at 10 members</b>). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
+        '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes live at <b>10 verified holder slots</b>, each one a wallet that really holds the token). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
         '<ul>' +
           '<li><b>🪙 Real holders only:</b> to start, join, or post in a community you must <b>hold that token</b> (verified on-chain from a linked wallet). Sell or move it out and your 10× for that community is revoked.</li>' +
-          '<li><b>🏆 Community level</b> climbs as its <b>distinct members</b> stay active — posting and reacting on the community wall. It uses the same exponential curve and is <b>daily-capped</b> so it can’t be farmed by one person.</li>' +
-          '<li><b>💎 Your member level</b> (your “conviction”) is <b>per community</b> — it rises the longer you’re a member and the more you post there, and shows as a badge next to that token in the <b>Conviction Plays</b> section of your public wall.</li>' +
-          '<li><b>👑 Founder bonus:</b> whoever starts a community and grows it to 10 members earns a one-time Send Power bonus when it goes live.</li>' +
+          '<li><b>🏆 Community level</b> climbs as its <b>distinct members</b> stay active — posting and reacting on the community wall. Same exponential curve as your own level, and <b>daily-capped</b> so one person cannot farm it: any single member can push at most <b>' + nCap(R.commXpPerUserDay, 250) + ' community XP a day</b> into one community, however much they post.</li>' +
+          xpTable(R) +
+          '<li><b>💎 Your member level</b> (your “conviction”) is <b>per community</b>, and it moves <b>only when you do something there</b> — joining, posting, commenting, reacting, making a Send Call for that token, voting on a proposal. It never rises for time alone: being a member for a year and saying nothing leaves it where it started. It shows as a badge next to that token in the <b>Conviction Plays</b> section of your public wall, and it needs a <b>verified holder slot</b> — sell the token and it stops accruing.</li>' +
+          '<li><b>👑 Founder bonus:</b> whoever starts a community and grows it to <b>10 verified holder slots</b> — not 10 taps of Join — earns a one-time bonus when it flips live. It is paid once per <b>account</b>, ever, and it shares the same rolling 24h ceiling as everything else, so a day already spent grinding can leave less of it to pay out.</li>' +
         '</ul>' +
         ogRulesHtml(g) +
-        '<p><b>📣 Send Calls — what one call can pay.</b> A call pays three ways: an opening award (bigger for a bigger on-chain buy), a milestone for each whole X it hits (170 × the X, up to 50x), and a <b>diamond-hands hold bonus</b> that compounds the longer and higher it stays in profit. Everything one call ever pays you comes out of <b>one lifetime budget — the Send Power it takes to reach Level 70 (≈737,627)</b> — and that budget is carved on purpose: the opening award may take at most a tenth, the ladder at most three tenths, and <b>at least 60% is reserved for holding in profit</b>. Your hold bonus also accrues faster when the people who Sent It on your call are in profit too: <b>+10% per Sender in the green, up to 3×</b>. Level 100 is about twenty perfect calls; no single call can carry anyone to the top.</p>' +
+        '<p><b>📣 Send Calls — what one call can pay.</b> A call pays three ways: an opening award (bigger for a bigger on-chain buy), a milestone for each whole X it hits — the rungs rise in a <b>straight line</b>, not with the multiple, so a 50x rung is worth about six of the first rung rather than fifty, and a <b>diamond-hands hold bonus</b> that compounds the longer and higher it stays in profit. Everything one call ever pays you comes out of <b>one lifetime budget — the Send Power it takes to reach Level 70 (' + nCap(R.callBudget, 737627) + ')</b> — and that budget is carved on purpose: the opening award may take at most a tenth, the ladder at most three tenths, and <b>at least 60% is reserved for holding in profit</b>. Your hold bonus also accrues faster when the people who Sent It on your call are in profit too: <b>+10% per Sender in the green, up to 3×</b>. Level 100 is about twenty perfect calls; no single call can carry anyone to the top.</p>' +
         '<p><b>🏆 Biggest Sender — a fresh race every week.</b> Every Monday at 00:00 UTC the Biggest Sender board resets to zero, so the week\'s standings are only what you earned inside it. When the week ends, the game master pays the <b>top 10</b> a Send Power boost <b>by finishing place</b> — #1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10; exactly ten prizes, a tie at the edge to whoever joined first — on everything they earn for the whole of the following week, added on top of their other boosts. The board ranks <b>base points</b>: what you did, with every boost (Holder, OG, community, Rocket Run) and any prize taken out, so a whale, an OG and a newcomer race on the same footing. Toggle the Arena to 🏆 Biggest Senders to watch it.</p>' +
         '<p><b>🔒 Fair &amp; safe.</b> Your holdings, and whether you\'ve sold, are read straight from the blockchain and re-verified — so no one can fake diamond hands to cheat their level. Connecting your wallet is a <b>free signature — never a transaction</b>, and this site can never touch or move your funds.</p>' +
       '</div>' +
@@ -875,9 +1306,11 @@
       callAllowanceBlock(g) +
       lootLog(g) +
       '<div class="gdash-cols">' +
-        '<div class="gcol"><h3 class="gsub">🗺️ Quest Board</h3>' + earnList(g.perAction, mult) + '<p class="modal-note" style="margin-top:0.4rem;">Tap any quest to go do it. Points × your ⚡ Power. Daily caps keep it fair.</p></div>' +
+        '<div class="gcol"><h3 class="gsub">🗺️ Quest Board</h3>' + earnList(g.perAction, mult, g.rules) + dayCapLine(g) + '</div>' +
         '<div class="gcol" id="arena-col">' + arenaBlock(lb, competition, AUTH.user && AUTH.user.username) + '</div>' +
       '</div>' +
+      rektBlock(g) +
+      recordBlock(g) +
       rulesBlock(g);
 
     // clickable quest rows that open the right section / page

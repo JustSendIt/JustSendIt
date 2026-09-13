@@ -135,9 +135,11 @@
         '<ul class="sc-rules">' +
           '<li>📣 <b>+120</b> for making a call, scaled by the size of your own on-chain buy (the token needs ≥$500 liquidity, so no one can farm a dust pool). One opening award per token, ever.</li>' +
           '<li>📥 <b>Send-size boost:</b> we read on-chain the value of the tokens you bought from the pool <b>and still hold</b> — <b>every $100 = ×1 Send Power</b> (so $1,000 still held = ×10). Sell and it drops. The same applies when you 🚀 Send It on someone else’s call. The card shows what the caller and all followers put in. (Best-effort — only pool buys you still hold count.)</li>' +
-          '<li>🚀 <b>Per whole X it hits:</b> 1x → +170, 2x → +340, 3x → +510 … all the way to 50x → +8,500. The bigger the call, the more — no daily cap, though everything one call ever pays shares one lifetime budget, and most of it is reserved for holding.</li>' +
+          /* These four rungs are the code's: rung m = round(PTS.call_x × (1 + (m−1)×CALL_X_STEP)) with call_x 170
+             and step 0.1. This card promised 170 × the X — +8,500 at 50x — for as long as the ladder had been flat. */
+          '<li>🚀 <b>Per whole X it hits:</b> a milestone as each one passes — the rungs rise in a <b>straight line</b>, not with the multiple: 1x → +170, 2x → +187, 10x → +323, 50x → +1,003. No daily cap, but everything one call ever pays shares one lifetime budget, and <b>most of it is reserved for holding in profit</b> rather than for the ladder.</li>' +
           '<li>💎 <b>Diamond hands:</b> a call that <b>stays in profit</b> earns even more the <b>longer and higher</b> it holds — this bonus <b>compounds</b> over time, accruing automatically every few minutes it’s above entry.</li>' +
-          '<li>🚀 <b>+30</b> to <b>Send It!</b> on someone else’s call, scaled by your own buy — it pays on a <b>verified on-chain buy</b>, and one paying position per token. Stay in profit from your entry price and you earn the <b>same 💎 diamond-hands bonus</b> the caller does.</li>' +
+          '<li>🚀 <b>+30</b> to <b>Send It!</b> on someone else’s call, scaled by your own buy — it pays on a <b>verified on-chain buy</b>, and one paying position per token. Stay in profit from your entry price and you earn a 💎 <b>diamond-hands bonus on the same curve</b> the caller does — though the crew multiplier is the caller’s alone, and a Sender’s lifetime budget for one call is a quarter of theirs.</li>' +
         '</ul>' +
         '<p class="sc-explain-note">Not financial advice. Most tokens go to zero — <b>always DYOR</b>.</p>' +
       '</div>' +

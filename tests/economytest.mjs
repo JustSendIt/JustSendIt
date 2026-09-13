@@ -46,6 +46,10 @@ check('the ladder still rewards a bigger call more', total(50) > total(10) && to
 const DECAYsrc = grab(/const DECAY = \{[\s\S]*?\n\};/, 'DECAY');
 const dayNoSrc = grab(/const dayNo = [^\n]*\n/, 'dayNo');
 const decayUserSrc = grab(/function decayUser\(u, today\) \{[\s\S]*?\n\}\n/, 'decayUser');
+/* The rate arithmetic now lives in decayReasons(), shared with the forecast the dashboard prints, so the
+   sandbox has to carry it too. That sharing is the point: this suite tests the numbers a user is SHOWN as
+   well as the numbers they are charged, because they are now the same function. */
+const decayReasonsSrc = grab(/function decayReasons\(u, showedUp, streak\) \{[\s\S]*?\n\}\n/, 'decayReasons');
 // decayUser no longer reads the points ledger to decide whether someone showed up — it asks
 // checkedInToday(), which reads the users.checkin_at stamp the route writes whether or not the award paid.
 const checkedInSrc = grab(/function checkedInToday\(userId, row\) \{[\s\S]*?\n\}/, 'checkedInToday');
@@ -76,7 +80,7 @@ function mkEnv(opts = {}) {
     exec() {},
   };
   const fn = new Function('db', 'now', 'notify', 'restrictionOf', 'console', 'ymd',
-    DECAYsrc + '\n' + dayNoSrc + checkedInSrc + '\n' + decayUserSrc + '\nreturn { DECAY, decayUser, checkedInToday };')(
+    DECAYsrc + '\n' + dayNoSrc + checkedInSrc + '\n' + decayReasonsSrc + '\n' + decayUserSrc + '\nreturn { DECAY, decayUser, decayReasons, checkedInToday };')(
     db, () => NOW, (id, ico, msg) => state.notes.push(msg), () => (opts.readOnly ? { level: 1 } : null), console, () => '2026-9-11');
   return { fn, state };
 }

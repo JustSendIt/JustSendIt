@@ -58,7 +58,9 @@
       <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1.2rem; flex-wrap:wrap;">
         <span id="pf-avatar" style="font-size:2.2rem;" aria-hidden="true">🚀</span>
         <div>
-          <h1 style="font-weight:800; font-size:1.2rem; margin:0;">@<span id="pf-username-show"></span></h1>
+          <!-- h2, not h1: "Your Send Station" above is the page heading, and two h1s on one page leaves a
+               screen-reader user with two competing answers to "what is this page". -->
+          <h2 style="font-weight:800; font-size:1.2rem; margin:0;">@<span id="pf-username-show"></span></h2>
           <a id="pf-wall-link" class="btn btn-primary btn-sm" href="#" style="margin-top:0.4rem;">🧱 View My Public Wall →</a>
         </div>
         <button class="btn btn-ghost btn-sm" id="signout-btn" style="margin-left:auto;">Sign Out 👋</button>

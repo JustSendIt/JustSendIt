@@ -336,7 +336,7 @@ Only $Send you buy **after** your baseline (recorded when the restriction was ap
 
 Send Power is **not** a permanent record of what you once did. It is a balance, and it **drains every day you don't show up**. Levels can go *down*. The design goal is that a leaderboard reflects who is playing now, not who was early — a number that only ever climbs makes an inactive Level 90 permanently outrank an active Level 60, and after a year the board stops meaning anything.
 
-**One drain per UTC day, per account.** A background sweep runs every **5 minutes** and takes up to **200** accounts whose next decay stamp has come due. System accounts are exempt.
+**One drain per UTC day, per account.** A background sweep runs every **5 minutes** and takes up to **500** accounts (`DECAY_BATCH`) whose next decay stamp has come due — 500 × 288 ticks, so about 144,000 accounts a day. System accounts are exempt.
 
 **The daily rate is a sum of three things, then capped:**
 
@@ -351,19 +351,58 @@ So: away 3 days → 0.4%. Away 7 days → 1.2%. Away 21 days → 4% (the cap). A
 
 **What stops it.** A **daily check‑in** — and nothing else. Holding coins doesn't stop it; neither does a high level. **Anyone can check in, including a muted account** — read‑only pauses what you can *make*, not your ability to defend what you already earned.
 
-**It stops two of the three components.** A check‑in inside the last 24 hours sets your absence streak to zero *and* skips the underwater‑call charge entirely, so on a day you show up those cost you **nothing**. The bad‑call rate only ever applies on a day you were *already* away: a call that went down is a market outcome, not misconduct, and billing someone daily for one while they are actively participating would be a far harsher rule than the one intended.
+**It stops two of the three components.** A check‑in inside the current **UTC day** sets your absence streak to zero *and* skips the underwater‑call charge entirely, so on a day you show up those cost you **nothing**. The bad‑call rate only ever applies on a day you were *already* away: a call that went down is a market outcome, not misconduct, and billing someone daily for one while they are actively participating would be a far harsher rule than the one intended.
 
 **The read‑only charge is the exception.** It is the one component a check‑in does **not** cancel — while restricted you pay its flat 1.0 point per day regardless. A penalty that stops costing anything the moment you tap a button is not a penalty. But it is *all* you pay if you keep showing up: a steady 1%/day, instead of that plus an absence rate climbing toward the 4% ceiling.
 
 **Old bad calls never stop counting.** The underwater count is `cur_price < entry_price` over *all* your calls, and since nothing ever closes a call, one you made a year ago that never recovered still adds its 0.3% to any day you're absent. It costs nothing on a day you check in.
 
-**Two clocks, deliberately.** Decay is held off by a check‑in within a **rolling 24 hours**, while the 60‑point award is once per **UTC calendar day** — so a late‑night check‑in still protects you even after the calendar day turns.
+**One clock, not two.** `checkedInToday()` compares **UTC day numbers**, the same clock the 60‑point award's `daily:<id>:<ymd>` ref uses. A check‑in at 23:50 UTC protects that day and not the next. This section previously claimed a rolling 24‑hour window that carried over past midnight; it does not, and it never has.
 
 **Floors, so it can't wipe you out.** Balances at or below **5,000** are never touched, and the drain is `min(balance × rate, balance − 5,000)` — decay can take you down toward the floor but never through it, and never negative. If the computed drain is **less than one whole point** it takes nothing rather than rounding up.
 
 **It is on the record.** Every drain writes a negative row to your points ledger (`kind: 'decay'`) and sends you a **📉** notification, so a drop is always explained and always auditable. Nothing happens silently.
 
 **What decay does *not* touch:** your Holder Boost, Diamond level, OG tier, badges, community memberships, or any call's recorded history. It only ever moves the points balance.
+
+### 3.6c Your dashboard shows the other half of the ledger 💀
+
+For a long time every block on the profile dashboard was a way to **gain**, while the same engine was
+quietly draining balances for absence, muting accounts on a ladder that never resets, shrinking callers'
+allowances and revoking badges on a sell. None of that reached the client, so the first anyone heard of
+any of it was a notification saying it had already happened.
+
+`gamifySummary()` now ships the rest: `boost` (the exact figure `effectiveMult` pays), `restriction`,
+`probation`, `strikes`, `decay`, `beta`, `rugged`, `holderVerified`/`holderProof`, `wallets`, and a
+**`rules` object carrying every constant the page prints**. Two sections render it:
+
+- **💀 Rekt — how you lose it.** Six cards, each stating the rule *and* this account's standing against it:
+  the live decay forecast (what the next sweep will take, which components, and which of them a check‑in
+  cancels), the strike ladder with the rung you are on, what a rugged or underwater call costs, what is
+  revoked rather than drained, the participation check, and the beta reset. It is **not** behind a
+  `<details>` — a consequence you can be surprised by has to be visible without a click.
+- **🗂️ Your record.** A definition list of everything the site tracks: rank, level, the multiplier you are
+  paid at, each coin's dollar value against the $100 floor, both hold streaks, Diamond tier, whether the
+  holdings read is fresh, call allowance, strikes, days away, wallets linked, participation state, OG,
+  communities, and the beta countdown.
+
+**The numbers now travel with the payload.** They used to be typed into `public/gamify.js`, and by the
+time anyone checked, five daily caps were wrong (track said 10/day against a real 3; watch 30 against 5;
+`react_get` 60 against 20; `vote_get` 100 against 30; `be_followed` 30 against 10), the Send Call X‑ladder
+was quoted at the old multiplicative rate and overstated the 50× rung by **8.5×**, the per‑action ceiling
+was printed as 500,000 against a real 73,762, and the beta badge was missing from the client's boost stack
+entirely. `tests/dashboard.mjs` asserts the server ships each constant and the client reads it.
+
+**Two figures that did not add up, now do.** The equation strip printed `1 + (supply × diamond) = total`
+using the **raw** supply percentage while the server pays on the **qualifying** one, so an account holding
+$45 of $SEND and $130 of $GWC was shown `1 + 3.9 × 10 = 28.00` — two numbers next to each other rather
+than an equation. Both the strip and the Vault footer now use the figure the server actually pays on, and
+say plainly which coin is being excluded by the floor and why.
+
+**Losses are in the log.** The Loot Log filtered its own ledger to `total > 0`, so `decay` — the only
+negative kind — could never appear in it, while two pages promised "every drain writes a line to your
+points history". Negative rows now render in their own list, and a negative day is signed and coloured as
+a loss instead of printing `+-1,234` in gain green.
 
 ### 3.7 Safety tools
 
@@ -497,6 +536,17 @@ Rally the fans of a token into one place. A **community** is a fan group for a s
 - Market stats on community cards are cached (~45s refresh) and are **display only** — nothing about a community implies the token is safe or a good buy. **Most tokens go to zero.**
 
 ---
+
+**A dollar floor can never quietly become a dust floor.** `holdsToken()` used to raise its threshold to
+the dollar equivalent only `if (minUsd > 0 && priceUsd > 0)`, leaving it at `OG_DUST_WEI` otherwise. Every
+community caller passes `communities.c_price`, a **nullable** cached price — so whenever that price was
+missing, a slot the whole site describes as "$100 of the token" was satisfied by `1e-9` of it, and with it
+the verified membership, the go‑live count and the flat 10×. It now returns **`null`** — *undecided* —
+when a floor is demanded and no price is available. Grant paths refuse and say which it is ("nothing has
+been decided — try again in a minute"); the revocation sweep skips the row, exactly as it already did for
+an RPC error, so an unreadable price never takes a slot from someone who has done nothing wrong. This is
+the same rule `refreshHolder` uses for $SEND/$GWC, where an unreadable price keeps the previous verdict
+rather than falling through to dust.
 
 ### 3.10b The holders‑only wall 🔒
 
