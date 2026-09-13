@@ -1537,16 +1537,21 @@
     const wrap = document.getElementById('np-saved'); if (!wrap) return;
     wrap.innerHTML = state.saved.map((v, i) => '<div class="np-savedview"><button class="np-sv-apply" type="button" data-sv="' + i + '">📁 ' + esc(v.name) + '</button><button class="np-sv-del" type="button" data-svdel="' + i + '" aria-label="Delete view ' + esc(v.name) + '">✕</button></div>').join('');
   }
-  function saveCurrentView() {
+  /* Save lives in BOTH the sticky header and the footer, so the name box has to open wherever it was
+     pressed — a header press that dropped the input eight fieldsets below is the same reach problem the
+     header button exists to solve. `host` is the element to open in; only ever one form at a time. */
+  function saveCurrentView(host) {
     // inline name input (prompt() is avoided project-wide — blocked in some embedded browsers)
-    const foot = document.querySelector('.np-filters-foot'); if (!foot) return;
-    let form = foot.querySelector('.np-saveform');
+    const where = (host && host.nodeType === 1) ? host : document.querySelector('.np-filters-foot');
+    if (!where) return;
+    document.querySelectorAll('#np-filters .np-saveform').forEach(f => { if (f.parentElement !== where) f.remove(); });
+    let form = where.querySelector('.np-saveform');
     if (form) { const i = form.querySelector('input'); if (i) i.focus(); return; }
     form = document.createElement('div'); form.className = 'np-saveform';
     form.innerHTML = '<input type="text" class="np-saveinput addr-input" maxlength="24" placeholder="Name this view…" aria-label="Name this view">' +
       '<button class="btn btn-sm btn-primary" type="button" data-savego>Save</button>' +
       '<button class="btn btn-sm btn-ghost" type="button" data-savecancel aria-label="Cancel">✕</button>';
-    foot.appendChild(form);
+    where.appendChild(form);
     const inp = form.querySelector('input'); inp.focus();
     const done = (ok) => {
       if (ok) {
@@ -1561,7 +1566,12 @@
     };
     form.querySelector('[data-savego]').addEventListener('click', () => done(true));
     form.querySelector('[data-savecancel]').addEventListener('click', () => done(false));
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') { e.preventDefault(); done(false); } });
+    /* stopPropagation matters: the panel closes on a document-level Escape, so without it one press to
+       back out of the name box would also shut the whole settings panel. Innermost thing wins. */
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
+      else if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); e.stopPropagation(); done(false); }
+    });
   }
   function applySaved(i) {
     const v = state.saved[i]; if (!v) return;
@@ -1667,14 +1677,16 @@
     // preset chips
     document.querySelectorAll('#np-presets .np-chip').forEach(c => c.addEventListener('click', () => applyPreset(c.dataset.preset)));
     // saved views
-    if ($('np-savenow')) $('np-savenow').addEventListener('click', saveCurrentView);
+    if ($('np-savenow')) $('np-savenow').addEventListener('click', () => saveCurrentView(document.querySelector('.np-filters-foot')));
+    if ($('np-savenow-top')) $('np-savenow-top').addEventListener('click', () => saveCurrentView(document.querySelector('.np-fhead')));
     const savedWrap = $('np-saved');
     if (savedWrap) savedWrap.addEventListener('click', e => {
       const del = e.target.closest('[data-svdel]'); if (del) { e.stopPropagation(); deleteSaved(Number(del.dataset.svdel)); return; }
       const sv = e.target.closest('[data-sv]'); if (sv) applySaved(Number(sv.dataset.sv));
     });
     // reset
-    if ($('np-reset')) $('np-reset').addEventListener('click', resetFilters);
+    if ($('np-reset')) $('np-reset').addEventListener('click', () => resetFilters());
+    if ($('np-reset-top')) $('np-reset-top').addEventListener('click', () => resetFilters());
     // refresh
     $('np-refresh').addEventListener('click', () => { const btn = $('np-refresh'); if (!reduced()) btn.classList.add('spin'); fetchPairs(true).then(() => setTimeout(() => btn.classList.remove('spin'), 500)); });
     // staged new-pairs bar
@@ -1762,6 +1774,10 @@
     const q = document.getElementById('np-q'); if (q) q.value = '';
     syncControls(); persist(); updateChips(); updateFcount();
     selectSafety('safer');   // triggers applyView + render
+    /* Said out loud because Reset is reachable from the sticky header now, where the controls it cleared
+       are scrolled off-screen — without this the button looks like it did nothing. */
+    if (window.sendToast) sendToast('Filters reset ↺');
+    announce('Filters reset. ' + state.view.length + ' pairs shown');
   }
 
   /* ============================ 🎬 HOT FEED (TikTok-style) ============================ */

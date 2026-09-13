@@ -158,6 +158,44 @@ try {
       /window\.npSetFiltersOpen\(true, false\)/.test(NP) && !/panel\.hidden = false; if \(more\)/.test(NP));
   }
 
+  /* ═══════════ 6c. the panel's own buttons are reachable ═══════════
+     Measured with the panel open and scrolled to its end: the footer sat at 805–849 while #music-player
+     held 788–849 (z 250) and #compose-fab 799–850 (z 240), against the panel's z 45. Save and Reset were
+     not near the pinned controls, they were UNDER them. Two fixes: the panel reserves that strip, and both
+     actions also sit in the sticky header so neither needs a scroll to the end of eight groups. */
+  {
+    // the strip the pinned controls own is declared once, not re-derived per rule
+    check('the pinned-control clearance is a single token', /--fab-clear: calc\(5\.5rem \+ env\(safe-area-inset-bottom, 0px\)\);/.test(CSS));
+    check('  ...and the page footer uses that token rather than its own copy', /footer \{\s*\n\s*padding-bottom: var\(--fab-clear\);/.test(CSS));
+    check('the pop-down reserves the strip so its footer clears the pinned controls',
+      /\.np-filters \{[\s\S]{0,700}?padding-bottom: calc\(0\.7rem \+ var\(--fab-clear\)\);/.test(CSS));
+    check('  ...and so does the phone bottom sheet, which is pinned to the same edge',
+      /@media \(max-width: 760px\) \{[\s\S]{0,700}?padding-bottom: calc\(0\.7rem \+ var\(--fab-clear\)\);/.test(CSS));
+    check('  ...and the footer is not left below the panel stacking floor', /\.np-filters-foot \{ position: relative; z-index: 1; \}/.test(CSS));
+
+    check('Save is offered at the top of the panel as well as the bottom',
+      /id="np-savenow-top"/.test(HTML) && /id="np-savenow"/.test(HTML));
+    check('Reset is offered at the top of the panel as well as the bottom',
+      /id="np-reset-top"/.test(HTML) && /id="np-reset"/.test(HTML));
+    check('  ...both inside the sticky header, so they stay in reach while scrolling',
+      /class="np-fhead"[\s\S]{0,600}?id="np-savenow-top"[\s\S]{0,200}?id="np-reset-top"/.test(HTML));
+    check('  ...and the header pair is laid out, not stacked on the title',
+      /\.np-fhead-acts \{ display: flex;/.test(CSS));
+
+    /* The event-as-argument bug again: saveCurrentView(host) handed straight to addEventListener receives
+       the click Event as `host`, and the name box would open inside nothing. */
+    check('neither Save button is handed the raw click event as its target',
+      !/addEventListener\('click', saveCurrentView\)/.test(NP));
+    check('  ...and the function guards the argument it is given anyway',
+      /\(host && host\.nodeType === 1\) \? host : document\.querySelector\('\.np-filters-foot'\)/.test(NP));
+    check('the name box opens where Save was pressed', /where\.appendChild\(form\)/.test(NP));
+    check('  ...and only one is ever open', /forEach\(f => \{ if \(f\.parentElement !== where\) f\.remove\(\); \}\)/.test(NP));
+    check('Escape out of the name box does not also shut the panel',
+      /e\.preventDefault\(\); e\.stopPropagation\(\); done\(false\)/.test(NP));
+    check('Reset says it happened, since from the header the cleared controls are off-screen',
+      /sendToast\('Filters reset/.test(NP) && /announce\('Filters reset\./.test(NP));
+  }
+
   /* ═══════════ 7. the bug that made every row after the first fail ═══════════
      passFilters gained a second parameter, and two call sites passed it straight to Array.filter — which
      hands the callback (element, index, array). Row 0 worked; every row after it was tested against a

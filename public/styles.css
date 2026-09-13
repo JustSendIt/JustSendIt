@@ -37,6 +37,12 @@
 
   /* ---------- FOCUS (never accent-derived — prefs.js must not be able to hide it) ---------- */
   --focus: #eef4ff;
+  /* How much of the bottom of the VIEWPORT the two pinned controls own — #music-player (bottom 1rem,
+     ~61px tall, z 250) and #compose-fab (bottom 1rem, ~51px, z 240). Anything that puts a control near
+     the bottom of the screen has to clear this or the pinned ones sit on top of it: they are pinned to
+     the viewport, not to the column, so it happens at every width, not just on a phone. Declared once
+     because it was already being re-derived in two places. */
+  --fab-clear: calc(5.5rem + env(safe-area-inset-bottom, 0px));
   --focus-halo: rgba(5,3,14,0.92);
 
   /* ---------- INK-ON-ACCENT ---------- */
@@ -2425,7 +2431,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .np-slide-more:hover, .np-slide-more:focus-visible { background: var(--ink-4); border-color: var(--tok, var(--green)); }
 @media (prefers-reduced-motion: reduce) { .np-slide-more::after { transition: none; } }
 /* right rail */
-.np-slide-rail { position: absolute; right: 0.6rem; bottom: 5.5rem; display: flex; flex-direction: column; gap: 0.6rem; z-index: 3; } /* bottom offset clears the compose FAB (fixed bottom-right) */
+.np-slide-rail { position: absolute; right: 0.6rem; bottom: var(--fab-clear); display: flex; flex-direction: column; gap: 0.6rem; z-index: 3; } /* same reserved strip as the footer and the settings panel */
 .np-rail-btn { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: rgba(16,22,35,0.85); backdrop-filter: blur(6px); border: 1.5px solid var(--ink-4); color: var(--text); font-size: 1.3rem; text-decoration: none; cursor: pointer; }
 .np-rail-btn:hover { border-color: var(--green); color: var(--green-bright); }
 .np-rail-btn:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 2px; }
@@ -3452,10 +3458,10 @@ body::after {
    ANY page parked the FAB and the player on top of the last line of fine print. The clearance
    used to live in a max-width:560px block, which is backwards — the overlap is not a phone
    problem, it happens at every width because both elements are pinned to the viewport, not the
-   column. 5.5rem clears the taller of the two with room to spare, and the safe-area inset keeps
-   that true on notched devices where the FAB is itself pushed up. */
+   column. The size of that strip is --fab-clear (declared with the palette) — the scanner's
+   settings panel reserves the same strip for the same reason. */
 footer {
-  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--fab-clear);
   position: relative;
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--green) 4%, transparent), transparent 220px),
@@ -4144,6 +4150,11 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   position: absolute; z-index: 45; left: 0; right: 0;
   max-height: min(70vh, 620px); overflow-y: auto; overscroll-behavior: contain;
   margin-top: 0.2rem;
+  /* Reserve the strip the pinned controls own. Measured before this line existed: with the panel scrolled
+     to its end the footer sat at 805–849 while #music-player held 788–849 and #compose-fab 799–850, both
+     at z-index 240+ against this panel's 45 — "Save current view" and "Reset filters" were not close to
+     the pinned buttons, they were behind them, and could not be clicked at all. */
+  padding-bottom: calc(0.7rem + var(--fab-clear));
   box-shadow: 0 24px 60px rgba(0,0,0,0.6);
   border-color: color-mix(in srgb, var(--green) 30%, var(--ink-4));
   align-items: flex-start;
@@ -4178,7 +4189,9 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   .np-filters {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto;
     max-height: 82dvh; margin: 0; border-radius: 18px 18px 0 0;
-    border-bottom: 0; padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    /* same clearance as the desktop pop-down: as a fixed bottom sheet this sits UNDER the pinned
+       player and SEND IT button (z 240+ vs 45), so the strip they occupy has to stay reserved here too. */
+    border-bottom: 0; padding-bottom: calc(0.7rem + var(--fab-clear));
   }
   .np-sheet-backdrop { background: rgba(4,6,14,0.6); backdrop-filter: blur(2px); }
   .np-fhead { margin-top: -0.7rem; }
@@ -4189,4 +4202,17 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   @media (max-width: 760px) {
     @keyframes npSheetIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
   }
+}
+
+/* ---- Save and Reset also live at the top --------------------------------------------------------
+   Reserving the strip stops the footer pair being covered, but it still sits past eight fieldsets. The
+   same two actions sit in the sticky header as well, so neither needs a scroll to the end to reach. */
+.np-filters-foot { position: relative; z-index: 1; }
+.np-fhead-acts { display: flex; gap: 0.4rem; flex: 0 0 auto; }
+.np-fhead-acts .btn { white-space: nowrap; }
+/* the "name this view" form opens wherever Save was pressed; in the header that means its own row */
+.np-fhead .np-saveform { order: 5; flex-basis: 100%; padding-top: 0.15rem; }
+@media (max-width: 560px) {
+  .np-fhead-sub { order: 3; flex-basis: 100%; }
+  .np-fhead-acts { order: 2; }
 }
