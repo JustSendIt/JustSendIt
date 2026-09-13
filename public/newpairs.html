@@ -107,6 +107,20 @@
       <button class="np-refresh" type="button" id="np-refresh" aria-label="Refresh now">↻</button>
     </section>
 
+    <!-- Five complete search shapes. Not grades and not recommendations: each one is a saved set of
+         settings, and pressing it REPLACES every setting rather than merging, so nothing left over from a
+         previous shape can quietly narrow the board. The settings panel opens and visibly moves to match,
+         which is the point — the strategy is a starting position to fine-tune from, not a black box. -->
+    <div class="np-strats" id="np-strategies" role="group" aria-label="Scanner strategies">
+      <span class="np-strats-lead">Start from a strategy:</span>
+      <button class="np-strat" type="button" data-strat="first30"  aria-pressed="false">🌱 First 30 Minutes</button>
+      <button class="np-strat" type="button" data-strat="liqfirst" aria-pressed="false">💧 Liquidity First</button>
+      <button class="np-strat" type="button" data-strat="crowd"    aria-pressed="false">👥 Crowd Forming</button>
+      <button class="np-strat" type="button" data-strat="momentum" aria-pressed="false">🚀 Moving Right Now</button>
+      <button class="np-strat" type="button" data-strat="strict"   aria-pressed="false">🛡️ Strictest Checks</button>
+    </div>
+    <p class="np-strat-note" id="np-strat-note" hidden></p>
+
     <div class="np-chips" id="np-presets" role="group" aria-label="Quick filters">
       <button class="np-chip" type="button" data-preset="safest"   aria-pressed="false">🛡️ Safest</button>
       <button class="np-chip" type="button" data-preset="verified" aria-pressed="false">✓ Verified</button>
@@ -128,19 +142,46 @@
       </fieldset>
       <fieldset class="np-fgroup"><legend class="np-fgroup-h">Age &amp; size</legend>
         <label class="np-f-range">Max age <input type="range" id="f-maxage" min="5" max="1440" step="5" value="1440"><output id="f-maxage-out">All-time</output></label>
-        <label class="np-f-range">Min liquidity <input type="range" id="f-minliq" min="0" max="50000" step="1000" value="0"><output id="f-minliq-out">$0</output></label>
-        <label class="np-f-range">Min vol 24h <input type="range" id="f-minvol" min="0" max="50000" step="500" value="0"><output id="f-minvol-out">$0</output></label>
+        <label class="np-f-range">Min age <input type="range" id="f-minage" min="0" max="720" step="5" value="0"><output id="f-minage-out">any</output></label>
+        <label class="np-f-range">Min liquidity <input type="range" id="f-minliq" min="0" max="250000" step="1000" value="0"><output id="f-minliq-out">$0</output></label>
+        <label class="np-f-range">Min vol 24h <input type="range" id="f-minvol" min="0" max="500000" step="500" value="0"><output id="f-minvol-out">$0</output></label>
         <label class="np-f-range">Min health <input type="range" id="f-minhealth" min="0" max="100" step="5" value="0"><output id="f-minhealth-out">0</output></label>
+      </fieldset>
+      <!-- Market cap uses marketCap where the feed gives one and FDV where it does not; the card labels
+           which, because dividing one by the other would be two different questions with one answer. -->
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">Market cap</legend>
+        <label class="np-f-range">Min cap <input type="range" id="f-mcapmin" min="0" max="100000000" step="5000" value="0"><output id="f-mcapmin-out">$0</output></label>
+        <label class="np-f-range">Max cap <input type="range" id="f-mcapmax" min="0" max="100000000" step="5000" value="100000000"><output id="f-mcapmax-out">any</output></label>
       </fieldset>
       <fieldset class="np-fgroup"><legend class="np-fgroup-h">Holders &amp; concentration</legend>
         <label class="np-f-range">Min holders <input type="range" id="f-minholders" min="0" max="500" step="10" value="0"><output id="f-minholders-out">0</output></label>
         <label class="np-f-range">Max top wallet <input type="range" id="f-maxtop" min="5" max="100" step="5" value="100"><output id="f-maxtop-out">any</output></label>
+        <label class="np-f-range">Max top 10 <input type="range" id="f-maxtop10" min="5" max="100" step="5" value="100"><output id="f-maxtop10-out">any</output></label>
+      </fieldset>
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">The launch</legend>
+        <label class="np-f-range">Max block-0 share <input type="range" id="f-maxsniped" min="0" max="100" step="1" value="100"><output id="f-maxsniped-out">any</output></label>
+        <label class="np-f"><input type="checkbox" id="f-sniperok"> 🎯 Block-0 must be clean</label>
       </fieldset>
       <fieldset class="np-fgroup"><legend class="np-fgroup-h">Activity</legend>
         <label class="np-f">Price 1h
           <select id="f-price1h"><option value="any">Any</option><option value="up">Up only</option><option value="down">Down only</option><option value="m20">∣move∣ ≥ 20%</option><option value="m50">≥ 50%</option></select></label>
-        <label class="np-f">Flow 24h
+        <label class="np-f">Flow
           <select id="f-flow"><option value="any">Any</option><option value="buys">More buys</option><option value="sells">More sells</option><option value="bal">Balanced</option></select></label>
+        <label class="np-f">Flow window
+          <select id="f-flowwin"><option value="h24">24 hours</option><option value="h1">1 hour</option></select></label>
+        <label class="np-f-range">Min vol 1h <input type="range" id="f-minvolh1" min="0" max="100000" step="500" value="0"><output id="f-minvolh1-out">$0</output></label>
+        <label class="np-f-range">Min buys 1h <input type="range" id="f-minbuysh1" min="0" max="200" step="1" value="0"><output id="f-minbuysh1-out">any</output></label>
+        <label class="np-f-range">Volume ÷ liquidity <input type="range" id="f-volliq" min="0" max="20" step="0.1" value="0"><output id="f-volliq-out">any</output></label>
+      </fieldset>
+      <!-- The honest counterweight to every filter that lets an unreadable signal through. Tick one and a
+           token the site could NOT check is excluded, instead of quietly counting as fine. -->
+      <fieldset class="np-fgroup"><legend class="np-fgroup-h">Must actually have been checked</legend>
+        <label class="np-f"><input type="checkbox" data-req="liquidity"> 💧 Liquidity</label>
+        <label class="np-f"><input type="checkbox" data-req="holders"> 👥 Holder count</label>
+        <label class="np-f"><input type="checkbox" data-req="concentration"> 🐋 Concentration</label>
+        <label class="np-f"><input type="checkbox" data-req="verified"> 📄 Verification</label>
+        <label class="np-f"><input type="checkbox" data-req="snipers"> 🎯 Block-0 scan</label>
+        <label class="np-f"><input type="checkbox" data-req="indexed"> 📈 Indexed</label>
       </fieldset>
       <fieldset class="np-fgroup np-fgroup--hide"><legend class="np-fgroup-h">Hide risk flags</legend>
         <label class="np-f"><input type="checkbox" data-hide="honeypotSuspect"> 🍯 Honeypots</label>
@@ -152,6 +193,8 @@
         <label class="np-f"><input type="checkbox" data-hide="lowHolders"> 👥 Few holders</label>
         <label class="np-f"><input type="checkbox" data-hide="sellPressure"> 🔻 Heavy selling</label>
         <label class="np-f"><input type="checkbox" data-hide="deadVolume"> 💤 No volume</label>
+        <label class="np-f"><input type="checkbox" data-hide="sniperDump"> 🎯 Block-0 sold out</label>
+        <label class="np-f"><input type="checkbox" data-hide="sniperHeavy"> 🎯 Block-0 took a lot</label>
       </fieldset>
       <div class="np-savedviews" id="np-saved" aria-label="Saved views"></div>
       <div class="np-filters-foot">

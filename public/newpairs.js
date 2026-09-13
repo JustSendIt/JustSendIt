@@ -153,8 +153,56 @@
      immaterial (under 1% of the float, taken and held). `sniperOk` is null until the scan finishes — not
      checked is not the same as checked and fine, so it withholds the badge rather than granting it. */
   const sniperOk = (p) => !!(p.risk && p.risk.sniperOk === true);
+  /* ═══ THE FLOOR THE READER CANNOT LOWER ═══════════════════════════════════════════════════════════
+     "Looks Good, Send It" is awarded against the READER'S OWN BAR — that is the whole point of the
+     settings, and it is why the tag can now appear at all. But a bar somebody sets for themselves is not
+     permission to call a honeypot clean. These four are absolute: no setting waives them, no strategy
+     relaxes them, and a token carrying any of them can never wear the tag whatever the filters say.
+
+     They are the ones where being wrong is not a matter of taste:
+       honeypotSuspect — people are buying and nobody can sell
+       dumping         — it is falling off a cliff as you read this
+       sniperDump      — the wallets that got in first have already sold into you
+       triage avoid    — the risk model's own bottom tier
+     Everything else — unverified, few holders, thin liquidity, one big wallet, quiet volume, a serial
+     deployer, a heavy block-0 — is a judgement the reader is entitled to make for themselves, as long as
+     the card keeps saying plainly that it was made. */
+  const VERDICT_FLOOR = ['honeypotSuspect', 'dumping', 'sniperDump'];
+  function floorBreached(p) {
+    if (!p.risk) return true;
+    if (triageOf(p) === 'avoid') return true;
+    return VERDICT_FLOOR.some(k => !!p.risk[k]);
+  }
+  /* Does this token clear the bar the reader actually set? Health, the flags they chose to hide, the
+     signals they insisted were genuinely checked — the same predicate the board filters on, so the tag
+     and the list can never disagree about what qualifies. */
+  function meetsYourBar(p) {
+    const f = state.filters;
+    if (floorBreached(p)) return false;
+    if (!passFilters(p, f)) return false;
+    // a reader who has set NO bar at all gets the site's own, so the tag never becomes a participation medal
+    if (activeFilterCount(f) === 0) return !thinData(p) && triageOf(p) === 'ok' && Math.round((p.risk && p.risk.health) || 0) >= 100 && sniperOk(p);
+    return true;
+  }
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
+    if (meetsYourBar(p)) {
+      /* The wording changes with WHOSE bar it cleared, because those are different claims and a reader
+         must never be able to mistake one for the other. Against the site's own default it is the site
+         saying so; against a custom bar it is the reader's own filters saying so, and the tag says
+         "matches what you asked for" in the tooltip rather than pretending to be an endorsement. */
+        /* TWO DIFFERENT CLAIMS, TWO DIFFERENT TAGS. A reader who sees the rocket must be able to tell
+         whether the SITE said so or their own filter did — otherwise a loose setting quietly borrows the
+         site's credibility, which is the one thing this verdict is not allowed to lend. So the site's own
+         bar keeps the rocket and its wording; a bar the reader set gets its own word and its own colour,
+         and names itself as theirs. Both mean "this passed", but only one of them is us saying it. */
+      const own = activeFilterCount() === 0;
+      return own
+        ? { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
+            why: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' }
+        : { cls: 'np-t-ok np-t-yours', ico: '🎯', word: 'Matches Your Bar, Send It', yours: true,
+            why: 'This clears every setting YOU asked for, and trips none of the checks nobody can waive. It is your filter saying so, not us.' };
+    }
     if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
     if (tri === 'ok' && health >= 100 && !sniperOk(p)) {
       const st = p.risk && p.risk.snipers ? p.risk.snipers.status : null;
@@ -162,7 +210,6 @@
         ? { cls: 'np-t-caution np-t-snipe', ico: '🎯', word: 'Block-0 snipers sold' }
         : { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Checking block 0…' };
     }
-    if (tri === 'ok' && health >= 100 && sniperOk(p)) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' };
     return TRI[tri];
   }
   const FLAG = {
@@ -295,15 +342,125 @@
   }
 
   /* ---------- state ---------- */
-  function defaultFilters() {
-    return {
-      quote: { weth: true, usdg: true, other: true },
-      verified: false, indexed: false,
-      minLiq: 0, minVol: 0, maxAge: 1440, minHealth: 0,
-      minHolders: 0, maxTopPct: 100,
-      price1h: 'any', flow: 'any',
-      hide: { honeypotSuspect: false, dumping: false, serialDeployer: false, lowLiquidity: false, concentrated: false, unverified: false, lowHolders: false, sellPressure: false, deadVolume: false },
+  /* ═══ THE SETTINGS MODEL ═══════════════════════════════════════════════════════════════════════════
+     One typed table describes every scanner setting, and everything else reads it: the defaults, the
+     filter test, the strategy comparison, the "how many are active" badge, the control sync, the reset,
+     and the migration of an old saved shape. Adding a setting used to mean editing six places and hoping;
+     it is now one row here.
+
+     `kind` decides how a value is compared and what "off" means:
+       min   — keep rows at or above it; off at 0
+       max   — keep rows at or below it; off at its ceiling
+       bool  — keep rows where the thing is true; off at false
+       enum  — one of a fixed set; off at 'any'
+       set   — an object of booleans (quote legs, hidden flags)
+
+     `read` is the ONLY place a field is tied to the pair object, and `onNull` says what happens when the
+     site could not read that signal at all. That distinction is the whole point: with the explorer
+     unreachable, holder counts and verification are null for every token, and a filter that silently
+     treats "not checked" as "fine" would be the scanner lying about what it knows. */
+  const MCAP_MAX = 100000000;    // the top of the market-cap band slider ($100M); above it the band is "any"
+  const AGE_MAX = 1440;          // 24h, the width of the radar window
+  const mcapOf = (p) => (p.market && p.market.marketCap != null) ? p.market.marketCap
+    : (p.market && p.market.fdv != null ? p.market.fdv : null);
+  /* ═══ WHERE THE Xs WERE ════════════════════════════════════════════════════════════════════════════
+     Three stamped moments against today, so "early market cap vs later market cap" is a thing you can
+     read rather than a thing you have to remember. The server stores them; this only prints them.
+
+     EVERY ONE OF THESE IS A MEASUREMENT, NOT A CLAIM. "First seen" is simply the earliest cap this site
+     happens to have recorded — it is NOT the launch cap, and a token the radar met late shows a high one
+     through no fault of its own. "First tagged" is the cap the first time it cleared the site's own
+     default bar, which is a fact about our checks that day and not a suggestion that buying then would
+     have worked. "Peak" is where it got to, which says nothing whatever about where it is going. Nobody
+     bought at any of these numbers — not a user, not the site — so none of them is an entry, and the
+     copy never calls one that. */
+  function capTrail(p) {
+    const c = p.caps; if (!c) return '';
+    const row = (lbl, v, at, x) => {
+      if (!(v > 0)) return '';
+      const when = at ? ' <i>' + esc(npFmtAge(Math.max(0, Math.round((Date.now() - at) / 60000)))) + ' ago</i>' : '';
+      const xs = (x != null && isFinite(x)) ? '<span class="np-capx ' + (x >= 0 ? 'up' : 'down') + '">' + (x >= 0 ? '+' : '') + x.toFixed(2) + 'x</span>' : '';
+      return '<div class="hstat"><div class="lbl">' + lbl + when + '</div><div class="val">' + npFmtUsd(v) + ' ' + xs + '</div></div>';
     };
+    const rows = row('First seen', c.firstMc, c.firstSeenAt, c.xFromFirst)
+      + row('First tagged', c.qualMc, c.qualAt, c.xFromQual)
+      + row('Peak', c.peakMc, c.peakAt, null);
+    if (!rows) return '';
+    const off = (c.offPeakPct != null && c.offPeakPct > 0)
+      ? ' Currently <b>' + pctPlain(c.offPeakPct) + '</b> below its own high.' : '';
+    return '<div class="np-captrail">' +
+      '<div class="lbl">Market cap then → now</div>' +
+      '<div class="np-kv">' + rows +
+        '<div class="hstat"><div class="lbl">Now</div><div class="val">' + npFmtUsd(c.nowMc) + '</div></div>' +
+      '</div>' +
+      '<p class="np-cap-note">Measured from the first time this scanner recorded a cap — <b>not</b> the launch cap, and not an entry: nobody bought at these numbers.' + off +
+      ' Xs are in the site\'s convention where +100% = 1x. Where the feed gives no market cap the figure is FDV.</p>' +
+    '</div>';
+  }
+  const volLiqOf = (p) => {
+    const l = p.market && p.market.liquidityUsd, v = p.volume && p.volume.h24;
+    return (l > 0 && v != null) ? v / l : null;
+  };
+  const FIELDS = {
+    // ---- the pool itself ----
+    quote:      { kind: 'set',  def: { weth: true, usdg: true, other: true }, group: 'pool' },
+    minLiq:     { kind: 'min',  def: 0,        max: 250000, group: 'pool', read: p => p.market.liquidityUsd, onNull: 'fail' },
+    maxAge:     { kind: 'max',  def: AGE_MAX,  max: AGE_MAX, group: 'pool', read: p => p.pair.ageMinutes, onNull: 'fail' },
+    minAge:     { kind: 'min',  def: 0,        max: 720,    group: 'pool', read: p => p.pair.ageMinutes, onNull: 'fail' },
+    // ---- size ----
+    mcapMin:    { kind: 'min',  def: 0,        max: MCAP_MAX, group: 'size', read: mcapOf, onNull: 'fail' },
+    mcapMax:    { kind: 'max',  def: MCAP_MAX, max: MCAP_MAX, group: 'size', read: mcapOf, onNull: 'fail' },
+    // ---- trading ----
+    minVol:     { kind: 'min',  def: 0,        max: 500000, group: 'trade', read: p => p.volume.h24, onNull: 'fail' },
+    minVolH1:   { kind: 'min',  def: 0,        max: 100000, group: 'trade', read: p => p.volume.h1, onNull: 'fail' },
+    minBuysH1:  { kind: 'min',  def: 0,        max: 200,    group: 'trade', read: p => p.txns.h1.buys, onNull: 'fail' },
+    volLiqMin:  { kind: 'min',  def: 0,        max: 20,     step: 0.1, group: 'trade', read: volLiqOf, onNull: 'fail' },
+    price1h:    { kind: 'enum', def: 'any', opts: ['any', 'up', 'down', 'm20', 'm50'], group: 'trade' },
+    flow:       { kind: 'enum', def: 'any', opts: ['any', 'buys', 'sells', 'bal'], group: 'trade' },
+    flowWin:    { kind: 'enum', def: 'h24', opts: ['h24', 'h1'], group: 'trade' },
+    // ---- who holds it ----
+    minHolders: { kind: 'min',  def: 0,   max: 2000, group: 'holders', read: p => p.holders.count, onNull: 'fail' },
+    maxTopPct:  { kind: 'max',  def: 100, max: 100,  group: 'holders', read: p => p.holders.topHolderPct, onNull: 'pass' },
+    maxTop10Pct:{ kind: 'max',  def: 100, max: 100,  group: 'holders', read: p => p.holders.top10Pct, onNull: 'pass' },
+    // ---- the launch ----
+    maxSnipedPct:{ kind: 'max', def: 100, max: 100,  group: 'launch', read: p => (p.risk && p.risk.snipers) ? p.risk.snipers.snipedPct : null, onNull: 'pass' },
+    requireSniperOk: { kind: 'bool', def: false, group: 'launch', read: p => (p.risk && p.risk.sniperOk) === true },
+    // ---- the contract ----
+    verified:   { kind: 'bool', def: false, group: 'contract', read: p => p.token.isVerified === true },
+    indexed:    { kind: 'bool', def: false, group: 'contract', read: p => !!p.indexed },
+    minHealth:  { kind: 'min',  def: 0, max: 100, group: 'contract', read: p => (p.risk && p.risk.health) || 0, onNull: 'fail' },
+    // ---- what must actually have been checked ----
+    /* The honest counterweight to every "onNull: pass" above. A reader who genuinely requires a signal
+       says so here, and then a token the site could not read is excluded rather than quietly accepted. */
+    requireData: { kind: 'set', def: { indexed: false, liquidity: false, holders: false, concentration: false, verified: false, snipers: false }, group: 'checked' },
+    // ---- flags to hide ----
+    hide:       { kind: 'set',  group: 'flags',
+      def: { honeypotSuspect: false, dumping: false, serialDeployer: false, lowLiquidity: false, concentrated: false,
+             unverified: false, lowHolders: false, sellPressure: false, deadVolume: false, sniperDump: false, sniperHeavy: false } },
+  };
+  const FIELD_KEYS = Object.keys(FIELDS);
+  function defaultFilters() {
+    const f = {};
+    for (const k of FIELD_KEYS) {
+      const d = FIELDS[k].def;
+      f[k] = (d && typeof d === 'object') ? JSON.parse(JSON.stringify(d)) : d;
+    }
+    return f;
+  }
+  // is this field doing anything at all? used by the count badge and by "what did the strategy change"
+  function fieldActive(k, f) {
+    const F = FIELDS[k], v = f[k];
+    if (F.kind === 'set') { for (const s in F.def) if (v[s] !== F.def[s]) return true; return false; }
+    return v !== F.def;
+  }
+  function activeFilterCount(fl) {
+    const f = fl || state.filters; let n = 0;
+    for (const k of FIELD_KEYS) {
+      const F = FIELDS[k];
+      if (F.kind !== 'set') { if (fieldActive(k, f)) n++; continue; }
+      for (const sk in F.def) if (f[k][sk] !== F.def[sk]) n++;
+    }
+    return n;
   }
   const state = {
     all: [], byAddr: new Map(), view: [],
@@ -708,7 +865,7 @@
         '<div class="hstat np-soft"><div class="lbl">FDV ⚠︎</div><div class="val">' + npFmtUsd(m.fdv) + '</div></div>' +
         '<div class="hstat"><div class="lbl">Total supply</div><div class="val">' + (supply != null ? npCompact(supply) : '—') + '</div></div>' +
         '<div class="hstat"><div class="lbl">Decimals</div><div class="val">' + (p.token.decimals != null ? p.token.decimals : '—') + '</div></div>' +
-      '</div>' + resv +
+      '</div>' + resv + capTrail(p) +
       '<div class="np-vol-wrap"><div class="lbl">Volume</div>' + vol + '</div>' +
       '<div class="np-moves">' + move('1h', p.priceChange.h1) + move('6h', p.priceChange.h6) + move('24h', p.priceChange.h24) + '</div>';
 
@@ -788,22 +945,33 @@
   // explicit "Risky ☠️" tab reveals them. Covers honeypots, serial deployers, high-risk/avoid triage (isRisky)
   // and thin-liquidity tokens (which on their own may not trip isRisky but are exactly what people want hidden).
   function hideFromMain(p) { return isRisky(p) || !!(p.risk && p.risk.lowLiquidity); }
-  function passFilters(p) {
-    const f = state.filters, q = f.quote;
+  /* One test per field, driven by FIELDS, so a setting cannot exist in the panel and quietly do nothing —
+     which is exactly what happened to the five settings that had a control and no branch here. */
+  function passFilters(p, filters) {
+    // guard the shape, not just the truthiness: passing this straight to Array.filter hands it the index
+    const f = (filters && typeof filters === 'object') ? filters : state.filters;
+    const q = f.quote;
     const qs = p.pair.quoteSymbol, other = qs !== 'WETH' && qs !== 'USDG';
     if (!(q.weth && q.usdg && q.other)) {                 // some quote filter active
       if (qs === 'WETH' && !q.weth) return false;
       if (qs === 'USDG' && !q.usdg) return false;
       if (other && !q.other) return false;
     }
-    if (f.verified && p.token.isVerified !== true) return false;
-    if (f.indexed && !p.indexed) return false;
-    if (f.minLiq > 0 && !(p.market.liquidityUsd != null && p.market.liquidityUsd >= f.minLiq)) return false;
-    if (f.minVol > 0 && !(p.volume.h24 >= f.minVol)) return false;
-    if (f.maxAge < 1440 && !(p.pair.ageMinutes != null && p.pair.ageMinutes <= f.maxAge)) return false;
-    if (f.minHealth > 0 && ((p.risk && p.risk.health) || 0) < f.minHealth) return false;
-    if (f.minHolders > 0 && !(p.holders.count != null && p.holders.count >= f.minHolders)) return false;
-    if (f.maxTopPct < 100 && p.holders.topHolderPct != null && p.holders.topHolderPct > f.maxTopPct) return false; // null passes
+    for (const k of FIELD_KEYS) {
+      const F = FIELDS[k];
+      if (F.kind === 'set' || !fieldActive(k, f)) continue;   // sets and off fields are handled separately / skipped
+      const v = f[k];
+      if (F.kind === 'bool') { if (v && !F.read(p)) return false; continue; }
+      if (F.kind === 'enum') continue;                        // enums have their own tests below
+      let x; try { x = F.read(p); } catch { x = null; }
+      /* An unreadable signal is NOT a pass and NOT a fail by default — each field says which it is, and
+         the ones that pass on null are the ones where excluding every unread token would empty the board
+         while the explorer is down. `requireData` below is how a reader turns any of them back into a
+         hard requirement. */
+      if (x == null || !isFinite(x)) { if (F.onNull === 'pass') continue; return false; }
+      if (F.kind === 'min' && !(x >= v)) return false;
+      if (F.kind === 'max' && !(x <= v)) return false;
+    }
     if (f.price1h !== 'any') {
       const c = p.priceChange.h1; if (c == null) return false;
       if (f.price1h === 'up' && !(c > 0)) return false;
@@ -812,11 +980,16 @@
       if (f.price1h === 'm50' && Math.abs(c) < 50) return false;
     }
     if (f.flow !== 'any') {
-      const bb = p.txns.h24.buys, ss = p.txns.h24.sells;
+      // the window is the reader's choice now: an hour for momentum, a day for the settled picture
+      const t = (f.flowWin === 'h1' ? p.txns.h1 : p.txns.h24) || { buys: 0, sells: 0 };
+      const bb = t.buys, ss = t.sells;
       if (f.flow === 'buys' && !(bb > ss)) return false;
       if (f.flow === 'sells' && !(ss > bb)) return false;
       if (f.flow === 'bal' && !(Math.abs(bb - ss) <= Math.max(1, (bb + ss) * 0.15))) return false;
     }
+    // "I require this to have actually been checked" — an unread signal is excluded, never assumed fine
+    const dk = (p.risk && p.risk.dataKnown) || {};
+    for (const k in f.requireData) { if (f.requireData[k] && !dk[k]) return false; }
     for (const k in f.hide) { if (f.hide[k] && p.risk && p.risk[k]) return false; }
     if (state.q) {
       const query = state.q.toLowerCase();
@@ -826,7 +999,7 @@
     return true;
   }
   function applyView() {
-    let v = state.all.filter(passFilters);
+    let v = state.all.filter(p => passFilters(p));   // arrow, NOT a bare reference: filter passes the index as arg 2
     if (state.safety === 'safer') v = v.filter(saferOk);
     else if (state.safety === 'risky') v = v.filter(hideFromMain); // the explicit opt-in: shows exactly what "All" auto-hides
     else v = v.filter(p => !hideFromMain(p)); // "All" now auto-hides high-risk (honeypots, thin liquidity, high-risk) — Risky ☠️ to reveal
@@ -876,7 +1049,7 @@
   function updateStatus() {
     if (state.lookup && state.mode === 'list') return; // renderLookup owns the status line during an address lookup
     const shown = state.view.length;
-    const passed = state.all.filter(passFilters);
+    const passed = state.all.filter(p => passFilters(p));
     const hidden = state.safety === 'safer' ? passed.filter(p => !saferOk(p)).length
       : state.safety === 'all' ? passed.filter(hideFromMain).length
       : passed.filter(p => !hideFromMain(p)).length;
@@ -1100,7 +1273,86 @@
   const cssEsc = (s) => (window.CSS && CSS.escape) ? CSS.escape(s) : s.replace(/["\\]/g, '\\$&');
   function announce(msg) { if (srEl) { srEl.textContent = ''; setTimeout(() => { srEl.textContent = msg; }, 30); } }
 
-  /* ---------- presets ---------- */
+  /* ═══ STRATEGIES ═══════════════════════════════════════════════════════════════════════════════════
+     Five complete settings configurations, not toggles. Clicking one REPLACES every field — no merging,
+     because a leftover setting from a previous strategy silently narrowing the board is how somebody ends
+     up believing the chain is empty.
+
+     A strategy is a SEARCH SHAPE, never a grade and never a recommendation. None of them says a token is
+     good; each says "these are the ones matching this shape". Every threshold reads a field the pair
+     object actually carries — none of them filters on data the site cannot read — and each declares what
+     it cannot protect you from, because that sentence is the honest half of a filter.
+
+     They are deliberately different in intent rather than five degrees of the same caution: the first is
+     the most exposed and says so, the last is the most conservative. */
+  const STRATEGIES = [
+    {
+      id: 'first30', emoji: '🌱', name: 'First 30 Minutes',
+      blurb: 'Brand-new pools with a pulse — the earliest window, and the most exposed one.',
+      cannot: 'Almost nothing is knowable this early: no holder history, usually no verified contract, and the block-0 scan rarely finished. This is the riskiest shape on the board and most of what it surfaces will go to zero.',
+      set: { maxAge: 30, minLiq: 1500, minBuysH1: 5, hide: { honeypotSuspect: true, dumping: true, sniperDump: true } },
+    },
+    {
+      id: 'liqfirst', emoji: '💧', name: 'Liquidity First',
+      blurb: 'Pools deep enough that one sell does not end the chart.',
+      cannot: 'Deep liquidity can still be removed. It says nothing about who holds the supply, and nothing about whether the team keeps the keys.',
+      set: { minLiq: 25000, minVol: 2000, volLiqMin: 0.15, hide: { honeypotSuspect: true, dumping: true, lowLiquidity: true, sniperDump: true } },
+    },
+    {
+      id: 'crowd', emoji: '👥', name: 'Crowd Forming',
+      blurb: 'Supply spread across real holders rather than sitting in one wallet.',
+      cannot: 'Holder counts and concentration come from the block explorer. While that is unreachable they read as “not checked”, and this strategy requires them — so it will show nothing rather than guess.',
+      set: { minHolders: 75, maxTopPct: 20, maxTop10Pct: 55, minLiq: 5000,
+             requireData: { holders: true, concentration: true },
+             hide: { honeypotSuspect: true, concentrated: true, lowHolders: true, sniperDump: true } },
+    },
+    {
+      id: 'momentum', emoji: '🚀', name: 'Moving Right Now',
+      blurb: 'Buying pressure and volume in the last hour, not yesterday.',
+      cannot: 'Momentum is the easiest signal to manufacture — wash trading produces exactly this shape. It is a description of the last hour, never a forecast of the next one.',
+      set: { minVolH1: 1000, minBuysH1: 15, flow: 'buys', flowWin: 'h1', price1h: 'up', minLiq: 3000,
+             hide: { honeypotSuspect: true, dumping: true, sniperDump: true } },
+    },
+    {
+      id: 'strict', emoji: '🛡️', name: 'Strictest Checks',
+      blurb: 'Only tokens where every check actually ran and every one came back clean.',
+      cannot: 'It cannot check what an upstream will not answer. Nothing here is a promise that a token is safe — it is the narrowest thing the site can honestly say, and most new tokens still go to zero.',
+      set: { minHealth: 100, verified: true, indexed: true, minLiq: 10000, minHolders: 50, maxTopPct: 25,
+             requireSniperOk: true,
+             requireData: { indexed: true, liquidity: true, holders: true, concentration: true, verified: true, snipers: true },
+             hide: { honeypotSuspect: true, dumping: true, serialDeployer: true, lowLiquidity: true, concentrated: true,
+                     unverified: true, lowHolders: true, sellPressure: true, deadVolume: true, sniperDump: true, sniperHeavy: true } },
+    },
+  ];
+  const STRAT_BY_ID = {};
+  STRATEGIES.forEach(s => { STRAT_BY_ID[s.id] = s; });
+
+  // the complete filter set a strategy means — defaults everywhere it does not speak
+  function strategyFilters(id) {
+    const st = STRAT_BY_ID[id]; if (!st) return defaultFilters();
+    const f = defaultFilters();
+    for (const k in st.set) {
+      const v = st.set[k];
+      if (v && typeof v === 'object' && FIELDS[k] && FIELDS[k].kind === 'set') Object.assign(f[k], v);
+      else f[k] = v;
+    }
+    return f;
+  }
+  // exactly this strategy, untouched? (used for the pressed state and for "strategy, edited")
+  function strategyExact(id, f) {
+    const want = strategyFilters(id), have = f || state.filters;
+    for (const k of FIELD_KEYS) {
+      if (FIELDS[k].kind === 'set') { for (const sk in FIELDS[k].def) if (want[k][sk] !== have[k][sk]) return false; }
+      else if (want[k] !== have[k]) return false;
+    }
+    return true;
+  }
+  function currentStrategy() {
+    for (const st of STRATEGIES) if (strategyExact(st.id)) return st.id;
+    return null;
+  }
+
+  /* ---------- the original one-tap chips, kept: they are shortcuts, not strategies ---------- */
   const PRESETS = {
     safest:   { minHealth: 70, verified: true, minLiq: 10000, hide: { honeypotSuspect: true, concentrated: true } },
     verified: { verified: true },
@@ -1136,16 +1388,9 @@
   }
 
   /* ---------- active-filter count ---------- */
-  function activeFilterCount() {
-    const f = state.filters; let n = 0;
-    if (!(f.quote.weth && f.quote.usdg && f.quote.other)) n++;
-    if (f.verified) n++; if (f.indexed) n++;
-    if (f.minLiq > 0) n++; if (f.minVol > 0) n++; if (f.maxAge < 1440) n++; if (f.minHealth > 0) n++;
-    if (f.minHolders > 0) n++; if (f.maxTopPct < 100) n++;
-    if (f.price1h !== 'any') n++; if (f.flow !== 'any') n++;
-    for (const k in f.hide) if (f.hide[k]) n++;
-    return n;
-  }
+  /* the hand-written version of this drifted out of sync with the settings the moment one was added;
+     it now counts whatever FIELDS says exists. Set-type fields count their individual members, because a
+     reader who hid three flags has made three decisions, not one. */
   function updateFcount() {
     const el = document.getElementById('np-fcount'); if (!el) return;
     const n = activeFilterCount();
@@ -1165,9 +1410,101 @@
     rng('f-minhealth', 'f-minhealth-out', f.minHealth, v => String(v));
     rng('f-minholders', 'f-minholders-out', f.minHolders, v => String(v));
     rng('f-maxtop', 'f-maxtop-out', f.maxTopPct, v => v >= 100 ? 'any' : v + '%');
+    // the settings the model gained; each one has a real branch in passFilters, so none of these is decorative
+    rng('f-minage', 'f-minage-out', f.minAge, v => v > 0 ? npFmtAge(v) + '+' : 'any');
+    rng('f-mcapmin', 'f-mcapmin-out', f.mcapMin, v => v > 0 ? npFmtUsd(v) : '$0');
+    rng('f-mcapmax', 'f-mcapmax-out', f.mcapMax, v => v >= MCAP_MAX ? 'any' : npFmtUsd(v));
+    rng('f-maxtop10', 'f-maxtop10-out', f.maxTop10Pct, v => v >= 100 ? 'any' : v + '%');
+    rng('f-maxsniped', 'f-maxsniped-out', f.maxSnipedPct, v => v >= 100 ? 'any' : v + '%');
+    rng('f-minvolh1', 'f-minvolh1-out', f.minVolH1, v => v > 0 ? npFmtUsd(v) : '$0');
+    rng('f-minbuysh1', 'f-minbuysh1-out', f.minBuysH1, v => v > 0 ? String(v) : 'any');
+    rng('f-volliq', 'f-volliq-out', f.volLiqMin, v => v > 0 ? '≥ ' + v.toFixed(1) + '×' : 'any');
+    set('f-sniperok', f.requireSniperOk);
     if ($('f-price1h')) $('f-price1h').value = f.price1h;
     if ($('f-flow')) $('f-flow').value = f.flow;
+    if ($('f-flowwin')) $('f-flowwin').value = f.flowWin;
     document.querySelectorAll('#np-filters input[data-hide]').forEach(cb => { cb.checked = !!f.hide[cb.dataset.hide]; });
+    document.querySelectorAll('#np-filters input[data-req]').forEach(cb => { cb.checked = !!f.requireData[cb.dataset.req]; });
+    syncStrategyButtons();
+  }
+
+  /* ═══ APPLYING A STRATEGY, VISIBLY ═══════════════════════════════════════════════════════════════════
+     The request was explicit: pressing a strategy must SHOW the settings moving, so the reader can see
+     what it did and carry on adjusting from there. So the state is written first and syncControls() runs
+     immediately — the filters are correct before a single pixel moves — and the animation is pure
+     decoration layered on top. A tween is never the source of a value, never dispatches an input event,
+     and an interrupted one leaves a complete, correct filter set behind.
+
+     Under reduced motion nothing tweens; the controls that changed keep a static mark instead, because
+     the information ("these are the ones it touched") is the point and the movement is only how it is
+     usually delivered. */
+  const CHANGED_MS = 2600;
+  function markChanged(before, after) {
+    const panel = document.getElementById('np-filters'); if (!panel) return;
+    panel.querySelectorAll('.np-f-moved').forEach(e => e.classList.remove('np-f-moved'));
+    const moved = [];
+    for (const k of FIELD_KEYS) {
+      const F = FIELDS[k];
+      const same = F.kind === 'set'
+        ? Object.keys(F.def).every(sk => before[k][sk] === after[k][sk])
+        : before[k] === after[k];
+      if (!same) moved.push(k);
+    }
+    // map a changed field back to the control(s) that show it
+    const byField = {
+      minAge: ['f-minage'], maxAge: ['f-maxage'], minLiq: ['f-minliq'], minVol: ['f-minvol'],
+      minHealth: ['f-minhealth'], minHolders: ['f-minholders'], maxTopPct: ['f-maxtop'],
+      maxTop10Pct: ['f-maxtop10'], mcapMin: ['f-mcapmin'], mcapMax: ['f-mcapmax'],
+      minVolH1: ['f-minvolh1'], minBuysH1: ['f-minbuysh1'], volLiqMin: ['f-volliq'],
+      maxSnipedPct: ['f-maxsniped'], requireSniperOk: ['f-sniperok'], verified: ['f-verified'],
+      indexed: ['f-indexed'], price1h: ['f-price1h'], flow: ['f-flow'], flowWin: ['f-flowwin'],
+    };
+    let n = 0;
+    for (const k of moved) {
+      const ids = byField[k];
+      if (ids) { for (const id of ids) { const e = document.getElementById(id); if (e && e.closest('label')) { e.closest('label').classList.add('np-f-moved'); n++; } } continue; }
+      if (k === 'hide') { panel.querySelectorAll('input[data-hide]').forEach(cb => { if (before.hide[cb.dataset.hide] !== after.hide[cb.dataset.hide]) { cb.closest('label').classList.add('np-f-moved'); n++; } }); }
+      if (k === 'requireData') { panel.querySelectorAll('input[data-req]').forEach(cb => { if (before.requireData[cb.dataset.req] !== after.requireData[cb.dataset.req]) { cb.closest('label').classList.add('np-f-moved'); n++; } }); }
+      if (k === 'quote') { ['f-weth', 'f-usdg', 'f-other'].forEach(id => { const e = document.getElementById(id); if (e) { e.closest('label').classList.add('np-f-moved'); n++; } }); }
+    }
+    if (!reduced()) setTimeout(() => panel.querySelectorAll('.np-f-moved').forEach(e => e.classList.remove('np-f-moved')), CHANGED_MS);
+    return n;
+  }
+  function applyStrategy(id) {
+    const st = STRAT_BY_ID[id]; if (!st) return;
+    const before = JSON.parse(JSON.stringify(state.filters));
+    const already = strategyExact(id);
+    // pressing the active strategy again clears it, so the button is a real two-state control
+    state.filters = already ? defaultFilters() : strategyFilters(id);
+    syncControls();                       // values are correct BEFORE anything animates
+    const moved = markChanged(before, state.filters);
+    const panel = document.getElementById('np-filters'), more = document.getElementById('np-more');
+    if (panel && panel.hidden && !already) { panel.hidden = false; if (more) more.setAttribute('aria-expanded', 'true'); }
+    updateFcount(); persist(); applyView(); render();
+    const note = document.getElementById('np-strat-note');
+    if (note) {
+      note.hidden = already;
+      if (!already) note.innerHTML = '<b>' + esc(st.emoji + ' ' + st.name) + '</b> — ' + esc(st.blurb) +
+        ' <span class="np-strat-cannot">What it can’t tell you: ' + esc(st.cannot) + '</span>';
+    }
+    announce(already
+      ? 'Strategy cleared. Showing everything again.'
+      : st.name + ' applied. ' + moved + ' setting' + (moved === 1 ? '' : 's') + ' changed. ' + document.querySelectorAll('#np-list li').length + ' tokens match.');
+  }
+  function syncStrategyButtons() {
+    const cur = currentStrategy();
+    document.querySelectorAll('#np-strategies .np-strat').forEach(b => {
+      const on = b.dataset.strat === cur;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', String(on));
+    });
+    /* "strategy, edited": the reader started from one and has since changed something. Saying so is the
+       difference between a panel that looks broken and one that is telling you where you are. */
+    const note = document.getElementById('np-strat-note');
+    if (note && !note.hidden && !cur) {
+      const edited = note.querySelector('.np-strat-edited');
+      if (!edited) note.insertAdjacentHTML('beforeend', '<span class="np-strat-edited">· edited from here</span>');
+    }
   }
 
   /* ---------- saved views ---------- */
@@ -1260,11 +1597,25 @@
     range('f-minhealth', 'f-minhealth-out', 'minHealth', v => String(v));
     range('f-minholders', 'f-minholders-out', 'minHolders', v => String(v));
     range('f-maxtop', 'f-maxtop-out', 'maxTopPct', v => v >= 100 ? 'any' : v + '%');
+    range('f-minage', 'f-minage-out', 'minAge', v => v > 0 ? npFmtAge(v) + '+' : 'any');
+    range('f-mcapmin', 'f-mcapmin-out', 'mcapMin', v => v > 0 ? npFmtUsd(v) : '$0');
+    range('f-mcapmax', 'f-mcapmax-out', 'mcapMax', v => v >= MCAP_MAX ? 'any' : npFmtUsd(v));
+    range('f-maxtop10', 'f-maxtop10-out', 'maxTop10Pct', v => v >= 100 ? 'any' : v + '%');
+    range('f-maxsniped', 'f-maxsniped-out', 'maxSnipedPct', v => v >= 100 ? 'any' : v + '%');
+    range('f-minvolh1', 'f-minvolh1-out', 'minVolH1', v => v > 0 ? npFmtUsd(v) : '$0');
+    range('f-minbuysh1', 'f-minbuysh1-out', 'minBuysH1', v => v > 0 ? String(v) : 'any');
+    range('f-volliq', 'f-volliq-out', 'volLiqMin', v => v > 0 ? '≥ ' + v.toFixed(1) + '×' : 'any');
+    chk('f-sniperok', v => state.filters.requireSniperOk = v);
     // selects
     if ($('f-price1h')) $('f-price1h').addEventListener('change', () => { state.filters.price1h = $('f-price1h').value; commit(); });
     if ($('f-flow')) $('f-flow').addEventListener('change', () => { state.filters.flow = $('f-flow').value; commit(); });
+    if ($('f-flowwin')) $('f-flowwin').addEventListener('change', () => { state.filters.flowWin = $('f-flowwin').value; commit(); });
     // hide-risk toggles
     document.querySelectorAll('#np-filters input[data-hide]').forEach(cb => cb.addEventListener('change', () => { state.filters.hide[cb.dataset.hide] = cb.checked; commit(); }));
+    // "must actually have been checked" toggles
+    document.querySelectorAll('#np-filters input[data-req]').forEach(cb => cb.addEventListener('change', () => { state.filters.requireData[cb.dataset.req] = cb.checked; commit(); }));
+    // strategies — a complete search shape each, applied visibly
+    document.querySelectorAll('#np-strategies .np-strat').forEach(b => b.addEventListener('click', () => applyStrategy(b.dataset.strat)));
     // preset chips
     document.querySelectorAll('#np-presets .np-chip').forEach(c => c.addEventListener('click', () => applyPreset(c.dataset.preset)));
     // saved views
@@ -1369,7 +1720,11 @@
   const healthOf = (p) => Math.round((p.risk && p.risk.health) || 0);
   // The ONE feed filter: a perfect score AND the 'ok' triage — i.e. exactly the pairs that carry the
   // 🚀 "Looks Good, Send It" verdict. Same test as verdictOf(), kept in one place so the two can never drift.
-  const feedQualifies = (p) => !thinData(p) && triageOf(p) === 'ok' && healthOf(p) >= 100 && sniperOk(p);
+  /* The Hot Feed used to run its own private test and ignore every setting the reader had chosen: you
+     could set twenty filters, watch the DEX List narrow, switch to the feed and be shown a completely
+     different set of tokens with no indication why. It is the SAME predicate as the tag now — if it earns
+     "Looks Good, Send It" for you, it is in your feed, and if it does not, it is not. */
+  const feedQualifies = (p) => meetsYourBar(p);
 
   /* ---------- chains ----------
      Robinhood Chain is the home chain and the only one with a block explorer behind it, so it is

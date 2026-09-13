@@ -456,6 +456,70 @@ the 200 system rows — so a busy wall can never evict a level-up, an OG grant o
 
 Manage every alert you have set under **Settings → 🔔 Post Alerts** on your profile.
 
+### 3.6e The scanner is yours to set 🎛️
+
+**The problem, measured.** On a live radar of 36 pairs, **zero** could earn 🚀 "Looks Good, Send It" — and
+not because they were bad. The verdict needs `health === 100` exactly (every one of the 11 RISK weights is
+positive, so 100 means *no flag at all*), plus a clean block-0 scan, plus `thinData === false`. And
+`thinData` was true for **36 of 36**, because `holders.count` was null for every token. The tag was not
+strict; it was unreachable.
+
+**One bar, set by the reader.** The verdict is now awarded against *your* settings, which is what makes it
+reachable at all — but the two claims are kept apart, because they are different claims:
+
+- 🚀 **Looks Good, Send It** — the site's own default bar. Unchanged meaning: nothing we can check tripped
+  a flag. Only the site can award this.
+- 🎯 **Matches Your Bar, Send It** — your settings cleared, with its own word and its own colour. It says
+  in the card that it is your filter speaking, not us. A loose setting can never borrow the rocket.
+
+**Four things no setting, strategy or saved view can ever waive** — the ones where being wrong is not a
+matter of taste: a **honeypot**, a token **dumping** right now, **block-0 snipers who already sold**, and
+the risk model's own **avoid** tier. Everything else — unverified, few holders, thin liquidity, one big
+wallet, quiet volume, a serial deployer, a heavy block-0 — is a judgement you are entitled to make, as
+long as the card keeps saying you made it.
+
+**The Hot Feed finally obeys the settings.** It used to run its own private test and ignore every filter:
+you could set twenty of them, watch the DEX List narrow, switch to the feed and see a completely different
+set of tokens with nothing explaining why. It is the *same predicate* as the tag now — if it earns the tag
+for you, it is in your feed.
+
+**One typed table, `FIELDS`, is the single source of truth** for every setting: its kind (min / max /
+bool / enum / set), its off-value, its range, the pair-object field it reads, and how it treats an
+unreadable signal. `defaultFilters`, `passFilters`, `activeFilterCount`, `syncControls`, the strategies and
+the reset all read it, so a setting can no longer exist in the panel and quietly do nothing — which is
+exactly what had happened.
+
+**New settings:** min age, market-cap band (min/max), 1h volume, 1h buys, volume ÷ liquidity, flow window
+(1h or 24h), max top-10 concentration, max block-0 share, "block-0 must be clean", the two sniper flags in
+the hide list, and a **"must actually have been checked"** group — the honest counterweight to every filter
+that lets an unreadable signal through. Tick one and a token the site *could not* check is excluded rather
+than quietly counted as fine.
+
+**Five strategies**, each a complete settings configuration rather than a toggle. Pressing one **replaces**
+every setting (never merges — a leftover field silently narrowing the board is how you end up believing
+the chain is empty), opens the panel, and **visibly marks every control it changed** so you can fine-tune
+from there. Each carries a plain blurb *and* a "what it can't tell you" line:
+
+| | Shape | What it cannot tell you |
+|---|---|---|
+| 🌱 **First 30 Minutes** | ≤30m old, ≥$1.5k liq, ≥5 buys/h | almost nothing is knowable this early — the riskiest shape on the board |
+| 💧 **Liquidity First** | ≥$25k liq, ≥$2k vol, turnover ≥0.15 | deep liquidity can still be removed |
+| 👥 **Crowd Forming** | ≥75 holders, top ≤20%, top-10 ≤55% | requires explorer data, so it shows nothing rather than guessing |
+| 🚀 **Moving Right Now** | ≥$1k vol/h, ≥15 buys/h, price up | momentum is the easiest signal to fake |
+| 🛡️ **Strictest Checks** | every check ran *and* came back clean | it cannot check what an upstream will not answer |
+
+**Market cap then → now.** Each token's detail shows the cap the scanner **first saw** it at, the cap it
+**first cleared the site's own bar** at, its **peak**, and **now** — with the multiple between them, so
+"where the Xs were made" is readable rather than remembered. Stated plainly on the card: these are
+measurements, not entries. Nobody bought at those numbers, it is *not* the launch cap, and where the feed
+gives no market cap the figure is FDV.
+
+**A failed upstream read is no longer cached as an answer.** `jgetCached` called `jget`, which collapses
+`jgetR`'s `{ok:false, data:null}` to a bare `null` — and then stored that null for the full TTL. One 403,
+one 429, one timeout became a cached "this token genuinely has no data", served to every caller for
+minutes, and an upstream recovery changed nothing until it aged out. It caches successful reads only now.
+Failures still return null to the caller; they are simply not remembered.
+
 ### 3.7 Safety tools
 
 **Read the honesty rule first: every safety readout is an automated heuristic pattern‑scan of public on‑chain data. It is not an audit, and it never simulates a buy or sell.** It's a starting point for your own research, never a guarantee or a "buy."

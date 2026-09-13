@@ -449,10 +449,14 @@
       const left = closes ? fmtLeft(closes - Date.now()) : '';
       const v = c.tierNow === 2 ? '--silver' : c.tierNow === 1 ? '--bronze' : '';
       return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">🏅 OG ' + esc(name) + '</span>'
+        /* This is read by somebody who is INSIDE the window it is describing, so it says what THEY would
+           get and stops. The old copy re-listed all three tiers underneath — gold 10×, silver 5×,
+           bronze 3× — which is the one thing a reader in the gold window does not need, and it pushed
+           the sentence that matters (what you have to do) into the middle of a paragraph. The full
+           ladder is in the rulebook below, which is where a ladder belongs. */
         + '<div class="og-block-body"><b>The OG ' + esc(name) + ' window is open' + (left ? ' — it closes in ' + left : '') + '.</b> '
-        + 'Anyone who holds <b>both $Send and $GWC</b> bought inside this window, and keeps holding both, earns a permanent badge and <b>' + mult + '× Send Power</b> on everything. '
-        + 'The standard is identical in every window — gold 10×, silver 5×, bronze 3× — only <b>when</b> you got in changes the size. Sell out of either and it’s gone for good. '
-        + 'Not a reason to buy — just how the badge works.</div></div>';
+        + 'Buy <b>both $Send and $GWC</b> before it shuts and keep holding both: a permanent badge and <b>' + mult + '× Send Power</b> on everything you earn. '
+        + 'Sell out of either and it’s gone for good. Not a reason to buy.</div></div>';
     }
     return '';
   }

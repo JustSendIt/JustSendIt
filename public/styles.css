@@ -4077,3 +4077,57 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 }
 .alert-who { color: var(--green-bright); font-weight: 800; text-decoration: none; }
 .alert-who:hover { text-decoration: underline; }
+
+/* ═══ SCANNER: strategies and the settings that move when you press one ═════════════════════════════
+   A strategy is a saved search shape, not a grade — so these read as controls, not as badges, and the
+   pressed one is marked by a border and a word as well as a colour. */
+.np-strats { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.6rem 0 0.35rem; }
+.np-strats-lead { font-size: 0.78rem; font-weight: 800; color: var(--text-mute); letter-spacing: 0.03em; margin-right: 0.2rem; }
+.np-strat {
+  font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer;
+  background: var(--ink); color: var(--text-dim);
+  border: 1.5px solid var(--ink-4); border-radius: 999px; padding: 0.38rem 0.75rem; min-height: 34px;
+}
+.np-strat:hover { border-color: color-mix(in srgb, var(--green) 45%, transparent); color: var(--text); }
+.np-strat:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.np-strat.is-on {
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  border-color: var(--green); color: var(--green-bright);
+}
+.np-strat-note { margin: 0 0 0.5rem; font-size: 0.8rem; line-height: 1.5; color: var(--text-dim); }
+.np-strat-note b { color: var(--text); }
+/* the half of a filter that is honest: what it cannot tell you */
+.np-strat-cannot { display: block; margin-top: 0.2rem; font-size: 0.76rem; color: var(--gold); }
+.np-strat-edited { margin-left: 0.4rem; font-size: 0.74rem; font-weight: 800; color: var(--text-mute); }
+
+/* A setting a strategy just moved. Motion is how this is normally delivered, but the INFORMATION is the
+   mark — so under reduced motion the mark simply stays put instead of pulsing and fading. */
+.np-f-moved { position: relative; border-radius: 8px; }
+.np-f-moved::after {
+  content: 'changed'; position: absolute; top: -7px; right: 4px;
+  font-size: 0.56rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink-1); background: var(--green-bright); border-radius: 999px; padding: 0.05rem 0.32rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .np-f-moved { animation: npMoved 2.6s ease-out; }
+  @keyframes npMoved {
+    0%   { background: color-mix(in srgb, var(--green) 30%, transparent); }
+    70%  { background: color-mix(in srgb, var(--green) 16%, transparent); }
+    100% { background: transparent; }
+  }
+}
+
+/* ---- market cap then → now, on a token's detail ---- */
+.np-captrail { margin: 0.6rem 0 0.2rem; }
+.np-captrail > .lbl { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-mute); margin-bottom: 0.3rem; }
+.np-captrail .lbl i { font-style: normal; font-weight: 600; text-transform: none; letter-spacing: 0; opacity: 0.8; }
+.np-capx { font-size: 0.78rem; font-weight: 800; margin-left: 0.25rem; }
+.np-capx.up { color: var(--green-bright); }
+.np-capx.down { color: #ffb4b4; }
+.np-cap-note { margin: 0.35rem 0 0; font-size: 0.72rem; line-height: 1.5; color: var(--text-mute); }
+.np-cap-note b { color: var(--text-dim); }
+
+/* The reader's own bar, not the site's. Deliberately a different colour AND a different word from
+   .np-t-perfect: seeing the rocket has to mean the site said so, and nothing a reader configures is
+   allowed to borrow that. Both are "this passed"; only one of them is us saying it. */
+.np-t-yours { color: var(--diamond); border-color: color-mix(in srgb, var(--diamond) 45%, transparent); background: color-mix(in srgb, var(--diamond) 12%, transparent); }

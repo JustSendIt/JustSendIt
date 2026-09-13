@@ -690,6 +690,18 @@ for (const col of [
      so a column added to that statement afterwards never reaches it — which is exactly what happened to
      the dev database this was written against. Idempotent either way. */
   "ALTER TABLE alerts ADD COLUMN ip TEXT",
+  /* ═══ WHERE THE Xs WERE MADE ═══════════════════════════════════════════════════════════════════
+     runner_tokens already keeps first_mc — the market cap the very first time the scanner laid eyes on a
+     token — which is the honest answer to "how early is early". These three add the other half a reader
+     actually asks for: the cap at the moment it first cleared the site's OWN default bar (a different
+     moment from first sight, and the one an "if I'd acted on the tag" question is really about), and the
+     highest cap it ever reached, because that is where the multiple actually was.
+
+     peak_mc is stored rather than derived from peak_price, because a token's supply can change: a peak
+     price times today's supply is not the market cap that peak traded at. */
+  "ALTER TABLE runner_tokens ADD COLUMN qual_mc REAL",      // market cap when it first earned the default verdict
+  "ALTER TABLE runner_tokens ADD COLUMN qual_at INTEGER",   // when that was
+  "ALTER TABLE runner_tokens ADD COLUMN peak_mc REAL",
 ]) { try { db.exec(col); } catch {} }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
@@ -2626,14 +2638,25 @@ function recordRunners(pairs) {
       const pc24 = (p.priceChange && p.priceChange.h24 != null) ? p.priceChange.h24 : null;
       const holders = (p.holders && p.holders.count != null) ? p.holders.count : null;
       const health = (p.risk && p.risk.health != null) ? p.risk.health : null;
-      const ex = db.prepare('SELECT peak_price FROM runner_tokens WHERE token_addr=?').get(tok);
+      /* Did it clear the SITE'S OWN default bar on this pass? Not the viewer's bar — that is per-person
+         and cannot be one stored number. This is the shared, comparable moment: the first time the
+         scanner would have given this token its top verdict on its own default settings. Recorded once,
+         never moved, and left null for a token that has never cleared it. */
+      const qualNow = !!(p.risk && p.risk.triage === 'ok' && (p.risk.health || 0) >= 100 && p.risk.sniperOk === true && !p.risk.thinData);
+      const ex = db.prepare('SELECT peak_price, peak_mc, qual_mc FROM runner_tokens WHERE token_addr=?').get(tok);
       if (!ex) {
-        db.prepare('INSERT INTO runner_tokens (token_addr,pair_addr,symbol,name,brand,first_price,first_mc,first_seen_at,peak_price,peak_at,cur_price,cur_mc,cur_liq,cur_pc24,cur_holders,cur_health,last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-          .run(tok, pair, sym, name, brand, basePrice, baseMc, now(), basePrice, basePrice != null ? now() : null, price, mc, liq, pc24, holders, health, now());
+        db.prepare('INSERT INTO runner_tokens (token_addr,pair_addr,symbol,name,brand,first_price,first_mc,first_seen_at,peak_price,peak_at,peak_mc,qual_mc,qual_at,cur_price,cur_mc,cur_liq,cur_pc24,cur_holders,cur_health,last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          .run(tok, pair, sym, name, brand, basePrice, baseMc, now(), basePrice, basePrice != null ? now() : null, baseMc,
+               (qualNow && trustworthy) ? mc : null, (qualNow && trustworthy && mc != null) ? now() : null,
+               price, mc, liq, pc24, holders, health, now());
       } else {
         const oldPeak = ex.peak_price || 0, peak = trustworthy ? Math.max(oldPeak, price) : oldPeak, peakAt = peak > oldPeak ? now() : null;
-        db.prepare('UPDATE runner_tokens SET pair_addr=COALESCE(?,pair_addr), symbol=?, name=?, brand=COALESCE(?,brand), first_price=COALESCE(first_price,?), first_mc=COALESCE(first_mc,?), peak_price=?, peak_at=COALESCE(?,peak_at), cur_price=?, cur_mc=?, cur_liq=?, cur_pc24=?, cur_holders=?, cur_health=?, last_seen_at=? WHERE token_addr=?')
-          .run(pair, sym, name, brand, basePrice, baseMc, peak, peakAt, price, mc, liq, pc24, holders, health, now(), tok);
+        // the peak CAP moves with the peak price, not on its own — they describe the same instant
+        const peakMc = (peak > oldPeak && trustworthy && mc != null) ? mc : (ex.peak_mc != null ? ex.peak_mc : baseMc);
+        // written once, ever: COALESCE keeps the FIRST qualifying cap even if it qualifies again later
+        const qMc = (qualNow && trustworthy && ex.qual_mc == null && mc != null) ? mc : null;
+        db.prepare('UPDATE runner_tokens SET pair_addr=COALESCE(?,pair_addr), symbol=?, name=?, brand=COALESCE(?,brand), first_price=COALESCE(first_price,?), first_mc=COALESCE(first_mc,?), peak_price=?, peak_at=COALESCE(?,peak_at), peak_mc=?, qual_mc=COALESCE(qual_mc,?), qual_at=COALESCE(qual_at,?), cur_price=?, cur_mc=?, cur_liq=?, cur_pc24=?, cur_holders=?, cur_health=?, last_seen_at=? WHERE token_addr=?')
+          .run(pair, sym, name, brand, basePrice, baseMc, peak, peakAt, peakMc, qMc, qMc != null ? now() : null, price, mc, liq, pc24, holders, health, now(), tok);
       }
       if (trustworthy) { const last = db.prepare('SELECT MAX(at) a FROM runner_snaps WHERE token_addr=?').get(tok).a || 0; if (now() - last >= RUNNER_SNAP_INTERVAL) db.prepare('INSERT INTO runner_snaps (token_addr, at, price) VALUES (?,?,?)').run(tok, now(), price); }
     } catch {}
@@ -3003,17 +3026,33 @@ const jgetInflight = new Map();   // url -> Promise
 const jgetCache = new Map();      // url -> { at, val }
 const JGET_TTL = 20 * 1000;
 const JGET_MAX = 500;
+/* A FAILED READ IS NEVER CACHED.
+   This used to call jget(), which collapses jgetR's {ok:false, data:null} down to a bare null — and then
+   stored that null under the URL for the whole TTL. So one 403, one 429, one timeout became a cached
+   "this token genuinely has no data", served confidently to every caller for minutes afterwards, and the
+   recovery of the upstream did nothing until the entry aged out.
+
+   It is the exact confusion the comment below jgetR was written about: "the upstream answered and there
+   is nothing there" versus "we could not ask". jgetR has kept those apart since it was written; the cache
+   in front of it put them straight back together. Measured live: with the explorer behind a Cloudflare
+   challenge, holder counts and verification were null for 36 of 36 tokens, which forced thinData on every
+   one and made the site's top verdict unreachable — the failure looked exactly like an answer.
+
+   A failure still returns null to the caller, so nothing downstream changes shape. It is simply not
+   remembered, and the next caller asks again. */
 function jgetCached(url, ttl) {
   const t = ttl || JGET_TTL;
   const hit = jgetCache.get(url);
   if (hit && now() - hit.at < t) return Promise.resolve(hit.val);
   const flying = jgetInflight.get(url);
   if (flying) return flying;                      // someone is already asking — wait on their answer
-  const pr = jget(url).then((val) => {
-    if (jgetCache.size > JGET_MAX) jgetCache.clear();
-    jgetCache.set(url, { at: now(), val });
+  const pr = jgetR(url).then((r) => {
+    if (r.ok) {
+      if (jgetCache.size > JGET_MAX) jgetCache.clear();
+      jgetCache.set(url, { at: now(), val: r.data });
+    }
     jgetInflight.delete(url);
-    return val;
+    return r.data;                                // null on failure, exactly as before — just not stored
   }).catch((e) => { jgetInflight.delete(url); throw e; });
   jgetInflight.set(url, pr);
   return pr;
@@ -5103,6 +5142,37 @@ async function enrichPairs() {
   // A carried-forward price must never set a Best Runners baseline, a peak, or a snapshot — the store would
   // record an old price as if it were a new observation and bend every "since scanned" X measured against it.
   try { recordRunners(enriched.filter(e => !e.priceStale)); } catch {}
+  /* ═══ WHERE IT STARTED, AND WHERE IT GOT TO ═══════════════════════════════════════════════════════
+     Attach the stored baselines so a card can say "first seen at $36K, now $212K" instead of only ever
+     showing today's number. It is one indexed primary-key read per pair against a table this pass has
+     just written, so it costs nothing and cannot disagree with what was written a line earlier.
+
+     WHAT THESE NUMBERS ARE NOT. They are not a track record and not a prediction. `firstMc` is simply the
+     earliest cap this site happens to have recorded — it is not the launch cap, and a token the scanner
+     met late will show a high one through no fault of its own. `qualMc` is the cap the first time it
+     cleared the site's own default bar, which is a fact about our checks on that day, not a claim that
+     buying then would have worked. And `peakMc` is where it got to, which says nothing about where it is
+     going. The client labels all three as measurements. */
+  try {
+    const sel = db.prepare('SELECT first_mc, first_seen_at, qual_mc, qual_at, peak_mc, peak_at FROM runner_tokens WHERE token_addr = ?');
+    for (const e of enriched) {
+      const tok = ((e.token && e.token.address) || '').toLowerCase();
+      if (!/^0x[0-9a-f]{40}$/.test(tok)) continue;
+      const r = sel.get(tok);
+      if (!r) continue;
+      const nowMc = (e.market && e.market.marketCap != null) ? e.market.marketCap : (e.market && e.market.fdv != null ? e.market.fdv : null);
+      const x = (from) => (from > 0 && nowMc > 0) ? Math.round((nowMc / from - 1) * 100) / 100 : null;  // the site's +100% = 1x convention
+      e.caps = {
+        firstMc: r.first_mc, firstSeenAt: r.first_seen_at,
+        qualMc: r.qual_mc, qualAt: r.qual_at,
+        peakMc: r.peak_mc, peakAt: r.peak_at,
+        nowMc,
+        xFromFirst: x(r.first_mc), xFromQual: x(r.qual_mc),
+        // how far off its own high it currently sits — a fact about the past, stated as one
+        offPeakPct: (r.peak_mc > 0 && nowMc > 0) ? Math.round((1 - nowMc / r.peak_mc) * 1000) / 10 : null,
+      };
+    }
+  } catch {}
   try { cacheTokensFromPairs(enriched.filter(e => !e.priceStale && !e.priceUnread)); } catch {} // never overwrite a good cached price with an unread one
   enriched.sort((a, b) => (b.pair.createdAt || 0) - (a.pair.createdAt || 0));
   // `degraded` is what the page needs to say "this is the last reading, taken at HH:MM" instead of implying
