@@ -294,6 +294,16 @@ ta.addEventListener('input', () => setCharCount(500 - ta.value.length));
 let pendingImg = null;
 const postImgEl = document.getElementById('post-img'), wallStatus = document.getElementById('wall-c-status');
 function clearWallMedia() { pendingImg = null; postImgEl._attachGen = (postImgEl._attachGen || 0) + 1; postImgEl.value = ''; window.setMediaPreview(document.getElementById('img-preview'), null); }
+/* The same recorder as the site-wide composer and the profile one — one microphone implementation for
+   the whole site, attaching through the same pipeline a photo uses. */
+if (window.VoiceMemo) VoiceMemo.wire({
+  btn: document.getElementById('post-voice'),
+  previewEl: document.getElementById('img-preview'),
+  live: wallStatus || null,
+  onClear: clearWallMedia,
+  onStatus: (m) => { if (wallStatus) wallStatus.textContent = m; },
+  onAttached: (url) => { pendingImg = url; },
+});
 postImgEl.addEventListener('change', async (e) => {
   const f = e.target.files[0]; if (!f) return;
   const btn = document.getElementById('publish-btn'); btn.disabled = true;                 // no posting mid-prep/upload

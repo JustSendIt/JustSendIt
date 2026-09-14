@@ -246,6 +246,9 @@
   const toast = (m) => { if (window.sendToast) sendToast(m); };
   const IMG_TARGET = 1.6 * 1024 * 1024, IMG_MAXDIM = 1920;     // compress images to ≤ ~1.6MB, ≤ 1920px (keeps the feed fast)
   const GIF_HARD = 25 * 1024 * 1024, VIDEO_HARD = 64 * 1024 * 1024;
+  /* Matches the server's own cap for a voice memo. The recorder stops itself at two minutes, so in
+     practice this is a backstop against a hand-rolled upload rather than the thing a memo runs into. */
+  const AUDIO_HARD = 8 * 1024 * 1024;
   let _webp;
   function webpOk() { if (_webp === undefined) { try { _webp = document.createElement('canvas').toDataURL('image/webp').indexOf('data:image/webp') === 0; } catch { _webp = false; } } return _webp; }
   async function compressImage(file) {
@@ -276,8 +279,16 @@
     const isGif = type === 'image/gif';
     const isVideo = type === 'video/mp4' || type === 'video/webm';
     const isImg = type === 'image/jpeg' || type === 'image/png' || type === 'image/webp';
-    if (!isGif && !isVideo && !isImg) { toast(type.indexOf('video/') === 0 ? 'That video format isn’t supported — use MP4 or WebM 🎬' : 'Use a JPG, PNG, WebP, GIF, MP4 or WebM 🖼️'); return null; }
+    /* A voice memo arrives here as a Blob from the recorder, not a chosen file, and needs no processing —
+       the browser has already encoded it. Chrome/Firefox hand over audio/webm, Safari and iOS audio/mp4,
+       and both have to pass or the feature works on half the phones in the room. */
+    const isAudio = type === 'audio/webm' || type === 'audio/mp4' || type === 'audio/ogg';
+    if (!isGif && !isVideo && !isImg && !isAudio) { toast(type.indexOf('video/') === 0 ? 'That video format isn’t supported — use MP4 or WebM 🎬' : 'Use a JPG, PNG, WebP, GIF, MP4 or WebM 🖼️'); return null; }
     try {
+      if (isAudio) {
+        if (file.size <= AUDIO_HARD) return { blob: file, kind: 'audio', mime: type };
+        toast('That memo is too long — keep it under two minutes 🎤'); return null;
+      }
       if (isImg) {
         if (file.size > 80 * 1024 * 1024) { toast('That image is enormous — under 80MB please'); return null; }
         const r = await compressImage(file);
@@ -357,10 +368,13 @@
     if (!src) { el.hidden = true; el.style.display = 'none'; return; }
     if (String(src).indexOf('blob:') === 0) el._blobUrl = src;
     el.hidden = false; el.style.display = 'block';
-    const node = document.createElement(kind === 'video' ? 'video' : 'img');
-    node.className = 'media-preview-el';
+    const node = document.createElement(kind === 'video' ? 'video' : kind === 'audio' ? 'audio' : 'img');
+    node.className = 'media-preview-el' + (kind === 'audio' ? ' media-preview-audio' : '');
     node.src = src;
     if (kind === 'video') { node.muted = true; node.playsInline = true; node.loop = true; node.controls = true; node.preload = 'metadata'; node.setAttribute('aria-label', 'Attached video preview'); }
+    /* Never muted and never looping: a voice memo you cannot hear before sending is not a preview, and
+       one that repeats forever is a nuisance. Nothing autoplays. */
+    else if (kind === 'audio') { node.controls = true; node.preload = 'metadata'; node.setAttribute('aria-label', 'Listen back to your voice memo before posting'); }
     else node.alt = 'Attached ' + (kind === 'gif' ? 'GIF' : 'image') + ' preview';
     el.appendChild(node);
     if (typeof onClear === 'function') {
@@ -383,6 +397,13 @@
   window.mediaTag = function (escUrl, escAlt) {
     if (!escUrl) return '';
     const who = escAlt || 'a sender';
+    /* A voice memo is a first-class post, so it gets a labelled player rather than a bare <audio>: the
+       label is what a screen reader announces and what tells anyone scrolling past what they are looking
+       at. No autoplay, no loop — it plays when somebody asks it to. */
+    if (/\.(weba|m4a|ogg|mp3)$/i.test(escUrl)) {
+      return '<span class="post-voice"><span class="post-voice-tag" aria-hidden="true">🎤 Voice memo</span>' +
+        '<audio class="post-audio" src="' + escUrl + '" controls preload="none" aria-label="Voice memo posted by ' + who + '"></audio></span>';
+    }
     if (/\.(mp4|webm|mov)$/i.test(escUrl)) return '<video class="post-img post-video" src="' + escUrl + '" controls loop muted playsinline preload="metadata" aria-label="Video posted by ' + who + '"></video>';
     const isGif = /\.gif$/i.test(escUrl);
     const img = '<img class="post-img' + (isGif ? ' post-gif' : '') + '"' + (isGif ? ' data-gif="1"' : '') + ' src="' + escUrl + '" alt="' + (isGif ? 'Animated GIF' : 'Media') + ' posted by ' + who + '" loading="lazy">';

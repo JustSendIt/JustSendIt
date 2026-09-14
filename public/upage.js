@@ -574,6 +574,15 @@ async function loadPage() {
   let pcImg = null;
   const pcImgEl = document.getElementById('pc-img'), pcStatus = document.getElementById('pc-status');
   const clearPcMedia = () => { pcImg = null; pcImgEl._attachGen = (pcImgEl._attachGen || 0) + 1; pcImgEl.value = ''; window.setMediaPreview(document.getElementById('pc-preview'), null); };
+  /* The same recorder as the site-wide composer and the Send Wall's. */
+  if (window.VoiceMemo) VoiceMemo.wire({
+    btn: document.getElementById('pc-voice'),
+    previewEl: document.getElementById('pc-preview'),
+    live: pcStatus || null,
+    onClear: clearPcMedia,
+    onStatus: (m) => { if (pcStatus) pcStatus.textContent = m; },
+    onAttached: (url) => { pcImg = url; },
+  });
   pcImgEl.addEventListener('change', async (e) => {
     const f = e.target.files[0]; if (!f) return;
     const btn = document.getElementById('pc-publish'); btn.disabled = true;

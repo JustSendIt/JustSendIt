@@ -5643,6 +5643,22 @@ const UPLOAD_KINDS = {
   'image/gif': { ext: 'gif', kind: 'gif', cap: 25 * 1024 * 1024, magic: (b) => b.slice(0, 3).toString('latin1') === 'GIF' },
   'video/mp4': { ext: 'mp4', kind: 'video', cap: 64 * 1024 * 1024, magic: (b) => b.slice(4, 8).toString('latin1') === 'ftyp' },
   'video/webm': { ext: 'webm', kind: 'video', cap: 64 * 1024 * 1024, magic: (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3 },
+  /* Voice memos. A browser gives you whichever container it feels like — Chrome and Firefox record
+     audio/webm (Opus in an EBML container), Safari and iOS record audio/mp4 (AAC) — so both have to be
+     accepted or the feature works on half the phones in the room.
+
+     The magic bytes are deliberately the SAME tests as their video twins, because the containers ARE the
+     same: an Opus-only WebM and a video WebM open with identical EBML bytes, and an audio MP4 carries the
+     same `ftyp`. Declaring audio/webm for a file with a video track therefore passes — and lands as a
+     .weba that plays its soundtrack. That is a cosmetic oddity, not a hole: the cap is lower, the bytes
+     are still verified to be the container they claim, and nothing is ever executed.
+
+     8MB is about twenty minutes of Opus voice and a couple of minutes of Safari's AAC — far more than
+     the recorder will hand over (it stops itself at two minutes), so the cap is a backstop for a
+     hand-rolled upload rather than the thing that governs a memo's length. */
+  'audio/webm': { ext: 'weba', kind: 'audio', cap: 8 * 1024 * 1024, magic: (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3 },
+  'audio/mp4':  { ext: 'm4a',  kind: 'audio', cap: 8 * 1024 * 1024, magic: (b) => b.slice(4, 8).toString('latin1') === 'ftyp' },
+  'audio/ogg':  { ext: 'ogg',  kind: 'audio', cap: 8 * 1024 * 1024, magic: (b) => b.slice(0, 4).toString('latin1') === 'OggS' },
 };
 // Read the first N bytes of a file (for magic/dimension checks on a streamed upload without loading the whole file).
 function readHead(filePath, n) { try { const fd = fs.openSync(filePath, 'r'); try { const b = Buffer.allocUnsafe(n); const read = fs.readSync(fd, b, 0, n, 0); return b.slice(0, read); } finally { fs.closeSync(fd); } } catch { return Buffer.alloc(0); } } // allocUnsafe: we slice to `read`, so the uninitialized tail is never exposed
@@ -5917,6 +5933,10 @@ const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.gif': 'image/gif',
   '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg',
+  /* Voice memos. Without these two a recorded memo is served as application/octet-stream, and because
+     every response carries X-Content-Type-Options: nosniff the browser refuses to play it rather than
+     guessing — the memo would upload fine and be silent forever. */
+  '.weba': 'audio/webm', '.ogg': 'audio/ogg',
   '.txt': 'text/plain', '.xml': 'application/xml', '.ico': 'image/x-icon', '.json': 'application/json',
   '.mjs': 'text/javascript', '.webmanifest': 'application/manifest+json', // in COMPRESSIBLE/ASSET_REF → must have a real type (nosniff would block octet-stream)
 };
@@ -8696,7 +8716,7 @@ const server = http.createServer(async (req, res) => {
         if ((mediaByUser.get(me.id) || 0) >= MEDIA_PER_USER) return bad(res, 'you already have ' + MEDIA_PER_USER + ' uploads in flight — let them finish first', 429);
         const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         const spec = UPLOAD_KINDS[mime];
-        if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4 or WebM', 415);
+        if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4, WebM or a voice memo', 415);
         const q0 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
         if (q0 && q0.u >= UPLOAD_USER_QUOTA) return bad(res, 'you’ve hit your media storage limit — delete some old posts first', 413);
         const clen = Number(req.headers['content-length'] || 0);
@@ -8741,7 +8761,13 @@ const server = http.createServer(async (req, res) => {
           ws.end(() => {
             if (settled) return;
             if (!size || !spec.magic(head)) return fail(400, 'corrupt or mislabeled media');
-            if (spec.kind !== 'video') { const d = rasterDims(readHead(tmp, 131072), mime); if (!d || !(d.w > 0) || !(d.h > 0) || d.w > UPLOAD_MAX_PX || d.h > UPLOAD_MAX_PX || (d.w * d.h) / 1e6 > UPLOAD_MAX_MEGAPIXELS) return fail(400, 'image dimensions too large (max ' + UPLOAD_MAX_PX + 'px per side)'); }
+            /* Rasters only. This guards against a decompression bomb — a tiny file that decodes to
+               gigabytes in every viewer's tab — which is a property of images, not of sound. It used to
+               read `kind !== 'video'`, so the day audio was added every voice memo was run through a
+               PNG/JPEG header parser, found to have no dimensions, and rejected as "image dimensions too
+               large". Naming the kinds it is actually for means the next kind added does not inherit a
+               check that cannot apply to it. */
+            if (spec.kind === 'image' || spec.kind === 'gif') { const d = rasterDims(readHead(tmp, 131072), mime); if (!d || !(d.w > 0) || !(d.h > 0) || d.w > UPLOAD_MAX_PX || d.h > UPLOAD_MAX_PX || (d.w * d.h) / 1e6 > UPLOAD_MAX_MEGAPIXELS) return fail(400, 'image dimensions too large (max ' + UPLOAD_MAX_PX + 'px per side)'); }
             const q1 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
             if (q1 && q1.u + size > UPLOAD_USER_QUOTA) return fail(413, 'you’ve hit your media storage limit — delete some old posts first');
             try { const st = fs.statfsSync(DATA_DIR); if (st.bavail * st.bsize < DISK_SAFETY_MARGIN) return fail(507, 'storage is full right now — try again later'); } catch {}

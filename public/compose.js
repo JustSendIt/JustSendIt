@@ -44,6 +44,7 @@
             '<div id="compose-preview" class="media-preview" hidden aria-label="Attached media preview"></div>' +
             '<div class="composer-bar">' +
               '<label class="file-label" for="compose-img">🖼 Photo / GIF / Video<input type="file" id="compose-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>' +
+              '<button class="file-label voice-btn" type="button" id="compose-voice" data-tip="Records a voice memo to post — press once to start, once to stop">🎤 Voice memo</button>' +
               '<button class="btn btn-primary btn-sm" id="compose-send" data-tip="Posts this publicly to the wall and your profile" disabled>Send it 🚀</button>' +
               '<span class="hint" id="compose-count" aria-hidden="true">500</span>' +
             '</div>' +
@@ -357,6 +358,17 @@
     });
 
     const clearComposeMedia = () => { pendingImg = null; const ci = modal.querySelector('#compose-img'); ci._attachGen = (ci._attachGen || 0) + 1; ci.value = ''; window.setMediaPreview(modal.querySelector('#compose-preview'), null); sendBtn.disabled = !modal.querySelector('#compose-text').value.trim(); };
+    /* The SAME recorder the Send Wall and the profile composer use — one microphone implementation for
+       the whole site. It attaches through attachMedia, exactly as a photo does, so everything downstream
+       (preview, upload, progress, the ✕ that removes it) already works without knowing what it is. */
+    if (window.VoiceMemo) VoiceMemo.wire({
+      btn: modal.querySelector('#compose-voice'),
+      previewEl: modal.querySelector('#compose-preview'),
+      live: modal.querySelector('#compose-status'),
+      onClear: () => clearComposeMedia(),
+      onStatus: (m) => setStatus(m),
+      onAttached: (url) => { pendingImg = url; sendBtn.disabled = false; },
+    });
     modal.querySelector('#compose-img').addEventListener('change', async e => {
       const f = e.target.files[0]; if (!f) return;
       composeBusy = true; sendBtn.disabled = true;

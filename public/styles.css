@@ -4356,3 +4356,30 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 /* reduced motion: no travel, no fade — it is either there or it is not */
 .tip-bubble.is-instant { transition: none; transform: none; }
 @media (prefers-reduced-motion: reduce) { .tip-bubble { transition: none; transform: none; } }
+
+/* ===== voice memos ===============================================================================
+   The 🎤 button sits beside the photo attach and matches it, because they are the same kind of thing:
+   two ways to put something in a post. It only changes character while it is actually listening. */
+.voice-btn { cursor: pointer; font-variant-numeric: tabular-nums; }
+.voice-btn.is-recording {
+  color: var(--red); border-color: var(--red);
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+}
+/* A recording indicator has to be visible without colour — somebody who cannot tell red from grey still
+   needs to know the microphone is live — so it pulses as well, and says "Stop" in words. */
+@media (prefers-reduced-motion: no-preference) {
+  .voice-btn.is-recording { animation: voice-pulse 1.1s ease-in-out infinite; }
+  @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--red) 22%, transparent); } }
+}
+.media-preview-audio { width: 100%; min-height: 40px; display: block; }
+
+/* A posted memo. Labelled rather than a bare <audio>, so somebody scrolling past knows what it is
+   before they press play, and a screen reader is told the same thing. */
+.post-voice { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.6rem 0 0.2rem; }
+.post-voice-tag {
+  align-self: flex-start; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.02em;
+  color: var(--green-bright); background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green-bright) 34%, transparent);
+  border-radius: 999px; padding: 0.12rem 0.55rem;
+}
+.post-audio { width: 100%; max-width: 420px; height: 40px; }

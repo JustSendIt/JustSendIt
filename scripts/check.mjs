@@ -125,8 +125,15 @@ const isBtnLink = (attrs) => {
    sweep to silence it by editing the sentence — which is the check corrupting the codebase to satisfy
    itself. Strip comments first. `//` is only taken as a comment when it does not follow a colon, so a
    https:// inside a string survives. */
+/* A slash-star only opens a comment when something separates it from the token before it. Without that
+   test this stripper read the slash-star inside `accept="image/*,video/mp4"` as a comment opener and
+   blanked everything up to the next close marker — which in compose.js meant the check went blind to
+   most of the file and silently passed an undescribed button. A regex cannot know it is inside a string
+   literal; it can know that real block comments start a line or follow whitespace, and that is enough.
+   (This comment says "slash-star" in words on purpose: writing the close marker inside a block comment
+    ends the comment, which is exactly how the first attempt at this broke the file.) */
 const decomment = (src, isHtml) => (isHtml ? src.replace(/<!--[\s\S]*?-->/g, c => c.replace(/[^\n]/g, ' ')) : src)
-  .replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, ' '))            // keep line numbers stable
+  .replace(/(^|\s)\/\*[\s\S]*?\*\//g, (m, pre) => pre + ' '.repeat(m.length - pre.length))   // keep line numbers stable
   .replace(/(^|[^:])\/\/[^\n]*/g, (m, pre) => pre + ' '.repeat(m.length - pre.length));
 const scanForButtons = (rel, rawSrc, isHtml) => {
   const src = decomment(rawSrc, isHtml);
