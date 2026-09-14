@@ -16,27 +16,41 @@
  */
 :root {
   /* ---------- IDENTITY (prefs.js live-overrides the first three) ---------- */
-  --green: #8ee000; --green-bright: #b4ff2b; --green-dark: #5a9e00;
+  /* The acid green the brand art is built on. It was #b4ff2b — already a yellow-green, and close — but
+     the mark sits on a field that is a shade deeper and more saturated, and "close" is what makes a logo
+     look like it was dropped onto somebody else's site. prefs.js live-overrides these three per reader,
+     so this is the DEFAULT accent, not a fixed value anything may assume. */
+  --green: #a8ce00; --green-bright: #c6f000; --green-dark: #5e7a00;
   --rh-green: #00C805; --gold: #ffb340; --gold-deep: #e07b00;
   --diamond: #9fe0ff; --diamond-deep: #2a7fb0; --red: #ff5d5d;
 
   /* ---------- ATMOSPHERE (decoration only — never text, never state) ---------- */
   --neon-magenta: #ff3ba7; --neon-violet: #a45cff; --neon-cyan: #45e5ff;
 
-  /* ---------- SURFACE RAMP ---------- */
-  --void:  #05030e;
-  --ink:   #0b0818;
-  --ink-1: #06040f; /* darkest ink — high-contrast text ON bright green/gold highlights */
-  --ink-2: #14102a;
-  --ink-3: #1d1740;
-  --ink-4: #2e2560; /* DECORATIVE separator ONLY — not a control boundary */
-  --ink-5: #4a3e8c;
+  /* ---------- SURFACE RAMP ----------
+     Was a VIOLET-black ramp, chosen (see the note at the top of this file) because violet is what made
+     the old neon read as neon rather than as bright colour on grey. The brand's marks are MATTE NEUTRAL
+     black, so that violet cast was the one thing on the page actively disagreeing with the logo.
 
-  /* ---------- TEXT ---------- */
-  --text: #eef4ff; --text-dim: #a8b4d8; --text-mute: #8a93bd;
+     Not a pure neutral grey either — a ramp with no bias at all reads as unconsidered, and grey under an
+     acid-green accent reads as cold. The bias is a few points toward the accent's own hue, so the dark
+     belongs to the same family as the mark sitting on it. Every step keeps or improves the contrast it
+     had: --text-dim went 9.59 → 10.18, --text-mute 6.58 → 6.86. */
+  --void:  #050603;
+  --ink:   #0b0d08;
+  --ink-1: #060803; /* darkest ink — high-contrast text ON bright green/gold highlights */
+  --ink-2: #13160f;
+  --ink-3: #1b1f16;
+  --ink-4: #2a2f22; /* DECORATIVE separator ONLY — not a control boundary */
+  --ink-5: #434a38;
+
+  /* ---------- TEXT ----------
+     The blue cast went with the violet ramp; on a green-biased dark it read as a second accent nobody
+     asked for. Warmed to a near-white that belongs to the same family, at the same contrast. */
+  --text: #f2f6ec; --text-dim: #b6beac; --text-mute: #949c8a;
 
   /* ---------- FOCUS (never accent-derived — prefs.js must not be able to hide it) ---------- */
-  --focus: #eef4ff;
+  --focus: #f2f6ec;
   /* How much of the bottom of the VIEWPORT the two pinned controls own — #music-player (bottom 1rem,
      ~61px tall, z 250) and #compose-fab (bottom 1rem, ~51px, z 240). Anything that puts a control near
      the bottom of the screen has to clear this or the pinned ones sit on top of it: they are pinned to
@@ -49,7 +63,7 @@
   --on-green: #12200a; --on-gold: #2b1600; --on-diamond: #04121c; --on-red: #140606;
 
   /* ---------- CONTROL BOUNDARY (WCAG 1.4.11 >= 3:1) ---------- */
-  --edge-ctl: #7d7ab8;
+  --edge-ctl: #7e8a6e;
   --edge-ctl-lit: var(--green);
 
   /* ---------- ACCENT TINTS (follow the user's accent automatically) ---------- */
@@ -72,12 +86,16 @@
   --d-edge: color-mix(in srgb, var(--diamond) 40%, transparent);
 
   /* ---------- GLASS ---------- */
-  --glass-nav:   rgba(11, 8, 24, 0.86);
-  --glass-menu:  rgba(11, 8, 24, 0.975); /* mobile dropdown sits over scrolling content — stays near-opaque */
-  --glass-scrim: rgba(5, 3, 14, 0.80);
-  --glass-hi:    rgba(29, 23, 64, 0.82);
-  --glass-lo:    rgba(20, 16, 42, 0.86);
-  --glass-well:  rgba(6, 4, 15, 0.55);
+  /* These are the ramp again, as rgba so they can sit translucently over content — and being rgba they
+     are INVISIBLE to any search for hex colours, which is how they stayed violet while every token
+     around them moved. They paint the nav, the mobile menu, modal scrims and card surfaces, i.e. the
+     most-seen chrome on every page. Same alphas, new ramp. */
+  --glass-nav:   rgba(11, 13, 8, 0.86);     /* --ink   */
+  --glass-menu:  rgba(11, 13, 8, 0.975);    /* mobile dropdown sits over scrolling content — stays near-opaque */
+  --glass-scrim: rgba(5, 6, 3, 0.80);       /* --void  */
+  --glass-hi:    rgba(27, 31, 22, 0.82);    /* --ink-3 */
+  --glass-lo:    rgba(19, 22, 15, 0.86);    /* --ink-2 */
+  --glass-well:  rgba(6, 8, 3, 0.55);       /* --ink-1 */
   --glass-sheen: rgba(255, 255, 255, 0.055);
   --glass-edge:  rgba(255, 255, 255, 0.10);
   --hair:        rgba(255, 255, 255, 0.08);
@@ -2264,7 +2282,10 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 
 /* ===== A11y: resting form-control borders that clear WCAG 1.4.11 (>=3:1) on all card/page surfaces ===== */
 .addr-input, .composer textarea, #compose-modal textarea, .auth-tab, .np-search, .ab-select, .np-sort, #post-text, #pc-text {
-  border-color: #6b7a9c;
+  /* Was #6b7a9c, a blue-grey hardcoded beside the very token that exists to carry this exact value.
+     Pointing it at --edge-ctl means the one documented control-boundary colour is the one actually used,
+     and a future ramp change cannot leave this rule behind clearing less than 3:1. */
+  border-color: var(--edge-ctl);
 }
 /* focus + active states keep their higher-specificity green border (defined above) */
 
@@ -3133,9 +3154,14 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
    TRANSFORM only — never background-position, which would repaint the whole
    viewport every frame forever. */
 body {
+  /* The two washes were violet (#191036 / #230f3a) — the last and largest thing on the page still
+     painting the old identity, sitting behind every screen at full viewport size. Re-cast into the
+     brand's own family: a deep green-black at the top, a warmer one at the foot. Kept as literals rather
+     than derived from --green, because prefs.js live-overrides the accent per reader and the WORLD
+     should not change colour when somebody picks a different highlight. */
   background:
-    radial-gradient(120% 80% at 50% 0%,   #191036 0%, transparent 60%),
-    radial-gradient(100% 70% at 50% 100%, #230f3a 0%, transparent 62%),
+    radial-gradient(120% 80% at 50% 0%,   #121a0c 0%, transparent 60%),
+    radial-gradient(100% 70% at 50% 100%, #17200e 0%, transparent 62%),
     var(--void);
   background-attachment: fixed;
   font-family: var(--font-body);
@@ -3240,7 +3266,7 @@ body::after {
   body::after { display: none; }
 }
 @media (prefers-contrast: more) {
-  :root { --text-dim: #cdd8f2; --text-mute: #b3bede; --edge-ctl: #a9a6dd; --glass-sheen: transparent; }
+  :root { --text-dim: #d6dccd; --text-mute: #c2c9b6; --edge-ctl: #a7b399; --glass-sheen: transparent; }
   .card, .nav { background: var(--ink-2); backdrop-filter: none; -webkit-backdrop-filter: none; }
   body::before, body::after { display: none; }
 }

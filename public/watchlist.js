@@ -29,7 +29,7 @@
   function ringColor(health) {
     const v = Math.max(0, Math.min(100, Math.round(Number(health) || 0)));
     const dip = Math.sin((v / 100) * Math.PI);            // 0 at the ends, 1 in the middle
-    return 'hsl(' + (v * 0.81).toFixed(1) + ' 100% ' + (68 - 10 * (v / 100) - 8 * dip).toFixed(1) + '%)';
+    return 'hsl(' + (v * 0.705).toFixed(1) + ' 100% ' + (68 - 20.9 * (v / 100) - 8 * dip).toFixed(1) + '%)';
   }
 
   /* ---------- verdict + flags ---------- */

@@ -300,6 +300,78 @@ try {
       /--fab-clear: calc\(5\.5rem/.test(CSS) && /padding-bottom: var\(--fab-clear\)/.test(CSS));
   }
 
+  /* ═══════════ 6e. the rating scale (restored — see the note inside) ═══════════ */
+  {
+    /* ═══ THE RING IS A SCALE, NOT FOUR BUCKETS ═══
+       Every number gets its own colour, and both ENDS are the site's own brand colours rather than
+       invented ones — 0 lands on --red (#ff5d5d) and 100 on --green-bright. Verified by
+       evaluating the real function rather than by reading it.
+
+       The green end MOVED with the rebrand — #b4ff2b (hsl 81 100% 58%) became #c6f000 (hsl 70.5 100%
+       47.1%) — and this block is why that mattered: a scale anchored to a brand colour has to follow
+       when the brand does, or the code keeps claiming an agreement it no longer has. These assertions
+       were also DELETED by accident in e70e48f, when a splice that retired an unrelated block took the
+       range between two markers and this sat inside it. The assertion count fell 164 → 135 and was
+       reported as the unrelated retirement. Restored, and now checked against the token itself. */
+    {
+      const src = (/function ringColor\(health\) \{[\s\S]*?\n  \}/.exec(NP) || [''])[0];
+      check('the ring colour is computed per number, not per tier', !!src && /Math\.round\(Number\(health\)/.test(src));
+      let ringColor = null;
+      try { ringColor = new Function(src + ' return ringColor;')(); } catch {}
+      check('  ...and the function actually runs', typeof ringColor === 'function');
+      if (typeof ringColor === 'function') {
+        const hsl = (v) => (/hsl\(([\d.]+) ([\d.]+)% ([\d.]+)%\)/.exec(ringColor(v)) || []).slice(1).map(Number);
+        const [h0, s0, l0] = hsl(0), [h100, s100, l100] = hsl(100);
+        check('  ...0 is the site\'s own red', h0 === 0 && s0 === 100 && Math.abs(l0 - 68) < 0.6, ringColor(0));
+        check('  ...100 is the site\'s own green', Math.abs(h100 - 70.5) < 0.6 && s100 === 100 && Math.abs(l100 - 47.1) < 0.6, ringColor(100));
+        /* Pinned to the TOKEN, not to a number copied out of it. The endpoint silently disagreeing with
+           --green-bright is the exact failure the rebrand produced, and a hardcoded 70.5 would let it
+           happen again the next time the brand moves. */
+        const brand = (/--green-bright: (#[0-9a-f]{6})/i.exec(CSS) || [])[1];
+        check('  ...and that green IS --green-bright, not a copy of it', (() => {
+          if (!brand) return false;
+          const [r, g, b] = [1, 3, 5].map(i => parseInt(brand.slice(i, i + 2), 16) / 255);
+          const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+          const H = !d ? 0 : mx === r ? 60 * (((g - b) / d) % 6) : mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+          const L = (mx + mn) / 2;
+          return Math.abs(((H + 360) % 360) - h100) < 1 && Math.abs(L * 100 - l100) < 1;
+        })(), brand);
+        const hues = [0, 25, 50, 75, 100].map(v => hsl(v)[0]);
+        check('  ...and hue climbs with the number, never backwards', hues.every((v, i) => i === 0 || v > hues[i - 1]), hues.join(' → '));
+        check('  ...every step of the scale is its own colour',
+          new Set(Array.from({ length: 101 }, (_, v) => ringColor(v))).size === 101);
+        check('  ...and it is clamped, so bad input cannot produce invalid CSS',
+          ringColor(-50) === ringColor(0) && ringColor(999) === ringColor(100) && /^hsl\(/.test(ringColor(undefined)));
+      }
+      /* The scale is not a radar-page decoration: it has to reach every rating on every surface. The
+         score breakdown and the audit sentence render inside window.NPCard.detailHTML, which the token
+         modal and the Send Call widget ship to the Send Wall, communities, support and profiles —
+         pages with no gauge at all, where these text ratings ARE the rating. */
+      check('every rating goes through one helper, ring and text alike', /const ratingInk = \(v\) => ' style="color:' \+ ringColor\(v\)/.test(NP));
+      for (const [what, re] of [
+        ['the score breakdown\'s per-section score', /np-bd-score"' \+ ratingInk\(s\.score\)/],
+        ['  ...and its bar',                          /background:' \+ ringColor\(s\.score\)/],
+        ['the overall health line',                   /np-bd-formula">Overall health <b' \+ ratingInk\(health\)/],
+        ['the audit sentence',                        /Our checks score it <b' \+ ratingInk\(health\)/],
+        ['the Hot Feed health line',                  /np-slide-health"' \+ ratingInk\(health\)/],
+        ['  ...kept in step when it repaints',        /hp\.style\.color = ringColor\(health\)/],
+        ['the Best Runners rating',                   /np-runner-health"' \+ ratingInk\(r\.health\)/],
+      ]) check('  ...' + what + ' is shaded by it', re.test(NP));
+      check('  ...and no rating is left as plain text', !/Our checks score it <b>/.test(NP) && !/Overall health <b>/.test(NP));
+
+      /* Compared to the RADAR's own function rather than to a copied formula — the same number shaded two
+         different ways on two pages is worse than no colour at all, and a literal pinned here would drift
+         the moment the brand green moves again. */
+      check('the watchlist shades the same number the same way', (() => {
+        const a = (/function ringColor\(health\) \{[\s\S]*?\n  \}/.exec(NP) || [''])[0].replace(/\s+/g, ' ');
+        const b = (/function ringColor\(health\) \{[\s\S]*?\n  \}/.exec(WL) || [''])[0].replace(/\s+/g, ' ');
+        return !!a && a === b;
+      })());
+      check('  ...and both poll repaints keep the ring in step with the number',
+        (NP.match(/setProperty\('--tri', ringColor\(health\)\)/g) || []).length === 2);
+    }
+  }
+
   /* ═══════════ 7. the bug that made every row after the first fail ═══════════
      passFilters gained a second parameter, and two call sites passed it straight to Array.filter — which
      hands the callback (element, index, array). Row 0 worked; every row after it was tested against a

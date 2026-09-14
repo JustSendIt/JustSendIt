@@ -586,9 +586,14 @@
      carries the tier; this carries the number.
 
      Both ENDS are the site's own colours rather than invented ones: 0 lands exactly on --red (#ff5d5d =
-     hsl 0 100% 68%) and 100 exactly on --green-bright (#b4ff2b = hsl 81 100% 58%), so a full ring matches
-     the brand and an empty one matches every other danger colour on the page. Hue and lightness are
-     interpolated between those two points.
+     hsl 0 100% 68%) and 100 exactly on --green-bright, so a full ring matches the brand and an empty one
+     matches every other danger colour on the page. Hue and lightness are interpolated between those two.
+
+     The green end MOVED with the rebrand: --green-bright went #b4ff2b (hsl 81 100% 58%) to #c6f000
+     (hsl 70.5 100% 47.1%), so the coefficients moved with it. Anchoring a scale to a brand colour means
+     the scale has to follow when the brand does — otherwise a "full ring matches the brand" comment
+     quietly becomes false while every test still passes, because the tests pin the FUNCTION, not the
+     agreement between the function and the token.
 
      Lightness also dips through the middle. At full saturation the yellows around 55° render far brighter
      than either end — measured against this ground, an un-dipped 75 hit 17.6:1 while a 0 managed only
@@ -603,7 +608,7 @@
   function ringColor(health) {
     const v = Math.max(0, Math.min(100, Math.round(Number(health) || 0)));
     const dip = Math.sin((v / 100) * Math.PI);            // 0 at the ends, 1 in the middle
-    return 'hsl(' + (v * 0.81).toFixed(1) + ' 100% ' + (68 - 10 * (v / 100) - 8 * dip).toFixed(1) + '%)';
+    return 'hsl(' + (v * 0.705).toFixed(1) + ' 100% ' + (68 - 20.9 * (v / 100) - 8 * dip).toFixed(1) + '%)';
   }
   /* A rating shown as TEXT gets the same scale as the ring. These reach further than the gauge does:
      the score breakdown and the audit sentence render inside window.NPCard.detailHTML, which the token

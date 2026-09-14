@@ -192,6 +192,27 @@ for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) {
   }
 }
 
+/* ---- 10. every page carries the brand ----
+   theme-color paints the mobile address bar and apple-touch-icon is what iOS puts on a home screen —
+   without the latter iOS screenshots the page instead. Both were partly or entirely missing (4 pages had
+   no theme-color at all, and no page had an apple-touch-icon), which is the kind of gap that is invisible
+   on a desktop and only shows up on somebody's phone. Enforced rather than swept, so the next page added
+   cannot quietly ship without them.
+
+   theme-color is checked against --green-bright itself: the brand colour living in seventeen places is
+   how a rebrand ends up half-applied, which is exactly what happened to the value this replaced. */
+{
+  const css = readFileSync(path.join(PUBLIC, 'styles.css'), 'utf8');
+  const brand = (/--green-bright:\s*(#[0-9a-fA-F]{6})/.exec(css) || [])[1];
+  for (const f of htmlFiles) {
+    const src = readFileSync(path.join(PUBLIC, f), 'utf8');
+    const tc = (/<meta name="theme-color" content="(#[0-9a-fA-F]{6})">/.exec(src) || [])[1];
+    if (!tc) note('public/' + f, 'has no theme-color, so its mobile address bar is browser-default');
+    else if (brand && tc.toLowerCase() !== brand.toLowerCase()) note('public/' + f, 'theme-color is ' + tc + ' but the brand is ' + brand);
+    if (!/rel="apple-touch-icon"/.test(src)) note('public/' + f, 'has no apple-touch-icon — iOS will screenshot the page for the home screen');
+  }
+}
+
 if (problems.length) {
   console.error('✗ ' + problems.length + ' problem' + (problems.length === 1 ? '' : 's') + ':\n');
   for (const p of problems) console.error('  · ' + p);
