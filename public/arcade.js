@@ -473,6 +473,15 @@
     btn.hidden = !show;
     btn.disabled = dis;
     btn.className = 'btn arc-btn ' + cls;
+    /* This one control is six controls wearing one element — its label is rewritten per state, so a single
+       static description was only ever true in two of them. The description follows the state with it. */
+    btn.setAttribute('data-tip',
+      S.mode === 'signedout' ? 'Opens sign-in so you can play'
+      : S.mode === 'ready'   ? 'Starts your one flight for today'
+      : S.mode === 'resume'  ? 'Picks your flight back up where it is now'
+      : S.mode === 'flying'  ? 'Locks in the multiplier showing right now'
+      : S.mode === 'error'   ? 'Asks the arcade for its state again'
+      : 'Today\u2019s flight is over — the next unlocks at 00:00 UTC');
     // While flying, the VISIBLE label ticks with the multiplier 4×/s — so pin a stable accessible name, or a screen
     // reader re-announces the focused button every quarter second. The number is carried by the live region instead.
     if (S.mode === 'flying') btn.setAttribute('aria-label', 'Cash out');

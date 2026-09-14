@@ -105,13 +105,95 @@ try {
        neither a screen reader, nor a colour-blind reader, nor forced-colours mode. */
     check('clearing the reader\'s own bar earns the same words',
       /word: 'Looks Good, Send It', yours: true/.test(NP));
-    check('  ...attributed by a DIFFERENT icon, not by colour', /ico: '🚀', word: 'Looks Good, Send It'/.test(NP) && /ico: '🎯', word: 'Looks Good, Send It'/.test(NP));
-    check('  ...by a visible byline that is real text, never aria-hidden',
-      /by: 'by your filters'/.test(NP) && /np-verdict-by/.test(NP) && /np-verdict-by \{/.test(CSS) && !/np-verdict-by[^>]*aria-hidden/.test(NP));
-    check('  ...and by the spoken line, in words', /said: 'matching the filters you set — your settings, not ours'/.test(NP) && /const spokenVerdict = \(T\) => T\.word \+ \(T\.said/.test(NP));
-    check('every spoken verdict goes through that one helper', !/Verdict ' \+ T\.word/.test(NP) && (NP.match(/spokenVerdict\(T\)/g) || []).length >= 3);
-    check('  ...and the poll repaints keep the byline', (NP.match(/'<\/span>' \+ byline\(T\)/g) || []).length >= 2);
+    /* The chip is IDENTICAL for both bars by request: same rocket, same words, same green. Two carriers
+       of attribution remain, and because they are now the only ones, they are pinned harder than before —
+       the spoken line is the sole answer a screen reader ever gets. */
+    check('both bars carry the rocket', (NP.match(/ico: '🚀', word: 'Looks Good, Send It'/g) || []).length === 2);
+    check('  ...and no byline is rendered on the chip', !/np-verdict-by/.test(NP) && !/np-verdict-by/.test(CSS) && !/byline\(/.test(NP));
+    check('the spoken line still says whose bar it was',
+      /said: 'matching the filters you set — your settings, not ours'/.test(NP)
+      && /const spokenVerdict = \(T\) => T\.word \+ \(T\.said/.test(NP));
+    check('  ...on every surface that speaks a verdict', !/Verdict ' \+ T\.word/.test(NP) && (NP.match(/spokenVerdict\(T\)/g) || []).length >= 3);
+    /* ═══ TWO TIERS ON ONE SCALE ═══
+       100 earns "Looks Good, Send It"; 75 and above earns the milder "Looks Good". 75 is reachable, not
+       decorative — the lightest single deduction is 12, so one flag lands at 88 — but the floor is
+       absolute in BOTH tiers, and the middle one deliberately stops short of the word "Send". */
+    check('a full 100 is now required for the top tag, by either bar',
+      /if \(health >= 100 && !floorBreached\(p\) && clearsSiteBar\(p\)\)/.test(NP)
+      && /if \(health >= 100 && readerBarLive\(\) && meetsYourBar\(p\)\)/.test(NP));
+    check('75 and above earns the milder tag', /const LOOKS_GOOD_MIN = 75;/.test(NP)
+      && /health >= LOOKS_GOOD_MIN && !floorBreached\(p\)/.test(NP));
+    check('  ...which never says "Send"', /ico: '✅', word: 'Looks Good'/.test(NP)
+      && !/word: 'Looks Good, Send/.test(NP.split("ico: '✅'")[1] || ''));
+    check('  ...and the floor blocks it at any score', /health >= LOOKS_GOOD_MIN && !floorBreached\(p\)/.test(NP));
+    check('  ...and it is the quieter of the two on screen — no glow, no pulse',
+      /\.np-verdict\.np-t-good \{/.test(CSS) && !/\.np-verdict\.np-t-good \{[^}]*box-shadow/.test(CSS)
+      && !/np-t-good[^}]*animation/.test(CSS));
+    check('  ...mirrored server-side at the same 75 and the same floor',
+      /health >= 75 && r\.triage !== 'avoid' && !r\.honeypotSuspect && !r\.dumping && !r\.sniperDump/.test(SRC)
+      && /word: 'Looks Good', note:/.test(SRC));
+    check('  ...and on the watchlist', /h >= 75 && tri !== 'avoid'[\s\S]{0,180}?word: 'Looks Good'/.test(WL));
+    check('an unfinished block-0 check is still not swallowed by the milder word',
+      /tri === 'ok' && health >= 100 && !sniperOk\(p\)[\s\S]{0,600}?health >= LOOKS_GOOD_MIN/.test(NP));
+    /* ═══ THE RING IS A SCALE, NOT FOUR BUCKETS ═══
+       Every number gets its own colour, and both ENDS are the site's own brand colours rather than
+       invented ones — 0 lands on --red (#ff5d5d) and 100 on --green-bright (#b4ff2b). Verified by
+       evaluating the real function rather than by reading it. */
+    {
+      const src = (/function ringColor\(health\) \{[\s\S]*?\n  \}/.exec(NP) || [''])[0];
+      check('the ring colour is computed per number, not per tier', !!src && /Math\.round\(Number\(health\)/.test(src));
+      let ringColor = null;
+      try { ringColor = new Function(src + ' return ringColor;')(); } catch {}
+      check('  ...and the function actually runs', typeof ringColor === 'function');
+      if (typeof ringColor === 'function') {
+        const hsl = (v) => (/hsl\(([\d.]+) ([\d.]+)% ([\d.]+)%\)/.exec(ringColor(v)) || []).slice(1).map(Number);
+        const [h0, s0, l0] = hsl(0), [h100, s100, l100] = hsl(100);
+        check('  ...0 is the site\'s own red', h0 === 0 && s0 === 100 && Math.abs(l0 - 68) < 0.6, ringColor(0));
+        check('  ...100 is the site\'s own green', Math.abs(h100 - 81) < 0.6 && s100 === 100 && Math.abs(l100 - 58) < 0.6, ringColor(100));
+        const hues = [0, 25, 50, 75, 100].map(v => hsl(v)[0]);
+        check('  ...and hue climbs with the number, never backwards', hues.every((v, i) => i === 0 || v > hues[i - 1]), hues.join(' → '));
+        check('  ...every step of the scale is its own colour',
+          new Set(Array.from({ length: 101 }, (_, v) => ringColor(v))).size === 101);
+        check('  ...and it is clamped, so bad input cannot produce invalid CSS',
+          ringColor(-50) === ringColor(0) && ringColor(999) === ringColor(100) && /^hsl\(/.test(ringColor(undefined)));
+      }
+      /* The scale is not a radar-page decoration: it has to reach every rating on every surface. The
+         score breakdown and the audit sentence render inside window.NPCard.detailHTML, which the token
+         modal and the Send Call widget ship to the Send Wall, communities, support and profiles —
+         pages with no gauge at all, where these text ratings ARE the rating. */
+      check('every rating goes through one helper, ring and text alike', /const ratingInk = \(v\) => ' style="color:' \+ ringColor\(v\)/.test(NP));
+      for (const [what, re] of [
+        ['the score breakdown\'s per-section score', /np-bd-score"' \+ ratingInk\(s\.score\)/],
+        ['  ...and its bar',                          /background:' \+ ringColor\(s\.score\)/],
+        ['the overall health line',                   /np-bd-formula">Overall health <b' \+ ratingInk\(health\)/],
+        ['the audit sentence',                        /Our checks score it <b' \+ ratingInk\(health\)/],
+        ['the Hot Feed health line',                  /np-slide-health"' \+ ratingInk\(health\)/],
+        ['  ...kept in step when it repaints',        /hp\.style\.color = ringColor\(health\)/],
+        ['the Best Runners rating',                   /np-runner-health"' \+ ratingInk\(r\.health\)/],
+      ]) check('  ...' + what + ' is shaded by it', re.test(NP));
+      check('  ...and no rating is left as plain text', !/Our checks score it <b>/.test(NP) && !/Overall health <b>/.test(NP));
+
+      check('the watchlist shades the same number the same way', /function ringColor\(health\)/.test(WL)
+        && (/68 - 10 \* \(v \/ 100\) - 8 \* dip/.test(WL)));
+      check('  ...and both poll repaints keep the ring in step with the number',
+        (NP.match(/setProperty\('--tri', ringColor\(health\)\)/g) || []).length === 2);
+    }
+
+    check('the Hot Feed follows the top tag alone, through one predicate',
+      /const earnsSendIt = \(p\) => healthOfP\(p\) >= 100/.test(NP)
+      && /const feedQualifies = \(p\) => earnsSendIt\(p\);/.test(NP));
+
     check('the site\'s own bar keeps the rocket and its caveat', /word: 'Looks Good, Send It'[\s\S]{0,200}?most new tokens still go to zero/.test(NP));
+    /* Both indicators read GREEN. A different hue for the same sentence only said "yours counts for
+       less", and colour was never carrying the attribution anyway — it reaches neither a screen reader,
+       nor a colour-blind reader, nor forced-colours mode. Pinned so the split is not reintroduced as if
+       it were a safeguard. */
+    check('both bars read the same green, since colour never carried the claim',
+      /\.np-verdict\.np-t-yours \{[^}]*var\(--green-bright\)/.test(CSS)
+      && /\.np-verdict\.np-t-perfect \{[^}]*var\(--green-bright\)/.test(CSS)
+      && !/\.np-t-yours[^}]*var\(--diamond\)/.test(CSS));
+    check('  ...including the detail heading, which is the only verdict text off the scanner page',
+      /\.np-why-h \.np-verdict-word\.np-t-perfect, \.np-why-h \.np-verdict-word\.np-t-yours \{/.test(CSS));
 
     /* "Why WE say" is the site endorsing. It may only appear over the site's own bar — and this heading
        renders ONLY when flags.length is truthy, so without the split it would have printed the site's
@@ -122,14 +204,14 @@ try {
     check('the reader\'s bar is not claimed on pages that cannot show the settings',
       /const readerBarLive = \(\) => !!listEl && activeFilterCount\(\) > 0;/.test(NP) && /readerBarLive\(\) && meetsYourBar\(p\)/.test(NP));
     check('the site\'s bar is tested first, so a filter cannot cost a token the rocket',
-      /if \(!floorBreached\(p\) && clearsSiteBar\(p\)\)[\s\S]{0,320}?readerBarLive\(\) && meetsYourBar\(p\)/.test(NP));
+      /if \(health >= 100 && !floorBreached\(p\) && clearsSiteBar\(p\)\)[\s\S]{0,360}?readerBarLive\(\) && meetsYourBar\(p\)/.test(NP));
     check('the feed slide repaints its spoken line, not just its chip', /np-slide-sr'\); if \(srSlide\) srSlide\.textContent = srLine\(p\)/.test(NP));
     check('the watchlist awards the same words on the same test', /h >= 100 && sniperOk\) return \{ cls: 'np-t-ok np-t-perfect'/.test(WL));
     check('the server mirror stays the site\'s bar alone', /It has no second bar and must not grow one/.test(SRC));
-    check('the Hot Feed uses the same predicate as the tag — they cannot disagree', /const feedQualifies = \(p\) => meetsYourBar\(p\);/.test(NP));
+    check('the Hot Feed uses the same predicate as the tag — they cannot disagree', /const feedQualifies = \(p\) => earnsSendIt\(p\);/.test(NP));
     /* The feed's own copy has to say which bar it is following, and an empty feed has to say WHY —
        "check back soon" is the wrong answer when the real one is "your filter excluded everything". */
-    check('  ...and the feed says whose bar it is showing', /The fresh tokens that clear <b>your<\/b> settings/.test(NP) && /awarded by your filters rather than by us/.test(NP));
+    check('  ...and the feed says whose bar it is showing', /The fresh tokens that clear <b>your<\/b> settings/.test(NP) && /judged against your filters rather than ours/.test(NP));
     check('  ...and an empty feed blames the right thing', /Nothing on the board clears your settings right now/.test(NP));
   }
 

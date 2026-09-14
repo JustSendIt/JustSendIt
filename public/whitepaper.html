@@ -997,9 +997,12 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
           <p>A balance that cannot be read is stored as nothing at all, never as zero, and if any wallet in a cluster is unreadable the whole cluster reports <strong>unknown</strong>. This is the single most important rule in the whole scanner. A tool that quietly recorded an unreadable balance as &ldquo;sold everything&rdquo; would be inventing rugs that never happened &mdash; and it would be most likely to do it exactly when the chain was congested, which is when people are most anxious to check.</p>
           <p>The same care governs the green verdict. A coin whose scan has not finished is <em>not</em> treated as clean: the verdict stays unanswered, and the Hot Feed asks for a positive all-clear rather than merely the absence of a problem. An unfinished check is an open question, not a pass.</p>
           <p>That describes the bar the site sets for itself. A reader who sets filters of their own is judged
-          against those instead, and earns the same wording for clearing them &mdash; the claim is attributed by a
-          different icon, by a visible byline reading <em>by your filters</em>, and by the spoken line, rather than
-          by colour, which reaches neither a screen reader nor a colour-blind reader. Four checks are unwaivable by
+          against those instead, and earns the same tag for clearing them &mdash; which in either case needs a perfect
+          hundred. A score of 75 to 99 earns a second, quieter tag, <em>Looks Good</em>, that deliberately stops
+          short of the word <em>Send</em>; below the floor neither is available at any score. The claim is
+          attributed in words rather
+          than in a glance: the spoken line names whose bar it was, and the detail panel&rsquo;s heading reads
+          <em>Why your settings say</em> rather than <em>Why we say</em>. Four checks are unwaivable by
           any setting: a honeypot, a coin dumping as it is read, block-0 buyers who have already sold, and the risk
           model&rsquo;s own bottom tier.</p>
         </div>

@@ -22,6 +22,16 @@
   const move = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
   function copyBtn(a, label) { return '<button class="copy-btn" type="button" data-tip="Copies this address to your clipboard" data-copy="' + esc(a) + '" aria-label="Copy ' + esc(label || 'address') + '">📋</button>'; }
 
+  /* The ring is a scale, not four buckets: 0 full red, 100 full green, every number its own colour.
+     Hue ends at 81°, the hue of --green-bright, and lightness dips through the middle so the yellows do
+     not out-shout the ends. Kept identical to ringColor() in newpairs.js — the same number shaded two
+     different ways on two pages is worse than no colour at all. */
+  function ringColor(health) {
+    const v = Math.max(0, Math.min(100, Math.round(Number(health) || 0)));
+    const dip = Math.sin((v / 100) * Math.PI);            // 0 at the ends, 1 in the middle
+    return 'hsl(' + (v * 0.81).toFixed(1) + ' 100% ' + (68 - 10 * (v / 100) - 8 * dip).toFixed(1) + '%)';
+  }
+
   /* ---------- verdict + flags ---------- */
   const TRI = { ok: { cls: 'np-t-ok', ico: '🟢', word: 'Looks OK' }, caution: { cls: 'np-t-caution', ico: '🟡', word: 'Caution' }, high: { cls: 'np-t-high', ico: '🔴', word: 'High risk' }, avoid: { cls: 'np-t-avoid', ico: '☠️', word: 'Avoid' } };
   function triageOf(p) { const r = p.risk || {}; if (TRI[r.triage]) return r.triage; if (r.health != null) return r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid'; return 'caution'; }
@@ -32,7 +42,11 @@
        where null means the block-0 scan has not finished and is NOT the same as passed. Without this the
        identical sentence meant a weaker thing here than it does two pages away. */
     const sniperOk = !!(p.risk && p.risk.sniperOk === true);
-    if (tri === 'ok' && h >= 100 && sniperOk) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' }; return TRI[tri]; }
+    if (tri === 'ok' && h >= 100 && sniperOk) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' };
+    // the middle tier, same 75 and the same floor as the radar
+    const r = p.risk || {};
+    if (h >= 75 && tri !== 'avoid' && !r.honeypotSuspect && !r.dumping && !r.sniperDump) return { cls: 'np-t-ok np-t-good', ico: '✅', word: 'Looks Good' };
+    return TRI[tri]; }
   const FLAG = {
     honeypotSuspect: { ico: '🍯', word: "Can't sell?", sev: 'bad' }, dumping: { ico: '📉', word: 'Dumping', sev: 'bad' },
     serialDeployer: { ico: '🔁', word: 'Serial deployer', sev: 'bad' }, lowLiquidity: { ico: '💧', word: 'Thin liquidity', sev: 'bad' },
@@ -47,7 +61,7 @@
   }
   function gaugeHTML(p, tri, health) {
     const off = 100 - Math.max(0, Math.min(100, health));
-    return '<span class="np-gauge ' + TRI[tri].cls + '" aria-hidden="true"><svg viewBox="0 0 44 44" class="np-gauge-svg">' +
+    return '<span class="np-gauge ' + TRI[tri].cls + '" style="--tri:' + ringColor(health) + '" aria-hidden="true"><svg viewBox="0 0 44 44" class="np-gauge-svg">' +
       '<circle class="np-gauge-track" cx="22" cy="22" r="19"></circle>' +
       '<circle class="np-gauge-arc" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="100" stroke-dashoffset="' + off + '" transform="rotate(-90 22 22)"></circle>' +
       '</svg><span class="np-gauge-num">' + health + '</span></span>';
@@ -104,7 +118,7 @@
       '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span><code>' + esc(p.pair.address) + '</code>' + copyBtn(p.pair.address, 'pair') + '</div>' +
       (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer') + '</div>' : '') + owner +
       '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b>' : '📄 Verification unknown') + '</p>' +
-      '<div class="np-actions"><a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this token on the block explorer">🔍 Explorer ↗</a><a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this pair chart on Dexscreener">📈 Chart ↗</a></div>';
+      '<div class="np-actions"><a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this token on the block explorer in a new tab">🔍 Explorer ↗</a><a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this pair chart on Dexscreener in a new tab">📈 Chart ↗</a></div>';
     return '<div class="np-body">' +
       (activeFlags(p).length ? '<section class="np-why"><ul class="np-why-list">' + activeFlags(p).map(k => '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].word) + '</li>').join('') + '</ul></section>' : '') +
       group('chart', '📈 Chart', true, chartHTML(p)) +

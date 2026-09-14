@@ -30,7 +30,12 @@
 (function () {
   'use strict';
 
-  var SEL = 'button, a.btn, [role="button"], input[type="submit"], input[type="button"]';
+  /* `a.btn` is class-TOKEN matching, so it does not match class="oauth-btn" — but a reader looking at an
+     oauth-btn sees a button. The [class*="-btn"] arm catches the suffixed variants the site actually uses
+     (oauth-btn, arc-btn, np-caret-btn). scripts/check.mjs matches on exactly these two rules, so the set
+     it certifies and the set this can reach are the same set; when they disagreed, the check passed ten
+     controls this could never show a description for. */
+  var SEL = 'button, a.btn, a[class*="-btn"], [role="button"], input[type="submit"], input[type="button"]';
   var HOVER_DELAY = 350;   // long enough that sweeping the pointer across a toolbar does not strobe
   var TOUCH_HOLD = 400;    // press-and-hold shows it; a quick tap just activates the button
   var GAP = 10;            // clear air between the control and the bubble, so it never covers it
@@ -207,7 +212,11 @@
          Stripping that would take the explanation off the exact control most in need of one: the one the
          reader just tried to press and could not. */
       if (el.disabled) continue;
-      if (!el.hasAttribute('data-title-kept')) { el.setAttribute('data-title-kept', el.getAttribute('title')); el.removeAttribute('title'); }
+      /* Stash the ORIGINAL title once, but strip on every pass. Gating the removal on the same flag meant
+         a control that re-sets its title after load — several are rebuilt on state changes — kept a native
+         tooltip alongside this one, showing the reader two popups for the same control. */
+      if (!el.hasAttribute('data-title-kept')) el.setAttribute('data-title-kept', el.getAttribute('title'));
+      el.removeAttribute('title');
     }
   }
   function start() {

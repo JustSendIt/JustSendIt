@@ -54,14 +54,20 @@
   function toggle(p) { return has(p.pair.address) ? remove(p.pair.address) : add(p); }
 
   // save-button markup — a ☆/★ toggle; state comes from the live set
-  function btnHTML(p, extraCls) {
+  /* `withLabel` renders the same control with words beside the star, for the action bar at the foot of a
+     token's full detail. It is the SAME button — same class, same data-wpair, same aria-pressed — so
+     syncButtons() keeps every copy on the page in step without knowing which form it is looking at. */
+  function btnHTML(p, extraCls, withLabel) {
     const on = has(p.pair.address);
-    return '<button class="np-watch' + (extraCls ? ' ' + extraCls : '') + (on ? ' is-on' : '') + '" type="button" data-wpair="' + esc(p.pair.address) + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Remove from watchlist' : 'Save to watchlist') + '" title="' + (on ? 'In your watchlist' : 'Save to watchlist') + '" data-tip="Saves this token to your watchlist, or takes it off">' + (on ? '★' : '☆') + '</button>';
+    const label = on ? 'In your watchlist' : 'Save to watchlist';
+    return '<button class="np-watch' + (extraCls ? ' ' + extraCls : '') + (on ? ' is-on' : '') + '" type="button" data-wpair="' + esc(p.pair.address) + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Remove from watchlist' : 'Save to watchlist') + '"' + (withLabel ? '' : ' title="' + label + '"') + ' data-tip="Saves this token to your watchlist, or takes it off">' + (on ? '★' : '☆') + (withLabel ? ' <span class="np-watch-lbl">' + label + '</span>' : '') + '</button>';
   }
   // refresh every rendered save-button on the page to match the current set
   function syncButtons(root) {
     (root || document).querySelectorAll('.np-watch[data-wpair]').forEach(b => {
       const on = has(b.dataset.wpair);
+      const lbl = b.querySelector('.np-watch-lbl');
+      if (lbl) lbl.textContent = on ? 'In your watchlist' : 'Save to watchlist';
       b.classList.toggle('is-on', on);
       b.setAttribute('aria-pressed', String(on));
       b.setAttribute('aria-label', on ? 'Remove from watchlist' : 'Save to watchlist');

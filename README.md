@@ -469,12 +469,17 @@ which is what makes it reachable at all. Both bars award the same words — the 
 you can define what good means for you, and handing you a lesser phrase for clearing your own bar read as
 the site withholding its blessing. What never merges is **whose judgement it was**:
 
-- 🚀 **Looks Good, Send It** — the site's own bar: the data was readable, the risk model's top tier, a full
-  score, and a clean first block. Only the site awards this one.
-- 🎯 **Looks Good, Send It** *· by your filters* — your settings cleared. Same words, and the claim is
-  attributed three ways, none of which is colour: a different icon, a visible byline that is real text and
-  never `aria-hidden`, and the spoken line, which says *"matching the filters you set — your settings, not
-  ours"*. In the detail panel the heading reads **"Why your settings say"**, never "Why we say".
+- 🚀 **Looks Good, Send It** — a **full 100**, by either bar. Nothing we could check tripped at all. The
+  site's own route also needs readable data and a clean first block; the reader's route needs the 100 plus
+  their own settings. Below 100 the top tag is not available at any setting.
+- ✅ **Looks Good** — **75 and above**. One light flag tripped and nothing unwaivable. Green, but flat:
+  no glow, no pulse, and the words stop short of *Send* on purpose — an observation, never an invitation.
+  75 is reachable rather than decorative: the lightest single deduction is 12 points, so one flag lands
+  at 88. It can still be an empty band on a given day, simply because most fresh tokens trip more than one.
+- 🚀 **Looks Good, Send It** — your settings cleared. The chip is deliberately identical to the one above:
+  same rocket, same words, same green. Attribution lives in the two places that carry it in words rather
+  than in a glance — the spoken line says *"matching the filters you set — your settings, not ours"*, and
+  in the detail panel the heading reads **"Why your settings say"**, never "Why we say".
 
 The site's bar is tested **first**, and independently of whether you have set anything. It used to be
 reached only when you had no filters at all, which is a different question — a token clearing everything

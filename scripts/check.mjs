@@ -107,24 +107,44 @@ let tipped = 0, untipped = [];
    explained by where it goes. */
 const CONTROLS = [
   /<button\b([^>]*)>/gi,
-  /<a\b([^>]*\bclass="[^"]*\bbtn\b[^"]*"[^>]*)>/gi,
+  /<a\b([^>]*)>/gi,                                  // filtered by isBtnLink below — class TOKENS, not substrings
   /<[a-z]+\b([^>]*\brole="button"[^>]*)>/gi,
 ];
-const scanForButtons = (rel, src) => {
+/* Mirrors the CSS selector in tips.js exactly: `a.btn` is class-token matching, and `a[class*="-btn"]`
+   catches the suffixed variants (oauth-btn, arc-btn). Done in code rather than in the pattern because a
+   regex that tries to do token matching inline gets it subtly wrong — the first attempt anchored `^` to
+   the string instead of the attribute value and went blind to fifty controls while still reporting a
+   clean tree. A plain <a> is NOT a control: a link that looks like a link is explained by where it goes. */
+const isBtnLink = (attrs) => {
+  const cls = (/\bclass\s*=\s*"([^"]*)"/.exec(attrs) || [])[1];
+  if (!cls) return false;
+  return cls.split(/\s+/).some(t => t === 'btn' || t.endsWith('-btn'));
+};
+/* Comments are prose, not markup. A comment that says "the token symbol is a real <button> so it is
+   keyboard-accessible" is an explanation, and reporting it as an undescribed control taught the last
+   sweep to silence it by editing the sentence — which is the check corrupting the codebase to satisfy
+   itself. Strip comments first. `//` is only taken as a comment when it does not follow a colon, so a
+   https:// inside a string survives. */
+const decomment = (src, isHtml) => (isHtml ? src.replace(/<!--[\s\S]*?-->/g, c => c.replace(/[^\n]/g, ' ')) : src)
+  .replace(/\/\*[\s\S]*?\*\//g, c => c.replace(/[^\n]/g, ' '))            // keep line numbers stable
+  .replace(/(^|[^:])\/\/[^\n]*/g, (m, pre) => pre + ' '.repeat(m.length - pre.length));
+const scanForButtons = (rel, rawSrc, isHtml) => {
+  const src = decomment(rawSrc, isHtml);
   const seen = new Set();
   for (const re of CONTROLS) {
     for (const m of src.matchAll(re)) {
       if (seen.has(m.index)) continue;          // role=button on a <button> is one control, not two
       seen.add(m.index);
       const attrs = m[1] || '';
+      if (/^<a\b/i.test(m[0]) && !isBtnLink(attrs)) continue;
       if (SKIP.test(attrs)) continue;
       if (TIPPED.test(attrs)) { tipped++; continue; }
       untipped.push(rel + ':' + lineOf(src, m.index));
     }
   }
 };
-for (const f of htmlFiles) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'));
-for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'));
+for (const f of htmlFiles) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'), true);
+for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'), false);
 if (untipped.length) {
   note('button descriptions', untipped.length + ' control' + (untipped.length === 1 ? '' : 's') +
     ' have no data-tip (tips.js has nothing to show):\n      ' + untipped.join('\n      '));
@@ -152,13 +172,15 @@ for (const f of htmlFiles) {
    check reported a clean tree. Heuristic by necessity — it looks for a data-tip assignment in the same
    rough block as the construction — so it is a nudge, not a proof. */
 for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) {
-  const src = readFileSync(path.join(PUBLIC, f), 'utf8');
+  const src = decomment(readFileSync(path.join(PUBLIC, f), 'utf8'), false);
   for (const m of src.matchAll(/createElement\(\s*['"](button|a)['"]\s*\)/gi)) {
     const block = src.slice(m.index, m.index + 1200);          // the construction and its attribute run
     if (/data-tip/.test(block)) continue;
     if (/data-tip-skip/.test(block)) continue;
     // an <a> is only a control when it is styled as one; a plain link explains itself by where it goes
     if (m[1].toLowerCase() === 'a' && !/className\s*=\s*['"][^'"]*\bbtn\b/.test(block) && !/classList\.add\([^)]*\bbtn\b/.test(block)) continue;
+    // (the <a> arm above stays loose on purpose: in script the class is often built, so a near-miss here
+    //  costs a false positive, while a miss costs an undescribed control)
     note('public/' + f + ':' + lineOf(src, m.index), 'builds a <' + m[1] + '> control in script with no data-tip nearby');
   }
 }

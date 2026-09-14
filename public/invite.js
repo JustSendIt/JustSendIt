@@ -94,7 +94,7 @@
             '<label class="g-agree" for="inv-age"><input type="checkbox" id="inv-age"><span>I am <b>18 or older</b>.</span></label>' +
             '<p class="inv-err" id="inv-tos-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.6rem;">' +
-              '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled data-tip="Records your agreement to the terms and your age confirmation">Accept &amp; continue 🚀</button>' +
+              '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled data-tip="Records your agreement to the terms, then opens the last step">Accept &amp; continue 🚀</button>' +
               '<a class="g-btn g-btn-ghost" data-tip="Opens the same terms as a full page in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
             '</div>' +
           '</div>' +

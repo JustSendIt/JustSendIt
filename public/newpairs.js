@@ -189,6 +189,20 @@
      a verdict to settings somebody cannot reach is worse than not offering the verdict at all, so off
      the scanner page only the site's own bar is ever claimed. */
   const readerBarLive = () => !!listEl && activeFilterCount() > 0;
+  /* TWO TIERS, ONE SCALE.
+       100  → "Looks Good, Send It" — nothing we could check tripped at all
+       ≥75  → "Looks Good"          — one light flag, and nothing that cannot be waived
+     75 is reachable, not decorative: the lightest single deduction is 12 (sellPressure, deadVolume) and
+     the next few are 14-20, so one flag lands at 80-88. It is empty on some boards simply because most
+     fresh tokens trip more than one. The floor is absolute in BOTH tiers — a honeypot, a token dumping
+     now, block-0 buyers who already sold, or the risk model's own avoid tier can never read "Looks Good"
+     at any score. */
+  const LOOKS_GOOD_MIN = 75;
+  const healthOfP = (p) => Math.round((p.risk && p.risk.health) || 0);
+  /* The one predicate for the top tag, so the tag and the Hot Feed can never disagree about it. Both
+     routes to it now require a perfect 100: the site's own bar, or the reader's filters. */
+  const earnsSendIt = (p) => healthOfP(p) >= 100 &&
+    ((!floorBreached(p) && clearsSiteBar(p)) || (readerBarLive() && meetsYourBar(p)));
   function meetsYourBar(p) {
     const f = state.filters;
     if (floorBreached(p)) return false;
@@ -197,46 +211,56 @@
     if (activeFilterCount(f) === 0) return clearsSiteBar(p);
     return true;
   }
-  /* ═══ ONE VERDICT, TWO BARS, ALWAYS ATTRIBUTED ═════════════════════════════════════════════════
-     Both bars now award the same words — "Looks Good, Send It" — because the settings exist precisely
-     so a reader can define what good means for them, and handing them a different, lesser phrase for
-     clearing their own bar read as the site withholding its blessing.
+  /* ═══ ONE VERDICT, TWO BARS ════════════════════════════════════════════════════════════════════
+     Both bars award the same indicator — 🚀 "Looks Good, Send It", in green — because the settings exist
+     precisely so a reader can define what good means for them, and a different, lesser tag for clearing
+     their own bar read as the site withholding its blessing.
 
-     What must NOT merge is WHOSE judgement it was. So the claim is attributed three ways, and none of
-     them is colour, because colour is not available to a screen reader, to a colour-blind reader, or in
-     forced-colours mode:
-       · the icon      — 🚀 the site's own bar, 🎯 the bar the reader set
-       · a visible byline on the chip — "by your filters", real text, never aria-hidden
-       · the spoken line — srLine/sr-only append the same attribution in words
+     The chip is therefore IDENTICAL for the two: same icon, same words, same colour. That is deliberate
+     and was asked for. It means the visible chip no longer says whose judgement it was, and the two
+     things that still do are worth protecting because they are now the only ones:
+       · the spoken line — srLine/sr-only append "matching the filters you set — your settings, not ours",
+         which is the only answer a screen reader ever gets
+       · the detail panel — its heading reads "Why your settings say", never "Why we say", and off the
+         scanner page (Send Wall, communities, support, profiles via window.NPCard) it is the ONLY
+         verdict text that renders at all
 
      The SITE's bar is tested FIRST and independently of whether the reader has set anything. It used to
      be reached only when activeFilterCount() === 0, which is not the same question: a token that clears
      everything the site itself checks was being attributed to the reader's filters merely because they
      had set some. Now it earns the rocket either way, and more tokens carry it, not fewer. */
-  /* The two carriers of attribution, in one place so the chip and the spoken line can never disagree.
-     byline() is REAL TEXT and deliberately not aria-hidden: it is the whole claim about whose judgement
-     this was, and hiding it from assistive tech would leave exactly the readers with no other cue. */
-  const byline = (T) => T && T.by ? '<span class="np-verdict-by">' + esc(T.by) + '</span>' : '';
+  /* The chip is deliberately identical for both bars now — same rocket, same words, same green. What is
+     left carrying WHOSE judgement it was is this spoken line and the detail panel's "Why your settings
+     say" heading. Both are kept for that reason: they are the only things that still answer the question,
+     and the spoken one is the only answer a screen reader ever gets. */
   const spokenVerdict = (T) => T.word + (T.said ? ', ' + T.said : '');
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
-    if (!floorBreached(p) && clearsSiteBar(p)) {
+    if (health >= 100 && !floorBreached(p) && clearsSiteBar(p)) {
       return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
         why: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' };
     }
-    if (readerBarLive() && meetsYourBar(p)) {
-      return { cls: 'np-t-ok np-t-yours', ico: '🎯', word: 'Looks Good, Send It', yours: true,
-        by: 'by your filters',
+    if (health >= 100 && readerBarLive() && meetsYourBar(p)) {
+      return { cls: 'np-t-ok np-t-yours', ico: '🚀', word: 'Looks Good, Send It', yours: true,
         said: 'matching the filters you set — your settings, not ours',
-        why: 'This clears the settings you asked for and trips none of the checks nobody can waive. It is your filter saying so, not us.' };
+        why: 'This scores a full 100 and clears the settings you asked for. It is your filter saying so, not us.' };
     }
-    if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
+    /* A perfect score whose first block is still unresolved is held back from the top tag rather than
+       handed it — an unfinished check is an open question, not a pass. Tested before the 75 tier so that
+       "Checking block 0…" is not swallowed by the milder word. */
     if (tri === 'ok' && health >= 100 && !sniperOk(p)) {
       const st = p.risk && p.risk.snipers ? p.risk.snipers.status : null;
       return st === 'done' || st === 'partial'
         ? { cls: 'np-t-caution np-t-snipe', ico: '🎯', word: 'Block-0 snipers sold' }
         : { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Checking block 0…' };
     }
+    /* The middle tier. One light flag and nothing unwaivable — good, but not the top tag, and the words
+       stop short of "Send It" on purpose: this one is an observation, never an invitation. */
+    if (health >= LOOKS_GOOD_MIN && !floorBreached(p)) {
+      return { cls: 'np-t-ok np-t-good', ico: '✅', word: 'Looks Good',
+        why: 'Scores ' + health + ' out of 100 — something we check did trip, so read the flags below. Not a promise; most new tokens still go to zero.' };
+    }
+    if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
     return TRI[tri];
   }
   const FLAG = {
@@ -322,16 +346,16 @@
       return '<details class="np-bd-sec np-bd-g' + s.grade + '">' +
         '<summary class="np-bd-head">' +
           '<span class="np-bd-toprow"><span class="np-bd-ico" aria-hidden="true">' + s.ico + '</span><span class="np-bd-label">' + s.label + '</span>' +
-            '<span class="np-bd-grade" title="Section grade">' + s.grade + '</span><span class="np-bd-score">' + s.score + '<i>/100</i></span>' +
+            '<span class="np-bd-grade" title="Section grade">' + s.grade + '</span><span class="np-bd-score"' + ratingInk(s.score) + '>' + s.score + '<i>/100</i></span>' +
             '<span class="np-bd-chev" aria-hidden="true">▾</span></span>' +
-          '<span class="np-bd-bar"><span style="width:' + s.score + '%"></span></span>' +
+          '<span class="np-bd-bar"><span style="width:' + s.score + '%;background:' + ringColor(s.score) + '"></span></span>' +
           '<span class="np-bd-key">' + key + '</span>' +
         '</summary>' +
         '<ul class="np-bd-items">' + items + '</ul>' + contractSlot +
       '</details>';
     }).join('');
     return '<div class="np-breakdown">' +
-      '<p class="np-bd-formula">Overall health <b>' + health + '/100</b> = 100 − ' + totalPenalty + ' in penalties. Each section below shows exactly what helped or hurt.</p>' +
+      '<p class="np-bd-formula">Overall health <b' + ratingInk(health) + '>' + health + '/100</b> = 100 − ' + totalPenalty + ' in penalties. Each section below shows exactly what helped or hurt.</p>' +
       rows +
       '<p class="np-bd-note">Scores are automatic heuristics from public on-chain data — a starting point for your own research, never a guarantee or a “buy”.</p>' +
     '</div>';
@@ -547,9 +571,41 @@
   }
   function animateRings(root) { root.querySelectorAll('.np-gauge-arc[data-fill]').forEach(a => setArc(a, Number(a.getAttribute('data-fill')) || 0)); }
 
+  /* ═══ THE RING IS A SCALE, NOT FOUR BUCKETS ════════════════════════════════════════════════════
+     0 is full red, 100 is full green, and every number in between gets its own colour, so the ring reads
+     as a position on a scale rather than as one of a handful of tiers. The verdict chip beside it still
+     carries the tier; this carries the number.
+
+     Both ENDS are the site's own colours rather than invented ones: 0 lands exactly on --red (#ff5d5d =
+     hsl 0 100% 68%) and 100 exactly on --green-bright (#b4ff2b = hsl 81 100% 58%), so a full ring matches
+     the brand and an empty one matches every other danger colour on the page. Hue and lightness are
+     interpolated between those two points.
+
+     Lightness also dips through the middle. At full saturation the yellows around 55° render far brighter
+     than either end — measured against this ground, an un-dipped 75 hit 17.6:1 while a 0 managed only
+     5.7:1, so the mid-range was the loudest part of a scale whose whole point is that the middle is
+     unremarkable, and a low score read as the quietest thing on the row. The dip pulls that back.
+
+     Same variable the tier classes set, so an inline value simply overrides it, and `style-src` allows
+     inline styles here (server.js CSP).
+
+     aria-hidden on the gauge, so this is decoration for a sighted reader only — the number and the verdict
+     are both spoken by the sr-only line regardless. */
+  function ringColor(health) {
+    const v = Math.max(0, Math.min(100, Math.round(Number(health) || 0)));
+    const dip = Math.sin((v / 100) * Math.PI);            // 0 at the ends, 1 in the middle
+    return 'hsl(' + (v * 0.81).toFixed(1) + ' 100% ' + (68 - 10 * (v / 100) - 8 * dip).toFixed(1) + '%)';
+  }
+  /* A rating shown as TEXT gets the same scale as the ring. These reach further than the gauge does:
+     the score breakdown and the audit sentence render inside window.NPCard.detailHTML, which the token
+     modal and the Send Call widget ship to the Send Wall, communities, support and profiles — surfaces
+     that have no gauge at all. A reader who learns the colour on the radar should be able to read it
+     anywhere a token appears, and 88 should not be one colour here and plain text there. */
+  const ratingInk = (v) => ' style="color:' + ringColor(v) + '"';
+
   /* ---------- collapsed row ---------- */
   function gaugeHTML(p, tri, health) {
-    return '<span class="np-gauge ' + TRI[tri].cls + '" aria-hidden="true">' +
+    return '<span class="np-gauge ' + TRI[tri].cls + '" style="--tri:' + ringColor(health) + '" aria-hidden="true">' +
       '<svg viewBox="0 0 44 44" class="np-gauge-svg">' +
         '<circle class="np-gauge-track" cx="22" cy="22" r="19"></circle>' +
         '<circle class="np-gauge-arc" cx="22" cy="22" r="19" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" data-fill="' + health + '" transform="rotate(-90 22 22)"></circle>' +
@@ -636,7 +692,7 @@
         '<span class="np-meta"><span class="np-age">🕐 ' + npFmtAge(p.pair.ageMinutes) + '</span><span class="np-quote">/ ' + esc(p.pair.quoteSymbol) + '</span>' + commSlot(p.token.address, p.token.symbol) + '</span>' +
         badgesHTML(p) +
       '</span>' +
-      '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>' + byline(T) + '</span>' +
+      '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
       // a carried price must never draw identically to a live one — the label says which it is
       '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">' + (p.priceStale ? '⏳ last read' : 'MC') + '</i></span>' +
       '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
@@ -654,7 +710,7 @@
   // "Pin to my wall" button HTML — appears on every token's on-chain detail (DEX list, Hot Feed, lookup, Send Call widget, popup). State/handler are set up at the top of the IIFE.
   function pinBtnHTML(p) {
     const on = isPinned(p.token.address);
-    return '<button class="np-pin btn btn-sm' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Pins this token to your wall, or unpins it" data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' + (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') + ' aria-pressed="' + on + '">' + (on ? '📌 Pinned to wall' : '📌 Pin to my wall') + '</button>';
+    return '<button class="np-pin btn btn-sm' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Adds this token to your Conviction Plays, or takes it off" data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' + (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') + ' aria-pressed="' + on + '">' + (on ? '💎 A Conviction Play' : '💎 Pin as Conviction Play') + '</button>';
   }
   /* 📣 Send Call straight from the DEX list row.
      A call is PERMANENT and can never be deleted, so a single stray tap on a dense list row must not be able to
@@ -666,7 +722,7 @@
   function callBtnHTML(p) {
     const liq = p.market && p.market.liquidityUsd;
     if (!(liq != null && liq >= CALL_MIN_LIQ)) return '';
-    return '<button class="np-row-call" type="button" data-tip="Press twice to post a call that can never be deleted" data-call-ico="📣" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '"' +
+    return '<button class="np-row-call" type="button" data-tip="Posts a permanent call on this token — a second tap confirms" data-call-ico="📣" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '"' +
       ' title="Make a Send Call on $' + esc(p.token.symbol) + '" aria-label="Make a Send Call on ' + esc(p.token.symbol) + '. Press once to confirm — a Send Call is permanent.">📣</button>';
   }
   /* Convict straight from a DEX-list row. The full "📌 Pin to my wall" button already lives inside the
@@ -675,7 +731,7 @@
   function rowPinHTML(p) {
     const on = isPinned(p.token.address);
     const sy = p.token.symbol ? '$' + p.token.symbol : 'this token';
-    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Pins this token to your wall, or unpins it" data-pin-ico="1"' +
+    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Adds this token to your Conviction Plays, or takes it off" data-pin-ico="1"' +
       ' data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' +
       (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') +
       ' aria-pressed="' + on + '" title="' + (on ? 'Convicted — tap to remove' : 'Convict — pin to your wall') + '"' +
@@ -785,9 +841,9 @@
     if (r.thinData) {
       line += 'We cannot say much about it yet — too little of it is readable to judge, which is an unknown, not a pass.';
     } else if (flags.length) {
-      line += 'Our checks score it <b>' + health + '/100</b> and ' + (flags.length === 1 ? 'one thing tripped' : flags.length + ' things tripped') + ', listed below.';
+      line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and ' + (flags.length === 1 ? 'one thing tripped' : flags.length + ' things tripped') + ', listed below.';
     } else {
-      line += 'Our checks score it <b>' + health + '/100</b> and nothing tripped — which is not the same as safe.';
+      line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and nothing tripped — which is not the same as safe.';
     }
 
     const rows = [];
@@ -944,9 +1000,11 @@
       (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + r.deployerLaunches + ' launched' + (r.deployerDied ? ' · ' + r.deployerDied + ' dead' : '') + '</span>' : '') + '</div>' : '') +
       ownerLine +
       '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' : '📄 Verification unknown') + '</p>' +
+      /* Send Call and Pin used to sit here as well. They are state-changing — one of them permanently —
+         and this group is collapsed by default, so they were both buried AND duplicated by the action bar
+         at the foot of the panel. Two "Make a Send Call" buttons on one card, each arming separately, is
+         a hazard on an action that can never be undone. The links stay: they belong with the contract. */
       '<div class="np-actions">' +
-        (opts.hideCall ? '' : '<button class="btn btn-sm btn-primary np-call" type="button" data-tip="Posts a call on your wall that can never be deleted" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button>') +
-        pinBtnHTML(p) +
         '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' +
         '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' +
       '</div>';
@@ -961,7 +1019,18 @@
       group('block0', '🎯 Block 0 — the first buyers', S.block0 !== false, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
       group('contract', '📄 Contract &amp; copy', S.contract, contractInner) +
       (tgTokenLink(p.token.address) ? '<p class="np-tg-row">' + tgTokenLink(p.token.address) + '</p>' : '') +
-      '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p></div>';
+      '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
+      /* THE FOOT OF THE RESEARCH. Somebody who has just read the score breakdown, the market, the holders
+         and block 0 has finished doing their research, and the three things they might now want to DO are
+         right here rather than hidden inside a collapsed group: call it, keep it, or watch it. It sits
+         after the honesty line deliberately — the same order the Hot Feed card uses — so the caveat is
+         read before the buttons, not after them. Nothing here recommends anything; they are the three
+         actions the reader already had, gathered where the reading ends. */
+      '<div class="np-body-actions">' +
+        (opts.hideCall ? '' : '<button class="btn btn-sm btn-primary np-call" type="button" data-tip="Posts a call on your wall that can never be deleted" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button>') +
+        pinBtnHTML(p) +
+        (window.Watchlist ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
+      '</div></div>';
   }
   function rowHTML(p) {
     const tri = triageOf(p);
@@ -1190,10 +1259,10 @@
   function patchRow(li, p) {
     const tri = triageOf(p), T = verdictOf(p), health = Math.round((p.risk && p.risk.health) || 0);
     li.dataset.level = tri;
-    const gauge = li.querySelector('.np-gauge'); if (gauge) gauge.className = 'np-gauge ' + T.cls;
+    const gauge = li.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + T.cls; gauge.style.setProperty('--tri', ringColor(health)); }
     const gnum = li.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = li.querySelector('.np-gauge-arc'); if (arc) { const prevFill = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prevFill !== health) setArc(arc, health); else arc.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, health)); } // only replay the fill when it actually changed (no idle-poll flicker)
-    const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>' + byline(T); }
+    const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
     const lv = li.querySelector('.np-liq-val'); if (lv) lv.textContent = npFmtUsd(p.market.liquidityUsd);
     const cs = li.querySelector('.np-chg-slot'); if (cs) cs.innerHTML = chgChipHTML(p.priceChange.h1);
     const strip = li.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
@@ -1821,7 +1890,7 @@
      could set twenty filters, watch the DEX List narrow, switch to the feed and be shown a completely
      different set of tokens with no indication why. It is the SAME predicate as the tag now — if it earns
      "Looks Good, Send It" for you, it is in your feed, and if it does not, it is not. */
-  const feedQualifies = (p) => meetsYourBar(p);
+  const feedQualifies = (p) => earnsSendIt(p);
 
   /* ---------- chains ----------
      Robinhood Chain is the home chain and the only one with a block explorer behind it, so it is
@@ -1874,7 +1943,7 @@
       '<div class="np-slide-name">🎬 Hot Feed</div>' +
       (activeFilterCount() === 0
         ? '<p>Only the fresh tokens our automatic checks score a full <b>100/100</b> — the 🚀 <b>Looks Good, Send It</b> verdict — one at a time.</p>'
-        : '<p>The fresh tokens that clear <b>your</b> settings — the 🎯 <b>Looks Good, Send It</b> verdict, awarded by your filters rather than by us — one at a time. Change the settings and this feed changes with them.</p>') +
+        : '<p>The fresh tokens that clear <b>your</b> settings — the 🚀 <b>Looks Good, Send It</b> verdict, judged against your filters rather than ours — one at a time. Change the settings and this feed changes with them.</p>') +
       '<p class="np-slide-honest">⚠️ Fresh tokens are dangerous by default — most go to zero. These are heuristics from public on-chain data, not an audit and not advice. We never tell you to buy. Entertainment only. <b>Do your own research.</b></p>' +
       '<p class="np-slide-sub">Swipe up ▲ to start</p>' +
       '</div></article>';
@@ -1890,7 +1959,7 @@
           '<p class="np-slide-sub">🕐 ' + npFmtAge(p.pair.ageMinutes) + ' old · / ' + esc(p.pair.quoteSymbol) + ' · ' + (p.indexed ? 'indexed' : 'not indexed yet') + commSlot(p.token.address, p.token.symbol) + '</p>' + badgesHTML(p) + '</div></header>' +
         '<div class="np-slide-hero">' + gaugeHTML(p, tri, health) + '<div class="np-slide-verdict-wrap">' +
           '<span class="np-verdict np-slide-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
-          '<span class="np-slide-health">Health ' + health + '/100</span></div></div>' +
+          '<span class="np-slide-health"' + ratingInk(health) + '>Health ' + health + '/100</span></div></div>' +
         '<div class="np-slide-price"><span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24) + '</div>' +
         '<div class="np-slide-stats">' +
           '<div class="np-slide-mc"><i>Market cap</i><b>' + npFmtUsd(m.marketCap) + '</b></div>' +
@@ -1962,13 +2031,13 @@
     el.dataset.level = tri;
     const gnum = el.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = el.querySelector('.np-gauge-arc'); if (arc) { const prev = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prev !== health) { if (el.classList.contains('is-active') && !reduced()) setArc(arc, health); else seatRing(el); } }
-    const gauge = el.querySelector('.np-gauge'); if (gauge) gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution');
-    const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>' + byline(T); }
+    const gauge = el.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution'); gauge.style.setProperty('--tri', ringColor(health)); }
+    const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
     /* The slide's spoken line is repainted here too. It was the one thing patchFeedSlide left alone, and
        with both bars sharing a word a stale line does not merely go out of date — it asserts the wrong
        bar, on the surface that is spoken most often. */
     const srSlide = el.querySelector('.np-slide-sr'); if (srSlide) srSlide.textContent = srLine(p) + ' Press Enter for full detail.';
-    const hp = el.querySelector('.np-slide-health'); if (hp) hp.textContent = 'Health ' + health + '/100';
+    const hp = el.querySelector('.np-slide-health'); if (hp) { hp.textContent = 'Health ' + health + '/100'; hp.style.color = ringColor(health); }
     const priceRow = el.querySelector('.np-slide-price'); if (priceRow) priceRow.innerHTML = '<span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24);
     const stats = el.querySelectorAll('.np-slide-stats b');
     if (stats.length >= 4) {
@@ -2039,7 +2108,7 @@
   const runList = document.getElementById('np-runners-list');
   const runStatus = document.getElementById('np-runners-status');
   // click anywhere on a runner (except the 📌 pin or the ↗ external chart) → the shared on-chain detail popup (same as
-  // the DEX list / convicted-in chips). The token symbol is a real <button data-tip-skip> so it's keyboard-accessible; this delegation
+  // the DEX list / convicted-in chips). The token symbol is a real <button> so it's keyboard-accessible; this delegation
   // is the mouse-anywhere convenience. TokenModal is Esc/✕/backdrop-closable.
   if (runList) runList.addEventListener('click', (e) => {
     const rc = e.target.closest('.np-runner-call');
@@ -2048,7 +2117,7 @@
     if (e.target.closest('[data-pin]') || e.target.closest('.np-runner-chart') || e.target.closest('.tok-comm')) return; // the 🏘️ community tag is a real link
     const row = e.target.closest('.np-runner'); if (!row || !row.dataset.token) return;
     if (!window.TokenModal) return;
-    const sb = row.querySelector('.np-runner-sym'); if (sb) { try { sb.focus(); } catch (_) {} } // focus the trigger button before opening so the modal restores focus HERE on close (mouse + Safari, where a click doesn't focus a <button data-tip-skip>)
+    const sb = row.querySelector('.np-runner-sym'); if (sb) { try { sb.focus(); } catch (_) {} } // focus the trigger button before opening so the modal restores focus HERE on close (mouse + Safari, where a click doesn't focus a <button>)
     TokenModal.open(row.dataset.token, { symbol: row.dataset.sym, name: row.dataset.name });
   });
   const RUN_WIN_LABEL = { '24h': 'past 24 hours', week: 'past week', month: 'past month', year: 'past year', all: 'all time' };
@@ -2078,7 +2147,7 @@
      repainting it wholesale safe. */
   function runnerMetricsHTML(r) {
     const note = !r.exact ? '<span class="np-runner-note" title="Tracked for ' + r.depthDays + ' days — shorter than this window, so it’s measured since we first saw it, not the full window.">since ' + r.depthDays + 'd</span>' : '';
-    const health = r.health != null ? '<span class="np-runner-health" role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
+    const health = r.health != null ? '<span class="np-runner-health"' + ratingInk(r.health) + ' role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
     // hover/SR detail: the EXACT (uncapped) current multiple + the all-time high — the visible chip stays abbreviated
     const curFull = r.gain >= 1 ? fmtFullX(r.gain) + '×' : (r.gain >= 0 ? '+' + Math.round(r.gain * 100) + '%' : '−' + Math.round(Math.abs(r.gain) * 100) + '%');
     // How many Xs it has done since the scanner caught it — the same live number a Send Call card shows, with our
@@ -2105,14 +2174,14 @@
   function runnerRow(r, i) {
     const logo = (r.brand && r.brand.imageUrl) ? '<img class="np-runner-logo-img" src="' + esc(r.brand.imageUrl) + '" alt="" loading="lazy" decoding="async">' : '<span class="np-runner-logo-none" aria-hidden="true">🪙</span>';
     const sym = r.symbol ? '$' + esc(r.symbol) : 'Token';
-    const pin = '<button class="np-pin np-runner-pin" type="button" data-tip="Pins this token to your wall, or unpins it" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
+    const pin = '<button class="np-pin np-runner-pin" type="button" data-tip="Adds this token to your Conviction Plays, or takes it off" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
     /* Send Call straight off a runner. Same permanence, so the same two-press confirm the DEX list uses — a
        call can never be edited or deleted, and one tap on a scrolling list is not consent. Hidden below the
        same liquidity floor the server enforces, so the button is never offered for a call that would be
        refused. Note this path skips the on-chain detail, so the call is honestly recorded as un-researched. */
     const call = (r.liq != null && r.liq >= CALL_MIN_LIQ)
-      ? '<button class="np-runner-call np-row-call" type="button" data-tip="Press twice to post a call that can never be deleted" data-call-ico="🚀" data-call-token="' + esc(r.token) + '" data-call-sym="' + esc(r.symbol || '') + '"' +
+      ? '<button class="np-runner-call np-row-call" type="button" data-tip="Posts a permanent call on this token — a second tap confirms" data-call-ico="🚀" data-call-token="' + esc(r.token) + '" data-call-sym="' + esc(r.symbol || '') + '"' +
         ' title="Make a Send Call on ' + sym + '" aria-label="Make a Send Call on ' + sym + '. Press once to confirm — a Send Call is permanent.">🚀</button>'
       : '';
     const comm = commSlot(r.token, r.symbol); // 🏘️ Community / ＋ Start community (filled by tokentext.js)

@@ -34,7 +34,7 @@ function pinChip(p, mine, owner) {
   const comm = window.tokenCommunitySlot ? tokenCommunitySlot(p.token, p.symbol || '') : ''; // 🏘️ Community / ＋ Start community (filled by tokentext.js)
   return '<span class="pin-chip" data-token="' + esc(p.token) + '" data-owner="' + esc(owner) + '" data-sym="' + esc(p.symbol || '') + '">' +
     '<button class="pin-chip-open" type="button" data-tip="Opens the on-chain details for this token" aria-describedby="' + tipId + '" data-pin-view="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" data-name="' + esc(p.name || '') + '">' + logo + '<span class="pin-chip-sym">' + sym + '</span></button>' + conv + stats + comm +
-    (mine ? '<button class="pin-chip-rm" type="button" data-tip="Removes this token from your Conviction Plays" data-pin-rm="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" aria-label="Remove ' + sym + ' from your convictions">✕</button>' : '') +
+    (mine ? '<button class="pin-chip-rm" type="button" data-tip="Drops this from your Conviction Plays — re-adding restarts its tracking" data-pin-rm="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" aria-label="Remove ' + sym + ' from your convictions">✕</button>' : '') +
     '<span class="pin-hover" role="tooltip" id="' + tipId + '" aria-live="polite"><span class="pin-hover-load">holdings load on hover…</span></span>' +
     '</span>';
 }
@@ -270,7 +270,7 @@ function postEl(p) {
       '<span class="act-sep" aria-hidden="true"></span>' +
       '<button class="react-btn' + (p.myReactions.includes('fire') ? ' lit' : '') + '" data-react="fire" aria-label="React with fire" data-tip="Adds a fire reaction — press again to remove it">🔥 <span>' + p.reactions.fire + '</span></button>' +
       '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-react="rocket" aria-label="React with rocket" data-tip="Adds a rocket reaction — press again to remove it">🚀 <span>' + p.reactions.rocket + '</span></button>' +
-      '<button class="react-btn" data-comments aria-expanded="false" aria-label="Show comments" data-tip="Opens the comments under this post">💬 <span>' + p.comments + '</span></button>' +
+      '<button class="react-btn" data-comments aria-expanded="false" aria-label="Show comments" data-tip="Opens or hides the comments under this post">💬 <span>' + p.comments + '</span></button>' +
       (p.mine && !p.call ? '<button class="react-btn post-del" data-del aria-label="Delete your post" data-tip="Deletes this post for good — tap again to confirm">🗑</button>' : '') + // Send Calls are final — no delete
     '</div>' +
     '<div class="comments" hidden></div>';

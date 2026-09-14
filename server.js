@@ -10505,6 +10505,12 @@ function scanVerdict(p) {
       : { emoji: '🌫️', word: 'Checking block 0…', note: 'Everything else looks clean; the first-block check has not finished, so the top verdict is withheld.' };
   }
   if (r.triage === 'ok' && health >= 100 && r.sniperOk === true) return { emoji: '🚀', word: 'Looks Good, Send It', note: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' };
+  /* The middle tier, same 75 as the client's LOOKS_GOOD_MIN. One light flag and nothing unwaivable. The
+     words stop short of "Send It" deliberately: an observation, never an invitation. The floor still
+     applies — triage 'avoid' and the three unwaivable flags fall through to the tiers below. */
+  if (health >= 75 && r.triage !== 'avoid' && !r.honeypotSuspect && !r.dumping && !r.sniperDump) {
+    return { emoji: '✅', word: 'Looks Good', note: 'Scores ' + health + ' out of 100 — something we check did trip, so read the flags. Not a promise; most new tokens still go to zero.' };
+  }
   if (r.triage === 'ok') return { emoji: '🙂', word: 'Nothing obvious tripped', note: '' };
   if (r.triage === 'caution') return { emoji: '⚠️', word: 'Be careful', note: '' };
   if (r.triage === 'high') return { emoji: '🚨', word: 'High risk', note: '' };

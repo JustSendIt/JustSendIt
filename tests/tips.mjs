@@ -125,10 +125,34 @@ try {
     check('opting out is possible but has to be argued for', /data-tip-skip/.test(CHECK));
   }
 
+  /* ═══════════ 9b. the check and the selector must agree ═══════════
+     They disagreed once, and the failure mode is the worst kind: `a.btn` is class-TOKEN matching so it
+     never matched class="oauth-btn", while the check's regex used \bbtn\b, which does — so the check
+     reported the four sign-in buttons as described and tips.js could never show a description for any of
+     them. A green check certifying work that does not function is worse than a red one. */
+  {
+    check('the selector covers suffixed button classes, not just the bare token',
+      /a\[class\*="-btn"\]/.test(code) && /a\.btn/.test(code));
+    check('  ...and the check matches class tokens the way CSS does, in code not in a pattern',
+      /t === 'btn' \|\| t\.endsWith\('-btn'\)/.test(CHECK));
+    check('  ...naming the selector it is mirroring, so the two are changed together',
+      /tips\.js/.test(CHECK));
+    /* Comments are prose. Reporting a <button> written inside one taught a sweep to edit the sentence to
+       silence the check — the check corrupting the source to satisfy itself. */
+    check('prose in a comment is not read as markup', /const decomment =/.test(CHECK));
+    check('  ...and no control has had to opt out to get a clean run',
+      !readdirSync(PUB).filter(f => /\.(js|html)$/.test(f))
+        .some(f => /data-tip-skip/.test(readFileSync(path.join(PUB, f), 'utf8'))));
+  }
+
   /* ═══════════ 10. nothing regresses while descriptions are still being written ═══════════ */
   {
     check('an icon-only control falls back to its aria-label', /var al = el\.getAttribute\('aria-label'\)/.test(code) && /!hasWords\(el\)/.test(code));
     check('a control with both data-tip and title does not show two popups', /\[data-tip\]\[title\]/.test(code) && /removeAttribute\('title'\)/.test(code));
+    check('  ...even when it re-sets its title after load',
+      /if \(!el\.hasAttribute\('data-title-kept'\)\) el\.setAttribute[^\n]*\n\s*el\.removeAttribute\('title'\);/.test(code));
+    check('  ...but a DISABLED control keeps its native title, the only thing that can show there',
+      /if \(el\.disabled\) continue;/.test(code));
     check('  ...and the old title is kept rather than destroyed', /data-title-kept/.test(code));
     check('later-rendered controls are covered too', /MutationObserver/.test(code));
   }

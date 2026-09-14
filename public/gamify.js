@@ -635,7 +635,7 @@
   }
   function lootToggle() {
     return '<div class="ll-toggle" role="group" aria-label="Achievement log window">' +
-      '<button type="button" data-tip="Limits the log to your most recent day of earnings" data-lootmode="today" class="' + (_lootMode === 'today' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'today') + '">Today</button>' +
+      '<button type="button" data-tip="Narrows the log to earnings from the past day" data-lootmode="today" class="' + (_lootMode === 'today' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'today') + '">Today</button>' +
       '<button type="button" data-tip="Shows your whole earning history instead of just today" data-lootmode="all" class="' + (_lootMode === 'all' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'all') + '">All&nbsp;time</button>' +
     '</div>';
   }

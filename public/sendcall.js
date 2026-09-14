@@ -122,7 +122,7 @@
       '</div>' +
       '<div class="sc-hold"' + (call.holdEarned > 0 ? '' : ' hidden') + '>💎 <b class="sc-holdn">' + (call.holdEarned || 0).toLocaleString('en-US') + '</b> diamond-hands bonus' + (call.stale ? '' : ' · grows while it stays in profit') + '</div>' +
       '<div class="sc-actions">' +
-        '<button class="sc-btn sc-hop' + (call.hopped ? ' hopped' : '') + '" type="button" data-tip="Adds you publicly to the senders on this call" data-hop="' + call.id + '"' + (call.mineOwn ? ' disabled title="This is your own call"' : '') + '>🚀 ' + (call.hopped ? 'Sent it!' : 'Send It!') + ' <span class="sc-hopn">' + (call.hops || 0) + '</span></button>' +
+        '<button class="sc-btn sc-hop' + (call.hopped ? ' hopped' : '') + '" type="button" data-tip="Adds you publicly to the senders on this call — no undo" data-hop="' + call.id + '"' + (call.mineOwn ? ' disabled title="This is your own call"' : '') + '>🚀 ' + (call.hopped ? 'Sent it!' : 'Send It!') + ' <span class="sc-hopn">' + (call.hops || 0) + '</span></button>' +
         (call.wallet ? '<button class="sc-btn sc-track" type="button" data-tip="Adds that address to your wallet tracker" data-track="' + esc(call.wallet) + '" data-sym="' + esc(call.symbol || '') + '">➕ Track caller’s wallet</button>' : '') +
         '<a class="sc-btn" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(chart) + '" target="_blank" rel="noopener nofollow">📈 Chart</a>' +
         '<button class="sc-btn sc-share" type="button" data-tip="Saves a card image and opens X to post it" data-share="' + call.id + '" title="Share this call on X — we build a card image you can attach">𝕏 Share</button>' +
