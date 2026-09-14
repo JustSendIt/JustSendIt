@@ -5997,7 +5997,7 @@ function rewriteHtml(buf) {
 // not a raw {"error":"not found"} blob.
 function notFoundPage(res) {
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title>' +
-    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0e14;color:#e8eefc;font:16px/1.5 Rubik,system-ui,sans-serif;text-align:center;padding:2rem}h1{font-size:2.2rem;margin:0 0 .4rem;color:#b4ff2b}p{color:#aab6cf;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#b4ff2b,#5c9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
+    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;font:16px/1.5 Rubik,system-ui,sans-serif;text-align:center;padding:2rem}h1{font-size:2.2rem;margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
     '<body><main><h1>🚀 That page didn’t send.</h1><p>We couldn’t find what you were looking for.</p><a href="/">Back to $Send home →</a></main></body></html>';
   res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html) });
   res.end(html);
@@ -8566,7 +8566,7 @@ const server = http.createServer(async (req, res) => {
         if (b.instagram !== undefined) { const h = cleanHandle(b.instagram); if (h === null) return bad(res, 'that Instagram handle isn’t valid'); db.prepare('UPDATE users SET ig_handle = ? WHERE id = ?').run(h || null, me.id); }
         if (b.accent !== undefined) {
           const a = String(b.accent);
-          if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'accent must be a hex color like #b4ff2b');
+          if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'accent must be a hex color like #c6f000');
           db.prepare('UPDATE users SET accent = ? WHERE id = ?').run(a, me.id);
         }
         if (b.wall_bg !== undefined) {
@@ -8592,7 +8592,7 @@ const server = http.createServer(async (req, res) => {
             for (const k of ALLOWED) {
               const v = sp.colors[k];
               if (v === undefined || v === null || v === '') continue;
-              if (!HEX_COLOR_RE.test(String(v))) return bad(res, k + ' must be a hex colour like #8ee000');
+              if (!HEX_COLOR_RE.test(String(v))) return bad(res, k + ' must be a hex colour like #a8ce00');
               clean[k] = String(v).toLowerCase();
             }
             sp.colors = clean;

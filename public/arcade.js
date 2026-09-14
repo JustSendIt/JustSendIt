@@ -156,7 +156,7 @@
       py: (m) => y0 - ((Math.min(m, a.yMax) - 1) / (a.yMax - 1)) * (y0 - y1),
     };
   }
-  function hueFor(x) { return x >= 10 ? '#ff8f4d' : x >= 3 ? '#ffb340' : '#b4ff2b'; }
+  function hueFor(x) { return x >= 10 ? '#ff8f4d' : x >= 3 ? '#ffb340' : '#c6f000'; }
 
   function drawStars(t, speed) {
     const drift = (t / 1000) * (10 + speed * 300);
@@ -204,8 +204,8 @@
     ctx.lineTo(m.px(0), H - PAD.b);
     ctx.closePath();
     const g = ctx.createLinearGradient(0, PAD.t, 0, H - PAD.b);
-    g.addColorStop(0, 'rgba(142,224,0,0.30)');
-    g.addColorStop(1, 'rgba(142,224,0,0.015)');
+    g.addColorStop(0, 'rgba(168,206,0,0.30)');
+    g.addColorStop(1, 'rgba(168,206,0,0.015)');
     ctx.fillStyle = g; ctx.fill();
 
     ctx.save();

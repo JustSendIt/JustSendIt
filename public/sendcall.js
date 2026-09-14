@@ -57,15 +57,15 @@
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, 'rgba(6,10,6,0.5)'); grad.addColorStop(0.5, 'rgba(6,10,6,0.78)'); grad.addColorStop(1, 'rgba(6,10,6,0.95)');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#8ee000'; ctx.lineWidth = 10; ctx.strokeRect(6, 6, W - 12, H - 12);
+    ctx.strokeStyle = '#a8ce00'; ctx.lineWidth = 10; ctx.strokeRect(6, 6, W - 12, H - 12);
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#8ee000'; ctx.font = '900 96px "Luckiest Guy", Arial Black, Arial, sans-serif';
+    ctx.fillStyle = '#a8ce00'; ctx.font = '900 96px "Luckiest Guy", Arial Black, Arial, sans-serif';
     ctx.fillText('Just Send It! 🚀', W / 2, 168);
     ctx.fillStyle = '#ffffff'; ctx.font = '800 78px Arial, sans-serif';
     ctx.fillText('$' + (call.symbol || '?'), W / 2, 292);
     const mc = (!call.stale && call.curMc != null) ? call.curMc : call.entryMc;
     if (mc != null) { ctx.fillStyle = '#cfe9b0'; ctx.font = '600 46px Arial, sans-serif'; ctx.fillText((call.stale ? 'called at ' : '') + fmtUsd(mc) + ' market cap', W / 2, 372); }
-    if (!call.stale && call.curX != null && isFinite(call.curX)) { ctx.fillStyle = call.curX >= 0 ? '#8ee000' : '#ff6a6a'; ctx.font = '900 128px Arial Black, Arial, sans-serif'; ctx.fillText(xFmt(call.curX), W / 2, 520); }
+    if (!call.stale && call.curX != null && isFinite(call.curX)) { ctx.fillStyle = call.curX >= 0 ? '#a8ce00' : '#ff6a6a'; ctx.font = '900 128px Arial Black, Arial, sans-serif'; ctx.fillText(xFmt(call.curX), W / 2, 520); }
     ctx.fillStyle = 'rgba(255,255,255,0.82)'; ctx.font = '700 34px Arial, sans-serif';
     ctx.fillText('JustSendIt · a $Send call 🟢', W / 2, H - 38);
     return cv.toDataURL('image/png');

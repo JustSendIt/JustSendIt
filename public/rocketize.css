@@ -15,10 +15,10 @@
 
 /* --- empty state / drop zone --- */
 .rz-drop {
-  border: 2px dashed rgba(142,224,0,0.45); border-radius: 18px; padding: 1.6rem 1rem; text-align: center;
+  border: 2px dashed var(--g-lit); border-radius: 18px; padding: 1.6rem 1rem; text-align: center;
   background: rgba(16,22,35,0.6); transition: border-color 0.15s ease, background 0.15s ease;
 }
-.rz-drop.is-over { border-color: var(--green-bright); background: rgba(142,224,0,0.08); }
+.rz-drop.is-over { border-color: var(--green-bright); background: color-mix(in srgb, var(--green) 8%, transparent); }
 .rz-drop-title { font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1.5rem; color: var(--green-bright); margin: 0 0 0.25rem; letter-spacing: 0.02em; }
 .rz-drop-sub { color: var(--text-dim); font-size: 0.9rem; margin: 0 0 1rem; }
 .rz-private { color: var(--text-dim); font-size: 0.82rem; margin: 0.9rem 0 0; }
@@ -36,7 +36,7 @@
 .rz-sun { position: absolute; top: 22px; right: 28px; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 14px rgba(255,179,64,0.85); }
 .rz-hills {
   position: absolute; left: 10px; right: 10px; bottom: 30px; height: 44px; border-radius: 0 0 4px 4px; overflow: hidden;
-  background: radial-gradient(circle at 28% 110%, #6dbf00 0 58%, transparent 59%), radial-gradient(circle at 78% 115%, #5a9e00 0 52%, transparent 53%);
+  background: radial-gradient(circle at 28% 110%, #6dbf00 0 58%, transparent 59%), radial-gradient(circle at 78% 115%, #7e9a00 0 52%, transparent 53%);
 }
 .rz-float { position: absolute; left: -16px; bottom: -8px; font-size: 2.5rem; line-height: 1; animation: rz-bob 2.6s ease-in-out infinite; transform-origin: 50% 60%; }
 @keyframes rz-bob { 0%, 100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-10px) rotate(4deg); } }

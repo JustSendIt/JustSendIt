@@ -9,7 +9,7 @@
   function fit() { canvas.width = innerWidth * devicePixelRatio; canvas.height = innerHeight * devicePixelRatio; ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0); }
   fit(); addEventListener('resize', fit);
 
-  const COLORS = ['#b4ff2b', '#8ee000', '#ffb340', '#00C805', '#ffffff'];
+  const COLORS = ['#c6f000', '#a8ce00', '#ffb340', '#00C805', '#ffffff'];
   const EMOJI = ['🚀', '💸', '🪙', '💰', '🔥'];
 
   function burst(x, y, opts = {}) {

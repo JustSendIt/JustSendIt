@@ -97,7 +97,7 @@
       const lw = Math.max(3, c.canvas.width / 320);
       c.save(); c.translate(st.x, st.y); c.beginPath(); c.arc(0, 0, st.size * 0.62, 0, Math.PI * 2);
       c.lineWidth = lw + 3; c.strokeStyle = 'rgba(10,14,20,0.85)'; c.stroke();
-      c.lineWidth = lw; c.strokeStyle = '#b4ff2b'; c.stroke();
+      c.lineWidth = lw; c.strokeStyle = '#c6f000'; c.stroke();
       c.restore();
     }
   }

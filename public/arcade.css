@@ -25,7 +25,7 @@
 .arc-badge--boost { border-color: rgba(255,179,64,0.55); background: rgba(255,179,64,0.1); color: var(--gold); }
 .arc-badge--boost b { color: var(--gold); }
 .arc-badge--done { border-color: rgba(159,224,255,0.4); background: rgba(159,224,255,0.08); color: var(--diamond); }
-.arc-badge--free { border-color: rgba(142,224,0,0.5); background: rgba(142,224,0,0.1); color: var(--green-bright); }
+.arc-badge--free { border-color: color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 10%, transparent); color: var(--green-bright); }
 
 /* ---------- the stage ---------- */
 .arc-stage {
@@ -41,7 +41,7 @@
 }
 /* these two set display explicitly, so the UA's [hidden] rule needs help to win */
 .arc-canvas[hidden], .arc-static[hidden] { display: none !important; }
-.arc-static-ico { font-size: 3.4rem; line-height: 1; filter: drop-shadow(0 0 18px rgba(142,224,0,0.5)); }
+.arc-static-ico { font-size: 3.4rem; line-height: 1; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--green) 50%, transparent)); }
 
 .arc-overlay {
   grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -75,10 +75,10 @@
 }
 .arc-btn--go {
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: #12200a;
-  box-shadow: 0 6px 0 #33520a, 0 14px 34px rgba(142,224,0,0.35);
+  box-shadow: 0 6px 0 #33520a, 0 14px 34px color-mix(in srgb, var(--green) 35%, transparent);
   text-shadow: 0 1px 0 rgba(255,255,255,0.35);
 }
-.arc-btn--go:hover:not(:disabled) { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 #33520a, 0 20px 44px rgba(142,224,0,0.45); }
+.arc-btn--go:hover:not(:disabled) { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 #33520a, 0 20px 44px var(--g-lit); }
 .arc-btn--cash {
   background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: #2b1600;
   box-shadow: 0 6px 0 #8a4c00, 0 14px 34px rgba(255,179,64,0.3);
@@ -113,7 +113,7 @@
   font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1.15rem; letter-spacing: 0.03em;
   color: var(--text); margin: 0 0 0.4rem;
 }
-.arc-msg--win { border-color: rgba(142,224,0,0.5); background: rgba(142,224,0,0.08); }
+.arc-msg--win { border-color: color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); }
 .arc-msg--win .arc-msg-h { color: var(--green-bright); }
 .arc-msg--bust { border-color: rgba(255,93,93,0.5); background: rgba(255,93,93,0.08); }
 .arc-msg--bust .arc-msg-h { color: var(--red); }

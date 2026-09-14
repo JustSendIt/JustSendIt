@@ -258,7 +258,7 @@
       '<div class="pc-core" aria-hidden="true">' +
         '<svg viewBox="0 0 120 120" class="pc-svg">' +
           '<defs>' +
-            '<linearGradient id="gXp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5a9e00"/><stop offset="1" stop-color="#b4ff2b"/></linearGradient>' +
+            '<linearGradient id="gXp" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7e9a00"/><stop offset="1" stop-color="#c6f000"/></linearGradient>' +
             '<linearGradient id="gDia" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2a7fb0"/><stop offset="1" stop-color="#9fe0ff"/></linearGradient>' +
           '</defs>' +
           '<circle cx="60" cy="60" r="54" class="pc-track"/>' +

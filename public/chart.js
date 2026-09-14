@@ -103,7 +103,7 @@
      bottom rail: a Send Call and a Sent It happened AT a price we recorded, so they belong on the line;
      a conviction play is someone joining a community, which has no price of its own. */
   const MARKERS = {
-    call:       { glyph: '📣', label: 'Send Calls',      colour: '#b4ff2b', pin: 'price' },
+    call:       { glyph: '📣', label: 'Send Calls',      colour: '#c6f000', pin: 'price' },
     sent:       { glyph: '🚀', label: 'Sent Its',        colour: '#38e8ff', pin: 'price' },
     conviction: { glyph: '💠', label: 'Conviction',      colour: '#c9a6ff', pin: 'rail' },
     dev:        { glyph: '🛠️', label: 'Dev wallet',      colour: '#ffb340', pin: 'rail' },
@@ -175,7 +175,7 @@
 
     const css = getComputedStyle(document.documentElement);
     const tok = (n, f) => (css.getPropertyValue(n) || '').trim() || f;
-    const up = tok('--green-bright', '#b4ff2b'), down = tok('--red', '#ff5d5d');
+    const up = tok('--green-bright', '#c6f000'), down = tok('--red', '#ff5d5d');
     const grid = 'rgba(255,255,255,0.07)', axis = tok('--text-mute', '#8a93bd');
     const dir = dirOf(pts);
     const col = dir >= 0 ? up : down;
@@ -233,7 +233,7 @@
     ctx.lineTo(px(pts[0].t), H - PAD.b);
     ctx.closePath();
     const g = ctx.createLinearGradient(0, PAD.t, 0, H - PAD.b);
-    g.addColorStop(0, dir >= 0 ? 'rgba(180,255,43,0.28)' : 'rgba(255,93,93,0.26)');
+    g.addColorStop(0, dir >= 0 ? 'rgba(198,240,0,0.28)' : 'rgba(255,93,93,0.26)');
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.fill();
 
@@ -247,7 +247,7 @@
     const lastP = pts[pts.length - 1];
     const lx = px(lastP.t), ly = py(lastP.p);
     ctx.beginPath(); ctx.arc(lx, ly, 7, 0, Math.PI * 2);
-    ctx.fillStyle = dir >= 0 ? 'rgba(180,255,43,0.22)' : 'rgba(255,93,93,0.22)'; ctx.fill();
+    ctx.fillStyle = dir >= 0 ? 'rgba(198,240,0,0.22)' : 'rgba(255,93,93,0.22)'; ctx.fill();
     ctx.beginPath(); ctx.arc(lx, ly, 3, 0, Math.PI * 2);
     ctx.fillStyle = col; ctx.fill();
 

@@ -1,8 +1,8 @@
 /* ===== Profile page: tracker (main), collapsible settings, prefs ===== */
 const AVATARS = ['🚀','🦍','🐸','💎','🤝','🧨','🥷','👑','🦖','🌕','💸','🔥'];
-const ACCENTS = ['', '#b4ff2b', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2', '#ffffff'];
+const ACCENTS = ['', '#c6f000', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2', '#ffffff'];
 const BGS = ['', '#0a0e14', '#101a10', '#1a1210', '#10121a', '#1a101a', '#000000'];
-// '#8ee000' is deliberately absent: it looks identical to Default but derives a different
+// '#a8ce00' is deliberately absent: it looks identical to Default but derives a different
 // bright/dark pair, so the two swatches would look the same and behave differently.
 const SITE_ACCENTS = ['', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2'];
 let chosenAvatar = '🚀', chosenAccent = '', chosenBg = '';
@@ -35,12 +35,12 @@ function renderSwatches(zoneId, colors, current, onPick) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'swatch';
-    b.style.background = c || 'linear-gradient(135deg, #8ee000, #ffb340)';
+    b.style.background = c || 'linear-gradient(135deg, #a8ce00, #ffb340)';
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(c === current));
     b.setAttribute('aria-label', c ? 'color ' + c : 'default');
     b.title = c || 'default';
-    /* The colour is the swatch — a description that reads it back as "#b4ff2b" prints a system value at
+    /* The colour is the swatch — a description that reads it back as "#c6f000" prints a system value at
        somebody looking straight at the thing it names. "this colour" is what a person would say. */
     b.setAttribute('data-tip', zoneId === 'bg-swatches'
       ? (c ? 'Paints your public wall background in this colour' : 'Puts your wall background back to the default')
@@ -460,7 +460,7 @@ async function loadMe() {
    Every pick runs through the solver in prefs.js, which may adjust it for readability; when that
    happens the field shows the value actually applied rather than silently disagreeing with itself. */
 const THEME_CONTROLS = [
-  { key: 'accent',     label: 'Accent',      sub: 'buttons, links, highlights', fallback: '#8ee000' },
+  { key: 'accent',     label: 'Accent',      sub: 'buttons, links, highlights', fallback: '#a8ce00' },
   { key: 'background', label: 'Background',  sub: 'the page itself',            fallback: '#0b0818' },
   { key: 'text',       label: 'Text',        sub: 'body copy',                  fallback: '#eef4ff' },
   { key: 'highlight',  label: 'Gold accents', sub: 'prices, OG badges',         fallback: '#ffb340' },

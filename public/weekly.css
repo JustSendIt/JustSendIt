@@ -99,7 +99,7 @@
   align-self: flex-start; margin-top: 0.2rem; white-space: nowrap;
   display: inline-flex; align-items: center; gap: 0.2rem;
   padding: 0.15rem 0.5rem; border-radius: 999px;
-  background: rgba(142,224,0,0.14); border: 1px solid rgba(142,224,0,0.42);
+  background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid color-mix(in srgb, var(--green) 42%, transparent);
   color: var(--green-bright); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.01em;
 }
 
@@ -137,7 +137,7 @@
 }
 
 /* hover/focus tuned NOT to repaint the podium gradients (border + lift only) */
-.wk-link:hover { transform: translateY(-2px); border-color: rgba(142,224,0,0.5); }
+.wk-link:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .wk-link:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; transform: translateY(-2px); }
 
 /* ---------- narrow screens (no horizontal overflow at 320px) ----------
