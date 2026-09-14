@@ -48,7 +48,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the page links and sender search"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <header class="wall-hero" id="who-hero">
@@ -62,16 +62,16 @@
         <span class="wall-avatar-emoji" id="pub-avatar" aria-hidden="true">🚀</span>
       </div>
       <div class="wall-id-actions">
-        <button class="btn-follow" id="follow-btn" hidden>＋ Follow</button>
+        <button class="btn-follow" id="follow-btn" hidden data-tip="Adds their posts to your Following feed — they are told">＋ Follow</button>
         <!-- A separate control from Follow on purpose. Following is public and puts someone in your feed;
              an alert is private and rings your bell. Conflating them would either start notifying every
              existing follow, or make "quietly keep up with them" impossible. aria-pressed, not a switch
              role: it is a two-state button whose label already says what pressing it does. -->
-        <button class="btn btn-ghost btn-sm btn-alert" id="alert-btn" type="button" aria-pressed="false" hidden>🔔 Alerts</button>
-        <a class="btn btn-ghost btn-sm" id="edit-btn" href="/profile.html" hidden>Edit profile ✏️</a>
-        <button class="btn btn-ghost btn-sm" id="share-btn" aria-label="Copy link to this wall">Share 🔗</button>
+        <button class="btn btn-ghost btn-sm btn-alert" id="alert-btn" type="button" aria-pressed="false" hidden data-tip="Notifies you when they post or call — they are never told">🔔 Alerts</button>
+        <a class="btn btn-ghost btn-sm" id="edit-btn" href="/profile.html" hidden data-tip="Opens your profile settings to change this wall">Edit profile ✏️</a>
+        <button class="btn btn-ghost btn-sm" id="share-btn" aria-label="Copy link to this wall" data-tip="Copies a link to this wall to your clipboard">Share 🔗</button>
         <div class="mod-wrap" id="mod-wrap" hidden>
-          <button class="btn btn-ghost btn-sm mod-trigger" id="mod-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mod-menu">🛡️ Moderation <span class="mod-caret" aria-hidden="true">▾</span></button>
+          <button class="btn btn-ghost btn-sm mod-trigger" id="mod-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mod-menu" data-tip="Opens a menu to mute or unmute this sender">🛡️ Moderation <span class="mod-caret" aria-hidden="true">▾</span></button>
           <div class="mod-menu" id="mod-menu" role="menu" aria-labelledby="mod-trigger" hidden></div>
         </div>
       </div>
@@ -109,15 +109,15 @@
       <div id="pc-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
       <div class="composer-bar">
         <label class="file-label">📷 Photo / GIF / Video<input type="file" id="pc-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
-        <button class="btn btn-primary btn-sm" id="pc-publish">SEND IT 🚀</button>
+        <button class="btn btn-primary btn-sm" id="pc-publish" data-tip="Publishes this to your wall and the Send Wall">SEND IT 🚀</button>
         <span class="hint" id="pc-count" aria-hidden="true">500</span>
       </div>
       <p class="hint" id="pc-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
     </div>
     <div class="wall-tabs" role="tablist" aria-label="Wall sections">
-      <button class="wall-tab active" id="wt-posts" type="button" role="tab" aria-selected="true" aria-controls="panel-posts" data-tab="posts">🧱 Posts</button>
-      <button class="wall-tab" id="wt-calls" type="button" role="tab" aria-selected="false" aria-controls="panel-calls" data-tab="calls">📣 Send&nbsp;Calls</button>
-      <button class="wall-tab" id="wt-lb" type="button" role="tab" aria-selected="false" aria-controls="panel-lb" data-tab="lb">🏆 Leaderboard</button>
+      <button class="wall-tab active" id="wt-posts" type="button" role="tab" aria-selected="true" aria-controls="panel-posts" data-tab="posts" data-tip="Shows their posts in the panel below">🧱 Posts</button>
+      <button class="wall-tab" id="wt-calls" type="button" role="tab" aria-selected="false" aria-controls="panel-calls" data-tab="calls" data-tip="Shows their Send Calls and how each is doing">📣 Send&nbsp;Calls</button>
+      <button class="wall-tab" id="wt-lb" type="button" role="tab" aria-selected="false" aria-controls="panel-lb" data-tab="lb" data-tip="Shows the ranked list of top Send Callers">🏆 Leaderboard</button>
     </div>
     <section id="panel-posts" role="tabpanel" aria-labelledby="wt-posts" tabindex="0">
       <div class="wall-feed" id="feed" aria-label="This sender's posts"></div>
@@ -131,7 +131,7 @@
       <div class="sc-list" id="sc-list"></div>
     </section>
     <section id="panel-lb" role="tabpanel" aria-labelledby="wt-lb" tabindex="0" hidden>
-      <p class="lb-intro">The best Send Callers, ranked by total Xs across their calls. <button class="sc-info" id="lb-help" type="button" aria-expanded="false">ⓘ How?</button></p>
+      <p class="lb-intro">The best Send Callers, ranked by total Xs across their calls. <button class="sc-info" id="lb-help" type="button" aria-expanded="false" data-tip="Explains how these rankings are worked out">ⓘ How?</button></p>
       <p class="sc-explain" id="lb-explain" hidden>Each call's <b>peak Xs since it was called</b> (where +100% = 1x) is summed per person. Pick a window below. Calling big <i>and</i> often both help — but a call that never runs adds nothing.</p>
       <div class="lb-windows" id="lb-windows" role="group" aria-label="Leaderboard window"></div>
       <ol class="lb-list" id="lb-list"></ol>
@@ -163,6 +163,7 @@
    </div>
 </footer>
 
+<script src="tips.js"></script>
 <script src="/prefs.js"></script>
 <script src="/app.js"></script>
 <script src="/livex.js"></script>

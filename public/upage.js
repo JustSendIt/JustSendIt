@@ -33,8 +33,8 @@ function pinChip(p, mine, owner) {
   const stats = '<span class="pin-chip-stats">' + (p.curMc != null ? '<span class="pin-chip-mc" role="img" aria-label="Market cap ' + pinUsd(p.curMc) + '" title="Current market cap">💰 ' + pinUsd(p.curMc) + '</span>' : '') + pinXsChip(p.xs) + '</span>';
   const comm = window.tokenCommunitySlot ? tokenCommunitySlot(p.token, p.symbol || '') : ''; // 🏘️ Community / ＋ Start community (filled by tokentext.js)
   return '<span class="pin-chip" data-token="' + esc(p.token) + '" data-owner="' + esc(owner) + '" data-sym="' + esc(p.symbol || '') + '">' +
-    '<button class="pin-chip-open" type="button" aria-describedby="' + tipId + '" data-pin-view="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" data-name="' + esc(p.name || '') + '">' + logo + '<span class="pin-chip-sym">' + sym + '</span></button>' + conv + stats + comm +
-    (mine ? '<button class="pin-chip-rm" type="button" data-pin-rm="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" aria-label="Remove ' + sym + ' from your convictions">✕</button>' : '') +
+    '<button class="pin-chip-open" type="button" data-tip="Opens the on-chain details for this token" aria-describedby="' + tipId + '" data-pin-view="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" data-name="' + esc(p.name || '') + '">' + logo + '<span class="pin-chip-sym">' + sym + '</span></button>' + conv + stats + comm +
+    (mine ? '<button class="pin-chip-rm" type="button" data-tip="Removes this token from your Conviction Plays" data-pin-rm="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" aria-label="Remove ' + sym + ' from your convictions">✕</button>' : '') +
     '<span class="pin-hover" role="tooltip" id="' + tipId + '" aria-live="polite"><span class="pin-hover-load">holdings load on hover…</span></span>' +
     '</span>';
 }
@@ -51,7 +51,7 @@ function renderPins(u) {
       const head = '<div class="wall-pins-head">💎 Conviction Plays <span class="wall-pins-sub">' + sub + '</span></div>';
       const list = pins.length ? '<div class="wall-pins-list">' + pins.map(p => pinChip(p, u.isMe, u.username)).join('') + '</div>' : '';
       const empty = (!pins.length && u.isMe) ? '<p class="wall-pins-empty">Convict a token to show it here — paste its contract below, or open any token’s on-chain details anywhere and tap <b>📌 Pin to my wall</b>.</p>' : '';
-      const adder = u.isMe ? '<form class="pin-add" autocomplete="off"><label class="sr-only" for="pin-add-input">Token contract address to convict</label><input class="addr-input pin-add-input" id="pin-add-input" type="text" inputmode="text" spellcheck="false" placeholder="Paste a contract to convict (0x…)" pattern="0x[0-9a-fA-F]{40}"><button class="btn btn-primary btn-sm pin-add-go" type="submit">💎 Convict</button></form><p class="pin-add-msg" role="status" aria-live="polite"></p>' : '';
+      const adder = u.isMe ? '<form class="pin-add" autocomplete="off"><label class="sr-only" for="pin-add-input">Token contract address to convict</label><input class="addr-input pin-add-input" id="pin-add-input" type="text" inputmode="text" spellcheck="false" placeholder="Paste a contract to convict (0x…)" pattern="0x[0-9a-fA-F]{40}"><button class="btn btn-primary btn-sm pin-add-go" type="submit" data-tip="Adds the pasted token to your Conviction Plays">💎 Convict</button></form><p class="pin-add-msg" role="status" aria-live="polite"></p>' : '';
       box.innerHTML = head + list + empty + adder;
       livePins(box);
     }).catch(() => { box.hidden = true; });
@@ -250,10 +250,10 @@ function postEl(p) {
         '<svg class="vote-ico vote-static" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15L4 7h12z"/></svg>' +
       '</div>'
     : '<div class="vote" role="group" aria-label="Score ' + sTxt + '. Upvote or downvote.">' +
-        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-vote="up" aria-pressed="' + up + '" aria-label="Upvote">' +
+        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-vote="up" aria-pressed="' + up + '" aria-label="Upvote" data-tip="Votes this post up — press again to clear it">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5l6 8H4z"/></svg></button>' +
         '<span class="vote-score' + (p.score < 0 ? ' neg' : '') + '" aria-hidden="true">' + sTxt + '</span>' +
-        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-vote="down" aria-pressed="' + down + '" aria-label="Downvote">' +
+        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-vote="down" aria-pressed="' + down + '" aria-label="Downvote" data-tip="Votes this post down — press again to clear it">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 15L4 7h12z"/></svg></button>' +
         '<span class="sr-only" role="status" data-vote-status></span>' +
       '</div>';
@@ -268,10 +268,10 @@ function postEl(p) {
     '<div class="post-actions">' +
       voteHTML +
       '<span class="act-sep" aria-hidden="true"></span>' +
-      '<button class="react-btn' + (p.myReactions.includes('fire') ? ' lit' : '') + '" data-react="fire" aria-label="React with fire">🔥 <span>' + p.reactions.fire + '</span></button>' +
-      '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-react="rocket" aria-label="React with rocket">🚀 <span>' + p.reactions.rocket + '</span></button>' +
-      '<button class="react-btn" data-comments aria-expanded="false" aria-label="Show comments">💬 <span>' + p.comments + '</span></button>' +
-      (p.mine && !p.call ? '<button class="react-btn post-del" data-del aria-label="Delete your post">🗑</button>' : '') + // Send Calls are final — no delete
+      '<button class="react-btn' + (p.myReactions.includes('fire') ? ' lit' : '') + '" data-react="fire" aria-label="React with fire" data-tip="Adds a fire reaction — press again to remove it">🔥 <span>' + p.reactions.fire + '</span></button>' +
+      '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-react="rocket" aria-label="React with rocket" data-tip="Adds a rocket reaction — press again to remove it">🚀 <span>' + p.reactions.rocket + '</span></button>' +
+      '<button class="react-btn" data-comments aria-expanded="false" aria-label="Show comments" data-tip="Opens the comments under this post">💬 <span>' + p.comments + '</span></button>' +
+      (p.mine && !p.call ? '<button class="react-btn post-del" data-del aria-label="Delete your post" data-tip="Deletes this post for good — tap again to confirm">🗑</button>' : '') + // Send Calls are final — no delete
     '</div>' +
     '<div class="comments" hidden></div>';
   return el;
@@ -357,7 +357,7 @@ async function renderComments(post, id) {
     if (AUTH.user) {
       const form = document.createElement('form');
       form.className = 'comment-form';
-      form.innerHTML = '<input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit">Reply</button>';
+      form.innerHTML = '<input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Adds your comment under this post">Reply</button>';
       form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const input = form.querySelector('input');
@@ -654,7 +654,7 @@ async function loadCalls(u) {
 async function loadLeaderboard(win) {
   win = win || 'all';
   const winEl = document.getElementById('lb-windows'), listEl = document.getElementById('lb-list');
-  winEl.innerHTML = _lbWindows.map(w => '<button class="lb-win' + (w[0] === win ? ' active' : '') + '" type="button" data-win="' + w[0] + '" aria-pressed="' + (w[0] === win) + '">' + w[1] + '</button>').join('');
+  winEl.innerHTML = _lbWindows.map(w => '<button class="lb-win' + (w[0] === win ? ' active' : '') + '" type="button" data-tip="Ranks Send Callers over this time window" data-win="' + w[0] + '" aria-pressed="' + (w[0] === win) + '">' + w[1] + '</button>').join('');
   winEl.querySelectorAll('.lb-win').forEach(b => b.addEventListener('click', () => loadLeaderboard(b.dataset.win)));
   listEl.innerHTML = '<li class="lb-load">Loading…</li>';
   try {
@@ -705,7 +705,7 @@ async function loadLeaderboard(win) {
       '<div class="card ci-card">' +
         '<div class="ci-head"><span class="ci-emoji" aria-hidden="true">📅</span>' +
         '<h2 class="ci-title">Daily check-in</h2></div>' +
-        '<button class="btn btn-primary ci-btn" type="button" id="ci-go">✅ Check in for today</button>' +
+        '<button class="btn btn-primary ci-btn" type="button" id="ci-go" data-tip="Claims the daily Send Power bonus — once per day">✅ Check in for today</button>' +
         '<p class="ci-note">Claims today’s <b>Send Power</b> bonus — multiplied by your boosts. Free, once a day.</p>' +
         '<p class="ci-msg" id="ci-msg" role="status"></p>' +
       '</div>';

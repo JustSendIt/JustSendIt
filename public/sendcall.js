@@ -118,15 +118,15 @@
       '<div class="sc-senders"' + (call.hops > 0 ? '' : ' hidden') + '>' +
         '<div class="sc-senders-head">🚀 <b class="sc-senders-n">' + (call.hops || 0) + '</b> also Sent It <span class="sc-senders-sub">— top senders</span></div>' +
         '<ol class="sc-senders-list" aria-label="Others who Sent It, ranked by how much they put in">' + sendersRowsHTML((call.senders || []).slice(0, 3)) + '</ol>' +
-        (call.hops > 3 ? '<button class="sc-senders-toggle" type="button" data-senders-toggle="' + call.id + '" aria-expanded="false">▾ Show all ' + call.hops + '</button>' : '') +
+        (call.hops > 3 ? '<button class="sc-senders-toggle" type="button" data-tip="Lists everyone who Sent It on this call" data-senders-toggle="' + call.id + '" aria-expanded="false">▾ Show all ' + call.hops + '</button>' : '') +
       '</div>' +
       '<div class="sc-hold"' + (call.holdEarned > 0 ? '' : ' hidden') + '>💎 <b class="sc-holdn">' + (call.holdEarned || 0).toLocaleString('en-US') + '</b> diamond-hands bonus' + (call.stale ? '' : ' · grows while it stays in profit') + '</div>' +
       '<div class="sc-actions">' +
-        '<button class="sc-btn sc-hop' + (call.hopped ? ' hopped' : '') + '" type="button" data-hop="' + call.id + '"' + (call.mineOwn ? ' disabled title="This is your own call"' : '') + '>🚀 ' + (call.hopped ? 'Sent it!' : 'Send It!') + ' <span class="sc-hopn">' + (call.hops || 0) + '</span></button>' +
-        (call.wallet ? '<button class="sc-btn sc-track" type="button" data-track="' + esc(call.wallet) + '" data-sym="' + esc(call.symbol || '') + '">➕ Track caller’s wallet</button>' : '') +
-        '<a class="sc-btn" href="' + esc(chart) + '" target="_blank" rel="noopener nofollow">📈 Chart</a>' +
-        '<button class="sc-btn sc-share" type="button" data-share="' + call.id + '" title="Share this call on X — we build a card image you can attach">𝕏 Share</button>' +
-        '<button class="sc-btn sc-info" type="button" data-scinfo aria-expanded="false">ⓘ What’s a Send Call?</button>' +
+        '<button class="sc-btn sc-hop' + (call.hopped ? ' hopped' : '') + '" type="button" data-tip="Adds you publicly to the senders on this call" data-hop="' + call.id + '"' + (call.mineOwn ? ' disabled title="This is your own call"' : '') + '>🚀 ' + (call.hopped ? 'Sent it!' : 'Send It!') + ' <span class="sc-hopn">' + (call.hops || 0) + '</span></button>' +
+        (call.wallet ? '<button class="sc-btn sc-track" type="button" data-tip="Adds that address to your wallet tracker" data-track="' + esc(call.wallet) + '" data-sym="' + esc(call.symbol || '') + '">➕ Track caller’s wallet</button>' : '') +
+        '<a class="sc-btn" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(chart) + '" target="_blank" rel="noopener nofollow">📈 Chart</a>' +
+        '<button class="sc-btn sc-share" type="button" data-tip="Saves a card image and opens X to post it" data-share="' + call.id + '" title="Share this call on X — we build a card image you can attach">𝕏 Share</button>' +
+        '<button class="sc-btn sc-info" type="button" data-tip="Shows how Send Calls and their scores work" data-scinfo aria-expanded="false">ⓘ What’s a Send Call?</button>' +
       '</div>' +
       '<div class="sc-explain" hidden>' +
         '<p><b>📣 What’s a Send Call?</b> A public, timestamped, <b>permanent</b> shout that a token will run. Once posted a call can never be edited or deleted — it’s on the record forever, tracked live.</p>' +
@@ -143,7 +143,7 @@
         '</ul>' +
         '<p class="sc-explain-note">Not financial advice. Most tokens go to zero — <b>always DYOR</b>.</p>' +
       '</div>' +
-      '<button class="sc-toggle" type="button" data-sctoggle aria-expanded="false"><span class="sc-toggle-lbl">Full on-chain detail</span></button>' +
+      '<button class="sc-toggle" type="button" data-tip="Expands the live on-chain data for this token" data-sctoggle aria-expanded="false"><span class="sc-toggle-lbl">Full on-chain detail</span></button>' +
       '<div class="sc-detail" hidden></div>' +
     '</div>';
   }
@@ -258,7 +258,7 @@
           if (window.sendToast) sendToast('🚀 Sent it on the $' + (j.symbol || '') + ' call — good luck!');
           // reveal a track-wallet button if the caller has a public wallet and one isn't already shown
           const w = hop.closest('.sc-widget');
-          if (j.wallet && w && !w.querySelector('.sc-track')) hop.insertAdjacentHTML('afterend', '<button class="sc-btn sc-track" type="button" data-track="' + esc(j.wallet) + '" data-sym="' + esc(j.symbol || '') + '">➕ Track caller’s wallet</button>');
+          if (j.wallet && w && !w.querySelector('.sc-track')) hop.insertAdjacentHTML('afterend', '<button class="sc-btn sc-track" type="button" data-tip="Adds that address to your wallet tracker" data-track="' + esc(j.wallet) + '" data-sym="' + esc(j.symbol || '') + '">➕ Track caller’s wallet</button>');
         } catch { if (window.sendToast) sendToast('Could not Send It'); hop.disabled = false; }
         return;
       }

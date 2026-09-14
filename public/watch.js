@@ -56,7 +56,7 @@
   // save-button markup — a ☆/★ toggle; state comes from the live set
   function btnHTML(p, extraCls) {
     const on = has(p.pair.address);
-    return '<button class="np-watch' + (extraCls ? ' ' + extraCls : '') + (on ? ' is-on' : '') + '" type="button" data-wpair="' + esc(p.pair.address) + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Remove from watchlist' : 'Save to watchlist') + '" title="' + (on ? 'In your watchlist' : 'Save to watchlist') + '">' + (on ? '★' : '☆') + '</button>';
+    return '<button class="np-watch' + (extraCls ? ' ' + extraCls : '') + (on ? ' is-on' : '') + '" type="button" data-wpair="' + esc(p.pair.address) + '" aria-pressed="' + on + '" aria-label="' + (on ? 'Remove from watchlist' : 'Save to watchlist') + '" title="' + (on ? 'In your watchlist' : 'Save to watchlist') + '" data-tip="Saves this token to your watchlist, or takes it off">' + (on ? '★' : '☆') + '</button>';
   }
   // refresh every rendered save-button on the page to match the current set
   function syncButtons(root) {

@@ -670,12 +670,12 @@
         : n ? n + ' on this chart'
         : out ? out + ' — but outside this timeframe. Widen the window to see ' + (out === 1 ? 'it' : 'them') + '.'
         : 'none in this window';
-      return '<button class="oc-mk' + (on[k] ? ' is-on' : '') + (n ? '' : ' is-empty') + '" type="button" data-mk="' + k + '"' +
+      return '<button class="oc-mk' + (on[k] ? ' is-on' : '') + (n ? '' : ' is-empty') + '" type="button" data-tip="Shows or hides this kind of marker on the chart" data-mk="' + k + '"' +
         ' aria-pressed="' + !!on[k] + '" title="' + esc(title) + '">' +
         '<span class="oc-mk-g" aria-hidden="true">' + MARKERS[k].glyph + '</span>' + esc(MARKERS[k].label) +
         (n ? '<span class="oc-mk-n">' + n + '</span>' : out ? '<span class="oc-mk-n oc-mk-out">' + out + '↔</span>' : '') + '</button>';
     }).join('') +
-      '<button class="oc-mk oc-mk-clean" type="button" data-mk="__clean" title="Hide every marker and just show the price">' +
+      '<button class="oc-mk oc-mk-clean" type="button" data-tip="Turns every marker off, or all of them back on" data-mk="__clean" title="Hide every marker and just show the price">' +
       (anyOn ? '🧹 Clean chart' : '↩︎ Show markers') + '</button>';
   }
 
@@ -822,7 +822,7 @@
       '<div class="oc-head">' +
         '<div class="oc-tfs" role="tablist" aria-label="Chart timeframe">' +
           TF.map(([k, lbl]) => '<button class="oc-tf' + (k === (host.dataset.tf || '1h') ? ' is-on' : '') +
-            '" type="button" role="tab" aria-selected="' + (k === (host.dataset.tf || '1h')) + '" data-tf="' + k + '">' + lbl + '</button>').join('') +
+            '" type="button" data-tip="Reloads the chart at this candle size and window" role="tab" aria-selected="' + (k === (host.dataset.tf || '1h')) + '" data-tf="' + k + '">' + lbl + '</button>').join('') +
         '</div>' +
         '<span class="oc-live" aria-live="off"></span>' +
         '<span class="oc-src" title="History from this pair contract&#39;s own Swap events; the live price from its reserves, every ' +
@@ -834,13 +834,13 @@
            the margins the renderer reserves for them, so they can be dragged, tabbed to and driven from
            the keyboard. They are also the only elements here with touch-action:none — the canvas keeps
            pan-y so a phone can still scroll the page by dragging over the chart. */
-        '<button class="oc-grab oc-grab-x" type="button" data-grab="x"' +
+        '<button class="oc-grab oc-grab-x" type="button" data-tip="Stretches or squeezes the time axis — drag or use arrow keys" data-grab="x"' +
           ' aria-label="Time scale. Drag right to stretch time and see less of it, left to fit more in. Arrow keys also work; press Home to fit the window."' +
           ' title="Drag to stretch or compress time"><span>↔</span></button>' +
-        '<button class="oc-grab oc-grab-y" type="button" data-grab="y"' +
+        '<button class="oc-grab oc-grab-y" type="button" data-tip="Stretches or squeezes the price scale — drag or use arrow keys" data-grab="y"' +
           ' aria-label="Price scale. Drag up to stretch the price range and see it in more detail, down to fit more in. Arrow keys also work; press Home to fit the window."' +
           ' title="Drag to stretch or compress the price scale"><span>↕</span></button>' +
-        '<button class="oc-reset" type="button" hidden>↺ Fit</button>' +
+        '<button class="oc-reset" type="button" data-tip="Puts the whole window back and follows the live price" hidden>↺ Fit</button>' +
       '</div>' +
       '<div class="oc-legend" role="group" aria-label="Which markers to show"></div>' +
       '<p class="oc-status" role="status" aria-live="polite"></p>' +

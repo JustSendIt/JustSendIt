@@ -14,6 +14,10 @@
     fab.setAttribute('aria-haspopup', 'dialog');
     fab.setAttribute('aria-controls', 'compose-modal');
     fab.setAttribute('aria-label', 'Post to your Send Wall');
+    /* aria-label is this control's NAME. tips.js only falls back to a name when there is no visible text,
+       and this one prints "Send it", so without a data-tip the most travelled button on the site — it is
+       fixed on every page — would be the one control with no description at all. */
+    fab.setAttribute('data-tip', 'Opens the composer to post to the Wall or make a Send Call');
     fab.innerHTML = '<span class="fab-ico" aria-hidden="true">✏️</span><span class="fab-label">Send it</span>';
     document.body.appendChild(fab);
 
@@ -23,13 +27,13 @@
     modal.innerHTML =
       '<div class="modal-backdrop" data-close></div>' +
       '<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="compose-title">' +
-        '<button class="modal-x" data-close aria-label="Close composer">✕</button>' +
+        '<button class="modal-x" data-close aria-label="Close composer" data-tip="Closes the composer without posting anything">✕</button>' +
         '<h2 id="compose-title" class="display" style="color:var(--green-bright); text-align:center; font-size:1.5rem;">Send it to the Wall 🧱</h2>' +
 
         '<div id="compose-in" hidden>' +
           '<div class="cmp-modes" role="tablist" aria-label="What are you sending?">' +
-            '<button class="cmp-mode is-on" type="button" role="tab" id="cmp-mode-post" aria-selected="true" aria-controls="compose-post-pane">🧱 Post</button>' +
-            '<button class="cmp-mode" type="button" role="tab" id="cmp-mode-call" aria-selected="false" aria-controls="compose-call-pane">📣 Send Call</button>' +
+            '<button class="cmp-mode is-on" type="button" role="tab" id="cmp-mode-post" aria-selected="true" aria-controls="compose-post-pane" data-tip="Switches to writing a plain post for the wall">🧱 Post</button>' +
+            '<button class="cmp-mode" type="button" role="tab" id="cmp-mode-call" aria-selected="false" aria-controls="compose-call-pane" data-tip="Switches to making a permanent public call on a token">📣 Send Call</button>' +
           '</div>' +
           '<p class="modal-note" style="text-align:center; margin-top:0;">Posting as <b>@<span id="compose-handle"></span></b></p>' +
 
@@ -40,7 +44,7 @@
             '<div id="compose-preview" class="media-preview" hidden aria-label="Attached media preview"></div>' +
             '<div class="composer-bar">' +
               '<label class="file-label" for="compose-img">🖼 Photo / GIF / Video<input type="file" id="compose-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>' +
-              '<button class="btn btn-primary btn-sm" id="compose-send" disabled>Send it 🚀</button>' +
+              '<button class="btn btn-primary btn-sm" id="compose-send" data-tip="Posts this publicly to the wall and your profile" disabled>Send it 🚀</button>' +
               '<span class="hint" id="compose-count" aria-hidden="true">500</span>' +
             '</div>' +
             '<p class="modal-note">Public on the Wall and your profile. 🎉 Entertainment only — never post a seed phrase or password.</p>' +
@@ -56,7 +60,7 @@
             // is a choice you make rather than something the call does to you. Off unless ticked.
             '<label class="cmp-call-share"><input type="checkbox" id="compose-call-wallet"> <span>Show my wallet on this call <small>— anyone can then see and track this address. Off by default; you can remove it later.</small></span></label>' +
             '<div class="composer-bar">' +
-              '<button class="btn btn-primary btn-sm" id="compose-call-go" disabled>📣 Make the call</button>' +
+              '<button class="btn btn-primary btn-sm" id="compose-call-go" data-tip="Posts a permanent scored call on this token — it cannot be deleted" disabled>📣 Make the call</button>' +
               '<span class="hint" id="compose-call-left"></span>' +
             '</div>' +
             '<p class="modal-note" id="compose-call-help">A Send Call posts a <b>live scorecard</b> to your wall that tracks how far this token runs, forever. It is <b>public, timestamped and permanent — calls can never be deleted</b>. Needs a real pool (≥&nbsp;$500 liquidity). 🎉 Entertainment only, never advice.</p>' +
@@ -67,7 +71,7 @@
 
         '<div id="compose-out" hidden style="text-align:center;">' +
           '<p class="modal-note">Grab your free @handle to post, react 🔥, and start your own wall.</p>' +
-          '<button class="btn btn-primary" id="compose-signin">Sign in / Create account 🚪</button>' +
+          '<button class="btn btn-primary" id="compose-signin" data-tip="Opens sign-in, then brings this box back">Sign in / Create account 🚪</button>' +
           '<p class="modal-note">We never touch your funds and never ask for your seed phrase.</p>' +
         '</div>' +
 
@@ -75,8 +79,8 @@
           '<div style="font-size:2.6rem;" aria-hidden="true" id="compose-done-ico">🚀</div>' +
           '<p style="font-weight:800; color:var(--green-bright); font-size:1.1rem;" id="compose-done-msg">Sent to the Wall!</p>' +
           '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:0.9rem;">' +
-            '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall.html">View on the Wall →</a>' +
-            '<button class="btn btn-ghost btn-sm" id="compose-again" type="button">Post another ✏️</button>' +
+            '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall.html" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
+            '<button class="btn btn-ghost btn-sm" id="compose-again" type="button" data-tip="Returns to the empty composer to send another">Post another ✏️</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -203,7 +207,7 @@
         '</div>' +
         (thin
           ? '<p class="modal-note cmp-call-warn">⚠️ Too thin to call — a pool needs <b>$' + MIN_CALL_LIQ + '+</b> of liquidity (this one has ' + esc(money(liq)) + '). Thin pools are easy to manipulate.</p>'
-          : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>')
+          : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens the full on-chain detail and records that you looked">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>')
       );
       setCallReady(!thin);
       if (window.decorateTokenCommunities) window.decorateTokenCommunities(modal.querySelector('#compose-call-preview'));
@@ -315,7 +319,7 @@
       const nudge = modal.querySelector('#compose-nudge');
       if (hit && !nudge.dataset.addr) {
         nudge.dataset.addr = hit[0];
-        nudge.innerHTML = '<span>📣 That’s a token address.</span> <button class="btn btn-ghost btn-sm" type="button" id="compose-nudge-go">Make it a Send Call →</button>';
+        nudge.innerHTML = '<span>📣 That’s a token address.</span> <button class="btn btn-ghost btn-sm" type="button" id="compose-nudge-go" data-tip="Moves that pasted address into a Send Call">Make it a Send Call →</button>';
         nudge.hidden = false;
         modal.querySelector('#compose-nudge-go').addEventListener('click', () => {
           const addr = nudge.dataset.addr;

@@ -20,7 +20,7 @@
   const shortAddr = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
   function supplyOf(p) { const raw = p.token.totalSupply; if (raw == null) return null; const n = Number(raw) / Math.pow(10, p.token.decimals || 18); return isFinite(n) ? n : null; }
   const move = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
-  function copyBtn(a, label) { return '<button class="copy-btn" type="button" data-copy="' + esc(a) + '" aria-label="Copy ' + esc(label || 'address') + '">📋</button>'; }
+  function copyBtn(a, label) { return '<button class="copy-btn" type="button" data-tip="Copies this address to your clipboard" data-copy="' + esc(a) + '" aria-label="Copy ' + esc(label || 'address') + '">📋</button>'; }
 
   /* ---------- verdict + flags ---------- */
   const TRI = { ok: { cls: 'np-t-ok', ico: '🟢', word: 'Looks OK' }, caution: { cls: 'np-t-caution', ico: '🟡', word: 'Caution' }, high: { cls: 'np-t-high', ico: '🔴', word: 'High risk' }, avoid: { cls: 'np-t-avoid', ico: '☠️', word: 'Avoid' } };
@@ -28,7 +28,11 @@
   // same honesty rule as the radar: unreadable data is an unknown, never a green verdict
   function verdictOf(p) { const tri = triageOf(p), h = Math.round((p.risk && p.risk.health) || 0);
     if (p.risk && p.risk.thinData) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
-    if (tri === 'ok' && h >= 100) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' }; return TRI[tri]; }
+    /* Same words, same test. The radar's site bar also requires a clean first block — sniperOk === true,
+       where null means the block-0 scan has not finished and is NOT the same as passed. Without this the
+       identical sentence meant a weaker thing here than it does two pages away. */
+    const sniperOk = !!(p.risk && p.risk.sniperOk === true);
+    if (tri === 'ok' && h >= 100 && sniperOk) return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It' }; return TRI[tri]; }
   const FLAG = {
     honeypotSuspect: { ico: '🍯', word: "Can't sell?", sev: 'bad' }, dumping: { ico: '📉', word: 'Dumping', sev: 'bad' },
     serialDeployer: { ico: '🔁', word: 'Serial deployer', sev: 'bad' }, lowLiquidity: { ico: '💧', word: 'Thin liquidity', sev: 'bad' },
@@ -61,7 +65,7 @@
       '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
       '<span class="np-liq"><b class="np-liq-val">' + npFmtUsd(p.market.liquidityUsd) + '</b><i class="np-liq-lbl">liq</i></span>' +
       '<span class="np-chg-slot">' + chgChipHTML(p.priceChange.h1) + '</span>' +
-      '<button class="np-wl-remove" type="button" data-remove="' + esc(p.pair.address) + '" aria-label="Remove ' + esc(p.token.symbol) + ' from watchlist" title="Remove from watchlist">✕</button>' +
+      '<button class="np-wl-remove" type="button" data-tip="Takes this token off your watchlist straight away" data-remove="' + esc(p.pair.address) + '" aria-label="Remove ' + esc(p.token.symbol) + ' from watchlist" title="Remove from watchlist">✕</button>' +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
       '<span class="sr-only">' + esc(p.token.name) + ' ' + esc(p.token.symbol) + ', verdict ' + T.word + ', health ' + health + ' of 100. Expand for detail.</span>' +
       '</div>' + flagstripHTML(p) + '</summary>';
@@ -100,7 +104,7 @@
       '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span><code>' + esc(p.pair.address) + '</code>' + copyBtn(p.pair.address, 'pair') + '</div>' +
       (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer') + '</div>' : '') + owner +
       '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b>' : '📄 Verification unknown') + '</p>' +
-      '<div class="np-actions"><a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a><a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a></div>';
+      '<div class="np-actions"><a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this token on the block explorer">🔍 Explorer ↗</a><a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this pair chart on Dexscreener">📈 Chart ↗</a></div>';
     return '<div class="np-body">' +
       (activeFlags(p).length ? '<section class="np-why"><ul class="np-why-list">' + activeFlags(p).map(k => '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].word) + '</li>').join('') + '</ul></section>' : '') +
       group('chart', '📈 Chart', true, chartHTML(p)) +
@@ -115,7 +119,7 @@
 
   /* ---------- TOKEN watchlist: render + load ---------- */
   function setStatus(html) { if (statusEl) statusEl.innerHTML = html; }
-  function signedOut(el, what) { el.innerHTML = '<li class="np-msg">Sign in to keep a ' + what + '. <button class="btn btn-sm btn-primary" data-wl-signin type="button">Sign In 🚀</button></li>'; }
+  function signedOut(el, what) { el.innerHTML = '<li class="np-msg">Sign in to keep a ' + what + '. <button class="btn btn-sm btn-primary" data-tip="Opens the sign-in panel so saved tokens stick to your account" data-wl-signin type="button">Sign In 🚀</button></li>'; }
   function render() {
     if (!state.items.length) { listEl.innerHTML = '<li class="np-msg">⭐ No saved tokens yet. Open <a class="np-msg-link" href="newpairs.html">New Pairs</a>, tap the ☆ on any token, and it lands here.</li>'; setStatus(''); return; }
     listEl.innerHTML = state.items.map(rowHTML).join('');

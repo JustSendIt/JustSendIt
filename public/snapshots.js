@@ -49,7 +49,7 @@
     tabs.innerHTML = snaps.map((s, i) => {
       const on = active && s.id === active.id;
       const lbl = when(s.startedAt) + (s.status === 'complete' ? '' : ' · ' + s.status);
-      return '<button class="snap-tab' + (on ? ' is-on' : '') + '" role="tab" type="button"' +
+      return '<button class="snap-tab' + (on ? ' is-on' : '') + '" role="tab" type="button" data-tip="Shows the holder list captured at that moment"' +
         ' aria-selected="' + (on ? 'true' : 'false') + '" tabindex="' + (on ? '0' : '-1') + '"' +
         ' data-sid="' + s.id + '">' + (i === 0 ? '🆕 ' : '') + esc(lbl) + '</button>';
     }).join('');
@@ -70,7 +70,7 @@
       const pct = pctOfSupply(h.value, s.totalSupply);
       return '<tr><td class="snap-rank">' + h.rank + '</td>' +
         '<td class="snap-addr"><code>' + esc(shortAddr(h.address)) + '</code>' +
-        '<button class="copy-btn snap-copy" type="button" data-copy="' + esc(h.address) + '" aria-label="Copy address ' + esc(h.address) + '">📋</button></td>' +
+        '<button class="copy-btn snap-copy" type="button" data-tip="Copies this full wallet address to your clipboard" data-copy="' + esc(h.address) + '" aria-label="Copy address ' + esc(h.address) + '">📋</button></td>' +
         '<td class="snap-bal">' + esc(human(h.value, s.decimals)) + '</td>' +
         '<td class="snap-pct">' + (pct != null ? pct.toFixed(2) + '%' : '—') + '</td></tr>';
     }).join('');
@@ -90,7 +90,7 @@
         '<tbody>' + rows + '</tbody></table>' +
       '</div>' +
       (shown < (s.total || 0)
-        ? '<div class="snap-more-wrap"><button class="btn btn-ghost btn-sm" id="snap-more" type="button">Show more (' + shown + ' of ' + s.total.toLocaleString('en-US') + ')</button></div>'
+        ? '<div class="snap-more-wrap"><button class="btn btn-ghost btn-sm" id="snap-more" type="button" data-tip="Loads the next block of holder rows into the table">Show more (' + shown + ' of ' + s.total.toLocaleString('en-US') + ')</button></div>'
         : '');
   }
 

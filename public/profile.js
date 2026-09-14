@@ -22,6 +22,7 @@ function renderAvatarPicker() {
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(a === chosenAvatar));
     b.setAttribute('aria-label', 'avatar ' + a);
+    b.setAttribute('data-tip', 'Uses ' + a + ' as your avatar once you save changes');
     b.textContent = a;
     b.addEventListener('click', () => { chosenAvatar = a; document.getElementById('pf-avatar').textContent = a; renderAvatarPicker(); });
     zone.appendChild(b);
@@ -39,6 +40,13 @@ function renderSwatches(zoneId, colors, current, onPick) {
     b.setAttribute('aria-checked', String(c === current));
     b.setAttribute('aria-label', c ? 'color ' + c : 'default');
     b.title = c || 'default';
+    /* The colour is the swatch — a description that reads it back as "#b4ff2b" prints a system value at
+       somebody looking straight at the thing it names. "this colour" is what a person would say. */
+    b.setAttribute('data-tip', zoneId === 'bg-swatches'
+      ? (c ? 'Paints your public wall background in this colour' : 'Puts your wall background back to the default')
+      : zoneId === 'site-accent-swatches'
+        ? (c ? 'Re-themes the whole site in this colour, just for you' : 'Puts the site colours back to classic green')
+        : (c ? 'Uses this colour as the accent on your public wall' : 'Puts your wall accent back to the default'));
     b.addEventListener('click', () => { onPick(c); renderSwatches(zoneId, colors, c, onPick); });
     zone.appendChild(b);
   }
@@ -81,6 +89,7 @@ function renderImgSlot(kind, url) {
     rm.className = 'react-btn';
     rm.textContent = '🗑';
     rm.setAttribute('aria-label', 'remove ' + kind + ' image');
+    rm.setAttribute('data-tip', 'Removes the ' + kind + ' image from your wall — you can upload another');
     rm.addEventListener('click', async () => {
       try {
         await api('/api/profile/image', { method: 'POST', body: { kind, remove: true } });
@@ -240,8 +249,8 @@ function renderWallets(me) {
       '<span class="wl-addr">' + esc(w.address) + '</span>' +
       (key ? '<span class="wl-tag">🔐 Sign-in key</span>' : '') +
       '<span class="wl-acts">' +
-        (canPick ? '<button class="btn btn-ghost btn-sm js-wl-2fa" data-a="' + esc(w.address) + '">Use for 2FA</button>' : '') +
-        '<button class="btn btn-ghost btn-sm js-wl-unlink" data-a="' + esc(w.address) + '">Unlink</button>' +
+        (canPick ? '<button class="btn btn-ghost btn-sm js-wl-2fa" data-tip="Asks this wallet to sign, making it your two-factor key" data-a="' + esc(w.address) + '">Use for 2FA</button>' : '') +
+        '<button class="btn btn-ghost btn-sm js-wl-unlink" data-tip="Unlinks this wallet, so it stops counting toward your boost" data-a="' + esc(w.address) + '">Unlink</button>' +
       '</span></li>';
   }).join('');
 }
@@ -517,8 +526,8 @@ function loadConnectedWallet() {
     body.innerHTML =
       '<p class="modal-note" style="margin-top:0.2rem;">Connect a wallet to see your <b>$SEND &amp; $GWC holdings, trade history and PNL</b> here — pulled live from the chain. It\'s a <b>free signature, never a transaction</b>, and it unlocks your Holder Boost too.</p>' +
       '<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.5rem;">' +
-        '<button class="btn btn-primary btn-sm" id="cw-connect">Connect wallet 🔗</button>' +
-        '<a class="btn btn-ghost btn-sm" href="/tracker.html">Or track any wallet 💼</a>' +
+        '<button class="btn btn-primary btn-sm" id="cw-connect" data-tip="Links a wallet by signature so this panel can read it">Connect wallet 🔗</button>' +
+        '<a class="btn btn-ghost btn-sm" href="/tracker.html" data-tip="Opens the tracker to follow any address read-only">Or track any wallet 💼</a>' +
       '</div>';
     const c = document.getElementById('cw-connect');
     if (c) c.addEventListener('click', linkWallet);
@@ -526,7 +535,7 @@ function loadConnectedWallet() {
   }
   if (wallets.length > 1) {
     sel.innerHTML = '<span class="modal-note" style="margin:0 0.4rem 0 0;">Wallet:</span>' +
-      wallets.map(w => '<button class="copy-btn cw-pick" data-addr="' + esc(w) + '">' + esc(fmtShort(w)) + '</button>').join(' ');
+      wallets.map(w => '<button class="copy-btn cw-pick" data-tip="Loads holdings and trades for this wallet into the panel below" data-addr="' + esc(w) + '">' + esc(fmtShort(w)) + '</button>').join(' ');
     sel.querySelectorAll('.cw-pick').forEach(b => b.addEventListener('click', () => {
       sel.querySelectorAll('.cw-pick').forEach(x => x.classList.remove('lit'));
       b.classList.add('lit');
@@ -641,7 +650,7 @@ async function loadAlertList() {
   list.innerHTML = names.map(n =>
     '<li class="alert-row">' +
       '<a class="alert-who" href="/u/' + encodeURIComponent(n) + '">@' + esc(n) + '</a>' +
-      '<button class="btn btn-ghost btn-sm alert-off" type="button" data-off="' + esc(n) + '" aria-label="Turn off alerts for ' + esc(n) + '">Turn off</button>' +
+      '<button class="btn btn-ghost btn-sm alert-off" type="button" data-tip="Stops the bell telling you when this wall posts" data-off="' + esc(n) + '" aria-label="Turn off alerts for ' + esc(n) + '">Turn off</button>' +
     '</li>').join('');
   note.textContent = names.length === 1 ? '1 wall. They are not told.' : names.length + ' walls. They are not told.';
   if (list._wired) return;

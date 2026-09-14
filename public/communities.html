@@ -51,7 +51,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Slides the list of site pages open or shut"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <header class="profile-hero comm-page comm-hero-top-page">
@@ -62,9 +62,9 @@
     <label class="sr-only" for="comm-addr">Token contract address</label>
     <span class="addr-field">
       <input class="addr-input" id="comm-addr" type="text" inputmode="text" spellcheck="false" placeholder="Token contract address (0x…)" pattern="0x[0-9a-fA-F]{40}" aria-describedby="comm-start-msg">
-      <button class="addr-clear" id="comm-addr-clear" type="button" aria-label="Clear the address" title="Clear the address" hidden>✕</button>
+      <button class="addr-clear" id="comm-addr-clear" type="button" aria-label="Clear the address" title="Clear the address" hidden data-tip="Empties the box and puts your cursor back in it">✕</button>
     </span>
-    <button class="btn btn-primary" id="comm-start-go" type="submit">🏛️ Start a community</button>
+    <button class="btn btn-primary" id="comm-start-go" type="submit" data-tip="Looks the pasted contract up on-chain, then opens its new community page">🏛️ Start a community</button>
   </form>
   <p class="comm-start-msg" id="comm-start-msg" role="status" aria-live="polite"></p>
 
@@ -118,14 +118,14 @@
 
     <div class="comm-bar">
       <div class="comm-tabs" role="group" aria-label="Filter communities by status">
-        <button class="comm-tab is-on" type="button" aria-pressed="true" data-cstatus="live">🟢 Live</button>
-        <button class="comm-tab" type="button" aria-pressed="false" data-cstatus="pending">⏳ Starting up</button>
+        <button class="comm-tab is-on" type="button" aria-pressed="true" data-cstatus="live" data-tip="Lists only the communities that have gone live">🟢 Live</button>
+        <button class="comm-tab" type="button" aria-pressed="false" data-cstatus="pending" data-tip="Lists only communities still gathering members to go live">⏳ Starting up</button>
       </div>
       <div class="comm-sorts" role="group" aria-label="Sort communities">
-        <button class="sort-btn is-on" type="button" data-csort="active" aria-pressed="true">🔥 Most active</button>
-        <button class="sort-btn" type="button" data-csort="members" aria-pressed="false">👥 Members</button>
-        <button class="sort-btn" type="button" data-csort="mcap" aria-pressed="false">💰 Market cap</button>
-        <button class="sort-btn" type="button" data-csort="new" aria-pressed="false">🆕 New</button>
+        <button class="sort-btn is-on" type="button" data-csort="active" aria-pressed="true" data-tip="Reorders the grid so the busiest communities come first">🔥 Most active</button>
+        <button class="sort-btn" type="button" data-csort="members" aria-pressed="false" data-tip="Reorders the grid by how many members each one has">👥 Members</button>
+        <button class="sort-btn" type="button" data-csort="mcap" aria-pressed="false" data-tip="Reorders the grid by the market cap of each token">💰 Market cap</button>
+        <button class="sort-btn" type="button" data-csort="new" aria-pressed="false" data-tip="Reorders the grid to put the newest communities first">🆕 New</button>
       </div>
     </div>
     <p class="comm-status" id="comm-status" role="status" aria-live="polite"></p>
@@ -158,6 +158,7 @@
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

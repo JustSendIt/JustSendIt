@@ -89,11 +89,11 @@
     const id = 'prop-t-' + p.id;
     return '<div class="prop-vote" data-pid="' + p.id + '">' +
       '<div class="prop-ballot" role="radiogroup" aria-labelledby="' + id + '">' +
-        '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="0"  data-choice="yes">👍 Yes</button>' +
-        '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="-1" data-choice="no">👎 No</button>' +
-        '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="-1" data-choice="abstain">🤷 Abstain</button>' +
+        '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="0"  data-tip="Picks yes — press Cast my vote to send it" data-choice="yes">👍 Yes</button>' +
+        '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="-1" data-tip="Picks no — press Cast my vote to send it" data-choice="no">👎 No</button>' +
+        '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="-1" data-tip="Picks abstain — press Cast my vote to send it" data-choice="abstain">🤷 Abstain</button>' +
       '</div>' +
-      '<button class="btn btn-primary btn-sm prop-cast" type="button" disabled>Cast my vote</button>' +
+      '<button class="btn btn-primary btn-sm prop-cast" type="button" data-tip="Sends your vote after a second press — votes are final" disabled>Cast my vote</button>' +
       '<p class="prop-gate comm-gate-msg" role="status" aria-live="polite" hidden></p>' +
     '</div>';
   }
@@ -124,8 +124,8 @@
     if (p.reason && WHY[p.reason]) inner += '<p class="prop-why">' + esc(WHY[p.reason]) + '</p>';
     if (p.status === 'draft' && p.isMine) {
       inner += '<div class="prop-draft-actions">' +
-        '<button class="btn btn-primary btn-sm prop-open" type="button" data-pid="' + p.id + '">Open for voting</button>' +
-        '<button class="btn btn-ghost btn-sm prop-del" type="button" data-pid="' + p.id + '">Delete</button>' +
+        '<button class="btn btn-primary btn-sm prop-open" type="button" data-tip="Opens this draft for the community to vote — cannot be undone" data-pid="' + p.id + '">Open for voting</button>' +
+        '<button class="btn btn-ghost btn-sm prop-del" type="button" data-tip="Deletes this draft after a second press — cannot be undone" data-pid="' + p.id + '">Delete</button>' +
         '<p class="prop-note">Opening freezes who may vote, so it cannot be undone.</p></div>';
     }
 

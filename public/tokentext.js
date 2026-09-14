@@ -1,6 +1,6 @@
 /* ===== tokentext.js — tokens as social objects =====
  * 1) window.richText(text, tokens) → SAFE HTML for post / comment text: every $TICKER the server resolved (plus $SEND /
- *    $GWC always) becomes a <button class="tok-chip"> that opens the shared token-detail popup; any raw 0x… address the
+ *    $GWC always) becomes a button.tok-chip element that opens the shared token-detail popup; any raw 0x… address the
  *    server could NOT resolve is shown shortened in <code> with a copy button (app.js handles data-copy).
  * 2) window.tokenCommunityTag(addr, info, sym)   → the small 🏘️ Community / ＋ Start community tag (HTML).
  *    window.tokenCommunityPanel(addr, info, sym) → the fuller section used inside the token-detail popup (HTML).
@@ -36,13 +36,13 @@
   }
   function chipHTML(t) {
     var sym = '$' + esc(t.symbol);
-    return '<button type="button" class="tok-chip" data-addr="' + esc(t.addr) + '" data-symbol="' + esc(t.symbol) + '"' + (t.name ? ' data-name="' + esc(t.name) + '"' : '') +
+    return '<button type="button" class="tok-chip" data-tip="Opens the full on-chain detail for this token" data-addr="' + esc(t.addr) + '" data-symbol="' + esc(t.symbol) + '"' + (t.name ? ' data-name="' + esc(t.name) + '"' : '') +
       ' aria-label="' + sym + ' — view token details">' + sym + '</button>';
   }
   function addrHTML(a) {
     var lower = a.toLowerCase(), shortA = shortAddr(a);
     return '<code class="tok-addr" title="' + esc(a) + '">' + esc(shortA) + '</code>' +
-      '<button type="button" class="tok-copy" data-copy="' + esc(lower) + '" aria-label="Copy address ' + esc(shortA) + '">📋</button>';
+      '<button type="button" class="tok-copy" data-tip="Copies this full address to your clipboard" data-copy="' + esc(lower) + '" aria-label="Copy address ' + esc(shortA) + '">📋</button>';
   }
   // One pass over the ALREADY-ESCAPED text: a $WORD or a 0x address is swapped for markup, everything else is left as-is.
   // Single pass means generated markup (which contains addresses / $SYMBOLs itself) is never re-scanned.
@@ -120,10 +120,10 @@
       var live = info.status === 'live', q = Number(info.qualCount) || 0;
       inner = '<p class="tok-comm-txt"><b>' + symTxt + ' has a community</b> — ' + (live ? '<span class="tok-comm-live">🟢 LIVE</span>' : '<span class="tok-comm-forming">⏳ forming</span>') +
         ' · ' + memberTxt(info) + (q ? ' (' + q + ' verified holder' + (q === 1 ? '' : 's') + ')' : '') + (info.official ? ' · <span class="tok-comm-offtxt">official</span>' : '') + '</p>' +
-        '<div class="tok-comm-acts"><a class="btn btn-sm btn-primary" href="/community.html?id=' + encodeURIComponent(info.id) + '">🏘️ Open community →</a></div>';
+        '<div class="tok-comm-acts"><a class="btn btn-sm btn-primary" data-tip="Opens the page for this token community" href="/community.html?id=' + encodeURIComponent(info.id) + '">🏘️ Open community →</a></div>';
     } else if (addr) {
       inner = '<p class="tok-comm-txt">No ' + symTxt + ' community yet.</p>' +
-        '<div class="tok-comm-acts"><a class="btn btn-sm btn-ghost" href="/communities.html?start=' + esc(addr) + '">＋ Start a community</a></div>';
+        '<div class="tok-comm-acts"><a class="btn btn-sm btn-ghost" data-tip="Opens the start-a-community form with this address filled in" href="/communities.html?start=' + esc(addr) + '">＋ Start a community</a></div>';
     } else inner = '<p class="tok-comm-txt">Community info isn’t available for this token.</p>';
     return '<section class="tok-comm-panel" aria-label="Community"><h3 class="tok-comm-h">🏘️ Community</h3>' + inner +
       '<p class="tok-comm-note">Communities are holder-run hangouts on $Send — not an endorsement of the token.</p></section>';
@@ -201,7 +201,7 @@
     e.preventDefault();
     e._tokChip = true; // marker for any row handler that wants to ignore chip clicks explicitly
     var addr = normAddr(chip.getAttribute('data-addr')); if (!addr) return;
-    try { chip.focus(); } catch (_) {} // Safari/iOS don't focus a <button> on click — focus it so the popup restores focus HERE, not <body>
+    try { chip.focus(); } catch (_) {} // Safari/iOS don't focus a button element on click — focus it so the popup restores focus HERE, not <body>
     if (window.TokenModal && window.TokenModal.open) TokenModal.open(addr, { symbol: chip.getAttribute('data-symbol') || '', name: chip.getAttribute('data-name') || '' });
     else if (window.sendToast) sendToast('Token detail isn’t available on this page.');
   }, true);

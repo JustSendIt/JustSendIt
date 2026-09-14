@@ -338,7 +338,7 @@ function trkStat(label, val, cls) {
   return '<div class="hstat"><div class="lbl">' + label + '</div><div class="val ' + (cls || '') + '">' + val + '</div></div>';
 }
 function trkToggle(key, on, label) {
-  return '<button class="react-btn' + (on ? ' lit' : '') + '" data-trk-toggle="' + key + '" aria-pressed="' + on + '">' + (on ? '✓ ' : '') + label + '</button>';
+  return '<button class="react-btn' + (on ? ' lit' : '') + '" data-trk-toggle="' + key + '" aria-pressed="' + on + '" data-tip="Turns this report option on or off and remembers your choice">' + (on ? '✓ ' : '') + label + '</button>';
 }
 function trkTradeTable(t, exp) {
   const rows = t.trades.slice(0, 40).map(tr => {

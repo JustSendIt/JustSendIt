@@ -38,7 +38,7 @@
   </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the page links menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <header class="np-hero">
@@ -53,14 +53,14 @@
     <!-- wallet tracking moved to its own page -->
     <div class="np-msg wl-trk-card">
       <span>💼 <b>Wallet tracking has its own page now</b> — holdings, trades, cost basis and PNL for any address, with instant reopen.</span>
-      <a class="btn btn-sm btn-gold" href="tracker.html">Open the Wallet Tracker →</a>
+      <a class="btn btn-sm btn-gold" href="tracker.html" data-tip="Goes to the wallet tracker page">Open the Wallet Tracker →</a>
     </div>
 
     <!-- TOKEN WATCHLIST -->
     <section id="wl-token-panel" tabindex="-1" aria-label="Saved tokens" style="padding:0.4rem 0 0;">
       <div class="wl-bar">
         <p class="np-status" id="wl-status"><span class="np-live-dot" aria-hidden="true"></span> Loading your tokens…</p>
-        <a class="btn btn-sm btn-primary wl-cta" href="newpairs.html">📡 Find tokens in Live New Pairs →</a>
+        <a class="btn btn-sm btn-primary wl-cta" href="newpairs.html" data-tip="Opens the New Pairs radar to find tokens">📡 Find tokens in Live New Pairs →</a>
       </div>
       <ul class="np-list" id="wl-list" aria-label="Saved tokens"></ul>
     </section>
@@ -94,6 +94,7 @@
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

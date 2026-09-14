@@ -42,10 +42,10 @@ function postEl(p) {
         '<svg class="vote-ico vote-static" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15L4 7h12z"/></svg>' +
       '</div>'
     : '<div class="vote" role="group" aria-label="Score ' + sTxt + '. Upvote or downvote.">' +
-        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-vote="up" aria-pressed="' + up + '" aria-label="Upvote">' +
+        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-tip="Pushes this post higher in the Top ranking; tap again to undo" data-vote="up" aria-pressed="' + up + '" aria-label="Upvote">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5l6 8H4z"/></svg></button>' +
         '<span class="vote-score' + (p.score < 0 ? ' neg' : '') + '" aria-hidden="true">' + sTxt + '</span>' +
-        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-vote="down" aria-pressed="' + down + '" aria-label="Downvote">' +
+        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-tip="Pushes this post lower in the Top ranking; tap again to undo" data-vote="down" aria-pressed="' + down + '" aria-label="Downvote">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 15L4 7h12z"/></svg></button>' +
         '<span class="sr-only" role="status" data-vote-status></span>' +
       '</div>';
@@ -79,10 +79,10 @@ function postEl(p) {
     '<div class="post-actions">' +
       voteHTML +
       '<span class="act-sep" aria-hidden="true"></span>' +
-      '<button class="react-btn' + (p.myReactions.includes('fire') ? ' lit' : '') + '" data-react="fire" aria-label="React with fire">🔥 <span>' + p.reactions.fire + '</span></button>' +
-      '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-react="rocket" aria-label="React with rocket">🚀 <span>' + p.reactions.rocket + '</span></button>' +
-      '<button class="react-btn" data-comments aria-expanded="false" aria-label="Show comments">💬 <span>' + p.comments + '</span></button>' +
-      (p.mine && !p.call ? '<button class="react-btn post-del" data-del aria-label="Delete your post">🗑</button>' : '') + // Send Calls are final — no delete
+      '<button class="react-btn' + (p.myReactions.includes('fire') ? ' lit' : '') + '" data-tip="Adds your fire reaction; it does not change the ranking" data-react="fire" aria-label="React with fire">🔥 <span>' + p.reactions.fire + '</span></button>' +
+      '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-tip="Adds your rocket reaction; it does not change the ranking" data-react="rocket" aria-label="React with rocket">🚀 <span>' + p.reactions.rocket + '</span></button>' +
+      '<button class="react-btn" data-tip="Opens or hides the replies under this post" data-comments aria-expanded="false" aria-label="Show comments">💬 <span>' + p.comments + '</span></button>' +
+      (p.mine && !p.call ? '<button class="react-btn post-del" data-tip="Deletes your post for good — tap twice to confirm" data-del aria-label="Delete your post">🗑</button>' : '') + // Send Calls are final — no delete
     '</div>' +
     '<div class="comments" hidden></div>';
   return el;
@@ -147,6 +147,7 @@ async function loadFeed(reset = true) {
       btn.className = 'btn btn-sm';
       btn.type = 'button';
       btn.textContent = '↻ Try again';
+      btn.setAttribute('data-tip', 'Asks for the wall feed again');
       btn.addEventListener('click', () => loadFeed(true));
       box.append(p1, p2, btn);
       feedEl.appendChild(box);
@@ -265,7 +266,7 @@ async function renderComments(post, id) {
     if (AUTH.user) {
       const form = document.createElement('form');
       form.className = 'comment-form';
-      form.innerHTML = '<input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit">Reply</button>';
+      form.innerHTML = '<input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Posts your comment publicly under this post">Reply</button>';
       form.addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const input = form.querySelector('input');

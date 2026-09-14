@@ -61,7 +61,7 @@
   }
   const isUPage = () => !!document.getElementById('pub-username');
   function flagHTML(name) {
-    return '<button type="button" class="mute-flag" data-mute-name="' + esc(name) + '" aria-haspopup="dialog" aria-expanded="false" aria-label="You muted @' + esc(name) + ' — options">🔇</button>';
+    return '<button type="button" class="mute-flag" data-tip="Opens unmute options for this muted sender" data-mute-name="' + esc(name) + '" aria-haspopup="dialog" aria-expanded="false" aria-label="You muted @' + esc(name) + ' — options">🔇</button>';
   }
 
   /* ---------------- shared popdown (one per page) ---------------- */
@@ -123,8 +123,8 @@
       '<p class="mute-pop-title" id="mute-pop-title">🔇 You muted <b>@' + esc(name) + '</b></p>' +
       '<p class="mute-pop-sub">Their posts, calls and comments stay hidden. They are never told.</p>' +
       '<div class="mute-pop-actions">' +
-        '<button type="button" class="btn btn-primary btn-sm" data-pop-act="unmute">🔊 Unmute @' + esc(name) + '</button>' +
-        '<button type="button" class="btn btn-ghost btn-sm" data-pop-act="keep">Keep muted</button>' +
+        '<button type="button" class="btn btn-primary btn-sm" data-tip="Makes their posts, calls and comments visible again" data-pop-act="unmute">🔊 Unmute @' + esc(name) + '</button>' +
+        '<button type="button" class="btn btn-ghost btn-sm" data-tip="Closes this menu and leaves the mute in place" data-pop-act="keep">Keep muted</button>' +
       '</div>';
     pop.hidden = false;
     flag.setAttribute('aria-expanded', 'true');
@@ -281,7 +281,7 @@
     // signed out: the same control, but the tap opens sign-in (no menu to show yet)
     trg.setAttribute('aria-haspopup', signedIn() ? 'menu' : 'dialog');
     menu.innerHTML =
-      '<button type="button" class="mod-item' + (muted ? ' mod-item-unmute' : ' mod-item-mute') + '" role="menuitem" tabindex="-1" data-mod-act="' + (muted ? 'unmute' : 'mute') + '" aria-describedby="mod-hint">' +
+      '<button type="button" class="mod-item' + (muted ? ' mod-item-unmute' : ' mod-item-mute') + '" role="menuitem" tabindex="-1" data-tip="Mutes or unmutes them for you — a mute also drops your alerts" data-mod-act="' + (muted ? 'unmute' : 'mute') + '" aria-describedby="mod-hint">' +
         '<span class="mod-ico" aria-hidden="true">' + (muted ? '🔊' : '🔇') + '</span> ' + (muted ? 'Unmute' : 'Mute') + ' @' + esc(name) + '</button>' +
       '<p class="mod-hint" id="mod-hint" role="none">' + (muted
         ? 'Unmuting shows @' + esc(name) + '’s posts, calls and comments again.'

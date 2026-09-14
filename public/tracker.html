@@ -53,7 +53,7 @@
   </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the page links menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <header class="np-hero trk-hero">
@@ -76,7 +76,7 @@
         <li><span aria-hidden="true">⚡</span> <b>Instant reopen</b> — your last report is saved to your account, so it shows immediately and refreshes live in the background.</li>
       </ul>
       <p class="modal-note">Read-only, always: the tracker only <i>reads</i> public data. It never asks you to sign a transaction and can never move funds.</p>
-      <button class="btn btn-primary" id="trk-signin" type="button">Sign in to track wallets 🚀</button>
+      <button class="btn btn-primary" id="trk-signin" type="button" data-tip="Opens the sign-in panel — tracked wallets save to your account">Sign in to track wallets 🚀</button>
     </div>
 
     <!-- ===== SIGNED-IN LAYOUT ===== -->
@@ -106,7 +106,7 @@
           <p class="trk-err" id="trk-addr-err" hidden></p>
           <label class="f-label" for="trk-label">Label <span class="trk-opt">(optional)</span></label>
           <input class="addr-input" id="trk-label" maxlength="40" placeholder="e.g. Whale I'm watching" autocomplete="off">
-          <button class="btn btn-gold btn-sm trk-add-btn" type="submit" id="trk-add-btn">Track ➕</button>
+          <button class="btn btn-gold btn-sm trk-add-btn" type="submit" id="trk-add-btn" data-tip="Adds the address above to your list and opens its report">Track ➕</button>
           <p class="modal-note" id="trk-addr-help">Any Robinhood Chain address works — a wallet, a friend's, a whale. Labels are private to you.</p>
         </form>
       </aside>
@@ -114,14 +114,14 @@
       <section class="trk-main" aria-labelledby="trk-main-h">
         <div class="trk-main-head">
           <h2 class="display trk-h2" id="trk-main-h">Report</h2>
-          <button class="btn btn-ghost btn-sm" id="trk-refresh" type="button" hidden>↻ Refresh</button>
+          <button class="btn btn-ghost btn-sm" id="trk-refresh" type="button" hidden data-tip="Reads the selected wallet from the chain again">↻ Refresh</button>
         </div>
         <!-- Everything you own, added up. Sits above the single-wallet report because "what am I worth
              across all of it" is the question people open this page with. -->
         <section class="trk-comb" id="trk-comb" hidden aria-labelledby="trk-comb-h">
           <div class="trk-comb-head">
             <h3 class="trk-comb-h" id="trk-comb-h">🔗 All your wallets, combined</h3>
-            <button class="btn btn-ghost btn-sm" id="trk-comb-run" type="button">Add it all up 🧮</button>
+            <button class="btn btn-ghost btn-sm" id="trk-comb-run" type="button" data-tip="Reads each linked wallet and totals them into one figure">Add it all up 🧮</button>
           </div>
           <p class="trk-comb-sub" id="trk-comb-sub">Your linked wallets are always here — you proved they're yours, so they never use a tracked slot.</p>
           <div class="trk-comb-totals" id="trk-comb-totals" hidden></div>
@@ -184,6 +184,7 @@
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

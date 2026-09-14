@@ -366,6 +366,7 @@
     if (typeof onClear === 'function') {
       const rm = document.createElement('button');
       rm.type = 'button'; rm.className = 'media-preview-rm'; rm.title = 'Remove'; rm.setAttribute('aria-label', 'Remove attached media'); rm.textContent = '✕';
+      rm.setAttribute('data-tip', 'Takes this attachment off the post you are writing');
       rm.addEventListener('click', () => {
         onClear();
         // the ✕ we're standing on just got removed — move focus to the composer's text field so it doesn't fall to <body>
@@ -386,7 +387,7 @@
     const isGif = /\.gif$/i.test(escUrl);
     const img = '<img class="post-img' + (isGif ? ' post-gif' : '') + '"' + (isGif ? ' data-gif="1"' : '') + ' src="' + escUrl + '" alt="' + (isGif ? 'Animated GIF' : 'Media') + ' posted by ' + who + '" loading="lazy">';
     // every animated GIF gets a real, keyboard-reachable pause/play control (WCAG 2.2.2) — a looping <img> can't be stopped any other way
-    return isGif ? '<span class="gif-wrap">' + img + '<button class="gif-toggle" type="button" aria-pressed="false" aria-label="Pause animated GIF" title="Pause">⏸</button></span>' : img;
+    return isGif ? '<span class="gif-wrap">' + img + '<button class="gif-toggle" type="button" data-tip="Freezes this GIF on one frame, or lets it move again" aria-pressed="false" aria-label="Pause animated GIF" title="Pause">⏸</button></span>' : img;
   };
 
   // GIF pause/play: an animated <img> can't be paused by CSS, so "pause" swaps in a same-origin canvas snapshot (a canvas

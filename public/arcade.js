@@ -500,7 +500,7 @@
     if (S.mode === 'signedout') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🔒 Sign in to fly</p>' +
         '<p>Rocket Run is a free daily bonus for signed-in senders — the boost has to attach to an account. It costs nothing, there is nothing to put in, and the only outcome is a temporary Send Power boost.</p>' +
-        '<div class="arc-msg-actions"><button class="btn btn-sm btn-primary" type="button" data-arc="signin">Sign In 🚀</button></div></div>';
+        '<div class="arc-msg-actions"><button class="btn btn-sm btn-primary" type="button" data-tip="Opens the sign-in box so you can play" data-arc="signin">Sign In 🚀</button></div></div>';
     } else if (S.mode === 'ready') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🎟️ One flight, whenever you’re ready</p>' +
         '<p>Take off, watch the multiplier climb, and cash out before the hidden crash point. Cash out and it becomes a Send Power boost for 24 hours; leave it too long and today’s flight simply ends with no boost.</p>' +
@@ -536,7 +536,7 @@
     } else if (S.mode === 'error') {
       html = '<div class="arc-msg arc-msg--warn"><p class="arc-msg-h">⚠️ Couldn’t reach mission control</p>' +
         '<p>' + esc(S.err || 'Something went wrong') + '.</p>' +
-        '<div class="arc-msg-actions"><button class="btn btn-sm btn-ghost" type="button" data-arc="retry">↻ Try again</button></div></div>';
+        '<div class="arc-msg-actions"><button class="btn btn-sm btn-ghost" type="button" data-tip="Checks the server again for the state of your flight" data-arc="retry">↻ Try again</button></div></div>';
     }
     panel.innerHTML = html;
     paintCounts();
@@ -704,7 +704,7 @@
     else if (what === 'retry') { S.err = ''; setMode('loading'); loadState(); }
   });
 
-  // Space / Enter launch and cash out from anywhere on the page. The button is a real <button>, so when IT has
+  // Space / Enter launch and cash out from anywhere on the page. The button is a real button element, so when IT has
   // focus the browser already does this (and suppresses the space-scroll) — we only step in when focus is
   // elsewhere, and then we must eat the keypress so the page doesn't scroll underneath the game.
   function typingTarget(t) {
@@ -717,7 +717,7 @@
   }
   // Space/Enter as a game shortcut, but ONLY in the safe direction and only while a flight is actually up.
   // It must never LAUNCH from a page-wide key: the daily flight is irreversible, and someone pressing Space
-  // to scroll the page would burn it without ever meaning to. Launching is the real <button>'s job (focus it
+  // to scroll the page would burn it without ever meaning to. Launching is the real button element's job (focus it
   // and press — that already works). Cashing out early is always safe, so that one is worth a global key.
   document.addEventListener('keydown', function (e) {
     if (e.key !== ' ' && e.key !== 'Spacebar' && e.key !== 'Enter') return;

@@ -438,7 +438,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" data-tip="Shows or hides the list of page links" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <div class="ticker" aria-hidden="true">
@@ -996,6 +996,12 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
           <span class="lbl">Unknown is an answer, not a zero</span>
           <p>A balance that cannot be read is stored as nothing at all, never as zero, and if any wallet in a cluster is unreadable the whole cluster reports <strong>unknown</strong>. This is the single most important rule in the whole scanner. A tool that quietly recorded an unreadable balance as &ldquo;sold everything&rdquo; would be inventing rugs that never happened &mdash; and it would be most likely to do it exactly when the chain was congested, which is when people are most anxious to check.</p>
           <p>The same care governs the green verdict. A coin whose scan has not finished is <em>not</em> treated as clean: the verdict stays unanswered, and the Hot Feed asks for a positive all-clear rather than merely the absence of a problem. An unfinished check is an open question, not a pass.</p>
+          <p>That describes the bar the site sets for itself. A reader who sets filters of their own is judged
+          against those instead, and earns the same wording for clearing them &mdash; the claim is attributed by a
+          different icon, by a visible byline reading <em>by your filters</em>, and by the spoken line, rather than
+          by colour, which reaches neither a screen reader nor a colour-blind reader. Four checks are unwaivable by
+          any setting: a honeypot, a coin dumping as it is read, block-0 buyers who have already sold, and the risk
+          model&rsquo;s own bottom tier.</p>
         </div>
         <p>Two limits worth knowing. The green verdict is gated on <strong>block 0 only</strong>: the first-ten cohort is shown to you but does not change the score, so a coin with a clean first block whose next nine buyers all dumped still shows a rocket, with the contradiction visible in the panel for anyone who opens it. And the per-wallet percentages are shares of <em>total supply</em> while the summary and the verdict use <em>tradeable float</em> &mdash; two denominators on one screen, so compare like with like.</p>
         <p>The data comes from three public sources: the chain's own node, a block explorer, and a price service. The score is a set of quick heuristics on public data. It is <strong>not</strong> an audit, not a guarantee, and not advice.</p>
@@ -1113,6 +1119,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

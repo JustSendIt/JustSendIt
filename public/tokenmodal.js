@@ -16,7 +16,7 @@
       '<div class="tm-dialog" role="dialog" aria-modal="true" aria-labelledby="tm-title">' +
         '<div class="tm-head">' +
           '<h2 id="tm-title" class="tm-title">Token detail</h2>' +
-          '<button class="tm-x" type="button" data-tm-close aria-label="Close token detail">✕</button>' +
+          '<button class="tm-x" type="button" data-tm-close data-tip="Closes this popup and returns you to the page" aria-label="Close token detail">✕</button>' +
         '</div>' +
         '<div class="tm-body" id="tm-body"></div>' +
       '</div>';

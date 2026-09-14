@@ -88,9 +88,84 @@ try {
   for (const k of Object.keys(WEIGHTS)) if (!RISK[k]) note('public/newpairs.js', 'weights "' + k + '", which the server does not score');
 } catch (e) { note('newpairs risk parity', 'could not be checked: ' + e.message); }
 
+/* ---- 7. every control carries a description ----
+   "no button without a quick popup description" — enforced here rather than swept once, because a
+   sweep is true on the day it lands and false the next time somebody adds a button. tips.js reads
+   data-tip; a control without one falls back to its aria-label, which is a LABEL, not a description,
+   and only exists for icon-only controls anyway.
+
+   Best effort by design: these are string templates, not a DOM, so a <button whose attributes contain
+   a bare `>` cannot be delimited. Those are reported as unparseable rather than silently passed. */
+const TIPPED = /\bdata-tip\s*=/;
+const SKIP = /\bdata-tip-skip\b/;          // opt out, deliberately ugly so it has to be argued for
+const lineOf = (s, i) => s.slice(0, i).split('\n').length;
+let tipped = 0, untipped = [];
+/* A control is whatever the READER takes for a button, which is not the same set the parser sees:
+   <a class="btn"> is styled identically to <button class="btn"> and nobody can tell them apart, and
+   [role=button] is one by its own declaration. tips.js already answers all three; this is the check
+   catching up with it. Plain navigational links are NOT in scope — a link that looks like a link is
+   explained by where it goes. */
+const CONTROLS = [
+  /<button\b([^>]*)>/gi,
+  /<a\b([^>]*\bclass="[^"]*\bbtn\b[^"]*"[^>]*)>/gi,
+  /<[a-z]+\b([^>]*\brole="button"[^>]*)>/gi,
+];
+const scanForButtons = (rel, src) => {
+  const seen = new Set();
+  for (const re of CONTROLS) {
+    for (const m of src.matchAll(re)) {
+      if (seen.has(m.index)) continue;          // role=button on a <button> is one control, not two
+      seen.add(m.index);
+      const attrs = m[1] || '';
+      if (SKIP.test(attrs)) continue;
+      if (TIPPED.test(attrs)) { tipped++; continue; }
+      untipped.push(rel + ':' + lineOf(src, m.index));
+    }
+  }
+};
+for (const f of htmlFiles) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'));
+for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'));
+if (untipped.length) {
+  note('button descriptions', untipped.length + ' control' + (untipped.length === 1 ? '' : 's') +
+    ' have no data-tip (tips.js has nothing to show):\n      ' + untipped.join('\n      '));
+}
+
+/* ---- 8. a description is not a second label ----
+   A popup that repeats the word already printed on the button is noise the reader has to dismiss. This
+   catches the laziest version of that: data-tip identical to the control's own visible text. */
+for (const f of htmlFiles) {
+  const src = readFileSync(path.join(PUBLIC, f), 'utf8');
+  for (const m of src.matchAll(/<button\b([^>]*)>([\s\S]{0,200}?)<\/button>/gi)) {
+    const tip = (/\bdata-tip\s*=\s*"([^"]*)"/.exec(m[1] || '') || [])[1];
+    if (!tip) continue;
+    const words = t => t.replace(/<[^>]*>/g, '').replace(/[^a-zA-Z ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+    if (words(tip) && words(tip) === words(m[2])) {
+      note('public/' + f + ':' + lineOf(src, m.index), 'data-tip just repeats the button\'s own label ("' + tip + '")');
+    }
+  }
+}
+
+/* ---- 9. controls built with createElement, which checks 7 and 8 cannot see ----
+   Checks 7 and 8 scan HTML text. A control assembled as DOM — createElement('button') then setAttribute —
+   never appears as a "<button" anywhere, so it passes them while having no description at all. That is not
+   hypothetical: it is how the nav's "Sign In" and the site-wide SEND IT button both shipped bare while the
+   check reported a clean tree. Heuristic by necessity — it looks for a data-tip assignment in the same
+   rough block as the construction — so it is a nudge, not a proof. */
+for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) {
+  const src = readFileSync(path.join(PUBLIC, f), 'utf8');
+  for (const m of src.matchAll(/createElement\(\s*['"](button|a)['"]\s*\)/gi)) {
+    const block = src.slice(m.index, m.index + 1200);          // the construction and its attribute run
+    if (/data-tip/.test(block)) continue;
+    if (/data-tip-skip/.test(block)) continue;
+    // an <a> is only a control when it is styled as one; a plain link explains itself by where it goes
+    if (m[1].toLowerCase() === 'a' && !/className\s*=\s*['"][^'"]*\bbtn\b/.test(block) && !/classList\.add\([^)]*\bbtn\b/.test(block)) continue;
+    note('public/' + f + ':' + lineOf(src, m.index), 'builds a <' + m[1] + '> control in script with no data-tip nearby');
+  }
+}
+
 if (problems.length) {
   console.error('✗ ' + problems.length + ' problem' + (problems.length === 1 ? '' : 's') + ':\n');
   for (const p of problems) console.error('  · ' + p);
   process.exit(1);
 }
-console.log('✓ ' + jsFiles.length + ' JS files parse · ' + htmlFiles.length + ' pages checked · CSP, assets, .dockerignore and risk parity all clean');
+console.log('✓ ' + jsFiles.length + ' JS files parse · ' + htmlFiles.length + ' pages checked · ' + tipped + ' controls described · CSP, assets, .dockerignore and risk parity all clean');

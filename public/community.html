@@ -48,12 +48,12 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Slides the list of site pages open or shut"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <main id="main" style="padding:0.5rem 1.25rem 4rem;">
   <div class="wrap comm-page" style="max-width:680px;">
-    <p class="comm-back"><a class="btn btn-ghost btn-sm" href="communities.html">← All communities</a></p>
+    <p class="comm-back"><a class="btn btn-ghost btn-sm" href="communities.html" data-tip="Goes back to the list of communities">← All communities</a></p>
     <header class="comm-hero card" id="comm-hero"><p class="modal-note" style="text-align:center; padding:1.5rem;">Loading community… 🏘️</p></header>
 
     <section class="comm-members card" id="comm-members" aria-labelledby="comm-members-h" hidden>
@@ -65,7 +65,7 @@
     <section class="comm-props card" id="comm-props" aria-labelledby="comm-props-h" hidden>
       <div class="comm-props-head">
         <h2 class="comm-members-h" id="comm-props-h">🗳️ Proposals</h2>
-        <button class="btn btn-primary btn-sm" id="prop-new" type="button" hidden>✍️ New proposal</button>
+        <button class="btn btn-primary btn-sm" id="prop-new" type="button" hidden data-tip="Opens the form for writing something for holders to vote on">✍️ New proposal</button>
       </div>
       <p class="prop-intro">Verified holders decide. Round one needs <b>50%</b> of yes-and-no votes to promote; round two needs <b>75%</b> to pass. Abstaining helps reach quorum and never counts against a proposal.</p>
       <form class="prop-form" id="prop-form" hidden>
@@ -74,8 +74,8 @@
         <label class="sr-only" for="prop-body">Proposal detail</label>
         <textarea id="prop-body" maxlength="2000" rows="4" placeholder="Explain it. Paste a contract address → it becomes a clickable $TICKER"></textarea>
         <div class="prop-form-row">
-          <button class="btn btn-primary btn-sm" id="prop-save" type="submit">Save draft</button>
-          <button class="btn btn-ghost btn-sm" id="prop-cancel" type="button">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="prop-save" type="submit" data-tip="Saves it as a draft; voting starts when you open it">Save draft</button>
+          <button class="btn btn-ghost btn-sm" id="prop-cancel" type="button" data-tip="Puts the form away without saving what you wrote">Cancel</button>
           <span class="hint" id="prop-count" aria-hidden="true">2000</span>
         </div>
         <p class="modal-note" id="prop-status" role="status" aria-live="polite"></p>
@@ -87,7 +87,7 @@
     <section class="comm-snaps card" id="comm-snaps" aria-labelledby="comm-snaps-h" hidden>
       <div class="comm-props-head">
         <h2 class="comm-members-h" id="comm-snaps-h">📸 Holder snapshots</h2>
-        <button class="btn btn-ghost btn-sm" id="snap-take" type="button" hidden>📸 Take a snapshot</button>
+        <button class="btn btn-ghost btn-sm" id="snap-take" type="button" hidden data-tip="Reads the chain now to record who holds the token">📸 Take a snapshot</button>
       </div>
       <p class="prop-intro">A snapshot reads the chain at that moment and records every address holding the token, with how much each one holds. The newest is shown first.</p>
       <p class="modal-note" id="snap-status" role="status" aria-live="polite"></p>
@@ -101,8 +101,8 @@
            is never a separate thing to get wrong. The server refuses the private feed outright to anyone
            without a verified slot — this control is the door, not the lock. -->
       <div class="cw-tabs" role="tablist" aria-label="Which wall">
-        <button class="cw-tab is-on" id="cw-tab-public" type="button" role="tab" aria-selected="true" aria-controls="comm-wall-panel" tabindex="0" data-wall="public">🌐 Public wall</button>
-        <button class="cw-tab" id="cw-tab-holders" type="button" role="tab" aria-selected="false" aria-controls="comm-wall-panel" tabindex="-1" data-wall="holders">🔒 Holders only</button>
+        <button class="cw-tab is-on" id="cw-tab-public" type="button" role="tab" aria-selected="true" aria-controls="comm-wall-panel" tabindex="0" data-wall="public" data-tip="Switches to the posts anyone can read — clears any draft">🌐 Public wall</button>
+        <button class="cw-tab" id="cw-tab-holders" type="button" role="tab" aria-selected="false" aria-controls="comm-wall-panel" tabindex="-1" data-wall="holders" data-tip="Switches to the posts only verified holders see — clears any draft">🔒 Holders only</button>
       </div>
       <p class="cw-note" id="cw-note"></p>
       <div id="comm-wall-panel" role="tabpanel" aria-labelledby="cw-tab-public" tabindex="0">
@@ -113,7 +113,7 @@
         <div id="comm-c-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
         <div class="composer-bar">
           <label class="file-label">📷 Photo / GIF / Video<input type="file" id="comm-c-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
-          <button class="btn btn-primary btn-sm" id="comm-c-send">Post 🚀</button>
+          <button class="btn btn-primary btn-sm" id="comm-c-send" data-tip="Sends this to the wall you are currently viewing">Post 🚀</button>
           <span class="hint" id="comm-c-count" aria-hidden="true">500</span>
         </div>
         <p class="modal-note" id="comm-c-status" role="status" aria-live="polite"></p>
@@ -121,7 +121,7 @@
       <div class="comm-wall-locked" id="comm-wall-locked" role="status" hidden></div>
       <div class="wall-feed" id="comm-feed" role="feed" aria-label="Community posts"></div>
       <div class="empty-wall" id="comm-empty" style="display:none;"><div style="font-size:3rem;" aria-hidden="true">🦗</div><p>No posts yet — be the first to send it here.</p></div>
-      <div class="comm-more-row"><button class="btn btn-ghost btn-sm" id="comm-more" hidden>Load more ⬇️</button></div>
+      <div class="comm-more-row"><button class="btn btn-ghost btn-sm" id="comm-more" hidden data-tip="Adds older posts to the bottom of this wall">Load more ⬇️</button></div>
       </div>
     </section>
   </div>
@@ -152,6 +152,7 @@
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

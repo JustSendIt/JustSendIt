@@ -50,7 +50,7 @@
       '<div class="gate-sky" aria-hidden="true"></div>' +
       '<div class="gate-scan" aria-hidden="true"></div>' +
       '<div class="gate-vig" aria-hidden="true"></div>' +
-      '<button class="inv-close" id="inv-x" type="button">✕ <span>Keep browsing</span></button>' +
+      '<button class="inv-close" id="inv-x" type="button" data-tip="Closes this and leaves you reading the site">✕ <span>Keep browsing</span></button>' +
       '<div class="inv-wrap">' +
 
         /* step 1 — the ticket */
@@ -61,10 +61,10 @@
           ticketHtml() +
           '<p class="tk-cta" id="inv-cta">👆 Tap the ticket — <b>got a code?</b></p>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-have" type="button">I have a code 🎟️</button>' +
-            '<a class="g-btn g-btn-ghost" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
+            '<button class="g-btn g-btn-primary" id="inv-have" type="button" data-tip="Opens the box where you type your invite code">I have a code 🎟️</button>' +
+            '<a class="g-btn g-btn-ghost" data-tip="Opens the full terms of service in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
           '</div>' +
-          '<button class="inv-browse" id="inv-browse" type="button">No code? Keep browsing read-only →</button>' +
+          '<button class="inv-browse" id="inv-browse" type="button" data-tip="Closes this; you can keep reading without an account">No code? Keep browsing read-only →</button>' +
         '</div>' +
 
         /* step 2 — the code */
@@ -76,11 +76,11 @@
             '<input class="inv-in" id="inv-in" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="ABCD2345" aria-describedby="inv-err">' +
             '<p class="inv-err" id="inv-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.5rem;">' +
-              '<button class="g-btn g-btn-primary" id="inv-go" type="button">Redeem 🚀</button>' +
-              '<button class="g-btn g-btn-ghost" id="inv-back" type="button">Back</button>' +
+              '<button class="g-btn g-btn-primary" id="inv-go" type="button" data-tip="Checks the code and uses it up — a code works one time">Redeem 🚀</button>' +
+              '<button class="g-btn g-btn-ghost" id="inv-back" type="button" data-tip="Returns to the ticket without using your code">Back</button>' +
             '</div>' +
           '</div>' +
-          '<button class="inv-browse" id="inv-browse2" type="button">No code? Keep browsing read-only →</button>' +
+          '<button class="inv-browse" id="inv-browse2" type="button" data-tip="Closes this and leaves your code unused">No code? Keep browsing read-only →</button>' +
         '</div>' +
 
         /* step 3 — the terms */
@@ -94,8 +94,8 @@
             '<label class="g-agree" for="inv-age"><input type="checkbox" id="inv-age"><span>I am <b>18 or older</b>.</span></label>' +
             '<p class="inv-err" id="inv-tos-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.6rem;">' +
-              '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled>Accept &amp; continue 🚀</button>' +
-              '<a class="g-btn g-btn-ghost" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
+              '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled data-tip="Records your agreement to the terms and your age confirmation">Accept &amp; continue 🚀</button>' +
+              '<a class="g-btn g-btn-ghost" data-tip="Opens the same terms as a full page in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -105,9 +105,9 @@
           '<h2 class="inv-title">🎟️ Your ticket is valid</h2>' +
           '<p class="inv-sub">Last step: make your account. Your place in line — your <b>Send ID</b> — is set the moment you do, and it never changes.</p>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-join" type="button">Create my account 🚀</button>' +
+            '<button class="g-btn g-btn-primary" id="inv-join" type="button" data-tip="Closes this and opens the sign-up form">Create my account 🚀</button>' +
           '</div>' +
-          '<button class="inv-browse" id="inv-browse3" type="button">Later — keep browsing →</button>' +
+          '<button class="inv-browse" id="inv-browse3" type="button" data-tip="Closes this without making an account — your code is already used">Later — keep browsing →</button>' +
         '</div>' +
 
         /* step 4b — the participation check. Reached from anywhere on the site the moment a
@@ -126,11 +126,11 @@
             '<p class="inv-safe">🔒 <b>Read-only, and it stays read-only.</b> You sign a sentence to prove the wallet is yours. That signature <b>moves nothing, approves nothing and costs no gas</b> — this site can never send your funds anywhere, and never asks your wallet to.</p>' +
             '<p class="inv-err" id="inv-proof-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;">' +
-              '<button class="g-btn g-btn-primary" id="inv-proof-go" type="button">Connect wallet — read-only 🔗</button>' +
-              '<button class="g-btn g-btn-ghost" id="inv-proof-again" type="button" hidden>Check again ↻</button>' +
+              '<button class="g-btn g-btn-primary" id="inv-proof-go" type="button" data-tip="Asks your wallet to sign a sentence, then starts the chain check">Connect wallet — read-only 🔗</button>' +
+              '<button class="g-btn g-btn-ghost" id="inv-proof-again" type="button" hidden data-tip="Runs the check again on the wallets you already linked">Check again ↻</button>' +
             '</div>' +
           '</div>' +
-          '<button class="inv-browse" id="inv-browse4" type="button">Not yet — keep browsing read-only →</button>' +
+          '<button class="inv-browse" id="inv-browse4" type="button" data-tip="Closes the wallet check and leaves you reading the site">Not yet — keep browsing read-only →</button>' +
         '</div>' +
 
         /* step 4c — your profile. Only reachable once the check has passed, which is what "then and only
@@ -151,10 +151,10 @@
             '<p class="inv-safe">🔒 All of it is read-only. Linking a wallet is one signature over a sentence: it moves nothing, approves nothing, and costs no gas.</p>' +
           '</div>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-setup-go" type="button">Set up my profile →</button>' +
-            '<button class="g-btn g-btn-ghost" id="inv-setup-ticket" type="button">See my ticket 🎟️</button>' +
+            '<button class="g-btn g-btn-primary" id="inv-setup-go" type="button" data-tip="Closes this and opens your profile page to claim a handle">Set up my profile →</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-setup-ticket" type="button" data-tip="Shows your ticket and loads your own invite codes">See my ticket 🎟️</button>' +
           '</div>' +
-          '<button class="inv-browse" id="inv-browse5" type="button">Later — take me to the site →</button>' +
+          '<button class="inv-browse" id="inv-browse5" type="button" data-tip="Closes this and reloads the page you were on">Later — take me to the site →</button>' +
         '</div>' +
 
         /* step 5 — the ten codes */
@@ -168,11 +168,11 @@
             '<p class="inv-note" id="inv-copy-note">Tap a code to copy it, then send it to whoever you want inside.</p>' +
           '</div>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-share" type="button">Share on 𝕏 🎟️</button>' +
-            '<button class="g-btn g-btn-ghost" id="inv-dl" type="button">Download my ticket 📥</button>' +
-            '<button class="g-btn g-btn-ghost" id="inv-dash" type="button">See all my codes in my dashboard →</button>' +
+            '<button class="g-btn g-btn-primary" id="inv-share" type="button" data-tip="Makes your ticket page public and opens X to post it">Share on 𝕏 🎟️</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-dl" type="button" data-tip="Saves your ticket to your device as a picture">Download my ticket 📥</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-dash" type="button" data-tip="Closes this and opens the invites part of your profile">See all my codes in my dashboard →</button>' +
           '</div>' +
-          '<button class="inv-browse" id="inv-done" type="button">Close and carry on →</button>' +
+          '<button class="inv-browse" id="inv-done" type="button" data-tip="Closes this and puts you back on the site">Close and carry on →</button>' +
         '</div>' +
 
       '</div>';
@@ -184,7 +184,7 @@
   function ticketHtml(idPrefix) {
     const p = idPrefix ? idPrefix + '-' : '';
     return '<div class="ticket-stage">' +
-      '<button class="ticket" id="' + p + 'ticket" type="button" aria-label="Your ticket to Send">' +
+      '<button class="ticket" id="' + p + 'ticket" type="button" aria-label="Your ticket to Send" data-tip="Opens the next step, or saves your ticket as a picture">' +
         '<span class="tk-perf" aria-hidden="true"></span>' +
         '<span class="tk-notch top" aria-hidden="true"></span>' +
         '<span class="tk-notch bot" aria-hidden="true"></span>' +
@@ -558,7 +558,7 @@
           '<span class="inv-chars">' + esc(c.hint || '••••••••') + '</span>' +
           '<span class="inv-tag">' + esc(who) + '</span></span></li>';
       }
-      return '<li><button class="inv-code" type="button" data-c="' + esc(c.code) + '" title="Copy ' + esc(c.code) + '">' +
+      return '<li><button class="inv-code" type="button" data-tip="Copies this unused code so you can pass it to someone" data-c="' + esc(c.code) + '" title="Copy ' + esc(c.code) + '">' +
         '<span class="inv-chars">' + esc(c.code) + '</span><span class="inv-tag">copy</span></button></li>';
     }).join('');
   }
@@ -765,7 +765,7 @@
       host.querySelector('#inv-dash-note').innerHTML =
         'Tap an unused code to copy it. <b>Each code works once</b> — a used one is shown here for the record and can’t be copied, because it will never work again. ' +
         'Your Send ID is <span class="inv-sendid">#' + Number(t.sendId).toLocaleString('en-US') + ' <small>Send ID</small></span> — your place in line, set when you joined, and it never changes. ' +
-        '<button class="linklike" type="button" id="inv-dash-dl">Download your ticket 📥</button>';
+        '<button class="linklike" type="button" id="inv-dash-dl" data-tip="Draws your ticket as an image and saves it to your device">Download your ticket 📥</button>';
       state.ticket = t;
       const dl = host.querySelector('#inv-dash-dl');
       if (dl) dl.addEventListener('click', downloadTicket);

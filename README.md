@@ -464,13 +464,33 @@ positive, so 100 means *no flag at all*), plus a clean block-0 scan, plus `thinD
 `thinData` was true for **36 of 36**, because `holders.count` was null for every token. The tag was not
 strict; it was unreachable.
 
-**One bar, set by the reader.** The verdict is now awarded against *your* settings, which is what makes it
-reachable at all — but the two claims are kept apart, because they are different claims:
+**One wording, two bars, always attributed.** The verdict is now awarded against *your* settings as well,
+which is what makes it reachable at all. Both bars award the same words — the settings exist precisely so
+you can define what good means for you, and handing you a lesser phrase for clearing your own bar read as
+the site withholding its blessing. What never merges is **whose judgement it was**:
 
-- 🚀 **Looks Good, Send It** — the site's own default bar. Unchanged meaning: nothing we can check tripped
-  a flag. Only the site can award this.
-- 🎯 **Matches Your Bar, Send It** — your settings cleared, with its own word and its own colour. It says
-  in the card that it is your filter speaking, not us. A loose setting can never borrow the rocket.
+- 🚀 **Looks Good, Send It** — the site's own bar: the data was readable, the risk model's top tier, a full
+  score, and a clean first block. Only the site awards this one.
+- 🎯 **Looks Good, Send It** *· by your filters* — your settings cleared. Same words, and the claim is
+  attributed three ways, none of which is colour: a different icon, a visible byline that is real text and
+  never `aria-hidden`, and the spoken line, which says *"matching the filters you set — your settings, not
+  ours"*. In the detail panel the heading reads **"Why your settings say"**, never "Why we say".
+
+The site's bar is tested **first**, and independently of whether you have set anything. It used to be
+reached only when you had no filters at all, which is a different question — a token clearing everything
+the site itself checks was being attributed to your filters merely because you had some set. More tokens
+carry the rocket now, not fewer.
+
+Your bar is only ever claimed **on the scanner page**. The same card renders on the Send Wall, in
+communities, on support and on profiles through `window.NPCard`, and those pages have no settings panel, no
+filter count and no reset — attributing a verdict to settings you cannot reach there would be worse than
+not offering it, so off the scanner only the site's own bar is ever claimed.
+
+**Still measured, still honest.** On the live board today `thinData` is true for **42 of 42** pairs — the
+block explorer sits behind a challenge, so holder counts and verification are unreadable for everything.
+That is exactly why your bar exists: without it the tag would still be unreachable. It is also why the
+card keeps saying, in the same panel, *"What we could not check … that is missing information, **not a
+pass**"*.
 
 **Four things no setting, strategy or saved view can ever waive** — the ones where being wrong is not a
 matter of taste: a **honeypot**, a token **dumping** right now, **block-0 snipers who already sold**, and

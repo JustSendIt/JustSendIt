@@ -75,8 +75,8 @@
     const qualified = !!(joined && c.mine && c.mine.qualified); // the 10× + posting need a CURRENTLY-verified holder, not just an opt-in row (revoked members keep neither)
     const requalify = joined && !qualified; // de-qualified (sold / disconnected / moved bags) → the primary action is to re-verify, never a dead end
     const optBtn = requalify
-      ? '<button class="btn btn-primary comm-join-btn" id="comm-join" type="button">' + (c.mine && c.mine.blockReason ? '↻ Re-check my slot' : '↻ Re-verify holdings &amp; opt back in') + '</button> <button class="btn btn-ghost btn-sm" id="comm-leave" type="button">Leave</button>'
-      : '<button class="btn ' + (joined ? 'btn-ghost' : 'btn-primary') + ' comm-join-btn" id="comm-join" type="button" aria-pressed="' + (!!joined) + '">' + (joined ? '✓ You’re in' + (c.mine && c.mine.isCreator ? ' (starter 👑)' : '') : '➕ Opt in' + (live ? ' & get 10×' : '')) + '</button>';
+      ? '<button class="btn btn-primary comm-join-btn" id="comm-join" type="button" data-tip="Re-checks your holdings on-chain and tries to get your spot back">' + (c.mine && c.mine.blockReason ? '↻ Re-check my slot' : '↻ Re-verify holdings &amp; opt back in') + '</button> <button class="btn btn-ghost btn-sm" id="comm-leave" type="button" data-tip="Leaves after a second press — your member level is wiped for good">Leave</button>'
+      : '<button class="btn ' + (joined ? 'btn-ghost' : 'btn-primary') + ' comm-join-btn" id="comm-join" type="button" data-tip="Opts you in, or on a second tap takes you out" aria-pressed="' + (!!joined) + '">' + (joined ? '✓ You’re in' + (c.mine && c.mine.isCreator ? ' (starter 👑)' : '') : '➕ Opt in' + (live ? ' & get 10×' : '')) + '</button>';
     const conv = (joined && c.mine) ? xpBar('💎 Your conviction · ' + esc(c.mine.convictionTitle), c.mine.convictionLevel, c.mine.convictionInto, c.mine.convictionSpan, 'comm-xp-conv') : '';
     const blockReason = (c.mine && c.mine.blockReason) || null; // anti-sybil block (IP cap / starter network) — NOT a holdings problem, so say so
     const twoX = c.demo ? '<span class="comm-2x-badge comm-2x-off" title="The sandbox is for trying things out, so it grants no Send Power multiplier">🧪 Sandbox — no 10×</span>'
@@ -89,7 +89,7 @@
           '<div class="comm-hero-id"><h1 class="comm-hero-name">' + esc(c.name) + ' <b>$' + esc(c.symbol) + '</b></h1>' +
           (c.demo
             ? '<p class="comm-hero-sub">The open sandbox · started by @' + esc(c.creator || '—') + ' · <a href="' + esc((st && st.quoteUrl) || 'https://www.nasdaq.com/market-activity/stocks/hood') + '" target="_blank" rel="noopener nofollow">' + esc((st && st.exchange) || 'NASDAQ') + ': ' + esc(c.symbol) + ' ↗</a></p></div>'
-            : '<p class="comm-hero-sub">Community · started by @' + esc(c.creator || '—') + ' · <button class="linklike comm-viewtoken" type="button">View token on-chain ↗</button></p></div>') +
+            : '<p class="comm-hero-sub">Community · started by @' + esc(c.creator || '—') + ' · <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">View token on-chain ↗</button></p></div>') +
           twoX +
         '</div>' +
         metrics + panel + conv +
@@ -183,9 +183,9 @@
       (p.text ? '<p class="post-body">' + (window.richText ? richText(p.text, p.tokens) : esc(p.text)) + '</p>' : '') + // $TICKERs → token chips (tokentext.js)
       (p.image ? window.mediaTag(esc(p.image), esc(p.username)) : '') +
       '<div class="post-actions">' +
-        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" data-react="fire" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
-        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" data-react="rocket" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
-        '<button class="react-btn comm-cmt-toggle" type="button" data-comments aria-label="Show comments">💬 <span>' + (p.comments || 0) + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" data-react="fire" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" data-react="rocket" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
+        '<button class="react-btn comm-cmt-toggle" type="button" data-comments data-tip="Shows or hides the comments people left on this post" aria-label="Show comments">💬 <span>' + (p.comments || 0) + '</span></button>' +
       '</div>' +
       '<div class="comm-cmt-zone" hidden></div>' +
     '</article>';
@@ -306,7 +306,7 @@
               gate.hidden = false;
               gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'You must hold this token to join.') +
                 (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile.html#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
-                ' <button class="linklike comm-viewtoken" type="button">Get $' + esc(C.symbol) + ' ↗</button>';
+                ' <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">Get $' + esc(C.symbol) + ' ↗</button>';
             }
             join.disabled = false; return;
           }
@@ -414,7 +414,7 @@
       const j = await window.api('/api/posts/' + pid + '/comments');
       const tog = post.querySelector('.comm-cmt-toggle span'); if (tog) tog.textContent = (j.comments || []).length; // keep the 💬 badge truthful
       const list = (j.comments || []).map(c => '<div class="comm-cmt"><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '">@' + esc(c.username) + '</a>' + ogB(c.og) + ' <span class="c-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span></div>').join('') || '<p class="modal-note">no comments yet — start it off 👇</p>';
-      zone.innerHTML = list + (window.AUTH && AUTH.user ? '<form class="comm-cmt-form"><input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit">Reply</button></form>' : '<p class="modal-note"><button class="linklike" type="button" data-signin>Sign in</button> to comment.</p>');
+      zone.innerHTML = list + (window.AUTH && AUTH.user ? '<form class="comm-cmt-form"><input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Adds what you typed as a comment on this post">Reply</button></form>' : '<p class="modal-note"><button class="linklike" type="button" data-signin data-tip="Opens the sign-in box so you can join in">Sign in</button> to comment.</p>');
       const form = zone.querySelector('.comm-cmt-form');
       if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; toggleComments(post); toggleComments(post); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); } catch {} });
       const si = zone.querySelector('[data-signin]'); if (si) si.addEventListener('click', () => { if (window.AUTH) AUTH.open(); });

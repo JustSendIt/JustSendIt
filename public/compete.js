@@ -83,7 +83,7 @@
         '<h3 class="cmp-card-h" id="cmp-' + id + '-h"><span class="cmp-card-ico" aria-hidden="true">' + o.emoji + '</span>' + esc(o.title) + '</h3>' +
         '<span class="cmp-head-tools">' +
           (o.live ? '<span class="cmp-live-pill"><i aria-hidden="true"></i>' + esc(o.live) + '</span>' : '') +
-          (o.how ? '<button class="cmp-info" id="cmp-' + id + '-info" type="button" aria-expanded="false" aria-controls="cmp-' + id + '-tip" aria-describedby="cmp-' + id + '-tip" aria-label="How ' + esc(o.title) + ' works">ⓘ</button>' : '') +
+          (o.how ? '<button class="cmp-info" id="cmp-' + id + '-info" type="button" data-tip="Opens a note on how this race works" aria-expanded="false" aria-controls="cmp-' + id + '-tip" aria-describedby="cmp-' + id + '-tip" aria-label="How ' + esc(o.title) + ' works">ⓘ</button>' : '') +
         '</span>' +
         (o.how ? '<div class="cmp-tip" role="tooltip" id="cmp-' + id + '-tip">' + o.how + '</div>' : '') +
       '</header>' +
@@ -95,7 +95,7 @@
       (o.cta ? '<div class="cmp-actions">' + o.cta + '</div>' : '') +
     '</article>';
   }
-  const signInBtn = label => '<button class="btn btn-sm btn-ghost" type="button" data-cmp-signin>' + esc(label || 'Sign in to race') + '</button>';
+  const signInBtn = label => '<button class="btn btn-sm btn-ghost" type="button" data-tip="Opens the sign-in panel so you can take part" data-cmp-signin>' + esc(label || 'Sign in to race') + '</button>';
 
   /* ---------- the six cards ---------- */
   function biggestSenderCard(d, ctx) {
@@ -118,7 +118,7 @@
       prize: 'Top <b>' + n + '</b> win a Send Power boost for the next ' + bs.prize.lastsDays + ' days — <b>#1 gets ' + ladder[0] + '×</b>' + (ladder.length > 1 ? ', down to ' + ladder[ladder.length - 1] + '× for #' + ladder.length : '') + '.',
       body: rows.length ? podium(rows, ctx.prev.bs, u => u.points, pts) + list(rows, ctx.prev.bs, pts) : '<p class="cmp-empty">Nobody has scored this week yet. The first post takes the lead. 🚀</p>',
       me: me + last,
-      cta: '<a class="btn btn-sm btn-primary" href="wall.html">Post on the Send Wall</a>',
+      cta: '<a class="btn btn-sm btn-primary" href="wall.html" data-tip="Opens the Send Wall feed, where you post">Post on the Send Wall</a>',
       how: '<b>A fresh race every week, ranked on base points.</b> Every Monday at 00:00 UTC the board resets to zero: only what you did inside the week counts — every boost (Holder, OG, community, Rocket Run) and any prize taken out — so a whale, an OG and a newcomer race on the same footing. When the week ends the game master pays exactly ' + n + ' prizes by finishing place — ' + ladder.map(b => b + '×').join(' · ') + ' — for the whole of the next week; a tie at the edge goes to whoever joined first. Boosts add on top of your other boosts, they don\'t multiply.',
     });
   }
@@ -134,7 +134,7 @@
       prize: 'Ranked by <b>total peak gain</b> across every call made in the last 7 days (each call counted up to ' + sc.cap + 'x) — a rolling window, so a call drops off the board a week after it was made. A call pays Send Power as it climbs, and most of it for <b>holding in profit</b>.',
       body: rows.length ? podium(rows, ctx.prev.calls, u => Math.max(0, u.totalX), val) + list(rows, ctx.prev.calls, val) : '<p class="cmp-empty">No call on the board in the last 7 days. The first good call leads. 📣</p>',
       me,
-      cta: '<a class="btn btn-sm btn-primary" href="wall.html">Make a Send Call</a>',
+      cta: '<a class="btn btn-sm btn-primary" href="wall.html" data-tip="Opens the Send Wall, where calls are posted">Make a Send Call</a>',
       how: '<b>A Send Call is a public call on a token.</b> Its gain is tracked from your entry price to its peak, and it is graded: 💪 Solid from +2x, 🔥 Big from +5x, 🚀 Massive from +10x, 🏆 Legendary from +20x. The board adds up every call you made in the last 7 days, each counted up to +' + sc.cap + 'x, so one lucky call cannot carry the week alone. Tokens need at least $' + nf(sc.minLiq) + ' of pooled liquidity to be callable. Calls pay an opening award, a milestone for each whole X, and a hold bonus that grows the longer they stay in profit — bigger still when the people who Sent It on your call are in profit too.',
     });
   }
@@ -161,7 +161,7 @@
           : joinedDemo ? 'You are in the sandbox — it races here but grants no boost. A live <b>token</b> community is what pays the 10×.'
           : 'Join a live token community and post there — every member action adds to its week.')
         : 'Rally around a token: join its community and post there. ' + signInBtn('Sign in to join'),
-      cta: '<a class="btn btn-sm btn-primary" href="communities.html">Browse communities</a>',
+      cta: '<a class="btn btn-sm btn-primary" href="communities.html" data-tip="Opens the directory of token communities">Browse communities</a>',
       how: '<b>Communities level up as their members show up.</b> Posting, reacting and commenting on a community wall earns it community XP, capped per member per day so one person cannot carry it. The weekly bucket resets on its own every Monday at 00:00 UTC; the all-time XP — and the level it buys — stays. Being in at least one live <i>token</i> community adds a 10× community boost to your own Send Power stack; the sandbox grants none.',
     });
   }
@@ -183,7 +183,7 @@
       prize: 'A permanent badge and a Send Power multiplier for being early in <b>both $SEND and $GWC</b> — <b>10×</b> Gold, 5× Silver, 3× Bronze. One standard; only <i>when</i> you got in changes the size.',
       body: rowsHtml,
       me,
-      cta: '<a class="btn btn-sm btn-primary" href="about.html#og-rules">The OG rules</a>' + (ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="profile.html">Link a wallet</a>' : ''),
+      cta: '<a class="btn btn-sm btn-primary" href="about.html#og-rules" data-tip="Opens the OG badge rules on the About page">The OG rules</a>' + (ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="profile.html" data-tip="Opens your profile, where wallets are linked">Link a wallet</a>' : ''),
       how: '<b>Three windows, one rule.</b> Windows count from each coin\'s own launch and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ' + (o.closes ? 'Gold closes ' + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '') + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. Sell out of either coin entirely, ever, and the badge is revoked. Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
     });
   }
@@ -207,7 +207,7 @@
       prize: 'Cash out for a Send Power boost of up to <b>' + rr.maxBoost + '×</b> for 24 hours. Free, one flight a day, nothing at stake.',
       body,
       me,
-      cta: '<button class="btn btn-sm btn-primary" type="button" data-cmp-launch>Go to the rocket</button>',
+      cta: '<button class="btn btn-sm btn-primary" type="button" data-tip="Scrolls down to the Rocket Run game on this page" data-cmp-launch>Go to the rocket</button>',
       how: '<b>Ride the multiplier, tap before it blows.</b> The multiplier is e<sup>' + rr.growth + ' × seconds</sup>, capped at ' + rr.maxX + '×; your boost is 1 + (multiplier − 1) ÷ 4, capped at ' + rr.maxBoost + '×, for 24 hours. The crash point is rolled on the server the moment you launch and revealed only when your flight ends. The numbers on this card are today\'s totals across every pilot — never who flew.',
     });
   }
@@ -222,7 +222,7 @@
       prize: 'Every Send Power point ever earned, with every boost applied. <b>Level 100</b> is the Biggest Sender crown 👑.',
       body: rows.length ? podium(rows, ctx.prev.all, u => u.points, val) + list(rows, ctx.prev.all, val) : '<p class="cmp-empty">Nobody has scored yet.</p>',
       me,
-      cta: ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="profile.html">My Send Power</a>' : '',
+      cta: ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="profile.html" data-tip="Opens your profile with your Send Power total">My Send Power</a>' : '',
       how: '<b>The long game.</b> Levels climb an exponential curve with no cap — each level costs about 10% more than the last. Your Holder, OG, community, Rocket Run and Biggest Sender boosts all add together and every point you earn is paid at that total.',
     });
   }
@@ -304,7 +304,7 @@
       lastJSON = txt; data = j;
       render();
     } catch (e) {
-      if (!data) { grid.innerHTML = '<p class="cmp-empty cmp-err" role="alert">The boards could not be reached — <button class="btn btn-sm btn-ghost" type="button" data-cmp-retry>try again</button></p>'; root.setAttribute('aria-busy', 'false'); }
+      if (!data) { grid.innerHTML = '<p class="cmp-empty cmp-err" role="alert">The boards could not be reached — <button class="btn btn-sm btn-ghost" type="button" data-tip="Asks the server for the boards again" data-cmp-retry>try again</button></p>'; root.setAttribute('aria-busy', 'false'); }
     }
   }
   function tick() {

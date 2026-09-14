@@ -37,7 +37,7 @@
         '<div class="intro-tag">JUST SEND IT!</div>' +
         '<div class="intro-mcap" id="intro-mcap" aria-hidden="true">$0</div>' +
       '</div>' +
-      '<button class="intro-skip" type="button">Skip intro ⏭</button>' +
+      '<button class="intro-skip" type="button" data-tip="Ends the opening animation and shows the homepage now">Skip intro ⏭</button>' +
       '<span class="sr-only" role="status">Loading Just Send It.</span>';
     document.body.appendChild(el);
     document.body.style.overflow = 'hidden';

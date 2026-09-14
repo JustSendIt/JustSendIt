@@ -92,7 +92,7 @@
     overlay.hidden = true;
     overlay.innerHTML =
       '<div class="wc-modal">' +
-        '<button class="wc-x" type="button" aria-label="Close">✕</button>' +
+        '<button class="wc-x" type="button" aria-label="Close" data-tip="Closes the wallet picker without connecting anything">✕</button>' +
         '<h2 class="wc-title">Connect a wallet</h2>' +
         '<p class="wc-note">🔒 <b>Read-only.</b> We only read your address &amp; token balances — <b>we can never move your funds</b> and will never ask you to approve a transaction to connect.</p>' +
         '<div class="wc-list" id="wc-list"></div>' +
@@ -122,6 +122,7 @@
           ? '<img class="wc-ico" src="' + esc(v.info.icon) + '" alt="">'
           : '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + (k ? k.emoji : '👛') + '</span>';
         b.innerHTML = icon + '<span class="wc-name">' + esc(v.info.name || 'Wallet') + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">Connect →</span>';
+        b.setAttribute('data-tip', 'Connects using this wallet');
         b.addEventListener('click', () => finish(v));
         listEl.appendChild(b);
       }

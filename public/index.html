@@ -112,7 +112,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the page menu and search"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <div class="ticker" aria-hidden="true">
@@ -162,14 +162,14 @@
     <div class="rh-badge"><span class="dot"></span> LIVE ON ROBINHOOD CHAIN · ID 4663</div>
     <a class="risk-chip" href="#guide">🎢 High-risk fun · Not financial advice</a>
     <div class="mcap-panels">
-      <button class="mcap-panel" type="button" data-mcap-jump="SEND" aria-label="See the $SEND live chart">
+      <button class="mcap-panel" type="button" data-mcap-jump="SEND" aria-label="See the $SEND live chart" data-tip="Scrolls down to the token cards and their charts">
         <span class="mcap-banner" id="mcap-banner-SEND" aria-hidden="true"></span>
         <span class="mcap-label" id="mcap-label-SEND">$SEND Market Cap · Live</span>
         <span class="mcap-value" id="mcap-value-SEND" aria-hidden="true">$———</span>
         <span class="mcap-delta" id="mcap-delta-SEND" aria-hidden="true"></span>
         <span class="mcap-sub" id="mcap-sub-SEND">loading from Dexscreener…</span>
       </button>
-      <button class="mcap-panel" type="button" data-mcap-jump="GWC" aria-label="See the $GWC live chart">
+      <button class="mcap-panel" type="button" data-mcap-jump="GWC" aria-label="See the $GWC live chart" data-tip="Scrolls down to the token cards and their charts">
         <span class="mcap-banner" id="mcap-banner-GWC" aria-hidden="true"></span>
         <span class="mcap-label" id="mcap-label-GWC">$GWC Market Cap · Live</span>
         <span class="mcap-value" id="mcap-value-GWC" aria-hidden="true">$———</span>
@@ -179,9 +179,9 @@
     </div>
     <span class="sr-only" role="status" aria-live="polite" id="mcap-a11y"></span>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#swap">Buy $Send 🚀</a>
-      <a class="btn btn-rh" href="#guide">How To Buy 📖</a>
-      <a class="btn btn-gold" href="#tokens">Live Charts 📈</a>
+      <a class="btn btn-primary" href="#swap" data-tip="Jumps down to the swap panel on this page">Buy $Send 🚀</a>
+      <a class="btn btn-rh" href="#guide" data-tip="Jumps to the step-by-step buying guide below">How To Buy 📖</a>
+      <a class="btn btn-gold" href="#tokens" data-tip="Jumps to the token cards and their live charts">Live Charts 📈</a>
     </div>
     <details class="reassure">
       <summary>New here? What is $Send — and is it safe?</summary>
@@ -237,12 +237,12 @@
         <div class="send-tax-chip" title="Verified on-chain: 1% fee on every buy/sell/transfer, 100% auto-added to the LP">💧 1% buy / sell / transfer tax → auto-adds to liquidity</div>
         <div class="contract-box">
           <code>0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105</code>
-          <button class="copy-btn" data-copy="0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105">Copy 📋</button>
+          <button class="copy-btn" data-copy="0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" data-tip="Copies the $Send contract address to your clipboard">Copy 📋</button>
         </div>
         <div class="token-links">
-          <a class="btn btn-ghost btn-sm" href="https://dexscreener.com/robinhood/0xf30bb531d0255969be155533abac34b22bd63414" target="_blank" rel="noopener">Dexscreener ↗</a>
-          <a class="btn btn-ghost btn-sm" href="https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" target="_blank" rel="noopener">Explorer ↗</a>
-          <button class="btn btn-ghost btn-sm" data-watch-token="SEND">Add to Wallet 👁</button>
+          <a class="btn btn-ghost btn-sm" href="https://dexscreener.com/robinhood/0xf30bb531d0255969be155533abac34b22bd63414" target="_blank" rel="noopener" data-tip="Opens the $Send pair on Dexscreener in a new tab">Dexscreener ↗</a>
+          <a class="btn btn-ghost btn-sm" href="https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" target="_blank" rel="noopener" data-tip="Shows the $Send token on the chain explorer in a new tab">Explorer ↗</a>
+          <button class="btn btn-ghost btn-sm" data-watch-token="SEND" data-tip="Asks your wallet to show $SEND in its token list">Add to Wallet 👁</button>
         </div>
         <!-- Our own chart, drawn from this pair contract's own Swap logs, with the site's markers on it.
            It replaces a Dexscreener iframe: same underlying data one step closer to the source, no
@@ -275,12 +275,12 @@
         <div class="gwc-tax-chip">⚠️ 5% buy / 5% sell tax — factor it in</div>
         <div class="contract-box">
           <code>0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22</code>
-          <button class="copy-btn" data-copy="0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22">Copy 📋</button>
+          <button class="copy-btn" data-copy="0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" data-tip="Copies the $GWC contract address to your clipboard">Copy 📋</button>
         </div>
         <div class="token-links">
-          <a class="btn btn-ghost btn-sm" href="https://dexscreener.com/robinhood/0x22df73eef683a93680dff3b51fdf3ee91e7352d9" target="_blank" rel="noopener">Dexscreener ↗</a>
-          <a class="btn btn-ghost btn-sm" href="https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" target="_blank" rel="noopener">Explorer ↗</a>
-          <button class="btn btn-ghost btn-sm" data-watch-token="GWC">Add to Wallet 👁</button>
+          <a class="btn btn-ghost btn-sm" href="https://dexscreener.com/robinhood/0x22df73eef683a93680dff3b51fdf3ee91e7352d9" target="_blank" rel="noopener" data-tip="Opens the $GWC pair on Dexscreener in a new tab">Dexscreener ↗</a>
+          <a class="btn btn-ghost btn-sm" href="https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" target="_blank" rel="noopener" data-tip="Shows the $GWC token on the chain explorer in a new tab">Explorer ↗</a>
+          <button class="btn btn-ghost btn-sm" data-watch-token="GWC" data-tip="Asks your wallet to show $GWC in its token list">Add to Wallet 👁</button>
         </div>
         <!-- Our own chart, drawn from this pair contract's own Swap logs, with the site's markers on it.
            It replaces a Dexscreener iframe: same underlying data one step closer to the source, no
@@ -354,7 +354,7 @@
           <p class="g1-alt">Already have a wallet, or want a different one? Any of these work — tap one to install it, or hit the button below if you've got it already:</p>
           <ul class="g1-wallets" id="g1-wallets" aria-label="Supported wallets"></ul>
           <div class="step-actions g1-actions">
-            <button class="btn btn-primary btn-sm" id="g1-connect" type="button">Connect my wallet 🔗</button>
+            <button class="btn btn-primary btn-sm" id="g1-connect" type="button" data-tip="Opens sign-in, or links this wallet to your account">Connect my wallet 🔗</button>
             <span class="g1-hint" id="g1-hint" role="status" aria-live="polite"></span>
           </div>
           <p class="g1-safe">⚠️ Only ever download from the official site or your phone's app store — fake wallet apps are the #1 way people get robbed. Connecting here is <b>read-only</b>: you sign a message to prove the wallet is yours, and that's all it can ever do.</p>
@@ -389,7 +389,7 @@
             <tr><td>Explorer</td><td><code>https://robinhoodchain.blockscout.com</code></td></tr>
           </table>
           <div class="step-actions">
-            <button class="btn btn-rh btn-sm" id="add-chain-btn">Add Robinhood Chain ⚡</button>
+            <button class="btn btn-rh btn-sm" id="add-chain-btn" data-tip="Asks your wallet to add the Robinhood Chain network">Add Robinhood Chain ⚡</button>
           </div>
         </div>
       </div>
@@ -401,8 +401,8 @@
           <p>Got ETH (or anything) on Ethereum, Base, Arbitrum, or another EVM chain? Use <b>Relay</b> — the cross-chain route that already powers most traffic in and out of Robinhood Chain. Pick what you have, it lands as ETH on Robinhood Chain, usually in under a minute.</p>
           <p><b>No crypto anywhere yet?</b> A third-party on-ramp such as MoonPay can sell you ETH with a card (their sign-up, their fees, their rules — we're not involved). Then bridge it here.</p>
           <div class="step-actions">
-            <a class="btn btn-rh btn-sm" href="https://relay.link/bridge/robinhood" target="_blank" rel="noopener">Open Relay Bridge ↗</a>
-            <a class="btn btn-gold btn-sm" href="https://www.moonpay.com/buy/eth" target="_blank" rel="noopener">Card → ETH (MoonPay) ↗</a>
+            <a class="btn btn-rh btn-sm" href="https://relay.link/bridge/robinhood" target="_blank" rel="noopener" data-tip="Opens the Relay bridge to Robinhood Chain in a new tab">Open Relay Bridge ↗</a>
+            <a class="btn btn-gold btn-sm" href="https://www.moonpay.com/buy/eth" target="_blank" rel="noopener" data-tip="Opens MoonPay, a third-party card-to-ETH service, in a new tab">Card → ETH (MoonPay) ↗</a>
           </div>
         </div>
       </div>
@@ -438,11 +438,11 @@
     <div class="swap-panel reveal">
       <div style="text-align:center; font-weight:800; color:var(--text-dim); font-size:0.9rem;">I WANT</div>
       <div class="swap-row">
-        <div class="swap-choice send selected" id="choice-SEND" role="button" tabindex="0" aria-pressed="true" aria-label="Buy $SEND">
+        <div class="swap-choice send selected" id="choice-SEND" role="button" tabindex="0" aria-pressed="true" aria-label="Buy $SEND" data-tip="Aims this swap at $SEND and refreshes the quote">
           <div class="big">$SEND 🚀</div>
           <div class="sub">SEND IT</div>
         </div>
-        <div class="swap-choice gwc" id="choice-GWC" role="button" tabindex="0" aria-pressed="false" aria-label="Buy $GWC">
+        <div class="swap-choice gwc" id="choice-GWC" role="button" tabindex="0" aria-pressed="false" aria-label="Buy $GWC" data-tip="Aims this swap at $GWC and refreshes the quote">
           <div class="big">$GWC 💰</div>
           <div class="sub">Generational Wealth Coin</div>
         </div>
@@ -450,9 +450,9 @@
       <div style="text-align:center; font-weight:800; color:var(--text-dim); font-size:0.9rem; margin-top:0.4rem;">I'M SPENDING (ETH on Robinhood Chain)</div>
       <div style="display:flex; gap:0.6rem; margin:0.8rem 0; align-items:center;">
         <input class="addr-input" id="swap-amt" style="margin:0; font-size:1.2rem; font-weight:800;" placeholder="0.05" inputmode="decimal" aria-label="ETH amount to swap">
-        <button class="copy-btn" data-amt="0.01">0.01</button>
-        <button class="copy-btn" data-amt="0.05">0.05</button>
-        <button class="copy-btn" data-amt="0.1">0.1</button>
+        <button class="copy-btn" data-amt="0.01" data-tip="Fills the amount box above with this much ETH">0.01</button>
+        <button class="copy-btn" data-amt="0.05" data-tip="Fills the amount box above with this much ETH">0.05</button>
+        <button class="copy-btn" data-amt="0.1" data-tip="Fills the amount box above with this much ETH">0.1</button>
       </div>
       <div class="lbl" id="swap-usd" style="margin:-0.3rem 0 0.8rem; text-align:center;"></div>
       <div class="hstat" style="margin-bottom:1rem;">
@@ -461,9 +461,9 @@
         <div class="lbl" style="margin-top:0.3rem;" id="swap-min"></div>
       </div>
       <div style="text-align:center; display:flex; gap:0.8rem; justify-content:center; flex-wrap:wrap;">
-        <button class="btn btn-primary" id="swap-go">Swap In My Wallet 🚀</button>
-        <a class="btn btn-rh" href="https://relay.link/bridge/robinhood" target="_blank" rel="noopener">Need ETH here? Bridge from any chain 🌉</a>
-        <a class="btn btn-gold" id="moonpay-btn" href="https://www.moonpay.com/buy/eth" target="_blank" rel="noopener">No crypto yet? Card → ETH 💳</a>
+        <button class="btn btn-primary" id="swap-go" data-tip="Builds the swap for you to review and sign in your wallet">Swap In My Wallet 🚀</button>
+        <a class="btn btn-rh" href="https://relay.link/bridge/robinhood" target="_blank" rel="noopener" data-tip="Opens the Relay cross-chain bridge in a new tab">Need ETH here? Bridge from any chain 🌉</a>
+        <a class="btn btn-gold" id="moonpay-btn" href="https://www.moonpay.com/buy/eth" target="_blank" rel="noopener" data-tip="Opens MoonPay, a third-party card-to-crypto service, in a new tab">No crypto yet? Card → ETH 💳</a>
       </div>
       <p class="hint swap-status" id="swap-status" role="status" aria-live="polite" style="text-align:center; margin:0.7rem 0 0; min-height:1.2em;"></p>
       <div id="swap-pending" hidden style="text-align:center; margin-top:1rem;" aria-live="polite">
@@ -495,7 +495,7 @@
       <div class="clip-card reveal"><video src="assets/clip-1.mp4" autoplay muted loop playsinline></video></div>
       <div class="clip-card reveal"><video src="assets/clip-2.mp4" autoplay muted loop playsinline></video></div>
     </div>
-    <div class="clip-ctl"><button class="btn btn-ghost btn-sm" type="button" id="clip-toggle" aria-pressed="false" aria-controls="clip-grid">⏸ Pause clips</button></div>
+    <div class="clip-ctl"><button class="btn btn-ghost btn-sm" type="button" id="clip-toggle" aria-pressed="false" aria-controls="clip-grid" data-tip="Pauses or resumes the looping clip videos">⏸ Pause clips</button></div>
   </div>
 </section>
 
@@ -517,7 +517,7 @@
         </div>
         <p class="rz-drop-title">Drop a picture here</p>
         <p class="rz-drop-sub">JPG, PNG, WebP or GIF (first frame) · up to 12 MB</p>
-        <button class="btn btn-primary" type="button" id="rz-pick">Choose a picture 🖼️</button>
+        <button class="btn btn-primary" type="button" id="rz-pick" data-tip="Opens your file picker to choose a picture">Choose a picture 🖼️</button>
         <input type="file" id="rz-file" accept="image/jpeg,image/png,image/webp,image/gif" hidden aria-label="Picture to rocketize">
         <p class="rz-private">🔒 Stays on your device until you choose to make it your profile pic.</p>
       </div>
@@ -532,8 +532,8 @@
           <div class="rz-group" role="group" aria-labelledby="rz-hist-title">
             <p class="rz-group-title" id="rz-hist-title">History</p>
             <div class="rz-row">
-              <button class="btn btn-ghost btn-sm" type="button" id="rz-undo" aria-disabled="true" aria-keyshortcuts="Control+Z Meta+Z">↶ Undo</button>
-              <button class="btn btn-ghost btn-sm" type="button" id="rz-redo" aria-disabled="true" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y">↷ Redo</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="rz-undo" aria-disabled="true" aria-keyshortcuts="Control+Z Meta+Z" data-tip="Takes back your last rocket change">↶ Undo</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="rz-redo" aria-disabled="true" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y" data-tip="Puts back the change you just undid">↷ Redo</button>
             </div>
           </div>
 
@@ -543,9 +543,9 @@
             <div class="rz-field">
               <label for="rz-size"><span>Size</span><output id="rz-size-out" for="rz-size">128 px</output></label>
               <div class="rz-slider-row">
-                <button class="rz-step-btn" type="button" id="rz-smaller" aria-label="Smaller rocket" disabled>−</button>
+                <button class="rz-step-btn" type="button" id="rz-smaller" aria-label="Smaller rocket" disabled data-tip="Makes the selected rocket a step smaller">−</button>
                 <input type="range" id="rz-size" min="32" max="512" step="1" value="128" disabled>
-                <button class="rz-step-btn" type="button" id="rz-bigger" aria-label="Bigger rocket" disabled>+</button>
+                <button class="rz-step-btn" type="button" id="rz-bigger" aria-label="Bigger rocket" disabled data-tip="Makes the selected rocket a step bigger">+</button>
               </div>
             </div>
             <div class="rz-field">
@@ -553,20 +553,20 @@
               <input type="range" id="rz-rot" min="-180" max="180" step="1" value="0" disabled>
             </div>
             <div class="rz-row">
-              <button class="btn btn-ghost btn-sm" type="button" id="rz-next" disabled>Select next rocket ⏭</button>
-              <button class="btn btn-ghost btn-sm" type="button" id="rz-dup" disabled>Duplicate ⧉</button>
-              <button class="btn btn-ghost btn-sm" type="button" id="rz-del" disabled>Remove rocket 🗑</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="rz-next" disabled data-tip="Moves the selection on to the next rocket">Select next rocket ⏭</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="rz-dup" disabled data-tip="Adds a copy of the selected rocket beside it">Duplicate ⧉</button>
+              <button class="btn btn-ghost btn-sm" type="button" id="rz-del" disabled data-tip="Removes the selected rocket; undo brings it back">Remove rocket 🗑</button>
             </div>
             <p class="rz-kbd">Keyboard: <kbd>arrow keys</kbd> nudge the selected rocket 1 px (<kbd>Shift</kbd> = 10 px) · <kbd>Delete</kbd> removes it · <kbd>Ctrl/⌘ Z</kbd> undo · <kbd>Enter</kbd> on the picture adds a rocket.</p>
           </div>
 
           <div class="rz-group rz-actions" role="group" aria-labelledby="rz-done-title">
             <p class="rz-group-title" id="rz-done-title">Finish</p>
-            <button class="btn btn-gold" type="button" id="rz-download">Download PNG ⬇</button>
-            <button class="btn btn-primary" type="button" id="rz-avatar">Make it my profile pic 🚀</button>
+            <button class="btn btn-gold" type="button" id="rz-download" data-tip="Saves the picture to your device as a PNG">Download PNG ⬇</button>
+            <button class="btn btn-primary" type="button" id="rz-avatar" data-tip="Signs you in if needed, then sets this as your profile pic">Make it my profile pic 🚀</button>
             <p class="rz-note" id="rz-auth-note"></p>
             <p class="rz-status" id="rz-status" role="status" aria-live="polite"></p>
-            <button class="btn btn-ghost btn-sm" type="button" id="rz-reset">Start over</button>
+            <button class="btn btn-ghost btn-sm" type="button" id="rz-reset" data-tip="Throws away this picture and all its rockets — no undo">Start over</button>
           </div>
         </div>
       </div>
@@ -581,9 +581,9 @@
     <h3>Powered by Generational Wealth Coin</h3>
     <p>The rocket fuel behind the send — <strong>$GWC</strong>. Join the community and keep up with every send.</p>
     <div class="community-links">
-      <a class="btn btn-gold" href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">GenerationalWealthCoin.com 💸</a>
-      <a class="btn btn-ghost" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a>
-      <a class="btn btn-ghost" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X / Twitter 🐦</a>
+      <a class="btn btn-gold" href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener" data-tip="Opens the $GWC project website in a new tab">GenerationalWealthCoin.com 💸</a>
+      <a class="btn btn-ghost" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow" data-tip="Opens the $GWC Telegram community in a new tab">Telegram 💬</a>
+      <a class="btn btn-ghost" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow" data-tip="Opens the community X account in a new tab">X / Twitter 🐦</a>
     </div>
   </div>
 </section>
@@ -593,7 +593,7 @@
   <div class="wrap" style="text-align:center;">
     <h2 class="section-title display green">The Send Wall 🧱</h2>
     <p class="section-sub">The live community feed — post your sends, your memes, your gains, your pain. React 🔥, reply 💬, and claim your unique @handle before someone else does.</p>
-    <a class="btn btn-primary" href="wall.html">Enter The Wall 🚪</a>
+    <a class="btn btn-primary" href="wall.html" data-tip="Opens the public Send Wall feed">Enter The Wall 🚪</a>
   </div>
 </section>
 
@@ -628,6 +628,7 @@
 <script src="chain.js"></script>
 <script src="chart.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

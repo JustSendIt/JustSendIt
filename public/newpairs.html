@@ -52,7 +52,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" data-tip="Shows or hides the list of site pages" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <header class="np-hero">
@@ -71,21 +71,21 @@
     <p class="np-chain-note" id="np-chain-note" role="status" aria-live="polite" hidden></p>
 
     <div class="np-viewswitch" role="tablist" aria-label="View mode">
-      <button class="np-vs-btn" id="np-vs-runners" type="button" role="tab" aria-selected="true"  data-mode="runners"><span class="np-vs-ico" aria-hidden="true">📈</span><span class="np-vs-txt">Best&nbsp;Runners</span></button>
-      <button class="np-vs-btn" id="np-vs-feed" type="button" role="tab" aria-selected="false" data-mode="feed"><span class="np-vs-ico" aria-hidden="true">🎬</span><span class="np-vs-txt">Hot&nbsp;Feed</span></button>
-      <button class="np-vs-btn" id="np-vs-list" type="button" role="tab" aria-selected="false" data-mode="list"><span class="np-vs-ico" aria-hidden="true">📋</span><span class="np-vs-txt">DEX&nbsp;List</span></button>
+      <button class="np-vs-btn" id="np-vs-runners" type="button" role="tab" aria-selected="true"  data-mode="runners" data-tip="Switches to the biggest gainers over a time window"><span class="np-vs-ico" aria-hidden="true">📈</span><span class="np-vs-txt">Best&nbsp;Runners</span></button>
+      <button class="np-vs-btn" id="np-vs-feed" type="button" role="tab" aria-selected="false" data-mode="feed" data-tip="Switches to a swipeable card feed of tokens clearing your bar"><span class="np-vs-ico" aria-hidden="true">🎬</span><span class="np-vs-txt">Hot&nbsp;Feed</span></button>
+      <button class="np-vs-btn" id="np-vs-list" type="button" role="tab" aria-selected="false" data-mode="list" data-tip="Switches to the scrollable, filterable list of new pairs"><span class="np-vs-ico" aria-hidden="true">📋</span><span class="np-vs-txt">DEX&nbsp;List</span></button>
     </div>
 
     <section class="np-controls" aria-label="Filter and sort new pairs">
       <div class="np-search">
         <span aria-hidden="true">🔎</span>
         <input id="np-q" type="search" class="np-search-input" autocomplete="off" placeholder="Search name, symbol, or address" aria-label="Search pairs">
-        <button id="np-q-clear" class="np-search-clear" type="button" aria-label="Clear search" title="Clear search" hidden>✕</button>
+        <button id="np-q-clear" class="np-search-clear" type="button" aria-label="Clear search" title="Clear search" data-tip="Empties the search box and brings back every pair" hidden>✕</button>
       </div>
       <div class="np-safety" role="radiogroup" aria-label="Safety filter">
-        <button class="np-seg is-on" type="button" role="radio" aria-checked="true" data-safety="safer">🛡️ Safer</button>
-        <button class="np-seg" type="button" role="radio" aria-checked="false" data-safety="all">🌐 All</button>
-        <button class="np-seg" type="button" role="radio" aria-checked="false" data-safety="risky">☠️ Risky</button>
+        <button class="np-seg is-on" type="button" role="radio" aria-checked="true" data-safety="safer" data-tip="Hides anything flagged risky or scoring below our safer bar">🛡️ Safer</button>
+        <button class="np-seg" type="button" role="radio" aria-checked="false" data-safety="all" data-tip="Widens the list, still holding back high-risk and thin-liquidity pairs">🌐 All</button>
+        <button class="np-seg" type="button" role="radio" aria-checked="false" data-safety="risky" data-tip="Shows only the pairs the other two views hide">☠️ Risky</button>
       </div>
       <label class="np-sort-wrap"><span class="sr-only">Sort by</span>
         <select id="np-sort" class="np-sort">
@@ -100,11 +100,11 @@
         </select>
       </label>
       <div class="np-density" role="group" aria-label="Row density">
-        <button type="button" class="np-den is-on" data-density="comfortable" aria-pressed="true">☰ Comfort</button>
-        <button type="button" class="np-den" data-density="compact" aria-pressed="false">≡ Compact</button>
+        <button type="button" class="np-den is-on" data-density="comfortable" aria-pressed="true" data-tip="Gives each row more breathing room in the list">☰ Comfort</button>
+        <button type="button" class="np-den" data-density="compact" aria-pressed="false" data-tip="Tightens the rows so more fit on screen">≡ Compact</button>
       </div>
-      <button class="np-more" type="button" id="np-more" aria-expanded="false" aria-controls="np-filters">⚙️ Filters <span class="np-count-badge" id="np-fcount" hidden>0</span></button>
-      <button class="np-refresh" type="button" id="np-refresh" aria-label="Refresh now">↻</button>
+      <button class="np-more" type="button" id="np-more" aria-expanded="false" aria-controls="np-filters" data-tip="Opens the scanner settings pop-down; the badge counts active filters">⚙️ Filters <span class="np-count-badge" id="np-fcount" hidden>0</span></button>
+      <button class="np-refresh" type="button" id="np-refresh" aria-label="Refresh now" data-tip="Fetches a fresh scan now instead of waiting for the poll">↻</button>
     </section>
 
     <!-- Five complete search shapes. Not grades and not recommendations: each one is a saved set of
@@ -113,25 +113,25 @@
          which is the point — the strategy is a starting position to fine-tune from, not a black box. -->
     <div class="np-strats" id="np-strategies" role="group" aria-label="Scanner strategies">
       <span class="np-strats-lead">Start from a strategy:</span>
-      <button class="np-strat" type="button" data-strat="first30"  aria-pressed="false">🌱 First 30 Minutes</button>
-      <button class="np-strat" type="button" data-strat="liqfirst" aria-pressed="false">💧 Liquidity First</button>
-      <button class="np-strat" type="button" data-strat="crowd"    aria-pressed="false">👥 Crowd Forming</button>
-      <button class="np-strat" type="button" data-strat="momentum" aria-pressed="false">🚀 Moving Right Now</button>
-      <button class="np-strat" type="button" data-strat="smallcap" aria-pressed="false">💎 Small Cap, Real Pool</button>
-      <button class="np-strat" type="button" data-strat="cooled"   aria-pressed="false">📉 Cooled Off</button>
-      <button class="np-strat" type="button" data-strat="strict"   aria-pressed="false">🛡️ Strictest Checks</button>
+      <button class="np-strat" type="button" data-strat="first30"  aria-pressed="false" data-tip="Replaces every setting to search the newest pools with early buys">🌱 First 30 Minutes</button>
+      <button class="np-strat" type="button" data-strat="liqfirst" aria-pressed="false" data-tip="Replaces every setting to search for deeper pools that actually trade">💧 Liquidity First</button>
+      <button class="np-strat" type="button" data-strat="crowd"    aria-pressed="false" data-tip="Replaces every setting to search for supply spread across many holders">👥 Crowd Forming</button>
+      <button class="np-strat" type="button" data-strat="momentum" aria-pressed="false" data-tip="Replaces every setting to search for buying and volume this hour">🚀 Moving Right Now</button>
+      <button class="np-strat" type="button" data-strat="smallcap" aria-pressed="false" data-tip="Replaces every setting to search for small caps with real pools">💎 Small Cap, Real Pool</button>
+      <button class="np-strat" type="button" data-strat="cooled"   aria-pressed="false" data-tip="Replaces every setting to search for pairs falling with liquidity intact">📉 Cooled Off</button>
+      <button class="np-strat" type="button" data-strat="strict"   aria-pressed="false" data-tip="Replaces every setting to search only where every check ran clean">🛡️ Strictest Checks</button>
     </div>
     <p class="np-strat-note" id="np-strat-note" hidden></p>
 
     <div class="np-chips" id="np-presets" role="group" aria-label="Quick filters">
-      <button class="np-chip" type="button" data-preset="safest"   aria-pressed="false">🛡️ Safest</button>
-      <button class="np-chip" type="button" data-preset="verified" aria-pressed="false">✓ Verified</button>
-      <button class="np-chip" type="button" data-preset="liq"      aria-pressed="false">💧 Real liquidity</button>
-      <button class="np-chip" type="button" data-preset="community" aria-pressed="false">👥 Community</button>
-      <button class="np-chip" type="button" data-preset="fresh"    aria-pressed="false">🕐 Brand new</button>
-      <button class="np-chip" type="button" data-preset="trading"  aria-pressed="false">📊 Actually trading</button>
-      <button class="np-chip" type="button" data-preset="nowhale"  aria-pressed="false">🐋 Hide whales</button>
-      <button class="np-chip" type="button" data-preset="nohoney"  aria-pressed="false">🍯 Hide honeypots</button>
+      <button class="np-chip" type="button" data-preset="safest"   aria-pressed="false" data-tip="Toggles a stricter score, liquidity and verification filter">🛡️ Safest</button>
+      <button class="np-chip" type="button" data-preset="verified" aria-pressed="false" data-tip="Toggles hiding tokens whose contract source is not published">✓ Verified</button>
+      <button class="np-chip" type="button" data-preset="liq"      aria-pressed="false" data-tip="Toggles a floor on pool size, hiding the thinnest pairs">💧 Real liquidity</button>
+      <button class="np-chip" type="button" data-preset="community" aria-pressed="false" data-tip="Toggles a holder-count floor and a cap on the top wallet">👥 Community</button>
+      <button class="np-chip" type="button" data-preset="fresh"    aria-pressed="false" data-tip="Toggles limiting the list to pools opened minutes ago">🕐 Brand new</button>
+      <button class="np-chip" type="button" data-preset="trading"  aria-pressed="false" data-tip="Toggles requiring recent volume and hides the no-volume pairs">📊 Actually trading</button>
+      <button class="np-chip" type="button" data-preset="nowhale"  aria-pressed="false" data-tip="Toggles hiding pairs flagged for concentrated supply">🐋 Hide whales</button>
+      <button class="np-chip" type="button" data-preset="nohoney"  aria-pressed="false" data-tip="Toggles hiding pairs our checks flag as maybe unsellable">🍯 Hide honeypots</button>
     </div>
 
     <!-- A pop-down anchored under the controls row, not a block that shoves the list down the page.
@@ -143,10 +143,10 @@
         <h2 class="np-fhead-title" id="np-fhead-title">⚙️ Scanner settings</h2>
         <p class="np-fhead-sub" id="np-fhead-sub">Everything here narrows the DEX List <b>and</b> the Hot Feed.</p>
         <div class="np-fhead-acts">
-          <button class="btn btn-sm btn-ghost" type="button" id="np-savenow-top">💾 Save view</button>
-          <button class="btn btn-sm btn-ghost" type="button" id="np-reset-top">↺ Reset</button>
+          <button class="btn btn-sm btn-ghost" type="button" id="np-savenow-top" data-tip="Opens a name box to store these settings as a view">💾 Save view</button>
+          <button class="btn btn-sm btn-ghost" type="button" id="np-reset-top" data-tip="Puts every setting back to default and clears the search">↺ Reset</button>
         </div>
-        <button class="np-fclose" type="button" id="np-fclose" aria-label="Close scanner settings">✕</button>
+        <button class="np-fclose" type="button" id="np-fclose" aria-label="Close scanner settings" data-tip="Closes the settings panel, keeping the filters you set">✕</button>
       </div>
       <fieldset class="np-fgroup"><legend class="np-fgroup-h">Quote &amp; code</legend>
         <label class="np-f"><input type="checkbox" id="f-weth" checked> Ξ WETH</label>
@@ -213,26 +213,26 @@
       </fieldset>
       <div class="np-savedviews" id="np-saved" aria-label="Saved views"></div>
       <div class="np-filters-foot">
-        <button class="btn btn-sm btn-ghost" type="button" id="np-savenow">💾 Save current view</button>
-        <button class="btn btn-sm btn-ghost" type="button" id="np-reset">↺ Reset filters</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="np-savenow" data-tip="Stores the current filters under a name you type">💾 Save current view</button>
+        <button class="btn btn-sm btn-ghost" type="button" id="np-reset" data-tip="Clears every filter and the search box back to defaults">↺ Reset filters</button>
       </div>
     </div>
 
     <p class="np-status" id="np-status"><span class="np-live-dot" aria-hidden="true"></span> Scanning the chain…</p>
-    <button class="np-newbar" id="np-newbar" type="button" hidden></button>
+    <button class="np-newbar" id="np-newbar" type="button" data-tip="Rebuilds the list with the changes held back while you read" hidden></button>
 
     <ul class="np-list" id="np-list" aria-label="New token pairs"></ul>
     <div class="sr-only" id="np-sr" aria-live="polite"></div>
 
-    <section class="np-feed" id="np-feed" hidden tabindex="0" role="region" aria-roledescription="Token feed" aria-label="Hot feed — new tokens our checks score a full 100 out of 100">
+    <section class="np-feed" id="np-feed" hidden tabindex="0" role="region" aria-roledescription="Token feed" aria-label="Hot feed — new tokens that clear the bar in force: ours by default, yours once you set a filter">
       <div class="np-feed-chrome">
         <span class="np-feed-live" id="np-feed-live"><span class="np-live-dot"></span> live</span>
-        <button class="np-feed-fresh" id="np-feed-fresh" type="button" hidden></button>
+        <button class="np-feed-fresh" id="np-feed-fresh" type="button" data-tip="Jumps down to the newest card in the feed" hidden></button>
       </div>
       <span class="np-feed-dyor" aria-hidden="true">🎉 Entertainment only · DYOR</span>
       <div class="np-feed-nav">
-        <button class="np-rail-btn" id="np-feed-up"   type="button" aria-label="Previous token">▲</button>
-        <button class="np-rail-btn" id="np-feed-down" type="button" aria-label="Next token">▼</button>
+        <button class="np-rail-btn" id="np-feed-up"   type="button" aria-label="Previous token" data-tip="Flips back to the previous token card">▲</button>
+        <button class="np-rail-btn" id="np-feed-down" type="button" aria-label="Next token" data-tip="Flips forward to the next token card">▼</button>
       </div>
       <div class="np-feed-hint" id="np-feed-hint">Swipe up ▲ for the next</div>
       <div class="np-feed-track" id="np-feed-track"></div>
@@ -242,11 +242,11 @@
     <section class="np-runners" id="np-runners" hidden aria-label="Best runners — top gainers by time window">
       <div class="np-runners-bar">
         <div class="np-runwin" role="radiogroup" aria-label="Time window">
-          <button class="np-seg is-on" type="button" role="radio" aria-checked="true"  data-win="24h">24h</button>
-          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="week">1W</button>
-          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="month">1M</button>
-          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="year">1Y</button>
-          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="all">All</button>
+          <button class="np-seg is-on" type="button" role="radio" aria-checked="true"  data-win="24h" data-tip="Ranks the biggest gainers over the past day">24h</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="week" data-tip="Ranks the biggest gainers over the past week">1W</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="month" data-tip="Ranks the biggest gainers over the past month">1M</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="year" data-tip="Ranks the biggest gainers over the past year">1Y</button>
+          <button class="np-seg" type="button" role="radio" aria-checked="false" data-win="all" data-tip="Ranks the biggest gainers with no time limit">All</button>
         </div>
       </div>
       <p class="np-runners-note">📈 Biggest gains in the window — a past run says nothing about the next one. 🔎 is how far it has run <b>since our scanner first priced it</b> — the same maths as a Send Call (+100% = 1x). Tap any token to see its risk scan before you even think about buying.</p>
@@ -293,6 +293,7 @@
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

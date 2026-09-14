@@ -10,7 +10,7 @@
   async function load(fresh) {
     const r = await J('/api/data/eligibility' + (fresh ? '?fresh=1' : ''));
     if (r.status === 401) { card.innerHTML = '<p class="dk-note">Sign in and link the wallet you burn from, then come back — your burn is read from your linked wallets.</p>'; return; }
-    if (!r.ok || !r.j) { card.innerHTML = '<p class="dk-note">Could not check right now. <button class="btn btn-sm btn-ghost" id="dk-retry" type="button">Try again</button></p>'; wire(); return; }
+    if (!r.ok || !r.j) { card.innerHTML = '<p class="dk-note">Could not check right now. <button class="btn btn-sm btn-ghost" id="dk-retry" type="button" data-tip="Reads your linked wallets on the chain again">Try again</button></p>'; wire(); return; }
     render(r.j);
   }
   function render(e) {
@@ -45,10 +45,10 @@
     const goldHoldsPaid = e.free && e.key && e.key.live && e.key.source === 'burn';
     const mintLabel = e.free ? (goldHoldsPaid ? 'Switch to my free Gold key (paid time kept)' : e.key && e.key.live ? 'Mint a replacement key' : 'Mint my free key') : (e.key && e.key.live ? 'Renew — +1 year for ' + usd(e.threshold) : 'Mint my key — 1 year for ' + usd(e.threshold));
     h += '<div class="dk-actions">' +
-      (e.eligible ? '<button class="btn btn-sm btn-primary" id="dk-mint" type="button">' + mintLabel + '</button>' : '<button class="btn btn-sm btn-primary" type="button" disabled title="Reach ' + usd(e.threshold) + ' of unspent burn first">' + mintLabel + '</button>') +
-      (e.key && e.key.rotatable ? '<button class="btn btn-sm btn-ghost" id="dk-rotate" type="button" title="New secret, same expiry, nothing spent">Rotate key</button>' : '') +
-      (e.key ? '<button class="btn btn-sm btn-ghost" id="dk-revoke" type="button">Revoke key</button>' : '') +
-      '<button class="btn btn-sm btn-ghost" id="dk-retry" type="button">Re-check the chain</button></div>';
+      (e.eligible ? '<button class="btn btn-sm btn-primary" id="dk-mint" type="button" data-tip="Creates your key and shows the secret once only">' + mintLabel + '</button>' : '<button class="btn btn-sm btn-primary" type="button" data-tip="Not available yet — more unspent burn is needed first" disabled title="Reach ' + usd(e.threshold) + ' of unspent burn first">' + mintLabel + '</button>') +
+      (e.key && e.key.rotatable ? '<button class="btn btn-sm btn-ghost" id="dk-rotate" type="button" data-tip="Issues a new secret and stops the old one working" title="New secret, same expiry, nothing spent">Rotate key</button>' : '') +
+      (e.key ? '<button class="btn btn-sm btn-ghost" id="dk-revoke" type="button" data-tip="Stops this key working for good — no burn refund">Revoke key</button>' : '') +
+      '<button class="btn btn-sm btn-ghost" id="dk-retry" type="button" data-tip="Reads your linked wallets on the chain again">Re-check the chain</button></div>';
     card.innerHTML = h; wire();
   }
   function wire() {
@@ -71,7 +71,7 @@
   function showKey(key, note) {
     card.innerHTML = '<p><b>Your key — shown once.</b> Copy it now; it is stored only as a hash and cannot be shown again.</p>' +
       '<div class="dk-key" id="dk-keytext">' + esc(key) + '</div>' +
-      '<div class="dk-actions"><button class="btn btn-sm btn-primary" id="dk-copy" type="button">Copy key</button><button class="btn btn-sm btn-ghost" id="dk-done" type="button">I have saved it</button></div>' +
+      '<div class="dk-actions"><button class="btn btn-sm btn-primary" id="dk-copy" type="button" data-tip="Copies the key to your clipboard">Copy key</button><button class="btn btn-sm btn-ghost" id="dk-done" type="button" data-tip="Hides the key and shows your status again">I have saved it</button></div>' +
       '<p class="dk-note">' + note + ' Anyone holding this key can read your own private data — treat it like a password.</p>';
     document.getElementById('dk-copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(key); say('Key copied'); } catch { say('Select the key and copy it manually'); } });
     document.getElementById('dk-done').addEventListener('click', () => load());

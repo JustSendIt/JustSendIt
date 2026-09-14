@@ -34,25 +34,25 @@
   modal.innerHTML = `
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-    <button class="modal-x" data-close aria-label="Close sign-in dialog">✕</button>
+    <button class="modal-x" data-close aria-label="Close sign-in dialog" data-tip="Closes this dialog without signing you in">✕</button>
     <h2 id="auth-title" class="display" style="color:var(--green-bright); text-align:center; font-size:1.6rem;">Welcome to The Send 🚀</h2>
     <p class="modal-sub">One account. Your wall, your reactions, your private wallet tracker.</p>
 
     <div class="auth-tabs" role="tablist" aria-label="Sign-in method">
-      <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet">🦊 Wallet</button>
-      <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email">✉️ Email</button>
+      <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet" data-tip="Shows the wallet sign-in panel instead of email">🦊 Wallet</button>
+      <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email" data-tip="Shows the email and password panel instead of wallet">✉️ Email</button>
     </div>
 
     <div id="pane-wallet" role="tabpanel" aria-labelledby="tab-wallet">
       <p class="modal-note">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
-      <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;">Continue with Wallet 🦊</button>
+      <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a login message">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
     </div>
 
     <div id="pane-email" role="tabpanel" aria-labelledby="tab-email" hidden>
       <div class="auth-segment" role="group" aria-label="Log in or sign up">
-        <button type="button" class="auth-seg active" id="seg-login" aria-pressed="true">Log in</button>
-        <button type="button" class="auth-seg" id="seg-signup" aria-pressed="false">Sign up</button>
+        <button type="button" class="auth-seg active" id="seg-login" aria-pressed="true" data-tip="Sets the form up for an account you already have">Log in</button>
+        <button type="button" class="auth-seg" id="seg-signup" aria-pressed="false" data-tip="Switches to making a new account, and asks for an invite">Sign up</button>
       </div>
       <form id="email-form" novalidate>
         <div id="reg-fields" hidden>
@@ -64,7 +64,7 @@
         <input class="addr-input" id="f-email" type="text" autocomplete="username" placeholder="you@example.com or your @handle">
         <label class="f-label" for="f-password">Password</label>
         <input class="addr-input" id="f-password" type="password" autocomplete="current-password" placeholder="••••••••">
-        <button class="btn btn-primary" type="submit" style="width:100%;" id="email-submit">Sign In 🚪</button>
+        <button class="btn btn-primary" type="submit" style="width:100%;" id="email-submit" data-tip="Sends these details to sign in or make your account">Sign In 🚪</button>
       </form>
       <p class="modal-note" id="email-status" aria-live="polite"></p>
     </div>
@@ -74,17 +74,17 @@
         <p class="modal-note">🔐 Two-factor is on for this account. Enter the 6-digit code from your authenticator app.</p>
         <label class="f-label" for="f-totp">Authentication code</label>
         <input class="addr-input" id="f-totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="text-align:center; font-size:1.3rem; letter-spacing:0.3em;">
-        <button class="btn btn-primary" id="totp-submit" style="width:100%;">Verify ✅</button>
+        <button class="btn btn-primary" id="totp-submit" style="width:100%;" data-tip="Checks the code you typed and finishes signing in">Verify ✅</button>
       </div>
       <div id="twofa-wallet" hidden>
         <p class="modal-note">🔐 Two-factor is on for this account. Sign a free message with your linked wallet to finish signing in.</p>
-        <button class="btn btn-primary" id="wallet2fa-submit" style="width:100%;">Sign With Wallet 🦊</button>
+        <button class="btn btn-primary" id="wallet2fa-submit" style="width:100%;" data-tip="Signs a message with your linked wallet to finish signing in">Sign With Wallet 🦊</button>
       </div>
       <div id="twofa-password" hidden>
         <p class="modal-note">🔐 Two-factor is on for this account. Enter your account password to finish signing in.</p>
         <label class="f-label" for="f-2fa-pw">Account password</label>
         <input class="addr-input" id="f-2fa-pw" type="password" autocomplete="current-password" placeholder="••••••••">
-        <button class="btn btn-primary" id="pw2fa-submit" style="width:100%;">Verify ✅</button>
+        <button class="btn btn-primary" id="pw2fa-submit" style="width:100%;" data-tip="Checks your account password and finishes signing in">Verify ✅</button>
       </div>
       <p class="modal-note" id="twofa-status" aria-live="polite"></p>
     </div>
@@ -92,20 +92,20 @@
     <div id="oauth-row" class="oauth-row" hidden>
       <div class="or-line"><span>or continue with</span></div>
       <div class="oauth-grid">
-        <a class="oauth-btn" id="oauth-google" href="/api/auth/google" hidden aria-label="Continue with Google">
+        <a class="oauth-btn" id="oauth-google" href="/api/auth/google" hidden data-tip="Sends you to Google to sign in, then back here" aria-label="Continue with Google">
           <span class="oauth-ico"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span><span class="oauth-name">Google</span></a>
-        <a class="oauth-btn" id="oauth-facebook" href="/api/auth/facebook" hidden aria-label="Continue with Facebook">
+        <a class="oauth-btn" id="oauth-facebook" href="/api/auth/facebook" hidden data-tip="Sends you to Facebook to sign in, then back here" aria-label="Continue with Facebook">
           <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.89v2.25h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg></span><span class="oauth-name">Facebook</span></a>
-        <a class="oauth-btn oauth-x" id="oauth-x" href="/api/auth/x" hidden aria-label="Continue with X (Twitter)">
+        <a class="oauth-btn oauth-x" id="oauth-x" href="/api/auth/x" hidden data-tip="Sends you to X to sign in, then back here" aria-label="Continue with X (Twitter)">
           <span class="oauth-ico"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.46l8.6-9.83L0 1.15h7.6l5.24 6.93 6.06-6.93zm-1.29 19.5h2.04L6.48 3.24H4.29L17.61 20.65z"/></svg></span><span class="oauth-name">X</span></a>
-        <a class="oauth-btn" id="oauth-instagram" href="/api/auth/instagram" hidden aria-label="Continue with Instagram">
+        <a class="oauth-btn" id="oauth-instagram" href="/api/auth/instagram" hidden data-tip="Sends you to Instagram to sign in, then back here" aria-label="Continue with Instagram">
           <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><path fill="url(#ig-g)" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 01-1.38-.9 3.7 3.7 0 01-.9-1.38c-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0 1.62c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19a3.6 3.6 0 00-.88-1.35 3.6 3.6 0 00-1.35-.88c-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 2.76a5.46 5.46 0 110 10.92 5.46 5.46 0 010-10.92zm0 9a3.54 3.54 0 100-7.08 3.54 3.54 0 000 7.08zm6.95-9.22a1.28 1.28 0 11-2.55 0 1.28 1.28 0 012.55 0z"/></svg></span><span class="oauth-name">Instagram</span></a>
       </div>
     </div>
     <!-- The way in for somebody who was handed a code. Without it, a person holding an invite has to
          guess that "Sign up" is what opens the ticket — and this line also tells everyone else, in one
          sentence, that they can read the whole site without any of this. -->
-    <p class="auth-invite">New here? Joining is by invite — <button type="button" class="linklike" id="auth-ticket">get your ticket 🎟️</button>. You can read the whole site without an account.</p>
+    <p class="auth-invite">New here? Joining is by invite — <button type="button" class="linklike" id="auth-ticket" data-tip="Closes this and opens the invite code panel">get your ticket 🎟️</button>. You can read the whole site without an account.</p>
   </div>`;
 
   let lastFocus = null, releaseTrap = null;
@@ -486,10 +486,12 @@
     const trg = document.createElement('a');
     trg.className = 'profile-link'; trg.id = 'nav-profile-trigger'; trg.href = '/u/' + encodeURIComponent(user.username);
     trg.setAttribute('aria-label', 'Your public Send Wall — @' + user.username);
+    trg.setAttribute('data-tip', 'Opens your own public Send Wall');
     trg.innerHTML = '<span class="pl-name">' + roEsc(user.avatar + ' @' + user.username) + '</span>' + ((user.og && window.ogBadge) ? ogBadge(user.og) : '');
     const caret = document.createElement('button');
     caret.type = 'button'; caret.className = 'np-caret-btn'; caret.id = 'nav-profile-caret';
     caret.setAttribute('aria-haspopup', 'true'); caret.setAttribute('aria-expanded', 'false'); caret.setAttribute('aria-controls', 'nav-profile-menu');
+    caret.setAttribute('data-tip', 'Opens your account menu');
     caret.setAttribute('aria-label', 'Account menu for @' + user.username);
     caret.innerHTML = '<span class="np-caret" aria-hidden="true">▾</span>';
     const menu = document.createElement('div');
@@ -513,6 +515,7 @@
       const disc = document.createElement('button');
       disc.type = 'button'; disc.className = 'npm-item npm-danger'; disc.id = 'npm-disconnect'; disc.setAttribute('role', 'menuitem'); disc.tabIndex = -1;
       disc.innerHTML = '<span class="npm-ico" aria-hidden="true">🔌</span> Disconnect wallet';
+      disc.setAttribute('data-tip', 'Unlinks your wallet after a second tap — an OG badge comes off too');
       let armed = false, armT = null;
       const resetArm = () => { armed = false; if (armT) { clearTimeout(armT); armT = null; } disc.classList.remove('armed'); disc.innerHTML = '<span class="npm-ico" aria-hidden="true">🔌</span> Disconnect wallet'; };
       disc._resetArm = resetArm; // let any menu-close path disarm the two-tap confirm (see setProfileOpen)
@@ -529,6 +532,7 @@
     const out = document.createElement('button');
     out.type = 'button'; out.className = 'npm-item npm-danger'; out.id = 'npm-signout'; out.setAttribute('role', 'menuitem'); out.tabIndex = -1;
     out.innerHTML = '<span class="npm-ico" aria-hidden="true">🚪</span> Sign out';
+    out.setAttribute('data-tip', 'Ends this session on this device');
     out.addEventListener('click', () => { setProfileOpen(wrap, false); AUTH.logout(); });
     menu.appendChild(out);
     wrap.appendChild(trg); wrap.appendChild(caret); wrap.appendChild(menu);
@@ -660,7 +664,7 @@
       ? '<div class="ro-redeem">' +
           '<p class="ro-redeem-h">🛒 Want back in now? <b>Buy &amp; hold $SEND.</b></p>' +
           '<p class="ro-redeem-t">Buy at least <b>$' + (r.redeemUsd || 25) + '</b> more $SEND (we read it straight from the chain) to lift ' + (perm ? 'your permanent read-only' : 'this') + ' immediately — then <b>keep your $SEND (don’t sell any) for ' + roDur(r.holdMs || 86400000) + '</b> to clear it for good. Sell before then and ' + (perm ? 'the <b>permanent</b> mute returns' : 'read-only comes back, <b>doubled</b>') + '.</p>' +
-          '<button class="btn btn-primary btn-sm" id="ro-redeem-btn" type="button">🛒 I bought $SEND — lift my read-only</button>' +
+          '<button class="btn btn-primary btn-sm" id="ro-redeem-btn" type="button" data-tip="Re-checks your wallet on-chain and lifts read-only if it qualifies">🛒 I bought $SEND — lift my read-only</button>' +
         '</div>'
       : '';
     bar.innerHTML =
@@ -793,6 +797,7 @@
       b.type = 'button';
       b.className = 'profile-link';
       b.textContent = 'Sign In 🚪';
+      b.setAttribute('data-tip', 'Opens sign-in, where you can use an invite code or a wallet');
       b.addEventListener('click', () => openModal());
       slot.appendChild(b);
     }

@@ -38,7 +38,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the list of site pages"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <main id="main">
@@ -48,7 +48,7 @@
     <div class="wrap" style="text-align:center; max-width:560px;">
       <h1 class="section-title display">Your Send Station 👤</h1>
       <p class="section-sub">One account gets you a pro-grade <b>private</b> wallet tracker, a unique handle, a fully customizable public Send Wall, and optional 2FA.</p>
-      <button class="btn btn-primary" id="signedout-cta">Sign In / Create Account 🚀</button>
+      <button class="btn btn-primary" id="signedout-cta" data-tip="Opens the sign-in window over this page">Sign In / Create Account 🚀</button>
       <p class="pnl-note" style="margin-top:1rem;">Connect a wallet (free signature, no transaction) or use email — sign in later with your email <b>or</b> your unique @handle.</p>
     </div>
   </section>
@@ -63,9 +63,9 @@
           <!-- h2, not h1: "Your Send Station" above is the page heading, and two h1s on one page leaves a
                screen-reader user with two competing answers to "what is this page". -->
           <h2 style="font-weight:800; font-size:1.2rem; margin:0;">@<span id="pf-username-show"></span></h2>
-          <a id="pf-wall-link" class="btn btn-primary btn-sm" href="#" style="margin-top:0.4rem;">🧱 View My Public Wall →</a>
+          <a id="pf-wall-link" class="btn btn-primary btn-sm" href="#" data-tip="Opens your public wall at your handle" style="margin-top:0.4rem;">🧱 View My Public Wall →</a>
         </div>
-        <button class="btn btn-ghost btn-sm" id="signout-btn" style="margin-left:auto;">Sign Out 👋</button>
+        <button class="btn btn-ghost btn-sm" id="signout-btn" style="margin-left:auto;" data-tip="Ends your session and reloads the page signed out">Sign Out 👋</button>
       </div>
 
       <div id="claim-banner" class="warn-box" style="margin:0 0 1.5rem;" hidden>
@@ -97,7 +97,7 @@
         <h2 class="display" style="color:var(--gold); font-size:1.7rem; margin-bottom:0.4rem;">Wallet Tracker 💼</h2>
         <p class="privacy-chip" style="margin-bottom:0.8rem;">🔒 Private — only you can see it</p>
         <p class="modal-note" style="margin:0 0 0.9rem;">Follow any wallet on Robinhood Chain — holdings, trades, cost basis and PNL, read straight from the chain in your browser and cached so it opens instantly next time. It has its own page now (also in your account menu ▾).</p>
-        <a class="btn btn-gold" href="/tracker.html">Open the Wallet Tracker 💼 →</a>
+        <a class="btn btn-gold" href="/tracker.html" data-tip="Goes to the wallet tracker page">Open the Wallet Tracker 💼 →</a>
       </div>
 
       <!-- ===== SETTINGS: collapsible ===== -->
@@ -118,7 +118,7 @@
             <input class="addr-input" id="pf-twitter" maxlength="30" spellcheck="false" autocomplete="off" placeholder="yourhandle">
             <label class="f-label" for="pf-instagram">📸 Instagram <span style="font-weight:400;">(handle, no @)</span></label>
             <input class="addr-input" id="pf-instagram" maxlength="30" spellcheck="false" autocomplete="off" placeholder="yourhandle">
-            <button class="btn btn-primary btn-sm" id="save-profile-btn" style="margin-top:0.9rem;">Save Changes 💾</button>
+            <button class="btn btn-primary btn-sm" id="save-profile-btn" style="margin-top:0.9rem;" data-tip="Saves your handle, avatar, bio and social links">Save Changes 💾</button>
           </div>
         </details>
 
@@ -135,23 +135,23 @@
               <p class="modal-note" id="wl-status" role="status" aria-live="polite" style="margin:0.4rem 0 0;"></p>
             </div>
 
-            <button class="btn btn-ghost btn-sm" id="link-wallet-btn" style="margin-top:0.7rem;">Link a wallet 🔗</button>
+            <button class="btn btn-ghost btn-sm" id="link-wallet-btn" style="margin-top:0.7rem;" data-tip="Asks your wallet for a signature that links it to this account">Link a wallet 🔗</button>
 
             <div style="margin-top:1.1rem; border-top:1px solid var(--ink-4); padding-top:0.9rem;">
               <div class="f-label" style="margin-top:0;">Two-factor authentication <span id="twofa-state" class="privacy-chip" style="margin-left:0.4rem;">off</span></div>
               <div id="twofa-off">
                 <p class="modal-note">Add a second lock on your account. Works with any authenticator app on your phone (Google Authenticator, Authy, 1Password…), or use a linked wallet signature.</p>
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-                  <button class="btn btn-primary btn-sm" id="totp-start-btn">📱 Set up phone app</button>
-                  <button class="btn btn-ghost btn-sm" id="wallet-2fa-btn">🦊 Use wallet as 2FA</button>
-                  <button class="btn btn-ghost btn-sm" id="pw-2fa-btn" hidden>🔑 Use my password as 2FA</button>
+                  <button class="btn btn-primary btn-sm" id="totp-start-btn" data-tip="Shows a QR code to scan in your authenticator app">📱 Set up phone app</button>
+                  <button class="btn btn-ghost btn-sm" id="wallet-2fa-btn" data-tip="Requires this wallet to sign in, and to turn this off again">🦊 Use wallet as 2FA</button>
+                  <button class="btn btn-ghost btn-sm" id="pw-2fa-btn" hidden data-tip="Opens the field where you confirm your password">🔑 Use my password as 2FA</button>
                 </div>
                 <div id="pw2fa-setup" hidden style="margin-top:0.9rem; max-width:420px;">
                   <p class="modal-note">With password-2FA on, signing in with your wallet also asks for your account password — two different things a thief would need.</p>
                   <label class="f-label" for="pw2fa-pass">Confirm your account password</label>
                   <div style="display:flex; gap:0.5rem;">
                     <input class="addr-input" id="pw2fa-pass" type="password" autocomplete="current-password" style="margin:0;" placeholder="••••••••">
-                    <button class="btn btn-primary btn-sm" id="pw2fa-confirm-btn">Enable ✅</button>
+                    <button class="btn btn-primary btn-sm" id="pw2fa-confirm-btn" data-tip="Turns on asking for your password at wallet sign-in">Enable ✅</button>
                   </div>
                 </div>
                 <div id="totp-setup" hidden style="margin-top:0.9rem; text-align:center;">
@@ -160,7 +160,7 @@
                   <label class="f-label" for="totp-confirm" style="text-align:left;">Enter the 6-digit code to turn it on</label>
                   <div style="display:flex; gap:0.5rem;">
                     <input class="addr-input" id="totp-confirm" style="margin:0; text-align:center; letter-spacing:0.3em;" inputmode="numeric" maxlength="6" placeholder="123456">
-                    <button class="btn btn-primary btn-sm" id="totp-confirm-btn">Enable ✅</button>
+                    <button class="btn btn-primary btn-sm" id="totp-confirm-btn" data-tip="Checks the code and turns on the authenticator app">Enable ✅</button>
                   </div>
                 </div>
               </div>
@@ -169,7 +169,7 @@
                 <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
                   <input class="addr-input" id="twofa-disable-code" style="margin:0; width:130px; text-align:center;" inputmode="numeric" maxlength="6" placeholder="code" aria-label="Authenticator code">
                   <input class="addr-input" id="twofa-disable-pw" type="password" autocomplete="current-password" style="margin:0; width:180px;" placeholder="account password" aria-label="Account password" hidden>
-                  <button class="btn btn-ghost btn-sm" id="twofa-disable-btn">Turn off 2FA</button>
+                  <button class="btn btn-ghost btn-sm" id="twofa-disable-btn" data-tip="Removes the second step after you prove the current one">Turn off 2FA</button>
                 </div>
                 <p class="modal-note">Turning it off always needs the current factor — a code, your password, or a wallet signature.</p>
               </div>
@@ -186,7 +186,7 @@
                 <label class="f-label" for="ae-pw2" style="margin:0;">Confirm password</label>
                 <input class="addr-input" id="ae-pw2" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
                 <div id="ae-factor" hidden><label class="f-label" for="ae-code" style="margin:0;">Your current authenticator code</label><input class="addr-input" id="ae-code" inputmode="numeric" maxlength="6" style="margin:0;" placeholder="123456"></div>
-                <button class="btn btn-primary btn-sm" type="submit" id="ae-submit">Add email + password 🔐</button>
+                <button class="btn btn-primary btn-sm" type="submit" id="ae-submit" data-tip="Adds an email and password as another way in">Add email + password 🔐</button>
                 <p class="modal-note" id="ae-status" role="status" aria-live="polite" style="margin:0;"></p>
               </form>
             </div>
@@ -232,20 +232,20 @@
               <div class="theme-rows" id="theme-rows"></div>
               <p class="theme-note warn-box" id="theme-note">Backgrounds are kept dark on purpose. Around forty shadows and overlays across the site are painted with fixed dark values that do not invert, so on a light background text, buttons and focus outlines stop being readable. Light picks are darkened to the lightest ground that still works.</p>
               <div class="theme-actions">
-                <button class="btn btn-ghost btn-sm" id="theme-reset" type="button">Reset all colours</button>
+                <button class="btn btn-ghost btn-sm" id="theme-reset" type="button" data-tip="Puts every colour back to the site default">Reset all colours</button>
               </div>
             </div>
             <div class="pref-row">
               <div><div class="p-label">Confetti &amp; effects 🎉</div><div class="p-sub">bursts on clicks, reactions, and buys</div></div>
-              <button class="switch" id="pref-confetti" role="switch" aria-checked="true" aria-label="Toggle confetti effects"></button>
+              <button class="switch" id="pref-confetti" role="switch" aria-checked="true" aria-label="Toggle confetti effects" data-tip="Stops or restarts the confetti bursts across the site"></button>
             </div>
             <div class="pref-row">
               <div><div class="p-label">Ticker tape 📈</div><div class="p-sub">the scrolling banner on the homepage</div></div>
-              <button class="switch" id="pref-ticker" role="switch" aria-checked="true" aria-label="Toggle ticker tape"></button>
+              <button class="switch" id="pref-ticker" role="switch" aria-checked="true" aria-label="Toggle ticker tape" data-tip="Shows or hides the scrolling banner strip across the site"></button>
             </div>
             <div class="pref-row">
               <div><div class="p-label">Resume music between pages 🎵</div><div class="p-sub">keep the theme playing as you browse</div></div>
-              <button class="switch" id="pref-music" role="switch" aria-checked="true" aria-label="Toggle music auto-resume"></button>
+              <button class="switch" id="pref-music" role="switch" aria-checked="true" aria-label="Toggle music auto-resume" data-tip="Chooses whether the theme song keeps playing between pages"></button>
             </div>
             <p class="modal-note">Preferences save to your account and follow you to any device you sign in on.</p>
           </div>
@@ -284,6 +284,7 @@
 <script src="chain.js"></script>
 <script src="tracker.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

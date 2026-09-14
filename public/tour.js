@@ -42,8 +42,8 @@
         '<h2 id="tw-title" class="display" style="color:var(--green-bright); font-size:1.7rem;">Welcome to $Send</h2>' +
         '<p id="tw-body" class="modal-note" style="font-size:0.95rem;">New to crypto? You\'re exactly where you should be. Take a 60-second tour — where to buy safely, how to track your bags, where the memes live, and how you <b>earn points &amp; level up to Biggest Sender</b> 🏆. No pressure.<br><span style="opacity:0.8;">Entertainment only, not financial advice, not affiliated with Robinhood.</span></p>' +
         '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">' +
-          '<button class="btn btn-primary" id="tw-start" type="button">Show me around 👀</button>' +
-          '<button class="btn btn-ghost btn-sm" id="tw-skip" type="button">I\'ll explore myself</button>' +
+          '<button class="btn btn-primary" id="tw-start" type="button" data-tip="Starts the step-by-step walkthrough of this page">Show me around 👀</button>' +
+          '<button class="btn btn-ghost btn-sm" id="tw-skip" type="button" data-tip="Closes this and stops the tour reopening later">I\'ll explore myself</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(welcome);
@@ -108,10 +108,10 @@
       '<h3 id="tt-title" class="tour-title">' + step.title + '</h3>' +
       '<p id="tt-body" class="tour-body">' + step.body + '</p>' +
       '<div class="tour-controls">' +
-        '<button class="linklike" id="tt-skip" type="button">Skip tour</button>' +
+        '<button class="linklike" id="tt-skip" type="button" data-tip="Ends the tour here and stops it reopening later">Skip tour</button>' +
         '<span style="flex:1"></span>' +
-        (idx > 0 ? '<button class="btn btn-ghost btn-sm" id="tt-back" type="button">Back</button>' : '') +
-        '<button class="btn btn-primary btn-sm" id="tt-next" type="button">' + (isLast ? 'Finish 🚀' : 'Next') + '</button>' +
+        (idx > 0 ? '<button class="btn btn-ghost btn-sm" id="tt-back" type="button" data-tip="Returns to the previous stop on the tour">Back</button>' : '') +
+        '<button class="btn btn-primary btn-sm" id="tt-next" type="button" data-tip="Moves to the next stop, or finishes the tour">' + (isLast ? 'Finish 🚀' : 'Next') + '</button>' +
       '</div>';
 
     target.scrollIntoView({ block: 'center', behavior: reduced() ? 'auto' : 'smooth' });

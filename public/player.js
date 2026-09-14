@@ -10,10 +10,10 @@
     const wrap = document.createElement('div');
     wrap.id = 'music-player';
     wrap.innerHTML =
-      '<button class="mp-btn" id="mp-toggle" aria-label="Play the Just Send It theme" aria-pressed="false">▶</button>' +
+      '<button class="mp-btn" id="mp-toggle" data-tip="Plays the theme tune, or pauses it and keeps it off" aria-label="Play the Just Send It theme" aria-pressed="false">▶</button>' +
       '<div class="mp-title"><span class="eq" aria-hidden="true"><span>▮</span><span>▮</span><span>▮</span></span> Just $Send It</div>' +
       '<input type="range" id="mp-vol" min="0" max="100" value="70" aria-label="Music volume">' +
-      '<button class="mp-hint" id="mp-hint" hidden>🔊 Tap for the theme</button>';
+      '<button class="mp-hint" id="mp-hint" data-tip="Turns the music on and hides this nudge" hidden>🔊 Tap for the theme</button>';
     document.body.appendChild(wrap);
 
     const audio = new Audio('/assets/justsendit-audio.m4a');

@@ -13,6 +13,7 @@ const SRC = readFileSync(SERVER_JS, 'utf8');
 const NP = readFileSync(path.join(ROOT, 'public', 'newpairs.js'), 'utf8');
 const HTML = readFileSync(path.join(ROOT, 'public', 'newpairs.html'), 'utf8');
 const CSS = readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
+const WL = readFileSync(path.join(ROOT, 'public', 'watchlist.js'), 'utf8');
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 
@@ -93,20 +94,42 @@ try {
   {
     check('the tag is awarded against the reader\'s own bar', /function meetsYourBar\(p\)/.test(NP) && /if \(!passFilters\(p, f\)\) return false;/.test(NP));
     check('with no settings at all it falls back to the site\'s own bar, not to everything',
-      /activeFilterCount\(f\) === 0\) return !thinData\(p\)[\s\S]{0,140}?sniperOk\(p\)/.test(NP));
+      /activeFilterCount\(f\) === 0\) return clearsSiteBar\(p\)/.test(NP));
+    check('  ...and the site\'s own bar is a named predicate, testable in one place',
+      /function clearsSiteBar\(p\) \{[\s\S]{0,220}?!thinData\(p\)[\s\S]{0,160}?sniperOk\(p\)/.test(NP));
     check('four things can never be waived by any setting', /const VERDICT_FLOOR = \['honeypotSuspect', 'dumping', 'sniperDump'\]/.test(NP) && /triageOf\(p\) === 'avoid'\) return true/.test(NP));
     check('  ...and no strategy can turn them off', !/hide: \{[^}]*honeypotSuspect: false/.test(NP));
-    /* Two tags, not one with a tooltip: a reader must be able to tell at a glance whether the SITE said
-       so or their own filter did, because the rocket is the site's credibility and a setting cannot be
-       allowed to borrow it. */
-    check('a custom bar gets its own tag, never the site\'s rocket',
-      /word: 'Matches Your Bar, Send It', yours: true/.test(NP) && /np-t-yours/.test(NP) && /np-t-yours \{/.test(CSS));
-    check('  ...and says in words that it is the reader\'s filter speaking', /It is your filter saying so, not us\./.test(NP));
-    check('  ...while the site\'s own bar keeps the rocket and its caveat', /word: 'Looks Good, Send It'[\s\S]{0,160}?most new tokens still go to zero/.test(NP));
+    /* ONE WORDING, TWO BARS, ALWAYS ATTRIBUTED. Clearing the settings the reader chose earns the same
+       words the site's own bar earns — that is what the settings are for. What may never merge is whose
+       judgement it was, so the claim is attributed three ways, none of which is colour: colour reaches
+       neither a screen reader, nor a colour-blind reader, nor forced-colours mode. */
+    check('clearing the reader\'s own bar earns the same words',
+      /word: 'Looks Good, Send It', yours: true/.test(NP));
+    check('  ...attributed by a DIFFERENT icon, not by colour', /ico: '🚀', word: 'Looks Good, Send It'/.test(NP) && /ico: '🎯', word: 'Looks Good, Send It'/.test(NP));
+    check('  ...by a visible byline that is real text, never aria-hidden',
+      /by: 'by your filters'/.test(NP) && /np-verdict-by/.test(NP) && /np-verdict-by \{/.test(CSS) && !/np-verdict-by[^>]*aria-hidden/.test(NP));
+    check('  ...and by the spoken line, in words', /said: 'matching the filters you set — your settings, not ours'/.test(NP) && /const spokenVerdict = \(T\) => T\.word \+ \(T\.said/.test(NP));
+    check('every spoken verdict goes through that one helper', !/Verdict ' \+ T\.word/.test(NP) && (NP.match(/spokenVerdict\(T\)/g) || []).length >= 3);
+    check('  ...and the poll repaints keep the byline', (NP.match(/'<\/span>' \+ byline\(T\)/g) || []).length >= 2);
+    check('the site\'s own bar keeps the rocket and its caveat', /word: 'Looks Good, Send It'[\s\S]{0,200}?most new tokens still go to zero/.test(NP));
+
+    /* "Why WE say" is the site endorsing. It may only appear over the site's own bar — and this heading
+       renders ONLY when flags.length is truthy, so without the split it would have printed the site's
+       endorsement directly above a list of warnings the site itself raised. */
+    check('only the site says "Why we say"', /T\.yours \? 'Why your settings say ' : 'Why we say '/.test(NP));
+    check('  ...which matters because that heading is the only verdict text off the scanner page',
+      /window\.NPCard = \{/.test(NP) && /detailHTML:/.test(NP));
+    check('the reader\'s bar is not claimed on pages that cannot show the settings',
+      /const readerBarLive = \(\) => !!listEl && activeFilterCount\(\) > 0;/.test(NP) && /readerBarLive\(\) && meetsYourBar\(p\)/.test(NP));
+    check('the site\'s bar is tested first, so a filter cannot cost a token the rocket',
+      /if \(!floorBreached\(p\) && clearsSiteBar\(p\)\)[\s\S]{0,320}?readerBarLive\(\) && meetsYourBar\(p\)/.test(NP));
+    check('the feed slide repaints its spoken line, not just its chip', /np-slide-sr'\); if \(srSlide\) srSlide\.textContent = srLine\(p\)/.test(NP));
+    check('the watchlist awards the same words on the same test', /h >= 100 && sniperOk\) return \{ cls: 'np-t-ok np-t-perfect'/.test(WL));
+    check('the server mirror stays the site\'s bar alone', /It has no second bar and must not grow one/.test(SRC));
     check('the Hot Feed uses the same predicate as the tag — they cannot disagree', /const feedQualifies = \(p\) => meetsYourBar\(p\);/.test(NP));
     /* The feed's own copy has to say which bar it is following, and an empty feed has to say WHY —
        "check back soon" is the wrong answer when the real one is "your filter excluded everything". */
-    check('  ...and the feed says whose bar it is showing', /The fresh tokens that clear <b>your<\/b> settings/.test(NP));
+    check('  ...and the feed says whose bar it is showing', /The fresh tokens that clear <b>your<\/b> settings/.test(NP) && /awarded by your filters rather than by us/.test(NP));
     check('  ...and an empty feed blames the right thing', /Nothing on the board clears your settings right now/.test(NP));
   }
 

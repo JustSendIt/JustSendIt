@@ -293,7 +293,7 @@
     const stale = h && h.streakStart && h.fresh === false;
     if (stale) {
       return '<div class="gobj gobj-alert" role="status">' +
-        '<div class="gobj-primary">⏸ Your <b>⚡' + (Math.round((1 + supplyTermOf(h) * (h.diamond ? h.diamond.factor : 1)) * 100) / 100).toFixed(2) + '×</b> boost is paused (paying 1× right now) — <button class="gobj-link js-refresh" type="button">Refresh to re-verify your bags →</button></div>' +
+        '<div class="gobj-primary">⏸ Your <b>⚡' + (Math.round((1 + supplyTermOf(h) * (h.diamond ? h.diamond.factor : 1)) * 100) / 100).toFixed(2) + '×</b> boost is paused (paying 1× right now) — <button class="gobj-link js-refresh" type="button" data-tip="Re-reads your linked wallets on-chain and updates your boost">Refresh to re-verify your bags →</button></div>' +
       '</div>';
     }
     const maxed = g.nextLevelXp == null;
@@ -316,9 +316,9 @@
         ? '💎 Don\'t break your <b>' + Math.floor(h.holdDays) + '-day</b> diamond streak — ' + diaLeft + ' day' + (diaLeft === 1 ? '' : 's') + ' to ' + esc(nextLbl)
         : '👑 <b>' + esc(d.name) + '</b> — the highest Diamond tier there is. Never sell. 💎';
     } else if (hasWallet) {
-      secondary = '💰 <button class="gobj-link js-refresh" type="button">Buy &amp; hold $SEND / $GWC, then Refresh</button> to unlock your boost';
+      secondary = '💰 <button class="gobj-link js-refresh" type="button" data-tip="Re-checks your linked wallets on-chain and updates this dashboard">Buy &amp; hold $SEND / $GWC, then Refresh</button> to unlock your boost';
     } else {
-      secondary = '🔗 <button class="gobj-link js-connect" type="button">Connect a wallet</button> that holds $SEND / $GWC to unlock your Holder Boost';
+      secondary = '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Connect a wallet</button> that holds $SEND / $GWC to unlock your Holder Boost';
     }
     return '<div class="gobj" role="status">' +
       '<div class="gobj-primary">' + primary + '</div>' +
@@ -583,8 +583,8 @@
             : 'Connect a wallet holding <b>$SEND / $GWC</b> to unlock a boost that multiplies <b>every point</b> you earn — and grows the longer you diamond-hand.') +
         '</p>' +
         '<div class="lock-btns">' +
-          (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button">Connect wallet 🔗</button>') +
-          '<button class="btn btn-ghost btn-sm js-refresh" type="button">↻ Refresh holdings</button>' +
+          (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button" data-tip="Jumps to the Security panel to link a wallet">Connect wallet 🔗</button>') +
+          '<button class="btn btn-ghost btn-sm js-refresh" type="button" data-tip="Re-reads your linked wallets on-chain and redraws this dashboard">↻ Refresh holdings</button>' +
         '</div>' +
       '</div>';
     }
@@ -607,7 +607,7 @@
           ') → feeds your <b>×' + supplyTerm.toFixed(1) + '</b> supply boost</div>'
       : '<div class="vtok"><span class="token-emblem send vtok-emblem" aria-hidden="true">$</span><div class="vtok-body"><div class="vtok-line"><span class="vtok-amt">' + compact(h.sendTok || 0) + '</span> <span class="vtok-sym">$SEND</span></div></div></div>' +
         '<div class="vtok"><span class="token-emblem gwc vtok-emblem" aria-hidden="true">$</span><div class="vtok-body"><div class="vtok-line"><span class="vtok-amt">' + compact(h.gwcTok || 0) + '</span> <span class="vtok-sym">$GWC</span></div></div></div>' +
-        '<div class="vault-foot">You hold <b>' + pctFmt(scorePct) + '%</b> of combined supply → <b>×' + supplyTerm.toFixed(1) + '</b> supply boost · <button class="gobj-link js-refresh" type="button">Refresh to see your $SEND / $GWC split</button></div>';
+        '<div class="vault-foot">You hold <b>' + pctFmt(scorePct) + '%</b> of combined supply → <b>×' + supplyTerm.toFixed(1) + '</b> supply boost · <button class="gobj-link js-refresh" type="button" data-tip="Re-reads your wallets on-chain to fill in the per-token split">Refresh to see your $SEND / $GWC split</button></div>';
     return '<div class="engine engine-live">' +
       '<div class="vault">' +
         '<h3 class="eng-h">🏦 The Vault</h3>' +
@@ -635,8 +635,8 @@
   }
   function lootToggle() {
     return '<div class="ll-toggle" role="group" aria-label="Achievement log window">' +
-      '<button type="button" data-lootmode="today" class="' + (_lootMode === 'today' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'today') + '">Today</button>' +
-      '<button type="button" data-lootmode="all" class="' + (_lootMode === 'all' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'all') + '">All&nbsp;time</button>' +
+      '<button type="button" data-tip="Limits the log to your most recent day of earnings" data-lootmode="today" class="' + (_lootMode === 'today' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'today') + '">Today</button>' +
+      '<button type="button" data-tip="Shows your whole earning history instead of just today" data-lootmode="all" class="' + (_lootMode === 'all' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'all') + '">All&nbsp;time</button>' +
     '</div>';
   }
   function lootLog(g) {
@@ -670,7 +670,7 @@
       rows += '<li class="ll-li" style="--i:' + i + '" aria-label="' + esc(meta[1]) + ': ' + nf(x.total) + ' points from ' + x.n + ' action' + (x.n === 1 ? '' : 's') + '">' +
         '<span class="ll-ico" aria-hidden="true">' + meta[0] + '</span>' +
         '<span class="ll-label">' + esc(meta[1]) + (i === 0 ? ' <span class="ll-top">⭐ Top</span>' : '') + '<span class="ll-n">×' + x.n + '</span>' +
-          '<button class="ll-info" type="button" aria-expanded="false" aria-label="What ' + esc(meta[1]) + ' points are for">ⓘ</button></span>' +
+          '<button class="ll-info" type="button" data-tip="Explains what these points were paid for" aria-expanded="false" aria-label="What ' + esc(meta[1]) + ' points are for">ⓘ</button></span>' +
         '<span class="ge-tip" role="tooltip">' + why + '</span>' +
         '<span class="ll-track" aria-hidden="true"><span class="ll-fill" data-fill="' + (x.total / max * 100).toFixed(1) + '" style="width:0;background:' + RAMP[i % RAMP.length] + '"></span></span>' +
         '<span class="ll-pts">' + nf(x.total) + '</span>' +
@@ -787,9 +787,9 @@
       if (done) row = '<div class="gearn-row gearn-done">' + inner + '<span class="ge-go" aria-hidden="true">✓ today</span></div>';
       else if (t.wall) row = '<a class="gearn-row" href="' + wallHref + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
       else if (t.href) row = '<a class="gearn-row" href="' + t.href + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
-      else row = '<button class="gearn-row" type="button" data-earn="' + k + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></button>';
+      else row = '<button class="gearn-row" type="button" data-tip="Jumps to the part of this page where you do it" data-earn="' + k + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></button>';
       // ⓘ toggle so the rule text is reachable by tap, not just hover (audit #24 — mobile has no hover)
-      const info = tip ? '<button class="ge-info" type="button" aria-expanded="false" aria-label="Rules for ' + esc(label) + '">ⓘ</button>' : '';
+      const info = tip ? '<button class="ge-info" type="button" data-tip="Opens the full rules for this way of earning" aria-expanded="false" aria-label="Rules for ' + esc(label) + '">ⓘ</button>' : '';
       html += '<li class="gearn-li">' + row + info + tip + '</li>';
     }
     html += '</ul>';
@@ -1142,7 +1142,7 @@
   }
   function arenaBlock(lb, comp, myUsername) {
     const week = _arenaTab === 'week';
-    const tab = (key, label, on) => '<button class="arena-tab' + (on ? ' is-on' : '') + '" type="button" role="tab" id="arena-tab-' + key + '" aria-selected="' + on + '" aria-controls="arena-panel" tabindex="' + (on ? '0' : '-1') + '" data-arena="' + key + '">' + label + '</button>';
+    const tab = (key, label, on) => '<button class="arena-tab' + (on ? ' is-on' : '') + '" type="button" data-tip="Switches the board between all-time and this week" role="tab" id="arena-tab-' + key + '" aria-selected="' + on + '" aria-controls="arena-panel" tabindex="' + (on ? '0' : '-1') + '" data-arena="' + key + '">' + label + '</button>';
     return '<div class="arena-head"><h3 class="gsub">🏟️ The Arena</h3>' +
       '<div class="arena-tabs" role="tablist" aria-label="Which board">' + tab('all', '👑 All time', !week) + tab('week', '🏆 Biggest Senders', week) + '</div></div>' +
       '<div id="arena-panel" role="tabpanel" aria-labelledby="arena-tab-' + (week ? 'week' : 'all') + '">' + (week ? compBoard(comp, myUsername) : boardList(lb, myUsername)) + '</div>';

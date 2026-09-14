@@ -176,32 +176,59 @@
   /* Does this token clear the bar the reader actually set? Health, the flags they chose to hide, the
      signals they insisted were genuinely checked — the same predicate the board filters on, so the tag
      and the list can never disagree about what qualifies. */
+  /* The SITE's own bar, as a named predicate rather than an expression buried in a branch. Everything
+     in it is a thing we actually checked and that actually passed: the data was readable, the risk
+     model's top tier, a full score, and a clean first block. */
+  function clearsSiteBar(p) {
+    return !thinData(p) && triageOf(p) === 'ok' && Math.round((p.risk && p.risk.health) || 0) >= 100 && sniperOk(p);
+  }
+  /* Is the reader's own bar in play on THIS page? It is not enough that filters exist in localStorage.
+     newpairs.js is also loaded on the Send Wall, community, support and profile pages to render token
+     cards through window.NPCard, and those pages have no settings panel, no filter count and no reset —
+     a reader there cannot see what their filters are, let alone that they are being applied. Attributing
+     a verdict to settings somebody cannot reach is worse than not offering the verdict at all, so off
+     the scanner page only the site's own bar is ever claimed. */
+  const readerBarLive = () => !!listEl && activeFilterCount() > 0;
   function meetsYourBar(p) {
     const f = state.filters;
     if (floorBreached(p)) return false;
     if (!passFilters(p, f)) return false;
     // a reader who has set NO bar at all gets the site's own, so the tag never becomes a participation medal
-    if (activeFilterCount(f) === 0) return !thinData(p) && triageOf(p) === 'ok' && Math.round((p.risk && p.risk.health) || 0) >= 100 && sniperOk(p);
+    if (activeFilterCount(f) === 0) return clearsSiteBar(p);
     return true;
   }
+  /* ═══ ONE VERDICT, TWO BARS, ALWAYS ATTRIBUTED ═════════════════════════════════════════════════
+     Both bars now award the same words — "Looks Good, Send It" — because the settings exist precisely
+     so a reader can define what good means for them, and handing them a different, lesser phrase for
+     clearing their own bar read as the site withholding its blessing.
+
+     What must NOT merge is WHOSE judgement it was. So the claim is attributed three ways, and none of
+     them is colour, because colour is not available to a screen reader, to a colour-blind reader, or in
+     forced-colours mode:
+       · the icon      — 🚀 the site's own bar, 🎯 the bar the reader set
+       · a visible byline on the chip — "by your filters", real text, never aria-hidden
+       · the spoken line — srLine/sr-only append the same attribution in words
+
+     The SITE's bar is tested FIRST and independently of whether the reader has set anything. It used to
+     be reached only when activeFilterCount() === 0, which is not the same question: a token that clears
+     everything the site itself checks was being attributed to the reader's filters merely because they
+     had set some. Now it earns the rocket either way, and more tokens carry it, not fewer. */
+  /* The two carriers of attribution, in one place so the chip and the spoken line can never disagree.
+     byline() is REAL TEXT and deliberately not aria-hidden: it is the whole claim about whose judgement
+     this was, and hiding it from assistive tech would leave exactly the readers with no other cue. */
+  const byline = (T) => T && T.by ? '<span class="np-verdict-by">' + esc(T.by) + '</span>' : '';
+  const spokenVerdict = (T) => T.word + (T.said ? ', ' + T.said : '');
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
-    if (meetsYourBar(p)) {
-      /* The wording changes with WHOSE bar it cleared, because those are different claims and a reader
-         must never be able to mistake one for the other. Against the site's own default it is the site
-         saying so; against a custom bar it is the reader's own filters saying so, and the tag says
-         "matches what you asked for" in the tooltip rather than pretending to be an endorsement. */
-        /* TWO DIFFERENT CLAIMS, TWO DIFFERENT TAGS. A reader who sees the rocket must be able to tell
-         whether the SITE said so or their own filter did — otherwise a loose setting quietly borrows the
-         site's credibility, which is the one thing this verdict is not allowed to lend. So the site's own
-         bar keeps the rocket and its wording; a bar the reader set gets its own word and its own colour,
-         and names itself as theirs. Both mean "this passed", but only one of them is us saying it. */
-      const own = activeFilterCount() === 0;
-      return own
-        ? { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
-            why: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' }
-        : { cls: 'np-t-ok np-t-yours', ico: '🎯', word: 'Matches Your Bar, Send It', yours: true,
-            why: 'This clears every setting YOU asked for, and trips none of the checks nobody can waive. It is your filter saying so, not us.' };
+    if (!floorBreached(p) && clearsSiteBar(p)) {
+      return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
+        why: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' };
+    }
+    if (readerBarLive() && meetsYourBar(p)) {
+      return { cls: 'np-t-ok np-t-yours', ico: '🎯', word: 'Looks Good, Send It', yours: true,
+        by: 'by your filters',
+        said: 'matching the filters you set — your settings, not ours',
+        why: 'This clears the settings you asked for and trips none of the checks nobody can waive. It is your filter saying so, not us.' };
     }
     if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
     if (tri === 'ok' && health >= 100 && !sniperOk(p)) {
@@ -570,7 +597,7 @@
     (b.socials || []).forEach(s => links.push({ t: s.type, url: s.url, label: SOCIAL_LABEL[s.type] || 'Link' }));
     if (b.dextools && b.dextools.url) links.push({ t: 'link', url: b.dextools.url, label: 'Dextools' });
     if (!links.length) return '';
-    return '<div class="np-socials">' + links.map(l => '<a class="np-social-btn" href="' + esc(l.url) + '" target="_blank" rel="noopener nofollow"><span class="np-social-ico" aria-hidden="true">' + (SOCIAL_ICON[l.t] || '🔗') + '</span>' + esc(l.label) + '</a>').join('') + '</div>';
+    return '<div class="np-socials">' + links.map(l => '<a class="np-social-btn" data-tip="Opens the link listed for this token in a new tab" href="' + esc(l.url) + '" target="_blank" rel="noopener nofollow"><span class="np-social-ico" aria-hidden="true">' + (SOCIAL_ICON[l.t] || '🔗') + '</span>' + esc(l.label) + '</a>').join('') + '</div>';
   }
   // Explicit paid/updated status for BOTH platforms — shown in the expanded detail so "whether or not paid" is clear.
   function brandStatusHTML(p) {
@@ -609,7 +636,7 @@
         '<span class="np-meta"><span class="np-age">🕐 ' + npFmtAge(p.pair.ageMinutes) + '</span><span class="np-quote">/ ' + esc(p.pair.quoteSymbol) + '</span>' + commSlot(p.token.address, p.token.symbol) + '</span>' +
         badgesHTML(p) +
       '</span>' +
-      '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
+      '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>' + byline(T) + '</span>' +
       // a carried price must never draw identically to a live one — the label says which it is
       '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">' + (p.priceStale ? '⏳ last read' : 'MC') + '</i></span>' +
       '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
@@ -618,16 +645,16 @@
       rowPinHTML(p) +
       (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
-      '<span class="sr-only">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + T.word + ', health ' + health + ' of 100. Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.</span>' +
+      '<span class="sr-only">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100. Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.</span>' +
     '</div>' + flagstripHTML(p) + '</summary>';
   }
 
   /* ---------- expanded detail panel ---------- */
-  function copyBtn(addr, label) { return '<button class="copy-btn" type="button" data-copy="' + esc(addr) + '" aria-label="Copy ' + esc(label || 'address') + '">📋</button>'; }
+  function copyBtn(addr, label) { return '<button class="copy-btn" type="button" data-tip="Copies this address to your clipboard" data-copy="' + esc(addr) + '" aria-label="Copy ' + esc(label || 'address') + '">📋</button>'; }
   // "Pin to my wall" button HTML — appears on every token's on-chain detail (DEX list, Hot Feed, lookup, Send Call widget, popup). State/handler are set up at the top of the IIFE.
   function pinBtnHTML(p) {
     const on = isPinned(p.token.address);
-    return '<button class="np-pin btn btn-sm' + (on ? ' is-pinned' : '') + '" type="button" data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' + (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') + ' aria-pressed="' + on + '">' + (on ? '📌 Pinned to wall' : '📌 Pin to my wall') + '</button>';
+    return '<button class="np-pin btn btn-sm' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Pins this token to your wall, or unpins it" data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' + (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') + ' aria-pressed="' + on + '">' + (on ? '📌 Pinned to wall' : '📌 Pin to my wall') + '</button>';
   }
   /* 📣 Send Call straight from the DEX list row.
      A call is PERMANENT and can never be deleted, so a single stray tap on a dense list row must not be able to
@@ -639,7 +666,7 @@
   function callBtnHTML(p) {
     const liq = p.market && p.market.liquidityUsd;
     if (!(liq != null && liq >= CALL_MIN_LIQ)) return '';
-    return '<button class="np-row-call" type="button" data-call-ico="📣" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '"' +
+    return '<button class="np-row-call" type="button" data-tip="Press twice to post a call that can never be deleted" data-call-ico="📣" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '"' +
       ' title="Make a Send Call on $' + esc(p.token.symbol) + '" aria-label="Make a Send Call on ' + esc(p.token.symbol) + '. Press once to confirm — a Send Call is permanent.">📣</button>';
   }
   /* Convict straight from a DEX-list row. The full "📌 Pin to my wall" button already lives inside the
@@ -648,7 +675,7 @@
   function rowPinHTML(p) {
     const on = isPinned(p.token.address);
     const sy = p.token.symbol ? '$' + p.token.symbol : 'this token';
-    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-pin-ico="1"' +
+    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Pins this token to your wall, or unpins it" data-pin-ico="1"' +
       ' data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' +
       (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') +
       ' aria-pressed="' + on + '" title="' + (on ? 'Convicted — tap to remove' : 'Convict — pin to your wall') + '"' +
@@ -677,7 +704,7 @@
   }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && callArmed) disarmCall(); });
   // a small copy button that sits next to a ticker (stops the click from also toggling the row it lives in)
-  function tickerCopy(addr) { return '<button class="np-tickcopy" type="button" data-copy="' + esc(addr) + '" data-nostop="1" title="Copy contract address" aria-label="Copy contract address">📋</button>'; }
+  function tickerCopy(addr) { return '<button class="np-tickcopy" type="button" data-tip="Copies the contract address to your clipboard" data-copy="' + esc(addr) + '" data-nostop="1" title="Copy contract address" aria-label="Copy contract address">📋</button>'; }
   // 🏘️ Community / ＋ Start community tag placeholder — tokentext.js fills it (batched lookup, 60 s cache); empty when that module isn't loaded
   function commSlot(addr, sym) { return window.tokenCommunitySlot ? tokenCommunitySlot(addr, sym || '') : ''; }
   function commDecorate(root) { if (window.decorateTokenCommunities) decorateTokenCommunities(root); }
@@ -842,7 +869,13 @@
     // A. Why verdict (always shown)
     let why;
     if (flags.length) {
-      why = '<section class="np-why"><h3 class="np-why-h">Why we say <span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></h3><ul class="np-why-list">';
+      /* Off the scanner page this heading is the ONLY verdict text there is — window.NPCard.detailHTML
+         ships this panel into the Send Wall, communities, support, profiles and the token modal, where
+         there is no chip, no icon and no byline. So the attribution has to live in the sentence itself.
+         It also cannot be left alone: this branch renders only when flags.length is truthy, and a
+         reader-bar pass can carry flags, so the old wording would print "Why we say Looks Good, Send It"
+         directly above a list of warnings the site itself raised. */
+      why = '<section class="np-why"><h3 class="np-why-h">' + (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></h3><ul class="np-why-list">';
       flags.forEach(k => { why += '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].say(p)) + '</li>'; });
       why += '</ul></section>';
     } else {
@@ -912,10 +945,10 @@
       ownerLine +
       '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' : '📄 Verification unknown') + '</p>' +
       '<div class="np-actions">' +
-        (opts.hideCall ? '' : '<button class="btn btn-sm btn-primary np-call" type="button" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button>') +
+        (opts.hideCall ? '' : '<button class="btn btn-sm btn-primary np-call" type="button" data-tip="Posts a call on your wall that can never be deleted" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button>') +
         pinBtnHTML(p) +
-        '<a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' +
-        '<a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' +
+        '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' +
+        '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' +
       '</div>';
 
     return '<div class="np-body">' + brandHeadHTML(p) + audit + why +
@@ -1037,14 +1070,14 @@
       return;
     }
     listEl.removeAttribute('aria-busy');
-    if (npData.error) { listEl.innerHTML = '<li class="np-msg np-error">⚠️ Couldn\'t reach the radar. <button class="btn btn-sm btn-ghost" id="np-retry" type="button">Try again</button></li>'; return; }
+    if (npData.error) { listEl.innerHTML = '<li class="np-msg np-error">⚠️ Couldn\'t reach the radar. <button class="btn btn-sm btn-ghost" id="np-retry" type="button" data-tip="Fetches the pair list from the scanner again">Try again</button></li>'; return; }
     listEl.innerHTML = '<li class="np-msg">🌙 Quiet on the chain — no new pairs right now. Fewer fresh tokens means fewer traps. Check back later.</li>';
   }
   function renderEmpty() {
     listEl.removeAttribute('aria-busy');
-    if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches “' + esc(state.q) + '”. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button">Clear search</button></li>'; return; }
-    if (state.safety === 'safer' && state.all.length) { listEl.innerHTML = '<li class="np-msg np-allclear">🛡️ All clear in Safer view — every new pair matching your filters tripped our checks, so none are shown by default.<div style="margin-top:0.7rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;"><button class="btn btn-sm btn-ghost" id="np-showrisky" type="button">Show risky ☠️</button><button class="btn btn-sm btn-ghost" id="np-reset2" type="button">Reset filters</button></div></li>'; return; }
-    listEl.innerHTML = '<li class="np-msg">Nothing matches these filters. <button class="btn btn-sm btn-ghost" id="np-reset2" type="button">Reset filters</button></li>';
+    if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches “' + esc(state.q) + '”. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>'; return; }
+    if (state.safety === 'safer' && state.all.length) { listEl.innerHTML = '<li class="np-msg np-allclear">🛡️ All clear in Safer view — every new pair matching your filters tripped our checks, so none are shown by default.<div style="margin-top:0.7rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;"><button class="btn btn-sm btn-ghost" id="np-showrisky" type="button" data-tip="Switches to the Risky tab, which shows the hidden pairs">Show risky ☠️</button><button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></div></li>'; return; }
+    listEl.innerHTML = '<li class="np-msg">Nothing matches these filters. <button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></li>';
   }
   function updateStatus() {
     if (state.lookup && state.mode === 'list') return; // renderLookup owns the status line during an address lookup
@@ -1055,8 +1088,8 @@
       : passed.filter(p => !hideFromMain(p)).length;
     const ago = state.lastFetch ? Math.max(0, Math.round((Date.now() - state.lastFetch) / 1000)) : null;
     let txt = '<span class="np-live-dot' + (npData.stale ? ' stale' : '') + '" aria-hidden="true"></span> ' + shown + ' of ' + state.all.length + ' pair' + (state.all.length === 1 ? '' : 's');
-    if (state.safety === 'safer' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhidden">' + hidden + ' hidden (risky or under ' + SAFER_MIN + '%)</button>';
-    else if (state.safety === 'all' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhigh">🛡️ ' + hidden + ' high-risk hidden ☠️</button>';
+    if (state.safety === 'safer' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhidden" data-tip="Switches to the All tab so these pairs appear">' + hidden + ' hidden (risky or under ' + SAFER_MIN + '%)</button>';
+    else if (state.safety === 'all' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhigh" data-tip="Switches to the Risky tab so these pairs appear">🛡️ ' + hidden + ' high-risk hidden ☠️</button>';
     if (ago != null) txt += ' · <span class="np-ago">updated ' + (ago < 60 ? ago + 's' : Math.round(ago / 60) + 'm') + ' ago</span>';
     if (npData.degraded) txt = '<span class="np-live-dot stale" aria-hidden="true"></span> ⚠️ Price feed unreachable (' + esc(npData.degraded) + ') — showing the last reading we actually took · ' + txt.replace(/^<span[^>]*><\/span> /, '');
     else if (npData.stale) txt = '<span class="np-live-dot stale" aria-hidden="true"></span> ⚠️ Feed may be stale · ' + txt.replace(/^<span[^>]*><\/span> /, '');
@@ -1129,23 +1162,23 @@
       return;
     }
     if (lk.status === 'unnamed') {
-      listEl.innerHTML = '<li class="np-msg">🕵️ That address has a pool, but its <b>name and symbol don’t resolve on-chain</b> — there is nothing here we can honestly identify for you. <code>' + esc(shortAddr(lk.addr)) + '</code> <button class="btn btn-sm btn-ghost" id="np-clearq" type="button">Clear search</button></li>';
+      listEl.innerHTML = '<li class="np-msg">🕵️ That address has a pool, but its <b>name and symbol don’t resolve on-chain</b> — there is nothing here we can honestly identify for you. <code>' + esc(shortAddr(lk.addr)) + '</code> <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>';
       statusEl.innerHTML = '';
       return;
     }
     if (lk.status === 'notfound') {
-      listEl.innerHTML = '<li class="np-msg">🤷 ' + esc(lk.msg || 'No indexed trading pair or WETH/USDG pool found for this address.') + ' <code>' + esc(shortAddr(lk.addr)) + '</code> · double-check the address. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button">Clear search</button></li>';
+      listEl.innerHTML = '<li class="np-msg">🤷 ' + esc(lk.msg || 'No indexed trading pair or WETH/USDG pool found for this address.') + ' <code>' + esc(shortAddr(lk.addr)) + '</code> · double-check the address. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>';
       statusEl.innerHTML = '';
       return;
     }
     if (lk.status === 'error') {
-      listEl.innerHTML = '<li class="np-msg np-error">⚠️ Couldn’t look that up right now. <button class="btn btn-sm btn-ghost" id="np-lookup-retry" type="button">Try again</button> · <button class="btn btn-sm btn-ghost" id="np-clearq" type="button">Clear</button></li>';
+      listEl.innerHTML = '<li class="np-msg np-error">⚠️ Couldn’t look that up right now. <button class="btn btn-sm btn-ghost" id="np-lookup-retry" type="button" data-tip="Tries the on-chain lookup for this address again">Try again</button> · <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear</button></li>';
       statusEl.innerHTML = '';
       return;
     }
     // done — one detail card, rendered OPEN inline (without mutating the shared state.open Set) so full detail shows now
     const p = lk.p;
-    listEl.innerHTML = '<li class="np-lookup-note">🔎 On-chain lookup for a pasted address' + (lk.fromLive ? ' · also live in the radar' : '') + ' <button class="np-lookup-clear" id="np-clearq" type="button">✕ Clear</button></li>' +
+    listEl.innerHTML = '<li class="np-lookup-note">🔎 On-chain lookup for a pasted address' + (lk.fromLive ? ' · also live in the radar' : '') + ' <button class="np-lookup-clear" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">✕ Clear</button></li>' +
       '<li class="np-row' + (isBranded(p) ? ' np-branded' : '') + '" data-addr="' + esc(p.pair.address) + '" data-level="' + triageOf(p) + '" style="' + tokVars(p) + '"><details class="np-card" open>' + summaryHTML(p) + bodyHTML(p) + '</details></li>';
     markViewed(p.token.address); // pasted-address lookup opens the full detail
     animateRings(listEl);
@@ -1160,12 +1193,12 @@
     const gauge = li.querySelector('.np-gauge'); if (gauge) gauge.className = 'np-gauge ' + T.cls;
     const gnum = li.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = li.querySelector('.np-gauge-arc'); if (arc) { const prevFill = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prevFill !== health) setArc(arc, health); else arc.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, health)); } // only replay the fill when it actually changed (no idle-poll flicker)
-    const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
+    const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>' + byline(T); }
     const lv = li.querySelector('.np-liq-val'); if (lv) lv.textContent = npFmtUsd(p.market.liquidityUsd);
     const cs = li.querySelector('.np-chg-slot'); if (cs) cs.innerHTML = chgChipHTML(p.priceChange.h1);
     const strip = li.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
     const sr = li.querySelector('.np-sum .np-head > .sr-only');
-    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + T.word + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.';
+    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.';
     const det = li.querySelector('details.np-card');
     if (det && det.open) {
       const body = li.querySelector('.np-body');
@@ -1535,7 +1568,7 @@
   /* ---------- saved views ---------- */
   function renderSaved() {
     const wrap = document.getElementById('np-saved'); if (!wrap) return;
-    wrap.innerHTML = state.saved.map((v, i) => '<div class="np-savedview"><button class="np-sv-apply" type="button" data-sv="' + i + '">📁 ' + esc(v.name) + '</button><button class="np-sv-del" type="button" data-svdel="' + i + '" aria-label="Delete view ' + esc(v.name) + '">✕</button></div>').join('');
+    wrap.innerHTML = state.saved.map((v, i) => '<div class="np-savedview"><button class="np-sv-apply" type="button" data-tip="Applies the filters and sort order saved under this name" data-sv="' + i + '">📁 ' + esc(v.name) + '</button><button class="np-sv-del" type="button" data-tip="Deletes this saved view for good — no undo" data-svdel="' + i + '" aria-label="Delete view ' + esc(v.name) + '">✕</button></div>').join('');
   }
   /* Save lives in BOTH the sticky header and the footer, so the name box has to open wherever it was
      pressed — a header press that dropped the input eight fieldsets below is the same reach problem the
@@ -1549,8 +1582,8 @@
     if (form) { const i = form.querySelector('input'); if (i) i.focus(); return; }
     form = document.createElement('div'); form.className = 'np-saveform';
     form.innerHTML = '<input type="text" class="np-saveinput addr-input" maxlength="24" placeholder="Name this view…" aria-label="Name this view">' +
-      '<button class="btn btn-sm btn-primary" type="button" data-savego>Save</button>' +
-      '<button class="btn btn-sm btn-ghost" type="button" data-savecancel aria-label="Cancel">✕</button>';
+      '<button class="btn btn-sm btn-primary" type="button" data-tip="Stores the current filters and sort under the name typed" data-savego>Save</button>' +
+      '<button class="btn btn-sm btn-ghost" type="button" data-tip="Closes the name box without saving a view" data-savecancel aria-label="Cancel">✕</button>';
     where.appendChild(form);
     const inp = form.querySelector('input'); inp.focus();
     const done = (ok) => {
@@ -1807,7 +1840,7 @@
     if (CHAINS.length < 2) { chainBar.hidden = true; chainBar.innerHTML = ''; if (chainNote) { chainNote.hidden = true; chainNote.textContent = ''; } return; }
     chainBar.hidden = false;
     chainBar.innerHTML = CHAINS.map(c =>
-      '<button class="np-chain-btn' + (c.slug === CHAIN ? ' is-on' : '') + '" type="button" role="tab"' +
+      '<button class="np-chain-btn' + (c.slug === CHAIN ? ' is-on' : '') + '" type="button" role="tab" data-tip="Switches the scanner to this chain and reloads the list"' +
       ' aria-selected="' + (c.slug === CHAIN ? 'true' : 'false') + '" tabindex="' + (c.slug === CHAIN ? '0' : '-1') + '"' +
       ' data-chain="' + esc(c.slug) + '"><span aria-hidden="true">' + esc(c.emoji || '') + '</span> ' + esc(c.name) +
       (c.deep ? '' : '<i class="np-chain-lite" title="Market data only on this chain">lite</i>') + '</button>'
@@ -1832,7 +1865,7 @@
   function rocketLabel(addr) { const n = rocketCount(addr); return n ? 'you \u00d7' + n : ''; }
   function srLine(p) {
     const T = verdictOf(p), health = healthOf(p);
-    return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + T.word + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
+    return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
   }
   function seatRing(el) { el.querySelectorAll('.np-gauge-arc[data-fill]').forEach(a => { a.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, Number(a.getAttribute('data-fill')) || 0)); }); }
 
@@ -1841,7 +1874,7 @@
       '<div class="np-slide-name">🎬 Hot Feed</div>' +
       (activeFilterCount() === 0
         ? '<p>Only the fresh tokens our automatic checks score a full <b>100/100</b> — the 🚀 <b>Looks Good, Send It</b> verdict — one at a time.</p>'
-        : '<p>The fresh tokens that clear <b>your</b> settings — the 🎯 <b>Matches Your Bar</b> verdict — one at a time. Change the settings and this feed changes with them.</p>') +
+        : '<p>The fresh tokens that clear <b>your</b> settings — the 🎯 <b>Looks Good, Send It</b> verdict, awarded by your filters rather than by us — one at a time. Change the settings and this feed changes with them.</p>') +
       '<p class="np-slide-honest">⚠️ Fresh tokens are dangerous by default — most go to zero. These are heuristics from public on-chain data, not an audit and not advice. We never tell you to buy. Entertainment only. <b>Do your own research.</b></p>' +
       '<p class="np-slide-sub">Swipe up ▲ to start</p>' +
       '</div></article>';
@@ -1869,17 +1902,17 @@
         socialsHTML(p) +
         flagstripHTML(p) +
         '<p class="np-slide-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
-        '<div class="np-slide-cta"><button class="btn btn-primary np-call np-slide-call" type="button" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button></div>' +
+        '<div class="np-slide-cta"><button class="btn btn-primary np-call np-slide-call" type="button" data-tip="Posts a call on your wall that can never be deleted" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button></div>' +
         '<details class="np-slide-details"><summary class="np-slide-more"><span class="np-slide-more-lbl">Full on-chain detail</span></summary></details>' +
-        '<span class="sr-only">' + srLine(p) + ' Press Enter for full detail.</span>' +
+        '<span class="sr-only np-slide-sr">' + srLine(p) + ' Press Enter for full detail.</span>' +
       '</div>' +
       '<div class="np-slide-rail" aria-label="Actions">' +
         (window.Watchlist ? Watchlist.btnHTML(p, 'np-rail-btn') : '') +
-        '<button class="np-rail-btn np-feed-react" type="button" data-addr="' + esc(p.pair.address) + '" aria-label="Hype this token — a private tap only you can see, not advice">🚀<span class="np-rail-count">' + rocketLabel(p.pair.address) + '</span></button>' +
-        '<a class="np-rail-btn" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" aria-label="Open chart">📈</a>' +
-        '<a class="np-rail-btn" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" aria-label="Open explorer">🔍</a>' +
-        '<button class="copy-btn np-rail-btn" type="button" data-copy="' + esc(p.token.address) + '" aria-label="Copy contract address">📋</button>' +
-        '<button class="np-rail-btn np-slide-expand" type="button" aria-label="Show full detail">ℹ️</button>' +
+        '<button class="np-rail-btn np-feed-react" type="button" data-tip="Adds a private hype tap saved only in this browser" data-addr="' + esc(p.pair.address) + '" aria-label="Hype this token — a private tap only you can see, not advice">🚀<span class="np-rail-count">' + rocketLabel(p.pair.address) + '</span></button>' +
+        '<a class="np-rail-btn" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" aria-label="Open chart">📈</a>' +
+        '<a class="np-rail-btn" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" aria-label="Open explorer">🔍</a>' +
+        '<button class="copy-btn np-rail-btn" type="button" data-tip="Copies the contract address to your clipboard" data-copy="' + esc(p.token.address) + '" aria-label="Copy contract address">📋</button>' +
+        '<button class="np-rail-btn np-slide-expand" type="button" data-tip="Opens or closes the full on-chain detail for this token" aria-label="Show full detail">ℹ️</button>' +
       '</div>' +
     '</article>';
   }
@@ -1930,7 +1963,11 @@
     const gnum = el.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = el.querySelector('.np-gauge-arc'); if (arc) { const prev = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prev !== health) { if (el.classList.contains('is-active') && !reduced()) setArc(arc, health); else seatRing(el); } }
     const gauge = el.querySelector('.np-gauge'); if (gauge) gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution');
-    const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
+    const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>' + byline(T); }
+    /* The slide's spoken line is repainted here too. It was the one thing patchFeedSlide left alone, and
+       with both bars sharing a word a stale line does not merely go out of date — it asserts the wrong
+       bar, on the surface that is spoken most often. */
+    const srSlide = el.querySelector('.np-slide-sr'); if (srSlide) srSlide.textContent = srLine(p) + ' Press Enter for full detail.';
     const hp = el.querySelector('.np-slide-health'); if (hp) hp.textContent = 'Health ' + health + '/100';
     const priceRow = el.querySelector('.np-slide-price'); if (priceRow) priceRow.innerHTML = '<span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24);
     const stats = el.querySelectorAll('.np-slide-stats b');
@@ -2002,7 +2039,7 @@
   const runList = document.getElementById('np-runners-list');
   const runStatus = document.getElementById('np-runners-status');
   // click anywhere on a runner (except the 📌 pin or the ↗ external chart) → the shared on-chain detail popup (same as
-  // the DEX list / convicted-in chips). The token symbol is a real <button> so it's keyboard-accessible; this delegation
+  // the DEX list / convicted-in chips). The token symbol is a real <button data-tip-skip> so it's keyboard-accessible; this delegation
   // is the mouse-anywhere convenience. TokenModal is Esc/✕/backdrop-closable.
   if (runList) runList.addEventListener('click', (e) => {
     const rc = e.target.closest('.np-runner-call');
@@ -2011,7 +2048,7 @@
     if (e.target.closest('[data-pin]') || e.target.closest('.np-runner-chart') || e.target.closest('.tok-comm')) return; // the 🏘️ community tag is a real link
     const row = e.target.closest('.np-runner'); if (!row || !row.dataset.token) return;
     if (!window.TokenModal) return;
-    const sb = row.querySelector('.np-runner-sym'); if (sb) { try { sb.focus(); } catch (_) {} } // focus the trigger button before opening so the modal restores focus HERE on close (mouse + Safari, where a click doesn't focus a <button>)
+    const sb = row.querySelector('.np-runner-sym'); if (sb) { try { sb.focus(); } catch (_) {} } // focus the trigger button before opening so the modal restores focus HERE on close (mouse + Safari, where a click doesn't focus a <button data-tip-skip>)
     TokenModal.open(row.dataset.token, { symbol: row.dataset.sym, name: row.dataset.name });
   });
   const RUN_WIN_LABEL = { '24h': 'past 24 hours', week: 'past week', month: 'past month', year: 'past year', all: 'all time' };
@@ -2068,21 +2105,21 @@
   function runnerRow(r, i) {
     const logo = (r.brand && r.brand.imageUrl) ? '<img class="np-runner-logo-img" src="' + esc(r.brand.imageUrl) + '" alt="" loading="lazy" decoding="async">' : '<span class="np-runner-logo-none" aria-hidden="true">🪙</span>';
     const sym = r.symbol ? '$' + esc(r.symbol) : 'Token';
-    const pin = '<button class="np-pin np-runner-pin" type="button" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
+    const pin = '<button class="np-pin np-runner-pin" type="button" data-tip="Pins this token to your wall, or unpins it" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
     /* Send Call straight off a runner. Same permanence, so the same two-press confirm the DEX list uses — a
        call can never be edited or deleted, and one tap on a scrolling list is not consent. Hidden below the
        same liquidity floor the server enforces, so the button is never offered for a call that would be
        refused. Note this path skips the on-chain detail, so the call is honestly recorded as un-researched. */
     const call = (r.liq != null && r.liq >= CALL_MIN_LIQ)
-      ? '<button class="np-runner-call np-row-call" type="button" data-call-ico="🚀" data-call-token="' + esc(r.token) + '" data-call-sym="' + esc(r.symbol || '') + '"' +
+      ? '<button class="np-runner-call np-row-call" type="button" data-tip="Press twice to post a call that can never be deleted" data-call-ico="🚀" data-call-token="' + esc(r.token) + '" data-call-sym="' + esc(r.symbol || '') + '"' +
         ' title="Make a Send Call on ' + sym + '" aria-label="Make a Send Call on ' + sym + '. Press once to confirm — a Send Call is permanent.">🚀</button>'
       : '';
     const comm = commSlot(r.token, r.symbol); // 🏘️ Community / ＋ Start community (filled by tokentext.js)
     return '<li class="np-runner" data-token="' + esc(r.token) + '" data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '">' +
       '<span class="np-runner-rank">' + (i + 1) + '</span>' +
       '<span class="np-runner-logo">' + logo + '</span>' +
-      '<span class="np-runner-id"><button class="np-runner-sym" type="button" data-runner-view aria-label="View ' + sym + ' on-chain details">' + sym + '</button></span>' +
+      '<span class="np-runner-id"><button class="np-runner-sym" type="button" data-tip="Opens a popup with the full on-chain detail" data-runner-view aria-label="View ' + sym + ' on-chain details">' + sym + '</button></span>' +
       // the 🏘️ community tag lives on the full-width name row (grid-column 1/-1), NOT in .np-runner-metrics: at ≥560px
       // metrics share grid cell 3 with the symbol, so a pill there would overlap a long ticker. Emit the row even with no name.
       ((r.name || comm) ? '<span class="np-runner-name"' + (r.name ? ' title="' + esc(r.name) + '"' : '') + '>' + esc(r.name || '') + comm + '</span>' : '') +
@@ -2180,8 +2217,8 @@
     if (tgInfo.enabled) {
       sub.textContent = 'Add @' + tgInfo.username + ' to any group and anyone there can scan a contract address the moment it lands — without leaving the chat.';
       actions.innerHTML =
-        '<a class="btn btn-primary" href="' + esc(tgInfo.addToGroup) + '" target="_blank" rel="noopener">➕ Add to a group</a>' +
-        '<a class="btn btn-ghost" href="' + esc(tgInfo.bot) + '" target="_blank" rel="noopener">💬 Try it in a DM</a>' +
+        '<a class="btn btn-primary" data-tip="Opens Telegram in a new tab to add the bot" href="' + esc(tgInfo.addToGroup) + '" target="_blank" rel="noopener">➕ Add to a group</a>' +
+        '<a class="btn btn-ghost" data-tip="Opens a chat with the scanner bot in a new tab" href="' + esc(tgInfo.bot) + '" target="_blank" rel="noopener">💬 Try it in a DM</a>' +
         '<code class="np-tg-cmd">/scan 0x…</code>';
     } else {
       // no bot token on this server — say that, rather than offering a link that goes nowhere

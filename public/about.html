@@ -66,7 +66,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the site page links"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <div class="ticker" aria-hidden="true">
@@ -91,9 +91,9 @@
       <li>🎮 Free to join</li><li>🔒 Read-only — we never move funds</li><li>🎢 High-risk fun · not financial advice</li><li>🤝 Not affiliated with Robinhood</li>
     </ul>
     <div class="cta-row">
-      <a class="btn btn-primary" href="#start">Get Started 🚀</a>
-      <a class="btn btn-gold" href="#power">How Send Power Works ⚡</a>
-      <a class="btn btn-ghost" href="#what">What is it? ↓</a>
+      <a class="btn btn-primary" href="#start" data-tip="Jumps to the four-step getting-started section">Get Started 🚀</a>
+      <a class="btn btn-gold" href="#power" data-tip="Jumps to the section explaining the points game">How Send Power Works ⚡</a>
+      <a class="btn btn-ghost" href="#what" data-tip="Jumps to the plain-English definition of $Send">What is it? ↓</a>
     </div>
   </div>
 </header>
@@ -108,7 +108,7 @@
       <div class="def-tags">
         <span class="def-tag">🪙 Two tokens</span><span class="def-tag">🔗 Read-only connect</span><span class="def-tag">🧱 A community wall</span><span class="def-tag">🏘️ Token communities</span><span class="def-tag">⚡ A levelling game</span><span class="def-tag">📡 An honest new-pairs radar</span>
       </div>
-      <button class="copy-btn def-share" id="ab-share" type="button">Copy link to this page 🔗</button>
+      <button class="copy-btn def-share" id="ab-share" type="button" data-tip="Copies this page address to your clipboard">Copy link to this page 🔗</button>
     </div>
 
     <div class="truth-row">
@@ -123,16 +123,16 @@
         <div class="tok-mini-body"><h3>$Send · SEND IT</h3>
           <div class="send-tax-chip" title="Verified on-chain: 1% fee on every buy/sell/transfer, 100% auto-added to the LP">💧 1% buy / sell / transfer → auto-adds to liquidity</div>
           <div class="contract-box"><code>0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105</code>
-            <button class="copy-btn" data-copy="0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105">Copy 📋</button></div>
-          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105">Verify on explorer ↗</a></div>
+            <button class="copy-btn" data-copy="0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" data-tip="Copies the $Send contract address to your clipboard">Copy 📋</button></div>
+          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" data-tip="Shows the $Send token on the chain explorer in a new tab">Verify on explorer ↗</a></div>
       </div>
       <div class="tok-mini reveal">
         <div class="token-emblem gwc" aria-hidden="true">$G</div>
         <div class="tok-mini-body"><h3>$GWC · Generational Wealth Coin</h3>
           <div class="gwc-tax-chip">⚠️ 5% buy / 5% sell tax — factor it in</div>
           <div class="contract-box"><code>0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22</code>
-            <button class="copy-btn" data-copy="0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22">Copy 📋</button></div>
-          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22">Verify on explorer ↗</a></div>
+            <button class="copy-btn" data-copy="0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" data-tip="Copies the $GWC contract address to your clipboard">Copy 📋</button></div>
+          <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" data-tip="Shows the $GWC token on the chain explorer in a new tab">Verify on explorer ↗</a></div>
       </div>
     </div>
     <p class="section-sub verify-note">Golden rule: <b>always copy an address from this page and verify it on the explorer</b> before you trade. Scammers clone tickers.</p>
@@ -150,20 +150,20 @@
     </div>
     <ol class="step-list gs-steps">
       <li class="step reveal" data-gs-step="1">
-        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 1 done"><span class="step-num">1</span></button>
-        <div><h3>Create your free account ✨</h3><p>Sign in with <span class="signin-methods">your wallet or email</span>, and pick your <b>@handle</b>. <button class="linklike" id="gs-join" type="button">Create account →</button></p></div>
+        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 1 done" data-tip="Ticks this step off or on — remembered in this browser"><span class="step-num">1</span></button>
+        <div><h3>Create your free account ✨</h3><p>Sign in with <span class="signin-methods">your wallet or email</span>, and pick your <b>@handle</b>. <button class="linklike" id="gs-join" type="button" data-tip="Opens the sign-in panel to set up an account">Create account →</button></p></div>
       </li>
       <li class="step reveal" data-gs-step="2">
-        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 2 done"><span class="step-num">2</span></button>
+        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 2 done" data-tip="Ticks this step off or on — remembered in this browser"><span class="step-num">2</span></button>
         <div><h3>Look around — earn as you go 🎮</h3><p>Post, react, vote, follow, track a wallet. Nearly every action earns <b>Send Power</b>, and showing up daily counts too. <a href="wall.html">Open the Send Wall →</a></p></div>
       </li>
       <li class="step reveal security-step" data-gs-step="3">
-        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 3 done"><span class="step-num">🔐</span></button>
+        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 3 done" data-tip="Ticks this step off or on — remembered in this browser"><span class="step-num">🔐</span></button>
         <div><h3>Want the coins? Guard your seed phrase, then buy safely</h3><p>Get an EVM wallet (<b>Robinhood Wallet</b> natively supports this chain), never type your seed phrase into any website, add Robinhood Chain, bridge ETH, and one-click swap. <a href="index.html#guide">Open the buying guide ↗</a></p></div>
       </li>
       <li class="step reveal" data-gs-step="4">
-        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 4 done"><span class="step-num">4</span></button>
-        <div><h3>Connect (read-only) &amp; prove your bags ⚡</h3><p>Optional. Connecting only <b>reads</b> your address to show balances and unlock your Holder Boost — it can <b>never</b> move funds. <button class="linklike" id="gs-connect" type="button">Connect a wallet →</button></p></div>
+        <button class="gs-check" type="button" aria-pressed="false" aria-label="Mark step 4 done" data-tip="Ticks this step off or on — remembered in this browser"><span class="step-num">4</span></button>
+        <div><h3>Connect (read-only) &amp; prove your bags ⚡</h3><p>Optional. Connecting only <b>reads</b> your address to show balances and unlock your Holder Boost — it can <b>never</b> move funds. <button class="linklike" id="gs-connect" type="button" data-tip="Opens the sign-in panel, where you can link a wallet">Connect a wallet →</button></p></div>
       </li>
     </ol>
     <p class="gs-done-msg" id="gs-done-msg" hidden aria-live="polite">🎉 That's the whole send. Welcome aboard, Sender.</p>
@@ -184,7 +184,7 @@
         <div class="pillar-body">
           <p>Universal EIP-6963 detection + mobile deep-links: <b>Robinhood Wallet</b> is featured (native to this chain); Phantom, MetaMask, Coinbase, Trust, OKX &amp; Rainbow all work. Your $SEND / $GWC / ETH then show live in the nav.</p>
           <p class="pillar-note">🔒 <b>Read-only.</b> Connecting reads your address &amp; balances only. No approvals, no custody, never your seed phrase — it can <b>never</b> move funds.</p>
-          <button class="btn btn-ghost btn-sm" id="pillar-connect" type="button">Connect a wallet →</button>
+          <button class="btn btn-ghost btn-sm" id="pillar-connect" type="button" data-tip="Opens the sign-in panel, where you can link a wallet">Connect a wallet →</button>
         </div>
       </details>
 
@@ -193,7 +193,7 @@
         <span class="pillar-head"><span class="pillar-title">Private Wallet Tracker</span><span class="pillar-sub">Holdings · trades · cost basis · PNL</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
         <div class="pillar-body"><p>Analyze any wallet's holdings, trades, average cost basis and live PNL from on-chain data, with your own private labels. Track up to <b>10 wallets free</b>; hold &amp; diamond-hand $GWC to unlock <b>100+</b> (scales with your Diamond level). Private to you.</p>
-        <a class="btn btn-ghost btn-sm" href="profile.html">Open your tracker →</a></div>
+        <a class="btn btn-ghost btn-sm" href="profile.html" data-tip="Opens your profile, where you track wallets">Open your tracker →</a></div>
       </details>
 
       <details class="pillar reveal"><summary>
@@ -201,7 +201,7 @@
         <span class="pillar-head"><span class="pillar-title">The Send Wall</span><span class="pillar-sub">Post · react · vote · profiles</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
         <div class="pillar-body"><p>The public community feed: post, react 🔥🚀, comment, and upvote/downvote Reddit-style (Top-sorted). Every sender gets a customizable public profile wall, X-style, at a unique @handle.</p>
-        <a class="btn btn-ghost btn-sm" href="wall.html">Enter the wall →</a></div>
+        <a class="btn btn-ghost btn-sm" href="wall.html" data-tip="Opens the public Send Wall feed">Enter the wall →</a></div>
       </details>
 
       <details class="pillar reveal"><summary>
@@ -209,7 +209,7 @@
         <span class="pillar-head"><span class="pillar-title">Token Communities</span><span class="pillar-sub">Go live at 10 · a flat 10× · member levels</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
         <div class="pillar-body"><p>Rally around any token: paste its contract to <b>start a community</b> — it goes <b>live once 10 real holders opt in</b>, auto-branded from its Dexscreener art. <b>Anyone can read</b> a live community's wall — but to <b>post</b> you must join by <b>connecting a wallet</b> and confirming on-chain that you <b>hold that token</b>, so communities stay real. A verified slot needs <b>at least $100</b> of the token — the same floor every holder reward on the site uses. Members post photos, GIFs and videos just like the Send Wall, and a live community has <b>two walls</b>: a public one anyone can read, and a <b>🔒 holders-only wall</b> only verified holders can see — sell the token and it closes again. <b>Public</b> posts also appear on the main Send Wall, badged and linked back; holders-only posts never do. Being in a live community adds a flat <b>⚡ 10× Send Power boost</b> on top of everything you earn — every post, reaction and comment inside it included (boosts add, they don't multiply). Every community lists <b>its members (up to 200) ranked by member level</b> (Newcomer → Ride-or-Die), and participating raises your level <b>and</b> levels the community itself up exponentially; the starter earns a one-time <b>founder bonus</b> 👑. The open <b>🧪 sandbox</b> community is joinable with no wallet and no token — it's there to try the feature, and deliberately grants <b>no</b> 10×. A community is a fan group, <b>not an endorsement</b> — the person who starts one is a <b>community starter</b>, never a "dev".</p>
-        <a class="btn btn-ghost btn-sm" href="communities.html">Browse communities →</a></div>
+        <a class="btn btn-ghost btn-sm" href="communities.html" data-tip="Opens the directory of token communities">Browse communities →</a></div>
       </details>
 
       <details class="pillar reveal"><summary>
@@ -219,8 +219,14 @@
         <div class="pillar-body"><p>A live scanner of brand-new tokens on Robinhood Chain with plain-English risk flags — honeypot, dumping, thin liquidity, whale concentration, unverified code, serial-deployer — so you can dodge traps. We flag risk; <b>we never tell you to buy.</b></p>
         <p>Three views: <b>📈 Best Runners</b> (the top 50 gainers holding at least $300 of liquidity, each with a <b>🔎 since scanned</b> figure measured from the earliest price we ever recorded for it), the <b>🎬 Hot Feed</b>, and the <b>📋 DEX List</b> with every filter.</p>
         <p>The Hot Feed asks for <b>four</b> things, not one: a full <b>100/100</b>, no tripped flag, <b>enough data to judge</b>, and a <b>completed early-buyer scan that came back clean</b>. That third one matters — a flag can only trip on data we could actually read, so a token too new to be indexed would otherwise score 100/100 for the same reason a clean one does. Those are now marked <b>🌫️ "Not enough data yet"</b> and pulled down to caution instead of being promoted. And a token whose scan hasn't <i>finished</i> is held back rather than shown as clean: an unfinished check is an open question, not a pass.</p>
+        <p>That is the bar <b>we</b> set. Once you set a filter of your own, the Hot Feed and the verdict follow
+          <b>your</b> settings instead, and a token that clears them carries the same words &mdash; 🎯 <b>Looks Good,
+          Send It</b>, with <i>by your filters</i> printed on the tag and said aloud to a screen reader, so it is
+          never mistaken for us saying it. Four things stay unwaivable whatever you set: a <b>honeypot</b>, a token
+          <b>dumping</b> as you read, <b>block-0 buyers who already sold</b>, and the risk model&rsquo;s own
+          <b>avoid</b> tier.</p>
         <p>A token whose name and symbol don't resolve on-chain is <b>never listed anywhere on the radar</b>: if we can't identify it, we won't show it. Open any token for its full on-chain detail and a <b>live chart</b>, and you can post a Send Call straight from a list row (it asks you to confirm first — a call is permanent).</p>
-        <a class="btn btn-ghost btn-sm" href="newpairs.html">Open the radar →</a></div>
+        <a class="btn btn-ghost btn-sm" href="newpairs.html" data-tip="Opens the scanner for brand-new tokens">Open the radar →</a></div>
       </details>
 
       <details class="pillar reveal"><summary>
@@ -228,7 +234,7 @@
         <span class="pillar-head"><span class="pillar-title">Live Charts &amp; Verified Contracts</span><span class="pillar-sub">$SEND &amp; $GWC · copy + verify</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
         <div class="pillar-body"><p><b>Our own on-chain charts</b> — candles built from each pair contract's own <code>Swap</code> events, not an embedded third-party frame. A labelled UTC time axis, a hover readout giving the price, the market cap and the swap count for the candle under your pointer, and <b>event markers</b> on the timeline for Send Calls, Sent Its, conviction plays, the deployer's own buys and sells, and the pool's first ten buyers — each layer toggleable, with one press for a clean price-only chart. <b>Drag the time axis or the price gutter</b> to stretch or compress either scale, drag the chart to pan, press <b>Fit</b> to go back. Plus market cap, liquidity and volume, with one-tap copy + explorer-verify for every contract. <span class="send-tax-chip">💧 $Send: 1% buy/sell/transfer → auto-LP</span> <span class="gwc-tax-chip">⚠️ $GWC has a 5% buy / 5% sell tax</span></p>
-        <a class="btn btn-ghost btn-sm" href="index.html#tokens">See live charts →</a></div>
+        <a class="btn btn-ghost btn-sm" href="index.html#tokens" data-tip="Opens the home page at the token charts">See live charts →</a></div>
       </details>
 
       <details class="pillar reveal"><summary>
@@ -236,7 +242,7 @@
         <span class="pillar-head"><span class="pillar-title">One-Click Swap</span><span class="pillar-sub">ETH on Robinhood Chain → SEND / GWC</span></span>
         <span class="pillar-caret" aria-hidden="true">▾</span></summary>
         <div class="pillar-body"><p>Swap ETH that's already on Robinhood Chain straight into $SEND or $GWC in one transaction <b>you</b> review and sign in your own wallet (bridging in from another chain is a separate step — the guide links it). The verified contract is prefilled so you can't fat-finger a fake. No approvals, no custody.</p>
-        <a class="btn btn-ghost btn-sm" href="index.html#swap">Open the swap →</a></div>
+        <a class="btn btn-ghost btn-sm" href="index.html#swap" data-tip="Opens the home page at the swap panel">Open the swap →</a></div>
       </details>
 
     </div>
@@ -295,12 +301,12 @@
         <span class="ab-rocket" id="ab-rocket" aria-hidden="true" style="left:20%;">🚀</span>
       </div>
       <div class="ab-chips" role="group" aria-label="Preview a level milestone">
-        <button class="ab-chip" type="button" data-lvl="1" data-title="Fresh Sender">1</button>
-        <button class="ab-chip is-on" type="button" data-lvl="20" data-title="Rocket Rider 🚀">20</button>
-        <button class="ab-chip" type="button" data-lvl="40" data-title="Diamond Hands 💎">40</button>
-        <button class="ab-chip" type="button" data-lvl="60" data-title="Send Sensei">60</button>
-        <button class="ab-chip" type="button" data-lvl="80" data-title="Send Lord">80</button>
-        <button class="ab-chip" type="button" data-lvl="100" data-title="Biggest Sender 👑">100</button>
+        <button class="ab-chip" type="button" data-lvl="1" data-title="Fresh Sender" data-tip="Shows the Power needed for this level and moves the rocket">1</button>
+        <button class="ab-chip is-on" type="button" data-lvl="20" data-title="Rocket Rider 🚀" data-tip="Shows the Power needed for this level and moves the rocket">20</button>
+        <button class="ab-chip" type="button" data-lvl="40" data-title="Diamond Hands 💎" data-tip="Shows the Power needed for this level and moves the rocket">40</button>
+        <button class="ab-chip" type="button" data-lvl="60" data-title="Send Sensei" data-tip="Shows the Power needed for this level and moves the rocket">60</button>
+        <button class="ab-chip" type="button" data-lvl="80" data-title="Send Lord" data-tip="Shows the Power needed for this level and moves the rocket">80</button>
+        <button class="ab-chip" type="button" data-lvl="100" data-title="Biggest Sender 👑" data-tip="Shows the Power needed for this level and moves the rocket">100</button>
       </div>
       <p class="ab-readout" role="status" aria-live="polite" id="ab-lvl-readout">Level 20 · Rocket Rider 🚀 · 4,470 Power to reach</p>
       <p class="ab-fine">An exponential curve: fast early, then <b>exponentially harder</b> — Level 99 ≈ 13M Power, Level 100 (<b>Biggest Sender 👑</b>) ≈ 14.4M, and there's <b>no level cap</b> — it climbs forever (Send Deity ✨, Eternal Sender ♾️, and beyond). Every point is real; the server is the source of truth.</p>
@@ -416,11 +422,11 @@
         <li><b>💎 Conviction (per community).</b> Grows <b>only when you do something there</b> — join 40, post 20, Send Call 30, comment 6, reaction 2, capped at <b>150 a day</b> per community — never for time alone. Staying a member without posting leaves it exactly where it was. It shows as a badge next to that token in the <b>Conviction Plays</b> section of your public wall.</li>
         <li><b>🧱 Community posts land on the Send Wall.</b> Every <b>public</b> post from a community also appears on the main Send Wall, badged with that community and linking back to it — so a community can actually be found. A <b>holders-only</b> post never does. Posting inside a community spends the <b>same</b> allowance as posting on the wall (12 per 10 min), so it isn't a second lane to the front page.</li>
       </ul>
-      <a class="btn btn-ghost btn-sm" href="communities.html" style="margin-top:0.4rem;">Explore communities →</a>
+      <a class="btn btn-ghost btn-sm" href="communities.html" style="margin-top:0.4rem;" data-tip="Opens the list of communities you can join">Explore communities →</a>
     </div>
 
     <div class="cta-row" style="justify-content:center; margin-top:1.6rem;">
-      <a class="btn btn-primary" href="profile.html">See Your Send Power ⚡</a>
+      <a class="btn btn-primary" href="profile.html" data-tip="Opens your profile, which shows your Send Power">See Your Send Power ⚡</a>
     </div>
   </div>
 </section>
@@ -635,8 +641,8 @@
       <a class="do-card" href="profile.html"><div class="do-ico" aria-hidden="true">⚡</div><div class="do-title">Start your Send Power</div><div class="do-sub">Track wallets · level up</div></a>
     </div>
     <div class="cta-row" style="justify-content:center; margin-top:2rem;">
-      <button class="btn btn-primary" id="join-signin" type="button">Create a free account 🎉</button>
-      <a class="btn btn-ghost" href="index.html#tokens">See the live charts 🪙</a>
+      <button class="btn btn-primary" id="join-signin" type="button" data-tip="Opens the sign-in panel to set up an account">Create a free account 🎉</button>
+      <a class="btn btn-ghost" href="index.html#tokens" data-tip="Opens the home page at the live token charts">See the live charts 🪙</a>
     </div>
   </div>
 </section>
@@ -670,6 +676,7 @@
 <script src="prefs.js"></script>
 <script src="chart.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>

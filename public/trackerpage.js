@@ -82,17 +82,17 @@
     const sel = state.selected === w.address;
     const mine = isMine(w.address);
     return '<li class="trk-w' + (sel ? ' is-selected' : '') + '" data-wid="' + esc(w.id) + '" data-addr="' + esc(w.address) + '">' +
-      '<button class="trk-w-main" type="button" data-select="' + esc(w.address) + '"' + (sel ? ' aria-current="true"' : '') + '>' +
+      '<button class="trk-w-main" type="button" data-tip="Shows the holdings and trade report for this wallet" data-select="' + esc(w.address) + '"' + (sel ? ' aria-current="true"' : '') + '>' +
         '<span class="trk-w-ico" aria-hidden="true">' + (mine ? '🔗' : '💼') + '</span>' +
         '<span class="trk-w-txt"><span class="trk-w-label">' + esc(nameOf(w)) + '</span>' +
         '<span class="trk-w-addr"><code>' + esc(shortAddr(w.address)) + '</code>' + (mine ? ' <span class="trk-w-badge">your linked wallet</span>' : '') + '</span></span>' +
         '<span class="sr-only">' + (sel ? 'Selected. ' : '') + 'Show report for ' + esc(nameOf(w)) + ' ' + esc(w.address) + '</span>' +
       '</button>' +
       '<span class="trk-w-actions">' +
-        '<button class="copy-btn trk-w-btn" type="button" data-copy="' + esc(w.address) + '" aria-label="Copy address of ' + esc(nameOf(w)) + '">📋</button>' +
-        (w.id != null ? '<button class="copy-btn trk-w-btn" type="button" data-rename="' + esc(w.id) + '" aria-label="Rename ' + esc(nameOf(w)) + '">✏️</button>' : '') +
+        '<button class="copy-btn trk-w-btn" type="button" data-tip="Copies this wallet address to your clipboard" data-copy="' + esc(w.address) + '" aria-label="Copy address of ' + esc(nameOf(w)) + '">📋</button>' +
+        (w.id != null ? '<button class="copy-btn trk-w-btn" type="button" data-tip="Opens a box to change the private label you gave this wallet" data-rename="' + esc(w.id) + '" aria-label="Rename ' + esc(nameOf(w)) + '">✏️</button>' : '') +
         // Your own wallets can't be "untracked" — they're yours by signature. Unlinking lives in Profile → Security.
-        (mine ? '' : '<button class="copy-btn trk-w-btn trk-w-rm" type="button" data-remove="' + esc(w.id) + '" aria-label="Stop tracking ' + esc(nameOf(w)) + '">✕</button>') +
+        (mine ? '' : '<button class="copy-btn trk-w-btn trk-w-rm" type="button" data-tip="Drops this wallet from your list — tap twice to confirm" data-remove="' + esc(w.id) + '" aria-label="Stop tracking ' + esc(nameOf(w)) + '">✕</button>') +
       '</span>' +
     '</li>';
   }
@@ -118,7 +118,7 @@
     const full = state.wallets.length >= (state.limit || 10);
     if (!mine.length || full) { chips.hidden = true; chipsRow.innerHTML = ''; return; }
     chips.hidden = false;
-    chipsRow.innerHTML = mine.map(a => '<button class="react-btn trk-chip" type="button" data-quick="' + esc(a) + '">🔗 Track my connected wallet <code>' + esc(shortAddr(a)) + '</code></button>').join('');
+    chipsRow.innerHTML = mine.map(a => '<button class="react-btn trk-chip" type="button" data-tip="Adds your connected wallet to the list and opens its report" data-quick="' + esc(a) + '">🔗 Track my connected wallet <code>' + esc(shortAddr(a)) + '</code></button>').join('');
   }
   function highlightSelected() {
     wlist.querySelectorAll('.trk-w').forEach(li => {
@@ -147,7 +147,7 @@
       if (pick) select(pick, false); else showNoSelection();
     } catch (e) {
       if (/sign in/i.test(e.message || '')) { showSignedOut(); return; }
-      wstatus.innerHTML = '⚠️ Couldn\'t load your wallets. <button type="button" data-retry-wallets>Retry</button>';
+      wstatus.innerHTML = '⚠️ Couldn\'t load your wallets. <button type="button" data-tip="Asks for your saved wallet list again" data-retry-wallets>Retry</button>';
     }
   }
 
@@ -202,7 +202,7 @@
     form.className = 'trk-rename';
     form.innerHTML = '<label class="sr-only" for="trk-rn-' + esc(w.id) + '">New label for ' + esc(nameOf(w)) + '</label>' +
       '<input class="addr-input trk-rename-in" id="trk-rn-' + esc(w.id) + '" maxlength="40" autocomplete="off" placeholder="label">' +
-      '<span class="trk-rename-btns"><button class="btn btn-sm btn-primary" type="submit">Save</button><button class="btn btn-sm btn-ghost" type="button" data-cancel>Cancel</button></span>' +
+      '<span class="trk-rename-btns"><button class="btn btn-sm btn-primary" type="submit" data-tip="Stores the label you typed for this wallet">Save</button><button class="btn btn-sm btn-ghost" type="button" data-tip="Closes this box and keeps the old label" data-cancel>Cancel</button></span>' +
       '<span class="trk-rename-hint">Enter to save · Esc to cancel</span>';
     li.appendChild(form);
     const input = form.querySelector('input');
@@ -297,7 +297,7 @@
     if (!w) { selectedEl.hidden = true; return; }
     selectedEl.hidden = false;
     selectedEl.innerHTML = '<span class="trk-sel-lbl">' + esc(nameOf(w)) + '</span> <code class="trk-sel-addr">' + esc(w.address) + '</code>' +
-      '<button class="copy-btn" type="button" data-copy="' + esc(w.address) + '" aria-label="Copy full address">📋</button>' +
+      '<button class="copy-btn" type="button" data-tip="Copies the full address to your clipboard" data-copy="' + esc(w.address) + '" aria-label="Copy full address">📋</button>' +
       '<a class="trk-sel-link" href="https://robinhoodchain.blockscout.com/address/' + encodeURIComponent(w.address) + '" target="_blank" rel="noopener">explorer ↗</a>';
   }
   function setBanner(kind, html) {
@@ -402,7 +402,7 @@
       if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); delete entry.failedMsg; progress.textContent = 'Live refresh failed — showing the saved report.'; }
       else {
         progress.textContent = '';
-        reportEl.innerHTML = '<p class="np-msg">⚠️ Couldn\'t read this wallet right now — the explorer may be busy. <button class="btn btn-sm btn-ghost trk-retry" type="button" data-retry>Try again</button></p>';
+        reportEl.innerHTML = '<p class="np-msg">⚠️ Couldn\'t read this wallet right now — the explorer may be busy. <button class="btn btn-sm btn-ghost trk-retry" type="button" data-tip="Attempts the chain read for this wallet again" data-retry>Try again</button></p>';
       }
     } finally {
       if (run === state.runId) setBusy(); // paints the banner (fresh / saved / warning) from the entry's state
@@ -470,6 +470,7 @@
     btn.type = 'button'; btn.className = 'trk-info'; btn.textContent = 'ⓘ';
     btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', id);
     btn.setAttribute('aria-label', 'What is ' + key + '?');
+    btn.setAttribute('data-tip', 'Shows or hides what this figure means');
     labelEl.appendChild(btn);
     const panel = document.createElement('p');
     panel.className = 'trk-info-panel'; panel.id = id; panel.hidden = true; panel.textContent = def;
@@ -524,7 +525,7 @@
     combRows.innerHTML = c.rows.map(r => {
       const rnet = (r.realized == null && r.unrealized == null) ? null : (r.realized || 0) + (r.unrealized || 0);
       return '<li class="cmb-row' + (r.pending ? ' is-pending' : '') + '">' +
-        '<button class="cmb-pick" type="button" data-select="' + esc(r.address) + '">' +
+        '<button class="cmb-pick" type="button" data-tip="Opens the full report for this wallet below" data-select="' + esc(r.address) + '">' +
           '<code class="cmb-addr">' + esc(shortAddr(r.address)) + '</code>' +
           '<span class="cmb-name">' + esc(r.label || '') + '</span>' +
         '</button>' +

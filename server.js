@@ -10487,9 +10487,13 @@ function tgSend(chatId, html, extra) {
   }).catch((e) => { console.error('telegram send failed:', e.message); });
 }
 
-/* The verdict rule, server-side. It mirrors verdictOf() in public/newpairs.js deliberately — the two must
-   agree, because the same token read in a group and on the site giving different answers would make both
-   untrustworthy. If you change one, change the other. */
+/* The verdict rule, server-side. It mirrors the SITE'S OWN BAR in verdictOf() (public/newpairs.js)
+   deliberately — the two must agree, because the same token read in a group and on the site giving
+   different answers would make both untrustworthy. If you change one, change the other.
+
+   It has no second bar and must not grow one. The client can also award the same words against filters
+   the READER set, but those filters live in that reader's browser: there is no such thing as "the
+   reader's bar" for a message posted to a group, so everything sent from here is the site speaking. */
 function scanVerdict(p) {
   const r = p.risk || {};
   const health = Math.round(r.health || 0);

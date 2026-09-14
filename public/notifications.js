@@ -18,12 +18,12 @@
          describe a disclosure, which is what it is. The badge is decorative and hidden: the count is in
          the button's own name, so a screen reader hears it as part of the control rather than as a
          number floating beside it, and arrivals are announced once through the shared polite region. */
-      '<button class="notif-bell" id="notif-bell" type="button" aria-controls="notif-panel" aria-expanded="' + open + '" aria-label="Notifications' + (n ? ', ' + n + ' in your list' : '') + '">🔔' + (n ? '<span class="notif-badge" aria-hidden="true">' + (n > 9 ? '9+' : n) + '</span>' : '') + '</button>' +
+      '<button class="notif-bell" id="notif-bell" type="button" data-tip="Shows or hides your list of recent updates" aria-controls="notif-panel" aria-expanded="' + open + '" aria-label="Notifications' + (n ? ', ' + n + ' in your list' : '') + '">🔔' + (n ? '<span class="notif-badge" aria-hidden="true">' + (n > 9 ? '9+' : n) + '</span>' : '') + '</button>' +
       /* role="list", not role="menu". A menu is a set of commands and traps the arrow keys; this is a list
          of rows, some of which are links and each of which has its own dismiss button. Calling it a menu
          made a screen reader promise menu keyboard behaviour that was never implemented. */
       '<div class="notif-panel' + (open ? ' open' : '') + '" id="notif-panel" aria-label="Notifications"' + (open ? '' : ' hidden') + '>' +
-        '<div class="notif-head"><span id="notif-head-title">🔔 Notifications</span>' + (n ? '<button class="notif-clearall" id="notif-clearall" type="button">Clear all</button>' : '') + '</div>' +
+        '<div class="notif-head"><span id="notif-head-title">🔔 Notifications</span>' + (n ? '<button class="notif-clearall" id="notif-clearall" type="button" data-tip="Removes every notification from your list for good">Clear all</button>' : '') + '</div>' +
         '<ul class="notif-list" role="list" aria-labelledby="notif-head-title">' + (n ? items.map(it => {
           /* A link ONLY for a server-built, site-relative path. The href is validated again here rather
              than trusted from the payload: this string is about to be interpolated into innerHTML, so a
@@ -34,7 +34,7 @@
             '<span class="notif-body"><span class="notif-text">' + esc(it.text) + '</span><span class="notif-time">' + ago(it.created_at) + '</span></span>';
           return '<li class="notif-item' + (href ? ' is-link' : '') + '" data-id="' + it.id + '">' +
             (href ? '<a class="notif-go" href="' + esc(href) + '">' + body + '</a>' : '<span class="notif-go notif-go-static">' + body + '</span>') +
-            '<button class="notif-x" type="button" data-clear="' + it.id + '" aria-label="Clear: ' + esc(it.text) + '">✕</button></li>';
+            '<button class="notif-x" type="button" data-tip="Removes this one notification from your list for good" data-clear="' + it.id + '" aria-label="Clear: ' + esc(it.text) + '">✕</button></li>';
         }).join('') : '<li class="notif-empty">🎉 You\'re all caught up.</li>') + '</ul>' +
       '</div>';
   }

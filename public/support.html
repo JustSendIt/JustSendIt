@@ -52,7 +52,7 @@
     </div>
   <span id="nav-notif"></span>
   <span id="nav-auth" class="nav-persist"></span>
-  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+  <button class="nav-toggle" type="button" data-tip="Shows or hides the list of page links" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
 </nav>
 
 <header class="profile-hero">
@@ -70,18 +70,18 @@
     </div>
 
     <div class="feed-sort" role="group" aria-label="Sort questions">
-      <button class="sort-btn is-on" type="button" data-sort="top" aria-pressed="true">🔝 Most&nbsp;asked</button>
-      <button class="sort-btn" type="button" data-sort="new" aria-pressed="false">🕒 Newest</button>
+      <button class="sort-btn is-on" type="button" data-tip="Reloads the list with the most-upvoted questions first" data-sort="top" aria-pressed="true">🔝 Most&nbsp;asked</button>
+      <button class="sort-btn" type="button" data-tip="Reloads the list with the newest questions first" data-sort="new" aria-pressed="false">🕒 Newest</button>
       <p class="sort-caption" id="sort-caption" role="status" aria-live="polite">Sorted by votes — if a question is already here, vote it up instead of asking it again.</p>
     </div>
     <div class="resort-nudge" id="resort-nudge" hidden>
-      <button class="btn btn-ghost btn-sm" type="button" id="resort-btn">↕ Ranking changed — refresh</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-tip="Reloads the list so the new vote counts reorder it" id="resort-btn">↕ Ranking changed — refresh</button>
     </div>
 
     <div class="composer card" id="composer-card">
       <div id="composer-signedout" style="text-align:center; padding:0.6rem 0;">
         <p style="color:var(--text-dim); margin-bottom:0.9rem;">You can read every question without an account. Sign in to ask one, answer, or vote.</p>
-        <button class="btn btn-primary" id="signin-cta">Sign In To Ask 🛟</button>
+        <button class="btn btn-primary" data-tip="Opens the sign-in box so you can post" id="signin-cta">Sign In To Ask 🛟</button>
       </div>
       <div id="composer-signedin" hidden>
         <div style="display:flex; gap:0.7rem; margin-bottom:0.7rem; align-items:center;">
@@ -93,7 +93,7 @@
         <div id="img-preview" class="media-preview" hidden aria-label="Attached screenshot preview"></div>
         <div class="composer-bar">
           <label class="file-label">📷 Add a screenshot<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a screenshot or short clip"></label>
-          <button class="btn btn-primary btn-sm" id="publish-btn">Ask 🛟</button>
+          <button class="btn btn-primary btn-sm" data-tip="Posts your question publicly for anyone to answer" id="publish-btn">Ask 🛟</button>
           <span class="hint" id="char-count" aria-hidden="true">500</span>
         </div>
         <p class="hint" id="wall-c-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
@@ -107,7 +107,7 @@
       <p>No questions yet. Ask the first one — someone else probably has the same one.</p>
     </div>
     <div style="text-align:center; margin-top:1.4rem;">
-      <button class="btn btn-ghost btn-sm" id="load-more" hidden>Load more ⬇️</button>
+      <button class="btn btn-ghost btn-sm" data-tip="Adds the next batch of older questions below" id="load-more" hidden>Load more ⬇️</button>
     </div>
 
     <p class="sup-foot">Still stuck after all that? Email <a href="mailto:GWCRH@atomicmail.io">GWCRH@atomicmail.io</a>.</p>
@@ -140,6 +140,7 @@
 
 <script src="prefs.js"></script>
 <script src="app.js"></script>
+<script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>
