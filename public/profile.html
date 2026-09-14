@@ -77,6 +77,14 @@
       <div class="card gamify-card" id="gamify-dash" aria-label="Your Send progress dashboard" style="margin-bottom:1.6rem;"></div>
 
       <!-- ===== CONNECTED WALLET ANALYTICS ===== -->
+      <!-- Straight from the dashboard to the one panel that holds wallets, sign-in methods and 2FA.
+           Everything WAS already gathered in Security, but Security is a collapsed row near the bottom
+           of Settings, so from up here there was no sign it existed. -->
+      <p class="sec-jump">
+        <a class="btn btn-ghost btn-sm" href="#sec-security" id="sec-jump-link"
+           data-tip="Opens Security — your wallets, how you sign in, and two-factor">🔐 Wallets &amp; security →</a>
+      </p>
+
       <div class="card" id="connected-wallet" style="margin-bottom:1.6rem;">
         <h2 class="display" style="color:var(--green-bright); font-size:1.5rem; margin-bottom:0.3rem;">My Connected Wallet 👛</h2>
         <p class="privacy-chip" style="margin-bottom:0.2rem;">🔒 Read-only · we can never move your funds</p>
@@ -123,7 +131,7 @@
         </details>
 
         <details class="setting-card" id="sec-security">
-          <summary>🔐 Security</summary>
+          <summary>🔐 Security <span class="sec-state" id="sec-state" aria-live="polite"></span></summary>
           <div class="setting-body">
             <div class="f-label" style="margin-top:0;">Sign-in methods</div>
             <div id="pf-methods" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin:0.4rem 0 0.7rem;"></div>

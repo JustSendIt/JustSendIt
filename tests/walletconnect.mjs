@@ -128,6 +128,44 @@ try {
     check('the server still refuses to strand a wallet-only account',
       /your wallet is your only way to sign in, so disconnecting it would lock you out/.test(SRC));
   }
+  /* ═══════════ 4. everything about getting in, in one place ═══════════ */
+  {
+    const PHTML = readFileSync(path.join(PUB, 'profile.html'), 'utf8');
+    const PJS = strip(readFileSync(path.join(PUB, 'profile.js'), 'utf8'));
+    const sec = (/<details class="setting-card" id="sec-security">[\s\S]*?<\/details>/.exec(PHTML) || [''])[0];
+    check('there is a Security panel', !!sec);
+    for (const [what, id] of [
+      ['which ways in you have',      'pf-methods'],
+      ['every linked wallet',         'wl-list'],
+      ['adding another wallet',       'link-wallet-btn'],
+      ['an authenticator app',        'totp-start-btn'],
+      ['a wallet as the second factor','wallet-2fa-btn'],
+      ['a password as the second factor','pw-2fa-btn'],
+      ['turning the second factor off','twofa-disable-btn'],
+    ]) check('  ...and it holds ' + what, sec.includes(id));
+
+    /* A <details> opens shut, so a panel labelled only "Security" answers nothing until it is opened. */
+    check('the label carries the state, so it is readable while shut',
+      /id="sec-state"/.test(PHTML) && /function securitySummary\(me\)/.test(PJS) && /'2FA on' : '2FA off'/.test(PJS));
+    check('  ...and it is repainted whenever either half changes',
+      (PJS.match(/securitySummary\(me\);/g) || []).length >= 2);
+    check('  ...saying it in words, never only in colour', /no wallet yet/.test(PJS) && /sec-state-warn/.test(readFileSync(path.join(PUB, 'styles.css'), 'utf8')));
+
+    check('the dashboard offers a way to reach it', /id="sec-jump-link"/.test(PHTML) && /href="#sec-security"/.test(PHTML));
+    /* A link to a <details> scrolls to it and leaves it shut — from the reader's side, a link that did
+       nothing. */
+    check('  ...that actually opens it, rather than scrolling to a shut panel',
+      /function openSecurity\(scroll\)/.test(PJS) && /d\.open = true;/.test(PJS));
+    check('  ...including when the page is opened at that link directly', /location\.hash === '#sec-security'/.test(PJS));
+    check('  ...and focus follows, for anyone who arrived by keyboard', /sum\.focus\(\{ preventScroll: true \}\)/.test(PJS));
+
+    /* This page had a THIRD hand-rolled copy of the link flow, identical to AUTH.linkWallet — and being
+       a copy, it missed what the shared one gained: landing the wallet on Robinhood Chain. */
+    check('linking from this page goes through the one shared door',
+      /AUTH\.connectWallet\(\{ note: 'Linking a wallet adds a new way to sign in/.test(PJS));
+    check('  ...so the hand-rolled copy is gone', !/purpose=link&address=/.test(PJS));
+    check('  ...while the page still repaints what only it has', /loadConnectedWallet\(\)/.test(PJS) && /loadGamify\(\)/.test(PJS));
+  }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join('\n'));
 }

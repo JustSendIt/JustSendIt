@@ -208,13 +208,50 @@ function setWallLinks(name) {
    enough to take the account permanently. Returns {} when the account has no factor to prove. */
 // One implementation, in auth.js, so every page proves the second factor the same way.
 const currentFactorBody = (note) => AUTH.currentFactor(note);
+
+/* Everything about how you get into this account lives in one place — wallets, sign-in methods and the
+   second factor — and that place is a <details> that opens shut. A closed panel labelled only "Security"
+   tells you nothing, so the label carries the state: how many wallets are linked and whether a second
+   factor is on. It is the one line somebody checks when they want to know they are covered, and now
+   they can read it without opening anything. */
+/* A link to a <details> scrolls to it and leaves it SHUT, which from the reader's side is a link that
+   did nothing. Opening it on the jump — and on arrival with #sec-security in the URL, so a link shared
+   from anywhere lands open — is the difference between a shortcut and a dead end. Focus follows, because
+   somebody who arrived by keyboard has to be put where they were sent. */
+function openSecurity(scroll) {
+  const d = document.getElementById('sec-security');
+  if (!d) return;
+  d.open = true;
+  const sum = d.querySelector('summary');
+  if (scroll) { try { d.scrollIntoView({ behavior: window.prefersReduced && prefersReduced() ? 'auto' : 'smooth', block: 'start' }); } catch { d.scrollIntoView(); } }
+  if (sum) { try { sum.setAttribute('tabindex', '-1'); sum.focus({ preventScroll: true }); } catch {} }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const jump = document.getElementById('sec-jump-link');
+  if (jump) jump.addEventListener('click', (e) => { e.preventDefault(); history.replaceState(null, '', '#sec-security'); openSecurity(true); });
+  if (location.hash === '#sec-security') setTimeout(() => openSecurity(true), 60);   // after the page has painted
+});
+
+function securitySummary(me) {
+  const el = document.getElementById('sec-state');
+  if (!el || !me) return;
+  const n = ((me.wallets || []).length);
+  const bits = [];
+  bits.push(n ? n + (n === 1 ? ' wallet' : ' wallets') : 'no wallet yet');
+  bits.push(me.twofa ? '2FA on' : '2FA off');
+  el.textContent = bits.join(' · ');
+  el.classList.toggle('sec-state-warn', !me.twofa);
+}
+/* Through the SAME door every other connect on the site uses. This was a third hand-rolled copy of the
+   link flow — identical to AUTH.linkWallet, since currentFactorBody is a pass-through to
+   AUTH.currentFactor — and being a copy meant it missed what the shared one gained: landing the wallet
+   on Robinhood Chain. Somebody linking from this page ended up on whatever network their wallet was
+   showing, and then wondered why the holdings panel below was empty. The page-specific refreshes stay,
+   because only this page has a holdings card and a dashboard to repaint. */
 async function linkWallet() {
   try {
-    const current = await currentFactorBody('Linking a wallet adds a new way to sign in to this account.');
-    const { provider, address } = await WALLET.connect();
-    const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
-    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature, current } });
+    const j = await AUTH.connectWallet({ note: 'Linking a wallet adds a new way to sign in to this account.' });
+    if (!j) return;                       // signed out: the sign-in panel took over
     if (j.alreadyLinked) { sendToast('That wallet is already linked to your account ✅'); return; } // nothing changed — don't re-fetch everything
     if (j.linked) { sendToast('Wallet linked 🔗'); await loadMe(); loadConnectedWallet(); if (window.loadGamify) loadGamify(); if (window.refreshNavBalances) refreshNavBalances(); }
     // a wallet owned by ANOTHER account now comes back as a 409 and surfaces through the catch below
@@ -237,6 +274,7 @@ function renderWallets(me) {
   if (!ws.length) { list.innerHTML = ''; return; }
   const count = document.getElementById('wl-count');
   if (count) count.textContent = ws.length + ' of ' + (me.maxWallets || 5);
+  securitySummary(me);
   /* Accounts that turned wallet-2FA on before there was anything to choose have no flagged row; the
      server falls back to the oldest wallet, so show that as the key rather than leaving every row bare
      and letting someone unlink what is actually holding their account. */
@@ -398,6 +436,7 @@ async function loadMe() {
     }
     const on = !!me.twofa;
     document.getElementById('twofa-state').textContent = on ? 'ON' : 'off';
+    securitySummary(me);
     document.getElementById('twofa-off').hidden = on;
     document.getElementById('twofa-on').hidden = !on;
     document.getElementById('totp-setup').hidden = true;

@@ -4383,3 +4383,12 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   border-radius: 999px; padding: 0.12rem 0.55rem;
 }
 .post-audio { width: 100%; max-width: 420px; height: 40px; }
+
+/* ===== the Security panel's own state ============================================================
+   Wallets, sign-in methods and two-factor all live in one <details>, and a <details> opens shut. The
+   summary carries the state so the answer to "am I covered?" is readable without opening anything. */
+.sec-state { font-family: 'Rubik', sans-serif; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.01em; color: var(--text-dim); margin-left: 0.5rem; }
+/* No second factor is worth noticing, but it is not an error — the site does not require one. Gold,
+   not red, and the words say it either way for anyone who cannot see the colour. */
+.sec-state.sec-state-warn { color: var(--gold); }
+.sec-jump { margin: -0.6rem 0 1.2rem; }
