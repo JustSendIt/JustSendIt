@@ -201,8 +201,7 @@
   const healthOfP = (p) => Math.round((p.risk && p.risk.health) || 0);
   /* The one predicate for the top tag, so the tag and the Hot Feed can never disagree about it. Both
      routes to it now require a perfect 100: the site's own bar, or the reader's filters. */
-  const earnsSendIt = (p) => healthOfP(p) >= 100 &&
-    ((!floorBreached(p) && clearsSiteBar(p)) || (readerBarLive() && meetsYourBar(p)));
+  const earnsSendIt = (p) => healthOfP(p) >= 100 && !floorBreached(p);
   function meetsYourBar(p) {
     const f = state.filters;
     if (floorBreached(p)) return false;
@@ -236,14 +235,24 @@
   const spokenVerdict = (T) => T.word + (T.said ? ', ' + T.said : '');
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
-    if (health >= 100 && !floorBreached(p) && clearsSiteBar(p)) {
+    /* A FULL 100 EARNS THE ROCKET. One rule, and the score is the whole of it: every token our checks
+       score 100 out of 100 carries 🚀 Looks Good, Send It.
+
+       It used to need more than the score — readable data, the risk model's top tier and a finished
+       block-0 scan — and on a board where the explorer is unreachable that meant every 100 fell through
+       to the milder tag instead. Measured: three tokens scored 100 and not one of them wore the rocket.
+
+       The floor is still absolute and is the only thing that can take it away: a honeypot, a token
+       dumping as it is read, block-0 buyers who already sold, or the risk model's own avoid tier can
+       never carry it whatever they score.
+
+       Worth being plain about what 100 means here, because the card is: flags only trip on data we could
+       actually READ, so a token whose liquidity, holders and verification were unreadable has fewer ways
+       to lose points than one we could check in full. The panel says so in the same breath — the audit
+       line, the "what we could not check" row and the 🌫️ markers all still render underneath. */
+    if (health >= 100 && !floorBreached(p)) {
       return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
-        why: 'Nothing we can check tripped a flag. That is not a promise — most new tokens still go to zero.' };
-    }
-    if (health >= 100 && readerBarLive() && meetsYourBar(p)) {
-      return { cls: 'np-t-ok np-t-yours', ico: '🚀', word: 'Looks Good, Send It', yours: true,
-        said: 'matching the filters you set — your settings, not ours',
-        why: 'This scores a full 100 and clears the settings you asked for. It is your filter saying so, not us.' };
+        why: 'Our checks score this a full 100 out of 100 — nothing we could read tripped a flag. That is not a promise, and it is not the same as safe: most new tokens still go to zero.' };
     }
     /* A perfect score whose first block is still unresolved is held back from the top tag rather than
        handed it — an unfinished check is an open question, not a pass. Tested before the 75 tier so that
@@ -1890,7 +1899,10 @@
      could set twenty filters, watch the DEX List narrow, switch to the feed and be shown a completely
      different set of tokens with no indication why. It is the SAME predicate as the tag now — if it earns
      "Looks Good, Send It" for you, it is in your feed, and if it does not, it is not. */
-  const feedQualifies = (p) => earnsSendIt(p);
+  /* The feed is the tagged tokens, narrowed by the reader's own settings when they have any. The tag is
+     the site's score and nothing else now, so the two are no longer the same predicate — but the feed
+     can never show something the tag would not, which is the half of that invariant that mattered. */
+  const feedQualifies = (p) => earnsSendIt(p) && (!readerBarLive() || meetsYourBar(p));
 
   /* ---------- chains ----------
      Robinhood Chain is the home chain and the only one with a block explorer behind it, so it is

@@ -12,7 +12,7 @@
 (function () {
   'use strict';
 
-  const TF = [['5m', '5m'], ['15m', '15m'], ['1h', '1h'], ['4h', '4h'], ['1d', '1D']];
+  const TF = [['1s', '1s'], ['1m', '1m'], ['5m', '5m'], ['15m', '15m'], ['1h', '1h'], ['4h', '4h'], ['1d', '1D']];
   const TAIL_MAX = 900;                // live points kept behind the history; the history itself is never evicted
   /* b was 18, which was exactly enough for nothing: there was no time axis at all, so a reader could see
      a shape without ever learning what span it covered. 46 buys a labelled axis and a rail for the
@@ -24,7 +24,14 @@
   const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   const defaultView = () => ({ x: 1, y: 1, tEnd: null });   // tEnd null = pinned to the live edge
   const isZoomed = (v) => !!v && (v.x !== 1 || v.y !== 1 || v.tEnd != null);
-  const HOURS = { '5m': 12, '15m': 48, '1h': 168, '4h': 720, '1d': 720 };
+  /* How much history each width loads. The short widths are deliberately SHORT windows: a second a
+     candle over even an hour would be 3,600 candles to draw and — more to the point — more blocks than
+     the server can put an exact timestamp on, which is what makes a 1s chart honest rather than merely
+     precise-looking. Three minutes of 1s and three hours of 1m both land inside that budget. */
+  const HOURS = { '1s': 0.05, '1m': 3, '5m': 12, '15m': 48, '1h': 168, '4h': 720, '1d': 720 };
+  /* A one-second candle behind a two-second poll is stale as often as it is fresh, so the poll follows
+     the candle. Anything the page asked for explicitly via data-poll still wins. */
+  const TF_POLL = { '1s': 1000, '1m': 2000 };
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reduced = () => !!(window.prefersReduced && window.prefersReduced());
 
@@ -79,12 +86,18 @@
   function tickLabel(ms, spanMs) {
     const d = new Date(ms);
     const p = (n) => String(n).padStart(2, '0');
+    /* The ladder had no rung below thirty HOURS, so a three-minute window labelled every tick with the
+       same HH:MM and an axis under a 1s chart could not tell its own candles apart. Seconds appear when
+       the whole window is short enough for them to mean something. */
+    if (spanMs <= 18e5) return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds());
     if (spanMs <= 36e5 * 30) return p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
     if (spanMs <= 864e5 * 10) return p(d.getUTCDate()) + ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes());
     return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + ' ' + d.getUTCDate();
   }
-  const fullTime = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-  const hhmm = (ms) => new Date(ms).toISOString().slice(11, 16);
+  /* `secs` when one candle is a second or a minute wide: "14:03" names sixty 1s candles, so the hover
+     would be pointing at one and naming all of them. */
+  const fullTime = (ms, secs) => new Date(ms).toISOString().slice(0, secs ? 19 : 16).replace('T', ' ') + ' UTC';
+  const hhmm = (ms, secs) => new Date(ms).toISOString().slice(11, secs ? 19 : 16);
 
   /* The five marker kinds. `pin` decides whether a marker sits at its own price on the line or on the
      bottom rail: a Send Call and a Sent It happened AT a price we recorded, so they belong on the line;
@@ -362,9 +375,10 @@
        by the poll, n === 0) really are instants, and are labelled as such. */
     const live = !q.n && q.live;
     const span = Number(data.tfSec) || 0;
-    const title = live ? fullTime(q.t * 1000) + ' · live'
-      : span ? fullTime(q.t * 1000) + ' → ' + hhmm((q.t + span) * 1000) + (i === pts.length - 1 ? ' · still open' : '')
-      : fullTime(q.t * 1000);
+    const fine = span > 0 && span <= 60;          // a second or a minute a candle
+    const title = live ? fullTime(q.t * 1000, fine) + ' · live'
+      : span ? fullTime(q.t * 1000, fine) + ' → ' + hhmm((q.t + span) * 1000, fine) + (i === pts.length - 1 ? ' · still open' : '')
+      : fullTime(q.t * 1000, fine);
     // the move from here to now, which needs neither a dollar rate nor a supply to be true
     const mult = (i < pts.length - 1 && q.p > 0 && last && last.p > 0) ? fmtX(last.p / q.p - 1) : null;
     const hiLo = (!live && q.n > 0 && q.h > 0 && q.l > 0 && q.h !== q.l)
@@ -707,6 +721,13 @@
     const pair = host.dataset.pair, token = host.dataset.token;
     if (!pair || !token) return;
     const tf = host.dataset.tf || '1h';
+    /* EVERY load is stamped, and only the newest one is allowed to land. There was no sequencing here:
+       whichever fetch resolved LAST wrote host._data, so switching timeframes quickly — or switching to
+       a fast one while a slow one was still in flight — left the chart drawing the previous timeframe's
+       candles under the new timeframe's label, with the button row and the axis both insisting otherwise.
+       Reproduced by clicking through 5m → 1h → 15m → 1m → 1s: two of the five drew the previous payload.
+       It is the timeframe SWITCH that is racy, so the guard belongs on the switch, not on the poll. */
+    const seq = host._seq = (host._seq || 0) + 1;
     host._view = defaultView();          // a new timeframe is a new window — it starts where it fits
     const status = host.querySelector('.oc-status');
     const cv = host.querySelector('canvas');
@@ -718,6 +739,7 @@
     try {
       const d = await fetch('/api/chart?pair=' + encodeURIComponent(pair) + '&token=' + encodeURIComponent(token) +
         '&tf=' + encodeURIComponent(tf) + '&hours=' + (HOURS[tf] || 168), { credentials: 'same-origin' }).then(r => r.json());
+      if (seq !== host._seq) return;      // a newer timeframe was chosen while this was in flight
       if (d.error) { status.textContent = '⚠️ ' + d.error; host._data._msg = d.error; paint(host, true); return; }
       d.points = pointsFromCandles(d.candles);
       d._msg = d.note || 'No swaps on this pool in this window. The pool exists; nobody traded it.';
@@ -734,6 +756,7 @@
       loadMarkers(host);
       startTicking(host);
     } catch {
+      if (seq !== host._seq) return;      // a failed OLD request must not overwrite a newer good one
       status.textContent = '⚠️ Could not read the chain right now.';
       host._data._msg = 'Could not read the chain right now — the explorer link above still works.';
       paint(host, true);
@@ -809,7 +832,12 @@
     /* Charts on a page that is mostly read, rather than watched, can say so with data-poll. Two charts
        polling once a second is 120 requests a minute from one visitor against a 240/min bucket — the
        landing page asks for 5s instead, and the chip below the chart is written to match. */
-    host._tick = setInterval(tick, Math.max(1000, Number(host.dataset.poll) || 1000));
+    /* The candle width wins over data-poll at the short end. A page that asked for a calm 5s poll was
+       asking on behalf of a 1h chart; somebody who has switched that chart to 1s is watching it, and a
+       one-second candle refreshed every five seconds is stale four times out of five. The 1000ms floor
+       still holds, and the visibility gate above means a chart nobody is looking at polls nothing. */
+    const pollMs = TF_POLL[host.dataset.tf] || Number(host.dataset.poll) || 1000;
+    host._tick = setInterval(tick, Math.max(1000, pollMs));
     tick();
   }
   function stopTicking(host) { if (host._tick) { clearInterval(host._tick); host._tick = null; } }

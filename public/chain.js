@@ -77,16 +77,30 @@ async function walletConnect() {
   return { provider: window.ethereum, address: a && a[0] };
 }
 
-async function ensureRobinhoodChain() {
-  const p = wprov(); if (!p) { sendToast('No wallet connected 🔌'); return false; }
+/* Put a wallet on Robinhood Chain, adding the network if it has never seen it.
+   `prov` is explicit so this acts on the wallet that was actually just connected. It used to always read
+   wprov(), which answers with WALLET.get() or window.ethereum — in a browser with two wallets installed
+   that can be a DIFFERENT provider from the one the picker just returned, so the switch prompt would
+   land in the wrong wallet.
+   `why` only changes the wording of the refusal toast: this is called from the swap AND from every
+   connect now, and "switch to Robinhood Chain to swap" is the wrong sentence when nobody is swapping. */
+async function ensureRobinhoodChain(prov, why) {
+  const p = prov || wprov(); if (!p) { sendToast('No wallet connected 🔌'); return false; }
+  /* Ask before telling. Most wallets no-op a switch to the chain they are already on, but some show a
+     prompt anyway — and a pointless confirmation on every single connect is exactly the friction this
+     is meant to remove. */
+  try {
+    const cur = await p.request({ method: 'eth_chainId' });
+    if (String(cur).toLowerCase() === RH_CHAIN.hexId.toLowerCase()) return true;
+  } catch {}
   try {
     await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: RH_CHAIN.hexId }] });
     return true;
   } catch (e) {
     if (e && (e.code === 4902 || (e.message || '').includes('Unrecognized'))) {
-      return addRobinhoodChain();
+      return addRobinhoodChain(p);
     }
-    if (e && e.code === 4001) sendToast('Switch to Robinhood Chain to swap 🟢');
+    if (e && e.code === 4001) sendToast(why === 'swap' ? 'Switch to Robinhood Chain to swap 🟢' : 'Stay on Robinhood Chain to see your balances 🟢');
     return false;
   }
 }
@@ -105,7 +119,7 @@ async function executeSwap(tokenKey, ethAmountStr, slippagePct) {
   try { const c = await walletConnect(); address = c.address; provider = c.provider; }
   catch (e) { if (e && e.message !== 'cancelled') say('Connect your wallet to swap 🔌'); return; }
   if (!address) { say('Connect your wallet to swap 🔌'); return; }
-  if (!(await ensureRobinhoodChain())) { if (typeof window.swapStatus === 'function') window.swapStatus('Switch your wallet to Robinhood Chain to swap ⛓️', 'error'); return; } // ensureRobinhoodChain already toasted — inline line only, no double announcement
+  if (!(await ensureRobinhoodChain(null, 'swap'))) { if (typeof window.swapStatus === 'function') window.swapStatus('Switch your wallet to Robinhood Chain to swap ⛓️', 'error'); return; } // ensureRobinhoodChain already toasted — inline line only, no double announcement
   // balance pre-check: no ETH on this chain is the #1 first-timer failure — name it instead of a generic "rejected"
   const ethIn = toNum(weiIn, 18);
   let bal = null; try { bal = await ethBalance(address); } catch {}
@@ -210,8 +224,10 @@ async function initTokenCards() {
 function dexImg(u) { return (typeof u === 'string' && /^https:\/\/(cdn|dd)\.dexscreener\.com\//.test(u) && !/["'<>\s]/.test(u)) ? u : null; }
 
 /* ---- add chain to wallet ---- */
-async function addRobinhoodChain() {
-  const p = wprov();
+/* `prov` for the same reason ensureRobinhoodChain takes one: with two wallets installed, wprov() can
+   answer with a different provider than the one being set up, and the add prompt lands in the wrong one. */
+async function addRobinhoodChain(prov) {
+  const p = prov || wprov();
   if (!p) {
     sendToast('No wallet detected — install MetaMask or Rabby first 🦊');
     return false;

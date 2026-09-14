@@ -314,13 +314,17 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
 
   // Signed out → the sign-in modal (its wallet button signs you in and makes the account).
   // Signed in → link this wallet to the account you already have. Same server route either way.
+  /* One call either way now. Signed out it opens the panel already running the wallet sign-in, so the
+     picker is the next thing you see; signed in it links straight from here. It used to drop a signed-out
+     reader on the sign-in panel with no indication that the wallet button was the one they wanted. */
   async function go() {
     const signedIn = !!(window.AUTH && AUTH.user);
-    if (!signedIn) { if (window.AUTH) AUTH.open(); return; }
+    if (!window.AUTH) return;
+    if (!signedIn) { AUTH.connectWallet(); return; }
     btn.disabled = true;
     hint.textContent = 'Choose your wallet…';
     try {
-      const j = await AUTH.linkWallet('Linking a wallet adds it to the account you are signed in to.');
+      const j = await AUTH.connectWallet({ note: 'Linking a wallet adds it to the account you are signed in to.' });
       if (j.alreadyLinked) { hint.textContent = '✅ Already linked to your account.'; sendToast('That wallet is already linked ✅'); }
       else { hint.textContent = '✅ Linked — it now counts toward your Send Power.'; sendToast('Wallet linked 🔗'); }
     } catch (e) {

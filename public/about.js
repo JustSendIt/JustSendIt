@@ -19,8 +19,22 @@
     if (window.AUTH && typeof window.AUTH.open === 'function') window.AUTH.open();
     else location.href = 'profile.html';
   }
-  ['gs-join', 'gs-connect', 'pillar-connect', 'join-signin'].forEach(function (id) {
+  /* The two JOIN buttons open the sign-in panel, which is what they say. The two CONNECT buttons connect
+     a wallet, which is what THEY say — they used to open the same panel and leave the reader to find the
+     wallet tab, so a button labelled "Connect a wallet →" did not connect a wallet. */
+  ['gs-join', 'join-signin'].forEach(function (id) {
     var b = $(id); if (b) b.addEventListener('click', openAuth);
+  });
+  ['gs-connect', 'pillar-connect'].forEach(function (id) {
+    var b = $(id); if (!b) return;
+    b.addEventListener('click', function (e) {
+      if (e) e.preventDefault();
+      if (window.AUTH && typeof window.AUTH.connectWallet === 'function') {
+        window.AUTH.connectWallet().catch(function (err) {
+          if (err && err.message && err.message !== 'cancelled' && window.sendToast) sendToast('⚠️ ' + err.message);
+        });
+      } else location.href = 'profile.html';
+    });
   });
 
   /* --- 3. Get-started tracker: cosmetic check-offs, persisted per-browser (never awards real points) --- */

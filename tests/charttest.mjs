@@ -67,8 +67,12 @@ try {
 
   /* ═══════════ 5. clustering follows the candle, not a fraction of the window ═══════════ */
   {
-    check('markers: a cluster is bucketed by the chart timeframe when the caller names one', /\(Number\(tfSec\) \|\| 0\) \* 1000 \|\| Math\.round/.test(SRC));
-    check('markers: the cluster floor is one minute', /Math\.max\(60000, Math\.round\(bucketMs\)/.test(SRC));
+    check('markers: a cluster is bucketed by the chart timeframe when the caller names one',
+      /\(Number\(tfSec\) \|\| 0\) > 0[\s\S]{0,120}?Math\.max\(1000, Number\(tfSec\) \* 1000\)/.test(SRC));
+    check('markers: and by a slice of the window when it names none', /Math\.max\(60000, Math\.round\(Math\.max\(1, toMs - fromMs\) \/ 120\)\)/.test(SRC));
+    /* The floor used to be a flat minute in BOTH places, so the width the caller named was thrown away
+       downstream and 1s/1m charts clumped their markers into minute-wide blobs anyway. */
+    check('markers: the floor follows the candle rather than overriding it', /Math\.max\(1000, Math\.round\(bucketMs\) \|\| 60000\)/.test(SRC));
   }
 
   /* ═══════════ 6. dollars fail together, or not at all ═══════════

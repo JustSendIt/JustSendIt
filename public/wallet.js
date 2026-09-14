@@ -195,7 +195,19 @@
     selected = chosen; remember(chosen);
     const accts = await chosen.provider.request({ method: 'eth_requestAccounts' });
     if (!accts || !accts[0]) throw new Error('No account authorized');
-    return { provider: chosen.provider, address: accts[0], info: chosen.info };
+    /* EVERY connect lands on Robinhood Chain — sign-in, linking a wallet, and the swap alike. It used to
+       be the swap's job alone, so somebody who connected from anywhere else stayed on whatever network
+       their wallet happened to be showing, and the site read their balances and holdings on a chain they
+       were not on: no tokens, no Holder Boost, nothing wrong on screen to explain it.
+
+       Deliberately NOT fatal. The signature that proves a wallet is yours is chain-agnostic, so refusing
+       the switch must not refuse the sign-in — it would be a worse outcome than the one being fixed. The
+       result rides along as chainOk so a caller can say something useful, and ensureRobinhoodChain asks
+       eth_chainId before prompting, so a wallet already on the right chain is never interrupted. */
+    let chainOk = null;
+    try { if (typeof window.ensureRobinhoodChain === 'function') chainOk = await window.ensureRobinhoodChain(chosen.provider, 'connect'); }
+    catch { chainOk = false; }
+    return { provider: chosen.provider, address: accts[0], info: chosen.info, chainOk: chainOk };
   }
 
   function forget() { selected = null; try { localStorage.removeItem(LS_KEY); } catch {} }

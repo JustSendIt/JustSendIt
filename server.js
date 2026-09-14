@@ -3788,9 +3788,15 @@ async function scanNewPairs() {
    documented free price endpoint is used as the USD anchor, which is what it is published for. */
 const SWAP_TOPIC = '0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822'; // Swap(address,uint,uint,uint,uint,address)
 const SYNC_TOPIC = '0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1'; // Sync(uint112,uint112)
-const CHART_TF = { '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+/* 1s is a real candle on this chain, not a decorative one: blocks land about every 0.1s, so one second
+   is roughly ten blocks of genuine trade. It is only honest at that width if the swaps inside it are
+   placed by their OWN block's timestamp rather than an interpolated one — see EXACT_TS_TF below. */
+const CHART_TF = { '1s': 1, '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
 const chartCache = new Map();          // `${pair}:${tf}` -> { at, data }
 const CHART_TTL = 30 * 1000;
+/* A thirty-second cache behind a one-second candle would serve a chart up to thirty candles stale while
+   presenting it as live, so the short widths get a cache measured against their own candle. */
+const chartTtlFor = (tfSec) => (Number(tfSec) || 0) <= 60 ? 3000 : CHART_TTL;
 let ethUsdCache = { at: 0, usd: 0 };
 
 async function ethUsd() {
@@ -3979,7 +3985,12 @@ function markerCluster(list, bucketMs) {
      CANDLE, not by a fraction of the window: a cluster that straddles two candles puts one dot between
      two prices and belongs to neither. Members are kept so a hover can still name them. */
   if (!list.length) return [];
-  const bucket = Math.max(60000, Math.round(bucketMs) || 60000);
+  /* The floor was a flat 60000, which silently undid the caller's candle width: chartMarkers could pass
+     1000 for a one-second chart and every marker still clumped into minute-wide blobs, on the two widths
+     where the extra resolution is the whole point. The floor now guards the case it was actually for —
+     a caller that names NO width — and otherwise follows the candle down to a second. It stays bounded:
+     a 1s chart loads three minutes, so 180 buckets is the worst case, not thousands. */
+  const bucket = Math.max(1000, Math.round(bucketMs) || 60000);
   const by = new Map();
   for (const m of list) {
     const k = Math.floor(m.t / bucket);
@@ -3995,7 +4006,12 @@ function markerCluster(list, bucketMs) {
 async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDev) {
   const out = { token: tokenAddr, from: fromMs, to: toMs, types: {}, notes: {} };
   // cluster on the chart's own candle width when the caller names one; otherwise on a slice of the window
-  const span = Math.max(60000, (Number(tfSec) || 0) * 1000 || Math.round(Math.max(1, toMs - fromMs) / 120));
+  /* The floor was 60s, which quietly collapsed every marker on a 1s or 1m chart into minute-wide clumps —
+     the one place the extra resolution matters most. It follows the candle down to a second now, and the
+     floor only applies when the caller names no width at all. */
+  const span = (Number(tfSec) || 0) > 0
+    ? Math.max(1000, Number(tfSec) * 1000)
+    : Math.max(60000, Math.round(Math.max(1, toMs - fromMs) / 120));
   const inWindow = (t) => t >= fromMs && t <= toMs;
   const mine = me ? me.id : 0;
   // the same rounding the Senders list uses — exact only for the person it belongs to
@@ -4178,7 +4194,7 @@ const chartInflight = new Map();
 async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
   const key = candleKey(pairAddr, tokenAddr, tfKey, hours);
   const hit = chartCache.get(key);
-  if (hit && now() - hit.at < CHART_TTL) return hit.data;
+  if (hit && now() - hit.at < chartTtlFor(CHART_TF[tfKey])) return hit.data;
   const live = chartInflight.get(key);
   if (live) return live;
   const job = buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours);
@@ -4210,17 +4226,52 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
   const decToken = decT != null ? decT : 18;
   const decQuote = 18;                            // WETH/USDG legs are both 18 on this chain's pairs
 
-  // block -> timestamp: sample sparsely and interpolate, rather than one call per log
+  /* block -> timestamp. Twelve sparse probes and a straight-line interpolation between them is ample at
+     five minutes a candle: a few seconds of drift cannot move a swap out of a 300-second bucket.
+
+     At one second a candle it is not ample — it is wrong. Drift of a couple of seconds puts a trade in
+     the wrong candle, and the result is a chart that looks more precise than the data behind it, which
+     is the same failure the block-time guard below refuses ("a confident-looking chart that is entirely
+     wrong — worse than no chart"). So at the short widths every block that actually carries a swap is
+     asked for its own timestamp. Only blocks WITH swaps are probed, never the whole range, and the
+     probing is capped: past the cap it falls back to dense sampling and SAYS the times are approximate
+     rather than quietly pretending otherwise. */
   const blocks = [...new Set(logs.map(l => parseInt(l.blockNumber, 16)))].sort((a, b) => a - b);
+  const EXACT_TS_TF = 60;              // candle widths at or below this need real block times
+  const EXACT_TS_MAX = 400;            // …and this many probes is the most we will ask the node for
+  const wantExact = tf <= EXACT_TS_TF && blocks.length <= EXACT_TS_MAX;
+  const approxAtThisWidth = tf <= EXACT_TS_TF && !wantExact;
   const marks = [];
-  const step = Math.max(1, Math.floor(blocks.length / 12));
-  for (let i = 0; i < blocks.length; i += step) marks.push(blocks[i]);
-  if (blocks.length && marks[marks.length - 1] !== blocks[blocks.length - 1]) marks.push(blocks[blocks.length - 1]);
+  if (wantExact) {
+    for (const b of blocks) marks.push(b);
+  } else {
+    const step = Math.max(1, Math.floor(blocks.length / (tf <= EXACT_TS_TF ? 120 : 12)));
+    for (let i = 0; i < blocks.length; i += step) marks.push(blocks[i]);
+    if (blocks.length && marks[marks.length - 1] !== blocks[blocks.length - 1]) marks.push(blocks[blocks.length - 1]);
+  }
   const stamps = new Map();
-  await Promise.all(marks.map(async (b) => {
-    const blk = await rpc('eth_getBlockByNumber', ['0x' + b.toString(16), false]).catch(() => null);
-    if (blk && blk.timestamp) stamps.set(b, parseInt(blk.timestamp, 16) * 1000);
-  }));
+  /* In batches: twelve probes could go out at once, four hundred should not. The node is shared with the
+     scanner, the runners board and every other chart on the page. */
+  const TS_BATCH = 24;
+  for (let i = 0; i < marks.length; i += TS_BATCH) {
+    await Promise.all(marks.slice(i, i + TS_BATCH).map(async (b) => {
+      const blk = await rpc('eth_getBlockByNumber', ['0x' + b.toString(16), false]).catch(() => null);
+      if (blk && blk.timestamp) stamps.set(b, parseInt(blk.timestamp, 16) * 1000);
+    }));
+  }
+  /* One retry before giving up. Every probe missing is almost always a transient RPC hiccup, not a chain
+     that has no block times — and the failure is visible: the reader gets a chart that says "found 4,954
+     swaps but could not place them", which is honest but useless, and it stays that way until they change
+     timeframe, because the live poll only carries price. Observed exactly that on a busy pair whose very
+     next request succeeded. Retrying the handful of probes costs one round trip on the rare bad read. */
+  if (marks.length && !stamps.size) {
+    await new Promise(r => setTimeout(r, 250));
+    const retry = marks.slice(0, Math.min(marks.length, TS_BATCH));
+    await Promise.all(retry.map(async (b) => {
+      const blk = await rpc('eth_getBlockByNumber', ['0x' + b.toString(16), false]).catch(() => null);
+      if (blk && blk.timestamp) stamps.set(b, parseInt(blk.timestamp, 16) * 1000);
+    }));
+  }
   const known = [...stamps.entries()].sort((a, b) => a[0] - b[0]);
   // If NONE of the timestamp probes resolved we cannot place a single swap in time. Falling back to
   // "now" would silently pile every trade into one candle and render a confident-looking chart that
@@ -4276,8 +4327,15 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
     candles,
     swaps: logs.length,
     source: 'on-chain Swap events',
+    /* Whether every swap was placed by its own block's clock or by interpolation between probes. At a
+       second a candle that is the difference between a chart and a guess, so the client says which. */
+    exactTimes: wantExact,
     // Say plainly when there is nothing to draw, rather than rendering an empty chart that looks broken.
-    note: candles.length ? null : 'No swaps on this pair in the window, so there is nothing to chart yet.',
+    note: candles.length
+      ? (approxAtThisWidth
+          ? 'This pair traded in more blocks than we can time exactly right now, so at this candle width the times are approximate — a swap may sit one candle either side. Wider candles are exact.'
+          : null)
+      : 'No swaps on this pair in the window, so there is nothing to chart yet.',
   };
   chartCache.set(key, { at: now(), data });
   return data;
@@ -9367,12 +9425,22 @@ const server = http.createServer(async (req, res) => {
         const pair = String(url.searchParams.get('pair') || '').toLowerCase().trim();
         const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
         if (!/^0x[0-9a-f]{40}$/.test(pair) || !/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'bad pair or token address');
-        if (!rateLimit('chart:' + clientIp(req), 90, 6e4)) return bad(res, 'slow down', 429);
+        /* 90/min was sized for charts that poll every second or two at wide candles. A 1s chart polls
+           once a second by design — 60/min from one chart — so two of them open at once tripped it. 240
+           is the bucket /api/spot already uses for exactly this, once-a-second reads from one visitor. */
+        if (!rateLimit('chart:' + clientIp(req), 240, 6e4)) return bad(res, 'slow down', 429);
         const tf = Object.prototype.hasOwnProperty.call(CHART_TF, url.searchParams.get('tf')) ? url.searchParams.get('tf') : '1h';
-        const hours = Math.min(720, Math.max(1, Number(url.searchParams.get('hours')) || 168));
+        /* The floor was ONE HOUR, which silently turned a three-minute 1s request into a 3,600-candle one
+           and put it far beyond the number of blocks the server can timestamp exactly. The short widths
+           need short windows — that is what makes them honest — so fractional hours are allowed, with a
+           floor of about seventy seconds so the parameter still cannot be used to ask for nothing. */
+        const hours = Math.min(720, Math.max(0.02, Number(url.searchParams.get('hours')) || 168));
         let data; try { data = await buildCandles(pair, token, tf, hours); } catch (e) { return bad(res, 'could not read the chain', 502); }
         if (!data) return bad(res, 'could not read the chain', 502);
-        return send(res, 200, data, { 'Cache-Control': 'public, max-age=30' });
+        /* The HTTP cache follows the candle for the same reason the server cache does: thirty seconds in
+           front of a one-second chart is thirty stale candles served as live. */
+        const maxAge = CHART_TF[tf] <= 60 ? 2 : 30;
+        return send(res, 200, data, { 'Cache-Control': 'public, max-age=' + maxAge });
       }
       /* ===== Chart markers: what PEOPLE did, on the same time axis as the price =======================
          One request per chart, answered from tables this site already keeps, so a wall of charts costs a

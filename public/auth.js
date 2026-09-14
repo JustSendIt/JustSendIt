@@ -443,6 +443,32 @@
     return j;
   };
 
+  /* ═══ ONE WAY TO CONNECT A WALLET, FROM ANYWHERE ═══════════════════════════════════════════════
+     Every control on this site that says "Connect a wallet" now calls this and connects a wallet.
+
+     They did not before, and they disagreed with each other about what the words meant. about.html's two
+     buttons opened the sign-in panel and left the reader to find the wallet tab themselves. index.html's
+     button branched on sign-in state. Only the profile page actually connected anything. A button whose
+     label is a verb has to do the verb.
+
+     Signed IN, it links the wallet to the account you are already in — no modal, no detour, straight to
+     the wallet picker. Signed OUT, it opens the panel already running the wallet sign-in, so the picker
+     is the next thing the reader sees rather than something to go hunting for. The signed-out path goes
+     through the modal ON PURPOSE rather than being re-implemented here: that one handler already deals
+     with a brand-new account, an address already linked to somebody, an invite the server wants first,
+     and an account whose wallet is only its FIRST factor. Re-implementing that outside the modal would
+     be a second copy of the hardest flow on the site, and the two would drift. */
+  AUTH.connectWallet = async function (opts) {
+    opts = opts || {};
+    if (AUTH.user) return AUTH.linkWallet(opts.note);
+    openModal();
+    const tab = modal.querySelector('#tab-wallet');
+    if (tab && !tab.classList.contains('active')) tab.click();   // a previous visit may have left Email selected
+    const go = modal.querySelector('#btn-wallet-signin');
+    if (go) go.click();                       // the picker opens itself; the panel is only here to host it
+    return null;
+  };
+
   AUTH.logout = async function () {
     await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
     AUTH.user = null;
@@ -510,18 +536,43 @@
     dat.className = 'npm-item'; dat.setAttribute('role', 'menuitem'); dat.tabIndex = -1; dat.href = '/data.html';
     dat.innerHTML = '<span class="npm-ico" aria-hidden="true">🔑</span> Data API';
     menu.appendChild(wall); menu.appendChild(dash); menu.appendChild(trk); menu.appendChild(dat);
+    /* WHAT "DISCONNECT" MEANS DEPENDS ON HOW YOU GOT IN.
+       With an email or a social login as well, your wallet is one of several ways in, so disconnecting it
+       unlinks the wallet and leaves you signed in — you should never have to sign out to drop a wallet.
+       With ONLY a wallet, it is the entire account: the server refuses to unlink it ("your wallet is your
+       only way to sign in, so disconnecting it would lock you out") and, before this, the menu offered the
+       button anyway and let the reader discover that by being refused. Wallet-only now signs you out,
+       which is what disconnecting the only key you have actually means. `methods` comes straight from
+       /api/me (identityTypes), so this is the server's own answer, not a guess from the shape of the UI. */
+    /* Fail SAFE when we do not know. `!(user.methods || []).some(…)` reads an ABSENT methods list as
+       "wallet only", which would hide Sign out for every account and turn Disconnect into a logout for
+       people who have an email. Wallet-only has to be positively established: a real list, non-empty,
+       and nothing in it but wallets. Not knowing means leaving both doors as they were — the server
+       still refuses an unlink that would lock somebody out, so the cautious branch is never a trap. */
+    const methods = Array.isArray(user.methods) ? user.methods : null;
+    const walletOnly = !!methods && methods.length > 0 && !methods.some(m => m !== 'wallet');
     if (user.wallets && user.wallets.length) {
       const sep = document.createElement('div'); sep.className = 'npm-sep'; sep.setAttribute('role', 'separator'); menu.appendChild(sep);
       const disc = document.createElement('button');
       disc.type = 'button'; disc.className = 'npm-item npm-danger'; disc.id = 'npm-disconnect'; disc.setAttribute('role', 'menuitem'); disc.tabIndex = -1;
       disc.innerHTML = '<span class="npm-ico" aria-hidden="true">🔌</span> Disconnect wallet';
-      disc.setAttribute('data-tip', 'Unlinks your wallet after a second tap — an OG badge comes off too');
+      disc.setAttribute('data-tip', walletOnly
+        ? 'Signs you out — this wallet is the only way into this account'
+        : 'Unlinks your wallet and keeps you signed in — an OG badge comes off too');
       let armed = false, armT = null;
       const resetArm = () => { armed = false; if (armT) { clearTimeout(armT); armT = null; } disc.classList.remove('armed'); disc.innerHTML = '<span class="npm-ico" aria-hidden="true">🔌</span> Disconnect wallet'; };
       disc._resetArm = resetArm; // let any menu-close path disarm the two-tap confirm (see setProfileOpen)
       disc.addEventListener('click', async () => {
-        if (!armed) { armed = true; disc.classList.add('armed'); disc.innerHTML = '<span class="npm-ico" aria-hidden="true">⚠️</span> ' + (AUTH.user && AUTH.user.og ? 'Tap again — OG badge comes off until you relink' : 'Tap again to confirm'); armT = setTimeout(resetArm, 4000); return; }
+        if (!armed) {
+          armed = true; disc.classList.add('armed');
+          disc.innerHTML = '<span class="npm-ico" aria-hidden="true">⚠️</span> ' + (walletOnly
+            ? 'Tap again — this signs you out'
+            : (AUTH.user && AUTH.user.og ? 'Tap again — OG badge comes off until you relink' : 'Tap again to confirm'));
+          armT = setTimeout(resetArm, 4000); return;
+        }
         clearTimeout(armT); armed = false; disc.disabled = true; disc.innerHTML = 'Disconnecting…';
+        // the only key you have: disconnecting it IS signing out, so do that rather than be refused
+        if (walletOnly) { setProfileOpen(wrap, false); AUTH.logout(); return; }
         try { await AUTH.disconnectWallet(); sendToast('Wallet disconnected 🔌'); } // onAuthChange (inside) rebuilds this nav
         catch (err) { sendToast('⚠️ ' + ((err && err.message) || 'could not disconnect')); disc.disabled = false; resetArm(); setProfileOpen(wrap, false); }
       });
@@ -534,6 +585,9 @@
     out.innerHTML = '<span class="npm-ico" aria-hidden="true">🚪</span> Sign out';
     out.setAttribute('data-tip', 'Ends this session on this device');
     out.addEventListener('click', () => { setProfileOpen(wrap, false); AUTH.logout(); });
+    /* A wallet-only account would otherwise show two buttons that do the same thing under different
+       names. "Disconnect wallet" is the one that matches what the reader thinks they are doing. */
+    if (walletOnly && user.wallets && user.wallets.length) out.hidden = true;
     menu.appendChild(out);
     wrap.appendChild(trg); wrap.appendChild(caret); wrap.appendChild(menu);
 
