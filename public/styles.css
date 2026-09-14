@@ -656,15 +656,21 @@ video.media-preview-el { width: auto; }
 @media (prefers-reduced-motion: reduce) { .vote-btn.pop { animation: none; } .vote-btn:active { transform: none; } }
 
 /* ===== Toast + fx ===== */
-#toast-zone { position: fixed; bottom: 1.4rem; left: 50%; transform: translateX(-50%); z-index: 200; display: grid; gap: 0.5rem; justify-items: center; pointer-events: none; max-width: calc(100vw - 2rem); padding: 0 1rem; }
+/* Toasts sit at the TOP, under the nav rather than over it — nav.js measures the real bar and publishes
+   it as --nav-h (58px is the fallback for any page that does not load it). The bottom of the screen is
+   already spoken for by #music-player and #compose-fab, and a toast landing there had to either cover
+   them or dodge them; at the top it answers where the reader's attention already is after pressing
+   something in the page chrome. z-index stays 200, above the nav's 50, so a toast is never clipped. */
+#toast-zone { position: fixed; top: calc(var(--nav-h, 58px) + 0.75rem); left: 50%; transform: translateX(-50%); z-index: 200; display: grid; gap: 0.5rem; justify-items: center; pointer-events: none; max-width: calc(100vw - 2rem); padding: 0 1rem; }
 .toast {
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: #12200a;
   font-weight: 800; padding: 0.65rem 1.4rem; border-radius: 999px; font-size: 0.95rem;
   max-width: 100%;
   box-shadow: 0 8px 30px rgba(0,0,0,0.5); animation: toast-in 0.25s ease, toast-out 0.3s ease 2.2s forwards;
 }
-@keyframes toast-in { from { opacity: 0; transform: translateY(16px) scale(0.9); } }
-@keyframes toast-out { to { opacity: 0; transform: translateY(10px) scale(0.92); } }
+/* Direction follows position: it drops in from above the fold and withdraws upward. */
+@keyframes toast-in { from { opacity: 0; transform: translateY(-16px) scale(0.9); } }
+@keyframes toast-out { to { opacity: 0; transform: translateY(-10px) scale(0.92); } }
 #fx-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 300; }
 
 .float-emoji { position: absolute; font-size: 1.9rem; opacity: 0.5; animation: floaty ease-in-out infinite; pointer-events: none; z-index: 1; }
@@ -3301,7 +3307,7 @@ body::after {
 /* points and level-ups pop rather than appear */
 .toast { animation: sw-pop var(--dur-3) var(--ease-pop) both; }
 @keyframes sw-pop {
-  from { transform: translateY(8px) scale(0.96); opacity: 0; }
+  from { transform: translateY(-8px) scale(0.96); opacity: 0; }
   to   { transform: translateY(0)   scale(1);    opacity: 1; }
 }
 
