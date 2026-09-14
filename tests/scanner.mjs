@@ -14,6 +14,9 @@ const NP = readFileSync(path.join(ROOT, 'public', 'newpairs.js'), 'utf8');
 const HTML = readFileSync(path.join(ROOT, 'public', 'newpairs.html'), 'utf8');
 const CSS = readFileSync(path.join(ROOT, 'public', 'styles.css'), 'utf8');
 const WL = readFileSync(path.join(ROOT, 'public', 'watchlist.js'), 'utf8');
+/* newpairs.js with its comments removed. Several fixes here are explained by quoting the code they
+   replaced, so a "this is gone" assertion has to read the source, not the story about the source. */
+const NP_CODE = NP.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 
@@ -299,6 +302,72 @@ try {
       /e\.preventDefault\(\); e\.stopPropagation\(\); done\(false\)/.test(NP));
     check('Reset says it happened, since from the header the cleared controls are off-screen',
       /sendToast\('Filters reset/.test(NP) && /announce\('Filters reset\./.test(NP));
+  }
+
+  /* ═══════════ 6d. the Hot Feed: what it shows, and whether you can get to it ═══════════
+     Three complaints, one audit, and largely one root cause — the card was taller than the box it was
+     given, inside a scroller that was itself taller than the screen. */
+  {
+    /* THE DATA. patchFeedSlide walked querySelectorAll('.np-slide-stats b')[0..3] while slideHTML laid out
+       FIVE cells in a different order, so every poll wrote liquidity under "Market cap", volume under
+       "Liquidity", holders under "Volume 24h" and a percentage under "Holders" — and never touched "Top
+       wallet". `stats.length >= 4` passed at 5, so it was silent. */
+    check('the feed stats are keyed, never positional', /const b = el\.querySelector\('\.np-slide-stats \[data-k="' \+ c\.k \+ '"\] b'\)/.test(NP));
+    check('  ...and one table drives both the render and the repaint',
+      /function statCells\(p\)/.test(NP) && /const statsHTML = \(p\) =>/.test(NP) && /function patchStats\(el, p\)/.test(NP));
+    /* Against CODE only. The comment that replaced this bug quotes the old guard verbatim to explain it,
+       and an assertion that reads prose as source has fooled this suite more than once. */
+    check('  ...so the positional walk is gone for good',
+      !/querySelectorAll\('\.np-slide-stats b'\)/.test(NP_CODE) && !/stats\.length >= 4/.test(NP_CODE));
+    check('  ...and every cell the table declares is repainted, "Top wallet" included',
+      (NP.match(/\{ k: '(mc|liq|vol|holders|top)'/g) || []).length === 5);
+    check('a reading we could not take says so, rather than showing a dash beside real figures',
+      /'not read yet'/.test(NP) && /\.np-slide-stats b\.dim \{/.test(CSS));
+
+    /* AGE. The one number on a freshness feed that was nailed to build time — and the sr-only line WAS
+       being repainted with the fresh value, so the two disagreed about the same card. */
+    check('age is repainted, not frozen at build time', /el\.querySelector\('\.np-slide-age'\)/.test(NP) && /npFmtAge\(p\.pair\.ageMinutes\)/.test(NP));
+    check('  ...by name, so the async community slot beside it survives', !/np-slide-sub'\)[^\n]*innerHTML/.test(NP));
+    check('  ...and the index status with it', /el\.querySelector\('\.np-slide-indexed'\)/.test(NP));
+
+    /* THE SCROLLING. .np-feed is a <section>, so `section { padding: 4.2rem 1.25rem }` handed the scroller
+       134px of dead height and took 40px off every card. These two must stay together: the track's
+       height: 100% resolves against the shell's CONTENT box. */
+    check('the track scrolls and the shell only positions',
+      /\.np-feed \{ position: relative; padding: 0; overflow: hidden;/.test(CSS)
+      && /\.np-feed-track \{ height: 100%; overflow-y: auto;/.test(CSS));
+    check('  ...so the pinned chrome stops scrolling away with the cards', /\.np-feed-track \{[^}]*scroll-snap-type: y mandatory/.test(CSS));
+    check('the card is no longer a scroll dead-end',
+      !/\.np-slide-inner \{[^}]*overscroll-behavior: contain/.test(CSS)
+      && /\.np-feed-track \{[^}]*overscroll-behavior: contain/.test(CSS));
+    check('  ...and is never overflow:hidden, which would hide the honesty line rather than scroll it',
+      !/\.np-slide-inner \{[^}]*overflow: hidden/.test(CSS));
+    check('flipping a card moves the feed, not the document',
+      /function scrollFeedTo\(el, smooth\)/.test(NP) && !/scrollToSlide\(i\)[^\n]*scrollIntoView/.test(NP));
+    check('  ...and the active-slide observer watches the element that actually scrolls',
+      /root: feedTrack \|\| feedEl/.test(NP));
+    check('reduced motion follows the scroller', /prefers-reduced-motion: reduce\) \{ \.np-feed-track \{ scroll-behavior: auto/.test(CSS));
+
+    /* THE FIT. The strategy row and the body's FAB reserve were the last of the page scroll that let the
+       page creep behind a feed sized for a whole viewport. */
+    check('feed mode hides the strategy row that pushed it below the fold',
+      /body\.np-mode-feed #np-strategies/.test(CSS) && /body\.np-mode-feed #np-strat-note/.test(CSS));
+    check('  ...and the page stops reserving a strip below a feed with nothing under it',
+      /body\.np-mode-feed \{ padding-bottom: 0; \}/.test(CSS));
+    check('the action rail no longer covers the card — or the honesty line',
+      /\.np-slide-rail \{ position: absolute; right: 0\.6rem; bottom: 0\.6rem;/.test(CSS)
+      && !/\.np-slide-rail \{[^}]*var\(--fab-clear\)/.test(CSS));
+    check('  ...and the strip it occupies is reserved by the slide, so the card cannot grow into it',
+      /\.np-slide \{ padding-bottom: calc\(0\.6rem \+ 46px \+ 0\.6rem\); \}/.test(CSS));
+    check('the prev/next pair leaves the rail\'s column and only shows where there is a gutter',
+      /\.np-feed-nav \{ position: absolute; left: 0\.6rem/.test(CSS)
+      && /@media \(hover: hover\) and \(min-width: 700px\) \{ \.np-feed-nav \{ display: flex; \} \}/.test(CSS));
+    check('  ...replacing the blanket hide that left touch readers no forward control at all',
+      !/@media \(hover: none\) \{ \.np-feed-nav \{ display: none; \} \}/.test(CSS));
+    /* --fab-clear is a deliberate single-token invariant elsewhere; the rail stopping using it must not
+       take the token or its other call sites with it. */
+    check('the shared clearance token and its other users are untouched',
+      /--fab-clear: calc\(5\.5rem/.test(CSS) && /padding-bottom: var\(--fab-clear\)/.test(CSS));
   }
 
   /* ═══════════ 7. the bug that made every row after the first fail ═══════════

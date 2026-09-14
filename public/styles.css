@@ -2368,7 +2368,7 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 /* keep list controls clear of the sticky switch */
 body.np-mode-list .np-controls { top: calc(var(--nav-h, 58px) + var(--np-switch-h)); }
 /* mode visibility */
-body.np-mode-feed .np-hero, body.np-mode-feed .np-controls, body.np-mode-feed .np-chips, body.np-mode-feed .np-filters, body.np-mode-feed .np-status, body.np-mode-feed .np-newbar, body.np-mode-feed #np-list, body.np-mode-feed footer { display: none !important; }
+body.np-mode-feed .np-hero, body.np-mode-feed .np-controls, body.np-mode-feed .np-chips, body.np-mode-feed .np-filters, body.np-mode-feed .np-status, body.np-mode-feed .np-newbar, body.np-mode-feed #np-strategies, body.np-mode-feed #np-strat-note, body.np-mode-feed #np-list, body.np-mode-feed footer { display: none !important; }
 /* Best Runners mode: hide the DEX-list chrome, keep only the runners panel */
 body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-runners .np-filters, body.np-mode-runners .np-status, body.np-mode-runners .np-newbar, body.np-mode-runners #np-list { display: none !important; }
 
@@ -2423,17 +2423,36 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 @media (prefers-reduced-motion: reduce) { .np-runner { transition: none; } .np-runner:hover { transform: none; } }
 
 /* feed scroller: TikTok column, 100dvh minus nav minus switch */
-.np-feed { position: relative; height: calc(100dvh - var(--nav-h, 58px) - var(--np-switch-h)); overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; scroll-behavior: smooth; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--ink); }
-@supports not (height: 100dvh) { .np-feed { height: calc(100vh - var(--nav-h,58px) - var(--np-switch-h)); } }
+/* .np-feed is a <section>, so `section { padding: 4.2rem 1.25rem }` (line 377) was silently handing the
+   scroller 134px of dead scroll height and taking 40px off the width of every card. Refusing that padding
+   and moving the scrolling to the track fixes two things at once, and the two MUST ship together: the
+   track's `height: 100%` resolves against this element's content box, so padding here would shrink the
+   track below a slide and break mandatory snap.
+
+   The track scrolls; this stays put. .np-feed-chrome (the live pill and the 🆕 jump button), .np-feed-dyor,
+   .np-feed-nav and .np-feed-hint are absolutely positioned against this element — and an absolute child of
+   a SCROLL container scrolls away with the content, which is why the live counter and the jump-to-newest
+   button were hundreds of pixels off-screen from the second card onward. They are pinned now for free,
+   with no sticky conversion and no change to their own rules.
+
+   -webkit-overflow-scrolling is dropped deliberately: a no-op on iOS 13+ and a known irritant for snap. */
+.np-feed { position: relative; padding: 0; overflow: hidden; background: var(--ink); }
+.np-feed-track { height: 100%; overflow-y: auto; overflow-x: hidden; scroll-snap-type: y mandatory; scroll-behavior: smooth; overscroll-behavior: contain; }
 .np-slide { height: calc(100dvh - var(--nav-h, 58px) - var(--np-switch-h)); scroll-snap-align: start; scroll-snap-stop: always; position: relative; display: flex; flex-direction: column; justify-content: center; padding: 1rem; content-visibility: auto; contain-intrinsic-size: 1px calc(100dvh - var(--nav-h,58px) - var(--np-switch-h)); --rowtri: var(--green-bright); }
 @supports not (height: 100dvh) { .np-slide { height: calc(100vh - var(--nav-h, 58px) - var(--np-switch-h)); } }
 .np-slide[data-level="caution"] { --rowtri: var(--gold); }
 .np-slide[data-level="high"]    { --rowtri: var(--triage-high); }
 .np-slide[data-level="avoid"]   { --rowtri: var(--red); }
-.np-slide-inner { width: 100%; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.7rem; max-height: 100%; overflow: auto; overscroll-behavior: contain; background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 1.5px solid var(--ink-4); border-top: 4px solid var(--rowtri); border-radius: 20px; padding: 1.1rem; box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
+/* The card was a scroll DEAD-END: it is the scroller AND it had overscroll-behavior: contain, and it
+   covers about 72% of a phone screen — so a swipe that began over it scrolled a few lines of text and then
+   refused to chain into the feed, while .np-feed-nav is display:none under (hover: none), leaving no other
+   way forward. Containment belongs on the feed track alone. It keeps overflow-y: auto as a last resort —
+   overflow: hidden here would turn "below a hidden fold" into "unreachable", and the first thing it would
+   swallow is the honesty paragraph. */
+.np-slide-inner { width: 100%; max-width: 520px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.7rem; max-height: 100%; overflow-y: auto; overflow-x: hidden; background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 1.5px solid var(--ink-4); border-top: 4px solid var(--rowtri); border-radius: 20px; padding: 1.1rem; box-shadow: 0 12px 40px rgba(0,0,0,0.45); }
 .np-slide .np-gauge, .np-slide .np-gauge-svg { width: 104px; height: 104px; }
 .np-slide .np-gauge-num { font-size: 2rem; }
-.np-slide-hero { display: flex; align-items: center; justify-content: center; gap: 1rem; }
+.np-slide-hero { display: flex; align-items: center; justify-content: center; gap: 0.8rem; }
 .np-slide-verdict-wrap { display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; }
 .np-slide-verdict { font-size: 1rem; padding: 0.35rem 0.8rem; }
 .np-slide-health { font-size: 0.8rem; font-weight: 700; color: var(--text-dim); }
@@ -2442,13 +2461,19 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .np-slide-sub { text-align: center; font-size: 0.82rem; font-weight: 700; color: var(--text-dim); margin: 0; }
 .np-slide-price { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
 .np-slide-priceval { font-weight: 800; font-size: 1.2rem; color: var(--text); font-variant-numeric: tabular-nums; }
-.np-slide-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
-.np-slide-stats > div { background: var(--ink); border-radius: 12px; padding: 0.5rem 0.7rem; text-align: center; }
+/* Spacing, not structure. Going four-wide was measured to overflow the card horizontally — `1fr` is
+   `minmax(auto, 1fr)`, so a long figure pushes its own track wider than the column it sits in. Two cells
+   a row still fits every value; the height comes out of the padding and the gap instead. */
+.np-slide-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.4rem; }
+.np-slide-stats > div { background: var(--ink); border-radius: 12px; padding: 0.4rem 0.55rem; text-align: center; min-width: 0; }
 .np-slide-stats .np-slide-mc { grid-column: 1 / -1; background: color-mix(in srgb, var(--green) 12%, var(--ink)); border: 1px solid color-mix(in srgb, var(--green) 30%, transparent); }
 .np-slide-stats .np-slide-mc b { font-size: 1.35rem; color: var(--green-bright); }
 .np-slide-stats i { display: block; font-style: normal; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); font-weight: 700; }
 .np-slide-stats b { font-size: 1rem; color: var(--text); font-variant-numeric: tabular-nums; }
 .np-slide-stats b.red { color: var(--red); }
+/* "not read yet" is longer than a figure and must not shout like one — it is the absence of a reading,
+   not a value. Smaller and dimmed, so a cell that could not be read never draws the eye like one that could. */
+.np-slide-stats b.dim { font-size: 0.7rem; font-weight: 800; color: var(--text-mute); letter-spacing: 0; }
 .np-slide .np-flagstrip { justify-content: center; padding: 0; }
 .np-slide-honest { font-size: 0.72rem; line-height: 1.5; color: var(--text-dim); opacity: 0.85; text-align: center; margin: 0; }
 .np-slide-details { border-top: 1px solid var(--ink-4); margin-top: 0.45rem; padding-top: 0.5rem; }
@@ -2459,7 +2484,34 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .np-slide-more:hover, .np-slide-more:focus-visible { background: var(--ink-4); border-color: var(--tok, var(--green)); }
 @media (prefers-reduced-motion: reduce) { .np-slide-more::after { transition: none; } }
 /* right rail */
-.np-slide-rail { position: absolute; right: 0.6rem; bottom: var(--fab-clear); display: flex; flex-direction: column; gap: 0.6rem; z-index: 3; } /* same reserved strip as the footer and the settings panel */
+/* The rail sat on top of the card's right-hand 46px — including the honesty paragraph, the one line the
+   site must not obscure. It also reserved --fab-clear, the strip the fixed player and SEND IT button own;
+   in feed mode the FEED's own bottom edge already clears them (see --np-feed-h), so reserving it again
+   pushed the rail up into the card instead of down out of it.
+
+   The fix is to reserve the strip with PADDING ON THE SLIDE rather than to move the rail out of it: the
+   card is sized by `max-height: 100%`, a percentage that resolves against the slide's CONTENT box, so
+   padding shrinks the card by exactly the strip the rail occupies and the two can no longer overlap. */
+.np-slide-rail { position: absolute; right: 0.6rem; bottom: 0.6rem; display: flex; flex-direction: column; gap: 0.6rem; z-index: 3; }
+@media (max-width: 640px), (max-height: 700px) {
+  /* On a phone there is no gutter beside the card, so the rail becomes a row beneath it, in space the
+     slide reserves for it. 46px keeps the site's 44px touch-target floor. */
+  .np-slide { padding-bottom: calc(0.6rem + 46px + 0.6rem); }
+  .np-slide-rail { flex-direction: row; left: 50%; right: auto; transform: translateX(-50%); bottom: 0.6rem; gap: 0.45rem; }
+  .np-slide-rail .np-rail-btn { width: 46px; height: 46px; }
+
+  /* Reserving the rail's strip costs the card 65px, so the card has to give 65px back — out of SPACING and
+     out of the gauge, never out of the honesty paragraph. Measured at 375x812: content 660px in a 596px
+     box before this, 598px after, so nothing is left behind a hidden fold. The gauge stays well above the
+     44px floor and keeps its number legible at 1.6rem. */
+  .np-slide-inner { gap: 0.45rem; padding: 0.9rem; }
+  .np-slide .np-gauge, .np-slide .np-gauge-svg { width: 80px; height: 80px; }
+  .np-slide .np-gauge-num { font-size: 1.6rem; }
+  .np-slide-hero { gap: 0.7rem; }
+  /* the disclosure keeps a 44px target — the site's floor — and gives back the rest of its padding */
+  .np-slide-more { padding: 0.45rem 1rem; min-height: 44px; font-size: 0.86rem; }
+  .np-slide-honest { font-size: 0.7rem; line-height: 1.45; }
+}
 .np-rail-btn { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: rgba(16,22,35,0.85); backdrop-filter: blur(6px); border: 1.5px solid var(--ink-4); color: var(--text); font-size: 1.3rem; text-decoration: none; cursor: pointer; }
 .np-rail-btn:hover { border-color: var(--green); color: var(--green-bright); }
 .np-rail-btn:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 2px; }
@@ -2470,9 +2522,12 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .np-feed-live { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 800; color: var(--text-dim); background: rgba(10,14,20,0.7); border: 1px solid var(--ink-4); border-radius: 999px; padding: 0.25rem 0.6rem; }
 .np-feed-fresh { pointer-events: auto; font: inherit; font-size: 0.74rem; font-weight: 800; color: var(--green-bright); background: rgba(142,224,0,0.14); border: 1.5px solid var(--green); border-radius: 999px; padding: 0.3rem 0.7rem; cursor: pointer; min-height: 32px; }
 .np-feed-dyor { position: absolute; top: 0.5rem; left: 0.6rem; z-index: 5; font-size: 0.64rem; font-weight: 800; color: var(--gold); background: rgba(255,179,64,0.12); border: 1px solid rgba(255,179,64,0.35); border-radius: 999px; padding: 0.2rem 0.5rem; pointer-events: none; }
-.np-feed-nav { position: absolute; right: 0.6rem; top: 42%; transform: translateY(-50%); z-index: 4; display: flex; flex-direction: column; gap: 0.5rem; }
+/* Moved to the LEFT gutter: it shared a column with the action rail, and it is only shown where there is
+   actually a gutter to put it in. `display: none` under (hover: none) is replaced by a positive test, so
+   the rule cannot leave a touch reader with no forward control and no rail either. */
+.np-feed-nav { position: absolute; left: 0.6rem; right: auto; top: 50%; transform: translateY(-50%); z-index: 4; display: none; flex-direction: column; gap: 0.5rem; }
 .np-feed-nav .np-rail-btn { width: 44px; height: 44px; font-size: 1rem; }
-@media (hover: none) { .np-feed-nav { display: none; } }
+@media (hover: hover) and (min-width: 700px) { .np-feed-nav { display: flex; } }
 .np-feed-hint { position: absolute; bottom: 1.2rem; left: 50%; transform: translateX(-50%); z-index: 5; font-size: 0.75rem; font-weight: 800; color: var(--text); background: rgba(10,14,20,0.75); border: 1px solid var(--ink-4); border-radius: 999px; padding: 0.35rem 0.8rem; pointer-events: none; }
 .np-slide--intro .np-slide-inner { text-align: center; align-items: center; }
 .np-slide-newtag { position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3; font-size: 0.66rem; font-weight: 800; color: var(--green-bright); background: rgba(142,224,0,0.16); border: 1px solid var(--green); border-radius: 999px; padding: 0.15rem 0.5rem; }
@@ -2485,7 +2540,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 }
 @keyframes np-pop { 0%{transform:scale(1);} 40%{transform:scale(1.35);} 100%{transform:scale(1);} }
 @keyframes np-bob { 0%,100%{transform:translateX(-50%) translateY(0);} 50%{transform:translateX(-50%) translateY(-5px);} }
-@media (prefers-reduced-motion: reduce) { .np-feed { scroll-behavior: auto; } .np-slide .np-gauge-arc { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .np-feed-track { scroll-behavior: auto; } .np-slide .np-gauge-arc { transition: none; } }
 
 /* ===================================================================
    WATCHLIST save-buttons + WATCHLIST page + NOTIFICATIONS bell
@@ -3556,6 +3611,11 @@ body.np-mode-feed { --np-feed-h: calc(100dvh - var(--nav-h, 58px) - var(--np-swi
 @supports not (height: 100dvh) {
   body.np-mode-feed { --np-feed-h: calc(100vh - var(--nav-h, 58px) - var(--np-switch-h) - 1rem); }
 }
+/* responsive.css puts padding-bottom: var(--fab-reserve) on <body> so nothing is stranded under the player
+   and the FAB. In feed mode there is nothing below the feed to strand, and those pixels were the last of
+   the page scroll that let the sticky switcher creep over the feed. The pinned strip is reserved inside
+   the slide instead, where it costs card height only at the widths that need it. */
+body.np-mode-feed { padding-bottom: 0; }
 body.np-mode-feed #main { padding-bottom: 0; }
 body.np-mode-feed .np-feed,
 body.np-mode-feed .np-slide { height: var(--np-feed-h); }

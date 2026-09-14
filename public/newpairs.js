@@ -1863,7 +1863,7 @@
       const slide = d.closest('.np-slide'); const p = slide && state.byAddr.get(slide.dataset.addr);
       if (p) { markViewed(p.token.address); d.insertAdjacentHTML('beforeend', bodyHTML(p)); if (window.mountOnChainCharts) mountOnChainCharts(); animateRings(d); }
     }, true);
-    freshBtn.addEventListener('click', () => { const first = feedTrack.querySelector('.np-slide--new'); if (first) first.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); });
+    freshBtn.addEventListener('click', () => { const first = feedTrack.querySelector('.np-slide--new'); if (first) scrollFeedTo(first, true); });
     document.getElementById('np-feed-up').addEventListener('click', () => flip(-1));
     document.getElementById('np-feed-down').addEventListener('click', () => flip(1));
     document.addEventListener('keydown', feedKeydown);
@@ -1948,6 +1948,45 @@
       '<p class="np-slide-sub">Swipe up ▲ to start</p>' +
       '</div></article>';
   }
+  /* ONE table drives the first render AND every repaint. The bug this replaces was positional:
+     patchFeedSlide walked querySelectorAll('.np-slide-stats b')[0..3] while slideHTML laid out FIVE cells
+     in a different order, so every poll wrote liquidity under "Market cap", volume under "Liquidity",
+     holders under "Volume 24h" and a percentage under "Holders", and never touched "Top wallet" at all.
+     `stats.length >= 4` passed at 5, so it was silent for as long as it has existed.
+
+     Two quieter wrongs went with it. The red class for lowLiquidity was applied to the MARKET CAP cell,
+     where `.np-slide-stats b.red` beats `.np-slide-mc b` on source order — so the headline number turned
+     red for a condition it was not reporting. And index 1, the real Liquidity cell, never had its class
+     touched at all, so it kept whatever colour it was BUILT with for the life of the card.
+
+     Keyed cells cannot drift: a cell added here renders and repaints from the same row, and a cell with
+     no row is never written. */
+  function statCells(p) {
+    const m = p.market, h = p.holders, r = p.risk || {};
+    return [
+      { k: 'mc',      lbl: 'Market cap', val: npFmtUsd(m.marketCap),    cls: '' },
+      { k: 'liq',     lbl: 'Liquidity',  val: npFmtUsd(m.liquidityUsd), cls: r.lowLiquidity ? 'red' : '' },
+      { k: 'vol',     lbl: 'Volume 24h', val: npFmtUsd(p.volume.h24),   cls: '' },
+      /* "not read yet" rather than an em dash. Both of these are null on every pair on the board while the
+         explorer is unreachable, and a dash sitting beside real dollar figures reads as zero rather than as
+         unread — which is the same "we could not check looks like we checked" failure the verdict avoids. */
+      { k: 'holders', lbl: 'Holders',    val: h.count != null ? npNum(h.count) : 'not read yet',
+        cls: r.lowHolders ? 'red' : (h.count == null ? 'dim' : '') },
+      { k: 'top',     lbl: 'Top wallet', val: h.topHolderPct != null ? pctPlain(h.topHolderPct) : 'not read yet',
+        cls: r.concentrated ? 'red' : (h.topHolderPct == null ? 'dim' : '') },
+    ];
+  }
+  const statsHTML = (p) => '<div class="np-slide-stats">' + statCells(p).map(c =>
+    '<div data-k="' + c.k + '"' + (c.k === 'mc' ? ' class="np-slide-mc"' : '') +
+    '><i>' + c.lbl + '</i><b class="' + c.cls + '">' + c.val + '</b></div>').join('') + '</div>';
+  function patchStats(el, p) {
+    statCells(p).forEach(c => {
+      const b = el.querySelector('.np-slide-stats [data-k="' + c.k + '"] b');
+      if (!b) return;
+      if (b.textContent !== c.val) b.textContent = c.val;   // no needless DOM writes on an idle poll
+      if (b.className !== c.cls) b.className = c.cls;
+    });
+  }
   function slideHTML(p, isNew) {
     const tri = triageOf(p), T = verdictOf(p), health = healthOf(p), h = p.holders, m = p.market, r = p.risk || {};
     const banner = p.brand && p.brand.header ? '<div class="np-slide-banner"><img class="np-logo-img" src="' + esc(p.brand.header) + '" alt="" loading="lazy" decoding="async"></div>' : '';
@@ -1956,18 +1995,12 @@
       '<div class="np-slide-inner">' +
         '<span class="np-slide-newtag"' + (isNew ? '' : ' hidden') + '>🆕 just landed</span>' +
         '<header class="np-slide-top">' + logoHTML(p, 46) + '<div class="np-slide-idcol"><h2 class="np-slide-name">' + esc(p.token.name) + ' <span class="np-slide-sym">$' + esc(p.token.symbol) + '</span>' + tickerCopy(p.token.address) + '</h2>' +
-          '<p class="np-slide-sub">🕐 ' + npFmtAge(p.pair.ageMinutes) + ' old · / ' + esc(p.pair.quoteSymbol) + ' · ' + (p.indexed ? 'indexed' : 'not indexed yet') + commSlot(p.token.address, p.token.symbol) + '</p>' + badgesHTML(p) + '</div></header>' +
+          '<p class="np-slide-sub">🕐 <span class="np-slide-age">' + npFmtAge(p.pair.ageMinutes) + '</span> old · / ' + esc(p.pair.quoteSymbol) + ' · <span class="np-slide-indexed">' + (p.indexed ? 'indexed' : 'not indexed yet') + '</span>' + commSlot(p.token.address, p.token.symbol) + '</p>' + badgesHTML(p) + '</div></header>' +
         '<div class="np-slide-hero">' + gaugeHTML(p, tri, health) + '<div class="np-slide-verdict-wrap">' +
           '<span class="np-verdict np-slide-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
           '<span class="np-slide-health"' + ratingInk(health) + '>Health ' + health + '/100</span></div></div>' +
         '<div class="np-slide-price"><span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24) + '</div>' +
-        '<div class="np-slide-stats">' +
-          '<div class="np-slide-mc"><i>Market cap</i><b>' + npFmtUsd(m.marketCap) + '</b></div>' +
-          '<div><i>Liquidity</i><b class="' + (r.lowLiquidity ? 'red' : '') + '">' + npFmtUsd(m.liquidityUsd) + '</b></div>' +
-          '<div><i>Volume 24h</i><b>' + npFmtUsd(p.volume.h24) + '</b></div>' +
-          '<div><i>Holders</i><b class="' + (r.lowHolders ? 'red' : '') + '">' + (h.count != null ? npNum(h.count) : '—') + '</b></div>' +
-          '<div><i>Top wallet</i><b class="' + (r.concentrated ? 'red' : '') + '">' + (h.topHolderPct != null ? pctPlain(h.topHolderPct) : '—') + '</b></div>' +
-        '</div>' +
+        statsHTML(p) +
         socialsHTML(p) +
         flagstripHTML(p) +
         '<p class="np-slide-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
@@ -2029,6 +2062,16 @@
   function patchFeedSlide(el, p) {
     const tri = triageOf(p), T = verdictOf(p), health = healthOf(p), h = p.holders, m = p.market, r = p.risk || {};
     el.dataset.level = tri;
+    /* Age and index status are repainted BY NAME, never by rewriting .np-slide-sub — an innerHTML rewrite
+       there would wipe the 🏘️ community slot that tokentext.js has already resolved asynchronously.
+       On a feed whose entire premise is freshness, age was the one number nailed to build time: a card
+       read "11m old" for as long as the tab stayed open while the live dot beside it ticked. The server
+       recomputes it every sweep, and the sr-only line below was already being repainted with the fresh
+       value — so a screen reader and a sighted reader were told different things about the same card. */
+    const ageEl = el.querySelector('.np-slide-age');
+    if (ageEl && p.pair.ageMinutes != null) { const a = npFmtAge(p.pair.ageMinutes); if (ageEl.textContent !== a) ageEl.textContent = a; }
+    const idxEl = el.querySelector('.np-slide-indexed');
+    if (idxEl) { const t = p.indexed ? 'indexed' : 'not indexed yet'; if (idxEl.textContent !== t) idxEl.textContent = t; }
     const gnum = el.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = el.querySelector('.np-gauge-arc'); if (arc) { const prev = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prev !== health) { if (el.classList.contains('is-active') && !reduced()) setArc(arc, health); else seatRing(el); } }
     const gauge = el.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution'); gauge.style.setProperty('--tri', ringColor(health)); }
@@ -2039,13 +2082,7 @@
     const srSlide = el.querySelector('.np-slide-sr'); if (srSlide) srSlide.textContent = srLine(p) + ' Press Enter for full detail.';
     const hp = el.querySelector('.np-slide-health'); if (hp) { hp.textContent = 'Health ' + health + '/100'; hp.style.color = ringColor(health); }
     const priceRow = el.querySelector('.np-slide-price'); if (priceRow) priceRow.innerHTML = '<span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24);
-    const stats = el.querySelectorAll('.np-slide-stats b');
-    if (stats.length >= 4) {
-      stats[0].textContent = npFmtUsd(m.liquidityUsd); stats[0].className = r.lowLiquidity ? 'red' : '';
-      stats[1].textContent = npFmtUsd(p.volume.h24);
-      stats[2].textContent = h.count != null ? npNum(h.count) : '—'; stats[2].className = r.lowHolders ? 'red' : '';
-      stats[3].textContent = h.topHolderPct != null ? pctPlain(h.topHolderPct) : '—'; stats[3].className = r.concentrated ? 'red' : '';
-    }
+    patchStats(el, p);
     const strip = el.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
   }
   function appendFreshSlides(newAddrs) {
@@ -2058,7 +2095,10 @@
   function observeSlides() {
     if (feedObserver) feedObserver.disconnect();
     if (!('IntersectionObserver' in window)) return;
-    feedObserver = new IntersectionObserver(ents => { ents.forEach(e => { if (e.isIntersecting && e.intersectionRatio >= 0.6) setActiveSlide(e.target); }); }, { root: feedEl, threshold: [0.6] });
+    /* root is the TRACK, which is the element that scrolls now. .np-feed is a non-scrolling shell whose
+       content box happens to match, so this worked by coincidence — the coincidence should not be the
+       contract, and any future padding on the shell would quietly break the active-slide tracking. */
+    feedObserver = new IntersectionObserver(ents => { ents.forEach(e => { if (e.isIntersecting && e.intersectionRatio >= 0.6) setActiveSlide(e.target); }); }, { root: feedTrack || feedEl, threshold: [0.6] });
     feedTrack.querySelectorAll('.np-slide').forEach(s => feedObserver.observe(s));
   }
   function setActiveSlide(el) {
@@ -2078,7 +2118,16 @@
   function slideIndex(el) { if (!el || !el.dataset.addr) return 0; return [...feedTrack.querySelectorAll('.np-slide[data-addr]')].indexOf(el) + 1; }
   const allSlides = () => [...feedTrack.querySelectorAll('.np-slide')];
   function activeIndex() { return allSlides().findIndex(s => s.classList.contains('is-active')); }
-  function scrollToSlide(i) { const s = allSlides(); const t = Math.max(0, Math.min(s.length - 1, i)); if (s[t]) s[t].scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'start' }); }
+  /* scrollIntoView scrolls EVERY scrollable ancestor, the document included — which is how ▼ could move the
+     page rather than the feed and land the target card hundreds of pixels off. The track is the only
+     container that owns this geometry, so the offset is computed against it and set directly. */
+  function scrollFeedTo(el, smooth) {
+    if (!el || !feedTrack) return;
+    const top = el.offsetTop - (el.offsetParent === feedTrack ? 0 : feedTrack.offsetTop);
+    try { feedTrack.scrollTo({ top: top, behavior: smooth && !reduced() ? 'smooth' : 'auto' }); }
+    catch (e) { feedTrack.scrollTop = top; }
+  }
+  function scrollToSlide(i) { const s = allSlides(); const t = Math.max(0, Math.min(s.length - 1, i)); if (s[t]) scrollFeedTo(s[t], true); }
   function flip(dir) { const cur = activeIndex(); scrollToSlide((cur < 0 ? 0 : cur) + dir); }
   function feedKeydown(e) {
     if (state.mode !== 'feed') return;
