@@ -217,6 +217,12 @@ CREATE TABLE IF NOT EXISTS points_events (
 );
 CREATE INDEX IF NOT EXISTS idx_pe_user ON points_events(user_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_pe_ref ON points_events(ref) WHERE ref IS NOT NULL;
+CREATE TABLE IF NOT EXISTS easter_eggs (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  egg_id INTEGER NOT NULL,
+  found_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, egg_id)
+);
 CREATE TABLE IF NOT EXISTS holder_state (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   score_bp INTEGER NOT NULL DEFAULT 0,   -- combined (%SEND + %GWC of supply) * 10000
@@ -1154,12 +1160,21 @@ function titleFor(level) {
 // real buys a day the swap cap allows, 6,390. At 1x that is Level 100 in ~7.8 years; at the 10x a live
 // community pays, ~285 days — and the SOCIAL_DAY_CAP below means no stack, however large, turns a day
 // of clicks into more than 73,762. The fast lane is meant to be Send Calls held in profit.
-const PTS = { post: 75, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 170 }; // call_x 170 is the FIRST rung of an additive ladder (see CALL_X_STEP): rung m pays 170 + 17×(m−1), so 1x=170, 2x=187, 50x=1,003 and all fifty rungs total 29,325 base — 13% of the ladder's 30% slice, leaving the room for the hold bonus
+const PTS = { post: 75, egg: 20, first_post: 150, comment: 24, react_give: 6, react_get: 9, vote_give: 6, vote_get: 12, follow: 18, be_followed: 15, track_wallet: 45, watch_token: 15, connect_wallet: 150, customize: 30, daily: 60, swap: 450, send_call: 120, hop_on: 30, call_x: 170 }; // call_x 170 is the FIRST rung of an additive ladder (see CALL_X_STEP): rung m pays 170 + 17×(m−1), so 1x=170, 2x=187, 50x=1,003 and all fifty rungs total 29,325 base — 13% of the ladder's 30% slice, leaving the room for the hold bonus
 // anti-farm: max awards of this kind per rolling 24h (per recipient user).
 // Every point-earning kind is capped so no single action can be farmed unbounded.
-const DAILY_CAP = { post: 40, first_post: 1, comment: 20, react_give: 40, react_get: 20, vote_give: 60, vote_get: 30, follow: 10, be_followed: 10, track_wallet: 3, watch_token: 5, connect_wallet: 1, customize: 1, swap: 3, send_call: 20, hop_on: 30, community_founder: 1 };
+const DAILY_CAP = { post: 40, egg: 25, first_post: 1, comment: 20, react_give: 40, react_get: 20, vote_give: 60, vote_get: 30, follow: 10, be_followed: 10, track_wallet: 3, watch_token: 5, connect_wallet: 1, customize: 1, swap: 3, send_call: 20, hop_on: 30, community_founder: 1 };
 // Economy audit 2026-09-08: the receive-side kinds (react_get / vote_get / be_followed) are what a ring of alts can push into one
 // account, and the once-per-object kinds (connect / track / watch) are free to mint objects for — both cut to what a real day needs. // call_x (milestone payouts) is uncapped — earned by real performance
+/* ===== Easter eggs ================================================================================
+   One hundred of them, hidden across the site (public/eggs.js knows where). The server's whole job is to
+   pay each one exactly once per account and to bound the rate: an id outside 1..EGG_TOTAL is refused,
+   a repeat is a no-op, and the kind rides the same daily cap and social budget as every other award. The
+   client can only ever tell us "I found #N" — it cannot tell us how much to pay. */
+const EGG_TOTAL = 100;
+function eggsOf(userId) {
+  return db.prepare('SELECT egg_id FROM easter_eggs WHERE user_id = ? ORDER BY found_at').all(userId).map((r) => r.egg_id);
+}
 const PTS_EVENT_CAP = Math.floor(xpForLevel(70) * 0.1); // 73,762 — no single award may exceed a tenth of a Send Call's lifetime budget. At 1,500,000 it bound only above a 3,000× stack, i.e. never; one clamped event was Level 77 on its own
 // The grind has a ceiling the boosts cannot lift: every daily-capped kind plus the check-in shares ONE rolling-24h budget on
 // the PAID amount. A 400× holder still shows 400× and still earns it on Send Call performance; a day of clicks is worth at
@@ -2796,6 +2811,7 @@ function gamifySummary(u) {
   const h = db.prepare('SELECT * FROM holder_state WHERE user_id = ?').get(u.id);
   return {
     points: u.points, level, title: titleFor(level),
+    eggs: { found: eggsOf(u.id).length, total: EGG_TOTAL }, // the hunt: how many of the hidden hundred this account has found
     levelXp: base, nextLevelXp: nextXp,
     intoLevel: u.points - base, spanLevel: nextXp != null ? nextXp - base : null,
     rank: userRank(u.id),
@@ -2875,6 +2891,7 @@ function gamifySummary(u) {
       betaBadgeMult: BETA_BADGE_MULT, betaTopN: BETA_TOP_N,
       arcadeMaxBoost: ARCADE_BOOST_MAX,
       proofSellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
+      eggTotal: EGG_TOTAL, eggPoints: PTS.egg, eggDailyCap: DAILY_CAP.egg,
       // the two community ladders, which appeared in no served file at all before this
       commXp: COMM_XP, commXpPerUserDay: COMM_XP_PER_USER_DAY,
       convXp: CONV_XP, convDailyCap: CONV_DAILY_CAP,
@@ -9322,6 +9339,26 @@ const server = http.createServer(async (req, res) => {
          mute a compounding penalty a muted account could do nothing about, which is a different and much
          harsher thing than pausing what someone can create. Read-only pauses making; it does not lock
          someone out of protecting what they already earned. */
+      // the hunt: what this account has found, and the total, so the dashboard can draw N / 100
+      if (p === '/api/eggs' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        return send(res, 200, { found: eggsOf(me.id), total: EGG_TOTAL, points: PTS.egg });
+      }
+      if (p === '/api/eggs/claim' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (blockReadOnly(res, me)) return;                                   // same choke point as every other write
+        if (!rateLimit('egg:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
+        let b; try { b = await readBody(req); } catch { return bad(res, 'bad request'); }
+        const id = Number(b && b.id);
+        if (!Number.isInteger(id) || id < 1 || id > EGG_TOTAL) return bad(res, 'no such egg');
+        const already = !!db.prepare('SELECT 1 FROM easter_eggs WHERE user_id = ? AND egg_id = ?').get(me.id, id);
+        if (already) return send(res, 200, { already: true, awarded: 0, found: eggsOf(me.id), total: EGG_TOTAL });
+        db.prepare('INSERT OR IGNORE INTO easter_eggs (user_id, egg_id, found_at) VALUES (?,?,?)').run(me.id, id, now());
+        const awarded = awardPoints(me.id, 'egg', PTS.egg, 'egg:' + me.id + ':' + id);   // idempotent per (user, egg) via the ref
+        const found = eggsOf(me.id);
+        if (found.length === EGG_TOTAL) notify(me.id, '🥚', 'All ' + EGG_TOTAL + ' eggs. Every single one. You have seen more of this site than the people who built it. 🚀', 'points');
+        return send(res, 200, { already: false, awarded, found, total: EGG_TOTAL });
+      }
       if (p === '/api/checkin' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('checkin:' + me.id, 20, 6e5)) return bad(res, 'slow down', 429);

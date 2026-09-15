@@ -2148,7 +2148,14 @@
   function flip(dir) { const cur = activeIndex(); scrollToSlide((cur < 0 ? 0 : cur) + dir); }
   function feedKeydown(e) {
     if (state.mode !== 'feed') return;
-    const t = document.activeElement; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+    /* Only take the keyboard when nothing interactive owns it. The old guard skipped form fields and
+       nothing else, so a keyboard user who tabbed onto a button, link or summary inside the feed and
+       pressed Enter got the card's details toggled instead of the control they were on — every control in
+       the feed was reachable but none was operable. Modifier chords are left alone for the same reason:
+       Cmd/Ctrl+ArrowDown is the reader's, not ours. */
+    const t = document.activeElement;
+    if (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(t.tagName) || t.isContentEditable || t.getAttribute('role') === 'button')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     switch (e.key) {
       case 'ArrowDown': case 'j': case 'J': case 'PageDown': e.preventDefault(); flip(1); break;
       case 'ArrowUp': case 'k': case 'K': case 'PageUp': e.preventDefault(); flip(-1); break;
