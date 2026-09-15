@@ -537,6 +537,9 @@ for (const col of [
   "ALTER TABLE calls ADD COLUMN scored INTEGER NOT NULL DEFAULT 0",           // 1 once this matured call has been counted toward a daily limit adjustment
   // read-only redemption: buy & hold $SEND to lift a restriction early (sell before the hold is up → it returns, doubled)
   "ALTER TABLE users ADD COLUMN redeem_base_send REAL NOT NULL DEFAULT 0",    // $SEND balance snapshot when the restriction was applied (baseline to detect a genuine buy)
+  "ALTER TABLE users ADD COLUMN gate_hold_until INTEGER NOT NULL DEFAULT 0",  // participation gate's sell window ends at this ms (0 = not in one)
+  "ALTER TABLE users ADD COLUMN gate_floor REAL NOT NULL DEFAULT 0",          // $SEND balance that opened the door; selling out of it inside the window is read-only
+  "ALTER TABLE users ADD COLUMN gate_wallets TEXT",                            // the addresses that bag was measured over, so the window is judged on-chain and not on who is linked today
   "ALTER TABLE users ADD COLUMN redeem_hold_until INTEGER NOT NULL DEFAULT 0",// probation end: must hold the bought $SEND until this ms (0 = not in probation)
   "ALTER TABLE users ADD COLUMN redeem_floor REAL NOT NULL DEFAULT 0",        // $SEND balance that must be maintained through probation (sell below → penalty)
   "ALTER TABLE users ADD COLUMN redeem_dur INTEGER NOT NULL DEFAULT 0",       // the restriction's duration (ms) — the required hold length, and doubles on a broken probation
@@ -1648,6 +1651,9 @@ async function refreshHolder(userId) {
     ON CONFLICT(user_id) DO UPDATE SET score_bp=excluded.score_bp, base_bp=excluded.base_bp, send_tok=excluded.send_tok, gwc_tok=excluded.gwc_tok, send_bp=excluded.send_bp, gwc_bp=excluded.gwc_bp, streak_start=excluded.streak_start, gwc_streak_start=excluded.gwc_streak_start, gwc_base_bp=excluded.gwc_base_bp, send_usd=excluded.send_usd, gwc_usd=excluded.gwc_usd, send_qual=excluded.send_qual, gwc_qual=excluded.gwc_qual, last_check=excluded.last_check, updated_at=excluded.updated_at`)
     .run(userId, scoreBp, baseBp, sendTok, gwcTok, sendBp, gwcBp, streakStart, gwcStreak, gwcBase, sendUsd, gwcUsd, sendQual, gwcQual, now(), now());
   checkProbation(userId, sendTok); // enforce any active "hold your bought $SEND" redemption deal against this fresh balance
+  /* The gate's first-day window is deliberately NOT judged here. sendTok aggregates whatever wallets are
+     linked right now, and that number falls when somebody unlinks a spare — which is not a sale. It is
+     checked on its own pinned addresses by the sweep and by holdWatchTick instead. */
   // OG revocation: OG requires holding BOTH $SEND and $GWC, so selling out of EITHER (dropping it to ~0) permanently
   // removes OG. These balances are real — rpc() throws on failure (we'd never reach here on a transient error), so a
   // zero here is a true zero, not a glitch.
@@ -1750,7 +1756,7 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
        lastZeroMs      — the last moment the position went to dust, which is where a continuous hold
          genuinely begins, whatever the first buy says. */
   const sinceMs = opts && opts.sinceMs ? opts.sinceMs : null;
-  let boughtWei = 0n, soldWei = 0n, balAtSince = null, lastZeroMs = null, firstInMs = null;
+  let boughtWei = 0n, soldWei = 0n, balAtSince = null, lastZeroMs = null, firstInMs = null, lastBuyMs = null;
   for (const r of rows) {
     const from = ((r.from && r.from.hash) || '').toLowerCase();
     const to = ((r.to && r.to.hash) || '').toLowerCase();
@@ -1766,6 +1772,10 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
       if (firstInMs === null) firstInMs = ts;
       if (isAcquisition(from)) boughtWei += v;
       if (firstBuyMs === null && isAcquisition(from)) firstBuyMs = ts;      // EARLIEST market acquisition — the tier basis
+      /* LATEST market acquisition. The OG tier asks when you got in; the participation gate asks when you
+         last put money in, because that is what its 24-hour window runs from. Rows are already sorted by
+         block then log index, so the last assignment wins without a second comparison. */
+      if (isAcquisition(from)) lastBuyMs = ts;
     }
     if (from === w) {
       bal -= v;
@@ -1787,6 +1797,7 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
   if (onChain !== bal) throw new Error('og scan: replay did not reconcile with chain balance');
   return {
     firstBuyMs,
+    lastBuyMs,
     tier: firstBuyMs === null ? OG_TIER.NONE : ogTierForBuy(firstBuyMs, launchMs),
     holds: bal > OG_DUST_WEI,
     balWei: bal.toString(),   // for the value floor at grant time (strings, never BigInt, so a scan result can be logged/JSON'd)
@@ -2863,7 +2874,7 @@ function gamifySummary(u) {
       communityMult: COMMUNITY_MULT, liveThreshold: LIVE_THRESHOLD, founderBonus: FOUNDER_BONUS,
       betaBadgeMult: BETA_BADGE_MULT, betaTopN: BETA_TOP_N,
       arcadeMaxBoost: ARCADE_BOOST_MAX,
-      proofMinHoldDays: Math.round(PROOF_MIN_HOLD_MS / DAY_MS),
+      proofSellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
       // the two community ladders, which appeared in no served file at all before this
       commXp: COMM_XP, commXpPerUserDay: COMM_XP_PER_USER_DAY,
       convXp: CONV_XP, convDailyCap: CONV_DAILY_CAP,
@@ -6514,6 +6525,17 @@ function redeemCostUsd(u) { // how much MORE $SEND they must buy to lift THIS re
 function redeemHoldMs(u) { // how long they must then hold that $SEND (permanent → 40d; timed → the restriction length)
   return (u.restrict_level || 0) >= 3 ? PERM_HOLD_MS : (u.redeem_dur || DAY_MS);
 }
+/* The remaining slice of a hold window, which is routinely minutes rather than days — somebody who bought
+   yesterday and links their wallet today can verify with twenty minutes left. humanDur() below rounds to
+   whole hours and is deliberately left alone (it formats sanction LENGTHS, which are always day multiples);
+   rounding a 20-minute tail through it prints "0 hours", which reads as no obligation at all while a real
+   24-hour sanction is armed. */
+function humanLeft(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  if (m < 60) return m + (m === 1 ? ' minute' : ' minutes');
+  const h = Math.floor(m / 60);
+  return h + (h === 1 ? ' hour' : ' hours');
+}
 function humanDur(ms) { const h = Math.round(ms / 3600000); if (h < 48) return h + ' hours'; const d = Math.round(ms / DAY_MS); if (d < 14) return d + ' days'; return Math.round(d / 7) + ' weeks'; }
 // This list is shown to a restricted account as a promise, so it must match what the routes actually do.
 // The daily check-in IS on it and the route is deliberately not gated: read-only pauses what you can
@@ -6888,13 +6910,65 @@ function checkProbation(userId, sendTok) {
     notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. Buy & hold again to lift it.', 'restriction');
   }
 }
+/* THE PARTICIPATION GATE'S FIRST-DAY WATCH. Deliberately not checkProbation(): that one enforces a
+   buy-out of the anti-bot sanction, and breaking it doubles the sanction or restores a permanent one.
+   This is a new member's first day. It can produce exactly one read-only, it lasts one window, and it
+   adds NO strike — the ladder belongs to the scanner, and an account that dumped on day one has not
+   done the thing the ladder is counting.
+
+   The 2% tolerance is checkProbation's, for the same reason: a transfer fee or a dust rounding is not a
+   sell, and the floor is a balance rather than a price. */
+async function checkGateHold(userId) {
+  const u = db.prepare('SELECT gate_hold_until, gate_floor, gate_wallets, restricted_until FROM users WHERE id = ?').get(userId);
+  if (!u || !u.gate_hold_until || u.gate_hold_until <= 0) return;
+  const close = () => db.prepare('UPDATE users SET gate_hold_until=0, gate_floor=0, gate_wallets=NULL WHERE id=?').run(userId);
+
+  /* Judged against the ADDRESSES the qualifying bag was measured over, read straight from the chain —
+     not against whatever wallets happen to be linked when the sweep runs. That distinction is the whole
+     fix: the aggregate over currently-linked wallets drops when somebody unlinks a spare, which is not a
+     sale, and this rule must never tell a member they sold something they still hold. Pinning to the
+     addresses also closes the other door, because shedding a wallet can no longer shrink the number the
+     window is measured by. */
+  let addrs = [];
+  try { addrs = JSON.parse(u.gate_wallets || '[]'); } catch {}
+  if (!Array.isArray(addrs) || !addrs.length) { close(); return; }   // nothing to judge against → do not guess
+
+  let tok = 0;
+  try {
+    let wei = 0n;
+    for (const a of addrs) wei += await erc20Balance(TOK.SEND, a);
+    tok = Number(wei) / 1e18;
+  } catch { return; }   // an RPC that did not answer is not a sale. Leave the window exactly as it was.
+
+  const holding = tok >= (u.gate_floor || 0) * 0.98;      // checkProbation's tolerance: a fee is not a sell
+  if (now() >= u.gate_hold_until) {                       // the window is over either way
+    close();
+    // only congratulate somebody the chain agrees held on; the alternative is praising a wallet that is empty
+    if (holding) notify(userId, '💎', 'You kept the bag you came in with through your first day. Nothing left to prove — welcome in.', 'wallet');
+    return;
+  }
+  if (holding) return;
+  /* Already read-only for something else? Leave that sanction exactly alone. Writing a fresh 24h over a
+     running one would SHORTEN a week-long or permanent restriction, which is the opposite of what either
+     rule intends. The window just closes; the standing sanction is already doing the work. */
+  if (u.restricted_until && u.restricted_until > now()) { close(); return; }
+
+  const reason = 'You sold the $SEND that got you in, inside your first ' + humanDur(PROOF_SELL_WINDOW_MS) + '.';
+  db.prepare('UPDATE users SET gate_hold_until=0, gate_floor=0, gate_wallets=NULL, restricted_until=?, restrict_level=?, restrict_reason=?, redeem_dur=?, redeem_base_send=? WHERE id=?')
+    .run(now() + PROOF_SELL_WINDOW_MS, 1, reason, PROOF_SELL_WINDOW_MS, tok, userId);
+  notify(userId, '🔇', reason + ' Read-only for ' + humanDur(PROOF_SELL_WINDOW_MS) + ' — you can still read every part of the site, and buying back in lifts it early.', 'restriction');
+}
 const _probTick = new Map();
-function probationTick(userId) { // fire-and-forget on-chain re-check for an ACTIVE probation user (throttled 60s) so a sell is caught before their next write, not just on the 5-min sweep
-  const u = db.prepare('SELECT redeem_hold_until FROM users WHERE id = ?').get(userId);
-  if (!u || u.redeem_hold_until <= now()) return;
+// fire-and-forget on-chain re-check while EITHER hold window is open — the redemption deal or the gate's
+// first day (throttled 60s) — so a sell is caught before their next write, not just on the 5-min sweep
+function holdWatchTick(userId) {
+  const u = db.prepare('SELECT redeem_hold_until, gate_hold_until FROM users WHERE id = ?').get(userId);
+  if (!u) return;
+  if (u.redeem_hold_until <= now() && u.gate_hold_until <= now()) return;
   if (now() - (_probTick.get(userId) || 0) < 60000) return;
   _probTick.set(userId, now());
-  refreshHolder(userId).catch(() => {});
+  if (u.redeem_hold_until > now()) refreshHolder(userId).catch(() => {});
+  if (u.gate_hold_until > now()) checkGateHold(userId).catch(() => {});
 }
 
 // call AFTER a successful write action; flags + returns true if this tripped the scanner.
@@ -6978,20 +7052,29 @@ async function runProofQueue() {
         catch { unreadable = true; }
       }
     }
-    // Both prices, read together. sendPriceUsd() is the hardened one — it values at the LOWER of spot
-    // and the 24h median and refuses outright during a spike — so a pump cannot buy anyone through the
-    // door, and an unreadable price leaves the door exactly where it was.
+    // One price now, and it is the hardened read: sendPriceUsd() values at the LOWER of spot and the 24h
+    // median and refuses outright during a spike, so a pump cannot buy anyone through the door, and an
+    // unreadable price leaves the door exactly where it was. ($GWC used to be fetched here too; the gate
+    // stopped testing it, and a network call for a number nothing reads is just a slower door.)
     let prices = {};
-    try {
-      const [sp, gp] = await Promise.all([sendPriceUsd().catch(() => null), tokenPriceUsdOf(TOK.GWC).catch(() => null)]);
-      prices = { SEND: sp, GWC: gp };
-    } catch {}
+    try { prices = { SEND: await sendPriceUsd().catch(() => null) }; } catch {}
     const v = holderProofVerdict(scans, now(), prices);
     const t = now();
     if (v.ok) {
-      db.prepare("UPDATE users SET holder_state = 'ok', holder_verified_at = ?, holder_proof_at = ?, holder_proof_reason = NULL, holder_proof = ? WHERE id = ?")
-        .run(t, t, encField(JSON.stringify(v.detail)), userId);
-      notify(userId, '✅', 'Wallet verified — you hold $SEND and $GWC and have held them over a week. The whole site is open to you now. 🚀', 'wallet');
+      /* The door opens, and the first day is watched. The window runs from their LAST buy, so somebody
+         who has held since long before today is never in one — `until` lands in the past and stores as 0.
+         The floor is the balance that opened the door, in tokens, because that is the unit refreshHolder
+         reports and a price cannot move a floor that is denominated in the asset itself. */
+      const d = v.detail && v.detail.SEND;
+      const until = d && d.lastBuyMs ? d.lastBuyMs + PROOF_SELL_WINDOW_MS : 0;
+      const watching = until > t;
+      const floor = watching && d ? Number(d.balWei || 0) / 1e18 : 0;
+      db.prepare("UPDATE users SET holder_state = 'ok', holder_verified_at = ?, holder_proof_at = ?, holder_proof_reason = NULL, holder_proof = ?, gate_hold_until = ?, gate_floor = ?, gate_wallets = ? WHERE id = ?")
+        .run(t, t, encField(JSON.stringify(v.detail)), watching ? until : 0, floor,
+             watching ? JSON.stringify(addrs.map((x) => String(x).toLowerCase())) : null, userId);
+      notify(userId, '✅', watching
+        ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; sell out of it before then and the account goes read-only for a day.'
+        : 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀', 'wallet');
     } else if (v.unknown || unreadable) {
       // not a verdict. Leave the door exactly as it was and say so.
       db.prepare("UPDATE users SET holder_state = 'none', holder_proof_at = ?, holder_proof_reason = ? WHERE id = ?")
@@ -7013,13 +7096,20 @@ proofTimer.unref();
    posting, calling, reacting, voting, joining a community — needs one more thing: a wallet that proves,
    read-only and on-chain, that this person is actually here.
 
-   THREE TESTS, per coin, across every wallet the account has linked:
+   TWO TESTS, across every wallet the account has linked:
 
-     1. YOU HOLD IT.        Aggregate balance of $SEND and of $GWC is above dust, right now.
-     2. FOR OVER A WEEK.    The earliest market acquisition across your wallets is at least seven days
-                            old. "Bought it this morning" is not conviction, it is a ticket price.
-     3. YOU ARE NOT A NET SELLER.  Everything you have sold back to the market is no more than everything
+     1. YOU HOLD IT.        Aggregate $SEND balance is worth at least MIN_HOLD_USD right now, priced live.
+     2. YOU ARE NOT A NET SELLER.  Everything you have sold back to the market is no more than everything
                             you bought from it.
+
+   There is no waiting period. The door opens the moment you hold the bag — and then the FIRST DAY is
+   watched instead. PROOF_SELL_WINDOW_MS after your most recent buy, the position that opened the door has
+   to still be there; sell out of it inside that window and the account goes read-only. A week of waiting
+   asked everyone to prove patience before they had done anything; this asks only the person who actually
+   dumps to answer for it, and it answers a question waiting never could — did the bag exist to get in, or
+   to stay in? A long-standing holder whose last buy is already older than the window is never in it at all.
+
+   $GWC used to be tested alongside $SEND. It is not any more: one coin, one floor, one door.
 
    Test 3 is stated as <= rather than <, and that is deliberate. ogScan's own comment argues that
    "bought more than sold" is a tautology, and for TOTAL flows it is — sum(in) - sum(out) IS the balance,
@@ -7033,14 +7123,15 @@ proofTimer.unref();
    WHAT THIS IS NOT: it is not a punishment, and it must never be worded like one. restrictionOf() is
    the anti-bot sanction with strikes and a buy-out; this is a new account that simply has not shown its
    hand yet. Same enforcement point, opposite meaning, and the copy has to carry that difference. */
-const PROOF_MIN_HOLD_MS = 7 * DAY_MS;
+/* How long after their last buy a newly-admitted account's position is watched. Measured from the buy,
+   not from the moment they passed the gate, because the rule is about the bag and not about the paperwork. */
+const PROOF_SELL_WINDOW_MS = DAY_MS;
 const PROOF_COINS = [
   { key: 'SEND', label: '$SEND', token: TOK.SEND, pair: OG_PAIR.SEND, launch: OG_LAUNCH.SEND },
-  { key: 'GWC', label: '$GWC', token: TOK.GWC, pair: OG_PAIR.GWC, launch: OG_LAUNCH.GWC },
 ];
-/* Pure, so it can be tested without a chain. `scans` is { SEND: [scan,...], GWC: [scan,...] } — one
-   ogScan per (wallet, coin). Returns { ok, reason, detail }. A coin whose scans are ALL missing means
-   the chain could not be read, which is not a failure and must never be recorded as one. */
+/* Pure, so it can be tested without a chain. `scans` is { SEND: [scan,...] } — one ogScan per wallet.
+   Returns { ok, reason, detail }. A coin whose scans are ALL missing means the chain could not be read,
+   which is not a failure and must never be recorded as one. */
 function holderProofVerdict(scans, nowMs, prices) {
   const t = nowMs || now();
   const detail = {};
@@ -7057,7 +7148,7 @@ function holderProofVerdict(scans, nowMs, prices) {
        arithmetic in hand — it is a small, early community by design, not an accident of a round number. */
     const px = prices && prices[c.key];
     if (!(px > 0)) return { ok: false, unknown: true, reason: 'We could not read the ' + c.label + ' price just now, so we cannot value your holding. Nothing has been decided — try again in a minute.', detail };
-    let bal = 0n, bought = 0n, sold = 0n, firstBuyMs = null;
+    let bal = 0n, bought = 0n, sold = 0n, firstBuyMs = null, lastBuyMs = null;
     for (const r of rows) {
       try {
         bal += BigInt(r.balWei || '0');
@@ -7065,17 +7156,19 @@ function holderProofVerdict(scans, nowMs, prices) {
         sold += BigInt(r.soldWei || '0');
       } catch { return { ok: false, unknown: true, reason: 'We could not read your ' + c.label + ' history cleanly. Nothing has been decided — try again.', detail }; }
       if (r.firstBuyMs && (firstBuyMs === null || r.firstBuyMs < firstBuyMs)) firstBuyMs = r.firstBuyMs;
+      // the LATEST buy across all linked wallets — the anchor the sell window runs from
+      if (r.lastBuyMs && (lastBuyMs === null || r.lastBuyMs > lastBuyMs)) lastBuyMs = r.lastBuyMs;
     }
     const heldMs = firstBuyMs ? t - firstBuyMs : 0;
     const usd = Number(bal) / 1e18 * px;
-    detail[c.key] = { balWei: bal.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs, heldMs, usd, priceUsd: px };
-    if (bal <= OG_DUST_WEI) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. You need to hold at least $' + MIN_HOLD_USD + ' of both $SEND and $GWC.', detail };
-    if (usd < MIN_HOLD_USD) return { ok: false, short: true, reason: 'You hold about $' + usd.toFixed(2) + ' of ' + c.label + '. It takes $' + MIN_HOLD_USD + ' of each coin — the same floor that counts toward Diamond levels.', detail };
-    if (!firstBuyMs) return { ok: false, reason: 'We can see your ' + c.label + ', but no market buy behind it — we cannot tell how long you have held it.', detail };
-    if (heldMs < PROOF_MIN_HOLD_MS) {
-      const daysIn = Math.floor(heldMs / DAY_MS), left = Math.max(1, Math.ceil((PROOF_MIN_HOLD_MS - heldMs) / DAY_MS));
-      return { ok: false, tooNew: true, reason: 'You have held ' + c.label + ' for ' + daysIn + ' day' + (daysIn === 1 ? '' : 's') + '. It takes a week — come back in ' + left + ' day' + (left === 1 ? '' : 's') + '.', detail };
-    }
+    detail[c.key] = { balWei: bal.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs, lastBuyMs, heldMs, usd, priceUsd: px };
+    if (bal <= OG_DUST_WEI) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. You need to hold at least $' + MIN_HOLD_USD + ' of ' + c.label + '.', detail };
+    if (usd < MIN_HOLD_USD) return { ok: false, short: true, reason: 'You hold about $' + usd.toFixed(2) + ' of ' + c.label + '. It takes $' + MIN_HOLD_USD + ' — the same floor that counts toward Diamond levels.', detail };
+    /* A market buy is still required, and the reason changed with the rule. It is no longer "so we can
+       tell how long you have held it" — nothing is timed at the door any more. It is that the sell window
+       has to run from something, and a bag that arrived without ever passing through the market gives it
+       no anchor. Tokens that came from a friend or an airdrop are somebody else's conviction. */
+    if (!firstBuyMs || !lastBuyMs) return { ok: false, reason: 'We can see your ' + c.label + ', but no market buy behind it. The bag has to be one you bought.', detail };
     if (sold > bought) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders — buy back in and the check will pass.', detail };
   }
   return { ok: true, reason: null, detail };
@@ -7092,7 +7185,7 @@ function holderProofState(u) {
     state: u.holder_state || 'none',
     reason: u.holder_proof_reason || null,
     checkedAt: u.holder_proof_at || null,
-    minHoldDays: Math.round(PROOF_MIN_HOLD_MS / DAY_MS),
+    sellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
     coins: PROOF_COINS.map(c => c.label),
     minUsd: MIN_HOLD_USD,          // the same floor Diamond status uses — one number for the whole site
     wallets: walletAddresses(u.id).length,
@@ -7111,7 +7204,7 @@ function blockReadOnly(res, me) {
      not proved itself yet has done nothing wrong. */
   if (needsHolderProof(me)) {
     send(res, 403, {
-      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND and $GWC, and have held them for a week.',
+      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND. No waiting period.',
       needsProof: true, proof: holderProofState(me),
     });
     return true;
@@ -8338,7 +8431,7 @@ const server = http.createServer(async (req, res) => {
            is never gated at all — nobody should need to prove anything to stop being notified. */
         if (req.method === 'POST' && needsHolderProof(me)) {
           return send(res, 403, {
-            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND and $GWC, and have held them for a week.',
+            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND. No waiting period.',
             needsProof: true, proof: holderProofState(me),
           });
         }
@@ -9031,7 +9124,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/calls' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in to make a Send Call', 401);
         if (blockReadOnly(res, me)) return;
-        probationTick(me.id); // if they lifted a restriction by buying $SEND, re-check on-chain that they still hold it (catches a mid-probation sell fast)
+        holdWatchTick(me.id); // if they lifted a restriction by buying $SEND, re-check on-chain that they still hold it (catches a mid-probation sell fast)
         if (!rateLimit('call:' + me.id, 10, 6e5)) return bad(res, 'slow down — too many calls', 429);
         const b = await readBody(req);
         const token = String(b.token || '').toLowerCase().trim();
@@ -9959,7 +10052,7 @@ const server = http.createServer(async (req, res) => {
           if (sub === 'join' && req.method === 'POST') {
             if (!me) return bad(res, 'sign in first', 401);
             if (blockReadOnly(res, me)) return;
-            probationTick(me.id);
+            holdWatchTick(me.id);
             if (!rateLimit('commjoin:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
             let holds;
             if (c.demo) holds = true;   // the open sandbox: no token, no wallet, no chain call — anyone may walk in
@@ -10399,11 +10492,16 @@ let probationSweeping = false; // a slow tick (RPC stalls) must never overlap th
 const probationTimer = setInterval(async () => {
   if (probationSweeping) return; probationSweeping = true;
   try {
-    const rows = db.prepare('SELECT id FROM users WHERE redeem_hold_until > 0').all();
+    const rows = db.prepare('SELECT id FROM users WHERE redeem_hold_until > 0 OR gate_hold_until > 0').all();
     for (const r of rows) {
       try {
         const h = await refreshHolder(r.id); // calls checkProbation() when a wallet is readable
-        if (h && h.hasWallet === false) checkProbation(r.id, 0); // no readable wallet during probation → can't prove the hold → treat as sold
+        /* No readable wallet mid-probation → the hold cannot be proved → treated as sold. That inference is
+           fair for the redemption deal, which is a bargain the user struck to get out of a sanction. It is
+           NOT applied to the gate window, which nobody agreed to: checkGateHold reads its own pinned
+           addresses and simply finds them still holding. */
+        if (h && h.hasWallet === false) checkProbation(r.id, 0);
+        await checkGateHold(r.id);
       } catch {}
     }
   } catch {} finally { probationSweeping = false; }

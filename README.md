@@ -844,24 +844,44 @@ The open sandbox (joinable with no token and no wallet, grants no multiplier) is
 
 **You cannot *do* anything until a wallet proves you are actually here.** Posting, Send Calls, Sending It, comments, reactions, votes, following, tracking, customising, joining a community — all of it waits behind one read-only check. The moment you try, the check opens over whatever page you were on, and it explains itself rather than just refusing.
 
-**Three tests, run across every wallet you have linked, against the chain:**
+**Two tests, run across every wallet you have linked, against the chain:**
 
 | | The test | Why it is that and not something else |
 |---|---|---|
-| 1 | **You hold $100+ of $SEND and $100+ of $GWC** | Priced live, both coins, right now. The same `MIN_HOLD_USD` floor Diamond status uses (§3.2.1) — the site has one definition of "you actually hold this", not two. **Dust does not count.** |
-| 2 | **You have held them for over a week** | Measured from your earliest *market* buy across your wallets. Bought this morning is not conviction, it is a ticket price. |
-| 3 | **You are not a net seller** | Of the tokens that moved between you and the market, no more went out than came in. |
+| 1 | **You hold $100+ of $SEND** | Priced live, right now. The same `MIN_HOLD_USD` floor Diamond status uses (§3.2.1) — the site has one definition of "you actually hold this", not two. **Dust does not count**, and the bag has to be one you *bought* on the market: a position that only ever arrived from elsewhere gives the sell window below nothing to anchor on. |
+| 2 | **You are not a net seller** | Of the tokens that moved between you and the market, no more went out than came in. |
+
+**There is no waiting period — the first day is watched instead.** A third test used to ask whether you had
+held for over a week. It is gone. The door now opens the moment you hold the bag, and in exchange
+`PROOF_SELL_WINDOW_MS` (24h) after your **most recent market buy**, the position that opened the door has to
+still be there. Sell out of it inside that window and the account goes read-only for a day — `restrict_level`
+1, buy-out priced like any other one-day sanction, and **no strike**, because the strike ladder belongs to
+the anti-bot scanner (§3.6) and dumping on day one is not the thing that ladder counts.
+
+Two columns carry it, alongside the redemption pair in §3.6:
+
+| Column | Holds |
+|---|---|
+| `gate_hold_until` | When the window ends: `lastBuyMs + PROOF_SELL_WINDOW_MS`, stored only if that instant is still in the future — so a long-standing holder is never in a window at all. |
+| `gate_floor` | The $SEND balance that opened the door, in **tokens**. |
+| `gate_wallets` | The addresses that balance was measured over, as JSON. |
+
+`checkGateHold()` reads **those addresses** from the chain rather than the current linked-wallet aggregate,
+and that is the whole point of the column: unlinking a spare wallet drops the aggregate without a single
+token moving, and an earlier cut of this answered that with a 24-hour read-only whose stated reason was
+"you sold". Pinning the addresses also closes the reverse door — shedding a wallet can no longer shrink the
+number the window is measured by. An RPC that does not answer is never a sale; the window is left as it was.
 
 **On test 3 and the tautology.** `ogScan`'s own comment argues that "bought more than you sold" is circular, because Σin − Σout *is* the balance — and for *total* flows that is exactly right. This asks a different question: of the tokens that moved between you and **the market**, did more come in than went out? That is not the balance, because tokens also arrive from a friend, an airdrop, or another of your own wallets. Two cases show the shape is right:
 
 - **gifted 100, never sold** → bought 0, sold 0 → `0 ≤ 0` **passes.** They hold, and have never sold a thing.
 - **gifted 100, sold 90** → bought 0, sold 90 → **fails.** They are a net seller. That is the entire point.
 
-**What the $100 means on these coins.** $GWC's whole supply is 1,000,000,000 tokens at roughly an $11,650 FDV, so **$100 is about 0.86% of every $GWC there is** — no more than ~116 wallets can clear that bar at the same time. ($SEND is looser: $100 is ~0.027% of its 10,000,000,000 supply, so ~3,763 wallets.) That is a deliberate choice made with the arithmetic in hand: this is a small, early community by design, not a round number picked without checking what it buys.
+**What the $100 means on $SEND.** $100 is ~0.027% of $SEND's 10,000,000,000 supply, so on the order of ~3,763 wallets can clear this bar at once. $GWC is far tighter — 1,000,000,000 tokens at roughly an $11,650 FDV makes $100 about 0.86% of every $GWC there is, ~116 wallets — which is why the gate no longer asks for it; that floor still applies to the OG badge (§3.15) and Diamond status (§3.2.1), where it is doing a different job. The number is a deliberate choice made with the arithmetic in hand, not a round figure picked without checking what it buys.
 
-**It is not a punishment, and it is not worded like one.** Read-Only Mode (§3.6) is a sanction with strikes, an escalating ladder and a buy-out. This is a new account that simply has not shown its hand yet. Same enforcement point in the code (`blockReadOnly`), deliberately different answer: `needsProof`, never `readOnly`.
+**It is not a punishment, and it is not worded like one.** Read-Only Mode (§3.6) is a sanction with strikes, an escalating ladder and a buy-out. This is a new account that simply has not shown its hand yet. The first-day sell window above is the one part that *is* a sanction, and it is worded as one. Same enforcement point in the code (`blockReadOnly`), deliberately different answer: `needsProof`, never `readOnly`.
 
-**The check runs in the background, and says so.** A full scan walks your entire transfer history for both coins against an explorer that rate-limits hard — it cannot run inside a button press, so it is queued and the page watches it. A restart re-opens anything left mid-flight; a stale claim is never believed.
+**The check runs in the background, and says so.** A full scan walks your entire $SEND transfer history against an explorer that rate-limits hard — it cannot run inside a button press, so it is queued and the page watches it. A restart re-opens anything left mid-flight; a stale claim is never believed.
 
 **A chain we cannot read is never a refusal.** If the explorer times out, or a price cannot be read, nothing is decided and the door stays exactly where it was. The site says "nothing has been decided — try again in a minute", because that is the truth.
 

@@ -1,6 +1,7 @@
 /* The participation gate: an account can be MADE with an email alone, but it cannot DO anything until a
-   wallet has proved on-chain that the person holds $SEND and $GWC, has held them over a week, and is not
-   a net seller. Throwaway accounts only; deleted in the finally block.
+   wallet has proved on-chain that the person holds $100 of $SEND and is not a net seller. There is no
+   waiting period — instead the FIRST DAY after their last buy is watched, and selling out of the position
+   that opened the door inside that window is read-only. Throwaway accounts only; deleted in the finally block.
 
    The verdict function is pulled out of server.js and run directly, because the interesting cases (gifted
    and never sold, gifted then dumped, chain unreadable) cannot be produced against a real chain on demand.
@@ -42,51 +43,170 @@ try {
   {
     const grab = (re, label) => { const m = SRC.match(re); if (!m) { check('EXTRACT ' + label, false); return ''; } return m[0]; };
     const fn = new Function('TOK', 'OG_PAIR', 'OG_LAUNCH', 'DAY_MS', 'OG_DUST_WEI', 'MIN_HOLD_USD', 'now',
-      grab(/const PROOF_MIN_HOLD_MS = [^\n]*\n/, 'PROOF_MIN_HOLD_MS') +
+      grab(/const PROOF_SELL_WINDOW_MS = [^\n]*\n/, 'PROOF_SELL_WINDOW_MS') +
       grab(/const PROOF_COINS = \[[\s\S]*?\n\];/, 'PROOF_COINS') +
       grab(/function holderProofVerdict\(scans, nowMs, prices\) \{[\s\S]*?\n\}/, 'holderProofVerdict') +
       '\nreturn holderProofVerdict;')({ SEND: '0xa', GWC: '0xb' }, { SEND: '0xp', GWC: '0xq' }, { SEND: 1, GWC: 1 }, 86400000, 1000000000n, 100, () => 0);
 
     const DAY = 86400000, T = 1789000000000;
-    const w = (bal, bought, sold, daysAgo) => ({ balWei: String(bal), boughtWei: String(bought), soldWei: String(sold), firstBuyMs: daysAgo == null ? null : T - daysAgo * DAY });
-    const both = (s, g) => ({ SEND: [s], GWC: [g] });
+    /* daysAgo is the FIRST buy, lastDaysAgo the most recent one. They differ because the gate uses the
+       first only for the record and the last as the sell window's anchor. */
+    const w = (bal, bought, sold, daysAgo, lastDaysAgo) => ({
+      balWei: String(bal), boughtWei: String(bought), soldWei: String(sold),
+      firstBuyMs: daysAgo == null ? null : T - daysAgo * DAY,
+      lastBuyMs: daysAgo == null ? null : T - (lastDaysAgo == null ? daysAgo : lastDaysAgo) * DAY,
+    });
+    const one = (s) => ({ SEND: [s] });
     // $1 per token keeps the arithmetic readable: 1e18 wei = 1 token = $1, so 100e18 wei = $100 exactly
-    const PX = { SEND: 1, GWC: 1 };
+    const PX = { SEND: 1 };
     const V = (sc, px) => fn(sc, T, px || PX);
     const HUNDRED = 100e18;
 
-    check('holds both, a month, never sold → passes', V(both(w(HUNDRED, HUNDRED, 0, 30), w(HUNDRED, HUNDRED, 0, 30))).ok);
-    check('bought this week → refused, and told how long is left',
-      !V(both(w(HUNDRED, HUNDRED, 0, 3), w(HUNDRED, HUNDRED, 0, 30))).ok && /come back in 4 days/.test(V(both(w(HUNDRED, HUNDRED, 0, 3), w(HUNDRED, HUNDRED, 0, 30))).reason));
-    check('exactly seven days → passes (the bar is "over a week", inclusive at the day boundary)',
-      V(both(w(HUNDRED, HUNDRED, 0, 7), w(HUNDRED, HUNDRED, 0, 8))).ok);
-    check('one coin missing → refused, and names which', !V(both(w(HUNDRED, HUNDRED, 0, 30), w(0, 0, 0, null))).ok && /\$GWC/.test(V(both(w(HUNDRED, HUNDRED, 0, 30), w(0, 0, 0, null))).reason));
-    check('a dust balance is not holding', !V(both(w(HUNDRED, HUNDRED, 0, 30), w(999, 999, 0, 30))).ok);
-    // the floor the user set, with the arithmetic in hand: $100 of each coin, priced live
-    const short = V(both(w(HUNDRED, HUNDRED, 0, 30), w(HUNDRED * 0.99, HUNDRED, 0, 30)));
-    check('$99 of a coin is not $100 — refused, with the real figure', !short.ok && /You hold about \$99\.00 of \$GWC/.test(short.reason), short.reason);
-    check('  ...and exactly $100 passes', V(both(w(HUNDRED, HUNDRED, 0, 30), w(HUNDRED, HUNDRED, 0, 30))).ok);
-    check('  ...a whole token of a cheap coin is still dust if it is not worth $100',
-      !V(both(w(HUNDRED, HUNDRED, 0, 30), w(1e18, 1e18, 0, 30)), { SEND: 1, GWC: 0.00001165 }).ok);
-    const noPx = V(both(w(HUNDRED, HUNDRED, 0, 30), w(HUNDRED, HUNDRED, 0, 30)), { SEND: 1, GWC: null });
-    check('an unreadable PRICE is unknown, never a refusal', noPx.unknown === true && /Nothing has been decided/.test(noPx.reason), noPx.reason);
+    check('holds $100 of $SEND, bought a month ago, never sold → passes', V(one(w(HUNDRED, HUNDRED, 0, 30))).ok);
+    // the point of the change: the waiting period is gone
+    check('bought THIS MORNING → passes (there is no waiting period any more)', V(one(w(HUNDRED, HUNDRED, 0, 0))).ok);
+    check('bought three days ago → passes', V(one(w(HUNDRED, HUNDRED, 0, 3))).ok);
+    check('  ...and no refusal anywhere still talks about coming back in N days',
+      !/come back in/i.test(JSON.stringify([V(one(w(HUNDRED, HUNDRED, 0, 0))), V(one(w(1e18, 1e18, 0, 0))), V(one(w(0, 0, 0, null)))])));
+
+    check('$GWC is no longer part of the gate', !/GWC/.test(grab(/const PROOF_COINS = \[[\s\S]*?\n\];/, 'PROOF_COINS')));
+    check('  ...and a wallet holding only $SEND is enough', V(one(w(HUNDRED, HUNDRED, 0, 30))).ok);
+    check('  ...no waiting-period constant survives in the source', !/PROOF_MIN_HOLD_MS/.test(SRC));
+
+    check('a dust balance is not holding', !V(one(w(999, 999, 0, 30))).ok);
+    const short = V(one(w(HUNDRED * 0.99, HUNDRED, 0, 30)));
+    check('$99 is not $100 — refused, with the real figure', !short.ok && /You hold about \$99\.00 of \$SEND/.test(short.reason), short.reason);
+    check('  ...and exactly $100 passes', V(one(w(HUNDRED, HUNDRED, 0, 30))).ok);
+    check('  ...a whole token is still short if it is not worth $100', !V(one(w(1e18, 1e18, 0, 30)), { SEND: 0.00001165 }).ok);
     check('the gate floor is the same constant Diamond uses', /const usd = Number\(bal\) \/ 1e18 \* px;/.test(SRC) && /usd < MIN_HOLD_USD/.test(SRC));
+
     check('sold back more than bought → refused as a net seller',
-      !V(both(w(HUNDRED, HUNDRED, 0, 30), w(HUNDRED, HUNDRED, 2 * HUNDRED, 30))).ok && /sold back more/.test(V(both(w(HUNDRED, HUNDRED, 0, 30), w(HUNDRED, HUNDRED, 2 * HUNDRED, 30))).reason));
-    // the two cases that prove the rule is about the MARKET side, not the balance
-    check('gifted and never sold → passes (bought 0, sold 0 — they have never net-sold)',
-      V(both(w(HUNDRED, HUNDRED, 0, 30), { balWei: String(HUNDRED), boughtWei: '0', soldWei: '0', firstBuyMs: T - 30 * DAY })).ok);
-    check('gifted then dumped most of it → refused (sold 90, bought 0)',
-      !V(both(w(HUNDRED, HUNDRED, 0, 30), { balWei: String(HUNDRED), boughtWei: '0', soldWei: String(90 * HUNDRED), firstBuyMs: T - 30 * DAY })).ok);
-    check('holds but with no market buy behind it → refused, honestly ("we cannot tell how long")',
-      /cannot tell how long/.test(V(both(w(HUNDRED, HUNDRED, 0, 30), { balWei: String(HUNDRED), boughtWei: '0', soldWei: '0', firstBuyMs: null })).reason || ''));
-    // the one that matters most: an unreadable chain is NOT a refusal
-    const unk = V({ SEND: [w(HUNDRED, HUNDRED, 0, 30)], GWC: [] });
+      !V(one(w(HUNDRED, HUNDRED, 2 * HUNDRED, 30))).ok && /sold back more/.test(V(one(w(HUNDRED, HUNDRED, 2 * HUNDRED, 30))).reason));
+    /* A gifted bag used to be refused for a reason that no longer exists ("we cannot tell how long you
+       have held it"). It is still refused, for the reason that does: the sell window has to run from a
+       buy, and a bag that never passed through the market gives it no anchor. */
+    check('holds, but with no market buy behind it → refused',
+      !V(one({ balWei: String(HUNDRED), boughtWei: '0', soldWei: '0', firstBuyMs: null, lastBuyMs: null })).ok);
+    check('  ...and the reason is the bag, not the clock',
+      /bag has to be one you bought/i.test(V(one({ balWei: String(HUNDRED), boughtWei: '0', soldWei: '0', firstBuyMs: null, lastBuyMs: null })).reason || ''));
+
+    const unk = V({ SEND: [] });
     check('an unreadable chain is NOT recorded as a failure', unk.unknown === true && /Nothing has been decided/.test(unk.reason));
+    const noPx = V(one(w(HUNDRED, HUNDRED, 0, 30)), { SEND: null });
+    check('an unreadable PRICE is unknown, never a refusal', noPx.unknown === true && /Nothing has been decided/.test(noPx.reason), noPx.reason);
+
     check('wallets are summed, so a position split across two still qualifies',
-      V({ SEND: [w(HUNDRED, HUNDRED, 0, 30)], GWC: [w(HUNDRED / 2, HUNDRED / 2, 0, 2), w(HUNDRED / 2, HUNDRED / 2, 0, 20)] }).ok);
-    check('the floor is one week', /const PROOF_MIN_HOLD_MS = 7 \* DAY_MS;/.test(SRC));
-    check('both coins are required, by name', /PROOF_COINS[\s\S]{0,300}\$SEND[\s\S]{0,200}\$GWC/.test(SRC));
+      V({ SEND: [w(HUNDRED / 2, HUNDRED / 2, 0, 2), w(HUNDRED / 2, HUNDRED / 2, 0, 20)] }).ok);
+    // the anchor the window runs from is the LATEST buy across every linked wallet, not the earliest
+    const split = V({ SEND: [w(HUNDRED / 2, HUNDRED / 2, 0, 30, 30), w(HUNDRED / 2, HUNDRED / 2, 0, 20, 1)] });
+    check('the sell window anchors on the LATEST buy across wallets',
+      split.ok && split.detail.SEND.lastBuyMs === T - 1 * DAY && split.detail.SEND.firstBuyMs === T - 30 * DAY,
+      'last=' + (split.detail.SEND.lastBuyMs - T) / DAY + 'd first=' + (split.detail.SEND.firstBuyMs - T) / DAY + 'd');
+  }
+
+  /* ═══ the first-day sell window ═══ */
+  {
+    const state = { rows: new Map(), notes: [], updates: [], chain: new Map(), fail: false, reads: [] };
+    const stubDb = {
+      prepare(sql) {
+        return {
+          get: (id) => state.rows.get(id),
+          run: (...args) => { state.updates.push({ sql, args });
+            const id = args[args.length - 1], r = state.rows.get(id);
+            if (!r) return;
+            if (/gate_hold_until=0/.test(sql)) { r.gate_hold_until = 0; r.gate_floor = 0; r.gate_wallets = null; }
+            if (/restricted_until=\?/.test(sql)) { r.restricted_until = args[0]; r.restrict_level = args[1]; r.restrict_reason = args[2]; }
+          },
+        };
+      },
+    };
+    const NOW = 1789000000000, DAYMS = 86400000;
+    const grab2 = (re, label) => { const m = SRC.match(re); if (!m) { check('EXTRACT ' + label, false); return ''; } return m[0]; };
+    const gate = new Function('db', 'now', 'notify', 'humanDur', 'PROOF_SELL_WINDOW_MS', 'erc20Balance', 'TOK',
+      grab2(/async function checkGateHold\(userId\) \{[\s\S]*?\n\}/, 'checkGateHold') + '\nreturn checkGateHold;')(
+      stubDb, () => NOW, (id, e, m, k) => state.notes.push({ id, m, k }),
+      (ms) => Math.round(ms / 3600000) + ' hours', DAYMS,
+      async (_tok, addr) => { state.reads.push(addr); if (state.fail) throw new Error('rpc down');
+                              return BigInt(Math.round((state.chain.get(addr) || 0) * 1e18)); },
+      { SEND: '0xsend' });
+
+    const put = (id, row, chain) => {
+      state.rows.set(id, Object.assign({ gate_hold_until: 0, gate_floor: 0, gate_wallets: null, restricted_until: 0, restrict_level: 0 }, row));
+      for (const [a, v] of Object.entries(chain || {})) state.chain.set(a, v);
+      return id;
+    };
+    const reset = () => { state.notes.length = 0; state.updates.length = 0; state.reads.length = 0; state.fail = false; };
+    const W = JSON.stringify(['0xaaa', '0xbbb']);
+
+    reset(); put(1, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W }, { '0xaaa': 60, '0xbbb': 40 });
+    await gate(1);
+    check('still holding the floor mid-window → nothing happens', state.updates.length === 0 && state.rows.get(1).gate_hold_until > 0);
+    check('  ...and it read the PINNED addresses, both of them', state.reads.join(',') === '0xaaa,0xbbb', state.reads.join(','));
+
+    reset(); put(2, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W }, { '0xaaa': 99, '0xbbb': 0 });
+    await gate(2);
+    check('a 1% drop is a fee, not a sell', state.rows.get(2).restricted_until === 0, JSON.stringify(state.rows.get(2)));
+
+    reset(); put(3, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W }, { '0xaaa': 5, '0xbbb': 5 });
+    await gate(3);
+    const r3 = state.rows.get(3);
+    check('sold out inside the window → read-only', r3.restricted_until === NOW + DAYMS && r3.restrict_level === 1, JSON.stringify(r3));
+    check('  ...for one window, and the window closes', r3.gate_hold_until === 0 && r3.gate_floor === 0);
+    check('  ...the reason names what they did', /sold the \$SEND that got you in/i.test(r3.restrict_reason || ''), r3.restrict_reason);
+    check('  ...and they are told, once', state.notes.length === 1 && state.notes[0].k === 'restriction', JSON.stringify(state.notes));
+    check('  ...with NO strike added — the ladder belongs to the scanner',
+      !state.updates.some(u => /strikes\s*=/.test(u.sql)), JSON.stringify(state.updates.map(u => u.sql)));
+
+    /* THE REGRESSION TEST. Unlinking a spare wallet drops the aggregate over currently-linked wallets, but
+       it is not a sale — and an earlier cut of this code answered it with a 24h read-only whose stated
+       reason was "You sold the $SEND that got you in". The window is pinned to the addresses the bag was
+       measured over and read from the chain, so who is linked today changes nothing either way. */
+    reset(); put(4, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W }, { '0xaaa': 60, '0xbbb': 40 });
+    await gate(4);   // 0xbbb is no longer a linked identity, but it still holds and is still read
+    const r4 = state.rows.get(4);
+    check('unlinking a wallet mid-window is NOT a sale', r4.restricted_until === 0 && r4.gate_hold_until > 0, JSON.stringify(r4));
+    check('  ...because the window reads the addresses, not the account', state.reads.includes('0xbbb'));
+
+    reset(); put(5, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W }, { '0xaaa': 0, '0xbbb': 0 });
+    state.fail = true;
+    await gate(5);
+    const r5 = state.rows.get(5);
+    check('an RPC that did not answer is never a sale', r5.restricted_until === 0 && r5.gate_hold_until > 0 && state.updates.length === 0, JSON.stringify(r5));
+
+    /* An account already serving a LONGER sanction: writing a fresh 24h over it would shorten a week-long
+       or permanent restriction. */
+    reset(); put(6, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W, restricted_until: NOW + 7 * DAYMS, restrict_level: 2 }, { '0xaaa': 0, '0xbbb': 0 });
+    await gate(6);
+    const r6 = state.rows.get(6);
+    check('a running sanction is never shortened by the gate', r6.restricted_until === NOW + 7 * DAYMS && r6.restrict_level === 2, JSON.stringify(r6));
+    check('  ...but the window still closes behind it', r6.gate_hold_until === 0);
+
+    reset(); put(7, { gate_hold_until: NOW - 1, gate_floor: 100, gate_wallets: W }, { '0xaaa': 100, '0xbbb': 0 });
+    await gate(7);
+    const r7 = state.rows.get(7);
+    check('riding the window out costs nothing', r7.restricted_until === 0 && r7.gate_hold_until === 0, JSON.stringify(r7));
+    check('  ...and is acknowledged', state.notes.length === 1 && state.notes[0].k === 'wallet', JSON.stringify(state.notes));
+
+    reset(); put(8, { gate_hold_until: NOW - 1, gate_floor: 100, gate_wallets: W }, { '0xaaa': 0, '0xbbb': 0 });
+    await gate(8);
+    check('selling AFTER the window costs nothing', state.rows.get(8).restricted_until === 0);
+    check('  ...but an empty wallet is not congratulated for holding', state.notes.length === 0, JSON.stringify(state.notes));
+
+    reset(); put(9, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: null });
+    await gate(9);
+    check('no pinned addresses → the window closes rather than guessing',
+      state.rows.get(9).gate_hold_until === 0 && state.rows.get(9).restricted_until === 0 && state.reads.length === 0);
+
+    reset(); put(10, { gate_hold_until: 0, gate_floor: 0 });
+    await gate(10);
+    check('an account not in a window is left alone', state.updates.length === 0 && state.notes.length === 0);
+
+    // the tail of a window is minutes, not days — humanDur() would print "0 hours" for it
+    const left = new Function(grab2(/function humanLeft\(ms\) \{[\s\S]*?\n\}/, 'humanLeft') + '\nreturn humanLeft;')();
+    check('a 20-minute tail reads as minutes, not "0 hours"', left(20 * 60000) === '20 minutes', left(20 * 60000));
+    check('  ...45 minutes is not "1 hours"', left(45 * 60000) === '45 minutes', left(45 * 60000));
+    check('  ...and an hour is singular', left(3600000) === '1 hour', left(3600000));
+    check('  ...a sub-minute tail never reads as zero', left(20000) === '1 minute', left(20000));
   }
 
   /* ═══ the gate, through the real API ═══ */
@@ -110,7 +230,7 @@ try {
     const me = await api('/api/me', { sid: u.sid });
     check('the gate state reaches the client', me.j.user.holderVerified === false && me.j.user.holderProof, JSON.stringify(me.j.user.holderProof && me.j.user.holderProof.state));
     check('  ...with the honest read-only assurance, in words', /moves nothing, approves nothing, and costs no gas/.test((me.j.user.holderProof || {}).readOnly || ''));
-    check('  ...and says both coins and the week', /\$SEND/.test(JSON.stringify(me.j.user.holderProof)) && me.j.user.holderProof.minHoldDays === 7);
+    check('  ...and states the one coin and the sell window', /\$SEND/.test(JSON.stringify(me.j.user.holderProof)) && me.j.user.holderProof.sellWindowHours === 24 && me.j.user.holderProof.minHoldDays === undefined);
 
     const noWallet = await api('/api/holder/verify', { method: 'POST', sid: u.sid, body: {} });
     check('asking for the check with no wallet linked is refused clearly', noWallet.status === 400 && /connect a wallet/i.test(noWallet.j.error || ''), noWallet.j && noWallet.j.error);

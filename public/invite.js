@@ -116,13 +116,13 @@
         '<div class="inv-step" id="step-proof">' +
           '<p class="inv-kicker">One read-only check</p>' +
           '<h2 class="inv-title">Show us you\'re <span class="hl">actually here</span></h2>' +
-          '<p class="inv-sub">Reading the site is open to everyone. Posting, calling and voting are for people who hold the coins — so we read your wallet, once, and check three things.</p>' +
+          '<p class="inv-sub">Reading the site is open to everyone. Posting, calling and voting are for people who hold the coins — so we read your wallet, once, and check two things.</p>' +
           '<div class="inv-panel">' +
             '<ul class="inv-tests" id="inv-tests">' +
-              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You hold <span id="inv-min">$100</span> of $SEND and $GWC</b><small>Both, priced live, right now, across every wallet you link. Dust does not count.</small></div></li>' +
-              '<li data-t="time"><span class="inv-tick">○</span><div><b>You\'ve held them over a week</b><small>Counted from your first buy on the market. Bought this morning doesn\'t count yet.</small></div></li>' +
+              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You hold <span id="inv-min">$100</span> of $SEND</b><small>Priced live, right now, across every wallet you link. Dust does not count.</small></div></li>' +
               '<li data-t="net"><span class="inv-tick">○</span><div><b>You\'re not a net seller</b><small>You haven\'t sold more back to the market than you bought from it.</small></div></li>' +
             '</ul>' +
+            '<p class="inv-note">⏳ <b>No waiting period — but keep the bag.</b> The door opens as soon as you hold it. If you sell that $SEND within 24 hours of buying it, the account goes read-only for a day; buying back in lifts it early.</p>' +
             '<p class="inv-safe">🔒 <b>Read-only, and it stays read-only.</b> You sign a sentence to prove the wallet is yours. That signature <b>moves nothing, approves nothing and costs no gas</b> — this site can never send your funds anywhere, and never asks your wallet to.</p>' +
             '<p class="inv-err" id="inv-proof-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;">' +
@@ -459,8 +459,8 @@
 
   /* ---------- the participation check ----------
      The scan runs on the server and takes as long as the explorer takes: it walks a wallet's whole
-     transfer history for both coins against an endpoint that rate-limits hard. So this queues it and
-     watches, rather than pretending a button press is instant. */
+     $SEND transfer history against an endpoint that rate-limits hard. So this queues it and watches,
+     rather than pretending a button press is instant. */
   let proofPoll = 0;
   function paintTests(v) {
     const set = (k, st) => {
@@ -469,13 +469,16 @@
       li.dataset.state = st;
       li.querySelector('.inv-tick').textContent = st === 'ok' ? '✓' : st === 'no' ? '✕' : '○';
     };
-    if (!v) { for (const k of ['hold', 'time', 'net']) set(k, ''); return; }
-    if (v.verified) { for (const k of ['hold', 'time', 'net']) set(k, 'ok'); return; }
+    if (!v) { for (const k of ['hold', 'net']) set(k, ''); return; }
+    if (v.verified) { for (const k of ['hold', 'net']) set(k, 'ok'); return; }
     const r = (v.proof && v.proof.reason) || '';
-    // The server names the test it stopped on. Mark that one and leave the rest unjudged — inventing a
-    // verdict for a check the server never reached would be making a number up.
-    set('hold', /No \$(SEND|GWC) found|no market buy|It takes \$\d+ of each/i.test(r) ? 'no' : '');
-    set('time', /held .* for \d+ day/i.test(r) ? 'no' : '');
+    /* The server names the test it stopped on. Mark that one and leave the rest unjudged — inventing a
+       verdict for a check the server never reached would be making a number up.
+
+       These patterns have to track holderProofVerdict()'s wording, which is a real coupling: when the
+       gate dropped $GWC and the waiting period, "It takes $100 of each coin" became "It takes $100", and
+       a pattern still looking for "of each" silently stopped marking the one failure people hit most. */
+    set('hold', /No \$SEND found|no market buy|It takes \$\d+\b/i.test(r) ? 'no' : '');
     set('net', /sold back more/i.test(r) ? 'no' : '');
   }
   async function refreshProof() {
@@ -499,7 +502,7 @@
       if (min && v.proof && v.proof.minUsd) min.textContent = '$' + v.proof.minUsd;
       const st = (v.proof && v.proof.state) || 'none';
       if (st === 'pending' || v.queued) {
-        if (err) { err.className = 'inv-err'; err.textContent = '⛓️ Reading the chain… this can take a minute — it is your wallet\'s whole history, for both coins.'; }
+        if (err) { err.className = 'inv-err'; err.textContent = '⛓️ Reading the chain… this can take a minute — it is your wallet\'s whole $SEND history.'; }
         if (go) go.disabled = true;
         if (!proofPoll) proofPoll = setInterval(() => { refreshProof().catch(() => {}); }, 4000);
       } else {
