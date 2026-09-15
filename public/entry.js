@@ -33,7 +33,7 @@
     el.innerHTML =
       '<div class="intro-stage">' +
         '<span class="intro-rocket" aria-hidden="true">🚀</span>' +
-        '<img class="intro-logo" src="/assets/logo-hero.png" alt="">' +
+        '<img class="intro-logo" src="/assets/logo-mark.png" alt="">' +
         '<div class="intro-tag">JUST SEND IT!</div>' +
         '<div class="intro-mcap" id="intro-mcap" aria-hidden="true">$0</div>' +
       '</div>' +
