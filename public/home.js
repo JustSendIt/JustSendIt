@@ -152,9 +152,11 @@ document.querySelectorAll('[data-mcap-jump]').forEach(j => {
   j.addEventListener('click', () => { const t = document.getElementById('tokens'); if (t) t.scrollIntoView({ behavior: _reduced() ? 'auto' : 'smooth' }); });
 });
 
-/* reduced-motion: stop decorative autoplay/loop videos (CSS can't pause <video>) */
+/* reduced-motion: stop decorative autoplay/loop videos (CSS can't pause <video>). The hero background
+   clip used to be excluded from getting controls; it no longer exists, so the exception went with it —
+   the only autoplay videos left on this page are the two .clip-card clips, which should have them. */
 if (_reduced()) {
-  document.querySelectorAll('video[autoplay]').forEach(v => { try { v.removeAttribute('autoplay'); v.pause(); if (!v.classList.contains('hero-bg-video')) v.controls = true; } catch {} });
+  document.querySelectorAll('video[autoplay]').forEach(v => { try { v.removeAttribute('autoplay'); v.pause(); v.controls = true; } catch {} });
 }
 
 /* pause / resume the looping clips — auto-playing motion must be user-pausable (WCAG 2.2.2) */
