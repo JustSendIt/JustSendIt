@@ -41,7 +41,9 @@
 /* Closing is a first-class action, not an escape hatch: someone who does not have a code has to be
    able to get back to the site they were reading, immediately and obviously. */
 .inv-close {
-  position: absolute; top: 0.9rem; right: 0.9rem; z-index: 6;
+  /* fixed, not absolute: #invite-overlay is the scroll container, so an absolute close scrolled out of
+     view on the terms step at phone height — the one control that lets a reader leave */
+  position: fixed; top: 0.9rem; right: 0.9rem; z-index: 6;
   display: inline-flex; align-items: center; gap: 0.4rem;
   background: var(--g-text, #f2eaff); color: var(--g-ink, #070312);
   border: 1px solid var(--g-text, #f2eaff); border-radius: 999px;

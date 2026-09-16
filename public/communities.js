@@ -1,7 +1,7 @@
-let loadedOnce = false;   // the 'Loading…' announcement is for the first paint, not the polite refresh
 /* ===== Communities grid page — square-box card per community, most-active first ===== */
 (function () {
   'use strict';
+  let loadedOnce = false;   // the 'Loading…' announcement is for the first paint, not the polite refresh
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function fmtUsd(n) { if (n == null || isNaN(n)) return '—'; const a = Math.abs(n); if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'k'; if (a >= 1) return '$' + n.toFixed(2); if (a > 0) return '$' + n.toPrecision(2); return '$0'; }
   function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('en-US'); }
