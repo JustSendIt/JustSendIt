@@ -262,3 +262,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 }
 /* more sub-11px text: OG timer captions and tag, chart source, bar/x-axis captions, the holders-only badge */
 .og-timer i, .og-tag, .np-vbar i, .sc-x i, .oc-src, .post-lock { font-size: 0.72rem; }
+
+/* the swap's quick-amount presets: 44px everywhere, not only under pointer:coarse — a touch-screen laptop
+   reports pointer:fine and was getting ~30px targets */
+[data-amt] { min-height: 44px; }
