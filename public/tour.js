@@ -27,7 +27,7 @@
     { sel: '#guide h2', title: 'Set up in order 🧭', body: 'Wallet → seed phrase → add Robinhood Chain → get a little ETH here (bridge it over, or card → ETH through a third-party on-ramp) → swap. The guide walks every step with the real links, and you can stop at any point — reading is free.' },
     { sel: '#swap', title: 'Swap in one move 💱', body: 'Turn ETH into $SEND or $GWC in a single transaction YOU sign in your own wallet. We never hold your funds. Start tiny while you learn.' },
     { sel: '.do-card[href="wall.html"]', title: 'Meet the Send Wall 🧱', body: 'Post wins, memes and cope; react 🔥, reply, claim your @handle, and build your own public wall.' },
-    { sel: '#nav-auth', title: 'Level up to Biggest Sender 🏆', body: () => 'Almost everything you do here earns Send Power that levels you up on an exponential curve — there is no top level. Holding $SEND/$GWC multiplies every point (bigger bags, held longer = bigger boost), and joining a live community adds a flat 10×. ' + (signedIn() ? 'Your level & points live right here' : 'Sign in here (free) and your level & points will live right here') + ', and the leaderboard crowns the Biggest Sender 👑. (Full rules are on your profile.)' },
+    { sel: '#nav-auth', title: 'Level up to Biggest Sender 🏆', body: () => 'Almost everything you do here earns Send Power that levels you up on an exponential curve — there is no top level. Holding $SEND/$GWC multiplies every point (bigger bags, held longer = bigger boost), and joining a live community adds a flat 10×. ' + (signedIn() ? 'Your level & points live right here' : 'Sign in here (free) and your level & points will live right here') + ', and the leaderboard crowns the Biggest Sender 👑. ' + (signedIn() ? '(Full rules are on your profile.)' : '(Full rules land on your profile once you have one.)') },
     { sel: '#compose-fab', title: 'Post from anywhere ✏️', body: 'This button follows you across the whole site — tap it to send to the Wall in seconds. (P.S. tap the player bottom-left for the theme 🔊.)' },
   ];
 
@@ -49,7 +49,7 @@
         '</div>' +
       '</div>';
     document.body.appendChild(welcome);
-    document.body.style.overflow = 'hidden';
+    if (window.lockScroll) lockScroll(); else document.body.style.overflow = 'hidden';
     const card = welcome.querySelector('.tour-welcome');
     releaseTrap = window.trapFocus ? window.trapFocus(card) : null;
     const startBtn = welcome.querySelector('#tw-start');
@@ -61,7 +61,7 @@
   function closeWelcome() {
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (welcome) { welcome.remove(); welcome = null; }
-    document.body.style.overflow = '';
+    if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
   }
 
   /* ---------- spotlight steps ---------- */
@@ -167,7 +167,7 @@
     if (spot) { spot.remove(); spot = null; }
     if (tip) { tip.remove(); tip = null; }
     closeWelcome();
-    document.body.style.overflow = '';
+    if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
     if (completed) {
       if (window.sendToast) sendToast("You're all set — Just $Send It! 🚀");
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 2.4, { count: 70, emojiRatio: 0.5 });

@@ -50,7 +50,10 @@
     btn.disabled = true;
     try {
       if (wasOn) {
-        await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+        // fetch() resolves on a 401/5xx too — without this check an expired session still toasted "Unpinned"
+        // and repainted the button while the pin stayed on the wall
+        const r = await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+        if (!r.ok) { const j = await r.json().catch(() => ({})); if (window.sendToast) sendToast(j.error || 'Could not unpin'); btn.disabled = false; return; }
         pinnedTokens.delete(token);
         if (window.sendToast) sendToast('Unpinned $' + (btn.dataset.sym || '') + ' 📌');
       } else {
@@ -233,6 +236,11 @@
      say" heading. Both are kept for that reason: they are the only things that still answer the question,
      and the spoken one is the only answer a screen reader ever gets. */
   const spokenVerdict = (T) => T.word + (T.said ? ', ' + T.said : '');
+  /* The verdict's own caveat (`why`, below) used to be authored and never rendered — the collapsed row showed
+     only the icon and the word, and the "not the same as safe" sentence lived in a property nobody read. It
+     now rides on the chip as its title (hover / long-press) and in the spoken line beside the verdict. */
+  const verdictTitle = (T) => T.why ? ' title="' + esc(T.why) + '"' : '';
+  const spokenWhy = (T) => T.why ? ' ' + T.why : '';
   function verdictOf(p) {
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
     /* A FULL 100 EARNS THE ROCKET. One rule, and the score is the whole of it: every token our checks
@@ -698,7 +706,11 @@
     const T = verdictOf(p);
     const liq = npFmtUsd(p.market.liquidityUsd);
     const mc = npFmtUsd(p.market.marketCap);
-    return '<summary class="np-sum"><div class="np-head">' +
+    /* <summary> maps to a button, and a button's name-from-content would swallow every nested control's
+       label (copy, community, call, pin, watch) plus their warnings. aria-labelledby pins the name to the
+       one-line sr summary below instead; the pair address makes the id unique per row. */
+    const srId = 'np-sum-sr-' + esc(p.pair.address);
+    return '<summary class="np-sum" aria-labelledby="' + srId + '"><div class="np-head">' +
       gaugeHTML(p, tri, health) +
       logoHTML(p) +
       '<span class="np-id">' +
@@ -706,7 +718,7 @@
         '<span class="np-meta"><span class="np-age">🕐 ' + npFmtAge(p.pair.ageMinutes) + '</span><span class="np-quote">/ ' + esc(p.pair.quoteSymbol) + '</span>' + commSlot(p.token.address, p.token.symbol) + '</span>' +
         badgesHTML(p) +
       '</span>' +
-      '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
+      '<span class="np-verdict ' + T.cls + '"' + verdictTitle(T) + '><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
       // a carried price must never draw identically to a live one — the label says which it is
       '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">' + (p.priceStale ? '⏳ last read' : 'MC') + '</i></span>' +
       '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
@@ -715,7 +727,7 @@
       rowPinHTML(p) +
       (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
-      '<span class="sr-only">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100. Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.</span>' +
+      '<span class="sr-only" id="' + srId + '">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.</span>' +
     '</div>' + flagstripHTML(p) + '</summary>';
   }
 
@@ -1276,12 +1288,12 @@
     const gauge = li.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + T.cls; gauge.style.setProperty('--tri', ringColor(health)); }
     const gnum = li.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = li.querySelector('.np-gauge-arc'); if (arc) { const prevFill = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prevFill !== health) setArc(arc, health); else arc.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, health)); } // only replay the fill when it actually changed (no idle-poll flicker)
-    const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
+    const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; if (T.why) vw.title = T.why; else vw.removeAttribute('title'); vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
     const lv = li.querySelector('.np-liq-val'); if (lv) lv.textContent = npFmtUsd(p.market.liquidityUsd);
     const cs = li.querySelector('.np-chg-slot'); if (cs) cs.innerHTML = chgChipHTML(p.priceChange.h1);
     const strip = li.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
     const sr = li.querySelector('.np-sum .np-head > .sr-only');
-    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.';
+    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + spokenWhy(T) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.';
     const det = li.querySelector('details.np-card');
     if (det && det.open) {
       const body = li.querySelector('.np-body');
@@ -1953,7 +1965,7 @@
   function rocketLabel(addr) { const n = rocketCount(addr); return n ? 'you \u00d7' + n : ''; }
   function srLine(p) {
     const T = verdictOf(p), health = healthOf(p);
-    return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100. Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
+    return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
   }
   function seatRing(el) { el.querySelectorAll('.np-gauge-arc[data-fill]').forEach(a => { a.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, Number(a.getAttribute('data-fill')) || 0)); }); }
 
@@ -2016,7 +2028,7 @@
         '<header class="np-slide-top">' + logoHTML(p, 46) + '<div class="np-slide-idcol"><h2 class="np-slide-name">' + esc(p.token.name) + ' <span class="np-slide-sym">$' + esc(p.token.symbol) + '</span>' + tickerCopy(p.token.address) + '</h2>' +
           '<p class="np-slide-sub">🕐 <span class="np-slide-age">' + npFmtAge(p.pair.ageMinutes) + '</span> old · / ' + esc(p.pair.quoteSymbol) + ' · <span class="np-slide-indexed">' + (p.indexed ? 'indexed' : 'not indexed yet') + '</span>' + commSlot(p.token.address, p.token.symbol) + '</p>' + badgesHTML(p) + '</div></header>' +
         '<div class="np-slide-hero">' + gaugeHTML(p, tri, health) + '<div class="np-slide-verdict-wrap">' +
-          '<span class="np-verdict np-slide-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
+          '<span class="np-verdict np-slide-verdict ' + T.cls + '"' + verdictTitle(T) + '><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
           '<span class="np-slide-health"' + ratingInk(health) + '>Health ' + health + '/100</span></div></div>' +
         '<div class="np-slide-price"><span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24) + '</div>' +
         statsHTML(p) +
@@ -2050,12 +2062,16 @@
       ? '<div class="np-feed-msg">🛡️ Nothing is scoring a full 100/100 right now.<br>The 🚀 Looks Good, Send It bar is deliberately hard to clear — check back soon, or switch to 📋 DEX List to see everything.</div>'
       : '<div class="np-feed-msg">🎯 Nothing on the board clears your settings right now.<br>Loosen one, pick a different strategy, or switch to 📋 DEX List to see everything — the feed follows whatever you set.</div>';
   }
+  /* The feed's ceiling. Every slide is a full card (animated gauge, flag strip, stats) with its own
+     IntersectionObserver entry, so the count has to be bounded on BOTH paths — the first build and the
+     15 s appends — or a tab left open on a busy launch day grows without limit. */
+  const FEED_MAX = 80;
   function buildFeed() {
     if (!feedTrack) return;
     if (!state.started || npData.building) { renderFeedState(); return; }
     let q = state.all.filter(feedQualifies).sort((a, b) => (b.pair.createdAt || 0) - (a.pair.createdAt || 0));
     if (!q.length) { renderFeedEmpty(); return; }
-    if (q.length > 80) q = q.slice(0, 80);
+    if (q.length > FEED_MAX) q = q.slice(0, FEED_MAX);
     state.feedAddrs = q.map(p => p.pair.address);
     feedTrack.innerHTML = introSlideHTML() + q.map(p => slideHTML(p, false)).join('');
     feedTrack.querySelectorAll('.np-slide').forEach(seatRing);
@@ -2067,16 +2083,35 @@
     const slides = [...feedTrack.querySelectorAll('.np-slide[data-addr]')];
     const activeIdx = slides.findIndex(s => s.classList.contains('is-active'));
     slides.forEach((el, i) => {
-      const p = state.byAddr.get(el.dataset.addr); if (!p) return;
-      // a card that dropped off the 100/100 bar and sits BELOW the one you're viewing is pruned (jump-free); the
-      // active card is never yanked — it degrades in place honestly until you flip past it.
-      if (!feedQualifies(p) && i > activeIdx && !el.classList.contains('is-active')) {
-        if (feedObserver) feedObserver.unobserve(el);
-        const j = state.feedAddrs.indexOf(el.dataset.addr); if (j >= 0) state.feedAddrs.splice(j, 1);
-        el.remove(); return;
-      }
-      patchFeedSlide(el, p);
+      const p = state.byAddr.get(el.dataset.addr);
+      // a card that dropped off the 100/100 bar — or left the sweep entirely, so there is no pair to patch it
+      // from — and sits BELOW the one you're viewing is pruned (jump-free); the active card is never yanked —
+      // it degrades in place honestly until you flip past it.
+      if ((!p || !feedQualifies(p)) && i > activeIdx && !el.classList.contains('is-active')) { dropSlide(el); return; }
+      if (p) patchFeedSlide(el, p);
     });
+  }
+  function dropSlide(el) {
+    if (feedObserver) feedObserver.unobserve(el);
+    const j = state.feedAddrs.indexOf(el.dataset.addr); if (j >= 0) state.feedAddrs.splice(j, 1);
+    el.remove();
+  }
+  /* Hold the appended feed to FEED_MAX by evicting the slides that have been on screen longest (DOM order,
+     never the active one). A slide removed ABOVE the active card would shift it, so the track is re-pinned
+     to the active card's top afterwards — with smooth scrolling off for that one write, or the pin animates. */
+  function trimFeed() {
+    const slides = [...feedTrack.querySelectorAll('.np-slide[data-addr]')];
+    let count = slides.length;
+    if (count <= FEED_MAX) return;
+    const active = feedTrack.querySelector('.np-slide.is-active');
+    let shifted = false;
+    for (const el of slides) {
+      if (count <= FEED_MAX) break;
+      if (el === active) continue;
+      if (active && (el.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING)) shifted = true;   // it sat above the active card
+      dropSlide(el); count--;
+    }
+    if (shifted && active) { feedTrack.style.scrollBehavior = 'auto'; feedTrack.scrollTop = active.offsetTop; feedTrack.style.scrollBehavior = ''; }
   }
   function patchFeedSlide(el, p) {
     const tri = triageOf(p), T = verdictOf(p), health = healthOf(p), h = p.holders, m = p.market, r = p.risk || {};
@@ -2094,7 +2129,7 @@
     const gnum = el.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
     const arc = el.querySelector('.np-gauge-arc'); if (arc) { const prev = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prev !== health) { if (el.classList.contains('is-active') && !reduced()) setArc(arc, health); else seatRing(el); } }
     const gauge = el.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution'); gauge.style.setProperty('--tri', ringColor(health)); }
-    const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
+    const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; if (T.why) vd.title = T.why; else vd.removeAttribute('title'); vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
     /* The slide's spoken line is repainted here too. It was the one thing patchFeedSlide left alone, and
        with both bars sharing a word a stale line does not merely go out of date — it asserts the wrong
        bar, on the surface that is spoken most often. */
@@ -2108,6 +2143,7 @@
     const add = newAddrs.filter(a => { const p = state.byAddr.get(a); return p && feedQualifies(p) && state.feedAddrs.indexOf(a) < 0; });
     if (!add.length) return;
     add.forEach(a => { const p = state.byAddr.get(a); feedTrack.insertAdjacentHTML('beforeend', slideHTML(p, true)); const el = feedTrack.lastElementChild; seatRing(el); if (feedObserver) feedObserver.observe(el); state.feedAddrs.push(a); });
+    trimFeed();
     state.freshCount += add.length; updateFreshPill();
     announceFeed(add.length + ' fresh pair' + (add.length > 1 ? 's' : '') + ' added below');
   }
@@ -2385,6 +2421,7 @@
 
   function setMode(mode) {
     const m = (mode === 'list' || mode === 'feed' || mode === 'runners') ? mode : 'runners';
+    const changed = state.mode !== m;   // the boot call re-applies the persisted mode; only a real switch is spoken
     state.mode = m; persist();
     document.body.classList.toggle('np-mode-feed', m === 'feed');
     document.body.classList.toggle('np-mode-list', m === 'list');
@@ -2393,10 +2430,14 @@
     if (tgBox) { if (!TG_UI || m === 'feed') tgBox.hidden = true; else loadTelegram(); }
     [['np-vs-feed', 'feed'], ['np-vs-list', 'list'], ['np-vs-runners', 'runners']].forEach(([id, mm]) => { const b = document.getElementById(id); if (b) { b.setAttribute('aria-selected', String(m === mm)); b.tabIndex = m === mm ? 0 : -1; } }); // roving tabindex: one tab stop for the tablist
     const runEl = document.getElementById('np-runners');
+    const listPanel = document.getElementById('np-list-panel'); if (listPanel) listPanel.hidden = m !== 'list'; // the list's tabpanel: the CSS hides the <ul>, the panel itself must go too
     const teardownFeed = () => { feedEl.hidden = true; if (feedObserver) { feedObserver.disconnect(); feedObserver = null; } feedTrack.innerHTML = ''; state.feedAddrs = []; state.activeAddr = null; };
     if (m === 'feed') { clearLookup(); if (runEl) runEl.hidden = true; feedEl.hidden = false; buildFeed(); } // a lookup is a DEX-list view — leaving to the feed drops it
     else if (m === 'runners') { clearLookup(); teardownFeed(); if (runEl) runEl.hidden = false; loadRunners(); }
     else { teardownFeed(); if (runEl) runEl.hidden = true; applyView(); render(); }
+    /* The switch replaces most of the page (hero, controls, chips and status all go with the body class) and
+       is the one control here that never said so — the chain switcher announces, this now does too. */
+    if (changed) { const txt = document.querySelector('#np-vs-' + m + ' .np-vs-txt'); const label = txt ? txt.textContent.replace(/\u00a0/g, ' ').trim() : m; announce('Switched to ' + label + ' view.'); } // the words only — the icon span is aria-hidden for a reason
   }
 
   // Expose the full token-detail renderer so the Send Wall / profiles can pop down the exact same New Pairs detail.

@@ -44,6 +44,8 @@ WHITEPAPER.pdf
 # video for exceeding 100 MB: do NOT "fix" that with Git LFS or by re-encoding,
 # because both routes publish the footage.
 public/assets/justsendit-full.mp4
+# a frame of that video: same rights, same rule; the page hides the section when it is absent
+public/assets/full-send-poster.jpg
 public/assets/justsendit-audio.m4a
 
 # ── Internal audit tracker — DO NOT COMMIT ──────────────────────────────────

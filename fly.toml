@@ -9,7 +9,8 @@ primary_region = "iad"          # put it near your users; a single region is rig
 [env]
   BASE_URL = "https://sendrh.com"
   COOKIE_SECURE = "1"           # Fly terminates TLS in front of the app
-  TRUST_PROXY = "1"             # one hop; without it every rate limit keys on Fly's edge IP
+  TRUST_PROXY = "1"             # Fly's edge appends one hop; 2 if Cloudflare proxies the domain in front of Fly
+  HOST = "0.0.0.0"              # Fly's proxy reaches the VM over the private network
   NODE_ENV = "production"
   PORT = "8642"
 

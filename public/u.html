@@ -31,7 +31,7 @@
 <a class="skip-link" href="#main">Skip to posts</a>
 
 <nav class="nav" aria-label="Main">
-  <a class="nav-logo" href="/index.html"><img src="/assets/logo-mark.png" alt="$Send home"><span>$Send</span></a>
+  <a class="nav-logo" href="/index.html"><img src="/assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="/about.html">About</a>
     <a href="/arcade.html">Arcade</a>
@@ -106,10 +106,13 @@
         <span class="composer-handle">@<span id="pc-handle"></span></span>
       </div>
       <label for="pc-text" class="sr-only">Write a post</label>
-      <textarea id="pc-text" maxlength="500" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
+      <!-- the limit is described up front; the visible counter is a bare number a screen reader was never told
+           about, and maxlength stops keystrokes silently — upage.js announces the last 20 and the limit once each -->
+      <span class="sr-only" id="pc-hint">Up to 500 characters</span>
+      <textarea id="pc-text" maxlength="500" aria-describedby="pc-hint" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
       <div id="pc-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
       <div class="composer-bar">
-        <label class="file-label">📷 Photo / GIF / Video<input type="file" id="pc-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
+        <label class="file-label">📷 Photo / GIF / Video<input type="file" id="pc-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Photo / GIF / Video — attach one to this post"></label>
         <button class="file-label voice-btn" type="button" id="pc-voice" data-tip="Records a voice memo to post — press once to start, once to stop">🎤 Voice memo</button>
         <button class="btn btn-primary btn-sm" id="pc-publish" data-tip="Publishes this to your wall and the Send Wall">SEND IT 🚀</button>
         <span class="hint" id="pc-count" aria-hidden="true">500</span>
@@ -158,6 +161,9 @@
      <a href="/newpairs.html">New Pairs</a>
      <a href="/wall.html">Send Wall</a>
      <a href="/support.html">Support</a>
+     <a href="/terms.html">Terms</a>
+     <a href="/privacy.html">Privacy</a>
+     <a href="/tracker.html">Wallet Tracker</a>
      <a href="/index.html#swap">Swap</a>
      <a href="/index.html#tokens">Tokens</a>
      <a href="/watchlist.html">Watchlist</a>

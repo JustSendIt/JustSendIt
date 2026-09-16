@@ -108,6 +108,18 @@
 
     // a persistent, honest explanation for a member blocked by the anti-sybil caps (the toast alone vanished in 2.6 s)
     if (blockReason) { const g = document.getElementById('comm-gate'); if (g) { g.hidden = false; g.textContent = '🛡️ ' + blockReason; } }
+    // The sandbox verifies nobody's holdings (its Join is a plain opt-in), so the governance block must not claim
+    // "verified holders" there. community.html ships the token wording; the flag is set once so a re-render of the
+    // hero never wipes an armed ballot, and proposals.js re-reads it when it paints.
+    const propsEl = document.getElementById('comm-props');
+    if (c.demo && propsEl && !propsEl.dataset.demo) {
+      propsEl.dataset.demo = '1';
+      const intro = propsEl.querySelector('.prop-intro'), pe = document.getElementById('prop-empty'), pn = document.getElementById('prop-new');
+      if (intro) intro.innerHTML = 'Sandbox members decide — nobody’s holdings are verified here. Round one needs <b>50%</b> of yes-and-no votes to promote; round two needs <b>75%</b> to pass. Abstaining helps reach quorum and never counts against a proposal.';
+      if (pe) pe.textContent = 'No proposals yet. Any sandbox member can start one.';
+      if (pn) pn.setAttribute('data-tip', 'Opens the form for writing something for sandbox members to vote on');
+      if (window.rerenderProposals) rerenderProposals();
+    }
     // wall visibility
     if (live) { wallEl.hidden = false; paintWallTabs(); setupComposer(qualified); loadWall(true); }   // paintWallTabs hides the tabs where there is no second wall
     else { wallEl.hidden = false; paintWallTabs(); document.getElementById('comm-composer').hidden = true; feedEl.innerHTML = ''; emptyEl.style.display = 'none';
@@ -188,6 +200,7 @@
         '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('fire') + '" data-react="fire" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
         '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('rocket') + '" data-react="rocket" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
         '<button class="react-btn comm-cmt-toggle" type="button" data-comments data-tip="Shows or hides the comments people left on this post" aria-label="Show comments" aria-expanded="false">💬 <span>' + (p.comments || 0) + '</span></button>' +
+        (!p.mine ? '<button class="react-btn post-report" type="button" data-report="post" data-report-id="' + p.id + '" aria-label="Report this post" data-tip="Reports this post to the moderators">⚑</button>' : '') +
       '</div>' +
       '<div class="comm-cmt-zone" hidden></div>' +
     '</article>';
@@ -336,7 +349,8 @@
       if (rb) {
         if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
         const post = rb.closest('.post'), pid = post.dataset.id;
-        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); } catch {}
+        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); }
+        catch (err) { const m = (err && err.message) || 'could not react'; if (window.sendToast) sendToast(m); if (window.announce) announce(m); } // a refusal must be seen and heard, as on the Send Wall (the proof check itself is raised by auth.js)
         return;
       }
       const ct = e.target.closest('[data-comments]');
@@ -419,15 +433,23 @@
       const list = (j.comments || []).map(c => '<div class="comm-cmt"><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '">@' + esc(c.username) + '</a>' + ogB(c.og) + ' <span class="c-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span></div>').join('') || '<p class="modal-note">no comments yet — start it off 👇</p>';
       zone.innerHTML = list + (window.AUTH && AUTH.user ? '<form class="comm-cmt-form"><input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Adds what you typed as a comment on this post">Reply</button></form>' : '<p class="modal-note"><button class="linklike" type="button" data-signin data-tip="Opens the sign-in box so you can join in">Sign in</button> to comment.</p>');
       const form = zone.querySelector('.comm-cmt-form');
-      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); } catch {} });
+      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); }
+        catch (err) { const m = (err && err.message) || 'could not send'; if (window.sendToast) sendToast(m); if (window.announce) announce(m); } }); // the draft stays in the input; the refusal is toasted and announced, as on the Send Wall
       const si = zone.querySelector('[data-signin]'); if (si) si.addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
     } catch { zone.innerHTML = '<p class="modal-note">could not load comments</p>'; }
   }
 
+  // The hero carries the page's only <h1> and its <title>, so a failure has to paint both too — a stale shared link
+  // must not land a screen-reader user on an unheaded document still titled "Community".
+  function renderFailure(msg) {
+    document.title = msg + ' — $Send 🏘️';
+    heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:1.4rem;">' + esc(msg) + '</h1>' +
+      '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="communities.html">Browse all communities →</a></p></div>';
+  }
   async function load() {
-    if (!id) { heroEl.innerHTML = '<p class="modal-note" style="text-align:center; padding:1.5rem;">No community specified. <a href="communities.html">Browse all →</a></p>'; return; }
-    try { const j = await window.api('/api/communities/' + id); renderHero(j.community); }
-    catch (e) { heroEl.innerHTML = '<p class="modal-note" style="text-align:center; padding:1.5rem;">Community not found. <a href="communities.html">Browse all →</a></p>'; }
+    if (!id) { renderFailure('No community specified'); return; }
+    try { const j = await window.api('/api/communities/' + id); if (j.community) renderHero(j.community); else if (!C) renderFailure('Community not found'); }
+    catch (e) { renderFailure('Community not found'); }
   }
   load();
   document.addEventListener('auth:change', load); // re-render on login (opt-in state / composer)

@@ -228,7 +228,10 @@
     if (AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length) {
       try { g = await api('/api/gamify/refresh', { method: 'POST' }); } catch {}
     }
-    try { lb = await (await fetch('/api/leaderboard', { credentials: 'same-origin' })).json(); } catch { lb = { top: [], me: null }; }
+    // null, not an empty board, when the request fails: an empty board is a claim about the data, and a
+    // 500 or a Cloudflare error page parses (or throws) into exactly that claim without the r.ok check
+    lb = null;
+    try { const r = await fetch('/api/leaderboard', { credentials: 'same-origin' }); if (r.ok) lb = await r.json(); } catch {}
     leaderboard = lb;
     try { competition = await (await fetch('/api/competition', { credentials: 'same-origin' })).json(); } catch { competition = null; }
     render(g, lb);
@@ -1086,7 +1089,8 @@
   }
 
   function boardList(lb, myUsername) {
-    if (!lb || !lb.top || !lb.top.length) return '<p class="modal-note">No senders on the board yet — be the first! 🚀</p>';
+    if (!lb || !Array.isArray(lb.top)) return '<p class="modal-note">The board could not be reached — refresh to try again.</p>';
+    if (!lb.top.length) return '<p class="modal-note">No senders on the board yet — be the first! 🚀</p>';
     const medal = ['🥇', '🥈', '🥉'];
     let html = '<ol class="gboard">';
     for (const u of lb.top.slice(0, 6)) {
@@ -1173,16 +1177,18 @@
     const n = comp.prize ? comp.prize.winners : 10, ladder = (comp.prize && comp.prize.ladder) || [];
     let html = '<p class="comp-clock">Week ' + esc(comp.week.key) + ' · resets in <b>' + fmtLeftLong(comp.week.msLeft) + '</b> · top <b>' + n + '</b> win a boost, biggest for #1</p>';
     if (!comp.top || !comp.top.length) html += '<p class="modal-note">Nobody has scored this week yet — every point you earn from now counts. 🚀</p>';
-    else html += '<ol class="gboard">' + comp.top.filter(u => u.rank <= n).map(u => compRow(u, myUsername, compact(u.points))).join('') + '</ol>';
+    // "base": the server ranks this board on base points with every multiplier stripped (prize.rankedBy),
+    // so calling the figure Send Power would contradict the Send Power tile above it by the boost factor
+    else html += '<ol class="gboard">' + comp.top.filter(u => u.rank <= n).map(u => compRow(u, myUsername, compact(u.points) + ' base')).join('') + '</ol>';
     if (comp.me) {
       html += '<p class="modal-note" style="text-align:center; margin-top:0.5rem;">' + (comp.me.rank
-        ? 'You\'re <b>#' + comp.me.rank + '</b> this week with <b>' + nf(comp.me.points) + '</b> Send Power' + (comp.me.rank <= n ? ' — inside the prize places. Hold it. 🏆' : ' — top ' + n + ' wins a boost.')
+        ? 'You\'re <b>#' + comp.me.rank + '</b> this week with <b>' + nf(comp.me.points) + '</b> base points' + (comp.me.rank <= n ? ' — inside the prize places. Hold it. 🏆' : ' — top ' + n + ' wins a boost.')
         : 'You haven\'t scored this week yet — anything you earn from now counts.') + '</p>';
     }
     if (comp.myBoost && comp.myBoost.boost > 1) html += '<p class="comp-mine">🏆 Your prize from week ' + esc(comp.myBoost.wonIn || '') + ': <b>' + comp.myBoost.boost + '×</b> on everything you earn until ' + esc(new Date(comp.myBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC. It does not count toward this week\'s standings — that\'s what keeps the race fair.</p>';
     if (comp.last && comp.last.winners && comp.last.winners.length) {
       html += '<h4 class="comp-last">Last week (' + esc(comp.last.key) + ') — winners and their prizes</h4>' +
-        '<ol class="gboard gboard-compact">' + comp.last.winners.map(w => compRow(w, myUsername, compact(w.points))).join('') + '</ol>';
+        '<ol class="gboard gboard-compact">' + comp.last.winners.map(w => compRow(w, myUsername, compact(w.points) + ' base')).join('') + '</ol>';
     }
     html += '<p class="comp-rules">Every Monday 00:00 UTC the board resets to zero and the game master pays the top ' + n + ' a Send Power boost by finishing place' +
       (ladder.length ? ' — <b>#1 gets ' + ladder[0] + '×</b>, down to ' + ladder[ladder.length - 1] + '× for #' + ladder.length + ' (' + ladder.map(b => b + '×').join(' · ') + '); a tie at the edge goes to whoever joined first —' : '') + ' for the whole of the next week. It adds on top of your Holder, OG, community and arcade boosts (boosts add, they don\'t multiply). A winner\'s prize never counts toward next week\'s standings, so the same people can\'t buy the board with it.</p>';
@@ -1382,7 +1388,8 @@
     btns.forEach(b => { b.disabled = true; b.dataset.orig = b.textContent; b.textContent = 'Reading the chain… ⛓️'; });
     try {
       const g = await api('/api/gamify/refresh', { method: 'POST' });
-      let lb; try { lb = await (await fetch('/api/leaderboard', { credentials: 'same-origin' })).json(); } catch { lb = leaderboard; }
+      let lb = leaderboard;   // a failed re-read keeps the last good board rather than reporting an empty one
+      try { const r = await fetch('/api/leaderboard', { credentials: 'same-origin' }); if (r.ok) lb = await r.json(); } catch {}
       leaderboard = lb;
       try { competition = await (await fetch('/api/competition', { credentials: 'same-origin' })).json(); } catch {}
       render(g, lb); // render() runs celebrate() → confetti only on a real level/tier increase

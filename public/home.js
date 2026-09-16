@@ -109,6 +109,7 @@ function setMcap(key, target, opts = {}) {
   }
   requestAnimationFrame(frame);
 }
+let mcapAnnounced = false;
 async function refreshMcap(opts) {
   try {
     const pairs = await fetchPairs();
@@ -139,7 +140,13 @@ async function refreshMcap(opts) {
       a11yText += '$' + key + (hasMc ? ' market cap about ' : ' fully diluted value about ') + fmtUsd(fdv) + (chg != null ? ', ' + (chg >= 0 ? 'up ' : 'down ') + Math.abs(chg).toFixed(1) + '% today. ' : '. ');
     }
     const a11y = document.getElementById('mcap-a11y');
-    if (a11y && a11yText) a11y.textContent = a11yText;
+    if (a11y && a11yText) {
+      // first fill is announced; later refreshes only update the text for a reader who goes looking for it —
+      // a two-sentence interruption every 30s on a page someone is reading is the flood 2.2.2 forbids
+      if (mcapAnnounced) { a11y.setAttribute('aria-live', 'off'); a11y.removeAttribute('role'); }
+      a11y.textContent = a11yText;
+      mcapAnnounced = true;
+    }
   } catch {}
 }
 refreshMcap();
@@ -152,22 +159,28 @@ document.querySelectorAll('[data-mcap-jump]').forEach(j => {
   j.addEventListener('click', () => { const t = document.getElementById('tokens'); if (t) t.scrollIntoView({ behavior: _reduced() ? 'auto' : 'smooth' }); });
 });
 
-/* reduced-motion: stop decorative autoplay/loop videos (CSS can't pause <video>). The hero background
-   clip used to be excluded from getting controls; it no longer exists, so the exception went with it —
-   the only autoplay videos left on this page are the two .clip-card clips, which should have them. */
-if (_reduced()) {
-  document.querySelectorAll('video[autoplay]').forEach(v => { try { v.removeAttribute('autoplay'); v.pause(); v.controls = true; } catch {} });
-}
-
-/* pause / resume the looping clips — auto-playing motion must be user-pausable (WCAG 2.2.2) */
+/* The looping clips: user-pausable (WCAG 2.2.2), a still with controls under reduced motion (CSS can't
+   pause <video>), and fetched only once they scroll into view. They carry preload="none" and no autoplay
+   attribute, so a visitor who never reaches the section never pulls the ~3.5 MB the two files weigh. */
 (function () {
   const btn = document.getElementById('clip-toggle');
-  if (!btn) return;
-  let paused = _reduced(); // reduced-motion already paused them above
+  const clips = [...document.querySelectorAll('.clip-card video')];
+  if (!btn || !clips.length) return;
+  let paused = _reduced();
+  if (paused) clips.forEach(v => { try { v.controls = true; } catch {} });   // reduced motion: only starts by hand
+  const inView = new Set();
+  const play = (v) => { if (paused || !inView.has(v)) return; try { v.preload = 'auto'; v.play().catch(() => {}); } catch {} };
   const paint = () => { btn.setAttribute('aria-pressed', String(paused)); btn.textContent = paused ? '▶ Play clips' : '⏸ Pause clips'; };
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(ents => ents.forEach(en => {
+      if (en.isIntersecting) { inView.add(en.target); play(en.target); }
+      else { inView.delete(en.target); try { en.target.pause(); } catch {} }   // off-screen loops cost decode for nothing
+    }), { threshold: 0.25 });
+    clips.forEach(v => io.observe(v));
+  } else clips.forEach(v => { inView.add(v); play(v); });
   btn.addEventListener('click', () => {
     paused = !paused;
-    document.querySelectorAll('.clip-card video').forEach(v => { try { if (paused) v.pause(); else v.play().catch(() => {}); } catch {} });
+    clips.forEach(v => { try { if (paused) v.pause(); else play(v); } catch {} });
     paint();
   });
   paint();
@@ -191,13 +204,23 @@ function rocketStorm() {
 }
 async function watchSwapTx(hash) {
   const pend = document.getElementById('swap-pending');
+  const inflight = document.getElementById('swap-inflight');
+  const txEl = document.getElementById('swap-tx');
+  // the hash is whatever the wallet handed back — pin its shape before it goes anywhere near a URL or markup
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(hash))) { sendToast('Swap sent — check your wallet for the result ⏳'); return; }
+  /* "Watch it on the explorer" was an instruction with no link: the hash was only ever a polling key. The
+     link + copy button live in #swap-pending, which stays visible after the spinner line goes — the moment
+     money has left the wallet is exactly when someone wants to find their own transaction. */
+  if (txEl) txEl.innerHTML = 'Your transaction: <a href="' + RH_CHAIN.explorer + '/tx/' + hash + '" target="_blank" rel="noopener">' + hash.slice(0, 10) + '…' + hash.slice(-6) + ' ↗</a> ' +
+    '<button class="copy-btn" type="button" data-copy="' + hash + '" data-tip="Copies the full transaction hash so you can look it up in your wallet or the explorer">Copy hash</button>';
+  if (inflight) inflight.hidden = false;
   pend.hidden = false;
   for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000));
     try {
       const rcpt = await rpcCall('eth_getTransactionReceipt', [hash]);
       if (rcpt) {
-        pend.hidden = true;
+        if (inflight) inflight.hidden = true;
         if (rcpt.status === '0x1') {
           rocketStorm();
           setTimeout(() => refreshMcap({ pump: true }), 1200);
@@ -211,13 +234,26 @@ async function watchSwapTx(hash) {
       }
     } catch {}
   }
-  pend.hidden = true;
+  if (inflight) inflight.hidden = true;
   sendToast('Still pending — check your wallet or the explorer ⏳');
+  if (typeof window.swapStatus === 'function') window.swapStatus('Still pending after two minutes — the explorer link above will show what happened ⏳', 'info');
 }
 
 /* ---------- swap panel ---------- */
 let swapPick = 'SEND';
 const SLIPPAGE = 10; // % — generous guard for thin pools + GWC's transfer tax
+/* Transfer taxes the router's quote knows nothing about: getAmountsOut prices the pool leg only, then the
+   token contract takes its cut on the transfer to the buyer (which is why the swap uses the fee-on-transfer
+   router path). Without this the headline was ~5% high for $GWC and ~1% high for $SEND. The figures are
+   the ones this page already states in the guide's warn-box ($Send 1% per transfer, $GWC 5% each way). */
+const TAX_BPS = { SEND: 100, GWC: 500 };
+/* Price impact is what a constant-product pool charges for SIZE, and the slippage guard never covered it —
+   the guard trims an already-crushed quote by 10%, so "10% guard" read as a loss cap while a large order
+   could fill far under the going rate. The going rate comes from the pool itself: a second quote for a
+   sliver of ETH (0.0001, too small to move the pool) is its marginal price, no off-chain feed needed. */
+const REF_WEI = 10n ** 14n;
+const IMPACT_WARN = 5;   // % — from here the swap button asks before opening the wallet
+let lastImpact = null;   // impact of the amount currently quoted; null while a quote is pending or unavailable
 function pickSwap(key) {
   swapPick = key;
   for (const k of ['SEND', 'GWC']) {
@@ -243,21 +279,33 @@ function refreshQuote() {
     const mEl = document.getElementById('swap-min');
     const uEl = document.getElementById('swap-usd');
     const wei = parseEth(document.getElementById('swap-amt').value);
-    if (!wei || wei <= 0n) { qEl.textContent = 'enter an amount ☝️'; mEl.textContent = ''; if (uEl) uEl.textContent = ''; return; }
+    if (!wei || wei <= 0n) { qEl.textContent = 'enter an amount ☝️'; mEl.textContent = ''; if (uEl) uEl.textContent = ''; const i0 = document.getElementById('swap-impact'); if (i0) i0.textContent = ''; lastImpact = null; return; }
     // dollar equivalent of the ETH you'd spend — raw ETH means nothing to a first-timer (audit #2)
     if (uEl) uEl.textContent = lastEthUsd ? toNum(wei, 18) + ' ETH ≈ ' + fmtUsd(toNum(wei, 18) * lastEthUsd) : '';
+    const iEl = document.getElementById('swap-impact');
     const seq = ++quoteSeq;
+    lastImpact = null;
     qEl.textContent = 'quoting…';
     try {
-      const out = await quoteEthToToken(swapPick, wei);
+      const [out, ref] = await Promise.all([quoteEthToToken(swapPick, wei), quoteEthToToken(swapPick, REF_WEI).catch(() => null)]);
       if (seq !== quoteSeq) return;
       const outN = toNum(out, 18);
-      const usdOut = lastTokUsd[swapPick] ? outN * lastTokUsd[swapPick] : null;
-      qEl.textContent = '~' + outN.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' $' + swapPick + (usdOut != null ? ' (≈ ' + fmtUsd(usdOut) + ')' : '');
-      const minN = outN * (100 - SLIPPAGE) / 100;
-      mEl.textContent = 'min received after ' + SLIPPAGE + '% slippage guard: ' + minN.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      const taxPct = (TAX_BPS[swapPick] || 0) / 100;
+      const getN = outN * (1 - taxPct / 100);   // what actually lands in the wallet
+      const usdOut = lastTokUsd[swapPick] ? getN * lastTokUsd[swapPick] : null;
+      qEl.textContent = '~' + getN.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' $' + swapPick + (usdOut != null ? ' (≈ ' + fmtUsd(usdOut) + ')' : '');
+      const minN = getN * (100 - SLIPPAGE) / 100;
+      mEl.textContent = 'after the ' + taxPct + '% $' + swapPick + ' contract tax · min received after the ' + SLIPPAGE + '% slippage guard: ' + minN.toLocaleString('en-US', { maximumFractionDigits: 0 });
+      let impact = null;
+      if (ref && ref > 0n) {
+        const spotOut = toNum(ref, 18) * (toNum(wei, 18) / toNum(REF_WEI, 18));   // this order at the pool's marginal rate
+        if (spotOut > 0) impact = Math.max(0, (1 - outN / spotOut) * 100);
+      }
+      lastImpact = impact;
+      if (iEl) iEl.textContent = impact == null ? '' :
+        'price impact ~' + impact.toFixed(1) + '%' + (impact >= IMPACT_WARN ? ' ⚠️ big order for this pool — you would get that much less than the going rate, and the slippage guard does not cover it' : ' (the pool moves against your size — not covered by the slippage guard)');
     } catch (e) {
-      if (seq === quoteSeq) { qEl.textContent = 'quote unavailable 📡'; mEl.textContent = ''; }
+      if (seq === quoteSeq) { qEl.textContent = 'quote unavailable 📡'; mEl.textContent = ''; if (iEl) iEl.textContent = ''; }
     }
   }, 350);
 }
@@ -272,9 +320,27 @@ document.querySelectorAll('[data-amt]').forEach(b => b.addEventListener('click',
   document.getElementById('swap-amt').value = b.dataset.amt;
   refreshQuote();
 }));
-document.getElementById('swap-go').addEventListener('click', async () => {
-  const hash = await executeSwap(swapPick, document.getElementById('swap-amt').value, SLIPPAGE);
-  if (hash) watchSwapTx(hash);
+const swapGo = document.getElementById('swap-go');
+let swapBusy = false;
+const SWAP_WORKING = 'Checking wallet, chain and quote… ⏳';
+swapGo.addEventListener('click', async () => {
+  if (swapBusy) return;
+  // F079: past the impact threshold the button asks first — a fat-fingered 10 instead of 1.0 would otherwise
+  // fill far under the going rate and still pass the slippage guard
+  if (lastImpact != null && lastImpact >= IMPACT_WARN) {
+    const ok = confirm('Price impact is about ' + lastImpact.toFixed(1) + '% — this order is big for the pool, so you would get that much less than the going rate, and the ' + SLIPPAGE + '% slippage guard does not protect against it. Swap anyway?');
+    if (!ok) { window.swapStatus('Swap not sent — a smaller amount means less price impact', 'info'); return; }
+  }
+  swapBusy = true; swapGo.disabled = true;
+  window.swapStatus(SWAP_WORKING, 'info');
+  try {
+    const hash = await executeSwap(swapPick, document.getElementById('swap-amt').value, SLIPPAGE);
+    if (hash) watchSwapTx(hash);
+  } finally {
+    swapBusy = false; swapGo.disabled = false;
+    const st = document.getElementById('swap-status');
+    if (st && st.textContent === SWAP_WORKING) window.swapStatus('', 'info');   // a silent exit (picker closed) must not leave "checking…" on screen
+  }
 });
 document.querySelectorAll('[data-watch-token]').forEach(b =>
   b.addEventListener('click', () => watchToken(b.dataset.watchToken)));

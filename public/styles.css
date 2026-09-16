@@ -638,6 +638,9 @@ section { padding: 3.6rem 1.25rem; position: relative; }
 .file-label {
   cursor: pointer; background: var(--ctl-fill-lo); color: var(--ctl-ink); border-radius: 10px; padding: 0.5rem 0.9rem;
   font-weight: 700; font-size: 0.85rem; transition: all 0.12s ease;
+  /* the 📷 control is a <label> and the 🎤 control beside it is a <button>: a button does not inherit the
+     page font and brings the UA's outset border, so both are set here or the pair does not match */
+  font-family: inherit; border: 0;
   display: inline-flex; align-items: center; justify-content: center; gap: 0.35em; text-align: center; min-height: 40px;
 }
 .file-label:hover { background: var(--ctl-fill-hi); color: var(--ctl-ink); }
@@ -695,7 +698,7 @@ video.media-preview-el { width: auto; }
 .vote-btn:active { transform: scale(0.82); }
 .vote-up.on { color: var(--on-green); background: var(--green); }
 .vote-down.on { color: var(--on-red); background: var(--red); }
-.vote-btn:focus-visible { outline: 3px solid var(--ctl-ink); outline-offset: 2px; }
+.vote-btn:focus-visible { outline: 3px solid var(--ctl-ink); outline-offset: -3px; } /* drawn inside the arrow's circle, so the whole ring sits on the light track instead of spilling onto the dark post */
 .vote-score { min-width: 2.2ch; padding: 0 0.15rem; text-align: center; font-weight: 800; font-size: 0.9rem; color: var(--ctl-ink); font-variant-numeric: tabular-nums; }
 .vote-score.neg { color: var(--ctl-ink); } /* the − sign carries the meaning; a red numeral on the light track would not clear 4.5:1 */
 /* your own post: read-only score, no self-vote arrows */
@@ -1702,12 +1705,17 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .og-banner-sub { display: block; font-size: 0.82rem; color: var(--text); margin-top: 0.15rem; }
 .og-banner-sub b { color: var(--gold); }
 /* timers */
-.og-banner-timers { position: relative; z-index: 1; flex: 0 0 auto; display: flex; gap: 0.6rem; }
+/* The row may shrink and wrap: the banner is overflow:hidden, so a row that refuses to (flex 0 0 auto) is
+   simply cut off at 320–375px — and the two things it cuts are the deadlines. */
+.og-banner-timers { position: relative; z-index: 1; flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
 .og-timer { display: flex; flex-direction: column; align-items: center; line-height: 1.15; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,179,64,0.4); border-radius: 12px; padding: 0.32rem 0.6rem; }
 .og-timer i { font-style: normal; font-size: 0.57rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--gold); font-weight: 800; white-space: nowrap; }
 .og-timer b { font-size: 1.02rem; font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 8px rgba(255,179,64,0.5); }
 .og-timer b.og-timer-closed { color: var(--text-dim); text-shadow: none; }
-.og-timer.og-timer-soon { border-color: var(--red); background: rgba(255,93,93,0.16); animation: ogSoon 1s ease-in-out infinite; }
+/* The red tint sits on a scrim DARKER than the ordinary timer's, not instead of it: a tint alone lightens the
+   banner's brightest gradient stop (#6b4c08) under red text to 2.3:1. Black 0.7 under a 0.12 tint measures
+   5.0:1 for #ff5d5d at that stop, the worst point of the sweep. */
+.og-timer.og-timer-soon { border-color: var(--red); background: linear-gradient(rgba(255,93,93,0.12), rgba(255,93,93,0.12)), rgba(0,0,0,0.7); animation: ogSoon 1s ease-in-out infinite; }
 .og-timer.og-timer-soon i { color: var(--red); }
 .og-timer.og-timer-soon b { color: var(--red); text-shadow: 0 0 8px rgba(255,93,93,0.6); }
 @keyframes ogSoon { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
@@ -1726,6 +1734,9 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
   .og-banner-cta { flex: 1 0 100%; text-align: center; margin-top: 0.25rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; }
   .og-medal { font-size: 1.7rem; }
   .og-banner-title { font-size: 1.04rem; }
+  /* the timers take their own row like the CTA, and a caption may break rather than push past the edge */
+  .og-banner-timers { flex: 1 1 100%; }
+  .og-timer i { white-space: normal; }
 }
 @media (prefers-reduced-motion: reduce) {
   .og-banner, .og-medal, .og-confetti span, .og-timer.og-timer-soon, .og-banner-cta, .og-cta-arrow { animation: none; }
@@ -2478,6 +2489,13 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 @media (max-width: 430px) { .np-viewswitch .np-vs-ico { display: none; } .np-vs-btn { padding: 0 0.2rem; gap: 0; } } /* drop the emoji on small screens so the full label fits the equal-thirds tab */
 /* keep list controls clear of the sticky switch */
 body.np-mode-list .np-controls { top: calc(var(--nav-h, 58px) + var(--np-switch-h)); }
+/* At 400% zoom (a 320x256 viewport, SC 1.4.10 Reflow) the wrapped filter bar is taller than the viewport,
+   so pinning it left nothing of the list to read and put the fixed player on top of the Safer segment.
+   Under 500px of height the bar and the view tabs scroll with the page instead. */
+@media (max-height: 500px) {
+  .np-controls, body.np-mode-list .np-controls { position: static; }
+  body.np-mode-list .np-viewswitch { position: relative; top: auto; } /* relative, not static: the ::before pill needs a positioned box; top reset, or the sticky offset becomes a downward shove */
+}
 /* mode visibility */
 body.np-mode-feed .np-hero, body.np-mode-feed .np-controls, body.np-mode-feed .np-chips, body.np-mode-feed .np-filters, body.np-mode-feed .np-status, body.np-mode-feed .np-newbar, body.np-mode-feed #np-strategies, body.np-mode-feed #np-strat-note, body.np-mode-feed #np-list, body.np-mode-feed footer { display: none !important; }
 /* Best Runners mode: hide the DEX-list chrome, keep only the runners panel */
@@ -4516,7 +4534,9 @@ html.motion-off .ticker-track, html.motion-off .float-emoji, html.motion-off .he
 html.motion-off #compose-fab, html.motion-off .og-banner, html.motion-off .og-banner::before, html.motion-off .og-shine,
 html.motion-off .og-confetti span, html.motion-off .og-medal, html.motion-off .og-banner-cta, html.motion-off .og-cta-arrow,
 html.motion-off body::before, html.motion-off .rh-badge .dot, html.motion-off .mcap-value.pumping, html.motion-off .np-verdict.np-t-perfect,
-html.motion-off #music-player .eq span, html.motion-off .relic-pip, html.motion-off .forge-flame, html.motion-off .gxp.near .gxp-fill { animation-play-state: paused !important; }
+html.motion-off #music-player .eq span, html.motion-off .relic-pip, html.motion-off .forge-flame, html.motion-off .gxp.near .gxp-fill,
+/* the same infinite pulses the prefers-reduced-motion rules stop — the switch is for readers without the OS setting */
+html.motion-off .nav-live-dot, html.motion-off .og-timer.og-timer-soon, html.motion-off .np-live-dot, html.motion-off .comm-pulse i, html.motion-off .np-feed-hint { animation-play-state: paused !important; }
 html.motion-off #matrix-rain { display: none; }
 .motion-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; border-radius: 999px; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink); font: inherit; font-size: 1rem; cursor: pointer; margin-right: 0.35rem; }
 .motion-btn:hover, .motion-btn:focus-visible { color: var(--ctl-ink); background: var(--ctl-fill-hi); border-color: var(--green); }
@@ -4541,3 +4561,15 @@ html.motion-off #matrix-rain { display: none; }
 .foot-tour { margin: 1.1rem 0 0; }
 .pc-eggs { background: color-mix(in srgb, var(--gold) 12%, transparent); border: 1.5px solid color-mix(in srgb, var(--gold) 40%, transparent); color: var(--gold); font-weight: 800; font-size: 0.72rem; padding: 0.22rem 0.6rem; border-radius: var(--r-pill); white-space: nowrap; }
 .gearn-still { cursor: default; }
+
+/* the one red button on the site: account deletion (X02). Black type on the red fill, like every other CTA. */
+.btn-danger { background: var(--red-soft, #ff6b6b); color: var(--ink-1); border-color: transparent; }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
+.danger-zone { border-top: 1px solid var(--hair); margin-top: 1rem; padding-top: 0.2rem; }
+
+/* moderation queue (admin.html) */
+.adm-report { padding: 0.9rem 1rem; }
+.adm-report .post-head { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.4rem; }
+.adm-reason { font-style: italic; margin: 0.3rem 0; }
+.adm-quote { margin: 0.4rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--green); background: var(--glass-1, rgba(255,255,255,0.03)); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.adm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }

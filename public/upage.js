@@ -50,8 +50,11 @@ function renderPins(u) {
       const sub = u.isMe ? 'tokens you’re convicted in — hover to see your holdings' : 'tokens @' + esc(u.username) + ' is convicted in — hover a token';
       const head = '<div class="wall-pins-head">💎 Conviction Plays <span class="wall-pins-sub">' + sub + '</span></div>';
       const list = pins.length ? '<div class="wall-pins-list">' + pins.map(p => pinChip(p, u.isMe, u.username)).join('') + '</div>' : '';
-      const empty = (!pins.length && u.isMe) ? '<p class="wall-pins-empty">Convict a token to show it here — paste its contract below, or open any token’s on-chain details anywhere and tap <b>📌 Pin to my wall</b>.</p>' : '';
-      const adder = u.isMe ? '<form class="pin-add" autocomplete="off"><label class="sr-only" for="pin-add-input">Token contract address to convict</label><input class="addr-input pin-add-input" id="pin-add-input" type="text" inputmode="text" spellcheck="false" placeholder="Paste a contract to convict (0x…)" pattern="0x[0-9a-fA-F]{40}"><button class="btn btn-primary btn-sm pin-add-go" type="submit" data-tip="Adds the pasted token to your Conviction Plays">💎 Convict</button></form><p class="pin-add-msg" role="status" aria-live="polite"></p>' : '';
+      const empty = (!pins.length && u.isMe) ? '<p class="wall-pins-empty">Pin a token to show it here — paste its contract below, or open any token’s on-chain details anywhere and tap <b>📌 Pin to my wall</b>.</p>' : '';
+      /* "Pin to wall", not "Convict": the verb is plain English for what happens, and it matches the
+         📌 Pin to my wall button the token details already use. novalidate: with pattern= and no novalidate
+         the browser's bare "match the format" bubble swallowed the submit, so the message below never ran. */
+      const adder = u.isMe ? '<form class="pin-add" autocomplete="off" novalidate><label class="sr-only" for="pin-add-input">Token contract address to pin</label><input class="addr-input pin-add-input" id="pin-add-input" type="text" inputmode="text" spellcheck="false" placeholder="Paste a token contract to pin (0x…)" pattern="0x[0-9a-fA-F]{40}"><button class="btn btn-primary btn-sm pin-add-go" type="submit" data-tip="Shows this token on your public wall and tracks its price from today">📌 Pin to wall</button></form><p class="pin-add-msg" role="status" aria-live="polite"></p>' : '';
       box.innerHTML = head + list + empty + adder;
       livePins(box);
     }).catch(() => { box.hidden = true; });
@@ -131,9 +134,9 @@ function livePins(box) {
     try {
       const r = await fetch('/api/pins', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) { inp.value = ''; msg.textContent = ''; if (window.sendToast) sendToast('💎 Convicted in ' + (j.symbol ? '$' + j.symbol : 'that token') + '!'); if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 40, emojiRatio: 0.5 }); document.dispatchEvent(new CustomEvent('pins:changed')); }
-      else { go.disabled = false; msg.textContent = '⚠️ ' + (j.error || 'Could not convict that token.'); }
-    } catch { go.disabled = false; msg.textContent = '⚠️ Could not convict that token — try again.'; }
+      if (r.ok) { inp.value = ''; msg.textContent = ''; if (window.sendToast) sendToast('📌 ' + (j.symbol ? '$' + j.symbol : 'That token') + ' is pinned to your wall!'); if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 40, emojiRatio: 0.5 }); document.dispatchEvent(new CustomEvent('pins:changed')); }
+      else { go.disabled = false; msg.textContent = '⚠️ ' + (j.error || 'Could not pin that token.'); }
+    } catch { go.disabled = false; msg.textContent = '⚠️ Could not pin that token — try again.'; }
   });
   box.addEventListener('click', async (e) => {
     // remove ✕ (own wall) — destructive, stays its own action
@@ -162,6 +165,19 @@ function livePins(box) {
   });
 })();
 
+/* A looping wall video answers to two things a plain `document.hidden ? pause : play` ignored: the
+   reduced-motion setting (coming back to the tab restarted a video that setting had held) and the nav's
+   ⏸ motion switch (html.motion-off, app.js) — which is the visible pause control WCAG 2.2.2 asks for, so
+   the videos honour it instead of growing a second button each. */
+function keepVideoHonest(v) {
+  const rm = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+  const wanted = () => !document.hidden && !rm() && !document.documentElement.classList.contains('motion-off');
+  const sync = () => { try { wanted() ? v.play() : v.pause(); } catch {} };
+  document.addEventListener('visibilitychange', sync);
+  try { new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] }); } catch {}
+  if (!wanted()) sync();   // motion already off when the video is built: never let the first frames roll
+}
+
 function applyTheme(t) {
   if (!t) return;
   if (t.accent) {
@@ -187,9 +203,9 @@ function applyTheme(t) {
         const scrim = document.createElement('div');
         scrim.className = 'wall-bg-scrim'; scrim.setAttribute('aria-hidden', 'true');
         document.body.appendChild(scrim);
-        document.addEventListener('visibilitychange', () => { try { document.hidden ? v.pause() : v.play(); } catch {} });
         // Motion sensitivity is a real accessibility need, not a preference: hold the first frame.
         try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
+        keepVideoHonest(v);
       }
       v.src = t.bg_img;
     } else {
@@ -210,7 +226,7 @@ function applyTheme(t) {
       // Same reduced-motion hold as the background video above: an autoplaying header is motion too.
       try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
       h.replaceWith(v);
-      document.addEventListener('visibilitychange', () => { try { document.hidden ? v.pause() : v.play(); } catch {} });
+      keepVideoHonest(v);
     } else { h.src = t.header_img; h.hidden = false; }
   }
   // avatar: the wrap owns the circle; toggle the permanent img/emoji children (show the image only once it proves it loaded)
@@ -278,6 +294,7 @@ function postEl(p) {
       '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-react="rocket" aria-label="React with rocket" data-tip="Adds a rocket reaction — press again to remove it">🚀 <span>' + p.reactions.rocket + '</span></button>' +
       '<button class="react-btn" data-comments aria-expanded="false" aria-label="Show comments" data-tip="Opens or hides the comments under this post">💬 <span>' + p.comments + '</span></button>' +
       (p.mine && !p.call ? '<button class="react-btn post-del" data-del aria-label="Delete your post" data-tip="Deletes this post for good — tap again to confirm">🗑</button>' : '') + // Send Calls are final — no delete
+      (!p.mine ? '<button class="react-btn post-report" data-report="post" data-report-id="' + p.id + '" aria-label="Report this post" data-tip="Reports this post to the moderators">⚑</button>' : '') +
     '</div>' +
     '<div class="comments" hidden></div>';
   return el;
@@ -313,8 +330,17 @@ document.getElementById('feed').addEventListener('click', async (e) => {
   const dBtn = e.target.closest('[data-del]');
   if (dBtn) {
     if (dBtn.dataset.armed) {
-      try { await api('/api/posts/' + id, { method: 'DELETE' }); post.remove(); sendToast('Unsent 🫥'); }
-      catch (err) { sendToast(err.message); }
+      try {
+        await api('/api/posts/' + id, { method: 'DELETE' });
+        // post.remove() detaches the focused button, which drops focus to <body> at the top of the page.
+        // Pick the landing spot first: a control in the neighbouring post, else the feed itself.
+        const next = post.nextElementSibling || post.previousElementSibling;
+        post.remove();
+        const landing = next && (next.querySelector('button, a[href]') || next);
+        if (landing) { if (landing === next) next.tabIndex = -1; landing.focus(); }
+        else { const f = document.getElementById('feed'); if (f) { f.tabIndex = -1; f.focus(); } }
+        sendToast('Unsent 🫥');
+      } catch (err) { sendToast(err.message); }
     } else {
       const oldLbl = dBtn.getAttribute('aria-label');
       dBtn.dataset.armed = '1'; dBtn.textContent = 'Sure? 🗑';   // armed look: styles.css `.react-btn.post-del[data-armed]` — no inline colour
@@ -575,7 +601,16 @@ async function loadPage() {
   const ta = document.getElementById('pc-text');
   if (!ta) return;
   const pcCount = document.getElementById('pc-count');
-  const setPcCount = (n) => { pcCount.textContent = n; pcCount.setAttribute('aria-hidden', n > 20 ? 'true' : 'false'); }; // announce to SRs only when low
+  /* The visible counter stays aria-hidden for good: flipping aria-hidden never announced anything. The limit
+     is described up front by #pc-hint (u.html), and the shared polite region says "20 left" and "limit
+     reached" once per crossing — not on every keystroke, which would talk over the typing. */
+  let pcBand = 'ok';
+  const setPcCount = (n) => {
+    pcCount.textContent = n;
+    const band = n <= 0 ? 'full' : n <= 20 ? 'low' : 'ok';
+    if (band !== pcBand && band !== 'ok' && window.announce) announce(band === 'full' ? '0 characters left, limit reached.' : n + ' characters left.');
+    pcBand = band;
+  };
   ta.addEventListener('input', () => setPcCount(500 - ta.value.length));
   let pcImg = null;
   const pcImgEl = document.getElementById('pc-img'), pcStatus = document.getElementById('pc-status');
@@ -821,8 +856,12 @@ async function loadLeaderboard(win) {
       // #toast-zone is itself role="status" aria-live="polite", so a toast IS the announcement — adding say()
       // here would read the same news to a screen reader twice.
       toast('✅ Checked in for today! You earned ' + nf(awarded) + ' Send Power 🪙');
-    } else {
+    } else if (j && j.already) {
       toast('✅ You were already checked in today');
+    } else {
+      // a real first check-in that paid 0: the rolling 24-hour earning ceiling was already spent. The
+      // server still stamped it, so "already checked in" would be untrue and the reason would go unsaid.
+      toast('✅ Checked in for today — you had already hit your 24-hour Send Power ceiling, so this one paid nothing. It still counts as checked in.');
     }
   }
   host.addEventListener('click', (e) => { const b = e.target.closest('#ci-go'); if (b && !b.disabled) go(b); });

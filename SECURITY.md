@@ -49,8 +49,14 @@ If you self-host, these are yours and the code cannot do them for you:
   key sits beside the database, "stolen database" and "stolen key" are the same event.
 - Set `BASE_URL` to your real https origin. It drives the CSRF origin check, the Secure cookie flag
   and the domain baked into every wallet sign-in message.
-- Set `TRUST_PROXY=1` behind a reverse proxy, or every visitor shares the proxy's IP and both the
-  rate limits and the community anti-sybil caps stop working.
+- Set `TRUST_PROXY` to the number of proxies that append to `X-Forwarded-For` (Caddy alone: 1;
+  Cloudflare in front of Caddy: 2, or `TRUST_CF=1`), or every visitor shares a proxy's IP and both the
+  rate limits and the community anti-sybil caps stop working. The header is only believed from peers in
+  `TRUST_PROXY_FROM` (loopback and private ranges by default), and the boot log warns on a hop mismatch.
+- Leave `HOST` at its default `127.0.0.1` behind a same-box proxy; bind wider only when the platform needs it.
+- Set `SEED_INVITE_CODE` (or read the generated one from the first boot's log) — it is the only key to the
+  only door on a fresh deploy and it mints accounts. Set `ADMIN_USER_IDS` to the operators who may use the
+  moderation queue.
 - Keep Node at 24 or newer.
 
 The server prints warnings at boot when these look wrong. Read them.

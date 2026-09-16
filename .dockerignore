@@ -19,9 +19,12 @@ server.log
 # 143 findings including exploit repros — must not ship inside a container either.
 audit-2026-09-05.csv
 
-# Large media, kept out of the repo and out of the image.
-public/assets/justsendit-full.mp4
-public/assets/justsendit-audio.m4a
+# The theme audio and hero video are kept out of GIT (.gitignore) for rights reasons but are deliberately NOT
+# excluded here: the image is built from the operator's own working copy where they exist, and the site serves
+# them from public/ — excluding them shipped a 404 behind "The Full Send" and the music widget. A fresh clone
+# has neither file and builds a working image without them.
+
+# Whitepaper PDFs are built artefacts, not served by the app.
 JustSendIt-Whitepaper.pdf
 WHITEPAPER.pdf
 

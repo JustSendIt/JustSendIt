@@ -19,6 +19,10 @@
   const UNPAID = 'send.eggs.unpaid';        // found while the day's allowance was full — re-sent so they pay later
   const reg = new Map();                    // id -> arm(found)
   let total = null, foundIds = new Set(), booted = false;
+  let lastRefusal = '';                     // why the last claim was kept instead of banked — flushPending reports it once
+  let proofAsked = false;                   // the wallet check is raised once per page load, not once per egg
+  let flushing = false, lastUid = null;   // flushing: the boot replay is running; lastUid: who was signed in before a sign-out
+  let wasIn = false;                        // signed in at the last auth check — so a sign-out can be told from a sign-in
 
   const reduced = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
   const load = (k) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
@@ -67,8 +71,15 @@
       /* refused or unreachable — a rate limit, an expired session, read-only mode, a network blip. The find
          is kept and re-sent on the next load, and the reader is told why now, not left guessing. */
       const pend = load(KEY); if (!pend.includes(id)) { pend.push(id); save(KEY, pend); }
-      const why = (res && res.j && res.j.error) ? res.j.error : 'the server did not answer';
+      /* The participation gate is the refusal a new account hits most (every claim is a write, so it rides
+         the same choke point as posting). Say what actually unblocks it, and open the check the way every
+         other refused write on the site does (auth.js's api helper) — once, so a run of saved finds does
+         not stack a modal per egg. */
+      const gated = !!(res && res.j && res.j.needsProof);
+      const why = gated ? 'it banks once your wallet check has passed' : (res && res.j && res.j.error) ? res.j.error : 'the server did not answer';
+      lastRefusal = why;
       if (window.sendToast && !load(SEEN).includes(id)) { save(SEEN, load(SEEN).concat(id)); sendToast('🥚 Egg #' + id + ' found — kept for later: ' + why); }
+      if (gated && !proofAsked && !flushing && window.AUTH && AUTH.needsProof) { proofAsked = true; try { AUTH.needsProof(res.j); } catch {} }   // from a live find only — the boot replay must not raise a modal on every page
       return;
     }
     const j = res.j;
@@ -83,16 +94,31 @@
 
   async function flushPending() {
     if (!signedIn()) return;
-    const ids = [...new Set(load(KEY).concat(load(UNPAID)))];
+    // unpaid ids may be tagged {id, uid} by a sign-out; only this account's come back, the rest wait for theirs
+    const me = AUTH.user.id;
+    const unpaidAll = load(UNPAID);
+    const mine = unpaidAll.filter((x) => typeof x !== 'object' || x.uid === me).map((x) => (typeof x === 'object' ? x.id : x));
+    const others = unpaidAll.filter((x) => typeof x === 'object' && x.uid !== me);
+    const ids = [...new Set(load(KEY).concat(mine))];
     if (!ids.length) return;
-    save(KEY, []); save(UNPAID, []);
+    save(KEY, []); save(UNPAID, others);
+    flushing = true;
     // one at a time, with a breath between: thirty in a burst would hit the per-route limiter and lose the rest
     for (const id of ids) {
       foundIds.delete(id);                       // let found() re-send an unpaid one
       try { await found(id); } catch {}
-      if (load(KEY).includes(id)) { const rest = ids.slice(ids.indexOf(id) + 1); save(KEY, [...new Set(load(KEY).concat(rest))]); break; }   // refused: keep the remainder queued
+      if (load(KEY).includes(id)) {
+        // refused: keep the remainder queued, and say so once — these ids were celebrated while signed out,
+        // so found()'s own toast (gated on SEEN) stays quiet for them and nothing else would
+        const rest = ids.slice(ids.indexOf(id) + 1); save(KEY, [...new Set(load(KEY).concat(rest))]);
+        const kept = load(KEY).length;
+        // once per session, not once per page load: a gated account would otherwise hear it on every page
+        if (window.sendToast && kept && !sessionStorage.getItem('send.eggs.keptsaid')) { try { sessionStorage.setItem('send.eggs.keptsaid', '1'); } catch {} sendToast('🥚 ' + kept + ' saved egg' + (kept === 1 ? '' : 's') + ' kept for later: ' + (lastRefusal || 'the server did not answer')); }
+        break;
+      }
       await new Promise((r) => setTimeout(r, 350));
     }
+    flushing = false;
     document.dispatchEvent(new CustomEvent('egg:found', { detail: { id: null, awarded: 0, found: foundIds.size, total } }));
   }
 
@@ -178,7 +204,9 @@
       if (!el) return;
       let t = 0; const down = () => { clearTimeout(t); t = setTimeout(cb, ms); }; const up = () => clearTimeout(t);
       el.addEventListener('pointerdown', down); el.addEventListener('pointerup', up); el.addEventListener('pointerleave', up);
-      el.addEventListener('keydown', (e) => { if (e.key === ' ' && !e.repeat && e.target === el && el.tagName !== 'BUTTON') down(); });
+      // a button too: Space held is a hold, and the click a button fires on the key's release is its own
+      // job, which a hold egg never stands in front of (the hero logo's egg #13 lives on a real button)
+      el.addEventListener('keydown', (e) => { if (e.key === ' ' && !e.repeat && e.target === el) down(); });
       el.addEventListener('keyup', up);
     },
     // a double-click on something decorative
@@ -389,8 +417,25 @@
     if (booted) return; booted = true;
     armDeclarative();
     reg.forEach((arm, id) => tryArm(id, arm));
+    wasIn = signedIn();
+    if (wasIn) lastUid = AUTH.user.id;
     sync().then(flushPending);
-    document.addEventListener('auth:change', () => { sync().then(flushPending); });
+    document.addEventListener('auth:change', () => {
+      /* A sign-out empties this browser's egg memory. The pending list has no owner: on a shared machine,
+         whatever the next signed-out visitor finds would otherwise be paid to whoever signs in after them,
+         and the seen list from the last account would swallow that visitor's own "you found #N" toasts. */
+      if (wasIn && !signedIn()) {
+        // UNPAID is the server's own "recorded, not yet paid" list for THIS account: it is kept, tagged with the
+        // account it belongs to, and only replayed for that account (see flushPending). Wiping it would strand
+        // capped finds forever — the server relies on the client re-claiming them.
+        const un = load(UNPAID); if (un.length && lastUid && !un.some((x) => typeof x === 'object')) save(UNPAID, un.map((id) => ({ id, uid: lastUid })));
+        save(KEY, []); save(SEEN, []);
+        foundIds = new Set(); total = null; proofAsked = false;
+      }
+      if (signedIn()) lastUid = AUTH.user.id;
+      wasIn = signedIn();
+      sync().then(flushPending);
+    });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 

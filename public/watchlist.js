@@ -100,7 +100,8 @@
       '<div class="hstat np-soft"><div class="lbl">Market cap ⚠︎</div><div class="val">' + npFmtUsd(m.marketCap) + '</div></div>' +
       '<div class="hstat np-soft"><div class="lbl">FDV ⚠︎</div><div class="val">' + npFmtUsd(m.fdv) + '</div></div>' +
       '<div class="hstat"><div class="lbl">Total supply</div><div class="val">' + (supply != null ? npCompact(supply) : '—') + '</div></div>' +
-      '<div class="hstat"><div class="lbl">Decimals</div><div class="val">' + (p.token.decimals != null ? p.token.decimals : '—') + '</div></div>' +
+      // the snapshot is client-supplied and stored verbatim, so this is coerced like every other figure here, not printed raw
+      '<div class="hstat"><div class="lbl">Decimals</div><div class="val">' + (p.token.decimals != null && Number.isFinite(+p.token.decimals) ? String(+p.token.decimals) : '—') + '</div></div>' +
       '</div>' + resv +
       '<div class="np-moves">' + move('1h', p.priceChange.h1) + move('6h', p.priceChange.h6) + move('24h', p.priceChange.h24) + '</div>';
     const txrow = (l, o) => '<tr><td>' + l + '</td><td class="np-tx-buy">' + npNum(o.buys) + '</td><td class="np-tx-sell">' + npNum(o.sells) + '</td></tr>';
@@ -151,16 +152,23 @@
       render();
     } catch { setStatus('⚠️ Couldn\'t load your tokens.'); }
   }
-  listEl.addEventListener('click', e => {
+  listEl.addEventListener('click', async e => {
     const rm = e.target.closest('.np-wl-remove');
     if (rm) {
       e.preventDefault(); e.stopPropagation();
       const addr = rm.dataset.remove; const li = rm.closest('li[data-addr]');
+      const idx = state.items.findIndex(p => p.pair.address === addr), item = idx >= 0 ? state.items[idx] : null, wasOpen = state.open.has(addr);
       state.items = state.items.filter(p => p.pair.address !== addr); state.open.delete(addr);
       if (li) li.remove();
-      if (window.Watchlist) Watchlist.remove(addr);
       if (!state.items.length) render(); else setStatus('<span class="np-live-dot" aria-hidden="true"></span> ' + state.items.length + ' saved token' + (state.items.length === 1 ? '' : 's'));
-      if (srEl) srEl.textContent = 'Removed from watchlist';
+      /* The row leaves at once, but the server has the last word: "Removed" is only spoken once the DELETE
+         succeeded, and a failed one puts the row back where it was — otherwise the token is gone from the
+         page and back on the next load, with nothing in between to say why. */
+      const ok = window.Watchlist ? await Watchlist.remove(addr) : false;
+      if (!ok && item) {
+        state.items.splice(Math.min(idx, state.items.length), 0, item); if (wasOpen) state.open.add(addr); render();
+        if (srEl) srEl.textContent = 'Could not remove — still on your watchlist';
+      } else if (srEl) srEl.textContent = 'Removed from watchlist';
       return;
     }
     if (e.target.closest('[data-wl-signin]') && window.AUTH) AUTH.open();

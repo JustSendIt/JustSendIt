@@ -882,7 +882,7 @@ number the window is measured by. An RPC that does not answer is never a sale; t
 - **gifted 100, never sold** → bought 0, sold 0 → `0 ≤ 0` **passes.** They hold, and have never sold a thing.
 - **gifted 100, sold 90** → bought 0, sold 90 → **fails.** They are a net seller. That is the entire point.
 
-**What the $100 means on $SEND.** $100 is ~0.027% of $SEND's 10,000,000,000 supply, so on the order of ~3,763 wallets can clear this bar at once. $GWC is far tighter — 1,000,000,000 tokens at roughly an $11,650 FDV makes $100 about 0.86% of every $GWC there is, ~116 wallets — which is why the gate no longer asks for it; that floor still applies to the OG badge (§3.15) and Diamond status (§3.2.1), where it is doing a different job. The number is a deliberate choice made with the arithmetic in hand, not a round figure picked without checking what it buys.
+**What the $100 means on $SEND** (at the market prices of 13 September 2026, when these figures were written; they move with the price). $100 was ~0.027% of $SEND's 10,000,000,000 supply, so on the order of ~3,763 wallets can clear this bar at once. $GWC is far tighter — 1,000,000,000 tokens at roughly an $11,650 FDV makes $100 about 0.86% of every $GWC there is, ~116 wallets — which is why the gate no longer asks for it; that floor still applies to the OG badge (§3.15) and Diamond status (§3.2.1), where it is doing a different job. The number is a deliberate choice made with the arithmetic in hand, not a round figure picked without checking what it buys.
 
 **It is not a punishment, and it is not worded like one.** Read-Only Mode (§3.6) is a sanction with strikes, an escalating ladder and a buy-out. This is a new account that simply has not shown its hand yet. The first-day sell window above is the one part that *is* a sanction, and it is worded as one. Same enforcement point in the code (`blockReadOnly`), deliberately different answer: `needsProof`, never `readOnly`.
 
@@ -963,6 +963,26 @@ so nobody loses one.
 **Where you see it.** The power core on your dashboard shows `🥚 N/100`; the Quest Board lists the hunt;
 the Loot Log names each find.
 
+### 3.18 Reports, moderation and leaving 🧹
+
+**Report a post.** Every post that is not yours carries a ⚑ control. It writes a row to a `reports` table with an
+optional sentence from you; one report per person per post. Nothing is hidden automatically — a person decides.
+
+**The moderation queue** lives at `/admin.html` and is for operators only: the server answers 404 to anyone whose
+user id is not in `ADMIN_USER_IDS`, so the page does not exist for anybody else. From it an operator can take
+a post or comment down (a Send Call post keeps its call row — calls are permanent — and loses its words and
+media), put an account in read‑only mode for a number of days or indefinitely, lift a restriction, or dismiss a
+report. Every action notifies the person it lands on, with the reason, and is written to the report it resolved.
+Behind Cloudflare, a takedown also purges the removed upload from the edge when `CF_ZONE_ID` + `CF_API_TOKEN`
+are set; `/uploads` is cached a day at most either way.
+
+**Deleting your account** is in Settings → Account. You type DELETE, prove it is you (password, or a signature
+from a wallet already on the account, or your current second factor), and the account is closed: sign‑in
+methods, sessions, profile, posts, comments, uploads, tracked wallets, points and notifications are removed and
+you are signed out everywhere. Send Calls are permanent and stay under a placeholder name. A wallet that verified
+an account for the participation check, or earned an OG badge, stays recorded (as a hash) so it cannot verify or
+badge another account — the [Privacy Policy](public/privacy.html) says exactly what stays and why.
+
 ## 4. How to participate — in 4 steps
 
 1. **Get a ticket.** Someone already inside sends you one of their ten invite codes. You can read the whole site without one — you need it to make an account (§3.16).
@@ -981,10 +1001,11 @@ the Loot Log names each find.
   - **Phishing‑resistant wallet sign‑in.** The message you sign is domain‑bound (SIWE‑style: it names this site's host, URI, chain ID, a one‑time nonce and an expiry) and the server only accepts the exact message it issued, so a signature harvested on any other site can never open a session here. 2FA confirmations are domain‑bound too.
   - **Two‑factor for everyone.** Authenticator app, wallet signature, or — for wallet‑first accounts that add an **email + password** (Profile → Security) — the **password as the second factor** for wallet sign‑ins. Changing or removing 2FA always requires the current factor; for wallet‑2FA only wallets linked *before* it was enabled count.
   - Strict CSP (`script-src 'self'`), HttpOnly/SameSite cookies, per‑route rate limits, read‑only wallet connect (a free signature, never a transaction or approval).
-- **Required in production** (see `.env.example` and `DEPLOY.md`): `DATA_KEY` (64 hex chars — `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`), `BASE_URL` (your real `https://` origin — it drives every canonical / og / twitter / JSON‑LD / sitemap / robots URL at serve time, the CSRF origin check, and OAuth callbacks), `COOKIE_SECURE=1` (Secure session cookies), and `TRUST_PROXY=1` when behind nginx/Caddy/Cloudflare (otherwise every visitor shares the proxy's IP and the per‑IP rate limits + community anti‑sybil caps misfire).
+- **Required in production** (see `.env.example` and `DEPLOY.md`): `DATA_KEY` (64 hex chars — `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`), `BASE_URL` (your real `https://` origin — it drives every canonical / og / twitter / JSON‑LD / sitemap / robots URL at serve time, the CSRF origin check, and OAuth callbacks), `COOKIE_SECURE=1` (Secure session cookies), and `TRUST_PROXY=<hops>` when behind a proxy — the number of proxies that append to `X-Forwarded-For`: 1 for Caddy/nginx alone, 2 with Cloudflare in front (or `TRUST_CF=1`); otherwise every visitor shares a proxy's IP and the per‑IP rate limits + community anti‑sybil caps misfire. Node binds to `127.0.0.1` unless `HOST` says otherwise. `SEED_INVITE_CODE` is the first door's only key (unset, a random one is printed once at boot), and `ADMIN_USER_IDS` names who may use the moderation queue at `/admin.html`.
 - **Optional environment variables** to enable extras (all off by default):
   - OAuth: `GOOGLE_CLIENT_ID/SECRET`, `FACEBOOK_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `INSTAGRAM_CLIENT_ID/SECRET` (each provider's callback is `…/api/auth/<provider>/callback`).
   - `MOONPAY_API_KEY` for the fiat on‑ramp widget. `BACKUP_DIR` to move the daily DB snapshots (default `data/backups`).
+  - `CF_ZONE_ID` + `CF_API_TOKEN` so a takedown or account deletion purges the removed upload from Cloudflare's edge (without them `/uploads` is cached a day at most). `TRUST_PROXY_FROM` to name which peers may speak for the client (default `loopback,private`).
 - **Backups:** the server writes one consistent snapshot per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite online backup API — safe while running; last 7 kept). **Restore:** stop the server, copy the snapshot over `data/app.db`, delete any `app.db-wal` / `app.db-shm` next to it, start. Copy `data/uploads/` separately (avatars, headers, post media).
 - **On deploy:** the placeholder SEO domain is swapped for `BASE_URL` automatically — just set it, and register your OAuth callback URLs.
 

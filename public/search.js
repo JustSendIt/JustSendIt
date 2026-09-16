@@ -1,4 +1,9 @@
-/* ===== Sender search: finds public walls, keyboard accessible ===== */
+/* ===== Sender search: finds public walls, keyboard accessible =====
+   A search box over a list of LINKS, not a combobox: the results are real <a href> that take DOM focus, and
+   a combobox promises aria-activedescendant/option semantics this never had (a reader in forms mode heard
+   nothing when results landed, and an option that was really a link). So the box is a plain searchbox that
+   names the results panel with aria-controls, and every result set — including "no matches" — is spoken
+   through the shared live region. */
 (function () {
   // attribute-safe HTML escape (also encodes quotes so it's safe inside src="…"/style="…")
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -10,29 +15,32 @@
     slot.innerHTML =
       '<span class="s-icon" aria-hidden="true">🔎</span>' +
       '<input type="search" id="sender-search" placeholder="find senders…" autocomplete="off" ' +
-      'role="combobox" aria-expanded="false" aria-label="Search for senders and their public walls">';
+      'aria-controls="sender-search-results" aria-describedby="sender-search-help" aria-label="Search for senders and their public walls">' +
+      '<span class="sr-only" id="sender-search-help">Matching senders are listed below the box as you type; press Down arrow to move into the list.</span>';
     const input = slot.querySelector('input');
     let drop = null, timer = null, hits = [], sel = -1;
 
+    const say = (t) => { if (typeof window.announce === 'function') window.announce(t); };
     function close() {
       if (drop) { drop.remove(); drop = null; }
-      input.setAttribute('aria-expanded', 'false');
       sel = -1;
     }
     function open(users, q) {
       close();
       drop = document.createElement('div');
       drop.className = 'search-drop';
-      drop.setAttribute('role', 'listbox');
+      drop.id = 'sender-search-results';
+      drop.setAttribute('aria-label', 'Sender search results');
       hits = users;
       if (!users.length) {
         drop.innerHTML = '<div class="search-empty">No senders match "' + esc(q) + '" 👻</div>';
+        say('No senders match ' + q);
       } else {
+        say(users.length + (users.length === 1 ? ' sender matches' : ' senders match') + ' — press Down arrow to browse');
         for (const u of users) {
           const a = document.createElement('a');
           a.className = 'search-hit';
           a.href = '/u/' + encodeURIComponent(u.username);
-          a.setAttribute('role', 'option');
           const ava = u.avatar_img
             ? window.avatarHTML(u.avatar_img, 'h-ava')
             : '<span class="h-ava" aria-hidden="true">' + esc(u.avatar) + '</span>';
@@ -43,7 +51,6 @@
         }
       }
       slot.appendChild(drop);
-      input.setAttribute('aria-expanded', 'true');
     }
 
     input.addEventListener('input', () => {

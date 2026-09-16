@@ -31,7 +31,7 @@
   function close() {
     if (!modal || modal.hasAttribute('hidden')) return;
     modal.setAttribute('hidden', '');
-    document.body.style.overflow = '';
+    if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) { try { lastFocus.focus(); } catch (e) {} }
     seq++; // invalidate any in-flight fetch so a late response can't paint into a closed/reused modal
@@ -45,7 +45,7 @@
     titleEl.textContent = (meta.name ? meta.name + ' ' : '') + (meta.symbol ? '$' + meta.symbol : '') || 'Token detail';
     body.innerHTML = '<p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading the chain for the latest on-chain detail…</p>';
     modal.removeAttribute('hidden');
-    document.body.style.overflow = 'hidden';
+    if (window.lockScroll) lockScroll(); else document.body.style.overflow = 'hidden';
     releaseTrap = window.trapFocus ? window.trapFocus(dialog) : null;
     var xBtn = modal.querySelector('.tm-x'); if (xBtn) xBtn.focus(); // focus synchronously — the dialog is already un-hidden, so no Tab-escape window
     var my = ++seq;

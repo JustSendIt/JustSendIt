@@ -29,10 +29,11 @@
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="responsive.css">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap">
+<!-- preconnect before the first request to the host, or it warms a connection that is already open; one
+     stylesheet for all five families, because each extra request here is a render-blocking round trip -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 
 <style>
   /* Dark is the default: this paper is served inside a black site, and the bare :root is what the
@@ -152,7 +153,10 @@
 
   /* Under 1100px the contents used to be display:none — no in-page navigation for a seventeen-section
      paper on a phone. It is a collapsible block there; from 1100px up the same list is the sticky rail
-     and the summary disappears. */
+     and the summary disappears. The <details> carries `open` in the markup because a closed one never
+     renders its content and no CSS can open it — so on a phone the list starts expanded and the pill
+     collapses it. Sticky lives on .toc-wrap, the grid child: the nav inside it is exactly as tall as its
+     parent, so it had nothing to stick within. */
   .toc-wrap { margin: 0 0 22px; }
   .toc-wrap > summary { cursor: pointer; list-style: none; display: inline-block; font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 8px 14px; border: 1px solid var(--rule); border-radius: 999px; }
   .toc-wrap > summary::-webkit-details-marker { display: none; }
@@ -165,17 +169,18 @@
   .toc a { color: var(--muted); text-decoration: none; display: grid; grid-template-columns: 26px 1fr; gap: 4px; }
   .toc .n { font-family: var(--mono); font-size: 11.5px; color: var(--faint); padding-top: 2px; }
   @media (min-width: 1100px) {
-    .toc-wrap { margin: 0; }
-    .toc-wrap > summary { display: none; }
-    .toc-wrap:not([open]) > .toc { display: block; }
-    .toc h2 { display: block; }
-    .toc {
-      display: block;
+    .toc-wrap {
+      margin: 0;
       position: sticky;
       top: 32px;
       align-self: start;
       max-height: calc(100vh - 64px);
       overflow-y: auto;
+    }
+    .toc-wrap > summary { display: none; }
+    .toc h2 { display: block; }
+    .toc {
+      display: block;
       padding-top: 52px;
       font-size: 13.5px;
       line-height: 1.45;
@@ -388,7 +393,7 @@
     body { background: #fff; font-size: 10pt; line-height: 1.5; }
     .page { max-width: none; padding: 0; display: block; }
     .body-grid { display: block; }
-    .toc { display: none !important; }
+    .toc-wrap { display: none !important; }   /* the whole block, or the "Contents" pill prints without its list */
     main, .masthead, .wp-colophon { max-width: none; margin-left: 0; }
 
     .masthead { padding: 0 0 18px; border-bottom-width: 1.5px; break-after: avoid; }
@@ -424,7 +429,7 @@
 <a class="skip-link" href="#main">Skip to content</a>
 
 <nav class="nav" aria-label="Primary">
-  <a class="nav-logo" href="index.html"><img src="assets/logo-mark.png" alt="$Send home"><span>$Send</span></a>
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
@@ -562,11 +567,11 @@
         <p><strong>An email is enough to make an account.</strong> No wallet, no signature, no coins. You can read every page, and you can check in each day.</p>
         <p><strong>A wallet is what lets you do things.</strong> Posting, calling, commenting, reacting, voting, joining a community &mdash; all of it waits behind one read-only check, which opens the moment you try, over whatever page you were on. It asks two questions of the chain, across every wallet you have linked:</p>
         <ul>
-          <li><strong>Do you hold at least $100 of $SEND?</strong> Priced at the live market, right now. A dust balance is not a holding, and the bag has to be one you bought on the market rather than one that arrived from somewhere else.</li>
+          <li><strong>Do you hold at least $100 of $SEND?</strong> Priced at the live market, right now. A dust balance is not a holding, and there has to be a market buy behind the bag: a wallet that has only ever received $SEND from somewhere else has not bought any.</li>
           <li><strong>Are you a net seller?</strong> Of the coins that moved between you and the market, no more may have gone out than came in.</li>
         </ul>
-        <p><strong>There is no waiting period, and the first day is watched instead.</strong> The check used to ask a third question &mdash; whether you had held for over a week &mdash; and it no longer does. The door opens the moment you hold the bag. In exchange, for <strong>24 hours after your most recent market buy</strong>, the position that opened the door has to still be there: sell out of it inside that window and the account goes read-only for a day, which can be lifted early by buying back in. The window is anchored on the buy rather than on the sign-up, so somebody who has held since long before today is never in one at all. A week of waiting asked everybody to prove patience before they had done anything; this asks only the person who actually dumps to answer for it.</p>
-        <p class="callout"><strong>What $100 actually means on $SEND.</strong> $100 is about 0.027% of $SEND&rsquo;s ten billion supply, so on the order of 3,763 wallets can clear this bar at the same time. ($GWC is far tighter &mdash; one billion tokens at a market value around $11,650 makes $100 roughly 0.86% of every $GWC in existence, about 116 wallets &mdash; which is why the gate no longer asks for it. That floor still applies to the OG badge and to Diamond status, where it is doing a different job.) The number is a deliberate choice made with the arithmetic in hand, not a round figure picked without checking what it buys.</p>
+        <p><strong>There is no waiting period, and the first day is watched instead.</strong> The check used to ask a third question &mdash; whether you had held for over a week &mdash; and it no longer does. The door opens the moment you hold the bag. In exchange, for <strong>24 hours after your most recent market buy</strong>, the position that opened the door has to still be there: let that balance drop by more than about 2% inside that window (a partial sale and a transfer out count the same; the 2% exists because a transfer fee or a dust rounding is not a sell) and the account goes read-only for a day, which can be lifted early by buying back in. The window is anchored on the buy rather than on the sign-up, so somebody who has held since long before today is never in one at all. A week of waiting asked everybody to prove patience before they had done anything; this asks only the person who actually dumps to answer for it.</p>
+        <p class="callout"><strong>What $100 actually means on $SEND.</strong> At the market prices of 13 September 2026, when this version was written, $100 was about 0.027% of $SEND&rsquo;s ten billion supply, so on the order of 3,763 wallets could clear this bar at the same time. ($GWC is far tighter &mdash; one billion tokens at a market value then around $11,650 made $100 roughly 0.86% of every $GWC in existence, about 116 wallets &mdash; which is why the gate no longer asks for it. That floor still applies to the OG badge and to Diamond status, where it is doing a different job.) These are the only figures in this paper that move: they follow the price, and the site prices the check live. The number is a deliberate choice made with the arithmetic in hand, not a round figure picked without checking what it buys.</p>
         <p><strong>The check itself is not a punishment.</strong> Read-only mode (Section 15) is a penalty with strikes and an escalating ladder. This is simply a new account that has not shown its hand yet, and the site says so in those words. The first-day sell window above is the one exception, and it is worded as what it is.</p>
         <p><strong>Nothing about it can move your money.</strong> You sign a sentence to prove the wallet is yours. That signature moves nothing, approves nothing, and costs no gas. This site never asks a wallet to send anything, anywhere, and it has no code that could.</p>
         <p><strong>If the chain cannot be read, nothing is decided.</strong> The check can fail to complete &mdash; the block explorer rate-limits hard, and a full history walk is a lot of requests. When that happens the site says nothing has been decided and to try again, rather than recording a refusal it did not earn.</p>
@@ -706,6 +711,7 @@ object-src  'none'
               <tr><td class="name">Send It on someone's call (paid on a verified buy)</td><td class="num">30</td><td class="num">30</td></tr>
               <tr><td class="name">Customise your wall</td><td class="num">30</td><td class="num">1</td></tr>
               <tr><td class="name">Comment</td><td class="num">24</td><td class="num">20</td></tr>
+              <tr><td class="name">Find a hidden egg (each once per account, 100 in all)</td><td class="num">20</td><td class="num">25</td></tr>
               <tr><td class="name">Follow someone</td><td class="num">18</td><td class="num">10</td></tr>
               <tr><td class="name">Watch a token</td><td class="num">15</td><td class="num">5</td></tr>
               <tr><td class="name">Gain a follower</td><td class="num">15</td><td class="num">10</td></tr>
@@ -716,7 +722,7 @@ object-src  'none'
             </tbody>
           </table>
         </div>
-        <p>Two ceilings sit on top of all of this. No single award can exceed <strong>73,762</strong> points, a tenth of what one Send Call can pay in its lifetime. And <strong>every capped action in the table above, plus the check-in</strong>, shares <strong>one budget of 73,762 points per rolling 24 hours</strong>, however large your multipliers. Note what that includes: opening a Send Call and tapping Send It both have daily caps, so they draw on the same shared budget as posting. Only three things sit outside it &mdash; the milestone ladder and the two hold bonuses. Boosts pay in full on a call held in profit; on everything else they pay until the day&rsquo;s ceiling. That is what keeps Level 100 a long climb for everyone.</p>
+        <p>Two ceilings sit on top of all of this. No single award can exceed <strong>73,762</strong> points, a tenth of what one Send Call can pay in its lifetime. And <strong>every capped action in the table above, plus the check-in</strong>, shares <strong>one budget of 73,762 points per rolling 24 hours</strong>, however large your multipliers. Note what that includes: opening a Send Call, tapping Send It and finding a hidden egg all have daily caps, so they draw on the same shared budget as posting. Only three things sit outside it &mdash; the milestone ladder and the two hold bonuses. Boosts pay in full on a call held in profit; on everything else they pay until the day&rsquo;s ceiling. That is what keeps Level 100 a long climb for everyone.</p>
         <p>There is also a quieter ceiling worth knowing: the opening award for a call, and the Send It award, are each capped at <strong>ten times</strong> their size-scaled base no matter how large the boost stack behind them. Someone calling a coin with no position of their own can never be paid more than 1,200 for opening it. Boosts are for the grind and for holding in profit; they cannot turn the act of making a call into a payday.</p>
         <h3>Biggest Sender &mdash; a fresh race every week</h3>
         <p>Every Monday at midnight UTC the Biggest Sender board goes back to zero, so a week&rsquo;s standings are only what you earned inside that week. When the week ends the site settles it by itself: the <strong>top ten</strong> each receive a Send Power boost <strong>by finishing place</strong> &mdash; first place 5&times;, then 4.5, 4, 3.5, 3, 2.5, 2, 1.75, 1.5 and 1.25&times; for tenth; tied places share a rung &mdash; added on top of everything they earn for the whole of the following week.</p>
@@ -1097,7 +1103,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
   </div>
 
   <div class="wp-colophon">
-    <p><strong>JustSendIt White Paper, version 1.</strong> Every number in this document was read directly from the server source rather than from marketing copy. Where the documentation and the code disagreed, the code was treated as correct.</p>
+    <p><strong>JustSendIt White Paper, version 1.</strong> Every number in this document was read directly from the server source rather than from marketing copy, except the market values in Section 4, which are a dated snapshot of a live price. Where the documentation and the code disagreed, the code was treated as correct.</p>
     <p>JustSendIt is not affiliated with, endorsed by, or connected to Robinhood Markets, Inc. Robinhood Chain is the name of a public blockchain. Nothing here is financial advice. Points, levels, badges and games are entertainment and have no monetary value. Most new tokens lose all their value.</p>
   </div>
 
@@ -1120,6 +1126,9 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
     <a href="newpairs.html">New Pairs</a>
     <a href="wall.html">Send Wall</a>
     <a href="support.html">Support</a>
+    <a href="terms.html">Terms</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="tracker.html">Wallet Tracker</a>
     <a href="index.html#swap">Swap</a>
     <a href="index.html#tokens">Tokens</a>
     <a href="watchlist.html">Watchlist</a>

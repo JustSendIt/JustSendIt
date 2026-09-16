@@ -35,11 +35,13 @@ function mkUser(name) {
     .run(createHash('sha256').update(raw).digest('hex'), id, Date.now(), Date.now() + 864e5);
   return { id, sid: raw };
 }
-async function link(sid, w) {
+async function link(sid, w, proof) {   // proof: a wallet already on the account signs a manage challenge (F011)
   const addr = w.address.toLowerCase();
   const n = await api('/api/auth/wallet/nonce?purpose=link&address=' + addr, { sid });
   const signature = await w.signMessage(n.j.message);
-  return api('/api/auth/wallet/verify', { method: 'POST', sid, body: { address: addr, signature } });
+  let current;
+  if (proof) { const pa = proof.address.toLowerCase(); const pn = await api('/api/auth/wallet/nonce?purpose=manage&address=' + pa, { sid }); current = { address: pa, signature: await proof.signMessage(pn.j.message) }; }
+  return api('/api/auth/wallet/verify', { method: 'POST', sid, body: { address: addr, signature, current } });
 }
 
 try {
@@ -51,7 +53,8 @@ try {
   check('  ...and a tracked count of 0', empty.j.trackedCount === 0, empty.j.trackedCount);
 
   await link(u.sid, w1);
-  await link(u.sid, w2);
+  db.prepare('UPDATE sessions SET created_at = ? WHERE user_id = ?').run(Date.now() + 5, u.id);   // as if signed in again with w1 (a wallet linked mid-session cannot vouch for the next link)
+  await link(u.sid, w2, w1);
   const two = await api('/api/wallets', { sid: u.sid });
   const ws = two.j.wallets || [];
   check('linked wallets appear in the tracker automatically', ws.length === 2, ws.length + ' listed');
@@ -71,7 +74,7 @@ try {
   check('  ...your own wallets still sort first', three.j.wallets[0].mine && three.j.wallets[1].mine && !three.j.wallets[2].mine);
 
   // linking a third shows up without any action
-  await link(u.sid, w3);
+  await link(u.sid, w3, w1);
   const four = await api('/api/wallets', { sid: u.sid });
   check('linking another wallet adds it to the tracker with no extra step', (four.j.wallets || []).filter(w => w.mine).length === 3, (four.j.wallets || []).filter(w => w.mine).length);
   check('  ...and still costs no slots', four.j.trackedCount === 1, four.j.trackedCount);

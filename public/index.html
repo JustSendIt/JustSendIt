@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>$Send (SEND IT) on Robinhood Chain — Just Send It! 🚀 Powered by $GWC</title>
 <meta name="description" content="$Send (SEND IT) is the memecoin that just sends it on Robinhood Chain — live charts & market cap, a beginner-friendly how-to-buy-crypto guide, one-click swaps from any EVM wallet, an honest new-token risk scanner, and the Send Wall meme community. Powered by Generational Wealth Coin ($GWC). High-risk fun and crypto memes — entertainment only, not financial advice.">
-<meta name="keywords" content="$Send, SEND IT, SEND IT memecoin, Robinhood Chain, Robinhood Chain crypto, Robinhood memecoin, GWC, Generational Wealth Coin, memecoin, meme coin, memecoins, best memecoins, new memecoins, crypto, cryptocurrency, altcoin, DeFi, how to buy crypto, how to buy memecoin, crypto memes, making money crypto, new crypto tokens, buy SEND token, dexscreener SEND, Ethereum L2, crypto community, moon">
+<meta name="keywords" content="$Send, SEND IT, SEND IT memecoin, Robinhood Chain, Robinhood Chain crypto, Robinhood memecoin, GWC, Generational Wealth Coin, memecoin, meme coin, memecoins, new memecoins, crypto, cryptocurrency, altcoin, DeFi, how to buy crypto, how to buy memecoin, crypto memes, new crypto tokens, buy SEND token, dexscreener SEND, Ethereum L2, crypto community">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="author" content="Just Send It community · $Send / $GWC">
 <meta name="theme-color" content="#c6f000">
@@ -93,7 +93,7 @@
 <a class="skip-link" href="#main">Skip to content</a>
 
 <nav class="nav" aria-label="Primary">
-  <a class="nav-logo" href="index.html"><img src="assets/logo-mark.png" alt="$Send logo"><span>$Send</span></a>
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send logo" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
@@ -177,7 +177,7 @@
     <span class="float-emoji"       style="bottom:6%;  right:9%;  animation-duration:6.2s; animation-delay:-1.9s;">🔥</span>
   </span>
   <div class="hero-content">
-    <button type="button" class="hero-logo-btn" data-tip="Fires a burst of confetti — just for fun"><img class="hero-logo" src="assets/logo-mark.png" alt="$Send — Just Send It logo"></button>
+    <button type="button" class="hero-logo-btn" aria-label="Fire confetti" data-tip="Fires a burst of confetti — just for fun"><img class="hero-logo" src="assets/logo-mark.png" alt="$Send — Just Send It logo"></button>
     <h1 class="display">Just $Send It! <span class="rocket">🚀</span></h1>
     <p class="tag">No brakes. No brainer. <strong>Whatever you do…</strong> Just $Send It.</p>
     <div class="rh-badge"><span class="dot"></span> LIVE ON ROBINHOOD CHAIN · ID 4663</div>
@@ -370,7 +370,7 @@
       <div class="step reveal">
         <div class="step-num">1</div>
         <div>
-          <h4>Get a wallet 👛</h4>
+          <h3>Get a wallet 👛</h3>
           <p><b>🪶 Robinhood Wallet is the easy pick</b> — it's the one major wallet that supports Robinhood Chain out of the box, so you can skip step 2 entirely. <a href="https://robinhood.com/wallet/" target="_blank" rel="noopener">Get Robinhood Wallet ↗</a></p>
           <p class="g1-alt">Already have a wallet, or want a different one? Any of these work — tap one to install it, or hit the button below if you've got it already:</p>
           <ul class="g1-wallets" id="g1-wallets" aria-label="Supported wallets"></ul>
@@ -385,7 +385,7 @@
       <div class="step security-step reveal">
         <div class="step-num">🔐</div>
         <div>
-          <h4>Lock down your seed phrase (do NOT skip this)</h4>
+          <h3>Lock down your seed phrase (do NOT skip this)</h3>
           <p>When you create the wallet you'll get a 12–24 word <b>seed phrase</b>. That phrase <i>is</i> your money.</p>
           <ul>
             <li>Write it on <b>paper</b> (twice), store it somewhere safe. Never in a screenshot, email, or cloud note.</li>
@@ -400,14 +400,16 @@
       <div class="step reveal">
         <div class="step-num">2</div>
         <div>
-          <h4>Add Robinhood Chain to your wallet 🟢</h4>
+          <h3>Add Robinhood Chain to your wallet 🟢</h3>
           <p>Robinhood Chain is an Ethereum L2 (Arbitrum Orbit tech). One click below adds it, or enter the details manually:</p>
           <table class="chain-params">
-            <tr><td>Network name</td><td>Robinhood Chain</td></tr>
-            <tr><td>Chain ID</td><td><code>4663</code></td></tr>
-            <tr><td>RPC URL</td><td><code>https://rpc.mainnet.chain.robinhood.com</code></td></tr>
-            <tr><td>Currency</td><td>ETH (18 decimals)</td></tr>
-            <tr><td>Explorer</td><td><code>https://robinhoodchain.blockscout.com</code></td></tr>
+            <!-- the label column is a row header (role, not <th>: the td rule in styles.css is what styles it) -->
+            <caption class="sr-only">Robinhood Chain network settings</caption>
+            <tr><td role="rowheader">Network name</td><td>Robinhood Chain</td></tr>
+            <tr><td role="rowheader">Chain ID</td><td><code>4663</code></td></tr>
+            <tr><td role="rowheader">RPC URL</td><td><code>https://rpc.mainnet.chain.robinhood.com</code></td></tr>
+            <tr><td role="rowheader">Currency</td><td>ETH (18 decimals)</td></tr>
+            <tr><td role="rowheader">Explorer</td><td><code>https://robinhoodchain.blockscout.com</code></td></tr>
           </table>
           <div class="step-actions">
             <button class="btn btn-rh btn-sm" id="add-chain-btn" data-tip="Asks your wallet to add the Robinhood Chain network">Add Robinhood Chain ⚡</button>
@@ -418,7 +420,7 @@
       <div class="step reveal">
         <div class="step-num">3</div>
         <div>
-          <h4>Bridge some ETH over 🌉</h4>
+          <h3>Bridge some ETH over 🌉</h3>
           <p>Got ETH (or anything) on Ethereum, Base, Arbitrum, or another EVM chain? Use <b>Relay</b> — the cross-chain route that already powers most traffic in and out of Robinhood Chain. Pick what you have, it lands as ETH on Robinhood Chain, usually in under a minute.</p>
           <p><b>No crypto anywhere yet?</b> A third-party on-ramp such as MoonPay can sell you ETH with a card (their sign-up, their fees, their rules — we're not involved). Then bridge it here.</p>
           <div class="step-actions">
@@ -431,7 +433,7 @@
       <div class="step reveal">
         <div class="step-num">4</div>
         <div>
-          <h4>Swap into $Send or $GWC 💱</h4>
+          <h3>Swap into $Send or $GWC 💱</h3>
           <p>Use the <a href="#swap">one-click swap below</a> — it prefills the real contract address so you can't fat-finger a fake. Or paste the contract address (copied from this page, nowhere else!) into your DEX of choice on Robinhood Chain.</p>
         </div>
       </div>
@@ -439,7 +441,7 @@
       <div class="step reveal">
         <div class="step-num">5</div>
         <div>
-          <h4>See your bags 💼</h4>
+          <h3>See your bags 💼</h3>
           <p>Hit "Add to Wallet" on the token cards above so $SEND and $GWC show up in your wallet, then create your free account and open <a href="profile.html">My Profile</a> — track any wallets you like (with your own labels), see every coin they hold, and get live value &amp; PNL from on-chain data. Your tracker is <b>private to you</b>; only your Send Wall posts are public.</p>
         </div>
       </div>
@@ -480,6 +482,7 @@
         <div class="lbl">You'd receive (live quote)</div>
         <div class="val green" id="swap-quote">enter an amount ☝️</div>
         <div class="lbl" style="margin-top:0.3rem;" id="swap-min"></div>
+        <div class="lbl" style="margin-top:0.3rem;" id="swap-impact"></div>
       </div>
       <div style="text-align:center; display:flex; gap:0.8rem; justify-content:center; flex-wrap:wrap;">
         <button class="btn btn-primary" id="swap-go" data-tip="Builds the swap for you to review and sign in your wallet">Swap In My Wallet 🚀</button>
@@ -488,10 +491,15 @@
       </div>
       <p class="hint swap-status" id="swap-status" role="status" aria-live="polite" style="text-align:center; margin:0.7rem 0 0; min-height:1.2em;"></p>
       <div id="swap-pending" hidden style="text-align:center; margin-top:1rem;" aria-live="polite">
-        <p style="font-weight:800; color:var(--green-bright);">⛓️ Transaction in flight… <span class="eq" aria-hidden="true">🚀</span></p>
+        <p id="swap-inflight" style="font-weight:800; color:var(--green-bright);">⛓️ Transaction in flight… <span class="eq" aria-hidden="true">🚀</span></p>
+        <p class="lbl" id="swap-tx"></p>
       </div>
       <p class="swap-note">
-        <b>How it works:</b> the swap is a direct call to Robinhood Chain's public Uniswap&nbsp;v2 router — the standard router contract on this chain — with the verified token address prefilled so you can't fat-finger a fake. Getting ETH onto Robinhood Chain from another chain is a separate step through a third-party bridge such as <a href="https://relay.link" target="_blank" rel="noopener">Relay</a> (<a href="https://docs.relay.link" target="_blank" rel="noopener">docs</a>) — we don't vouch for any third party, so do your own homework. This site never holds custody of your funds and there are no approvals to grant: you review and sign the one transaction in your own wallet. Quote includes a 10% slippage guard (GWC also has its own 5% contract tax). Start small, read what you sign. 🧠
+        <b>How it works:</b> the swap is a direct call to Robinhood Chain's public Uniswap&nbsp;v2 router — the standard router contract on this chain — with the verified token address prefilled so you can't fat-finger a fake. Getting ETH onto Robinhood Chain from another chain is a separate step through a third-party bridge such as <a href="https://relay.link" target="_blank" rel="noopener">Relay</a> (<a href="https://docs.relay.link" target="_blank" rel="noopener">docs</a>) — we don't vouch for any third party, so do your own homework. This site never holds custody of your funds and there are no approvals to grant: you review and sign the one transaction in your own wallet. The quote already takes off the token's own contract tax ($Send 1%, $GWC 5%) and shows the price impact of your size on a thin pool. The 10% slippage guard only covers price movement between the quote and your confirmation — it is not a cap on what a big order costs. Start small, read what you sign. 🧠
+      </p>
+      <p class="lbl swap-router">Router contract (what your wallet will show as <b>To</b>): <code id="swap-router-addr">0x89e5DB8B5aA49aA85AC63f691524311AEB649eba</code>
+        <button type="button" class="btn btn-xs" data-copy="0x89e5DB8B5aA49aA85AC63f691524311AEB649eba" data-tip="Copies the router address so you can compare it in your wallet">Copy</button>
+        <a href="https://robinhoodchain.blockscout.com/address/0x89e5DB8B5aA49aA85AC63f691524311AEB649eba" target="_blank" rel="noopener" data-tip="Opens the router contract on the block explorer">Explorer ↗</a>
       </p>
     </div>
   </div>
@@ -503,7 +511,7 @@
     <h2 class="section-title display">The Full Send 🎬</h2>
     <p class="section-sub">Sit back, crank it up, and witness the send.</p>
     <div class="feature-frame reveal">
-      <video src="assets/justsendit-full.mp4" controls preload="metadata" playsinline></video>
+      <video src="assets/justsendit-full.mp4" width="1280" height="720" controls preload="none" poster="assets/full-send-poster.jpg" playsinline data-optional-media></video>
     </div>
   </div>
 </section>
@@ -513,8 +521,8 @@
     <h2 class="section-title display">Certified Send Moments 🔥</h2>
     <p class="section-sub">Six seconds of pure send energy. On loop. Forever.</p>
     <div class="clip-grid" id="clip-grid">
-      <div class="clip-card reveal"><video src="assets/clip-1.mp4" autoplay muted loop playsinline></video></div>
-      <div class="clip-card reveal"><video src="assets/clip-2.mp4" autoplay muted loop playsinline></video></div>
+      <div class="clip-card reveal"><video src="assets/clip-1.mp4" width="544" height="544" muted loop playsinline preload="none"></video></div>
+      <div class="clip-card reveal"><video src="assets/clip-2.mp4" width="544" height="544" muted loop playsinline preload="none"></video></div>
     </div>
     <div class="clip-ctl"><button class="btn btn-ghost btn-sm" type="button" id="clip-toggle" aria-pressed="false" aria-controls="clip-grid" data-tip="Pauses or resumes the looping clip videos">⏸ Pause clips</button></div>
   </div>
@@ -602,7 +610,7 @@
     <h3>Powered by Generational Wealth Coin</h3>
     <p>The rocket fuel behind the send — <strong>$GWC</strong>. Join the community and keep up with every send.</p>
     <div class="community-links">
-      <a class="btn btn-gold" href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener" data-tip="Opens the $GWC project website in a new tab">GenerationalWealthCoin.com 💸</a>
+      <a class="btn btn-gold" href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener" data-tip="Opens the $GWC project website in a new tab">Generational<wbr>Wealth<wbr>Coin.com 💸</a>
       <a class="btn btn-ghost" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow" data-tip="Opens the $GWC Telegram community in a new tab">Telegram 💬</a>
       <a class="btn btn-ghost" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow" data-tip="Opens the community X account in a new tab">X / Twitter 🐦</a>
     </div>
@@ -637,7 +645,10 @@
     <a href="newpairs.html">New Pairs</a>
     <a href="wall.html">Send Wall</a>
     <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="tracker.html">Wallet Tracker</a>
     <a href="index.html#swap">Swap</a>
+    <a href="terms.html">Terms</a>
     <a href="index.html#tokens">Tokens</a>
     <a href="watchlist.html">Watchlist</a>
     <a href="whitepaper.html">White Paper</a>

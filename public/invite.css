@@ -107,6 +107,10 @@
   letter-spacing: 0.09em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 999px;
   background: color-mix(in srgb, var(--g-ink, #070312) 35%, transparent); color: inherit; text-decoration: none;
 }
+/* No wash on a spent chip. The chip is already the muted fill and the type is dark, so a 35% ink wash under
+   the only text that records who used the code pulled it under 4.5:1 (3.5:1 on the dashboard). On the chip
+   itself it clears with room to spare; the wash is for the bright unused chips, where it is a highlight. */
+.inv-code.is-used .inv-tag { background: none; }
 .inv-note { margin: 0.65rem 0 0; font-size: 0.84rem; color: var(--g-dim, #b9a8dd); line-height: 1.5; }
 .inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: 0.88rem; color: #ff8aa8; }
 .inv-err.is-ok { color: var(--g-green-hi, #b4ff2b); }
@@ -164,7 +168,8 @@
   font-size: 0.85rem; font-weight: 800; line-height: 1;
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); color: var(--g-dim, #b9a8dd);
 }
-.inv-tests li[data-state="ok"] .inv-tick { background: rgba(142,224,0,0.18); border-color: rgba(142,224,0,0.55); color: var(--g-green-hi, #b4ff2b); }
+/* mixes of the token the tick's own text uses, not an rgba copy of it: a second copy is what a rebrand leaves behind */
+.inv-tests li[data-state="ok"] .inv-tick { background: color-mix(in srgb, var(--green-bright) 18%, transparent); border-color: color-mix(in srgb, var(--green-bright) 55%, transparent); color: var(--green-bright); }
 .inv-tests li[data-state="no"] .inv-tick { background: rgba(255,46,136,0.15); border-color: rgba(255,46,136,0.5); color: #ff8aa8; }
 /* The read-only assurance. It is a statement of what the code does — personal_sign returns a signature
    over a sentence and nothing else, and this site never calls eth_sendTransaction — not a promise about

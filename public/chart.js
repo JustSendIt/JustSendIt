@@ -732,6 +732,7 @@
     const seq = host._seq = (host._seq || 0) + 1;
     host._view = defaultView();          // a new timeframe is a new window — it starts where it fits
     const status = host.querySelector('.oc-status');
+    host._sayNow = true;                 // a fresh load (first paint or a timeframe change) is always announced
     const cv = host.querySelector('canvas');
     status.textContent = 'Reading the chain…';
     // something on the canvas while the chain is being read, rather than an empty box that reads as broken
@@ -775,8 +776,15 @@
     if (rb) rb.hidden = !isZoomed(host._view);
     if (hoverOnly) return;               // a crosshair repaint must not redo the status line and the table
     const sum = summarise(d);
-    host.querySelector('.oc-status').textContent = sum;
+    /* F004: this is a polite live region, and paint() runs on every 1s poll tick — so a screen reader was
+       read the whole summary sentence once a second for as long as the chart was on screen. The canvas
+       label follows every repaint silently; the SPOKEN line only changes when the summary text actually
+       changed, and live ticks re-announce at most once every 30s. A timeframe load resets the throttle so
+       "switch to 1d" is spoken at once. */
     cv.setAttribute('aria-label', sum);
+    const st = host.querySelector('.oc-status');
+    const nowMs = Date.now();
+    if (st.textContent !== sum && (!host._saidAt || nowMs - host._saidAt >= 30000 || host._sayNow)) { st.textContent = sum; host._saidAt = nowMs; host._sayNow = false; }
     const pts = d.points || [];
     const dir = pts.length ? dirOf(pts) : 1;
     host.classList.toggle('is-up', dir >= 0);

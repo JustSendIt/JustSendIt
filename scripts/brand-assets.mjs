@@ -153,6 +153,9 @@ function emit(name, png) { writeFileSync(A(name), PNG.sync.write(png)); made.pus
   /* The free-floating mark: the hero sits on the page's own ground, so it keeps the transparency the key
      produced and carries no field of its own. 900px covers the hero's 340px box on a 2x screen. */
   emit('logo-mark.png', onClear(downscale(src, box, ...fit(box, 900, 900)), 900, 900));
+  /* The nav's logo is drawn at 34px; every page was pulling the 900px hero mark for it (F073). A 128px
+     transparent copy covers a 4x screen with room to spare. */
+  emit('logo-mark-sm.png', onClear(downscale(src, box, ...fit(box, 128, 128)), 128, 128));
 }
 
 // ---- the lockup ----------------------------------------------------------------------------------

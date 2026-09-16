@@ -60,7 +60,8 @@
   zone.id = 'toast-zone';
   zone.setAttribute('role', 'status');
   zone.setAttribute('aria-live', 'polite');
-  zone.setAttribute('aria-atomic', 'true');
+  zone.setAttribute('aria-atomic', 'false');   // per toast, not per queue: atomic here re-announces every toast still in the zone
+  zone.setAttribute('aria-relevant', 'additions');
   document.body.appendChild(zone);
   /* Shared OG badge — rendered next to an OG's username everywhere. Hover shows a simple explanation
      (native title). OG = verified early buyer of BOTH $Send and $GWC who still holds both, in one of
@@ -107,15 +108,23 @@
      it. Videos are muted, looped and inline — the only combination browsers will autoplay — never autoplay
      under reduced motion, and pause while the tab is hidden so a wall full of them costs nothing unseen. */
   const AVATAR_VIDEO = /\.(mp4|webm)(\?.*)?$/i;
+  /* src is only ever the server-shaped /uploads/<24 hex>.<ext> path (saveImage / /api/profile/image), so
+     anything else is refused outright rather than escaped — the helper's name promises safety and every
+     page that shows a person goes through it. attrs is the caller's literal attribute string; it is
+     allow-listed to the handful of shapes the call sites actually pass, so a future caller cannot turn it
+     into an injection point by handing over user text. */
+  const AVATAR_SRC = /^\/uploads\/[a-f0-9]{24}\.(jpg|png|webp|gif|mp4|webm)$/i;
+  const AVATAR_ATTRS = /^(\s*(loading="lazy"|width="\d{1,4}"|height="\d{1,4}"|style="[^"<>&]*"))*\s*$/;
+  const escAttr = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   window.avatarHTML = function (src, cls, attrs) {
-    if (!src) return '';
-    const s = String(src).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
-    const a = attrs ? ' ' + attrs : '';
+    if (!src || !AVATAR_SRC.test(String(src))) return '';
+    const s = escAttr(src), c = escAttr(cls);
+    const a = attrs && AVATAR_ATTRS.test(String(attrs)) ? ' ' + String(attrs).trim() : '';
     if (AVATAR_VIDEO.test(String(src))) {
       const auto = (window.prefersReduced && window.prefersReduced()) ? '' : ' autoplay';
-      return '<video class="' + cls + '" src="' + s + '" muted loop playsinline preload="metadata" aria-hidden="true" data-avatar-video="1"' + auto + a + '></video>';
+      return '<video class="' + c + '" src="' + s + '" muted loop playsinline preload="metadata" aria-hidden="true" data-avatar-video="1"' + auto + a + '></video>';
     }
-    return '<img class="' + cls + '" src="' + s + '" alt=""' + a + '>';
+    return '<img class="' + c + '" src="' + s + '" alt=""' + a + '>';
   };
   // DOM form, for the places that build elements rather than strings (the wall header)
   window.avatarNode = function (src, cls, attrs) {
@@ -148,6 +157,44 @@
     setTimeout(() => t.remove(), 2600);
   };
 
+  // --- report a post or comment (X01): one handler for every wall; the server writes a reports row the operator reads
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-report]');
+    if (!b) return;
+    e.preventDefault();
+    if (!(window.AUTH && AUTH.user)) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
+    const kind = b.dataset.report, id = Number(b.dataset.reportId);
+    const reason = window.prompt('Why are you reporting this ' + kind + '? (optional — a sentence helps the moderators)');
+    if (reason === null) return;
+    b.disabled = true;
+    try {
+      const r = await fetch('/api/report', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, id, reason: String(reason).slice(0, 500) }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'could not send the report');
+      if (window.sendToast) sendToast(j.already ? 'You already reported this — thanks, it is in the queue' : '⚑ Reported. A moderator will look at it.');
+      b.setAttribute('aria-pressed', 'true');
+    } catch (err) { b.disabled = false; if (window.sendToast) sendToast('⚠️ ' + err.message); }
+  });
+  // --- shared scroll lock (F086): overlays stack (the proof check over the composer); each one used to write
+  //     body.style.overflow = '' on close, unlocking the page under the one still open. A counter, and the value
+  //     that was there before the first lock, restored when the last lock goes.
+  (function () {
+    let n = 0, prev = '';
+    window.lockScroll = function () { if (n++ === 0) { prev = document.body.style.overflow; document.body.style.overflow = 'hidden'; } };
+    window.unlockScroll = function () { if (n > 0 && --n === 0) document.body.style.overflow = prev; };
+  })();
+  // --- optional media (X04): the feature video and its poster ship outside git; hide what is not on this deploy ---
+  (function () {
+    const vids = document.querySelectorAll('video[data-optional-media]');
+    if (!vids.length) return;
+    fetch('/api/config', { credentials: 'same-origin' }).then(r => r.json()).then(j => {
+      const media = (j && j.media) || {};
+      vids.forEach(v => {
+        if (media.poster === false) v.removeAttribute('poster');
+        if (media.video === false) { const sec = v.closest('section') || v.closest('.feature-frame'); if (sec) sec.hidden = true; }
+      });
+    }).catch(() => {});
+  })();
   // --- copy helper (elements with data-copy) ---
   document.addEventListener('click', async (e) => {
     const el = e.target.closest('[data-copy]');
@@ -174,7 +221,8 @@
   // --- logo easter egg: click logo → mega send ---
   document.querySelectorAll('.hero-logo-btn, .nav-logo img').forEach(el => {
     el.addEventListener('click', (e) => {
-      burst(e.clientX, e.clientY, { count: 60, emojiRatio: 0.4 });
+      const r = el.getBoundingClientRect();   // Enter/Space fire click at 0,0 — burst from the logo instead of the corner
+      burst(e.clientX || r.left + r.width / 2, e.clientY || r.top + r.height / 2, { count: 60, emojiRatio: 0.4 });
       sendToast('JUST SEND IT! 🚀🚀🚀');
     });
   });

@@ -52,7 +52,15 @@ for (const f of htmlFiles) {
     const rel = ref.split(/[?#]/)[0];
     if (!rel || rel.endsWith('/')) continue;
     const target = rel.startsWith('/') ? path.join(PUBLIC, rel.slice(1)) : path.join(PUBLIC, rel);
-    if (!existsSync(target)) note('public/' + f, 'references a file that is not there: ' + ref);
+    if (!existsSync(target)) {
+      /* X04: the feature video and its poster are kept out of git for rights reasons. Their <video> carries
+         data-optional-media, /api/config reports whether they exist, and app.js hides the section when they do
+         not — so a clean checkout serves no dead player. Anything else missing is still a failure. */
+      const tagStart = s.lastIndexOf('<', m.index);
+      const tag = s.slice(tagStart, s.indexOf('>', m.index) + 1);
+      if (/data-optional-media/.test(tag)) console.log('  · public/' + f + ': optional media not present here (hidden at runtime): ' + ref);
+      else note('public/' + f, 'references a file that is not there: ' + ref);
+    }
   }
 }
 

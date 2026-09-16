@@ -34,7 +34,7 @@
 <a class="skip-link" href="#np-list">Skip to new pairs</a>
 
 <nav class="nav" aria-label="Main">
-  <a class="nav-logo" href="index.html"><img src="assets/logo-mark.png" alt="$Send home"><span>$Send</span></a>
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
@@ -72,9 +72,11 @@
     <p class="np-chain-note" id="np-chain-note" role="status" aria-live="polite" hidden></p>
 
     <div class="np-viewswitch" role="tablist" aria-label="View mode">
-      <button class="np-vs-btn" id="np-vs-runners" type="button" role="tab" aria-selected="true"  data-mode="runners" data-tip="Switches to the biggest gainers over a time window"><span class="np-vs-ico" aria-hidden="true">📈</span><span class="np-vs-txt">Best&nbsp;Runners</span></button>
-      <button class="np-vs-btn" id="np-vs-feed" type="button" role="tab" aria-selected="false" data-mode="feed" data-tip="Switches to a swipeable card feed of tokens clearing your bar"><span class="np-vs-ico" aria-hidden="true">🎬</span><span class="np-vs-txt">Hot&nbsp;Feed</span></button>
-      <button class="np-vs-btn" id="np-vs-list" type="button" role="tab" aria-selected="false" data-mode="list" data-tip="Switches to the scrollable, filterable list of new pairs"><span class="np-vs-ico" aria-hidden="true">📋</span><span class="np-vs-txt">DEX&nbsp;List</span></button>
+      <!-- Each tab names the panel it drives (aria-controls ↔ role="tabpanel" below); the switch replaces most
+           of the page, and without the pairing a reader had no "jump to panel" target after it. -->
+      <button class="np-vs-btn" id="np-vs-runners" type="button" role="tab" aria-selected="true"  aria-controls="np-runners" data-mode="runners" data-tip="Switches to the biggest gainers over a time window"><span class="np-vs-ico" aria-hidden="true">📈</span><span class="np-vs-txt">Best&nbsp;Runners</span></button>
+      <button class="np-vs-btn" id="np-vs-feed" type="button" role="tab" aria-selected="false" aria-controls="np-feed" data-mode="feed" data-tip="Switches to a swipeable card feed of tokens clearing your bar"><span class="np-vs-ico" aria-hidden="true">🎬</span><span class="np-vs-txt">Hot&nbsp;Feed</span></button>
+      <button class="np-vs-btn" id="np-vs-list" type="button" role="tab" aria-selected="false" aria-controls="np-list-panel" data-mode="list" data-tip="Switches to the scrollable, filterable list of new pairs"><span class="np-vs-ico" aria-hidden="true">📋</span><span class="np-vs-txt">DEX&nbsp;List</span></button>
     </div>
 
     <section class="np-controls" aria-label="Filter and sort new pairs">
@@ -222,10 +224,15 @@
     <p class="np-status" id="np-status"><span class="np-live-dot" aria-hidden="true"></span> Scanning the chain…</p>
     <button class="np-newbar" id="np-newbar" type="button" data-tip="Rebuilds the list with the changes held back while you read" hidden></button>
 
-    <ul class="np-list" id="np-list" aria-label="New token pairs"></ul>
+    <!-- The tabpanel wraps the <ul> rather than being it: role="tabpanel" on the list itself would strip its
+         list semantics. newpairs.js toggles `hidden` here in step with the view mode. -->
+    <div id="np-list-panel" role="tabpanel" aria-labelledby="np-vs-list" hidden>
+      <ul class="np-list" id="np-list" aria-label="New token pairs"></ul>
+    </div>
     <div class="sr-only" id="np-sr" aria-live="polite"></div>
 
-    <section class="np-feed" id="np-feed" hidden tabindex="0" role="region" aria-roledescription="Token feed" aria-label="Hot feed — new tokens that clear the bar in force: ours by default, yours once you set a filter">
+    <!-- Named by its tab, so the reader hears "Hot Feed, tab panel"; the bar it follows is spoken by the intro slide. -->
+    <section class="np-feed" id="np-feed" hidden tabindex="0" role="tabpanel" aria-labelledby="np-vs-feed">
       <div class="np-feed-chrome">
         <span class="np-feed-live" id="np-feed-live"><span class="np-live-dot"></span> live</span>
         <button class="np-feed-fresh" id="np-feed-fresh" type="button" data-tip="Jumps down to the newest card in the feed" hidden></button>
@@ -240,7 +247,7 @@
       <div class="sr-only" id="np-feed-sr" aria-live="polite"></div>
     </section>
 
-    <section class="np-runners" id="np-runners" hidden aria-label="Best runners — top gainers by time window">
+    <section class="np-runners" id="np-runners" hidden role="tabpanel" aria-labelledby="np-vs-runners">
       <div class="np-runners-bar">
         <div class="np-runwin" role="radiogroup" aria-label="Time window">
           <button class="np-seg is-on" type="button" role="radio" aria-checked="true"  data-win="24h" data-tip="Ranks the biggest gainers over the past day">24h</button>
@@ -285,8 +292,11 @@
      <a href="newpairs.html">New Pairs</a>
      <a href="wall.html">Send Wall</a>
      <a href="support.html">Support</a>
+     <a href="terms.html">Terms</a>
+     <a href="privacy.html">Privacy</a>
      <a href="index.html#swap">Swap</a>
      <a href="index.html#tokens">Tokens</a>
+     <a href="tracker.html">Wallet Tracker</a>
      <a href="watchlist.html">Watchlist</a>
      <a href="whitepaper.html">White Paper</a>
    </div>

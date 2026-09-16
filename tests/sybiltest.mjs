@@ -46,12 +46,20 @@ function mkUser(name) {
 }
 
 // link a freshly generated wallet to an account through the real SIWE link route
-async function linkWallet(sid, w, ip) {
+// F011: after the first wallet, linking another is a security change — proof of ownership rides along as
+// `current`: a management signature from a wallet ALREADY on the account (`proof`).
+async function linkWallet(sid, w, ip, proof) {
   const addr = w.address.toLowerCase();
   const n = await api('/api/auth/wallet/nonce?purpose=link&address=' + addr, { sid, ip });
   if (!n.j || !n.j.message) return { status: n.status, j: n.j };
   const signature = await w.signMessage(n.j.message);
-  return api('/api/auth/wallet/verify', { method: 'POST', sid, ip, body: { address: addr, signature } });
+  let current;
+  if (proof) {
+    const pa = proof.address.toLowerCase();
+    const pn = await api('/api/auth/wallet/nonce?purpose=manage&address=' + pa, { sid, ip });
+    current = { address: pa, signature: await proof.signMessage(pn.j.message) };
+  }
+  return api('/api/auth/wallet/verify', { method: 'POST', sid, ip, body: { address: addr, signature, current } });
 }
 
 GATE = await gatePass(BASE);
@@ -60,10 +68,11 @@ try {
   const a = mkUser('__sy_multi__');
   const w1 = Wallet.createRandom(), w2 = Wallet.createRandom(), w3 = Wallet.createRandom();
   const r1 = await linkWallet(a.sid, w1);
+  db.prepare('UPDATE sessions SET created_at = ? WHERE user_id = ?').run(Date.now() + 5, a.id);   // as if signed in again with w1: a wallet linked mid-session cannot vouch for the next link
   check('a wallet links to an account', r1.status === 200 && r1.j && r1.j.linked, r1.status + ' ' + JSON.stringify(r1.j));
-  const r2 = await linkWallet(a.sid, w2);
+  const r2 = await linkWallet(a.sid, w2, undefined, w1);
   check('a SECOND wallet links to the SAME account', r2.status === 200 && r2.j && r2.j.linked, r2.status + ' ' + JSON.stringify(r2.j));
-  const r3 = await linkWallet(a.sid, w3);
+  const r3 = await linkWallet(a.sid, w3, undefined, w1);
   check('a third links too', r3.status === 200 && r3.j && r3.j.linked, r3.status);
 
   const me1 = await api('/api/me', { sid: a.sid });
@@ -75,7 +84,7 @@ try {
 
   // a wallet already linked elsewhere cannot be taken
   const b = mkUser('__sy_other__');
-  const steal = await linkWallet(b.sid, w1);
+  const steal = await linkWallet(b.sid, w1);   // b has no wallet yet: its first link needs no proof, and must still be refused
   check('a wallet cannot be linked to two accounts', steal.status === 409 || (steal.j && steal.j.error), steal.status + ' ' + JSON.stringify(steal.j));
 
   // ═══ 2. unlink ONE wallet, keep the rest ═══
@@ -107,7 +116,7 @@ try {
   for (let i = 0; i < 4; i++) acc.push(await mkAcct(i));
   for (const r of acc) { const j = r.j || {}; if (j.username) { const row = db.prepare('SELECT id FROM users WHERE username=?').get(j.username); if (row) made.users.push(row.id); } }
   const okCount = acc.filter(r => r.status === 200).length;
-  check('exactly 3 accounts may be created from one IP', okCount === 3, okCount + ' succeeded of 4');
+  check('exactly 3 accounts may be created from one IP', okCount === 3, okCount + ' succeeded of 4 — ' + acc.map(r => r.status + ':' + ((r.j && (r.j.error || r.j.code)) || 'ok')).join(' | '));
   check('  ...the 4th is refused with a 429', acc[3].status === 429, acc[3].status);
   check('  ...and the refusal explains multi-wallet instead', /link up to \d+ wallets/i.test((acc[3].j && acc[3].j.error) || ''), (acc[3].j && acc[3].j.error || '').slice(0, 90));
   const stored = db.prepare('SELECT COUNT(*) n FROM users WHERE signup_ip IS NOT NULL').get().n;

@@ -3,7 +3,10 @@
 # JustSendIt — one process, one SQLite file, one volume.
 #
 # Node 24 is not a preference: the app uses node:sqlite (DatabaseSync), which does not exist before it.
-# Pinned to a digest-stable minor rather than :latest so a rebuild six months from now is the same runtime.
+# This tag tracks the whole Node 24 line: it is re-pushed on every 24.x patch and every bookworm base
+# refresh, so a rebuild picks up whatever it points at that day. It is NOT a digest pin. To make a rebuild
+# byte-for-byte the tested runtime, append the digest of the image that passed (`docker inspect
+# --format '{{index .RepoDigests 0}}' node:24-bookworm-slim`) as node:24-bookworm-slim@sha256:<digest>.
 FROM node:24-bookworm-slim
 
 # Tini reaps zombies and, more importantly, forwards SIGTERM to node. Without it PID 1 is node with no

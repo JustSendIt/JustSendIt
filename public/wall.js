@@ -83,6 +83,7 @@ function postEl(p) {
       '<button class="react-btn' + (p.myReactions.includes('rocket') ? ' lit' : '') + '" data-tip="Adds your rocket reaction; it does not change the ranking" data-react="rocket" aria-label="React with rocket">🚀 <span>' + p.reactions.rocket + '</span></button>' +
       '<button class="react-btn" data-tip="Opens or hides the replies under this post" data-comments aria-expanded="false" aria-label="Show comments">💬 <span>' + p.comments + '</span></button>' +
       (p.mine && !p.call ? '<button class="react-btn post-del" data-tip="Deletes your post for good — tap twice to confirm" data-del aria-label="Delete your post">🗑</button>' : '') + // Send Calls are final — no delete
+      (!p.mine ? '<button class="react-btn post-report" data-tip="Reports this post to the moderators" data-report="post" data-report-id="' + p.id + '" aria-label="Report this post">⚑</button>' : '') +
     '</div>' +
     '<div class="comments" hidden></div>';
   return el;
@@ -112,7 +113,10 @@ async function loadFeed(reset = true) {
   /* A first paint with nothing in it is not neutral: an empty wall says "nobody has posted", and a blank one
      after a failed request says "this site is broken" — with only a toast, already gone, to say otherwise.
      So the feed says what it is doing, and says what went wrong with a way to try again. */
-  if (reset && !feedEl.children.length) { feedEl.setAttribute('aria-busy', 'true'); feedEl.innerHTML = '<p class="empty-wall">Loading the wall…</p>'; }
+  // aria-busy on EVERY reset, not only an empty one: a tab or sort switch replaces a full feed, and that
+  // is the load a screen reader most needs to hear about. The placeholder text is still only for an empty feed.
+  if (reset) feedEl.setAttribute('aria-busy', 'true');
+  if (reset && !feedEl.children.length) feedEl.innerHTML = '<p class="empty-wall">Loading the wall…</p>';
   try {
     const j = await api('/api/posts' + (params.length ? '?' + params.join('&') : ''));
     feedEl.removeAttribute('aria-busy');
@@ -130,6 +134,7 @@ async function loadFeed(reset = true) {
         ? 'Nothing here yet — follow some senders and their posts land here.'
         : 'Nothing on the wall yet. Be the first to send it.';
     document.getElementById('load-more').hidden = j.posts.length < 30;
+    return true;
   } catch (e) {
     feedEl.removeAttribute('aria-busy');
     const msg = (e && e.message) || 'Could not load the feed';
@@ -153,20 +158,33 @@ async function loadFeed(reset = true) {
       feedEl.appendChild(box);
       const empty = document.getElementById('empty');
       if (empty) empty.style.display = 'none';   // the "nothing posted yet" copy would contradict the error
+      // A live region inserted already holding its text does not fire, so the box above is silent to a
+      // screen reader; the shared region is one that already exists in the tree.
+      if (window.announce) announce('😬 ' + msg + ' — the wall could not be loaded. There is a Try again button in the feed.');
     } else {
       sendToast(msg);   // a failed "load more" keeps what is already on screen
     }
+    return false;
   }
 }
 
-/* feed tabs (WHO) */
+/* feed tabs (WHO) — one place sets the selected tab, the roving tabindex and the panel's name, whether the
+   change came from a click or from signing out */
+function selectFeedTab(feed) {
+  currentFeed = feed;
+  let sel = null;
+  document.querySelectorAll('.feed-tab').forEach(t => { const on = t.dataset.feed === feed; if (on) sel = t; t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; });
+  const panel = document.getElementById('feed-panel');
+  if (panel && sel && sel.id) panel.setAttribute('aria-labelledby', sel.id);   // the panel is named by whichever tab is showing
+}
 document.querySelectorAll('.feed-tab').forEach(tab => {
   tab.addEventListener('click', (e) => {
     // signed out: a real click/Enter opens sign-in; the synthetic click from arrow-key browsing (app.js) only moves focus
     if (tab.dataset.feed === 'following' && !AUTH.user) { if (e.isTrusted) AUTH.open(); return; }
-    currentFeed = tab.dataset.feed;
-    document.querySelectorAll('.feed-tab').forEach(t => t.setAttribute('aria-selected', String(t === tab)));
-    loadFeed(true);
+    selectFeedTab(tab.dataset.feed);
+    // Nothing else says the whole feed just changed under the reader — aria-selected flipping is not that.
+    // Only after a load that actually landed: a failed reset already announces its own error.
+    loadFeed(true).then((ok) => { if (ok && window.announce) announce('Showing posts from ' + (currentFeed === 'following' ? 'people you follow' : 'everyone') + '.'); });
   });
 });
 
@@ -225,8 +243,17 @@ feedEl.addEventListener('click', async (e) => {
   const dBtn = e.target.closest('[data-del]');
   if (dBtn) {
     if (dBtn.dataset.armed) {
-      try { await api('/api/posts/' + id, { method: 'DELETE' }); post.remove(); sendToast('Unsent 🫥'); }
-      catch (err) { sendToast(err.message); }
+      try {
+        await api('/api/posts/' + id, { method: 'DELETE' });
+        // post.remove() detaches the focused button, which drops focus to <body> at the top of an infinite
+        // feed. Pick the landing spot first: a control in the neighbouring post, else the feed itself.
+        const next = post.nextElementSibling || post.previousElementSibling;
+        post.remove();
+        const landing = next && (next.querySelector('button, a[href]') || next);
+        if (landing) { if (landing === next) next.tabIndex = -1; landing.focus(); }
+        else { feedEl.tabIndex = -1; feedEl.focus(); }
+        sendToast('Unsent 🫥');
+      } catch (err) { sendToast(err.message); }
     } else {
       dBtn.dataset.armed = '1';
       const oldLbl = dBtn.getAttribute('aria-label');
@@ -287,7 +314,23 @@ async function renderComments(post, id) {
 /* composer */
 const ta = document.getElementById('post-text');
 const charCount = document.getElementById('char-count');
-function setCharCount(n) { charCount.textContent = n; charCount.setAttribute('aria-hidden', n > 20 ? 'true' : 'false'); } // only announce to SRs when running low
+/* The visible counter stays aria-hidden for good: flipping aria-hidden never announced anything, it only
+   let a bare number into the tree. The limit is described up front (support.html shares this file and has
+   no static hint, so build one when it is missing), and the shared polite region says "20 left" and
+   "limit reached" once per crossing — not on every keystroke, which would talk over the typing. */
+if (!document.getElementById('char-hint')) {
+  const hint = document.createElement('span');
+  hint.id = 'char-hint'; hint.className = 'sr-only'; hint.textContent = 'Up to 500 characters';
+  ta.insertAdjacentElement('beforebegin', hint);
+  ta.setAttribute('aria-describedby', ((ta.getAttribute('aria-describedby') || '') + ' char-hint').trim());
+}
+let charBand = 'ok';   // 'ok' | 'low' | 'full' — the band the counter was last in, so each crossing speaks once
+function setCharCount(n) {
+  charCount.textContent = n;
+  const band = n <= 0 ? 'full' : n <= 20 ? 'low' : 'ok';
+  if (band !== charBand && band !== 'ok' && window.announce) announce(band === 'full' ? '0 characters left, limit reached.' : n + ' characters left.');
+  charBand = band;
+}
 ta.addEventListener('input', () => setCharCount(500 - ta.value.length));
 
 let pendingImg = null;
@@ -397,8 +440,7 @@ window.onAuthReady = function (user) {
       if (user.og && window.ogBadge) mh.insertAdjacentHTML('afterend', ogBadge(user.og));
     }
   } else if (currentFeed === 'following') {
-    currentFeed = 'all';
-    document.querySelectorAll('.feed-tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.feed === 'all')));
+    selectFeedTab('all');
   }
   loadFeed(true);
 };

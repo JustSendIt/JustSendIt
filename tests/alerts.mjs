@@ -157,7 +157,7 @@ try {
     const code = NOTIF.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     check('the bell announces the panel as a list, not a menu', /role="list"/.test(code) && !/role="menu"/.test(code) && !/aria-haspopup="true"/.test(code));
     check('  ...and Escape hands focus back to the bell instead of dropping it', /if \(inside\) \{ const b = document\.getElementById\('notif-bell'\); if \(b\) b\.focus\(\); \}/.test(NOTIF));
-    check('  ...and a poll never rebuilds the panel under a keyboard user', /if \(open && mount\.contains\(document\.activeElement\)\) \{ items = next;/.test(NOTIF));
+    check('  ...and a poll never rebuilds the panel under a keyboard user', /if \(open && mount\.contains\(document\.activeElement\)\) \{\s*pending = next;/.test(NOTIF));
     check('the badge is decorative; the count is in the button\'s own name', /notif-badge" aria-hidden="true"/.test(NOTIF) && /in your list/.test(NOTIF));
   }
 

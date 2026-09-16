@@ -46,7 +46,13 @@ function renderAvatarPicker() {
     b.setAttribute('aria-label', 'avatar ' + a);
     b.setAttribute('data-tip', 'Uses ' + a + ' as your avatar once you save changes');
     b.textContent = a;
-    b.addEventListener('click', () => { chosenAvatar = a; document.getElementById('pf-avatar').textContent = a; renderAvatarPicker(); });
+    b.addEventListener('click', () => {
+      chosenAvatar = a; document.getElementById('pf-avatar').textContent = a;
+      // the re-render discards this button, and with it the focus: put focus on the new node at the same index
+      const i = Array.prototype.indexOf.call(zone.children, b);
+      renderAvatarPicker();
+      const nb = zone.children[i]; if (nb) nb.focus();
+    });
     zone.appendChild(b);
   }
   roveRadios(zone);
@@ -70,7 +76,12 @@ function renderSwatches(zoneId, colors, current, onPick) {
       : zoneId === 'site-accent-swatches'
         ? (c ? 'Re-themes the whole site in this colour, just for you' : 'Puts the site colours back to classic green')
         : (c ? 'Uses this colour as the accent on your public wall' : 'Puts your wall accent back to the default'));
-    b.addEventListener('click', () => { onPick(c); renderSwatches(zoneId, colors, c, onPick); });
+    b.addEventListener('click', () => {
+      onPick(c);
+      const i = Array.prototype.indexOf.call(zone.children, b);   // same as the avatar picker: refocus the rebuilt node
+      renderSwatches(zoneId, colors, c, onPick);
+      const nb = zone.children[i]; if (nb) nb.focus();
+    });
     zone.appendChild(b);
   }
   roveRadios(zone);
@@ -112,7 +123,8 @@ function renderImgSlot(kind, url) {
   up.className = 'file-label';
   /* sr-only, not hidden: [hidden] is display:none and an unfocusable input means Tab skips 'Upload'
      entirely — the only keyboard dead-end on the page. Every other uploader on the site uses this shape. */
-  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" class="sr-only" aria-label="Upload a ' + kind + ' image or video" accept="image/*,video/mp4,video/webm">';
+  // the name starts with the visible word (Replace / Upload) so "click Replace" works for voice control (WCAG 2.5.3)
+  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" class="sr-only" aria-label="' + (url ? 'Replace' : 'Upload') + ' the ' + kind + ' image or video" accept="image/*,video/mp4,video/webm">';
   up.querySelector('input').addEventListener('change', e => uploadThemeImage(kind, e.target));
   zone.appendChild(up);
   if (url) {
@@ -219,7 +231,8 @@ async function saveProfile() {
     if (navTrg) {
       const nm = navTrg.querySelector('.pl-name');
       const badge = navTrg.querySelector('.og-badge');
-      navTrg.innerHTML = (window.AUTH && AUTH.navIdentity) ? AUTH.navIdentity(j.user) : '<span class="pl-name">@' + j.user.username + '</span>';
+      // AUTH.user, not j.user: the merged object still carries avatarImg, which the save response does not — j.user alone swapped the pill's picture for the emoji
+      navTrg.innerHTML = (window.AUTH && AUTH.navIdentity) ? AUTH.navIdentity(AUTH.user) : '<span class="pl-name">@' + j.user.username + '</span>';
       if (badge) navTrg.appendChild(badge);   // the OG badge rides along
       void nm;
       navTrg.setAttribute('href', '/u/' + encodeURIComponent(j.user.username));
@@ -485,7 +498,9 @@ async function loadMe() {
     document.getElementById('totp-setup').hidden = true;
     if (on) document.getElementById('twofa-kind').textContent = ({ totp: 'authenticator app', wallet: 'wallet signature', password: 'account password' })[me.twofa] || me.twofa;
     // the disable control matches the factor: a code for authenticator 2FA, the password for password-2FA, a signature (no field) for wallet 2FA
-    document.getElementById('twofa-disable-code').style.display = (on && me.twofa === 'totp') ? '' : 'none';
+    const codeShow = (on && me.twofa === 'totp') ? '' : 'none';
+    document.getElementById('twofa-disable-code').style.display = codeShow;
+    const codeLab = document.getElementById('twofa-disable-code-lab'); if (codeLab) codeLab.style.display = codeShow;   // its visible label follows it
     const dpw = document.getElementById('twofa-disable-pw'); if (dpw) dpw.hidden = !(on && me.twofa === 'password');
     document.getElementById('wallet-2fa-btn').disabled = !me.wallets.length;
     if (!me.wallets.length) document.getElementById('wallet-2fa-btn').title = 'Link a wallet first';
@@ -519,7 +534,7 @@ function initThemeEditor() {
       '<label class="theme-lab" for="tc-' + c.key + '"><b>' + c.label + '</b><i>' + c.sub + '</i></label>' +
       '<input type="color" id="tc-' + c.key + '" value="' + v + '" aria-describedby="tc-note-' + c.key + '">' +
       '<input type="text" class="theme-hex" id="tch-' + c.key + '" value="' + v + '" maxlength="7" spellcheck="false"' +
-        ' aria-label="' + c.label + ' colour as a hex code">' +
+        ' pattern="#?[0-9a-fA-F]{6}" aria-describedby="tc-note-' + c.key + '" aria-label="' + c.label + ' colour as a hex code">' +
       '<span class="theme-applied" id="tc-note-' + c.key + '" role="status" aria-live="polite"></span>' +
     '</div>';
   }).join('');
@@ -529,7 +544,14 @@ function initThemeEditor() {
     const hex = document.getElementById('tch-' + c.key);
     const note = document.getElementById('tc-note-' + c.key);
     const commit = (val) => {
-      if (!/^#[0-9a-fA-F]{6}$/.test(val)) return;
+      if (/^[0-9a-fA-F]{6}$/.test(val)) val = '#' + val;   // a missing # is the commonest way people write one
+      if (!/^#[0-9a-fA-F]{6}$/.test(val)) {
+        // a rejected value used to vanish silently: the field kept the typing, nothing changed, nothing said why
+        note.textContent = 'Use a 6-digit hex code starting with #, like #c6f000.';
+        hex.setAttribute('aria-invalid', 'true');
+        return;
+      }
+      hex.removeAttribute('aria-invalid');
       applySitePrefs({ colors: { [c.key]: val } }, true);
       // Say plainly when the solver moved the colour, and to what.
       const solved = window.themeFrom ? window.themeFrom((window.SITE_PREFS || {}).colors || {}) : {};
@@ -634,6 +656,28 @@ document.getElementById('signedout-cta').addEventListener('click', () => AUTH.op
 document.getElementById('signout-btn').addEventListener('click', () => AUTH.logout().then(() => location.reload()));
 document.getElementById('save-profile-btn').addEventListener('click', saveProfile);
 document.getElementById('link-wallet-btn').addEventListener('click', linkWallet);
+/* ---------- delete the account (X02): typed confirmation, then proof of ownership, then gone ---------- */
+(function () {
+  const inp = document.getElementById('acct-delete-confirm'), btn = document.getElementById('acct-delete-btn'), st = document.getElementById('acct-delete-status');
+  if (!inp || !btn) return;
+  inp.addEventListener('input', () => { const ok = inp.value.trim().toUpperCase() === 'DELETE'; btn.disabled = !ok; if (ok) btn.removeAttribute('title'); else btn.title = 'Type DELETE above first'; });
+  btn.addEventListener('click', async () => {
+    if (btn.disabled) return;
+    st.textContent = '';
+    try {
+      const proof = await (AUTH.ownershipProof ? AUTH.ownershipProof('Deleting your account is permanent.') : AUTH.currentFactor('Deleting your account is permanent.'));
+      btn.disabled = true; st.textContent = 'Deleting…';
+      await api('/api/account/delete', { method: 'POST', body: Object.assign({ confirm: 'DELETE', current: proof }, proof && proof.password ? { password: proof.password } : {}) });
+      st.textContent = 'Your account is gone. Thanks for sending it with us.';
+      try { localStorage.removeItem('send.eggs.pending'); localStorage.removeItem('send.eggs.seen'); localStorage.removeItem('send.eggs.unpaid'); } catch {}
+      AUTH.user = null; if (AUTH.redraw) AUTH.redraw();
+      setTimeout(() => { location.href = 'index.html'; }, 1600);
+    } catch (e) {
+      btn.disabled = false;
+      st.textContent = e.message === 'cancelled' ? '' : '⚠️ ' + (e.message || 'could not delete the account');
+    }
+  });
+})();
 document.getElementById('totp-start-btn').addEventListener('click', startTotp);
 document.getElementById('totp-confirm-btn').addEventListener('click', confirmTotp);
 document.getElementById('wallet-2fa-btn').addEventListener('click', enableWallet2fa);

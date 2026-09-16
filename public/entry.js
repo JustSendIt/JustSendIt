@@ -40,7 +40,7 @@
       '<button class="intro-skip" type="button" data-tip="Ends the opening animation and shows the homepage now">Skip intro ⏭</button>' +
       '<span class="sr-only" role="status">Loading Just Send It.</span>';
     document.body.appendChild(el);
-    document.body.style.overflow = 'hidden';
+    if (window.lockScroll) lockScroll(); else document.body.style.overflow = 'hidden';
 
     const skip = el.querySelector('.intro-skip');
     skip.focus();
@@ -70,7 +70,7 @@
       if (window.sendConfetti) window.sendConfetti(innerWidth / 2, innerHeight * 0.42, { count: 60, emojiRatio: 0.5 });
       setTimeout(function () {
         el.remove();
-        document.body.style.overflow = '';
+        if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
         enter(true);
         focusMain();
       }, 520);

@@ -245,6 +245,30 @@ CREATE TABLE IF NOT EXISTS og_claims (
   claimed_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ogclaims_user ON og_claims(user_id);
+/* F021: which WALLET opened the participation gate, and for whom. The pass used to live only on the
+   account, so one $100 bag could verify unlimited accounts by link → verify → unlink → relink. A wallet
+   admits exactly one account; claims are not released on unlink, for the same reason og_claims are not.
+   Blind index only. */
+CREATE TABLE IF NOT EXISTS gate_claims (
+  addr_idx TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  claimed_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gateclaims_user ON gate_claims(user_id);
+/* X01: reports from users about content or accounts, and what the operator did about them. */
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,                 -- post | comment | user
+  target_id INTEGER NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolved_by INTEGER,
+  action TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_reports_open ON reports(resolved_at, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_once ON reports(reporter_id, kind, target_id);
 CREATE TABLE IF NOT EXISTS watchlist (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   pair_addr TEXT NOT NULL,
@@ -297,6 +321,15 @@ CREATE TABLE IF NOT EXISTS calls (
 CREATE INDEX IF NOT EXISTS idx_calls_user ON calls(user_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_calls_created ON calls(created_at);
 CREATE INDEX IF NOT EXISTS idx_calls_token ON calls(token_addr);
+/* F003: the price a Send Call is CREDITED at is the lower of spot and the median of the last hour's
+   samples, so a pump has to be held for half an hour before the ladder sees it. Samples come from the
+   refresh sweep itself and are pruned after 90 minutes. */
+CREATE TABLE IF NOT EXISTS call_price_samples (
+  token_addr TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  price REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cps_token_at ON call_price_samples(token_addr, at);
 CREATE TABLE IF NOT EXISTS call_hops (
   call_id INTEGER NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -605,6 +638,8 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN holder_proof_at INTEGER",
   "ALTER TABLE users ADD COLUMN holder_proof_reason TEXT",
   "ALTER TABLE users ADD COLUMN holder_proof TEXT",
+  "ALTER TABLE users ADD COLUMN twofa_last_step INTEGER",   // F017: the last TOTP step accepted, so a code is spent once
+  "ALTER TABLE users ADD COLUMN deleted_at INTEGER",        // X02: the row stays (Send Calls reference it) but is anonymised and can never sign in
   /* Wallet challenges are bound to WHAT they authorise. One generic "Read-only sign-in" message used to be
      accepted for signing in, enabling wallet 2FA, DISABLING two-factor and adding an email — so a signature a
      wallet truthfully rendered as a read-only sign-in could strip an account's second factor, and the person
@@ -877,22 +912,33 @@ const now = () => Date.now();
 const rand = (n = 32) => crypto.randomBytes(n).toString('hex');
 
 const MAX_PW = 1024; // cap password length so scrypt can't be weaponized for CPU DoS
-function hashPassword(pw) {
+/* F012: scrypt used to run SYNCHRONOUSLY on the one event loop (~30ms a call), and the sign-in door is
+   open to anyone — a rotating pool of addresses could stall the whole site with ordinary login posts.
+   The hash now runs in libuv's thread pool, and at most HASH_MAX_INFLIGHT run at once: past that the
+   caller is told the desk is busy (503) rather than queueing unbounded CPU. */
+const HASH_MAX_INFLIGHT = 6;
+let hashInFlight = 0;
+function scryptAsync(pw, salt) {
+  if (hashInFlight >= HASH_MAX_INFLIGHT) throw new HttpError('the sign-in desk is busy — try again in a moment', 503);
+  hashInFlight++;
+  return new Promise((ok, no) => crypto.scrypt(pw, salt, 64, (e, k) => { hashInFlight--; e ? no(e) : ok(k); }));
+}
+async function hashPassword(pw) {
   const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(pw, salt, 64).toString('hex');
+  const hash = (await scryptAsync(pw, salt)).toString('hex');
   return `${salt}:${hash}`;
 }
-function checkPassword(pw, stored) {
+async function checkPassword(pw, stored) {
   const [salt, hash] = String(stored).split(':');
   if (!salt || !hash) return false;
-  const test = crypto.scryptSync(String(pw).slice(0, MAX_PW), salt, 64);
+  const test = await scryptAsync(String(pw).slice(0, MAX_PW), salt);
   const ref = Buffer.from(hash, 'hex');
   return test.length === ref.length && crypto.timingSafeEqual(test, ref);
 }
 // run a scrypt of comparable cost even when the account doesn't exist,
 // so response timing can't be used to enumerate emails/usernames
-const DUMMY_HASH = hashPassword(crypto.randomBytes(16).toString('hex'));
-function dummyCheck(pw) { try { checkPassword(pw, DUMMY_HASH); } catch {} }
+const DUMMY_HASH = (() => { const salt = crypto.randomBytes(16).toString('hex'); return salt + ':' + crypto.scryptSync(crypto.randomBytes(16).toString('hex'), salt, 64).toString('hex'); })();  // once, at boot: sync is fine here
+async function dummyCheck(pw) { try { await checkPassword(pw, DUMMY_HASH); } catch {} }
 
 /* ---------- TOTP (RFC 6238, HMAC-SHA1, 30s steps) ---------- */
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -924,15 +970,25 @@ function totpCode(secretB32, step = Math.floor(Date.now() / 30000)) {
   const code = ((h[off] & 0x7f) << 24 | h[off + 1] << 16 | h[off + 2] << 8 | h[off + 3]) % 1e6;
   return String(code).padStart(6, '0');
 }
+/* Returns the matched 30s step (truthy) or null. The step is what gets burned: RFC 6238 §5.2 says a code
+   MUST NOT be accepted twice, and before F017 one phished code both opened a session and turned 2FA off. */
 function totpVerify(secretB32, code) {
-  if (!secretB32) return false;
+  if (!secretB32) return null;
   const step = Math.floor(Date.now() / 30000);
   const c = String(code || '').replace(/\D/g, ''); // digits only — avoids multibyte length mismatch in timingSafeEqual
-  if (c.length !== 6) return false;
-  return [step - 1, step, step + 1].some(s => {
+  if (c.length !== 6) return null;
+  for (const s of [step - 1, step, step + 1]) {
     const expect = totpCode(secretB32, s);
-    return crypto.timingSafeEqual(Buffer.from(expect), Buffer.from(c));
-  });
+    if (crypto.timingSafeEqual(Buffer.from(expect), Buffer.from(c))) return s;
+  }
+  return null;
+}
+/* Verify AND burn: accepts a code only if its step is newer than the last one this account used, and
+   records it atomically so two racing requests cannot both spend the same code. */
+function totpConsume(userId, secretB32, code) {
+  const step = totpVerify(secretB32, code);
+  if (!step) return false;
+  return db.prepare('UPDATE users SET twofa_last_step = ? WHERE id = ? AND (twofa_last_step IS NULL OR twofa_last_step < ?)').run(step, userId, step).changes === 1;
 }
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
@@ -983,7 +1039,7 @@ function getUser(req) {
   // forgotten one, without a DB write on literally every request.
   if (!s.last_seen || now() - s.last_seen > 3e5) { try { db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), s.token); } catch {} }
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id);
-  return u ? { ...u, sid: cookies.sid, sid_at: s.created_at } : null;   // sid_at: credential changes check what predates this session
+  return u && !u.deleted_at ? { ...u, sid: cookies.sid, sid_at: s.created_at } : null;   // sid_at: credential changes check what predates this session; a deleted account is nobody
 }
 function themeOf(u) {
   return {
@@ -1378,7 +1434,7 @@ function voteGateReason(me, c, p, cm) {
   if (c.status !== 'live') return 'This community is not live yet.';
   if (p.status !== 'open' && p.status !== 'round2') return 'Voting is closed on this proposal.';
   if (!cm) return 'Join this community to vote.';
-  if (!cm.qualified) return 'Only verified holders of $' + c.symbol + ' can vote. Re-verify your wallet to get a slot.';
+  if (!cm.qualified) return c.demo ? 'Only sandbox members can vote. Join the sandbox to get a slot.' : 'Only verified holders of $' + c.symbol + ' can vote. Re-verify your wallet to get a slot.';
   if (p.opened_at && cm.joined_at > p.opened_at) return 'You joined after this vote opened, so you are not on its roll.';
   const round = p.status === 'round2' ? 2 : 1;
   if (db.prepare('SELECT 1 FROM proposal_votes WHERE proposal_id=? AND round=? AND user_id=?').get(p.id, round, me.id)) {
@@ -1622,7 +1678,12 @@ function callAllowance(u) {
 async function refreshHolder(userId) {
   const addrs = walletAddresses(userId).slice(0, MAX_LINKED_WALLETS); // defense-in-depth for rows linked before the cap
   const prev = db.prepare('SELECT * FROM holder_state WHERE user_id = ?').get(userId);
-  if (!addrs.length) return { hasWallet: false, multiplier: 1, pct: 0, holdDays: 0, sendTok: 0, gwcTok: 0, streakStart: null };
+  if (!addrs.length) {
+    /* F022: returning without a write left this row's last_check frozen, and both oldest-first sweeps pick
+       the oldest rows — twenty wallet-less accounts pinned the sweep forever. Zero the row so it moves on. */
+    if (prev) try { db.prepare('UPDATE holder_state SET score_bp = 0, base_bp = 0, send_tok = 0, gwc_tok = 0, send_bp = 0, gwc_bp = 0, streak_start = NULL, gwc_streak_start = NULL, gwc_base_bp = 0, send_usd = NULL, gwc_usd = NULL, send_qual = 0, gwc_qual = 0, last_check = ?, updated_at = ? WHERE user_id = ?').run(now(), now(), userId); } catch {}
+    return { hasWallet: false, multiplier: 1, pct: 0, holdDays: 0, sendTok: 0, gwcTok: 0, streakStart: null };
+  }
   let sendWei = 0n, gwcWei = 0n;
   for (const a of addrs) { sendWei += await erc20Balance(TOK.SEND, a); gwcWei += await erc20Balance(TOK.GWC, a); }
   const [ss, gs] = await Promise.all([totalSupply(TOK.SEND), totalSupply(TOK.GWC)]);
@@ -2131,6 +2192,13 @@ function awardPoints(userId, kind, base, ref, maxAmount, compBase) {
   if (SOCIAL_KINDS.includes(kind)) { // the grind's shared rolling-24h ceiling on what was PAID (see SOCIAL_DAY_CAP)
     const spent = db.prepare(`SELECT COALESCE(SUM(amount), 0) s FROM points_events WHERE user_id = ? AND created_at > ? AND kind IN (${SOCIAL_KINDS.map(() => '?').join(',')})`).get(userId, now() - 864e5, ...SOCIAL_KINDS).s;
     amount = Math.min(amount, SOCIAL_DAY_CAP - spent);
+    /* F026: an action the day cap squeezes to nothing still HAPPENED. Record a 0-amount row (with its
+       comp_base) so the weekly race and the ledger see it, and so the same ref cannot pay later when the
+       cap rolls — the row is the idempotency key. Nothing is credited, nobody is notified. */
+    if (!(amount > 0)) {
+      try { db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, comp_amount, comp_base, ref, created_at) VALUES (?,?,0,?,?,0,?,?,?)').run(userId, kind, base, effMult, Math.min(base, (compBase != null && compBase > 0) ? compBase : base), ref || null, now()); } catch {}
+      return 0;
+    }
   }
   if (!(amount > 0)) return 0;
   try {
@@ -2555,7 +2623,7 @@ function communityDetailView(c, me, ip) {
 }
 // The opt-in / go-live / founder-bonus transaction — shared by create (creator auto-opt-in) and the join endpoint.
 // `holds` = verified on-chain (by the caller) that this user holds the community's own token.
-function joinCommunity(me, cid, ip, holds) {
+async function joinCommunity(me, cid, ip, holds) {
   const c = db.prepare('SELECT * FROM communities WHERE id=?').get(cid);
   if (!c) return { error: 'not found' };
   // a member whose row was de-qualified (sold, disconnected, moved bags) is NOT a dead end: joining again while holding
@@ -2568,6 +2636,25 @@ function joinCommunity(me, cid, ip, holds) {
   if (!isNew && !qual) return { alreadyMember: true, qualified: false, reason };
   const wasLive = c.status === 'live';
   let wentLive = false;
+  /* F028: the go-live test read a counter that was written once per account at join time and never
+     re-read, so one bag moved through ten accounts in ten minutes tipped a community live for good and
+     paid the founder bonus. On the tipping join, every counted member's holdings are re-read from the
+     chain first: a member who no longer holds is de-qualified, an unreadable one is simply not counted
+     toward the threshold this time (nothing is taken from them). The join still proceeds either way. */
+  if (!wasLive && qual && !c.demo && (c.qual_count + 1) >= LIVE_THRESHOLD) {
+    let confirmed = 0;
+    for (const m of db.prepare('SELECT user_id FROM community_members WHERE community_id=? AND qualified=1 AND user_id<>?').all(cid, me.id)) {
+      forgetHoldings(m.user_id);
+      let ok = null;
+      try { ok = await holdsToken(m.user_id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { ok = null; }
+      if (ok === true) confirmed++;
+      else if (ok === false) {
+        db.prepare('UPDATE community_members SET qualified=0, qual_check_at=? WHERE community_id=? AND user_id=?').run(now(), cid, m.user_id);
+        db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id=?').run(cid);
+      }
+    }
+    c.qual_count = confirmed;   // only members the chain confirmed right now count toward tipping live
+  }
   try {
     db.exec('BEGIN');
     if (isNew) db.prepare('INSERT INTO community_members (community_id, user_id, joined_at, qualified, join_ip) VALUES (?,?,?,?,?)').run(cid, me.id, now(), qual ? 1 : 0, ip ? bidx(ip) : null);
@@ -2904,7 +2991,7 @@ function gamifySummary(u) {
     breakdown: db.prepare('SELECT kind, SUM(amount) total, COUNT(*) n FROM points_events WHERE user_id=? GROUP BY kind ORDER BY total DESC').all(u.id),
     // "today" achievement log (resets every 24h); the client toggles between this and the all-time breakdown
     todayBreakdown: db.prepare('SELECT kind, SUM(amount) total, COUNT(*) n FROM points_events WHERE user_id=? AND created_at>? GROUP BY kind ORDER BY total DESC').all(u.id, now() - 864e5),
-    recent: db.prepare('SELECT kind, amount, created_at FROM points_events WHERE user_id=? ORDER BY id DESC LIMIT 12').all(u.id),
+    recent: db.prepare('SELECT kind, amount, created_at FROM points_events WHERE user_id=? AND amount <> 0 ORDER BY id DESC LIMIT 12').all(u.id),   // 0-amount rows are dedupe/ledger markers, not gains
     perAction: PTS,
   };
 }
@@ -3541,7 +3628,7 @@ function encodePng(c) {
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
-    chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),
+    chunk('IDAT', zlib.deflateSync(raw, { level: 6 })),   // F019: level 9 cost 3× the CPU of level 6 for a PNG a few percent smaller
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
@@ -3549,6 +3636,9 @@ function encodePng(c) {
 /* The share card: 1200x630 because that is the size X crops a large-image card from. Composed only from
    the username, the Send ID and the join date — every one of which is already public on the person's own
    profile. Nothing here touches a wallet, an email or a balance. */
+const ticketCardCache = new Map();   // F019: key → { png, at }; pruned with the other caches
+const TICKET_CARD_TTL = 10 * 60 * 1000, TICKET_CARD_MAX = 500;
+function sweepTicketCards() { const cut = now() - TICKET_CARD_TTL; for (const [k, v] of ticketCardCache) if (v.at < cut) ticketCardCache.delete(k); }
 function renderTicketCard({ username, sendId, joinedAt, invitedBy }) {
   const W = 1200, H = 630, STUB = 300;
   const c = makeCanvas(W, H);
@@ -5548,11 +5638,41 @@ const TRUST_PROXY_HOPS = /^\d+$/.test(process.env.TRUST_PROXY || '') ? Number(pr
 // Returns the NORMALISED unit of "one connection" (see ipKey): the IPv4 address, or the IPv6 /64.
 // Every caller — rate limits, the per-IP account cap, the anti-sybil ring check, the community gate —
 // wants that unit rather than the literal address, and normalising here means none of them can forget.
+/* Which peers may speak for the client. X-Forwarded-For is only believed when the TCP peer is one of our
+   own proxies — loopback and private ranges by default, or the list in TRUST_PROXY_FROM — because a request
+   that reaches the origin directly can write any header it likes, and under TRUST_PROXY=1 that let a
+   stranger pick their own rate-limit bucket (F002). TRUST_CF=1 opts into Cloudflare's CF-Connecting-IP for
+   an origin that only Cloudflare can reach; never read that header otherwise, it is forgeable too. */
+const TRUST_PROXY_FROM = String(process.env.TRUST_PROXY_FROM || 'loopback,private').split(',').map(s => s.trim()).filter(Boolean);
+const TRUST_CF = process.env.TRUST_CF === '1';
+function peerIsTrustedProxy(addr) {
+  const a = String(addr || '').replace(/^::ffff:/, '');
+  for (const rule of TRUST_PROXY_FROM) {
+    if (rule === 'loopback' && (a === '127.0.0.1' || a === '::1')) return true;
+    if (rule === 'private' && (/^10\./.test(a) || /^192\.168\./.test(a) || /^172\.(1[6-9]|2\d|3[01])\./.test(a) || /^fd/i.test(a) || /^fe80:/i.test(a))) return true;
+    if (rule === 'any') return true;
+    if (rule.includes('/')) { const [net, bits] = rule.split('/'); if (cidrHas(net, Number(bits), a)) return true; }
+    else if (rule === a) return true;
+  }
+  return false;
+}
+function cidrHas(net, bits, addr) {  // IPv4 only; an IPv6 rule is matched by exact string above
+  const p = (x) => x.split('.').map(Number); if (net.includes(':') || addr.includes(':')) return false;
+  const n = p(net), a = p(addr); if (n.length !== 4 || a.length !== 4 || n.some(isNaN) || a.some(isNaN)) return false;
+  const toInt = (q) => ((q[0] << 24) | (q[1] << 16) | (q[2] << 8) | q[3]) >>> 0;
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  return (toInt(n) & mask) === (toInt(a) & mask);
+}
+let hopWarned = false;
 function clientIp(req) {
-  if (TRUST_PROXY_HOPS > 0) {
+  if (TRUST_PROXY_HOPS > 0 && peerIsTrustedProxy(req.socket.remoteAddress)) {
+    if (TRUST_CF && req.headers['cf-connecting-ip']) return ipKey(String(req.headers['cf-connecting-ip']).trim()) || 'unknown';
     const xff = req.headers['x-forwarded-for'];
     if (xff) {
       const parts = String(xff).split(',').map(s => s.trim()).filter(Boolean);
+      /* Cloudflare in front of Caddy is TWO appending hops; the docs used to say 1, which silently keyed
+         every visitor on a handful of Cloudflare edge addresses (F001/F025). Say it once, loudly. */
+      if (!hopWarned && parts.length !== TRUST_PROXY_HOPS) { hopWarned = true; console.warn('[proxy] X-Forwarded-For carries ' + parts.length + ' hop(s) but TRUST_PROXY=' + TRUST_PROXY_HOPS + ' — per-IP limits are keying on the wrong address. Set TRUST_PROXY to the number of proxies that append to the header (Cloudflare → Caddy = 2), or TRUST_CF=1 behind Cloudflare.'); }
       const ip = parts[parts.length - TRUST_PROXY_HOPS]; // the real client is the hop our own proxy appended
       if (ip) return ipKey(ip) || 'unknown';
     }
@@ -5563,7 +5683,7 @@ const SEC_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',   // the voice memo needs the mic on our own origin
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Cross-Origin-Resource-Policy': 'same-origin',
   ...(IS_HTTPS ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}),
@@ -5625,7 +5745,15 @@ function readBody(req, limit = 256 * 1024) {
     let size = 0, done = false; const chunks = [];
     const finish = (fn, arg) => { if (done) return; done = true; clearTimeout(timer); fn(arg); };
     const timer = setTimeout(() => { finish(reject, new HttpError('request body timed out', 408)); req.destroy(); }, BODY_TIMEOUT_MS);
-    req.on('data', c => { size += c.length; if (size > limit) { finish(reject, new HttpError('request too large', 413)); req.destroy(); } else chunks.push(c); });
+    const t0 = Date.now();
+    req.on('data', c => {
+      size += c.length;
+      if (size > limit) { finish(reject, new HttpError('request too large', 413)); req.destroy(); return; }
+      // F016: a large body (a data-URI post) dribbled at a few bytes a second held a media slot for the whole BODY_TIMEOUT
+      const el = (Date.now() - t0) / 1000;
+      if (el > 10 && size > 64 * 1024 && size / el < 8 * 1024) { finish(reject, new HttpError('request body too slow', 408)); req.destroy(); return; }
+      chunks.push(c);
+    });
     req.on('end', () => {
       try { finish(resolve, chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}); }
       catch { finish(reject, new HttpError('malformed JSON body', 400)); }
@@ -5639,9 +5767,18 @@ function readBody(req, limit = 256 * 1024) {
 let mediaInFlight = 0;
 const MEDIA_CONCURRENCY = 4;
 const mediaByUser = new Map();            // userId -> uploads currently streaming, so one account can't take every slot
+const mediaByIp = new Map();              // F016: and one network can't either — two accounts used to be enough to hold all four slots
+const MEDIA_PER_IP = 2;
+const UPLOAD_MIN_BPS = 16 * 1024;         // F016: after the first 10s an upload has to keep moving at this rate, or the slot is not its to keep
 const MEDIA_PER_USER = 2;                 // at most half the site's slots to any one account
 const UPLOAD_DEADLINE_MS = 5 * 60 * 1000; // absolute wall-clock cap on one upload, whatever the idle timer says
+const ROUTE_WATCHDOG_MS = Math.max(120000, UPLOAD_DEADLINE_MS + 10000);   // F024: a request that never answers is ended here; declared after the upload cap it is derived from
 const MEDIA_GATE_BYTES = 400 * 1024;
+/* F016: large posts (data-URI media) used to share the four upload slots, so two accounts holding uploads
+   503'd every post over 400 KB site-wide. Posts get their own counter, and one large post per account. */
+let bigPostInFlight = 0;
+const BIG_POST_CONCURRENCY = 4;
+const bigPostByUser = new Map();
 // Profile media (avatar/header/bg) — intentionally OUTSIDE the upload_bytes quota + orphan sweep: it's bounded to 3
 // replaceable slots per user (the old file is unlinked on replace, see /api/profile/image), so it can't grow unbounded.
 function saveImage(dataUrl, maxBytes = 2.5 * 1024 * 1024) {
@@ -5654,9 +5791,19 @@ function saveImage(dataUrl, maxBytes = 2.5 * 1024 * 1024) {
     (buf[0] === 0x89 && buf[1] === 0x50) ||
     (buf.slice(0, 4).toString() === 'RIFF' && buf.slice(8, 12).toString() === 'WEBP');
   if (!magicOk) throw new Error('not an image');
+  // the declared type must match the bytes, because rasterDims parses by the declared type
+  const declared = m[1] === 'jpeg' ? (buf[0] === 0xff) : m[1] === 'png' ? (buf[0] === 0x89) : (buf.slice(0, 4).toString() === 'RIFF');
+  if (!declared) throw new Error('not an image');
+  assertRasterDims(buf, 'image/' + m[1]);   // F014: the one write path that skipped the pixel-bomb caps
   const name = rand(12) + '.' + (m[1] === 'jpeg' ? 'jpg' : m[1]);
   fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
   return name;
+}
+/* shared by every raster write path: a decoded image must fit in a phone's memory, whatever it weighs on disk */
+function assertRasterDims(buf, mime) {
+  const d = rasterDims(buf, mime);
+  if (!d || !(d.w > 0) || !(d.h > 0)) throw new Error('could not read the image — try re-exporting it');
+  if (d.w > UPLOAD_MAX_PX || d.h > UPLOAD_MAX_PX || (d.w * d.h) / 1e6 > UPLOAD_MAX_MEGAPIXELS) throw new Error('image dimensions too large (max ' + UPLOAD_MAX_PX + 'px per side)');
 }
 const UPLOAD_MAX_PX = 8000;                 // max width/height of a raster (block "pixel-bomb" images that are tiny on disk but gigabytes decoded)
 const UPLOAD_MAX_MEGAPIXELS = 33;           // and a total-area cap
@@ -5752,8 +5899,20 @@ function saveMedia(dataUrl, opts = {}) {
   return name;
 }
 // delete an upload and (if we know the owner) credit its bytes back to their quota; also drop its tracking row
+/* F119: Cloudflare (or any CDN) keeps serving a deleted upload until its edge copy expires. When the
+   operator has set CF_ZONE_ID + CF_API_TOKEN the URL is purged on delete; otherwise the shorter
+   Cache-Control on /uploads bounds the exposure to a day. Best-effort, never blocks the delete. */
+function purgeCdn(urls) {
+  const zone = process.env.CF_ZONE_ID, tok = process.env.CF_API_TOKEN;
+  if (!zone || !tok || !urls.length) return;
+  fetch('https://api.cloudflare.com/client/v4/zones/' + zone + '/purge_cache', {
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: urls.slice(0, 30) }), signal: AbortSignal.timeout(8000),
+  }).then((r) => { if (!r.ok) console.warn('[cdn] purge failed: HTTP ' + r.status); }).catch((e) => console.warn('[cdn] purge failed:', e && e.message));
+}
 function deleteUpload(name, ownerId) {
   if (!name) return;
+  try { purgeCdn([SITE_ORIGIN + '/uploads/' + name]); } catch {}
   try {
     if (ownerId != null) { let sz = 0; try { sz = fs.statSync(path.join(UPLOAD_DIR, name)).size; } catch {} if (sz) db.prepare('UPDATE users SET upload_bytes = MAX(upload_bytes - ?, 0) WHERE id=?').run(sz, ownerId); }
     try { db.prepare('DELETE FROM uploads WHERE name=?').run(name); } catch {}
@@ -5762,11 +5921,13 @@ function deleteUpload(name, ownerId) {
 }
 // A post's image can be a freshly-uploaded /uploads path (streaming upload — verify ownership + claim it) OR a data: URI
 // (small legacy/compressed path — saveMedia). Returns the bare filename to store in posts.image.
+// every extension /api/upload can store, derived from UPLOAD_KINDS so the two lists cannot drift (F015 shipped a memo that could be uploaded but never posted)
+const UPLOAD_EXT_RE = new RegExp('^[0-9a-f]{24}\\.(' + [...new Set(Object.values(UPLOAD_KINDS).map((k) => k.ext))].join('|') + ')$');
 function resolvePostMedia(image, userId) {
   if (!image || typeof image !== 'string') return null;
   if (image.startsWith('/uploads/')) {
     const name = image.slice(9);
-    if (!/^[0-9a-f]{24}\.(jpg|png|webp|gif|mp4|webm)$/.test(name)) throw new Error('bad media reference');
+    if (!UPLOAD_EXT_RE.test(name)) throw new Error('bad media reference');   // F015: built from UPLOAD_KINDS, so audio is not left behind again
     const row = db.prepare('SELECT user_id, claimed FROM uploads WHERE name=?').get(name);
     if (!row || row.user_id !== userId) throw new Error('that upload has expired — re-attach your media'); // can only post your OWN upload
     // Atomic single-use claim: an upload backs AT MOST one post. Without the claimed=0 guard the same file could be
@@ -5944,6 +6105,7 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
       entry.messages = {};
       for (const w of walletAddresses(userId)) entry.messages[w] = signInMessage(w, pend, 'Two-factor confirmation for JustSendIt. This signature never moves funds and grants no token approvals.');
     }
+    if (!rateLimit('pend:' + userId, 10, 9e5)) { lockoutAlert(userId); res.writeHead(302, { Location: '/?err=locked', 'Set-Cookie': CLEAR_OAUTH_STATE }); return res.end(); }   // F013
     pendingLogins.set(pend, entry);
     res.writeHead(302, {
       'Set-Cookie': [`oauth_2fa=${pend}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=300${cookieSecure()}`, CLEAR_OAUTH_STATE],
@@ -6023,6 +6185,13 @@ function rewriteHtml(buf) {
 }
 // A real, branded HTML 404 for unknown PAGE urls (API 404s stay JSON) — a newcomer who mistypes a link gets a way home,
 // not a raw {"error":"not found"} blob.
+/* X04: these two files are kept out of git (rights) and may be absent on a deploy. Checked once at boot;
+   /api/config tells the pages, which hide the player and the video section rather than show a dead one. */
+const OPTIONAL_MEDIA = {
+  video: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-full.mp4')),
+  poster: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'full-send-poster.jpg')),
+  audio: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-audio.m4a')),
+};
 function notFoundPage(res) {
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title>' +
     '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;font:16px/1.5 Rubik,system-ui,sans-serif;text-align:center;padding:2rem}h1{font-size:2.2rem;margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
@@ -6453,6 +6622,23 @@ function presenceSweep() { // called from the 5-min maintenance tick so the per-
 }
 // 2FA: any change of method (enable another, replace the secret, disable) must pass the CURRENT factor, so a hijacked
 // session cookie alone can never strip or swap it. Returns null when the factor passes, else the error message.
+/* The owner hears about a second-factor lockout once a day at most. Somebody guessing codes on their
+   account already has the password — the alert is what turns that into a password change. */
+/* X01: who may moderate. A comma-separated list of user ids in ADMIN_USER_IDS; nobody by default. Admin
+   routes answer 404 to everyone else so their existence is not advertised. */
+const ADMIN_USER_IDS = new Set(String(process.env.ADMIN_USER_IDS || '').split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0));
+function isAdmin(u) { return !!u && !u.deleted_at && ADMIN_USER_IDS.has(u.id); }
+/* Remove a post the way its author could, plus what an author cannot: a Send Call post is permanent, so
+   its text and media go and the call row stays under a moderation note. */
+function takeDownPost(row, note) {
+  deleteUpload(row.image, row.user_id);
+  if (row.call_id) db.prepare("UPDATE posts SET text = ?, image = NULL WHERE id = ?").run('[removed' + (note ? ': ' + note : '') + ']', row.id);
+  else db.prepare('DELETE FROM posts WHERE id = ?').run(row.id);
+}
+function lockoutAlert(userId) {
+  if (!rateLimit('lockalert:' + userId, 1, 864e5)) return;
+  try { notify(userId, '🚨', 'Too many failed two-factor attempts on your account. If that was not you, someone may have your password — change it and end other sessions in Settings → Security.', 'alert'); } catch {}
+}
 async function verifyCurrentFactor(me, b) {
   /* Guess budget. The SIGN-IN doors have always burned a try per attempt and killed the pending token
      after five — but these management routes had no counter at all, so a stolen session cookie could sit
@@ -6462,11 +6648,11 @@ async function verifyCurrentFactor(me, b) {
      Keyed per account, not per IP: the attacker chooses their IP, never their victim's account id. */
   if (!rateLimit('factor:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
   if (me.twofa_method === 'totp') {
-    return totpVerify(decField(me.twofa_secret), b.code) ? null : 'enter a valid code from your authenticator app first';
+    return totpConsume(me.id, decField(me.twofa_secret), b.code) ? null : 'enter a valid, unused code from your authenticator app first';
   }
   if (me.twofa_method === 'password') {
     const e = emailIdentity(me.id);
-    return (e && checkPassword(String(b.password || ''), e.secret)) ? null : 'enter your account password first';
+    return (e && await checkPassword(String(b.password || ''), e.secret)) ? null : 'enter your account password first';
   }
   if (me.twofa_method === 'wallet') {
     const address = String(b.address || '').toLowerCase();
@@ -6503,17 +6689,27 @@ async function ownershipRefusal(me, b) {
   const e = emailIdentity(me.id);
   if (e) {
     const pw = String((b && b.current && b.current.password) || (b && b.password) || '');
-    return checkPassword(pw, e.secret) ? null : 'enter your account password to make this change';
+    return (await checkPassword(pw, e.secret)) ? null : 'enter your account password to make this change';
   }
   const addr = String((b && b.address) || (b && b.current && b.current.address) || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(addr)) return 'sign with the wallet you signed in with to make this change';
   if (!walletAddresses(me.id).includes(addr)) return 'sign with a wallet linked to this account';
-  const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(addr));
-  if (w && w.linked_at && me.sid_at && w.linked_at > me.sid_at) {
-    return 'that wallet was linked during this session — sign in again with it first, so a borrowed session can never change how you sign in';
-  }
+  const tooNew = walletTooNew(me, addr); if (tooNew) return tooNew;
   const sig = consumeNonce(addr, (b && b.signature) || (b && b.current && b.current.signature), 'manage');
   return sig.error || null;
+}
+/* F000: "linked before this session" was the whole test, and the session is the attacker's to mint —
+   sign in with the wallet you just attached and it predates the new session. So a wallet also has to be
+   OLD enough to vouch for the account: the founding wallet always can; any other must have been linked
+   more than a day ago, which gives the owner's alert (see the link route) time to land. */
+function walletTooNew(me, addr) {
+  const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(addr));
+  if (!w || !w.linked_at) return null;                                   // pre-migration rows keep the legacy behaviour
+  if (me.sid_at && w.linked_at > me.sid_at) return 'that wallet was linked during this session — sign in again with it first, so a borrowed session can never change how you sign in';
+  const u = db.prepare('SELECT created_at FROM users WHERE id = ?').get(me.id);
+  const founding = u && w.linked_at <= (u.created_at || 0) + 60000;
+  if (!founding && now() - w.linked_at < 864e5) return 'that wallet was linked less than 24 hours ago — a newly linked wallet cannot authorise security changes yet; sign with an older one';
+  return null;
 }
 function presenceCount() {
   const cutoff = now() - PRESENCE_WINDOW; let n = 0;
@@ -6672,7 +6868,14 @@ function settleBeta() {
    are for. This decides who may see the site at all. */
 const TOS_VERSION = '2026-09-11';
 const INVITE_GRANT = 10;                 // codes each admitted person gets to hand out
-const SEED_CODE = process.env.SEED_INVITE_CODE || '12345';
+/* The seed code is the only key to the only door on a fresh deploy, and signupRefusal makes it an
+   account-minting credential. It used to default to '12345' (F018). Unset, a random code is generated
+   and printed once at boot; tests set it explicitly. */
+/* F007: Redeem spends the code before any account exists, and the only key to it is an HttpOnly cookie
+   in that one browser. Lose the cookie (in-app browser, another device) and both invitee and inviter lost
+   the code for good. A code that was redeemed but never CLAIMED by an account comes back after this long. */
+const INVITE_RECLAIM_MS = 60 * 60 * 1000;
+const SEED_CODE_ENV = process.env.SEED_INVITE_CODE || '';   // resolved at seeding time (newCode's alphabet is declared below)
 const PASS_COOKIE = 'jsi_pass';
 const PASS_MS = 365 * DAY_MS;
 // Unambiguous alphabet: no O/0, I/1, S/5, B/8 — these get read aloud and typed in by hand.
@@ -6697,7 +6900,14 @@ function mintCodes(ownerId, n) {
   return out;
 }
 // The one code that exists before anybody has been let in. Idempotent.
-try { db.prepare('INSERT OR IGNORE INTO invite_codes (code, owner_id, created_at) VALUES (?,NULL,?)').run(normCode(SEED_CODE), now()); } catch {}
+// seeded only while the table is empty: once anyone is in, the door has real keys and the seed must not keep reappearing
+try {
+  if (!db.prepare('SELECT 1 FROM invite_codes LIMIT 1').get()) {
+    const seed = SEED_CODE_ENV || newCode();
+    if (!SEED_CODE_ENV) console.log('[gate] SEED_INVITE_CODE unset — generated the seed invite code for this fresh database: ' + seed + '  (it is the only key to the door; keep it)');
+    db.prepare('INSERT OR IGNORE INTO invite_codes (code, owner_id, created_at) VALUES (?,NULL,?)').run(normCode(seed), now());
+  }
+} catch {}
 
 function passRow(req) {
   const c = parseCookies(req.headers.cookie);
@@ -7075,9 +7285,16 @@ async function runProofQueue() {
     // stopped testing it, and a network call for a number nothing reads is just a slower door.)
     let prices = {};
     try { prices = { SEND: await sendPriceUsd().catch(() => null) }; } catch {}
-    const v = holderProofVerdict(scans, now(), prices);
+    let v = holderProofVerdict(scans, now(), prices);
     const t = now();
     if (v.ok) {
+      /* F021: one wallet, one account. A wallet that already admitted somebody else cannot admit this
+         account too, however much it holds — otherwise the bag walks through accounts. */
+      const taken = addrs.map((a) => db.prepare('SELECT user_id FROM gate_claims WHERE addr_idx = ?').get(bidx(a))).filter((r) => r && r.user_id !== userId);
+      if (taken.length) v = { ok: false, reason: 'One of these wallets has already verified a different account. A wallet can open the door for one account only — link a wallet that has not been used to verify another account.', detail: v.detail };
+    }
+    if (v.ok) {
+      for (const a of addrs) { try { db.prepare('INSERT OR IGNORE INTO gate_claims (addr_idx, user_id, claimed_at) VALUES (?,?,?)').run(bidx(a), userId, t); } catch {} }
       /* The door opens, and the first day is watched. The window runs from their LAST buy, so somebody
          who has held since long before today is never in one — `until` lands in the past and stores as 0.
          The floor is the balance that opened the door, in tokens, because that is the unit refreshHolder
@@ -7090,7 +7307,7 @@ async function runProofQueue() {
         .run(t, t, encField(JSON.stringify(v.detail)), watching ? until : 0, floor,
              watching ? JSON.stringify(addrs.map((x) => String(x).toLowerCase())) : null, userId);
       notify(userId, '✅', watching
-        ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; sell out of it before then and the account goes read-only for a day.'
+        ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; let that balance drop by more than about 2% before then and the account goes read-only for a day.'
         : 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀', 'wallet');
     } else if (v.unknown || unreadable) {
       // not a verdict. Leave the door exactly as it was and say so.
@@ -7253,7 +7470,9 @@ sweeper.unref?.(); // don't keep the process alive just for the sweeper
    All prices are read from public sources; nothing here moves funds.
    =========================================================================== */
 const callX = (price, entry) => (entry > 0 && price != null) ? (price / entry - 1) : 0; // +100% = 1.0x
-const MIN_CALL_LIQ = 500;   // a token must have ≥ this pooled liquidity (USD) to be callable — stops farming on self-made dust pools
+const MIN_CALL_LIQ = 2000;   // F003: raised from 500 — a $500 pool is moved ~50x by $1.5k of parked capital
+const CALL_DEPTH_USD_PER_X = 500;   // F003: each creditable X needs this much pooled liquidity behind it (a $5k pool can pay up to 10x)
+const CALL_MEDIAN_MS = 60 * 60 * 1000, CALL_MEDIAN_MIN = 6;   // credit off the median of at least six samples over the last hour   // a token must have ≥ this pooled liquidity (USD) to be callable — stops farming on self-made dust pools
 const RUG_LIQ_FLOOR = 100;  // a called token whose live liquidity collapses below this (it started ≥ $500) = liquidity pulled → RUGGED
 const RUG_PENALTY = 2;      // calls the caller's daily limit drops when one of their calls rugs
 const CALL_X_CAP = 50;      // cap the milestone ladder so a manipulated/glitched peak can't mint unbounded points or spin the loop
@@ -7484,6 +7703,19 @@ async function refreshCalls() {
       }
     }
     const t = now();
+    /* F003: record this sweep's spot for every priced token, prune, and build the hour-median per token.
+       Crediting below uses min(spot, median) and pauses while spot runs more than PRICE_MAX_SPIKE× above it. */
+    const medians = {};
+    try {
+      const ins = db.prepare('INSERT INTO call_price_samples (token_addr, at, price) VALUES (?,?,?)');
+      for (const tk of Object.keys(byToken)) if (byToken[tk].price > 0) ins.run(tk, t, byToken[tk].price);
+      db.prepare('DELETE FROM call_price_samples WHERE at < ?').run(t - CALL_MEDIAN_MS * 1.5);
+      const sel = db.prepare('SELECT price FROM call_price_samples WHERE token_addr = ? AND at > ? ORDER BY price ASC');
+      for (const tk of Object.keys(byToken)) {
+        const ps = sel.all(tk, t - CALL_MEDIAN_MS).map((x) => x.price);
+        medians[tk] = ps.length >= CALL_MEDIAN_MIN ? ps[Math.floor(ps.length / 2)] : null;
+      }
+    } catch (e) { console.error('call samples', e && e.message); }
     for (const r of rows) {
       const info = byToken[r.token_addr];
       if (!info || !(info.price > 0)) { if (fetched.has(r.token_addr) && !r.dead) db.prepare('UPDATE calls SET dead=1 WHERE id=?').run(r.id); continue; } // only mark stale on a DEFINITIVE unpriced answer — never on a failed fetch (peak is kept either way)
@@ -7491,6 +7723,13 @@ async function refreshCalls() {
       // fallen below the call-time floor, the last-trade price can be moved for cents, so we PAUSE all crediting for this call
       // this tick (still update the displayed price + timestamp so a paused gap is never back-credited later).
       const liquid = info._liq >= MIN_CALL_LIQ;
+      // F003: what the call is CREDITED at — never the raw last trade. No median yet (a fresh token, or a
+      // fresh boot) means nothing is credited this tick; the gap is not back-paid, exactly like a thin pool.
+      const med = medians[r.token_addr];
+      const spike = med != null && info.price > med * PRICE_MAX_SPIKE;
+      const creditPrice = med != null ? Math.min(info.price, med) : null;
+      const creditable = liquid && !spike && creditPrice != null;
+      const depthX = Math.max(0, Math.floor(info._liq / CALL_DEPTH_USD_PER_X));   // the pool has to be deep enough to have paid that X for real
       // RUG: the pool started with ≥ $500 (call-time floor) but its live liquidity has now collapsed → liquidity was pulled.
       // Mark it permanently and dock the caller's daily call limit by RUG_PENALTY, ONCE (guarded by the rugged flag).
       if (!r.rugged && info._liq < RUG_LIQ_FLOOR) {
@@ -7499,15 +7738,15 @@ async function refreshCalls() {
         notify(r.user_id, '💀', 'Your $' + (r.symbol || '') + ' Send Call just got RUGGED — its liquidity was pulled. Your daily call limit dropped by ' + RUG_PENALTY + '.', 'restriction');
         r.rugged = 1;
       }
-      const curX = callX(info.price, r.entry_price);
+      const curX = creditable ? Math.min(callX(creditPrice, r.entry_price), depthX) : 0;
       const dtH = (t - (r.last_check || t)) / 3600000;
       // diamond-hands: accrue the caller's hold integral (positive Xs × time) and pay out super-linearly — only while liquid
       // Senders are read once here: the caller's accrual needs to know how many are in profit, and the
       // hopper loop below reuses the same rows
-      const hops = liquid ? db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, points_paid, last_check, spend_usd FROM call_hops WHERE call_id=?').all(r.id) : [];
+      const hops = creditable ? db.prepare('SELECT user_id, entry_price, hold_x, hold_paid, points_paid, last_check, spend_usd FROM call_hops WHERE call_id=?').all(r.id) : [];
       // a crew is people with money in the call, in profit — a tap with no position is not a crew member (twenty free alts tapping once gave the full 3×)
-      const crewN = hops.filter(h => h.entry_price > 0 && (h.spend_usd || 0) >= CREW_MIN_SPEND_USD && callX(info.price, h.entry_price) > 0).length;
-      const hc = liquid ? accrueHold(r.hold_x, r.hold_paid, curX, dtH, crewFactor(crewN)) : { holdX: r.hold_x, award: 0, holdPaid: r.hold_paid };
+      const crewN = hops.filter(h => h.entry_price > 0 && (h.spend_usd || 0) >= CREW_MIN_SPEND_USD && callX(creditPrice, h.entry_price) > 0).length;
+      const hc = creditable ? accrueHold(r.hold_x, r.hold_paid, curX, dtH, crewFactor(crewN)) : { holdX: r.hold_x, award: 0, holdPaid: r.hold_paid };
       // Finding 1 fix: advance hold_paid ONLY if the credit actually landed. The integral (hold_x) still advances, so a rolled-back
       // award (SQLITE_BUSY/FULL) is simply retried next tick instead of being silently swallowed. No ref: dedup is the hold_paid delta.
       let holdPaid = r.hold_paid, paidPts = r.points_paid || 0;
@@ -7523,11 +7762,12 @@ async function refreshCalls() {
       const peak = liquid ? Math.max(r.peak_price, info.price) : r.peak_price, newPeak = peak > r.peak_price;
       if (newPeak) db.prepare('UPDATE calls SET cur_price=?, cur_mc=?, peak_price=?, peak_at=?, dead=0, hold_x=?, hold_paid=?, points_paid=?, last_check=? WHERE id=?').run(info.price, info.mc, peak, t, hc.holdX, holdPaid, paidPts, t, r.id);
       else db.prepare('UPDATE calls SET cur_price=?, cur_mc=?, dead=0, hold_x=?, hold_paid=?, points_paid=?, last_check=? WHERE id=?').run(info.price, info.mc, hc.holdX, holdPaid, paidPts, t, r.id);
-      if (liquid) {
+      if (creditable) {
         // milestone points off the price SUSTAINED across the last two samples (min of prev cur-price and now), capped — this
         // defeats a one-trade peak spike: a level must survive a full refresh interval with real liquidity before it pays.
-        const sustained = Math.min(r.cur_price > 0 ? r.cur_price : info.price, info.price);
-        const newMax = Math.min(Math.floor(callX(sustained, r.entry_price)), CALL_X_CAP);
+        // F003: and never above the hour-median or what the pool's depth could have paid.
+        const sustained = Math.min(r.cur_price > 0 ? r.cur_price : creditPrice, creditPrice);
+        const newMax = Math.min(Math.floor(callX(sustained, r.entry_price)), CALL_X_CAP, depthX);
         if (newMax > r.awarded_x && newMax >= 1) {
           // what the ladder has already taken from this call, read off the refs it was paid under. A
           // range on the ref index rather than LIKE, so it stays cheap as points_events grows.
@@ -7544,7 +7784,7 @@ async function refreshCalls() {
         // reward hoppers who are ALSO in positive Xs (from their own hop-in price), same diamond-hands mechanic + same Finding-1-safe advance
         for (const hop of hops) {
           if (!(hop.entry_price > 0) || !((hop.spend_usd || 0) > 0)) continue; // the Sender hold bonus rewards a real position held in profit, never a tap
-          const ha = accrueHold(hop.hold_x, hop.hold_paid, callX(info.price, hop.entry_price), (t - (hop.last_check || t)) / 3600000);
+          const ha = accrueHold(hop.hold_x, hop.hold_paid, Math.min(callX(creditPrice, hop.entry_price), depthX), (t - (hop.last_check || t)) / 3600000);
           let hopPaid = hop.hold_paid, hopPts = hop.points_paid || 0;
           if (ha.award > 0) {
             const got = awardPoints(hop.user_id, 'hop_hold', ha.award, null, callHeadroom(hopPts, HOP_POINTS_CAP));
@@ -7638,7 +7878,15 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(h.ok ? 200 : 503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     return res.end(JSON.stringify(h));
   }
-  const url = new URL(req.url, BASE_URL);
+  /* F024: Node's parser accepts targets new URL() rejects — "//", "/\\", "//[" — and the throw used to land
+     before the router's try, in an async handler, so the rejection was swallowed, nothing ever ended the
+     response, and the socket sat open until the process restarted. A bad target is a 400, and a watchdog
+     ends anything that has not answered in 30s so no path can hold a socket forever again. */
+  // long enough for the slowest legitimate request (a streaming upload has UPLOAD_DEADLINE_MS of its own), short enough that a hung one does not live forever
+  const wd = setTimeout(() => { if (!res.writableEnded) { try { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('timeout'); } catch {} try { res.destroy(); } catch {} } }, ROUTE_WATCHDOG_MS);
+  res.on('close', () => clearTimeout(wd));
+  let url;
+  try { url = new URL(req.url, BASE_URL); } catch { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...SEC_HEADERS }); return res.end('{"error":"bad request"}'); }
   const p = url.pathname;
   // only API routes read the session — resolving it for every static asset cost 2 SELECTs × ~21 assets per page load
   const me = p.startsWith('/api/') ? getUser(req) : null;
@@ -7758,9 +8006,11 @@ const server = http.createServer(async (req, res) => {
         if (already) return send(res, 200, { ok: true, already: true, tosAccepted: !!already.tos_at });
         const row = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(code);
         if (!row) return bad(res, 'that code is not one of ours — check it and try again');
-        if (row.used_at) return bad(res, 'that code has already been used. Every code works once — ask whoever sent it for a spare.');
+        if (row.used_at && row.user_id) return bad(res, 'that code has already been used. Every code works once — ask whoever sent it for a spare.');
+        if (row.used_at && now() - row.used_at < INVITE_RECLAIM_MS) return bad(res, 'that code was redeemed ' + humanLeft(now() - row.used_at) + ' ago and the sign-up is still in progress. If that was you on another device, finish there — otherwise it frees up again in ' + humanLeft(INVITE_RECLAIM_MS - (now() - row.used_at)) + '.');
         const tok = rand();
-        db.prepare('UPDATE invite_codes SET used_at = ?, pass = ? WHERE code = ? AND used_at IS NULL').run(now(), passHash(tok), code);
+        // F007: a spent-but-unclaimed code is re-issuable once the reclaim window has passed; the new redeemer accepts the terms afresh
+        db.prepare('UPDATE invite_codes SET used_at = ?, pass = ?, tos_at = NULL WHERE code = ? AND (used_at IS NULL OR (user_id IS NULL AND used_at < ?))').run(now(), passHash(tok), code, now() - INVITE_RECLAIM_MS);
         // re-read: if two people raced on the same code, only the winner's pass is on the row
         const after = db.prepare('SELECT pass FROM invite_codes WHERE code = ?').get(code);
         if (!after || after.pass !== passHash(tok)) return bad(res, 'that code was just used by someone else — ask for another');
@@ -7782,6 +8032,7 @@ const server = http.createServer(async (req, res) => {
 
       if (p === '/api/config' && req.method === 'GET') {
         return send(res, 200, {
+          media: OPTIONAL_MEDIA,   // X04: the theme song and the feature video ship outside git; pages hide what is not here
           auth: {
             wallet: true, email: true,
             google: !!(OAUTH.google.id && OAUTH.google.secret),
@@ -7974,6 +8225,7 @@ const server = http.createServer(async (req, res) => {
             username: me.username, avatar: me.avatar, bio: me.bio, auto_named: !!me.auto_named,
             avatarImg: me.avatar_img ? '/uploads/' + me.avatar_img : null,   // the nav shows the picture when there is one, the emoji when there is not
             methods: identityTypes(me.id), wallets: walletAddresses(me.id),
+            admin: isAdmin(me) || undefined,
             walletList: walletList(me.id),          // [{address,label,linkedAt,is2fa}] — what the settings list renders
             twofaWallet: twofaWalletAddress(me.id),  // the wallet that actually unlocks sign-in (null = legacy: any pre-2FA wallet)
             maxWallets: MAX_LINKED_WALLETS,
@@ -8025,7 +8277,7 @@ const server = http.createServer(async (req, res) => {
         const regBlock = ipSignupBlocked(regIp);
         if (regBlock) return bad(res, regBlock, 429);
         const userId = createUser(username, false, regIp);
-        insertIdentity(userId, 'email', email, hashPassword(password));
+        insertIdentity(userId, 'email', email, await hashPassword(password));
         claimInvite(req, userId);   // bind the code that let them in, and mint their own to hand out
         return send(res, 200, { ok: true, username }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
       }
@@ -8041,8 +8293,8 @@ const server = http.createServer(async (req, res) => {
           const u = db.prepare('SELECT id FROM users WHERE username = ?').get(idf);
           if (u) ident = db.prepare('SELECT * FROM identities WHERE type = ? AND user_id = ?').get('email', u.id);
         }
-        if (!ident) { dummyCheck(password); return bad(res, 'wrong credentials', 401); } // equalize timing vs real-account path
-        if (!checkPassword(password, ident.secret)) return bad(res, 'wrong credentials', 401);
+        if (!ident) { await dummyCheck(password); return bad(res, 'wrong credentials', 401); } // equalize timing vs real-account path
+        if (!(await checkPassword(password, ident.secret))) return bad(res, 'wrong credentials', 401);
         const u = db.prepare('SELECT * FROM users WHERE id = ?').get(ident.user_id);
         if (u.twofa_method && u.twofa_method !== 'password') { // the password was just proven — it can't be the second factor of itself
           const pend = rand(16);
@@ -8056,6 +8308,7 @@ const server = http.createServer(async (req, res) => {
              address the caller already controls — which tells them nothing they did not already know.
              entry.messages stays server-side as the record of what was issued under this pending token. */
           if (u.twofa_method === 'wallet') entry.messages = {};
+          if (!rateLimit('pend:' + u.id, 10, 9e5)) { lockoutAlert(u.id); return bad(res, 'too many sign-in attempts on this account — wait 15 minutes', 429); }   // F013: a fresh token no longer resets the guess budget
           pendingLogins.set(pend, entry);
           return send(res, 200, { twofa: u.twofa_method, pending: pend, ...extra });
         }
@@ -8066,8 +8319,12 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const pend = pendingLogins.get(String(b.pending || ''));
         if (!pend || pend.expires < now()) return bad(res, '2FA session expired — sign in again', 401);
+        /* F013: per-ACCOUNT brake. The per-IP limit above is the attacker's to dodge; this one is keyed on
+           the victim, and the owner is told when it trips — that is the one signal they get that somebody
+           already has their password. */
+        if (!rateLimit('totp-user:' + pend.userId, 10, 9e5)) { lockoutAlert(pend.userId); return bad(res, 'too many attempts on this account — wait 15 minutes', 429); }
         const u = db.prepare('SELECT * FROM users WHERE id = ?').get(pend.userId);
-        if (!u || u.twofa_method !== 'totp' || !totpVerify(decField(u.twofa_secret), b.code)) {
+        if (!u || u.twofa_method !== 'totp' || !totpConsume(u.id, decField(u.twofa_secret), b.code)) {
           // burn one of a small number of tries per pending token, then invalidate it
           pend.tries = (pend.tries || 0) + 1;
           if (pend.tries >= 5) pendingLogins.delete(String(b.pending));
@@ -8115,6 +8372,7 @@ const server = http.createServer(async (req, res) => {
         if (!pend || pend.expires < now()) return bad(res, '2FA session expired — sign in again', 401);
         const u = db.prepare('SELECT * FROM users WHERE id = ?').get(pend.userId);
         if (!u || u.twofa_method !== 'wallet') return bad(res, 'wallet 2FA not enabled', 400);
+        if (!rateLimit('w2fa-user:' + u.id, 10, 9e5)) { lockoutAlert(u.id); return bad(res, 'too many attempts on this account — wait 15 minutes', 429); }   // F013
         // the exact EIP-4361 text we issued FOR THIS ADDRESS — a signature made for one wallet's challenge
         // cannot be presented as another's, because each carries its own address in line 2
         const addr = String(b.address || '').toLowerCase();
@@ -8141,8 +8399,9 @@ const server = http.createServer(async (req, res) => {
         const pend = pendingLogins.get(String(b.pending || ''));
         if (!pend || pend.expires < now()) return bad(res, '2FA session expired — sign in again', 401);
         const u = db.prepare('SELECT * FROM users WHERE id = ?').get(pend.userId);
+        if (u && !rateLimit('pw2fa-user:' + u.id, 10, 9e5)) { lockoutAlert(u.id); return bad(res, 'too many attempts on this account — wait 15 minutes', 429); }   // F013
         const e = u && emailIdentity(u.id);
-        if (!u || u.twofa_method !== 'password' || !e || !checkPassword(String(b.password || ''), e.secret)) {
+        if (!u || u.twofa_method !== 'password' || !e || !(await checkPassword(String(b.password || ''), e.secret))) {
           pend.tries = (pend.tries || 0) + 1;
           if (pend.tries >= 5) pendingLogins.delete(String(b.pending));
           return bad(res, 'wrong password — try again', 401);
@@ -8180,18 +8439,133 @@ const server = http.createServer(async (req, res) => {
          way a password ever changes, and it needs the old one plus whatever second factor is on. Every
          other session is dropped: changing the password because you think someone has it is pointless if
          the session they already hold survives it. */
+      /* ═══ X01: reports and moderation ═══════════════════════════════════════════════════════ */
+      if (p === '/api/report' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('report:' + me.id, 10, 6e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        const kind = ['post', 'comment', 'user'].includes(b.kind) ? b.kind : null;
+        const target = Number(b.id);
+        if (!kind || !Number.isInteger(target) || target < 1) return bad(res, 'what are you reporting?');
+        const exists = kind === 'post' ? db.prepare('SELECT 1 FROM posts WHERE id = ?').get(target)
+          : kind === 'comment' ? db.prepare('SELECT 1 FROM comments WHERE id = ?').get(target)
+          : db.prepare('SELECT 1 FROM users WHERE id = ? AND system = 0').get(target);
+        if (!exists) return bad(res, 'not found', 404);
+        const reason = String(b.reason || '').trim().slice(0, 500);
+        const r = db.prepare('INSERT OR IGNORE INTO reports (reporter_id, kind, target_id, reason, created_at) VALUES (?,?,?,?,?)').run(me.id, kind, target, reason, now());
+        return send(res, 200, { ok: true, already: r.changes === 0 });
+      }
+      if (p === '/api/admin/reports' && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        const all = url.searchParams.get('all') === '1';
+        const rows = db.prepare('SELECT r.*, u.username reporter FROM reports r JOIN users u ON u.id = r.reporter_id ' + (all ? '' : 'WHERE r.resolved_at IS NULL ') + 'ORDER BY r.created_at DESC LIMIT 200').all();
+        for (const r of rows) {
+          if (r.kind === 'post') { const p2 = db.prepare('SELECT p.id, p.text, p.image, p.call_id, p.user_id, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?').get(r.target_id); r.target = p2 ? { id: p2.id, text: String(p2.text || '').slice(0, 280), image: p2.image ? '/uploads/' + p2.image : null, call: !!p2.call_id, userId: p2.user_id, username: p2.username } : null; }
+          else if (r.kind === 'comment') { const c2 = db.prepare('SELECT c.id, c.text, c.user_id, c.post_id, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?').get(r.target_id); r.target = c2 ? { id: c2.id, text: String(c2.text || '').slice(0, 280), userId: c2.user_id, username: c2.username, postId: c2.post_id } : null; }
+          else { const u2 = db.prepare('SELECT id, username, restricted_until, restrict_level, deleted_at FROM users WHERE id = ?').get(r.target_id); r.target = u2 ? { id: u2.id, username: u2.username, userId: u2.id, restrictedUntil: u2.restricted_until || 0, restrictLevel: u2.restrict_level || 0, deleted: !!u2.deleted_at } : null; }
+        }
+        return send(res, 200, { reports: rows, open: db.prepare('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').get().n });
+      }
+      if (p === '/api/admin/takedown' && req.method === 'POST') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        const b = await readBody(req);
+        const id = Number(b.id), note = String(b.note || '').trim().slice(0, 140);
+        if (b.kind === 'post') {
+          const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
+          if (!row) return bad(res, 'post not found', 404);
+          takeDownPost(row, note);
+          notify(row.user_id, '🧹', 'A post of yours was removed by a moderator' + (note ? ': ' + note : '.') + ' Questions: GWCRH@atomicmail.io', 'alert');
+        } else if (b.kind === 'comment') {
+          const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id);
+          if (!row) return bad(res, 'comment not found', 404);
+          db.prepare('DELETE FROM comments WHERE id = ?').run(id);
+          notify(row.user_id, '🧹', 'A comment of yours was removed by a moderator' + (note ? ': ' + note : '.'), 'alert');
+        } else if (b.kind === 'upload') {
+          const name = String(b.name || '');
+          const row = db.prepare('SELECT name, user_id FROM uploads WHERE name = ?').get(name);
+          if (!row) return bad(res, 'upload not found', 404);
+          db.prepare('UPDATE posts SET image = NULL WHERE image = ?').run(name);
+          db.prepare('UPDATE users SET avatar_img = NULL WHERE avatar_img = ?').run('/uploads/' + name);
+          deleteUpload(name, row.user_id);
+        } else return bad(res, 'kind must be post, comment or upload');
+        db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?").run(now(), me.id, b.kind === 'upload' ? 'post' : b.kind, id);
+        return send(res, 200, { ok: true });
+      }
+      if (p === '/api/admin/restrict' && req.method === 'POST') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        const b = await readBody(req);
+        const uid = Number(b.userId);
+        const target = db.prepare('SELECT id, username FROM users WHERE id = ? AND system = 0').get(uid);
+        if (!target) return bad(res, 'user not found', 404);
+        if (ADMIN_USER_IDS.has(uid)) return bad(res, 'not on an admin');
+        const days = Math.max(0, Math.min(365, Number(b.days) || 0));
+        const reason = String(b.reason || 'moderation').trim().slice(0, 200);
+        if (b.lift) {
+          db.prepare("UPDATE users SET restricted_until = 0, restrict_level = 0, restrict_reason = NULL WHERE id = ?").run(uid);
+          notify(uid, '🔊', 'Your read-only restriction was lifted by a moderator.', 'restriction');
+        } else {
+          const until = days ? now() + days * DAY_MS : PERM_UNTIL;
+          db.prepare('UPDATE users SET restricted_until = ?, restrict_level = ?, restrict_reason = ?, redeem_dur = ? WHERE id = ?').run(until, days ? 1 : 3, reason, days ? days * DAY_MS : DAY_MS, uid);
+          notify(uid, '🔇', 'A moderator put your account in read-only mode' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' indefinitely') + ': ' + reason + ' Questions: GWCRH@atomicmail.io', 'restriction');
+        }
+        db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE resolved_at IS NULL AND kind = 'user' AND target_id = ?").run(now(), me.id, b.lift ? 'lifted' : 'restricted', uid);
+        return send(res, 200, { ok: true });
+      }
+      if (p === '/api/admin/resolve' && req.method === 'POST') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        const b = await readBody(req);
+        const r = db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE id = ? AND resolved_at IS NULL").run(now(), me.id, String(b.action || 'dismissed').slice(0, 40), Number(b.id));
+        if (!r.changes) return bad(res, 'report not found or already resolved', 404);
+        return send(res, 200, { ok: true });
+      }
+      /* ═══ X02: close the account and erase what can be erased ═══════════════════════════════
+         Ownership is proven first (password / linked wallet / current factor). The users row itself is
+         kept — Send Calls are permanent and reference it — but anonymised: no identities, no sessions,
+         no profile, no content, and it can never sign in again. gate_claims and og_claims stay on
+         purpose (a wallet admits one account, ever), as the privacy policy says. */
+      if (p === '/api/account/delete' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('acctdel:' + me.id, 6, 9e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        if (String(b.confirm || '').trim().toUpperCase() !== 'DELETE') return bad(res, 'type DELETE to confirm');
+        const err = await ownershipRefusal(me, b); if (err) return bad(res, 'to delete the account, ' + err, 401);
+        const uid = me.id;
+        const media = [];
+        try {
+          for (const r of db.prepare('SELECT name FROM uploads WHERE user_id = ?').all(uid)) media.push(r.name);
+          for (const r of db.prepare('SELECT image FROM posts WHERE user_id = ? AND image IS NOT NULL').all(uid)) media.push(r.image);
+          db.exec('BEGIN');
+          for (const q of db.prepare('SELECT community_id FROM community_members WHERE user_id = ? AND qualified = 1').all(uid))
+            db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id = ?').run(q.community_id);
+          for (const q of db.prepare('SELECT community_id FROM community_members WHERE user_id = ?').all(uid))
+            db.prepare('UPDATE communities SET member_count = MAX(member_count-1,0) WHERE id = ?').run(q.community_id);
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache'])
+            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
+          try { db.prepare('DELETE FROM mutes WHERE user_id = ? OR muted_id = ?').run(uid, uid); } catch {}
+          try { db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(uid, uid); } catch {}
+          try { db.prepare('DELETE FROM notifications WHERE actor_id = ?').run(uid); } catch {}
+          db.prepare('DELETE FROM posts WHERE user_id = ? AND call_id IS NULL').run(uid);
+          db.prepare("UPDATE posts SET text = '[deleted]', image = NULL WHERE user_id = ?").run(uid);   // the Send Call widgets stay, the words go
+          db.prepare('UPDATE calls SET wallet = NULL WHERE user_id = ?').run(uid);
+          db.prepare("UPDATE users SET username = ?, avatar = '👻', avatar_img = NULL, bio = '', accent = NULL, points = 0, og = 0, og_tier = 0, twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL, twofa_last_step = NULL, holder_verified_at = NULL, holder_state = 'none', holder_proof = NULL, holder_proof_reason = NULL, gate_wallets = NULL, live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?").run('deleted-' + uid, now(), uid);
+          db.exec('COMMIT');
+        } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('account delete', e && e.message); return bad(res, 'could not delete the account right now — try again', 500); }
+        for (const n of media) { try { deleteUpload(n, null); } catch {} }
+        forgetHoldings(uid); balCache.delete(uid);
+        return send(res, 200, { ok: true }, { 'Set-Cookie': 'sid=; Path=/; HttpOnly; Max-Age=0' });
+      }
       if (p === '/api/account/password' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('pwchange:' + me.id, 10, 36e5)) return bad(res, 'too many attempts — try again later', 429);
         const b = await readBody(req);
         const e = emailIdentity(me.id);
         if (!e) return bad(res, 'this account has no password yet — add an email + password first');
-        if (!checkPassword(String(b.current || ''), e.secret)) return bad(res, 'that is not your current password', 401);
+        if (!(await checkPassword(String(b.current || ''), e.secret))) return bad(res, 'that is not your current password', 401);
         const next = String(b.password || '');
         if (next.length < 8) return bad(res, 'password needs at least 8 characters');
         if (next.length > MAX_PW) return bad(res, 'password is too long');
         if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
-        db.prepare('UPDATE identities SET secret = ? WHERE id = ?').run(hashPassword(next), e.id);
+        db.prepare('UPDATE identities SET secret = ? WHERE id = ?').run(await hashPassword(next), e.id);
         const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
         notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended.' : '.'), 'wallet');
         return send(res, 200, { ok: true, endedOthers: dropped });
@@ -8223,6 +8597,7 @@ const server = http.createServer(async (req, res) => {
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet'").run(me.id);
           forgetHoldings(me.id); // no cached "holds $X" may survive the wallets it was read from
           db.prepare('DELETE FROM holder_state WHERE user_id = ?').run(me.id); // boost was verified against those wallets → reset it honestly
+          db.prepare("UPDATE users SET holder_verified_at = NULL, holder_state = 'none', holder_proof_reason = 'no wallet linked' WHERE id = ?").run(me.id);   // N05: the participation pass was earned by those wallets too
           // Community qualification is holdings-gated (qualifyOptIn requires on-chain holdings); with no wallet the user can
           // hold nothing verifiable, so void it NOW rather than waiting on the 10-min sweep — else the flat 10× lingers and
           // go-live could re-credit a qualified row that no longer holds. Mirrors sweepCommunityHolders' revoke.
@@ -8253,8 +8628,9 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('totpenable:' + me.id, 12, 9e5)) return bad(res, 'too many attempts — wait 15 minutes and try again', 429);
         const b = await readBody(req);
         if (!me.twofa_pending) return bad(res, 'run setup first');
-        if (!totpVerify(decField(me.twofa_pending), b.code)) return bad(res, 'wrong code — check your authenticator app');
+        if (!totpConsume(me.id, decField(me.twofa_pending), b.code)) return bad(res, 'wrong code — check your authenticator app');   // F017: the setup code is spent too
         db.prepare("UPDATE users SET twofa_method = 'totp', twofa_secret = twofa_pending, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // promote only on proof
+        notify(me.id, '🔐', 'Authenticator two-factor is on. Every sign-in now needs a code from your app.', 'alert');
         return send(res, 200, { ok: true });
       }
       if (p === '/api/2fa/wallet/enable' && req.method === 'POST') {
@@ -8283,14 +8659,12 @@ const server = http.createServer(async (req, res) => {
           if (me.twofa_method === 'wallet' && String(cur.address || '').toLowerCase() === addr) alreadyProved = true;
         } else if (emailIdentity(me.id)) {
           const e = emailIdentity(me.id);
-          if (!checkPassword(String((b.current && b.current.password) || b.password || ''), e.secret)) {
+          if (!(await checkPassword(String((b.current && b.current.password) || b.password || ''), e.secret))) {
             return bad(res, 'enter your account password to turn wallet two-factor on', 401);
           }
         } else {
-          const w0 = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(me.id, bidx(addr));
-          if (w0 && w0.linked_at && me.sid_at && w0.linked_at > me.sid_at) {
-            return bad(res, 'that wallet was linked during this session — sign in again with it first, so a borrowed session can never lock you out of your own account', 401);
-          }
+          const tooNew = walletTooNew(me, addr);   // F000: same age rule as ownershipRefusal, from one helper
+          if (tooNew) return bad(res, tooNew, 401);
         }
 
         /* And prove control of the wallet being bound, right now. Without this, one click bound a wallet whose
@@ -8303,6 +8677,7 @@ const server = http.createServer(async (req, res) => {
         }
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
         setTwofaWallet(me.id, addr);   // THIS wallet is the key from now on — the others are for holdings only
+        notify(me.id, '🔐', 'Wallet two-factor is on. Your wallet ending in ' + addr.slice(-6) + ' is now the key to this account.', 'alert');
         return send(res, 200, { ok: true, twofaWallet: addr });
       }
       if (p === '/api/2fa/disable' && req.method === 'POST') {
@@ -8312,6 +8687,7 @@ const server = http.createServer(async (req, res) => {
         const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401);
         db.prepare('UPDATE users SET twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL WHERE id = ?').run(me.id);
         setTwofaWallet(me.id, null);   // the wallets stay linked and keep counting for Send Power; none of them is a key any more
+        notify(me.id, '🔓', 'Two-factor was turned OFF on your account. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
         return send(res, 200, { ok: true });
       }
       /* Change WHICH linked wallet is the second factor, without turning 2FA off and on again (which would
@@ -8360,6 +8736,15 @@ const server = http.createServer(async (req, res) => {
           db.exec('BEGIN');
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").run(me.id, bidx(addr));
           if (revokeOg) db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1 WHERE id = ?').run(me.id);
+          if (linked.length === 1) {
+            /* F022/N05: that was the last wallet. Everything holdings-verified came from it — the boost, the
+               badge, the participation pass, community qualification — and none of it can be re-read now. */
+            db.prepare('DELETE FROM holder_state WHERE user_id = ?').run(me.id);
+            db.prepare("UPDATE users SET og = 0, og_tier = 0, holder_verified_at = NULL, holder_state = 'none', holder_proof_reason = 'no wallet linked', live_comm_count = 0 WHERE id = ?").run(me.id);
+            for (const q of db.prepare('SELECT community_id FROM community_members WHERE user_id = ? AND qualified = 1').all(me.id))
+              db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id = ?').run(q.community_id);
+            db.prepare('UPDATE community_members SET qualified = 0, qual_check_at = ? WHERE user_id = ? AND qualified = 1').run(now(), me.id);
+          }
           db.exec('COMMIT');
         } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not unlink that wallet — try again', 500); }
         /* Holdings were verified against a wallet set that just changed, so nothing cached may survive it.
@@ -8380,7 +8765,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const e = emailIdentity(me.id);
         if (!e) return bad(res, 'add an email + password to your account first (Profile → Security)');
-        if (!checkPassword(String(b.password || ''), e.secret)) return bad(res, 'wrong password', 401);
+        if (!(await checkPassword(String(b.password || ''), e.secret))) return bad(res, 'wrong password', 401);
         if (me.twofa_method && me.twofa_method !== 'password') { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
         db.prepare("UPDATE users SET twofa_method = 'password', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id);
         return send(res, 200, { ok: true });
@@ -8400,7 +8785,7 @@ const server = http.createServer(async (req, res) => {
         // ownership whether or not two-factor is on — not just on the accounts that already have 2FA.
         { const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
         if (findIdentity('email', email)) return bad(res, 'that email already belongs to another account');
-        insertIdentity(me.id, 'email', email, hashPassword(password));
+        insertIdentity(me.id, 'email', email, await hashPassword(password));
         return send(res, 200, { ok: true, methods: identityTypes(me.id) });
       }
       /* ----- moderation: mute / unmute (private to the muter; the muted user is never told) ----- */
@@ -8542,8 +8927,18 @@ const server = http.createServer(async (req, res) => {
              to enable wallet 2FA with it and lock the real owner out for good, since every exit then demands a
              signature only the attacker can produce. /api/account/email is gated for exactly this reason; the
              wallet door was not. A curl request sends no Origin header, so the CSRF check never covered it. */
-          if (me.twofa_method) { const err = await verifyCurrentFactor(me, b.current || {}); if (err) return bad(res, 'to link a wallet, ' + err, 401); }
+          /* F011: ownershipRefusal, not "only if 2FA is on". On a password account that is the password; on a
+             wallet-only account it is a manage-signature from a wallet already on the account — so a borrowed
+             cookie cannot attach a key of its own. b.current carries that proof; b.password is accepted too. */
+          if (me.twofa_method || emailIdentity(me.id) || walletAddresses(me.id).length) {
+            const cur = Object.assign({}, b.current || {}); if (!cur.password && b.password) cur.password = b.password;
+            const err = await ownershipRefusal(me, cur); if (err) return bad(res, 'to link a wallet, ' + err, 401);
+          }
+          // else: an account with no password and no wallet yet (a social sign-in) has nothing it could prove with —
+          // its FIRST wallet links on the session alone; the owner is notified below and the 24h age rule
+          // (walletTooNew) keeps that wallet from becoming the account's key straight away
           insertIdentity(me.id, 'wallet', address);
+          notify(me.id, '🔗', 'A wallet ending in ' + address.slice(-6) + ' was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
           forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
           // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
           // while read-only — so an empty throwaway keypair (or a flagged account) can't farm the bonus.
@@ -8593,6 +8988,7 @@ const server = http.createServer(async (req, res) => {
           const u2 = db.prepare('SELECT twofa_method, twofa_enabled_at FROM users WHERE id = ?').get(userId);
           if (u2 && u2.twofa_method && u2.twofa_method !== 'wallet') {
             const pend = rand(16);
+            if (!rateLimit('pend:' + userId, 10, 9e5)) { lockoutAlert(userId); return bad(res, 'too many sign-in attempts on this account — wait 15 minutes', 429); }   // F013
             pendingLogins.set(pend, { userId, expires: now() + 3e5 });
             return send(res, 200, { twofa: u2.twofa_method, pending: pend, username });
           }
@@ -8825,19 +9221,24 @@ const server = http.createServer(async (req, res) => {
            how many slots a single account can occupy, and the absolute deadline further down that no
            amount of dribbling can extend. */
         if ((mediaByUser.get(me.id) || 0) >= MEDIA_PER_USER) return bad(res, 'you already have ' + MEDIA_PER_USER + ' uploads in flight — let them finish first', 429);
+        const upIp = clientIp(req);
+        if ((mediaByIp.get(upIp) || 0) >= MEDIA_PER_IP) return bad(res, 'too many uploads in flight from this network — let them finish first', 429);
         const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         const spec = UPLOAD_KINDS[mime];
         if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4, WebM or a voice memo', 415);
         const q0 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
         if (q0 && q0.u >= UPLOAD_USER_QUOTA) return bad(res, 'you’ve hit your media storage limit — delete some old posts first', 413);
         const clen = Number(req.headers['content-length'] || 0);
-        if (clen && clen > spec.cap) return bad(res, spec.kind + ' too large (max ' + Math.round(spec.cap / 1048576) + 'MB)', 413);
+        if (!(clen > 0)) return bad(res, 'length required — send the upload with a Content-Length', 411);   // F016: a chunked body of unknown length is how a slot gets held forever
+        if (clen > spec.cap) return bad(res, spec.kind + ' too large (max ' + Math.round(spec.cap / 1048576) + 'MB)', 413);
         // Reserve worst-case disk for THIS upload plus everything already streaming, BEFORE writing a byte — the shared
         // app.db volume must keep its DISK_SAFETY_MARGIN headroom even with MEDIA_CONCURRENCY uploads in flight (the
         // end-of-stream check alone fires only after the bytes are already on disk).
         try { const st = fs.statfsSync(DATA_DIR); if (st.bavail * st.bsize < DISK_SAFETY_MARGIN + spec.cap * (mediaInFlight + 1)) return bad(res, 'storage is full right now — try again later', 507); } catch {}
         mediaInFlight++;
         mediaByUser.set(me.id, (mediaByUser.get(me.id) || 0) + 1);
+        mediaByIp.set(upIp, (mediaByIp.get(upIp) || 0) + 1);
+        const t0 = now();
         const tmp = path.join(UPLOAD_DIR, 'tmp_' + rand(16) + '.part');
         const ws = fs.createWriteStream(tmp);
         let size = 0, head = Buffer.alloc(0), settled = false, idle = null;
@@ -8847,6 +9248,8 @@ const server = http.createServer(async (req, res) => {
           settled = true; mediaInFlight--; clearIdle(); clearTimeout(hardStop);
           const n = (mediaByUser.get(me.id) || 1) - 1;
           if (n > 0) mediaByUser.set(me.id, n); else mediaByUser.delete(me.id);
+          const ni = (mediaByIp.get(upIp) || 1) - 1;
+          if (ni > 0) mediaByIp.set(upIp, ni); else mediaByIp.delete(upIp);
         };
         const fail = (code, msg) => { finish(); try { ws.destroy(); } catch {} try { fs.unlinkSync(tmp); } catch {} try { req.destroy(); } catch {} if (!res.headersSent) bad(res, msg, code); };
         // Idle-timeout the upload so a stalled / slow-loris client can't pin a mediaInFlight slot (which would 503 every
@@ -8862,6 +9265,10 @@ const server = http.createServer(async (req, res) => {
           armIdle();
           size += chunk.length;
           if (size > spec.cap) return fail(413, spec.kind + ' too large (max ' + Math.round(spec.cap / 1048576) + 'MB)');
+          if (size > clen) return fail(400, 'upload is longer than its Content-Length said');
+          // F016: a trickle that keeps the idle timer happy is not an upload. 16 KB/s after the first 10s.
+          const el = (now() - t0) / 1000;
+          if (el > 10 && size / el < UPLOAD_MIN_BPS) return fail(408, 'upload too slow — try again on a better connection');
           if (head.length < 64) head = Buffer.concat([head, chunk.slice(0, 64 - head.length)]);
           if (ws.write(chunk) === false) { req.pause(); ws.once('drain', () => req.resume()); }
         });
@@ -8897,12 +9304,12 @@ const server = http.createServer(async (req, res) => {
         if (blockReadOnly(res, me)) return;
         if (!rateLimit('post:' + me.id, 12, 6e5)) return bad(res, 'posting too fast — take a breath 😅', 429);
         const bigUpload = Number(req.headers['content-length'] || 0) > MEDIA_GATE_BYTES;
-        if (bigUpload && mediaInFlight >= MEDIA_CONCURRENCY) return bad(res, 'lots of uploads right now — try again in a moment', 503);
+        if (bigUpload && (bigPostInFlight >= BIG_POST_CONCURRENCY || (bigPostByUser.get(me.id) || 0) >= 1)) return bad(res, 'lots of large posts right now — try again in a moment', 503);
         let b, image = null;
-        if (bigUpload) mediaInFlight++;
+        if (bigUpload) { bigPostInFlight++; bigPostByUser.set(me.id, (bigPostByUser.get(me.id) || 0) + 1); }
         try { b = await readBody(req, 12 * 1024 * 1024); if (b.image) image = resolvePostMedia(b.image, me.id); } // media is normally a pre-uploaded /uploads URL; data: URIs still accepted
         catch (e) { return bad(res, e.message || 'could not read your post', (e && e.status) || 400); }
-        finally { if (bigUpload) mediaInFlight--; }
+        finally { if (bigUpload) { bigPostInFlight--; const n = (bigPostByUser.get(me.id) || 1) - 1; if (n > 0) bigPostByUser.set(me.id, n); else bigPostByUser.delete(me.id); } }
         const board = BOARDS.has(String(b.board || '')) ? String(b.board) : null;
         const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 500));
         const text = rt.text;
@@ -8969,7 +9376,11 @@ const server = http.createServer(async (req, res) => {
           if (cpost && cpost.community_id) {
             awardCommunityXp(cpost.community_id, cpost.user_id, 'wall_react_get', COMM_XP.wall_react_get, 'c' + cpost.community_id + ':wall_react_get:' + postId + ':' + me.id + ':' + kind);
             awardConviction(cpost.community_id, me.id, 'wall_react_give', CONV_XP.wall_react_give, 'v' + cpost.community_id + ':wall_react_give:' + postId + ':' + me.id + ':' + kind);
-            bumpActivity(cpost.community_id, W_react);
+            // F027: XP and conviction dedupe on (post, user, kind) via their refs; the rank bump had no such key, so
+            // toggling one reaction off and on pumped the grid for free. Bump only when the XP row was new.
+            if (!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('a' + cpost.community_id + ':react:' + postId + ':' + me.id + ':' + kind)) {
+              try { db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, ref, created_at) VALUES (?,?,0,0,1,?,?)').run(me.id, 'commact', 'a' + cpost.community_id + ':react:' + postId + ':' + me.id + ':' + kind, now()); bumpActivity(cpost.community_id, W_react); } catch {}
+            }
           }
         }
         const n = db.prepare('SELECT COUNT(*) n FROM reactions WHERE post_id = ? AND kind = ?').get(postId, kind).n;
@@ -9164,6 +9575,7 @@ const server = http.createServer(async (req, res) => {
         if (!r || r.notFound || !r.pair) return bad(res, (r && r.reason === 'quote') ? 'that is a base asset (WETH/USDG), not a callable token' : 'no trading pair found for that token');
         const p2 = r.pair, price = p2.market && p2.market.priceUsd;
         if (!(price > 0)) return bad(res, 'no live price for that token yet — can’t track Xs');
+        if (isTokenDev(me.id, p2.token)) return bad(res, 'you can’t make a Send Call on a token you deployed or run — call something you don’t control', 403);   // F003: deployer/owner from the chain, never the client
         const liq = (p2.market && p2.market.liquidityUsd != null) ? Number(p2.market.liquidityUsd) : 0;
         if (!(liq >= MIN_CALL_LIQ)) return bad(res, 'this token’s pool is too thin to call ($' + Math.round(liq) + ' liquidity, need $' + MIN_CALL_LIQ + '+). Thin pools can be manipulated — call it once it has real liquidity.'); // anti-farm floor
         const mc = (p2.market && p2.market.marketCap != null) ? p2.market.marketCap : null;
@@ -9738,6 +10150,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/watchlist' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('wlget:' + me.id, 30, 6e4) || !rateLimit('wlgetip:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);   // F020: up to 500 rows, 20 enrichments and a brotli per call
         return send(res, 200, { items: await watchlistView(me.id) });
       }
       if (p === '/api/watchlist' && req.method === 'POST') {
@@ -9897,7 +10310,7 @@ const server = http.createServer(async (req, res) => {
           .run(me.id, token, pr.pair.address, sym, name, brand, 'pending', ip ? bidx(ip) : null, pr.market.priceUsd, pr.market.marketCap, (pr.priceChange && pr.priceChange.h24) || null, pr.market.liquidityUsd, (pr.holders && pr.holders.count) || null, now(), now());
         // auto-opt-in the starter, but pass their REAL holding status: a deployer who started without holding joins as
         // a member and does NOT count toward the 10 verified holders needed to go live
-        joinCommunity(me, info.lastInsertRowid, ip, holdsC);
+        await joinCommunity(me, info.lastInsertRowid, ip, holdsC);
         const c = db.prepare('SELECT * FROM communities WHERE id=?').get(info.lastInsertRowid);
         // announce it on the public wall — a brand-new community needs holders to find it to go live at all
         try { communityInvitePost(c.id, 'new'); } catch {}
@@ -10107,7 +10520,7 @@ const server = http.createServer(async (req, res) => {
               if (holds === null) return bad(res, 'We couldn’t read the $' + c.symbol + ' price just now, so we can’t check your holding against the $' + MIN_COMMUNITY_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
               if (!holds) return bad(res, 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
             }
-            const j = joinCommunity(me, cid, clientIp(req), holds);
+            const j = await joinCommunity(me, cid, clientIp(req), holds);
             if (j.error) return bad(res, j.error === 'not found' ? 'community not found' : 'could not join', j.error === 'not found' ? 404 : 500);
             if (j.alreadyMember) return send(res, 200, { joined: true, alreadyMember: true, qualified: j.qualified !== false, reason: j.reason || null, community: communityDetailView(c, me, clientIp(req)) }); // a member who holds but can't re-qualify gets the honest reason, not "Opted in!"
             return send(res, 200, { ...j, community: communityDetailView(db.prepare('SELECT * FROM communities WHERE id=?').get(cid), me, clientIp(req)) });
@@ -10156,12 +10569,12 @@ const server = http.createServer(async (req, res) => {
                person, wherever they choose to write it. */
             if (!rateLimit('post:' + me.id, 12, 6e5)) return bad(res, 'posting too fast — take a breath 😅', 429);
             const bigUpload = Number(req.headers['content-length'] || 0) > MEDIA_GATE_BYTES;
-            if (bigUpload && mediaInFlight >= MEDIA_CONCURRENCY) return bad(res, 'lots of uploads right now — try again in a moment', 503);
+            if (bigUpload && (bigPostInFlight >= BIG_POST_CONCURRENCY || (bigPostByUser.get(me.id) || 0) >= 1)) return bad(res, 'lots of large posts right now — try again in a moment', 503);
             let b, image = null;
-            if (bigUpload) mediaInFlight++;
+            if (bigUpload) { bigPostInFlight++; bigPostByUser.set(me.id, (bigPostByUser.get(me.id) || 0) + 1); }
             try { b = await readBody(req, 12 * 1024 * 1024); if (b.image) image = resolvePostMedia(b.image, me.id); }
             catch (e) { return bad(res, e.message || 'bad media', (e && e.status) || 400); }
-            finally { if (bigUpload) mediaInFlight--; }
+            finally { if (bigUpload) { bigPostInFlight--; const n = (bigPostByUser.get(me.id) || 1) - 1; if (n > 0) bigPostByUser.set(me.id, n); else bigPostByUser.delete(me.id); } }
             const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 500));
             const text = rt.text;
             if (!text && !image) return bad(res, 'write something or attach a photo, GIF or video');
@@ -10343,7 +10756,7 @@ const server = http.createServer(async (req, res) => {
       const f = path.normalize(p.replace('/uploads/', ''));
       if (f.includes('..') || f.includes('/') || f.endsWith('.part')) return bad(res, 'nope', 400); // never serve in-progress temp uploads
       // uploaded media is content-addressed by a random name → its bytes never change → cache it forever (immutable, no revalidation)
-      return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=31536000, immutable' });
+      return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=86400' });   // F119: a day, not a year — a takedown must reach the CDN edge in hours, not months
     }
     /* ===== /t/<sendId> — the ticket share page ========================================================
        The ONE page on this site rendered per-request rather than served from disk, and it exists for a
@@ -10359,19 +10772,30 @@ const server = http.createServer(async (req, res) => {
        never once appeared in a post. It lives in the same namespace as the page that references it. */
     const tc = /^\/t\/(\d+)\.png$/.exec(p);
     if (tc && (req.method === 'GET' || req.method === 'HEAD')) {
-      if (!rateLimit('tcard:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+      if (!rateLimit('tcard:' + clientIp(req), 120, 6e4) || !rateLimit('tcard-site', 900, 6e4)) return bad(res, 'slow down', 429);   // F019: a site-wide bucket too — the render is the cost, whoever asks
       const u = db.prepare('SELECT id, username, created_at, invited_by, ticket_public FROM users WHERE id = ? AND system = 0').get(Number(tc[1]));
       if (!u || !u.ticket_public) { notFoundPage(res); return; }
       const inv = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
-      let png; try { png = renderTicketCard({ username: u.username, sendId: u.id, joinedAt: u.created_at, invitedBy: inv && inv.username }); }
-      catch (e) { console.error('ticket card', e && e.message); return bad(res, 'could not draw that ticket', 500); }
-      const etag = '"' + crypto.createHash('sha1').update(png).digest('base64url').slice(0, 20) + '"';
-      const head = { 'Content-Type': 'image/png', 'Content-Length': png.length, 'ETag': etag,
-                     'Cache-Control': 'public, max-age=600', ...SEC_HEADERS };
-      delete head['X-Frame-Options'];   // a social card is fetched by crawlers and shown inside previews
-      if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); }
+      /* F019: the ETag is a hash of what the card is DRAWN FROM, computed before drawing, so a 304 and a
+         HEAD cost nothing; and a drawn card is kept for a while, since the same ticket is fetched by every
+         crawler and viewer of the share page. */
+      const key = [u.username, u.id, u.created_at, inv && inv.username, 'v1'].join('|');
+      const etag = '"' + crypto.createHash('sha1').update(key).digest('base64url').slice(0, 20) + '"';
+      const headBase = { 'Content-Type': 'image/png', 'ETag': etag, 'Cache-Control': 'public, max-age=600', ...SEC_HEADERS };
+      delete headBase['X-Frame-Options'];   // a social card is fetched by crawlers and shown inside previews
+      if (req.headers['if-none-match'] === etag) { res.writeHead(304, headBase); return res.end(); }
+      let hit = ticketCardCache.get(key);
+      if (!hit || now() - hit.at > TICKET_CARD_TTL) {
+        if (req.method === 'HEAD') { res.writeHead(200, headBase); return res.end(); }   // nothing to draw for a HEAD
+        let png; try { png = renderTicketCard({ username: u.username, sendId: u.id, joinedAt: u.created_at, invitedBy: inv && inv.username }); }
+        catch (e) { console.error('ticket card', e && e.message); return bad(res, 'could not draw that ticket', 500); }
+        hit = { png, at: now() };
+        if (ticketCardCache.size >= TICKET_CARD_MAX) ticketCardCache.delete(ticketCardCache.keys().next().value);   // oldest out
+        ticketCardCache.set(key, hit);
+      }
+      const head = { ...headBase, 'Content-Length': hit.png.length };
       res.writeHead(200, head);
-      return res.end(req.method === 'HEAD' ? undefined : png);
+      return res.end(req.method === 'HEAD' ? undefined : hit.png);
     }
     const tp = /^\/t\/(\d+)$/.exec(p);
     if (tp && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -10478,6 +10902,7 @@ const walTimer = setInterval(() => {
   // Caches keyed on addresses an anonymous caller supplies. SCALING.md says every in-memory cache is
   // cleaned up; these three were the exceptions, and they are exactly the ones a stranger can grow.
   sweepSpotCache();
+  sweepTicketCards();
   sweepOpenCaches();
 }, 5 * 60 * 1000);
 walTimer.unref();
@@ -11154,11 +11579,14 @@ function productionChecks() {
   if (prod) {
     if (BASE_URL.includes('localhost')) warn('BASE_URL is still localhost — OAuth redirects and Secure cookies will be wrong in production. Set BASE_URL=https://yourdomain.');
     if (!IS_HTTPS && process.env.COOKIE_SECURE !== '1') warn('Serving over http and COOKIE_SECURE!=1 — session cookies will NOT be marked Secure. Set COOKIE_SECURE=1 behind TLS termination.');
+    if (!process.env.SEED_INVITE_CODE && !db.prepare('SELECT 1 FROM invite_codes LIMIT 1').get()) warn('SEED_INVITE_CODE unset on a fresh deploy — a random seed code was generated and printed above; set SEED_INVITE_CODE to choose it (F018).');
+    if ((process.env.HOST || '127.0.0.1') !== '127.0.0.1' && !TRUST_PROXY_HOPS) warn('HOST=' + process.env.HOST + ' binds beyond loopback while TRUST_PROXY is unset — if anything but your proxy can reach this port, per-IP limits key on whatever the peer says. Set TRUST_PROXY, or keep HOST=127.0.0.1 behind a same-box proxy.');
+    if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin.html). Set it to your user id once you have signed up.');
     if (!TRUST_PROXY_HOPS) warn('TRUST_PROXY unset — behind a reverse proxy, rate limits & the community anti-sybil gate will key on the proxy IP, not real clients. Set TRUST_PROXY to your proxy hop count (1 for a single proxy).');
   }
 }
 
-server.listen(PORT, () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
+server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
 
 // New Pairs Radar is hidden (unlinked from the nav) — no background refresher runs so we don't hit the
 // RPC/Blockscout/Dexscreener every 90s for a page nobody can reach. The /api/pairs/new endpoint still

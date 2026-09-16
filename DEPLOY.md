@@ -60,8 +60,11 @@ BASE_URL=https://sendrh.com
 NODE_ENV=production
 PORT=8642
 COOKIE_SECURE=1
-TRUST_PROXY=1
+TRUST_PROXY=1            # Caddy alone. Cloudflare in front of Caddy = 2 (see .env.example)
+SEED_INVITE_CODE=<pick one, or read the generated code from the first boot's log>
+ADMIN_USER_IDS=<your user id once you have signed up — unlocks /admin.html>
 ```
+Node binds to `127.0.0.1` unless `HOST` says otherwise, so only Caddy on the same box can reach it.
 `BASE_URL` also drives every absolute SEO / share URL (canonical, og:*, twitter:*, JSON-LD, sitemap.xml, robots.txt) —
 they are rewritten at serve time, so nothing in `public/` needs editing on deploy.
 (Plus any OAuth / MoonPay keys you have.)
@@ -112,7 +115,10 @@ www.sendrh.com {
 ```
 `sudo systemctl reload caddy` — Caddy fetches and auto-renews a Let's Encrypt cert for both names. Done: the
 site is live at `https://sendrh.com`. (Caddy sets `X-Forwarded-For`, which the app reads because
-`TRUST_PROXY=1`.)
+`TRUST_PROXY=1`. If Cloudflare proxies the domain in front of Caddy, the header carries TWO appended hops —
+set `TRUST_PROXY=2`, or `TRUST_CF=1` to read `CF-Connecting-IP` — otherwise every visitor is keyed on a
+Cloudflare edge address and the per-IP limits stop meaning anything. Lock the origin down so only
+Cloudflare can reach port 443: allow Cloudflare's published ranges in the firewall and nothing else.)
 
 **Why the `www` redirect is not optional.** `BASE_URL` is the site's single identity: the app compares every
 write request's `Origin` header against it and rejects a mismatch as cross-origin. So if someone reaches the
@@ -132,7 +138,7 @@ project's `data/` path**, or the DB and uploads vanish on redeploy.
 
 - **Start command:** `npm start` (i.e. `node server.js`).
 - **Node version:** pin 24 (via `engines` in `package.json`, already set, or the platform's runtime setting).
-- **Env vars:** set `BASE_URL`, `COOKIE_SECURE=1`, `TRUST_PROXY=1` (+ optional keys) in the dashboard.
+- **Env vars:** set `BASE_URL`, `COOKIE_SECURE=1`, `TRUST_PROXY=1` (2 with Cloudflare in front), `HOST=0.0.0.0` (the platform's proxy reaches Node over the network), `SEED_INVITE_CODE`, `ADMIN_USER_IDS` (+ optional keys) in the dashboard.
 - **Health check path:** `/healthz`.
 - **Volume:** mount a disk at `data/` (e.g. Fly `[mounts] destination="/app/data"`, Render "Disk", Railway volume).
 - **Scaling:** keep it at **exactly one instance** — multiple instances would each get their own SQLite

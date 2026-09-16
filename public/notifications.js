@@ -8,6 +8,9 @@
   function ago(t) { const s = Math.max(0, Math.round((Date.now() - t) / 1000)); if (s < 60) return s + 's ago'; const m = Math.round(s / 60); if (m < 60) return m + 'm ago'; const h = Math.round(m / 60); if (h < 24) return h + 'h ago'; return Math.round(h / 24) + 'd ago'; }
   const signedIn = () => !!(window.AUTH && AUTH.user);
   let items = [], open = false, poll = null, loaded = false;
+  let pending = null;   // rows a poll fetched while the reader was inside the panel — applied once they leave it
+  const bellLabel = (n) => 'Notifications' + (n ? ', ' + n + ' in your list' : '');
+  const badgeHTML = (n) => n ? '<span class="notif-badge" aria-hidden="true">' + (n > 9 ? '9+' : n) + '</span>' : '';
 
   function render() {
     if (!signedIn()) { mount.innerHTML = ''; return; }
@@ -18,7 +21,7 @@
          describe a disclosure, which is what it is. The badge is decorative and hidden: the count is in
          the button's own name, so a screen reader hears it as part of the control rather than as a
          number floating beside it, and arrivals are announced once through the shared polite region. */
-      '<button class="notif-bell" id="notif-bell" type="button" data-tip="Shows or hides your list of recent updates" aria-controls="notif-panel" aria-expanded="' + open + '" aria-label="Notifications' + (n ? ', ' + n + ' in your list' : '') + '">🔔' + (n ? '<span class="notif-badge" aria-hidden="true">' + (n > 9 ? '9+' : n) + '</span>' : '') + '</button>' +
+      '<button class="notif-bell" id="notif-bell" type="button" data-tip="Shows or hides your list of recent updates" aria-controls="notif-panel" aria-expanded="' + open + '" aria-label="' + bellLabel(n) + '">🔔' + badgeHTML(n) + '</button>' +
       /* role="list", not role="menu". A menu is a set of commands and traps the arrow keys; this is a list
          of rows, some of which are links and each of which has its own dismiss button. Calling it a menu
          made a screen reader promise menu keyboard behaviour that was never implemented. */
@@ -41,22 +44,48 @@
   async function load() {
     if (!signedIn()) { render(); return; }
     try {
-      const r = await fetch('/api/notifications', { credentials: 'same-origin' }); if (!r.ok) return;
+      const r = await fetch('/api/notifications', { credentials: 'same-origin' });
+      /* A definite 401 means this session is gone — signed out in another tab, or ended from Security on
+         another device. Keeping the previous person's list on screen for whoever sits down next is the one
+         thing the poll must not do, so it empties the bell and stops asking; a transient failure changes nothing. */
+      if (r.status === 401) {
+        items = []; pending = null; open = false; render();
+        if (poll) { clearInterval(poll); poll = null; }
+        if (window.AUTH && AUTH.refresh) AUTH.refresh().catch(() => {});
+        return;
+      }
+      if (!r.ok) return;
       const j = await r.json();
-      const before = new Set(items.map(x => x.id));
       const next = j.items || [];
-      const fresh = next.filter(x => !before.has(x.id)).length;
-      const first = !items.length && !loaded;
       /* Rebuilding innerHTML detaches whatever the reader is focused on and drops focus to <body>, which
-         on a 25-second poll means a keyboard user can be interrupted mid-row. Hold the new rows until the
-         panel is closed or focus leaves it; the badge still updates, because it is rendered from `items`. */
-      if (open && mount.contains(document.activeElement)) { items = next; loaded = true; return; }
-      items = next; loaded = true; render();
-      /* Say it once, politely, and only for rows that actually arrived while the page was open — not for
-         the first load, which would read the whole backlog at somebody the moment they signed in. */
-      if (fresh && !first && window.announce) announce(fresh === 1 ? 'One new notification.' : fresh + ' new notifications.');
+         on a 25-second poll means a keyboard user can be interrupted mid-row. Hold the new rows in `pending`
+         until the panel is closed or focus leaves it — `items` stays as rendered, so the arrivals are still
+         counted (and announced) against what was on screen when they do land. The bell alone is repainted in
+         place, since it stays attached and its count is otherwise frozen for as long as the reader lingers. */
+      if (open && mount.contains(document.activeElement)) {
+        pending = next; loaded = true;
+        const bell = document.getElementById('notif-bell');
+        if (bell) { bell.setAttribute('aria-label', bellLabel(next.length)); bell.innerHTML = '🔔' + badgeHTML(next.length); }
+        return;
+      }
+      applyItems(next);
     } catch {}
   }
+  function applyItems(next) {
+    const before = new Set(items.map(x => x.id));
+    const fresh = next.filter(x => !before.has(x.id)).length;
+    const first = !items.length && !loaded;
+    // a flush can run one tick after Escape handed focus to the bell; render() rebuilds that bell, so put focus back on the new one
+    const hadBell = document.activeElement && (document.activeElement.id === 'notif-bell' || mount.contains(document.activeElement));
+    pending = null; items = next; loaded = true; render();
+    if (hadBell) { const b = document.getElementById('notif-bell'); if (b) b.focus(); }
+    /* Say it once, politely, and only for rows that actually arrived while the page was open — not for
+       the first load, which would read the whole backlog at somebody the moment they signed in. */
+    if (fresh && !first && window.announce) announce(fresh === 1 ? 'One new notification.' : fresh + ' new notifications.');
+  }
+  // the held rows land once the reader is out of the panel; deferred a tick so the click or focus change
+  // that got them out is fully over before the rows it was on are rebuilt
+  function flushPending() { if (pending && !(open && mount.contains(document.activeElement))) { const p = pending; setTimeout(() => { if (pending === p) applyItems(p); }, 0); } }
   // open/close WITHOUT rebuilding innerHTML — a rebuild would detach the just-clicked bell and make the
   // outside-click handler immediately re-close the panel. Data re-renders happen only in load().
   function applyOpen() {
@@ -64,10 +93,20 @@
     if (panel) { panel.classList.toggle('open', open); panel.hidden = !open; }
     if (bell) bell.setAttribute('aria-expanded', String(open));
   }
-  function toggle(o) { open = (o == null ? !open : o); applyOpen(); }
+  function toggle(o) { open = (o == null ? !open : o); applyOpen(); if (!open) flushPending(); }
+  mount.addEventListener('focusout', () => setTimeout(flushPending, 0));   // focus has moved by the next tick
   // defer the re-render past the current click so the outside-click handler doesn't see a detached target and close the panel
-  async function clearAll() { items = []; setTimeout(render, 0); try { await fetch('/api/notifications', { method: 'DELETE', credentials: 'same-origin' }); } catch {} }
-  async function clearOne(id) { items = items.filter(x => String(x.id) !== String(id)); setTimeout(render, 0); try { await fetch('/api/notifications/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' }); } catch {} }
+  // optimistic, but honest: a clear the server refused puts the rows back and says so (F171)
+  async function clearAll() {
+    const keep = items; items = []; pending = null; setTimeout(render, 0);
+    let ok = false; try { ok = (await fetch('/api/notifications', { method: 'DELETE', credentials: 'same-origin' })).ok; } catch {}
+    if (!ok) { items = keep; setTimeout(render, 0); if (window.sendToast) sendToast('Could not clear notifications — try again'); }
+  }
+  async function clearOne(id) {
+    const keep = items; items = items.filter(x => String(x.id) !== String(id)); pending = null; setTimeout(render, 0);
+    let ok = false; try { ok = (await fetch('/api/notifications/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })).ok; } catch {}
+    if (!ok) { items = keep; setTimeout(render, 0); if (window.sendToast) sendToast('Could not clear that notification — try again'); }
+  }
 
   mount.addEventListener('click', e => {
     if (e.target.closest('#notif-bell')) { toggle(); if (open) load(); return; }
@@ -95,7 +134,7 @@
     if (open && finePointer() && !mount.contains(document.activeElement)) hoverTimer = setTimeout(() => toggle(false), 350);
   });
   mount.addEventListener('mouseenter', () => { if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; } });
-  document.addEventListener('auth:change', () => { items = []; open = false; render(); load(); startPoll(); });
+  document.addEventListener('auth:change', () => { items = []; pending = null; open = false; render(); load(); startPoll(); });
   document.addEventListener('points:changed', () => { if (signedIn()) setTimeout(load, 900); }); // catch level-ups / gains soon after
   function startPoll() { if (poll) clearInterval(poll); if (signedIn()) poll = setInterval(() => { if (!document.hidden) load(); }, 25000); }
 

@@ -21,7 +21,7 @@
 <a class="skip-link" href="#main">Skip to content</a>
 
 <nav class="nav" aria-label="Main">
-  <a class="nav-logo" href="index.html"><img src="assets/logo-mark.png" alt="$Send home"><span>$Send</span></a>
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
@@ -45,10 +45,15 @@
 
 <main id="main">
 
+  <!-- The page heading sits outside both sections: #signedout is hidden the moment someone signs in, so an h1
+       inside it left the signed-in dashboard with an outline that starts at h2 and no level-1 heading to jump to. -->
+  <div class="wrap" style="text-align:center; max-width:560px; padding-top:3rem;">
+    <h1 class="section-title display">Your Send Station 👤</h1>
+  </div>
+
   <!-- signed out -->
-  <section id="signedout" hidden>
+  <section id="signedout" hidden style="padding-top:0;">
     <div class="wrap" style="text-align:center; max-width:560px;">
-      <h1 class="section-title display">Your Send Station 👤</h1>
       <p class="section-sub">One account gets you a pro-grade <b>private</b> wallet tracker, a unique handle, a fully customizable public Send Wall, and optional 2FA.</p>
       <button class="btn btn-primary" id="signedout-cta" data-tip="Opens the sign-in window over this page">Sign In / Create Account 🚀</button>
       <p class="pnl-note" style="margin-top:1rem;">Connect a wallet (free signature, no transaction) or use email — sign in later with your email <b>or</b> your unique @handle.</p>
@@ -62,8 +67,8 @@
       <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1.2rem; flex-wrap:wrap;">
         <span id="pf-avatar" style="font-size:2.2rem;" aria-hidden="true">🚀</span>
         <div>
-          <!-- h2, not h1: "Your Send Station" above is the page heading, and two h1s on one page leaves a
-               screen-reader user with two competing answers to "what is this page". -->
+          <!-- h2, not h1: the "Your Send Station" h1 above both sections is the page heading, and two h1s on one
+               page leaves a screen-reader user with two competing answers to "what is this page". -->
           <h2 style="font-weight:800; font-size:1.2rem; margin:0;">@<span id="pf-username-show"></span></h2>
           <a id="pf-wall-link" class="btn btn-primary btn-sm" href="#" data-tip="Opens your public wall at your handle" style="margin-top:0.4rem;">🧱 View My Public Wall →</a>
         </div>
@@ -157,6 +162,15 @@
             <label class="f-label" for="pf-instagram">📸 Instagram <span style="font-weight:400;">(handle, no @)</span></label>
             <input class="addr-input" id="pf-instagram" maxlength="30" spellcheck="false" autocomplete="off" placeholder="yourhandle">
             <button class="btn btn-primary btn-sm" id="save-profile-btn" style="margin-top:0.9rem;" data-tip="Saves your handle, avatar, bio and social links">Save Changes 💾</button>
+
+            <div class="danger-zone" id="acct-delete">
+              <div class="f-label" style="margin-top:1.4rem;">Delete this account</div>
+              <p class="modal-note">Removes your sign-in methods, sessions, profile, posts, comments, uploads, tracked wallets, points and notifications, and signs you out everywhere. Send Calls are permanent and stay under a placeholder name. What stays and why is in the <a href="privacy.html#p10">Privacy Policy</a>. This cannot be undone.</p>
+              <label class="f-label" for="acct-delete-confirm">Type <b>DELETE</b> to confirm</label>
+              <input class="addr-input" id="acct-delete-confirm" maxlength="12" autocomplete="off" spellcheck="false" placeholder="DELETE">
+              <button class="btn btn-sm btn-danger" id="acct-delete-btn" type="button" disabled title="Type DELETE above first" data-tip="Deletes your account for good after you prove it is you">Delete my account 🗑</button>
+              <p class="modal-note" id="acct-delete-status" role="status" aria-live="polite"></p>
+            </div>
           </div>
         </details>
 
@@ -197,7 +211,7 @@
                   <p class="modal-note">Scan with your authenticator app, or enter this key manually:<br><code id="totp-secret" style="color:var(--green-bright); word-break:break-all;"></code></p>
                   <label class="f-label" for="totp-confirm" style="text-align:left;">Enter the 6-digit code to turn it on</label>
                   <div style="display:flex; gap:0.5rem;">
-                    <input class="addr-input" id="totp-confirm" style="margin:0; text-align:center; letter-spacing:0.3em;" inputmode="numeric" maxlength="6" placeholder="123456">
+                    <input class="addr-input" id="totp-confirm" style="margin:0; text-align:center; letter-spacing:0.3em;" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456">
                     <button class="btn btn-primary btn-sm" id="totp-confirm-btn" data-tip="Checks the code and turns on the authenticator app">Enable ✅</button>
                   </div>
                 </div>
@@ -205,7 +219,9 @@
               <div id="twofa-on" hidden>
                 <p class="modal-note">✅ Two-factor is protecting this account (<span id="twofa-kind"></span>).</p>
                 <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-                  <input class="addr-input" id="twofa-disable-code" style="margin:0; width:130px; text-align:center;" inputmode="numeric" maxlength="6" placeholder="code" aria-label="Authenticator code">
+                  <!-- one-time-code lets the phone offer the code it just received, as the sign-in field already does -->
+                  <label class="f-label" for="twofa-disable-code" id="twofa-disable-code-lab" style="margin:0;">Authenticator code</label>
+                  <input class="addr-input" id="twofa-disable-code" style="margin:0; width:130px; text-align:center;" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="code">
                   <input class="addr-input" id="twofa-disable-pw" type="password" autocomplete="current-password" style="margin:0; width:180px;" placeholder="account password" aria-label="Account password" hidden>
                   <button class="btn btn-ghost btn-sm" id="twofa-disable-btn" data-tip="Removes the second step after you prove the current one">Turn off 2FA</button>
                 </div>
@@ -223,7 +239,7 @@
                 <input class="addr-input" id="ae-pw" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
                 <label class="f-label" for="ae-pw2" style="margin:0;">Confirm password</label>
                 <input class="addr-input" id="ae-pw2" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
-                <div id="ae-factor" hidden><label class="f-label" for="ae-code" style="margin:0;">Your current authenticator code</label><input class="addr-input" id="ae-code" inputmode="numeric" maxlength="6" style="margin:0;" placeholder="123456"></div>
+                <div id="ae-factor" hidden><label class="f-label" for="ae-code" style="margin:0;">Your current authenticator code</label><input class="addr-input" id="ae-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="margin:0;" placeholder="123456"></div>
                 <button class="btn btn-primary btn-sm" type="submit" id="ae-submit" data-tip="Adds an email and password as another way in">Add email + password 🔐</button>
                 <p class="modal-note" id="ae-status" role="status" aria-live="polite" style="margin:0;"></p>
               </form>
@@ -311,6 +327,9 @@
      <a href="newpairs.html">New Pairs</a>
      <a href="wall.html">Send Wall</a>
      <a href="support.html">Support</a>
+     <a href="terms.html">Terms</a>
+     <a href="privacy.html">Privacy</a>
+     <a href="tracker.html">Wallet Tracker</a>
      <a href="index.html#swap">Swap</a>
      <a href="index.html#tokens">Tokens</a>
      <a href="watchlist.html">Watchlist</a>

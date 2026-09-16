@@ -25,7 +25,7 @@
     if (/^#invites?$|^#inv-/.test(h)) return 'invites';
     if (/^#(connected-wallet|cw-)/.test(h)) return 'wallet';
     if (/^#(rekt-|rec-h|arena|gamify|loot|quest)/.test(h)) return 'overview';
-    const el = document.querySelector(h.replace(/[^#\w-]/g, ''));
+    const el = document.getElementById(h.slice(1));   // not querySelector: "#1" is a valid id but throws as a selector
     return el ? ownerOf(el) : null;
   }
   function ownerOf(el) {

@@ -9,3 +9,6 @@ Disallow: /gate.html
 Disallow: /api/
 
 Sitemap: https://sendrh.com/sitemap.xml
+
+# The moderation queue is for operators only (the server answers 404 to everyone else); nothing to index.
+Disallow: /admin.html

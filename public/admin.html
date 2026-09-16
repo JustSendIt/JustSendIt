@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Moderation — $Send</title>
+<meta name="description" content="Operator-only moderation queue for JustSendIt: reports, takedowns and account restrictions.">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#c6f000">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the queue</a>
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="about.html">About</a>
+    <a href="communities.html">Communities</a>
+    <a href="newpairs.html">New&nbsp;Pairs</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="support.html">Support</a>
+    <a href="profile.html">My&nbsp;Profile</a>
+    <a class="active" href="admin.html" aria-current="page">Moderation</a>
+    <span id="nav-search-slot"></span>
+  </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Opens or closes the site links">☰</button>
+</nav>
+
+<main id="main" class="wrap" style="padding-top:2.2rem; padding-bottom:4rem;">
+  <h1 class="display" style="font-size:1.6rem; margin:0 0 0.3rem;">Moderation 🧹</h1>
+  <p class="section-sub" style="margin:0 0 1.2rem;">Reports from senders, newest first. Every action here notifies the person it lands on and is written to the report it resolves.</p>
+
+  <p class="modal-note" id="adm-gate" role="status" aria-live="polite">Checking who you are…</p>
+
+  <div id="adm-tools" hidden>
+    <div class="feed-controls" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
+      <label class="f-label" style="margin:0;"><input type="checkbox" id="adm-all"> Show resolved too</label>
+      <button class="btn btn-sm" id="adm-refresh" type="button" data-tip="Reads the report queue again">↻ Refresh</button>
+      <span class="privacy-chip" id="adm-count" aria-live="polite"></span>
+    </div>
+
+    <details class="setting-card" style="margin-bottom:1rem;">
+      <summary>🔇 Restrict or lift an account by id</summary>
+      <div class="setting-body">
+        <label class="f-label" for="adm-uid">User id</label>
+        <input class="addr-input" id="adm-uid" inputmode="numeric" placeholder="123">
+        <label class="f-label" for="adm-days">Days (0 = indefinite)</label>
+        <input class="addr-input" id="adm-days" inputmode="numeric" value="7">
+        <label class="f-label" for="adm-reason">Reason (the person sees it)</label>
+        <input class="addr-input" id="adm-reason" maxlength="200" placeholder="spam / harassment / …">
+        <div style="display:flex; gap:0.5rem; margin-top:0.7rem; flex-wrap:wrap;">
+          <button class="btn btn-sm btn-primary" id="adm-restrict" type="button" data-tip="Puts the account in read-only mode for that many days">Restrict</button>
+          <button class="btn btn-sm" id="adm-lift" type="button" data-tip="Ends the account's read-only restriction now">Lift restriction</button>
+        </div>
+        <p class="modal-note" id="adm-restrict-status" role="status" aria-live="polite"></p>
+      </div>
+    </details>
+
+    <div id="adm-list" class="feed" aria-live="polite" aria-busy="true"></div>
+  </div>
+</main>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="tips.js"></script>
+<script src="nav.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="notifications.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

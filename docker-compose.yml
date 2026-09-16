@@ -15,7 +15,8 @@ services:
       NODE_ENV: production
       BASE_URL: https://sendrh.com
       COOKIE_SECURE: "1"          # TLS is terminated in front of this container, so say so
-      TRUST_PROXY: "1"            # one proxy hop; without it every rate limit keys on the proxy's IP
+      TRUST_PROXY: "1"            # proxies that append to X-Forwarded-For: 1 for Caddy/nginx alone, 2 with Cloudflare in front
+      HOST: "0.0.0.0"             # the proxy container reaches Node over the compose network; keep the port unpublished on the host
       # DATA_KEY: set this. See .env.example for how to generate it, and back it up somewhere the
       # database backups are NOT. Left unset, the app generates one into the volume on first boot —
       # survivable, but it means the key and the data it protects live in the same place.

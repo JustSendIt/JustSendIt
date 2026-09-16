@@ -34,7 +34,7 @@
   }
 
   let root = null, state = { access: false, redeemed: false, tosAccepted: false, signedIn: false, ticket: null };
-  let goldEndsAt = null, goldStartedAt = null, raf = 0, onResize = null, lastFocus = null, releaseTrap = null, afterJoin = null;
+  let goldEndsAt = null, goldStartedAt = null, raf = 0, onResize = null, lastFocus = null, releaseTrap = null, afterJoin = null, prevOverflow = '';
   const $ = (id) => root && root.querySelector('#' + id);
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -87,7 +87,7 @@
         '<div class="inv-step" id="step-tos">' +
           '<h2 class="inv-title">Before you come in</h2>' +
           '<div class="inv-panel">' +
-            '<p class="inv-note">Read this all the way down. The box unlocks when you reach the end — that is the point of it.</p>' +
+            '<p class="inv-note">Read this all the way down. The box unlocks when you reach the end and at least ' + (MIN_DWELL / 1000) + ' seconds have passed — that is the point of it.</p>' +
             '<div class="g-terms" id="inv-tos" tabindex="0" role="region" aria-label="Terms of service"></div>' +
             '<div class="g-readmark"><span id="inv-pct">0% read</span><span class="g-readbar"><span class="g-readfill" id="inv-fill"></span></span></div>' +
             '<label class="g-agree is-locked" id="inv-agree-l" for="inv-agree"><input type="checkbox" id="inv-agree" disabled><span id="inv-agree-t">Scroll to the end to unlock this box.</span></label>' +
@@ -359,9 +359,14 @@
       $(p + 'tk-serial').textContent = 'SEND·RH · ' + new Date(t.joinedAt).toISOString().slice(0, 10);
       const face = $(p + 'tk-face');
       if (t.avatarImg) {
-        face.innerHTML = /\.(mp4|webm)$/i.test(t.avatarImg)
-          ? '<video src="' + esc(t.avatarImg) + '" muted loop autoplay playsinline></video>'
-          : '<img src="' + esc(t.avatarImg) + '" alt="">';
+        // through app.js's helper, which is the one place that knows a reduced-motion reader gets no
+        // autoplay (CSS cannot pause a <video>) and stamps data-avatar-video so its play/pause rules apply.
+        // The fallback below is the same markup for a page that has no app.js.
+        face.innerHTML = window.avatarHTML
+          ? avatarHTML(t.avatarImg, '')
+          : /\.(mp4|webm)$/i.test(t.avatarImg)
+            ? '<video src="' + esc(t.avatarImg) + '" muted loop playsinline data-avatar-video="1"' + (reduced() ? '' : ' autoplay') + '></video>'
+            : '<img src="' + esc(t.avatarImg) + '" alt="">';
       } else face.textContent = t.avatar || '🚀';
     }
     if (t && t.goldEndsAt != null) { goldEndsAt = t.goldEndsAt; goldStartedAt = goldEndsAt - 30 * DAY; }
@@ -393,6 +398,9 @@
     if (root.hasAttribute('data-open')) return;
     lastFocus = document.activeElement;
     root.setAttribute('data-open', '');
+    // remembered, not assumed empty: the proof check is raised over the compose modal (a refused post), and
+    // closing it must hand the lock back to that modal rather than unlock the page underneath it
+    prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     releaseTrap = window.trapFocus ? window.trapFocus(root) : null;
     document.dispatchEvent(new CustomEvent('jsi:modalopen'));
@@ -411,7 +419,7 @@
   function close() {
     if (!root || !root.hasAttribute('data-open')) return;
     root.removeAttribute('data-open');
-    document.body.style.overflow = '';
+    document.body.style.overflow = prevOverflow;
     stopScreen();
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
@@ -452,10 +460,10 @@
      MIN_DWELL has passed since it opened — so a flick of the scrollbar is not "read". The copy never
      claims this proves anyone read it; it proves the text was put in front of them. */
   const MIN_DWELL = 12000;
-  let tosLoaded = false, openedAt = 0, reachedEnd = false, tosTimer = 0;
+  let tosLoaded = false, openedAt = 0, reachedEnd = false, tosTimer = 0, unlocked = false;
   async function loadTerms() {
     const box = $('inv-tos');
-    openedAt = 0; reachedEnd = false;
+    openedAt = 0; reachedEnd = false; unlocked = false;
     if (!tosLoaded) {
       box.innerHTML = '<p>Loading the terms…</p>';
       try {
@@ -481,6 +489,15 @@
     $('inv-pct').textContent = ok ? 'Read to the end ✅' : Math.round(seen * 100) + '% read';
     const cb = $('inv-agree');
     cb.disabled = !ok;
+    /* The unlock happens on a timer, after the reader has moved on. A disabled checkbox is out of the tab
+       order, so a screen reader that passed it while locked has no way to know it exists now — say so,
+       once, through the site's shared live region (the modal's own status line when a page lacks it). */
+    if (ok && !unlocked) {
+      unlocked = true;
+      const msg = 'You have read to the end. The agreement checkbox is now available.';
+      if (window.announce) announce(msg);
+      else { const st = $('inv-tos-err'); if (st) { st.className = 'inv-err is-ok'; st.textContent = msg; } }
+    }
     $('inv-agree-l').classList.toggle('is-locked', !ok);
     $('inv-agree-t').textContent = ok
       ? 'I have read these terms. I understand this is entertainment, not financial advice, that crypto is extremely volatile, and that I can lose everything I put in.'

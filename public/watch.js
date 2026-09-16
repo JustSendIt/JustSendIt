@@ -45,11 +45,15 @@
     pair = String(pair || ''); if (!pair) return false;
     ids.delete(pair.toLowerCase());              // optimistic
     document.dispatchEvent(new CustomEvent('watchlist:changed'));
+    // the mirror of add(): a failed DELETE puts the id back and says so, or the star goes hollow for a pair the
+    // server still has saved and the next tap sends an add for a row that was never removed
+    const revert = () => { ids.add(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); };
     try {
       const r = await fetch('/api/watchlist', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pair }) });
-      if (r.ok && window.sendToast) sendToast('Removed from watchlist');
-      return r.ok;
-    } catch { return false; }
+      if (!r.ok) { revert(); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.sendToast) sendToast('Could not remove — try again'); return false; }
+      if (window.sendToast) sendToast('Removed from watchlist');
+      return true;
+    } catch { revert(); if (window.sendToast) sendToast('Could not remove — try again'); return false; }
   }
   function toggle(p) { return has(p.pair.address) ? remove(p.pair.address) : add(p); }
 

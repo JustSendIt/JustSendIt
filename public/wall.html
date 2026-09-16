@@ -34,7 +34,7 @@
 <a class="skip-link" href="#main">Skip to feed</a>
 
 <nav class="nav" aria-label="Main">
-  <a class="nav-logo" href="index.html"><img src="assets/logo-mark.png" alt="$Send home"><span>$Send</span></a>
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
@@ -65,9 +65,12 @@
 <main id="main" style="padding:1.2rem 1.25rem 4rem;">
   <div class="wrap">
 
+    <!-- Real ARIA tabs: each tab controls #feed-panel, a role="tabpanel" wrapped around the feed. Pointing
+         aria-controls straight at #feed (role="feed") promised a panel that did not exist. wall.js re-points
+         the panel's aria-labelledby and the roving tabindex on every switch. -->
     <div class="feed-tabs" role="tablist" aria-label="Feed filter">
-      <button class="feed-tab" role="tab" type="button" data-feed="all" aria-selected="true" aria-controls="feed" data-tip="Shows posts from everyone, not just who you follow">🌍 Everyone</button>
-      <button class="feed-tab" role="tab" type="button" data-feed="following" id="tab-following" aria-selected="false" aria-controls="feed" data-tip="Limits the feed to senders you follow — prompts sign-in">⭐ Following</button>
+      <button class="feed-tab" role="tab" type="button" data-feed="all" id="tab-all" aria-selected="true" aria-controls="feed-panel" data-tip="Shows posts from everyone, not just who you follow">🌍 Everyone</button>
+      <button class="feed-tab" role="tab" type="button" data-feed="following" id="tab-following" aria-selected="false" aria-controls="feed-panel" tabindex="-1" data-tip="Limits the feed to senders you follow — prompts sign-in">⭐ Following</button>
     </div>
 
     <div class="feed-sort" role="group" aria-label="Sort posts">
@@ -90,10 +93,14 @@
           <span style="font-weight:800;">@<span id="my-handle"></span></span>
         </div>
         <label for="post-text" class="sr-only">Write a post</label>
-        <textarea id="post-text" maxlength="500" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
+        <!-- The limit is said up front through aria-describedby: the visible counter is a bare number a screen
+             reader was never told about, and maxlength stops keystrokes silently. wall.js announces the last
+             20 characters and the limit once each through the shared polite region. -->
+        <span class="sr-only" id="char-hint">Up to 500 characters</span>
+        <textarea id="post-text" maxlength="500" aria-describedby="char-hint" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
         <div id="img-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
         <div class="composer-bar">
-          <label class="file-label">📷 Photo / GIF / Video<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
+          <label class="file-label">📷 Photo / GIF / Video<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Photo / GIF / Video — attach one to this post"></label>
           <button class="file-label voice-btn" type="button" id="post-voice" data-tip="Records a voice memo to post — press once to start, once to stop">🎤 Voice memo</button>
           <button class="btn btn-primary btn-sm" type="button" id="publish-btn" data-tip="Posts this publicly to the wall and your profile">SEND IT 🚀</button>
           <span class="hint" id="char-count" aria-hidden="true">500</span>
@@ -102,13 +109,15 @@
       </div>
     </div>
 
-    <div class="wall-feed" id="feed" role="feed" aria-label="Send Wall posts"></div>
-    <div class="empty-wall" id="empty" style="display:none;">
-      <div style="font-size:3rem;" aria-hidden="true">🦗</div>
-      <p>Nothing on the wall yet. Be the first to send it.</p>
-    </div>
-    <div style="text-align:center; margin-top:1.4rem;">
-      <button class="btn btn-ghost btn-sm" type="button" id="load-more" hidden data-tip="Adds the next batch of older posts below">Load more ⬇️</button>
+    <div id="feed-panel" role="tabpanel" aria-labelledby="tab-all" tabindex="0">
+      <div class="wall-feed" id="feed" role="feed" aria-label="Send Wall posts"></div>
+      <div class="empty-wall" id="empty" style="display:none;">
+        <div style="font-size:3rem;" aria-hidden="true">🦗</div>
+        <p>Nothing on the wall yet. Be the first to send it.</p>
+      </div>
+      <div style="text-align:center; margin-top:1.4rem;">
+        <button class="btn btn-ghost btn-sm" type="button" id="load-more" hidden data-tip="Adds the next batch of older posts below">Load more ⬇️</button>
+      </div>
     </div>
 
   </div>
@@ -130,6 +139,9 @@
      <a href="newpairs.html">New Pairs</a>
      <a href="wall.html">Send Wall</a>
      <a href="support.html">Support</a>
+     <a href="terms.html">Terms</a>
+     <a href="privacy.html">Privacy</a>
+     <a href="tracker.html">Wallet Tracker</a>
      <a href="index.html#swap">Swap</a>
      <a href="index.html#tokens">Tokens</a>
      <a href="watchlist.html">Watchlist</a>

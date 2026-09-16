@@ -79,8 +79,15 @@
   if (!blocked()) for (let k = 0; k < 6; k++) draw();
   raf = requestAnimationFrame(frame);
 
-  // clear the trail when paused so a stale sheet is not left frozen behind the page
+  // clear the trail when paused so a stale sheet is not left frozen behind the page — and cancel the loop,
+  // because a frame() that only returns early still wakes the main thread at the refresh rate for nothing
   const clear = () => { ctx.clearRect(0, 0, w, h); };
-  new MutationObserver(() => { if (root.classList.contains('motion-off')) clear(); }).observe(root, { attributes: true, attributeFilter: ['class'] });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) clear(); });
+  const sync = () => {
+    const stop = document.hidden || blocked();
+    if (stop) { clear(); if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+    else if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
+  };
+  new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['class'] });
+  document.addEventListener('visibilitychange', sync);
+  sync();
 })();

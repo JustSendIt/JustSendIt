@@ -485,12 +485,33 @@
     return { address, signature };
   };
 
+  /* Prove you OWN the account, for a change that adds a way in (linking a wallet). currentFactor answers
+     "did you pass the second factor" and is rightly empty when there is none — but the server now asks
+     for ownership on every link (a stolen cookie must not be able to attach its own key): the password
+     on an account that has one, otherwise a management signature from a wallet ALREADY on the account. */
+  AUTH.ownershipProof = async function (note) {
+    if (!AUTH.user) return {};
+    if (AUTH.user.twofa) return AUTH.currentFactor(note);
+    const methods = AUTH.user.methods || [];
+    if (methods.includes('email')) {
+      if (!AUTH._confirmFactor) throw new Error('cancelled');
+      return AUTH._confirmFactor('password', note);
+    }
+    // wallet-only account: sign with a wallet that is already linked — then connect the NEW one to link it
+    sendToast('First, sign with a wallet already linked to this account to confirm it’s you ✍️');
+    const { provider, address } = await WALLET.connect();
+    const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
+    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    return { address, signature };
+  };
+
   /* Link another wallet to the account you are already signed in to. Read-only: one personal_sign, no
      transaction, no approval. Resolves to the server's answer so a caller can tell linked from
      already-linked; throws with the server's own message on a refusal (wallet cap, wallet owned by
      another account, second factor not proven). */
   AUTH.linkWallet = async function (note) {
-    const current = await AUTH.currentFactor(note || 'Linking a wallet adds a new way to sign in to this account.');
+    const current = await AUTH.ownershipProof(note || 'Linking a wallet adds a new way to sign in to this account.');
+    if (current && current.address && !AUTH.user.twofa) sendToast('Now connect the wallet you want to link 🔗');
     const { provider, address } = await WALLET.connect();
     const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
     const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
@@ -922,16 +943,20 @@
     }
   }
 
+  let lastMeStatus = 0;   // a definite 401 from /api/me means the session is gone; anything else is weather
   async function refresh() {
-    try { AUTH.user = (await api('/api/me')).user; }
-    catch { AUTH.user = null; }
+    try { AUTH.user = (await api('/api/me')).user; lastMeStatus = 200; }
+    catch (e) { AUTH.user = null; lastMeStatus = (e && e.status) || 0; }
   }
   // re-read /api/me and repaint the nav badge — for anything that changes points or the boost stack out of band
   // (an arcade boost expiring, a cash-out in another tab). Never throws: a failed refresh just leaves the badge.
   AUTH.refresh = async function () {
     const before = AUTH.user;
     await refresh();
-    if (!AUTH.user && before) AUTH.user = before;      // a transient /api/me failure must not sign the UI out
+    if (!AUTH.user && before) {
+      if (lastMeStatus === 401) { onAuthChange(); }     // the session really ended (expired, ended elsewhere): the UI signs out
+      else AUTH.user = before;                          // a transient /api/me failure must not sign the UI out
+    }
     document.dispatchEvent(new CustomEvent('points:changed'));
   };
   // redraw the nav from AUTH.user — for the moments the identity itself changes (a new picture)

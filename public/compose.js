@@ -110,7 +110,7 @@
   function open() {
     lastFocus = document.activeElement;
     modal.removeAttribute('hidden');
-    document.body.style.overflow = 'hidden';
+    if (window.lockScroll) lockScroll(); else document.body.style.overflow = 'hidden';
     setStatus('');
     showForAuth();
     releaseTrap = window.trapFocus ? window.trapFocus(card) : null;
@@ -118,7 +118,7 @@
   }
   function close() {
     modal.setAttribute('hidden', '');
-    document.body.style.overflow = '';
+    if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) { try { lastFocus.focus(); } catch {} }
     document.dispatchEvent(new CustomEvent('jsi:modalclose'));

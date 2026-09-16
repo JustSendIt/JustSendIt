@@ -42,13 +42,14 @@
      moment before that lands (and the signed-out reader, who never gets a state call). */
   const BOOST_DIV = 4;
   const S = {
-    mode: 'loading',        // loading | signedout | ready | resume | flying | cashed | busted | done | expired | error
+    mode: 'loading',        // loading | signedout | ready | resume | flying | cashed | busted | done | expired | error | needsproof
     boost: 1, until: null, playedToday: false, last: null,
     growth: 0.06, maxBoost: 5, maxX: 50,
     round: null,            // { id, startedAt, offset }  offset = serverClock − localClock
     freeze: null,           // frozen view for the resolved-round drawing
     outcome: null,
     busy: false, netErr: '', err: '',
+    proof: null,            // the needsProof refusal from /start, kept so the button can re-open the wallet check
   };
 
   const mulAt   = (sec) => Math.exp(S.growth * Math.max(0, sec));
@@ -438,6 +439,7 @@
       case 'done':      x = '—'; sub = 'That’s today’s flight'; break;
       case 'expired':   x = '—'; sub = 'The rocket flew off without you'; subCls = 'is-bad'; ico = '🕒'; break;
       case 'error':     x = '—'; sub = 'Couldn’t reach mission control'; subCls = 'is-bad'; ico = '⚠️'; break;
+      case 'needsproof': x = '—'; sub = 'A wallet check comes first'; subCls = 'is-bad'; ico = '🪙'; break;
     }
     if (S.mode !== 'flying') { lastXStr = x; xEl.textContent = x; setXClass(xcls); }
     subEl.textContent = sub;
@@ -451,7 +453,7 @@
       case 'loading':
         show = false; hint = 'Checking today’s flight…'; break;
       case 'signedout':
-        label = 'Sign in to play 🚀'; hint = 'Free to play, free to join. Nothing is for sale here.'; break;
+        label = 'Sign in to play 🚀'; hint = 'Joining takes an invite, and flying takes the same check as posting — at least $100 of $SEND held in a linked wallet. Nothing is for sale here.'; break;
       case 'ready':
         label = '🚀 Launch'; hint = 'Tap the button — or Tab to it and press <kbd>Space</kbd> / <kbd>Enter</kbd> — to launch.'; break;
       case 'resume':
@@ -459,10 +461,13 @@
       case 'flying':
         label = lastBtnStr || ('💰 Cash out (' + fx(curX()) + '×)');
         cls = 'arc-btn--cash';
-        hint = 'Tap the button — or press <kbd>Space</kbd> / <kbd>Enter</kbd> — to lock in that multiplier.';
+        hint = 'Tap the button — or press <kbd>Space</kbd> / <kbd>Enter</kbd> — to cash out. It settles at the multiplier the server sees when your tap lands, a moment after the one showing.';
         break;
       case 'error':
         label = '↻ Try again'; hint = ''; break;
+      case 'needsproof':
+        // the same gate every write on the site sits behind — say so, rather than a generic error
+        label = '🪙 Verify a wallet to fly'; hint = 'Flying counts as doing, like posting: it needs at least $100 of $SEND held in a linked wallet, read on-chain. Verify once and the launch button comes back.'; break;
       case 'expired':
       case 'cashed':
       case 'busted':
@@ -479,8 +484,9 @@
       S.mode === 'signedout' ? 'Opens sign-in so you can play'
       : S.mode === 'ready'   ? 'Starts your one flight for today'
       : S.mode === 'resume'  ? 'Picks your flight back up where it is now'
-      : S.mode === 'flying'  ? 'Locks in the multiplier showing right now'
+      : S.mode === 'flying'  ? 'Sends your cash-out — it settles at the multiplier the server sees when the tap lands, a moment after the one showing'
       : S.mode === 'error'   ? 'Asks the arcade for its state again'
+      : S.mode === 'needsproof' ? 'Opens the wallet check that unlocks the launch'
       : 'Today\u2019s flight is over — the next unlocks at 00:00 UTC');
     // While flying, the VISIBLE label ticks with the multiplier 4×/s — so pin a stable accessible name, or a screen
     // reader re-announces the focused button every quarter second. The number is carried by the live region instead.
@@ -508,7 +514,7 @@
     let html = '';
     if (S.mode === 'signedout') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🔒 Sign in to fly</p>' +
-        '<p>Rocket Run is a free daily bonus for signed-in senders — the boost has to attach to an account. It costs nothing, there is nothing to put in, and the only outcome is a temporary Send Power boost.</p>' +
+        '<p>Rocket Run is a once-a-day flight for signed-in senders — the boost has to attach to an account. Joining takes an invite, and flying takes the same wallet check as posting: at least $100 of $SEND held in a linked wallet, read on-chain. Nothing is for sale here, nothing is put in, and the only outcome is a temporary Send Power boost.</p>' +
         '<div class="arc-msg-actions"><button class="btn btn-sm btn-primary" type="button" data-tip="Opens the sign-in box so you can play" data-arc="signin">Sign In 🚀</button></div></div>';
     } else if (S.mode === 'ready') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🎟️ One flight, whenever you’re ready</p>' +
@@ -628,6 +634,8 @@
     } catch (e) {
       S.busy = false;
       const msg = String((e && e.message) || 'request failed');
+      // the participation gate: auth.js has already opened the wallet check; the page must not also say "error"
+      if (e && e.needsProof) { S.proof = e; setMode('needsproof', { focusOutcome: hadFocus }); say('A wallet check comes first. ' + msg); return; }
       if (/sign in/i.test(msg)) { setMode('signedout'); if (window.AUTH && AUTH.open) AUTH.open(); return; }
       if (/expired/i.test(msg)) { S.err = msg; S.playedToday = true; setMode('expired', { focusOutcome: hadFocus }); say('That flight expired. Come back tomorrow.'); return; }
       if (/already flown|one run per day/i.test(msg)) { S.playedToday = true; await loadState(); say('You have already flown today. Come back tomorrow.'); return; }
@@ -703,6 +711,8 @@
     if (S.mode === 'ready' || S.mode === 'resume') { start(); return; }
     if (S.mode === 'flying') { cashout(); return; }
     if (S.mode === 'error') { S.err = ''; setMode('loading'); loadState(); return; }
+    // re-open the wallet check; once it passes, auth:change re-boots the page into 'ready'
+    if (S.mode === 'needsproof') { if (S.proof && window.AUTH && AUTH.needsProof) AUTH.needsProof(S.proof); else { setMode('loading'); loadState(); } return; }
   });
 
   panel.addEventListener('click', function (e) {
@@ -778,6 +788,12 @@
   }
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(boot, boot);
   else boot();
+  // A passed wallet check ends in AUTH.refresh(), which announces itself as points:changed (not auth:change,
+  // and boot() would ignore a same-user auth:change anyway). Only the gated state listens, so nothing else re-loads.
+  document.addEventListener('points:changed', function () {
+    if (S.mode !== 'needsproof') return;
+    S.proof = null; setMode('loading'); loadState();
+  });
   document.addEventListener('auth:change', boot);
   // the stage can be measured at 0 width before first layout / webfont settle — repaint the idle scene once more
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { if (!running) paintIdle(); });

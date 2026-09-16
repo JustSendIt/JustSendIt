@@ -127,12 +127,16 @@ try {
     // end to end: promote a second wallet to be the key, then prove which wallet the door accepts
     const u = mkUser('__af_2fa__');
     const wA = Wallet.createRandom(), wB = Wallet.createRandom();
-    const link = async (w) => {
+    const link = async (w, proof) => {
       const a = w.address.toLowerCase();
       const n = await api('/api/auth/wallet/nonce?purpose=link&address=' + a, { sid: u.sid });
-      return api('/api/auth/wallet/verify', { method: 'POST', sid: u.sid, body: { address: a, signature: await w.signMessage(n.j.message) } });
+      let current;   // F011: the second wallet needs a manage signature from the first
+      if (proof) { const pa = proof.address.toLowerCase(); const pn = await api('/api/auth/wallet/nonce?purpose=manage&address=' + pa, { sid: u.sid }); current = { address: pa, signature: await proof.signMessage(pn.j.message) }; }
+      return api('/api/auth/wallet/verify', { method: 'POST', sid: u.sid, body: { address: a, signature: await w.signMessage(n.j.message), current } });
     };
-    await link(wA); await link(wB);
+    await link(wA);
+    db.prepare('UPDATE sessions SET created_at = ? WHERE user_id = ?').run(Date.now() + 5, u.id);   // as if signed in again with A
+    await link(wB, wA);
     // arm wallet 2FA on A, then move the key to B — exactly what /api/2fa/wallet/primary does
     db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_enabled_at = ? WHERE id = ?").run(Date.now(), u.id);
     db.prepare("UPDATE identities SET is_2fa = 0 WHERE user_id = ?").run(u.id);

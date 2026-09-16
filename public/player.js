@@ -6,6 +6,12 @@
  *  - opted-out (mp-on=0): stay silent forever, never nag
  * The intro/entry animation now lives in entry.js (homepage only). */
 (function () {
+  /* X04/F120: the theme file ships outside git and may be absent on a deploy. /api/config says whether it is
+     here; when it is not, no player is drawn at all — a play button that plays nothing is worse than none. */
+  async function themeAvailable() {
+    try { const r = await fetch('/api/config', { credentials: 'same-origin' }); const j = await r.json(); return !(j && j.media && j.media.audio === false); }
+    catch { return true; }   // the config being unreachable is not evidence about the file
+  }
   function initPlayer() {
     const wrap = document.createElement('div');
     wrap.id = 'music-player';
@@ -14,10 +20,15 @@
       '<div class="mp-title"><span class="eq" aria-hidden="true"><span>▮</span><span>▮</span><span>▮</span></span> Just $Send It</div>' +
       '<input type="range" id="mp-vol" min="0" max="100" value="70" aria-label="Music volume">' +
       '<button class="mp-hint" id="mp-hint" data-tip="Turns the music on and hides this nudge" hidden>🔊 Tap for the theme</button>';
-    document.body.appendChild(wrap);
+    // right after the skip link (before it, on a page without one): the pause control is the second tab stop,
+    // not the last one behind the whole document while the theme is already playing (WCAG 1.4.2 guidance)
+    const skip = document.querySelector('.skip-link');
+    if (skip && skip.parentNode === document.body) skip.after(wrap); else document.body.prepend(wrap);
 
     const audio = new Audio('/assets/justsendit-audio.m4a');
     audio.loop = true;
+    // if the file 404s or will not decode, say so once and take the control away rather than spin forever
+    audio.addEventListener('error', () => { wrap.remove(); if (window.sendToast) sendToast('The theme tune is not available right now.'); });
     audio.preload = 'none';
     try { audio.volume = Number(localStorage.getItem('mp-vol') ?? 70) / 100; } catch { audio.volume = 0.7; }
     try { const t = Number(localStorage.getItem('mp-pos') || 0); if (t > 0) audio.currentTime = t; } catch {}
@@ -89,6 +100,7 @@
     }
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initPlayer);
-  else initPlayer();
+  const boot = () => { themeAvailable().then((ok) => { if (ok) initPlayer(); }); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();

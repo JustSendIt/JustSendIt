@@ -176,7 +176,9 @@
           // spoken once, near the end, rather than every tick — a countdown read aloud 300 times is noise
           if (left <= WARN_AT && left > WARN_AT - 250) announce('Fifteen seconds left');
         },
-        onError: function (msg) { toIdle(); announce(msg); say(''); if (window.sendToast) sendToast('⚠️ ' + msg); },
+        // say('') first: at every call site onStatus writes to the SAME node as `live`, so clearing it
+        // after announce() left the live region empty by the time a screen reader looked at it
+        onError: function (msg) { toIdle(); say(''); announce(msg); if (window.sendToast) sendToast('⚠️ ' + msg); },
         onDone: function (blob, mime, ms) {
           toIdle();
           announce('Recording stopped, ' + fmt(ms) + '. Attaching.');

@@ -93,7 +93,8 @@
         '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="-1" data-tip="Picks no — press Cast my vote to send it" data-choice="no">👎 No</button>' +
         '<button class="sort-btn prop-choice" type="button" role="radio" aria-checked="false" tabindex="-1" data-tip="Picks abstain — press Cast my vote to send it" data-choice="abstain">🤷 Abstain</button>' +
       '</div>' +
-      '<button class="btn btn-primary btn-sm prop-cast" type="button" data-tip="Sends your vote after a second press — votes are final" disabled>Cast my vote</button>' +
+      // disabled until a choice is armed: a disabled control gets no pointer events, so only a native title can explain it (see tips.js dedupe)
+      '<button class="btn btn-primary btn-sm prop-cast" type="button" data-tip="Sends your vote after a second press — votes are final" disabled title="Pick yes, no or abstain first">Cast my vote</button>' +
       '<p class="prop-gate comm-gate-msg" role="status" aria-live="polite" hidden></p>' +
     '</div>';
   }
@@ -136,7 +137,7 @@
       '</div>' +
       (p.body ? '<p class="prop-body">' + esc(p.body) + '</p>' : '') +
       '<p class="prop-by">by @' + esc(p.author ? p.author.username : '—') +
-        (p.electorate ? ' · ' + p.electorate + ' verified holders on the roll' : '') + '</p>' +
+        (p.electorate ? ' · ' + p.electorate + (sec.dataset.demo ? ' sandbox members' : ' verified holders') + ' on the roll' : '') + '</p>' + // the sandbox verifies nobody
       inner +
     '</li>';
   }
@@ -156,7 +157,7 @@
       sec.hidden = false;
       render();
       const me = window.AUTH && AUTH.user;
-      // Only a verified holder can start one, so only they are offered the button.
+      // Only a verified holder (a member, in the sandbox) can start one, so only they are offered the button.
       newBtn.hidden = !(me && cache.every(p => !(p.isMine && p.status === 'draft')));
     } catch { sec.hidden = true; }
   }
@@ -195,6 +196,7 @@
       });
       const cast = choice.closest('.prop-vote').querySelector('.prop-cast');
       cast.disabled = false;
+      cast.removeAttribute('title'); // the native fallback was for the disabled state only — tips.js shows the data-tip from here
       cast.dataset.choice = choice.dataset.choice;
       cast.textContent = 'Cast my vote';
       cast._armed = false;
@@ -245,11 +247,13 @@
     const del = e.target.closest('.prop-del');
     if (del) {
       if (!del._armed) { del._armed = true; del.textContent = 'Tap again to delete'; setTimeout(() => { del._armed = false; del.textContent = 'Delete'; }, 5000); return; }
-      try { await window.api('/api/communities/' + cid() + '/proposals/' + del.dataset.pid, { method: 'DELETE' }); load(); } catch {}
+      try { await window.api('/api/communities/' + cid() + '/proposals/' + del.dataset.pid, { method: 'DELETE' }); load(); }
+      catch (err) { del._armed = false; del.textContent = 'Delete'; say('Could not delete. ' + (err.message || '')); if (window.sendToast) sendToast('⚠️ ' + (err.message || 'Could not delete')); } // a silent refusal left "Tap again" on screen with nothing said
     }
   });
 
   document.addEventListener('auth:change', load);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', load); else load();
   window.reloadProposals = load;
+  window.rerenderProposals = render;   // repaint from cache — community.js calls it once it knows the sandbox flag
 })();
