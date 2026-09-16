@@ -106,6 +106,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 }
 @media (pointer: coarse) {
   .switch::before, .ll-toggle button::after, .swatch::after { width: max(100%, 44px); height: max(100%, 44px); }
+  .np-search-clear, .oc-tf, .oc-reset, .oc-data > summary, .sc-senders-toggle { min-height: 44px; }
   .react-btn { min-height: 44px; }   /* avatar radios reached 44px only at ≤560px; coarse-pointer tablets were at ~31px */
   .gobj-primary a, .gobj-primary .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 }
@@ -241,3 +242,9 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .post-comm-sandbox { background: linear-gradient(90deg, rgba(159,224,255,0.12), transparent); border-color: rgba(159,224,255,0.35); }
 .post-comm-sandbox:hover { border-color: var(--diamond); background: linear-gradient(90deg, rgba(159,224,255,0.2), transparent); }
 .post-comm-sandbox .post-comm-name { color: var(--diamond); }
+
+/* the sub-11px text the floor above missed (styles.css sizes are cited in the restyle inventory) */
+.glevel-lbl, .eq-chip small, .np-rail-count, .np-f-moved::after, .np-feed-dyor, .wc-badge, .rekt-rung-you, .oc-tip-note, .oc-mk-out, .g1-w-tag, .og-badge,
+.rec-k, .rekt-state, .gd-text, .wl-tag, .cmb-l, .trk-w-badge { font-size: 0.72rem; }
+/* mouse-size floor for the chart and senders controls (24px, WCAG 2.5.8) */
+.np-search-clear, .oc-tf, .oc-reset, .oc-data > summary, .sc-senders-toggle { min-height: 24px; min-width: 24px; }

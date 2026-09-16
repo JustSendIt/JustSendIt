@@ -165,6 +165,7 @@
   const io = new IntersectionObserver((ents) => {
     ents.forEach(en => { if (en.isIntersecting) { en.target.classList.add('shown'); io.unobserve(en.target); } });
   }, { threshold: 0.12 });
+  document.documentElement.classList.add('js');   // .reveal parks at opacity 0 only under html.js — see styles.css
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
   // --- logo easter egg: click logo → mega send ---
@@ -523,4 +524,39 @@
     el.textContent = '';
     setTimeout(function () { el.textContent = String(text || ''); }, 30); // clear→set so identical text re-announces
   };
+})();
+
+/* ===== Motion pause (WCAG 2.2.2) ===============================================================
+   The ticker, the OG banner sweeps, the hero field, the world grid and the breathing FAB all start on
+   their own and never stop. prefers-reduced-motion stops them, but that is an OS setting, not a control
+   in the content; the signed-in "effects" pref only reaches people with an account. This is the switch
+   for everyone: a ⏸ in the nav that toggles html.motion-off (styles.css pauses every ambient animation
+   under it) and remembers the choice in this browser. State animations — toasts, meter fills, focus —
+   are deliberately not on that list. */
+(function () {
+  const KEY = 'send.motion';
+  const root = document.documentElement;
+  let off = false; try { off = localStorage.getItem(KEY) === 'off'; } catch {}
+  if (off) root.classList.add('motion-off');
+  function mount() {
+    const nav = document.querySelector('nav.nav'); if (!nav || document.getElementById('motion-btn')) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.id = 'motion-btn'; b.className = 'motion-btn';
+    b.setAttribute('aria-pressed', String(off));
+    b.setAttribute('aria-label', off ? 'Resume moving decorations' : 'Pause moving decorations');
+    b.setAttribute('data-tip', 'Pauses or resumes the ticker, floating emoji and other decorative motion — remembered on this device');
+    b.textContent = off ? '▶' : '⏸';
+    b.addEventListener('click', () => {
+      off = !off;
+      root.classList.toggle('motion-off', off);
+      try { localStorage.setItem(KEY, off ? 'off' : 'on'); } catch {}
+      b.setAttribute('aria-pressed', String(off));
+      b.setAttribute('aria-label', off ? 'Resume moving decorations' : 'Pause moving decorations');
+      b.textContent = off ? '▶' : '⏸';
+      if (window.sendToast) sendToast(off ? 'Motion paused ⏸' : 'Motion back on ▶');
+    });
+    const before = nav.querySelector('#nav-notif') || nav.querySelector('#nav-auth') || nav.lastElementChild;
+    nav.insertBefore(b, before);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();
