@@ -355,7 +355,7 @@
       return '<details class="np-bd-sec np-bd-g' + s.grade + '">' +
         '<summary class="np-bd-head">' +
           '<span class="np-bd-toprow"><span class="np-bd-ico" aria-hidden="true">' + s.ico + '</span><span class="np-bd-label">' + s.label + '</span>' +
-            '<span class="np-bd-grade" title="Section grade">' + s.grade + '</span><span class="np-bd-score"' + ratingInk(s.score) + '>' + s.score + '<i>/100</i></span>' +
+            '<span class="np-bd-grade" title="Section grade"><span class="sr-only">Section grade </span>' + s.grade + '</span><span class="np-bd-score"' + ratingInk(s.score) + '>' + s.score + '<i>/100</i></span>' +
             '<span class="np-bd-chev" aria-hidden="true">▾</span></span>' +
           '<span class="np-bd-bar"><span style="width:' + s.score + '%;background:' + ringColor(s.score) + '"></span></span>' +
           '<span class="np-bd-key">' + key + '</span>' +
@@ -676,7 +676,7 @@
       ? '<span class="np-status-yes">✓ Info added' + (b.boosted > 0 ? ' · ⚡ Paid boost ×' + b.boosted : '') + '</span>'
       : '<span class="np-status-no">— no info added</span>';
     let dext;
-    if (b.dextools == null) dext = '<span class="np-status-unk" title="Needs a Dextools API key to check (and Robinhood Chain must be listed there)">— not connected</span>';
+    if (b.dextools == null) dext = '<span class="np-status-unk" title="Needs a Dextools API key to check (and Robinhood Chain must be listed there)">— not connected<span class="sr-only"> — needs a Dextools API key to check, and Robinhood Chain must be listed there</span></span>';
     else if (b.dextools.updated) dext = '<span class="np-status-yes">✓ Logo or socials added</span>';
     else if (b.dextools.listed) dext = '<span class="np-status-no">listed, no branding</span>';
     else dext = '<span class="np-status-no">— not listed</span>';
@@ -1750,7 +1750,7 @@
     if (backdrop) backdrop.addEventListener('click', () => setFiltersOpen(false, true));
     document.addEventListener('keydown', (e) => {
       if (filters.hidden || (e.key !== 'Escape' && e.key !== 'Esc')) return;
-      // only if the panel actually owns the moment — never steal Escape from a search box elsewhere
+      if (e.defaultPrevented || (e.target && e.target.id === 'np-q')) return;   // #np-q owns its own Esc (it clears itself); never yank focus off it
       setFiltersOpen(false, true);
     });
     // quote + code checkboxes (independent multi-select)
@@ -1926,10 +1926,12 @@
     if (CHAINS.length < 2) { chainBar.hidden = true; chainBar.innerHTML = ''; if (chainNote) { chainNote.hidden = true; chainNote.textContent = ''; } return; }
     chainBar.hidden = false;
     chainBar.innerHTML = CHAINS.map(c =>
-      '<button class="np-chain-btn' + (c.slug === CHAIN ? ' is-on' : '') + '" type="button" role="tab" data-tip="Switches the scanner to this chain and reloads the list"' +
+      // the "lite" caveat rides in the button's own data-tip (focus / press-and-hold reach it) and in sr-only copy —
+      // a title= on the <i> alone only ever reached a mouse
+      '<button class="np-chain-btn' + (c.slug === CHAIN ? ' is-on' : '') + '" type="button" role="tab" data-tip="Switches the scanner to this chain and reloads the list' + (c.deep ? '' : ' — market data only on this chain') + '"' +
       ' aria-selected="' + (c.slug === CHAIN ? 'true' : 'false') + '" tabindex="' + (c.slug === CHAIN ? '0' : '-1') + '"' +
       ' data-chain="' + esc(c.slug) + '"><span aria-hidden="true">' + esc(c.emoji || '') + '</span> ' + esc(c.name) +
-      (c.deep ? '' : '<i class="np-chain-lite" title="Market data only on this chain">lite</i>') + '</button>'
+      (c.deep ? '' : '<i class="np-chain-lite">lite<span class="sr-only"> — market data only on this chain</span></i>') + '</button>'
     ).join('');
   }
   if (chainBar) chainBar.addEventListener('click', (e) => {
@@ -2027,7 +2029,7 @@
       '</div>' +
       '<div class="np-slide-rail" aria-label="Actions">' +
         (window.Watchlist ? Watchlist.btnHTML(p, 'np-rail-btn') : '') +
-        '<button class="np-rail-btn np-feed-react" type="button" data-tip="Adds a private hype tap saved only in this browser" data-addr="' + esc(p.pair.address) + '" aria-label="Hype this token — a private tap only you can see, not advice">🚀<span class="np-rail-count">' + rocketLabel(p.pair.address) + '</span></button>' +
+        '<button class="np-rail-btn np-feed-react" type="button" data-tip="Adds a private hype tap saved only in this browser" data-addr="' + esc(p.pair.address) + '">🚀<span class="sr-only">Hype this token — a private tap only you can see, not advice. </span><span class="np-rail-count">' + rocketLabel(p.pair.address) + '</span></button>' +
         '<a class="np-rail-btn" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" aria-label="Open chart">📈</a>' +
         '<a class="np-rail-btn" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" aria-label="Open explorer">🔍</a>' +
         '<button class="copy-btn np-rail-btn" type="button" data-tip="Copies the contract address to your clipboard" data-copy="' + esc(p.token.address) + '" aria-label="Copy contract address">📋</button>' +
@@ -2189,6 +2191,9 @@
     if (callArmed) disarmCall();                                               // any other click on the board stands it down
     if (e.target.closest('[data-pin]') || e.target.closest('.np-runner-chart') || e.target.closest('.tok-comm')) return; // the 🏘️ community tag is a real link
     const row = e.target.closest('.np-runner'); if (!row || !row.dataset.token) return;
+    // a drag to copy a name or mcap ends with a mouse-up on the row — that is not a request for the popup
+    const sel = window.getSelection && getSelection();
+    if (sel && String(sel).length && sel.anchorNode && row.contains(sel.anchorNode)) return;
     if (!window.TokenModal) return;
     const sb = row.querySelector('.np-runner-sym'); if (sb) { try { sb.focus(); } catch (_) {} } // focus the trigger button before opening so the modal restores focus HERE on close (mouse + Safari, where a click doesn't focus a <button>)
     TokenModal.open(row.dataset.token, { symbol: row.dataset.sym, name: row.dataset.name });
@@ -2219,7 +2224,8 @@
      position, their focus or an open detail. Nothing interactive lives in here, which is what makes
      repainting it wholesale safe. */
   function runnerMetricsHTML(r) {
-    const note = !r.exact ? '<span class="np-runner-note" title="Tracked for ' + r.depthDays + ' days — shorter than this window, so it’s measured since we first saw it, not the full window.">since ' + r.depthDays + 'd</span>' : '';
+    // title= only ever reaches a mouse; the sr-only copy carries the same explanation to everyone else
+    const note = !r.exact ? '<span class="np-runner-note" title="Tracked for ' + r.depthDays + ' days — shorter than this window, so it’s measured since we first saw it, not the full window.">since ' + r.depthDays + 'd<span class="sr-only"> — tracked for ' + r.depthDays + ' days, shorter than this window, so measured since we first saw it</span></span>' : '';
     const health = r.health != null ? '<span class="np-runner-health"' + ratingInk(r.health) + ' role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
     // hover/SR detail: the EXACT (uncapped) current multiple + the all-time high — the visible chip stays abbreviated
     const curFull = r.gain >= 1 ? fmtFullX(r.gain) + '×' : (r.gain >= 0 ? '+' + Math.round(r.gain * 100) + '%' : '−' + Math.round(Math.abs(r.gain) * 100) + '%');

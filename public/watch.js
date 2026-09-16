@@ -72,7 +72,9 @@
       b.setAttribute('aria-pressed', String(on));
       b.setAttribute('aria-label', on ? 'Remove from watchlist' : 'Save to watchlist');
       b.setAttribute('title', on ? 'In your watchlist' : 'Save to watchlist');
-      b.textContent = on ? '★' : '☆';
+      // the star is the first text node; writing textContent here would erase the label span just refreshed above
+      if (lbl && b.firstChild && b.firstChild.nodeType === 3) b.firstChild.nodeValue = (on ? '★' : '☆') + ' ';
+      else b.textContent = on ? '★' : '☆';
     });
   }
   document.addEventListener('watchlist:changed', () => syncButtons());

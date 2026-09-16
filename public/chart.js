@@ -475,7 +475,9 @@
   function showTip(host, html, x, y, wide) {
     const plot = host.querySelector('.oc-plot') || host;
     let tip = plot.querySelector('.oc-tip');
-    if (!tip) { tip = document.createElement('div'); tip.className = 'oc-tip'; tip.setAttribute('role', 'status'); plot.appendChild(tip); }
+    /* Not a live region: it is rewritten on every pointermove, which as role=status streamed one announcement
+       per pixel. The canvas aria-label and the "View the numbers" table are the AT surfaces; this is hover-only. */
+    if (!tip) { tip = document.createElement('div'); tip.className = 'oc-tip'; tip.setAttribute('role', 'tooltip'); tip.setAttribute('aria-hidden', 'true'); plot.appendChild(tip); }
     tip.innerHTML = html;
     tip.classList.toggle('is-wide', !!wide);
     tip.hidden = false;

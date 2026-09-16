@@ -24,11 +24,12 @@
   function shortDur(ms) { const s = Math.max(0, ms / 1000); if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm'; if (s < 86400) return Math.round(s / 3600) + 'h'; return Math.round(s / 86400) + 'd'; }
   function sendersRowsHTML(list) {
     return (list || []).map(s => {
-      const dia = s.diamond >= 1 ? '<span class="sc-sender-diamond" title="Diamond Hand Lv ' + s.diamond + '">💎' + s.diamond + '</span>' : '';
+      // title= only ever reaches a mouse; the sr-only copy carries the same words to everyone else
+      const dia = s.diamond >= 1 ? '<span class="sc-sender-diamond" title="Diamond Hand Lv ' + s.diamond + '">💎<span class="sr-only">Diamond Hand Lv </span>' + s.diamond + '</span>' : '';
       const pnl = s.senderX != null ? '<span class="sc-sender-pnl ' + xClass(s.senderX) + '"><span class="sr-only">up </span>' + xFmt(s.senderX) + '</span>' : '';
       const hold = s.holding
-        ? '<span class="sc-sender-hold sc-holding" title="Still holding for ' + shortDur(s.holdMs) + '">💎 ' + shortDur(s.holdMs) + '</span>'
-        : (s.sold ? '<span class="sc-sender-hold sc-soldout" title="Sold out">💀 sold</span>' : '<span class="sc-sender-hold sc-nobuy" title="Sent It — no on-chain buy found">—</span>');
+        ? '<span class="sc-sender-hold sc-holding" title="Still holding for ' + shortDur(s.holdMs) + '">💎 <span class="sr-only">still holding for </span>' + shortDur(s.holdMs) + '</span>'
+        : (s.sold ? '<span class="sc-sender-hold sc-soldout" title="Sold out">💀 sold<span class="sr-only"> out</span></span>' : '<span class="sc-sender-hold sc-nobuy" title="Sent It — no on-chain buy found"><span aria-hidden="true">—</span><span class="sr-only">Sent It — no on-chain buy found</span></span>');
       return '<li class="sc-sender' + (s.holding ? '' : ' sc-sender-out') + '">' +
         '<a class="sc-sender-who" href="/u/' + encodeURIComponent(s.username) + '">' + senderAva(s) + dia + '<span class="sc-sender-name">@' + esc(s.username) + '</span>' + (window.ogBadge ? ogBadge(s.og) : '') + '</a>' +
         '<span class="sc-sender-stats">' +
@@ -101,7 +102,7 @@
       '<div class="sc-top">' + logo(call) +
         '<div class="sc-id"><span class="sc-name">' + esc(call.name || 'Token') + ' <b>$' + esc(call.symbol || '?') + '</b></span>' +
           '<span class="sc-when">📣 Send Call · ' + timeAgo(call.calledAt) + ' · entry ' + (call.entryMc != null ? fmtUsd(call.entryMc) + ' MC' : '$' + (call.entryPrice != null ? Number(call.entryPrice).toPrecision(3) : '—')) + '</span></div>' +
-        '<span class="sc-grade" title="' + esc(g.label) + ' call">' + g.emoji + '<i>' + esc(g.g) + '</i></span>' +
+        '<span class="sc-grade" title="' + esc(g.label) + ' call">' + g.emoji + '<i>' + esc(g.g) + '</i><span class="sr-only sc-grade-sr"> — ' + esc(g.label) + ' call</span></span>' +
       '</div>' +
       '<div class="sc-xrow">' +
         '<div class="sc-x ' + (call.stale ? 'sc-flat' : xClass(call.curX)) + '"><i>Now' + (call.stale ? ' ⚠︎' : '') + '</i><b class="sc-xnow">' + (call.stale ? '—' : xFmt(call.curX)) + '</b></div>' +
@@ -125,7 +126,7 @@
         '<button class="sc-btn sc-hop' + (call.hopped ? ' hopped' : '') + '" type="button" data-tip="Adds you publicly to the senders on this call — no undo" data-hop="' + call.id + '"' + (call.mineOwn ? ' disabled title="This is your own call"' : '') + '>🚀 ' + (call.hopped ? 'Sent it!' : 'Send It!') + ' <span class="sc-hopn">' + (call.hops || 0) + '</span></button>' +
         (call.wallet ? '<button class="sc-btn sc-track" type="button" data-tip="Adds that address to your wallet tracker" data-track="' + esc(call.wallet) + '" data-sym="' + esc(call.symbol || '') + '">➕ Track caller’s wallet</button>' : '') +
         '<a class="sc-btn" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(chart) + '" target="_blank" rel="noopener nofollow">📈 Chart</a>' +
-        '<button class="sc-btn sc-share" type="button" data-tip="Saves a card image and opens X to post it" data-share="' + call.id + '" title="Share this call on X — we build a card image you can attach">𝕏 Share</button>' +
+        '<button class="sc-btn sc-share" type="button" data-tip="Saves a card image and opens X to post it" data-share="' + call.id + '" title="Share this call on X — we build a card image you can attach"><span aria-hidden="true">𝕏</span><span class="sr-only">X</span> Share</button>' +
         '<button class="sc-btn sc-info" type="button" data-tip="Shows how Send Calls and their scores work" data-scinfo aria-expanded="false">ⓘ What’s a Send Call?</button>' +
       '</div>' +
       '<div class="sc-explain" hidden>' +
@@ -168,7 +169,7 @@
     }
     const cm = el.querySelector('.sc-curmc'); if (cm && (!spotFresh || call.stale)) cm.textContent = call.stale ? '—' : fmtUsd(call.curMc);
     const pm = el.querySelector('.sc-peakmc'); if (pm) pm.textContent = fmtUsd(call.peakMc);
-    const gr = el.querySelector('.sc-grade'); if (gr) { gr.firstChild.textContent = g.emoji || '➖'; const i = gr.querySelector('i'); if (i) i.textContent = g.g || 'E'; }
+    const gr = el.querySelector('.sc-grade'); if (gr) { gr.firstChild.textContent = g.emoji || '➖'; const i = gr.querySelector('i'); if (i) i.textContent = g.g || 'E'; const sr = gr.querySelector('.sc-grade-sr'); if (sr) sr.textContent = ' — ' + (g.label || 'Flat') + ' call'; gr.setAttribute('title', (g.label || 'Flat') + ' call'); }
     const hn = el.querySelector('.sc-hopn'); if (hn) hn.textContent = call.hops || 0;
     const hold = el.querySelector('.sc-hold'); if (hold) { hold.hidden = !(call.holdEarned > 0); const hx = hold.querySelector('.sc-holdn'); if (hx) hx.textContent = (call.holdEarned || 0).toLocaleString('en-US'); }
     const hs = el.querySelector('.sc-hopspend'); if (hs) hs.textContent = fmtUsd(call.hopSpend || 0); // followers' cumulative buy-in grows as more Send It

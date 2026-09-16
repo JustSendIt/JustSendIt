@@ -66,8 +66,8 @@
   <div class="wrap">
 
     <div class="feed-tabs" role="tablist" aria-label="Feed filter">
-      <button class="feed-tab" role="tab" data-feed="all" aria-selected="true" data-tip="Shows posts from everyone, not just who you follow">🌍 Everyone</button>
-      <button class="feed-tab" role="tab" data-feed="following" id="tab-following" aria-selected="false" data-tip="Limits the feed to senders you follow — prompts sign-in">⭐ Following</button>
+      <button class="feed-tab" role="tab" type="button" data-feed="all" aria-selected="true" aria-controls="feed" data-tip="Shows posts from everyone, not just who you follow">🌍 Everyone</button>
+      <button class="feed-tab" role="tab" type="button" data-feed="following" id="tab-following" aria-selected="false" aria-controls="feed" data-tip="Limits the feed to senders you follow — prompts sign-in">⭐ Following</button>
     </div>
 
     <div class="feed-sort" role="group" aria-label="Sort posts">
@@ -82,20 +82,20 @@
     <div class="composer card" id="composer-card">
       <div id="composer-signedout" style="text-align:center; padding:0.6rem 0;">
         <p style="color:var(--text-dim); margin-bottom:0.9rem;">You're seeing the live feed. Want in on it?</p>
-        <button class="btn btn-primary" id="signin-cta" data-tip="Opens the sign-in panel so you can post here">Sign In To Post 🚀</button>
+        <button class="btn btn-primary" type="button" id="signin-cta" data-tip="Opens the sign-in panel so you can post here">Sign In To Post 🚀</button>
       </div>
       <div id="composer-signedin" hidden>
         <div style="display:flex; gap:0.7rem; margin-bottom:0.7rem; align-items:center;">
           <span style="font-size:1.6rem;" id="my-avatar" aria-hidden="true">🚀</span>
           <span style="font-weight:800;">@<span id="my-handle"></span></span>
         </div>
-        <label for="post-text" class="f-label" style="position:absolute; left:-9999px;">Write a post</label>
+        <label for="post-text" class="sr-only">Write a post</label>
         <textarea id="post-text" maxlength="500" placeholder="What did you send today? 🚀 Paste a contract address → it becomes a clickable $TICKER"></textarea>
         <div id="img-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
         <div class="composer-bar">
           <label class="file-label">📷 Photo / GIF / Video<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
           <button class="file-label voice-btn" type="button" id="post-voice" data-tip="Records a voice memo to post — press once to start, once to stop">🎤 Voice memo</button>
-          <button class="btn btn-primary btn-sm" id="publish-btn" data-tip="Posts this publicly to the wall and your profile">SEND IT 🚀</button>
+          <button class="btn btn-primary btn-sm" type="button" id="publish-btn" data-tip="Posts this publicly to the wall and your profile">SEND IT 🚀</button>
           <span class="hint" id="char-count" aria-hidden="true">500</span>
         </div>
         <p class="hint" id="wall-c-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
@@ -108,7 +108,7 @@
       <p>Nothing on the wall yet. Be the first to send it.</p>
     </div>
     <div style="text-align:center; margin-top:1.4rem;">
-      <button class="btn btn-ghost btn-sm" id="load-more" hidden data-tip="Adds the next batch of older posts below">Load more ⬇️</button>
+      <button class="btn btn-ghost btn-sm" type="button" id="load-more" hidden data-tip="Adds the next batch of older posts below">Load more ⬇️</button>
     </div>
 
   </div>

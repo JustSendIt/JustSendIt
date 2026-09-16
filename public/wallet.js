@@ -82,7 +82,7 @@
   function knownRank(info) { const k = knownFor(info); return k ? KNOWN.indexOf(k) : 90; }
 
   // --- picker modal ---
-  let overlay = null, resolver = null, lastFocus = null;
+  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '';
   function buildModal() {
     overlay = document.createElement('div');
     overlay.className = 'wc-overlay';
@@ -101,7 +101,10 @@
     document.body.appendChild(overlay);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
     overlay.querySelector('.wc-x').addEventListener('click', () => close(null));
-    document.addEventListener('keydown', (e) => { if (!overlay.hidden && e.key === 'Escape') close(null); });
+    /* Captured, and stopped there: the picker is the topmost layer whenever it is up, so Esc is its alone.
+       As a plain bubbling listener it ran alongside the sign-in modal's and the ticket's own Esc handlers,
+       and whichever of those registered later fired too — closing the thing beneath the picker as well. */
+    document.addEventListener('keydown', (e) => { if (!overlay.hidden && e.key === 'Escape') { e.stopPropagation(); close(null); } }, true);
   }
 
   function badgeHTML(k) { return (k && k.badge) ? '<span class="wc-badge">✓ ' + esc(k.badge) + '</span>' : ''; }
@@ -163,15 +166,18 @@
     let ticks = 0; const iv = setInterval(() => { if (overlay.hidden || ++ticks > 8) { clearInterval(iv); return; } renderList(); }, 350);
     lastFocus = document.activeElement;
     overlay.hidden = false;
+    prevOverflow = document.body.style.overflow;   // the sign-in modal or the ticket beneath may hold the scroll lock — hand it back, not ''
     document.body.style.overflow = 'hidden';
     const first = overlay.querySelector('.wc-item, .wc-deep, .wc-x'); if (first) first.focus();
-    if (window.trapFocus) { try { window.trapFocus(overlay.querySelector('.wc-modal')); } catch {} }
+    if (releaseTrap) { releaseTrap(); releaseTrap = null; }   // never stack a second trap on the same card
+    if (window.trapFocus) { try { releaseTrap = window.trapFocus(overlay.querySelector('.wc-modal')); } catch {} }
     return new Promise((res) => { resolver = res; });
   }
   function close(v) {
     if (!overlay) return;
     overlay.hidden = true;
-    document.body.style.overflow = '';
+    document.body.style.overflow = prevOverflow;
+    if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
     const r = resolver; resolver = null;
     if (r) r(v || null);

@@ -1,7 +1,7 @@
 /* ===== Data API page: your eligibility, and the one place a key is ever shown ===== */
 (function () {
   const card = document.getElementById('dk-card'), sr = document.getElementById('dk-sr');
-  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const usd = n => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const tok = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const say = t => { if (sr) sr.textContent = t; if (window.sendToast) sendToast(t); };

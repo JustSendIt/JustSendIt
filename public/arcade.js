@@ -453,7 +453,7 @@
       case 'signedout':
         label = 'Sign in to play 🚀'; hint = 'Free to play, free to join. Nothing is for sale here.'; break;
       case 'ready':
-        label = '🚀 Launch'; hint = 'Press <kbd>Space</kbd> or <kbd>Enter</kbd> to launch.'; break;
+        label = '🚀 Launch'; hint = 'Tap the button — or Tab to it and press <kbd>Space</kbd> / <kbd>Enter</kbd> — to launch.'; break;
       case 'resume':
         label = '🚀 Rejoin your flight'; hint = 'You left mid-flight — pick it back up where it is now.'; break;
       case 'flying':
@@ -782,4 +782,12 @@
   // the stage can be measured at 0 width before first layout / webfont settle — repaint the idle scene once more
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(function () { if (!running) paintIdle(); });
   addEventListener('load', function () { if (!running) paintIdle(); });
+  // a stage booted inside a hidden tab/section measures 0 wide, fit() bails, and nothing repaints until a window
+  // resize — watch the stage itself so its first real layout (or a later reveal) paints the idle scene
+  try {
+    if (window.ResizeObserver) new ResizeObserver(function (entries) {
+      const r = entries[0] && entries[0].contentRect;
+      if (r && r.width && !running) paintIdle();
+    }).observe(stage);
+  } catch (err) { /* no ResizeObserver: the load/resize repaints above still cover the visible case */ }
 })();

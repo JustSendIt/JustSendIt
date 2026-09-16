@@ -82,19 +82,19 @@
     <div class="composer card" id="composer-card">
       <div id="composer-signedout" style="text-align:center; padding:0.6rem 0;">
         <p style="color:var(--text-dim); margin-bottom:0.9rem;">You can read every question without an account. Sign in to ask one, answer, or vote.</p>
-        <button class="btn btn-primary" data-tip="Opens the sign-in box so you can post" id="signin-cta">Sign In To Ask 🛟</button>
+        <button class="btn btn-primary" type="button" data-tip="Opens the sign-in box so you can post" id="signin-cta">Sign In To Ask 🛟</button>
       </div>
       <div id="composer-signedin" hidden>
         <div style="display:flex; gap:0.7rem; margin-bottom:0.7rem; align-items:center;">
           <span style="font-size:1.6rem;" id="my-avatar" aria-hidden="true">🚀</span>
           <span style="font-weight:800;">@<span id="my-handle"></span></span>
         </div>
-        <label for="post-text" class="f-label" style="position:absolute; left:-9999px;">Write your question</label>
+        <label for="post-text" class="sr-only">Write your question</label>
         <textarea id="post-text" maxlength="500" placeholder="What are you stuck on? The more specific the question, the better the answer — say what you tried and what happened."></textarea>
         <div id="img-preview" class="media-preview" hidden aria-label="Attached screenshot preview"></div>
         <div class="composer-bar">
           <label class="file-label">📷 Add a screenshot<input type="file" id="post-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a screenshot or short clip"></label>
-          <button class="btn btn-primary btn-sm" data-tip="Posts your question publicly for anyone to answer" id="publish-btn">Ask 🛟</button>
+          <button class="btn btn-primary btn-sm" type="button" data-tip="Posts your question publicly for anyone to answer" id="publish-btn">Ask 🛟</button>
           <span class="hint" id="char-count" aria-hidden="true">500</span>
         </div>
         <p class="hint" id="wall-c-status" role="status" aria-live="polite" style="margin:0.3rem 0 0;"></p>
@@ -108,7 +108,7 @@
       <p>No questions yet. Ask the first one — someone else probably has the same one.</p>
     </div>
     <div style="text-align:center; margin-top:1.4rem;">
-      <button class="btn btn-ghost btn-sm" data-tip="Adds the next batch of older questions below" id="load-more" hidden>Load more ⬇️</button>
+      <button class="btn btn-ghost btn-sm" type="button" data-tip="Adds the next batch of older questions below" id="load-more" hidden>Load more ⬇️</button>
     </div>
 
     <p class="sup-foot">Still stuck after all that? Email <a href="mailto:GWCRH@atomicmail.io">GWCRH@atomicmail.io</a>.</p>

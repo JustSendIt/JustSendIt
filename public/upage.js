@@ -112,9 +112,13 @@ function livePins(box) {
       } else html = '<span class="pin-hover-note">Wallet holds none right now.</span>';
       tip.innerHTML = html;
     } catch { tip.innerHTML = '<span class="pin-hover-note">Couldn’t load holdings.</span>'; }
+    // the tooltip's own aria-live never fires — it sits on a display:none node — so read it through the shared region
+    if (window.announce) announce(tip.textContent);
   }
   box.addEventListener('mouseover', (e) => { const chip = e.target.closest('.pin-chip'); if (chip) loadHold(chip); });
   box.addEventListener('focusin', (e) => { const chip = e.target.closest('.pin-chip'); if (chip) loadHold(chip); });
+  // the tooltip is shown by :focus-within, so Escape dismisses it by dropping focus (WCAG 1.4.13)
+  box.addEventListener('keydown', (e) => { if ((e.key === 'Escape' || e.key === 'Esc') && e.target.closest('.pin-chip')) e.target.blur(); });
   // paste-to-convict (own wall)
   box.addEventListener('submit', async (e) => {
     const form = e.target.closest('.pin-add'); if (!form) return;
@@ -203,6 +207,8 @@ function applyTheme(t) {
       v.src = t.header_img; v.muted = true; v.loop = true; v.autoplay = true;
       v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
       v.setAttribute('aria-hidden', 'true');
+      // Same reduced-motion hold as the background video above: an autoplaying header is motion too.
+      try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
       h.replaceWith(v);
       document.addEventListener('visibilitychange', () => { try { document.hidden ? v.pause() : v.play(); } catch {} });
     } else { h.src = t.header_img; h.hidden = false; }

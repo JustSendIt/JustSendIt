@@ -45,7 +45,7 @@
             '<div class="composer-bar">' +
               '<label class="file-label" for="compose-img">🖼 Photo / GIF / Video<input type="file" id="compose-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>' +
               '<button class="file-label voice-btn" type="button" id="compose-voice" data-tip="Records a voice memo to post — press once to start, once to stop">🎤 Voice memo</button>' +
-              '<button class="btn btn-primary btn-sm" id="compose-send" data-tip="Posts this publicly to the wall and your profile" disabled>Send it 🚀</button>' +
+              '<button class="btn btn-primary btn-sm" id="compose-send" data-tip="Posts this publicly to the wall and your profile" title="Posts this publicly to the wall and your profile" disabled>Send it 🚀</button>' +
               '<span class="hint" id="compose-count" aria-hidden="true">500</span>' +
             '</div>' +
             '<p class="modal-note">Public on the Wall and your profile. 🎉 Entertainment only — never post a seed phrase or password.</p>' +
@@ -61,7 +61,7 @@
             // is a choice you make rather than something the call does to you. Off unless ticked.
             '<label class="cmp-call-share"><input type="checkbox" id="compose-call-wallet"> <span>Show my wallet on this call <small>— anyone can then see and track this address. Off by default; you can remove it later.</small></span></label>' +
             '<div class="composer-bar">' +
-              '<button class="btn btn-primary btn-sm" id="compose-call-go" data-tip="Posts a permanent scored call on this token — it cannot be deleted" disabled>📣 Make the call</button>' +
+              '<button class="btn btn-primary btn-sm" id="compose-call-go" data-tip="Posts a permanent scored call on this token — it cannot be deleted" title="Posts a permanent scored call on this token — it cannot be deleted" disabled>📣 Make the call</button>' +
               '<span class="hint" id="compose-call-left"></span>' +
             '</div>' +
             '<p class="modal-note" id="compose-call-help">A Send Call posts a <b>live scorecard</b> to your wall that tracks how far this token runs, forever. It is <b>public, timestamped and permanent — calls can never be deleted</b>. Needs a real pool (≥&nbsp;$500 liquidity). 🎉 Entertainment only, never advice.</p>' +
@@ -132,10 +132,10 @@
     const countEl = modal.querySelector('#compose-count');
     countEl.textContent = '500';
     countEl.setAttribute('aria-hidden', 'true'); // back to "not low" — don't leave it exposed to SR
-    modal.querySelector('#compose-send').disabled = true;
+    gate(modal.querySelector('#compose-send'), true);
     const nudge = modal.querySelector('#compose-nudge'); if (nudge) { nudge.hidden = true; nudge.innerHTML = ''; }
     // Send Call side
-    modal.querySelector('#compose-call-addr').value = '';
+    const addrReset = modal.querySelector('#compose-call-addr'); addrReset.value = ''; addrReset.removeAttribute('aria-invalid');
     modal.querySelector('#compose-call-note').value = '';
     const shareBox = modal.querySelector('#compose-call-wallet'); if (shareBox) shareBox.checked = false; // never carries over to the next call
     callPreview(''); setCallReady(false); callLookupSeq++; viewedDetail = false;
@@ -181,7 +181,11 @@
     el.textContent = a.remaining > 0 ? a.remaining + ' of ' + a.limit + ' calls left today' : 'no calls left right now';
   }
   function callPreview(html) { modal.querySelector('#compose-call-preview').innerHTML = html || ''; }
-  function setCallReady(on) { modal.querySelector('#compose-call-go').disabled = !on; }
+  // A disabled <button> receives no pointer events, so tips.js can never show its data-tip on one; the
+  // native title is the only description that still renders there. Mirror it in only while disabled —
+  // tips.js strips titles from enabled controls, so an enabled one would otherwise show two bubbles.
+  function gate(btn, off) { btn.disabled = off; if (off) btn.setAttribute('title', btn.getAttribute('data-tip') || ''); else btn.removeAttribute('title'); }
+  function setCallReady(on) { gate(modal.querySelector('#compose-call-go'), !on); }
 
   async function lookupCallToken(addr) {
     const seq = ++callLookupSeq;
@@ -222,7 +226,7 @@
     if (!callTok) { setStatus('Paste a token contract address first 🤌'); return; }
     const btn = modal.querySelector('#compose-call-go');
     const note = modal.querySelector('#compose-call-note').value.trim();
-    btn.disabled = true; setStatus('Calling it… 📣');
+    gate(btn, true); setStatus('Calling it… 📣');
     try {
       const shareWallet = !!(modal.querySelector('#compose-call-wallet') || {}).checked;
       const j = await window.api('/api/calls', { method: 'POST', body: { token: callTok.addr, note, viewedDetail, shareWallet } });
@@ -251,7 +255,7 @@
       callTok = null;
     } catch (err) {
       setStatus('⚠️ ' + ((err && err.message) || 'could not make that call'));
-      btn.disabled = false;
+      gate(btn, false);
     }
   }
 
@@ -260,7 +264,7 @@
     if (composeBusy) { setStatus('Hang on — still uploading your media ⏳'); return; }
     if (!text && !pendingImg) { setStatus('Say something or drop a meme first 🤌'); return; }
     const btn = modal.querySelector('#compose-send');
-    btn.disabled = true; setStatus('Sending… 🚀');
+    gate(btn, true); setStatus('Sending… 🚀');
     try {
       const j = await window.api('/api/posts', { method: 'POST', body: { text, image: pendingImg } });
       resetForm();
@@ -279,7 +283,7 @@
       if (view && j.post && j.post.id) view.href = '/wall.html#p' + j.post.id;
     } catch (err) {
       setStatus('⚠️ ' + (err.message || 'could not post'));
-      btn.disabled = false;
+      gate(btn, false);
     }
   }
 
@@ -314,7 +318,7 @@
       const left = 500 - textEl.value.length;
       countEl.textContent = left;
       countEl.setAttribute('aria-hidden', left > 20 ? 'true' : 'false'); // only announce when running low
-      sendBtn.disabled = !(textEl.value.trim() || pendingImg);
+      gate(sendBtn, !(textEl.value.trim() || pendingImg));
       // pasted a contract address into a plain post? offer the Send Call instead — same paste, bigger move
       const hit = ADDR_RE.exec(textEl.value);
       const nudge = modal.querySelector('#compose-nudge');
@@ -340,8 +344,9 @@
       const v = addrEl.value.trim();
       clearTimeout(callLookupTimer);
       callTok = null; setCallReady(false);
-      if (!v) { callLookupSeq++; callPreview(''); return; }
+      if (!v) { callLookupSeq++; callPreview(''); addrEl.removeAttribute('aria-invalid'); return; }
       const hit = ADDR_RE.exec(v);                      // tolerate a pasted explorer URL or stray spaces
+      addrEl.setAttribute('aria-invalid', String(!hit)); // the warning below is only visual — this is what the field itself reports
       if (!hit) { callLookupSeq++; callPreview('<p class="modal-note cmp-call-warn" style="margin:0;">Paste a full <b>0x…</b> contract address (40 hex characters).</p>'); return; }
       callLookupTimer = setTimeout(() => lookupCallToken(hit[0].toLowerCase()), 350);
     });
@@ -357,7 +362,7 @@
       else if (window.sendToast) sendToast('Open this token from New Pairs to see its full detail');
     });
 
-    const clearComposeMedia = () => { pendingImg = null; const ci = modal.querySelector('#compose-img'); ci._attachGen = (ci._attachGen || 0) + 1; ci.value = ''; window.setMediaPreview(modal.querySelector('#compose-preview'), null); sendBtn.disabled = !modal.querySelector('#compose-text').value.trim(); };
+    const clearComposeMedia = () => { pendingImg = null; const ci = modal.querySelector('#compose-img'); ci._attachGen = (ci._attachGen || 0) + 1; ci.value = ''; window.setMediaPreview(modal.querySelector('#compose-preview'), null); gate(sendBtn, !modal.querySelector('#compose-text').value.trim()); };
     /* The SAME recorder the Send Wall and the profile composer use — one microphone implementation for
        the whole site. It attaches through attachMedia, exactly as a photo does, so everything downstream
        (preview, upload, progress, the ✕ that removes it) already works without knowing what it is. */
@@ -367,17 +372,17 @@
       live: modal.querySelector('#compose-status'),
       onClear: () => clearComposeMedia(),
       onStatus: (m) => setStatus(m),
-      onAttached: (url) => { pendingImg = url; sendBtn.disabled = false; },
+      onAttached: (url) => { pendingImg = url; gate(sendBtn, false); },
     });
     modal.querySelector('#compose-img').addEventListener('change', async e => {
       const f = e.target.files[0]; if (!f) return;
-      composeBusy = true; sendBtn.disabled = true;
+      composeBusy = true; gate(sendBtn, true);
       const r = await window.guardedAttach(e.target, f, modal.querySelector('#compose-preview'), clearComposeMedia, m => setStatus(m));
       composeBusy = false;
-      if (r && r.skip) { sendBtn.disabled = !(modal.querySelector('#compose-text').value.trim() || pendingImg); return; } // a flow was already running / it was cleared mid-upload
+      if (r && r.skip) { gate(sendBtn, !(modal.querySelector('#compose-text').value.trim() || pendingImg)); return; } // a flow was already running / it was cleared mid-upload
       setStatus('');
       if (!r) { clearComposeMedia(); return; }
-      pendingImg = r.url; sendBtn.disabled = false;
+      pendingImg = r.url; gate(sendBtn, false);
     });
 
     // signed-out gate → close composer, open sign-in, reopen composer once signed in

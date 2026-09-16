@@ -83,7 +83,7 @@
         '<span>taken <b>' + esc(when(s.startedAt)) + '</b></span>' +
         (s.symbol ? '<span>$' + esc(s.symbol) + '</span>' : '') +
       '</div>' +
-      '<div class="snap-tablewrap">' +
+      '<div class="snap-tablewrap" tabindex="0" role="region" aria-label="Holders of ' + esc(s.symbol || 'this token') + ' — scrollable table">' +
         '<table class="snap-table"><caption class="sr-only">Holders of ' + esc(s.symbol || 'this token') +
           ' at ' + esc(when(s.startedAt)) + ', ranked by balance</caption>' +
         '<thead><tr><th scope="col">#</th><th scope="col">Address</th><th scope="col">Balance</th><th scope="col">Share of supply</th></tr></thead>' +

@@ -10,6 +10,26 @@
   const statusEl = document.getElementById('comm-status');
   let state = { status: 'live', sort: 'active' };
 
+  // Repaint a card grid without stealing focus or re-rendering identical markup: the 45s refresh must not
+  // yank a keyboard user off the card they tabbed to. Focus is restored by href, the same way wkPaint does.
+  // The last string set is remembered on the element because innerHTML reads back re-serialised, not verbatim.
+  function paintGrid(el, html) {
+    if (el._html === html) return;
+    const active = document.activeElement;
+    const keep = (active && el.contains(active)) ? active.getAttribute('href') : null;
+    el._html = html;
+    el.innerHTML = html;
+    if (keep) {
+      const back = el.querySelector('a[href="' + keep.replace(/["\\]/g, '\\$&') + '"]');
+      if (back) { try { back.focus(); } catch {} }
+    }
+  }
+  // the status line is a polite live region — only write it when the wording changes, or every refresh re-announces itself
+  function setStatus(text, asHTML) {
+    if (asHTML ? statusEl.innerHTML === text : statusEl.textContent === text) return;
+    if (asHTML) statusEl.innerHTML = text; else statusEl.textContent = text;
+  }
+
   function cardHTML(c) {
     const banner = c.banner ? '<span class="comm-card-banner" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></span>' : '<span class="comm-card-banner comm-card-banner-none"></span>';
     const logo = c.image ? '<img class="comm-card-logo" src="' + esc(c.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="comm-card-logo comm-card-logo-none" aria-hidden="true">' + (c.demo ? '📈' : '🪙') + '</span>';
@@ -53,28 +73,28 @@
   }
 
   async function load() {
-    statusEl.textContent = 'Loading communities…';
+    if (!grid.children.length) setStatus('Loading communities…'); // first paint only — a refresh of a full grid says nothing
     grid.setAttribute('aria-busy', 'true');
     try {
       const j = await window.api('/api/communities?status=' + state.status + '&sort=' + state.sort);
       // the official $Send / $GWC communities are pinned in their own strip on every tab; the main grid lists the rest
       const officials = (j && j.officials) || [];
       const offSec = document.getElementById('comm-officials'), offGrid = document.getElementById('comm-officials-grid');
-      if (offSec && offGrid) { offSec.hidden = !officials.length; offGrid.innerHTML = officials.map(cardHTML).join(''); }
+      if (offSec && offGrid) { offSec.hidden = !officials.length; paintGrid(offGrid, officials.map(cardHTML).join('')); }
       const list = ((j && j.communities) || []).filter(c => !c.official);
       grid.removeAttribute('aria-busy');
       if (!list.length) {
-        grid.innerHTML = '';
-        statusEl.innerHTML = state.status === 'live'
+        paintGrid(grid, '');
+        setStatus(state.status === 'live'
           ? '🌱 No other live communities yet — <b>be the first to start one</b> above. It goes live at 10 members.'
-          : '⏳ No communities are starting up right now. Paste a token address above to kick one off.';
+          : '⏳ No communities are starting up right now. Paste a token address above to kick one off.', true);
         return;
       }
-      grid.innerHTML = list.map(cardHTML).join('');
-      statusEl.textContent = list.length + ' ' + (state.status === 'live' ? 'live' : 'starting-up') + ' communit' + (list.length === 1 ? 'y' : 'ies') + ' · sorted by ' + ({ active: 'most active', members: 'members', mcap: 'market cap', new: 'newest' }[state.sort]);
+      paintGrid(grid, list.map(cardHTML).join(''));
+      setStatus(list.length + ' ' + (state.status === 'live' ? 'live' : 'starting-up') + ' communit' + (list.length === 1 ? 'y' : 'ies') + ' · sorted by ' + ({ active: 'most active', members: 'members', mcap: 'market cap', new: 'newest' }[state.sort]));
     } catch (e) {
       grid.removeAttribute('aria-busy');
-      statusEl.textContent = 'Couldn’t load communities — try again.';
+      setStatus('Couldn’t load communities — try again.');
     }
   }
 

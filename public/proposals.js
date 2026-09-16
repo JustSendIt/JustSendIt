@@ -164,13 +164,14 @@
   /* ---------- compose ---------- */
   newBtn.addEventListener('click', () => { form.hidden = false; newBtn.hidden = true; titleEl.focus(); });
   document.getElementById('prop-cancel').addEventListener('click', () => { form.hidden = true; newBtn.hidden = false; statusEl.textContent = ''; newBtn.focus(); });
-  bodyEl.addEventListener('input', () => { countEl.textContent = String(2000 - bodyEl.value.length); });
+  const setPropCount = (n) => { countEl.textContent = String(n); countEl.setAttribute('aria-hidden', n > 20 ? 'true' : 'false'); }; // announce to SRs only when low
+  bodyEl.addEventListener('input', () => setPropCount(2000 - bodyEl.value.length));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     statusEl.textContent = 'Saving…';
     try {
       await window.api('/api/communities/' + cid() + '/proposals', { method: 'POST', body: { title: titleEl.value, body: bodyEl.value } });
-      titleEl.value = ''; bodyEl.value = ''; form.hidden = true;
+      titleEl.value = ''; bodyEl.value = ''; setPropCount(2000); form.hidden = true;
       statusEl.textContent = 'Draft saved. Open it when you are ready — that starts the clock.';
       say('Proposal draft saved.');
       load();

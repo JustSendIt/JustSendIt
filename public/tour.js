@@ -8,6 +8,7 @@
 
   const reduced = () => window.prefersReduced && window.prefersReduced();
   const onHome = () => !!document.body.dataset.intro;
+  const signedIn = () => !!(window.AUTH && AUTH.user);
   const flagged = () => { try { return !!localStorage.getItem(KEY); } catch { return false; } };
   const setFlag = (v) => { try { localStorage.setItem(KEY, v); } catch {} };
   const anyModalOpen = () => {
@@ -25,7 +26,7 @@
     { sel: '#guide h2', title: 'Set up in order 🧭', body: 'Wallet → seed phrase → add Robinhood Chain → get a little ETH here (bridge it over, or card → ETH through a third-party on-ramp) → swap. The guide walks every step with the real links, and you can stop at any point — reading is free.' },
     { sel: '#swap', title: 'Swap in one move 💱', body: 'Turn ETH into $SEND or $GWC in a single transaction YOU sign in your own wallet. We never hold your funds. Start tiny while you learn.' },
     { sel: '.do-card[href="wall.html"]', title: 'Meet the Send Wall 🧱', body: 'Post wins, memes and cope; react 🔥, reply, claim your @handle, and build your own public wall.' },
-    { sel: '#nav-auth', title: 'Level up to Biggest Sender 🏆', body: 'Almost everything you do here earns Send Power that levels you up on an exponential curve — there is no top level. Holding $SEND/$GWC multiplies every point (bigger bags, held longer = bigger boost), and joining a live community adds a flat 10×. Your level & points live right here, and the leaderboard crowns the Biggest Sender 👑. (Full rules are on your profile.)' },
+    { sel: '#nav-auth', title: 'Level up to Biggest Sender 🏆', body: () => 'Almost everything you do here earns Send Power that levels you up on an exponential curve — there is no top level. Holding $SEND/$GWC multiplies every point (bigger bags, held longer = bigger boost), and joining a live community adds a flat 10×. ' + (signedIn() ? 'Your level & points live right here' : 'Sign in here (free) and your level & points will live right here') + ', and the leaderboard crowns the Biggest Sender 👑. (Full rules are on your profile.)' },
     { sel: '#compose-fab', title: 'Post from anywhere ✏️', body: 'This button follows you across the whole site — tap it to send to the Wall in seconds. (P.S. tap the player bottom-left for the theme 🔊.)' },
   ];
 
@@ -106,7 +107,7 @@
     tip.innerHTML =
       '<p id="tt-count" class="tour-count">Step ' + (idx + 1) + ' of ' + STEPS.length + '</p>' +
       '<h3 id="tt-title" class="tour-title">' + step.title + '</h3>' +
-      '<p id="tt-body" class="tour-body">' + step.body + '</p>' +
+      '<p id="tt-body" class="tour-body">' + (typeof step.body === 'function' ? step.body() : step.body) + '</p>' + // a function body reads live state (signed in or not) at render time
       '<div class="tour-controls">' +
         '<button class="linklike" id="tt-skip" type="button" data-tip="Ends the tour here and stops it reopening later">Skip tour</button>' +
         '<span style="flex:1"></span>' +

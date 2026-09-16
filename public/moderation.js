@@ -320,7 +320,7 @@
       else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
       else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
       else if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); setOpen(false); trg.focus(); }
-      else if (e.key === 'Tab') { setOpen(false); } // APG: Tab leaves and closes the menu
+      else if (e.key === 'Tab') { e.preventDefault(); setOpen(false); trg.focus(); } // APG: Tab leaves and closes the menu — hand focus back to the trigger explicitly, since Safari computes the next stop from the now-hidden item and lands on <body>
     });
     menu.addEventListener('click', (e) => { const b = e.target.closest('[data-mod-act]'); if (b) actMenu(b); });
     document.addEventListener('click', (e) => { if (wrap.classList.contains('open') && !wrap.contains(e.target)) setOpen(false); });

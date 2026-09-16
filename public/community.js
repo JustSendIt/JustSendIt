@@ -125,9 +125,12 @@
   function paintWallTabs() {
     const qual = !!(C && C.mine && C.mine.qualified), sym = C ? esc(C.symbol) : '';
     const tabsEl = document.querySelector('.cw-tabs'), noteEl = document.getElementById('cw-note');
+    const panel = document.getElementById('comm-wall-panel');
     if (!hasPrivateWall()) {
       if (tabsEl) tabsEl.hidden = true;
       if (noteEl) { noteEl.hidden = true; noteEl.textContent = ''; }
+      // no tab strip → no tabpanel: a focusable region named by a hidden tab would be an unnamed Tab stop
+      if (panel) { panel.removeAttribute('role'); panel.removeAttribute('aria-labelledby'); panel.tabIndex = -1; }
       wall = 'public';
       return;
     }
@@ -139,8 +142,7 @@
       b.setAttribute('aria-selected', String(on));
       b.tabIndex = on ? 0 : -1;
     }
-    const panel = document.getElementById('comm-wall-panel');
-    if (panel) panel.setAttribute('aria-labelledby', 'cw-tab-' + wall);
+    if (panel) { panel.setAttribute('role', 'tabpanel'); panel.tabIndex = 0; panel.setAttribute('aria-labelledby', 'cw-tab-' + wall); }
     const note = document.getElementById('cw-note');
     if (note) note.innerHTML = wall === 'holders'
       ? '🔒 <b>Holders only.</b> Everything here is visible <b>only to verified holders of $' + sym + '</b> — it is never served to anyone else, never appears on the Send Wall or a profile, and is not in the public data feed.' + (qual ? ' You are in.' : '')
@@ -183,9 +185,9 @@
       (p.text ? '<p class="post-body">' + (window.richText ? richText(p.text, p.tokens) : esc(p.text)) + '</p>' : '') + // $TICKERs → token chips (tokentext.js)
       (p.image ? window.mediaTag(esc(p.image), esc(p.username)) : '') +
       '<div class="post-actions">' +
-        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" data-react="fire" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
-        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" data-react="rocket" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
-        '<button class="react-btn comm-cmt-toggle" type="button" data-comments data-tip="Shows or hides the comments people left on this post" aria-label="Show comments">💬 <span>' + (p.comments || 0) + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('fire') + '" data-react="fire" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('rocket') + '" data-react="rocket" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
+        '<button class="react-btn comm-cmt-toggle" type="button" data-comments data-tip="Shows or hides the comments people left on this post" aria-label="Show comments" aria-expanded="false">💬 <span>' + (p.comments || 0) + '</span></button>' +
       '</div>' +
       '<div class="comm-cmt-zone" hidden></div>' +
     '</article>';
@@ -253,7 +255,7 @@
     const ava = m.avatar_img ? window.avatarHTML(m.avatar_img, 'cm-ava', 'loading="lazy"') : '<span class="cm-ava cm-ava-emoji" aria-hidden="true">' + esc(m.avatar || '🚀') + '</span>';
     const rank = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
     const rankLbl = i < 3 ? ('rank ' + (i + 1)) : String(i + 1);
-    const crown = m.isCreator ? '<span class="cm-crown" title="Community starter" aria-label="community starter">👑</span>' : '';
+    const crown = m.isCreator ? '<span class="cm-crown" role="img" title="Community starter" aria-label="community starter">👑</span>' : '';
     const nameStyle = m.accent ? ' style="color:' + esc(m.accent) + '"' : '';
     return '<li class="cm-row' + (m.isCreator ? ' cm-creator' : '') + '">' +
       '<span class="cm-rank" role="img" aria-label="' + rankLbl + '">' + rank + '</span>' +
@@ -334,7 +336,7 @@
       if (rb) {
         if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
         const post = rb.closest('.post'), pid = post.dataset.id;
-        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.querySelector('span').textContent = j.count; if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); } catch {}
+        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); } catch {}
         return;
       }
       const ct = e.target.closest('[data-comments]');
@@ -405,10 +407,11 @@
     });
   }
 
-  async function toggleComments(post) {
-    const zone = post.querySelector('.comm-cmt-zone');
-    if (!zone.hidden) { zone.hidden = true; return; }
-    zone.hidden = false; zone.innerHTML = '<p class="modal-note">loading…</p>';
+  async function toggleComments(post, refresh) {
+    const zone = post.querySelector('.comm-cmt-zone'), tbtn = post.querySelector('.comm-cmt-toggle');
+    const setOpen = (open) => { if (tbtn) { tbtn.setAttribute('aria-expanded', String(open)); tbtn.setAttribute('aria-label', open ? 'Hide comments' : 'Show comments'); } };
+    if (!zone.hidden && !refresh) { zone.hidden = true; setOpen(false); return; }
+    zone.hidden = false; setOpen(true); zone.innerHTML = '<p class="modal-note">loading…</p>';
     const pid = post.dataset.id;
     try {
       const j = await window.api('/api/posts/' + pid + '/comments');
@@ -416,7 +419,7 @@
       const list = (j.comments || []).map(c => '<div class="comm-cmt"><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '">@' + esc(c.username) + '</a>' + ogB(c.og) + ' <span class="c-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span></div>').join('') || '<p class="modal-note">no comments yet — start it off 👇</p>';
       zone.innerHTML = list + (window.AUTH && AUTH.user ? '<form class="comm-cmt-form"><input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Adds what you typed as a comment on this post">Reply</button></form>' : '<p class="modal-note"><button class="linklike" type="button" data-signin data-tip="Opens the sign-in box so you can join in">Sign in</button> to comment.</p>');
       const form = zone.querySelector('.comm-cmt-form');
-      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; toggleComments(post); toggleComments(post); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); } catch {} });
+      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); } catch {} });
       const si = zone.querySelector('[data-signin]'); if (si) si.addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
     } catch { zone.innerHTML = '<p class="modal-note">could not load comments</p>'; }
   }

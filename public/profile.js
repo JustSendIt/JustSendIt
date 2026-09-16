@@ -12,6 +12,26 @@ let myTheme = {};
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 /* ---------- pickers ---------- */
+/* Roving tabindex for a radiogroup (the WAI-ARIA radio pattern): one Tab stop per group, arrows move AND
+   choose, Home/End jump to the ends. Without it each of the twelve avatars and every swatch was its own
+   Tab stop while announcing itself as a radio, which promises arrow keys that did nothing. Choosing
+   re-renders the group, so focus is put on the NEW node at the same index, not the one just discarded. */
+function roveRadios(zone) {
+  const radios = Array.from(zone.querySelectorAll('[role="radio"]'));
+  const on = Math.max(0, radios.findIndex(r => r.getAttribute('aria-checked') === 'true')); // nothing checked → first is the stop
+  radios.forEach((r, i) => {
+    r.tabIndex = i === on ? 0 : -1;
+    r.addEventListener('keydown', (e) => {
+      const k = e.key;
+      const fwd = k === 'ArrowRight' || k === 'ArrowDown', back = k === 'ArrowLeft' || k === 'ArrowUp';
+      if (!fwd && !back && k !== 'Home' && k !== 'End') return;
+      e.preventDefault();
+      const j = k === 'Home' ? 0 : k === 'End' ? radios.length - 1 : (i + (fwd ? 1 : radios.length - 1)) % radios.length;
+      radios[j].click();
+      const n = zone.querySelectorAll('[role="radio"]')[j]; if (n) n.focus();
+    });
+  });
+}
 function renderAvatarPicker() {
   const zone = document.getElementById('pf-avatar-pick');
   zone.innerHTML = '';
@@ -27,6 +47,7 @@ function renderAvatarPicker() {
     b.addEventListener('click', () => { chosenAvatar = a; document.getElementById('pf-avatar').textContent = a; renderAvatarPicker(); });
     zone.appendChild(b);
   }
+  roveRadios(zone);
 }
 function renderSwatches(zoneId, colors, current, onPick) {
   const zone = document.getElementById(zoneId);
@@ -50,6 +71,7 @@ function renderSwatches(zoneId, colors, current, onPick) {
     b.addEventListener('click', () => { onPick(c); renderSwatches(zoneId, colors, c, onPick); });
     zone.appendChild(b);
   }
+  roveRadios(zone);
 }
 
 /* ---------- wall style ---------- */

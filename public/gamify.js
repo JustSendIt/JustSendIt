@@ -257,6 +257,8 @@
     const rankTxt = g.rank === 1 ? '👑 #1 all time' : '#' + g.rank + ' all time';
     const boosted = mult > 1;
     const multParts = em.parts.length > 1 ? '1× + ' + em.parts.join(' + ') + ' = ' + mult.toFixed(2) + '×' : '';
+    // one string for the chip's title AND its screen-reader twin, so the two can never drift apart
+    const weekTip = (g.weekBoost && g.weekBoost.boost > 1) ? 'Biggest Sender prize — the boost your finishing place won last week, added to everything you earn until ' + esc(new Date(g.weekBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC' : '';
     return '<div class="pc-hero">' +
       '<div class="pc-core" aria-hidden="true">' +
         '<svg viewBox="0 0 120 120" class="pc-svg">' +
@@ -280,8 +282,8 @@
         '<div class="pc-chips">' +
           (boosted ? '<span class="pc-mult">⚡ ' + mult.toFixed(2) + '× boost</span>' : '<span class="pc-mult pc-mult-off">⚡ 1× · unlock boost ↓</span>') +
           (g.todayPoints ? '<span class="pc-today' + (g.todayPoints < 0 ? ' is-down' : '') + '">' + signed(g.todayPoints) + ' today</span>' : '') +
-          (g.eggs && g.eggs.total ? '<span class="pc-eggs" title="Easter eggs found — a hundred are hidden across the site">🥚 ' + (g.eggs.found || 0) + '/' + g.eggs.total + ' eggs</span>' : '') +
-          (g.weekBoost && g.weekBoost.boost > 1 ? '<span class="pc-week" title="Biggest Sender prize — the boost your finishing place won last week, added to everything you earn until ' + esc(new Date(g.weekBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC">🏆 ' + g.weekBoost.boost + '× prize</span>' : '') +
+          (g.eggs && g.eggs.total ? '<span class="pc-eggs" title="Easter eggs found — a hundred are hidden across the site">🥚 ' + (g.eggs.found || 0) + '/' + g.eggs.total + ' eggs<span class="sr-only"> — Easter eggs found; the rest are still hidden across the site</span></span>' : '') +
+          (g.weekBoost && g.weekBoost.boost > 1 ? '<span class="pc-week" title="' + weekTip + '">🏆 ' + g.weekBoost.boost + '× prize<span class="sr-only"> — ' + weekTip + '</span></span>' : '') +
         '</div>' +
         (multParts ? '<div class="pc-mult-parts">' + esc(multParts) + ' on every point</div>' : '') +
       '</div>' +
@@ -296,7 +298,7 @@
     const hasWallet = AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length;
     const stale = h && h.streakStart && h.fresh === false;
     if (stale) {
-      return '<div class="gobj gobj-alert" role="status">' +
+      return '<div class="gobj gobj-alert">' +
         '<div class="gobj-primary">⏸ Your <b>⚡' + (Math.round((1 + supplyTermOf(h) * (h.diamond ? h.diamond.factor : 1)) * 100) / 100).toFixed(2) + '×</b> boost is paused (paying 1× right now) — <button class="gobj-link js-refresh" type="button" data-tip="Re-reads your linked wallets on-chain and updates your boost">Refresh to re-verify your bags →</button></div>' +
       '</div>';
     }
@@ -324,7 +326,7 @@
     } else {
       secondary = '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Connect a wallet</button> that holds $SEND / $GWC to unlock your Holder Boost';
     }
-    return '<div class="gobj" role="status">' +
+    return '<div class="gobj">' +
       '<div class="gobj-primary">' + primary + '</div>' +
       '<div class="gobj-secondary">' + secondary + '</div>' +
     '</div>';
@@ -775,7 +777,7 @@
       const evCap = (rules && rules.eventCap > 0) ? rules.eventCap : 73762;
       const eff = base != null ? Math.min(evCap, Math.max(1, Math.round(base * mult))) : 0;
       const pts = variable
-        ? '<span class="ge-pts ge-var" title="Points scale with real performance">⚡ scales</span>'
+        ? '<span class="ge-pts ge-var" title="Points scale with real performance">⚡ scales<span class="sr-only"> — points scale with real performance</span></span>'
         : (mult > 1
           ? '<span class="ge-pts">+' + base + ' <span class="ge-eff">→ +' + nf(eff) + ' ⚡</span></span>'
           : '<span class="ge-pts">+' + base + '</span>');
@@ -1092,7 +1094,7 @@
       html += '<li class="' + (me ? 'gb-me' : '') + '">' +
         '<span class="gb-rank">' + (medal[u.rank - 1] || ('#' + u.rank)) + '</span>' + av +
         '<a class="gb-name" href="/u/' + encodeURIComponent(u.username) + '"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + '</a>' + (window.ogBadge ? ogBadge(u.og) : '') +
-        (u.diamond && u.diamond.level > 0 ? '<span class="gb-dia" title="' + esc(u.diamond.name) + ' (Diamond Lv ' + u.diamond.level + ')">' + u.diamond.emoji + '</span>' : '') +
+        (u.diamond && u.diamond.level > 0 ? '<span class="gb-dia" title="' + esc(u.diamond.name) + ' (Diamond Lv ' + u.diamond.level + ')">' + u.diamond.emoji + '<span class="sr-only">' + esc(u.diamond.name) + ', Diamond level ' + u.diamond.level + '</span></span>' : '') +
         '<span class="gb-lv">Lv ' + u.level + '</span>' +
         '<span class="gb-pts">' + compact(u.points) + '</span>' +
       '</li>';
@@ -1161,7 +1163,7 @@
     return '<li class="' + (me ? 'gb-me' : '') + '">' +
       '<span class="gb-rank">' + (medal[u.rank - 1] || ('#' + u.rank)) + '</span>' + av +
       '<a class="gb-name" href="/u/' + encodeURIComponent(u.username) + '"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + '</a>' + (window.ogBadge ? ogBadge(u.og) : '') +
-      (u.boost ? '<span class="gb-prize" title="the boost this place won">' + u.boost + '×</span>' : '') +
+      (u.boost ? '<span class="gb-prize" title="the boost this place won">' + u.boost + '×<span class="sr-only"> boost won by this place</span></span>' : '') +
       '<span class="gb-pts">' + ptsLabel + '</span>' +
     '</li>';
   }
@@ -1301,6 +1303,17 @@
       '<p class="gcc-boost">' + boostLine + '</p>' +
     '</div>';
   }
+  /* The objective bar was role=status, so every paint re-read the whole thing — button labels included —
+     even when nothing had changed. Now render() only remembers the sentence and doRefresh() speaks it
+     through the shared live region, once, and only when it actually changed. */
+  let _objSaid = null, _objNews = '';
+  function objectiveNews() {
+    const o = dash.querySelector('.gobj');
+    const t = o ? o.textContent.replace(/\s+/g, ' ').trim() : '';
+    const changed = _objSaid !== null && t !== _objSaid; // first paint is not news
+    _objSaid = t;
+    return changed ? t : '';
+  }
   function render(g, lb) {
     stopRafs();
     _lg = g;
@@ -1323,6 +1336,7 @@
       rektBlock(g) +
       recordBlock(g) +
       rulesBlock(g);
+    _objNews = objectiveNews(); // remembered here (every paint), spoken by doRefresh()
 
     // clickable quest rows that open the right section / page
     dash.querySelectorAll('[data-earn]').forEach(btn => btn.addEventListener('click', () => {
@@ -1372,7 +1386,7 @@
       /* render() replaced dash.innerHTML under the Refresh button, so focus fell to <body> at the top of a
          card three screens tall. Put it back on the new Refresh button, and say what happened. */
       const nb = dash.querySelector('.js-refresh'); if (nb) nb.focus(); else { dash.tabIndex = -1; dash.focus(); }
-      if (window.announce) announce('Dashboard refreshed');
+      if (window.announce) announce('Dashboard refreshed' + (_objNews ? '. ' + _objNews : ''));
       if (window.sendToast) sendToast(g.holderLive && g.holderLive.multiplier > 1 ? ('Holder Boost live: ' + g.holderLive.multiplier.toFixed(2) + '× 🔥') : 'Holdings refreshed ✓');
     } catch (e) {
       btns.forEach(b => { b.disabled = false; if (b.dataset.orig) b.textContent = b.dataset.orig; });

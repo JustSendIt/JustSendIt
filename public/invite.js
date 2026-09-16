@@ -34,7 +34,7 @@
   }
 
   let root = null, state = { access: false, redeemed: false, tosAccepted: false, signedIn: false, ticket: null };
-  let goldEndsAt = null, goldStartedAt = null, raf = 0, lastFocus = null, afterJoin = null;
+  let goldEndsAt = null, goldStartedAt = null, raf = 0, onResize = null, lastFocus = null, releaseTrap = null, afterJoin = null;
   const $ = (id) => root && root.querySelector('#' + id);
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -73,7 +73,7 @@
           '<div class="inv-panel">' +
             '<p class="inv-note">Enter the invite code someone sent you. <b>Each code works once.</b></p>' +
             '<label class="inv-note" for="inv-in" style="display:block;margin-top:0.7rem;">Invite code</label>' +
-            '<input class="inv-in" id="inv-in" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="ABCD2345" aria-describedby="inv-err">' +
+            '<input class="inv-in" id="inv-in" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="ABCD2345" aria-describedby="inv-err">' +
             '<p class="inv-err" id="inv-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.5rem;">' +
               '<button class="g-btn g-btn-primary" id="inv-go" type="button" data-tip="Checks the code and uses it up — a code works one time">Redeem 🚀</button>' +
@@ -267,11 +267,16 @@
       raf = requestAnimationFrame(frame);
     }
     size();
-    addEventListener('resize', () => { if (!root || !root.hasAttribute('data-open')) return; cancelAnimationFrame(raf); size(); if (!reduced()) raf = requestAnimationFrame(frame); });
+    // one listener, and this run's: it closes over this run's columns, so an earlier one would resize the
+    // wrong screen — and this runs on every open under reduced motion (raf stays 0 there), so without the
+    // swap each open stacked another
+    if (onResize) removeEventListener('resize', onResize);
+    onResize = () => { if (!root || !root.hasAttribute('data-open')) return; cancelAnimationFrame(raf); size(); if (!reduced()) raf = requestAnimationFrame(frame); };
+    addEventListener('resize', onResize);
     if (reduced()) { ctx.fillStyle = '#070312'; ctx.fillRect(0, 0, w, h); }
     else raf = requestAnimationFrame(frame);
   }
-  const stopScreen = () => { cancelAnimationFrame(raf); raf = 0; };
+  const stopScreen = () => { cancelAnimationFrame(raf); raf = 0; if (onResize) { removeEventListener('resize', onResize); onResize = null; } };
 
   /* ---------- painting the ticket ---------- */
   function bars(el, seed) {
@@ -305,6 +310,19 @@
         rocket.style.left = (gone * 100).toFixed(1) + '%';
       }
     }
+    for (const p of ['', 'inv-ticket2-']) labelTicket(p);
+  }
+  /* The ticket button's name for a screen reader is what is painted on it. A fixed "Your ticket to Send"
+     hid the handle, the Send ID, the invites left and the countdown — everything the button is for. Set
+     from the paint (and the 30s tick), so it tracks what a sighted reader sees. */
+  function labelTicket(p) {
+    const b = $(p + 'ticket'); if (!b) return;
+    const t = state.ticket, v = $(p + 'tk-launch-v');
+    const left = v ? v.textContent : '';
+    const when = (!left || left === '—') ? '' : left === 'closed' ? ' Gold OG has closed.' : ' Gold OG closes in ' + left + '.';
+    b.setAttribute('aria-label', t
+      ? 'Your ticket to Send: @' + t.username + ', Send ID #' + t.sendId + ', ' + t.codesLeft + ' of ' + t.codesTotal + ' invites left.' + when
+      : 'Your ticket to Send, unclaimed.' + when);
   }
   /* The $GWC banner the coin's own team published, across the top of the ticket. Served through this
      site's brand proxy, so the viewer's browser never talks to a third party. Decorative and optional:
@@ -356,21 +374,33 @@
     root.querySelectorAll('.inv-step').forEach(s => s.removeAttribute('data-active'));
     const el = $(id); if (el) el.setAttribute('data-active', '');
     root.scrollTop = 0;
-    const f = el && el.querySelector('input:not([disabled]), button:not([disabled])');
+    // the terms step lands on the text itself, which is what the reader is told to read — the generic
+    // pick took the first enabled control, the 18+ box beneath it (the agree box starts disabled)
+    const f = (id === 'step-tos' && $('inv-tos')) || (el && el.querySelector('input:not([disabled]), button:not([disabled])'));
     if (f) { try { f.focus({ preventScroll: true }); } catch { f.focus(); } }
     if (id === 'step-tos') loadTerms();
     if (id === 'step-codes') paintCodes();
   }
 
   /* ---------- open / close ---------- */
-  async function open(opts) {
-    const o = opts || {};
-    afterJoin = o.then || null;
-    if (!root) { build(); startScreen(); }
+  /* What every way in shares: the scroll lock, the focus trap (aria-modal promises one — without it Tab
+     walked out into the locked page behind), and the event tour.js waits on before it spotlights
+     anything, so the tour cannot start underneath this. Already open means a proof check raised from
+     inside the ticket: leave the trap and the remembered focus alone rather than stacking a second. */
+  function raise() {
+    if (!root) build();
+    if (!raf) startScreen();
+    if (root.hasAttribute('data-open')) return;
     lastFocus = document.activeElement;
     root.setAttribute('data-open', '');
     document.body.style.overflow = 'hidden';
-    if (!raf) startScreen();
+    releaseTrap = window.trapFocus ? window.trapFocus(root) : null;
+    document.dispatchEvent(new CustomEvent('jsi:modalopen'));
+  }
+  async function open(opts) {
+    const o = opts || {};
+    afterJoin = o.then || null;
+    raise();
     await refresh();
     // land on the step that is actually next for this person
     if (state.signedIn) show('step-codes');
@@ -379,11 +409,13 @@
     else show(o.step || 'step-ticket');
   }
   function close() {
-    if (!root) return;
+    if (!root || !root.hasAttribute('data-open')) return;
     root.removeAttribute('data-open');
     document.body.style.overflow = '';
     stopScreen();
+    if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
+    document.dispatchEvent(new CustomEvent('jsi:modalclose'));
   }
 
   async function refresh() {
@@ -553,11 +585,12 @@
   function renderCodes(t) {
     // The characters and the tag each get their own box that can shrink: a long username in the tag
     // ("used · @somebody_with_a_long_handle") otherwise pushed the row out of its grid cell and over
-    // the code beside it. The full name stays in the title/aria text, so nothing is lost to the trim.
+    // the code beside it. The tag wraps rather than trimming, so the full name stays readable: an
+    // aria-label on a plain span is not reliably read, and a title is not reachable by touch at all.
     return (t.codes || []).map(c => {
       if (c.used) {
         const who = c.usedBy ? 'used · @' + c.usedBy : 'used';
-        return '<li><span class="inv-code is-used" title="' + esc(who) + '" aria-label="Code ' + esc(c.hint || '') + ', ' + esc(who) + '">' +
+        return '<li><span class="inv-code is-used">' +
           '<span class="inv-chars">' + esc(c.hint || '••••••••') + '</span>' +
           '<span class="inv-tag">' + esc(who) + '</span></span></li>';
       }
@@ -744,7 +777,12 @@
     if (agree) agree.addEventListener('change', both);
     if (age) age.addEventListener('change', both);
     // Esc closes it, at every step. Somebody who does not have a code must never feel trapped.
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && root && root.hasAttribute('data-open')) close(); });
+    // Not while the wallet picker or a confirm-your-factor dialog is up over it, though: that Esc is theirs.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !root || !root.hasAttribute('data-open')) return;
+      if (document.querySelector('.wc-overlay:not([hidden]), #auth-modal:not([hidden])')) return;
+      close();
+    });
     setInterval(paintCountdown, 30000);
   }
 
@@ -781,11 +819,7 @@
   /* Open straight on the participation check. This is what a refused write calls: the person was trying
      to DO something, so the modal explains what is missing and offers the one action that fixes it. */
   async function openProof() {
-    if (!root) { build(); startScreen(); }
-    lastFocus = document.activeElement;
-    root.setAttribute('data-open', '');
-    document.body.style.overflow = 'hidden';
-    if (!raf) startScreen();
+    raise();
     show('step-proof');
     await refreshProof();
   }

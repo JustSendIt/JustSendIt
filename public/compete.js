@@ -340,7 +340,8 @@
     if (e.target.closest('[data-cmp-retry]')) { grid.innerHTML = '<p class="cmp-loading">Loading the boards…</p>'; load(); return; }
     if (e.target.closest('[data-cmp-launch]')) {
       const game = document.getElementById('arc-game'), btn = document.getElementById('arc-btn');
-      if (game) scrollTo({ top: game.getBoundingClientRect().top + scrollY - 84, behavior: reduced() ? 'auto' : 'smooth' }); // 84px: the sticky nav
+      const navH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 58; // published by nav.js; fallback matches the stylesheets' var(--nav-h, 58px)
+      if (game) scrollTo({ top: game.getBoundingClientRect().top + scrollY - navH - 10, behavior: reduced() ? 'auto' : 'smooth' }); // clear the sticky nav plus a little air
       const target = btn && !btn.hidden && !btn.disabled ? btn : document.getElementById('arc-game-h');
       if (target) { if (!target.hasAttribute('tabindex') && target.tagName !== 'BUTTON') target.setAttribute('tabindex', '-1'); setTimeout(() => target.focus({ preventScroll: true }), reduced() ? 0 : 450); }
     }

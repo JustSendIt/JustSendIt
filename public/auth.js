@@ -108,9 +108,11 @@
     <p class="auth-invite">New here? Joining is by invite — <button type="button" class="linklike" id="auth-ticket" data-tip="Closes this and opens the invite code panel">get your ticket 🎟️</button>. You can read the whole site without an account.</p>
   </div>`;
 
-  let lastFocus = null, releaseTrap = null;
+  let lastFocus = null, releaseTrap = null, confirmReject = null, prevOverflow = '';
   function openModal() {
     lastFocus = document.activeElement;
+    // a confirm raised from inside the ticket must hand the scroll lock back to it, not clear it
+    if (modal.hasAttribute('hidden')) prevOverflow = document.body.style.overflow;
     modal.removeAttribute('hidden');
     document.body.style.overflow = 'hidden';
     if (AUTH._reset2fa) AUTH._reset2fa();
@@ -120,9 +122,11 @@
   }
   function closeModal() {
     modal.setAttribute('hidden', '');
-    document.body.style.overflow = '';
+    document.body.style.overflow = prevOverflow;
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) lastFocus.focus();
+    // a confirm-mode dialog closed without an answer is a cancel, not a promise left hanging
+    if (confirmReject) { const r = confirmReject; confirmReject = null; r(new Error('cancelled')); }
     document.dispatchEvent(new CustomEvent('jsi:modalclose'));
   }
   AUTH.open = openModal;
@@ -202,7 +206,8 @@
   document.addEventListener('DOMContentLoaded', () => {
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeModal(); });
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hasAttribute('hidden')) closeModal(); });
+    // not while the wallet picker is up over this: that Esc is the picker's to answer (wallet.js)
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hasAttribute('hidden') && !document.querySelector('.wc-overlay:not([hidden])')) closeModal(); });
 
     // tabs
     const tabs = { wallet: modal.querySelector('#tab-wallet'), email: modal.querySelector('#tab-email') };
@@ -216,6 +221,14 @@
         }
       });
     }
+    // Left/Right move between the tabs, as a tablist promises — click alone left a keyboard user on the first
+    modal.querySelector('.auth-tabs').addEventListener('keydown', e => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const other = e.target === tabs.wallet ? tabs.email : tabs.wallet;
+      e.preventDefault(); other.click(); other.focus();
+    });
+    // one writer for the status lines, so a failure's red is dropped again by the next progress message
+    const setStatus = (el, text, bad) => { el.textContent = text; el.classList.toggle('is-err', !!bad); };
 
     // email log-in / sign-up: an explicit segmented choice, DEFAULTING TO LOG IN (never sign-up-first)
     let regMode = false;
@@ -280,16 +293,16 @@
       modal.querySelector('#twofa-wallet').hidden = j.twofa !== 'wallet';
       modal.querySelector('#twofa-password').hidden = j.twofa !== 'password';
       const status = modal.querySelector('#twofa-status');
-      status.textContent = '';
+      setStatus(status, '');
       if (j.twofa === 'password') {
         const input = modal.querySelector('#f-2fa-pw');
         input.value = ''; input.focus();
         modal.querySelector('#pw2fa-submit').onclick = async () => {
-          status.textContent = '…';
+          setStatus(status, '…');
           try {
             const r = await api('/api/auth/login/password2fa', { method: 'POST', body: { pending: j.pending, password: input.value } });
             loginSuccess(r);
-          } catch (err) { status.textContent = '⚠️ ' + err.message; status.style.color = 'var(--red)'; }
+          } catch (err) { setStatus(status, '⚠️ ' + err.message, true); }
         };
         input.onkeydown = ev => { if (ev.key === 'Enter') modal.querySelector('#pw2fa-submit').click(); };
       } else if (j.twofa === 'totp') {
@@ -297,11 +310,11 @@
         input.value = '';
         input.focus();
         modal.querySelector('#totp-submit').onclick = async () => {
-          status.textContent = '…';
+          setStatus(status, '…');
           try {
             const r = await api('/api/auth/login/totp', { method: 'POST', body: { pending: j.pending, code: input.value.trim() } });
             loginSuccess(r);
-          } catch (err) { status.textContent = '⚠️ ' + err.message; status.style.color = 'var(--red)'; }
+          } catch (err) { setStatus(status, '⚠️ ' + err.message, true); }
         };
         input.onkeydown = ev => { if (ev.key === 'Enter') modal.querySelector('#totp-submit').click(); };
       } else {
@@ -327,17 +340,60 @@
     // show2fa lives in this DOMContentLoaded closure; the OAuth pickup at the bottom of the file runs
     // outside it, so expose it the same way _reset2fa is exposed
     AUTH._show2fa = show2fa;
+    // the headings confirm mode rewrites (below), captured once so a reset can put the sign-in ones back
+    const heads = ['#auth-title', '.modal-sub', '#twofa-password .modal-note', '#twofa-totp .modal-note'].map(s => modal.querySelector(s));
+    const headText = heads.map(el => el.textContent);
     AUTH._reset2fa = function () {
+      modal.classList.remove('is-confirm');
+      heads.forEach((el, i) => { el.textContent = headText[i]; });
+      modal.querySelector('.auth-invite').hidden = false;
       modal.querySelector('.auth-tabs').hidden = false;
       modal.querySelector('#pane-2fa').hidden = true;
       panes.wallet.hidden = !tabs.wallet.classList.contains('active');
       panes.email.hidden = !tabs.email.classList.contains('active');
     };
 
+    /* The same masked pane, in a CONFIRM mode. A credential change made elsewhere (linking a wallet,
+       changing two-factor) has to prove the current factor first, and that used to be a native prompt(),
+       which shows a password or a code in clear text. Resolves to the field the server expects, or
+       rejects 'cancelled' when the dialog is closed with no answer (see closeModal). */
+    AUTH._confirmFactor = function (mode, note) {
+      return new Promise((resolve, reject) => {
+        openModal();                        // resets the panes and the headings; this then restyles them
+        modal.classList.add('is-confirm');  // the ticket can be what asked, and it stacks above this card
+        const pw = mode === 'password';
+        heads[0].textContent = 'Confirm it’s you 🔐';
+        heads[1].textContent = note || 'Confirm this change';
+        heads[pw ? 2 : 3].textContent = pw ? '🔐 Enter your account password to confirm.' : '🔐 Enter the 6-digit code from your authenticator app to confirm.';
+        modal.querySelector('.auth-tabs').hidden = true;
+        modal.querySelector('.auth-invite').hidden = true;   // "new here?" is not a question for someone already in
+        panes.wallet.hidden = true;
+        panes.email.hidden = true;
+        modal.querySelector('#pane-2fa').hidden = false;
+        modal.querySelector('#twofa-totp').hidden = pw;
+        modal.querySelector('#twofa-wallet').hidden = true;
+        modal.querySelector('#twofa-password').hidden = !pw;
+        const status = modal.querySelector('#twofa-status');
+        setStatus(status, '');
+        const input = modal.querySelector(pw ? '#f-2fa-pw' : '#f-totp'), btn = modal.querySelector(pw ? '#pw2fa-submit' : '#totp-submit');
+        input.value = ''; input.focus();
+        confirmReject = reject;
+        btn.onclick = () => {
+          const v = input.value;
+          if (!v.trim()) { setStatus(status, pw ? 'Enter your password to confirm.' : 'Enter the 6-digit code to confirm.', true); return; }
+          input.value = '';                 // a secret does not sit in a hidden field afterwards
+          confirmReject = null;             // answered — closing must not read as a cancel
+          closeModal();
+          resolve(pw ? { password: v } : { code: v.trim() });
+        };
+        input.onkeydown = ev => { if (ev.key === 'Enter') btn.click(); };
+      });
+    };
+
     modal.querySelector('#email-form').addEventListener('submit', async e => {
       e.preventDefault();
       const status = modal.querySelector('#email-status');
-      status.textContent = '…';
+      setStatus(status, '…');
       try {
         const body = { password: modal.querySelector('#f-password').value };
         if (regMode) {
@@ -347,13 +403,13 @@
           body.identifier = modal.querySelector('#f-email').value;
         }
         const j = await api(regMode ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body });
-        status.textContent = '';
+        setStatus(status, '');
         if (j.twofa) { show2fa(j); return; }
         loginSuccess(j);
       } catch (err) {
         // "you need a ticket" is not an error to read, it is a door to open
-        if (AUTH.needsInvite(err)) { status.textContent = ''; closeModal(); return; }
-        status.textContent = '⚠️ ' + err.message; status.style.color = 'var(--red)';
+        if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
+        setStatus(status, '⚠️ ' + err.message, true);
       }
     });
 
@@ -367,7 +423,7 @@
         const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
         const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
         const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature } });
-        status.textContent = '';
+        setStatus(status, '');
         if (j.twofa) { show2fa(j); return; } // account has an authenticator / password second factor — the wallet was only the first
         closeModal();
         await refresh();
@@ -385,7 +441,7 @@
       } catch (err) {
         // A wallet nobody has signed in with before is a NEW ACCOUNT, so the server asks for a ticket
         // here too. Somebody who connected expecting to sign in gets the door, not a refusal.
-        if (AUTH.needsInvite(err)) { status.textContent = ''; closeModal(); return; }
+        if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
         status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled');
       }
     });
@@ -411,15 +467,10 @@
   AUTH.currentFactor = async function (note) {
     const m = AUTH.user && AUTH.user.twofa;
     if (!m) return {};
-    if (m === 'password') {
-      const pw = prompt((note || 'Confirm this change') + '\n\nEnter your account password:');
-      if (!pw) throw new Error('cancelled');
-      return { password: pw };
-    }
-    if (m === 'totp') {
-      const code = prompt((note || 'Confirm this change') + '\n\nEnter the 6-digit code from your authenticator app:');
-      if (!code) throw new Error('cancelled');
-      return { code: code.trim() };
+    // the masked pane of the sign-in modal, never a native prompt() — that shows the secret as typed
+    if (m === 'password' || m === 'totp') {
+      if (!AUTH._confirmFactor) throw new Error('cancelled');   // the pane is built on DOMContentLoaded
+      return AUTH._confirmFactor(m, note);
     }
     // wallet 2FA: sign a management challenge with the wallet the account's two-factor is set to
     sendToast('Connect the wallet your two-factor is set to, and sign to confirm ✍️');
