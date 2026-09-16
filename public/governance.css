@@ -46,8 +46,14 @@
 .prop-ballot { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 /* Selection state must not be carried by colour alone (WCAG 1.4.1) — aria-checked covers assistive
    tech, this ring covers sighted colour-blind users. */
-.prop-choice::before { content: "○ "; opacity: 0.7; }
-.prop-choice[aria-checked="true"]::before { content: "◉ "; opacity: 1; }
+/* .prop-choice rides on .sort-btn, and styles.css now turns every .sort-btn::before into the matrix grid layer
+   (absolute, inset 0, behind the label). The ○/◉ marker lives on this same ::before, so it is put back into the
+   flow here — the marker is the 1.4.1 cue and outranks the grid. The pointer light (::after) still rides. */
+.prop-choice::before { content: "○ "; position: static; background-image: none; animation: none; opacity: 0.7; }
+.prop-choice:hover::before, .prop-choice:focus-visible::before { opacity: 0.7; animation: none; }
+.prop-choice[aria-checked="true"]::before,
+.prop-choice[aria-checked="true"]:hover::before, .prop-choice[aria-checked="true"]:focus-visible::before { content: "◉ "; opacity: 1; }
+@media (forced-colors: active) { .prop-choice::before { display: inline; } }   /* styles.css hides the grid layers there; the marker is not one */
 .prop-cast { justify-self: start; }
 /* A green ring on a green button is 1:1. Dark ring, bright halo — readable on any accent. */
 .prop-cast:focus-visible { outline: 3px solid var(--ink-1); outline-offset: 2px; box-shadow: 0 0 0 6px var(--green-bright); }
@@ -118,15 +124,52 @@
   text-align: left; font-weight: 600; font-size: 0.76rem; letter-spacing: var(--tr-caps); text-transform: uppercase;
   padding: 0.6rem 0.7rem; border-bottom: 1.5px solid var(--edge-ctl);
 }
-.snap-table td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--rule-soft, rgba(255,255,255,0.05)); }
+.snap-table td { padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--g-wash); }   /* row rule is a green wash — --rule-soft was never defined, so the white fallback was live */
 .snap-rank { color: var(--text-mute); font-variant-numeric: tabular-nums; width: 3.2rem; }
 .snap-addr code { font-size: 0.82rem; color: var(--text-dim); }
 .snap-bal, .snap-pct { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .snap-pct { color: var(--green-bright); }
-.snap-copy { background: none; border: none; cursor: pointer; opacity: 0.65; padding: 0 0.25rem; }
-.snap-copy:hover { opacity: 1; }
+/* .copy-btn already paints the green matrix tile (styles.css) — this only makes it compact enough for a table cell.
+   No opacity wash and no transparent fill: those left the tile's grid drawn over nothing. 24px is the 2.5.8 mouse floor. */
+.snap-copy { padding: 0 0.25rem; min-width: 24px; min-height: 24px; margin-left: 0.25rem; }
+/* styles.css lifts every .copy-btn to 44px at this width; the 24px floor above would out-cascade it, so restate it */
+@media (max-width: 600px) { .snap-copy { min-width: 44px; min-height: 44px; } }
 .snap-more-wrap { text-align: center; margin-top: 0.8rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .prop-seg-yes { transition: none; }
 }
+
+/* ===== matrix tile: the snapshot tabs =====================================================
+   The same two layers styles.css gives every .btn (see "The matrix grid" at its end) — .snap-tab is
+   not in that list, so it takes them here. ::before is the dark cell grid that drifts on hover,
+   ::after the pointer-lit cells around --mx/--my (app.js sets them; unset, the centre lights).
+   Same numbers as the base block, the keyframe has its own name so the two never collide. */
+.snap-tab { position: relative; isolation: isolate; }
+.snap-tab::before, .snap-tab::after { content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; }
+.snap-tab::before {
+  background-image:
+    linear-gradient(var(--mx-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mx-line) 1px, transparent 1px);
+  background-size: var(--mx-size) var(--mx-size);
+  opacity: 0.42;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.snap-tab::after {
+  background-image:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--mx-glow) 0, transparent 46px),
+    radial-gradient(circle, var(--mx-cell) 0 1.7px, transparent 2px);
+  background-size: 100% 100%, var(--mx-size) var(--mx-size);
+  background-position: 0 0, calc(var(--mx-size) / 2) calc(var(--mx-size) / 2);
+  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--ink-1) 0, transparent 100%);
+          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--ink-1) 0, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.snap-tab:hover::before, .snap-tab:focus-visible::before { opacity: 0.85; animation: gov-mx-rain 1.1s linear infinite; }
+.snap-tab:hover::after, .snap-tab:focus-visible::after { opacity: 1; }
+.snap-tab:active::after { -webkit-mask-image: none; mask-image: none; opacity: 0.9; }   /* the press: every cell at once */
+@keyframes gov-mx-rain { from { background-position: 0 0, 0 0; } to { background-position: 0 var(--mx-size), 0 0; } }
+@media (prefers-reduced-motion: reduce) { .snap-tab::before { animation: none !important; } }
+html.motion-off .snap-tab::before { animation: none !important; }
+@media (forced-colors: active) { .snap-tab::before, .snap-tab::after { display: none; } }

@@ -6867,6 +6867,9 @@ function settleBeta() {
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
    are for. This decides who may see the site at all. */
 const TOS_VERSION = '2026-09-11';
+/* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
+   need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
+const TOS_GATE = process.env.TOS_GATE === '1';
 const INVITE_GRANT = 10;                 // codes each admitted person gets to hand out
 /* The seed code is the only key to the only door on a fresh deploy, and signupRefusal makes it an
    account-minting credential. It used to default to '12345' (F018). Unset, a random code is generated
@@ -6983,9 +6986,9 @@ function claimInvite(req, userId) {
   } catch (e) { console.error('claimInvite', e.message); }
 }
 
-function passOk(req) {           // a redeemed pass that has accepted the terms — one indexed lookup
+function passOk(req) {           // a redeemed pass (that has accepted the terms, when the terms step is on) — one indexed lookup
   const r = passRow(req);
-  return !!(r && r.tos_at);
+  return !!(r && (TOS_GATE ? r.tos_at : true));
 }
 function hasAccess(req, user) {
   if (user) return true;
@@ -6997,7 +7000,7 @@ function hasAccess(req, user) {
 function signupRefusal(req) {
   const r = passRow(req);
   if (!r) return { error: 'You need an invite code to join. Browsing is open to everyone — joining is by ticket.', code: 'need_invite' };
-  if (!r.tos_at) return { error: 'Read and accept the terms to finish joining.', code: 'need_tos' };
+  if (TOS_GATE && !r.tos_at) return { error: 'Read and accept the terms to finish joining.', code: 'need_tos' };
   if (r.user_id) return { error: 'That invite code has already been used to make an account. Ask whoever sent it for a spare.', code: 'code_spent' };
   return null;
 }
@@ -7137,11 +7140,11 @@ function checkProbation(userId, sendTok) {
     notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. Buy & hold again to lift it.', 'restriction');
   }
 }
-/* THE PARTICIPATION GATE'S FIRST-DAY WATCH. Deliberately not checkProbation(): that one enforces a
-   buy-out of the anti-bot sanction, and breaking it doubles the sanction or restores a permanent one.
-   This is a new member's first day. It can produce exactly one read-only, it lasts one window, and it
-   adds NO strike — the ladder belongs to the scanner, and an account that dumped on day one has not
-   done the thing the ladder is counting.
+/* THE PARTICIPATION GATE'S FIRST-DAY WATCH. Selling the bag that opened the door inside its first day is
+   an anti-cheat trigger like any other, so it walks the SAME three-strike ladder through flagUser():
+   24h the first time, a week the second, permanent the third — bought out at $25 of $SEND per day of the
+   sanction (a flat $1000 for a permanent one), and if the bought bag is sold before the hold is up the
+   sanction comes back doubled (checkProbation). One ladder for every trigger, so the ladder means one thing.
 
    The 2% tolerance is checkProbation's, for the same reason: a transfer fee or a dust rounding is not a
    sell, and the floor is a balance rather than a price. */
@@ -7181,9 +7184,12 @@ async function checkGateHold(userId) {
   if (u.restricted_until && u.restricted_until > now()) { close(); return; }
 
   const reason = 'You sold the $SEND that got you in, inside your first ' + humanDur(PROOF_SELL_WINDOW_MS) + '.';
-  db.prepare('UPDATE users SET gate_hold_until=0, gate_floor=0, gate_wallets=NULL, restricted_until=?, restrict_level=?, restrict_reason=?, redeem_dur=?, redeem_base_send=? WHERE id=?')
-    .run(now() + PROOF_SELL_WINDOW_MS, 1, reason, PROOF_SELL_WINDOW_MS, tok, userId);
-  notify(userId, '🔇', reason + ' Read-only for ' + humanDur(PROOF_SELL_WINDOW_MS) + ' — you can still read every part of the site, and buying back in lifts it early.', 'restriction');
+  close();
+  if (!flagUser(userId, reason)) return;   // a running sanction is never shortened — flagUser leaves it alone
+  const after = db.prepare('SELECT restrict_level, redeem_dur, strikes FROM users WHERE id = ?').get(userId) || {};
+  const lvl = after.restrict_level || 1;
+  const span = lvl >= 3 ? 'for good' : 'for ' + humanDur(after.redeem_dur || PROOF_SELL_WINDOW_MS);
+  notify(userId, '🔇', reason + ' That is strike ' + (after.strikes || 1) + ' of 3 — read-only ' + span + '. You can still read every part of the site; buying and holding $SEND lifts it early ($25 a day of the sanction, $1000 for a permanent one), and selling that bag before the hold is up brings it back doubled.', 'restriction');
 }
 const _probTick = new Map();
 // fire-and-forget on-chain re-check while EITHER hold window is open — the redemption deal or the gate's
@@ -7307,7 +7313,7 @@ async function runProofQueue() {
         .run(t, t, encField(JSON.stringify(v.detail)), watching ? until : 0, floor,
              watching ? JSON.stringify(addrs.map((x) => String(x).toLowerCase())) : null, userId);
       notify(userId, '✅', watching
-        ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; let that balance drop by more than about 2% before then and the account goes read-only for a day.'
+        ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; let that balance drop by more than about 2% before then and it counts as a strike: read-only for a day the first time, a week the second, for good the third — $25 of $SEND a day buys it out, and selling that before the hold is up doubles it.'
         : 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀', 'wallet');
     } else if (v.unknown || unreadable) {
       // not a verdict. Leave the door exactly as it was and say so.
@@ -7990,7 +7996,8 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, {
           access: hasAccess(req, u),
           redeemed: !!r,
-          tosAccepted: !!(r && r.tos_at) || !!(u && u.tos_at),
+          tosAccepted: !TOS_GATE || !!(r && r.tos_at) || !!(u && u.tos_at),
+          tosRequired: TOS_GATE,
           tosVersion: TOS_VERSION,
           signedIn: !!u,
           brand: coinBrandUrls(),
@@ -8003,7 +8010,7 @@ const server = http.createServer(async (req, res) => {
         const code = normCode(b.code);
         if (!code) return bad(res, 'enter your code');
         const already = passRow(req);
-        if (already) return send(res, 200, { ok: true, already: true, tosAccepted: !!already.tos_at });
+        if (already) return send(res, 200, { ok: true, already: true, tosAccepted: !TOS_GATE || !!already.tos_at, tosRequired: TOS_GATE });
         const row = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(code);
         if (!row) return bad(res, 'that code is not one of ours — check it and try again');
         if (row.used_at && row.user_id) return bad(res, 'that code has already been used. Every code works once — ask whoever sent it for a spare.');
@@ -8014,7 +8021,7 @@ const server = http.createServer(async (req, res) => {
         // re-read: if two people raced on the same code, only the winner's pass is on the row
         const after = db.prepare('SELECT pass FROM invite_codes WHERE code = ?').get(code);
         if (!after || after.pass !== passHash(tok)) return bad(res, 'that code was just used by someone else — ask for another');
-        return send(res, 200, { ok: true, tosAccepted: false }, { 'Set-Cookie': passCookie(tok) });
+        return send(res, 200, { ok: true, tosAccepted: !TOS_GATE, tosRequired: TOS_GATE }, { 'Set-Cookie': passCookie(tok) });
       }
       if (p === '/api/gate/invites' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);

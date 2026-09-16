@@ -157,6 +157,25 @@
     setTimeout(() => t.remove(), 2600);
   };
 
+  // --- matrix tiles: the pointer lights the cells under it (styles.css reads --mx/--my on the control) ---
+  (function () {
+    // every tile: the position/isolation list at the end of styles.css, plus the tiles the gate, invite, governance,
+    // moderation and token-text stylesheets declare. scripts/check.mjs fails when this list and that block drift apart.
+    const SEL = '.btn, .react-btn, .feed-tab, .dtab, .oc-tf, .np-seg, .np-vs-btn, .mp-btn, .copy-btn, .nav-toggle, .mcap-panel, .sc-hop, .np-row-call, .motion-btn, .npm-item, .auth-seg, .auth-tab, .profile-link, .np-caret-btn, .swap-choice, .file-label, .vote-btn, .sort-btn, .linklike, .oauth-btn, .btn-follow, .gobj-link, .wc-item, .wc-deep, .np-search-clear, .np-tickcopy, .tm-x, .pin-chip-open, .pin-chip-rm, .np-pin, .np-sort, .np-more, .np-refresh, .np-hidden-link, .np-status button, .np-newbar, .np-lookup-clear, .ab-chip, .np-chip, .np-den, .np-sv-apply, .np-sv-del, .np-runner-pin, .np-runner-chart, .np-rail-btn, .np-feed-fresh, .np-watch, .np-wl-remove, .notif-bell, .notif-clearall, .notif-x, .sc-btn, .sc-senders-toggle, .wall-tab, .lb-win, .ll-toggle button, .comm-tab, .ge-info, .cmp-mode, .np-chain-btn, .oc-mk, .ll-info, .arena-tab, .np-social-btn, .cw-tab, .np-strat, .np-fclose, .pillar > summary, .oc-data > summary, .b0-conn summary, .risk-chip, .g1-w-link, .sc-info, .g-btn, .g-x, .g-code, .inv-close, .inv-browse, .inv-code, .snap-tab, .mute-flag, .mod-item, .tok-chip, .tok-copy, .tok-comm';
+    let raf = 0, pending = null;
+    const paint = () => {
+      raf = 0; const e = pending; pending = null; if (!e) return;
+      const el = e.target && e.target.closest && e.target.closest(SEL); if (!el) return;
+      const r = el.getBoundingClientRect(); if (!r.width || !r.height) return;
+      el.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100).toFixed(1) + '%');
+      el.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100).toFixed(1) + '%');
+    };
+    document.addEventListener('pointermove', (e) => { pending = e; if (!raf) raf = requestAnimationFrame(paint); }, { passive: true });
+    document.addEventListener('pointerout', (e) => {
+      const el = e.target && e.target.closest && e.target.closest(SEL);
+      if (el && !(e.relatedTarget && el.contains(e.relatedTarget))) { el.style.removeProperty('--mx'); el.style.removeProperty('--my'); }
+    }, { passive: true });
+  })();
   // --- report a post or comment (X01): one handler for every wall; the server writes a reports row the operator reads
   document.addEventListener('click', async (e) => {
     const b = e.target.closest('[data-report]');

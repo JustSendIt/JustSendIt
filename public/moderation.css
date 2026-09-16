@@ -1,5 +1,5 @@
 /* ===== moderation.css — muted senders: red @names + 🔇 flag, unmute popdown, and the u.html Moderation menu =====
- * Depends on the tokens in styles.css (--red, --ink-2, --ink-4, --text, --text-dim, --green-bright). */
+ * Depends on the tokens in styles.css (--red, --ink-2, --ink-4, --text, --text-dim, --green-bright, the --ctl-* and --mx-* controls). */
 
 /* --- a muted @name, wherever it appears (wins over per-user accent colours set inline) --- */
 .is-muted { color: var(--red) !important; text-shadow: none !important; }
@@ -23,7 +23,7 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
   color: var(--ctl-ink); font-size: 0.85rem; line-height: 1; cursor: pointer; vertical-align: middle;
   transition: background 0.12s ease, transform 0.12s ease;
 }
-.mute-flag:hover { background: var(--red-soft); border-color: var(--red-soft); transform: translateY(-1px); }
+.mute-flag:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); transform: translateY(-1px); }   /* the site's green hover, not the pale-pink wash; red is kept for the OPEN state below */
 .mute-flag:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 .mute-flag[aria-expanded="true"] { background: var(--red); border-color: var(--red); color: var(--on-red); }
 @media (max-width: 600px) { .mute-flag { min-width: 44px; min-height: 44px; margin: -8px 0 -8px 0.25rem; } }
@@ -61,7 +61,11 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
   transition: background 0.12s ease, color 0.12s ease;
 }
 .mod-item:hover, .mod-item:focus-visible { background: var(--red); color: var(--on-red); outline: none; }
-.mod-item:focus-visible { box-shadow: inset 0 0 0 3px var(--ctl-ink); }   /* an inset ring on a red/green fill has to be the ink — --green-bright is ~1.4:1 there */
+/* the ring on a red/green fill has to be the ink — --green-bright is ~1.4:1 there. It is an OUTLINE, not an
+   inset box-shadow: an inset shadow paints with the element's background, and the tile's ::before/::after
+   (z-index -1 inside the isolated stacking context) paint above that — on the green Unmute item the lit
+   cells and the 46px glow overprinted the ring. An outline paints above everything; -3px keeps it inside. */
+.mod-item:focus-visible { outline: 3px solid var(--ctl-ink); outline-offset: -3px; }
 .mod-item-unmute:hover, .mod-item-unmute:focus-visible { background: var(--green); color: var(--on-green); }
 .mod-item[disabled] { background: var(--ctl-fill-dis); color: var(--ctl-ink); opacity: 1; cursor: wait; }
 .mod-ico { flex: 0 0 auto; width: 1.2em; text-align: center; }
@@ -79,3 +83,48 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
   .mute-flag, .mod-caret, .mod-item { transition: none; }
   .mute-flag:hover { transform: none; }
 }
+
+/* ===== matrix tile: the 🔇 flag and the Moderation menu items ==============================
+   The same two layers styles.css gives every .btn (see "The matrix grid" at its end) — neither
+   .mute-flag nor .mod-item is in that list, so they take them here. ::before is the dark cell grid
+   that drifts on hover, ::after the pointer-lit cells around --mx/--my (app.js sets them; unset,
+   the centre lights). Same numbers as the base block; the keyframe has its own name.
+   The one local rule: the pointer light is green-bright, and the flag's OPEN state and the Mute
+   item's hover are red on purpose (a destructive action) — green cells on red is the pairing the
+   ballot bar above already refuses, so on those two fills only the grid drifts and no cell lights. */
+.mute-flag, .mod-item { position: relative; isolation: isolate; }
+.mute-flag::before, .mute-flag::after, .mod-item::before, .mod-item::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+}
+.mute-flag::before, .mod-item::before {
+  background-image:
+    linear-gradient(var(--mx-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mx-line) 1px, transparent 1px);
+  background-size: var(--mx-size) var(--mx-size);
+  opacity: 0.42;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.mute-flag::after, .mod-item::after {
+  background-image:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--mx-glow) 0, transparent 46px),
+    radial-gradient(circle, var(--mx-cell) 0 1.7px, transparent 2px);
+  background-size: 100% 100%, var(--mx-size) var(--mx-size);
+  background-position: 0 0, calc(var(--mx-size) / 2) calc(var(--mx-size) / 2);
+  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--ink-1) 0, transparent 100%);
+          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--ink-1) 0, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.mute-flag:hover::before, .mute-flag:focus-visible::before, .mod-item:hover::before, .mod-item:focus-visible::before { opacity: 0.85; animation: mod-mx-rain 1.1s linear infinite; }
+.mute-flag:hover::after, .mute-flag:focus-visible::after, .mod-item:hover::after, .mod-item:focus-visible::after { opacity: 1; }
+.mute-flag:active::after, .mod-item:active::after { -webkit-mask-image: none; mask-image: none; opacity: 0.9; }   /* the press: every cell at once */
+/* the red fills: grid only */
+.mute-flag[aria-expanded="true"]::after,
+.mod-item:not(.mod-item-unmute):hover::after, .mod-item:not(.mod-item-unmute):focus-visible::after, .mod-item:not(.mod-item-unmute):active::after { display: none; }
+/* a disabled item is still a tile, but nothing in it moves or lights */
+.mod-item[disabled]::before { animation: none; opacity: 0.35; }
+.mod-item[disabled]::after { display: none; }
+@keyframes mod-mx-rain { from { background-position: 0 0, 0 0; } to { background-position: 0 var(--mx-size), 0 0; } }
+@media (prefers-reduced-motion: reduce) { .mute-flag::before, .mod-item::before { animation: none !important; } }
+html.motion-off .mute-flag::before, html.motion-off .mod-item::before { animation: none !important; }
+@media (forced-colors: active) { .mute-flag::before, .mute-flag::after, .mod-item::before, .mod-item::after { display: none; } }

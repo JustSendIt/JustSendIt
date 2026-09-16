@@ -86,3 +86,44 @@
   .tok-chip:hover { transform: none; }
   .tok-chip:active { transform: none; }
 }
+
+/* ===== matrix tile: $TICKER chips, the 📋 address copy and the 🏘️ community tags ===========
+   The same two layers styles.css gives every .btn (see "The matrix grid" at its end) — none of
+   these three is in that list, so they take them here. ::before is the dark cell grid that drifts
+   on hover, ::after the pointer-lit cells around --mx/--my (app.js sets them; unset, the centre
+   lights). Same numbers as the base block; the keyframe has its own name. All three already sit
+   position: relative; the isolation keeps the z-index:-1 layers inside the control. */
+.tok-chip, .tok-copy, .tok-comm { isolation: isolate; }
+.tok-chip::before, .tok-chip::after, .tok-copy::before, .tok-copy::after, .tok-comm::before, .tok-comm::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+}
+.tok-chip::before, .tok-copy::before, .tok-comm::before {
+  background-image:
+    linear-gradient(var(--mx-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mx-line) 1px, transparent 1px);
+  background-size: var(--mx-size) var(--mx-size);
+  opacity: 0.42;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.tok-chip::after, .tok-copy::after, .tok-comm::after {
+  background-image:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--mx-glow) 0, transparent 46px),
+    radial-gradient(circle, var(--mx-cell) 0 1.7px, transparent 2px);
+  background-size: 100% 100%, var(--mx-size) var(--mx-size);
+  background-position: 0 0, calc(var(--mx-size) / 2) calc(var(--mx-size) / 2);
+  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--ink-1) 0, transparent 100%);
+          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--ink-1) 0, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.tok-chip:hover::before, .tok-chip:focus-visible::before, .tok-copy:hover::before, .tok-copy:focus-visible::before, .tok-comm:hover::before, .tok-comm:focus-visible::before {
+  opacity: 0.85; animation: tok-mx-rain 1.1s linear infinite;
+}
+.tok-chip:hover::after, .tok-chip:focus-visible::after, .tok-copy:hover::after, .tok-copy:focus-visible::after, .tok-comm:hover::after, .tok-comm:focus-visible::after { opacity: 1; }
+.tok-chip:active::after, .tok-copy:active::after, .tok-comm:active::after { -webkit-mask-image: none; mask-image: none; opacity: 0.9; }   /* the press: every cell at once */
+@keyframes tok-mx-rain { from { background-position: 0 0, 0 0; } to { background-position: 0 var(--mx-size), 0 0; } }
+@media (prefers-reduced-motion: reduce) { .tok-chip::before, .tok-copy::before, .tok-comm::before { animation: none !important; } }
+html.motion-off .tok-chip::before, html.motion-off .tok-copy::before, html.motion-off .tok-comm::before { animation: none !important; }
+@media (forced-colors: active) {
+  .tok-chip::before, .tok-chip::after, .tok-copy::before, .tok-copy::after, .tok-comm::before, .tok-comm::after { display: none; }
+}

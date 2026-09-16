@@ -49,6 +49,7 @@ body { padding-bottom: var(--fab-reserve); }   /* player and FAB both stand ~70p
 .trk-sel-link::after, .comm-viewtoken::after, .ge-info::after, .ll-info::after {
   content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, 24px); height: max(100%, 24px);
+  pointer-events: auto;   /* see "matrix tiles vs. phantom boxes" below */
 }
 @media (pointer: coarse) {
   .nav-logo::after, .notif-bell::after, .nav-xp::after, .nav-live::after, .profile-link::after,
@@ -103,6 +104,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .switch::before, .ll-toggle button::after, .swatch::after {
   content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, 24px); height: max(100%, 24px);
+  pointer-events: auto;
 }
 @media (pointer: coarse) {
   .switch::before, .ll-toggle button::after, .swatch::after { width: max(100%, 44px); height: max(100%, 44px); }
@@ -114,10 +116,45 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .wall-stat::after, .pin-chip-open::after, .pin-chip-rm::after {
   content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, 24px); height: max(100%, 24px);
+  pointer-events: auto;
 }
 @media (pointer: coarse) {
   .wall-stat::after, .pin-chip-open::after, .pin-chip-rm::after { width: max(100%, 44px); height: max(100%, 44px); }
   .wall-tab { min-height: 44px; }
+}
+
+/* matrix tiles vs. phantom boxes. styles.css ("The matrix grid", at its end) now draws two layers under
+   every control it lists, and its pointer-light layer is the ::after — the same pseudo-element the phantom
+   hit boxes above live on. Eleven of the boxes are on listed controls (.notif-bell, .profile-link,
+   .np-caret-btn, .np-hidden-link, .linklike, .gobj-link, .ge-info, .ll-info, .ll-toggle button,
+   .pin-chip-open, .pin-chip-rm). This sheet loads last, so the box keeps its geometry — but the tile rule's
+   `pointer-events: none` would have quietly turned every one of those boxes back into a mark nobody can
+   tap, which is the whole reason the boxes exist. `pointer-events: auto` above puts the catch back.
+   Two consequences of the shared pseudo, handled here rather than by giving up either feature:
+     · under a finger the box is 44px around a mark that may be 20px, and a tap leaves :hover stuck on
+       phones — so the lit cells would have painted a 44px square of green dots around a tiny ✕. On coarse
+       pointers the light layer draws nothing on a phantom box; the grid (::before, inset 0) still drifts
+       on the mark itself. With a mouse the box is at most 24px, a few px past the mark at worst.
+     · forced-colors hides the tile layers (display: none), which would take the hit box with it. The box
+       comes back as a transparent block there, with nothing to paint.
+     · the tile rule also gives its ::after `border-radius: inherit`, so on a round / pill mark the 44px
+       box was a 44px CIRCLE — the corners no longer caught (~21% less area than the square the box is
+       meant to be). Under a finger nothing paints on the box anyway, so it goes back to square here; with
+       a mouse it stays round so the lit cells keep inside the mark. The seven boxes in this list that are
+       not tiled never had a radius, so `0` is a no-op on them. */
+@media (pointer: coarse) {
+  .nav-logo::after, .notif-bell::after, .nav-xp::after, .nav-live::after, .profile-link::after,
+  .np-caret-btn::after, .np-hidden-link::after, .linklike::after, .gobj-link::after,
+  .trk-sel-link::after, .comm-viewtoken::after, .ge-info::after, .ll-info::after,
+  .ll-toggle button::after, .swatch::after, .wall-stat::after, .pin-chip-open::after, .pin-chip-rm::after { background-image: none; border-radius: 0; }
+}
+@media (forced-colors: active) {
+  .nav-logo::after, .notif-bell::after, .nav-xp::after, .nav-live::after, .profile-link::after,
+  .np-caret-btn::after, .np-hidden-link::after, .linklike::after, .gobj-link::after,
+  .trk-sel-link::after, .comm-viewtoken::after, .ge-info::after, .ll-info::after,
+  .ll-toggle button::after, .swatch::after, .wall-stat::after, .pin-chip-open::after, .pin-chip-rm::after {
+    display: block; background-image: none; -webkit-mask-image: none; mask-image: none;
+  }
 }
 
 /* The radar's search field is a bare <input> in a flex row with no padding of its own, so it laid

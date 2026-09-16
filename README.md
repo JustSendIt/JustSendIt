@@ -859,9 +859,10 @@ The open sandbox (joinable with no token and no wallet, grants no multiplier) is
 **There is no waiting period — the first day is watched instead.** A third test used to ask whether you had
 held for over a week. It is gone. The door now opens the moment you hold the bag, and in exchange
 `PROOF_SELL_WINDOW_MS` (24h) after your **most recent market buy**, the position that opened the door has to
-still be there. Sell out of it inside that window and the account goes read-only for a day — `restrict_level`
-1, buy-out priced like any other one-day sanction, and **no strike**, because the strike ladder belongs to
-the anti-bot scanner (§3.6) and dumping on day one is not the thing that ladder counts.
+still be there. Sell out of it inside that window and it is an anti-cheat trigger like any other: a **strike on
+the same three-step ladder** (§3.6) — read-only for a day the first time, a week the second, for good the third —
+bought out at **$25 of $SEND per day** of the sanction ($1000 flat for a permanent one), and if that bought bag is
+sold before its hold is up the sanction **comes back doubled**. One ladder for every trigger, so a strike means one thing.
 
 Two columns carry it, alongside the redemption pair in §3.6:
 
@@ -896,7 +897,7 @@ number the window is measured by. An RPC that does not answer is never a sale; t
 
 ### 3.16 The ticket — reading is open, joining is by invite 🎟️
 
-**You do not need anything to read this site.** The landing page, the Send Wall, the New Pairs Radar, the Arcade, profiles, Send Calls and the terms are all open to anyone, signed in or not, crawler or person. That is deliberate and it is load‑bearing: this site's whole SEO surface — every canonical, every sitemap entry, every `og:` tag — only means something if the pages behind them can actually be fetched.
+**You do not need anything to read this site.** The landing page, the Send Wall, the New Pairs Radar, the Arcade, profiles and Send Calls are all open to anyone, signed in or not, crawler or person. That is deliberate and it is load‑bearing: this site's whole SEO surface — every canonical, every sitemap entry, every `og:` tag — only means something if the pages behind them can actually be fetched.
 
 **You do need a ticket to JOIN.** An invite code is required at exactly three doors, the three that can create an account:
 
@@ -914,7 +915,7 @@ All three call one function (`signupRefusal`), and nothing else on the site call
 2. They tap **Sign up** — from anywhere on the site. The ticket opens over the page they were on.
 3. **They can close it.** "No code? Keep browsing read‑only →" is on every step, Esc works throughout, and closing it puts them back exactly where they were. A door that cannot be walked away from is a wall.
 4. They enter a code. **Each code works once.**
-5. They read the terms. The box unlocks when the text has been scrolled to the end *and* twelve seconds have passed — jumping to the bottom is not enough. **18+ is a separate tick**, because the terms assert it and nothing was otherwise asking.
+5. *(Hidden by default.)* A terms step — scroll to the end, twelve seconds, an 18+ tick — exists behind `TOS_GATE=1` for an operator who wants it; the site ships without it, and `need_tos` is only ever answered when it is on.
 6. They make their account. Their **Send ID** — their place in line — is set at that moment and never changes. It is the user id: already monotonic, already unique, already means "how early you were", so a second counter would only be a way for the two to disagree.
 7. They get **ten codes of their own**, shown immediately, one tap each to copy.
 

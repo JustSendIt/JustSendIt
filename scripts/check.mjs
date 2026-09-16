@@ -64,6 +64,30 @@ for (const f of htmlFiles) {
   }
 }
 
+/* ---- 3b. the matrix tiles' pointer tracking covers every tile ----
+   styles.css gives a list of selectors position:relative + isolation (the tile block at its end) and the other
+   stylesheets add a few of their own; app.js sets --mx/--my on the SAME list. A tile missing from app.js keeps
+   its light pinned at the centre, which is the bug this check exists to catch. */
+{
+  const css = readFileSync(path.join(PUBLIC, 'styles.css'), 'utf8');
+  const mm = css.match(/\n([^\n{}]+) \{\n  position: relative; isolation: isolate;\n/);
+  const app = readFileSync(path.join(PUBLIC, 'app.js'), 'utf8');
+  const sm = app.match(/const SEL = '([^']+)';/);
+  if (!mm || !sm) note('public/app.js', 'could not find the matrix tile lists to compare (styles.css block or app.js SEL)');
+  else {
+    const inCss = new Set(mm[1].split(',').map(s => s.trim()));
+    for (const [f, re] of [['gate.css', /\n([^\n{}]+) \{ position: relative; isolation: isolate; \}/g], ['governance.css', /\n([^\n{}]+) \{ position: relative; isolation: isolate; \}/g], ['moderation.css', /\n([^\n{}]+) \{ position: relative; isolation: isolate; \}/g], ['invite.css', /\n([^\n{}]+) \{ isolation: isolate; \}/g], ['tokentext.css', /\n([^\n{}]+) \{ isolation: isolate; \}/g]]) {
+      let src = ''; try { src = readFileSync(path.join(PUBLIC, f), 'utf8'); } catch { continue; }
+      for (const x of src.matchAll(re)) x[1].split(',').map(s => s.trim()).filter(s => s.startsWith('.')).forEach(s => inCss.add(s));
+    }
+    const inJs = new Set(sm[1].split(',').map(s => s.trim()));
+    const missing = [...inCss].filter(s => !inJs.has(s));
+    const stale = [...inJs].filter(s => !inCss.has(s));
+    if (missing.length) note('public/app.js', 'pointer tracking (SEL) misses tiles the CSS declares: ' + missing.join(', '));
+    if (stale.length) note('public/app.js', 'pointer tracking (SEL) lists selectors no stylesheet makes a tile: ' + stale.join(', '));
+  }
+}
+
 /* ---- 4. lazily-loaded assets exist too ----
    auth.js fetches these by string at runtime, so no HTML file names them and check 3 cannot see them. */
 for (const ref of ['invite.js', 'invite.css', 'gate.css']) {

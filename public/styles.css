@@ -76,11 +76,18 @@
      pill with black type is invisible. The ladder: rest → hover lightens toward --text → selected takes
      the green (or gold) fill → disabled drops to a muted mix that still clears 4.5:1 for --ink-1.
      Mixes of tokens only, so prefs.js's re-solved --text / --green families carry straight through. */
-  --ctl-fill: color-mix(in srgb, var(--text) 82%, var(--green) 18%);
-  --ctl-fill-hi: var(--text);
-  --ctl-fill-lo: var(--text-dim);
-  --ctl-fill-mute: var(--text-mute);
-  --ctl-fill-dis: color-mix(in srgb, var(--text-mute) 82%, var(--ink) 18%);
+  /* Every control fill is the brand green — never a white wash. Black type sits on all of them, and
+     --green-dark is the floor: prefs.js lifts a user-chosen accent until --ink-1 clears 4.5:1 on it. */
+  --ctl-fill: var(--green);
+  --ctl-fill-hi: var(--green-bright);
+  --ctl-fill-lo: var(--green-dark);
+  --ctl-fill-mute: var(--green-dark);
+  --ctl-fill-dis: color-mix(in srgb, var(--green-dark) 75%, var(--ink-4) 25%);
+  /* the matrix grid every control wears: dark cells on the green, lit cells around the pointer */
+  --mx-line: color-mix(in srgb, var(--ink-1) 26%, transparent);
+  --mx-cell: var(--green-bright);
+  --mx-glow: color-mix(in srgb, var(--green-bright) 55%, transparent);
+  --mx-size: 7px;
   --ctl-ink: var(--ink-1);
 
   /* ---------- CONTROL BOUNDARY (WCAG 1.4.11 >= 3:1) ---------- */
@@ -117,9 +124,9 @@
   --glass-hi:    rgba(20, 23, 15, 0.82);    /* --ink-3 */
   --glass-lo:    rgba(12, 14, 9, 0.86);    /* --ink-2 */
   --glass-well:  rgba(2, 3, 1, 0.55);       /* --ink-1 */
-  --glass-sheen: rgba(255, 255, 255, 0.055);
-  --glass-edge:  rgba(255, 255, 255, 0.10);
-  --hair:        rgba(255, 255, 255, 0.08);
+  --glass-sheen: color-mix(in srgb, var(--green) 9%, transparent);    /* green, not a white wash — the world layer is one colour */
+  --glass-edge:  color-mix(in srgb, var(--green) 20%, transparent);
+  --hair:        color-mix(in srgb, var(--green) 14%, transparent);
   --blur: 18px; --blur-sm: 10px; --blur-scrim: 8px; --sat: 1.35;
 
   /* ---------- GLOW ---------- */
@@ -176,7 +183,9 @@
     --r-wash: rgba(255,93,93,0.08);  --r-tint: rgba(255,93,93,0.15);
     --r-edge: rgba(255,93,93,0.40);
     --d-tint: rgba(159,224,255,0.12); --d-edge: rgba(159,224,255,0.40);
-    --ctl-fill: #e5efc2; --ctl-fill-dis: #7a8172;
+    --ctl-fill: #a8ce00; --ctl-fill-dis: #6d8318;
+    --mx-line: rgba(2,3,1,0.26); --mx-glow: rgba(198,240,0,0.55);
+    --glass-sheen: rgba(168,206,0,0.09); --glass-edge: rgba(168,206,0,0.20); --hair: rgba(168,206,0,0.14);
     --glow-g: rgba(168,206,0,0.55);   --glow-o: rgba(255,179,64,0.50);
     --grid-line-2: rgba(168,206,0,0.15);
   }
@@ -402,19 +411,16 @@ a { color: var(--gold); }
 .btn-primary {
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: var(--on-green);
   box-shadow: 0 6px 0 var(--green-dark), 0 14px 34px color-mix(in srgb, var(--green) 35%, transparent);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
 }
 .btn-primary:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 var(--green-dark), 0 20px 44px var(--g-lit); }
 .btn-gold {
   background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: var(--on-gold);
   box-shadow: 0 6px 0 var(--gold-deep), 0 14px 34px rgba(255,179,64,0.3);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
 }
 .btn-gold:hover { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 var(--gold-deep), 0 20px 44px rgba(255,179,64,0.4); }
 .btn-rh {
   background: var(--rh-green); color: var(--ctl-ink);
   box-shadow: 0 6px 0 color-mix(in srgb, var(--rh-green) 70%, var(--ink)), 0 14px 34px color-mix(in srgb, var(--rh-green) 30%, transparent);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.3);
 }
 .btn-rh:hover { transform: translateY(-3px) scale(1.03); }
 .btn-ghost {
@@ -620,7 +626,7 @@ section { padding: 3.6rem 1.25rem; position: relative; }
 .skeleton { position: relative; overflow: hidden; background: var(--ink-4); border-radius: 8px; color: transparent !important; }
 .skeleton::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  background: linear-gradient(90deg, transparent, var(--g-tint), transparent);   /* green sweep, not a white one */
   animation: shimmer 1.2s infinite;
 }
 @keyframes shimmer { from { transform: translateX(-100%);} to { transform: translateX(100%);} }
@@ -790,7 +796,7 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 /* ===== Auth modal ===== */
 #auth-modal { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 1rem; }
 /* The invite line under the sign-in modal: quiet, but the only signpost a person holding a code has. */
-.auth-invite { margin: 1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--border, rgba(255,255,255,0.1));
+.auth-invite { margin: 1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--hair);
   font-size: 0.83rem; line-height: 1.55; color: var(--text-dim); text-align: center; }
 #auth-modal[hidden] { display: none; }
 .modal-backdrop { position: absolute; inset: 0; background: rgba(4,6,10,0.78); backdrop-filter: blur(6px); }
@@ -875,18 +881,27 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 .trk-grid-tight .hstat { padding: 0.5rem 0.7rem; }
 .trk-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: 1.05rem; margin: 1rem 0 0.5rem; letter-spacing: 0.03em; }
 .trk-token { background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; margin-bottom: 0.5rem; }
+/* The summary is the row's button, so it sits on the green control ladder with black type like every other
+   disclosure summary. The ± figure keeps its green / red, on an ink pill (the .g1-w-tag construction) so it
+   stays legible at every step of the fill; the caret is its own ::before, so no matrix layers here. */
 .trk-token summary {
   display: flex; align-items: center; gap: 0.8rem; padding: 0.65rem 0.9rem;
   cursor: pointer; list-style: none; flex-wrap: wrap;
+  background: var(--ctl-fill-lo); color: var(--ctl-ink); transition: background 0.15s ease;
+  border-radius: calc(12px - 1.5px);   /* the .trk-token radius less its border: `inherit` reads 0 through the <details> slot */
 }
 .trk-token summary::-webkit-details-marker { display: none; }
-.trk-token summary::before { content: '▸'; color: var(--text-dim); transition: transform 0.15s; }
+.trk-token summary::before { content: '▸'; color: var(--ctl-ink); transition: transform 0.15s; }
+.trk-token[open] summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .trk-token[open] summary::before { transform: rotate(90deg); }
-.trk-token summary:hover { background: color-mix(in srgb, var(--green) 5%, transparent); border-radius: 12px; }
+.trk-token summary:hover { background: var(--ctl-fill-hi); }
+.trk-token summary .t-pnl.pos, .trk-token summary .t-pnl.neg { background: var(--ink-1); padding: 0.15rem 0.4rem; border-radius: var(--r-pill); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .trk-token summary, .trk-token summary::before { transition: none; } }
+html.motion-off .trk-token summary, html.motion-off .trk-token summary::before { transition: none; }
 .trk-token-body { padding: 0.4rem 0.9rem 0.9rem; border-top: 1px solid var(--ink-4); }
 .trk-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
 .trk-table th { text-align: left; color: var(--text-dim); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--ink-4); }
-.trk-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.trk-table td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--hair); }
 .trk-table a { color: var(--gold); text-decoration: none; }
 
 /* ===== Wall themes ===== */
@@ -926,7 +941,7 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
   padding: 0; transition: transform 0.12s;
 }
 .swatch:hover { transform: scale(1.15); }
-.swatch[aria-checked="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--ink), 0 0 14px rgba(255,255,255,0.4); }
+.swatch[aria-checked="true"] { border-color: var(--green-bright); box-shadow: 0 0 0 2px var(--ink), 0 0 14px var(--glow-g); }
 .img-slot { display: flex; align-items: center; gap: 0.7rem; margin: 0.5rem 0; flex-wrap: wrap; }
 .img-slot img { width: 72px; height: 44px; object-fit: cover; border-radius: 8px; border: 1.5px solid var(--ink-4); }
 .img-slot .none { width: 72px; height: 44px; border-radius: 8px; border: 1.5px dashed var(--ink-4); display: grid; place-items: center; color: var(--text-dim); font-size: 0.7rem; }
@@ -1085,13 +1100,18 @@ details.setting-card {
   background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
   border: 2px solid var(--g-veil); border-radius: 18px;
 }
+/* The summary IS the card's button, so it is the green tile every other control is, with black type.
+   Its caret is its own ::after, so the matrix layers cannot ride on it — fill and ink still match. */
 details.setting-card > summary {
   display: flex; align-items: center; gap: 0.7rem; padding: 1rem 1.3rem;
   cursor: pointer; list-style: none; font-family: 'Luckiest Guy', cursive;
-  font-size: 1.15rem; color: var(--green-bright); letter-spacing: 0.03em;
+  font-size: 1.15rem; color: var(--ctl-ink); letter-spacing: 0.03em;
+  background: var(--ctl-fill-lo); border-radius: inherit; transition: background 0.15s ease;
 }
+details.setting-card > summary:hover { background: var(--ctl-fill-hi); }
+details.setting-card[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 details.setting-card > summary::-webkit-details-marker { display: none; }
-details.setting-card > summary::after { content: '▾'; margin-left: auto; color: var(--text-dim); transition: transform 0.2s; }
+details.setting-card > summary::after { content: '▾'; margin-left: auto; color: var(--ctl-ink); transition: transform 0.2s; }
 details.setting-card[open] > summary::after { transform: rotate(180deg); }
 details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 .pref-row { display: flex; align-items: center; gap: 0.8rem; justify-content: space-between; padding: 0.55rem 0; border-bottom: 1px solid var(--ink-4); flex-wrap: wrap; }
@@ -1198,14 +1218,16 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 [id] { scroll-margin-top: 72px; }
 .risk-chip {
   display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.8rem;
-  background: rgba(255,179,64,0.12); border: 1.5px solid rgba(255,179,64,0.45); color: var(--gold);
+  background: var(--gold); border: 1.5px solid var(--gold); color: var(--on-gold);   /* a clickable chip is a control: gold FILL, black type, no wash */
   border-radius: 999px; padding: 0.35rem 0.9rem; font-weight: 800; font-size: 0.8rem; text-decoration: none;
 }
-.risk-chip:hover { background: rgba(255,179,64,0.2); }
+.risk-chip:hover, .risk-chip:focus-visible { background: var(--gold-deep); border-color: var(--gold-deep); color: var(--ctl-ink); }
 .reassure { max-width: 620px; margin: 1.4rem auto 0; text-align: left; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 16px; }
-.reassure > summary { cursor: pointer; padding: 0.9rem 1.2rem; font-weight: 800; color: var(--green-bright); list-style: none; }
+.reassure > summary { cursor: pointer; padding: 0.9rem 1.2rem; font-weight: 800; color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: inherit; list-style: none; transition: background 0.15s ease; }
+.reassure > summary:hover { background: var(--ctl-fill-hi); }
+.reassure[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .reassure > summary::-webkit-details-marker { display: none; }
-.reassure > summary::after { content: ' ▾'; color: var(--text-dim); }
+.reassure > summary::after { content: ' ▾'; color: var(--ctl-ink); }
 .reassure[open] > summary::after { content: ' ▴'; }
 .reassure-body { padding: 0 1.2rem 1.1rem; color: var(--text-dim); font-size: 0.9rem; line-height: 1.6; }
 .reassure-body ul { margin: 0.5rem 0 0 1.1rem; display: grid; gap: 0.4rem; }
@@ -1306,9 +1328,11 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 
 /* gamification rules explainer */
 .grules { margin-top: 1.2rem; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 14px; }
-.grules > summary { cursor: pointer; padding: 0.8rem 1rem; font-weight: 800; color: var(--green-bright); list-style: none; }
+.grules > summary { cursor: pointer; padding: 0.8rem 1rem; font-weight: 800; color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: inherit; list-style: none; transition: background 0.15s ease; }
+.grules > summary:hover { background: var(--ctl-fill-hi); }
+.grules[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .grules > summary::-webkit-details-marker { display: none; }
-.grules > summary::after { content: ' ▾'; color: var(--text-dim); }
+.grules > summary::after { content: ' ▾'; color: var(--ctl-ink); }
 .grules[open] > summary::after { content: ' ▴'; }
 .grules-body { padding: 0 1rem 1rem; color: var(--text-dim); font-size: 0.9rem; line-height: 1.6; }
 .grules-body p { margin: 0.5rem 0; }
@@ -1460,7 +1484,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .vmeter-fill { height: 100%; border-radius: 999px; transition: width 0.9s cubic-bezier(0.2,0.8,0.3,1); }
 .vmeter-fill.send { background: linear-gradient(90deg, var(--green-dark), var(--green-bright)); }
 .vmeter-fill.gwc { background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
-.vtick { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.14); }
+.vtick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--hair); }
 .vtok-cap { font-size: 0.74rem; color: var(--text-dim); }
 .vtok-cap b { color: var(--text); }
 .vault-foot { font-size: 0.82rem; color: var(--text-dim); text-align: center; padding: 0.55rem 0 0.2rem; border-top: 1px dashed var(--ink-4); margin-top: 0.2rem; }
@@ -1611,9 +1635,10 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .np-search-clear:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--green-bright); }
 
 /* small copy button next to a token ticker */
-.np-tickcopy { background: none; border: none; cursor: pointer; font-size: 0.78em; opacity: 0.6; padding: 0 0.2rem; vertical-align: middle; line-height: 1; transition: opacity 0.15s ease, transform 0.1s ease; }
-.np-tickcopy:hover { opacity: 1; transform: scale(1.15); }
-.np-tickcopy:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--green-bright); border-radius: 4px; opacity: 1; }
+/* a green tile like every other control — it was a 60% glyph with no fill, which is the one thing a black-type control cannot be */
+.np-tickcopy { background: var(--ctl-fill-lo); color: var(--ctl-ink); border: none; border-radius: 4px; cursor: pointer; font-size: 0.78em; padding: 0 0.2rem; vertical-align: middle; line-height: 1; transition: background 0.15s ease, transform 0.1s ease; }
+.np-tickcopy:hover { background: var(--ctl-fill-hi); color: var(--ctl-ink); transform: scale(1.15); }
+.np-tickcopy:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--green-bright); }
 
 /* Hot Feed "Make a Send Call" CTA (direct — no need to expand the detail first) */
 .np-slide-cta { margin: 0.55rem 0 0.2rem; }
@@ -1631,7 +1656,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .np-hp-summary { font-size: 0.83rem; line-height: 1.45; color: var(--text); margin: 0 0 0.5rem; }
 .np-hp-sub { font-size: 0.8rem; color: var(--text-dim); margin: 0 0 0.3rem; }
 .np-hp-powers { list-style: none; margin: 0 0 0.5rem; padding: 0; display: grid; gap: 0.3rem; }
-.np-hp-powers li { font-size: 0.8rem; line-height: 1.4; padding: 0.35rem 0.5rem; border-radius: 8px; border-left: 3px solid var(--text-dim); background: rgba(255,255,255,0.03); }
+.np-hp-powers li { font-size: 0.8rem; line-height: 1.4; padding: 0.35rem 0.5rem; border-radius: 8px; border-left: 3px solid var(--g-lit); background: var(--g-wash); }
 .np-hp-crit { border-left-color: var(--red) !important; background: rgba(255,64,64,0.09) !important; }
 .np-hp-high { border-left-color: #f0932b !important; background: rgba(240,147,43,0.09) !important; }
 .np-hp-med { border-left-color: var(--gold) !important; }
@@ -1648,8 +1673,8 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 
 /* social handle buttons on a public wall */
 .wall-socials { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.55rem 0; }
-.wall-soc { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.75rem; border-radius: 999px; background: rgba(255,255,255,0.07); color: var(--text); text-decoration: none; font-weight: 700; font-size: 0.85rem; border: 1px solid rgba(255,255,255,0.12); transition: background 0.15s ease, color 0.15s ease; }
-.wall-soc:hover { background: rgba(255,255,255,0.15); }
+.wall-soc { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.75rem; border-radius: 999px; background: var(--g-tint); color: var(--text); text-decoration: none; font-weight: 700; font-size: 0.85rem; border: 1px solid var(--g-edge); transition: background 0.15s ease, color 0.15s ease; }
+.wall-soc:hover { background: var(--g-veil); }
 .wall-soc-x:hover { color: #1d9bf0; }
 .wall-soc-ig:hover { color: #e1306c; }
 
@@ -1681,7 +1706,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .og-banner:hover, .og-banner:focus-visible { transform: translateY(-1px); box-shadow: inset 0 0 55px rgba(255,179,64,0.22), 0 6px 32px rgba(255,179,64,0.4); }
 .og-banner:focus-visible { outline: 3px solid #ffd27a; outline-offset: -3px; } /* keyboard focus must stay visible (WCAG 2.4.7) */
 /* diagonal shine sweep */
-.og-shine { position: absolute; top: 0; left: -60%; width: 42%; height: 100%; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,0.22), transparent); animation: ogShine 5.5s ease-in-out infinite; pointer-events: none; }
+.og-shine { position: absolute; top: 0; left: -60%; width: 42%; height: 100%; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, var(--g-veil), transparent); animation: ogShine 5.5s ease-in-out infinite; pointer-events: none; }
 @keyframes ogShine { 0% { left: -60%; } 55%, 100% { left: 135%; } }
 /* floating emoji accents */
 .og-confetti { position: absolute; inset: 0; pointer-events: none; }
@@ -2175,7 +2200,7 @@ details[open] .np-chev { transform: rotate(180deg); }
 .gs-check .step-num { transition: transform 0.15s ease, box-shadow 0.15s ease; border: 3px solid transparent; }
 .gs-check:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
 .gs-steps .step.is-done { border-color: color-mix(in srgb, var(--green) 60%, transparent); }
-.gs-steps .step.is-done .step-num { background: linear-gradient(180deg, color-mix(in srgb, var(--green-bright) 70%, var(--text)), var(--green)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 35%, transparent), 0 4px 0 var(--green-dark); }
+.gs-steps .step.is-done .step-num { background: linear-gradient(180deg, var(--green-bright), var(--green)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 35%, transparent), 0 4px 0 var(--green-dark); }
 .gs-steps .step.is-done .step-num::after { content: '✓'; position: absolute; margin-top: -2px; }
 .gs-steps .step.is-done h3 { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .gs-check[aria-pressed="true"] .step-num { transform: scale(1.04); }
@@ -2187,9 +2212,12 @@ details[open] .np-chev { transform: rotate(180deg); }
 @media (min-width: 720px) { .pillar-grid { grid-template-columns: repeat(2, 1fr); } }
 .pillar { background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 2px solid var(--g-veil); border-radius: 18px; overflow: hidden; transition: border-color 0.15s ease; }
 .pillar[open] { border-color: color-mix(in srgb, var(--green) 50%, transparent); }
-.pillar > summary { display: flex; align-items: center; gap: 0.95rem; padding: 1.2rem 1.3rem; cursor: pointer; list-style: none; }
+.pillar > summary { display: flex; align-items: center; gap: 0.95rem; padding: 1.2rem 1.3rem; cursor: pointer; list-style: none; background: var(--ctl-fill-lo); color: var(--ctl-ink); transition: background 0.15s ease; }
+.pillar > summary:hover { background: var(--ctl-fill-hi); }
+/* black type on the green summary: title, sub-line and caret all take the ink */
+.pillar > summary .pillar-title, .pillar > summary .pillar-sub, .pillar > summary .pillar-caret { color: var(--ctl-ink); }
 .pillar > summary::-webkit-details-marker { display: none; }
-.pillar-plate { flex-shrink: 0; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.08), 0 6px 16px rgba(0,0,0,0.4); }
+.pillar-plate { flex-shrink: 0; width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; font-size: 1.5rem; box-shadow: inset 0 0 0 2px var(--g-veil), 0 6px 16px rgba(0,0,0,0.4); }
 .pillar-plate.send { background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--green) 35%, transparent), var(--ink)); }
 .pillar-plate.gwc { background: radial-gradient(circle at 30% 30%, rgba(255,197,0,0.35), var(--ink)); }
 .pillar-plate.diamond { background: radial-gradient(circle at 30% 30%, rgba(120,200,255,0.35), var(--ink)); }
@@ -2282,15 +2310,15 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
   display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: 0.45rem; }
 /* wrap allowed so a badge drops to its own line instead of squeezing the name */
 .g1-w-link { display: flex; align-items: center; gap: 0.4rem 0.5rem; flex-wrap: wrap; min-height: 44px; padding: 0.5rem 0.7rem;
-  background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 10px;
-  text-decoration: none; color: var(--text); font-size: 0.88rem; font-weight: 600; }
-.g1-w-link:hover, .g1-w-link:focus-visible { border-color: var(--green); background: var(--ink-3); }
+  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); border-radius: 10px;
+  text-decoration: none; color: var(--ctl-ink); font-size: 0.88rem; font-weight: 600; }
+.g1-w-link:hover, .g1-w-link:focus-visible { border-color: var(--green); background: var(--ctl-fill-hi); color: var(--ctl-ink); }
 .g1-w-ico { font-size: 1.05rem; line-height: 1; }
 .g1-w-name { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
 .g1-w-tag { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
   padding: 0.15rem 0.4rem; border-radius: 999px; white-space: nowrap;
-  background: color-mix(in srgb, var(--gold) 22%, transparent); color: var(--gold); }
-.g1-w-tag.is-here { background: color-mix(in srgb, var(--green) 22%, transparent); color: var(--green-bright); }
+  background: var(--ink-1); color: var(--gold); }   /* badges on a green tile: ink pills, so the gold / green words stay legible at every step of the fill ladder */
+.g1-w-tag.is-here { background: var(--ink-1); color: var(--green-bright); }
 .g1-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.8rem; }
 .g1-hint { font-size: 0.85rem; color: var(--text-dim); }
 .g1-safe { margin-top: 0.8rem; font-size: 0.85rem; color: var(--text-dim); line-height: 1.55; }
@@ -2428,9 +2456,10 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 
 /* expanded detail groups */
 .np-detail-group { border-top: 1px solid var(--ink-4); }
-.np-detail-group > summary.np-detail-h { font-size: 0.82rem; font-weight: 800; color: var(--text); padding: 0.6rem 0.15rem; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.4rem; }
+.np-detail-group > summary.np-detail-h { font-size: 0.82rem; font-weight: 800; color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: 8px; padding: 0.6rem 0.75rem; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.4rem; transition: background 0.15s ease; }
+.np-detail-group > summary.np-detail-h:hover { background: var(--ctl-fill-hi); }
 .np-detail-group > summary.np-detail-h::-webkit-details-marker { display: none; }
-.np-detail-group > summary.np-detail-h::after { content: '▾'; margin-left: auto; color: var(--text-dim); transition: transform 0.2s ease; }
+.np-detail-group > summary.np-detail-h::after { content: '▾'; margin-left: auto; color: var(--ctl-ink); transition: transform 0.2s ease; }
 .np-detail-group[open] > summary.np-detail-h::after { transform: rotate(180deg); }
 .np-detail-body { padding: 0.2rem 0.15rem 0.8rem; }
 .np-reserves { font-size: 0.84rem; color: var(--text-dim); margin: 0.2rem 0 0.6rem; }
@@ -2699,7 +2728,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .notif-head { display: flex; align-items: center; justify-content: space-between; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--ink-4); font-weight: 800; font-size: 0.9rem; position: sticky; top: 0; background: var(--ink-2); }
 .notif-clearall { background: var(--gold); border: none; color: var(--on-gold); font: inherit; font-weight: 700; font-size: 0.78rem; cursor: pointer; min-height: 32px; padding: 0.3rem 0.7rem; border-radius: var(--r-pill); }
 .notif-list { display: flex; flex-direction: column; }
-.notif-item { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.65rem 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.notif-item { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--hair); }
 .notif-ico { font-size: 1.1rem; flex-shrink: 0; line-height: 1.3; }
 .notif-body { flex: 1; min-width: 0; }
 .notif-text { font-size: 0.85rem; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; word-break: break-word; }
@@ -2786,6 +2815,10 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .sc-hopn { background: color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 999px; padding: 0 0.4em; font-size: 0.72rem; }
 .sc-track { color: var(--on-gold); background: var(--gold); border-color: var(--gold); }
 .sc-info { color: var(--ctl-ink); }
+/* #lb-help on the leaderboard is a bare .sc-info (no .sc-btn) and was rendering in the browser's own grey.
+   Same inline pill as .sc-senders-toggle, on the control ladder, so it reads as one of ours. */
+.sc-info:not(.sc-btn) { background: var(--ctl-fill-lo); border: none; color: var(--ctl-ink); font: inherit; font-weight: 700; font-size: 0.82rem; cursor: pointer; padding: 0.2rem 0.7rem; border-radius: var(--r-pill); }
+.sc-info:not(.sc-btn):hover, .sc-info:not(.sc-btn):focus-visible { background: var(--ctl-fill-hi); }
 .sc-explain { margin-top: 0.6rem; font-size: 0.78rem; line-height: 1.5; color: var(--text-dim); background: var(--ink-3); border-radius: 12px; padding: 0.6rem 0.75rem; }
 .sc-explain b { color: var(--text); }
 @media (max-width: 560px) { .sc-x b { font-size: 1.25rem; } .sc-logo { width: 34px; height: 34px; } }
@@ -2859,7 +2892,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .gcc-title { font-weight: 800; color: var(--text); }
 .gcc-count { font-variant-numeric: tabular-nums; color: var(--text-dim); font-weight: 700; }
 .gcc-count b { color: var(--green-bright); font-size: 1.15em; }
-.gcc-bar { height: 8px; border-radius: 6px; background: rgba(255,255,255,0.09); overflow: hidden; }
+.gcc-bar { height: 8px; border-radius: 6px; background: var(--glass-sheen); overflow: hidden; }
 .gcc-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--green-dark), var(--green-bright)); border-radius: 6px; transition: width 0.4s ease; }
 .gcc-note { margin: 0.5rem 0 0.35rem; color: var(--text-dim); font-size: 0.88rem; line-height: 1.35; }
 .gcc-boost { margin: 0; font-size: 0.88rem; color: var(--text); }
@@ -2885,7 +2918,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .sc-size-mult { color: #ffcf3f; font-style: normal; font-weight: 800; }
 
 /* Send Call "who else Sent It" — ranked senders, one line each (avatar · entry MC · amount sent) */
-.sc-senders { margin: 0.5rem 0; padding: 0.55rem 0.7rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; }
+.sc-senders { margin: 0.5rem 0; padding: 0.55rem 0.7rem; background: var(--g-wash); border: 1px solid var(--hair); border-radius: 10px; }
 .sc-senders-head { font-size: 0.85rem; font-weight: 700; color: var(--text-dim); margin-bottom: 0.45rem; }
 .sc-senders-head b { color: var(--green-bright); }
 .sc-senders-sub { font-weight: 400; }
@@ -2902,7 +2935,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .sc-sender-who { display: flex; align-items: center; gap: 0.35rem; text-decoration: none; color: var(--text); min-width: 0; flex: 1 1 auto; }
 .sc-sender-who:hover .sc-sender-name, .sc-sender-who:focus-visible .sc-sender-name { text-decoration: underline; }
 .sc-sender-ava { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; object-fit: cover; }
-.sc-sender-ava-emoji { display: inline-flex; align-items: center; justify-content: center; font-size: 0.95rem; background: rgba(255,255,255,0.06); line-height: 1; }
+.sc-sender-ava-emoji { display: inline-flex; align-items: center; justify-content: center; font-size: 0.95rem; background: var(--g-wash); line-height: 1; }
 .sc-sender-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sc-sender-mc { color: var(--text-dim); white-space: nowrap; flex: 0 0 auto; }
 .sc-sender-mc b { color: var(--text); }
@@ -3324,13 +3357,13 @@ body::after {
     0 0 var(--glow-3) color-mix(in srgb, var(--green) 30%, transparent);
 }
 .btn-primary {
-  border: 1px solid color-mix(in srgb, var(--green) 70%, white 12%);
+  border: 1px solid color-mix(in srgb, var(--green-bright) 70%, var(--green) 30%);
   box-shadow:
     0 6px 0 var(--green-dark),
     0 10px 28px var(--glow-g),
-    inset 0 1px 0 rgba(255,255,255,0.45);
+    inset 0 1px 0 color-mix(in srgb, var(--green-bright) 70%, transparent);
 }
-.btn-primary:hover { box-shadow: 0 6px 0 var(--green-dark), 0 14px 40px var(--glow-g), inset 0 1px 0 rgba(255,255,255,0.5); }
+.btn-primary:hover { box-shadow: 0 6px 0 var(--green-dark), 0 14px 40px var(--glow-g), inset 0 1px 0 color-mix(in srgb, var(--green-bright) 85%, transparent); }
 
 /* ---------- 4. Control boundaries (WCAG 1.4.11) ----------
    --ink-4 is decorative from here on. Anything focusable or clickable that was
@@ -3571,13 +3604,15 @@ body::after {
 .oc-canvas { display: block; width: 100%; height: 240px; }
 .oc-status { font-size: 0.8rem; color: var(--text-dim); margin: 0.35rem 0 0; }
 .oc-data { margin-top: 0.4rem; }
-.oc-data > summary { cursor: pointer; font-size: 0.78rem; color: var(--text-mute); }
+/* a small green pill, not muted text — black type needs a ground (same construction as .linklike) */
+.oc-data > summary { cursor: pointer; display: inline-flex; align-items: center; font-size: 0.78rem; font-weight: 700; color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: var(--r-pill); padding: 0.3rem 0.7rem; min-height: 32px; list-style: none; transition: background 0.15s ease; }
+.oc-data > summary:hover { background: var(--ctl-fill-hi); }
 .oc-table-wrap { overflow-x: auto; max-height: 260px; overflow-y: auto; margin-top: 0.4rem; }
 .oc-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
 .oc-table th { position: sticky; top: 0; background: var(--ink-2); color: var(--text-mute); text-align: right;
   font-weight: 600; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--edge-ctl); }
 .oc-table th:first-child, .oc-table td:first-child { text-align: left; }
-.oc-table td { text-align: right; padding: 0.3rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.oc-table td { text-align: right; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--hair); }
 @media (max-width: 640px) { .oc-canvas { height: 200px; } }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -3609,7 +3644,7 @@ body::after {
   width: calc((100% - 2 * var(--seg-pad) - (var(--seg-n) - 1) * var(--seg-gap)) / var(--seg-n));
   border-radius: var(--r-pill);
   background: linear-gradient(180deg, var(--green-bright), var(--green));
-  box-shadow: 0 2px 14px var(--glow-g), inset 0 1px 0 rgba(255,255,255,0.45);
+  box-shadow: 0 2px 14px var(--glow-g), inset 0 1px 0 color-mix(in srgb, var(--green-bright) 70%, transparent);
   transform: translateX(calc(var(--seg-i, 0) * (100% + var(--seg-gap))));
   transition: transform var(--dur-3) var(--ease-out);
   pointer-events: none;
@@ -3644,7 +3679,7 @@ body::after {
 .np-seg.is-on {
   background: linear-gradient(180deg, var(--green-bright), var(--green));
   color: var(--on-green);
-  box-shadow: 0 2px 12px var(--glow-g), inset 0 1px 0 rgba(255,255,255,0.45);
+  box-shadow: 0 2px 12px var(--glow-g), inset 0 1px 0 color-mix(in srgb, var(--green-bright) 70%, transparent);
 }
 
 /* Focus must read against BOTH the dark track and the bright pill, so it uses the
@@ -3695,7 +3730,7 @@ footer::before {
 .disclaimer {
   color: var(--on-green);
   box-shadow: 0 4px 0 var(--green-dark), 0 10px 26px var(--glow-g);
-  border: 1px solid color-mix(in srgb, var(--green) 70%, white 12%);
+  border: 1px solid color-mix(in srgb, var(--green-bright) 70%, var(--green) 30%);
 }
 footer .fine a { color: var(--gold); }
 footer .nav-foot a { color: var(--text-dim); text-decoration: none; transition: color var(--dur-2) var(--ease-out); }
@@ -3709,13 +3744,13 @@ footer .nav-foot a:hover { color: var(--green-bright); }
 .btn-gold {
   color: var(--on-gold);
   background: linear-gradient(180deg, var(--gold), var(--gold-deep));
-  border: 1px solid color-mix(in srgb, var(--gold) 70%, white 12%);
+  border: 1px solid color-mix(in srgb, var(--gold) 70%, var(--gold-deep) 30%);
   box-shadow:
     0 6px 0 var(--gold-deep),
     0 10px 28px var(--glow-o),
-    inset 0 1px 0 rgba(255,255,255,0.45);
+    inset 0 1px 0 color-mix(in srgb, var(--gold) 70%, transparent);
 }
-.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 6px 0 var(--gold-deep), 0 14px 40px var(--glow-o), inset 0 1px 0 rgba(255,255,255,0.5); }
+.btn-gold:hover { transform: translateY(-2px); box-shadow: 0 6px 0 var(--gold-deep), 0 14px 40px var(--glow-o), inset 0 1px 0 color-mix(in srgb, var(--gold) 85%, transparent); }
 .btn-gold:active { transform: translateY(1px); }
 .btn-gold:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 .btn-gold, .btn-rh { transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
@@ -4001,8 +4036,9 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .b0-w-stats b { color: var(--text); font-weight: 800; }
 .b0-w-stats i { font-style: normal; opacity: 0.75; }
 .b0-conn { margin-top: 0.45rem; }
-.b0-conn summary { cursor: pointer; font-size: 0.8rem; color: var(--diamond); font-weight: 700; min-height: 32px; display: flex; align-items: center; }
-.b0-conn summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.b0-conn summary { cursor: pointer; font-size: 0.8rem; color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: var(--r-pill); padding: 0.3rem 0.7rem; font-weight: 700; min-height: 32px; display: inline-flex; align-items: center; list-style: none; transition: background 0.15s ease; }
+.b0-conn summary:hover { background: var(--ctl-fill-hi); }
+.b0-conn summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .b0-conn ul { list-style: none; margin: 0.35rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
 .b0-conn li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; font-size: 0.78rem; color: var(--text-dim); background: var(--ink-2); border-radius: 8px; padding: 0.3rem 0.5rem; font-variant-numeric: tabular-nums; }
 .b0-conn code { font-family: ui-monospace, Menlo, monospace; color: var(--text); }
@@ -4268,7 +4304,7 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
    key behaviour that was never implemented. The whole row is the link so the hit target is the row, not
    the sentence inside it (WCAG 2.5.8 — a target you can actually hit). */
 .notif-list { list-style: none; margin: 0; padding: 0; }
-.notif-item { display: flex; gap: 0.6rem; align-items: stretch; padding: 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.notif-item { display: flex; gap: 0.6rem; align-items: stretch; padding: 0; border-bottom: 1px solid var(--hair); }
 .notif-go {
   display: flex; gap: 0.6rem; align-items: flex-start; flex: 1 1 auto; min-width: 0;
   padding: 0.65rem 0.3rem 0.65rem 0.9rem; color: inherit; text-decoration: none;
@@ -4517,10 +4553,11 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 /* ===== the Security panel's own state ============================================================
    Wallets, sign-in methods and two-factor all live in one <details>, and a <details> opens shut. The
    summary carries the state so the answer to "am I covered?" is readable without opening anything. */
-.sec-state { font-family: 'Rubik', sans-serif; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.01em; color: var(--text-dim); margin-left: 0.5rem; }
+.sec-state { font-family: 'Rubik', sans-serif; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.01em; color: var(--ctl-ink); margin-left: 0.5rem; }
 /* No second factor is worth noticing, but it is not an error — the site does not require one. Gold,
-   not red, and the words say it either way for anyone who cannot see the colour. */
-.sec-state.sec-state-warn { color: var(--gold); }
+   not red, and the words say it either way for anyone who cannot see the colour. Gold as a FILL: the
+   summary it sits in is green now, and gold type on green clears nothing. */
+.sec-state.sec-state-warn { color: var(--on-gold); background: var(--gold); border-radius: var(--r-pill); padding: 0.12rem 0.55rem; }
 .sec-jump { margin: -0.6rem 0 1.2rem; }
 
 /* ---------- motion pause (WCAG 2.2.2) ----------
@@ -4571,5 +4608,84 @@ html.motion-off #matrix-rain { display: none; }
 .adm-report { padding: 0.9rem 1rem; }
 .adm-report .post-head { color: var(--muted); font-size: 0.85rem; margin-bottom: 0.4rem; }
 .adm-reason { font-style: italic; margin: 0.3rem 0; }
-.adm-quote { margin: 0.4rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--green); background: var(--glass-1, rgba(255,255,255,0.03)); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.adm-quote { margin: 0.4rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--green); background: var(--g-wash); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
 .adm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+
+
+/* ===== The matrix grid: every control is a tile of green cells ==================================
+   Two layers under the label, above the fill (isolation + z-index -1):
+     ::before  the grid itself — dark cell lines on the green, faint at rest, and on hover the
+               lines drift downward like the rain in the page's own background
+     ::after   the pointer's light — cells near the cursor light up green-bright, with a soft halo.
+               --mx/--my are set by app.js on pointermove (percent of the control); keyboard focus
+               lights the centre.
+   Press: the whole tile flashes. Reduced motion / the ⏸ switch: no drift, no flash — the pointer
+   light still follows, since it only moves when the pointer does. Text contrast is untouched: the
+   lines are 1px at 26% ink, the lit cells are the same green the label already clears.
+
+   Every button-like control on the site is in these lists: the .btn family, the segment tabs on their
+   green tracks, the small round ✕ / ☆ / 📌 / ⓘ controls, the menu items, the chips, and the disclosure
+   summaries that have no caret pseudo-element of their own. The ones that are already absolutely or
+   fixed positioned (.modal-x, .wc-x, .media-preview-rm, .intro-skip, .gif-toggle, .oc-reset,
+   .addr-clear, #compose-fab) take only the stacking context, never `position: relative` — that would
+   pull them back into the flow. Controls whose ::before/::after already draw something (the .switch
+   knob, the .mp-hint arrow, the ▾ of .sc-toggle / .np-slide-more / the setting-card, reassure, grules
+   and np-detail summaries, the ▸ of .trk-token) are deliberately absent: they wear the same green fill
+   and the same ink, without the layers. So is .np-runner-sym: responsive.css, which loads after this
+   sheet, owns its ::after as the 24px / 44px phantom hit box around an 18px symbol, and this block's
+   `pointer-events: none`, coarse-pointer lit cells and forced-colors `display: none` would have made
+   that box un-tappable, painted it, or deleted it. app.js keeps the same list for the pointer tracking. */
+.btn, .react-btn, .feed-tab, .dtab, .oc-tf, .np-seg, .np-vs-btn, .mp-btn, .copy-btn, .nav-toggle, .mcap-panel, .sc-hop, .np-row-call, .motion-btn, .npm-item, .auth-seg, .auth-tab, .profile-link, .np-caret-btn, .swap-choice, .file-label, .vote-btn, .sort-btn, .linklike, .oauth-btn, .btn-follow, .gobj-link, .wc-item, .wc-deep, .np-search-clear, .np-tickcopy, .tm-x, .pin-chip-open, .pin-chip-rm, .np-pin, .np-sort, .np-more, .np-refresh, .np-hidden-link, .np-status button, .np-newbar, .np-lookup-clear, .ab-chip, .np-chip, .np-den, .np-sv-apply, .np-sv-del, .np-runner-pin, .np-runner-chart, .np-rail-btn, .np-feed-fresh, .np-watch, .np-wl-remove, .notif-bell, .notif-clearall, .notif-x, .sc-btn, .sc-senders-toggle, .wall-tab, .lb-win, .ll-toggle button, .comm-tab, .ge-info, .cmp-mode, .np-chain-btn, .oc-mk, .ll-info, .arena-tab, .np-social-btn, .cw-tab, .np-strat, .np-fclose, .pillar > summary, .oc-data > summary, .b0-conn summary, .risk-chip, .g1-w-link, .sc-info {
+  position: relative; isolation: isolate;
+}
+/* already positioned (absolute / fixed) — only the stacking context, so they stay where they are pinned */
+.modal-x, .wc-x, .media-preview-rm, .intro-skip, .gif-toggle, .oc-reset, .addr-clear, #compose-fab {
+  isolation: isolate;
+}
+.btn::before, .react-btn::before, .feed-tab::before, .dtab::before, .oc-tf::before, .np-seg::before, .np-vs-btn::before, .mp-btn::before, .copy-btn::before, .nav-toggle::before, .mcap-panel::before, .sc-hop::before, .np-row-call::before, .motion-btn::before, .npm-item::before, .auth-seg::before, .auth-tab::before, .profile-link::before, .np-caret-btn::before, .swap-choice::before, .file-label::before, .vote-btn::before, .sort-btn::before, .linklike::before, .oauth-btn::before, .btn-follow::before, .gobj-link::before, .wc-item::before, .wc-deep::before, .np-search-clear::before, .np-tickcopy::before, .tm-x::before, .pin-chip-open::before, .pin-chip-rm::before, .np-pin::before, .np-sort::before, .np-more::before, .np-refresh::before, .np-hidden-link::before, .np-status button::before, .np-newbar::before, .np-lookup-clear::before, .ab-chip::before, .np-chip::before, .np-den::before, .np-sv-apply::before, .np-sv-del::before, .np-runner-pin::before, .np-runner-chart::before, .np-rail-btn::before, .np-feed-fresh::before, .np-watch::before, .np-wl-remove::before, .notif-bell::before, .notif-clearall::before, .notif-x::before, .sc-btn::before, .sc-senders-toggle::before, .wall-tab::before, .lb-win::before, .ll-toggle button::before, .comm-tab::before, .ge-info::before, .cmp-mode::before, .np-chain-btn::before, .oc-mk::before, .ll-info::before, .arena-tab::before, .np-social-btn::before, .cw-tab::before, .np-strat::before, .np-fclose::before, .pillar > summary::before, .oc-data > summary::before, .b0-conn summary::before, .modal-x::before, .wc-x::before, .media-preview-rm::before, .intro-skip::before, .gif-toggle::before, .oc-reset::before, .addr-clear::before, #compose-fab::before, .risk-chip::before, .g1-w-link::before, .sc-info::before,
+.btn::after, .react-btn::after, .feed-tab::after, .dtab::after, .oc-tf::after, .np-seg::after, .np-vs-btn::after, .mp-btn::after, .copy-btn::after, .nav-toggle::after, .mcap-panel::after, .sc-hop::after, .np-row-call::after, .motion-btn::after, .npm-item::after, .auth-seg::after, .auth-tab::after, .profile-link::after, .np-caret-btn::after, .swap-choice::after, .file-label::after, .vote-btn::after, .sort-btn::after, .linklike::after, .oauth-btn::after, .btn-follow::after, .gobj-link::after, .wc-item::after, .wc-deep::after, .np-search-clear::after, .np-tickcopy::after, .tm-x::after, .pin-chip-open::after, .pin-chip-rm::after, .np-pin::after, .np-sort::after, .np-more::after, .np-refresh::after, .np-hidden-link::after, .np-status button::after, .np-newbar::after, .np-lookup-clear::after, .ab-chip::after, .np-chip::after, .np-den::after, .np-sv-apply::after, .np-sv-del::after, .np-runner-pin::after, .np-runner-chart::after, .np-rail-btn::after, .np-feed-fresh::after, .np-watch::after, .np-wl-remove::after, .notif-bell::after, .notif-clearall::after, .notif-x::after, .sc-btn::after, .sc-senders-toggle::after, .wall-tab::after, .lb-win::after, .ll-toggle button::after, .comm-tab::after, .ge-info::after, .cmp-mode::after, .np-chain-btn::after, .oc-mk::after, .ll-info::after, .arena-tab::after, .np-social-btn::after, .cw-tab::after, .np-strat::after, .np-fclose::after, .pillar > summary::after, .oc-data > summary::after, .b0-conn summary::after, .modal-x::after, .wc-x::after, .media-preview-rm::after, .intro-skip::after, .gif-toggle::after, .oc-reset::after, .addr-clear::after, #compose-fab::after, .risk-chip::after, .g1-w-link::after, .sc-info::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+}
+.btn::before, .react-btn::before, .feed-tab::before, .dtab::before, .oc-tf::before, .np-seg::before, .np-vs-btn::before, .mp-btn::before, .copy-btn::before, .nav-toggle::before, .mcap-panel::before, .sc-hop::before, .np-row-call::before, .motion-btn::before, .npm-item::before, .auth-seg::before, .auth-tab::before, .profile-link::before, .np-caret-btn::before, .swap-choice::before, .file-label::before, .vote-btn::before, .sort-btn::before, .linklike::before, .oauth-btn::before, .btn-follow::before, .gobj-link::before, .wc-item::before, .wc-deep::before, .np-search-clear::before, .np-tickcopy::before, .tm-x::before, .pin-chip-open::before, .pin-chip-rm::before, .np-pin::before, .np-sort::before, .np-more::before, .np-refresh::before, .np-hidden-link::before, .np-status button::before, .np-newbar::before, .np-lookup-clear::before, .ab-chip::before, .np-chip::before, .np-den::before, .np-sv-apply::before, .np-sv-del::before, .np-runner-pin::before, .np-runner-chart::before, .np-rail-btn::before, .np-feed-fresh::before, .np-watch::before, .np-wl-remove::before, .notif-bell::before, .notif-clearall::before, .notif-x::before, .sc-btn::before, .sc-senders-toggle::before, .wall-tab::before, .lb-win::before, .ll-toggle button::before, .comm-tab::before, .ge-info::before, .cmp-mode::before, .np-chain-btn::before, .oc-mk::before, .ll-info::before, .arena-tab::before, .np-social-btn::before, .cw-tab::before, .np-strat::before, .np-fclose::before, .pillar > summary::before, .oc-data > summary::before, .b0-conn summary::before, .modal-x::before, .wc-x::before, .media-preview-rm::before, .intro-skip::before, .gif-toggle::before, .oc-reset::before, .addr-clear::before, #compose-fab::before, .risk-chip::before, .g1-w-link::before, .sc-info::before {
+  background-image:
+    linear-gradient(var(--mx-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mx-line) 1px, transparent 1px);
+  background-size: var(--mx-size) var(--mx-size);
+  opacity: 0.42;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.btn::after, .react-btn::after, .feed-tab::after, .dtab::after, .oc-tf::after, .np-seg::after, .np-vs-btn::after, .mp-btn::after, .copy-btn::after, .nav-toggle::after, .mcap-panel::after, .sc-hop::after, .np-row-call::after, .motion-btn::after, .npm-item::after, .auth-seg::after, .auth-tab::after, .profile-link::after, .np-caret-btn::after, .swap-choice::after, .file-label::after, .vote-btn::after, .sort-btn::after, .linklike::after, .oauth-btn::after, .btn-follow::after, .gobj-link::after, .wc-item::after, .wc-deep::after, .np-search-clear::after, .np-tickcopy::after, .tm-x::after, .pin-chip-open::after, .pin-chip-rm::after, .np-pin::after, .np-sort::after, .np-more::after, .np-refresh::after, .np-hidden-link::after, .np-status button::after, .np-newbar::after, .np-lookup-clear::after, .ab-chip::after, .np-chip::after, .np-den::after, .np-sv-apply::after, .np-sv-del::after, .np-runner-pin::after, .np-runner-chart::after, .np-rail-btn::after, .np-feed-fresh::after, .np-watch::after, .np-wl-remove::after, .notif-bell::after, .notif-clearall::after, .notif-x::after, .sc-btn::after, .sc-senders-toggle::after, .wall-tab::after, .lb-win::after, .ll-toggle button::after, .comm-tab::after, .ge-info::after, .cmp-mode::after, .np-chain-btn::after, .oc-mk::after, .ll-info::after, .arena-tab::after, .np-social-btn::after, .cw-tab::after, .np-strat::after, .np-fclose::after, .pillar > summary::after, .oc-data > summary::after, .b0-conn summary::after, .modal-x::after, .wc-x::after, .media-preview-rm::after, .intro-skip::after, .gif-toggle::after, .oc-reset::after, .addr-clear::after, #compose-fab::after, .risk-chip::after, .g1-w-link::after, .sc-info::after {
+  background-image:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--mx-glow) 0, transparent 46px),
+    radial-gradient(circle, var(--mx-cell) 0 1.7px, transparent 2px);
+  background-size: 100% 100%, var(--mx-size) var(--mx-size);
+  background-position: 0 0, calc(var(--mx-size) / 2) calc(var(--mx-size) / 2);
+  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), #000 0, transparent 100%);
+          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), #000 0, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.btn:hover::before, .react-btn:hover::before, .feed-tab:hover::before, .dtab:hover::before, .oc-tf:hover::before, .np-seg:hover::before, .np-vs-btn:hover::before, .mp-btn:hover::before, .copy-btn:hover::before, .nav-toggle:hover::before, .mcap-panel:hover::before, .sc-hop:hover::before, .np-row-call:hover::before, .motion-btn:hover::before, .npm-item:hover::before, .auth-seg:hover::before, .auth-tab:hover::before, .profile-link:hover::before, .np-caret-btn:hover::before, .swap-choice:hover::before, .file-label:hover::before, .vote-btn:hover::before, .sort-btn:hover::before, .linklike:hover::before, .oauth-btn:hover::before, .btn-follow:hover::before, .gobj-link:hover::before, .wc-item:hover::before, .wc-deep:hover::before, .np-search-clear:hover::before, .np-tickcopy:hover::before, .tm-x:hover::before, .pin-chip-open:hover::before, .pin-chip-rm:hover::before, .np-pin:hover::before, .np-sort:hover::before, .np-more:hover::before, .np-refresh:hover::before, .np-hidden-link:hover::before, .np-status button:hover::before, .np-newbar:hover::before, .np-lookup-clear:hover::before, .ab-chip:hover::before, .np-chip:hover::before, .np-den:hover::before, .np-sv-apply:hover::before, .np-sv-del:hover::before, .np-runner-pin:hover::before, .np-runner-chart:hover::before, .np-rail-btn:hover::before, .np-feed-fresh:hover::before, .np-watch:hover::before, .np-wl-remove:hover::before, .notif-bell:hover::before, .notif-clearall:hover::before, .notif-x:hover::before, .sc-btn:hover::before, .sc-senders-toggle:hover::before, .wall-tab:hover::before, .lb-win:hover::before, .ll-toggle button:hover::before, .comm-tab:hover::before, .ge-info:hover::before, .cmp-mode:hover::before, .np-chain-btn:hover::before, .oc-mk:hover::before, .ll-info:hover::before, .arena-tab:hover::before, .np-social-btn:hover::before, .cw-tab:hover::before, .np-strat:hover::before, .np-fclose:hover::before, .pillar > summary:hover::before, .oc-data > summary:hover::before, .b0-conn summary:hover::before, .modal-x:hover::before, .wc-x:hover::before, .media-preview-rm:hover::before, .intro-skip:hover::before, .gif-toggle:hover::before, .oc-reset:hover::before, .addr-clear:hover::before, #compose-fab:hover::before, .risk-chip:hover::before, .g1-w-link:hover::before, .sc-info:hover::before,
+.btn:focus-visible::before, .react-btn:focus-visible::before, .feed-tab:focus-visible::before, .dtab:focus-visible::before, .oc-tf:focus-visible::before, .np-seg:focus-visible::before, .np-vs-btn:focus-visible::before, .mp-btn:focus-visible::before, .copy-btn:focus-visible::before, .nav-toggle:focus-visible::before, .mcap-panel:focus-visible::before, .sc-hop:focus-visible::before, .np-row-call:focus-visible::before, .motion-btn:focus-visible::before, .npm-item:focus-visible::before, .auth-seg:focus-visible::before, .auth-tab:focus-visible::before, .profile-link:focus-visible::before, .np-caret-btn:focus-visible::before, .swap-choice:focus-visible::before, .file-label:focus-visible::before, .vote-btn:focus-visible::before, .sort-btn:focus-visible::before, .linklike:focus-visible::before, .oauth-btn:focus-visible::before, .btn-follow:focus-visible::before, .gobj-link:focus-visible::before, .wc-item:focus-visible::before, .wc-deep:focus-visible::before, .np-search-clear:focus-visible::before, .np-tickcopy:focus-visible::before, .tm-x:focus-visible::before, .pin-chip-open:focus-visible::before, .pin-chip-rm:focus-visible::before, .np-pin:focus-visible::before, .np-sort:focus-visible::before, .np-more:focus-visible::before, .np-refresh:focus-visible::before, .np-hidden-link:focus-visible::before, .np-status button:focus-visible::before, .np-newbar:focus-visible::before, .np-lookup-clear:focus-visible::before, .ab-chip:focus-visible::before, .np-chip:focus-visible::before, .np-den:focus-visible::before, .np-sv-apply:focus-visible::before, .np-sv-del:focus-visible::before, .np-runner-pin:focus-visible::before, .np-runner-chart:focus-visible::before, .np-rail-btn:focus-visible::before, .np-feed-fresh:focus-visible::before, .np-watch:focus-visible::before, .np-wl-remove:focus-visible::before, .notif-bell:focus-visible::before, .notif-clearall:focus-visible::before, .notif-x:focus-visible::before, .sc-btn:focus-visible::before, .sc-senders-toggle:focus-visible::before, .wall-tab:focus-visible::before, .lb-win:focus-visible::before, .ll-toggle button:focus-visible::before, .comm-tab:focus-visible::before, .ge-info:focus-visible::before, .cmp-mode:focus-visible::before, .np-chain-btn:focus-visible::before, .oc-mk:focus-visible::before, .ll-info:focus-visible::before, .arena-tab:focus-visible::before, .np-social-btn:focus-visible::before, .cw-tab:focus-visible::before, .np-strat:focus-visible::before, .np-fclose:focus-visible::before, .pillar > summary:focus-visible::before, .oc-data > summary:focus-visible::before, .b0-conn summary:focus-visible::before, .modal-x:focus-visible::before, .wc-x:focus-visible::before, .media-preview-rm:focus-visible::before, .intro-skip:focus-visible::before, .gif-toggle:focus-visible::before, .oc-reset:focus-visible::before, .addr-clear:focus-visible::before, #compose-fab:focus-visible::before, .risk-chip:focus-visible::before, .g1-w-link:focus-visible::before, .sc-info:focus-visible::before {
+  opacity: 0.85;
+  animation: mx-rain 1.1s linear infinite;
+}
+.btn:hover::after, .react-btn:hover::after, .feed-tab:hover::after, .dtab:hover::after, .oc-tf:hover::after, .np-seg:hover::after, .np-vs-btn:hover::after, .mp-btn:hover::after, .copy-btn:hover::after, .nav-toggle:hover::after, .mcap-panel:hover::after, .sc-hop:hover::after, .np-row-call:hover::after, .motion-btn:hover::after, .npm-item:hover::after, .auth-seg:hover::after, .auth-tab:hover::after, .profile-link:hover::after, .np-caret-btn:hover::after, .swap-choice:hover::after, .file-label:hover::after, .vote-btn:hover::after, .sort-btn:hover::after, .linklike:hover::after, .oauth-btn:hover::after, .btn-follow:hover::after, .gobj-link:hover::after, .wc-item:hover::after, .wc-deep:hover::after, .np-search-clear:hover::after, .np-tickcopy:hover::after, .tm-x:hover::after, .pin-chip-open:hover::after, .pin-chip-rm:hover::after, .np-pin:hover::after, .np-sort:hover::after, .np-more:hover::after, .np-refresh:hover::after, .np-hidden-link:hover::after, .np-status button:hover::after, .np-newbar:hover::after, .np-lookup-clear:hover::after, .ab-chip:hover::after, .np-chip:hover::after, .np-den:hover::after, .np-sv-apply:hover::after, .np-sv-del:hover::after, .np-runner-pin:hover::after, .np-runner-chart:hover::after, .np-rail-btn:hover::after, .np-feed-fresh:hover::after, .np-watch:hover::after, .np-wl-remove:hover::after, .notif-bell:hover::after, .notif-clearall:hover::after, .notif-x:hover::after, .sc-btn:hover::after, .sc-senders-toggle:hover::after, .wall-tab:hover::after, .lb-win:hover::after, .ll-toggle button:hover::after, .comm-tab:hover::after, .ge-info:hover::after, .cmp-mode:hover::after, .np-chain-btn:hover::after, .oc-mk:hover::after, .ll-info:hover::after, .arena-tab:hover::after, .np-social-btn:hover::after, .cw-tab:hover::after, .np-strat:hover::after, .np-fclose:hover::after, .pillar > summary:hover::after, .oc-data > summary:hover::after, .b0-conn summary:hover::after, .modal-x:hover::after, .wc-x:hover::after, .media-preview-rm:hover::after, .intro-skip:hover::after, .gif-toggle:hover::after, .oc-reset:hover::after, .addr-clear:hover::after, #compose-fab:hover::after, .risk-chip:hover::after, .g1-w-link:hover::after, .sc-info:hover::after,
+.btn:focus-visible::after, .react-btn:focus-visible::after, .feed-tab:focus-visible::after, .dtab:focus-visible::after, .oc-tf:focus-visible::after, .np-seg:focus-visible::after, .np-vs-btn:focus-visible::after, .mp-btn:focus-visible::after, .copy-btn:focus-visible::after, .nav-toggle:focus-visible::after, .mcap-panel:focus-visible::after, .sc-hop:focus-visible::after, .np-row-call:focus-visible::after, .motion-btn:focus-visible::after, .npm-item:focus-visible::after, .auth-seg:focus-visible::after, .auth-tab:focus-visible::after, .profile-link:focus-visible::after, .np-caret-btn:focus-visible::after, .swap-choice:focus-visible::after, .file-label:focus-visible::after, .vote-btn:focus-visible::after, .sort-btn:focus-visible::after, .linklike:focus-visible::after, .oauth-btn:focus-visible::after, .btn-follow:focus-visible::after, .gobj-link:focus-visible::after, .wc-item:focus-visible::after, .wc-deep:focus-visible::after, .np-search-clear:focus-visible::after, .np-tickcopy:focus-visible::after, .tm-x:focus-visible::after, .pin-chip-open:focus-visible::after, .pin-chip-rm:focus-visible::after, .np-pin:focus-visible::after, .np-sort:focus-visible::after, .np-more:focus-visible::after, .np-refresh:focus-visible::after, .np-hidden-link:focus-visible::after, .np-status button:focus-visible::after, .np-newbar:focus-visible::after, .np-lookup-clear:focus-visible::after, .ab-chip:focus-visible::after, .np-chip:focus-visible::after, .np-den:focus-visible::after, .np-sv-apply:focus-visible::after, .np-sv-del:focus-visible::after, .np-runner-pin:focus-visible::after, .np-runner-chart:focus-visible::after, .np-rail-btn:focus-visible::after, .np-feed-fresh:focus-visible::after, .np-watch:focus-visible::after, .np-wl-remove:focus-visible::after, .notif-bell:focus-visible::after, .notif-clearall:focus-visible::after, .notif-x:focus-visible::after, .sc-btn:focus-visible::after, .sc-senders-toggle:focus-visible::after, .wall-tab:focus-visible::after, .lb-win:focus-visible::after, .ll-toggle button:focus-visible::after, .comm-tab:focus-visible::after, .ge-info:focus-visible::after, .cmp-mode:focus-visible::after, .np-chain-btn:focus-visible::after, .oc-mk:focus-visible::after, .ll-info:focus-visible::after, .arena-tab:focus-visible::after, .np-social-btn:focus-visible::after, .cw-tab:focus-visible::after, .np-strat:focus-visible::after, .np-fclose:focus-visible::after, .pillar > summary:focus-visible::after, .oc-data > summary:focus-visible::after, .b0-conn summary:focus-visible::after, .modal-x:focus-visible::after, .wc-x:focus-visible::after, .media-preview-rm:focus-visible::after, .intro-skip:focus-visible::after, .gif-toggle:focus-visible::after, .oc-reset:focus-visible::after, .addr-clear:focus-visible::after, #compose-fab:focus-visible::after, .risk-chip:focus-visible::after, .g1-w-link:focus-visible::after, .sc-info:focus-visible::after {
+  opacity: 1;
+}
+/* the press: every cell lights at once, then the pointer light takes over again */
+.btn:active::after, .react-btn:active::after, .feed-tab:active::after, .dtab:active::after, .oc-tf:active::after, .np-seg:active::after, .np-vs-btn:active::after, .mp-btn:active::after, .copy-btn:active::after, .nav-toggle:active::after, .mcap-panel:active::after, .sc-hop:active::after, .np-row-call:active::after, .motion-btn:active::after, .npm-item:active::after, .auth-seg:active::after, .auth-tab:active::after, .profile-link:active::after, .np-caret-btn:active::after, .swap-choice:active::after, .file-label:active::after, .vote-btn:active::after, .sort-btn:active::after, .linklike:active::after, .oauth-btn:active::after, .btn-follow:active::after, .gobj-link:active::after, .wc-item:active::after, .wc-deep:active::after, .np-search-clear:active::after, .np-tickcopy:active::after, .tm-x:active::after, .pin-chip-open:active::after, .pin-chip-rm:active::after, .np-pin:active::after, .np-sort:active::after, .np-more:active::after, .np-refresh:active::after, .np-hidden-link:active::after, .np-status button:active::after, .np-newbar:active::after, .np-lookup-clear:active::after, .ab-chip:active::after, .np-chip:active::after, .np-den:active::after, .np-sv-apply:active::after, .np-sv-del:active::after, .np-runner-pin:active::after, .np-runner-chart:active::after, .np-rail-btn:active::after, .np-feed-fresh:active::after, .np-watch:active::after, .np-wl-remove:active::after, .notif-bell:active::after, .notif-clearall:active::after, .notif-x:active::after, .sc-btn:active::after, .sc-senders-toggle:active::after, .wall-tab:active::after, .lb-win:active::after, .ll-toggle button:active::after, .comm-tab:active::after, .ge-info:active::after, .cmp-mode:active::after, .np-chain-btn:active::after, .oc-mk:active::after, .ll-info:active::after, .arena-tab:active::after, .np-social-btn:active::after, .cw-tab:active::after, .np-strat:active::after, .np-fclose:active::after, .pillar > summary:active::after, .oc-data > summary:active::after, .b0-conn summary:active::after, .modal-x:active::after, .wc-x:active::after, .media-preview-rm:active::after, .intro-skip:active::after, .gif-toggle:active::after, .oc-reset:active::after, .addr-clear:active::after, #compose-fab:active::after, .risk-chip:active::after, .g1-w-link:active::after, .sc-info:active::after {
+  -webkit-mask-image: none; mask-image: none; opacity: 0.9;
+}
+@keyframes mx-rain { from { background-position: 0 0, 0 0; } to { background-position: 0 var(--mx-size), 0 0; } }
+/* disabled tiles are still tiles, but nothing in them moves or lights */
+.btn:disabled::before, .btn[aria-disabled="true"]::before, .react-btn:disabled::before, .sc-hop:disabled::before, .sc-btn:disabled::before, .np-row-call[disabled]::before, .pin-chip-rm:disabled::before, .sc-info:disabled::before { animation: none; opacity: 0.35; }
+.btn:disabled::after, .btn[aria-disabled="true"]::after, .react-btn:disabled::after, .sc-hop:disabled::after, .sc-btn:disabled::after, .np-row-call[disabled]::after, .pin-chip-rm:disabled::after, .sc-info:disabled::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .btn::before, .react-btn::before, .feed-tab::before, .dtab::before, .oc-tf::before, .np-seg::before, .np-vs-btn::before, .mp-btn::before, .copy-btn::before, .nav-toggle::before, .mcap-panel::before, .sc-hop::before, .np-row-call::before, .motion-btn::before, .npm-item::before, .auth-seg::before, .auth-tab::before, .profile-link::before, .np-caret-btn::before, .swap-choice::before, .file-label::before, .vote-btn::before, .sort-btn::before, .linklike::before, .oauth-btn::before, .btn-follow::before, .gobj-link::before, .wc-item::before, .wc-deep::before, .np-search-clear::before, .np-tickcopy::before, .tm-x::before, .pin-chip-open::before, .pin-chip-rm::before, .np-pin::before, .np-sort::before, .np-more::before, .np-refresh::before, .np-hidden-link::before, .np-status button::before, .np-newbar::before, .np-lookup-clear::before, .ab-chip::before, .np-chip::before, .np-den::before, .np-sv-apply::before, .np-sv-del::before, .np-runner-pin::before, .np-runner-chart::before, .np-rail-btn::before, .np-feed-fresh::before, .np-watch::before, .np-wl-remove::before, .notif-bell::before, .notif-clearall::before, .notif-x::before, .sc-btn::before, .sc-senders-toggle::before, .wall-tab::before, .lb-win::before, .ll-toggle button::before, .comm-tab::before, .ge-info::before, .cmp-mode::before, .np-chain-btn::before, .oc-mk::before, .ll-info::before, .arena-tab::before, .np-social-btn::before, .cw-tab::before, .np-strat::before, .np-fclose::before, .pillar > summary::before, .oc-data > summary::before, .b0-conn summary::before, .modal-x::before, .wc-x::before, .media-preview-rm::before, .intro-skip::before, .gif-toggle::before, .oc-reset::before, .addr-clear::before, #compose-fab::before, .risk-chip::before, .g1-w-link::before, .sc-info::before { animation: none !important; }
+}
+html.motion-off .btn::before, html.motion-off .react-btn::before, html.motion-off .feed-tab::before, html.motion-off .dtab::before, html.motion-off .oc-tf::before, html.motion-off .np-seg::before, html.motion-off .np-vs-btn::before, html.motion-off .mp-btn::before, html.motion-off .copy-btn::before, html.motion-off .nav-toggle::before, html.motion-off .mcap-panel::before, html.motion-off .sc-hop::before, html.motion-off .np-row-call::before, html.motion-off .motion-btn::before, html.motion-off .npm-item::before, html.motion-off .auth-seg::before, html.motion-off .auth-tab::before, html.motion-off .profile-link::before, html.motion-off .np-caret-btn::before, html.motion-off .swap-choice::before, html.motion-off .file-label::before, html.motion-off .vote-btn::before, html.motion-off .sort-btn::before, html.motion-off .linklike::before, html.motion-off .oauth-btn::before, html.motion-off .btn-follow::before, html.motion-off .gobj-link::before, html.motion-off .wc-item::before, html.motion-off .wc-deep::before, html.motion-off .np-search-clear::before, html.motion-off .np-tickcopy::before, html.motion-off .tm-x::before, html.motion-off .pin-chip-open::before, html.motion-off .pin-chip-rm::before, html.motion-off .np-pin::before, html.motion-off .np-sort::before, html.motion-off .np-more::before, html.motion-off .np-refresh::before, html.motion-off .np-hidden-link::before, html.motion-off .np-status button::before, html.motion-off .np-newbar::before, html.motion-off .np-lookup-clear::before, html.motion-off .ab-chip::before, html.motion-off .np-chip::before, html.motion-off .np-den::before, html.motion-off .np-sv-apply::before, html.motion-off .np-sv-del::before, html.motion-off .np-runner-pin::before, html.motion-off .np-runner-chart::before, html.motion-off .np-rail-btn::before, html.motion-off .np-feed-fresh::before, html.motion-off .np-watch::before, html.motion-off .np-wl-remove::before, html.motion-off .notif-bell::before, html.motion-off .notif-clearall::before, html.motion-off .notif-x::before, html.motion-off .sc-btn::before, html.motion-off .sc-senders-toggle::before, html.motion-off .wall-tab::before, html.motion-off .lb-win::before, html.motion-off .ll-toggle button::before, html.motion-off .comm-tab::before, html.motion-off .ge-info::before, html.motion-off .cmp-mode::before, html.motion-off .np-chain-btn::before, html.motion-off .oc-mk::before, html.motion-off .ll-info::before, html.motion-off .arena-tab::before, html.motion-off .np-social-btn::before, html.motion-off .cw-tab::before, html.motion-off .np-strat::before, html.motion-off .np-fclose::before, html.motion-off .pillar > summary::before, html.motion-off .oc-data > summary::before, html.motion-off .b0-conn summary::before, html.motion-off .modal-x::before, html.motion-off .wc-x::before, html.motion-off .media-preview-rm::before, html.motion-off .intro-skip::before, html.motion-off .gif-toggle::before, html.motion-off .oc-reset::before, html.motion-off .addr-clear::before, html.motion-off #compose-fab::before, html.motion-off .risk-chip::before, html.motion-off .g1-w-link::before, html.motion-off .sc-info::before { animation: none !important; }
+@media (forced-colors: active) {
+  .btn::before, .btn::after, .react-btn::before, .react-btn::after, .feed-tab::before, .feed-tab::after, .dtab::before, .dtab::after, .oc-tf::before, .oc-tf::after, .np-seg::before, .np-seg::after, .np-vs-btn::before, .np-vs-btn::after, .mp-btn::before, .mp-btn::after, .copy-btn::before, .copy-btn::after, .nav-toggle::before, .nav-toggle::after, .mcap-panel::before, .mcap-panel::after, .sc-hop::before, .sc-hop::after, .np-row-call::before, .np-row-call::after, .motion-btn::before, .motion-btn::after, .npm-item::before, .npm-item::after, .auth-seg::before, .auth-seg::after, .auth-tab::before, .auth-tab::after, .profile-link::before, .profile-link::after, .np-caret-btn::before, .np-caret-btn::after, .swap-choice::before, .swap-choice::after, .file-label::before, .file-label::after, .vote-btn::before, .vote-btn::after, .sort-btn::before, .sort-btn::after, .linklike::before, .linklike::after, .oauth-btn::before, .oauth-btn::after, .btn-follow::before, .btn-follow::after, .gobj-link::before, .gobj-link::after, .wc-item::before, .wc-item::after, .wc-deep::before, .wc-deep::after, .np-search-clear::before, .np-search-clear::after, .np-tickcopy::before, .np-tickcopy::after, .tm-x::before, .tm-x::after, .pin-chip-open::before, .pin-chip-open::after, .pin-chip-rm::before, .pin-chip-rm::after, .np-pin::before, .np-pin::after, .np-sort::before, .np-sort::after, .np-more::before, .np-more::after, .np-refresh::before, .np-refresh::after, .np-hidden-link::before, .np-hidden-link::after, .np-status button::before, .np-status button::after, .np-newbar::before, .np-newbar::after, .np-lookup-clear::before, .np-lookup-clear::after, .ab-chip::before, .ab-chip::after, .np-chip::before, .np-chip::after, .np-den::before, .np-den::after, .np-sv-apply::before, .np-sv-apply::after, .np-sv-del::before, .np-sv-del::after, .np-runner-pin::before, .np-runner-pin::after, .np-runner-chart::before, .np-runner-chart::after, .np-rail-btn::before, .np-rail-btn::after, .np-feed-fresh::before, .np-feed-fresh::after, .np-watch::before, .np-watch::after, .np-wl-remove::before, .np-wl-remove::after, .notif-bell::before, .notif-bell::after, .notif-clearall::before, .notif-clearall::after, .notif-x::before, .notif-x::after, .sc-btn::before, .sc-btn::after, .sc-senders-toggle::before, .sc-senders-toggle::after, .wall-tab::before, .wall-tab::after, .lb-win::before, .lb-win::after, .ll-toggle button::before, .ll-toggle button::after, .comm-tab::before, .comm-tab::after, .ge-info::before, .ge-info::after, .cmp-mode::before, .cmp-mode::after, .np-chain-btn::before, .np-chain-btn::after, .oc-mk::before, .oc-mk::after, .ll-info::before, .ll-info::after, .arena-tab::before, .arena-tab::after, .np-social-btn::before, .np-social-btn::after, .cw-tab::before, .cw-tab::after, .np-strat::before, .np-strat::after, .np-fclose::before, .np-fclose::after, .pillar > summary::before, .pillar > summary::after, .oc-data > summary::before, .oc-data > summary::after, .b0-conn summary::before, .b0-conn summary::after, .modal-x::before, .modal-x::after, .wc-x::before, .wc-x::after, .media-preview-rm::before, .media-preview-rm::after, .intro-skip::before, .intro-skip::after, .gif-toggle::before, .gif-toggle::after, .oc-reset::before, .oc-reset::after, .addr-clear::before, .addr-clear::after, #compose-fab::before, #compose-fab::after, .risk-chip::before, .risk-chip::after, .g1-w-link::before, .g1-w-link::after, .sc-info::before, .sc-info::after { display: none; }
+}

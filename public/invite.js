@@ -36,7 +36,7 @@
   let root = null, state = { access: false, redeemed: false, tosAccepted: false, signedIn: false, ticket: null };
   let goldEndsAt = null, goldStartedAt = null, raf = 0, onResize = null, lastFocus = null, releaseTrap = null, afterJoin = null, prevOverflow = '';
   const $ = (id) => root && root.querySelector('#' + id);
-  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('motion-off');   // the ⏸ switch counts too
 
   /* ---------- markup ---------- */
   function build() {
@@ -62,7 +62,7 @@
           '<p class="tk-cta" id="inv-cta">👆 Tap the ticket — <b>got a code?</b></p>' +
           '<div class="inv-actions">' +
             '<button class="g-btn g-btn-primary" id="inv-have" type="button" data-tip="Opens the box where you type your invite code">I have a code 🎟️</button>' +
-            '<a class="g-btn g-btn-ghost" data-tip="Opens the full terms of service in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
+            '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the full terms of service in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
           '</div>' +
           '<button class="inv-browse" id="inv-browse" type="button" data-tip="Closes this; you can keep reading without an account">No code? Keep browsing read-only →</button>' +
         '</div>' +
@@ -95,7 +95,7 @@
             '<p class="inv-err" id="inv-tos-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.6rem;">' +
               '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled data-tip="Records your agreement to the terms, then opens the last step">Accept &amp; continue 🚀</button>' +
-              '<a class="g-btn g-btn-ghost" data-tip="Opens the same terms as a full page in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
+              '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the same terms as a full page in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -413,7 +413,7 @@
     // land on the step that is actually next for this person
     if (state.signedIn) show('step-codes');
     else if (state.access) show('step-join');
-    else if (state.redeemed) show('step-tos');
+    else if (state.redeemed) show(state.tosAccepted ? 'step-join' : 'step-tos');
     else show(o.step || 'step-ticket');
   }
   function close() {
@@ -426,9 +426,17 @@
     document.dispatchEvent(new CustomEvent('jsi:modalclose'));
   }
 
+  /* The terms step is hidden unless the server says it is on (TOS_GATE=1): the links to the page stay out
+     of the ticket and a redeemed code goes straight to making the account. */
+  function syncTerms() {
+    if (!root) return;
+    const on = state.tosRequired === true;
+    root.querySelectorAll('.inv-terms-link').forEach((a) => { a.hidden = !on; });
+  }
   async function refresh() {
     try {
       state = await api('/api/gate/state');
+      syncTerms();
       paintTicket();
     } catch { paintTicket(); }
     if (goldEndsAt == null) {

@@ -978,12 +978,12 @@
     const p = g.holderProof || {};
     return '<section class="rekt-card is-live" aria-labelledby="rekt-gate-h">' +
       '<div class="rekt-head"><h4 class="rekt-h" id="rekt-gate-h">🪪 You are in read-only until you prove your bags</h4>' +
-        '<span class="rekt-state rekt-state-warn">Not a strike</span></div>' +
+        '<span class="rekt-state rekt-state-warn">Not a strike — until you sell</span></div>' +
       '<p class="rekt-lede">This is a different read-only from the one above and it is <b>not a penalty</b>. You can read everything; doing anything needs proof that you hold the coins.</p>' +
       '<ul class="rekt-list">' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Hold at least <b>$' + floor + '</b> of <b>$SEND</b>, priced live. No waiting period.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Be a <b>net accumulator</b> — you have bought more than you have sold.</span></li>' +
-        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Then keep it: selling that $SEND within <b>' + hrs + ' hours</b> of buying it is read-only for a day.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Then keep it: selling that $SEND within <b>' + hrs + ' hours</b> of buying it is a strike on the read-only ladder — a day, then a week, then for good; $25 of $SEND a day buys it out, doubled if you sell that too.</span></li>' +
       '</ul>' +
       '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction. ' + esc(p.reason || '') + '</p>' +
     '</section>';

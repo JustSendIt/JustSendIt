@@ -45,16 +45,16 @@
      view on the terms step at phone height — the one control that lets a reader leave */
   position: fixed; top: 0.9rem; right: 0.9rem; z-index: 6;
   display: inline-flex; align-items: center; gap: 0.4rem;
-  background: var(--g-text, #f2eaff); color: var(--g-ink, #070312);
-  border: 1px solid var(--g-text, #f2eaff); border-radius: 999px;
+  background: var(--g-green, var(--green)); color: var(--g-ink, #070312);
+  border: 1px solid var(--g-green, var(--green)); border-radius: 999px;
   padding: 0.5rem 0.95rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
 }
-.inv-close:hover { background: var(--g-dim, #b9a8dd); border-color: var(--g-dim, #b9a8dd); }
+.inv-close:hover { background: var(--g-green-hi, var(--green-bright)); border-color: var(--g-green-hi, var(--green-bright)); }
 .inv-close:focus-visible { outline: 2px solid var(--g-cyan, #38e8ff); outline-offset: 2px; }
 
 .inv-kicker { margin: 0; font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g-cyan, #38e8ff); }
 .inv-title { margin: 0.2rem 0 0; font-size: clamp(1.6rem, 5.2vw, 2.5rem); line-height: 1.1; text-align: center; font-weight: 800; }
-.inv-title .hl { color: var(--g-green-hi, #b4ff2b); }
+.inv-title .hl { color: var(--g-green-hi, var(--green-bright)); }
 .inv-sub { margin: 0; max-width: 48ch; text-align: center; color: var(--g-dim, #b9a8dd); font-size: 0.95rem; line-height: 1.55; }
 
 .inv-step { display: none; width: 100%; flex-direction: column; align-items: center; gap: 1rem; }
@@ -63,14 +63,14 @@
 .inv-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; }
 /* The read-only exit, stated as a real option rather than a refusal. */
 .inv-browse {
-  background: var(--g-dim, #b9a8dd); border: 0; padding: 0.35rem 0.9rem; border-radius: 999px; font: inherit; font-size: 0.88rem;
+  background: var(--g-green-lo, var(--green-dark)); border: 0; padding: 0.35rem 0.9rem; border-radius: 999px; font: inherit; font-size: 0.88rem;
   color: var(--g-ink, #070312); text-decoration: none; cursor: pointer;
 }
-.inv-browse:hover { background: var(--g-text, #f2eaff); }
+.inv-browse:hover { background: var(--g-green, var(--green)); }
 
 .inv-panel {
   width: 100%; max-width: 560px;
-  background: rgba(20,11,40,0.86); border: 1px solid rgba(255,255,255,0.13);
+  background: rgba(20,11,40,0.86); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 13%, transparent);
   border-radius: 16px; padding: 1.1rem 1.15rem;
 }
 .inv-panel h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
@@ -81,7 +81,7 @@
 .inv-code {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
   padding: 0.62rem 0.8rem; border-radius: 10px; cursor: pointer; overflow: hidden;
-  background: var(--g-green-hi, #b4ff2b); border: 1px solid var(--g-green-hi, #b4ff2b);
+  background: var(--g-green-hi, var(--green-bright)); border: 1px solid var(--g-green-hi, var(--green-bright));
   color: var(--g-ink, #070312);
   font-family: ui-monospace, Menlo, monospace; font-size: 1rem; font-weight: 700; letter-spacing: 0.08em;
 }
@@ -89,13 +89,13 @@
    min-width is auto, so without it the code characters refuse to compress, and a long "used · @handle"
    tag pushes the whole row out of its grid cell and straight over the code beside it. */
 .inv-chars { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inv-code:hover { background: var(--g-green, #8ee000); border-color: var(--g-green, #8ee000); }
+.inv-code:hover { background: var(--g-green, var(--green)); border-color: var(--g-green, var(--green)); }
 .inv-code:focus-visible { outline: 2px solid var(--g-cyan, #38e8ff); outline-offset: 2px; }
 /* A spent code has nothing to copy — it will never work again — so it does not look or behave like
    something you can hand to a friend. The characters are withheld by the server, not just hidden here. */
 .inv-code.is-used,
 .inv-code.is-used:hover {
-  background: var(--g-dim, #b9a8dd); border-color: var(--g-dim, #b9a8dd);
+  background: var(--g-green-lo, var(--green-dark)); border-color: var(--g-green-lo, var(--green-dark));
   color: var(--g-ink, #070312); cursor: default;
 }
 /* struck through on the CHARACTERS only — a line through the "used · @who" label made it unreadable */
@@ -113,15 +113,15 @@
 .inv-code.is-used .inv-tag { background: none; }
 .inv-note { margin: 0.65rem 0 0; font-size: 0.84rem; color: var(--g-dim, #b9a8dd); line-height: 1.5; }
 .inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: 0.88rem; color: #ff8aa8; }
-.inv-err.is-ok { color: var(--g-green-hi, #b4ff2b); }
+.inv-err.is-ok { color: var(--g-green-hi, var(--green-bright)); }
 
 .inv-in {
   width: 100%; padding: 0.85rem 1rem; border-radius: 12px; margin-top: 0.5rem;
-  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.22); color: var(--g-text, #f2eaff);
+  background: rgba(0,0,0,0.35); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent); color: var(--g-text, #f2eaff);
   font-family: ui-monospace, Menlo, monospace; font-size: 1.25rem; letter-spacing: 0.22em; text-align: center;
   text-transform: uppercase;
 }
-.inv-in:focus-visible { outline: 2px solid var(--g-green, #8ee000); outline-offset: 2px; border-color: var(--g-green, #8ee000); }
+.inv-in:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; border-color: var(--g-green, var(--green)); }
 
 /* ═══ the same codes, on the dashboard ═══════════════════════════════════════════════════════
    Uses the site's own surface tokens rather than the gate palette: this one lives on a page the
@@ -135,7 +135,7 @@
   background: var(--green-bright, #c6f000); border-color: var(--green-bright, #c6f000); color: var(--ink-1, #020301);
 }
 .inv-dash .inv-code:hover { background: var(--green, #a8ce00); border-color: var(--green, #a8ce00); }
-.inv-dash .inv-code.is-used { background: var(--text-mute, #949c8a); border-color: var(--text-mute, #949c8a); color: var(--ink-1, #020301); }
+.inv-dash .inv-code.is-used { background: var(--ctl-fill-mute); border-color: var(--ctl-fill-mute); color: var(--ink-1, #020301); }
 .inv-dash .inv-note { color: var(--text-dim, #9aa); }
 .inv-sendid {
   display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0.3rem 0.7rem; border-radius: 999px;
@@ -150,6 +150,8 @@
 }
 @media (prefers-reduced-motion: reduce) {
   #invite-overlay * { animation: none !important; transition: none !important; }
+  /* `*` matches elements, not pseudo-elements: the tiles' drift has to be stopped by name */
+  .inv-close::before, .inv-browse::before, .inv-code::before { animation: none !important; }
 }
 
 /* ═══ the participation check ═══════════════════════════════════════════════════════════════
@@ -166,7 +168,7 @@
 .inv-tick {
   flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center;
   font-size: 0.85rem; font-weight: 800; line-height: 1;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.2); color: var(--g-dim, #b9a8dd);
+  background: color-mix(in srgb, var(--g-green, var(--green)) 6%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 20%, transparent); color: var(--g-dim, #b9a8dd);
 }
 /* mixes of the token the tick's own text uses, not an rgba copy of it: a second copy is what a rebrand leaves behind */
 .inv-tests li[data-state="ok"] .inv-tick { background: color-mix(in srgb, var(--green-bright) 18%, transparent); border-color: color-mix(in srgb, var(--green-bright) 55%, transparent); color: var(--green-bright); }
@@ -183,4 +185,52 @@
 @media (pointer: coarse) {
   .inv-browse { min-height: 44px; }
   .inv-code { min-height: 44px; }
+}
+
+/* ═══ the matrix grid on the shell's own controls ══════════════════════════════════════════════
+   The same tile gate.css gives .g-btn (and styles.css gives every control on the site): a faint grid of
+   dark cells at rest, brighter and drifting on hover / focus, and the pointer light — following the cursor
+   where app.js tracks --mx/--my on these selectors, centred (the 50% defaults) where it does not. Tokens are
+   gate.css's --gmx-* aliases and its
+   mx-rain-gate keyframes; the two files are always loaded together (auth.js). .inv-close keeps its
+   position: fixed — a fixed box is a containing block for the layers just as a relative one is. */
+.inv-browse, .inv-code { position: relative; }
+.inv-close, .inv-browse, .inv-code { isolation: isolate; }
+.inv-close::before, .inv-browse::before, .inv-code::before,
+.inv-close::after, .inv-browse::after, .inv-code::after {
+  content: ''; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+}
+.inv-close::before, .inv-browse::before, .inv-code::before {
+  background-image:
+    linear-gradient(var(--gmx-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--gmx-line) 1px, transparent 1px);
+  background-size: var(--gmx-size) var(--gmx-size);
+  opacity: 0.42;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.inv-close::after, .inv-browse::after, .inv-code::after {
+  background-image:
+    radial-gradient(circle at var(--mx, 50%) var(--my, 50%), var(--gmx-glow) 0, transparent 46px),
+    radial-gradient(circle, var(--gmx-cell) 0 1.7px, transparent 2px);
+  background-size: 100% 100%, var(--gmx-size) var(--gmx-size);
+  background-position: 0 0, calc(var(--gmx-size) / 2) calc(var(--gmx-size) / 2);
+  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--g-ink, #070312) 0, transparent 100%);
+          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--g-ink, #070312) 0, transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-2, 0.16s) ease;
+}
+.inv-close:hover::before, .inv-browse:hover::before, .inv-code:hover::before,
+.inv-close:focus-visible::before, .inv-browse:focus-visible::before, .inv-code:focus-visible::before {
+  opacity: 0.85;
+  animation: mx-rain-gate 1.1s linear infinite;
+}
+.inv-close:hover::after, .inv-browse:hover::after, .inv-code:hover::after,
+.inv-close:focus-visible::after, .inv-browse:focus-visible::after, .inv-code:focus-visible::after { opacity: 1; }
+.inv-close:active::after, .inv-browse:active::after, .inv-code:active::after { -webkit-mask-image: none; mask-image: none; opacity: 0.9; }
+/* a spent chip is still a tile, but nothing in it moves or lights */
+.inv-code.is-used::before { animation: none; opacity: 0.35; }
+.inv-code.is-used::after { display: none; }
+html.motion-off .inv-close::before, html.motion-off .inv-browse::before, html.motion-off .inv-code::before { animation: none !important; }
+@media (forced-colors: active) {
+  .inv-close::before, .inv-close::after, .inv-browse::before, .inv-browse::after, .inv-code::before, .inv-code::after { display: none; }
 }

@@ -46,7 +46,7 @@ writeFileSync(path.join(dataDir, '.data_key'), randomBytes(32).toString('hex'), 
 
 const PORT = 8000 + Math.floor(Math.random() * 1500);
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
-              BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345' };
+              BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1' };   // the terms step is hidden by default; the suites still cover it
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });

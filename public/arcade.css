@@ -76,13 +76,14 @@
 .arc-btn--go {
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: var(--on-green);
   box-shadow: 0 6px 0 var(--green-dark), 0 14px 34px color-mix(in srgb, var(--green) 35%, transparent);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+  /* the emboss under the label is the fill's own highlight, not a white wash (mirrors .btn-primary's inset in styles.css) */
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--green-bright) 70%, transparent);
 }
 .arc-btn--go:hover:not(:disabled) { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 var(--green-dark), 0 20px 44px var(--g-lit); }
 .arc-btn--cash {
   background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: var(--on-gold);
   box-shadow: 0 6px 0 var(--gold-deep), 0 14px 34px rgba(255,179,64,0.3);
-  text-shadow: 0 1px 0 rgba(255,255,255,0.35); font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 0 color-mix(in srgb, var(--gold) 70%, transparent); font-variant-numeric: tabular-nums;   /* gold's own highlight, same as .btn-gold's inset */
 }
 .arc-btn--cash:hover:not(:disabled) { transform: translateY(-3px) scale(1.03); box-shadow: 0 9px 0 var(--gold-deep), 0 20px 44px rgba(255,179,64,0.4); }
 /* the finished state stays fully legible (no opacity wash) — it still carries the only "come back tomorrow" copy */

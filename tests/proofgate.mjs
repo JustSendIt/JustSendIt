@@ -110,28 +110,32 @@ try {
     const stubDb = {
       prepare(sql) {
         return {
-          get: (id) => state.rows.get(id),
+          get: (id) => (/FROM holder_state/.test(sql) ? null : state.rows.get(id)),   // no holder row → baseline unknown, exactly as on a fresh account
           run: (...args) => { state.updates.push({ sql, args });
             const id = args[args.length - 1], r = state.rows.get(id);
             if (!r) return;
             if (/gate_hold_until=0/.test(sql)) { r.gate_hold_until = 0; r.gate_floor = 0; r.gate_wallets = null; }
-            if (/restricted_until=\?/.test(sql)) { r.restricted_until = args[0]; r.restrict_level = args[1]; r.restrict_reason = args[2]; }
+            // flagUser's ladder write: strikes, level, reason, until … — the first-day sell walks the same ladder now
+            if (/SET strikes=\?, restrict_level=\?, restrict_reason=\?, restricted_until=\?/.test(sql)) { r.strikes = args[0]; r.restrict_level = args[1]; r.restrict_reason = args[2]; r.restricted_until = args[3]; r.redeem_dur = args[6]; }
+            else if (/restricted_until=\?/.test(sql)) { r.restricted_until = args[0]; r.restrict_level = args[1]; r.restrict_reason = args[2]; }
           },
         };
       },
     };
     const NOW = 1789000000000, DAYMS = 86400000;
     const grab2 = (re, label) => { const m = SRC.match(re); if (!m) { check('EXTRACT ' + label, false); return ''; } return m[0]; };
-    const gate = new Function('db', 'now', 'notify', 'humanDur', 'PROOF_SELL_WINDOW_MS', 'erc20Balance', 'TOK',
+    const PERM = 32503680000000;
+    const gate = new Function('db', 'now', 'notify', 'humanDur', 'PROOF_SELL_WINDOW_MS', 'erc20Balance', 'TOK', 'DAY_MS', 'PERM_UNTIL',
+      grab2(/function flagUser\(userId, reason, costMult\) \{[\s\S]*?\n\}/, 'flagUser') + '\n' +
       grab2(/async function checkGateHold\(userId\) \{[\s\S]*?\n\}/, 'checkGateHold') + '\nreturn checkGateHold;')(
       stubDb, () => NOW, (id, e, m, k) => state.notes.push({ id, m, k }),
       (ms) => Math.round(ms / 3600000) + ' hours', DAYMS,
       async (_tok, addr) => { state.reads.push(addr); if (state.fail) throw new Error('rpc down');
                               return BigInt(Math.round((state.chain.get(addr) || 0) * 1e18)); },
-      { SEND: '0xsend' });
+      { SEND: '0xsend' }, DAYMS, PERM);
 
     const put = (id, row, chain) => {
-      state.rows.set(id, Object.assign({ gate_hold_until: 0, gate_floor: 0, gate_wallets: null, restricted_until: 0, restrict_level: 0 }, row));
+      state.rows.set(id, Object.assign({ gate_hold_until: 0, gate_floor: 0, gate_wallets: null, restricted_until: 0, restrict_level: 0, strikes: 0 }, row));
       for (const [a, v] of Object.entries(chain || {})) state.chain.set(a, v);
       return id;
     };
@@ -154,8 +158,18 @@ try {
     check('  ...for one window, and the window closes', r3.gate_hold_until === 0 && r3.gate_floor === 0);
     check('  ...the reason names what they did', /sold the \$SEND that got you in/i.test(r3.restrict_reason || ''), r3.restrict_reason);
     check('  ...and they are told, once', state.notes.length === 1 && state.notes[0].k === 'restriction', JSON.stringify(state.notes));
-    check('  ...with NO strike added — the ladder belongs to the scanner',
-      !state.updates.some(u => /strikes\s*=/.test(u.sql)), JSON.stringify(state.updates.map(u => u.sql)));
+    check('  ...as strike 1 of 3 on the SAME ladder every anti-cheat trigger walks', r3.strikes === 1 && /strike 1 of 3/.test(state.notes[0].m), JSON.stringify({ strikes: r3.strikes, note: state.notes[0].m }));
+    check('  ...and the note names the buy-out and the doubling', /\$25 a day/.test(state.notes[0].m) && /doubled/.test(state.notes[0].m), state.notes[0].m);
+
+    // the ladder: a second first-day dump on an account that already has a strike is a week, a third is for good
+    reset(); put(31, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W, strikes: 1 }, { '0xaaa': 0, '0xbbb': 0 });
+    await gate(31);
+    const r31 = state.rows.get(31);
+    check('second strike → one week', r31.strikes === 2 && r31.restrict_level === 2 && r31.restricted_until === NOW + 7 * DAYMS, JSON.stringify(r31));
+    reset(); put(32, { gate_hold_until: NOW + 3600000, gate_floor: 100, gate_wallets: W, strikes: 2 }, { '0xaaa': 0, '0xbbb': 0 });
+    await gate(32);
+    const r32 = state.rows.get(32);
+    check('third strike → permanent', r32.strikes === 3 && r32.restrict_level === 3 && r32.restricted_until === PERM && /for good/.test(state.notes[0].m), JSON.stringify(r32));
 
     /* THE REGRESSION TEST. Unlinking a spare wallet drops the aggregate over currently-linked wallets, but
        it is not a sale — and an earlier cut of this code answered it with a 24h read-only whose stated

@@ -3,6 +3,8 @@ Allow: /
 Disallow: /profile.html
 Disallow: /watchlist.html
 Disallow: /gate.html
+# the terms page is unlinked and not part of joining
+Disallow: /terms.html
 # The ticket share cards live at /t/<id>.png, outside /api/, precisely so this line cannot block them:
 # a crawler that is told to stay out of /api/ will not fetch an og:image there, and the card would
 # render perfectly and never once appear in a post.
