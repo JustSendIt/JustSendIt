@@ -150,6 +150,10 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
   @keyframes livex-pulse { 0% { opacity: 0.45; } 100% { opacity: 1; } }
   .livex-pulse { animation: livex-pulse 0.5s ease-out; }
 }
+@media (prefers-reduced-motion: reduce) {
+  /* the global clamp collapses the fade to nothing; a changed value still needs a cue, so it underlines */
+  .livex-pulse { text-decoration: underline; text-decoration-color: var(--green-bright); text-underline-offset: 2px; }
+}
 
 /* the wall's loading / error block: the retry button needs room from the copy above it */
 .empty-wall .btn { margin-top: 0.9rem; }
@@ -248,3 +252,13 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .rec-k, .rekt-state, .gd-text, .wl-tag, .cmb-l, .trk-w-badge { font-size: 0.72rem; }
 /* mouse-size floor for the chart and senders controls (24px, WCAG 2.5.8) */
 .np-search-clear, .oc-tf, .oc-reset, .oc-data > summary, .sc-senders-toggle { min-height: 24px; min-width: 24px; }
+
+/* targets the coarse-pointer list missed: the media-preview remover (the only way to drop an attachment),
+   the leaderboard window pills, the tracker's wallet buttons, the modal close */
+@media (pointer: coarse) {
+  .media-preview-rm, .modal-x { min-width: 44px; min-height: 44px; }
+  .lb-win { min-height: 44px; }
+  .trk-w-btn { min-width: 44px; min-height: 44px; }
+}
+/* more sub-11px text: OG timer captions and tag, chart source, bar/x-axis captions, the holders-only badge */
+.og-timer i, .og-tag, .np-vbar i, .sc-x i, .oc-src, .post-lock { font-size: 0.72rem; }

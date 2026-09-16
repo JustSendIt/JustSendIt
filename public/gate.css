@@ -129,7 +129,7 @@ body.gate {
    <span> and has to be given a display explicitly. Forgetting one collapses its children onto one line. */
 .tk-logo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; }
 .tk-brand { font-family: 'Luckiest Guy', cursive; font-size: 1.05rem; color: var(--g-green-hi); letter-spacing: 0.02em; }
-.tk-admit { display: inline-block; margin-left: auto; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.22em;
+.tk-admit { display: inline-block; margin-left: auto; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.22em;
   text-transform: uppercase; color: var(--g-ink); background: var(--g-green-hi);
   padding: 0.22rem 0.5rem; border-radius: 4px; white-space: nowrap; }
 
@@ -149,7 +149,7 @@ body.gate {
 
 .tk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.9rem; }
 .tk-cell { display: block; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.09); border-radius: 9px; padding: 0.45rem 0.6rem; min-width: 0; }
-.tk-k { display: block; font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
+.tk-k { display: block; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
 .tk-v { display: block; font-weight: 800; font-size: 0.95rem; color: #fff; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tk-v.gold { color: var(--g-gold); }
 
@@ -157,7 +157,7 @@ body.gate {
 .tk-launch { display: block; margin-top: 0.9rem; background: rgba(0,0,0,0.34); border: 1px solid rgba(255,179,64,0.35);
   border-radius: 10px; padding: 0.5rem 0.65rem; }
 .tk-launch-top { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
-.tk-launch-k { font-size: 0.58rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--g-gold); font-weight: 800; }
+.tk-launch-k { font-size: 0.7rem; letter-spacing: 0.13em; text-transform: uppercase; color: var(--g-gold); font-weight: 800; }
 .tk-launch-v { font-weight: 800; font-size: 0.92rem; color: var(--g-gold); font-variant-numeric: tabular-nums; margin-left: auto; }
 .tk-rail { display: block; position: relative; height: 16px; margin-top: 0.35rem; }
 .tk-rail-line { position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%);
@@ -166,8 +166,8 @@ body.gate {
   filter: drop-shadow(0 0 6px rgba(255,179,64,0.8)); transition: left 600ms ease; }
 
 .tk-stub-n { display: block; font-family: 'Luckiest Guy', cursive; font-size: 1.7rem; color: var(--g-green-hi); line-height: 1; }
-.tk-stub-k { display: block; font-size: 0.55rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
-.tk-code { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.62rem;
+.tk-stub-k { display: block; font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
+.tk-code { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.7rem;
   color: var(--g-dim); letter-spacing: 0.05em; overflow-wrap: anywhere; }
 .tk-bars { display: flex; gap: 2px; align-items: flex-end; height: 30px; margin-top: 0.1rem; }
 .tk-bars i { display: block; width: 2px; background: rgba(255,255,255,0.75); border-radius: 1px; }

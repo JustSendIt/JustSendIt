@@ -23,7 +23,7 @@
 .cmp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(360px, 100%), 1fr)); gap: 1.2rem; align-items: start; }
 .cmp-loading, .cmp-empty { margin: 0; color: var(--text-dim); font-size: 0.9rem; line-height: 1.5; text-align: center; padding: 0.8rem 0.4rem; }
 .cmp-err { grid-column: 1 / -1; }
-.cmp-card { padding: 1.15rem 1.15rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; scroll-margin-top: 84px; position: relative; overflow: visible; }
+.cmp-card { padding: 1.15rem 1.15rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; scroll-margin-top: calc(var(--nav-h, 58px) + 1.6rem); position: relative; overflow: visible; }
 .cmp-card:target { outline: 3px solid var(--green-bright); outline-offset: 4px; }
 .cmp-card-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
 .cmp-card-h {

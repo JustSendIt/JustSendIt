@@ -178,7 +178,7 @@
 .trk-comb-rows { list-style: none; margin: 0.75rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .cmb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.6rem;
   background: var(--ink); border: 1px solid var(--ink-4); border-radius: 10px; padding: 0.45rem 0.6rem; }
-.cmb-row.is-pending { opacity: 0.65; }
+.cmb-row.is-pending { color: var(--text-mute); filter: saturate(0.4); }
 .cmb-pick { background: var(--ctl-fill-lo); border: 0; padding: 0.35rem 0.85rem; border-radius: var(--r-pill); text-align: left; cursor: pointer; color: var(--ctl-ink);
   display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; min-width: 0; font: inherit; }
 .cmb-pick:hover, .cmb-pick:focus-visible { background: var(--ctl-fill-hi); }

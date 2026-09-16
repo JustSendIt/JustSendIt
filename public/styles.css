@@ -601,7 +601,7 @@ section { padding: 4.2rem 1.25rem; position: relative; }
   border: 2px solid var(--ink-4); border-radius: 14px; padding: 0.85rem 1rem;
   font-family: ui-monospace, Menlo, monospace; font-size: 1rem; margin-bottom: 0.8rem;
 }
-.addr-input:focus { outline: none; border-color: var(--green); }
+.addr-input:focus { border-color: var(--green); }
 .addr-pill {
   display: inline-flex; align-items: center; gap: 0.5rem;
   background: var(--ink-3); border: 1.5px solid color-mix(in srgb, var(--green) 35%, transparent); border-radius: 999px;
@@ -632,7 +632,7 @@ section { padding: 4.2rem 1.25rem; position: relative; }
   background: var(--ink); color: var(--text); border: 2px solid var(--ink-4); border-radius: 14px;
   padding: 0.9rem 1rem; font-family: 'Rubik', sans-serif; font-size: 16px;
 }
-.composer textarea:focus { outline: none; border-color: var(--green); }
+.composer textarea:focus { border-color: var(--green); }
 .composer-bar { display: flex; align-items: center; gap: 0.7rem; margin-top: 0.7rem; flex-wrap: wrap; }
 .composer-bar .hint { color: var(--text-dim); font-size: 0.8rem; margin-left: auto; }
 .file-label {
@@ -1024,7 +1024,7 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
   border-radius: 999px; padding: 0.45rem 1rem 0.45rem 2.1rem; font-size: 0.88rem; width: 170px;
   font-family: 'Rubik', sans-serif; transition: width 0.2s ease, border-color 0.2s ease;
 }
-.nav-search input:focus { outline: none; border-color: var(--green); width: 230px; }
+.nav-search input:focus { border-color: var(--green); width: 230px; }
 .nav-search .s-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); pointer-events: none; opacity: 0.6; font-size: 0.85rem; }
 .search-drop {
   position: absolute; top: calc(100% + 0.5rem); right: 0; width: 300px; max-height: 380px; overflow-y: auto;
@@ -1162,7 +1162,7 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
   border: 2px solid var(--ink-4); border-radius: 14px; padding: 0.9rem 1rem;
   font-family: 'Rubik', sans-serif; font-size: 16px; margin-top: 0.4rem;
 }
-#compose-modal textarea:focus { outline: none; border-color: var(--green); }
+#compose-modal textarea:focus { border-color: var(--green); }
 
 /* ===== Onboarding tour ===== */
 .tour-welcome-wrap { position: fixed; inset: 0; z-index: 360; display: grid; place-items: center; padding: 1rem; }
@@ -1281,7 +1281,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
   transition: transform 0.12s ease, border-color 0.12s ease;
 }
 .gearn-row:hover { transform: translateX(3px); border-color: color-mix(in srgb, var(--green) 50%, transparent); }
-.gearn-done { opacity: 0.72; cursor: default; }
+.gearn-done { cursor: default; color: var(--text-mute); filter: saturate(0.5); }   /* not opacity: --text-dim at 72% does not hold 4.5:1 */
 .ge-ico { font-size: 1rem; }
 .ge-label { flex: 1; font-size: 0.85rem; font-weight: 600; }
 .ge-pts { font-weight: 800; color: var(--green-bright); font-size: 0.9rem; }
@@ -1428,7 +1428,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 
 /* 5 — Equation strip */
 .eqstrip { background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 14px; padding: 0.85rem 0.8rem; margin-bottom: 1.1rem; }
-.eq-stale { opacity: 0.72; }
+.eq-stale { color: var(--text-mute); filter: saturate(0.4); }
 .eq-row { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; justify-content: center; }
 .eq-chip { display: inline-flex; flex-direction: column; align-items: center; gap: 0.12rem; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 10px; padding: 0.4rem 0.7rem; font-weight: 800; font-size: 1rem; color: var(--text); min-width: 62px; }
 .eq-chip small { font-weight: 700; font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
@@ -1653,7 +1653,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 
 /* OG badge — shown next to a verified early-buyer's name everywhere. cursor:help signals the hover explanation. */
 .og-badge { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 0.35rem; padding: 0.02rem 0.4rem; border-radius: 999px; font-size: 0.62rem; font-weight: 900; letter-spacing: 0.06em; line-height: 1.5; color: var(--on-gold); background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%); border: 1px solid rgba(255,179,64,0.65); box-shadow: 0 0 8px rgba(255,179,64,0.4); text-transform: uppercase; cursor: help; white-space: nowrap; }
-.og-badge:hover, .og-badge:focus-visible { box-shadow: 0 0 13px rgba(255,179,64,0.75); outline: none; }
+.og-badge:hover, .og-badge:focus-visible { box-shadow: 0 0 13px rgba(255,179,64,0.75); }
 @media (prefers-reduced-motion: reduce) { .og-badge { box-shadow: none; } }
 .og-block { display: flex; align-items: center; gap: 0.8rem; margin: 0.9rem 0; padding: 0.8rem 1rem; border-radius: 14px; background: linear-gradient(100deg, rgba(255,179,64,0.14), rgba(255,179,64,0.05)); border: 1.5px solid rgba(255,179,64,0.5); line-height: 1.5; }
 .og-block-badge { flex: 0 0 auto; font-weight: 900; font-size: 0.95rem; color: var(--on-gold); background: linear-gradient(180deg, var(--gold), var(--gold-deep)); border-radius: 999px; padding: 0.3rem 0.7rem; box-shadow: 0 0 10px rgba(255,179,64,0.5); }
@@ -2736,7 +2736,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 /* :not(.btn) — this is for inline links inside a message. Without it, it out-specifies every
    .btn-* variant and repaints button labels green-and-underlined on their own fill. */
 .np-msg-link, .np-msg a:not(.btn) { color: var(--green-bright); text-decoration: underline; font-weight: 700; }
-#wl-token-panel:focus-visible, #wl-wallet-panel:focus-visible { outline: none; }
+/* panels keep the global focus ring */
 
 /* ===================== SEND CALLS ===================== */
 .sc-widget { --tok: var(--green-bright); background: linear-gradient(180deg, color-mix(in srgb, var(--tok) 9%, var(--ink-2)), var(--ink-2)); border: 1.5px solid var(--ink-4); border-left: 4px solid var(--tok); border-radius: 16px; padding: 0.8rem 0.9rem; margin: 0.6rem 0; }
@@ -2932,7 +2932,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .comm-card:hover { transform: translateY(-5px); box-shadow: 0 16px 40px rgba(0,0,0,0.5), 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent); border-color: var(--g-lit); }
 .comm-card:focus-within { border-color: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 40%, transparent); }
 .comm-card-link { display: flex; flex-direction: column; height: 100%; text-decoration: none; color: var(--text); outline: none; }
-.comm-card-link:focus-visible { outline: none; }
+/* the card link keeps the global focus ring */
 .comm-card-banner {
   display: block; flex: 0 0 40%; background-size: cover; background-position: center; position: relative;
   border-bottom: 1px solid rgba(0,0,0,0.4);
@@ -3103,7 +3103,7 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
 .cm-rank { flex: 0 0 1.6rem; text-align: center; font-family: 'Luckiest Guy', cursive; font-size: 0.95rem; color: var(--text-dim); }
 .cm-ava { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background: var(--ink-3); display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
 .cm-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 800; font-size: 0.9rem; color: var(--text); text-decoration: none; }
-.cm-name:hover, .cm-name:focus-visible { color: var(--green-bright); outline: none; text-decoration: underline; }
+.cm-name:hover, .cm-name:focus-visible { color: var(--green-bright); text-decoration: underline; }
 .cm-crown { flex: 0 0 auto; font-size: 0.9rem; }
 .cm-lvl { flex: 0 0 auto; margin-left: auto; white-space: nowrap; font-size: 0.74rem; font-weight: 800; color: var(--green-bright); background: color-mix(in srgb, var(--green) 12%, transparent); border: 1px solid color-mix(in srgb, var(--green) 30%, transparent); border-radius: 999px; padding: 0.18rem 0.55rem; }
 @media (max-width: 480px) { .cm-lvl { font-size: 0.7rem; padding: 0.15rem 0.45rem; } .comm-members-h { font-size: 1.1rem; } }
@@ -3409,7 +3409,7 @@ body::after {
 .nav-menu a:hover::after, .nav-menu a.active::after, .nav-menu a:focus-visible::after { transform: scaleX(1); }
 
 /* the always-on FAB gets a slow neon breath so it reads as live, not stuck */
-.compose-fab, #compose-fab { animation: sw-breathe 3.2s var(--ease-xp) infinite; }
+#compose-fab { animation: sw-breathe 3.2s var(--ease-xp) infinite; }
 @keyframes sw-breathe {
   0%, 100% { transform: translateZ(0) scale(1); }
   50%      { transform: translateZ(0) scale(1.045); }
@@ -3423,7 +3423,7 @@ body::after {
 }
 
 /* the level badge pulses once when it changes; .bump is already toggled in JS */
-.nav-xp-badge.bump { animation: sw-bump var(--dur-4) var(--ease-pop); }
+.nav-xp.bump { animation: sw-bump var(--dur-4) var(--ease-pop); }
 @keyframes sw-bump {
   0%   { transform: scale(1); }
   35%  { transform: scale(1.18); }
@@ -3436,7 +3436,7 @@ body::after {
   .btn:hover, .btn-primary:hover, .btn-ghost:hover,
   .comm-card:hover, .np-row:hover { transform: none; }
   .nav-menu a::after { transition: none; }
-  .compose-fab, #compose-fab, .toast, .nav-xp-badge.bump { animation: none; }
+  #compose-fab, .toast, .nav-xp.bump { animation: none; }
   .card, .post, .comm-card, .np-row, .lb-row, .btn, .btn-primary, .btn-ghost { transition: none; }
 }
 
@@ -4043,7 +4043,7 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   display: grid; place-items: center; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease;
   touch-action: none; -webkit-user-select: none; user-select: none;
 }
-.oc-grab-x { left: 8px; right: 70px; bottom: 0; height: 46px; cursor: ew-resize; place-items: end; padding: 0 4px 3px 0; }
+.oc-grab-x { left: 8px; right: 70px; bottom: 0; height: 46px; cursor: ew-resize; place-items: end; padding: 0 4px 3px 0; touch-action: pan-y; }   /* a vertical swipe over the time axis scrolls the page, never zooms */
 .oc-grab-y { top: 12px; bottom: 46px; right: 0; width: 58px; cursor: ns-resize; place-items: start end; padding: 2px 3px 0 0; }
 /* The glyph sits in the same margin as the axis labels, so it carries its own ground rather than
    printing itself through whatever number happens to be behind it. */
@@ -4522,3 +4522,10 @@ html.motion-off #matrix-rain { display: none; }
 .motion-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; border-radius: 999px; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink); font: inherit; font-size: 1rem; cursor: pointer; margin-right: 0.35rem; }
 .motion-btn:hover, .motion-btn:focus-visible { color: var(--ctl-ink); background: var(--ctl-fill-hi); border-color: var(--green); }
 .motion-btn[aria-pressed="true"] { color: var(--on-green); background: var(--green); border-color: var(--green); }
+
+/* the zoom strips are hover-revealed, which on a touch screen means invisible: show them where there is no hover */
+@media (hover: none) { .oc-grab { opacity: 0.85; } }
+@media (max-width: 400px) { .feed-sort #sort-caption { flex: 1 1 100%; text-align: center; } }
+/* the hero logo as a control: a button reset that keeps the image's own bob/glow and the global focus ring */
+.hero-logo-btn { display: inline-block; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; line-height: 0; border-radius: 24px; }
+.hero-logo-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 6px; }
