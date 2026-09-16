@@ -81,6 +81,11 @@ This is verified on-chain (the contract source is verified on the explorer, Soli
 
 ---
 
+- **A dashboard in tabs, a motion switch, and the rain.** Your Send Station is five panels — Overview ·
+  Wallet · Invites · Tracker · Settings — instead of one long scroll, and every deep link that existed
+  still lands where it did. The ⏸ in the nav pauses every decorative animation (the ticker, the hero
+  field, the world grid, the falling glyphs) and remembers the choice on your device; it works signed out.
+
 ## 3. The Rules of the Game 🎮
 
 Everything below is exactly how the platform works — the same numbers the server uses. Nothing here is financial advice; it's a game built on public on‑chain data. **Most new tokens go to zero. Always DYOR.**
@@ -926,6 +931,37 @@ All three call one function (`signupRefusal`), and nothing else on the site call
 **The brand proxy.** The $GWC and $SEND artwork is served from `/api/brand/<token>/<header|logo>` rather than straight from Dexscreener's CDN, for three measured reasons: the CDN sends **no `Access-Control-Allow-Origin` header at all**, so a canvas that draws it is tainted and `toBlob()` throws — the download would break outright, not degrade; the assets are multi‑megabyte **animated GIFs** (the $GWC header is 4.6 MB) and every visitor pulling those from a third party is slow and tells that third party who looked at what; and one fetch can serve everyone. The proxy only ever fetches a URL our own token cache already vouched for, checks the bytes really are a raster image before serving them (never SVG, which is a script container wearing an image's extension), and caps what it will hold.
 
 ---
+
+### 3.17 The hunt — a hundred easter eggs 🥚
+
+A hundred eggs are hidden across the site. Finding one pays Send Power; finding all hundred is the only
+thing on the site that has seen more of it than the people who built it.
+
+**What an egg is.** A small, deliberate interaction that nothing advertises — a decoration that turns out
+to respond, a word typed where no field is focused, a place reached by patience. `public/eggs.js` is the
+engine (detectors, the claim call, the celebration); where each egg lives is registered per page. It is
+not documented here on purpose.
+
+**What the server owns.** Everything that involves a number. `POST /api/eggs/claim {id}` refuses anything
+outside `1..EGG_TOTAL` (100), is a no-op on a repeat, sits behind the participation check (§3.15b) and
+Read-Only Mode (§3.6) like every other write, and pays through `awardPoints` with a per-(user, egg) `ref`
+so the points layer is idempotent too. `GET /api/eggs` and `gamifySummary().eggs` carry the count; the
+constants ship in `rules` so the client reads them rather than copying them.
+
+| | |
+|---|---|
+| `PTS.egg` | **20** base — between a follow (18) and a comment (24). A hundred is 2,000 base: Level 13 on the curve, earned once, ever. |
+| `DAILY_CAP.egg` | **25** a day. That puts the kind inside the shared rolling-24h social budget (§3.1), so a script that reads the source and fires all hundred still takes four days and still cannot out-earn the day. |
+| `easter_eggs` | `(user_id, egg_id, found_at)`, primary key on the pair. |
+
+**Rules the eggs follow, because an egg that gets in the way is a bug.** None sits on a control's primary
+job (the click still does what the control does). None needs money, a wallet or a purchase. Wherever the
+trigger is an element, Enter/Space count as well as a click. Reduced-motion readers get the toast without
+the confetti. A find made while signed out is kept in the browser and banked on the next signed-in load,
+so nobody loses one.
+
+**Where you see it.** The power core on your dashboard shows `🥚 N/100`; the Quest Board lists the hunt;
+the Loot Log names each find.
 
 ## 4. How to participate — in 4 steps
 
