@@ -98,11 +98,14 @@
 /* ---------- snapshots ---------- */
 .snap-tabs { display: flex; gap: 0.4rem; overflow-x: auto; padding-bottom: 0.5rem; margin-bottom: 0.8rem; }
 .snap-tab {
-  flex: 0 0 auto; background: var(--glass-well); color: var(--text-dim);
-  border: 1.5px solid var(--edge-ctl); border-radius: var(--r-pill);
+  flex: 0 0 auto; background: var(--ctl-fill-lo); color: var(--ctl-ink);
+  border: 1.5px solid var(--ctl-fill-lo); border-radius: var(--r-pill);
   padding: 0.4rem 0.85rem; font-size: 0.82rem; cursor: pointer; white-space: nowrap;
 }
-.snap-tab.is-on { color: var(--green-bright); border-color: var(--green); background: var(--g-tint); }
+.snap-tab:hover { background: var(--ctl-fill-hi); }
+.snap-tab.is-on { color: var(--on-green); border-color: var(--green); background: linear-gradient(180deg, var(--green-bright), var(--green)); }
+/* a green ring on a green tab is 1:1 — same dark-ring / bright-halo pattern as .prop-cast */
+.snap-tab.is-on:focus-visible { outline: 3px solid var(--ink-1); outline-offset: 2px; box-shadow: 0 0 0 6px var(--green-bright); }
 .snap-meta { display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.7rem; }
 .snap-warn { background: var(--o-tint); border-left: 3px solid var(--gold); border-radius: 0 var(--r-1) var(--r-1) 0;
              padding: 0.7rem 0.9rem; margin: 0 0 0.8rem; font-size: 0.88rem; color: var(--text); }

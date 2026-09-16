@@ -7,8 +7,8 @@
 .rz-steps li + li::before { content: '→' / ''; color: var(--text-dim); font-weight: 800; margin-right: 0.3rem; }
 .rz-step-num {
   width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; flex: 0 0 30px;
-  font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1rem; color: #12200a;
-  background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); box-shadow: 0 3px 0 #33520a;
+  font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1rem; color: var(--on-green);
+  background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); box-shadow: 0 3px 0 var(--green-dark);
 }
 
 .rz-card { padding: 1.2rem; }
@@ -67,13 +67,13 @@
 .rz-slider-row input[type=range] { flex: 1 1 auto; min-width: 0; }
 .rz-tools input[type=range]:disabled { opacity: 0.45; cursor: not-allowed; }
 .rz-step-btn {
-  width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; border: 2px solid var(--ink-4); background: var(--ink-3);
-  color: var(--text); font-family: 'Rubik', sans-serif; font-weight: 800; font-size: 1.3rem; line-height: 1; cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease;
+  width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; border: 2px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo);
+  color: var(--ctl-ink); font-family: 'Rubik', sans-serif; font-weight: 800; font-size: 1.3rem; line-height: 1; cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
-.rz-step-btn:hover:not(:disabled) { border-color: var(--green); color: var(--green-bright); }
-.rz-step-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.rz-tools .btn:disabled, .rz-tools .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; transform: none !important; }
+.rz-step-btn:hover:not(:disabled) { border-color: var(--green); background: var(--ctl-fill-hi); color: var(--ctl-ink); }
+.rz-step-btn:disabled { background: var(--ctl-fill-dis); border-color: var(--ctl-fill-dis); color: var(--ctl-ink); opacity: 1; cursor: not-allowed; }
+.rz-tools .btn:disabled, .rz-tools .btn[aria-disabled="true"] { background: var(--ctl-fill-dis); color: var(--ctl-ink); border-color: transparent; box-shadow: none; text-shadow: none; opacity: 1; cursor: not-allowed; transform: none !important; }
 .rz-kbd { margin: 0; font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; }
 .rz-kbd kbd { font-family: inherit; font-weight: 800; color: var(--text); }
 

@@ -230,11 +230,10 @@ feedEl.addEventListener('click', async (e) => {
     } else {
       dBtn.dataset.armed = '1';
       const oldLbl = dBtn.getAttribute('aria-label');
-      dBtn.textContent = 'Sure? 🗑';
-      dBtn.style.color = 'var(--red)';
+      dBtn.textContent = 'Sure? 🗑';   // the armed look is styles.css `.react-btn.post-del[data-armed]` — no inline colour, so the type stays dark on the red fill
       dBtn.setAttribute('aria-label', 'Confirm delete — tap again within 4 seconds'); // the arm state must be perceivable without sight
       if (window.announce) announce('Tap delete again to confirm. Expires in 4 seconds.');
-      setTimeout(() => { delete dBtn.dataset.armed; dBtn.textContent = '🗑'; dBtn.style.color = ''; if (oldLbl) dBtn.setAttribute('aria-label', oldLbl); else dBtn.removeAttribute('aria-label'); }, 4000);
+      setTimeout(() => { delete dBtn.dataset.armed; dBtn.textContent = '🗑'; if (oldLbl) dBtn.setAttribute('aria-label', oldLbl); else dBtn.removeAttribute('aria-label'); }, 4000);
     }
     return;
   }

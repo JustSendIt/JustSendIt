@@ -28,24 +28,28 @@
 
 /* ---- wallet list ---- */
 .trk-wstatus { margin: 0.2rem 0 0.5rem; }
+/* the "Retry" button trackerpage.js renders bare — a light pill with black type, like every other control */
+.trk-wstatus button { background: var(--ctl-fill); color: var(--ctl-ink); border: 0; border-radius: var(--r-pill); font: inherit; font-weight: 700; cursor: pointer; padding: 0.3rem 0.7rem; }
+.trk-wstatus button:hover { background: var(--green); color: var(--on-green); }
 .trk-wlist { list-style: none; margin: 0 0 0.9rem; padding: 0; display: grid; gap: 0.45rem; min-width: 0; }
 .trk-empty { padding: 1rem 0.8rem; font-size: 0.9rem; }
 .trk-w { display: flex; align-items: stretch; gap: 0.35rem; min-width: 0; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 14px; padding: 0.3rem; transition: border-color 0.15s ease, background 0.15s ease; }
 .trk-w:hover { border-color: var(--g-lit); }
 .trk-w.is-selected { border-color: var(--green); background: var(--g-wash); box-shadow: inset 4px 0 0 0 var(--green); }
-.trk-w-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.55rem; text-align: left; background: none; border: none; color: var(--text); font: inherit; cursor: pointer; padding: 0.35rem 0.5rem; border-radius: 10px; min-height: 44px; }
-.trk-w-main:hover .trk-w-label { color: var(--green-bright); }
+.trk-w-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.55rem; text-align: left; background: var(--ctl-fill-lo); border: none; color: var(--ctl-ink); font: inherit; cursor: pointer; padding: 0.35rem 0.5rem; border-radius: 10px; min-height: 44px; }
+.trk-w-main:hover { background: var(--ctl-fill-hi); }
+.trk-w.is-selected .trk-w-main { background: var(--green); color: var(--on-green); }
 .trk-w-main:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 1px; }
 .trk-w-ico { flex: 0 0 auto; font-size: 1.15rem; }
 .trk-w-txt { display: flex; flex-direction: column; min-width: 0; gap: 0.1rem; }
 .trk-w-label { font-weight: 800; font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.trk-w-addr { font-size: 0.78rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.trk-w-addr { font-size: 0.78rem; color: inherit; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .trk-w-addr code { font-family: ui-monospace, Menlo, monospace; }
-.trk-w-badge { display: inline-block; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--diamond); background: rgba(159,224,255,0.1); border: 1px solid rgba(159,224,255,0.4); border-radius: 999px; padding: 0.05rem 0.45rem; }
+.trk-w-badge { display: inline-block; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--on-diamond); background: var(--diamond); border: 1px solid var(--diamond); border-radius: 999px; padding: 0.05rem 0.45rem; }
 .trk-w-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 0.25rem; }
 .trk-w-btn { min-width: 36px; min-height: 36px; padding: 0.3rem 0.45rem; font-size: 0.85rem; }
-.trk-w-rm.is-armed { background: var(--red); color: #1a0505; font-size: 0.78rem; }
-.trk-w-rm:hover { background: var(--red); color: #1a0505; }
+.trk-w-rm.is-armed { background: var(--red); color: var(--on-red); font-size: 0.78rem; }
+.trk-w-rm:hover { background: var(--red); color: var(--on-red); }
 .trk-w-btn:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 .trk-rename { flex: 1 1 100%; display: grid; gap: 0.4rem; padding: 0.3rem; min-width: 0; }
 .trk-rename .addr-input { margin: 0; font-family: 'Rubik', system-ui, sans-serif; color: var(--text); padding: 0.6rem 0.8rem; }
@@ -58,14 +62,14 @@
 .trk-chips-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .trk-chip { min-height: 40px; max-width: 100%; white-space: normal; text-align: left; line-height: 1.3; }
 .trk-chip code { font-family: ui-monospace, Menlo, monospace; font-size: 0.8em; }
-.trk-chip:disabled { opacity: 0.55; cursor: default; }
+.trk-chip:disabled { background: var(--ctl-fill-dis); border-color: var(--ctl-fill-dis); color: var(--ctl-ink); opacity: 1; cursor: default; }
 
 /* ---- add form ---- */
 .trk-add { border-top: 1px solid var(--ink-4); padding-top: 0.8rem; display: grid; gap: 0.1rem; }
 .trk-add .addr-input { margin: 0 0 0.2rem; }
 .trk-add .f-label { margin: 0.5rem 0 0.3rem; }
 .trk-add-btn { margin-top: 0.6rem; justify-self: start; }
-.trk-add-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none !important; }
+.trk-add-btn:disabled { cursor: not-allowed; transform: none !important; }   /* fill + ink come from .btn:disabled — no opacity wash over black type */
 .trk-err { color: #ffb0b0; font-size: 0.85rem; font-weight: 700; margin: 0.15rem 0 0.25rem; line-height: 1.45; }
 .trk-err::before { content: '⚠️ '; }
 .addr-input[aria-invalid="true"] { border-color: var(--red); }
@@ -92,11 +96,12 @@
 
 /* ---- "What am I looking at?" ---- */
 .trk-explain { background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; margin: 0 0 0.9rem; }
-.trk-explain > summary { list-style: none; cursor: pointer; padding: 0.65rem 0.9rem; font-weight: 800; font-size: 0.9rem; color: var(--gold); display: flex; align-items: center; gap: 0.5rem; min-height: 44px; border-radius: 12px; }
+.trk-explain > summary { list-style: none; cursor: pointer; padding: 0.65rem 0.9rem; font-weight: 800; font-size: 0.9rem; color: var(--on-gold); background: var(--gold); display: flex; align-items: center; gap: 0.5rem; min-height: 44px; border-radius: 12px; }
 .trk-explain > summary::-webkit-details-marker { display: none; }
-.trk-explain > summary::after { content: '▾'; margin-left: auto; color: var(--text-dim); transition: transform 0.2s; }
+.trk-explain > summary::after { content: '▾'; margin-left: auto; color: currentColor; transition: transform 0.2s; }
+.trk-explain[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .trk-explain[open] > summary::after { transform: rotate(180deg); }
-.trk-explain > summary:hover { background: rgba(255,179,64,0.06); }
+.trk-explain > summary:hover { background: var(--gold-deep); color: var(--ctl-ink); }
 .trk-explain > summary:focus-visible { outline: 3px solid var(--green-bright); outline-offset: -3px; }
 .trk-explain-body { padding: 0 0.9rem 0.8rem; border-top: 1px solid var(--ink-4); }
 .trk-defs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.15rem 0.8rem; margin: 0.7rem 0 0.2rem; font-size: 0.88rem; line-height: 1.5; }
@@ -108,8 +113,8 @@
  * Scoped to .trk-report: watchlist.html also loads this sheet (for the hand-off card) and has its own .hstat .lbl
  * labels that must keep rendering exactly like newpairs.html. */
 .trk-report .hstat .lbl, .trk-report .trk-h { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; }
-.trk-report .trk-info { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -6px 0; padding: 0; border-radius: 50%; border: 1.5px solid var(--ink-4); background: var(--ink-2); color: var(--text-dim); font: inherit; font-size: 0.95rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; flex: 0 0 auto; }
-.trk-report .trk-info:hover, .trk-report .trk-info[aria-expanded="true"] { border-color: var(--green); color: var(--green-bright); }
+.trk-report .trk-info { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: -6px 0; padding: 0; border-radius: 50%; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink); font: inherit; font-size: 0.95rem; line-height: 1; cursor: pointer; text-transform: none; letter-spacing: 0; flex: 0 0 auto; }
+.trk-report .trk-info:hover, .trk-report .trk-info[aria-expanded="true"] { border-color: var(--green); background: var(--green); color: var(--on-green); }
 .trk-report .trk-info:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 .trk-report .trk-info-panel { margin: 0.4rem 0 0; font-size: 0.8rem; font-weight: 400; line-height: 1.5; color: var(--text-dim); text-transform: none; letter-spacing: 0; border-top: 1px dashed var(--ink-4); padding-top: 0.35rem; }
 /* the heading's panel sits AFTER the <h4> (a <p> can't live inside a heading) — pull it up under the heading */
@@ -174,11 +179,11 @@
 .cmb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.6rem;
   background: var(--ink); border: 1px solid var(--ink-4); border-radius: 10px; padding: 0.45rem 0.6rem; }
 .cmb-row.is-pending { opacity: 0.65; }
-.cmb-pick { background: none; border: 0; padding: 0; text-align: left; cursor: pointer; color: inherit;
+.cmb-pick { background: var(--ctl-fill-lo); border: 0; padding: 0.35rem 0.85rem; border-radius: var(--r-pill); text-align: left; cursor: pointer; color: var(--ctl-ink);
   display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; min-width: 0; font: inherit; }
-.cmb-pick:hover .cmb-addr, .cmb-pick:focus-visible .cmb-addr { color: var(--green-bright); }
-.cmb-addr { font-size: 0.82rem; color: var(--text); }
-.cmb-name { font-size: 0.78rem; color: var(--text-dim); overflow-wrap: anywhere; }
+.cmb-pick:hover, .cmb-pick:focus-visible { background: var(--ctl-fill-hi); }
+.cmb-addr { font-size: 0.82rem; color: inherit; }
+.cmb-name { font-size: 0.78rem; color: inherit; overflow-wrap: anywhere; }
 .cmb-cell { font-size: 0.85rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cmb-wait { color: var(--text-mute); font-weight: 600; font-size: 0.8rem; }
 .trk-comb-note { margin: 0.6rem 0 0; }

@@ -5,11 +5,11 @@
   display: inline-flex; align-items: center; vertical-align: baseline; position: relative;
   margin: 0 0.05em; padding: 0.02em 0.5em; min-height: 1.5em; line-height: 1.35;
   font: inherit; font-weight: 800; font-size: 0.92em; letter-spacing: 0.01em;
-  color: var(--green-bright); background: var(--g-tint);
-  border: 1.5px solid color-mix(in srgb, var(--green) 50%, transparent); border-radius: 999px; cursor: pointer;
+  color: var(--on-green); background: var(--green);
+  border: 1.5px solid var(--green); border-radius: 999px; cursor: pointer;
   white-space: nowrap; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
 }
-.tok-chip:hover { background: color-mix(in srgb, var(--green) 24%, transparent); border-color: var(--green); transform: translateY(-1px); }
+.tok-chip:hover { background: var(--green-bright); border-color: var(--green-bright); transform: translateY(-1px); }
 .tok-chip:active { transform: scale(0.96); }
 .tok-chip:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 
@@ -21,9 +21,9 @@
 .tok-copy {
   display: inline-flex; align-items: center; justify-content: center; vertical-align: baseline; position: relative;
   min-width: 1.7em; min-height: 1.5em; margin-left: 0.15em; padding: 0 0.3em; line-height: 1;
-  font: inherit; font-size: 0.85em; color: var(--text); background: var(--ink-4); border: none; border-radius: 7px; cursor: pointer;
+  font: inherit; font-size: 0.85em; color: var(--ctl-ink); background: var(--ctl-fill-lo); border: none; border-radius: 7px; cursor: pointer;
 }
-.tok-copy:hover { background: var(--green); color: #12200a; }
+.tok-copy:hover { background: var(--green); color: var(--on-green); }
 .tok-copy:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 
 /* --- 🏘️ community tag (sits on a card's meta / sub line) --- */
@@ -35,12 +35,12 @@
   padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid; text-decoration: none; white-space: nowrap;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
-.tok-comm.has { color: var(--green-bright); border-color: color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 12%, transparent); }
-.tok-comm.has:hover { background: color-mix(in srgb, var(--green) 24%, transparent); border-color: var(--green); }
-.tok-comm.has.forming { color: var(--gold); border-color: rgba(255,179,64,0.5); background: rgba(255,179,64,0.12); }
-.tok-comm.has.forming:hover { background: rgba(255,179,64,0.22); border-color: var(--gold); }
-.tok-comm.none { color: var(--text-dim); border-color: var(--ink-4); background: var(--ink-3); }
-.tok-comm.none:hover { color: var(--green-bright); border-color: var(--green); }
+.tok-comm.has { color: var(--on-green); border-color: var(--green); background: var(--green); }
+.tok-comm.has:hover { background: var(--green-bright); border-color: var(--green-bright); }
+.tok-comm.has.forming { color: var(--on-gold); border-color: var(--gold); background: var(--gold); }
+.tok-comm.has.forming:hover { background: var(--gold-deep); border-color: var(--gold-deep); color: var(--ctl-ink); }
+.tok-comm.none { color: var(--ctl-ink); border-color: var(--ctl-fill-lo); background: var(--ctl-fill-lo); }
+.tok-comm.none:hover { color: var(--on-green); border-color: var(--green); background: var(--green); }
 .tok-comm:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 /* phones: grow the REAL box of the card tags (they have room around them) instead of an invisible 44px pseudo-element
    that would overhang into the neighbouring pin chip / line of text and steal its taps. Inline $TICKER chips and the
@@ -59,7 +59,7 @@
    cell 3 with the ticker at ≥560px). The name row is nowrap + overflow hidden, so keep the focus ring inside it. */
 .np-runner-name .tok-comm-slot { margin-left: 0.4rem; }
 .np-runner-name .tok-comm { font-size: 0.66rem; padding: 0.06rem 0.45rem; }
-.np-runner-name .tok-comm:focus-visible { outline-offset: -2px; }
+.np-runner-name .tok-comm:focus-visible { outline-offset: -2px; outline-color: var(--ctl-ink); } /* an inset ring sits ON the fill, so it has to be the ink, not the accent */
 .np-slide-sub .tok-comm-slot { margin-left: 0.25rem; }
 .pin-chip .tok-comm-slot { margin-left: 0.15rem; }
 .pin-chip .tok-comm { font-size: 0.66rem; padding: 0.06rem 0.42rem; }

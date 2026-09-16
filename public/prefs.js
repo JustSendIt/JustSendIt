@@ -93,24 +93,33 @@
     }
     const surfaces = [out['--ink'] || '#0b0818', out['--ink-2'] || '#14102a', out['--ink-3'] || '#1d1740', out['--ink-4'] || '#2e2560'];
 
+    // Every button on the site carries DARK type — --on-green / --on-gold are --ink-1 in styles.css, and
+    // --on-diamond is its own dark ink — over the whole gradient, so the ink is never re-solved to a
+    // light value here. What moves is the FILL: a dark user pick is lifted until the dark ink clears
+    // 4.5:1 on the gradient's bottom stop (--green-dark / --gold-deep / --diamond-deep), which is the
+    // darkest point a label ever sits on.
+    const INK = '#020301', INK_D = '#04121c';
+    const lift = (h) => rgb2hex(hex2rgb(h).map(v => v + (255 - v) * 0.05));
     if (acc) {
       // The accent may be lightened so buttons and focus outlines stay visible on the chosen
       // ground. When that happens the UI shows the value actually applied — see profile.js.
       let a = acc, bright = shade(a, 1.25);
-      for (let i = 0; i < 40 && ratio(bright, surfaces[0]) < 4.5; i++) { a = rgb2hex(hex2rgb(a).map(v => v + (255 - v) * 0.05)); bright = shade(a, 1.25); }
+      for (let i = 0; i < 40 && (ratio(bright, surfaces[0]) < 4.5 || ratio(INK, shade(a, 0.6)) < 4.5); i++) { a = lift(a); bright = shade(a, 1.25); }
       out['--green'] = a; out['--green-bright'] = bright; out['--green-dark'] = shade(a, 0.6);
-      out['--on-green'] = lum(a) > 0.35 ? '#0a1204' : '#f3ffe0';   // ink that reads on the fill itself
+      out['--on-green'] = INK;   // dark ink on the fill itself — never a light label on a button
     }
-    // --on-* is the ink printed ON the fill, so it has to be re-solved with the fill. Leaving the
-    // default dark ink in place put #2b1600 on whatever gold the user picked; a deep gold fill
-    // then had near-black text on near-black. Same rule as --on-green above.
+    // --on-* is the ink printed ON the fill. It stays dark; the fill is lifted to carry it.
     if (isHex(colors.highlight)) {
-      out['--gold'] = fixFg(colors.highlight, surfaces, 4.5); out['--gold-deep'] = shade(out['--gold'], 0.7);
-      out['--on-gold'] = lum(out['--gold']) > 0.35 ? '#2b1600' : '#fff4e0';
+      let g = fixFg(colors.highlight, surfaces, 4.5);
+      for (let i = 0; i < 40 && ratio(INK, shade(g, 0.7)) < 4.5; i++) g = lift(g);
+      out['--gold'] = g; out['--gold-deep'] = shade(g, 0.7);
+      out['--on-gold'] = INK;
     }
     if (isHex(colors.rare)) {
-      out['--diamond'] = fixFg(colors.rare, surfaces, 4.5); out['--diamond-deep'] = shade(out['--diamond'], 0.55);
-      out['--on-diamond'] = lum(out['--diamond']) > 0.35 ? '#04121c' : '#e8f8ff';
+      let d = fixFg(colors.rare, surfaces, 4.5);
+      for (let i = 0; i < 40 && ratio(INK_D, shade(d, 0.55)) < 4.5; i++) d = lift(d);
+      out['--diamond'] = d; out['--diamond-deep'] = shade(d, 0.55);
+      out['--on-diamond'] = INK_D;
     }
     if (isHex(colors.text)) {
       // 7:1 (AAA) is the aim, but at the darkest permitted background even pure white only reaches

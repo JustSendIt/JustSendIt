@@ -12,11 +12,11 @@
 .cmp-jump:empty { display: none; }
 .cmp-chip {
   display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0.35rem 0.9rem;
-  border-radius: var(--r-pill); border: 1.5px solid var(--edge-ctl); background: var(--glass-well);
-  color: var(--text); font-weight: 800; font-size: 0.86rem; text-decoration: none; line-height: 1.2;
-  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  border-radius: var(--r-pill); border: 1.5px solid var(--ctl-fill); background: var(--ctl-fill);
+  color: var(--ctl-ink); font-weight: 800; font-size: 0.86rem; text-decoration: none; line-height: 1.2;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-.cmp-chip:hover { border-color: var(--green); transform: translateY(-2px); box-shadow: 0 6px 18px var(--glow-g); }
+.cmp-chip:hover { border-color: var(--green); background: var(--green-bright); color: var(--ctl-ink); transform: translateY(-2px); box-shadow: 0 6px 18px var(--glow-g); }
 .cmp-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 
 /* ---------- the grid ---------- */
@@ -134,11 +134,11 @@
 .cmp-card-head { position: relative; }   /* the tip's containing block: on a phone it spans the card instead of running off-screen */
 .cmp-info {
   width: 44px; height: 44px; border-radius: 50%; cursor: pointer;
-  border: 1.5px solid var(--edge-ctl); background: var(--ink); color: var(--text-dim);
+  border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink);
   font-weight: 800; font-size: 1.05rem; line-height: 1; display: inline-grid; place-items: center;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
-.cmp-info:hover, .cmp-info[aria-expanded="true"] { border-color: var(--green); color: var(--green-bright); }
+.cmp-info:hover, .cmp-info[aria-expanded="true"] { border-color: var(--green); background: var(--green); color: var(--on-green); }
 .cmp-info:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .cmp-tip {
   position: absolute; right: 0; top: calc(100% + 8px); z-index: 40; width: min(340px, 100%);

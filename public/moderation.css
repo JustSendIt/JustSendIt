@@ -19,13 +19,13 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
 .mute-flag {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   min-width: 28px; min-height: 28px; margin-left: 0.25rem; padding: 0 0.3rem;
-  border-radius: 999px; border: 1.5px solid rgba(255,93,93,0.45); background: rgba(255,93,93,0.12);
-  color: var(--red); font-size: 0.85rem; line-height: 1; cursor: pointer; vertical-align: middle;
+  border-radius: 999px; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo);
+  color: var(--ctl-ink); font-size: 0.85rem; line-height: 1; cursor: pointer; vertical-align: middle;
   transition: background 0.12s ease, transform 0.12s ease;
 }
-.mute-flag:hover { background: rgba(255,93,93,0.22); transform: translateY(-1px); }
+.mute-flag:hover { background: var(--red-soft); border-color: var(--red-soft); transform: translateY(-1px); }
 .mute-flag:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
-.mute-flag[aria-expanded="true"] { background: var(--red); color: #1a0505; }
+.mute-flag[aria-expanded="true"] { background: var(--red); border-color: var(--red); color: var(--on-red); }
 @media (max-width: 600px) { .mute-flag { min-width: 44px; min-height: 44px; margin: -8px 0 -8px 0.25rem; } }
 
 /* --- a hidden card/comment authored by a muted sender (belt-and-braces; the server already filters feeds) --- */
@@ -56,14 +56,14 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
 }
 .mod-item {
   display: flex; align-items: center; gap: 0.55rem; width: 100%; text-align: left; min-height: 44px;
-  padding: 0.6rem 0.7rem; border-radius: 10px; border: none; background: none; cursor: pointer;
-  color: var(--text); font-family: 'Rubik', sans-serif; font-weight: 700; font-size: 0.9rem;
+  padding: 0.6rem 0.7rem; border-radius: 10px; border: none; background: var(--ctl-fill-lo); cursor: pointer;
+  color: var(--ctl-ink); font-family: 'Rubik', sans-serif; font-weight: 700; font-size: 0.9rem;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.mod-item:hover, .mod-item:focus-visible { background: rgba(255,93,93,0.13); color: var(--red); outline: none; }
-.mod-item:focus-visible { box-shadow: inset 0 0 0 3px var(--green-bright); }
-.mod-item-unmute:hover, .mod-item-unmute:focus-visible { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green-bright); }
-.mod-item[disabled] { opacity: 0.6; cursor: wait; }
+.mod-item:hover, .mod-item:focus-visible { background: var(--red); color: var(--on-red); outline: none; }
+.mod-item:focus-visible { box-shadow: inset 0 0 0 3px var(--ctl-ink); }   /* an inset ring on a red/green fill has to be the ink — --green-bright is ~1.4:1 there */
+.mod-item-unmute:hover, .mod-item-unmute:focus-visible { background: var(--green); color: var(--on-green); }
+.mod-item[disabled] { background: var(--ctl-fill-dis); color: var(--ctl-ink); opacity: 1; cursor: wait; }
 .mod-ico { flex: 0 0 auto; width: 1.2em; text-align: center; }
 .mod-hint { margin: 0.2rem 0.3rem 0.3rem; color: var(--text-dim); font-size: 0.8rem; line-height: 1.45; }
 
