@@ -1309,7 +1309,9 @@
   let _objSaid = null, _objNews = '';
   function objectiveNews() {
     const o = dash.querySelector('.gobj');
-    const t = o ? o.textContent.replace(/\s+/g, ' ').trim() : '';
+    // the sentence, not the buttons in it: a clone with the controls removed is what gets announced
+    const c = o ? o.cloneNode(true) : null; if (c) c.querySelectorAll('a, button').forEach((x) => x.remove());
+    const t = c ? c.textContent.replace(/\s+/g, ' ').trim() : '';
     const changed = _objSaid !== null && t !== _objSaid; // first paint is not news
     _objSaid = t;
     return changed ? t : '';

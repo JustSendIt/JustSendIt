@@ -99,8 +99,8 @@
 /* struck through on the CHARACTERS only — a line through the "used · @who" label made it unreadable */
 .inv-code.is-used .inv-chars { text-decoration: line-through; }
 .inv-tag {
-  flex: 0 1 auto; min-width: 0; max-width: 55%;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 0 1 auto; min-width: 0;
+  white-space: normal; overflow-wrap: anywhere;   /* the whole 'used · @handle' is the accessible name now — nothing else to fall back on */
   font-family: 'Rubik', system-ui, sans-serif; font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.09em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 999px;
   background: color-mix(in srgb, var(--g-ink, #070312) 35%, transparent); color: inherit; text-decoration: none;

@@ -779,7 +779,7 @@
     // Esc closes it, at every step. Somebody who does not have a code must never feel trapped.
     // Not while the wallet picker or a confirm-your-factor dialog is up over it, though: that Esc is theirs.
     document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' || !root || !root.hasAttribute('data-open')) return;
+      if (e.key !== 'Escape' || e.defaultPrevented || !root || !root.hasAttribute('data-open')) return;   // a dialog above us may have taken it
       if (document.querySelector('.wc-overlay:not([hidden]), #auth-modal:not([hidden])')) return;
       close();
     });

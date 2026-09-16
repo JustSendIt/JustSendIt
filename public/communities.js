@@ -1,3 +1,4 @@
+let loadedOnce = false;   // the 'Loading…' announcement is for the first paint, not the polite refresh
 /* ===== Communities grid page — square-box card per community, most-active first ===== */
 (function () {
   'use strict';
@@ -73,7 +74,8 @@
   }
 
   async function load() {
-    if (!grid.children.length) setStatus('Loading communities…'); // first paint only — a refresh of a full grid says nothing
+    if (!loadedOnce) setStatus('Loading communities…'); // the first paint only — a refresh, even of an empty list, says nothing
+    loadedOnce = true;
     grid.setAttribute('aria-busy', 'true');
     try {
       const j = await window.api('/api/communities?status=' + state.status + '&sort=' + state.sort);

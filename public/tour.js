@@ -16,6 +16,7 @@
       const m = document.getElementById(id);
       if (m && !m.hasAttribute('hidden')) return true;
     }
+    if (document.querySelector('#invite-overlay[data-open]')) return true;   // the ticket is a modal too
     return false;
   };
 

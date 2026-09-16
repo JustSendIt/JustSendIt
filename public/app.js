@@ -167,9 +167,12 @@
   }, { threshold: 0.12 });
   document.documentElement.classList.add('js');   // .reveal parks at opacity 0 only under html.js — see styles.css
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+  /* the net: if the observer never fires (a throttled or backgrounded document), nothing stays parked.
+     Everything off-screen is off-screen anyway, so revealing it early costs nothing visible. */
+  setTimeout(() => document.querySelectorAll('.reveal:not(.shown)').forEach(el => { el.classList.add('shown'); io.unobserve(el); }), 2500);
 
   // --- logo easter egg: click logo → mega send ---
-  document.querySelectorAll('.hero-logo, .nav-logo img').forEach(el => {
+  document.querySelectorAll('.hero-logo-btn, .nav-logo img').forEach(el => {
     el.addEventListener('click', (e) => {
       burst(e.clientX, e.clientY, { count: 60, emojiRatio: 0.4 });
       sendToast('JUST SEND IT! 🚀🚀🚀');

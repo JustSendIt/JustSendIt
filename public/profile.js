@@ -27,8 +27,10 @@ function roveRadios(zone) {
       if (!fwd && !back && k !== 'Home' && k !== 'End') return;
       e.preventDefault();
       const j = k === 'Home' ? 0 : k === 'End' ? radios.length - 1 : (i + (fwd ? 1 : radios.length - 1)) % radios.length;
-      radios[j].click();
-      const n = zone.querySelectorAll('[role="radio"]')[j]; if (n) n.focus();
+      /* move focus, not the selection: each of these radios saves to the account when it is picked, so an
+         arrow that clicked would post a change per keystroke. Enter, Space or a click picks the focused one. */
+      radios.forEach((x, k) => { x.tabIndex = k === j ? 0 : -1; });
+      radios[j].focus();
     });
   });
 }

@@ -113,14 +113,14 @@
     place(el);
     b.classList.toggle('is-instant', reduced());
     // described-by, not labelled-by: the control keeps its own name and gains a description after it
-    try { el.setAttribute('aria-describedby', 'tip-bubble'); } catch (e) {}
+    try { if (el.hasAttribute('aria-describedby') && !el._tipPrev) el._tipPrev = el.getAttribute('aria-describedby'); el.setAttribute('aria-describedby', 'tip-bubble'); } catch (e) {}   // a static description is stashed, not destroyed
     requestAnimationFrame(function () { if (current === el) b.classList.add('is-on'); });
   }
 
   function hide() {
     clearTimeout(showTimer); clearTimeout(hideTimer); clearTimeout(touchTimer);
     overBubble = false;
-    if (current) { try { current.removeAttribute('aria-describedby'); } catch (e) {} }
+    if (current) { try { if (current._tipPrev) { current.setAttribute('aria-describedby', current._tipPrev); current._tipPrev = null; } else current.removeAttribute('aria-describedby'); } catch (e) {} }
     current = null;
     if (bubble) { bubble.classList.remove('is-on'); bubble.hidden = true; bubble.textContent = ''; }
   }

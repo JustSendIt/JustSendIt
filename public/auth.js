@@ -122,6 +122,7 @@
   }
   function closeModal() {
     modal.setAttribute('hidden', '');
+    for (const id of ['f-2fa-pw', 'f-totp']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
     document.body.style.overflow = prevOverflow;
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) lastFocus.focus();
@@ -207,7 +208,11 @@
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeModal(); });
     // not while the wallet picker is up over this: that Esc is the picker's to answer (wallet.js)
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hasAttribute('hidden') && !document.querySelector('.wc-overlay:not([hidden])')) closeModal(); });
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || modal.hasAttribute('hidden') || document.querySelector('.wc-overlay:not([hidden])')) return;
+      e.preventDefault(); e.stopImmediatePropagation();   // this dialog owns the Esc — the ticket beneath it must not close as well
+      closeModal();
+    });
 
     // tabs
     const tabs = { wallet: modal.querySelector('#tab-wallet'), email: modal.querySelector('#tab-email') };

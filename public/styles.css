@@ -720,7 +720,7 @@ video.media-preview-el { width: auto; }
    already spoken for by #music-player and #compose-fab, and a toast landing there had to either cover
    them or dodge them; at the top it answers where the reader's attention already is after pressing
    something in the page chrome. z-index stays 200, above the nav's 50, so a toast is never clipped. */
-#toast-zone { position: fixed; top: calc(var(--nav-h, 58px) + 0.75rem); left: 50%; transform: translateX(-50%); z-index: 200; display: grid; gap: 0.5rem; justify-items: center; pointer-events: none; max-width: calc(100vw - 2rem); padding: 0 1rem; }
+#toast-zone { position: fixed; top: calc(var(--nav-h, 58px) + 0.75rem); left: 50%; transform: translateX(-50%); z-index: 9200; display: grid; gap: 0.5rem; justify-items: center; pointer-events: none; max-width: calc(100vw - 2rem); padding: 0 1rem; }
 .toast {
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: var(--on-green);
   font-weight: 800; padding: 0.65rem 1.4rem; border-radius: 999px; font-size: 0.95rem;
@@ -1555,7 +1555,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
   }
 
 /* ===== Universal wallet connect picker ===== */
-.wc-overlay { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 1rem; background: rgba(4,6,10,0.82); backdrop-filter: blur(6px); }
+.wc-overlay { position: fixed; inset: 0; z-index: 9100; display: grid; place-items: center; padding: 1rem; background: rgba(4,6,10,0.82); backdrop-filter: blur(6px); }
 .wc-modal {
   position: relative; width: min(420px, 100%); max-height: 88vh; overflow-y: auto;
   background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 1.5px solid color-mix(in srgb, var(--green) 40%, transparent);
@@ -1769,7 +1769,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .pin-chip-xs.up { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-bright); }
 .pin-chip-xs.down { background: rgba(255,93,93,0.14); color: var(--red); }
 /* hover tooltip: the owner's on-chain holding + how long held */
-.pin-hover { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 30; min-width: 170px; max-width: 240px; display: none; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0.7rem; background: var(--ink); border: 1.5px solid var(--green); border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.55); font-size: 0.8rem; line-height: 1.4; text-align: left; white-space: normal; pointer-events: none; }
+.pin-hover { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 9300; min-width: 170px; max-width: 240px; display: none; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0.7rem; background: var(--ink); border: 1.5px solid var(--green); border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.55); font-size: 0.8rem; line-height: 1.4; text-align: left; white-space: normal; pointer-events: none; }
 .pin-hover::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--green); }
 .pin-chip:hover .pin-hover, .pin-chip:focus-within .pin-hover { display: flex; }
 .pin-hover-hold { color: var(--text); font-weight: 800; }
@@ -4528,3 +4528,14 @@ html.motion-off #matrix-rain { display: none; }
 /* the hero logo as a control: a button reset that keeps the image's own bob/glow and the global focus ring */
 .hero-logo-btn { display: inline-block; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; line-height: 0; border-radius: 24px; }
 .hero-logo-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 6px; }
+
+/* ---------- layering the ticket forced ----------
+   #invite-overlay sits at 9000. Three things must be able to appear OVER it: the wallet picker it opens
+   (was 500 — it opened invisibly for every mobile visitor), the confirm-mode sign-in pane the proof step
+   can raise (was 400), and the toasts (were 200). All stay under the rocket cursor's 9998. */
+#auth-modal.is-confirm { z-index: 9500; }
+.modal-note.is-err { color: var(--red); }
+.snap-tablewrap:focus-visible, .comm-members-list:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* the holdings tooltip on a Conviction Play chip: reachable on touch (a tap opens it) and by focus */
+.pin-hover { pointer-events: auto; }
+.foot-tour { margin: 1.1rem 0 0; }
