@@ -41,11 +41,7 @@
   let rt = 0; addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(size, 150); }, { passive: true });
 
   let last = 0, raf = 0;
-  function frame(t) {
-    raf = requestAnimationFrame(frame);
-    if (t - last < 83) return;           // ~12fps
-    last = t;
-    if (document.hidden || blocked()) { return; }
+  function draw() {
     // fade the previous frame instead of clearing: that is the trail
     ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.fillRect(0, 0, w, h);
     for (let i = 0; i < cols; i++) {
@@ -60,6 +56,17 @@
       drops[i] += 1;
     }
   }
+  function frame(t) {
+    raf = requestAnimationFrame(frame);
+    if (t - last < 83) return;           // ~12fps
+    last = t;
+    if (document.hidden || blocked()) return;
+    draw();
+  }
+  /* one seed frame at mount, whatever the tab's visibility: a page opened in a background tab (or an
+     embedded view that never reports itself visible) shows the sheet the instant it is looked at, instead
+     of a blank ground until the loop's first unthrottled tick. A single frame costs nothing. */
+  if (!blocked()) for (let k = 0; k < 6; k++) draw();
   raf = requestAnimationFrame(frame);
 
   // clear the trail when paused so a stale sheet is not left frozen behind the page
