@@ -63,7 +63,14 @@ COOKIE_SECURE=1
 TRUST_PROXY=1            # Caddy alone. Cloudflare in front of Caddy = 2 (see .env.example)
 SEED_INVITE_CODE=<pick one, or read the generated code from the first boot's log>
 ADMIN_USER_IDS=<your user id once you have signed up — unlocks /admin.html>
+RPC_URL=<a keyed chain endpoint — Alchemy serves chain 4663>
+BLOCKSCOUT_URL=<a keyed explorer — free key at dev.blockscout.com>
 ```
+**The last two are not optional at launch volume.** Measured against the public hosts: the chain RPC returns
+429 on `eth_call` after a handful of rapid reads (Robinhood's own docs call it "rate-limited and not
+recommended for production use"), and the explorer returns 403 with a Cloudflare bot challenge to a server
+request. On the defaults the charts fail intermittently and every holder count, concentration figure and
+contract-power flag on the radar reads as unknown.
 Node binds to `127.0.0.1` unless `HOST` says otherwise, so only Caddy on the same box can reach it.
 `BASE_URL` also drives every absolute SEO / share URL (canonical, og:*, twitter:*, JSON-LD, sitemap.xml, robots.txt) —
 they are rewritten at serve time, so nothing in `public/` needs editing on deploy.

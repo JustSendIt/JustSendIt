@@ -964,6 +964,39 @@ so nobody loses one.
 **Where you see it.** The power core on your dashboard shows `🥚 N/100`; the Quest Board lists the hunt;
 the Loot Log names each find.
 
+### 3.17b The tape — the transactions behind the line ⛓️
+
+Every chart on the site carries a **Recent transactions** panel under it: the last 25 swaps on that pair,
+newest first, with the time, the side, the token amount, what it was worth in the pool's quote, the address
+the pool paid, and the transaction hash. The hash links to the block explorer and the address links to its
+explorer page, so any row can be checked against the chain in one click.
+
+**It costs no extra chain reads.** Every row is decoded from the same `eth_getLogs` Swap set the candles are
+already built from. That is deliberate: the public chain RPC answers 429 after a handful of rapid reads, so a
+per-row `eth_getTransactionByHash` — the only way to learn which key *signed* each trade — would rate-limit
+the whole site the moment two people opened a chart.
+
+**Whose address is shown.** A Uniswap-V2 `Swap` log names the contract that called it and the address it paid.
+The tape shows the address that was **paid** — the trader's own wallet on many trades, a router or a bot
+contract on others — and counts how many of the rows on screen went to the calling contract, so the note under
+the table states that as a number rather than an impression. The transaction link shows who signed.
+
+**The colours, each with its word beside it** (colour is never the only signal):
+
+| Chip | Means |
+|---|---|
+| **new** (blue) | that address's first buy inside the window on screen |
+| **up** (green) / **down** (red) | ahead or behind across all of that address's trades in the window, valued at the window's last price |
+| **flat** (grey) | level across those trades |
+| **no entry here** / **bag from before** (grey) | the window does not contain a whole entry price, so no profit is claimed |
+
+**What it refuses to claim.** A wallet that sold more tokens than it bought inside the window was spending a bag
+acquired somewhere the window cannot see, at a price it cannot know — so its proceeds are not called profit and
+the chip stays grey. Without that rule the biggest dumper on a tape renders as the greenest row on the page,
+which is exactly the kind of invented number this project does not ship. The figures are before gas and before
+any transfer tax the token itself charges, the note says so, and it prints the time the rows were read because
+they do not follow the live price above them.
+
 ### 3.18 Reports, moderation and leaving 🧹
 
 **Report a post.** Every post that is not yours carries a ⚑ control. It writes a row to a `reports` table with an
@@ -1006,6 +1039,7 @@ badge another account — the [Privacy Policy](public/privacy.html) says exactly
 - **Optional environment variables** to enable extras (all off by default):
   - OAuth: `GOOGLE_CLIENT_ID/SECRET`, `FACEBOOK_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `INSTAGRAM_CLIENT_ID/SECRET` (each provider's callback is `…/api/auth/<provider>/callback`).
   - `MOONPAY_API_KEY` for the fiat on‑ramp widget. `BACKUP_DIR` to move the daily DB snapshots (default `data/backups`).
+  - `RPC_URL` and `BLOCKSCOUT_URL` — keyed chain and explorer endpoints. Both default to the public hosts, and both of those refuse a server at launch volume (the RPC 429s `eth_call` after a handful of rapid reads; the explorer answers 403 with a bot challenge), so on the defaults charts fail intermittently and every holder/contract-power readout is unknown.
   - `CF_ZONE_ID` + `CF_API_TOKEN` so a takedown or account deletion purges the removed upload from Cloudflare's edge (without them `/uploads` is cached a day at most). `TRUST_PROXY_FROM` to name which peers may speak for the client (default `loopback,private`).
 - **Backups:** the server writes one consistent snapshot per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite online backup API — safe while running; last 7 kept). **Restore:** stop the server, copy the snapshot over `data/app.db`, delete any `app.db-wal` / `app.db-shm` next to it, start. Copy `data/uploads/` separately (avatars, headers, post media).
 - **On deploy:** the placeholder SEO domain is swapped for `BASE_URL` automatically — just set it, and register your OAuth callback URLs.

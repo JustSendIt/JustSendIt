@@ -715,6 +715,106 @@
       }).join('') + '</tbody></table>';
   }
 
+  /* ===== THE TAPE: recent transactions under the chart ==============================================
+     Every row is one on-chain Swap the chart is already drawing — same logs, no extra chain reads. The
+     hash links to the explorer, so any row can be checked against the chain in one click.
+
+     THE THREE COLOURS, and why none of them is colour alone (WCAG 1.4.1): every wallet chip carries a
+     word as well as a colour — "up" / "down" / "new" / "no entry here" — and the same word is in its
+     title and its accessible name.
+       blue   this row is that wallet's FIRST buy inside the window on screen
+       green  the wallet is ahead on what it traded in this window, valued at the window's last price
+       red    it is behind on the same measure
+       grey   it sold without a visible buy, so there is no entry price here to judge it against */
+  const short = (a) => (typeof a === 'string' && a.length > 12) ? a.slice(0, 6) + '…' + a.slice(-4) : (a || '');
+  /* The word is the signal; the colour repeats it. Every state below names itself in the chip, so the
+     tape reads identically to somebody who cannot tell the colours apart (WCAG 1.4.1). */
+  const STATE = {
+    first:    { cls: 'is-first',   word: 'new',            tip: 'This address’s first buy inside the window on screen.' },
+    up:       { cls: 'is-up',      word: 'up',             tip: 'Ahead across all of this address’s trades in the window, valued at the window’s last price, before gas and before any transfer tax the token charges.' },
+    down:     { cls: 'is-down',    word: 'down',           tip: 'Behind across all of this address’s trades in the window, valued at the window’s last price, before gas and before any transfer tax the token charges.' },
+    flat:     { cls: 'is-flat',    word: 'flat',           tip: 'Level across its trades in the window — what it put in and what it is worth now come out the same.' },
+    'no-buy': { cls: 'is-unknown', word: 'no entry here',  tip: 'This address sold without buying inside the window, so there is no entry price here to judge it against.' },
+    'sold-more': { cls: 'is-unknown', word: 'bag from before', tip: 'This address sold more than it bought inside the window — the rest of that bag was acquired somewhere this window cannot see, at a price we do not know, so no profit is claimed.' },
+    'no-mark': { cls: 'is-unknown', word: 'no price yet',  tip: 'There is no last price in this window to value the position against.' },
+    contract:   { cls: 'is-unknown', word: 'contract',           tip: 'A router, an aggregator or the next pool on a multi-hop route — not a person’s own address, so nothing here is called anyone’s profit.' },
+    unreadable: { cls: 'is-unknown', word: 'address unreadable', tip: 'This log did not carry a readable address.' },
+  };
+  const stateFor = (tr) => STATE[tr && (tr.basis === 'ok' ? tr.state : tr.basis)] || STATE['no-buy'];
+  /* Amounts are printed to significant figures, never to a fixed number of decimals: a real trade of
+     0.0000004 tokens rounded to "0" is a figure that is not on the chain. */
+  function amt(v) {
+    if (!(v > 0)) return '0';
+    if (v < 0.000001) return '<0.000001';
+    if (v >= 1000) return Math.round(v).toLocaleString('en-US');
+    return String(Number(v.toPrecision(4)));
+  }
+  function tapeHTML(data) {
+    const rows = data.trades || [];
+    if (!rows.length) return '';
+    const traders = data.traders || {};
+    const exp = typeof data.explorer === 'string' ? data.explorer.replace(/\/+$/, '') : '';
+    const qsym = data.quote || '';
+    const pct = (v) => (v == null || !isFinite(v)) ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(Math.abs(v) < 10 ? 2 : 1) + '%';
+    const body = rows.map((r) => {
+      const tr = (r.wallet && traders[r.wallet]) || null;
+      const st = !r.wallet ? STATE.unreadable : (r.firstBuy ? STATE.first : stateFor(tr));
+      const when = Number.isFinite(r.ts) ? new Date(r.ts).toISOString().slice(5, 16).replace('T', ' ') : '—';
+      const side = r.isBuy ? 'Buy' : 'Sell';
+      const walletTxt = r.wallet ? short(r.wallet) : 'unreadable';
+      const note = (r.viaContract || (tr && tr.basis === 'contract')) ? ' This is a contract — a router, an aggregator or another pool — not a person’s own address.' : '';
+      const pnlTxt = (!r.firstBuy && tr && tr.basis === 'ok' && tr.pnlPct != null) ? pct(tr.pnlPct) : '';
+      const wcell = r.wallet
+        ? '<a class="oc-w ' + st.cls + '" href="' + esc(exp + '/address/' + r.wallet) + '" target="_blank" rel="noopener"' +
+          ' title="' + esc(st.tip + note + ' Opens this address on the explorer.') + '">' +
+            '<span class="oc-w-a">' + esc(walletTxt) + '</span>' +
+            '<span class="oc-w-s">' + esc(st.word) + (pnlTxt ? ' ' + esc(pnlTxt) : '') +
+              (pnlTxt ? '<span class="sr-only"> across all of this address’s trades in the window, not this one row</span>' : '') +
+            '</span>' +
+          '</a>'
+        : '<span class="oc-w ' + st.cls + '" title="' + esc(st.tip) + '"><span class="oc-w-a">' + esc(walletTxt) + '</span></span>';
+      const hcell = r.hash
+        ? '<a class="oc-tx" href="' + esc(exp + '/tx/' + r.hash) + '" target="_blank" rel="noopener"' +
+          ' title="Opens this transaction on the chain explorer">' + esc(short(r.hash)) + ' ↗</a>'
+        : '—';
+      return '<tr class="' + (r.isBuy ? 'is-buy' : 'is-sell') + '">' +
+        '<td>' + esc(when) + '</td>' +
+        '<td><span class="oc-side">' + side + '</span></td>' +
+        '<td class="oc-num">' + esc(amt(r.tok)) + '</td>' +
+        '<td class="oc-num">' + esc(amt(r.quote)) + (qsym ? ' ' + esc(qsym) : '') + '</td>' +
+        '<td>' + wcell + '</td>' +
+        '<td>' + hcell + '</td></tr>';
+    }).join('');
+    /* The window is described from the rows that were ACTUALLY read, not from the hours that were asked
+       for: at a one-second candle the request is a fraction of an hour, and rounding that to hours told
+       the reader the figures covered "the last 0 hours". */
+    const span = (data.tapeFrom != null && data.tapeTo != null) ? Math.max(0, data.tapeTo - data.tapeFrom) : null;
+    const win = span == null ? 'this window'
+      : span >= 36e5 * 36 ? Math.round(span / 864e5) + ' days'
+      : span >= 36e5 ? (Math.round(span / 36e5) === 1 ? 'hour' : Math.round(span / 36e5) + ' hours')
+      : Math.max(1, Math.round(span / 6e4)) + (Math.max(1, Math.round(span / 6e4)) === 1 ? ' minute' : ' minutes');
+    const readAt = Number.isFinite(data.tapeAt) ? new Date(data.tapeAt).toISOString().slice(11, 16) + ' UTC' : null;
+    const viaN = Number.isFinite(data.tapeViaContract) ? data.tapeViaContract : null;
+    const viaLine = viaN == null ? ''
+      : viaN === 0 ? 'None of these rows was paid to the contract that called the swap. '
+      : viaN + ' of these ' + rows.length + ' rows ' + (viaN === 1 ? 'was' : 'were') + ' paid to the contract that called the swap — a router or a bot, not a person’s own address. ';
+    return '<div class="oc-tape-scroll">' +
+      '<table class="oc-tape"><caption class="sr-only">Recent on-chain transactions for this pair, newest first. Each row links to the transaction and the paid address on the block explorer.</caption>' +
+      '<thead><tr><th scope="col">Time (UTC)</th><th scope="col">Side</th><th scope="col">Tokens</th><th scope="col">Value</th><th scope="col">Address paid</th><th scope="col">Transaction</th></tr></thead>' +
+      '<tbody>' + body + '</tbody></table></div>' +
+      '<p class="oc-tape-note">' +
+      'The address shown is the one the pool paid: on a buy whoever received the tokens, on a sell whoever received the proceeds. ' +
+      esc(viaLine) + 'Rows marked <b class="oc-k">contract</b> were paid to a router, an aggregator or the next pool on a multi-hop route, so no profit is attributed to them. ' +
+      'The transaction link shows who signed it. ' +
+      '<b class="oc-k is-first">new</b> (blue) is that address’s first buy inside the window; ' +
+      '<b class="oc-k is-up">up</b> (green) and <b class="oc-k is-down">down</b> (red) are ahead or behind across all of that address’s trades in the last ' + esc(win) + ', ' +
+      'valued at the window’s last price — before gas, and before any transfer tax the token itself charges. ' +
+      '<b class="oc-k">flat</b>, <b class="oc-k">no entry here</b> and <b class="oc-k">bag from before</b> (grey) mean no profit is claimed: the window does not contain a whole entry price, because the address sold tokens it did not buy here. ' +
+      (readAt ? 'Rows read at ' + esc(readAt) + ' and they do not follow the live price above — change timeframe or reload to read them again. ' : '') +
+      'Figures are best-effort from public chain data over this window only. They are not a guarantee, not an audit and not advice, and copying a wallet’s trades can lose you money.' +
+      '</p>';
+  }
+
   // History becomes a point series; the live poll appends to the same series, so the line is one
   // continuous thing rather than a chart with a separate "live" gadget bolted on.
   function pointsFromCandles(cs) { return (cs || []).map(c => ({ t: c.t, p: c.c, n: c.n, h: c.h, l: c.l })); }
@@ -753,6 +853,21 @@
       paint(host);
       const tbl = host.querySelector('.oc-table-wrap');
       if (tbl) tbl.innerHTML = tableHTML(d);
+      const tape = host.querySelector('.oc-tape-wrap');
+      if (tape) {
+        tape.innerHTML = tapeHTML(d);
+        const det = host.querySelector('.oc-trades');
+        // no swaps in the window → no tape to open, so the disclosure goes away rather than opening on nothing
+        if (det) det.hidden = !(d.trades && d.trades.length);
+        /* A box that scrolls has to be reachable from a keyboard, and named when it is — but a tape that
+           fits must not leave a dead tab stop behind, so this is decided from the rendered width. */
+        const sc = tape.querySelector('.oc-tape-scroll');
+        if (sc) requestAnimationFrame(() => {
+          const over = sc.scrollWidth > sc.clientWidth + 1;
+          if (over) { sc.tabIndex = 0; sc.setAttribute('role', 'region'); sc.setAttribute('aria-label', 'Recent transactions, scrollable'); }
+          else { sc.removeAttribute('tabindex'); sc.removeAttribute('role'); sc.removeAttribute('aria-label'); }
+        });
+      }
       wirePointer(host);
       wireScales(host);
       renderLegend(host);
@@ -882,7 +997,8 @@
       '</div>' +
       '<div class="oc-legend" role="group" aria-label="Which markers to show"></div>' +
       '<p class="oc-status" role="status" aria-live="polite"></p>' +
-      '<details class="oc-data"><summary>View the numbers</summary><div class="oc-table-wrap"></div></details>';
+      '<details class="oc-data"><summary>View the numbers</summary><div class="oc-table-wrap"></div></details>' +
+      '<details class="oc-data oc-trades" hidden><summary>Recent transactions ⛓️</summary><div class="oc-tape-wrap"></div></details>';
     host._toggles = loadToggles();
     host.addEventListener('click', (e) => {
       const b = e.target.closest('.oc-tf');

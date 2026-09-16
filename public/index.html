@@ -268,8 +268,10 @@
         <!-- Our own chart, drawn from this pair contract's own Swap logs, with the site's markers on it.
            It replaces a Dexscreener iframe: same underlying data one step closer to the source, no
            third-party frame, no rate limit we do not control, and no tracking surface on the landing
-           page. What the iframe did that this does not: TradingView drawing tools, order-book depth,
-           and a trade tape. The Dexscreener link above is kept for anyone who wants those.
+           page. It carries its own trade tape now — "Recent transactions" under the chart, decoded from the
+           same Swap logs, so it costs no extra chain reads. What the iframe still does that this does
+           not: TradingView drawing tools and order-book depth. The Dexscreener link above is kept for
+           anyone who wants those.
            data-poll="5000": this is a page people read, not one they watch tick. Two charts at one
            second each is 120 requests a minute from a single visitor; at five seconds it is 24. -->
         <div class="onchain-chart" data-pair="0xf30bb531d0255969be155533abac34b22bd63414" data-token="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-tf="1h" data-poll="5000"></div>
@@ -306,8 +308,10 @@
         <!-- Our own chart, drawn from this pair contract's own Swap logs, with the site's markers on it.
            It replaces a Dexscreener iframe: same underlying data one step closer to the source, no
            third-party frame, no rate limit we do not control, and no tracking surface on the landing
-           page. What the iframe did that this does not: TradingView drawing tools, order-book depth,
-           and a trade tape. The Dexscreener link above is kept for anyone who wants those.
+           page. It carries its own trade tape now — "Recent transactions" under the chart, decoded from the
+           same Swap logs, so it costs no extra chain reads. What the iframe still does that this does
+           not: TradingView drawing tools and order-book depth. The Dexscreener link above is kept for
+           anyone who wants those.
            data-poll="5000": this is a page people read, not one they watch tick. Two charts at one
            second each is 120 requests a minute from a single visitor; at five seconds it is 24. -->
         <div class="onchain-chart" data-pair="0x22df73eef683a93680dff3b51fdf3ee91e7352d9" data-token="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-tf="1h" data-poll="5000"></div>

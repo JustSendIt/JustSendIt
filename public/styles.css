@@ -4621,6 +4621,45 @@ html.motion-off #matrix-rain { display: none; }
 .adm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
 
 
+
+/* ===== The tape: recent on-chain transactions under a chart =========================================
+   The colours are a second signal, never the only one — every chip carries its word ("up", "down",
+   "new", "no entry here") in the same element, so the tape reads the same to somebody who cannot tell
+   the three apart. Blue is the site's diamond token, which is already the "rare / new" colour here. */
+.oc-tape { width: 100%; border-collapse: collapse; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.oc-tape th, .oc-tape td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--hair); white-space: nowrap; }
+.oc-tape th { color: var(--text-dim); font-weight: 700; font-size: 0.74rem; letter-spacing: var(--tr-caps, 0.06em); text-transform: uppercase; }
+.oc-tape td { color: var(--text); }
+.oc-tape .oc-num { text-align: right; }
+.oc-tape tbody tr:hover { background: var(--g-wash); }
+/* the side is a word first: the tint only reinforces it */
+.oc-side { font-weight: 800; }
+.oc-tape tr.is-buy .oc-side { color: var(--green-bright); }
+.oc-tape tr.is-sell .oc-side { color: var(--red-soft); }
+/* the wallet chip: address above, state word (and its P/L) below, both inside the link */
+.oc-w { display: inline-flex; flex-direction: column; gap: 0.05rem; line-height: 1.2; padding: 0.2rem 0.5rem;
+  border-radius: var(--r-1, 8px); border: 1px solid transparent; text-decoration: none; font-family: var(--mono, ui-monospace, monospace); }
+.oc-w-a { font-size: 0.8rem; }
+.oc-w-s { font-size: 0.66rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.95; font-family: 'Rubik', sans-serif; }
+.oc-w.is-up { color: var(--green-bright); background: var(--g-wash); border-color: var(--g-edge); }
+.oc-w.is-down { color: var(--red-soft); background: var(--r-tint); border-color: var(--r-edge); }
+.oc-w.is-first { color: var(--diamond); background: var(--d-tint); border-color: var(--d-edge); }
+.oc-w.is-unknown { color: var(--text-mute); background: var(--glass-well); border-color: var(--hair); }
+.oc-w:hover { filter: brightness(1.12); }
+.oc-w:focus-visible { outline: 3px solid var(--focus, var(--green-bright)); outline-offset: 2px; }
+.oc-w.is-flat { color: var(--text-dim); background: var(--glass-well); border-color: var(--hair); }
+.oc-tx { display: inline-flex; align-items: center; min-height: 24px; font-family: var(--mono, ui-monospace, monospace); font-size: 0.78rem; color: var(--gold); text-decoration: none; }
+.oc-tx:hover, .oc-tx:focus-visible { text-decoration: underline; }
+.oc-tx:focus-visible { outline: 3px solid var(--focus, var(--green-bright)); outline-offset: 2px; }
+.oc-tape-note { font-size: 0.76rem; color: var(--text-mute); line-height: 1.55; margin: 0.6rem 0 0; white-space: normal; }
+.oc-k { font-weight: 800; color: var(--text-dim); }
+.oc-k.is-up { color: var(--green-bright); } .oc-k.is-down { color: var(--red-soft); } .oc-k.is-first { color: var(--diamond); }
+/* The TABLE scrolls, not the whole panel: the legend under it explains the columns, so it must stay put
+   rather than slide away from them. Every column survives on a phone — the one carrying the money is not
+   a column to delete, and a hidden cell would make the caption describe a table that is not there. */
+.oc-tape-scroll { overflow-x: auto; }
+@media (pointer: coarse) { .oc-w, .oc-tx { min-height: 44px; } }
+
 /* ===== The matrix grid: every control is a tile of green cells ==================================
    Two layers under the label, above the fill (isolation + z-index -1):
      ::before  the grid itself — dark cell lines on the green, faint at rest, and on hover the

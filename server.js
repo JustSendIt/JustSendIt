@@ -1471,7 +1471,10 @@ function proposalView(p, me, c, cm) {
 }
 
 // --- Robinhood Chain reads (server-authoritative → holdings can't be spoofed) ---
-const RH_RPC = 'https://rpc.mainnet.chain.robinhood.com';
+/* The chain endpoint, overridable WITHOUT a code change. The public one is explicitly "rate-limited and
+   not recommended for production use" in Robinhood's own docs, and it answers 429 to eth_call after a
+   handful of rapid reads — measured. A keyed endpoint (Alchemy serves chain 4663) goes in RPC_URL. */
+const RH_RPC = process.env.RPC_URL || 'https://rpc.mainnet.chain.robinhood.com';
 const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const TOK = { SEND: '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', GWC: '0x61339f11384dde4b2dc3a33e75b4dc23cc620f22' };
 const SWAP_ROUTER = '0x89e5db8b5aa49aa85ac63f691524311aeb649eba';
@@ -3028,7 +3031,10 @@ function weekWindow(t) {
    server-cached; the client only ever hits our own /api/pairs/new. Nothing here
    moves funds or trusts client input.
    ========================================================================= */
-const BLOCKSCOUT = 'https://robinhoodchain.blockscout.com';
+/* The explorer, overridable the same way and for a sharper reason: the keyless public host answers 403
+   with a Cloudflare bot challenge to a server's request (measured), so holder counts, concentration and
+   contract-power flags read as unknown until BLOCKSCOUT_URL points at a keyed endpoint. */
+const BLOCKSCOUT = (process.env.BLOCKSCOUT_URL || 'https://robinhoodchain.blockscout.com').replace(/\/+$/, '');
 const FACTORY = '0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f';           // UniswapV2-style factory (router.factory())
 const WETH_ADDR = '0x0bd7d308f8e1639fab988df18a8011f41eacad73';
 const USDG_ADDR = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';         // Global Dollar stablecoin
@@ -4340,9 +4346,36 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
   ]);
   if (!Array.isArray(logs)) return null;
   const token0 = t0 ? '0x' + String(t0).slice(-40).toLowerCase() : null;
-  const tokenIsZero = token0 === String(tokenAddr).toLowerCase();
-  const decToken = decT != null ? decT : 18;
-  const decQuote = 18;                            // WETH/USDG legs are both 18 on this chain's pairs
+  const token1 = t1 ? '0x' + String(t1).slice(-40).toLowerCase() : null;
+  const tokLc = String(tokenAddr).toLowerCase();
+  /* Orientation decided by BOTH reads, not by one. token0() alone silently answers "false" when the read
+     fails — and false means "the token is token1", which inverts every buy into a sell and every price
+     into its reciprocal, drawing a confident chart of the wrong thing.
+
+     The two failures are not the same failure, so they do not get the same answer. An UNREADABLE layout
+     (the RPC 429s, which this chain's public endpoint does readily) is transient: say so and try again.
+     A layout that reads fine and does not contain this token is the WRONG POOL, and there is nothing to
+     draw at any point in the future. */
+  if (token0 !== tokLc && token1 !== tokLc) {
+    if (!token0 && !token1) {
+      const qvE = await quoteValue(pairAddr, tokenAddr).catch(() => ({ symbol: null, usd: null }));
+      return { pair: pairAddr, token: tokenAddr, tf: tfKey, tfSec: tf, quote: qvE.symbol, quoteUsd: qvE.usd, ethUsd: null,
+               candles: [], swaps: 0, source: 'on-chain Swap events', trades: [], traders: {},
+               note: 'The chain would not say which way round this pair is just now — that read is rate-limited. Nothing is drawn rather than drawing it backwards. Try again in a moment.' };
+    }
+    return null;   // read fine, and this token is not in this pool: the route turns null into a 502
+  }
+  const tokenIsZero = token0 === tokLc;
+  const decToken = decT;                          // null means the chain would not say — see the tape guard below
+  /* The quote leg's decimals, read rather than assumed. WETH is 18; the Global Dollar stablecoin is NOT
+     (the rest of this file reads it and falls back to 6), and assuming 18 there moved every USDG-quoted
+     price by a factor of a million million. */
+  const quoteAddr = await pairQuote(pairAddr, tokenAddr);
+  let decQuote = 18;
+  if (quoteAddr && quoteAddr === USDG_ADDR) {
+    if (usdgDecimals == null) { const ud = await tokenDecimals(USDG_ADDR); if (ud != null) usdgDecimals = ud; }
+    decQuote = usdgDecimals != null ? usdgDecimals : 6;
+  }
 
   /* block -> timestamp. Twelve sparse probes and a straight-line interpolation between them is ample at
      five minutes a candle: a few seconds of drift cannot move a swap out of a 300-second bucket.
@@ -4414,8 +4447,9 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
   };
 
   const buckets = new Map();
+  const decTokenForPrice = decToken != null ? decToken : 18;   // the line has always drawn with this default
   for (const l of logs) {
-    const px = swapPrice(l, tokenIsZero, decToken, decQuote);
+    const px = swapPrice(l, tokenIsZero, decTokenForPrice, decQuote);
     if (!px) continue;
     const ts = tsFor(parseInt(l.blockNumber, 16));
     const b = Math.floor(ts / 1000 / tf) * tf;
@@ -4424,6 +4458,146 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
     else { c.h = Math.max(c.h, px); c.l = Math.min(c.l, px); c.c = px; c.n++; }
   }
   const candles = [...buckets.values()].sort((a, b) => a.t - b.t);
+
+  /* ===== THE TAPE: the recent transactions behind the line ==========================================
+     Every figure here is decoded from the SAME Swap logs the candles are built from, so the tape costs
+     ZERO extra chain reads. That is not a nicety: the public RPC answers 429 after a handful of rapid
+     calls (measured), so a per-row eth_getTransactionByHash — the only way to learn which EOA *signed*
+     each trade — would rate-limit the whole site the moment two people opened a chart.
+
+     WHOSE WALLET IS SHOWN. A Uniswap-V2 Swap log names two addresses: `sender` (the contract that called
+     swap — a router) and `to` (who the output was paid to). `to` is the wallet we show, because it is
+     the party the chain actually credited. Measured against this chain's live $SEND pool, `to` is the
+     trader's own EOA about half the time and an aggregator or bot contract the rest; when it is the
+     router itself the row says so rather than presenting a contract as a person. The transaction hash
+     beside it links to the explorer, where the signer is visible — so nothing is hidden, and nothing is
+     claimed that the log does not carry.
+
+     PROFIT AND LOSS is measured over THIS WINDOW ONLY, from the swaps in it, against the window's last
+     price. A wallet that bought before the window opened has no visible entry here, and is reported as
+     unknown rather than guessed at — its bag may have been bought anywhere, at any price, or received
+     as a transfer. The client labels the window in words beside the table. */
+  const TAPE_MAX = 25;
+  const dec10 = (v, d) => Number(v) / Math.pow(10, d);
+  /* The tape prints literal amounts, so it will not print one it cannot scale. The line above may still
+     draw on an assumed 18 (it always has, and a price is a ratio the assumption cancels out of); an
+     AMOUNT is not a ratio, and "1,000,000 tokens" off by a factor of a million is not a rounding. */
+  const canTape = decToken != null;
+  const decoded = [];
+  for (const l of logs) {
+    if (!canTape) break;
+    const d = String(l.data || '').replace(/^0x/, '');
+    if (d.length < 256) continue;
+    const a0In = hexToBig(d.slice(0, 64)), a1In = hexToBig(d.slice(64, 128));
+    const a0Out = hexToBig(d.slice(128, 192)), a1Out = hexToBig(d.slice(192, 256));
+    /* NET per side. A log may legally carry both legs in the same direction (a router that also adds
+       liquidity in the same call). Taking the gross out-leg then called it a buy and the candle priced
+       it the other way, so the tape and the line disagreed about one trade. The net is what the wallet
+       actually gained or gave up, and a log whose two nets do not point opposite ways is not a trade we
+       can describe, so it is skipped rather than guessed at. */
+    const netTok = (tokenIsZero ? a0Out - a0In : a1Out - a1In);
+    const netQuo = (tokenIsZero ? a1Out - a1In : a0Out - a0In);
+    if (netTok === 0n || netQuo === 0n) continue;
+    if ((netTok > 0n) === (netQuo > 0n)) continue;   // both in or both out: not a swap this can read
+    const isBuy = netTok > 0n;                       // tokens left the pool to this address → a buy
+    const abs = (v) => (v < 0n ? -v : v);
+    const tok = dec10(abs(netTok), decToken);
+    const quo = dec10(abs(netQuo), decQuote);
+    if (!(tok > 0) || !(quo > 0)) continue;
+    const ts = Math.round(tsFor(parseInt(l.blockNumber, 16)));
+    if (!Number.isFinite(ts) || ts <= 0) continue;   // an unreadable block number is not a time
+    const topics = Array.isArray(l.topics) ? l.topics : [];
+    const at = (t) => { const a = (typeof t === 'string' && t.length >= 40) ? ('0x' + t.slice(-40).toLowerCase()) : null; return (a && /^0x[0-9a-f]{40}$/.test(a)) ? a : null; };
+    const to = at(topics[2]), sender = at(topics[1]);
+    decoded.push({
+      ts,
+      hash: /^0x[0-9a-fA-F]{64}$/.test(String(l.transactionHash || '')) ? String(l.transactionHash).toLowerCase() : null,
+      wallet: to, isBuy, tok, quote: quo,
+      viaContract: !!(to && sender && to === sender),   // the recipient IS the calling contract — a router, not a person
+    });
+  }
+  /* Per-wallet, over the window. bought/spent give the average entry the tape can stand behind; sold/
+     received is what has already come back out. A wallet with no visible buy has no cost basis and is
+     never coloured as winning or losing. */
+  /* PLUMBING IS NOT A TRADER. On a multi-hop route the pool pays the NEXT POOL, so `to` is a contract
+     address — and left unmarked the tape showed another liquidity pool sitting in the wallet column with
+     a profit and loss beside it. Three free tests, all from data already in hand:
+       · it is this pair, the token itself, the quote token or the zero address, or
+       · it appears as the `sender` of some other swap in this window, which only a router or an
+         aggregator ever does, or
+       · it is the contract that called this very swap (viaContract, tested above).
+     None of these is a person, so none is coloured or given a profit. */
+  const routers = new Set();
+  for (const l of logs) {
+    const t1x = Array.isArray(l.topics) ? l.topics[1] : null;
+    if (typeof t1x === 'string' && t1x.length >= 40) routers.add('0x' + t1x.slice(-40).toLowerCase());
+  }
+  const systemAddr = new Set([pairAddr, tokenAddr, quoteAddr, '0x0000000000000000000000000000000000000000']
+    .filter(Boolean).map((a) => String(a).toLowerCase()));
+  /* …and any OTHER pool this site already knows about, because a multi-hop route pays the next pool and
+     that pool is not a person either. One indexed lookup per address on screen, no network. */
+  const seenAddrs = [...new Set(decoded.slice(-TAPE_MAX).map((t) => t.wallet).filter(Boolean))];
+  if (seenAddrs.length) {
+    const qs = seenAddrs.map(() => '?').join(',');
+    for (const tbl of ['watchlist', 'pinned_tokens', 'communities', 'sniper_scans']) {
+      try {
+        for (const row of db.prepare('SELECT DISTINCT LOWER(pair_addr) p FROM ' + tbl + ' WHERE LOWER(pair_addr) IN (' + qs + ')').all(...seenAddrs)) {
+          if (row && row.p) systemAddr.add(row.p);
+        }
+      } catch {}
+    }
+  }
+  for (const t of decoded) t.plumbing = !!(t.wallet && (systemAddr.has(t.wallet) || routers.has(t.wallet)));
+
+  const book = new Map();
+  decoded.forEach((t, i) => {
+    if (!t.wallet) return;
+    let b = book.get(t.wallet);
+    if (!b) { b = { bought: 0, spent: 0, sold: 0, received: 0, n: 0, firstBuyIdx: null }; book.set(t.wallet, b); }
+    b.n++;
+    // the debut is pinned to a ROW, by its index in chain order — a hash can repeat across logs and can be null
+    if (t.isBuy && b.firstBuyIdx == null) b.firstBuyIdx = i;
+    if (t.isBuy) { b.bought += t.tok; b.spent += t.quote; } else { b.sold += t.tok; b.received += t.quote; }
+  });
+  const lastPx = candles.length ? candles[candles.length - 1].c : null;
+  const tapeStart = decoded.length ? decoded[0].ts : null;
+  const tapeEnd = decoded.length ? decoded[decoded.length - 1].ts : null;
+  const firstIdx = new Map();
+  for (const [w, b] of book) if (b.firstBuyIdx != null) firstIdx.set(b.firstBuyIdx, w);
+  const trades = decoded.map((t, i) => ({ ...t, firstBuy: firstIdx.get(i) === t.wallet && !t.plumbing })).slice(-TAPE_MAX).reverse();
+  /* Only the wallets on screen are published. The ledger is accumulated over every log — that is what
+     makes the figures right — but the site publishes what it shows and nothing more, the same rule the
+     markers route already follows, and it keeps a busy pair's payload from carrying hundreds of
+     addresses nobody asked for. */
+  const shown = new Set(trades.map((t) => t.wallet).filter(Boolean));
+  const traders = {};
+  const plumbing = new Set(decoded.filter((t) => t.plumbing).map((t) => t.wallet));
+  for (const w of shown) {
+    const b = book.get(w); if (!b) continue;
+    // a pool or a router accumulates many unrelated people's trades in one bucket; that sum is nobody's profit
+    if (plumbing.has(w)) { traders[w] = { state: 'unknown', basis: 'contract', pnlPct: null, n: b.n }; continue; }
+    const position = Math.max(0, b.bought - b.sold);
+    /* WHEN A NUMBER IS REFUSED. The window has to contain a whole cost basis before anything is called a
+       profit. A wallet that sold more than it bought here was spending a bag acquired somewhere this
+       window cannot see — at a price it cannot know — so its proceeds are NOT profit, and booking them
+       as profit is how the biggest dumper on a tape ends up the greenest row on the page. */
+    const noBasis = b.sold > b.bought * (1 + 1e-9) + 1e-12;
+    let state = 'unknown', basis = 'no-buy', pnl = null, pnlPct = null;
+    if (b.bought <= 0) basis = 'no-buy';
+    else if (noBasis) basis = 'sold-more';
+    else if (lastPx == null) basis = 'no-mark';
+    else {
+      basis = 'ok';
+      const value = b.received + position * lastPx;   // what has come back plus what the rest is worth now
+      pnl = value - b.spent;
+      pnlPct = b.spent > 0 ? (pnl / b.spent) * 100 : null;
+      if (pnlPct != null && !Number.isFinite(pnlPct)) pnlPct = null;
+      // a hair either side of zero is flat, not a win: "up +0.00%" on a round trip is a claim with nothing in it
+      const eps = Math.max(b.spent, 1e-12) * 1e-6;
+      state = pnl > eps ? 'up' : pnl < -eps ? 'down' : 'flat';
+    }
+    traders[w] = { state, basis, pnlPct, n: b.n };
+  }
   const qv = await quoteValue(pairAddr, tokenAddr);
   const usd = await ethUsd();
   /* Supply, so the hover can turn a price into a market cap. It is TODAY'S supply, and it is the only
@@ -4445,6 +4619,16 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
     candles,
     swaps: logs.length,
     source: 'on-chain Swap events',
+    /* The tape and its ledger. Same logs as the candles, so no extra chain reads; see the block above
+       for whose wallet `wallet` is and what window the profit figures are measured over. */
+    trades,
+    traders,
+    explorer: BLOCKSCOUT,      // so the client can link a hash and a wallet without knowing the chain
+    // the span the tape ACTUALLY read, from its own rows — not the hours that were asked for
+    tapeFrom: tapeStart, tapeTo: tapeEnd,
+    tapeAt: now(),             // when these rows were read; the price above them keeps ticking, they do not
+    // how many of the rows on screen were paid to the contract that called the swap — a counted fact, not a guess
+    tapeViaContract: trades.filter((t) => t.viaContract).length,
     /* Whether every swap was placed by its own block's clock or by interpolation between probes. At a
        second a candle that is the difference between a chart and a guess, so the client says which. */
     exactTimes: wantExact,

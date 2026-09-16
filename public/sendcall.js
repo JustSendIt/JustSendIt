@@ -198,7 +198,7 @@
     if (!window.NPCard || !token) { detail.innerHTML = '<p class="sc-detail-msg">Full detail isn’t available here.</p>'; return; }
     detail.dataset.loading = '1';
     detail.innerHTML = '<p class="sc-detail-msg"><span class="np-live-dot" aria-hidden="true"></span> Reading the chain for the latest on-chain detail…</p>';
-    const renderDetail = (p, note) => { detail.innerHTML = (note || '') + window.NPCard.detailHTML(p); if (NPCard.animateRings) NPCard.animateRings(detail); detail.dataset.loaded = '1'; };
+    const renderDetail = (p, note) => { detail.innerHTML = (note || '') + window.NPCard.detailHTML(p); if (NPCard.animateRings) NPCard.animateRings(detail); if (window.mountOnChainCharts) mountOnChainCharts(detail); detail.dataset.loaded = '1'; };   // the chart (and its transaction tape) belongs on every on-chain detail panel, here as on the radar
     try {
       const r = await fetch('/api/pairs/lookup?token=' + encodeURIComponent(token), { credentials: 'same-origin' });
       const j = await r.json();

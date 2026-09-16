@@ -57,6 +57,10 @@ If you self-host, these are yours and the code cannot do them for you:
 - Set `SEED_INVITE_CODE` (or read the generated one from the first boot's log) — it is the only key to the
   only door on a fresh deploy and it mints accounts. Set `ADMIN_USER_IDS` to the operators who may use the
   moderation queue.
+- Point `RPC_URL` and `BLOCKSCOUT_URL` at keyed endpoints before launch. The public chain RPC answers 429
+  to `eth_call` after a handful of rapid reads, and the public explorer answers 403 with a bot challenge to a
+  server request — both measured. Left on the defaults, on-chain reads fail under load and every holder count
+  and contract-power flag reads as unknown, which is a safety readout going quiet rather than an outage you see.
 - Keep Node at 24 or newer.
 
 The server prints warnings at boot when these look wrong. Read them.

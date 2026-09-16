@@ -1298,7 +1298,10 @@
     if (det && det.open) {
       const body = li.querySelector('.np-body');
       const busy = body && ((body.contains(document.activeElement)) || (window.getSelection && getSelection().anchorNode && body.contains(getSelection().anchorNode)));
-      if (body && !busy) body.outerHTML = bodyHTML(p);
+      /* The 15s poll rewrites an open card's body, which destroys the chart and its transaction tape
+         inside it — they mount once and were never remounted, so an expanded card lost them silently a
+         few seconds after it was opened. Rebuild, then mount again. */
+      if (body && !busy) { body.outerHTML = bodyHTML(p); if (window.mountOnChainCharts) mountOnChainCharts(li); }
     }
   }
   function patchExisting() {
