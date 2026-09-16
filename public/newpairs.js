@@ -2156,8 +2156,10 @@
        the feed was reachable but none was operable. Modifier chords are left alone for the same reason:
        Cmd/Ctrl+ArrowDown is the reader's, not ours. */
     const t = document.activeElement;
-    if (t && (/^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(t.tagName) || t.isContentEditable || t.getAttribute('role') === 'button')) return;
+    if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // a focused button, link or summary owns Enter, Space and Escape — the paging keys stay ours
+    if (t && (/^(BUTTON|A|SUMMARY)$/.test(t.tagName) || t.getAttribute('role') === 'button') && /^(Enter| |Escape|Esc)$/.test(e.key)) return;
     switch (e.key) {
       case 'ArrowDown': case 'j': case 'J': case 'PageDown': e.preventDefault(); flip(1); break;
       case 'ArrowUp': case 'k': case 'K': case 'PageUp': e.preventDefault(); flip(-1); break;

@@ -950,7 +950,7 @@ constants ship in `rules` so the client reads them rather than copying them.
 
 | | |
 |---|---|
-| `PTS.egg` | **20** base — between a follow (18) and a comment (24). A hundred is 2,000 base: Level 13 on the curve, earned once, ever. |
+| `PTS.egg` | **20** base — between a follow (18) and a comment (24). A hundred is 2,000 base: Level 13 on the curve. Each egg pays once; a find made while the day's allowance is full is recorded and pays on a later claim — nothing found is ever burned. |
 | `DAILY_CAP.egg` | **25** a day. That puts the kind inside the shared rolling-24h social budget (§3.1), so a script that reads the source and fires all hundred still takes four days and still cannot out-earn the day. |
 | `easter_eggs` | `(user_id, egg_id, found_at)`, primary key on the pair. |
 

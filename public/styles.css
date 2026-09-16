@@ -4539,3 +4539,5 @@ html.motion-off #matrix-rain { display: none; }
 /* the holdings tooltip on a Conviction Play chip: reachable on touch (a tap opens it) and by focus */
 .pin-hover { pointer-events: auto; }
 .foot-tour { margin: 1.1rem 0 0; }
+.pc-eggs { background: color-mix(in srgb, var(--gold) 12%, transparent); border: 1.5px solid color-mix(in srgb, var(--gold) 40%, transparent); color: var(--gold); font-weight: 800; font-size: 0.72rem; padding: 0.22rem 0.6rem; border-radius: var(--r-pill); white-space: nowrap; }
+.gearn-still { cursor: default; }

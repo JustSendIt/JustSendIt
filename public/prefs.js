@@ -143,6 +143,7 @@
     all.forEach(t => root.style.removeProperty(t));
     const solved = themeFrom(colors);
     Object.keys(solved).forEach(t => root.style.setProperty(t, solved[t]));
+    document.dispatchEvent(new CustomEvent('site-prefs'));   // ambient layers that read the tokens re-read them
     window.__confettiEnabled = p.confetti !== false;
     document.querySelectorAll('.ticker').forEach(t => { t.style.display = p.ticker === false ? 'none' : ''; });
     window.__musicResume = p.musicResume !== false;

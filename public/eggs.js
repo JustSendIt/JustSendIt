@@ -16,6 +16,7 @@
 (function () {
   const KEY = 'send.eggs.pending';          // finds made while signed out — banked later
   const SEEN = 'send.eggs.seen';            // ids this browser has already celebrated — no double toasts
+  const UNPAID = 'send.eggs.unpaid';        // found while the day's allowance was full — re-sent so they pay later
   const reg = new Map();                    // id -> arm(found)
   let total = null, foundIds = new Set(), booted = false;
 
@@ -30,13 +31,14 @@
     return { status: r.status, j };
   }
 
-  function celebrate(id, awarded, n, tot) {
+  function celebrate(id, awarded, n, tot, capped) {
     const seen = load(SEEN);
     if (!seen.includes(id)) { seen.push(id); save(SEEN, seen); }
     const count = (n != null && tot != null) ? ' · ' + n + '/' + tot : '';
-    const pts = awarded > 0 ? ' +' + awarded + ' Send Power' : '';
+    const pts = awarded > 0 ? ' +' + awarded + ' Send Power' : (capped ? ' · today\'s egg allowance is full — it still counts, and pays on a later visit' : '');
     const line = HINTS.get(id) ? ' — ' + HINTS.get(id) : '';
     if (window.sendToast) sendToast('🥚 #' + id + line + pts + count);
+    if (awarded > 0 && window.showPoints) { try { showPoints(awarded, window.innerWidth / 2, Math.min(window.innerHeight - 80, window.innerHeight * 0.4)); } catch {} }   // the nav badge and points feedback the rest of the site uses
     if (window.burst && !reduced()) {
       const x = window.innerWidth / 2, y = Math.min(window.innerHeight - 80, window.innerHeight * 0.4);
       try { burst(x, y, { count: 40, emojiRatio: 0.5 }); } catch {}
@@ -59,19 +61,39 @@
       }
       return;
     }
-    try {
-      const { status, j } = await post(id);
-      if (status !== 200 || !j) return;
-      foundIds = new Set(j.found || []); total = j.total;
-      if (!j.already) celebrate(id, j.awarded, foundIds.size, total);
-    } catch {}
+    let res = null;
+    try { res = await post(id); } catch { res = null; }
+    if (!res || res.status !== 200 || !res.j) {
+      /* refused or unreachable — a rate limit, an expired session, read-only mode, a network blip. The find
+         is kept and re-sent on the next load, and the reader is told why now, not left guessing. */
+      const pend = load(KEY); if (!pend.includes(id)) { pend.push(id); save(KEY, pend); }
+      const why = (res && res.j && res.j.error) ? res.j.error : 'the server did not answer';
+      if (window.sendToast && !load(SEEN).includes(id)) { save(SEEN, load(SEEN).concat(id)); sendToast('🥚 Egg #' + id + ' found — kept for later: ' + why); }
+      return;
+    }
+    const j = res.j;
+    foundIds = new Set(j.found || []); total = j.total;
+    if (j.already) return;
+    if (j.capped) {
+      // recorded, unpaid: the server pays it on a later claim once the day's allowance opens up again
+      const un = load(UNPAID); if (!un.includes(id)) { un.push(id); save(UNPAID, un); }
+    }
+    celebrate(id, j.awarded, foundIds.size, total, j.capped);
   }
 
   async function flushPending() {
-    const pend = load(KEY);
-    if (!pend.length || !signedIn()) return;
-    save(KEY, []);
-    for (const id of pend) { try { await found(id); } catch {} }
+    if (!signedIn()) return;
+    const ids = [...new Set(load(KEY).concat(load(UNPAID)))];
+    if (!ids.length) return;
+    save(KEY, []); save(UNPAID, []);
+    // one at a time, with a breath between: thirty in a burst would hit the per-route limiter and lose the rest
+    for (const id of ids) {
+      foundIds.delete(id);                       // let found() re-send an unpaid one
+      try { await found(id); } catch {}
+      if (load(KEY).includes(id)) { const rest = ids.slice(ids.indexOf(id) + 1); save(KEY, [...new Set(load(KEY).concat(rest))]); break; }   // refused: keep the remainder queued
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    document.dispatchEvent(new CustomEvent('egg:found', { detail: { id: null, awarded: 0, found: foundIds.size, total } }));
   }
 
   async function sync() {
@@ -202,8 +224,8 @@
     [9, "all", "select('just send it')", "Highlighted. Now underlined in your heart."],
     [10, "all", "stay(600000)", "Ten minutes. You really are sending it."],
     [11, "all", "hash('moon')", "#moon. You navigated there yourself."],
-    [12, "index.html", "taps('.hero-logo', 10, 4000)", "Ten taps. Overdrive engaged."],
-    [13, "index.html", "hold('.hero-logo', 1500)", "Held it. Charged it. Launched it."],
+    [12, "index.html", "taps('.hero-logo-btn', 10, 4000)", "Ten taps. Overdrive engaged."],
+    [13, "index.html", "hold('.hero-logo-btn', 1500)", "Held it. Charged it. Launched it."],
     [14, "index.html", "taps('.hero h1 .rocket', 1, 0)", "The wiggly rocket wanted a tap."],
     [15, "index.html", "taps('.ticker-track span:nth-child(6)', 3, 3000)", "Caught a moving headline. Reflexes."],
     [16, "index.html", "taps('.hero-floats span:nth-child(7)', 5, 2500)", "Coin caught mid-drift. Nice hands."],
@@ -230,7 +252,7 @@
     [37, "u.html", "taps('#lb-list .lb-top .lb-rank', 3, 2000)", "Number one, tapped. Not yours yet."],
     [38, "u.html", "bottom()", "Bottom of their wall. Thorough. Respect."],
     [39, "u.html", "typed('follow')", "Typed follow. The button is right there."],
-    [40, "newpairs.html", "taps('#np-refresh', 5, 10000)", "The chain ticks every 30 seconds. Patience."],
+    [40, "newpairs.html", "taps('#np-refresh', 5, 10000)", "The radar refreshes itself. Patience."],
     [41, "newpairs.html", "taps('#np-strategies button:last-of-type', 3, 4000)", "Triple strict. Nothing gets past you."],
     [42, "newpairs.html", "dwell('.np-runner-rank', 2500)", "Gold rank, admired. Runners run on."],
     [43, "newpairs.html", "dwell('#np-feed', 20000)", "Twenty seconds in the feed. Hooked."],
@@ -287,7 +309,7 @@
     [94, "data.html", "dwell('#dk-what-h', 4000)", "Read what it never opens. Good."],
     [95, "data.html", "hash('key')", "#key. Locks stayed locked."],
     [96, "whitepaper.html", "bottom()", "Certified reader. \ud83d\udcc4\ud83d\ude80"],
-    [97, "whitepaper.html", "hash('s17')", "Section 17 doesn't exist. You do."],
+    [97, "whitepaper.html", "hash('s99')", "Section 99 doesn't exist. You do."],
     [98, "whitepaper.html", "dwell('.wp-colophon', 4000)", "Colophon lingered. Rarer than you think."],
     [99, "whitepaper.html", "stay(900000)", "Fifteen minutes. Peer reviewed."],
     [100, "whitepaper.html", "select('version 1')", "Version 1 selected. Version 2 pending."],
@@ -308,16 +330,17 @@
      a keyboard reader can land on it and press Enter; nothing that is already a control is touched. A
      pointer-events:none decoration (the drifting emoji) gets that lifted inline — no different from the
      inline drift timing it already carries. */
+  /* A decoration stays a decoration. An earlier cut gave every element target a tabindex and lifted its
+     aria-hidden so a keyboard could reach it — which put headings and paragraphs in the Tab order, created
+     focus stops inside aria-hidden containers that a screen reader cannot see, nested a focusable image
+     inside the hero button, and overrode the logo's alt text with a label. None of that is fair. Keyboard
+     readers reach the hunt through the eggs that are words, hashes, selections, the console, patience, and
+     the eggs that sit on real controls (tabs, buttons, chips) — the catalogue has those on every page.
+     The one thing this still does is lift pointer-events:none on the drifting emoji, which is no different
+     from the inline drift timing they already carry. */
   function reachable(el) {
     if (!el || el._eggReady) return el;
     el._eggReady = true;
-    const native = /^(A|BUTTON|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(el.tagName) || el.hasAttribute('tabindex');
-    if (!native) {
-      el.setAttribute('tabindex', '0');
-      if (el.getAttribute('aria-hidden') === 'true') el.removeAttribute('aria-hidden');
-      // a focusable thing with no name is a screen-reader dead stop; a neutral name is a nudge, not a spoiler
-      if (!el.hasAttribute('aria-label') && !el.textContent.trim()) el.setAttribute('aria-label', 'Try me');
-    }
     try { if (getComputedStyle(el).pointerEvents === 'none') el.style.pointerEvents = 'auto'; } catch {}
     return el;
   }
@@ -327,9 +350,9 @@
     if (!m) return document.querySelector(sel);
     return [...document.querySelectorAll(m[1])].find((e) => e.textContent.trim() === '=') || null;
   }
-  const armed = new WeakSet();
-  function whenPresent(sel, arm) {
-    const go = () => { const el = pick(sel); if (el && !armed.has(el)) { armed.add(el); arm(reachable(el)); } };
+  function whenPresent(sel, arm, id) {
+    // guarded per (element, egg): two eggs may share an element (a tap count and a long press on the logo)
+    const go = () => { const el = pick(sel); if (!el) return; el._eggs = el._eggs || new Set(); if (el._eggs.has(id)) return; el._eggs.add(id); arm(reachable(el)); };
     go();
     // late renders and re-renders: watch the document for the target appearing (cheap: one observer per egg)
     const mo = new MutationObserver(() => go());
@@ -347,10 +370,10 @@
       case 'hash':    D.hash(str(args[0]), done); break;
       case 'stay':    D.stay(Number(args[0]), done); break;
       case 'select':  D.select(str(args[0]), done); break;
-      case 'taps':    whenPresent(str(args[0]), (el) => D.taps(el, Number(args[1]) || 1, Number(args[2]) || 2500, done)); break;
-      case 'dwell':   whenPresent(str(args[0]), (el) => D.dwell(el, Number(args[1]) || 3000, done)); break;
-      case 'hold':    whenPresent(str(args[0]), (el) => D.hold(el, Number(args[1]) || 1500, done)); break;
-      case 'dbl':     whenPresent(str(args[0]), (el) => D.dbl(el, done)); break;
+      case 'taps':    whenPresent(str(args[0]), (el) => D.taps(el, Number(args[1]) || 1, Number(args[2]) || 2500, done), id); break;
+      case 'dwell':   whenPresent(str(args[0]), (el) => D.dwell(el, Number(args[1]) || 3000, done), id); break;
+      case 'hold':    whenPresent(str(args[0]), (el) => D.hold(el, Number(args[1]) || 1500, done), id); break;
+      case 'dbl':     whenPresent(str(args[0]), (el) => D.dbl(el, done), id); break;
     }
   }
   function armPage() {

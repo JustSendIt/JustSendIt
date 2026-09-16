@@ -22,9 +22,12 @@
   cv.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;opacity:0.16;';
   document.body.appendChild(cv);
   const ctx = cv.getContext('2d', { alpha: true });
-  const cs = getComputedStyle(root);
-  const green = (cs.getPropertyValue('--green') || '#a8ce00').trim();
-  const bright = (cs.getPropertyValue('--green-bright') || '#c6f000').trim();
+  // read on demand, not once at start-up: prefs.js applies a custom accent after this script runs
+  let green = '#a8ce00', bright = '#c6f000';
+  const readTokens = () => { const cs = getComputedStyle(root); green = (cs.getPropertyValue('--green') || green).trim(); bright = (cs.getPropertyValue('--green-bright') || bright).trim(); };
+  readTokens();
+  document.addEventListener('DOMContentLoaded', readTokens);
+  document.addEventListener('site-prefs', readTokens);
   const GLYPHS = '01$SENDIT<>/{}[]=+-*#@%&アイウエオカキクケコサシスセソ';
   const CELL = 18;
   let cols = 0, drops = [], w = 0, h = 0;

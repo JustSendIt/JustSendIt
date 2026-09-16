@@ -9352,11 +9352,17 @@ const server = http.createServer(async (req, res) => {
         let b; try { b = await readBody(req); } catch { return bad(res, 'bad request'); }
         const id = Number(b && b.id);
         if (!Number.isInteger(id) || id < 1 || id > EGG_TOTAL) return bad(res, 'no such egg');
-        const already = !!db.prepare('SELECT 1 FROM easter_eggs WHERE user_id = ? AND egg_id = ?').get(me.id, id);
-        if (already) return send(res, 200, { already: true, awarded: 0, found: eggsOf(me.id), total: EGG_TOTAL });
-        db.prepare('INSERT OR IGNORE INTO easter_eggs (user_id, egg_id, found_at) VALUES (?,?,?)').run(me.id, id, now());
-        const awarded = awardPoints(me.id, 'egg', PTS.egg, 'egg:' + me.id + ':' + id);   // idempotent per (user, egg) via the ref
+        const ref = 'egg:' + me.id + ':' + id;
+        const recorded = !!db.prepare('SELECT 1 FROM easter_eggs WHERE user_id = ? AND egg_id = ?').get(me.id, id);
+        const paid = !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(ref);
+        /* "already" means found AND paid. A find made while the day's allowance was full is recorded but
+           unpaid, and the next claim of it — tomorrow, from the client's own queue — pays. Nothing found is
+           ever burned. */
+        if (recorded && paid) return send(res, 200, { already: true, awarded: 0, found: eggsOf(me.id), total: EGG_TOTAL });
+        if (!recorded) db.prepare('INSERT OR IGNORE INTO easter_eggs (user_id, egg_id, found_at) VALUES (?,?,?)').run(me.id, id, now());
+        const awarded = awardPoints(me.id, 'egg', PTS.egg, ref);   // idempotent per (user, egg) via the ref
         const found = eggsOf(me.id);
+        if (!awarded) return send(res, 200, { already: false, awarded: 0, capped: true, found, total: EGG_TOTAL });
         if (found.length === EGG_TOTAL) notify(me.id, '🥚', 'All ' + EGG_TOTAL + ' eggs. Every single one. You have seen more of this site than the people who built it. 🚀', 'points');
         return send(res, 200, { already: false, awarded, found, total: EGG_TOTAL });
       }

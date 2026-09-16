@@ -89,7 +89,13 @@ try {
   const c25 = await api('/api/eggs/claim', { method: 'POST', sid: u.sid, body: { id: 50 } });
   const c26 = await api('/api/eggs/claim', { method: 'POST', sid: u.sid, body: { id: 51 } });
   check('the 25th find of the day pays', c25.status === 200 && c25.j.awarded > 0, JSON.stringify(c25.j));
-  check('the 26th is recorded as found but pays nothing', c26.status === 200 && c26.j.awarded === 0 && c26.j.already === false && c26.j.found.includes(51), JSON.stringify(c26.j));
+  check('the 26th is recorded as found, unpaid, and says so', c26.status === 200 && c26.j.awarded === 0 && c26.j.capped === true && c26.j.already === false && c26.j.found.includes(51), JSON.stringify(c26.j));
+  // the next day (the seeded events age out), the same claim pays — nothing found is ever burned
+  db.prepare("DELETE FROM points_events WHERE user_id=? AND ref LIKE 'egg:%:seed%'").run(u.id);
+  const c26b = await api('/api/eggs/claim', { method: 'POST', sid: u.sid, body: { id: 51 } });
+  check('an unpaid find pays on a later claim', c26b.status === 200 && c26b.j.awarded > 0 && c26b.j.already === false, JSON.stringify(c26b.j));
+  const c26c = await api('/api/eggs/claim', { method: 'POST', sid: u.sid, body: { id: 51 } });
+  check('  ...and then it is already, for good', c26c.status === 200 && c26c.j.already === true && c26c.j.awarded === 0);
 
   // read-only mode blocks it like any other write
   db.prepare('UPDATE users SET restricted_until=?, restrict_level=1 WHERE id=?').run(Date.now() + 864e5, u.id);

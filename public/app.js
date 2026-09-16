@@ -546,16 +546,15 @@
     const b = document.createElement('button');
     b.type = 'button'; b.id = 'motion-btn'; b.className = 'motion-btn';
     b.setAttribute('aria-pressed', String(off));
-    b.setAttribute('aria-label', off ? 'Resume moving decorations' : 'Pause moving decorations');
+    b.setAttribute('aria-label', 'Pause moving decorations');   // one name; aria-pressed carries the state — a label that flips would announce the opposite of the state
     b.setAttribute('data-tip', 'Pauses or resumes the ticker, floating emoji and other decorative motion — remembered on this device');
-    b.textContent = off ? '▶' : '⏸';
+    b.innerHTML = '<span aria-hidden="true">' + (off ? '▶' : '⏸') + '</span>';
     b.addEventListener('click', () => {
       off = !off;
       root.classList.toggle('motion-off', off);
       try { localStorage.setItem(KEY, off ? 'off' : 'on'); } catch {}
       b.setAttribute('aria-pressed', String(off));
-      b.setAttribute('aria-label', off ? 'Resume moving decorations' : 'Pause moving decorations');
-      b.textContent = off ? '▶' : '⏸';
+      b.innerHTML = '<span aria-hidden="true">' + (off ? '▶' : '⏸') + '</span>';
       if (window.sendToast) sendToast(off ? 'Motion paused ⏸' : 'Motion back on ▶');
     });
     const before = nav.querySelector('#nav-notif') || nav.querySelector('#nav-auth') || nav.lastElementChild;

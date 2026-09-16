@@ -113,7 +113,7 @@
     place(el);
     b.classList.toggle('is-instant', reduced());
     // described-by, not labelled-by: the control keeps its own name and gains a description after it
-    try { if (el.hasAttribute('aria-describedby') && !el._tipPrev) el._tipPrev = el.getAttribute('aria-describedby'); el.setAttribute('aria-describedby', 'tip-bubble'); } catch (e) {}   // a static description is stashed, not destroyed
+    try { const prev = el.getAttribute('aria-describedby'); if (prev && prev !== 'tip-bubble' && !el._tipPrev) el._tipPrev = prev; el.setAttribute('aria-describedby', 'tip-bubble'); } catch (e) {}   // a static description is stashed, not destroyed; the bubble's own id never is
     requestAnimationFrame(function () { if (current === el) b.classList.add('is-on'); });
   }
 

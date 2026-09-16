@@ -41,12 +41,14 @@
     const tab = tabs.find((t) => t.dataset.tab === name); if (!tab) return false;
     if (current === name) return true;
     current = name;
+    let lostFocus = false;
     tabs.forEach((t) => {
       const on = t === tab;
       t.setAttribute('aria-selected', String(on));
       t.tabIndex = on ? 0 : -1;
-      const p = panelOf(t); if (p) p.hidden = !on;
+      const p = panelOf(t); if (p) { if (!on && p.contains(document.activeElement)) lostFocus = true; p.hidden = !on; }
     });
+    if (lostFocus) tab.focus({ preventScroll: true });   // the control that asked for the switch just vanished under the reader; land them on the tab
     try { localStorage.setItem(KEY, name); } catch {}
     if (o.hash !== false && !tabForHashIsSpecific(location.hash)) {
       try { history.replaceState(null, '', '#tab-' + name); } catch {}

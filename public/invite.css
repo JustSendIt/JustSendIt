@@ -128,14 +128,14 @@
 .inv-dash-count { font-size: 0.82rem; color: var(--text-dim, #9aa); font-variant-numeric: tabular-nums; }
 .inv-dash .inv-codes { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
 .inv-dash .inv-code {
-  background: var(--green-bright, #b4ff2b); border-color: var(--green-bright, #b4ff2b); color: var(--ink-1, #020301);
+  background: var(--green-bright, #c6f000); border-color: var(--green-bright, #c6f000); color: var(--ink-1, #020301);
 }
 .inv-dash .inv-code:hover { background: var(--green, #a8ce00); border-color: var(--green, #a8ce00); }
 .inv-dash .inv-code.is-used { background: var(--text-mute, #949c8a); border-color: var(--text-mute, #949c8a); color: var(--ink-1, #020301); }
 .inv-dash .inv-note { color: var(--text-dim, #9aa); }
 .inv-sendid {
   display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0.3rem 0.7rem; border-radius: 999px;
-  background: rgba(142,224,0,0.12); border: 1px solid rgba(142,224,0,0.35); color: var(--green-bright, #b4ff2b);
+  background: var(--g-tint, rgba(168,206,0,0.13)); border: 1px solid var(--g-edge, rgba(168,206,0,0.33)); color: var(--green-bright, #c6f000);
   font-weight: 800; font-variant-numeric: tabular-nums;
 }
 .inv-sendid small { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
