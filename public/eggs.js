@@ -125,7 +125,16 @@
     // the reader reaches the very bottom of the page
     bottom(cb) {
       let done = false;
-      const onScroll = () => { if (done) return; if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) { done = true; cb(); } };
+      const onScroll = () => {
+        if (done) return;
+        const doc = document.documentElement;
+        /* "the very bottom" only means something on a page that scrolls. The Hot Feed is exactly one
+           viewport tall (its own track scrolls, not the document), so the naive test was true the moment
+           it opened and the egg fired for nothing. It takes a page at least half a screen taller than the
+           viewport and a real scroll to get there. */
+        if (doc.scrollHeight < window.innerHeight * 1.5 || window.scrollY < 120) return;
+        if (window.innerHeight + window.scrollY >= doc.scrollHeight - 4) { done = true; cb(); }
+      };
       addEventListener('scroll', onScroll, { passive: true });
     },
     // a hash in the URL nobody links to
