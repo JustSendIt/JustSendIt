@@ -204,15 +204,15 @@ a { color: var(--gold); }
   padding: 0.55rem 1.2rem;
   background: color-mix(in srgb, var(--ink) calc(0.86 * 100%), transparent);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--g-veil);
+  border-bottom: 1px solid var(--hair);
 }
 .nav-logo { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; }
 .nav-logo img { width: 42px; height: 42px; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--green) 50%, transparent)); }
 .nav-logo span { font-family: 'Luckiest Guy', cursive; font-size: 1.25rem; color: var(--green-bright); }
 .nav-menu { display: flex; align-items: center; gap: 0.2rem; margin-left: auto; flex-wrap: wrap; }
 .nav-menu a {
-  color: var(--text-dim); text-decoration: none; font-weight: 600; font-size: 0.92rem;
-  padding: 0.45rem 0.8rem; border-radius: 999px; transition: all 0.15s ease;
+  color: var(--text-mute); text-decoration: none; font-weight: 600; font-size: 0.88rem; letter-spacing: 0.01em;
+  padding: 0.4rem 0.7rem; border-radius: 999px; transition: color 0.15s ease, background 0.15s ease;
 }
 .nav-menu a:hover { color: var(--green-bright); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .nav-menu a.active { color: var(--on-green); background: var(--green); }
@@ -363,7 +363,7 @@ a { color: var(--gold); }
 .hero h1 {
   font-size: clamp(2.4rem, 7vw, 4.6rem); line-height: 1.05; margin-top: 1.4rem;
   color: var(--green-bright);
-  text-shadow: 0 3px 0 var(--green-dark), 0 0 40px color-mix(in srgb, var(--green) 50%, transparent), 0 8px 24px rgba(0,0,0,0.8);
+  text-shadow: 0 3px 0 var(--green-dark), 0 8px 24px rgba(0,0,0,0.8);
   transform: rotate(-2deg);
 }
 .hero h1 .rocket { display: inline-block; animation: rocket-wiggle 1.6s ease-in-out infinite; }
@@ -431,11 +431,11 @@ a { color: var(--gold); }
 .btn:disabled:hover, .btn[aria-disabled="true"]:hover { transform: none; }
 
 /* ===== Sections ===== */
-section { padding: 4.2rem 1.25rem; position: relative; }
-.wrap { max-width: 1080px; margin: 0 auto; }
+section { padding: 3.6rem 1.25rem; position: relative; }
+.wrap { max-width: 1040px; margin: 0 auto; }
 .section-title {
   text-align: center; font-size: clamp(1.9rem, 4.6vw, 3rem); color: var(--gold);
-  text-shadow: 0 3px 0 var(--gold-deep), 0 0 30px rgba(255,179,64,0.35);
+  text-shadow: 0 3px 0 var(--gold-deep);
   margin-bottom: 0.6rem; transform: rotate(-1deg);
 }
 .section-title.green { color: var(--green-bright); text-shadow: 0 3px 0 var(--green-dark), 0 0 30px color-mix(in srgb, var(--green) 35%, transparent); }
@@ -448,9 +448,9 @@ section { padding: 4.2rem 1.25rem; position: relative; }
 
 /* ===== Cards ===== */
 .card {
-  background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
-  border: 2px solid color-mix(in srgb, var(--green) 28%, transparent); border-radius: 22px;
-  padding: 1.6rem; box-shadow: 0 18px 40px rgba(0,0,0,0.45);
+  background: var(--ink-2);
+  border: 1px solid var(--hair); border-radius: var(--r-3);
+  padding: 1.5rem; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent), 0 12px 32px rgba(0,0,0,0.35);
 }
 .card.gold-card { border-color: rgba(255,179,64,0.4); }
 
@@ -998,8 +998,7 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
   position: relative; overflow: hidden; isolation: isolate;
   display: inline-flex; flex-direction: column; align-items: center; gap: 0.1rem;
   padding: 0.9rem 2rem; border-radius: 20px; flex: 1 1 260px; max-width: 360px; min-width: 240px;
-  background: var(--ctl-fill-lo); color: var(--ctl-ink); border: 1.5px solid var(--green);
-  backdrop-filter: blur(8px);
+  background: var(--ctl-fill-lo); color: var(--ctl-ink); border: 1px solid var(--green);
 }
 .mcap-panel[data-mcap-jump="GWC"] { border-color: var(--gold); }
 /* Dexscreener banner behind each tracker (JS sets background-image), darkened so the numbers stay readable */
@@ -1010,7 +1009,7 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 .mcap-label { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.1em; color: var(--ctl-ink); text-transform: uppercase; }
 .mcap-value {
   font-family: 'Luckiest Guy', cursive; font-size: clamp(1.8rem, 5vw, 2.8rem);
-  color: var(--ctl-ink); text-shadow: 0 2px 0 var(--gold), 0 0 30px rgba(255,179,64,0.4);
+  color: var(--ctl-ink);
   font-variant-numeric: tabular-nums;
 }
 .mcap-value.pumping { animation: mcap-pump 0.35s ease infinite alternate; color: var(--ctl-ink); text-shadow: 0 2px 0 var(--green-bright), 0 0 40px color-mix(in srgb, var(--green) 70%, transparent); }
@@ -1208,8 +1207,8 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 .reassure-body { padding: 0 1.2rem 1.1rem; color: var(--text-dim); font-size: 0.9rem; line-height: 1.6; }
 .reassure-body ul { margin: 0.5rem 0 0 1.1rem; display: grid; gap: 0.4rem; }
 .do-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; max-width: 900px; margin: 2rem auto 0; }
-.do-card { display: block; text-decoration: none; color: var(--text); background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 2px solid var(--g-veil); border-radius: 16px; padding: 1.1rem 1.2rem; transition: transform 0.15s ease, border-color 0.15s ease; }
-.do-card:hover { transform: translateY(-3px); border-color: var(--glow-g); }
+.do-card { display: block; text-decoration: none; color: var(--text); background: var(--ink-2); border: 1px solid var(--hair); border-radius: var(--r-2); padding: 1.1rem 1.2rem; transition: transform 0.15s ease, border-color 0.15s ease; }
+.do-card:hover { transform: translateY(-3px); border-color: var(--green); }
 .do-card .do-ico { font-size: 1.6rem; }
 .do-card .do-title { font-weight: 800; font-size: 1.05rem; margin: 0.3rem 0 0.2rem; }
 .do-card .do-sub { color: var(--text-dim); font-size: 0.82rem; }
