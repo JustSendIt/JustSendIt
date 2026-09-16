@@ -28,9 +28,13 @@
   readTokens();
   document.addEventListener('DOMContentLoaded', readTokens);
   document.addEventListener('site-prefs', readTokens);
-  const GLYPHS = '01$SENDIT<>/{}[]=+-*#@%&アイウエオカキクケコサシスセソ';
+  /* What the rain says. Read a column top to bottom and it spells the site's one instruction, over and
+     over; a few columns carry code-noise so the sheet still reads as a matrix and not as a marquee. Nobody
+     is meant to notice on purpose — that is the point. */
+  const PHRASE = 'JUST SEND IT! ';
+  const NOISE = '01$<>/{}[]=+-*#@%&アイウエオカキクケコサシスセソ';
   const CELL = 18;
-  let cols = 0, drops = [], w = 0, h = 0;
+  let cols = 0, drops = [], pos = [], noisy = [], w = 0, h = 0;
 
   function size() {
     w = cv.width = Math.floor(window.innerWidth); h = cv.height = Math.floor(window.innerHeight);
@@ -38,6 +42,8 @@
     // start each column somewhere in the sheet, not all above it: the first pass used a negative start
     // for every column, so at twelve frames a second nothing reached the viewport for about four seconds
     drops = Array.from({ length: cols }, (_, i) => drops[i] || (Math.random() * 2 - 1) * (h / CELL));
+    pos = Array.from({ length: cols }, (_, i) => pos[i] || ((Math.random() * PHRASE.length) | 0));   // each column starts mid-phrase, so the sheet never lines up
+    noisy = Array.from({ length: cols }, (_, i) => noisy[i] != null ? noisy[i] : Math.random() < 0.18);
     ctx.font = '600 14px ui-monospace, SFMono-Regular, Menlo, monospace';
   }
   size();
@@ -50,7 +56,8 @@
     for (let i = 0; i < cols; i++) {
       const y = drops[i] * CELL;
       if (y > 0) {
-        const ch = GLYPHS[(Math.random() * GLYPHS.length) | 0];
+        const ch = noisy[i] ? NOISE[(Math.random() * NOISE.length) | 0] : PHRASE[pos[i]];
+        pos[i] = (pos[i] + 1) % PHRASE.length;   // the next glyph down this column is the next letter
         ctx.fillStyle = Math.random() < 0.08 ? bright : green;
         ctx.fillText(ch, i * CELL, y);
       }
