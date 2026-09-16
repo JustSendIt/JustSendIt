@@ -489,6 +489,15 @@
     return j;
   };
 
+  /* The identity in the nav pill: the person's own picture when they have uploaded one, their emoji
+     when they have not, then the handle. The picture is decorative (alt="") — the handle is the name
+     a screen reader gets, and the pill's aria-label already says whose wall it opens. */
+  AUTH.navIdentity = function (user) {
+    const pic = (user.avatarImg && window.avatarHTML) ? window.avatarHTML(user.avatarImg, 'pl-img') : '';
+    const face = pic ? '<span class="pl-ava" aria-hidden="true">' + pic + '</span>' : '<span class="pl-ava pl-ava-emo" aria-hidden="true">' + roEsc(user.avatar || '🚀') + '</span>';
+    return face + '<span class="pl-name">@' + roEsc(user.username) + '</span>';
+  };
+
   /* ---------- nav account menu (hover on desktop, click/keyboard everywhere) ---------- */
   function setProfileOpen(wrap, open) {
     if (!wrap) return;
@@ -513,7 +522,7 @@
     trg.className = 'profile-link'; trg.id = 'nav-profile-trigger'; trg.href = '/u/' + encodeURIComponent(user.username);
     trg.setAttribute('aria-label', 'Your public Send Wall — @' + user.username);
     trg.setAttribute('data-tip', 'Opens your own public Send Wall');
-    trg.innerHTML = '<span class="pl-name">' + roEsc(user.avatar + ' @' + user.username) + '</span>' + ((user.og && window.ogBadge) ? ogBadge(user.og) : '');
+    trg.innerHTML = AUTH.navIdentity(user) + ((user.og && window.ogBadge) ? ogBadge(user.og) : '');
     const caret = document.createElement('button');
     caret.type = 'button'; caret.className = 'np-caret-btn'; caret.id = 'nav-profile-caret';
     caret.setAttribute('aria-haspopup', 'true'); caret.setAttribute('aria-expanded', 'false'); caret.setAttribute('aria-controls', 'nav-profile-menu');
@@ -869,6 +878,8 @@
     if (!AUTH.user && before) AUTH.user = before;      // a transient /api/me failure must not sign the UI out
     document.dispatchEvent(new CustomEvent('points:changed'));
   };
+  // redraw the nav from AUTH.user — for the moments the identity itself changes (a new picture)
+  AUTH.redraw = function () { onAuthChange(); };
 
   AUTH.ready = (async function init() {
     try {

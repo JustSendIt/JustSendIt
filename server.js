@@ -7972,6 +7972,7 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, {
           user: {
             username: me.username, avatar: me.avatar, bio: me.bio, auto_named: !!me.auto_named,
+            avatarImg: me.avatar_img ? '/uploads/' + me.avatar_img : null,   // the nav shows the picture when there is one, the emoji when there is not
             methods: identityTypes(me.id), wallets: walletAddresses(me.id),
             walletList: walletList(me.id),          // [{address,label,linkedAt,is2fa}] — what the settings list renders
             twofaWallet: twofaWalletAddress(me.id),  // the wallet that actually unlocks sign-in (null = legacy: any pre-2FA wallet)

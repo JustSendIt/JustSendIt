@@ -214,6 +214,9 @@ a { color: var(--gold); }
 }
 .profile-link:hover { transform: translateY(-1px); }
 .profile-link:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.pl-ava { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-right: 0.4rem; border-radius: 50%; overflow: hidden; }
+.pl-ava-emo { font-size: 1.05rem; }
+.pl-img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; display: block; }
 .pl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* the name is the only shrinkable part → it ellipsizes; caret/badge stay pinned */
 .np-caret { flex: 0 0 auto; font-size: 0.7rem; line-height: 1; transition: transform 0.15s ease; }
 .profile-link .og-badge { flex: 0 0 auto; }

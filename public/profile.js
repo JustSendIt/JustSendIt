@@ -58,6 +58,11 @@ async function saveWallColor(body) {
   catch (e) { sendToast('⚠️ ' + e.message); }
 }
 function renderImgSlot(kind, url) {
+  /* the nav pill shows this picture, so a change here must reach it without a reload — but only when it
+     actually changed, or the first render on every visit would cost a needless /api/me round trip */
+  if (kind === 'avatar' && window.AUTH && AUTH.user && (AUTH.user.avatarImg || null) !== (url || null) && AUTH.refresh) {
+    AUTH.refresh().then(() => { if (AUTH.redraw) AUTH.redraw(); }).catch(() => {});
+  }
   const zone = document.getElementById('slot-' + kind);
   zone.innerHTML = '';
   if (url) {
@@ -189,7 +194,10 @@ async function saveProfile() {
     const navTrg = document.querySelector('#nav-auth .profile-link');
     if (navTrg) {
       const nm = navTrg.querySelector('.pl-name');
-      if (nm) nm.textContent = j.user.avatar + ' @' + j.user.username; else navTrg.textContent = j.user.avatar + ' @' + j.user.username;
+      const badge = navTrg.querySelector('.og-badge');
+      navTrg.innerHTML = (window.AUTH && AUTH.navIdentity) ? AUTH.navIdentity(j.user) : '<span class="pl-name">@' + j.user.username + '</span>';
+      if (badge) navTrg.appendChild(badge);   // the OG badge rides along
+      void nm;
       navTrg.setAttribute('href', '/u/' + encodeURIComponent(j.user.username));
       navTrg.setAttribute('aria-label', 'Your public Send Wall — @' + j.user.username);
       const wallItem = document.querySelector('#nav-profile-menu a[href^="/u/"]'); if (wallItem) wallItem.href = '/u/' + encodeURIComponent(j.user.username);
