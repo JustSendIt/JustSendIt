@@ -32,7 +32,9 @@
   function size() {
     w = cv.width = Math.floor(window.innerWidth); h = cv.height = Math.floor(window.innerHeight);
     cols = Math.ceil(w / CELL);
-    drops = Array.from({ length: cols }, (_, i) => drops[i] || (Math.random() * -h / CELL));
+    // start each column somewhere in the sheet, not all above it: the first pass used a negative start
+    // for every column, so at twelve frames a second nothing reached the viewport for about four seconds
+    drops = Array.from({ length: cols }, (_, i) => drops[i] || (Math.random() * 2 - 1) * (h / CELL));
     ctx.font = '600 14px ui-monospace, SFMono-Regular, Menlo, monospace';
   }
   size();
