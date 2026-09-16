@@ -1030,6 +1030,19 @@ a.wall-stat:hover .l { color: var(--text); }
 .feed-tab[aria-selected="true"] { border-color: var(--green); color: var(--green-bright); background: color-mix(in srgb, var(--green) 8%, transparent); }
 
 /* ===== Collapsible settings ===== */
+/* ---------- dashboard tabs ----------
+   Sticky under the nav so the section switch is always one tap away on a long panel; the bar scrolls
+   sideways on a phone instead of wrapping into two rows. The selected tab is a filled pill — an
+   aria-selected styling, not a hover one, so it reads the same on touch. --nav-h is published by nav.js. */
+.dtabs { position: sticky; top: calc(var(--nav-h, 58px) + 0.35rem); z-index: 15; display: flex; gap: 0.35rem; margin: 0 0 1.2rem; padding: 0.35rem; overflow-x: auto; scrollbar-width: none; background: var(--glass-lo); border: 1px solid var(--hair); border-radius: 999px; backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur)); }
+.dtabs::-webkit-scrollbar { display: none; }
+.dtab { flex: 0 0 auto; min-height: 44px; padding: 0.55rem 1rem; border: 0; border-radius: 999px; background: transparent; color: var(--text-dim); font: inherit; font-weight: 800; font-size: 0.92rem; white-space: nowrap; cursor: pointer; transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+.dtab:hover { color: var(--text); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.dtab[aria-selected="true"] { color: var(--on-green); background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); box-shadow: 0 4px 0 var(--green-dark), 0 8px 22px var(--glow-g); }
+.dtab:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dpanel:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) { .dtab { transition: none; } }
+
 .settings-group { display: grid; gap: 0.8rem; }
 details.setting-card {
   background: linear-gradient(180deg, var(--ink-3), var(--ink-2));

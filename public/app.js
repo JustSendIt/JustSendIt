@@ -140,6 +140,7 @@
     document.querySelectorAll('video[data-avatar-video]').forEach(v => { try { if (document.hidden) v.pause(); else if (avatarWantsMotion()) v.play().catch(() => {}); } catch {} });
   });
 
+  window.burst = burst;   // eggs.js celebrates a find with the same confetti as everything else
   window.sendToast = function (msg) {
     const t = document.createElement('div');
     t.className = 'toast'; t.textContent = msg;

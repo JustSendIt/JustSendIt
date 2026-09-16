@@ -329,6 +329,7 @@ function renderTracker(zone, r, prefs) {
       const k = btn.dataset.trkToggle;
       P[k] = !P[k];
       renderTracker(zone, r, P);
+      const nb = zone.querySelector('[data-trk-toggle="' + k + '"]'); if (nb) nb.focus();   // the zone re-rendered under the pressed toggle
       if (window.saveTrackerPrefs) window.saveTrackerPrefs(P);
     });
   });

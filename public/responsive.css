@@ -99,13 +99,14 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 /* stragglers the second sweep turned up.
    NOTE .switch uses ::before, not ::after: its ::after is already the sliding knob
    (styles.css:991), and taking that over would leave the toggle with nothing to slide. */
-.switch, .ll-toggle button { position: relative; }
-.switch::before, .ll-toggle button::after {
+.switch, .ll-toggle button, .swatch { position: relative; }
+.switch::before, .ll-toggle button::after, .swatch::after {
   content: ''; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: max(100%, 24px); height: max(100%, 24px);
 }
 @media (pointer: coarse) {
-  .switch::before, .ll-toggle button::after { width: max(100%, 44px); height: max(100%, 44px); }
+  .switch::before, .ll-toggle button::after, .swatch::after { width: max(100%, 44px); height: max(100%, 44px); }
+  .react-btn { min-height: 44px; }   /* avatar radios reached 44px only at ≤560px; coarse-pointer tablets were at ~31px */
   .gobj-primary a, .gobj-primary .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 }
 .wall-stat, .pin-chip-open, .pin-chip-rm { position: relative; }

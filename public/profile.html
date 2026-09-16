@@ -71,12 +71,32 @@
       </div>
 
       <div id="claim-banner" class="warn-box" style="margin:0 0 1.5rem;" hidden>
-        <b>Claim your handle! 🏷️</b> You got a temporary username — pick your real one in <b>Settings → Account</b> below. Usernames are unique: first come, first served.
+        <b>Claim your handle! 🏷️</b> You got a temporary username — pick your real one in the <b>Settings tab → Account</b>. Usernames are unique: first come, first served.
       </div>
 
+      <!-- ===== THE DASHBOARD TABS =====
+           One long scroll became five panels. The tabs are real ARIA tabs (roving tabindex, arrow keys,
+           Home/End); the panels keep every id and every piece of markup they held before, so nothing that
+           targets #gamify-dash, #connected-wallet, #invites-card or a Settings <details> by id has to change.
+           What DID have to change is reachability: a hash like #sec-security, a details being opened by
+           script, or a scrollIntoView into a hidden panel would all have landed on nothing — dashtabs.js
+           routes each of those to its tab first. The URL carries the tab as #tab-<name> so a refresh keeps
+           it, and deep-link hashes that already existed keep their meaning. -->
+      <div class="dtabs" role="tablist" aria-label="Dashboard sections" id="dtabs">
+        <button class="dtab" role="tab" id="dtab-overview" aria-controls="dpanel-overview" aria-selected="true" tabindex="0" data-tab="overview" data-tip="Your Send Power, level, quests, arena and record">🏠 Overview</button>
+        <button class="dtab" role="tab" id="dtab-wallet" aria-controls="dpanel-wallet" aria-selected="false" tabindex="-1" data-tab="wallet" data-tip="Live holdings and PNL for the wallets you have linked">👛 Wallet</button>
+        <button class="dtab" role="tab" id="dtab-invites" aria-controls="dpanel-invites" aria-selected="false" tabindex="-1" data-tab="invites" data-tip="Your ticket and the invite codes you can hand out">🎟️ Invites</button>
+        <button class="dtab" role="tab" id="dtab-tracker" aria-controls="dpanel-tracker" aria-selected="false" tabindex="-1" data-tab="tracker" data-tip="Follow any wallet on Robinhood Chain — opens the tracker">💼 Tracker</button>
+        <button class="dtab" role="tab" id="dtab-settings" aria-controls="dpanel-settings" aria-selected="false" tabindex="-1" data-tab="settings" data-tip="Account, wallets and security, wall style, alerts and site preferences">⚙️ Settings</button>
+      </div>
+
+      <div class="dpanel" role="tabpanel" id="dpanel-overview" aria-labelledby="dtab-overview" tabindex="0">
       <!-- ===== GAMIFICATION DASHBOARD: the main dashboard ===== -->
       <h2 class="sr-only">Your Send Power</h2>
       <div class="card gamify-card" id="gamify-dash" aria-label="Your Send progress dashboard" style="margin-bottom:1.6rem;"></div>
+      </div>
+
+      <div class="dpanel" role="tabpanel" id="dpanel-wallet" aria-labelledby="dtab-wallet" tabindex="0" hidden>
 
       <!-- ===== CONNECTED WALLET ANALYTICS ===== -->
       <!-- Straight from the dashboard to the one panel that holds wallets, sign-in methods and 2FA.
@@ -93,6 +113,9 @@
         <div id="cw-selector" style="margin:0.6rem 0;"></div>
         <div id="cw-body"></div>
       </div>
+      </div>
+
+      <div class="dpanel" role="tabpanel" id="dpanel-invites" aria-labelledby="dtab-invites" tabindex="0" hidden>
 
       <!-- ===== YOUR TICKET & INVITE CODES =====
            Where "where are my codes?" has an answer that isn't "reopen the modal you closed". Filled by
@@ -101,6 +124,9 @@
       <div class="card" id="invites-card" style="margin-bottom:1.6rem;">
         <div id="invites-body"></div>
       </div>
+      </div>
+
+      <div class="dpanel" role="tabpanel" id="dpanel-tracker" aria-labelledby="dtab-tracker" tabindex="0" hidden>
 
       <!-- ===== TRACKER: now its own page ===== -->
       <div class="card gold-card" style="margin-bottom:1.6rem;">
@@ -109,7 +135,9 @@
         <p class="modal-note" style="margin:0 0 0.9rem;">Follow any wallet on Robinhood Chain — holdings, trades, cost basis and PNL, read straight from the chain in your browser and cached so it opens instantly next time. It has its own page now (also in your account menu ▾).</p>
         <a class="btn btn-gold" href="/tracker.html" data-tip="Goes to the wallet tracker page">Open the Wallet Tracker 💼 →</a>
       </div>
+      </div>
 
+      <div class="dpanel" role="tabpanel" id="dpanel-settings" aria-labelledby="dtab-settings" tabindex="0" hidden>
       <!-- ===== SETTINGS: collapsible ===== -->
       <h2 class="display" style="color:var(--green-bright); font-size:1.3rem; margin-bottom:0.8rem;">Settings ⚙️</h2>
       <div class="settings-group">
@@ -262,6 +290,7 @@
         </details>
 
       </div>
+      </div>
     </div>
   </section>
 </main>
@@ -294,6 +323,7 @@
 <script src="chain.js"></script>
 <script src="tracker.js"></script>
 <script src="app.js"></script>
+<script src="eggs.js"></script>
 <script src="tips.js"></script>
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
@@ -303,6 +333,7 @@
 <script src="moderation.js"></script>
 <script src="search.js"></script>
 <script src="player.js"></script>
+<script src="dashtabs.js"></script>
 <script src="profile.js"></script>
 <script src="gamify.js"></script>
 <script src="notifications.js"></script>

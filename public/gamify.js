@@ -33,6 +33,7 @@
 
   /* ---------- action metadata ---------- */
   const ACTION_LABEL = {
+    egg: ['🥚', 'Find a hidden egg'],
     swap: ['🚀', 'Swap for $Send / $GWC'],
     connect_wallet: ['🔗', 'Connect your wallet'],
     first_post: ['✨', 'Your first post'],
@@ -57,15 +58,16 @@
     follow: ['👀', 'Follow a sender'],
     community_founder: ['👑', 'Founded a community'],
   };
-  const ORDER = ['swap', 'send_call', 'call_x', 'call_hold', 'hop_on', 'hop_hold', 'connect_wallet', 'first_post', 'post', 'track_wallet', 'watch_token', 'daily', 'customize', 'comment', 'react_give', 'vote_give', 'follow', 'be_followed'];
+  const ORDER = ['swap', 'send_call', 'call_x', 'call_hold', 'hop_on', 'hop_hold', 'connect_wallet', 'first_post', 'post', 'track_wallet', 'watch_token', 'daily', 'egg', 'customize', 'comment', 'react_give', 'vote_give', 'follow', 'be_followed'];
   const VARIABLE = new Set(['call_x', 'call_hold', 'hop_hold']); // points scale with real performance — shown as "⚡ scales", not a fixed number
   // where clicking a "how to earn" row takes you to actually do it
   const EARN_ACTION = {
+    egg: {},   // there is nowhere to send them — the point is to look
     swap: { href: '/index.html#swap' },
     connect_wallet: { open: 'sec-security' },
     first_post: { href: '/wall.html' },
     post: { href: '/wall.html' },
-    track_wallet: { scroll: 'add-wallet-form', focus: 'tw-addr' },
+    track_wallet: { href: '/tracker.html' },   // the tracker is its own page now; #add-wallet-form no longer exists here
     watch_token: { href: '/newpairs.html' },
     send_call: { href: '/newpairs.html' },
     call_x: { href: '/wall.html' },
@@ -87,6 +89,7 @@
      it allows 10. A cap is a promise about what the site will pay you; a wrong one is worse than none.
      capLine() below appends the real figure from g.rules.dailyCap at render time, so it cannot drift again. */
   const EARN_DESC = {
+    egg: 'You found one of the hidden eggs. A hundred are tucked away across the site; each pays once, ever.',
     swap: 'Swap ETH for $SEND or $GWC via the in-page swap. Verified on-chain — the biggest fixed award on the board.',
     connect_wallet: 'Link a wallet holding $SEND/$GWC (read-only signature). Once per wallet.',
     first_post: 'A one-time bonus for your very first post on the Send Wall.',
@@ -277,6 +280,7 @@
         '<div class="pc-chips">' +
           (boosted ? '<span class="pc-mult">⚡ ' + mult.toFixed(2) + '× boost</span>' : '<span class="pc-mult pc-mult-off">⚡ 1× · unlock boost ↓</span>') +
           (g.todayPoints ? '<span class="pc-today' + (g.todayPoints < 0 ? ' is-down' : '') + '">' + signed(g.todayPoints) + ' today</span>' : '') +
+          (g.eggs && g.eggs.total ? '<span class="pc-eggs" title="Easter eggs found — a hundred are hidden across the site">🥚 ' + (g.eggs.found || 0) + '/' + g.eggs.total + ' eggs</span>' : '') +
           (g.weekBoost && g.weekBoost.boost > 1 ? '<span class="pc-week" title="Biggest Sender prize — the boost your finishing place won last week, added to everything you earn until ' + esc(new Date(g.weekBoost.until).toUTCString().slice(0, 16)) + ' 00:00 UTC">🏆 ' + g.weekBoost.boost + '× prize</span>' : '') +
         '</div>' +
         (multParts ? '<div class="pc-mult-parts">' + esc(multParts) + ' on every point</div>' : '') +
@@ -629,7 +633,10 @@
         if (_lootMode === b.dataset.lootmode) return;
         _lootMode = b.dataset.lootmode;
         const loot = dash.querySelector('.loot');
-        if (loot && _lg) { loot.outerHTML = lootLog(_lg); animate(dash); wireLootToggle(); }
+        if (loot && _lg) {
+          loot.outerHTML = lootLog(_lg); animate(dash); wireLootToggle();
+          const nb = dash.querySelector('[data-lootmode="' + _lootMode + '"]'); if (nb) nb.focus();   // the toggle just replaced itself
+        }
       });
     });
   }
@@ -1346,7 +1353,7 @@
     dash.querySelectorAll('.js-refresh').forEach(b => b.addEventListener('click', doRefresh));
     dash.querySelectorAll('.js-connect').forEach(b => b.addEventListener('click', () => {
       const sec = document.getElementById('sec-security'); if (sec) { sec.open = true; sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' }); }
-      if (window.sendToast) sendToast('Link a wallet under Security, then hit Refresh 🔗');
+      if (window.sendToast) sendToast('Link a wallet in Settings → Security, then hit Refresh 🔗');
     }));
 
     animate(dash);
@@ -1362,6 +1369,10 @@
       leaderboard = lb;
       try { competition = await (await fetch('/api/competition', { credentials: 'same-origin' })).json(); } catch {}
       render(g, lb); // render() runs celebrate() → confetti only on a real level/tier increase
+      /* render() replaced dash.innerHTML under the Refresh button, so focus fell to <body> at the top of a
+         card three screens tall. Put it back on the new Refresh button, and say what happened. */
+      const nb = dash.querySelector('.js-refresh'); if (nb) nb.focus(); else { dash.tabIndex = -1; dash.focus(); }
+      if (window.announce) announce('Dashboard refreshed');
       if (window.sendToast) sendToast(g.holderLive && g.holderLive.multiplier > 1 ? ('Holder Boost live: ' + g.holderLive.multiplier.toFixed(2) + '× 🔥') : 'Holdings refreshed ✓');
     } catch (e) {
       btns.forEach(b => { b.disabled = false; if (b.dataset.orig) b.textContent = b.dataset.orig; });

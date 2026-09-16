@@ -81,7 +81,9 @@ function renderImgSlot(kind, url) {
   }
   const up = document.createElement('label');
   up.className = 'file-label';
-  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" accept="image/*,video/mp4,video/webm" hidden>';
+  /* sr-only, not hidden: [hidden] is display:none and an unfocusable input means Tab skips 'Upload'
+     entirely — the only keyboard dead-end on the page. Every other uploader on the site uses this shape. */
+  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" class="sr-only" aria-label="Upload a ' + kind + ' image or video" accept="image/*,video/mp4,video/webm">';
   up.querySelector('input').addEventListener('change', e => uploadThemeImage(kind, e.target));
   zone.appendChild(up);
   if (url) {
@@ -218,6 +220,13 @@ const currentFactorBody = (note) => AUTH.currentFactor(note);
    did nothing. Opening it on the jump — and on arrival with #sec-security in the URL, so a link shared
    from anywhere lands open — is the difference between a shortcut and a dead end. Focus follows, because
    somebody who arrived by keyboard has to be put where they were sent. */
+/* A list that re-renders under the control you just pressed drops keyboard and screen-reader users to
+   <body>. Land them on the status line that just changed instead; it is the next thing they want anyway. */
+function refocus(id) {
+  const el = document.getElementById(id); if (!el) return;
+  if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  try { el.focus({ preventScroll: true }); } catch {}
+}
 function openSecurity(scroll) {
   const d = document.getElementById('sec-security');
   if (!d) return;
@@ -302,6 +311,7 @@ async function unlinkWallet(address) {
     const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, ...current } });
     sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: that wallet had sold out' : ''));
     await loadMe();
+    refocus('wl-status');   // the button that had focus was just re-rendered away
     if (window.loadConnectedWallet) loadConnectedWallet();
     if (window.loadGamify) loadGamify();
     if (window.refreshNavBalances) refreshNavBalances();
@@ -325,6 +335,7 @@ async function makeTwofaWallet(address) {
     await api('/api/2fa/wallet/primary', { method: 'POST', body: { address, newSignature, ...current } });
     sendToast('Two-factor wallet is now ' + shortAddr(address) + ' 🔐');
     await loadMe();
+    refocus('wl-status');   // the button that had focus was just re-rendered away
   } catch (e) {
     if (e.message === 'cancelled') return;
     if (st) st.textContent = '⚠️ ' + e.message;
@@ -662,7 +673,7 @@ async function loadInvites() {
     await inv.mountDashboard(host);
     if (location.hash === '#invites') {
       const card = document.getElementById('invites-card');
-      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (card) card.scrollIntoView({ behavior: (window.prefersReduced && prefersReduced()) ? 'auto' : 'smooth', block: 'start' });
     }
   } catch {
     // the ticket assets failed to load — say where the codes are rather than leaving an empty card
@@ -702,6 +713,7 @@ async function loadAlertList() {
       const j = await window.api('/api/alerts/' + encodeURIComponent(name), { method: 'DELETE' });
       AUTH.user.alerts = Array.isArray(j.alerts) ? j.alerts : [];
       loadAlertList();
+      refocus('alert-list-note');   // the Turn-off button that had focus no longer exists
       if (window.sendToast) sendToast('🔕 Alerts off for @' + name);
       if (window.announce) announce('Alerts off for ' + name);
     } catch (err) { b.disabled = false; if (window.sendToast) sendToast(err.message); }
