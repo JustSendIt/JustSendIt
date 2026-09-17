@@ -53,7 +53,8 @@ try {
   check('the invite is on the public Send Wall', !!wp);
   check('it links back to the community', wp && wp.community && wp.community.id === cid);
   check('it carries the community branding for the badge',
-    wp && wp.community && wp.community.symbol === 'IVF' && wp.community.image === 'https://cdn.dexscreener.com/ivf.png');
+    // the artwork arrives as our own proxy path — a visitor's browser never fetches from the CDN
+    wp && wp.community && wp.community.symbol === 'IVF' && wp.community.image === '/api/img?u=' + encodeURIComponent('https://cdn.dexscreener.com/ivf.png'), wp && wp.community && wp.community.image);
   check('and its live status', wp && wp.community.status === 'live', wp && wp.community.status);
 } catch (e) { console.error('ERROR', e.message); }
 finally {

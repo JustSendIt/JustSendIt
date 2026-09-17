@@ -18,19 +18,17 @@
 <meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
 <link rel="icon" href="assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="gate.css">
 <style>
-  body.terms { background: #0b0618; padding: 0; }
+  body.terms { background: var(--g-ink); padding: 0; }
   .t-wrap { position: relative; z-index: 4; max-width: 52rem; margin: 0 auto; padding: 2rem 1.15rem 5rem; }
   .t-h1 { font-family: 'Luckiest Guy', cursive; font-size: clamp(1.8rem, 6vw, 2.8rem); margin: 0 0 0.3rem;
-    color: #fff; text-shadow: 0 0 18px rgba(255,46,136,0.4); }
+    color: var(--g-text); text-shadow: 0 0 18px color-mix(in srgb, var(--g-green) 35%, transparent); }
   .t-meta { color: var(--g-dim); font-size: 0.85rem; margin: 0 0 1.4rem; }
-  .t-lede { background: rgba(255,46,136,0.10); border: 1.5px solid rgba(255,46,136,0.42); border-radius: 14px;
+  .t-lede { background: color-mix(in srgb, var(--g-green) 8%, transparent); border: 1.5px solid color-mix(in srgb, var(--g-green) 42%, transparent); border-radius: 14px;
     padding: 1rem 1.15rem; margin: 0 0 1.6rem; line-height: 1.65; }
-  .t-lede b { color: #fff; }
+  .t-lede b { color: var(--g-text); }
   .t-lede p { margin: 0.5rem 0; }
   .t-lede p:first-child { margin-top: 0; } .t-lede p:last-child { margin-bottom: 0; }
   .t-toc { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
@@ -38,19 +36,19 @@
   .t-toc ol { margin: 0.4rem 0 0; padding-left: 1.3rem; columns: 2; column-gap: 1.4rem; }
   @media (max-width: 640px) { .t-toc ol { columns: 1; } }
   .t-toc li { margin: 0.2rem 0; font-size: 0.85rem; break-inside: avoid; }
-  .t-toc a { color: var(--g-cyan); text-decoration: none; }
+  .t-toc a { color: var(--g-green-hi); text-decoration: none; }
   .t-toc a:hover { text-decoration: underline; }
   .t-sec { margin: 0 0 1.8rem; scroll-margin-top: 1rem; }
   .t-sec h3 { color: var(--g-green-hi); font-size: 1.05rem; margin: 0 0 0.5rem; line-height: 1.35; }
-  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #ded3f4; font-size: 0.93rem; }
-  .t-sec b { color: #fff; }
-  .t-sec a { color: var(--g-cyan); }
+  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #dfe5d6; font-size: 0.93rem; }
+  .t-sec b { color: var(--g-text); }
+  .t-sec a { color: var(--g-green-hi); }
   .t-sec table { border-collapse: collapse; width: 100%; font-size: 0.88rem; margin: 0.6rem 0; }
-  .t-sec th, .t-sec td { text-align: left; vertical-align: top; padding: 0.45rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); color: #ded3f4; line-height: 1.5; }
-  .t-sec th { color: #fff; font-weight: 700; }
+  .t-sec th, .t-sec td { text-align: left; vertical-align: top; padding: 0.45rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); color: #dfe5d6; line-height: 1.5; }
+  .t-sec th { color: var(--g-text); font-weight: 700; }
   .t-scroll { overflow-x: auto; }
   .t-back { display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 1.2rem;
-    color: var(--g-cyan); text-decoration: none; font-weight: 700; font-size: 0.9rem; }
+    color: var(--g-green-hi); text-decoration: none; font-weight: 700; font-size: 0.9rem; }
 </style>
 </head>
 <body class="gate terms">
@@ -60,7 +58,7 @@
 <main class="t-wrap" id="main">
   <a class="t-back" href="index.html">← Home 🏠</a>
   <h1 class="t-h1">Privacy Policy</h1>
-  <p class="t-meta">Version 2026-09-16 · $Send / JustSendIt · <a href="mailto:GWCRH@atomicmail.io" style="color:var(--g-cyan)">GWCRH@atomicmail.io</a></p>
+  <p class="t-meta">Version 2026-09-17 · $Send / JustSendIt · <a href="mailto:GWCRH@atomicmail.io" style="color:var(--g-green-hi)">GWCRH@atomicmail.io</a></p>
 
   <div class="t-lede">
     <p><b>The short version.</b></p>
@@ -114,6 +112,7 @@
 <tr><td>Two-factor secret (authenticator app), the last accepted code step, and which wallet is your second factor</td><td>Two-factor sign-in</td><td>Secret encrypted at rest</td></tr>
 <tr><td>Sessions</td><td>Keeping you signed in</td><td>The session token is stored as a hash; the cookie itself is HttpOnly. You can see and end your sessions in your profile.</td></tr>
 <tr><td>Invite code you redeemed, who invited you, the codes you hand out, and when you accepted the Terms (and which version)</td><td>The invite-only door and proof of acceptance</td><td>Plain text</td></tr>
+<tr><td>When you confirmed you are 18 or older</td><td>The age check every visitor answers before the site opens, recorded on your account when you join, or the first time you answer it while signed in</td><td>Plain text (a date and time only — we never ask for your birthday)</td></tr>
 <tr><td>Posts, comments, reactions, votes, pinned tokens, Send Calls, community memberships, proposals and votes</td><td>The site's content and its rankings</td><td>Plain text; public (section 3). A Send Call also records the price at the time it was made.</td></tr>
 <tr><td>Images, GIFs, videos and voice memos you upload</td><td>Attachments to your posts and your avatar</td><td>Files on our disk, served from a public URL that does not contain your name</td></tr>
 <tr><td>Wallets you add to the tracker (yours or anyone's)</td><td>The wallet tracker page</td><td>Encrypted, plus a blind index</td></tr>
@@ -156,6 +155,7 @@
 <table>
 <thead><tr><th scope="col">Cookie</th><th scope="col">What it does</th><th scope="col">Lifetime</th></tr></thead>
 <tbody>
+<tr><td><code>jsi_age</code></td><td>Remembers that you confirmed you are 18 or older, so the question is not asked on every page (holds the number 18 and nothing else)</td><td>1 year, or until you clear your cookies</td></tr>
 <tr><td><code>sid</code></td><td>Keeps you signed in (HttpOnly, not readable by page scripts)</td><td>30 days, or until you sign out or end the session</td></tr>
 <tr><td><code>jsi_pass</code></td><td>Remembers that you redeemed an invite code while you finish signing up (HttpOnly)</td><td>Until the sign-up completes; a redeemed but unclaimed code frees up again after an hour</td></tr>
 <tr><td>OAuth state and <code>oauth_2fa</code></td><td>Carry a Google or X sign-in through its redirect and a pending second factor</td><td>Minutes</td></tr>
@@ -167,26 +167,28 @@
 
 <section class="t-sec" id="p7">
 <h3>7. Other services your browser talks to</h3>
-<p>Pages load fonts from Google Fonts (fonts.googleapis.com and fonts.gstatic.com), so Google's servers see your IP address and the page that requested the font, under Google's privacy policy. Nothing about your account is sent to them.</p>
-<p>Chain data shown live in the page (balances, the swap quote, transaction status) is read by your browser from the Robinhood Chain public RPC (rpc.mainnet.chain.robinhood.com); that service sees your IP address and the addresses you ask about. Explorer links go to robinhoodchain.blockscout.com; chart and pair links go to Dexscreener. Links to wallets, bridges and exchanges (for example MetaMask, Rabby, Rainbow, Trust Wallet, Coinbase Wallet, Phantom, Relay, MoonPay, OKX) open those services, which have their own policies. Following a link is your choice.</p>
+<p>Pages load nothing from other companies. The fonts are served from this site. Token pictures, live prices, and the wallet history the tracker and your profile show are fetched by our server and passed on to you, so Google, Dexscreener and Blockscout never see your IP address or the wallets you look at.</p>
+<p>The one exception is the swap and wallet-connect flow: while you swap, your browser reads your balance, the swap quote and the transaction status from the Robinhood Chain public RPC (rpc.mainnet.chain.robinhood.com). That service sees your IP address and your wallet address — the same service the wallet app you connected already talks to. Explorer links go to robinhoodchain.blockscout.com; chart and pair links go to Dexscreener. Links to wallets, bridges and exchanges (for example MetaMask, Rabby, Rainbow, Trust Wallet, Coinbase Wallet, Phantom, Relay, MoonPay, OKX) open those services, which have their own policies. Following a link is your choice.</p>
 <p>If the site is served through a content delivery network such as Cloudflare, that network sees your IP address and the pages you request in order to serve them and to block attacks.</p>
 </section>
 
 <section class="t-sec" id="p8">
 <h3>8. Services our server talks to</h3>
-<p>The server reads public market and chain data from Dexscreener, the Robinhood Chain RPC and Blockscout (token pairs, prices, liquidity, balances, swap history), a public price feed for ETH, and public stock-quote endpoints for the HOOD ticker shown on the site. These requests carry no information about you: they are about tokens and addresses, made from our server, not your browser. If the operator has enabled sign-in with Google or X, the sign-in itself is completed with that provider. If the operator runs the Telegram bot, messages you send it go through Telegram.</p>
+<p>The server reads public market and chain data from Dexscreener, the Robinhood Chain RPC and Blockscout (token pairs, prices, liquidity, balances, swap history), a public price feed for ETH, and public stock-quote endpoints for the HOOD ticker shown on the site. These requests carry no information about you: they are about tokens and addresses, made from our server, not your browser. That includes the wallet history the tracker and your profile show, and the token pictures on every page: the services asked see our server, never you. If the operator has enabled sign-in with Google or X, the sign-in itself is completed with that provider. If the operator runs the Telegram bot, messages you send it go through Telegram.</p>
 <p>We do not sell, rent or trade personal data, and we do not share it with advertisers or data brokers. We would disclose data only where the law requires it, or to investigate abuse of the site.</p>
 </section>
 
 <section class="t-sec" id="p9">
 <h3>9. How long we keep things</h3>
+<p><b>IP addresses are never stored</b> — only a keyed hash of each, and each hash is kept only while the check that reads it needs it: the one recorded with a Send Call is erased eight days later, once the same-network ring check can no longer look at it; the one recorded when an account is created is erased after 90 days, so the limit on accounts per network counts the last 90 days; the ones recorded with a community membership, a community you started or an alert last as long as those do and go with them. The site does not keep a hash of the network you last signed in from, or of where a proposal or a vote came from.</p>
+<p>Pictures and videos you upload are stored <b>without their location and device data</b>: GPS tags, camera make and model and similar fields are removed from photos (a photo keeps only its orientation), and location and metadata boxes are blanked in videos. A file whose structure cannot be read is refused rather than published as it is.</p>
 <p>Sessions expire after 30 days, or when you end them. Wallet sign-in challenges expire after ten minutes. An upload that is never attached to a post is deleted after thirty minutes. Notifications are trimmed so only the most recent of each kind are kept. Rate-limit counters live in memory and vanish on their own. Public content stays until you delete it or your account is deleted. Everything else stays for as long as your account exists.</p>
 <p>The operator keeps database backups for disaster recovery; a deleted account can persist in a backup until that backup is rotated out.</p>
 </section>
 
 <section class="t-sec" id="p10">
 <h3>10. Deleting your account</h3>
-<p>You can delete your account yourself from your profile: Settings → Account → Delete account. You will be asked to prove it is you (your password, or a signature from a wallet already linked to the account, or your current second factor). Deletion removes your identities, sessions, tracked wallets, holder state, notifications, mutes, follows, points ledger, uploads and posts; the files behind your uploads are removed from disk, and, where the operator has configured it, purged from the content delivery network. Reactions and votes you left on other people's posts are removed. Community memberships end.</p>
+<p>You can delete your account yourself from your profile: Settings → Account → Delete account. You will be asked to prove it is you (your password, or a signature from a wallet already linked to the account, or your current second factor). Deletion removes your identities, sessions, tracked wallets, holder state, notifications, mutes, follows, points ledger, uploads and posts; the files behind your uploads and your profile, header and background pictures are removed from disk, and, where the operator has configured it, purged from the content delivery network. Your social handles, IP hashes, age confirmation, balances and preferences are erased from the account. Reactions and votes you left on other people's posts are removed. Community memberships end. A proposal you drafted is deleted; one that was already put to a vote keeps its result, because other members voted on it, but its title and text are replaced with "[deleted]".</p>
 <p>What deletion does not undo: Send Calls are permanent by design and remain, shown under a placeholder name of the form "deleted-123" with an empty profile; wallet addresses that verified an account for the participation check or earned an OG badge stay recorded (as a hash) so the same wallet cannot verify another account; and invite codes you handed out that were already used stay used.</p>
 <p>If you cannot sign in, email GWCRH@atomicmail.io from the address on the account and we will verify you and delete it by hand.</p>
 </section>

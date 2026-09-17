@@ -1,6 +1,7 @@
 /* The site is invite-only now, so a "signed-out visitor" in a test is someone who is INSIDE the door
    without an account — which means they hold a gate pass. This mints a throwaway code, redeems it and
-   accepts the terms, and hands back the cookie to send on every request. Cleaned up by cleanupGatePass. */
+   accepts the terms, and hands back the cookies to send on every request: the pass, and the answer to
+   the age question. Cleaned up by cleanupGatePass. */
 import { DatabaseSync } from 'node:sqlite';
 import { DB_PATH } from './_paths.mjs';
 
@@ -23,8 +24,9 @@ export async function gatePass(base) {
   const m = /jsi_pass=([^;]+)/.exec(sc);
   if (!m) throw new Error('gate pass not issued: ' + (await r.text()).slice(0, 120));
   const cookie = 'jsi_pass=' + m[1];
-  await post('/api/gate/accept', { age18: true }, cookie);
-  return cookie;
+  await post('/api/gate/accept', {}, cookie);
+  // and the 18+ answer every visitor gives before the site opens (agegate.js) — the sign-up doors check it
+  return cookie + '; jsi_age=18';
 }
 
 export function cleanupGatePass() {
@@ -58,8 +60,9 @@ export async function freshPass(base) {
   const m = /jsi_pass=([^;]+)/.exec(r.headers.get('set-cookie') || '');
   if (!m) throw new Error('gate pass not issued: ' + (await r.text()).slice(0, 120));
   const cookie = 'jsi_pass=' + m[1];
-  await post('/api/gate/accept', { age18: true }, cookie);
-  return cookie;
+  await post('/api/gate/accept', {}, cookie);
+  // and the 18+ answer every visitor gives before the site opens (agegate.js) — the sign-up doors check it
+  return cookie + '; jsi_age=18';
 }
 export function cleanupExtraPasses() {
   if (!extraCodes.length) return;

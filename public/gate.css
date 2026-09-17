@@ -1,29 +1,33 @@
-/* ===== The door: a synthwave screen, a holographic ticket, and the terms ==================
- * Loaded only by gate.html. Deliberately self-contained — the gate has to render for someone
- * who has never been inside, so it must not depend on anything the rest of the site defines.
+/* ===== The door: a matrix screen, the ticket, and the terms ================================
+ * Loaded with invite.css by the invite modal (and by the /t/<id> share page). Self-contained in the
+ * sense that every token has a fallback, so the share page renders without styles.css.
  *
- * Palette: a synthwave sunset (deep indigo ground, hot magenta, cyan) with the site's own
- * $GWC green as the one thing that glows. Gold is reserved for the OG countdown, so "time is
- * running out" never shares a colour with "this is yours".
+ * Palette: THE SITE'S OWN. The matte, green-biased black ramp the logo sits on, the brand acid green
+ * as the thing that glows, near-white text. It used to be a synthwave sunset (indigo, magenta, cyan)
+ * wrapped around a $GWC ticket; the door now looks like the house it opens. Gold is still reserved for
+ * the OG countdown, so "time is running out" never shares a colour with "this is yours".
  */
 
 :root {
-  --g-ink:      #070312;   /* the far end of the grid */
-  --g-ink-2:    #120a26;
-  --g-violet:   #2a1250;
-  --g-magenta:  #ff2e88;
-  --g-cyan:     #38e8ff;
+  --g-ink:      var(--ink, #050604);     /* the far end of the grid */
+  --g-ink-2:    var(--ink-2, #0c0e09);
+  --g-ink-3:    var(--ink-3, #14170f);
+  --g-focus:    var(--focus, #f2f6ec);   /* never accent-derived, as on the rest of the site */
+  /* The TYPE on every green control. Not --g-ink: that follows the reader's background preference (prefs.js
+     moves --ink), and a label must stay dark on green whatever the page behind it is. --ctl-ink is the site's
+     own label ink, which prefs.js never touches. */
+  --g-on:       var(--ctl-ink, #020301);
   /* The site's green, not a copy of it. Inside the modal styles.css is loaded and these resolve to the
      live --green family — prefs.js's per-reader accent included — so a rebrand or an accent change reaches
      the ticket. The literals only carry the standalone pages (privacy, terms, the gate redirect), none of
      which draws a control from this file. */
-  --g-green:    var(--green, #8ee000);           /* $GWC */
-  --g-green-hi: var(--green-bright, #b4ff2b);
+  --g-green:    var(--green, #a8ce00);           /* the site's green */
+  --g-green-hi: var(--green-bright, #c6f000);
   --g-green-lo: var(--green-dark, var(--g-green)); /* ghost / spent fill (and the disabled fallback when styles.css is absent) — black type clears it at 6.3:1 */
   --g-gold:     #ffb340;
-  --g-text:     #f2eaff;
-  --g-dim:      #b9a8dd;
-  --g-paper:    #140b28;
+  --g-text:     var(--text, #f2f6ec);
+  --g-dim:      var(--text-dim, #b6beac);
+  --g-paper:    var(--ink-2, #0c0e09);
   /* the matrix grid every control on the site wears (styles.css --mx-*), aliased so the same tile renders
      when this file is loaded on its own: the same lines, cells, halo and pitch */
   --gmx-line: var(--mx-line, color-mix(in srgb, var(--g-ink) 26%, transparent));
@@ -42,16 +46,16 @@ body.gate {
   overflow-x: hidden;
 }
 
-/* ---- the screen: matrix rain, a sun, and a horizon grid ---- */
+/* ---- the screen: matrix rain, a green glow, and a horizon grid ---- */
 /* Above the sky, below everything else. Both are fixed, so without this the sky — which comes
    later in the DOM — paints its opaque gradient straight over the rain and hides it completely. */
 #gate-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; display: block; }
 .gate-sky {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
-    radial-gradient(120% 80% at 50% 78%, rgba(255,46,136,0.26) 0%, transparent 60%),
-    radial-gradient(90% 60% at 50% 100%, rgba(56,232,255,0.18) 0%, transparent 65%),
-    linear-gradient(180deg, #070312 0%, #130a2a 45%, #2a1250 78%, #3d1a5e 100%);
+    radial-gradient(120% 80% at 50% 80%, color-mix(in srgb, var(--g-green) 16%, transparent) 0%, transparent 60%),
+    radial-gradient(90% 60% at 50% 100%, color-mix(in srgb, var(--g-green-hi) 10%, transparent) 0%, transparent 65%),
+    linear-gradient(180deg, var(--g-ink) 0%, var(--g-ink-2) 55%, var(--g-ink-3) 100%);
 }
 /* scanlines: the CRT the whole thing is supposedly on */
 .gate-scan {
@@ -70,16 +74,16 @@ body.gate {
 }
 .gate-kicker {
   font-size: 0.72rem; letter-spacing: 0.34em; text-transform: uppercase;
-  color: var(--g-cyan); margin: 0; font-weight: 700;
-  text-shadow: 0 0 14px rgba(56,232,255,0.6);
+  color: var(--g-green-hi); margin: 0; font-weight: 700;
+  text-shadow: 0 0 14px color-mix(in srgb, var(--g-green) 45%, transparent);
 }
 .gate-title {
   font-family: 'Luckiest Guy', cursive; margin: 0;
   font-size: clamp(2rem, 8vw, 3.6rem); line-height: 1.02; letter-spacing: 0.012em;
-  color: #fff; text-wrap: balance;
-  text-shadow: 0 0 18px rgba(255,46,136,0.55), 0 0 46px rgba(255,46,136,0.3), 0 3px 0 #a4155a;
+  color: var(--g-text); text-wrap: balance;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--g-green) 35%, transparent), 0 3px 0 var(--g-ink);
 }
-.gate-title .hl { color: var(--g-green-hi); text-shadow: 0 0 18px color-mix(in srgb, var(--g-green) 60%, transparent), 0 3px 0 #4d7a00; }
+.gate-title .hl { color: var(--g-green-hi); text-shadow: 0 0 18px color-mix(in srgb, var(--g-green) 60%, transparent), 0 3px 0 var(--green-dark, #7e9a00); }
 .gate-sub { margin: 0; max-width: 34rem; color: var(--g-dim); line-height: 1.6; font-size: 0.96rem; }
 .gate-sub b { color: var(--g-text); }
 
@@ -91,9 +95,9 @@ body.gate {
   position: relative; width: 100%;
   display: grid; grid-template-columns: minmax(0, 1fr) 10.5rem;
   border-radius: 16px; overflow: hidden;
-  background: linear-gradient(135deg, #1b1036 0%, #241247 45%, #1a0f33 100%);
-  box-shadow: 0 30px 70px -20px rgba(0,0,0,0.85), 0 0 0 1.5px color-mix(in srgb, var(--g-green) 10%, transparent),
-              0 0 42px rgba(255,46,136,0.22);
+  background: linear-gradient(135deg, var(--g-ink-3) 0%, var(--g-ink-2) 55%, var(--g-ink) 100%);
+  box-shadow: 0 30px 70px -20px rgba(0,0,0,0.85), 0 0 0 1.5px color-mix(in srgb, var(--g-green) 45%, transparent),
+              0 0 42px color-mix(in srgb, var(--g-green) 20%, transparent);
   transform-style: preserve-3d;
   transition: transform 220ms ease;
   animation: ticket-float 7s ease-in-out infinite;
@@ -105,14 +109,14 @@ body.gate {
   0%, 100% { transform: translateY(0) rotateX(0deg); }
   50%      { transform: translateY(-12px) rotateX(1.4deg); }
 }
-.ticket:focus-visible { outline: 3px solid var(--g-cyan); outline-offset: 5px; }
+.ticket:focus-visible { outline: 3px solid var(--g-focus); outline-offset: 5px; }
 
-/* the holographic sheen — a slow sweep of spectrum across the face */
+/* the sheen — a slow sweep of green light across the face */
 .ticket::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
   background: linear-gradient(115deg,
-    transparent 18%, rgba(56,232,255,0.16) 30%, rgba(255,46,136,0.20) 42%,
-    color-mix(in srgb, var(--g-green) 18%, transparent) 52%, color-mix(in srgb, var(--g-green-hi) 28%, transparent) 58%, transparent 74%);
+    transparent 18%, color-mix(in srgb, var(--g-green) 8%, transparent) 32%, color-mix(in srgb, var(--g-text) 7%, transparent) 44%,
+    color-mix(in srgb, var(--g-green) 14%, transparent) 52%, color-mix(in srgb, var(--g-green-hi) 20%, transparent) 58%, transparent 74%);
   background-size: 260% 260%;
   animation: holo 6.5s linear infinite;
   mix-blend-mode: screen;
@@ -141,11 +145,11 @@ body.gate {
 .tk-logo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; }
 .tk-brand { font-family: 'Luckiest Guy', cursive; font-size: 1.05rem; color: var(--g-green-hi); letter-spacing: 0.02em; }
 .tk-admit { display: inline-block; margin-left: auto; font-size: 0.7rem; font-weight: 800; letter-spacing: 0.22em;
-  text-transform: uppercase; color: var(--g-ink); background: var(--g-green-hi);
+  text-transform: uppercase; color: var(--g-on); background: var(--g-green-hi);
   padding: 0.22rem 0.5rem; border-radius: 4px; white-space: nowrap; }
 
 .tk-head { display: block; font-family: 'Luckiest Guy', cursive; font-size: clamp(1.3rem, 4.4vw, 1.9rem);
-  margin: 0.7rem 0 0.1rem; color: #fff; line-height: 1.08; }
+  margin: 0.7rem 0 0.1rem; color: var(--g-text); line-height: 1.08; }
 .tk-head .hl { color: var(--g-green-hi); }
 .tk-line { display: block; margin: 0; font-size: 0.8rem; color: var(--g-dim); line-height: 1.5; }
 
@@ -155,13 +159,13 @@ body.gate {
   display: grid; place-items: center; font-size: 1.7rem; overflow: hidden; }
 .tk-face img, .tk-face video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .tk-who { display: block; min-width: 0; }
-.tk-name { display: block; font-weight: 800; font-size: 1rem; color: #fff; overflow-wrap: anywhere; }
-.tk-role { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-cyan); font-weight: 700; }
+.tk-name { display: block; font-weight: 800; font-size: 1rem; color: var(--g-text); overflow-wrap: anywhere; }
+.tk-role { display: block; font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--g-green-hi); font-weight: 700; }
 
 .tk-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin-top: 0.9rem; }
 .tk-cell { display: block; background: rgba(0,0,0,0.3); border: 1px solid color-mix(in srgb, var(--g-green) 9%, transparent); border-radius: 9px; padding: 0.45rem 0.6rem; min-width: 0; }
 .tk-k { display: block; font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
-.tk-v { display: block; font-weight: 800; font-size: 0.95rem; color: #fff; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tk-v { display: block; font-weight: 800; font-size: 0.95rem; color: var(--g-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tk-v.gold { color: var(--g-gold); }
 
 /* the rocket countdown rail */
@@ -200,34 +204,34 @@ body.gate {
   font: inherit; font-weight: 800; cursor: pointer; border-radius: 999px;
   padding: 0.72rem 1.5rem; border: 2px solid transparent; min-height: 46px;
   transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
-  background: var(--g-green); color: var(--g-ink);   /* safe default: a green pill with dark type, never a bare label */
+  background: var(--g-green); color: var(--g-on);   /* safe default: a green pill with dark type, never a bare label */
 }
 .g-btn:active { transform: translateY(1px); }
-.g-btn-primary { background: linear-gradient(180deg, var(--g-green-hi), var(--g-green)); color: var(--g-ink);
+.g-btn-primary { background: linear-gradient(180deg, var(--g-green-hi), var(--g-green)); color: var(--g-on);
   box-shadow: 0 0 26px color-mix(in srgb, var(--g-green) 45%, transparent); }
 .g-btn-primary:hover { box-shadow: 0 0 38px color-mix(in srgb, var(--g-green) 65%, transparent); }
 /* the ghost is the deeper green, not a pale pill: same black type, one step down from the primary */
-.g-btn-ghost { background: var(--g-green-lo); color: var(--g-ink); border-color: var(--g-green-lo); }
+.g-btn-ghost { background: var(--g-green-lo); color: var(--g-on); border-color: var(--g-green-lo); }
 .g-btn-ghost:hover { background: var(--g-green); border-color: var(--g-green); }
 /* disabled: the site's muted control fill (styles.css --ctl-fill-dis; the deep green when this file stands alone) with the
    same black type and NO opacity wash — a 0.55 element opacity composited the label over the modal ground at ~2.65:1, and
    this is the state the reader looks at for the whole terms step (#inv-tos-go until they scroll to the end) and during
    redeem / wallet checks. Mirrors styles.css .btn:disabled; the static 0.35 grid (below) already marks the tile as inert. */
-.g-btn:disabled { background: var(--ctl-fill-dis, var(--g-green-lo)); color: var(--g-ink); opacity: 1; cursor: not-allowed; box-shadow: none; }
-.g-btn:focus-visible { outline: 3px solid var(--g-cyan); outline-offset: 3px; }
+.g-btn:disabled { background: var(--ctl-fill-dis, var(--g-green-lo)); color: var(--g-on); opacity: 1; cursor: not-allowed; box-shadow: none; }
+.g-btn:focus-visible { outline: 3px solid var(--g-focus); outline-offset: 3px; }
 
 /* ---- modal ---- */
 .g-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 1rem;
-  background: rgba(4,2,10,0.82); backdrop-filter: blur(7px); }
+  background: color-mix(in srgb, var(--g-ink) 84%, transparent); backdrop-filter: blur(7px); }
 .g-overlay[hidden] { display: none; }
 .g-modal { width: min(100%, 40rem); max-height: min(88vh, 60rem); display: flex; flex-direction: column;
-  background: linear-gradient(180deg, #170d2e, #100823); color: var(--g-text);
+  background: linear-gradient(180deg, var(--g-ink-3), var(--g-ink-2)); color: var(--g-text);
   border: 1.5px solid color-mix(in srgb, var(--g-green) 14%, transparent); border-radius: 16px;
   box-shadow: 0 30px 80px -20px rgba(0,0,0,0.9); overflow: hidden; }
 .g-modal-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.1rem;
   border-bottom: 1px solid color-mix(in srgb, var(--g-green) 10%, transparent); }
 .g-modal-h { margin: 0; font-family: 'Luckiest Guy', cursive; font-size: 1.15rem; color: var(--g-green-hi); }
-.g-x { margin-left: auto; background: var(--g-green-lo); border: 0; color: var(--g-ink); font-size: 1.4rem;
+.g-x { margin-left: auto; background: var(--g-green-lo); border: 0; color: var(--g-on); font-size: 1.4rem;
   cursor: pointer; line-height: 1; padding: 0.2rem 0.4rem; border-radius: 8px; }
 .g-x:hover { background: var(--g-green); }
 .g-modal-body { padding: 1.1rem; overflow-y: auto; }
@@ -249,17 +253,17 @@ body.gate {
 
 /* ---- terms ---- */
 .g-terms { background: rgba(0,0,0,0.3); border: 1px solid color-mix(in srgb, var(--g-green) 10%, transparent); border-radius: 12px;
-  padding: 0.9rem 1rem; max-height: 46vh; overflow-y: auto; font-size: 0.86rem; line-height: 1.62; color: #ddd2f2; }
+  padding: 0.9rem 1rem; max-height: 46vh; overflow-y: auto; font-size: 0.86rem; line-height: 1.62; color: var(--g-text); }
 .g-terms h3 { color: var(--g-green-hi); font-size: 0.95rem; margin: 1.2rem 0 0.35rem; }
 .g-terms h3:first-child { margin-top: 0; }
 .g-terms p, .g-terms li { margin: 0.45rem 0; }
 .g-terms ul { padding-left: 1.1rem; }
-.g-terms b, .g-terms strong { color: #fff; }
+.g-terms b, .g-terms strong { color: var(--g-text); }
 .g-readmark { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--g-dim);
   margin-top: 0.6rem; }
 .g-readbar { flex: 1 1 auto; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--g-green) 12%, transparent); overflow: hidden; }
 .g-readfill { display: block; height: 100%; width: 0; border-radius: 3px;
-  background: linear-gradient(90deg, var(--g-cyan), var(--g-green-hi)); transition: width 140ms linear; }
+  background: linear-gradient(90deg, var(--g-green), var(--g-green-hi)); transition: width 140ms linear; }
 .g-agree { display: flex; align-items: flex-start; gap: 0.6rem; margin-top: 0.9rem; font-size: 0.9rem;
   line-height: 1.5; cursor: pointer; }
 .g-agree input { width: 20px; height: 20px; margin: 0.1rem 0 0; flex: 0 0 auto; accent-color: var(--g-green); }
@@ -272,14 +276,14 @@ body.gate {
 .g-code { display: flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.6rem; min-height: 44px;
   background: var(--g-green-hi); border: 1px solid var(--g-green-hi); border-radius: 9px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; font-weight: 700;
-  color: var(--g-ink); cursor: pointer; }
+  color: var(--g-on); cursor: pointer; }
 .g-code:hover { background: var(--g-green); border-color: var(--g-green); }
-.g-code.is-used { background: var(--g-green-lo); border-color: var(--g-green-lo); color: var(--g-ink); text-decoration: line-through; cursor: default; }
+.g-code.is-used { background: var(--g-green-lo); border-color: var(--g-green-lo); color: var(--g-on); text-decoration: line-through; cursor: default; }
 .g-code .c-tag { margin-left: auto; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase;
-  font-family: 'Rubik', sans-serif; color: var(--g-violet); }
+  font-family: 'Rubik', sans-serif; color: var(--g-on); }
 
 .gate-foot { font-size: 0.76rem; color: var(--g-dim); line-height: 1.6; max-width: 40rem; }
-.gate-foot a { color: var(--g-cyan); }
+.gate-foot a { color: var(--g-green-hi); }
 
 @media (prefers-reduced-motion: reduce) {
   .ticket, .ticket::after { animation: none !important; }
@@ -287,16 +291,16 @@ body.gate {
   .g-btn::before, .g-x::before, .g-code::before { animation: none !important; }
 }
 
-/* The coin's own Dexscreener banner, as a band across the top of the ticket. Served through this site's
-   brand proxy: same origin, so no third party learns who is looking at a ticket, and a <canvas> can draw
-   it without tainting. It is decorative — if the artwork cannot be read the band stays empty and the
-   ticket is simply plainer, never broken. */
-.tk-band { display: block; position: absolute; inset: 0 0 auto 0; height: 30%; overflow: hidden; border-radius: 14px 14px 0 0; opacity: 0.38; pointer-events: none; }
-.tk-band img { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* The artwork is busy on purpose — it is a banner — and the ticket's own headline has to win. The
-   gradient starts already half-dark rather than clear, so the type sits on a settled ground at every
-   point rather than only below the fold of the band. */
-.tk-band::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,11,40,0.55) 0%, rgba(20,11,40,0.82) 55%, var(--g-paper, #140b28) 100%); }
+/* The site's matrix grid as a band across the top of the ticket — the texture every control on the site
+   wears, fading into the ticket's face. Decoration only: pure CSS, no artwork to fetch. */
+.tk-band { display: block; position: absolute; inset: 0 0 auto 0; height: 34%; overflow: hidden; border-radius: 14px 14px 0 0; pointer-events: none;
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--g-green) 22%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--g-green) 22%, transparent) 1px, transparent 1px);
+  background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0,0,0,0.45) 55%, transparent 100%);
+          mask-image: linear-gradient(180deg, #000 0%, rgba(0,0,0,0.45) 55%, transparent 100%);
+  opacity: 0.7; }
 /* and the ticket's own content sits above it, never behind */
 .ticket .tk-top, .ticket .tk-head, .ticket .tk-line { position: relative; z-index: 1; }
 .ticket .tk-body { position: relative; }

@@ -80,10 +80,9 @@
 </script>
 <link rel="icon" href="assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="styles.css">
+<script src="agegate.js"></script>
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="rocketize.css">
@@ -520,7 +519,10 @@
   </div>
 </section>
 
-<section class="alt-bg-2">
+<!-- Certified Send Moments: HIDDEN on request (2026-09-17). The `hidden` attribute keeps it out of the layout,
+     the accessibility tree and the tab order, and because the clips only load once they scroll into view
+     (home.js), a hidden section never fetches them. Delete `hidden` to bring it back as it was. -->
+<section class="alt-bg-2" id="moments" hidden>
   <div class="wrap">
     <h2 class="section-title display">Certified Send Moments 🔥</h2>
     <p class="section-sub">Six seconds of pure send energy. On loop. Forever.</p>

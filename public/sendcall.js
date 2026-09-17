@@ -49,7 +49,8 @@
     // backdrop: the token logo (via same-origin proxy so the canvas isn't CORS-tainted), else the Send logo
     const tokLogo = call.brand && call.brand.imageUrl;
     let bg = null;
-    if (tokLogo) { try { bg = await loadImg('/api/img?u=' + encodeURIComponent(tokLogo)); } catch {} }
+    // the server already sends artwork as our /api/img path; wrap only a raw CDN URL (an older cached call)
+    if (tokLogo) { try { bg = await loadImg(/^\/api\/img\?/.test(tokLogo) ? tokLogo : '/api/img?u=' + encodeURIComponent(tokLogo)); } catch {} }
     if (!bg) { try { bg = await loadImg('/assets/logo.png'); } catch {} }
     if (bg && bg.width) {
       const scale = Math.max(W / bg.width, H / bg.height), dw = bg.width * scale, dh = bg.height * scale;

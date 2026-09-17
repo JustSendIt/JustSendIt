@@ -71,12 +71,25 @@ try {
   const halfWay = await api('/api/auth/register', { method: 'POST', cookie: pass, body: { username: '__gt_notos__', email: 'gtnt@example.com', password: 'password123' } });
   check('a code alone is NOT enough — the terms come first', halfWay.status === 403 && halfWay.j.code === 'need_tos', halfWay.status + ' ' + (halfWay.j && halfWay.j.code));
 
-  const acc = await api('/api/gate/accept', { method: 'POST', cookie: pass, body: { age18: true } });
+  const acc = await api('/api/gate/accept', { method: 'POST', cookie: pass, body: {} });
   check('accepting the terms opens the door', acc.status === 200 && acc.j.access);
-  const joined = await api('/api/auth/register', { method: 'POST', cookie: pass, body: { username: '__gt_joined__', email: 'gtj@example.com', password: 'password123' } });
-  check('  ...and the account can now be made', joined.status === 200 && joined.j.ok, joined.status + ' ' + (joined.j && joined.j.error || ''));
-  if (joined.j && joined.j.username) { const r = db.prepare('SELECT id FROM users WHERE username=?').get(joined.j.username); if (r) made.users.push(r.id); }
-  const spent = await api('/api/auth/register', { method: 'POST', cookie: pass, body: { username: '__gt_twice__', email: 'gt2@example.com', password: 'password123' } });
+  // the 18+ question is asked before the site opens (agegate.js); a sign-up that never answered it is refused
+  const noAge = await api('/api/auth/register', { method: 'POST', cookie: pass, body: { username: '__gt_noage__', email: 'gtna@example.com', password: 'password123' } });
+  check('a code and the terms are NOT enough without the 18+ answer', noAge.status === 403 && noAge.j.code === 'need_age', noAge.status + ' ' + (noAge.j && noAge.j.code));
+  check('  ...and the refusal says what to do', /18 or older/.test(noAge.j.error || ''), noAge.j && noAge.j.error);
+  // through the gate state, which reads the same ageOk() — a sign-up here would spend one of the ten an
+  // hour this address gets, and the whole run shares that budget (sybiltest needs its four)
+  const wrongAge = await api('/api/gate/state', { cookie: pass + '; jsi_age=1' });
+  check('  ...a cookie that does not say 18 does not count', wrongAge.status === 200 && wrongAge.j.ageConfirmed === false, JSON.stringify(wrongAge.j && wrongAge.j.ageConfirmed));
+  const passAge = pass + '; jsi_age=18';
+  const joined = await api('/api/auth/register', { method: 'POST', cookie: passAge, body: { username: '__gt_joined__', email: 'gtj@example.com', password: 'password123' } });
+  check('  ...and with it the account can now be made', joined.status === 200 && joined.j.ok, joined.status + ' ' + (joined.j && joined.j.error || ''));
+  if (joined.j && joined.j.username) {
+    const r = db.prepare('SELECT id, age_at FROM users WHERE username=?').get(joined.j.username);
+    if (r) made.users.push(r.id);
+    check('  ...and the account records WHEN it confirmed its age', !!(r && r.age_at && Math.abs(r.age_at - Date.now()) < 60000), r && r.age_at);
+  }
+  const spent = await api('/api/auth/register', { method: 'POST', cookie: passAge, body: { username: '__gt_twice__', email: 'gt2@example.com', password: 'password123' } });
   check('  ...but that same code cannot make a SECOND account', spent.status === 403 && spent.j.code === 'code_spent', spent.status + ' ' + (spent.j && spent.j.code));
 
   const reuse = await api('/api/gate/redeem', { method: 'POST', body: { code: '12345' } });
@@ -100,7 +113,7 @@ try {
   const child = await api('/api/gate/redeem', { method: 'POST', body: { code: t.codes[0].code } });
   check("a holder's code admits the next person", child.status === 200 && child.j.ok, child.status);
   const childPass = passOf(child.setCookie);
-  await api('/api/gate/accept', { method: 'POST', cookie: childPass, body: { age18: true } });
+  await api('/api/gate/accept', { method: 'POST', cookie: childPass, body: {} });
   const childIn = await api('/', { cookie: childPass });
   check('  ...who then gets in', childIn.status === 200, childIn.status);
   const after = await api('/api/gate/invites', { cookie: u.sid });

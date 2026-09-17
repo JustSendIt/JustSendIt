@@ -125,14 +125,15 @@ try {
     const NOW = 1789000000000, DAYMS = 86400000;
     const grab2 = (re, label) => { const m = SRC.match(re); if (!m) { check('EXTRACT ' + label, false); return ''; } return m[0]; };
     const PERM = 32503680000000;
-    const gate = new Function('db', 'now', 'notify', 'humanDur', 'PROOF_SELL_WINDOW_MS', 'erc20Balance', 'TOK', 'DAY_MS', 'PERM_UNTIL',
+    // decField: the wallet list is encrypted at rest now; the real helper passes legacy plaintext through, and so does this stand-in
+    const gate = new Function('db', 'now', 'notify', 'humanDur', 'PROOF_SELL_WINDOW_MS', 'erc20Balance', 'TOK', 'DAY_MS', 'PERM_UNTIL', 'decField',
       grab2(/function flagUser\(userId, reason, costMult\) \{[\s\S]*?\n\}/, 'flagUser') + '\n' +
       grab2(/async function checkGateHold\(userId\) \{[\s\S]*?\n\}/, 'checkGateHold') + '\nreturn checkGateHold;')(
       stubDb, () => NOW, (id, e, m, k) => state.notes.push({ id, m, k }),
       (ms) => Math.round(ms / 3600000) + ' hours', DAYMS,
       async (_tok, addr) => { state.reads.push(addr); if (state.fail) throw new Error('rpc down');
                               return BigInt(Math.round((state.chain.get(addr) || 0) * 1e18)); },
-      { SEND: '0xsend' }, DAYMS, PERM);
+      { SEND: '0xsend' }, DAYMS, PERM, (v) => v);
 
     const put = (id, row, chain) => {
       state.rows.set(id, Object.assign({ gate_hold_until: 0, gate_floor: 0, gate_wallets: null, restricted_until: 0, restrict_level: 0, strikes: 0 }, row));

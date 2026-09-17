@@ -245,6 +245,19 @@ for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) {
   }
 }
 
+/* ---- 11. every site page asks the age question first ----
+   agegate.js has to run in <head>, after the stylesheet that styles its cover, or the page paints before
+   the question is up. A page added later without it is a way into the site that never asks. The legal
+   pages (privacy, terms) and the old gate redirect load no stylesheet from this site and stay readable. */
+for (const f of htmlFiles) {
+  const src = readFileSync(path.join(PUBLIC, f), 'utf8');
+  if (!/href="\/?styles\.css"/.test(src)) continue;
+  const head = src.slice(0, src.indexOf('</head>'));
+  const at = head.search(/<script src="\/?agegate\.js"><\/script>/);
+  if (at < 0) note('public/' + f, 'does not load agegate.js in <head> — this page would open without the 18+ question');
+  else if (at < head.search(/href="\/?styles\.css"/)) note('public/' + f, 'loads agegate.js before styles.css, so its cover is unstyled for the first paint');
+}
+
 if (problems.length) {
   console.error('✗ ' + problems.length + ' problem' + (problems.length === 1 ? '' : 's') + ':\n');
   for (const p of problems) console.error('  · ' + p);

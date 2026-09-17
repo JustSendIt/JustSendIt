@@ -53,17 +53,26 @@
   }
   function wire() {
     const m = document.getElementById('dk-mint'), rv = document.getElementById('dk-revoke'), rt = document.getElementById('dk-retry'), ro = document.getElementById('dk-rotate');
+    /* A key reads this account's private data, so minting or rotating one asks the same proof as any other
+       security change: the password, the second factor, or a signature from a wallet already on the account. */
+    const proofBody = async (note) => {
+      const proof = await (AUTH.ownershipProof ? AUTH.ownershipProof(note) : AUTH.currentFactor(note));
+      return JSON.stringify(Object.assign({ current: proof }, proof && proof.password ? { password: proof.password } : {}));
+    };
     if (ro) ro.addEventListener('click', async () => {
       ro.disabled = true;
-      const r = await J('/api/data/key/rotate', { method: 'POST', body: '{}' });
+      let body; try { body = await proofBody('A new secret for your Data API key.'); } catch { ro.disabled = false; return; }
+      const r = await J('/api/data/key/rotate', { method: 'POST', body });
       if (!r.ok || !r.j || !r.j.key) { say('⚠️ ' + ((r.j && r.j.error) || 'could not rotate')); load(); return; }
       showKey(r.j.key, 'Rotated. The old secret is dead; this one keeps ' + (r.j.expiresAt ? 'your expiry, ' + esc(new Date(r.j.expiresAt).toUTCString()) : 'its no-expiry status') + ', and spent nothing.');
     });
     if (rt) rt.addEventListener('click', () => { card.innerHTML = '<p class="dk-note">Reading the chain…</p>'; load(true); });
     if (rv) rv.addEventListener('click', async () => { rv.disabled = true; const r = await J('/api/data/key/revoke', { method: 'POST', body: '{}' }); say(r.ok ? 'Key revoked' : 'Could not revoke'); load(); });
     if (m) m.addEventListener('click', async () => {
-      m.disabled = true; m.textContent = 'Reading the chain…';
-      const r = await J('/api/data/key', { method: 'POST', body: '{}' });
+      m.disabled = true;
+      let body; try { body = await proofBody('A Data API key can read your private data.'); } catch { m.disabled = false; return; }
+      m.textContent = 'Reading the chain…';
+      const r = await J('/api/data/key', { method: 'POST', body });
       if (!r.ok || !r.j || !r.j.key) { say('⚠️ ' + ((r.j && r.j.error) || 'could not mint')); load(); return; }
       showKey(r.j.key, (r.j.source === 'og_gold' ? 'Free with your OG Gold — it never expires while you stay Gold.' + (r.j.paidUntil ? ' The time you had already paid for (until ' + esc(new Date(r.j.paidUntil).toUTCString()) + ') is kept as a fallback if the badge ever goes.' : '') : 'Good until <b>' + esc(new Date(r.j.expiresAt).toUTCString()) + '</b>. It spent ' + tok(r.j.spentTokens) + ' SEND of your burn (' + usd(r.j.spentUsd) + ' at $' + Number(r.j.priceUsd).toPrecision(4) + ' per $SEND' + (r.j.discountPct ? ', with your ' + r.j.discountPct + '% OG discount' : '') + ').'));
     });

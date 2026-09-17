@@ -5,7 +5,7 @@
  * the moment someone tries to JOIN. Reading is open; joining takes a ticket.
  *
  * This file is the shell — the overlay, the step flow, the codes list and the dashboard panel.
- * gate.css supplies the ticket itself and the synthwave screen, loaded alongside this one, on
+ * gate.css supplies the ticket itself and the matrix screen, loaded alongside this one, on
  * demand, the first time the modal is opened. Both are scoped: everything here lives under
  * #invite-overlay, which is its own stacking context, so nothing leaks onto the page behind it.
  */
@@ -18,8 +18,8 @@
 #invite-overlay {
   position: fixed; inset: 0; z-index: 9000;
   display: none; isolation: isolate;
-  background: var(--g-ink, #070312);
-  color: var(--g-text, #f2eaff);
+  background: var(--g-ink, #050604);
+  color: var(--g-text, #f2f6ec);
   font-family: 'Rubik', system-ui, -apple-system, 'Segoe UI', sans-serif;
   overflow-y: auto; overscroll-behavior: contain;
 }
@@ -45,17 +45,17 @@
      view on the terms step at phone height — the one control that lets a reader leave */
   position: fixed; top: 0.9rem; right: 0.9rem; z-index: 6;
   display: inline-flex; align-items: center; gap: 0.4rem;
-  background: var(--g-green, var(--green)); color: var(--g-ink, #070312);
+  background: var(--g-green, var(--green)); color: var(--g-on, #020301);
   border: 1px solid var(--g-green, var(--green)); border-radius: 999px;
   padding: 0.5rem 0.95rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
 }
 .inv-close:hover { background: var(--g-green-hi, var(--green-bright)); border-color: var(--g-green-hi, var(--green-bright)); }
-.inv-close:focus-visible { outline: 2px solid var(--g-cyan, #38e8ff); outline-offset: 2px; }
+.inv-close:focus-visible { outline: 3px solid var(--g-focus, #f2f6ec); outline-offset: 2px; }
 
-.inv-kicker { margin: 0; font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g-cyan, #38e8ff); }
+.inv-kicker { margin: 0; font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g-green-hi, #c6f000); }
 .inv-title { margin: 0.2rem 0 0; font-size: clamp(1.6rem, 5.2vw, 2.5rem); line-height: 1.1; text-align: center; font-weight: 800; }
 .inv-title .hl { color: var(--g-green-hi, var(--green-bright)); }
-.inv-sub { margin: 0; max-width: 48ch; text-align: center; color: var(--g-dim, #b9a8dd); font-size: 0.95rem; line-height: 1.55; }
+.inv-sub { margin: 0; max-width: 48ch; text-align: center; color: var(--g-dim, #b6beac); font-size: 0.95rem; line-height: 1.55; }
 
 .inv-step { display: none; width: 100%; flex-direction: column; align-items: center; gap: 1rem; }
 .inv-step[data-active] { display: flex; }
@@ -64,13 +64,13 @@
 /* The read-only exit, stated as a real option rather than a refusal. */
 .inv-browse {
   background: var(--g-green-lo, var(--green-dark)); border: 0; padding: 0.35rem 0.9rem; border-radius: 999px; font: inherit; font-size: 0.88rem;
-  color: var(--g-ink, #070312); text-decoration: none; cursor: pointer;
+  color: var(--g-on, #020301); text-decoration: none; cursor: pointer;
 }
 .inv-browse:hover { background: var(--g-green, var(--green)); }
 
 .inv-panel {
   width: 100%; max-width: 560px;
-  background: rgba(20,11,40,0.86); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 13%, transparent);
+  background: color-mix(in srgb, var(--g-ink-2, #0c0e09) 90%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent);
   border-radius: 16px; padding: 1.1rem 1.15rem;
 }
 .inv-panel h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
@@ -82,7 +82,7 @@
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
   padding: 0.62rem 0.8rem; border-radius: 10px; cursor: pointer; overflow: hidden;
   background: var(--g-green-hi, var(--green-bright)); border: 1px solid var(--g-green-hi, var(--green-bright));
-  color: var(--g-ink, #070312);
+  color: var(--g-on, #020301);
   font-family: ui-monospace, Menlo, monospace; font-size: 1rem; font-weight: 700; letter-spacing: 0.08em;
 }
 /* Both halves must be allowed to shrink. min-width:0 is the load-bearing part: a flex item's default
@@ -90,13 +90,13 @@
    tag pushes the whole row out of its grid cell and straight over the code beside it. */
 .inv-chars { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inv-code:hover { background: var(--g-green, var(--green)); border-color: var(--g-green, var(--green)); }
-.inv-code:focus-visible { outline: 2px solid var(--g-cyan, #38e8ff); outline-offset: 2px; }
+.inv-code:focus-visible { outline: 3px solid var(--g-focus, #f2f6ec); outline-offset: 2px; }
 /* A spent code has nothing to copy — it will never work again — so it does not look or behave like
    something you can hand to a friend. The characters are withheld by the server, not just hidden here. */
 .inv-code.is-used,
 .inv-code.is-used:hover {
   background: var(--g-green-lo, var(--green-dark)); border-color: var(--g-green-lo, var(--green-dark));
-  color: var(--g-ink, #070312); cursor: default;
+  color: var(--g-on, #020301); cursor: default;
 }
 /* struck through on the CHARACTERS only — a line through the "used · @who" label made it unreadable */
 .inv-code.is-used .inv-chars { text-decoration: line-through; }
@@ -105,19 +105,19 @@
   white-space: normal; overflow-wrap: anywhere;   /* the whole 'used · @handle' is the accessible name now — nothing else to fall back on */
   font-family: 'Rubik', system-ui, sans-serif; font-size: 0.72rem; font-weight: 700;
   letter-spacing: 0.09em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 999px;
-  background: color-mix(in srgb, var(--g-ink, #070312) 35%, transparent); color: inherit; text-decoration: none;
+  background: color-mix(in srgb, var(--g-ink, #050604) 35%, transparent); color: inherit; text-decoration: none;
 }
 /* No wash on a spent chip. The chip is already the muted fill and the type is dark, so a 35% ink wash under
    the only text that records who used the code pulled it under 4.5:1 (3.5:1 on the dashboard). On the chip
    itself it clears with room to spare; the wash is for the bright unused chips, where it is a highlight. */
 .inv-code.is-used .inv-tag { background: none; }
-.inv-note { margin: 0.65rem 0 0; font-size: 0.84rem; color: var(--g-dim, #b9a8dd); line-height: 1.5; }
-.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: 0.88rem; color: #ff8aa8; }
+.inv-note { margin: 0.65rem 0 0; font-size: 0.84rem; color: var(--g-dim, #b6beac); line-height: 1.5; }
+.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: 0.88rem; color: var(--red-soft, #ffb4b4); }
 .inv-err.is-ok { color: var(--g-green-hi, var(--green-bright)); }
 
 .inv-in {
   width: 100%; padding: 0.85rem 1rem; border-radius: 12px; margin-top: 0.5rem;
-  background: rgba(0,0,0,0.35); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent); color: var(--g-text, #f2eaff);
+  background: rgba(0,0,0,0.35); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent); color: var(--g-text, #f2f6ec);
   font-family: ui-monospace, Menlo, monospace; font-size: 1.25rem; letter-spacing: 0.22em; text-align: center;
   text-transform: uppercase;
 }
@@ -164,21 +164,21 @@
    "Required" onto its own line and split the sentence it belongs to in half. */
 .inv-tests li > div > b { display: block; font-size: 0.95rem; }
 .inv-tests li em { font-style: normal; font-weight: 600; opacity: 0.75; }
-.inv-tests li small { display: block; margin-top: 0.15rem; font-size: 0.82rem; line-height: 1.45; color: var(--g-dim, #b9a8dd); }
+.inv-tests li small { display: block; margin-top: 0.15rem; font-size: 0.82rem; line-height: 1.45; color: var(--g-dim, #b6beac); }
 .inv-tick {
   flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center;
   font-size: 0.85rem; font-weight: 800; line-height: 1;
-  background: color-mix(in srgb, var(--g-green, var(--green)) 6%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 20%, transparent); color: var(--g-dim, #b9a8dd);
+  background: color-mix(in srgb, var(--g-green, var(--green)) 6%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 20%, transparent); color: var(--g-dim, #b6beac);
 }
 /* mixes of the token the tick's own text uses, not an rgba copy of it: a second copy is what a rebrand leaves behind */
 .inv-tests li[data-state="ok"] .inv-tick { background: color-mix(in srgb, var(--green-bright) 18%, transparent); border-color: color-mix(in srgb, var(--green-bright) 55%, transparent); color: var(--green-bright); }
-.inv-tests li[data-state="no"] .inv-tick { background: rgba(255,46,136,0.15); border-color: rgba(255,46,136,0.5); color: #ff8aa8; }
+.inv-tests li[data-state="no"] .inv-tick { background: color-mix(in srgb, var(--red, #ff5d5d) 15%, transparent); border-color: color-mix(in srgb, var(--red, #ff5d5d) 50%, transparent); color: var(--red-soft, #ffb4b4); }
 /* The read-only assurance. It is a statement of what the code does — personal_sign returns a signature
    over a sentence and nothing else, and this site never calls eth_sendTransaction — not a promise about
    outcomes, which is not ours to make. */
 .inv-safe {
   margin: 1rem 0 0; padding: 0.8rem 0.9rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.55;
-  background: rgba(56,232,255,0.08); border: 1px solid rgba(56,232,255,0.28); color: var(--g-text, #f2eaff);
+  background: color-mix(in srgb, var(--g-green, #a8ce00) 8%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, #a8ce00) 30%, transparent); color: var(--g-text, #f2f6ec);
 }
 
 /* touch targets on the ticket flow: 'keep browsing' and the code chips were 28-35px */
@@ -214,8 +214,8 @@
     radial-gradient(circle, var(--gmx-cell) 0 1.7px, transparent 2px);
   background-size: 100% 100%, var(--gmx-size) var(--gmx-size);
   background-position: 0 0, calc(var(--gmx-size) / 2) calc(var(--gmx-size) / 2);
-  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--g-ink, #070312) 0, transparent 100%);
-          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--g-ink, #070312) 0, transparent 100%);
+  -webkit-mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--g-ink, #050604) 0, transparent 100%);
+          mask-image: radial-gradient(circle 48px at var(--mx, 50%) var(--my, 50%), var(--g-ink, #050604) 0, transparent 100%);
   opacity: 0;
   transition: opacity var(--dur-2, 0.16s) ease;
 }
@@ -234,3 +234,11 @@ html.motion-off .inv-close::before, html.motion-off .inv-browse::before, html.mo
 @media (forced-colors: active) {
   .inv-close::before, .inv-close::after, .inv-browse::before, .inv-browse::after, .inv-code::before, .inv-code::after { display: none; }
 }
+
+/* ═══ the rules for getting in (step 1) ═══════════════════════════════════════════════════════════
+   Numbered, because it is a real order: a code, then the wallet, then the bag. The numbers sit in the
+   same neutral ticks the participation check uses, so the two read as one process. */
+.inv-rules { text-align: left; }
+.inv-rules h3 { font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; color: var(--g-green-hi, #c6f000); }
+.inv-rules-list .inv-tick { color: var(--g-text, #f2f6ec); border-color: color-mix(in srgb, var(--g-green, #a8ce00) 45%, transparent); }
+.inv-rules .inv-note b { color: var(--g-text, #f2f6ec); }

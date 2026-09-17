@@ -158,10 +158,13 @@ function toNum(bi, decimals = 18) {
   return Number(bi) / 10 ** decimals;
 }
 
-/* ---- Dexscreener prices ---- */
+/* ---- Dexscreener prices ----
+   Read through THIS site (/api/chain/pairs), never from the browser: a direct call handed Dexscreener every
+   visitor's IP address every 30 seconds for as long as the homepage was open. The server caches it, so one
+   fetch serves everyone. */
 async function fetchPairs() {
-  const url = 'https://api.dexscreener.com/latest/dex/pairs/robinhood/' + TOKENS.SEND.pair + ',' + TOKENS.GWC.pair;
-  const res = await fetch(url);
+  const res = await fetch('/api/chain/pairs', { credentials: 'same-origin' });
+  if (!res.ok) throw new Error('prices ' + res.status);
   const j = await res.json();
   const out = {};
   for (const p of j.pairs || j.pair ? (j.pairs || [j.pair]) : []) {
@@ -221,7 +224,14 @@ async function initTokenCards() {
   } catch (e) { console.warn('price load failed', e); }
 }
 // only trust Dexscreener's own CDN (matches the CSP img-src allow-list) and reject any URL that could break out of markup
-function dexImg(u) { return (typeof u === 'string' && /^https:\/\/(cdn|dd)\.dexscreener\.com\//.test(u) && !/["'<>\s]/.test(u)) ? u : null; }
+// token artwork arrives as our own /api/img path (the server rewrites every CDN URL it sends); a raw CDN URL is
+// wrapped the same way, so a picture never loads from Dexscreener in the visitor's browser
+function dexImg(u) {
+  if (typeof u !== 'string' || /["'<>\s]/.test(u)) return null;
+  if (/^\/api\/img\?u=https%3A%2F%2F(cdn|dd)\.dexscreener\.com%2F/i.test(u)) return u;
+  if (/^https:\/\/(cdn|dd)\.dexscreener\.com\//.test(u)) return '/api/img?u=' + encodeURIComponent(u);
+  return null;
+}
 
 /* ---- add chain to wallet ---- */
 /* `prov` for the same reason ensureRobinhoodChain takes one: with two wallets installed, wprov() can
@@ -264,9 +274,11 @@ async function watchToken(tokenKey) {
   } catch { /* user closed */ }
 }
 
-/* ---- Blockscout history (best-effort, browser-origin only) ---- */
+/* ---- Blockscout history, read by this site's server ----
+   These reads carry wallet addresses — the visitor's own and the ones they track. From the browser they told
+   Blockscout which IP owns which wallets; through /api/chain/explorer the explorer only ever sees the server. */
 async function bsFetch(path) {
-  const res = await fetch(RH_CHAIN.explorer + path, { headers: { accept: 'application/json' } });
+  const res = await fetch('/api/chain/explorer?path=' + encodeURIComponent(path), { credentials: 'same-origin', headers: { accept: 'application/json' } });
   if (!res.ok) throw new Error('explorer ' + res.status);
   return res.json();
 }
@@ -294,7 +306,8 @@ async function dexPricesFor(addresses) {
   for (let i = 0; i < addresses.length; i += 30) {
     const chunk = addresses.slice(i, i + 30);
     try {
-      const res = await fetch('https://api.dexscreener.com/tokens/v1/robinhood/' + chunk.join(','));
+      const res = await fetch('/api/chain/dex-tokens?addrs=' + encodeURIComponent(chunk.join(',')), { credentials: 'same-origin' });   // via this site: the token list is a fingerprint of the wallet
+      if (!res.ok) throw new Error('prices ' + res.status);
       const arr = await res.json();
       for (const pairInfo of arr || []) {
         const base = (pairInfo.baseToken && pairInfo.baseToken.address || '').toLowerCase();

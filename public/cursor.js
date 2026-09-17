@@ -13,7 +13,9 @@
   let x = innerWidth / 2, y = innerHeight / 2, tx = x, ty = y, raf = null, lastTrail = 0;
   function loop() {
     x += (tx - x) * 0.35; y += (ty - y) * 0.35;                                    // gentle easing → a flying feel
-    rocket.style.transform = 'translate(' + x + 'px,' + y + 'px) rotate(-90deg)';
+    // the box's CENTRE sits on the pointer (translate -50%), and it turns about that same centre, so the
+    // middle of the rocket is exactly where a click lands
+    rocket.style.transform = 'translate(' + x + 'px,' + y + 'px) translate(-50%, -50%) rotate(-90deg)';
     // park the loop once the rocket has caught up with the pointer — an always-on rAF would keep writing
     // styles 60×/s on every page for as long as the tab lives, for no visible change. mousemove restarts it.
     if (Math.abs(tx - x) < 0.5 && Math.abs(ty - y) < 0.5) { x = tx; y = ty; raf = null; return; }

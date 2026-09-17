@@ -51,8 +51,9 @@ cd /opt/justsendit && npm ci --omit=dev
 
 ### 4. Configure env
 ```
-cp .env.example .env && nano .env
+install -m 600 .env.example .env && nano .env
 ```
+`install -m 600` creates the file readable by its owner only — it holds `DATA_KEY`, and a plain `cp` would leave it readable by every account on the box. (The server also tightens it to 600 at boot when it owns the file, and warns when it does not.)
 Set at least:
 ```
 DATA_KEY=<64 hex chars — node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
@@ -102,7 +103,7 @@ WantedBy=multi-user.target
 ```
 Make sure the data dir is writable by the service user, then enable it:
 ```
-sudo chown -R www-data:www-data /opt/justsendit/data && sudo systemctl enable --now justsendit
+sudo chown -R www-data:www-data /opt/justsendit/data /opt/justsendit/.env && sudo systemctl enable --now justsendit
 ```
 Check: `sudo systemctl status justsendit` and `curl localhost:8642/healthz` → `{"ok":true}`.
 

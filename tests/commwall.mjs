@@ -83,7 +83,8 @@ try {
   check('the post carries its community', !!(cp && cp.community), JSON.stringify(cp && cp.community));
   check('with the id needed to link to it', cp && cp.community.id === cLive);
   check('with the symbol and name', cp && cp.community.symbol === 'CWLIVE' && /CWLIVE/.test(cp.community.name));
-  check('with its branding image', cp && cp.community.image === 'https://cdn.dexscreener.com/x.png');
+  // served through our own image proxy: a visitor's browser never fetches from the CDN (see send() in server.js)
+  check('with its branding image', cp && cp.community.image === '/api/img?u=' + encodeURIComponent('https://cdn.dexscreener.com/x.png'), cp && cp.community.image);
   check('and its status, so the wall can say "not live yet"', cp && cp.community.status === 'live');
   const pp = (wall.j.posts || []).find(p => p.id === pPendComm);
   check('a pending community reports pending', pp && pp.community.status === 'pending', pp && pp.community.status);

@@ -95,7 +95,10 @@ try {
   for (const s of suites) {
     const r = await run(s);
     pass += r.pass; total += r.total;
-    const ok = (r.ran && r.pass === r.total) || r.skipped;
+    /* An ERROR line means the suite threw part-way: every check it printed passed, but the ones after the
+       throw never ran, so "20/20" would be a green light over a crash. A crash is a failure. */
+    const crashed = r.fails.some(l => l.startsWith('ERROR '));
+    const ok = ((r.ran && r.pass === r.total) || r.skipped) && !crashed;
     if (!ok) broken.push(r);
     if (r.skipped) skips.push(s);
     console.log((r.skipped ? '  – ' : ok ? '  ✓ ' : '  ✗ ') + s.padEnd(14) +

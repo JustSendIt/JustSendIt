@@ -109,8 +109,11 @@ function livePins(box) {
       let html;
       if (!j.hasWallet) html = '<span class="pin-hover-note">No wallet linked — a conviction, not verified holdings. Tap to see the token.</span>';
       else if (j.held) {
-        const amt = pinNum(j.amountTok) + ' ' + symTxt + (j.amountUsd ? ' <span class="pin-hover-usd">(~' + pinUsd(j.amountUsd) + ')</span>' : '');
-        const since = j.heldSinceMs ? ('held ' + (j.approx ? '≥ ' : '') + pinDur(j.heldSinceMs)) : 'currently holding';
+        // someone else's wall comes back in bands (the server's choice, so a hover cannot name a wallet): "10K+"
+        const plus = j.coarse ? '+' : '';
+        const amt = pinNum(j.amountTok) + plus + ' ' + symTxt + (j.amountUsd ? ' <span class="pin-hover-usd">(~' + pinUsd(j.amountUsd) + plus + ')</span>' : '');
+        const since = j.coarse ? (j.heldFor ? 'held ' + esc(j.heldFor) : 'currently holding')
+          : j.heldSinceMs ? ('held ' + (j.approx ? '≥ ' : '') + pinDur(j.heldSinceMs)) : 'currently holding';
         html = '<b class="pin-hover-hold">🪙 Holds ' + amt + '</b><span class="pin-hover-since">⏳ ' + since + '</span>';
       } else html = '<span class="pin-hover-note">Wallet holds none right now.</span>';
       tip.innerHTML = html;

@@ -1,7 +1,8 @@
 /* ===== Advanced on-chain wallet tracker for Robinhood Chain =====
  * For any address: holdings, full trade history vs DEX pools, average-cost
- * basis, realized + unrealized PNL, activity stats. All data straight from
- * the public RPC / Blockscout / Dexscreener — computed in your browser.
+ * basis, realized + unrealized PNL, activity stats. The chain data is read by this
+ * site's server from Blockscout and Dexscreener (so neither learns which IP looks at
+ * which wallets) and the report is computed in your browser.
  */
 
 const TRK = {

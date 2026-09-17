@@ -83,17 +83,24 @@
 
     const state = get();
     const resumeAllowed = window.__musicResume !== false;
+    /* Nothing plays while the 18+ question is up: the player is inert under it, so a track started there would
+       have no reachable pause (WCAG 1.4.2). Arming waits for the answer, and a question asked again pauses. */
+    const AGE = window.AGE;
+    const afterAge = (fn) => { if (AGE && AGE.needed) AGE.whenOk(fn); else fn(); };
+    document.addEventListener('jsi:age-open', () => { if (!audio.paused) audio.pause(); });
 
     if (state === '0' || !resumeAllowed) {
       // CASE C: opted out (or resume disabled in prefs) — silent, no hint, no arming
     } else if (state === '1') {
       // CASE A: returning listener — resume now, or on the very first interaction if blocked
-      tryPlay().then(ok => { if (!ok) armGeneric(); });
+      afterAge(() => tryPlay().then(ok => { if (!ok) armGeneric(); }));
     } else {
       // CASE B: brand-new visitor — arm to the deliberate entry-dismiss gesture + invite with a hint
       document.addEventListener('jsi:firstgesture', () => { tryPlay().then(ok => { if (!ok) showHint(); }); }, { once: true });
-      setTimeout(() => { if (audio.paused && !optedOut()) showHint(); }, 400);
-      setTimeout(() => { if (audio.paused) hideHint(); }, 8400); // auto-calm — never nag
+      afterAge(() => {
+        setTimeout(() => { if (audio.paused && !optedOut()) showHint(); }, 400);
+        setTimeout(() => { if (audio.paused) hideHint(); }, 8400); // auto-calm — never nag
+      });
     }
 
     // returning listener whose resume was blocked: retry on the first real interaction (they already opted in)

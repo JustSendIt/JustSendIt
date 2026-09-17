@@ -201,6 +201,8 @@
   AUTH.needsInvite = function (err) {
     const code = err && (err.code || err.gateCode);
     if (code === 'need_invite' || code === 'need_tos' || code === 'code_spent') { openInvite(); return true; }
+    // the server never got the 18+ answer (the cookie did not survive): the age question, not the ticket
+    if (code === 'need_age' && window.AGE) { AGE.reopen(); return true; }
     return false;
   };
 
@@ -456,8 +458,14 @@
        URL, so a reload does not re-trigger it. */
     try {
       const q = new URLSearchParams(location.search);
-      if (q.get('needinvite') === '1' || q.get('invite') === '1') {
-        openInvite();
+      if (q.get('needage') === '1') {
+        if (window.AGE) AGE.reopen();
+        q.delete('needage'); q.delete('autherror'); q.delete('autherrmsg');
+        const rest = q.toString();
+        history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+      } else if (q.get('needinvite') === '1' || q.get('invite') === '1') {
+        // the order is: loading screen, the 18+ question, THEN the ticket — never the ticket over either
+        if (window.AGE && AGE.needed) AGE.whenOk(openInvite); else openInvite();
         q.delete('needinvite'); q.delete('invite'); q.delete('autherror'); q.delete('autherrmsg');
         const rest = q.toString();
         history.replaceState(null, '', location.pathname + (rest ? '?' + rest : '') + location.hash);

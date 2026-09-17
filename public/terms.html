@@ -18,19 +18,17 @@
 <meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
 <link rel="icon" href="assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="gate.css">
 <style>
-  body.terms { background: #0b0618; padding: 0; }
+  body.terms { background: var(--g-ink); padding: 0; }
   .t-wrap { position: relative; z-index: 4; max-width: 52rem; margin: 0 auto; padding: 2rem 1.15rem 5rem; }
   .t-h1 { font-family: 'Luckiest Guy', cursive; font-size: clamp(1.8rem, 6vw, 2.8rem); margin: 0 0 0.3rem;
-    color: #fff; text-shadow: 0 0 18px rgba(255,46,136,0.4); }
+    color: var(--g-text); text-shadow: 0 0 18px color-mix(in srgb, var(--g-green) 35%, transparent); }
   .t-meta { color: var(--g-dim); font-size: 0.85rem; margin: 0 0 1.4rem; }
-  .t-lede { background: rgba(255,46,136,0.10); border: 1.5px solid rgba(255,46,136,0.42); border-radius: 14px;
+  .t-lede { background: color-mix(in srgb, var(--g-green) 8%, transparent); border: 1.5px solid color-mix(in srgb, var(--g-green) 42%, transparent); border-radius: 14px;
     padding: 1rem 1.15rem; margin: 0 0 1.6rem; line-height: 1.65; }
-  .t-lede b { color: #fff; }
+  .t-lede b { color: var(--g-text); }
   .t-lede p { margin: 0.5rem 0; }
   .t-lede p:first-child { margin-top: 0; } .t-lede p:last-child { margin-bottom: 0; }
   .t-toc { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
@@ -38,14 +36,14 @@
   .t-toc ol { margin: 0.4rem 0 0; padding-left: 1.3rem; columns: 2; column-gap: 1.4rem; }
   @media (max-width: 640px) { .t-toc ol { columns: 1; } }
   .t-toc li { margin: 0.2rem 0; font-size: 0.85rem; break-inside: avoid; }
-  .t-toc a { color: var(--g-cyan); text-decoration: none; }
+  .t-toc a { color: var(--g-green-hi); text-decoration: none; }
   .t-toc a:hover { text-decoration: underline; }
   .t-sec { margin: 0 0 1.8rem; scroll-margin-top: 1rem; }
   .t-sec h3 { color: var(--g-green-hi); font-size: 1.05rem; margin: 0 0 0.5rem; line-height: 1.35; }
-  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #ded3f4; font-size: 0.93rem; }
-  .t-sec b { color: #fff; }
+  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #dfe5d6; font-size: 0.93rem; }
+  .t-sec b { color: var(--g-text); }
   .t-back { display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 1.2rem;
-    color: var(--g-cyan); text-decoration: none; font-weight: 700; font-size: 0.9rem; }
+    color: var(--g-green-hi); text-decoration: none; font-weight: 700; font-size: 0.9rem; }
 </style>
 </head>
 <body class="gate terms">
@@ -57,7 +55,7 @@
        and got here from a footer — the gate would only bounce them. -->
   <a class="t-back" href="gate.html">← Back to the gate</a> · <a class="t-back" href="index.html">Home 🏠</a>
   <h1 class="t-h1">Terms of Service</h1>
-  <p class="t-meta">Version 2026-09-11 · $Send / JustSendIt · <a href="mailto:GWCRH@atomicmail.io" style="color:var(--g-cyan)">GWCRH@atomicmail.io</a></p>
+  <p class="t-meta">Version 2026-09-11 · $Send / JustSendIt · <a href="mailto:GWCRH@atomicmail.io" style="color:var(--g-green-hi)">GWCRH@atomicmail.io</a></p>
 
   <div class="t-lede">
     <p><b>The short version, and it is the honest one.</b></p>

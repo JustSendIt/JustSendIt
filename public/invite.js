@@ -4,14 +4,17 @@
  * again the moment they decide they would rather keep looking.
  *
  * The flow, in order:
- *   ticket  → the holographic ticket, "I have a code", and an obvious way out
+ *   ticket  → the ticket, the rules for getting in, "I have a code", and an obvious way out
  *   code    → redeem it (one use each)
- *   terms   → read to the end, tick both boxes
+ *   terms   → read to the end, tick the box (hidden unless TOS_GATE=1)
  *   join    → hand off to the normal sign-up modal
  *   codes   → once they have an account: their own ten, to copy and pass on
  *
- * Loaded on demand by auth.js, together with gate.css (the ticket and the synthwave screen) and
+ * Loaded on demand by auth.js, together with gate.css (the ticket and the matrix screen) and
  * invite.css (this shell). Nothing here runs until someone actually tries to join.
+ *
+ * The 18+ question is NOT here. It is asked once, before the site opens, by agegate.js — reading is
+ * free for everyone who answers it. This door is only about joining: a code, and the $SEND check.
  */
 (function () {
   'use strict';
@@ -56,10 +59,11 @@
         /* step 1 — the ticket */
         '<div class="inv-step" id="step-ticket" data-active>' +
           '<p class="inv-kicker">Invite only · Live beta</p>' +
-          '<h2 class="inv-title"><span class="hl">$GWC</span> is your ticket</h2>' +
-          '<p class="inv-sub">Reading the site is open to everyone — you can carry on looking around without an account. <b>Joining</b> takes a code from someone already inside, and once you are in you get <b>ten of your own</b> to hand out.</p>' +
+          '<h2 class="inv-title">Ticket to <span class="hl">Send</span> <span aria-hidden="true">🚀</span></h2>' +
+          '<p class="inv-sub">Reading the site is free for everyone 18 and over — you can carry on looking around without an account. <b>Joining</b> takes a code from someone already inside, and once you are in you get <b>ten of your own</b> to hand out.</p>' +
           ticketHtml() +
           '<p class="tk-cta" id="inv-cta">👆 Tap the ticket — <b>got a code?</b></p>' +
+          rulesHtml() +
           '<div class="inv-actions">' +
             '<button class="g-btn g-btn-primary" id="inv-have" type="button" data-tip="Opens the box where you type your invite code">I have a code 🎟️</button>' +
             '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the full terms of service in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
@@ -71,7 +75,7 @@
         '<div class="inv-step" id="step-code">' +
           '<h2 class="inv-title">Redeem your ticket</h2>' +
           '<div class="inv-panel">' +
-            '<p class="inv-note">Enter the invite code someone sent you. <b>Each code works once.</b></p>' +
+            '<p class="inv-note">Enter the invite code someone sent you. <b>Each code works once.</b> Full access also takes a read-only wallet check: <b><span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span></b> across the wallets you link.</p>' +
             '<label class="inv-note" for="inv-in" style="display:block;margin-top:0.7rem;">Invite code</label>' +
             '<input class="inv-in" id="inv-in" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="ABCD2345" aria-describedby="inv-err">' +
             '<p class="inv-err" id="inv-err" role="status" aria-live="polite"></p>' +
@@ -91,7 +95,6 @@
             '<div class="g-terms" id="inv-tos" tabindex="0" role="region" aria-label="Terms of service"></div>' +
             '<div class="g-readmark"><span id="inv-pct">0% read</span><span class="g-readbar"><span class="g-readfill" id="inv-fill"></span></span></div>' +
             '<label class="g-agree is-locked" id="inv-agree-l" for="inv-agree"><input type="checkbox" id="inv-agree" disabled><span id="inv-agree-t">Scroll to the end to unlock this box.</span></label>' +
-            '<label class="g-agree" for="inv-age"><input type="checkbox" id="inv-age"><span>I am <b>18 or older</b>.</span></label>' +
             '<p class="inv-err" id="inv-tos-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.6rem;">' +
               '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled data-tip="Records your agreement to the terms, then opens the last step">Accept &amp; continue 🚀</button>' +
@@ -119,7 +122,7 @@
           '<p class="inv-sub">Reading the site is open to everyone. Posting, calling and voting are for people who hold the coins — so we read your wallet, once, and check two things.</p>' +
           '<div class="inv-panel">' +
             '<ul class="inv-tests" id="inv-tests">' +
-              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You hold <span id="inv-min">$100</span> of $SEND</b><small>Priced live, right now, across every wallet you link. Dust does not count.</small></div></li>' +
+              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You hold <span id="inv-min">$100</span> of $SEND</b><small>Valued at the lower of the current price and its <span data-rule="median">24-hour</span> median, across every wallet you link. Dust does not count.</small></div></li>' +
               '<li data-t="net"><span class="inv-tick">○</span><div><b>You\'re not a net seller</b><small>You haven\'t sold more back to the market than you bought from it.</small></div></li>' +
             '</ul>' +
             '<p class="inv-note">⏳ <b>No waiting period — but keep the bag.</b> The door opens as soon as you hold it. If you sell that $SEND within 24 hours of buying it, the account goes read-only for a day; buying back in lifts it early.</p>' +
@@ -181,6 +184,32 @@
   }
 
   // The ticket markup, shared by the first and last steps (the second one gets its own ids).
+  /* The rules for getting in, stated on the door rather than discovered after it. Every number here is
+     painted from /api/gate/state (paintRules), which reads the same constants the wallet check enforces;
+     the literals are only what shows for the instant before that answer arrives. */
+  function rulesHtml() {
+    return '<section class="inv-panel inv-rules" aria-labelledby="inv-rules-h">' +
+      '<h3 id="inv-rules-h">How to get in</h3>' +
+      '<ol class="inv-tests inv-rules-list">' +
+        '<li><span class="inv-tick">1</span><div><b>Redeem an invite code</b><small>Someone already inside hands you one. Each code works once.</small></div></li>' +
+        '<li><span class="inv-tick">2</span><div><b>Connect your wallet — read-only</b><small>You sign a sentence to prove the wallet is yours. That signature moves nothing, approves nothing and costs no gas.</small></div></li>' +
+        '<li><span class="inv-tick">3</span><div><b>Hold <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span></b><small>Valued at the lower of the current price and its <span data-rule="median">24-hour</span> median, across every wallet you link, and you can\'t be a net seller. That unlocks full access: posting, calling and voting.</small></div></li>' +
+      '</ol>' +
+      '<p class="inv-note">Under <span data-rule="min">$100</span>? You can still make your account. It stays <b>read-only</b> until your wallets hold <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span>. Sell that $SEND within <span data-rule="hours">24 hours</span> of buying it and the account goes read-only for a day.</p>' +
+    '</section>';
+  }
+  function paintRules() {
+    if (!root) return;
+    const r = state && state.rules;
+    if (!r) return;
+    const min = Number(r.holdMinUsd);
+    if (Number.isFinite(min) && min > 0) root.querySelectorAll('[data-rule="min"]').forEach(n => { n.textContent = '$' + min.toLocaleString('en-US'); });
+    if (Array.isArray(r.coins) && r.coins.length) root.querySelectorAll('[data-rule="coin"]').forEach(n => { n.textContent = r.coins.join(' + '); });
+    const hrs = Number(r.sellWindowHours);
+    if (Number.isFinite(hrs) && hrs > 0) root.querySelectorAll('[data-rule="hours"]').forEach(n => { n.textContent = hrs + (hrs === 1 ? ' hour' : ' hours'); });
+    const med = Number(r.priceMedianHours);
+    if (Number.isFinite(med) && med > 0) root.querySelectorAll('[data-rule="median"]').forEach(n => { n.textContent = med + '-hour'; });
+  }
   function ticketHtml(idPrefix) {
     const p = idPrefix ? idPrefix + '-' : '';
     return '<div class="ticket-stage">' +
@@ -189,18 +218,16 @@
         '<span class="tk-notch top" aria-hidden="true"></span>' +
         '<span class="tk-notch bot" aria-hidden="true"></span>' +
         '<span class="tk-body">' +
-          // The $GWC banner the coin's own team published on Dexscreener, served from our origin so the
-          // viewer's browser never talks to a third party (and so a canvas can draw it — see brandImage).
-          // Lazy, and it simply does not appear if the artwork cannot be read: a ticket is not broken by
-          // a missing decoration.
-          '<span class="tk-band" id="' + p + 'tk-band" aria-hidden="true"></span>' +
+          // The site's matrix grid as a band across the top — the same texture every control on the site
+          // wears. Pure CSS: the ticket carries the site's brand, not a coin's banner art.
+          '<span class="tk-band" aria-hidden="true"></span>' +
           '<span class="tk-top">' +
-            '<img class="tk-logo" src="/assets/logo-128.png" alt="">' +
-            '<span class="tk-brand">$GWC</span>' +
+            '<img class="tk-logo" src="/assets/logo-mark-sm.png" alt="">' +
+            '<span class="tk-brand">$Send</span>' +
             '<span class="tk-admit">Admit one</span>' +
           '</span>' +
           '<span class="tk-head">Ticket to <span class="hl">Send</span></span>' +
-          '<span class="tk-line">Generational Wealth Coin · Robinhood Chain · Entertainment only</span>' +
+          '<span class="tk-line">Just Send It · Robinhood Chain · Entertainment only</span>' +
           '<span class="tk-holder">' +
             '<span class="tk-face" id="' + p + 'tk-face" aria-hidden="true">🎟️</span>' +
             '<span class="tk-who">' +
@@ -230,11 +257,11 @@
     '</div>';
   }
 
-  /* ---------- the screen: matrix rain over a synthwave horizon ---------- */
+  /* ---------- the screen: matrix rain over the site's grid horizon ---------- */
   function startScreen() {
     const cv = $('gate-bg'); if (!cv) return;
     const ctx = cv.getContext('2d', { alpha: true }); if (!ctx) return;
-    const GLYPHS = '$GWC0123456789ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ₿◆▲';
+    const GLYPHS = '$SEND0123456789ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉ◆▲';
     let cols = [], w = 0, h = 0, fs = 16;
     function size() {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -249,19 +276,19 @@
       cols = new Array(Math.ceil(w / fs)).fill(0).map(() => ({ y: Math.random() * -h, sp: 0.4 + Math.random() * 0.9 }));
     }
     function frame() {
-      ctx.fillStyle = 'rgba(7,3,18,0.11)'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = 'rgba(5,6,4,0.11)'; ctx.fillRect(0, 0, w, h);   // --ink
       ctx.font = '700 ' + fs + 'px ui-monospace, Menlo, monospace'; ctx.textBaseline = 'top';
       for (let i = 0; i < cols.length; i++) {
         const c = cols[i], x = i * fs;
-        ctx.fillStyle = 'rgba(180,255,43,0.92)';
+        ctx.fillStyle = 'rgba(198,240,0,0.92)';   // --green-bright
         ctx.fillText(GLYPHS[(Math.random() * GLYPHS.length) | 0], x, c.y);
-        ctx.fillStyle = 'rgba(142,224,0,0.32)';
+        ctx.fillStyle = 'rgba(168,206,0,0.32)';   // --green
         ctx.fillText(GLYPHS[(Math.random() * GLYPHS.length) | 0], x, c.y - fs);
         c.y += c.sp * fs * 0.55;
         if (c.y > h + fs * 2 && Math.random() > 0.975) c.y = -fs * 4;
       }
       const hy = h * 0.76;
-      ctx.strokeStyle = 'rgba(255,46,136,0.30)'; ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(168,206,0,0.22)'; ctx.lineWidth = 1;
       for (let g = 1; g <= 14; g++) { const y = hy + Math.pow(g / 14, 2.1) * (h - hy); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
       for (let g = -12; g <= 12; g++) { ctx.beginPath(); ctx.moveTo(w / 2 + g * (w / 14), hy); ctx.lineTo(w / 2 + g * w * 0.42, h); ctx.stroke(); }
       raf = requestAnimationFrame(frame);
@@ -273,7 +300,7 @@
     if (onResize) removeEventListener('resize', onResize);
     onResize = () => { if (!root || !root.hasAttribute('data-open')) return; cancelAnimationFrame(raf); size(); if (!reduced()) raf = requestAnimationFrame(frame); };
     addEventListener('resize', onResize);
-    if (reduced()) { ctx.fillStyle = '#070312'; ctx.fillRect(0, 0, w, h); }
+    if (reduced()) { ctx.fillStyle = '#050604'; ctx.fillRect(0, 0, w, h); }
     else raf = requestAnimationFrame(frame);
   }
   const stopScreen = () => { cancelAnimationFrame(raf); raf = 0; if (onResize) { removeEventListener('resize', onResize); onResize = null; } };
@@ -324,32 +351,11 @@
       ? 'Your ticket to Send: @' + t.username + ', Send ID #' + t.sendId + ', ' + t.codesLeft + ' of ' + t.codesTotal + ' invites left.' + when
       : 'Your ticket to Send, unclaimed.' + when);
   }
-  /* The $GWC banner the coin's own team published, across the top of the ticket. Served through this
-     site's brand proxy, so the viewer's browser never talks to a third party. Decorative and optional:
-     if the artwork cannot be read the band stays empty and the ticket is simply plainer, never broken. */
-  function paintBand(p) {
-    const band = $(p + 'tk-band');
-    // the brand urls ride on the gate state as well as the ticket, so the ticket a prospective member
-    // sees carries the same banner as the one they end up with
-    const brand = (state.ticket && state.ticket.brand) || state.brand;
-    if (!band || !brand || !brand.gwcHeader || band.dataset.filled) return;
-    band.dataset.filled = '1';                        // claim it now, so a re-paint cannot start a second load
-    /* Appended BEFORE the src is set, and deliberately not lazy. A detached `new Image()` carrying
-       loading="lazy" never loads at all — it is not in the document, so it is never near the viewport,
-       and the onload that was supposed to append it never fires. In the document it can simply load,
-       and a failure removes it again rather than leaving a broken-image frame on the ticket. */
-    const im = document.createElement('img');
-    im.alt = ''; im.decoding = 'async';
-    im.onerror = () => { im.remove(); band.dataset.filled = ''; };
-    band.appendChild(im);
-    im.src = brand.gwcHeader;
-  }
   function paintTicket() {
     const t = state.ticket;
     for (const p of ['', 'inv-ticket2-']) {
       if (!$(p + 'tk-name')) continue;
       bars($(p + 'tk-bars'), t ? 'SEND-' + t.sendId : 'SEND-UNCLAIMED');
-      paintBand(p);
       if (!t) { $(p + 'tk-serial').textContent = 'SEND·RH · UNCLAIMED'; continue; }
       $(p + 'tk-name').textContent = '@' + t.username;
       $(p + 'tk-role').textContent = t.invitedBy ? 'Invited by @' + t.invitedBy : 'Founding sender';
@@ -437,6 +443,7 @@
     try {
       state = await api('/api/gate/state');
       syncTerms();
+      paintRules();
       paintTicket();
     } catch { paintTicket(); }
     if (goldEndsAt == null) {
@@ -511,7 +518,7 @@
       ? 'I have read these terms. I understand this is entertainment, not financial advice, that crypto is extremely volatile, and that I can lose everything I put in.'
       : (reachedEnd ? 'Nearly — take a few more seconds with it.' : 'Scroll to the end to unlock this box.');
     if (!ok) cb.checked = false;
-    $('inv-tos-go').disabled = !(ok && cb.checked && $('inv-age').checked);
+    $('inv-tos-go').disabled = !(ok && cb.checked);
   }
 
   /* ---------- the participation check ----------
@@ -648,48 +655,61 @@
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
 
+    // the site's palette, as fixed values: a picture that leaves the site carries the BRAND green, not
+    // whichever accent this reader picked in their preferences
+    const GREEN = '#c6f000', GREEN_MID = '#a8ce00', TEXT = '#f2f6ec';
     const grd = c.createLinearGradient(0, 0, W, H);
-    grd.addColorStop(0, '#1b1036'); grd.addColorStop(0.5, '#2a1250'); grd.addColorStop(1, '#160d2c');
+    grd.addColorStop(0, '#14170f'); grd.addColorStop(0.5, '#0c0e09'); grd.addColorStop(1, '#050604');
     c.fillStyle = grd; c.fillRect(0, 0, W, H);
-    c.strokeStyle = 'rgba(255,46,136,0.35)'; c.lineWidth = 2;
+    // the matrix cell grid the site's controls wear, faint, then the horizon
+    c.fillStyle = 'rgba(168,206,0,0.05)';
+    for (let x = 30; x < W - 30; x += 14) c.fillRect(x, 30, 1, H * 0.62 - 30);
+    for (let y = 30; y < H * 0.62; y += 14) c.fillRect(30, y, W - 60, 1);
+    c.strokeStyle = 'rgba(168,206,0,0.24)'; c.lineWidth = 2;
     for (let g = 1; g <= 10; g++) { const y = H * 0.62 + Math.pow(g / 10, 2) * H * 0.38; c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
     for (let g = -8; g <= 8; g++) { c.beginPath(); c.moveTo(W / 2 + g * (W / 10), H * 0.62); c.lineTo(W / 2 + g * W * 0.5, H); c.stroke(); }
     const hol = c.createLinearGradient(0, H, W, 0);
-    hol.addColorStop(0.2, 'rgba(56,232,255,0)'); hol.addColorStop(0.45, 'rgba(56,232,255,0.16)');
-    hol.addColorStop(0.55, 'rgba(255,46,136,0.18)'); hol.addColorStop(0.75, 'rgba(142,224,0,0)');
+    hol.addColorStop(0.2, 'rgba(198,240,0,0)'); hol.addColorStop(0.45, 'rgba(198,240,0,0.09)');
+    hol.addColorStop(0.55, 'rgba(242,246,236,0.06)'); hol.addColorStop(0.75, 'rgba(198,240,0,0)');
     c.fillStyle = hol; c.fillRect(0, 0, W, H);
-    c.strokeStyle = 'rgba(180,255,43,0.75)'; c.lineWidth = 4; c.strokeRect(26, 26, W - 52, H - 52);
+    c.strokeStyle = GREEN; c.lineWidth = 4; c.strokeRect(26, 26, W - 52, H - 52);
     c.setLineDash([12, 10]); c.strokeStyle = 'rgba(255,255,255,0.42)'; c.lineWidth = 3;
     c.beginPath(); c.moveTo(W - 300, 30); c.lineTo(W - 300, H - 30); c.stroke(); c.setLineDash([]);
 
-    // measure, don't guess: a hard-coded x put "IS YOUR TICKET" right up against the "$GWC" before it
-    // ("$GWCIS YOUR TICKET") on any machine where Rubik renders a touch wider than it was eyeballed at.
-    c.fillStyle = '#b4ff2b'; c.font = '800 30px Rubik, system-ui, sans-serif';
-    c.fillText('$GWC', 64, 100);
-    const brandW = c.measureText('$GWC').width;
-    c.fillStyle = 'rgba(255,255,255,0.78)'; c.font = '700 20px Rubik, system-ui, sans-serif';
-    c.fillText('IS YOUR TICKET', 64 + brandW + 14, 100);
-    c.fillStyle = '#ffffff'; c.font = '800 74px Rubik, system-ui, sans-serif'; c.fillText('Ticket to Send', 64, 196);
+    // the lockup, as the nav wears it: the S-rocket mark and the $Send wordmark in the display face.
+    // Both are best effort — a mark that will not load or a face that is not ready leaves a plainer
+    // ticket, never a failed download.
+    const loadImg = (src) => new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = src; });
+    let mark = null;
+    try { mark = await loadImg('/assets/logo-mark-sm.png'); } catch {}
+    try { if (document.fonts && document.fonts.load) await document.fonts.load('40px "Luckiest Guy"'); } catch {}
+    if (mark) c.drawImage(mark, 58, 42, 76, 76);
+    const wordX = mark ? 146 : 64;
+    c.fillStyle = GREEN; c.font = '40px "Luckiest Guy", Rubik, system-ui, sans-serif'; c.fillText('$Send', wordX, 86);
+    c.fillStyle = 'rgba(242,246,236,0.72)'; c.font = '700 18px Rubik, system-ui, sans-serif'; c.fillText('JUST SEND IT · INVITE ONLY', wordX, 112);
+    c.fillStyle = TEXT; c.font = '800 74px Rubik, system-ui, sans-serif'; c.fillText('Ticket to Send 🚀', 64, 206);
 
     // the holder's own picture — best effort: a failed image must never stop the download
     let faceDrawn = false;
     if (t.avatarImg && !/\.(mp4|webm)$/i.test(t.avatarImg)) {
       try {
-        const img = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = rej; i.src = t.avatarImg; });
+        const img = await loadImg(t.avatarImg);
         c.save(); c.beginPath(); c.roundRect(64, 250, 132, 132, 20); c.clip();
         c.drawImage(img, 64, 250, 132, 132); c.restore();
-        c.strokeStyle = '#8ee000'; c.lineWidth = 4; c.beginPath(); c.roundRect(64, 250, 132, 132, 20); c.stroke();
+        c.strokeStyle = GREEN_MID; c.lineWidth = 4; c.beginPath(); c.roundRect(64, 250, 132, 132, 20); c.stroke();
         faceDrawn = true;
       } catch {}
     }
     if (!faceDrawn) {
       c.fillStyle = 'rgba(255,255,255,0.09)'; c.beginPath(); c.roundRect(64, 250, 132, 132, 20); c.fill();
-      c.font = '80px system-ui, sans-serif'; c.textAlign = 'center'; c.fillText(t.avatar || '🚀', 130, 348); c.textAlign = 'left';
+      // an opaque fill for the emoji: it inherits the fill's alpha, and the 9% square above left it a ghost
+      c.fillStyle = TEXT; c.font = '80px system-ui, sans-serif'; c.textAlign = 'center'; c.fillText(t.avatar || '🚀', 130, 348); c.textAlign = 'left';
     }
 
-    c.fillStyle = '#ffffff'; c.font = '800 44px Rubik, system-ui, sans-serif'; c.fillText('@' + t.username, 224, 300);
-    c.fillStyle = '#38e8ff'; c.font = '700 22px Rubik, system-ui, sans-serif';
-    c.fillText(t.invitedBy ? ('INVITED BY @' + t.invitedBy.toUpperCase()) : 'FOUNDING SENDER', 224, 336);
+    c.fillStyle = TEXT; c.font = '800 44px Rubik, system-ui, sans-serif'; c.fillText('@' + t.username, 224, 300);
+    c.fillStyle = GREEN; c.font = '700 22px Rubik, system-ui, sans-serif';
+    // a picture made to be shared does not name the inviter, who never agreed to appear on it (the ticket on screen still does)
+    c.fillText(t.invitedBy ? 'INVITED SENDER' : 'FOUNDING SENDER', 224, 336);
     c.fillStyle = 'rgba(255,255,255,0.62)'; c.font = '600 22px Rubik, system-ui, sans-serif';
     c.fillText('Joined ' + new Date(t.joinedAt).toISOString().slice(0, 10), 224, 372);
 
@@ -711,7 +731,7 @@
       idSize -= 4;
       c.font = '800 ' + idSize + 'px Rubik, system-ui, sans-serif';
     }
-    c.fillStyle = '#b4ff2b'; c.fillText(idText, sx, 260);
+    c.fillStyle = GREEN; c.fillText(idText, sx, 260);
     c.fillStyle = 'rgba(255,255,255,0.5)'; c.font = '700 18px Rubik, system-ui, sans-serif'; c.fillText('ADMIT ONE', sx, 320);
     let s = 0; const str = 'SEND-' + t.sendId;
     for (let i = 0; i < str.length; i++) s = (s * 31 + str.charCodeAt(i)) >>> 0;
@@ -789,18 +809,16 @@
     on('inv-tos-go', async () => {
       const err = $('inv-tos-err'), go = $('inv-tos-go');
       if (!$('inv-agree').checked) { err.textContent = 'Tick the box to confirm you have read the terms.'; return; }
-      if (!$('inv-age').checked) { err.textContent = 'You must confirm you are 18 or older.'; return; }
       go.disabled = true; err.textContent = '';
-      try { await api('/api/gate/accept', { method: 'POST', body: { version: state.tosVersion, age18: true } }); state.access = true; show('step-join'); }
+      try { await api('/api/gate/accept', { method: 'POST', body: { version: state.tosVersion } }); state.access = true; show('step-join'); }
       catch (e) { err.textContent = '⚠️ ' + e.message; go.disabled = false; }
     });
     const input = $('inv-in');
     if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') redeem(); });
     const tos = $('inv-tos'); if (tos) tos.addEventListener('scroll', checkRead);
-    const agree = $('inv-agree'), age = $('inv-age');
-    const both = () => { $('inv-tos-go').disabled = !($('inv-agree').checked && $('inv-age').checked && !$('inv-agree').disabled); };
+    const agree = $('inv-agree');
+    const both = () => { $('inv-tos-go').disabled = !($('inv-agree').checked && !$('inv-agree').disabled); };
     if (agree) agree.addEventListener('change', both);
-    if (age) age.addEventListener('change', both);
     // Esc closes it, at every step. Somebody who does not have a code must never feel trapped.
     // Not while the wallet picker or a confirm-your-factor dialog is up over it, though: that Esc is theirs.
     document.addEventListener('keydown', (e) => {

@@ -17,6 +17,7 @@
       if (m && !m.hasAttribute('hidden')) return true;
     }
     if (document.querySelector('#invite-overlay[data-open]')) return true;   // the ticket is a modal too
+    if (window.AGE && AGE.needed) return true;   // the 18+ question is up (or about to be): the tour waits for the answer
     return false;
   };
 

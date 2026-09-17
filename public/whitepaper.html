@@ -26,14 +26,14 @@
      <style> block below, and an equal-specificity rule that comes later wins — so styles.css can dress
      the nav, the ticker and the footer without touching the body of the paper. -->
 <link rel="stylesheet" href="styles.css">
+<script src="agegate.js"></script>
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="responsive.css">
 <!-- preconnect before the first request to the host, or it warms a connection that is already open; one
      stylesheet for all five families, because each extra request here is a render-blocking round trip -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Rubik:wght@400;600;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="fonts/fonts-whitepaper.css">
 
 <style>
   /* Dark is the default: this paper is served inside a black site, and the bare :root is what the
@@ -643,15 +643,14 @@ Expiration Time: &lt;10 minutes later&gt;
         <div class="figure">
 default-src 'self'
 script-src  'self'                        &larr; only our own code, ever
-style-src   'self' 'unsafe-inline' fonts.googleapis.com
-img-src     'self' data: blob: cdn.dexscreener.com dd.dexscreener.com
-connect-src 'self' rpc.mainnet.chain.robinhood.com
-                   robinhoodchain.blockscout.com
-                   api.dexscreener.com
+style-src   'self' 'unsafe-inline'
+font-src    'self'                        &larr; our own copies of the fonts
+img-src     'self' data: blob:            &larr; token art comes through our server
+connect-src 'self' rpc.mainnet.chain.robinhood.com   &larr; the swap only
 frame-src   'none'                         &larr; no third-party frames at all
 frame-ancestors 'none'                    &larr; nobody can hide us in their page
 object-src  'none'
-          <div class="cap">The full policy. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking. <span class="mono">frame-src 'none'</span> is newer: the price charts used to be an embedded third-party frame, and now the site draws them itself from each pair contract's own swap events &mdash; so the one exception that line used to carry no longer needs to exist.</div>
+          <div class="cap">The full policy. Pages load nothing from other companies: the fonts are served from this site, and token pictures, prices and wallet history are fetched by our server and passed on, so Google, Dexscreener and Blockscout never see a visitor's address. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking. <span class="mono">frame-src 'none'</span> is newer: the price charts used to be an embedded third-party frame, and now the site draws them itself from each pair contract's own swap events &mdash; so the one exception that line used to carry no longer needs to exist.</div>
         </div>
         <h3>Checking who asked</h3>
         <p>Whenever something changes &mdash; a post, a call, a setting &mdash; the server checks which website the request came from and rejects it unless it came from this one. That stops another site from acting for you while you happen to be logged in.</p>

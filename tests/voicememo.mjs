@@ -40,7 +40,17 @@ function mkUser(name) {
 }
 
 // a buffer that opens with the container's real magic bytes — what the upload route verifies
-const webmAudio = () => { const b = Buffer.alloc(2048); b[0] = 0x1a; b[1] = 0x45; b[2] = 0xdf; b[3] = 0xa3; return b; };
+/* The shape MediaRecorder writes: an EBML header, then a Segment and a Cluster whose sizes are "unknown"
+   (all ones) because the recorder streams. The upload route now parses the container to strip metadata, so
+   the fixture has to be a container, not magic bytes followed by zeros. */
+const webmAudio = () => {
+  const head = Buffer.concat([
+    Buffer.from('1a45dfa3', 'hex'), Buffer.from([0x87]), Buffer.from('4282847765626d', 'hex'),   // EBML header: DocType "webm"
+    Buffer.from('18538067', 'hex'), Buffer.from('01ffffffffffffff', 'hex'),                      // Segment, size unknown
+    Buffer.from('1f43b675', 'hex'), Buffer.from('01ffffffffffffff', 'hex'),                      // Cluster, size unknown
+  ]);
+  return Buffer.concat([head, Buffer.alloc(2048 - head.length)]);
+};
 const mp4Audio = () => { const b = Buffer.alloc(2048); b.write('ftyp', 4, 'latin1'); return b; };
 
 try {

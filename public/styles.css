@@ -2178,7 +2178,11 @@ details[open] .np-chev { transform: rotate(180deg); }
 /* ===== Rocket cursor 🚀 ===== */
 .rk-on, .rk-on * { cursor: none !important; }
 .rk-layer { position: fixed; inset: 0; z-index: 9998; pointer-events: none; overflow: hidden; }
-.rk-cursor { position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none; font-size: 22px; line-height: 1; margin: -18px 0 0 -4px; will-change: transform; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition: opacity 0.15s ease; }
+/* A square box with the glyph centred in it, so the box's centre IS the rocket's centre: cursor.js puts that
+   centre on the pointer (translate -50%) and rotates about it (transform-origin defaults to the centre). */
+.rk-cursor { position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none; font-size: 22px; line-height: 1;
+  width: 1.3em; height: 1.3em; display: grid; place-items: center; margin: 0;
+  will-change: transform; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition: opacity 0.15s ease; }
 .rk-p { position: fixed; pointer-events: none; line-height: 1; transform: translate(-50%, -50%); }
 .rk-trail { font-size: 12px; animation: rk-fade 0.2s ease-out forwards; }
 @keyframes rk-fade { from { opacity: 0.85; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, -50%) scale(0.4); } }
@@ -4812,4 +4816,111 @@ html.motion-off #matrix-rain { display: none; }
 html.motion-off .btn::before, html.motion-off .react-btn::before, html.motion-off .feed-tab::before, html.motion-off .dtab::before, html.motion-off .oc-tf::before, html.motion-off .np-seg::before, html.motion-off .np-vs-btn::before, html.motion-off .mp-btn::before, html.motion-off .copy-btn::before, html.motion-off .nav-toggle::before, html.motion-off .sc-hop::before, html.motion-off .np-row-call::before, html.motion-off .motion-btn::before, html.motion-off .npm-item::before, html.motion-off .auth-seg::before, html.motion-off .auth-tab::before, html.motion-off .profile-link::before, html.motion-off .np-caret-btn::before, html.motion-off .swap-choice::before, html.motion-off .file-label::before, html.motion-off .vote-btn::before, html.motion-off .sort-btn::before, html.motion-off .linklike::before, html.motion-off .oauth-btn::before, html.motion-off .btn-follow::before, html.motion-off .gobj-link::before, html.motion-off .wc-item::before, html.motion-off .wc-deep::before, html.motion-off .np-search-clear::before, html.motion-off .np-tickcopy::before, html.motion-off .tm-x::before, html.motion-off .pin-chip-open::before, html.motion-off .pin-chip-rm::before, html.motion-off .np-pin::before, html.motion-off .np-sort::before, html.motion-off .np-more::before, html.motion-off .np-refresh::before, html.motion-off .np-hidden-link::before, html.motion-off .np-status button::before, html.motion-off .np-newbar::before, html.motion-off .np-lookup-clear::before, html.motion-off .ab-chip::before, html.motion-off .np-chip::before, html.motion-off .np-den::before, html.motion-off .np-sv-apply::before, html.motion-off .np-sv-del::before, html.motion-off .np-runner-pin::before, html.motion-off .np-runner-chart::before, html.motion-off .np-rail-btn::before, html.motion-off .np-feed-fresh::before, html.motion-off .np-watch::before, html.motion-off .np-wl-remove::before, html.motion-off .notif-bell::before, html.motion-off .notif-clearall::before, html.motion-off .notif-x::before, html.motion-off .sc-btn::before, html.motion-off .sc-senders-toggle::before, html.motion-off .wall-tab::before, html.motion-off .lb-win::before, html.motion-off .ll-toggle button::before, html.motion-off .comm-tab::before, html.motion-off .ge-info::before, html.motion-off .cmp-mode::before, html.motion-off .np-chain-btn::before, html.motion-off .oc-mk::before, html.motion-off .ll-info::before, html.motion-off .arena-tab::before, html.motion-off .np-social-btn::before, html.motion-off .cw-tab::before, html.motion-off .np-strat::before, html.motion-off .np-fclose::before, html.motion-off .pillar > summary::before, html.motion-off .oc-data > summary::before, html.motion-off .b0-conn summary::before, html.motion-off .modal-x::before, html.motion-off .wc-x::before, html.motion-off .media-preview-rm::before, html.motion-off .intro-skip::before, html.motion-off .gif-toggle::before, html.motion-off .oc-reset::before, html.motion-off .addr-clear::before, html.motion-off #compose-fab::before, html.motion-off .risk-chip::before, html.motion-off .g1-w-link::before, html.motion-off .sc-info::before { animation: none !important; }
 @media (forced-colors: active) {
   .btn::before, .btn::after, .react-btn::before, .react-btn::after, .feed-tab::before, .feed-tab::after, .dtab::before, .dtab::after, .oc-tf::before, .oc-tf::after, .np-seg::before, .np-seg::after, .np-vs-btn::before, .np-vs-btn::after, .mp-btn::before, .mp-btn::after, .copy-btn::before, .copy-btn::after, .nav-toggle::before, .nav-toggle::after, .sc-hop::before, .sc-hop::after, .np-row-call::before, .np-row-call::after, .motion-btn::before, .motion-btn::after, .npm-item::before, .npm-item::after, .auth-seg::before, .auth-seg::after, .auth-tab::before, .auth-tab::after, .profile-link::before, .profile-link::after, .np-caret-btn::before, .np-caret-btn::after, .swap-choice::before, .swap-choice::after, .file-label::before, .file-label::after, .vote-btn::before, .vote-btn::after, .sort-btn::before, .sort-btn::after, .linklike::before, .linklike::after, .oauth-btn::before, .oauth-btn::after, .btn-follow::before, .btn-follow::after, .gobj-link::before, .gobj-link::after, .wc-item::before, .wc-item::after, .wc-deep::before, .wc-deep::after, .np-search-clear::before, .np-search-clear::after, .np-tickcopy::before, .np-tickcopy::after, .tm-x::before, .tm-x::after, .pin-chip-open::before, .pin-chip-open::after, .pin-chip-rm::before, .pin-chip-rm::after, .np-pin::before, .np-pin::after, .np-sort::before, .np-sort::after, .np-more::before, .np-more::after, .np-refresh::before, .np-refresh::after, .np-hidden-link::before, .np-hidden-link::after, .np-status button::before, .np-status button::after, .np-newbar::before, .np-newbar::after, .np-lookup-clear::before, .np-lookup-clear::after, .ab-chip::before, .ab-chip::after, .np-chip::before, .np-chip::after, .np-den::before, .np-den::after, .np-sv-apply::before, .np-sv-apply::after, .np-sv-del::before, .np-sv-del::after, .np-runner-pin::before, .np-runner-pin::after, .np-runner-chart::before, .np-runner-chart::after, .np-rail-btn::before, .np-rail-btn::after, .np-feed-fresh::before, .np-feed-fresh::after, .np-watch::before, .np-watch::after, .np-wl-remove::before, .np-wl-remove::after, .notif-bell::before, .notif-bell::after, .notif-clearall::before, .notif-clearall::after, .notif-x::before, .notif-x::after, .sc-btn::before, .sc-btn::after, .sc-senders-toggle::before, .sc-senders-toggle::after, .wall-tab::before, .wall-tab::after, .lb-win::before, .lb-win::after, .ll-toggle button::before, .ll-toggle button::after, .comm-tab::before, .comm-tab::after, .ge-info::before, .ge-info::after, .cmp-mode::before, .cmp-mode::after, .np-chain-btn::before, .np-chain-btn::after, .oc-mk::before, .oc-mk::after, .ll-info::before, .ll-info::after, .arena-tab::before, .arena-tab::after, .np-social-btn::before, .np-social-btn::after, .cw-tab::before, .cw-tab::after, .np-strat::before, .np-strat::after, .np-fclose::before, .np-fclose::after, .pillar > summary::before, .pillar > summary::after, .oc-data > summary::before, .oc-data > summary::after, .b0-conn summary::before, .b0-conn summary::after, .modal-x::before, .modal-x::after, .wc-x::before, .wc-x::after, .media-preview-rm::before, .media-preview-rm::after, .intro-skip::before, .intro-skip::after, .gif-toggle::before, .gif-toggle::after, .oc-reset::before, .oc-reset::after, .addr-clear::before, .addr-clear::after, #compose-fab::before, #compose-fab::after, .risk-chip::before, .risk-chip::after, .g1-w-link::before, .g1-w-link::after, .sc-info::before, .sc-info::after { display: none; }
+}
+
+/* ===== The age gate (agegate.js) ==================================================================
+   One question, once per device, before the site opens: are you 18 or older. It wears the site's own
+   look — the matte green-biased black, the brand green, the matrix grid — because it is the first thing
+   anybody sees. z-index 9960: above every modal (the ticket is 9000, the sign-in confirm 9500) and the
+   toasts, below the tip bubbles (9990) so its buttons can still describe themselves, and below the
+   rocket cursor (9998/9999), which hides the native pointer — painting over it would leave no cursor. */
+
+/* Until the question is built, a plain cover, so the page never flashes before it. On the homepage the
+   loading screen (z 999) sits above this, and entry.js drops the cover the moment that screen is up. */
+html.age-pending::after {
+  content: ''; position: fixed; inset: 0; z-index: 998; pointer-events: none;
+  background: var(--ink);
+}
+html.age-open, html.age-open body { overflow: hidden; }
+
+#age-gate {
+  position: fixed; inset: 0; z-index: 9960;
+  display: grid; place-items: center;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+  overflow-y: auto; overscroll-behavior: contain;
+  color: var(--text);
+  background:
+    radial-gradient(90% 70% at 50% 42%, color-mix(in srgb, var(--green) 14%, transparent), transparent 70%),
+    repeating-linear-gradient(to right, color-mix(in srgb, var(--green) 7%, transparent) 0 1px, transparent 1px 28px),
+    repeating-linear-gradient(to bottom, color-mix(in srgb, var(--green) 7%, transparent) 0 1px, transparent 1px 28px),
+    color-mix(in srgb, var(--ink) 94%, transparent);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  animation: age-in var(--dur-3, 320ms) var(--ease-out, ease) both;
+}
+#age-gate.age-leaving { animation: age-out 240ms ease both; pointer-events: none; }
+@keyframes age-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes age-out { from { opacity: 1; } to { opacity: 0; } }
+
+.age-card {
+  width: min(100%, 30rem); margin: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 0.85rem;
+  padding: clamp(1.25rem, 5vw, 2.1rem);
+  text-align: center;
+  background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
+  border: 1.5px solid color-mix(in srgb, var(--green) 38%, transparent);
+  border-radius: var(--r-4, 22px);
+  box-shadow: 0 30px 80px -24px rgba(0,0,0,0.9), 0 0 48px color-mix(in srgb, var(--green) 16%, transparent);
+  animation: age-card-in var(--dur-4, 600ms) cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.age-card[hidden] { display: none !important; }
+@keyframes age-card-in { from { transform: translateY(14px) scale(0.97); } to { transform: none; } }
+
+.age-brand { display: inline-flex; align-items: center; gap: 0.5rem; }
+.age-brand img { width: 48px; height: 48px; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--green) 50%, transparent)); }
+.age-brand span { font-family: 'Luckiest Guy', cursive; font-size: 1.35rem; letter-spacing: 0.02em; color: var(--green-bright); }
+
+.age-kicker {
+  margin: 0.2rem 0 0; padding: 0.2rem 0.65rem; border-radius: var(--r-pill, 999px);
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--on-green); background: var(--green-bright);
+}
+.age-title {
+  margin: 0; font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em;
+  font-size: clamp(1.7rem, 7vw, 2.4rem); line-height: 1.05; color: var(--text);
+  text-wrap: balance;
+}
+.age-title:focus { outline: none; }
+.age-title:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: 6px; }
+.age-sub { margin: 0; max-width: 40ch; color: var(--text-dim); font-size: 0.95rem; line-height: 1.55; }
+
+/* the box itself: a real checkbox, large, inside a row the whole of which is the label */
+.age-check {
+  width: 100%; margin-top: 0.3rem;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.8rem 0.95rem; min-height: 56px; border-radius: var(--r-2, 14px);
+  text-align: left; font-size: 0.98rem; line-height: 1.4; cursor: pointer;
+  background: color-mix(in srgb, var(--ink) 70%, transparent);
+  border: 1.5px solid var(--edge-ctl);
+  transition: border-color var(--dur-2, 180ms) ease, background var(--dur-2, 180ms) ease;
+}
+.age-check:hover { border-color: var(--green); }
+.age-check:has(input:checked) { border-color: var(--green-bright); background: color-mix(in srgb, var(--green) 12%, var(--ink)); }
+.age-check input {
+  flex: 0 0 auto; width: 24px; height: 24px; margin: 0; cursor: pointer;
+  accent-color: var(--green-bright);
+}
+.age-check input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.age-check b { color: var(--text); }
+
+.age-err { margin: 0; min-height: 1.3em; font-size: 0.88rem; font-weight: 600; color: var(--red-soft); }
+.age-actions { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0.7rem; }
+.age-enter { width: 100%; }
+.age-fine { margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--text-mute); line-height: 1.5; }
+.age-fine a { color: var(--green-bright); }
+
+@media (max-width: 380px) {
+  .age-enter { font-size: 1rem; padding: 0.85rem 1rem; }
+  .age-brand span { font-size: 1.15rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #age-gate, #age-gate.age-leaving, .age-card { animation: none; }
+}
+html.motion-off #age-gate, html.motion-off #age-gate.age-leaving, html.motion-off .age-card { animation: none; }
+@media print {
+  #age-gate, html.age-pending::after { display: none !important; }
+  html.age-open, html.age-open body { overflow: visible !important; }
+}
+@media (forced-colors: active) {
+  .age-card, .age-check { border: 2px solid CanvasText; }
+  html.age-pending::after { background: Canvas; }
 }

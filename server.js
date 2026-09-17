@@ -10,6 +10,10 @@ const zlib = require('node:zlib');
 const { DatabaseSync, backup: sqliteBackup } = require('node:sqlite'); // backup() = online, consistent, non-blocking snapshot (Node ≥ 23.8)
 const { verifyMessage, getAddress } = require('ethers');   // getAddress: EIP-55 checksum, required by the EIP-4361 parser in wallets
 const QRCode = require('qrcode');
+/* Private on disk as well as encrypted in it. Everything this process creates from here on — the database,
+   its WAL and SHM, backups, uploads, the generated key — is readable by the account running the site and by
+   nobody else on the machine. lockDownDataFiles() below repairs installs that were created before this. */
+process.umask(0o077);
 
 // Load a local .env if present (dependency-free) — real environment variables always win over the file.
 // Handy for a VPS/systemd deploy; on a PaaS you can just set the vars in its dashboard and skip the file.
@@ -100,6 +104,23 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 /* ---------- DB ---------- */
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
+(function lockDownDataFiles() {
+  const tighten = (p, mode) => { try { const st = fs.statSync(p); if ((st.mode & 0o077) !== 0) fs.chmodSync(p, mode); } catch {} };
+  tighten(DATA_DIR, 0o700);
+  tighten(UPLOAD_DIR, 0o700);
+  for (const f of ['app.db', 'app.db-wal', 'app.db-shm', '.data_key']) tighten(path.join(DATA_DIR, f), 0o600);
+  const bdir = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
+  tighten(bdir, 0o700);
+  try { for (const n of fs.readdirSync(bdir)) tighten(path.join(bdir, n), 0o600); } catch {}
+  // .env holds DATA_KEY on a VPS: fix it when this process owns it, say so when it does not
+  try {
+    const envf = path.join(__dirname, '.env'), st = fs.statSync(envf);
+    if (st.mode & 0o077) {
+      if (typeof process.getuid === 'function' && st.uid === process.getuid()) fs.chmodSync(envf, 0o600);
+      else console.warn('⚠️  ' + envf + ' is readable by other accounts on this machine and holds your secrets — chmod 600 it.');
+    }
+  } catch {}
+})();
 // node:sqlite has no statement cache: every db.prepare() recompiles the SQL, and compilation costs ~2-4× the execution
 // itself on our small queries. Memoize by SQL text — the ~340 call sites keep working unchanged, and the cache is
 // bounded because even the dynamically-built `IN (?,?,…)` queries only vary over a handful of arities.
@@ -708,6 +729,7 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN invited_by INTEGER",        // the account whose code let them in
   "ALTER TABLE users ADD COLUMN tos_at INTEGER",            // when this account accepted the terms
   "ALTER TABLE users ADD COLUMN tos_version TEXT",
+  "ALTER TABLE users ADD COLUMN age_at INTEGER",            // when this account confirmed it is 18 or older (the age gate)
 
   /* ── The 90-day beta campaign ───────────────────────────────────────────────────────────────────────
      The beta runs from launch to the moment Silver OG closes — 90 days to the minute — and ends with
@@ -907,6 +929,34 @@ try {
   db.exec('COMMIT');
 } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('encryption migration failed:', e && e.message); }
 
+/* One-time, idempotent: personal data that older code wrote in a form a database reader could use without the key.
+   Each statement only touches rows still in the old shape, so a second boot changes nothing. */
+try {
+  try { db.exec('ALTER TABLE community_members ADD COLUMN block_reason TEXT'); } catch {}   // the anti-sybil reason, decided once at join
+  db.exec('BEGIN');
+  // the first-day watch list of verifying wallets → encrypted
+  for (const r of db.prepare("SELECT id, gate_wallets FROM users WHERE gate_wallets IS NOT NULL AND gate_wallets NOT LIKE 'v1:%'").all())
+    db.prepare('UPDATE users SET gate_wallets = ? WHERE id = ?').run(encField(r.gate_wallets), r.id);
+  // ledger refs that carried a wallet address or a tx hash (which resolves to one) → blind indexes
+  const legacy = db.prepare("SELECT id, ref FROM points_events WHERE ref GLOB 'swaptx:0x*' OR ref GLOB 'connect:0x*' OR ref GLOB 'track:*:0x*'").all();
+  for (const r of legacy) {
+    let next = null, m;
+    if ((m = /^swaptx:(0x[0-9a-fA-F]+)$/.exec(r.ref))) next = 'swaptx:' + bidx(m[1].toLowerCase());
+    else if ((m = /^connect:(0x[0-9a-fA-F]{40})$/.exec(r.ref))) next = 'connect:' + bidx(m[1].toLowerCase());
+    else if ((m = /^track:(\d+):(0x[0-9a-fA-F]{40})$/.exec(r.ref))) next = 'track:' + m[1] + ':' + bidx(m[2].toLowerCase());
+    if (!next) continue;
+    if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(next)) db.prepare('UPDATE points_events SET ref = NULL WHERE id = ?').run(r.id);   // already recorded under the index: drop the address, keep the points
+    else db.prepare('UPDATE points_events SET ref = ? WHERE id = ?').run(next, r.id);
+  }
+  // Send Calls made before sharing a wallet on a call was opt-in (e3c71f8) published one nobody chose to share
+  db.prepare('UPDATE calls SET wallet = NULL WHERE wallet IS NOT NULL AND created_at < ?').run(1789146557000);
+  // notifications that quoted characters of a wallet address
+  db.prepare("UPDATE notifications SET text = 'A new wallet was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.' WHERE text LIKE 'A wallet ending in %was linked to your account%'").run();
+  db.prepare("UPDATE notifications SET text = 'Wallet two-factor is on. The wallet you chose is now the key to this account — Settings → Security shows which one.' WHERE text LIKE 'Wallet two-factor is on. Your wallet ending in %'").run();
+  db.prepare("UPDATE notifications SET text = 'Your two-factor wallet changed — sign-ins now need the wallet you just chose (Settings → Security shows which).' WHERE text LIKE 'Your two-factor wallet changed — sign-ins now need 0x%'").run();
+  db.exec('COMMIT');
+} catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('privacy migration failed:', e && e.message); }
+
 /* ---------- helpers ---------- */
 const now = () => Date.now();
 const rand = (n = 32) => crypto.randomBytes(n).toString('hex');
@@ -1002,17 +1052,16 @@ function autoUsername() {
   return 'sender_' + rand(6);
 }
 function createUser(username, autoNamed, ipIdxVal) {
-  // signup_ip is a blind index, recorded once and never updated — it is what the per-IP account cap counts.
-  const r = db.prepare('INSERT INTO users (username, auto_named, created_at, signup_ip, last_ip) VALUES (?,?,?,?,?)')
-    .run(username, autoNamed ? 1 : 0, now(), ipIdxVal || null, ipIdxVal || null);
+  // signup_ip is a blind index, recorded once and never updated — it is what the per-IP account cap counts,
+  // and it is erased after SIGNUP_IP_KEEP_MS (see the retention sweep). last_ip is no longer written: nothing read it.
+  const r = db.prepare('INSERT INTO users (username, auto_named, created_at, signup_ip) VALUES (?,?,?,?)')
+    .run(username, autoNamed ? 1 : 0, now(), ipIdxVal || null);
   return Number(r.lastInsertRowid);
 }
 function createSession(userId, ipIdxVal) {
   const token = rand();
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(hashToken(token), userId, now(), now() + 30 * 864e5); // a DB leak never yields a usable cookie
-  // Where an account is USED matters as much as where it was made: a ring that signs up on mobile data and
-  // then operates from one room is still a ring. Blind index only.
-  if (ipIdxVal) { try { db.prepare('UPDATE users SET last_ip = ? WHERE id = ?').run(ipIdxVal, userId); } catch {} }
+  // (A last-sign-in IP index used to be written here. Nothing ever read it, so it is no longer kept at all.)
   return token;
 }
 // Secure whenever we serve https OR are told we sit behind TLS termination (COOKIE_SECURE=1)
@@ -2359,6 +2408,23 @@ async function convictionHolding(uid, tokenAddr) {
   return data;
 }
 // Shared current-market cache for arbitrary tokens (Convicted-In current mcap/Xs) — Dexscreener batch, 60s per token.
+/* /api/img keeps what it fetched for a while, bounded in bytes, so a busy page of token logos is one CDN
+   fetch per picture for everyone rather than one per visitor. */
+const EXPLORER_PROXY_PATHS = [
+  /^\/api\/v2\/addresses\/0x[0-9a-f]{40}$/,
+  /^\/api\/v2\/addresses\/0x[0-9a-f]{40}\/counters$/,
+  /^\/api\/v2\/addresses\/0x[0-9a-f]{40}\/tokens\?type=ERC-20$/,
+  /^\/api\/v2\/addresses\/0x[0-9a-f]{40}\/token-transfers(\?[A-Za-z0-9_=&.%:+-]{0,800})?$/,
+  /^\/api\/v2\/transactions\/0x[0-9a-f]{64}(\/token-transfers)?$/,
+];
+const IMG_PROXY_TTL = 60 * 60 * 1000, IMG_PROXY_MAX_BYTES = 48 * 1024 * 1024;
+const imgProxyCache = new Map();   // url -> { ct, buf, at }
+let imgProxyBytes = 0;
+function imgProxyPut(u, ct, buf) {
+  const old = imgProxyCache.get(u); if (old) { imgProxyBytes -= old.buf.length; imgProxyCache.delete(u); }
+  imgProxyCache.set(u, { ct, buf, at: now() }); imgProxyBytes += buf.length;
+  for (const [k, v] of imgProxyCache) { if (imgProxyBytes <= IMG_PROXY_MAX_BYTES) break; imgProxyCache.delete(k); imgProxyBytes -= v.buf.length; }
+}
 const MARKET_TTL = 60 * 1000;
 const marketCache = new Map();                     // token -> { m:{price,mc,pc24,liq}, at }
 async function marketFor(tokens) {
@@ -2426,8 +2492,11 @@ function qualifyReason(me, c, ip, holds) {
   if (!holds) return 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
   const ipk = ip ? bidx(ip) : null; // IPs are stored only as blind indexes
   const ipUses = db.prepare("SELECT COUNT(*) n FROM community_members WHERE community_id=? AND qualified=1 AND join_ip=?").get(c.id, ipk).n;
-  if (ipUses >= 2) return 'You hold $' + c.symbol + ', but 2 verified members already opted in from your network (the anti-sybil cap). You’re in as a member — posting and the 10× need a verified slot.'; // ≤2 qualifying opt-ins per IP
-  if (ipk && ipk === c.creator_ip && me.id !== c.creator_id) return 'Opt-ins from the starter’s own network don’t count as verified (anti-sybil) — you’re in as a member, without the 10×.'; // founder-IP opt-ins don't count toward their own go-live
+  /* Both network rules answer with ONE sentence that names neither: which rule matched would tell a member
+     that other people — or the community's pseudonymous starter — use the same connection they do. */
+  const SYBIL = 'You hold $' + c.symbol + ', but this opt-in can’t count as a verified slot (an anti-sybil limit on shared connections). You’re in as a member — posting and the 10× need a verified slot.';
+  if (ipUses >= 2) return SYBIL; // ≤2 qualifying opt-ins per IP
+  if (ipk && ipk === c.creator_ip && me.id !== c.creator_id) return SYBIL; // founder-IP opt-ins don't count toward their own go-live
   return null;
 }
 function qualifyOptIn(me, c, ip, holds) { return !qualifyReason(me, c, ip, holds); }
@@ -2626,7 +2695,7 @@ function communityDetailView(c, me, ip) {
   const card = communityCardView(c, me);
   const creator = db.prepare('SELECT username FROM users WHERE id=?').get(c.creator_id);
   let mine = null;
-  if (me) { const m = db.prepare('SELECT * FROM community_members WHERE community_id=? AND user_id=?').get(c.id, me.id); if (m) { const cvl = commLevelInfo(m.conviction_xp); mine = { joined: true, qualified: !!m.qualified, blockReason: (!m.qualified && ip) ? qualifyReason(me, c, ip, true) : null, /* non-holding block (anti-sybil) shown to the member; null = only holdings are missing */ convictionXp: m.conviction_xp, convictionLevel: cvl.level, convictionTitle: convictionTitleFor(cvl.level), convictionInto: cvl.intoLevel, convictionSpan: cvl.spanLevel, isCreator: me.id === c.creator_id }; } }
+  if (me) { const m = db.prepare('SELECT * FROM community_members WHERE community_id=? AND user_id=?').get(c.id, me.id); if (m) { const cvl = commLevelInfo(m.conviction_xp); mine = { joined: true, qualified: !!m.qualified, blockReason: !m.qualified ? (m.block_reason || null) : null, /* the anti-sybil block decided at join; never re-tested against the network the page is read from, which would let a member probe connections */ convictionXp: m.conviction_xp, convictionLevel: cvl.level, convictionTitle: convictionTitleFor(cvl.level), convictionInto: cvl.intoLevel, convictionSpan: cvl.spanLevel, isCreator: me.id === c.creator_id }; } }
   return { ...card, socials: (commBrand(c).socials || []), websites: (commBrand(c).websites || []), communityLevel: commLevelInfo(c.xp), goLive: { qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count) }, creator: creator ? creator.username : null, mine };
 }
 // The opt-in / go-live / founder-bonus transaction — shared by create (creator auto-opt-in) and the join endpoint.
@@ -2641,7 +2710,8 @@ async function joinCommunity(me, cid, ip, holds) {
   const isNew = !existing;
   const reason = qualifyReason(me, c, ip, holds);
   const qual = !reason;
-  if (!isNew && !qual) return { alreadyMember: true, qualified: false, reason };
+  const sybilReason = qual ? null : qualifyReason(me, c, ip, true);   // the network block alone, stored for the member's own page
+  if (!isNew && !qual) { try { db.prepare('UPDATE community_members SET block_reason = ? WHERE community_id=? AND user_id=?').run(sybilReason, cid, me.id); } catch {} return { alreadyMember: true, qualified: false, reason }; }
   const wasLive = c.status === 'live';
   let wentLive = false;
   /* F028: the go-live test read a counter that was written once per account at join time and never
@@ -2665,8 +2735,8 @@ async function joinCommunity(me, cid, ip, holds) {
   }
   try {
     db.exec('BEGIN');
-    if (isNew) db.prepare('INSERT INTO community_members (community_id, user_id, joined_at, qualified, join_ip) VALUES (?,?,?,?,?)').run(cid, me.id, now(), qual ? 1 : 0, ip ? bidx(ip) : null);
-    else db.prepare('UPDATE community_members SET qualified = 1, qual_check_at = ?, join_ip = ? WHERE community_id=? AND user_id=?').run(now(), ip ? bidx(ip) : null, cid, me.id);
+    if (isNew) db.prepare('INSERT INTO community_members (community_id, user_id, joined_at, qualified, join_ip, block_reason) VALUES (?,?,?,?,?,?)').run(cid, me.id, now(), qual ? 1 : 0, ip ? bidx(ip) : null, sybilReason);
+    else db.prepare('UPDATE community_members SET qualified = 1, qual_check_at = ?, join_ip = ?, block_reason = NULL WHERE community_id=? AND user_id=?').run(now(), ip ? bidx(ip) : null, cid, me.id);
     db.prepare('UPDATE communities SET member_count = member_count + ' + (isNew ? 1 : 0) + (qual ? ', qual_count = qual_count + 1' : '') + ' WHERE id=?').run(cid);
     // THE ONE THING A DEMO MEMBERSHIP MUST NOT DO: grant the flat 10× Send Power. Demo members get a
     // qualified row so they can post, vote, propose and take snapshots like anyone else, but
@@ -3862,17 +3932,108 @@ function encodePng(c) {
 const ticketCardCache = new Map();   // F019: key → { png, at }; pruned with the other caches
 const TICKET_CARD_TTL = 10 * 60 * 1000, TICKET_CARD_MAX = 500;
 function sweepTicketCards() { const cut = now() - TICKET_CARD_TTL; for (const [k, v] of ticketCardCache) if (v.at < cut) ticketCardCache.delete(k); }
+/* The site's own mark, decoded once from the PNG the pages already ship, so the shared card carries the
+   real green S-rocket rather than a drawing of one. Only what that file is (8-bit RGB/RGBA, not
+   interlaced) is supported; anything else returns null and the card is drawn without it, never broken. */
+function decodePng(buf) {
+  try {
+    if (!buf || buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47) return null;
+    let off = 8, w = 0, h = 0, bpp = 0;
+    const idat = [];
+    while (off + 8 <= buf.length) {
+      const len = buf.readUInt32BE(off), type = buf.toString('latin1', off + 4, off + 8);
+      const data = buf.subarray(off + 8, off + 8 + len);
+      if (type === 'IHDR') {
+        w = data.readUInt32BE(0); h = data.readUInt32BE(4);
+        if (data[8] !== 8 || data[12] !== 0) return null;             // 8 bits per channel, no interlace
+        bpp = data[9] === 6 ? 4 : data[9] === 2 ? 3 : 0;
+        if (!bpp || w > 1024 || h > 1024) return null;
+      } else if (type === 'IDAT') idat.push(data);
+      else if (type === 'IEND') break;
+      off += 12 + len;
+    }
+    if (!bpp) return null;
+    const raw = zlib.inflateSync(Buffer.concat(idat));
+    const stride = w * bpp;
+    if (raw.length < h * (stride + 1)) return null;
+    const out = Buffer.alloc(w * h * 4), prev = Buffer.alloc(stride), cur = Buffer.alloc(stride);
+    for (let y = 0; y < h; y++) {
+      const base = y * (stride + 1), f = raw[base];
+      for (let i = 0; i < stride; i++) {
+        const a = i >= bpp ? cur[i - bpp] : 0, b = prev[i], cc = i >= bpp ? prev[i - bpp] : 0;
+        let v = raw[base + 1 + i];
+        if (f === 1) v += a;
+        else if (f === 2) v += b;
+        else if (f === 3) v += (a + b) >> 1;
+        else if (f === 4) { const q = a + b - cc, pa = Math.abs(q - a), pb = Math.abs(q - b), pc = Math.abs(q - cc); v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : cc); }
+        cur[i] = v & 255;
+      }
+      for (let x = 0; x < w; x++) {
+        const si = x * bpp, di = (y * w + x) * 4;
+        out[di] = cur[si]; out[di + 1] = cur[si + 1]; out[di + 2] = cur[si + 2]; out[di + 3] = bpp === 4 ? cur[si + 3] : 255;
+      }
+      cur.copy(prev);
+    }
+    return { w, h, px: out };
+  } catch { return null; }
+}
+let siteMark;   // undefined = not read yet; null = unreadable (the card is drawn without it)
+function siteMarkImage() {
+  if (siteMark === undefined) {
+    // the transparent mark the nav wears
+    try { siteMark = decodePng(fs.readFileSync(path.join(PUBLIC_DIR, 'assets', 'logo-mark-sm.png'))); } catch { siteMark = null; }
+  }
+  return siteMark;
+}
+function blit(c, img, x, y) {
+  for (let yy = 0; yy < img.h; yy++) for (let xx = 0; xx < img.w; xx++) {
+    const i = (yy * img.w + xx) * 4;
+    if (img.px[i + 3]) px(c, x + xx, y + yy, img.px[i], img.px[i + 1], img.px[i + 2], img.px[i + 3]);
+  }
+}
+/* 🚀, in the card's own pixel register: the bitmap font has no emoji, and "Ticket to Send 🚀" is the line.
+   One character per cell; the palette is the site's own: brand green and its dark step, the red and gold tokens, the text white. */
+const ROCKET_SPRITE = [
+  '................',
+  '............rrr.',
+  '..........GGrrr.',
+  '.........GGGGrr.',
+  '........GGWWGd..',
+  '.......GGWWWd...',
+  '......GGGWWGd...',
+  '....r.GGGGGGd...',
+  '...rrGGGGGGd....',
+  '..rrGGGGGGd.....',
+  '..rGGGGGGd.r....',
+  '...GGGGGdrr.....',
+  '..oyGGGdrr......',
+  '.oyyyGd.r.......',
+  '.oyyo...........',
+  'oyo.............',
+];
+const ROCKET_INK = { G: [198, 240, 0, 255], d: [126, 154, 0, 255], W: [242, 246, 236, 255], r: [255, 93, 93, 255], o: [255, 179, 64, 255], y: [255, 236, 170, 255] };
+function rocketSprite(c, x, y, scale) {
+  ROCKET_SPRITE.forEach((row, r) => { for (let k = 0; k < row.length; k++) { const col = ROCKET_INK[row[k]]; if (col) rect(c, x + k * scale, y + r * scale, scale, scale, col); } });
+  return ROCKET_SPRITE[0].length * scale;
+}
 function renderTicketCard({ username, sendId, joinedAt, invitedBy }) {
   const W = 1200, H = 630, STUB = 300;
   const c = makeCanvas(W, H);
-  const GREEN = [180, 255, 43, 255], WHITE = [255, 255, 255, 255], CYAN = [56, 232, 255, 255], DIM = [185, 168, 221, 255];
-  vgrad(c, 0, 0, W, H, [27, 16, 54], [22, 13, 44]);
+  // the site's palette (styles.css): brand green, its dark step, the near-white text and the dim text,
+  // on the matte green-biased black ramp the logo sits on
+  const GREEN = [198, 240, 0, 255], GREEN_LO = [126, 154, 0, 255], WHITE = [242, 246, 236, 255], DIM = [182, 190, 172, 255];
+  const TOP = [20, 23, 15], BOT = [5, 6, 4];
+  vgrad(c, 0, 0, W, H, TOP, BOT);
+  const groundAt = (y) => [0, 1, 2].map(k => Math.round(TOP[k] + (BOT[k] - TOP[k]) * (y / (H - 1))));
 
-  // horizon grid, clipped to the inside of the frame
+  // the matrix grid the site draws behind every control, as a horizon: clipped to the inside of the frame
   clip(c, 30, 30, W - 60, H - 60);
   const hy = Math.round(H * 0.60);
-  for (let g = 1; g <= 11; g++) line(c, 0, hy + Math.round(Math.pow(g / 11, 2) * (H - hy)), W, hy + Math.round(Math.pow(g / 11, 2) * (H - hy)), [255, 46, 136, 70]);
-  for (let g = -9; g <= 9; g++) line(c, Math.round(W / 2 + g * (W / 11)), hy, Math.round(W / 2 + g * W * 0.55), H, [255, 46, 136, 55]);
+  for (let g = 1; g <= 11; g++) line(c, 0, hy + Math.round(Math.pow(g / 11, 2) * (H - hy)), W, hy + Math.round(Math.pow(g / 11, 2) * (H - hy)), [168, 206, 0, 58]);
+  for (let g = -9; g <= 9; g++) line(c, Math.round(W / 2 + g * (W / 11)), hy, Math.round(W / 2 + g * W * 0.55), H, [168, 206, 0, 44]);
+  // and a faint cell grid across the top, the same pitch as the tiles
+  for (let y = 36; y < hy; y += 14) rect(c, 30, y, W - 60, 1, [168, 206, 0, 10]);
+  for (let x = 36; x < W - 30; x += 14) rect(c, x, 30, 1, hy - 30, [168, 206, 0, 10]);
   clip(c, null);
 
   // frame
@@ -3881,32 +4042,42 @@ function renderTicketCard({ username, sendId, joinedAt, invitedBy }) {
     rect(c, 26 + t, 26 + t, 1, H - 52 - 2 * t, GREEN);  rect(c, W - 27 - t, 26 + t, 1, H - 52 - 2 * t, GREEN);
   }
   // perforation, full height between the frame rails
-  for (let y = 34; y < H - 34; y += 22) rect(c, W - STUB, y, 3, 12, [255, 255, 255, 120]);
-  // punched notches, so it reads as a torn ticket rather than a box with a dotted line
-  for (const cy of [30, H - 30]) for (let dy = -13; dy <= 13; dy++) for (let dx = -13; dx <= 13; dx++)
-    if (dx * dx + dy * dy <= 169) px(c, W - STUB + 1 + dx, cy + dy, 27, 16, 54, 255);
+  for (let y = 34; y < H - 34; y += 22) rect(c, W - STUB, y, 3, 12, [242, 246, 236, 120]);
+  // punched notches, filled with the ground AT that height, so they read as holes rather than patches
+  for (const cy of [30, H - 30]) {
+    const g = groundAt(cy);
+    for (let dy = -13; dy <= 13; dy++) for (let dx = -13; dx <= 13; dx++)
+      if (dx * dx + dy * dy <= 169) px(c, W - STUB + 1 + dx, cy + dy, g[0], g[1], g[2], 255);
+  }
 
-  text(c, '$GWC IS YOUR TICKET', 64, 84, 3, GREEN);
-  text(c, 'TICKET TO SEND', 64, 134, 8, WHITE);
-  text(c, '@' + String(username || '').slice(0, 22), 64, 296, 5, WHITE);
-  text(c, invitedBy ? ('INVITED BY @' + String(invitedBy).slice(0, 18)) : 'FOUNDING SENDER', 64, 354, 3, CYAN);
-  text(c, 'JOINED ' + new Date(joinedAt).toISOString().slice(0, 10), 64, 400, 3, DIM);
-  text(c, 'SENDRH.COM', 64, H - 116, 4, [255, 255, 255, 225]);
-  text(c, 'ENTERTAINMENT ONLY - NOT FINANCIAL ADVICE', 64, H - 66, 2, [255, 255, 255, 155]);
+  // the lockup: the site's mark and its $SEND wordmark, as the nav wears them
+  const mark = siteMarkImage();
+  const wordX = mark ? 56 + mark.w + 20 : 64;
+  if (mark) blit(c, mark, 56, 46);
+  text(c, '$SEND', wordX, 70, 6, GREEN);
+  text(c, 'JUST SEND IT - INVITE ONLY', wordX, 132, 3, DIM);
+
+  const headW = text(c, 'TICKET TO SEND', 64, 212, 8, WHITE) - 64;
+  rocketSprite(c, 64 + headW + 18, 212 - 4, 4);
+  text(c, '@' + String(username || '').slice(0, 22), 64, 312, 5, WHITE);
+  text(c, invitedBy ? 'INVITED SENDER' : 'FOUNDING SENDER', 64, 368, 3, GREEN);   // the inviter is not named on a public card
+  text(c, 'JOINED ' + new Date(joinedAt).toISOString().slice(0, 10), 64, 408, 3, DIM);
+  text(c, 'SENDRH.COM', 64, H - 116, 4, [242, 246, 236, 225]);
+  text(c, 'ENTERTAINMENT ONLY - NOT FINANCIAL ADVICE', 64, H - 66, 2, [242, 246, 236, 155]);
 
   // the stub: the Send ID, centred and scaled to fit however large the number grows
   const id = '#' + sendId;
   const sx = W - STUB + 42, sw = STUB - 84;   // clear of the frame rail: nothing on the stub may touch it
   const lw = textWidth('SEND ID', 3);
-  text(c, 'SEND ID', sx + Math.round((sw - lw) / 2), 148, 3, [255, 255, 255, 160]);
+  text(c, 'SEND ID', sx + Math.round((sw - lw) / 2), 148, 3, [242, 246, 236, 160]);
   const k = fitScale(id, sw, 11, 3);
   text(c, id, sx + Math.round((sw - textWidth(id, k)) / 2), 210, k, GREEN);
   const aw = textWidth('ADMIT ONE', 3);
-  text(c, 'ADMIT ONE', sx + Math.round((sw - aw) / 2), 330, 3, [255, 255, 255, 150]);
+  text(c, 'ADMIT ONE', sx + Math.round((sw - aw) / 2), 330, 3, [242, 246, 236, 150]);
   // a barcode seeded from the id, so no two tickets look the same
   let s = 0; for (const ch of id) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
   let bx = sx;
-  while (bx < sx + sw - 6) { s = (s * 1103515245 + 12345) >>> 0; const bw = (s >>> 3) % 3 === 0 ? 5 : 3; rect(c, bx, 396, bw, 40 + ((s >>> 8) % 46), [255, 255, 255, 210]); bx += bw + 4; }
+  while (bx < sx + sw - 6) { s = (s * 1103515245 + 12345) >>> 0; const bw = (s >>> 3) % 3 === 0 ? 5 : 3; rect(c, bx, 396, bw, 40 + ((s >>> 8) % 46), (s >>> 11) % 4 === 0 ? GREEN_LO : [242, 246, 236, 210]); bx += bw + 4; }
   return encodePng(c);
 }
 
@@ -3972,6 +4143,8 @@ async function brandImage(tokenAddr, kind) {
   } catch { return hit || null; }
 }
 function dexCdnImg(u) { // only trust Dexscreener's own CDN so the client CSP img-src stays tight
+  // a value that came back from a browser is our proxy path (see send()): unwrap it to the CDN URL it stands for
+  if (typeof u === 'string' && u.startsWith('/api/img?u=')) { try { u = decodeURIComponent(u.slice(11)); } catch { return null; } }
   return (typeof u === 'string' && /^https:\/\/(cdn|dd)\.dexscreener\.com\//.test(u) && !/["'<>\s]/.test(u)) ? u.slice(0, 400) : null; // no quote/bracket/space chars → can't break out of an attribute even before esc()
 }
 function safeHttpUrl(u) { // http(s) only — never javascript:/data: — capped length
@@ -6166,7 +6339,11 @@ function clientIp(req) {
       /* Cloudflare in front of Caddy is TWO appending hops; the docs used to say 1, which silently keyed
          every visitor on a handful of Cloudflare edge addresses (F001/F025). Say it once, loudly. */
       if (!hopWarned && parts.length !== TRUST_PROXY_HOPS) { hopWarned = true; console.warn('[proxy] X-Forwarded-For carries ' + parts.length + ' hop(s) but TRUST_PROXY=' + TRUST_PROXY_HOPS + ' — per-IP limits are keying on the wrong address. Set TRUST_PROXY to the number of proxies that append to the header (Cloudflare → Caddy = 2), or TRUST_CF=1 behind Cloudflare.'); }
-      const ip = parts[parts.length - TRUST_PROXY_HOPS]; // the real client is the hop our own proxy appended
+      /* The real client is the hop our own proxy appended. When the header carries FEWER hops than configured
+         (a Caddy that overwrote it, a request that skipped a layer), that index does not exist — and falling back
+         to the socket address keyed every visitor on the proxy itself, one shared IP index linking strangers.
+         The outermost address present is the one a proxy we trust actually saw. */
+      const ip = parts.length >= TRUST_PROXY_HOPS ? parts[parts.length - TRUST_PROXY_HOPS] : parts[0];
       if (ip) return ipKey(ip) || 'unknown';
     }
   }
@@ -6185,11 +6362,14 @@ const SEC_HEADERS = {
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
-  "img-src 'self' data: blob: https://cdn.dexscreener.com https://dd.dexscreener.com",
+  /* Fonts are served from this origin (public/fonts) and token artwork through /api/img, so no page load
+     reaches Google or Dexscreener. The one third party left is the chain's own RPC, used only by the swap and
+     wallet flows — the wallet app the visitor connected already talks to that same endpoint. */
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
+  "img-src 'self' data: blob:",
   "media-src 'self' blob: data:",
-  "connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://robinhoodchain.blockscout.com https://api.dexscreener.com",
+  "connect-src 'self' https://rpc.mainnet.chain.robinhood.com",
   /* Nothing on this site embeds a frame any more: the last two were the Dexscreener charts on the
      landing page, and they are our own on-chain charts now. 'none' is the honest value, and it closes
      the embedding vector rather than leaving a permission standing for a thing that no longer exists. */
@@ -6199,8 +6379,17 @@ const CSP = [
   "frame-ancestors 'none'",
   "object-src 'none'",
 ].join('; ');
+/* Token artwork lives on Dexscreener's CDN. A page that loaded it from there would hand Dexscreener every
+   visitor's IP address and a record of which tokens (and on /u/<name>, whose pins) they looked at. So every
+   CDN URL leaving this server in a JSON response is rewritten, at this one boundary, to our own /api/img
+   proxy — whichever feature produced it, including snapshots stored before this existed. The cached and
+   stored values keep the real URL (the proxy needs it); only what the browser sees changes. The Data API
+   is exempt (res._rawImg): its callers are programs, not visitors' browsers. */
+const CDN_IMG_JSON = /"(https:\/\/(?:cdn|dd)\.dexscreener\.com\/[^"\\\s<>]{1,400})"/g;
+const viaImgProxy = (u) => '/api/img?u=' + encodeURIComponent(u);
 function send(res, code, body, headers = {}) {
   let data = typeof body === 'string' ? body : JSON.stringify(body);
+  if (!res._rawImg && typeof data === 'string' && data.includes('dexscreener.com/')) data = data.replace(CDN_IMG_JSON, (m, u) => JSON.stringify(viaImgProxy(u)));
   // API/JSON responses must never be cached (they carry private, per-session data)
   const h = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS, ...headers };
   // gzip larger payloads when the client accepts it (big feeds/leaderboards/pairs) → fewer packets, lower latency.
@@ -6274,6 +6463,239 @@ const BIG_POST_CONCURRENCY = 4;
 const bigPostByUser = new Map();
 // Profile media (avatar/header/bg) — intentionally OUTSIDE the upload_bytes quota + orphan sweep: it's bounded to 3
 // replaceable slots per user (the old file is unlinked on replace, see /api/profile/image), so it can't grow unbounded.
+/* ===== Uploaded media keeps its pictures and its sound, not its metadata ===========================
+   A phone writes where a photo or video was taken, and on what device, into the file itself: EXIF GPS in a
+   JPEG, an eXIf chunk in a PNG, EXIF/XMP chunks in a WebP, XMP in a GIF application block, the ©xyz atom and
+   com.apple.quicktime.location keys in an MP4/MOV, Tags in a WebM. /uploads serves files byte for byte to
+   anyone, so every one of those is stripped before a file is stored. Pixels, samples and timing are left
+   exactly as they were:
+     · rasters are rewritten in memory without their metadata segments (a JPEG keeps its orientation, as a
+       one-tag EXIF block, so a phone photo is not turned on its side)
+     · MP4/MOV and WebM are edited IN PLACE, without moving a byte: a metadata box becomes a `free` box and
+       a Tags element becomes a Void element of the same length, and its contents are overwritten with zeros
+   A file this cannot parse is left as it was and reported, so the caller decides; nothing here throws on
+   odd input. */
+const SCRUB_PNG_DROP = new Set(['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME']);
+function jpegOrientation(app1) {                 // app1 = the whole APP1 segment, marker included
+  try {
+    if (app1.toString('latin1', 4, 10) !== 'Exif\0\0') return 1;
+    const t = app1.subarray(10);
+    const le = t.toString('latin1', 0, 2) === 'II';
+    const u16 = (o) => (le ? t.readUInt16LE(o) : t.readUInt16BE(o));
+    const u32 = (o) => (le ? t.readUInt32LE(o) : t.readUInt32BE(o));
+    const ifd = u32(4), n = u16(ifd);
+    for (let k = 0; k < n; k++) {
+      const e = ifd + 2 + k * 12;
+      if (u16(e) === 0x0112) { const v = u16(e + 8); return v >= 1 && v <= 8 ? v : 1; }
+    }
+  } catch {}
+  return 1;
+}
+function exifOrientationSegment(v) {             // APP1 carrying ONLY the orientation tag, big-endian TIFF
+  const tiff = Buffer.alloc(26);
+  tiff.write('MM', 0, 'latin1'); tiff.writeUInt16BE(42, 2); tiff.writeUInt32BE(8, 4);
+  tiff.writeUInt16BE(1, 8);                                         // one entry
+  tiff.writeUInt16BE(0x0112, 10); tiff.writeUInt16BE(3, 12); tiff.writeUInt32BE(1, 14); tiff.writeUInt16BE(v, 18);
+  tiff.writeUInt32BE(0, 22);                                        // no next IFD
+  const body = Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
+  const seg = Buffer.alloc(4); seg[0] = 0xff; seg[1] = 0xe1; seg.writeUInt16BE(body.length + 2, 2);
+  return Buffer.concat([seg, body]);
+}
+function scrubJpeg(b) {
+  if (b[0] !== 0xff || b[1] !== 0xd8) return null;
+  const out = [b.subarray(0, 2)];
+  let i = 2, orientation = 1, insertAt = 1;
+  while (i + 1 < b.length) {
+    if (b[i] !== 0xff) return null;
+    const m = b[i + 1];
+    if (m === 0xff) { i++; continue; }                               // fill byte
+    if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { out.push(b.subarray(i, i + 2)); i += 2; continue; }
+    if (m === 0xda || m === 0xd9) {                                  // start of scan: everything after is image data
+      if (orientation !== 1) out.splice(insertAt, 0, exifOrientationSegment(orientation));
+      out.push(b.subarray(i));
+      return Buffer.concat(out);
+    }
+    if (i + 4 > b.length) return null;
+    const len = b.readUInt16BE(i + 2);
+    if (len < 2 || i + 2 + len > b.length) return null;
+    const seg = b.subarray(i, i + 2 + len);
+    const isIcc = m === 0xe2 && seg.toString('latin1', 4, 15) === 'ICC_PROFILE';
+    const drop = m === 0xe1 || m === 0xed || m === 0xfe || (m >= 0xe2 && m <= 0xef && m !== 0xee && !isIcc);
+    if (m === 0xe1) { const o = jpegOrientation(seg); if (o !== 1) orientation = o; }
+    if (!drop) { out.push(seg); if (m === 0xe0) insertAt = out.length; }
+    i += 2 + len;
+  }
+  return null;
+}
+function scrubPng(b) {
+  if (b.readUInt32BE(0) !== 0x89504e47) return null;
+  const out = [b.subarray(0, 8)];
+  let i = 8;
+  while (i + 12 <= b.length) {
+    const len = b.readUInt32BE(i), type = b.toString('latin1', i + 4, i + 8);
+    if (i + 12 + len > b.length) return null;
+    if (!SCRUB_PNG_DROP.has(type)) out.push(b.subarray(i, i + 12 + len));
+    i += 12 + len;
+    if (type === 'IEND') return Buffer.concat(out);
+  }
+  return null;
+}
+function scrubWebp(b) {
+  if (b.toString('latin1', 0, 4) !== 'RIFF' || b.toString('latin1', 8, 12) !== 'WEBP') return null;
+  const out = [];
+  let i = 12, vp8x = null;
+  while (i + 8 <= b.length) {
+    const type = b.toString('latin1', i, i + 4), len = b.readUInt32LE(i + 4);
+    const whole = 8 + len + (len & 1);
+    if (i + 8 + len > b.length) return null;
+    const chunk = Buffer.from(b.subarray(i, Math.min(b.length, i + whole)));
+    if (type === 'VP8X') vp8x = chunk;
+    if (type !== 'EXIF' && type !== 'XMP ') out.push(chunk);
+    i += whole;
+  }
+  if (vp8x) vp8x[8] &= ~(0x08 | 0x04);                               // the EXIF and XMP flags go with the chunks
+  const body = Buffer.concat(out);
+  const head = Buffer.alloc(12); head.write('RIFF', 0, 'latin1'); head.writeUInt32LE(body.length + 4, 4); head.write('WEBP', 8, 'latin1');
+  return Buffer.concat([head, body]);
+}
+function scrubGif(b) {
+  if (b.toString('latin1', 0, 3) !== 'GIF' || b.length < 13) return null;
+  let i = 13;
+  if (b[10] & 0x80) i += 3 * (1 << ((b[10] & 0x07) + 1));           // global colour table
+  const out = [b.subarray(0, i)];
+  const subBlocks = (j) => { while (j < b.length) { const n = b[j]; j += 1 + n; if (n === 0) return j; } return -1; };
+  while (i < b.length) {
+    const tag = b[i];
+    if (tag === 0x3b) { out.push(b.subarray(i, i + 1)); return Buffer.concat(out); }
+    if (tag === 0x21) {
+      const label = b[i + 1];
+      const end = subBlocks(i + 2);
+      if (end < 0) return null;
+      let keep = label !== 0xfe;                                       // comments go
+      if (label === 0xff) {                                            // application blocks: only the loop control stays
+        const id = b.toString('latin1', i + 3, i + 14);
+        keep = id === 'NETSCAPE2.0' || id === 'ANIMEXTS1.0';
+      }
+      if (keep) out.push(b.subarray(i, end));
+      i = end;
+      continue;
+    }
+    if (tag === 0x2c) {
+      let j = i + 10;
+      if (j > b.length) return null;
+      if (b[i + 9] & 0x80) j += 3 * (1 << ((b[i + 9] & 0x07) + 1)); // local colour table
+      j += 1;                                                          // LZW minimum code size
+      const end = subBlocks(j);
+      if (end < 0) return null;
+      out.push(b.subarray(i, end));
+      i = end;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+// ISO-BMFF (MP4, MOV, M4A), in place
+const BMFF_CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf', 'stbl', 'edts', 'dinf', 'moof', 'traf', 'mvex']);
+const XMP_UUID = 'be7acfcb97a942e89c71999491e3afac';
+function scrubBmffFile(fd, size) {
+  const read = (pos, len) => { const b = Buffer.alloc(len); const n = fs.readSync(fd, b, 0, len, pos); return b.subarray(0, n); };
+  const zero = (pos, len) => { const z = Buffer.alloc(Math.min(65536, len)); for (let p = pos, left = len; left > 0;) { const n = Math.min(left, z.length); fs.writeSync(fd, z, 0, n, p); p += n; left -= n; } };
+  let cleaned = 0, ok = true;
+  (function walk(start, end, depth) {
+    let pos = start;
+    while (pos + 8 <= end) {
+      const h = read(pos, 32);
+      if (h.length < 8) { ok = false; return; }
+      let len = h.readUInt32BE(0), hdr = 8;
+      const type = h.toString('latin1', 4, 8);
+      if (len === 1) { if (h.length < 16) { ok = false; return; } const big = h.readBigUInt64BE(8); if (big > BigInt(Number.MAX_SAFE_INTEGER)) { ok = false; return; } len = Number(big); hdr = 16; }
+      else if (len === 0) len = end - pos;
+      if (len < hdr || pos + len > end) { ok = false; return; }
+      const isXmp = type === 'uuid' && h.length >= hdr + 16 && h.toString('hex', hdr, hdr + 16) === XMP_UUID;
+      if (type === 'udta' || type === 'meta' || isXmp) {
+        fs.writeSync(fd, Buffer.from('free', 'latin1'), 0, 4, pos + 4);
+        zero(pos + hdr, len - hdr);
+        cleaned++;
+      } else if (BMFF_CONTAINERS.has(type) && depth < 8) walk(pos + hdr, pos + len, depth + 1);
+      pos += len;
+    }
+  })(0, size, 0);
+  return ok ? cleaned : -1;
+}
+// EBML (WebM, Matroska), in place
+function ebmlVint(b, o, keepMarker) {
+  const first = b[o];
+  if (!first) return null;
+  let len = 1; while (len <= 8 && !(first & (0x80 >> (len - 1)))) len++;
+  if (len > 8 || o + len > b.length) return null;
+  let v = keepMarker ? first : first & ((0x80 >> (len - 1)) - 1);
+  let allOnes = (first & ((0x80 >> (len - 1)) - 1)) === ((0x80 >> (len - 1)) - 1);
+  for (let k = 1; k < len; k++) { v = v * 256 + b[o + k]; if (b[o + k] !== 0xff) allOnes = false; }
+  return { v, len, unknown: !keepMarker && allOnes };
+}
+function scrubEbmlFile(fd, size) {
+  const read = (pos, len) => { const b = Buffer.alloc(len); const n = fs.readSync(fd, b, 0, len, pos); return b.subarray(0, n); };
+  const zero = (pos, len) => { const z = Buffer.alloc(Math.min(65536, len)); for (let p = pos, left = len; left > 0;) { const n = Math.min(left, z.length); fs.writeSync(fd, z, 0, n, p); p += n; left -= n; } };
+  const el = (pos) => {
+    const h = read(pos, 16);
+    const id = ebmlVint(h, 0, true); if (!id) return null;
+    const sz = ebmlVint(h, id.len, false); if (!sz) return null;
+    return { id: id.v, idLen: id.len, hdr: id.len + sz.len, len: sz.v, unknown: sz.unknown };
+  };
+  const top = el(0);
+  if (!top || top.id !== 0x1a45dfa3) return -1;
+  let pos = top.hdr + top.len;
+  const seg = el(pos);
+  if (!seg || seg.id !== 0x18538067) return -1;
+  const end = seg.unknown ? size : Math.min(size, pos + seg.hdr + seg.len);
+  pos += seg.hdr;
+  let cleaned = 0;
+  while (pos + 2 <= end) {
+    const e = el(pos);
+    if (!e || e.unknown) break;                       // a live-recorded cluster of unknown length: nothing to skip over
+    const total = e.hdr + e.len;
+    if (pos + total > end) break;
+    if (e.id === 0x1254c367 && total >= 9) {          // Tags → a Void element of exactly the same length
+      const L = 8, dataLen = total - 1 - L;
+      const head = Buffer.alloc(1 + L);
+      head[0] = 0xec; head[1] = 0x01;                 // 8-byte size: marker in the first byte, value in the other seven
+      let v = dataLen; for (let k = L; k >= 2; k--) { head[k] = v % 256; v = Math.floor(v / 256); }
+      fs.writeSync(fd, head, 0, head.length, pos);
+      zero(pos + 1 + L, dataLen);
+      cleaned++;
+    }
+    pos += total;
+  }
+  return cleaned;
+}
+/* The one entry point. Returns { ok, bytes } — ok=false when the file could not be parsed, in which case it is
+   untouched. `mime` is the type the bytes were already verified to be. */
+function scrubMediaFile(file, mime) {
+  const st = fs.statSync(file);
+  if (/^image\/(jpeg|png|webp|gif)$/.test(mime)) {
+    const b = fs.readFileSync(file);
+    const out = mime === 'image/jpeg' ? scrubJpeg(b) : mime === 'image/png' ? scrubPng(b) : mime === 'image/webp' ? scrubWebp(b) : scrubGif(b);
+    if (!out) return { ok: false, bytes: st.size };
+    if (out.length !== b.length || !out.equals(b)) fs.writeFileSync(file, out);
+    return { ok: true, bytes: out.length };
+  }
+  if (/^(video|audio)\/(mp4|webm)$/.test(mime)) {
+    const fd = fs.openSync(file, 'r+');
+    try {
+      const n = mime.endsWith('mp4') ? scrubBmffFile(fd, st.size) : scrubEbmlFile(fd, st.size);
+      return { ok: n >= 0, bytes: st.size };
+    } finally { fs.closeSync(fd); }
+  }
+  return { ok: false, bytes: st.size };
+}
+function scrubMediaBuffer(buf, mime) {
+  if (mime === 'image/jpeg') return scrubJpeg(buf);
+  if (mime === 'image/png') return scrubPng(buf);
+  if (mime === 'image/webp') return scrubWebp(buf);
+  if (mime === 'image/gif') return scrubGif(buf);
+  return null;
+}
 function saveImage(dataUrl, maxBytes = 2.5 * 1024 * 1024) {
   const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(dataUrl || '');
   if (!m) return null;
@@ -6288,8 +6710,10 @@ function saveImage(dataUrl, maxBytes = 2.5 * 1024 * 1024) {
   const declared = m[1] === 'jpeg' ? (buf[0] === 0xff) : m[1] === 'png' ? (buf[0] === 0x89) : (buf.slice(0, 4).toString() === 'RIFF');
   if (!declared) throw new Error('not an image');
   assertRasterDims(buf, 'image/' + m[1]);   // F014: the one write path that skipped the pixel-bomb caps
+  const clean = scrubMediaBuffer(buf, 'image/' + m[1]);   // no location or device data leaves in the file
+  if (!clean) throw new Error('could not read the image — try re-exporting it');
   const name = rand(12) + '.' + (m[1] === 'jpeg' ? 'jpg' : m[1]);
-  fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
+  fs.writeFileSync(path.join(UPLOAD_DIR, name), clean);
   return name;
 }
 /* shared by every raster write path: a decoded image must fit in a phone's memory, whatever it weighs on disk */
@@ -6387,8 +6811,19 @@ function saveMedia(dataUrl, opts = {}) {
   }
   try { const st = fs.statfsSync(DATA_DIR); if (st.bavail * st.bsize < DISK_SAFETY_MARGIN + buf.length) throw new Error('storage is full right now — try again later'); } catch (e) { if (String(e.message).includes('storage is full')) throw e; } // ignore statfs-unavailable
   const name = rand(12) + '.' + ext;
-  fs.writeFileSync(path.join(UPLOAD_DIR, name), buf);
-  if (opts.userId != null) db.prepare('UPDATE users SET upload_bytes = upload_bytes + ? WHERE id=?').run(buf.length, opts.userId);
+  const file = path.join(UPLOAD_DIR, name);
+  let bytes = buf.length;
+  if (isVideo) {
+    fs.writeFileSync(file, buf);
+    let r = null; try { r = scrubMediaFile(file, mime); } catch {}
+    if (!r || !r.ok) { try { fs.unlinkSync(file); } catch {} throw new Error('could not read that video — try re-exporting it'); }
+  } else {
+    const clean = scrubMediaBuffer(buf, mime);   // no location or device data leaves in the file
+    if (!clean) throw new Error('could not read the image — try re-exporting it');
+    fs.writeFileSync(file, clean);
+    bytes = clean.length;
+  }
+  if (opts.userId != null) db.prepare('UPDATE users SET upload_bytes = upload_bytes + ? WHERE id=?').run(bytes, opts.userId);
   return name;
 }
 // delete an upload and (if we know the owner) credit its bytes back to their quota; also drop its tracking row
@@ -6576,7 +7011,7 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
     // per-IP cap both apply at this door too. Throwing here lands in the caller's catch, which redirects
     // with an error the page turns back into the ticket.
     const oaGate = gateReq ? signupRefusal(gateReq) : { error: 'You need an invite code to join.', code: 'need_invite' };
-    if (oaGate) throw new HttpError(oaGate.error, 403);
+    if (oaGate) throw Object.assign(new HttpError(oaGate.error, 403), { code: oaGate.code });
     const oaBlock = ipSignupBlocked(ipIdxVal);
     if (oaBlock) throw new HttpError(oaBlock, 429);
     userId = createUser(autoUsername(), true, ipIdxVal);
@@ -6621,7 +7056,8 @@ const MIME = {
      guessing — the memo would upload fine and be silent forever. */
   '.weba': 'audio/webm', '.ogg': 'audio/ogg',
   '.txt': 'text/plain', '.xml': 'application/xml', '.ico': 'image/x-icon', '.json': 'application/json',
-  '.mjs': 'text/javascript', '.webmanifest': 'application/manifest+json', // in COMPRESSIBLE/ASSET_REF → must have a real type (nosniff would block octet-stream)
+  '.mjs': 'text/javascript', '.webmanifest': 'application/manifest+json',
+  '.woff2': 'font/woff2',   // the site's own fonts (public/fonts) — self-hosted so no page load reaches Google // in COMPRESSIBLE/ASSET_REF → must have a real type (nosniff would block octet-stream)
 };
 // In-memory static cache: small assets are read + (for text) gzipped ONCE, keyed by path+size+mtime, and then
 // served straight from RAM — repeat requests do zero fs reads and zero per-request gzip. It self-refreshes when a
@@ -6963,6 +7399,25 @@ const DATA_PAGE_MAX = 200;
 const DATA_BURN_TTL = 5 * 60 * 1000;
 const burnCache = new Map();               // userId -> { at, val }
 const _minting = new Set();                // accounts with a mint in flight
+/* A security event (a password change, "end other sessions", two-factor switched off) means someone else may
+   have held this account. A Data API key reads the owner's private data, so its CURRENT secret must stop working
+   too — but revoking would throw away a year the owner paid for in burn. So the key row lives on (same expiry,
+   same ledger) under a secret nobody has ever seen, and the owner rotates it for a new one, free. */
+function resetDataKeySecret(userId, why) {
+  const cur = db.prepare('SELECT * FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(userId);
+  if (!cur) return false;
+  const unseen = hashToken('sk_' + rand(24));
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE api_keys SET revoked_at = ? WHERE key_hash = ?').run(now(), cur.key_hash);
+    db.prepare('INSERT INTO api_keys (key_hash, user_id, wallet, burned_wei, burned_usd, price_usd, minted_at, wallets_idx, expires_at, source, consumed_wei) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+      .run(unseen, userId, cur.wallet, cur.burned_wei, cur.burned_usd, cur.price_usd, cur.minted_at, cur.wallets_idx, cur.expires_at, cur.source, cur.consumed_wei);
+    db.prepare('UPDATE api_key_burns SET key_hash = ? WHERE key_hash = ?').run(unseen, cur.key_hash);
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('data key reset', e && e.message); return false; }
+  notify(userId, '🔑', 'Your Data API key stopped working because ' + why + '. Rotate it on the Data API page for a new secret — free, same expiry.', 'alert');
+  return true;
+}
 const burnBump = new Map();                // userId -> when their unspent balance last changed (a read that started earlier must not be cached)
 // Every $SEND transfer from any linked wallet to the burn address, summed. Throws (never guesses) when
 // the chain cannot be read completely — the OG walker's own rule.
@@ -7062,7 +7517,7 @@ function ownDataView(u) {
     pointsEvents: db.prepare('SELECT id, kind, amount, base, mult, comp_amount, ref, created_at FROM points_events WHERE user_id = ? ORDER BY id DESC LIMIT 1000').all(u.id),
     posts: db.prepare('SELECT * FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(p => postView(p, null)),
     comments: db.prepare('SELECT id, post_id, text, tokens, created_at FROM comments WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(c => ({ ...c, tokens: parseTokens(c.tokens) })),
-    calls: db.prepare('SELECT * FROM calls WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(u.id).map(r => callView(r, null)),
+    calls: db.prepare('SELECT * FROM calls WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(u.id).map(r => callView(r, u)),   // their own calls: exact figures
     sends: db.prepare('SELECT call_id, created_at, entry_price, spend_usd, bought_usd, held_usd, hold_paid, points_paid FROM call_hops WHERE user_id = ? ORDER BY created_at DESC LIMIT 500').all(u.id),
     watchlist: db.prepare('SELECT pair_addr, token_addr, token0, token1, quote_symbol, added_at FROM watchlist WHERE user_id = ? ORDER BY added_at DESC').all(u.id),
     trackedWallets: db.prepare('SELECT id, address_enc, label, created_at FROM tracked_wallets WHERE user_id = ? ORDER BY id').all(u.id).map(t => ({ id: t.id, address: decField(t.address_enc), label: t.label, created_at: t.created_at })),
@@ -7183,7 +7638,9 @@ async function verifyCurrentFactor(me, b) {
                                cookie can never be the thing that authorises the next step
    Returns null when it passes, else the reason. */
 async function ownershipRefusal(me, b) {
-  if (me.twofa_method) return verifyCurrentFactor(me, b);
+  // the profile page sends the factor nested as `current` (a code, a password, a wallet signature); the
+  // second-factor check reads the top level, so an account with 2FA on could never prove itself here
+  if (me.twofa_method) return verifyCurrentFactor(me, Object.assign({}, (b && b.current) || {}, b || {}));
   if (!rateLimit('own:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
   const e = emailIdentity(me.id);
   if (e) {
@@ -7380,6 +7837,20 @@ const INVITE_GRANT = 10;                 // codes each admitted person gets to h
    the code for good. A code that was redeemed but never CLAIMED by an account comes back after this long. */
 const INVITE_RECLAIM_MS = 60 * 60 * 1000;
 const SEED_CODE_ENV = process.env.SEED_INVITE_CODE || '';   // resolved at seeding time (newCode's alphabet is declared below)
+/* ===== The age gate =================================================================================
+   Every visitor is asked, once per device, to tick a box confirming they are 18 or older before the site
+   opens (public/agegate.js). The answer lives in a plain first-party cookie, not an HttpOnly one: the page
+   has to read it synchronously in <head> to decide whether to cover itself, and it is not a secret — a
+   forged cookie says exactly what ticking the box says. What the server adds is the part that matters for
+   an account: signupRefusal() will not create one without the confirmation, and the account records WHEN
+   it was given (users.age_at), so there is a trail rather than a checkbox nobody can point to.
+
+   The value is the age that was confirmed, not a bare flag, so raising AGE_MIN later re-asks everyone. */
+const AGE_COOKIE = 'jsi_age';
+const AGE_MIN = 18;
+const AGE_MS = 365 * DAY_MS;             // asked again after a year, or on a new device / cleared cookies
+const ageOk = (req) => parseCookies(req.headers.cookie)[AGE_COOKIE] === String(AGE_MIN);
+const ageCookie = () => `${AGE_COOKIE}=${AGE_MIN}; Path=/; SameSite=Lax; Max-Age=${Math.floor(AGE_MS / 1000)}${cookieSecure()}`;
 const PASS_COOKIE = 'jsi_pass';
 const PASS_MS = 365 * DAY_MS;
 // Unambiguous alphabet: no O/0, I/1, S/5, B/8 — these get read aloud and typed in by hand.
@@ -7427,14 +7898,8 @@ const passCookie = (tok) => `${PASS_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=L
    "Number in line" is deliberately the user id — it is already monotonic, already unique, and already
    means "how early you were", so inventing a second counter would only create a way for the two to
    disagree. */
-/* The coins' own artwork, through our proxy rather than Dexscreener's CDN — see brandImage(). The client
-   never needs to know a token address to draw a ticket, and the pictures are public, so this rides on the
-   gate state as well as the ticket: the ticket somebody sees BEFORE they join should look like the one
-   they get, not a plainer version of it. */
-const coinBrandUrls = () => ({
-  gwcHeader: '/api/brand/' + TOK.GWC + '/header', gwcLogo: '/api/brand/' + TOK.GWC + '/logo',
-  sendHeader: '/api/brand/' + TOK.SEND + '/header', sendLogo: '/api/brand/' + TOK.SEND + '/logo',
-});
+/* The ticket wears the SITE's brand — the green S-rocket mark and the $Send wordmark, drawn from files this
+   site ships — not a coin's Dexscreener banner, so nothing about it needs a third party's artwork. */
 function ticketFor(u) {
   if (!u) return null;
   const codes = db.prepare('SELECT code, used_at, user_id FROM invite_codes WHERE owner_id = ? ORDER BY rowid').all(u.id);
@@ -7467,7 +7932,6 @@ function ticketFor(u) {
     // of the two — ogCampaign already does that arithmetic, so the ticket never re-derives it
     goldEndsAt: (camp && camp.closes && camp.closes.gold != null) ? camp.closes.gold : null,
     goldOpen: !!(camp && camp.tierNow === 3),
-    brand: coinBrandUrls(),
     tosVersion: TOS_VERSION,
   };
 }
@@ -7482,6 +7946,8 @@ function claimInvite(req, userId) {
       if (r.owner_id) db.prepare('UPDATE users SET invited_by = ? WHERE id = ?').run(r.owner_id, userId);
       if (r.tos_at) db.prepare('UPDATE users SET tos_at = ?, tos_version = ? WHERE id = ?').run(r.tos_at, r.tos_version || TOS_VERSION, userId);
     }
+    // the age confirmation the door checked, recorded on the account it let in (first time only)
+    if (ageOk(req)) db.prepare('UPDATE users SET age_at = ? WHERE id = ? AND age_at IS NULL').run(now(), userId);
     const have = db.prepare('SELECT COUNT(*) n FROM invite_codes WHERE owner_id = ?').get(userId).n;
     if (have === 0) mintCodes(userId, INVITE_GRANT);
   } catch (e) { console.error('claimInvite', e.message); }
@@ -7503,6 +7969,8 @@ function signupRefusal(req) {
   if (!r) return { error: 'You need an invite code to join. Browsing is open to everyone — joining is by ticket.', code: 'need_invite' };
   if (TOS_GATE && !r.tos_at) return { error: 'Read and accept the terms to finish joining.', code: 'need_tos' };
   if (r.user_id) return { error: 'That invite code has already been used to make an account. Ask whoever sent it for a spare.', code: 'code_spent' };
+  // last, so every refusal above keeps its own code: the age box is the one step a visitor has already seen
+  if (!ageOk(req)) return { error: 'Confirm you are ' + AGE_MIN + ' or older to join.', code: 'need_age' };
   return null;
 }
 
@@ -7661,7 +8129,7 @@ async function checkGateHold(userId) {
      addresses also closes the other door, because shedding a wallet can no longer shrink the number the
      window is measured by. */
   let addrs = [];
-  try { addrs = JSON.parse(u.gate_wallets || '[]'); } catch {}
+  try { addrs = JSON.parse(decField(u.gate_wallets) || '[]'); } catch {}
   if (!Array.isArray(addrs) || !addrs.length) { close(); return; }   // nothing to judge against → do not guess
 
   let tok = 0;
@@ -7812,7 +8280,7 @@ async function runProofQueue() {
       const floor = watching && d ? Number(d.balWei || 0) / 1e18 : 0;
       db.prepare("UPDATE users SET holder_state = 'ok', holder_verified_at = ?, holder_proof_at = ?, holder_proof_reason = NULL, holder_proof = ?, gate_hold_until = ?, gate_floor = ?, gate_wallets = ? WHERE id = ?")
         .run(t, t, encField(JSON.stringify(v.detail)), watching ? until : 0, floor,
-             watching ? JSON.stringify(addrs.map((x) => String(x).toLowerCase())) : null, userId);
+             watching ? encField(JSON.stringify(addrs.map((x) => String(x).toLowerCase()))) : null, userId);   // the account→wallet link, encrypted like every other copy of it
       notify(userId, '✅', watching
         ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; let that balance drop by more than about 2% before then and it counts as a strike: read-only for a day the first time, a week the second, for good the third — $25 of $SEND a day buys it out, and selling that before the hold is up doubles it.'
         : 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀', 'wallet');
@@ -7954,6 +8422,25 @@ function blockReadOnly(res, me) {
 }
 
 // periodic sweep: keep in-memory maps and short-lived DB rows from growing without bound
+/* ===== How long an IP index is kept ============================================================
+   Every IP this site stores is a keyed hash, never the address. Even so, a hash kept for longer than its
+   purpose needs is data held for no reason, so each one lives exactly as long as the check that reads it:
+     · calls.ip           the same-network ring detector looks back SYBIL_WINDOW_MS — erased a day after that
+     · users.signup_ip    the per-network account cap — erased after SIGNUP_IP_KEEP_MS, so the cap counts
+                          accounts made from one network in that window, not for all time
+     · join_ip, creator_ip, alerts.ip   live only while the membership, community or alert they guard does,
+                          and go with it (and with the account)
+   last_ip, vote_ip and author_ip are no longer written at all: nothing ever read them. */
+const SIGNUP_IP_KEEP_MS = 90 * DAY_MS;
+function sweepIpIndexes(t) {
+  try {
+    db.prepare('UPDATE calls SET ip = NULL WHERE ip IS NOT NULL AND created_at < ?').run(t - SYBIL_WINDOW_MS - DAY_MS);
+    db.prepare('UPDATE users SET signup_ip = NULL WHERE signup_ip IS NOT NULL AND created_at < ?').run(t - SIGNUP_IP_KEEP_MS);
+    db.prepare('UPDATE users SET last_ip = NULL WHERE last_ip IS NOT NULL').run();
+    db.prepare('UPDATE proposal_votes SET vote_ip = NULL WHERE vote_ip IS NOT NULL').run();
+    db.prepare('UPDATE proposals SET author_ip = NULL WHERE author_ip IS NOT NULL').run();
+  } catch (e) { console.error('ip index sweep', e && e.message); }
+}
 const sweeper = setInterval(() => {
   const t = now();
   for (const [k, v] of pendingLogins) if (v.expires < t) pendingLogins.delete(k);
@@ -7965,8 +8452,10 @@ const sweeper = setInterval(() => {
     db.prepare('DELETE FROM nonces WHERE expires_at < ?').run(t);
     db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(t);
   } catch {}
+  sweepIpIndexes(t);
 }, 6e5); // every 10 min
 sweeper.unref?.(); // don't keep the process alive just for the sweeper
+setTimeout(() => sweepIpIndexes(now()), 5000).unref?.();   // and once shortly after boot, not ten minutes later
 
 /* ---------- router ---------- */
 // gzip is acceptable only when the client offers it with a non-zero q-value (RFC 7231): "gzip;q=0" is a refusal.
@@ -8150,8 +8639,14 @@ function callView(row, me) {
   let snap = null; try { snap = JSON.parse(row.snapshot || 'null'); } catch {}
   const hops = db.prepare('SELECT COUNT(*) n FROM call_hops WHERE call_id=?').get(row.id).n;
   const hopped = me ? !!db.prepare('SELECT 1 FROM call_hops WHERE call_id=? AND user_id=?').get(row.id, me.id) : false;
-  const callerSpend = row.entry_spend_usd || 0; // $ the caller spent buying the token (on-chain)
-  const hopSpend = db.prepare('SELECT COALESCE(SUM(spend_usd),0) s FROM call_hops WHERE call_id=?').get(row.id).s || 0; // cumulative $ every follower put in
+  /* Dollar figures are exact only for the caller. callerSpend ÷ entryPrice is the caller's token position to
+     the last wei, and one follower's hopSpend is theirs — either one, matched against the public transfer log,
+     names the wallet behind a username. Everyone else gets the same two-significant-figure rounding the
+     senders list and the chart markers already use. */
+  const own = !!(me && me.id === row.user_id);
+  const exactSpend = row.entry_spend_usd || 0; // $ the caller spent buying the token (on-chain)
+  const callerSpend = own ? exactSpend : senderUsdPublic(exactSpend);
+  const hopSpend = senderUsdPublic(db.prepare('SELECT COALESCE(SUM(spend_usd),0) s FROM call_hops WHERE call_id=?').get(row.id).s || 0); // cumulative $ every follower put in
   return {
     id: row.id, postId: row.post_id || null, symbol: row.symbol, name: row.name, token: row.token_addr, pair: row.pair_addr,
     quoteSymbol: row.quote_symbol, wallet: row.wallet || null, calledAt: row.created_at,
@@ -8501,7 +8996,16 @@ const server = http.createServer(async (req, res) => {
           tosRequired: TOS_GATE,
           tosVersion: TOS_VERSION,
           signedIn: !!u,
-          brand: coinBrandUrls(),
+          ageConfirmed: ageOk(req),
+          ageMin: AGE_MIN,
+          /* The entry rules the ticket states up front, read from the same constants the wallet check
+             enforces, so the numbers on the door can never drift from the numbers behind it. */
+          rules: {
+            holdMinUsd: MIN_HOLD_USD,
+            coins: PROOF_COINS.map(c => c.label),
+            sellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
+            priceMedianHours: PRICE_MEDIAN_HOURS,   // the bag is valued at the LOWER of spot and this median (sendPriceUsd)
+          },
           ticket: u ? ticketFor(u) : null,
         });
       }
@@ -8528,6 +9032,16 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         claimInvite(req, me.id);   // a pre-existing account opening this for the first time gets its codes
         return send(res, 200, { ticket: ticketFor(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id)) });
+      }
+      /* The age gate's answer. The page sets the same cookie itself so the gate clears even if this call
+         fails; this is the copy the server stands behind, and the moment a signed-in account says yes. */
+      if (p === '/api/age' && req.method === 'POST') {
+        if (!rateLimit('age:' + clientIp(req), 30, 6e4)) return bad(res, 'too many tries — wait a minute', 429);
+        const b = await readBody(req);
+        if (b.confirm !== true || Number(b.age) !== AGE_MIN) return bad(res, 'tick the box to confirm you are ' + AGE_MIN + ' or older');
+        const u = me || getUser(req);
+        if (u) db.prepare('UPDATE users SET age_at = ? WHERE id = ? AND age_at IS NULL').run(now(), u.id);
+        return send(res, 200, { ok: true, ageMin: AGE_MIN }, { 'Set-Cookie': ageCookie() });
       }
       if (p === '/api/gate/accept' && req.method === 'POST') {
         const r = passRow(req);
@@ -8603,6 +9117,8 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (blockReadOnly(res, me)) return;
         if (!rateLimit('dkmint:' + me.id, 5, 36e5)) return bad(res, 'too many attempts — try again later', 429);
+        // a key reads this account's private data, so a session cookie alone must not be able to mint one
+        { const kb = await readBody(req).catch(() => ({})); const kerr = await ownershipRefusal(me, kb); if (kerr) return bad(res, 'to mint a data key, ' + kerr, 401); }
         if (_minting.has(me.id)) return bad(res, 'a mint is already in progress — wait for it', 409); // two tabs must not hand out a key that the other tab's mint has already revoked
         _minting.add(me.id);
         try {
@@ -8681,6 +9197,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/data/key/rotate' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('dkrot:' + me.id, 10, 36e5)) return bad(res, 'rotating too often — try again later', 429);
+        { const kb = await readBody(req).catch(() => ({})); const kerr = await ownershipRefusal(me, kb); if (kerr) return bad(res, 'to rotate the data key, ' + kerr, 401); }
         const cur = db.prepare('SELECT * FROM api_keys WHERE user_id = ? AND revoked_at IS NULL').get(me.id);
         if (!cur) return bad(res, 'no key to rotate', 404);
         const th = dataThresholdFor(me), t = now();
@@ -8705,6 +9222,7 @@ const server = http.createServer(async (req, res) => {
       }
       const dm = /^\/api\/data\/v1\/([a-z]+)$/.exec(p);
       if (dm && req.method === 'GET') {
+        res._rawImg = true;   // programs, not browsers: artwork URLs stay as the CDN serves them
         const k = dataKeyOf(req);
         if (!k) return bad(res, 'a valid Data API key is required — Authorization: Bearer sk_…', 401);
         if (!rateLimit('dk:' + k.key_hash, DATA_KEY_RATE, 60000)) return bad(res, 'rate limit: ' + DATA_KEY_RATE + ' requests per minute per key', 429);
@@ -8778,10 +9296,12 @@ const server = http.createServer(async (req, res) => {
         if (usernameTaken(username)) return bad(res, 'that username is taken — try another');
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
-        if (findIdentity('email', email)) return bad(res, 'that email already has an account — sign in instead');
-        // The invite, enforced where it belongs: at the moment an account comes into existence.
+        // The invite, enforced where it belongs: at the moment an account comes into existence — and BEFORE the
+        // email lookup, so a visitor with no ticket cannot use this door to ask whether an address is a member.
         const regGate = signupRefusal(req);
         if (regGate) return send(res, 403, regGate);
+        // one answer for "taken" whatever the reason, so even a ticket holder learns nothing about who else is here
+        if (findIdentity('email', email)) return bad(res, 'we could not create an account with those details — if you already have one, sign in instead');
         const regIp = ipIdx(req);
         const regBlock = ipSignupBlocked(regIp);
         if (regBlock) return bad(res, regBlock, 429);
@@ -8942,7 +9462,8 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/auth/sessions' && req.method === 'DELETE') {
         if (!me) return bad(res, 'sign in first', 401);
         const r = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid));
-        return send(res, 200, { ok: true, endedOthers: r.changes });
+        const keyReset = resetDataKeySecret(me.id, 'you ended your other sessions');
+        return send(res, 200, { ok: true, endedOthers: r.changes, dataKeyReset: keyReset });
       }
       /* Change the account password. There is no reset — this site can send no email — so this is the only
          way a password ever changes, and it needs the old one plus whatever second factor is on. Every
@@ -9049,6 +9570,8 @@ const server = http.createServer(async (req, res) => {
         try {
           for (const r of db.prepare('SELECT name FROM uploads WHERE user_id = ?').all(uid)) media.push(r.name);
           for (const r of db.prepare('SELECT image FROM posts WHERE user_id = ? AND image IS NOT NULL').all(uid)) media.push(r.image);
+          // profile pictures saved from a data URI have no uploads row; they are this person's photos all the same
+          for (const k of ['avatar_img', 'header_img', 'bg_img']) if (me[k] && /^[0-9a-f]{24}\.[a-z0-9]+$/.test(me[k])) media.push(me[k]);
           db.exec('BEGIN');
           for (const q of db.prepare('SELECT community_id FROM community_members WHERE user_id = ? AND qualified = 1').all(uid))
             db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id = ?').run(q.community_id);
@@ -9061,8 +9584,23 @@ const server = http.createServer(async (req, res) => {
           try { db.prepare('DELETE FROM notifications WHERE actor_id = ?').run(uid); } catch {}
           db.prepare('DELETE FROM posts WHERE user_id = ? AND call_id IS NULL').run(uid);
           db.prepare("UPDATE posts SET text = '[deleted]', image = NULL WHERE user_id = ?").run(uid);   // the Send Call widgets stay, the words go
-          db.prepare('UPDATE calls SET wallet = NULL WHERE user_id = ?').run(uid);
-          db.prepare("UPDATE users SET username = ?, avatar = '👻', avatar_img = NULL, bio = '', accent = NULL, points = 0, og = 0, og_tier = 0, twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL, twofa_last_step = NULL, holder_verified_at = NULL, holder_state = 'none', holder_proof = NULL, holder_proof_reason = NULL, gate_wallets = NULL, live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?").run('deleted-' + uid, now(), uid);
+          db.prepare('UPDATE calls SET wallet = NULL, ip = NULL WHERE user_id = ?').run(uid);
+          // proposals: a draft goes; an opened one keeps its tally (other people voted on it) but not the words or the author's network
+          try { db.prepare("DELETE FROM proposals WHERE author_id = ? AND status = 'draft'").run(uid); } catch {}
+          try { db.prepare("UPDATE proposals SET title = '[deleted]', body = '', tokens = NULL, author_ip = NULL WHERE author_id = ?").run(uid); } catch {}
+          try { db.prepare('UPDATE communities SET creator_ip = NULL WHERE creator_id = ?').run(uid); } catch {}
+          /* The row stays (Send Calls point at it) under a placeholder name, with nothing left that identifies the
+             person: no picture, no social handles, no IP indexes, no age record, no balances, no preferences.
+             accent/wall_bg/tracker_prefs/site_prefs are NOT NULL columns — writing NULL there made SQLite refuse
+             the whole statement, so every deletion rolled back and nobody's data was ever erased. */
+          db.prepare(`UPDATE users SET username = ?, avatar = '👻', avatar_img = NULL, header_img = NULL, bg_img = NULL, bio = '',
+            accent = '', wall_bg = '', tracker_prefs = '{}', site_prefs = '{}', twitter_handle = NULL, ig_handle = NULL,
+            points = 0, og = 0, og_tier = 0, og_buy_ms = 0,
+            twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL, twofa_last_step = NULL,
+            holder_verified_at = NULL, holder_state = 'none', holder_proof = NULL, holder_proof_reason = NULL, holder_proof_at = NULL,
+            gate_wallets = NULL, gate_hold_until = 0, gate_floor = 0, redeem_base_send = 0, redeem_floor = 0,
+            signup_ip = NULL, last_ip = NULL, age_at = NULL, restrict_reason = NULL,
+            live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?`).run('deleted-' + uid, now(), uid);
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('account delete', e && e.message); return bad(res, 'could not delete the account right now — try again', 500); }
         for (const n of media) { try { deleteUpload(n, null); } catch {} }
@@ -9082,6 +9620,7 @@ const server = http.createServer(async (req, res) => {
         if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
         db.prepare('UPDATE identities SET secret = ? WHERE id = ?').run(await hashPassword(next), e.id);
         const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
+        resetDataKeySecret(me.id, 'your password was changed');
         notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended.' : '.'), 'wallet');
         return send(res, 200, { ok: true, endedOthers: dropped });
       }
@@ -9192,7 +9731,7 @@ const server = http.createServer(async (req, res) => {
         }
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
         setTwofaWallet(me.id, addr);   // THIS wallet is the key from now on — the others are for holdings only
-        notify(me.id, '🔐', 'Wallet two-factor is on. Your wallet ending in ' + addr.slice(-6) + ' is now the key to this account.', 'alert');
+        notify(me.id, '🔐', 'Wallet two-factor is on. The wallet you chose is now the key to this account — Settings → Security shows which one.', 'alert');
         return send(res, 200, { ok: true, twofaWallet: addr });
       }
       if (p === '/api/2fa/disable' && req.method === 'POST') {
@@ -9202,6 +9741,7 @@ const server = http.createServer(async (req, res) => {
         const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401);
         db.prepare('UPDATE users SET twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL WHERE id = ?').run(me.id);
         setTwofaWallet(me.id, null);   // the wallets stay linked and keep counting for Send Power; none of them is a key any more
+        resetDataKeySecret(me.id, 'two-factor was turned off');
         notify(me.id, '🔓', 'Two-factor was turned OFF on your account. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
         return send(res, 200, { ok: true });
       }
@@ -9221,7 +9761,7 @@ const server = http.createServer(async (req, res) => {
         const proof = consumeNonce(next, b.newSignature, '2fa-on');
         if (proof.error) return bad(res, proof.error, 401);
         setTwofaWallet(me.id, next);
-        notify(me.id, '🔐', 'Your two-factor wallet changed — sign-ins now need ' + next.slice(0, 6) + '…' + next.slice(-4) + '.', 'wallet');
+        notify(me.id, '🔐', 'Your two-factor wallet changed — sign-ins now need the wallet you just chose (Settings → Security shows which).', 'wallet');
         return send(res, 200, { ok: true, twofaWallet: next });
       }
       /* Unlink ONE wallet and leave the rest. /api/wallet/disconnect removes every wallet at once, which is
@@ -9370,7 +9910,7 @@ const server = http.createServer(async (req, res) => {
           if (!db.prepare('SELECT 1 FROM alerts WHERE user_id=? AND target_id=?').get(me.id, u.id)) {
             const ipk = bidx(clientIp(req));   // stored as a blind index, never as an address
             if (ipk && db.prepare('SELECT COUNT(*) n FROM alerts WHERE target_id=? AND ip=?').get(u.id, ipk).n >= ALERT_IP_PER_TARGET) {
-              return bad(res, ALERT_IP_PER_TARGET + ' people on this connection already have alerts on @' + (u.username || uname) + '. That is the anti-sybil cap — a wall only carries so many, and they cannot all come from one network.', 409);
+              return bad(res, 'Alerts on @' + (u.username || uname) + ' can’t be added from this connection right now (an anti-sybil limit on shared networks).', 409);
             }
             if (alertCount(me.id) >= ALERT_MAX_PER_USER) {
               return bad(res, 'You are already watching ' + ALERT_MAX_PER_USER + ' walls, which is the limit. Turn one off to add this one.', 409);
@@ -9453,7 +9993,7 @@ const server = http.createServer(async (req, res) => {
           // its FIRST wallet links on the session alone; the owner is notified below and the 24h age rule
           // (walletTooNew) keeps that wallet from becoming the account's key straight away
           insertIdentity(me.id, 'wallet', address);
-          notify(me.id, '🔗', 'A wallet ending in ' + address.slice(-6) + ' was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
+          notify(me.id, '🔗', 'A new wallet was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
           forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
           // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
           // while read-only — so an empty throwaway keypair (or a flagged account) can't farm the bonus.
@@ -9563,7 +10103,7 @@ const server = http.createServer(async (req, res) => {
           // invite one carries a flag the page turns straight back into the ticket rather than an error.
           const explain = e instanceof HttpError && (e.status === 429 || e.status === 403);
           const msg = explain ? e.message : '';
-          const needs = (e instanceof HttpError && e.status === 403) ? '&needinvite=1' : '';
+          const needs = (e instanceof HttpError && e.status === 403) ? (e.code === 'need_age' ? '&needage=1' : '&needinvite=1') : '';   // the age question and the ticket are different doors
           res.writeHead(302, { Location: '/?autherror=' + encodeURIComponent(provider) + (msg ? '&autherrmsg=' + encodeURIComponent(msg) : '') + needs, 'Set-Cookie': CLEAR_OAUTH_STATE });
           res.end();
         }
@@ -9802,6 +10342,10 @@ const server = http.createServer(async (req, res) => {
                large". Naming the kinds it is actually for means the next kind added does not inherit a
                check that cannot apply to it. */
             if (spec.kind === 'image' || spec.kind === 'gif') { const d = rasterDims(readHead(tmp, 131072), mime); if (!d || !(d.w > 0) || !(d.h > 0) || d.w > UPLOAD_MAX_PX || d.h > UPLOAD_MAX_PX || (d.w * d.h) / 1e6 > UPLOAD_MAX_MEGAPIXELS) return fail(400, 'image dimensions too large (max ' + UPLOAD_MAX_PX + 'px per side)'); }
+            // strip where-and-on-what metadata before the file can ever be served (a file that cannot be parsed is refused, not published as-is)
+            let scrubbed = null; try { scrubbed = scrubMediaFile(tmp, mime); } catch {}
+            if (!scrubbed || !scrubbed.ok) return fail(400, 'could not read that file — try re-exporting it');
+            size = scrubbed.bytes;
             const q1 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
             if (q1 && q1.u + size > UPLOAD_USER_QUOTA) return fail(413, 'you’ve hit your media storage limit — delete some old posts first');
             try { const st = fs.statfsSync(DATA_DIR); if (st.bavail * st.bsize < DISK_SAFETY_MARGIN) return fail(507, 'storage is full right now — try again later'); } catch {}
@@ -10246,7 +10790,7 @@ const server = http.createServer(async (req, res) => {
           const hopBase = Math.round(PTS.hop_on * addBonus(sizeMult(spendUsd)));   // one factor today, but the same rule as the rest
           earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX), PTS.hop_on) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
           if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
-          notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' ($' + Math.round(spendUsd) + ' in)' : ''), 'points');
+          notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' (about $' + senderUsdPublic(spendUsd) + ' in)' : ''), 'points');
         } else {
           const hopEntry = dupTok ? null : ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null);
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check) VALUES (?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop);
@@ -10383,8 +10927,10 @@ const server = http.createServer(async (req, res) => {
         const px = await tokenPriceUsdOf(movedTok);
         if (!(px > 0)) return bad(res, 'the coin price cannot be read right now — try again in a minute', 503);
         if (Number(movedIn) / 1e18 * px < SWAP_MIN_USD) return bad(res, 'that swap brought in under $' + SWAP_MIN_USD + ' of the coin — Send Power is paid on real buys');
-        if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('swaptx:' + hash)) return send(res, 200, { awarded: 0, already: true });
-        return send(res, 200, { awarded: awardPoints(me.id, 'swap', PTS.swap, 'swaptx:' + hash) });
+        // a raw tx hash beside a user id is the account→wallet link in plain text (one RPC call away), so the
+        // ledger keeps only its blind index — the same dedupe, nothing a database reader can resolve
+        if (db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('swaptx:' + bidx(hash))) return send(res, 200, { awarded: 0, already: true });
+        return send(res, 200, { awarded: awardPoints(me.id, 'swap', PTS.swap, 'swaptx:' + bidx(hash)) });
       }
       // The Biggest Sender board: this week's standings (earned inside the week, prize factor divided out),
       // the clock, last week's winners and what they drew, and the caller's own row. Public — the board is
@@ -10642,21 +11188,62 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/img' && req.method === 'GET') {
         const u = String(url.searchParams.get('u') || '');
         if (!/^https:\/\/(cdn|dd)\.dexscreener\.com\/[^\s]+$/i.test(u)) return bad(res, 'unsupported image host');
-        if (!rateLimit('img:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+        // every token picture on the site now comes through here, so the budget is per page of logos, not per logo
+        if (!rateLimit('img:' + clientIp(req), 600, 6e4)) return bad(res, 'slow down', 429);
+        const imgHead = (ct, len) => ({ 'Content-Type': ct, 'Cache-Control': 'public, max-age=86400', 'Content-Length': len,
+          'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' });
+        const cached = imgProxyCache.get(u);
+        if (cached && now() - cached.at < IMG_PROXY_TTL) { res.writeHead(200, imgHead(cached.ct, cached.buf.length)); return res.end(cached.buf); }
         try {
           const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);
           const r2 = await fetch(u, { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'image/*' }, signal: ctrl.signal });
           clearTimeout(to);
           if (!r2.ok) return bad(res, 'image fetch failed', 502);
           if (r2.url && !/^https:\/\/(cdn|dd)\.dexscreener\.com\//i.test(r2.url)) return bad(res, 'image redirected off the allowed CDN', 502); // SSRF defense-in-depth: reject a redirect that leaves the Dexscreener CDN
-          const ct = r2.headers.get('content-type') || 'image/png';
-          if (!/^image\//i.test(ct)) return bad(res, 'not an image', 415);
+          // the same ceiling as the brand proxy: token banners are animated GIFs of several megabytes (the $GWC one is 4.6 MB)
+          const clen = Number(r2.headers.get('content-length') || 0);
+          if (clen && clen > BRAND_MAX_BYTES) return bad(res, 'image too large', 413);
           const buf = Buffer.from(await r2.arrayBuffer());
-          if (buf.length > 3_000_000) return bad(res, 'image too large', 413);
-          res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': 'public, max-age=86400', 'Content-Length': buf.length });
+          if (buf.length > BRAND_MAX_BYTES) return bad(res, 'image too large', 413);
+          // the type is read from the BYTES, never the header, and only still/animated rasters pass — an SVG is a
+          // script container wearing an image's name, and this answer is served from our own origin
+          const ct = imageTypeOf(buf);
+          if (!ct) return bad(res, 'not an image', 415);
+          imgProxyPut(u, ct, buf);
+          res.writeHead(200, imgHead(ct, buf.length));
           res.end(buf);
         } catch { return bad(res, 'image fetch failed', 502); }
         return;
+      }
+
+      /* ----- chain reads, from THIS server ----------------------------------------------------------
+         The tracker and the profile page used to read Blockscout, Dexscreener and the RPC straight from the
+         browser, which handed those companies each visitor's IP address together with the wallets they own
+         or track — the very link the database encrypts. These three routes make the same reads from here.
+         Explorer reads need BLOCKSCOUT_URL to point at a keyed endpoint: the public host refuses servers. */
+      if (p === '/api/chain/pairs' && req.method === 'GET') {   // the homepage's live $SEND / $GWC pair data
+        if (!rateLimit('chainp:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+        const j = await jgetCached('https://api.dexscreener.com/latest/dex/pairs/robinhood/' + OG_PAIR.SEND + ',' + OG_PAIR.GWC, 20000);
+        if (!j) return bad(res, 'market data could not be read right now', 502);
+        return send(res, 200, j);
+      }
+      if (p === '/api/chain/dex-tokens' && req.method === 'GET') {   // the tracker's price batch (≤30 tokens)
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('chaind:' + me.id, 120, 6e4)) return bad(res, 'slow down', 429);
+        const addrs = [...new Set(String(url.searchParams.get('addrs') || '').toLowerCase().split(',').map(s => s.trim()).filter(a => /^0x[0-9a-f]{40}$/.test(a)))].sort().slice(0, 30);
+        if (!addrs.length) return send(res, 200, []);
+        const j = await jgetCached('https://api.dexscreener.com/tokens/v1/robinhood/' + addrs.join(','), 60000);
+        if (!j) return bad(res, 'prices could not be read right now', 502);
+        return send(res, 200, Array.isArray(j) ? j : []);
+      }
+      if (p === '/api/chain/explorer' && req.method === 'GET') {   // the tracker's explorer reads, by allow-list
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('chainx:' + me.id, 300, 6e4)) return bad(res, 'slow down', 429);
+        const want = String(url.searchParams.get('path') || '').replace(/0x[0-9a-fA-F]+/g, (m) => m.toLowerCase());
+        if (!EXPLORER_PROXY_PATHS.some((re) => re.test(want))) return bad(res, 'that explorer read is not available here', 400);
+        const j = await jgetCached(BLOCKSCOUT + want, 30000);
+        if (!j) return bad(res, 'the explorer could not be read right now', 502);
+        return send(res, 200, j);
       }
 
       /* ----- watchlist (personal saved tokens; enriched view reuses the pairs pipeline) ----- */
@@ -10789,7 +11376,15 @@ const server = http.createServer(async (req, res) => {
         if (!db.prepare('SELECT 1 FROM pinned_tokens WHERE user_id=? AND token_addr=? COLLATE NOCASE').get(u.id, token)) return send(res, 200, { hasWallet: false, held: false }); // only expose holdings for tokens they've publicly convicted
         const h = await convictionHolding(u.id, token);
         let amountUsd = null; if (h.hasWallet && h.amountTok > 0) { try { const m = (await marketFor([token]))[token]; if (m && m.price != null) amountUsd = h.amountTok * m.price; } catch {} }
-        return send(res, 200, { ...h, amountUsd });
+        if (me && me.id === u.id) return send(res, 200, { ...h, amountUsd });   // your own wall: the figures you already know
+        /* Anyone else gets BANDS. A balance to three figures plus the day it arrived is two high-entropy keys,
+           and together they pick one wallet out of the public holder list — the link a wall is not meant to
+           publish. "10K+ tokens (~$1K+), held 1+ month" still says what a conviction is worth. */
+        const floor10 = (n) => (n > 0 ? Math.pow(10, Math.floor(Math.log10(n))) : 0);
+        const age = h.heldSinceMs ? now() - h.heldSinceMs : null;
+        const heldFor = age == null ? null : age >= 365 * DAY_MS ? '1+ year' : age >= 182 * DAY_MS ? '6+ months' : age >= 30 * DAY_MS ? '1+ month' : age >= 7 * DAY_MS ? '1+ week' : age >= DAY_MS ? '1+ day' : 'under a day';
+        return send(res, 200, { hasWallet: h.hasWallet, held: h.held, coarse: true,
+          amountTok: h.held ? floor10(h.amountTok) : 0, amountUsd: amountUsd != null && h.held ? floor10(amountUsd) : null, heldFor });
       }
 
       /* ===== Communities: token communities that go live at 10 opt-ins; being in one = a flat 10× Send Power ===== */
@@ -10992,8 +11587,8 @@ const server = http.createServer(async (req, res) => {
             if (choice !== 'yes' && choice !== 'no' && choice !== 'abstain') return bad(res, 'choose yes, no or abstain');
             const round = pr.status === 'round2' ? 2 : 1;
             try {
-              db.prepare('INSERT INTO proposal_votes (proposal_id, round, user_id, choice, created_at, vote_ip) VALUES (?,?,?,?,?,?)')
-                .run(pid, round, me.id, choice, now(), bidx(clientIp(req)));
+              db.prepare('INSERT INTO proposal_votes (proposal_id, round, user_id, choice, created_at, vote_ip) VALUES (?,?,?,?,?,NULL)')
+                .run(pid, round, me.id, choice, now());   // no IP index: nothing reads one for a vote
             } catch { return bad(res, 'you have already voted in this round', 409); } // PK collision = double vote
             awardCommunityXp(cid, me.id, 'wall_react_get', COMM_XP.wall_react_get, 'c' + cid + ':prop_vote:' + pid + ':' + round + ':' + me.id);
             awardConviction(cid, me.id, 'wall_react_give', CONV_XP.wall_react_give, 'v' + cid + ':prop_vote:' + pid + ':' + round + ':' + me.id);
@@ -11131,8 +11726,8 @@ const server = http.createServer(async (req, res) => {
             const title = String(b.title || '').trim().slice(0, PROP_TITLE_MAX);
             if (title.length < 4) return bad(res, 'give your proposal a title of at least 4 characters');
             const rt = await resolveTokensInText(String(b.body || '').trim().slice(0, PROP_BODY_MAX));
-            const info = db.prepare('INSERT INTO proposals (community_id, author_id, title, body, tokens, status, deadline, created_at, author_ip) VALUES (?,?,?,?,?,?,?,?,?)')
-              .run(cid, me.id, title, rt.text, rt.tokens, 'draft', now() + PROP_DRAFT_TTL, now(), bidx(clientIp(req)));
+            const info = db.prepare('INSERT INTO proposals (community_id, author_id, title, body, tokens, status, deadline, created_at, author_ip) VALUES (?,?,?,?,?,?,?,?,NULL)')
+              .run(cid, me.id, title, rt.text, rt.tokens, 'draft', now() + PROP_DRAFT_TTL, now());   // no IP index: nothing reads one for a proposal
             scanWriteAction(me.id, 'post', title);
             const fresh = db.prepare('SELECT * FROM proposals WHERE id=?').get(Number(info.lastInsertRowid));
             return send(res, 200, { proposal: proposalView(fresh, me, c, cmRow) });
@@ -11281,7 +11876,8 @@ const server = http.createServer(async (req, res) => {
        logo rather than the person). A ticket has to carry ITS OWN card, so its tags have to be built for
        it. Nothing is published until the owner presses Share — before that this 404s like any other
        address that is not a page. The only facts on it are ones already public on that person's profile:
-       their handle, their Send ID, when they joined, who invited them. No wallet, no email, no balance. */
+       their handle, their Send ID and when they joined. Not who invited them — that person never agreed to be
+       named on somebody else's share. No wallet, no email, no balance. */
     /* The card itself, at /t/<id>.png — deliberately NOT under /api/.
        robots.txt carries `Disallow: /api/`, and a social crawler that respects robots.txt (X's does)
        will not fetch an og:image it is told to stay out of. The card would have rendered perfectly and
@@ -11295,7 +11891,7 @@ const server = http.createServer(async (req, res) => {
       /* F019: the ETag is a hash of what the card is DRAWN FROM, computed before drawing, so a 304 and a
          HEAD cost nothing; and a drawn card is kept for a while, since the same ticket is fetched by every
          crawler and viewer of the share page. */
-      const key = [u.username, u.id, u.created_at, inv && inv.username, 'v1'].join('|');
+      const key = [u.username, u.id, u.created_at, inv ? 1 : 0, 'v3'].join('|');   // v3: the inviter is no longer drawn   // v2: the site's brand, not a coin's
       const etag = '"' + crypto.createHash('sha1').update(key).digest('base64url').slice(0, 20) + '"';
       const headBase = { 'Content-Type': 'image/png', 'ETag': etag, 'Cache-Control': 'public, max-age=600', ...SEC_HEADERS };
       delete headBase['X-Frame-Options'];   // a social card is fetched by crawlers and shown inside previews
@@ -11321,8 +11917,9 @@ const server = http.createServer(async (req, res) => {
       const e = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
       const card = SITE_ORIGIN + '/t/' + u.id + '.png';
       const title = '@' + u.username + ' has ticket #' + u.id + ' to Send';
+      // who invited them stays off the public page: the inviter never agreed to be named on someone else's share
       const desc = 'Send ID #' + u.id + ' · joined ' + new Date(u.created_at).toISOString().slice(0, 10) +
-                   (inv ? ' · invited by @' + inv.username : '') + '. JustSendIt is invite-only. Entertainment only — not financial advice.';
+                   '. JustSendIt is invite-only. Entertainment only — not financial advice.';
       const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${e(title)} 🎟️</title>
@@ -11333,7 +11930,7 @@ const server = http.createServer(async (req, res) => {
 <meta property="og:url" content="${e(SITE_ORIGIN + '/t/' + u.id)}">
 <meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}">
 <meta property="og:image" content="${e(card)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${e('A holographic ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
+<meta property="og:image:alt" content="${e('A Just Send It ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@senditrh">
 <meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(desc)}">
 <meta name="twitter:image" content="${e(card)}">
@@ -11343,7 +11940,7 @@ const server = http.createServer(async (req, res) => {
 <main class="inv-wrap" style="min-height:100vh;">
   <p class="inv-kicker">Invite only · Live beta</p>
   <h1 class="inv-title">@${e(u.username)} has <span class="hl">ticket #${u.id}</span></h1>
-  <p class="inv-sub">Send ID <b>#${u.id}</b> — their place in line, set the day they joined${inv ? ', invited by @' + e(inv.username) : ''}.</p>
+  <p class="inv-sub">Send ID <b>#${u.id}</b> — their place in line, set the day they joined.</p>
   <img src="${e('/t/' + u.id + '.png')}" width="1200" height="630" alt="${e('Ticket #' + u.id + ' belonging to @' + u.username)}" style="max-width:100%;height:auto;border-radius:14px;">
   <div class="inv-actions"><a class="g-btn g-btn-primary" href="/" style="text-decoration:none;display:inline-flex;align-items:center;">Get your own ticket 🎟️</a></div>
   <p class="inv-note" style="max-width:52ch;text-align:center;">JustSendIt is invite-only — someone already inside has to hand you a code. 🎉 <b>Entertainment purposes only.</b> Memecoins are extremely volatile and most go to zero. Nothing here is financial advice. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.</p>

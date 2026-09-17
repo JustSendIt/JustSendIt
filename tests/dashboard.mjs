@@ -106,6 +106,11 @@ try {
     for (const c of rocket) check('cursor namespace: gamify.js does not use .' + c, !new RegExp('[\'"\\s.]' + c + '[\'"\\s]').test(GAMIFY));
     check('cursor namespace: .rk-p is still the cursor particle', /\.rk-p \{ position: fixed/.test(CSS));
     check('rekt uses its own prefix', /\.rekt-card \{/.test(CSS));
+    /* the rocket's centre is the pointer: a square box, no margin offset, translated back by half itself and
+       turned about its own centre — so the middle of the rocket is exactly where a click lands */
+    const CURSOR = P('cursor.js');
+    check('rocket cursor: centred on the pointer', /translate\(' \+ x \+ 'px,' \+ y \+ 'px\) translate\(-50%, -50%\) rotate\(-90deg\)/.test(CURSOR));
+    check('rocket cursor: a square box with no offset margin', /\.rk-cursor \{[^}]*width: 1\.3em; height: 1\.3em; display: grid; place-items: center; margin: 0;/.test(CSS));
   }
 
   /* ═══════════ 6. no stale figure survives in anything a user can read ═══════════ */
