@@ -6680,6 +6680,12 @@ function rewriteHtml(buf) {
 // not a raw {"error":"not found"} blob.
 /* X04: these two files are kept out of git (rights) and may be absent on a deploy. Checked once at boot;
    /api/config tells the pages, which hide the player and the video section rather than show a dead one. */
+/* The voice memo is OFF unless VOICE_MEMOS=1. Hidden means hidden at both ends: the recorder is not
+   wired into any composer, and the upload route refuses audio outright — a feature you cannot see but
+   can still reach with a crafted request is not hidden, it is undocumented. Memos ALREADY posted keep
+   playing: /uploads still serves them and posts still render them, because taking those away would be
+   deleting something people made rather than hiding a button. */
+const VOICE_MEMOS = process.env.VOICE_MEMOS === '1';
 const OPTIONAL_MEDIA = {
   video: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-full.mp4')),
   poster: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'full-send-poster.jpg')),
@@ -8535,6 +8541,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/config' && req.method === 'GET') {
         return send(res, 200, {
           media: OPTIONAL_MEDIA,   // X04: the theme song and the feature video ship outside git; pages hide what is not here
+          features: { voiceMemos: VOICE_MEMOS },
           auth: {
             wallet: true, email: true,
             google: !!(OAUTH.google.id && OAUTH.google.secret),
@@ -9733,7 +9740,8 @@ const server = http.createServer(async (req, res) => {
         if ((mediaByIp.get(upIp) || 0) >= MEDIA_PER_IP) return bad(res, 'too many uploads in flight from this network — let them finish first', 429);
         const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         const spec = UPLOAD_KINDS[mime];
-        if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4, WebM or a voice memo', 415);
+        if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4 or WebM', 415);
+        if (spec.kind === 'audio' && !VOICE_MEMOS) return bad(res, 'voice memos are switched off', 415);
         const q0 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
         if (q0 && q0.u >= UPLOAD_USER_QUOTA) return bad(res, 'you’ve hit your media storage limit — delete some old posts first', 413);
         const clen = Number(req.headers['content-length'] || 0);

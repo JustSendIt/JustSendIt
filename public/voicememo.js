@@ -148,6 +148,13 @@
     /* A browser that cannot record should not offer to. Hiding it outright beats a button that
        apologises when pressed — and the photo/video attach beside it still works. */
     if (!supported()) { btn.hidden = true; return; }
+    /* THE FEATURE SWITCH. The server decides whether voice memos exist at all (VOICE_MEMOS), and the
+       answer arrives asynchronously — so the button starts HIDDEN and is only revealed once the config
+       says the feature is on. Hidden-by-default is the safe order: a recorder that flashes into view and
+       then disappears is worse than one that never appears, and the upload route refuses audio anyway. */
+    btn.hidden = true;
+    featureOn(function (on) { if (on) { btn.hidden = false; arm(); } });
+    function arm() {
 
     var IDLE = '🎤 Voice memo';
     function announce(msg) { if (live) live.textContent = msg; }
@@ -196,7 +203,35 @@
     /* Leaving the page mid-recording must not leave the microphone open. */
     document.addEventListener('visibilitychange', function () { if (document.hidden && rec) { rec.stop(); } });
     window.addEventListener('pagehide', function () { if (rec) rec.cancel(); });
+    }
   }
 
-  window.VoiceMemo = { start: start, wire: wire, supported: supported, MAX_MS: MAX_MS, WARN_AT: WARN_AT, fmt: fmt, pickMime: pickMime, baseMime: baseMime };
+  /* One config read for the page, however many composers ask. A config we cannot read is treated as OFF:
+     the recorder stays hidden rather than offering something the server would refuse. */
+  var _feat = null, _featWaiting = [];
+  function featureOn(cb) {
+    if (_feat !== null) { cb(_feat); return; }
+    _featWaiting.push(cb);
+    if (_featWaiting.length > 1) return;
+    fetch('/api/config', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { _feat = !!(j && j.features && j.features.voiceMemos); })
+      .catch(function () { _feat = false; })
+      .then(function () { var q = _featWaiting; _featWaiting = []; q.forEach(function (f) { try { f(_feat); } catch (e) {} }); });
+  }
+
+  /* THE BACKSTOP. wire() hides its own button, but a composer whose script ran before this one never
+     called wire() at all — so the switch cannot depend on it. Every .voice-btn on the page is hidden as
+     soon as the config answers, whoever wired it and whoever did not. */
+  featureOn(function (on) {
+    if (on) return;
+    var hideAll = function () {
+      var els = document.querySelectorAll('.voice-btn');
+      for (var i = 0; i < els.length; i++) els[i].hidden = true;
+    };
+    hideAll();
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hideAll);
+  });
+
+  window.VoiceMemo = { start: start, wire: wire, featureOn: featureOn, supported: supported, MAX_MS: MAX_MS, WARN_AT: WARN_AT, fmt: fmt, pickMime: pickMime, baseMime: baseMime };
 })();

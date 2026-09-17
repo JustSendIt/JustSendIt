@@ -968,6 +968,33 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
 #music-player.playing .mp-title .eq span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes eq { 0%,100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.2); } }
 #music-player input[type=range] { width: 64px; accent-color: var(--green); }
+/* ===== THE PLAYER KEEPS TO ITSELF ================================================================
+   It is a FIXED overlay, so whatever is under it cannot be tapped — and a measured sweep of every page
+   at nine widths from 320 to 1440 found that this one control was the ONLY thing on the site covering
+   anything: community cards, the risk chip, the New Pairs filters, the sign-in button, links all
+   through the white paper. Nothing else overlapped, nothing ran off-screen, nothing clipped.
+
+   So it collapses. At rest it is one round button — the smallest thing that can still be pressed — and
+   the title and volume unfold only while it is hovered, focused or being used. That takes its footprint
+   from about 240px wide to 48, which is the difference between covering a card and covering nothing.
+   Everything stays keyboard-reachable: :focus-within opens it, so tabbing to the volume slider expands
+   the player first. */
+#music-player .mp-title, #music-player input[type=range] {
+  max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+  transition: max-width var(--dur-3, 0.24s) var(--ease-out, ease), opacity var(--dur-2, 0.16s) ease;
+}
+#music-player:hover .mp-title, #music-player:focus-within .mp-title { max-width: 110px; opacity: 1; }
+#music-player:hover input[type=range], #music-player:focus-within input[type=range] { max-width: 64px; opacity: 1; }
+#music-player:not(:hover):not(:focus-within) { gap: 0; padding: 0.3rem; }
+@media (prefers-reduced-motion: reduce) { #music-player .mp-title, #music-player input[type=range] { transition: none; } }
+/* The nudge is the widest part of it — a 137px bubble floating over whatever is above the button. It
+   stays reachable, but it gets out of the way on its own (player.js hides it after a while) and it can
+   never be wider than the viewport it sits in. */
+#music-player .mp-hint { max-width: min(62vw, 15rem); overflow: hidden; text-overflow: ellipsis; }
+/* A lane at the foot of every page, so content at the very END is never permanently trapped under the
+   player — mid-page content scrolls out from under it, page-end content cannot. */
+body { padding-bottom: 5.5rem; }
+@media (max-width: 560px) { body { padding-bottom: 4.5rem; } }
 @media (max-width: 560px) { #music-player .mp-title, #music-player input[type=range] { display: none; } #music-player { padding: 0.3rem; } #music-player .mp-btn { width: 48px; height: 48px; font-size: 1.15rem; } }
 
 /* ===== Intro ===== */
@@ -4621,6 +4648,55 @@ html.motion-off #matrix-rain { display: none; }
 .adm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
 
 
+
+
+/* ===== Dashboard sections, quest board and the play tabs ===========================================
+   Each overview section is a disclosure whose summary carries a live one-line reading, so a shut
+   dashboard still answers "how am I doing" and the detail is one tap away. The summary is the control:
+   it is a real <summary>, so it is keyboard-operable and announced as a disclosure with no ARIA. */
+.gsec { border: 1px solid var(--hair); border-radius: var(--r-2, 14px); background: var(--glass-lo); margin: 0 0 0.8rem; overflow: hidden; }
+.gsec + .gsec { margin-top: 0.8rem; }
+.gsec-sum { display: flex; align-items: center; gap: 0.7rem; padding: 0.85rem 1rem; cursor: pointer; list-style: none; min-height: 56px;
+  background: var(--glass-hi); transition: background var(--dur-2, 0.16s) ease; }
+.gsec-sum::-webkit-details-marker { display: none; }
+.gsec-sum:hover { background: color-mix(in srgb, var(--green) 10%, var(--glass-hi)); }
+.gsec-sum:focus-visible { outline: 3px solid var(--focus, var(--green-bright)); outline-offset: -3px; }
+.gsec-ico { font-size: 1.2rem; flex: none; line-height: 1; }
+.gsec-txt { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1 1 auto; }
+.gsec-t { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: 1rem; letter-spacing: 0.02em; }
+/* the live reading: one line, never wrapped into a paragraph — it is a glance, not a read */
+.gsec-d { font-size: 0.8rem; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsec-chev { flex: none; color: var(--text-mute); font-size: 0.9rem; transition: transform var(--dur-2, 0.16s) ease; }
+.gsec[open] > .gsec-sum > .gsec-chev { transform: rotate(180deg); }
+.gsec[open] > .gsec-sum { border-bottom: 1px solid var(--hair); }
+.gsec-body { padding: 1rem; }
+.gsec-body > .grekt, .gsec-body > .grules { margin-top: 0; }
+@media (prefers-reduced-motion: reduce) { .gsec-chev { transition: none; } }
+
+/* the two tabs: quests, or the boards */
+.play-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--r-pill); background: var(--ctl-fill-lo); border: 1px solid var(--ctl-fill-lo); margin-bottom: 0.9rem; }
+.play-tab { min-height: 44px; padding: 0 1.1rem; border: 0; border-radius: var(--r-pill); background: none; color: var(--ctl-ink);
+  font: inherit; font-weight: 800; font-size: 0.92rem; cursor: pointer; white-space: nowrap; }
+.play-tab:hover { background: var(--ctl-fill-hi); }
+.play-tab.is-on { background: linear-gradient(180deg, var(--green-bright), var(--green)); color: var(--on-green); box-shadow: 0 2px 10px var(--glow-g); }
+.play-tab:focus-visible { outline: 3px solid var(--ctl-ink); outline-offset: -2px; }
+
+/* the board's own head: what is left, and the filters */
+.qhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.8rem; }
+.qcount { margin: 0; font-size: 0.9rem; color: var(--text-dim); }
+.qcount b { color: var(--green-bright); }
+.qchips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.qchip { min-height: 44px; padding: 0.3rem 0.8rem; border-radius: var(--r-pill); border: 1px solid var(--ctl-fill-lo);
+  background: var(--ctl-fill-lo); color: var(--ctl-ink); font: inherit; font-weight: 700; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+.qchip:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); }
+.qchip.is-on { background: linear-gradient(180deg, var(--green-bright), var(--green)); color: var(--on-green); border-color: transparent; }
+.qchip:focus-visible { outline: 3px solid var(--ctl-ink); outline-offset: 2px; }
+.qchip-n { opacity: 0.75; font-variant-numeric: tabular-nums; }
+.qgroup + .qgroup { margin-top: 1.1rem; }
+.qgroup-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; margin: 0 0 0.5rem;
+  font-family: 'Luckiest Guy', cursive; color: var(--text); font-size: 0.95rem; letter-spacing: 0.02em; }
+.qgroup-b { font-family: 'Rubik', sans-serif; font-weight: 400; font-size: 0.78rem; color: var(--text-mute); letter-spacing: 0; }
+@media (max-width: 560px) { .qhead { flex-direction: column; align-items: stretch; } }
 
 /* ===== The tape: recent on-chain transactions under a chart =========================================
    The colours are a second signal, never the only one — every chip carries its word ("up", "down",

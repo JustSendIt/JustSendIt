@@ -762,13 +762,100 @@
       (left > 0 ? '<b>' + nf(left) + '</b> left today.' : '<b>Reached for now</b> — it is a rolling window, so it frees up as the last 24 hours pass.') +
       ' Calls held in profit are paid outside it: that is the fast lane.</p>' +
     '</div>' +
-    '<p class="modal-note" style="margin-top:0.4rem;">Tap any quest to go do it. Points × your ⚡ Power, then this ceiling.</p>';
+    '<p class="modal-note" style="margin-top:0.4rem;">Tap any quest to go and do it. Points × your ⚡ Power, then this ceiling.</p>';
   }
 
-  function earnList(perAction, mult, rules) {
+  /* ═════════════════════════════════════════════════════════════════
+     🎮 QUESTS & LEADERBOARD — one section, two tabs
+     ═════════════════════════════════════════════════════════════════
+     The Quest Board and the Arena used to sit in two columns side by side, which on a phone meant one
+     long scroll of quests followed by one long scroll of boards. They are now one section with two
+     tabs, so a reader chooses which they are looking at instead of scrolling past the other.
+
+     And the board itself is a board now, not a price list: the quests are grouped by what KIND of thing
+     they are, a row of chips filters to one kind (or to the ones still available today), and a counter
+     says how many are still there to do. Every number still comes from the payload — a quest's points,
+     its cap and whether it is done are the server's answers, never this file's. */
+  const QUEST_CAT = {
+    daily:   { ico: '🔥', name: 'Daily',    blurb: 'Come back for these — they reset every day.' },
+    chain:   { ico: '⛓️', name: 'On-chain', blurb: 'Read from the chain. The biggest awards on the board.' },
+    social:  { ico: '💬', name: 'Social',   blurb: 'The wall, the people, the conversation.' },
+    explore: { ico: '🔎', name: 'Explore',  blurb: 'Poke around the site and see what is here.' },
+  };
+  const QUEST_OF = {
+    daily: 'daily', egg: 'explore',
+    swap: 'chain', connect_wallet: 'chain', send_call: 'chain', call_x: 'chain', call_hold: 'chain', hop_on: 'chain', hop_hold: 'chain',
+    first_post: 'social', post: 'social', comment: 'social', react_give: 'social', vote_give: 'social', follow: 'social', be_followed: 'social',
+    track_wallet: 'explore', watch_token: 'explore', customize: 'explore',
+  };
+  let _questFilter = 'all';
+  let _playTab = 'quests';
+
+  /* The Arena keeps its own wrapper id. wireArena() looks the container up by id and repaints it, and
+     when the two-column layout went away that id went with it — which left the Leaderboard's own tabs
+     (All time / Biggest Senders) bound to nothing at all. */
+  function questsArenaBlock(g, mult, lb) {
+    const tab = (key, label, on) =>
+      '<button class="play-tab' + (on ? ' is-on' : '') + '" type="button" role="tab" id="play-tab-' + key + '"' +
+      ' aria-selected="' + on + '" aria-controls="play-panel" tabindex="' + (on ? '0' : '-1') + '" data-play="' + key + '"' +
+      ' data-tip="' + (key === 'quests' ? 'Everything that pays Send Power, and what it pays' : 'Where you stand against everyone else') + '">' + label + '</button>';
+    const q = _playTab === 'quests';
+    return '<div class="play-tabs" role="tablist" aria-label="Quests or the leaderboard">' +
+        tab('quests', '🗺️ Quests', q) + tab('arena', '🏟️ Leaderboard', !q) +
+      '</div>' +
+      '<div id="play-panel" role="tabpanel" aria-labelledby="play-tab-' + (q ? 'quests' : 'arena') + '" tabindex="0">' +
+        (q ? questBoard(g, mult) : '<div id="arena-col">' + arenaBlock(lb, competition, AUTH.user && AUTH.user.username) + '</div>') +
+      '</div>';
+  }
+
+  /* Is this quest still there to do today? Only three of them can actually be ANSWERED — the daily
+     check-in, which the server reports, and the eggs, which carry their own count. The rest have no
+     per-account "done" signal on this payload, so they are never claimed as done: an unearned ✓ is
+     worse than no ✓ at all. `null` means "we cannot say", and the chip renders nothing. */
+  function questDone(k, g) {
+    if (k === 'daily') return !!(window.AUTH && AUTH.user && AUTH.user.checkedInToday);
+    if (k === 'egg') { const e = g.eggs || {}; return e.total && e.found >= e.total ? true : false; }
+    return null;
+  }
+  function questBoard(g, mult) {
+    const perAction = g.perAction || {}, rules = g.rules || {};
+    const rows = ORDER.filter((k) => ACTION_LABEL[k] && (VARIABLE.has(k) || perAction[k] != null));
+    const cats = {};
+    for (const k of rows) { const c = QUEST_OF[k] || 'explore'; (cats[c] = cats[c] || []).push(k); }
+    const openCount = rows.filter((k) => questDone(k, g) !== true).length;
+    const doneToday = rows.filter((k) => questDone(k, g) === true).length;
+
+    const chip = (key, label, on, n) =>
+      '<button class="qchip' + (on ? ' is-on' : '') + '" type="button" data-qfilter="' + key + '"' +
+      ' aria-pressed="' + on + '" data-tip="Shows only this kind of quest">' + label +
+      (n != null ? ' <span class="qchip-n">' + n + '</span>' : '') + '</button>';
+    let html = '<div class="qhead">' +
+      '<p class="qcount"><b>' + openCount + '</b> ' + (openCount === 1 ? 'quest' : 'quests') + ' to go' +
+        (doneToday ? ' · <b>' + doneToday + '</b> done today ✓' : '') + '</p>' +
+      '<div class="qchips" role="group" aria-label="Filter the quest board">' +
+        chip('all', 'All', _questFilter === 'all', rows.length) +
+        Object.keys(QUEST_CAT).filter((c) => (cats[c] || []).length)
+          .map((c) => chip(c, QUEST_CAT[c].ico + ' ' + QUEST_CAT[c].name, _questFilter === c, cats[c].length)).join('') +
+      '</div></div>';
+
+    const show = Object.keys(QUEST_CAT).filter((c) => (cats[c] || []).length && (_questFilter === 'all' || _questFilter === c));
+    if (!show.length) html += '<p class="modal-note">Nothing in that group right now.</p>';
+    for (const c of show) {
+      const cat = QUEST_CAT[c];
+      html += '<div class="qgroup">' +
+        '<h4 class="qgroup-h"><span aria-hidden="true">' + cat.ico + '</span> ' + cat.name +
+          '<span class="qgroup-b">' + esc(cat.blurb) + '</span></h4>' +
+        earnList(g.perAction, mult, g.rules, cats[c], g) +
+      '</div>';
+    }
+    html += dayCapLine(g);
+    return html;
+  }
+
+  function earnList(perAction, mult, rules, only, g) {
     mult = mult || 1;
     let html = '<ul class="gearn">';
-    for (const k of ORDER) {
+    for (const k of (only || ORDER)) {
       if (!ACTION_LABEL[k]) continue;
       const [ico, label] = ACTION_LABEL[k];
       const t = EARN_ACTION[k] || {};
@@ -806,10 +893,13 @@
       html += '<li class="gearn-li">' + row + info + tip + '</li>';
     }
     html += '</ul>';
-    const rcv = (k, word) => { const c = rules && rules.dailyCap && rules.dailyCap[k]; return '<b>' + word + '</b>' + (c > 0 ? ' (' + c + '/day)' : ''); };
-    html += '<p class="gearn-passive">💚 You also earn passively — ' + rcv('react_get', 'a reaction') + ', ' +
-      rcv('vote_get', 'an upvote') + ', or ' + rcv('be_followed', 'a new follower') + ' on your posts all add Send Power automatically. ' +
-      'Those are the three a ring of fake accounts could push at you, so they are the tightest caps on the board.</p>';
+    // the passive earners are a SOCIAL fact, so they are printed with the social group rather than under every filter
+    if (!only || only.includes('post')) {
+      const rcv = (k, word) => { const c = rules && rules.dailyCap && rules.dailyCap[k]; return '<b>' + word + '</b>' + (c > 0 ? ' (' + c + '/day)' : ''); };
+      html += '<p class="gearn-passive">💚 You also earn passively — ' + rcv('react_get', 'a reaction') + ', ' +
+        rcv('vote_get', 'an upvote') + ', or ' + rcv('be_followed', 'a new follower') + ' on your posts all add Send Power automatically. ' +
+        'Those are the three a ring of fake accounts could push at you, so they are the tightest caps on the board.</p>';
+    }
     return html;
   }
 
@@ -1323,56 +1413,126 @@
     _objSaid = t;
     return changed ? t : '';
   }
+  /* ═════════════════════════════════════════════════════════════════
+     COLLAPSIBLE SECTIONS
+     ═════════════════════════════════════════════════════════════════
+     The overview was one column of a dozen full-length blocks — every rule, every ledger, every board,
+     all open at once, three screens before the Quest Board. Each one is now a disclosure whose SUMMARY
+     carries a live one-line reading of that section, so the shut dashboard still answers "how am I
+     doing" at a glance and the detail is one tap away.
+
+     The blurb is never decoration: it is the section's own current state, taken from the same payload
+     the body renders, so a closed section cannot disagree with an open one. Open/closed is remembered
+     per section in this browser. */
+  const SEC_KEY = 'send.dash.sec';
+  function secState() { try { return JSON.parse(localStorage.getItem(SEC_KEY) || '{}') || {}; } catch { return {}; } }
+  function secOpen(key, def) { const m = secState(); return Object.prototype.hasOwnProperty.call(m, key) ? !!m[key] : !!def; }
+  function secRemember(key, open) { try { const m = secState(); m[key] = !!open; localStorage.setItem(SEC_KEY, JSON.stringify(m)); } catch {} }
+  function gsec(key, ico, title, blurb, body, def, force) {
+    if (!body) return '';
+    /* `force` overrides the remembered state and the default both. It exists for one section: the
+       consequences block, which this file has always refused to hide (see the REKT header) — a person
+       can close it while nothing is against them, and it opens itself the moment something is. */
+    const open = force ? true : secOpen(key, def);
+    return '<details class="gsec" data-sec="' + key + '"' + (open ? ' open' : '') + '>' +
+      '<summary class="gsec-sum">' +
+        '<span class="gsec-ico" aria-hidden="true">' + ico + '</span>' +
+        '<span class="gsec-txt"><span class="gsec-t">' + title + '</span>' +
+          (blurb ? '<span class="gsec-d">' + blurb + '</span>' : '') +
+        '</span>' +
+        '<span class="gsec-chev" aria-hidden="true">▾</span>' +
+      '</summary>' +
+      '<div class="gsec-body">' + body + '</div>' +
+    '</details>';
+  }
+  /* The one-line readings. Each is the shortest true sentence about that section right now — and each is
+     computed from g, never written by hand, so it moves when the thing it describes moves. */
+  /* Is anything actually working against this account right now? The consequences section is forced open
+     when it is, and its summary says which — so the state is legible whether it is open or shut. */
+  /* ONE list, read twice: the summary prints these words and the force-open predicate is simply
+     "is the list empty". They cannot disagree, which is what went wrong when they were written twice —
+     and every term names a field the payload actually carries (an earlier version compared against
+     a rules key the server has never sent, so `undefined < Infinity` made the
+     section force itself open for every account on the site, forever). */
+  function rektTerms(g) {
+    const t = [], a = g.callAllowance, d = g.decay || {};
+    if (g.restriction) t.push('read-only');
+    else if (g.holderVerified === false) t.push('read-only until you prove your bags');
+    if (g.probation) t.push('on probation');
+    if (!d.protected && d.drain > 0) t.push('decaying −' + nf(Math.round(d.drain)));
+    if (g.ogRevoked) t.push('OG revoked');
+    if (g.strikes > 0) t.push(g.strikes + (g.strikes === 1 ? ' strike' : ' strikes'));
+    if (g.rugged > 0) t.push(g.rugged + (g.rugged === 1 ? ' rugged call' : ' rugged calls'));
+    if (a && a.base > 0 && a.limit < a.base) t.push('call limit cut to ' + a.limit);
+    return t;
+  }
+  function rektLive(g) { return rektTerms(g).length > 0; }
+  // the log defaults to the last 24 hours, so the summary says what is actually in front of you
+  function lootBlurb(g) {
+    const rows = ((_lootMode === 'today' ? g.todayBreakdown : g.breakdown) || []).filter((x) => x.total > 0);
+    if (!rows.length) return _lootMode === 'today' ? 'Nothing earned in the last 24 hours yet' : 'Nothing earned yet';
+    const sum = rows.reduce((a, x) => a + x.total, 0);
+    return nf(sum) + ' from ' + rows.length + ' source' + (rows.length === 1 ? '' : 's') + (_lootMode === 'today' ? ' in the last 24h' : ' all time');
+  }
+  function secBlurbs(g) {
+    const r = g.rules || {}, h = g.holder || {}, a = g.callAllowance;
+    const tier = Number(g.ogTier || g.og) || 0;
+    const em = effMult(g);
+    const allComms = (g.communities || []).length;
+    const comms = (g.communities || []).filter(c => c.status === 'live' && !c.demo).length;
+    const spent = Math.max(0, r.socialSpentToday || 0), cap = r.socialDayCap || 0;
+    const m = effMult(g).eff;
+    const rekt = rektTerms(g);
+    return {
+      /* every one of these is READ from the payload, and each says what its own body says — a summary
+         that contradicts the section under it is worse than no summary at all */
+      og: g.ogRevoked ? 'Revoked — a coin was sold out of, and it cannot come back'
+        : tier ? (g.ogTierName || 'OG') + ' · ' + (em.og > 1 ? em.og + '× live on everything' : (Number(g.ogBonus) || 1) + '× — paused until your holdings are re-read')
+        : (g.ogCampaign && g.ogCampaign.open ? 'Not earned yet — the windows are still open' : 'The windows have closed'),
+      comm: comms
+        ? comms + (comms === 1 ? ' live community' : ' live communities') + ((g.communityMult || 1) > 1 ? ' · flat ' + g.communityMult + '× live' : ' · not paying yet — refresh your holdings')
+        : (allComms ? allComms + ' joined · none live yet' : 'None joined yet'),
+      boost: em.holder > 1 ? 'Your Holder Boost pays ' + em.holder.toFixed(2) + '× of a ⚡' + m.toFixed(2) + '× stack'
+        : (h.streakStart ? 'Paused — refresh to re-verify your bags' : 'Locked — no qualifying $SEND or $GWC yet'),
+      eq: 'Every term in your ⚡ boost, and what each one adds',
+      calls: a ? (a.readOnly ? 'Paused while your account is read-only' : a.remaining + ' of ' + a.limit + ' Send Calls left in the last 24h') : '',
+      loot: lootBlurb(g),
+      quests: cap > 0 ? (nf(Math.max(0, cap - spent)) + ' of the rolling 24h ceiling still unspent') : 'What pays, and what it pays you',
+      rekt: rekt.length ? '⚠️ ' + rekt.join(' · ') : 'Nothing against you right now',
+      record: 'Lv ' + (g.level || 0) + ' · ' + nf(g.wallets || 0) + ' wallet' + ((g.wallets || 0) === 1 ? '' : 's') + ' · ' + nf(g.strikes || 0) + ' strike' + ((g.strikes || 0) === 1 ? '' : 's'),
+      rules: nf(r.socialDayCap || 0) + ' daily ceiling · ' + (g.communityMult || 10) + '× communities · every rule in full',
+    };
+  }
+
   function render(g, lb) {
     stopRafs();
     _lg = g;
     const mult = effMult(g).eff; // the Quest Board must quote the SAME multiplier the hero shows and the server pays (Holder × OG × Community)
+    const B = secBlurbs(g);
     dash.innerHTML =
+      // always in view: who you are, what to do next, and the two bars — the answer to "how am I doing"
       heroBlock(g) +
       objectiveBar(g) +
       kpiStrip(g) +
       xpBar(g) +
-      ogBlock(g) +
-      communityBlock(g) +
-      equationStrip(g) +
-      boostEngine(g) +
-      callAllowanceBlock(g) +
-      lootLog(g) +
-      '<div class="gdash-cols">' +
-        '<div class="gcol"><h3 class="gsub">🗺️ Quest Board</h3>' + earnList(g.perAction, mult, g.rules) + dayCapLine(g) + '</div>' +
-        '<div class="gcol" id="arena-col">' + arenaBlock(lb, competition, AUTH.user && AUTH.user.username) + '</div>' +
-      '</div>' +
-      rektBlock(g) +
-      recordBlock(g) +
-      rulesBlock(g);
+      // the play: quests and the boards, one section, two tabs
+      gsec('play', '🎮', 'Quests &amp; Leaderboard', B.quests, questsArenaBlock(g, mult, lb), true) +
+      gsec('og', '🏅', 'OG status', B.og, ogBlock(g)) +
+      gsec('comm', '🏘️', 'Communities', B.comm, communityBlock(g)) +
+      gsec('boost', '⚡', 'Boost engine', B.boost, boostEngine(g)) +
+      gsec('eq', '🧮', 'How your multiplier is built', B.eq, equationStrip(g)) +
+      gsec('calls', '📣', 'Send Call allowance', B.calls, callAllowanceBlock(g)) +
+      gsec('loot', '🎁', 'Loot log', B.loot, lootLog(g)) +
+      gsec('rekt', '💀', 'What can cost you', B.rekt, rektBlock(g), true, rektLive(g)) +
+      gsec('record', '📋', 'Your record', B.record, recordBlock(g)) +
+      gsec('rules', '📖', 'The rulebook', B.rules, rulesBlock(g));
     _objNews = objectiveNews(); // remembered here (every paint), spoken by doRefresh()
 
-    // clickable quest rows that open the right section / page
-    dash.querySelectorAll('[data-earn]').forEach(btn => btn.addEventListener('click', () => {
-      const t = EARN_ACTION[btn.dataset.earn] || {};
-      if (t.open) { const s = document.getElementById(t.open); if (s) { s.open = true; s.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }); } }
-      else if (t.scroll) {
-        const s = document.getElementById(t.scroll);
-        if (s) { s.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' }); const f = t.focus && document.getElementById(t.focus); if (f) setTimeout(() => { try { f.focus(); } catch {} }, reducedMotion() ? 0 : 450); }
-      }
-    }));
-    // quest-rule ⓘ toggles: one open at a time; state exposed via aria-expanded; Escape / a click elsewhere closes
-    const closeTips = () => dash.querySelectorAll('.gearn-li.is-open, .ll-li.is-open').forEach(o => { o.classList.remove('is-open'); const ob = o.querySelector('.ge-info, .ll-info'); if (ob) ob.setAttribute('aria-expanded', 'false'); });
-    dash.querySelectorAll('.ge-info, .ll-info').forEach(b => b.addEventListener('click', () => {
-      const li = b.closest('.gearn-li, .ll-li');
-      const open = !li.classList.contains('is-open');
-      closeTips();
-      li.classList.toggle('is-open', open);
-      b.setAttribute('aria-expanded', String(open));
-      if (!open) b.blur(); // the focus-within hover rule must not keep showing a tip the user just closed
-    }));
-    if (!dash._tipDismiss) {
-      dash._tipDismiss = true;
-      dash.addEventListener('click', e => { if (!e.target.closest('.gearn-li, .ll-li')) closeTips(); });
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
-    }
+    wireQuestRows();
     wireLootToggle(); // achievement-log window toggle (Today resets every 24h · All time)
     wireArena();
+    wireSections();
+    wirePlay();
     dash.querySelectorAll('.js-refresh').forEach(b => b.addEventListener('click', doRefresh));
     dash.querySelectorAll('.js-connect').forEach(b => b.addEventListener('click', () => {
       const sec = document.getElementById('sec-security'); if (sec) { sec.open = true; sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' }); }
@@ -1381,6 +1541,105 @@
 
     animate(dash);
     celebrate(g);
+  }
+
+  /* Per-row wiring for the quest list and the loot log. It lives in its own function because the quest
+     list is now repainted on its own — by a filter chip or a tab — and a repainted row with no listener
+     is a quest that does nothing when you tap it. */
+  const closeTips = () => dash.querySelectorAll('.gearn-li.is-open, .ll-li.is-open').forEach(o => { o.classList.remove('is-open'); const ob = o.querySelector('.ge-info, .ll-info'); if (ob) ob.setAttribute('aria-expanded', 'false'); });
+  function wireQuestRows() {
+    dash.querySelectorAll('[data-earn]').forEach(btn => {
+      if (btn._wired) return; btn._wired = true;
+      btn.addEventListener('click', () => {
+        const t = EARN_ACTION[btn.dataset.earn] || {};
+        if (t.open) {
+          const el = document.getElementById(t.open);
+          if (el) { openSectionFor(el); el.open = true; el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }); }
+        } else if (t.scroll) {
+          const el = document.getElementById(t.scroll);
+          if (el) {
+            openSectionFor(el);
+            el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
+            const f = t.focus && document.getElementById(t.focus);
+            if (f) setTimeout(() => { try { f.focus(); } catch {} }, reducedMotion() ? 0 : 450);
+          }
+        }
+      });
+    });
+    // quest-rule ⓘ toggles: one open at a time; state exposed via aria-expanded; Escape / a click elsewhere closes
+    dash.querySelectorAll('.ge-info, .ll-info').forEach(b => {
+      if (b._wired) return; b._wired = true;
+      b.addEventListener('click', () => {
+        const li = b.closest('.gearn-li, .ll-li');
+        const open = !li.classList.contains('is-open');
+        closeTips();
+        li.classList.toggle('is-open', open);
+        b.setAttribute('aria-expanded', String(open));
+        if (!open) b.blur(); // the focus-within hover rule must not keep showing a tip the user just closed
+      });
+    });
+    if (!dash._tipDismiss) {
+      dash._tipDismiss = true;
+      dash.addEventListener('click', e => { if (!e.target.closest('.gearn-li, .ll-li')) closeTips(); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTips(); });
+    }
+  }
+
+  /* Remember which sections a person left open, and keep a quest's jump working when its target sits
+     inside a section they have closed: opening is what makes the scroll meaningful. */
+  function wireSections() {
+    dash.querySelectorAll('details.gsec').forEach((d) => {
+      d.addEventListener('toggle', () => secRemember(d.dataset.sec, d.open));
+    });
+  }
+  function openSectionFor(el) {
+    let d = el && el.closest ? el.closest('details.gsec') : null;
+    while (d) { if (!d.open) { d.open = true; secRemember(d.dataset.sec, true); } d = d.parentElement && d.parentElement.closest ? d.parentElement.closest('details.gsec') : null; }
+  }
+  /* The two tabs. Only the panel is re-rendered — re-rendering the whole dashboard to switch a tab would
+     throw away every other section's scroll position and animation. */
+  function wirePlay() {
+    const tabs = Array.from(dash.querySelectorAll('.play-tab'));
+    const panel = dash.querySelector('#play-panel');
+    if (!tabs.length || !panel) return;
+    const paint = (key, focus) => {
+      _playTab = key;
+      tabs.forEach((t) => { const on = t.dataset.play === key; t.classList.toggle('is-on', on); t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
+      panel.setAttribute('aria-labelledby', 'play-tab-' + key);
+      panel.innerHTML = key === 'quests'
+        ? questBoard(_lg, effMult(_lg).eff)
+        : '<div id="arena-col">' + arenaBlock(leaderboard, competition, AUTH.user && AUTH.user.username) + '</div>';
+      if (key === 'quests') { wireQuests(); animate(panel); } else wireArena();
+      if (window.announce) announce(key === 'quests' ? 'Quest board shown.' : 'Leaderboard shown.');
+    };
+    tabs.forEach((t) => t.addEventListener('click', () => { if (t.dataset.play !== _playTab) paint(t.dataset.play, false); }));
+    // a tablist is one Tab stop; the arrows move between the tabs inside it
+    tabs.forEach((t, i) => t.addEventListener('keydown', (e) => {
+      const k = e.key;
+      if (k !== 'ArrowLeft' && k !== 'ArrowRight' && k !== 'Home' && k !== 'End') return;
+      e.preventDefault();
+      const n = k === 'Home' ? 0 : k === 'End' ? tabs.length - 1 : (i + (k === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length;
+      paint(tabs[n].dataset.play, true);
+    }));
+    if (_playTab === 'quests') wireQuests();
+  }
+  /* The filter chips repaint only the quest list, so the chip row keeps its place and its focus. */
+  function wireQuests() {
+    dash.querySelectorAll('[data-qfilter]').forEach((c) => c.addEventListener('click', () => {
+      const key = c.dataset.qfilter;
+      _questFilter = (_questFilter === key && key !== 'all') ? 'all' : key;
+      const panel = dash.querySelector('#play-panel');
+      if (!panel) return;
+      panel.innerHTML = questBoard(_lg, effMult(_lg).eff);
+      wireQuests(); wireQuestRows(); animate(panel);
+      const again = panel.querySelector('[data-qfilter="' + _questFilter + '"]') || panel.querySelector('[data-qfilter="all"]');
+      if (again) again.focus();
+      if (window.announce) {
+        const n = panel.querySelectorAll('.gearn-li').length;
+        announce(n + (n === 1 ? ' quest' : ' quests') + ' shown.');
+      }
+    }));
+    wireQuestRows();
   }
 
   async function doRefresh() {

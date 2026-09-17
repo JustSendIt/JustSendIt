@@ -135,7 +135,10 @@ try {
     const lying = await post('audio/webm', Buffer.alloc(2048, 0x41));
     check('bytes that are not the container they claim are refused', lying.status !== 200, lying.status);
 
-    check('the server names voice memos when it refuses something else', /MP4, WebM or a voice memo/.test(SRC));
+    /* The unsupported-type message no longer advertises voice memos: the feature ships hidden (VOICE_MEMOS),
+       and the route refuses audio with its own sentence rather than listing something it will not accept. */
+    check('an unsupported type is named without advertising a hidden feature', /MP4 or WebM'/.test(SRC) && !/MP4, WebM or a voice memo/.test(SRC));
+    check('and audio is refused by name when the feature is off', /voice memos are switched off/.test(SRC) && /spec\.kind === 'audio' && !VOICE_MEMOS/.test(SRC));
     check('the cap is a backstop, not the thing that governs length', /'audio\/webm': \{ ext: 'weba', kind: 'audio', cap: 8 \* 1024 \* 1024/.test(SRC));
   }
 } catch (e) {

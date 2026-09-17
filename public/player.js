@@ -48,11 +48,16 @@
       btn.setAttribute('aria-pressed', String(playing));
       btn.setAttribute('aria-label', playing ? 'Pause the Just Send It theme' : 'Play the Just Send It theme');
     }
+    /* The nudge shows itself once and then leaves. It is a fixed bubble over page content, so a nudge
+       that never goes away is a nudge that permanently covers a link somebody wanted. */
+    var hintTimer = null;
     function showHint() {
       if (optedOut()) return;
       hint.hidden = false; btn.classList.add('wants');
+      clearTimeout(hintTimer);
+      hintTimer = setTimeout(hideHint, 12000);   // said once, then out of the way
     }
-    function hideHint() { hint.hidden = true; btn.classList.remove('wants'); }
+    function hideHint() { clearTimeout(hintTimer); hint.hidden = true; btn.classList.remove('wants'); }
 
     // only render "playing" once the browser actually starts audio
     async function tryPlay() {

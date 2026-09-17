@@ -69,12 +69,20 @@ try {
       ['revocations', /function revokeCard\(g\)/], ['call penalties', /function callRiskCard\(g\)/],
       ['the participation gate', /function gateCard\(g\)/], ['the beta reset', /function betaCard\(g\)/],
     ]) check('rekt: a card for ' + name, re.test(GAMIFY));
-    check('rekt: it is rendered, not defined and forgotten', /rektBlock\(g\) \+/.test(GAMIFY));
-    check('rekt: it is NOT hidden behind a <details>', !/<details[^>]*>[\s\S]{0,200}rektBlock/.test(GAMIFY));
+    check('rekt: it is rendered, not defined and forgotten', /rektBlock\(g\)/.test(GAMIFY) && /gsec\('rekt'/.test(GAMIFY));
+    /* It sits in a section like everything else now, but it is the ONE section that opens itself: gsec's
+       `force` argument is passed rektLive(g), so a live restriction, decay, revocation or strike can never
+       be behind a closed disclosure — and the summary names it either way. */
+    check('rekt: a live consequence forces the section open', /gsec\('rekt'[^\n]*rektLive\(g\)\)/.test(GAMIFY) && /function rektLive\(g\)/.test(GAMIFY));
+    /* One list feeds both the summary words and the force-open predicate, so they cannot disagree —
+       rektTerms() is read by the blurb and by rektLive(). Every term names a field the payload carries. */
+    check('rekt: and the summary says which one', /function rektTerms\(g\)/.test(GAMIFY) && /t\.push\('read-only'\)/.test(GAMIFY) && /decaying/.test(GAMIFY));
+    check('rekt: the force-open predicate IS that same list', /function rektLive\(g\) \{ return rektTerms\(g\)\.length > 0; \}/.test(GAMIFY));
+    check('rekt: it never compares against a key the server does not send', !/rules\.callLimitDefault/.test(GAMIFY));
     check('rekt: the free appeal route is offered alongside the buy-out', /appeal to a person at/.test(GAMIFY));
     check('rekt: the beta reset is stated before it happens', /every balance on the site goes to zero/.test(GAMIFY));
     check('rekt: the $100 floor is named per coin', /under the \$' \+ floor \+ ' floor/.test(GAMIFY));
-    check('record: everything tracked gets a row', /function recordBlock\(g\)/.test(GAMIFY) && /recordBlock\(g\) \+/.test(GAMIFY));
+    check('record: everything tracked gets a row', /function recordBlock\(g\)/.test(GAMIFY) && /gsec\('record'[^\n]*recordBlock\(g\)\)/.test(GAMIFY));
   }
 
   /* ═══════════ 4. risk is never colour alone ═══════════
