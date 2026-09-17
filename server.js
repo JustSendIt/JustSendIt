@@ -6295,6 +6295,7 @@ async function watchlistView(userId) {
 }
 
 const IS_HTTPS = BASE_URL.startsWith('https');
+const BASE_HOST = (() => { try { return new URL(BASE_URL).host.toLowerCase().split(':')[0]; } catch { return ''; } })();
 // Behind a trusted reverse proxy that APPENDS the client IP to X-Forwarded-For (nginx's
 // $proxy_add_x_forwarded_for, most CDNs), set TRUST_PROXY to the number of proxy hops (1 for a
 // single proxy). We then read the client IP from the RIGHT of the header — the hop your proxy
@@ -6329,10 +6330,16 @@ function cidrHas(net, bits, addr) {  // IPv4 only; an IPv6 rule is matched by ex
   const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
   return (toInt(n) & mask) === (toInt(a) & mask);
 }
-let hopWarned = false;
+let hopWarned = false, cfWarned = false;
 function clientIp(req) {
   if (TRUST_PROXY_HOPS > 0 && peerIsTrustedProxy(req.socket.remoteAddress)) {
-    if (TRUST_CF && req.headers['cf-connecting-ip']) return ipKey(String(req.headers['cf-connecting-ip']).trim()) || 'unknown';
+    const cfip = req.headers['cf-connecting-ip'];
+    if (TRUST_CF && cfip) return ipKey(String(cfip).trim()) || 'unknown';
+    /* The single likeliest launch mistake behind Cloudflare, said once, in the log: the requests carry
+       Cloudflare's header but the config does not read it (every visitor keys on a Cloudflare edge
+       address), or the config reads it but the requests do not carry it (Cloudflare is not in front). */
+    if (!cfWarned && cfip && !TRUST_CF) { cfWarned = true; console.warn('[proxy] Requests arrive with CF-Connecting-IP: Cloudflare is in front of this site, but TRUST_CF is not 1. Set TRUST_CF=1 (with TRUST_PROXY=1 for a cloudflared tunnel, or 2 for Cloudflare in front of Caddy), or every rate limit and anti-sybil cap keys on a Cloudflare address.'); }
+    if (!cfWarned && TRUST_CF && !cfip) { cfWarned = true; console.warn('[proxy] TRUST_CF=1 but this proxied request carries no CF-Connecting-IP — Cloudflare is not in front of this request. Falling back to X-Forwarded-For; if the site is not behind Cloudflare, unset TRUST_CF.'); }
     const xff = req.headers['x-forwarded-for'];
     if (xff) {
       const parts = String(xff).split(',').map(s => s.trim()).filter(Boolean);
@@ -8890,6 +8897,15 @@ const server = http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, BASE_URL); } catch { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...SEC_HEADERS }); return res.end('{"error":"bad request"}'); }
   const p = url.pathname;
+  /* One hostname. A request that arrives on www.<host> — a DNS record somebody added, a proxy that serves
+     both names — goes to the apex before anything else happens. Left alone, the pages would render on www
+     and then every POST would fail the Origin check against BASE_URL: a site that looks broken rather than
+     a DNS slip. 308 keeps the method, so nothing is quietly turned into a GET on the way. */
+  const hostHdr = String(req.headers.host || '').toLowerCase().split(':')[0];
+  if (BASE_HOST && hostHdr === 'www.' + BASE_HOST) {
+    res.writeHead(308, { Location: BASE_URL.replace(/\/+$/, '') + req.url, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
+    return res.end();
+  }
   // only API routes read the session — resolving it for every static asset cost 2 SELECTs × ~21 assets per page load
   const me = p.startsWith('/api/') ? getUser(req) : null;
 
@@ -11188,12 +11204,14 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/img' && req.method === 'GET') {
         const u = String(url.searchParams.get('u') || '');
         if (!/^https:\/\/(cdn|dd)\.dexscreener\.com\/[^\s]+$/i.test(u)) return bad(res, 'unsupported image host');
-        // every token picture on the site now comes through here, so the budget is per page of logos, not per logo
-        if (!rateLimit('img:' + clientIp(req), 600, 6e4)) return bad(res, 'slow down', 429);
+        // every token picture on the site now comes through here, so the budget is per page of logos, not per logo —
+        // and there is a site-wide bucket too, because a cache miss is an outbound fetch, whoever asked
+        if (!rateLimit('img:' + clientIp(req), 300, 6e4)) return bad(res, 'slow down', 429);
         const imgHead = (ct, len) => ({ 'Content-Type': ct, 'Cache-Control': 'public, max-age=86400', 'Content-Length': len,
           'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' });
         const cached = imgProxyCache.get(u);
         if (cached && now() - cached.at < IMG_PROXY_TTL) { res.writeHead(200, imgHead(cached.ct, cached.buf.length)); return res.end(cached.buf); }
+        if (!rateLimit('img-site', 1500, 6e4)) return bad(res, 'slow down', 429);
         try {
           const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);
           const r2 = await fetch(u, { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'image/*' }, signal: ctrl.signal });
@@ -11229,7 +11247,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/chain/dex-tokens' && req.method === 'GET') {   // the tracker's price batch (≤30 tokens)
         if (!me) return bad(res, 'sign in first', 401);
-        if (!rateLimit('chaind:' + me.id, 120, 6e4)) return bad(res, 'slow down', 429);
+        if (!rateLimit('chaind:' + me.id, 60, 6e4)) return bad(res, 'slow down', 429);   // the site's Dexscreener budget is shared: no member gets more than a slice
         const addrs = [...new Set(String(url.searchParams.get('addrs') || '').toLowerCase().split(',').map(s => s.trim()).filter(a => /^0x[0-9a-f]{40}$/.test(a)))].sort().slice(0, 30);
         if (!addrs.length) return send(res, 200, []);
         const j = await jgetCached('https://api.dexscreener.com/tokens/v1/robinhood/' + addrs.join(','), 60000);
@@ -11238,7 +11256,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/chain/explorer' && req.method === 'GET') {   // the tracker's explorer reads, by allow-list
         if (!me) return bad(res, 'sign in first', 401);
-        if (!rateLimit('chainx:' + me.id, 300, 6e4)) return bad(res, 'slow down', 429);
+        if (!rateLimit('chainx:' + me.id, 90, 6e4)) return bad(res, 'slow down', 429);   // one tracker report is ~70 explorer reads; the whole site has 240/min
         const want = String(url.searchParams.get('path') || '').replace(/0x[0-9a-fA-F]+/g, (m) => m.toLowerCase());
         if (!EXPLORER_PROXY_PATHS.some((re) => re.test(want))) return bad(res, 'that explorer read is not available here', 400);
         const j = await jgetCached(BLOCKSCOUT + want, 30000);

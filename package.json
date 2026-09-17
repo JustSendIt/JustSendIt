@@ -7,6 +7,7 @@
     "start": "node --disable-warning=ExperimentalWarning server.js",
     "test": "node --disable-warning=ExperimentalWarning tests/run.mjs",
     "check": "node scripts/check.mjs",
+    "live-check": "node scripts/live-check.mjs",
     "whitepaper": "bash scripts/build-whitepaper.sh"
   },
   "engines": {

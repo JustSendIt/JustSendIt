@@ -13,7 +13,8 @@ This app is a **single long-running Node process** backed by an on-disk SQLite d
 - **No custody, no private keys** — all chain data is read from public RPC/Blockscout/Dexscreener.
 
 Two good paths: **(A) a small VPS + Caddy** (recommended, cheapest, full control) or
-**(B) a managed platform with a volume** (Fly.io / Render / Railway). Pick one.
+**(B) a managed platform with a volume** (Fly.io / Render / Railway). Pick one — then put
+**(D) Cloudflare** in front of it, which is how the beta ships.
 
 ---
 
@@ -183,6 +184,118 @@ and keeps `/app/data` on a named volume. A few things worth knowing before you c
 - **tini is PID 1** so `docker stop` sends a SIGTERM that actually reaches node, which is what lets SQLite
   checkpoint instead of dying mid-write.
 - **One container.** Scaling the service to 2 gives you two databases, not twice the capacity.
+
+---
+
+## D. Cloudflare in front (the beta launch setup)
+
+Cloudflare sits in front of whichever origin you chose above. It gives the site TLS, a CDN for the
+static files and pictures, and — the reason to prefer it for a self-hosted box — a way to publish the
+site **without publishing the machine's IP address**. Two ways to connect the origin; pick one.
+
+### D.1 Tunnel (recommended: no open port, the origin's address is never in DNS)
+
+`cloudflared` runs beside the app and dials *out* to Cloudflare; Cloudflare's DNS points at the tunnel,
+not at your box. Nothing listens on a public port, so nobody can find or reach the origin directly, and
+the app keeps `HOST=127.0.0.1`. No Caddy is needed — Cloudflare terminates TLS and the tunnel is encrypted.
+
+```bash
+# on the box that runs the app
+curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
+echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list
+sudo apt-get update && sudo apt-get install -y cloudflared
+cloudflared tunnel login                 # opens a browser once; pick the zone
+cloudflared tunnel create sendrh         # prints the tunnel id and writes ~/.cloudflared/<id>.json
+cloudflared tunnel route dns sendrh sendrh.com
+cloudflared tunnel route dns sendrh www.sendrh.com   # the app sends www to the apex itself (308)
+```
+
+`/etc/cloudflared/config.yml`:
+```yaml
+tunnel: <the tunnel id>
+credentials-file: /etc/cloudflared/<the tunnel id>.json
+ingress:
+  - hostname: sendrh.com
+    service: http://127.0.0.1:8642
+  - hostname: www.sendrh.com
+    service: http://127.0.0.1:8642
+  - service: http_status:404
+```
+Then `sudo cloudflared service install && sudo systemctl enable --now cloudflared`. In `.env`:
+```
+TRUST_PROXY=1     # cloudflared appends exactly one hop to X-Forwarded-For
+TRUST_CF=1        # and carries the visitor's address in CF-Connecting-IP
+COOKIE_SECURE=1
+HOST=127.0.0.1    # unchanged: only the tunnel on this box can reach the app
+```
+
+### D.2 Proxied DNS in front of Caddy or Fly
+
+Keep section A or B as it is, then in Cloudflare DNS set the `A`/`CNAME` record to **Proxied** (orange
+cloud). SSL/TLS mode **Full (strict)** (Caddy already holds a real certificate). The header now carries two
+hops, so:
+```
+TRUST_PROXY=2     # Cloudflare appends one address, Caddy appends one
+TRUST_CF=1        # or read CF-Connecting-IP instead of counting hops — either works; set both and TRUST_CF wins
+```
+**Lock the origin down**, or the proxy protects nothing: allow port 443 only from Cloudflare's published
+ranges (`https://www.cloudflare.com/ips/`) and drop everything else. A box that answers on its own IP is
+a box whose IP is discoverable. (A tunnel makes this whole step unnecessary, which is why D.1 is first.)
+
+**Whichever you chose, the app tells you if it is wrong.** When requests arrive carrying `CF-Connecting-IP`
+and `TRUST_CF` is not 1 — or the other way round — the log says so once at the first request. Read the
+log after the first visit.
+
+### D.3 Dashboard settings that matter
+
+The site ships a strict Content-Security-Policy (`script-src 'self'`, no inline script anywhere) and
+promises that a page loads nothing from any other company. Several Cloudflare features work by injecting
+script or rewriting pages, and every one of those either breaks under the policy or breaks the promise.
+
+| Setting | Set it to | Why |
+|---|---|---|
+| SSL/TLS → mode | **Full (strict)** (tunnel: leave default) | anything less lets Cloudflare talk http to the origin |
+| SSL/TLS → Always Use HTTPS | **On** | `BASE_URL` is https; a plain-http visit must redirect, never serve |
+| Speed → Rocket Loader | **Off** | it rewrites every `<script>` into a loader the CSP refuses: the site would load with no JavaScript at all |
+| Scrape Shield → Email Address Obfuscation | **Off** | it replaces the support address with an encoded span plus an inline decoder script; the CSP blocks the script, so visitors see `[email protected]` on the privacy and support pages |
+| Analytics → Web Analytics (automatic setup) | **Off** | it injects a beacon script from `cloudflareinsights.com`; the CSP blocks it, and the privacy page says there is no analytics |
+| Security → Bot Fight Mode | **Off for the beta**, or a WAF rule that *skips* `/api/*` | a challenge page cannot be passed by a `fetch()`: a flagged visitor's page loads and then every API call silently fails |
+| Caching → Caching Level | Standard (default) | the origin sends the right headers: versioned assets are immutable for a year, HTML revalidates, `/api/*` is `no-store` and is never cached |
+| Caching → Cache Rule (optional) | cache `/api/img*` and `/uploads/*`, **respect origin TTL** | token pictures and uploads are the bulk of the bytes; `/api/img` has no file extension, so it is not cached by default |
+| Rules → Redirect Rule (optional) | `www.sendrh.com/*` → `https://sendrh.com/$1`, 301 | belt and braces: the app already answers www with a 308 to the apex |
+| Network → WebSockets | either | the site uses none |
+| Speed → Brotli, Early Hints, HTTP/3 | On | harmless, and free speed |
+
+Two limits of the free and pro plans to know about: request bodies are capped at 100 MB (the app's own
+upload caps are lower, so nothing changes), and Cloudflare gives the origin **100 seconds** to start
+answering a request. An upload is answered only once it has fully arrived, so an upload that takes longer
+than that on a slow connection is cut off with a 524 before the app's own five-minute deadline. During the
+beta, that is the effective size limit for videos over mobile data.
+
+**Purging a removed upload from the edge.** A takedown or an account deletion deletes the file on the box;
+the copy at Cloudflare's edge lives up to a day unless the app can purge it. Create an API token with the
+single permission *Zone → Cache Purge* on this zone, and set:
+```
+CF_ZONE_ID=<Overview page, right column>
+CF_API_TOKEN=<the token>
+```
+
+### D.4 Going live: the order
+
+1. **Start from an empty user table.** The dev database holds test accounts. On the box, the first boot
+   creates a fresh `data/app.db`; if you copied a database, run `sh data/wipe-users.sh` (it keeps the
+   site's own system account, resets the seed code and removes every person). Never copy `data/` from a
+   laptop to production without it.
+2. `.env`: `DATA_KEY` (generated, backed up somewhere the database is not), `BASE_URL=https://sendrh.com`,
+   `NODE_ENV=production`, `COOKIE_SECURE=1`, `TRUST_PROXY`/`TRUST_CF` from D.1 or D.2,
+   `SEED_INVITE_CODE`, `RPC_URL`, `BLOCKSCOUT_URL`, and `BETA_END` if the published date changes.
+3. Start the app; read the boot log. Every `⚠️` line is a launch blocker with the fix in the sentence.
+4. From your own machine: `npm run live-check -- https://sendrh.com`. It checks the things above — the
+   policy, the redirects, the cookie flag, that Cloudflare is in front, that nothing was injected, that the
+   data vendors answer from the origin — and exits non-zero on anything a visitor would hit.
+5. Sign up with the seed code (you are Send ID #2; #1 is the site's own account), put your user id in
+   `ADMIN_USER_IDS`, restart. Only then hand out codes.
+6. Point `BACKUP_DIR` off the volume and copy it to R2 or elsewhere on a schedule (below).
 
 ---
 
