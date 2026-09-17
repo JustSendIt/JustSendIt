@@ -61,6 +61,10 @@ If you self-host, these are yours and the code cannot do them for you:
   to `eth_call` after a handful of rapid reads, and the public explorer answers 403 with a bot challenge to a
   server request — both measured. Left on the defaults, on-chain reads fail under load and every holder count
   and contract-power flag reads as unknown, which is a safety readout going quiet rather than an outage you see.
+- Every outbound JSON read is metered per host against that vendor's published limit (`OUTBOUND_RPM_*`), so
+  the site waits for its own budget rather than being cut off by theirs. `/api/admin/outbound` shows what each
+  vendor is actually costing per minute, the busiest minute since boot, and how many calls were declined —
+  the numbers that say whether a paid tier is needed yet.
 - Keep Node at 24 or newer.
 
 The server prints warnings at boot when these look wrong. Read them.

@@ -1432,7 +1432,7 @@
     {
       id: 'crowd', emoji: '👥', name: 'Crowd Forming',
       blurb: 'Supply spread across real holders rather than sitting in one wallet.',
-      cannot: 'Holder counts and concentration come from the block explorer. While that is unreachable they read as “not checked”, and this strategy requires them — so it will show nothing rather than guess.',
+      cannot: 'Holder counts and concentration come from an automated scan of the chain, not from an audit. While that scan is unreachable they read as “not checked”, and this strategy requires them — so it will show nothing rather than guess.',
       set: { minHolders: 75, maxTopPct: 20, maxTop10Pct: 55, minLiq: 5000,
              requireData: { holders: true, concentration: true },
              hide: { honeypotSuspect: true, concentrated: true, lowHolders: true, sniperDump: true } },

@@ -433,9 +433,9 @@
   function ogBlock(g) {
     const tier = Number(g.ogTier || g.og) || 0;
     if (tier) {
-      const when = tier === 3 ? 'in their first month'
-        : tier === 2 ? 'in the two months after the gold window closed'
-        : 'in the nine months after the silver window closed';
+      const when = tier === 3 ? 'before the beta ended'
+        : tier === 2 ? 'in the 90 days after the beta ended'
+        : 'before $GWC turned one year old';
       const v = ogVariant(g);
       return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">🏅 OG ' + (g.ogTierName || '') + '</span>'
         + '<div class="og-block-body"><b>You’re an OG ' + (g.ogTierName || '') + '.</b> You bought <b>both $Send and $GWC</b> '
@@ -1203,10 +1203,10 @@
     const state = !c ? '' : !c.open ? ' <b>Every window has now closed; no new OG badges are granted.</b>' : c.tierNow ? ' <b>Right now the ' + esc((c.name && c.name[c.tierNow]) || '').toLowerCase() + ' window is open.</b>' : '';
     return '<p><b>🏅 OG — being early, three ways.</b> Hold <b>both $Send and $GWC</b>, bought from the market, and keep holding both: you earn a permanent OG badge and a Send Power multiplier. There is <b>one standard</b>; only when you got in changes the size. Windows are counted from each coin’s own launch, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.' + state + '</p>' +
       '<ul>' +
-        '<li><b>🥇 Gold — 10×.</b> Bought both inside the first month' + closes('gold') + '.</li>' +
-        '<li><b>🥈 Silver — 5×.</b> Bought both in the two months after gold closed' + closes('silver') + '.</li>' +
-        '<li><b>🥉 Bronze — 3×.</b> Bought both in the nine months after silver closed' + closes('bronze') + '.</li>' +
-        '<li><b>After that:</b> no badge, whatever you buy. Twelve 30-day months in all.</li>' +
+        '<li><b>🥇 Gold — 10×.</b> Bought both before the beta ends' + closes('gold') + '.</li>' +
+        '<li><b>🥈 Silver — 5×.</b> Bought both in the 90 days after the beta ended' + closes('silver') + '.</li>' +
+        '<li><b>🥉 Bronze — 3×.</b> Bought both before $GWC turns one year old' + closes('bronze') + '.</li>' +
+        '<li><b>After that:</b> no badge, whatever you buy. All three deadlines are the same date for both coins.</li>' +
         '<li><b>Two things disqualify a wallet, the same way in every window:</b> if it dumped its whole holding to nothing inside its own first month <b>and</b> it holds less today than it did at the end of that month, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place.</li>' +
         '<li><b>Sell out of either coin entirely, ever, and the badge is revoked for good.</b> The badge follows your wallet: unlink it and the badge pauses until you relink. Everything is read from the chain, and a read that cannot be completed is retried rather than guessed — nobody loses a badge to an outage.</li>' +
       '</ul>';

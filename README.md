@@ -760,14 +760,14 @@ A **live** community can put a question to its holders. Only a **verified holder
 
 Hold **both $Send and $GWC**, bought from the market, and keep holding both: you earn a **permanent OG badge** and a Send Power boost that adds on top of everything above. There is **one standard**; only *when* you got in changes the size.
 
-| Tier | Multiplier | Entry window (days from each coin's launch) | Binding close* |
+| Tier | Multiplier | Entry window | Closes* |
 |---|---:|---|---|
-| 🥇 Gold | **10×** | days 0–30 — the first month | 2026‑09‑18 |
-| 🥈 Silver | **5×** | days 30–90 — the two months after gold | 2026‑11‑17 |
-| 🥉 Bronze | **3×** | days 90–360 — the nine months after silver | 2027‑08‑14 |
-| — | 1× | after day 360: no badge, whatever you buy | — |
+| 🥇 Gold | **10×** | until the beta ends | 2026‑11‑17 |
+| 🥈 Silver | **5×** | the 90 days after the beta | 2027‑02‑15 |
+| 🥉 Bronze | **3×** | until $GWC turns one year old | 2027‑08‑19 |
+| — | 1× | after that: no badge, whatever you buy | — |
 
-\* Windows are measured from **each coin's own launch** (`OG_LAUNCH` in `server.js`, the on‑chain pair‑creation timestamps: $GWC 2026‑08‑19, $SEND 2026‑08‑25), and your tier is the **lower** of your two coins, because the rule is that you held both. So the binding date is $GWC's, six days ahead of $SEND's. Twelve 30‑day months in all — 30 days is what "a month" has always meant here. Nothing schedules this: a tier is a pure function of an on‑chain buy timestamp, so the campaign advances and closes by itself. The live clock is served at `GET /api/og/campaign`; the homepage banner, the About page and the dashboard all read it rather than hard‑coding a date.
+\* All three are **single moments that apply to both coins alike** (`OG_TIER_CLOSE` in `server.js`), not offsets from each coin's own launch — so "when does gold close" has one answer rather than two six days apart. Gold is tied to the beta's end (`BETA_END_MS`, overridable with `BETA_END`; moving it moves gold and silver together), and bronze to one year from $GWC's on‑chain launch (2026‑08‑19). Your tier is the **lower** of your two coins, because the rule is that you held both. So the binding date is $GWC's, six days ahead of $SEND's. Twelve 30‑day months in all — 30 days is what "a month" has always meant here. Nothing schedules this: a tier is a pure function of an on‑chain buy timestamp, so the campaign advances and closes by itself. The live clock is served at `GET /api/og/campaign`; the homepage banner, the About page and the dashboard all read it rather than hard‑coding a date.
 
 **The standard, identical in every window.** Verified read‑only from your linked wallets, across all of them:
 - You **bought** each coin from the market — tokens leaving the LP pool, or the measured router, for your wallet. Your first such buy of the *later* coin is the moment you "completed the pair", and that timestamp decides your tier. A transfer from another wallet is not a buy.
@@ -1039,6 +1039,7 @@ badge another account — the [Privacy Policy](public/privacy.html) says exactly
 - **Optional environment variables** to enable extras (all off by default):
   - OAuth: `GOOGLE_CLIENT_ID/SECRET`, `FACEBOOK_CLIENT_ID/SECRET`, `X_CLIENT_ID/SECRET`, `INSTAGRAM_CLIENT_ID/SECRET` (each provider's callback is `…/api/auth/<provider>/callback`).
   - `MOONPAY_API_KEY` for the fiat on‑ramp widget. `BACKUP_DIR` to move the daily DB snapshots (default `data/backups`).
+  - `GOPLUS_KEY` / `GOPLUS_CHAIN` — holder counts, top-holder concentration and owner-power flags come from GoPlus Security, which lists Robinhood Chain (4663) and answers keyless at 30 calls a minute. A key raises that; nothing breaks without one. The readings are an automated scan, never an audit, and the panel says so.
   - `RPC_URL` and `BLOCKSCOUT_URL` — keyed chain and explorer endpoints. Both default to the public hosts, and both of those refuse a server at launch volume (the RPC 429s `eth_call` after a handful of rapid reads; the explorer answers 403 with a bot challenge), so on the defaults charts fail intermittently and every holder/contract-power readout is unknown.
   - `CF_ZONE_ID` + `CF_API_TOKEN` so a takedown or account deletion purges the removed upload from Cloudflare's edge (without them `/uploads` is cached a day at most). `TRUST_PROXY_FROM` to name which peers may speak for the client (default `loopback,private`).
 - **Backups:** the server writes one consistent snapshot per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite online backup API — safe while running; last 7 kept). **Restore:** stop the server, copy the snapshot over `data/app.db`, delete any `app.db-wal` / `app.db-shm` next to it, start. Copy `data/uploads/` separately (avatars, headers, post media).

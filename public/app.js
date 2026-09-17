@@ -65,8 +65,8 @@
   document.body.appendChild(zone);
   /* Shared OG badge — rendered next to an OG's username everywhere. Hover shows a simple explanation
      (native title). OG = verified early buyer of BOTH $Send and $GWC who still holds both, in one of
-     three entry windows: gold (first month, ×10), silver (the two months after, ×5), bronze (the nine
-     months after that, ×3). Lost only on a full sell-out.
+     three entry windows: gold (until the beta ends, ×10), silver (the 90 days after that, ×5), bronze
+     (until $GWC turns one year old, ×3). Lost only on a full sell-out.
 
      The argument is the TIER (0-3), which is what every `og` field now carries from the server. It
      used to be a boolean and every label here was hardcoded to gold's "10×" — passing a silver holder
@@ -75,9 +75,9 @@
      rather than guessing a tier. 0 is falsy, so every existing `if (u.og)` call site still gates
      correctly with no change. */
   window.OG_TIERS = {
-    3: { name: 'Gold', mult: 10, when: 'in the first month' },
-    2: { name: 'Silver', mult: 5, when: 'in the two months after the gold window closed' },
-    1: { name: 'Bronze', mult: 3, when: 'in the nine months after the silver window closed' },
+    3: { name: 'Gold', mult: 10, when: 'before the beta ended' },
+    2: { name: 'Silver', mult: 5, when: 'in the 90 days after the beta ended' },
+    1: { name: 'Bronze', mult: 3, when: 'before $GWC turned one year old' },
   };
   window.ogTip = function (tier) {
     var t = window.OG_TIERS[tier];

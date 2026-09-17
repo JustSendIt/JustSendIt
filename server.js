@@ -1475,6 +1475,7 @@ function proposalView(p, me, c, cm) {
    not recommended for production use" in Robinhood's own docs, and it answers 429 to eth_call after a
    handful of rapid reads — measured. A keyed endpoint (Alchemy serves chain 4663) goes in RPC_URL. */
 const RH_RPC = process.env.RPC_URL || 'https://rpc.mainnet.chain.robinhood.com';
+const RPC_RPM = Number(process.env.OUTBOUND_RPM_RPC) || 0;   // 0 = unmetered (the public node publishes no limit); set it with a paid plan
 const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
 const TOK = { SEND: '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', GWC: '0x61339f11384dde4b2dc3a33e75b4dc23cc620f22' };
 const SWAP_ROUTER = '0x89e5db8b5aa49aa85ac63f691524311aeb649eba';
@@ -1514,6 +1515,10 @@ function communityForToken(addr) {
   return c ? { id: c.id, status: c.status, memberCount: c.member_count, qualCount: c.qual_count, official: !!c.official, demo: !!c.demo } : null;
 }
 async function rpc(method, params) {
+  /* Robinhood publishes no limit for the public node, so no ceiling is assumed here — but a paid endpoint
+     (Alchemy sells compute units per second) has one, and OUTBOUND_RPM_RPC makes it a number the site
+     keeps itself under rather than one it discovers by being refused. Unset means unmetered. */
+  if (RPC_RPM > 0) { try { await outboundTake('rpc'); } catch (e) { throw new Error('rpc budget spent — try again shortly'); } }
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 10000); // fast-fail a stalled RPC so a hung read can't freeze the pairs refresher
   try {
@@ -2703,7 +2708,12 @@ async function joinCommunity(me, cid, ip, holds) {
 let lastCommRefresh = 0, commRefreshing = false;
 function maybeRefreshCommunities() { if (now() - lastCommRefresh > 45000 && !commRefreshing) { lastCommRefresh = now(); commRefreshing = true; refreshCommunities().catch(() => {}).finally(() => { commRefreshing = false; }); } }
 async function refreshCommunities() {
-  const rows = db.prepare("SELECT id, token_addr FROM communities WHERE demo = 0").all(); // the sandbox has no token to price
+  /* Bounded, oldest-refreshed first: this was the one sweep whose request count grew with the size of
+     the table (ceil(C/30) every 45s, no cap), so a few thousand communities would have spent the entire
+     Dexscreener budget on their own. COMM_REFRESH_BATCH tokens a sweep keeps it flat; a community that
+     misses a sweep is simply next. */
+  const COMM_REFRESH_BATCH = 90;
+  const rows = db.prepare("SELECT id, token_addr FROM communities WHERE demo = 0 ORDER BY COALESCE(c_at, 0) ASC LIMIT ?").all(COMM_REFRESH_BATCH); // the sandbox has no token to price
   const tokens = [...new Set(rows.map(r => r.token_addr.toLowerCase()))];
   if (!tokens.length) return;
   const byToken = {};
@@ -3062,7 +3072,33 @@ const OG_BONUS = 10;                          // OGs earn 10× Send Power on eve
    function of an on-chain timestamp, so the campaign advances on its own and closes on its own. */
 const OG_MONTH_MS = OG_WINDOW_MS;
 const OG_TIER = { GOLD: 3, SILVER: 2, BRONZE: 1, NONE: 0 };
-const OG_TIER_END = { 3: 1 * OG_MONTH_MS, 2: 3 * OG_MONTH_MS, 1: 12 * OG_MONTH_MS }; // ms after launch each tier stops accepting entries
+/* ===== THE THREE DEADLINES ARE DATES, NOT OFFSETS ==================================================
+   They used to be measured from each coin's own launch (day 30 / day 90 / day 360), which put $GWC's
+   deadlines six days ahead of $SEND's and made "when does Gold close" a question with two answers. They
+   are now three absolute moments, identical for both coins:
+
+     GOLD    closes when the BETA ends
+     SILVER  closes 90 days after that
+     BRONZE  closes one year after $GWC launched — the older of the two coins, so it is the whole
+             campaign's outer edge
+
+   THE BETA'S END IS NOW ITS OWN ANCHOR. It used to be DEFINED as "when Silver closes", and Silver is
+   now defined as "90 days after the beta ends" — so one of the two had to become a fact rather than a
+   derivation, or they would define each other in a circle. The default below is the exact moment the
+   site has already been counting down to publicly (2026-11-17), so no deadline anyone has seen moves.
+   BETA_END (an ISO date or epoch ms) changes it, and Gold and Silver both follow it. */
+const BETA_END_MS = (() => {
+  const raw = process.env.BETA_END;
+  if (raw) { const t = /^\d+$/.test(raw) ? Number(raw) : Date.parse(raw); if (Number.isFinite(t) && t > 0) return t; }
+  return OG_LAUNCH.GWC + 90 * 864e5;         // the published date, kept as the default
+})();
+const OG_TIER_CLOSE = {
+  3: BETA_END_MS,                            // gold — until the beta ends
+  2: BETA_END_MS + 90 * 864e5,               // silver — ninety days after the beta
+  1: OG_LAUNCH.GWC + 365 * 864e5,            // bronze — a year from $GWC's launch
+};
+// kept for anything still thinking in offsets; the deadlines above are what decide a tier
+const OG_TIER_END = { 3: OG_TIER_CLOSE[3] - OG_LAUNCH.GWC, 2: OG_TIER_CLOSE[2] - OG_LAUNCH.GWC, 1: OG_TIER_CLOSE[1] - OG_LAUNCH.GWC };
 const OG_TIER_MULT = { 3: OG_BONUS, 2: 5, 1: 3, 0: 1 };
 const OG_TIER_NAME = { 3: 'Gold', 2: 'Silver', 1: 'Bronze', 0: '' };
 // Two different "ends", and conflating them would be wrong in both directions.
@@ -3070,8 +3106,9 @@ const OG_TIER_NAME = { 3: 'Gold', 2: 'Silver', 1: 'Bronze', 0: '' };
 // once the EARLIER coin's bronze window shuts nobody can earn anything, whatever $SEND still says.
 // OG_CAMPAIGN_END_MS is the internal stop-scanning guard and takes the LATER close, so the sweep can
 // never cut a still-earnable window short by six days.
-const OG_LAST_CHANCE_MS = Math.min(OG_LAUNCH.SEND, OG_LAUNCH.GWC) + OG_TIER_END[OG_TIER.BRONZE];
-const OG_CAMPAIGN_END_MS = Math.max(OG_LAUNCH.SEND, OG_LAUNCH.GWC) + OG_TIER_END[OG_TIER.BRONZE];
+// One deadline now, not two: the closes are absolute, so the earlier and later coin share them.
+const OG_LAST_CHANCE_MS = OG_TIER_CLOSE[OG_TIER.BRONZE];
+const OG_CAMPAIGN_END_MS = OG_TIER_CLOSE[OG_TIER.BRONZE];
 // Earning and VERIFYING are separate deadlines, and conflating them would quietly punish people for
 // our own outages. What you earned is decided by ogTierForBuy() from your buy timestamp, so no
 // amount of late scanning can manufacture a tier — a buy after the window scores NONE forever.
@@ -3083,32 +3120,28 @@ const OG_GRANT_UNTIL_MS = OG_CAMPAIGN_END_MS + OG_VERIFY_GRACE_MS;
 // Which tier a market acquisition at `tsMs` earns for a token launched at `launchMs`. Never consults
 // now() — a tier is decided by when you bought, so re-running this years later gives the same answer.
 function ogTierForBuy(tsMs, launchMs) {
-  const age = tsMs - launchMs;
-  if (!(age >= 0)) return OG_TIER.NONE;                 // before launch (or an unparseable stamp) earns nothing
-  if (age <= OG_TIER_END[OG_TIER.GOLD]) return OG_TIER.GOLD;
-  if (age <= OG_TIER_END[OG_TIER.SILVER]) return OG_TIER.SILVER;
-  if (age <= OG_TIER_END[OG_TIER.BRONZE]) return OG_TIER.BRONZE;
+  if (!(tsMs - launchMs >= 0)) return OG_TIER.NONE;     // before that coin existed (or an unparseable stamp) earns nothing
+  if (tsMs <= OG_TIER_CLOSE[OG_TIER.GOLD]) return OG_TIER.GOLD;
+  if (tsMs <= OG_TIER_CLOSE[OG_TIER.SILVER]) return OG_TIER.SILVER;
+  if (tsMs <= OG_TIER_CLOSE[OG_TIER.BRONZE]) return OG_TIER.BRONZE;
   return OG_TIER.NONE;
 }
 // The live campaign clock, for the UI. Serving this is what stops the countdown drifting: the
 // homepage used to hard-code the deadline epochs in HTML beside these constants.
 function ogCampaign() {
   const t = now();
-  const win = (tok, launch) => ({
-    token: tok,
-    gold: launch + OG_TIER_END[OG_TIER.GOLD],
-    silver: launch + OG_TIER_END[OG_TIER.SILVER],
-    bronze: launch + OG_TIER_END[OG_TIER.BRONZE],
-  });
-  const s = win('SEND', OG_LAUNCH.SEND);
-  const g = win('GWC', OG_LAUNCH.GWC);
+  // the same three moments for both coins — a deadline with one answer
+  const win = (tok) => ({ token: tok, gold: OG_TIER_CLOSE[OG_TIER.GOLD], silver: OG_TIER_CLOSE[OG_TIER.SILVER], bronze: OG_TIER_CLOSE[OG_TIER.BRONZE] });
+  const s = win('SEND');
+  const g = win('GWC');
   return {
     open: t <= OG_LAST_CHANCE_MS,
     // the tier a buyer of BOTH coins right now would earn — the lower of the two, as the rule requires
     tierNow: Math.min(ogTierForBuy(t, OG_LAUNCH.SEND), ogTierForBuy(t, OG_LAUNCH.GWC)),
     endsAt: OG_LAST_CHANCE_MS,
     // the binding deadline per tier is the EARLIER of the two coins', because you need both
-    closes: { gold: Math.min(s.gold, g.gold), silver: Math.min(s.silver, g.silver), bronze: Math.min(s.bronze, g.bronze) },
+    closes: { gold: OG_TIER_CLOSE[OG_TIER.GOLD], silver: OG_TIER_CLOSE[OG_TIER.SILVER], bronze: OG_TIER_CLOSE[OG_TIER.BRONZE] },
+    betaEndsAt: BETA_END_MS,   // gold closes with it, silver ninety days later — said once, here
     mult: OG_TIER_MULT,
     name: OG_TIER_NAME,
     windows: { SEND: s, GWC: g },
@@ -3146,6 +3179,8 @@ const PAIRS_TTL = 30 * 1000; // background refresh cadence (demand-driven: re-sw
 const jgetInflight = new Map();   // url -> Promise
 const jgetCache = new Map();      // url -> { at, val }
 const JGET_TTL = 20 * 1000;
+const EXPLORER_META_TTL = 5 * 60 * 1000;      // a token's name, symbol, verification, creator: minutes, not seconds
+const EXPLORER_HOLDERS_TTL = 2 * 60 * 1000;   // its holder count and top ten: slow-moving, and every row says when it was read
 const JGET_MAX = 500;
 /* A FAILED READ IS NEVER CACHED.
    This used to call jget(), which collapses jgetR's {ok:false, data:null} down to a bare null — and then
@@ -3186,8 +3221,83 @@ function jgetCached(url, ttl) {
    rugged" when the truth was that Dexscreener rate-limited us — a statement about someone's money that we
    had no evidence for. jgetR keeps them apart; jget stays as the thin wrapper for the many callers that
    genuinely only want the data. */
+/* ===== THE OUTBOUND BUDGET ===========================================================================
+   Every JSON read to a third party passes through here, so this is where the site keeps itself under
+   each vendor's PUBLISHED limit instead of finding it by getting cut off. One token bucket per host,
+   refilled continuously; a call that would overspend WAITS for the next token rather than being sent
+   and refused — a 429 costs the vendor's goodwill and our data, a short wait costs nothing.
+
+   The ceilings are the vendors' own numbers, and every one can be raised by env when a paid tier is
+   bought (OUTBOUND_RPM_<HOST>, host upper-cased with dots as underscores, e.g. OUTBOUND_RPM_API_DEXSCREENER_COM):
+     · api.dexscreener.com — 300 requests/minute on the endpoints we use (their API reference prints
+       the limit on each endpoint). We run at 90% of it so a burst never lands on the line.
+     · api.coingecko.com — the keyless tier publishes no number and is shared per IP; 20/min is well
+       inside what their docs describe as the public band, and one price every 60s is all we ask.
+     · blockscout — the keyed tier is 5 requests/second (their rate-limits page); 4/s here.
+     · anything else — 60/min, which nothing on this site approaches.
+   The wait is bounded (OUTBOUND_MAX_WAIT_MS) so a stampede degrades into "could not ask" — the same
+   honest answer a 429 already produces here — rather than into an unbounded queue. */
+const OUTBOUND_RPM = {
+  'api.dexscreener.com': 270,
+  'api.coingecko.com': 20,
+  'api.gopluslabs.io': 28,          // the free tier is 30 calls/min; a paid plan raises it via OUTBOUND_RPM_API_GOPLUSLABS_IO
+  'robinhoodchain.blockscout.com': 240,
+  'api.blockscout.com': 240,
+};
+try { OUTBOUND_RPM[new URL(BLOCKSCOUT).host] = OUTBOUND_RPM[new URL(BLOCKSCOUT).host] || 240; } catch {}   // a keyed explorer host inherits the keyed ceiling
+const OUTBOUND_MAX_WAIT_MS = Number(process.env.OUTBOUND_MAX_WAIT_MS) || 15000;
+const outBuckets = new Map();
+function outboundRpm(host) {
+  if (host === 'rpc') return RPC_RPM || 60;   // the JSON-RPC node, metered only when OUTBOUND_RPM_RPC is set
+  const env = process.env['OUTBOUND_RPM_' + host.toUpperCase().replace(/[^A-Z0-9]/g, '_')];
+  if (env && Number(env) > 0) return Number(env);
+  if (OUTBOUND_RPM[host]) return OUTBOUND_RPM[host];
+  for (const k of Object.keys(OUTBOUND_RPM)) if (host.endsWith('.' + k) || host.endsWith(k)) return OUTBOUND_RPM[k];
+  return 60;
+}
+/* resolves when a token is available for this host; rejects if the wait would exceed the bound */
+function outboundTake(host) {
+  const rpm = outboundRpm(host);
+  let b = outBuckets.get(host);
+  if (!b) { b = { tokens: rpm, at: Date.now(), rpm, waiting: 0, spent: 0, refused: 0, min: [], peak: 0 }; outBuckets.set(host, b); }
+  const t = Date.now();
+  b.tokens = Math.min(rpm, b.tokens + (t - b.at) * (rpm / 60000));
+  b.at = t; b.rpm = rpm;
+  /* Cumulative and rolling usage, so an operator can see what the site ACTUALLY spends against each
+     vendor's ceiling — the number that decides whether a paid tier is worth buying. `min` holds the
+     timestamps of the last minute's calls; `peak` is the highest any minute has reached since boot. */
+  b.spent++;
+  b.min.push(t);
+  while (b.min.length && t - b.min[0] > 60000) b.min.shift();
+  if (b.min.length > b.peak) b.peak = b.min.length;
+  if (b.tokens >= 1) { b.tokens -= 1; return Promise.resolve(); }
+  const wait = (1 - b.tokens) * (60000 / rpm) + b.waiting * (60000 / rpm);
+  if (wait > OUTBOUND_MAX_WAIT_MS) { b.refused++; return Promise.reject(new Error('outbound budget for ' + host + ' is spent — try again shortly')); }
+  b.waiting++;
+  return new Promise((ok) => setTimeout(() => { b.waiting--; b.tokens -= 1; ok(); }, wait));
+}
+function outboundStats() {
+  const o = {}, t = Date.now();
+  for (const [h, b] of outBuckets) {
+    const lastMin = b.min.filter((x) => t - x <= 60000).length;
+    o[h] = {
+      ceilingRpm: b.rpm,                 // what we hold ourselves to
+      lastMinute: lastMin,               // what we actually spent in the last 60s
+      pctOfCeiling: b.rpm ? Math.round((lastMin / b.rpm) * 1000) / 10 : null,
+      peakMinute: b.peak,                // the busiest minute since boot — the number that sizes a paid plan
+      totalSinceBoot: b.spent,
+      refused: b.refused,                // calls we declined to make rather than overspend; >0 means the ceiling binds
+      available: Math.round(Math.min(b.rpm, b.tokens + (t - b.at) * (b.rpm / 60000))),
+      waiting: b.waiting,
+    };
+  }
+  return o;
+}
 async function jgetR(url) {
   try {
+    let host = '';
+    try { host = new URL(url).host; } catch {}
+    if (host) { try { await outboundTake(host); } catch (e) { return { ok: false, data: null, reason: 'rate-limited' }; } }   // our own meter, before theirs
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json' }, signal: ctrl.signal });
@@ -3199,6 +3309,22 @@ async function jgetR(url) {
   }
 }
 async function jget(url) { return (await jgetR(url)).data; }
+/* jgetR with headers — for a vendor that authenticates a paid tier (GoPlus, Dextools). Same meter, same
+   ok/reason contract, so a caller can still tell "the vendor said no" from "we could not ask". */
+async function jgetHR(url, headers) {
+  try {
+    let host = ''; try { host = new URL(url).host; } catch {}
+    if (host) { try { await outboundTake(host); } catch { return { ok: false, data: null, reason: 'rate-limited' }; } }
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json', ...(headers || {}) }, signal: ctrl.signal });
+    clearTimeout(to);
+    if (!res.ok) return { ok: false, data: null, reason: res.status === 429 ? 'rate-limited' : 'upstream ' + res.status };
+    return { ok: true, data: await res.json(), reason: null };
+  } catch (e) {
+    return { ok: false, data: null, reason: (e && e.name === 'AbortError') ? 'timed out' : 'unreachable' };
+  }
+}
 /* ===== Community holder snapshots ==================================================================
    Walks Blockscout's paginated holders endpoint and freezes the full holder list at a moment in time.
 
@@ -3439,6 +3565,73 @@ function scanContractSource(src) {
   for (const c of CONTRACT_CHECKS) if (c.re.test(src)) hits.push({ key: c.key, sev: c.sev, can: c.can, why: c.why });
   return hits;
 }
+/* ===== GoPlus Security: holder counts and owner powers, for a chain the explorer will not serve us =====
+   The public explorer answers a server request with a Cloudflare challenge, which took holder counts and
+   contract-power flags off the site entirely. GoPlus lists Robinhood Chain in its own supported-chains
+   response ({"name":"Robinhood","id":"4663"}) and returns, keyless, in ONE call per token:
+     · holder_count, and holders[] — the top ten with their percentage of supply
+     · lp_holder_count, and lp_holders[] with a locked flag — what the LP-lock check needs
+     · the owner powers this site already names: mintable, pausable, blacklist, whitelist, anti-whale,
+       trading cooldown, modifiable slippage, take-back-ownership, owner-can-change-balance, hidden owner
+     · is_open_source (the verification flag), owner_address, creator_address, buy/sell tax, is_honeypot
+   Free tier is 30 calls a minute with no key; GOPLUS_KEY sends one when a paid plan is bought, and
+   OUTBOUND_RPM_API_GOPLUSLABS_IO raises the meter to match that plan.
+
+   WHAT IT IS NOT. These are one vendor's automated readings of someone else's contract, not an audit,
+   and the site says so wherever they are shown. A field GoPlus does not return stays null — "unknown" is
+   an answer this codebase already renders honestly, and it is never replaced by a zero. */
+const GOPLUS_KEY = process.env.GOPLUS_KEY || '';
+const GOPLUS_CHAIN = process.env.GOPLUS_CHAIN || '4663';
+const GOPLUS_TTL = 10 * 60 * 1000;          // flags never move; the holder count moves slowly, and rows say when they were read
+const _goplusCache = new Map();
+const _goplusInflight = new Map();
+const gpFlag = (v) => (v === '1' ? true : v === '0' ? false : null);   // GoPlus answers "1"/"0"; anything else is genuinely unknown
+const gpNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
+async function goplusToken(tokenAddr) {
+  const tok = String(tokenAddr || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(tok)) return null;
+  const c = _goplusCache.get(tok);
+  if (c && now() - c.at < GOPLUS_TTL) return c.v;
+  const flying = _goplusInflight.get(tok); if (flying) return flying;
+  const job = (async () => {
+    const url = 'https://api.gopluslabs.io/api/v1/token_security/' + GOPLUS_CHAIN + '?contract_addresses=' + tok;
+    const r = GOPLUS_KEY ? await jgetHR(url, { Authorization: GOPLUS_KEY }) : await jgetR(url);
+    // a failed read is NOT cached as "no flags" — that would turn an outage into a clean bill of health
+    if (!r.ok || !r.data || Number(r.data.code) !== 1) return null;
+    const res = r.data.result || {};
+    const d = res[tok] || res[Object.keys(res)[0]];
+    if (!d) return null;
+    const v = { raw: d, at: now() };
+    pruneCache(_goplusCache, 5000);
+    _goplusCache.set(tok, { at: now(), v });
+    return v;
+  })();
+  _goplusInflight.set(tok, job);
+  job.catch(() => {}).finally(() => _goplusInflight.delete(tok));
+  return job;
+}
+/* The site's own vocabulary for owner powers, mapped from GoPlus's flags. Same keys, severities and
+   sentences the verified-source scanner already produces, so the UI needs no new cases. */
+const GOPLUS_POWERS = [
+  ['is_mintable', 'mint', 'high', 'Mint new tokens', 'supply can be inflated and sold into the pool'],
+  ['is_blacklisted', 'blacklist', 'critical', 'Blacklist wallets', 'a blocked wallet cannot sell — the classic honeypot'],
+  ['transfer_pausable', 'pausable', 'high', 'Pause all transfers', 'every transfer, including sells, can be frozen'],
+  ['slippage_modifiable', 'fees', 'high', 'Change the trading tax', 'the sell tax can be raised toward 100%, trapping sellers'],
+  ['can_take_back_ownership', 'reclaim', 'critical', 'Take ownership back after renouncing', 'a renounce that can be undone is not a renounce'],
+  ['owner_change_balance', 'balance', 'critical', 'Change wallet balances directly', 'your tokens can be taken or zeroed'],
+  ['hidden_owner', 'hidden', 'critical', 'Act as a hidden owner', 'the real controller is not the address the contract names'],
+  ['is_whitelisted', 'whitelist', 'medium', 'Exempt chosen wallets from the rules', 'the rules do not apply equally to everyone'],
+  ['is_anti_whale', 'maxlimits', 'medium', 'Cap buy, sell or wallet size', 'a cap can block selling as well as buying'],
+  ['anti_whale_modifiable', 'maxlimits-mod', 'high', 'Change those caps at will', 'a cap that moves can be tightened onto sellers'],
+  ['trading_cooldown', 'cooldown', 'medium', 'Force a wait between trades', 'a cooldown delays getting out'],
+  ['cannot_sell_all', 'sellall', 'medium', 'Stop you selling the whole balance', 'you may not be able to exit fully'],
+];
+function goplusPowers(d) {
+  const out = [];
+  if (!d) return out;
+  for (const [field, key, sev, can, why] of GOPLUS_POWERS) if (gpFlag(d[field]) === true) out.push({ key, sev, can, why });
+  return out;
+}
 async function checkLpLock(pairAddr) {
   if (!pairAddr) return { known: false };
   try {
@@ -3460,10 +3653,12 @@ async function checkLpLock(pairAddr) {
   } catch { return { known: false }; }
 }
 function contractSummaryOf(o) {
-  if (o.verified === false) return 'The contract source is NOT verified on the explorer — no one can read what it actually does. That is itself a red flag; treat it as high-risk.';
-  if (o.verified == null) return 'Couldn’t read the contract source right now.';
-  if (!o.powers.length) return 'Heuristic read of the verified source: no obvious owner powers to mint, blacklist, pause, toggle trading, or change taxes were found — the usual honeypot/rug levers weren’t detected. Still DYOR; a scan isn’t an audit.';
-  return 'Heuristic read of the verified source — the owner’s code appears able to ' + o.powers.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders.';
+  const via = o.source === 'goplus' ? ' (read by GoPlus Security, an automated scanner — not an audit)' : '';
+  if (o.honeypot === true) return 'An automated scan reports this token as a HONEYPOT — it says a buy goes through and a sell does not. Treat it as unsellable until you have proof otherwise' + via + '.';
+  if (o.verified === false) return 'The contract source is NOT published, so no one can read what it actually does' + via + '. That is itself a red flag; treat it as high-risk.';
+  if (o.verified == null) return 'Couldn’t read the contract right now.';
+  if (!o.powers.length) return 'No obvious owner powers to mint, blacklist, pause, toggle trading, or change taxes were found — the usual honeypot/rug levers weren’t detected. Still DYOR; a scan isn’t an audit.';
+  return (o.source === 'goplus' ? 'An automated scan of the contract' : 'A heuristic read of the verified source') + ' says the owner’s code appears able to ' + o.powers.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders. A scan is not an audit.';
 }
 /* The pair is supplied by whoever asked, and the answer used to be cached under the TOKEN alone — so
    asking about token X while naming some unrelated pool whose LP happens to be burned wrote "Liquidity
@@ -3489,13 +3684,35 @@ async function analyzeContract(tokenAddr, pairAddr) {
   const key = tok + '|' + (pair || '');
   const cached = _contractCache.get(key);
   if (cached && now() - cached.t < CONTRACT_TTL) return cached.v;
-  const out = { verified: null, name: null, powers: [], liquidity: { known: false }, summary: '' };
+  const out = { verified: null, name: null, powers: [], liquidity: { known: false }, summary: '', source: null };
+  /* GoPlus first: it answers on this chain, and its flags are the same vocabulary the source scanner
+     produces. The explorer's verified source is still read when it will answer — it names the contract
+     and is a second opinion — but it is no longer the only way to learn what an owner can do. */
+  try {
+    const gp = await goplusToken(tok);
+    if (gp && gp.raw) {
+      const g = gp.raw;
+      out.verified = gpFlag(g.is_open_source);
+      out.powers = goplusPowers(g);
+      out.source = 'goplus';
+      out.honeypot = gpFlag(g.is_honeypot);
+      out.buyTax = gpNum(g.buy_tax); out.sellTax = gpNum(g.sell_tax);
+      out.renounced = g.owner_address ? /^0x0{40}$/.test(String(g.owner_address).toLowerCase()) : null;
+      out.readAt = gp.at;
+      if (Array.isArray(g.lp_holders) && g.lp_holders.length) {
+        // LP lock, from the same reading: the share of LP tokens held in a locked or burn position
+        const locked = g.lp_holders.filter((h) => gpFlag(h.is_locked) === true || /^0x0{40}$|dead$/i.test(String(h.address || '')));
+        const pct = locked.reduce((a, h) => a + ((gpNum(h.percent) || 0) * 100), 0);
+        out.liquidity = { known: true, lockedPct: pct, locked: pct >= 50, source: 'goplus' };
+      }
+    }
+  } catch {}
   try {
     const sc = await jget(BLOCKSCOUT + '/api/v2/smart-contracts/' + tok);
-    if (sc) { out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); const src = String(sc.source_code || ''); if (out.verified && src) out.powers = scanContractSource(src); }
+    if (sc) { if (out.verified == null) out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); const src = String(sc.source_code || ''); if (out.verified && src && !out.powers.length) out.powers = scanContractSource(src); }
   } catch {}
-  if (pair && await pairContainsToken(pair, tok)) out.liquidity = await checkLpLock(pair);
-  else if (pair) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
+  if (!out.liquidity.known && pair && await pairContainsToken(pair, tok)) out.liquidity = await checkLpLock(pair);
+  else if (!out.liquidity.known && pair) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
   out.summary = contractSummaryOf(out);
   _contractCache.set(key, { t: now(), v: out });
   return out;
@@ -5238,30 +5455,53 @@ async function ethCall(to, data) { return rpc('eth_call', [{ to, data }, 'latest
    from "the chain did not answer" need this: with the swallowing version, an RPC outage is indistinguishable
    from an authoritative negative, which is how a node being down became "no pool exists for this token". */
 async function ethCallStrict(to, data) { return rpc('eth_call', [{ to, data }, 'latest']); }
+/* decimals() never changes for a deployed token, so a successful read is kept for the life of the process
+   — this one call was being made for every token on every radar refresh, every token-cache tick and every
+   chart load, against an RPC that answers 429 to a burst. A miss is never cached (a scale factor must not
+   be guessed), and the map is bounded. */
+const _decimalsCache = new Map();
 async function tokenDecimals(token) {                         // decimals() 0x313ce567 — null on failure (never cache/scale a miss)
+  const k = String(token || '').toLowerCase();
+  if (_decimalsCache.has(k)) return _decimalsCache.get(k);
   const r = await ethCall(token, '0x313ce567');
   if (!r || r === '0x') return null;
-  try { return Number(BigInt(r)); } catch { return null; }
+  try { const d = Number(BigInt(r)); if (Number.isFinite(d) && d >= 0 && d <= 36) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(k, d); } return d; } catch { return null; }
 }
 async function getReserves(pairAddr) {                        // getReserves() 0x0902f1ac → (uint112 r0, uint112 r1, uint32 ts)
   const r = await ethCall(pairAddr, '0x0902f1ac');
   if (!r || r.length < 130) return null;
   try { return { r0: BigInt('0x' + r.slice(2, 66)), r1: BigInt('0x' + r.slice(66, 130)) }; } catch { return null; }
 }
+/* owner() changes only on a transfer or a renounce, which are rare and one-way in practice; a successful
+   read is kept for ten minutes. A failed read is not cached — "unknown" must be re-asked, not remembered. */
+const _ownerCache = new Map();
+const OWNER_TTL = 10 * 60 * 1000;
 async function tokenOwner(token) {                            // owner() 0x8da5cb5b (many tokens lack it → unknown)
+  const k = String(token || '').toLowerCase();
+  const c = _ownerCache.get(k);
+  if (c && now() - c.at < OWNER_TTL) return c.v;
   const r = await ethCall(token, '0x8da5cb5b');
   if (!r || r === '0x' || r.length < 66) return { owner: null, renounced: null };
   const a = '0x' + r.slice(26, 66);
-  return { owner: a, renounced: /^0x0{40}$/.test(a) };        // zero address = ownership renounced
+  const v = { owner: a, renounced: /^0x0{40}$/.test(a) };     // zero address = ownership renounced
+  pruneCache(_ownerCache, 20000); _ownerCache.set(k, { at: now(), v });
+  return v;
 }
 let usdgDecimals = null; // cached once (Global Dollar's decimals — don't hardcode)
 
-function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tokenDec) {
+function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tokenDec, gp) {
+  /* gp: the GoPlus reading for this token, when we have one. It is preferred over the explorer for the
+     holder count, the top-ten list, verification and ownership — the explorer refuses server requests on
+     this chain, so those readings are otherwise simply absent. Every field falls back to the explorer's
+     answer, and then to null: an unknown is still rendered as an unknown, never as a zero. */
+  const g = (gp && gp.raw) || null;
   const decimals = tokenDec != null ? tokenDec : (meta && meta.decimals != null ? Number(meta.decimals) : 18); // prefer authoritative on-chain decimals
   const totalSupplyRaw = meta && meta.total_supply ? meta.total_supply : null;
   const holdersVal = meta ? (meta.holders_count != null ? meta.holders_count : meta.holders) : null;
-  // treat 0 as "not indexed yet" (unknown), not a real zero — brand-new tokens lag Blockscout's holder count
-  const count = holdersVal != null && Number(holdersVal) > 0 ? Number(holdersVal) : null;
+  // treat 0 as "not indexed yet" (unknown), not a real zero — brand-new tokens lag either index
+  const gpCount = g ? gpNum(g.holder_count) : null;
+  const count = (gpCount != null && gpCount > 0) ? gpCount
+    : (holdersVal != null && Number(holdersVal) > 0 ? Number(holdersVal) : null);
   /* NOT A HOLDER: the pool itself, the burn address, and the zero address. Blockscout returns them in the
      holders list like anything else, and counting them made "top holder owns 78% of supply" the normal
      reading of a HEALTHY token — the liquidity pool is usually the largest single balance, and a token
@@ -5275,16 +5515,25 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
   const realHolders = (holdersData && Array.isArray(holdersData.items))
     ? holdersData.items.filter(h => !NON_HOLDERS.has(String((h.address && h.address.hash) || h.address || '').toLowerCase()))
     : null;
-  let topHolderPct = null, top10Pct = null;
-  if (realHolders && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
+  let topHolderPct = null, top10Pct = null, topHolders = [];
+  /* GoPlus already reports each top holder as a FRACTION of supply ("0.900000" = 90%), so this path needs
+     no total supply at all — which matters, because the supply came from the explorer that will not
+     answer us. The same non-holder filter applies: a pool, a burn address and the zero address are not
+     people, and counting them made a healthy token read as one whale. */
+  const gpHolders = (g && Array.isArray(g.holders)) ? g.holders : null;
+  if (gpHolders) {
+    const real = gpHolders
+      .map((h) => ({ address: String(h.address || '').toLowerCase(), pct: gpNum(h.percent) != null ? gpNum(h.percent) * 100 : null, locked: gpFlag(h.is_locked) === true, contract: gpFlag(h.is_contract) === true }))
+      .filter((h) => h.address && !NON_HOLDERS.has(h.address) && h.pct != null);
+    if (real.length) {
+      topHolderPct = real[0].pct;
+      top10Pct = real.slice(0, 10).reduce((a, b) => a + b.pct, 0);
+      topHolders = real.slice(0, 10).map(({ address, pct, locked }) => ({ address, pct, locked }));
+    }
+  } else if (realHolders && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
     const ts0 = Number(totalSupplyRaw);
     const vals = realHolders.map(h => Number(h.value) || 0);
     if (vals.length) { topHolderPct = vals[0] / ts0 * 100; top10Pct = vals.slice(0, 10).reduce((a, b) => a + b, 0) / ts0 * 100; }
-  }
-  // top-10 holder list (no extra network call — reuses the holders fetch already made)
-  let topHolders = [];
-  if (realHolders && totalSupplyRaw && Number(totalSupplyRaw) > 0) {
-    const ts0 = Number(totalSupplyRaw);
     topHolders = realHolders.slice(0, 10).map(h => ({
       address: String((h.address && h.address.hash) || h.address || '').toLowerCase(),
       pct: ts0 ? (Number(h.value) || 0) / ts0 * 100 : null,
@@ -5307,7 +5556,8 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
       name: (meta && meta.name) || (dex && dex.baseToken && dex.baseToken.name) || 'Unknown Token',
       symbol: (meta && meta.symbol) || (dex && dex.baseToken && dex.baseToken.symbol) || '???',
       decimals, totalSupply: totalSupplyRaw,
-      isVerified: addr && typeof addr.is_verified === 'boolean' ? addr.is_verified : null,
+      isVerified: (g && gpFlag(g.is_open_source) != null) ? gpFlag(g.is_open_source)
+        : (addr && typeof addr.is_verified === 'boolean' ? addr.is_verified : null),
       deployer: (addr && addr.creator_address_hash) ? String(addr.creator_address_hash).toLowerCase() : null,
       owner: ownerInfo ? ownerInfo.owner : null,
       renounced: ownerInfo ? ownerInfo.renounced : null,
@@ -5454,16 +5704,21 @@ async function enrichPairs() {
   }
   if (usdgDecimals == null) { const d = await tokenDecimals(USDG_ADDR); if (d != null) usdgDecimals = d; } // cache only a successful read (retry next refresh)
   const enriched = (await mapLimit(valid, 6, async (t) => {
-    const [meta, addr, holders, ts, reserves, ownerInfo, tokenDec] = await Promise.all([
-      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token),
-      jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token),
-      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10'),
+    /* Explorer reads are held for minutes, not the default 20s: the radar re-sweeps every 30s, so at the
+       default every tick re-bought all three reads for all 48 tokens — 288 requests a minute, more than
+       the keyed explorer tier allows. A token's name and verification do not change in five minutes; its
+       holder list moves slowly enough that two is honest, and the row says when it was read. */
+    const [meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp] = await Promise.all([
+      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
+      jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
+      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
       blockTimestamp(t.block),
       getReserves(t.pair),        // pooled reserves (read-only)
       tokenOwner(t.token),        // owner()/renounced (read-only)
       tokenDecimals(t.token),     // authoritative decimals (read-only)
+      goplusToken(t.token),       // holder count, top ten and owner powers — the explorer will not serve a server
     ]);
-    const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec);
+    const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp);
     /* The price feed could not be asked about this token. Carry forward the last reading we actually took
        rather than publishing zeros: a blank row is not neutral, it reads as "dead token" to every reader and
        to our own scoring. The carried numbers are labelled with when they were true, and `priceStale` stops
@@ -5552,20 +5807,22 @@ async function refreshPairs() {
 const wlEnrichCache = new Map(); // pairAddr(lc) -> {t, pair} — shared across all users watching the same token
 async function enrichOne(item, opts = {}) {
   const t = { token: item.token_addr, pair: item.pair_addr, token0: item.token0, token1: item.token1, quoteSymbol: item.quote_symbol || '?', block: 0 };
-  const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr] = await Promise.all([
-    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token),
-    jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token),
-    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10'),
+  const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr, gp] = await Promise.all([
+    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
+    jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
+    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
     getReserves(t.pair),
     tokenOwner(t.token),
     tokenDecimals(t.token),
-    jget('https://api.dexscreener.com/tokens/v1/robinhood/' + t.token),
+    // a caller that has just fetched this token's pairs passes them in; nobody pays for the same URL twice
+    opts.dexArr !== undefined ? Promise.resolve(opts.dexArr) : jget('https://api.dexscreener.com/tokens/v1/robinhood/' + t.token),
+    goplusToken(t.token),         // holder count, top ten and owner powers
   ]);
   if (usdgDecimals == null) { const d = await tokenDecimals(USDG_ADDR); if (d != null) usdgDecimals = d; }
   let dex = null; const arr = dexArr || [];
   for (const pr of arr) if (pr && pr.pairAddress && pr.pairAddress.toLowerCase() === t.pair.toLowerCase()) { dex = pr; break; }
   if (!dex && !opts.strictPair && arr[0]) dex = arr[0]; // strictPair (lookups): never borrow a DIFFERENT pool's market data
-  const p = buildPair(t, dex, meta, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec);
+  const p = buildPair(t, dex, meta, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp);
   if (DEXTOOLS_ON) p.brand.dextools = await dextoolsInfo(t.token); // opt-in; no-op unless DEXTOOLS_API_KEY+CHAIN set
   // serial-deployer flag needs a window of other launches; the live New-Pairs set (passed by lookups) supplies one
   let dc = {}, dd = {};
@@ -5643,10 +5900,16 @@ function fetchAndStore(tok, opts = {}) {           // single-flight live lookup 
   lookupInflight.set(tok, pr);
   return pr;
 }
+/* a pool's token order is fixed at creation; both reads succeeding is remembered for the process life */
+const _pairTokensCache = new Map();
 async function pairTokens(pairAddr) {                          // token0() 0x0dfe1681 / token1() 0xd21220a7 → authoritative V2 ordering
+  const k = String(pairAddr || '').toLowerCase();
+  const hit = _pairTokensCache.get(k); if (hit) return hit;
   const dec = (r) => (r && r.length >= 66) ? ('0x' + r.slice(26, 66)).toLowerCase() : null;
   const [t0, t1] = await Promise.all([ethCall(pairAddr, '0x0dfe1681'), ethCall(pairAddr, '0xd21220a7')]);
-  return { token0: dec(t0), token1: dec(t1) };
+  const v = { token0: dec(t0), token1: dec(t1) };
+  if (v.token0 && v.token1) { pruneCache(_pairTokensCache, 20000); _pairTokensCache.set(k, v); }
+  return v;
 }
 // strict: throw when the chain could not be read, so only a real zero address means "no such pool"
 async function factoryGetPair(a, b, strict) {                  // getPair(address,address) 0xe6a43905 → pool addr or null
@@ -5721,7 +5984,53 @@ async function refreshTokenCache() {
     const stale = db.prepare('SELECT token_addr FROM token_cache WHERE found=1 AND updated_at < ? ORDER BY last_read_at DESC LIMIT ?')
       .all(now() - TOKEN_CACHE_FRESH, TOKEN_CACHE_REFRESH_BATCH * 3)
       .map(r => r.token_addr).filter(t => !liveSet.has(t)).slice(0, TOKEN_CACHE_REFRESH_BATCH);
-    if (stale.length) await mapLimit(stale, 4, async (tok) => { try { await fetchAndStore(tok); } catch {} });
+    /* ONE batched Dexscreener call for the whole tick — up to 30 tokens per request, the endpoint's own
+       batch size — instead of the two unbatched calls per token this used to make (a lookup, then the
+       same URL again inside enrichOne). At the 24-token batch that is 1 request where there were 48:
+       the largest single consumer of the Dexscreener budget, cut by ~98%. The market fields are
+       refreshed from the batch; the rarer per-token reads (holders, owner, decimals) keep their own
+       caches and are not touched here. */
+    if (stale.length) {
+      const byToken = {};
+      for (let i = 0; i < stale.length; i += 30) {
+        const slice = stale.slice(i, i + 30);
+        const r = await jgetR('https://api.dexscreener.com/tokens/v1/robinhood/' + slice.join(','));
+        if (!r.ok) continue;   // a failed batch leaves those rows stale, to be picked up next tick — never blanked
+        for (const pr of (r.data || [])) {
+          const base = ((pr.baseToken && pr.baseToken.address) || '').toLowerCase();
+          if (!base) continue;
+          const liq = (pr.liquidity && Number(pr.liquidity.usd)) || 0;
+          if (!byToken[base] || liq > byToken[base]._liq) byToken[base] = { ...pr, _liq: liq };
+        }
+      }
+      let refreshed = 0;
+      for (const tok of stale) {
+        const pr = byToken[tok]; if (!pr) continue;
+        try {
+          const row = tokenCacheGet(tok); if (!row || !row.pair_json) continue;
+          const p = JSON.parse(row.pair_json);
+          if (!p || !p.market) continue;
+          p.market.priceUsd = pr.priceUsd != null ? Number(pr.priceUsd) : p.market.priceUsd;
+          p.market.liquidityUsd = pr.liquidity && pr.liquidity.usd != null ? Number(pr.liquidity.usd) : p.market.liquidityUsd;
+          p.market.fdv = pr.fdv != null ? Number(pr.fdv) : p.market.fdv;
+          p.market.marketCap = pr.marketCap != null ? Number(pr.marketCap) : p.market.marketCap;
+          const n = (v) => (v == null ? 0 : Number(v));
+          if (pr.volume) p.volume = { m5: n(pr.volume.m5), h1: n(pr.volume.h1), h6: n(pr.volume.h6), h24: n(pr.volume.h24) };
+          if (pr.txns) p.txns = { h1: { buys: n(pr.txns.h1 && pr.txns.h1.buys), sells: n(pr.txns.h1 && pr.txns.h1.sells) },
+                                 h6: { buys: n(pr.txns.h6 && pr.txns.h6.buys), sells: n(pr.txns.h6 && pr.txns.h6.sells) },
+                                 h24: { buys: n(pr.txns.h24 && pr.txns.h24.buys), sells: n(pr.txns.h24 && pr.txns.h24.sells) } };
+          if (pr.priceChange) p.priceChange = { h1: pr.priceChange.h1 != null ? Number(pr.priceChange.h1) : null, h6: pr.priceChange.h6 != null ? Number(pr.priceChange.h6) : null, h24: pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null };
+          p.priceStale = false; p.priceAsOf = now();
+          tokenCachePut(tok, { pair: p });
+          refreshed++;
+        } catch {}
+      }
+      /* Tokens the batch did not return (delisted, or a failed batch) fall back to the full per-token
+         lookup, a few at a time, so a token can still be re-found — bounded so it cannot become the old
+         two-calls-per-token loop through the back door. */
+      const missed = stale.filter((t) => !byToken[t]).slice(0, 4);
+      if (missed.length) await mapLimit(missed, 2, async (tok) => { try { await fetchAndStore(tok); } catch {} });
+    }
   } finally { tokenCacheRefreshing = false; }
 }
 // Persist every token the radar surfaces, so ANY scanner-surfaced token opens instantly in the popup (even before an
@@ -5768,7 +6077,7 @@ async function _doLookup(tokenAddr) {
   const q = (token0 && QUOTE_SET.has(token0)) ? token0 : ((token1 && QUOTE_SET.has(token1)) ? token1 : null);
   const p = await enrichOne(
     { token_addr: tokenAddr, pair_addr: pairAddr, token0, token1, quote_symbol: q ? QUOTE_SYMBOL[q] : '?' },
-    { strictPair: true, deployerWindow: pairsCache.pairs }       // exact-pool market data + serial-deployer window from the live feed
+    { strictPair: true, deployerWindow: pairsCache.pairs, dexArr: dexr.ok ? arr : undefined }   // the pairs just fetched above — not fetched again
   );
   // if this token is only the QUOTE side of its pool, Dexscreener's price/FDV/mcap describe the OTHER token → drop them
   if (!tokenIsBase) { p.market.priceUsd = null; p.market.fdv = null; p.market.marketCap = null; p.brand = brandFromDex(null); p._quoteSide = true; } // enhanced info/branding belongs to the base token, not this quote-side token
@@ -6999,11 +7308,13 @@ function probationOf(u) {
 const isReadOnly = (u) => !!restrictionOf(u);
 
 /* ===== The beta campaign ============================================================================
-   Ends exactly when Silver OG closes, which is 90 days after the first coin launched. At that moment the
-   standings are frozen, the top ten are badged, and EVERY balance goes to zero. */
+   Ends at BETA_END_MS. At that moment the standings are frozen, the top ten are badged, and EVERY
+   balance goes to zero. Gold OG closes with the beta; Silver runs ninety days past it. */
 const BETA_TOP_N = 10;
 const BETA_BADGE_MULT = 2;              // what a badge is worth afterwards, forever
-const betaEndsAt = () => { try { return ogCampaign().closes.silver; } catch { return null; } };
+/* The beta's end is now a fact of its own (BETA_END_MS), not a reading of the OG calendar — Gold closes
+   WITH it and Silver ninety days AFTER it, so deriving it from them would be circular. */
+const betaEndsAt = () => BETA_END_MS;
 const betaOver = () => { const e = betaEndsAt(); return e != null && now() >= e; };
 
 function betaStandings(n) {
@@ -8701,6 +9012,12 @@ const server = http.createServer(async (req, res) => {
         }
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE resolved_at IS NULL AND kind = 'user' AND target_id = ?").run(now(), me.id, b.lift ? 'lifted' : 'restricted', uid);
         return send(res, 200, { ok: true });
+      }
+      /* The outbound meters: how much of each vendor's budget is in hand right now and how many calls
+         are waiting on it. What an operator watches to decide whether a paid tier is worth buying. */
+      if (p === '/api/admin/outbound' && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        return send(res, 200, { hosts: outboundStats(), maxWaitMs: OUTBOUND_MAX_WAIT_MS });
       }
       if (p === '/api/admin/resolve' && req.method === 'POST') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);

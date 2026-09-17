@@ -113,7 +113,8 @@ try {
   const beta = await api('/api/beta', { cookie: pass });
   check('the beta campaign is published', beta.status === 200 && beta.j.endsAt, beta.status);
   const silver = new Date(beta.j.endsAt).toISOString().slice(0, 10);
-  check('  ...ending when Silver OG closes (2026-11-17)', silver === '2026-11-17', silver);
+  // the beta's end is its own anchor now (BETA_END_MS); Gold closes with it and Silver 90 days after
+  check('  ...ending on the published beta date (2026-11-17)', silver === '2026-11-17', silver);
   check('  ...90 days after the first coin launched', Math.round((beta.j.endsAt - 1787157963000) / 864e5) === 90, Math.round((beta.j.endsAt - 1787157963000) / 864e5) + ' days');
   check('  ...top 10, badge worth 2x', beta.j.topN === 10 && beta.j.badgeMult === 2);
   check('  ...not settled yet', beta.j.settled === false && beta.j.over === false);
