@@ -27,6 +27,7 @@ process.umask(0o077);
       const key = line.slice(0, eq).trim();
       let val = line.slice(eq + 1).trim();
       if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+      else val = val.replace(/\s+#.*$/, '').trim();   // `KEY=value   # note` — the note is not part of the value (a quoted value keeps its # characters)
       if (key && process.env[key] === undefined) process.env[key] = val;
     }
   } catch {} // no .env file → rely on the real environment
