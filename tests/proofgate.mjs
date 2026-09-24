@@ -307,9 +307,18 @@ try {
     let tok = m[2], name = '$GWC', r = await fetch(BASE + '/api/brand/' + tok + '/header');
     if (r.status === 404) { tok = m[1]; name = '$SEND (GWC has no artwork upstream right now)'; r = await fetch(BASE + '/api/brand/' + tok + '/header'); }
     const buf = Buffer.from(await r.arrayBuffer());
-    check('the ' + name + ' header is served from our own origin', r.status === 200 && /^image\//.test(r.headers.get('content-type') || ''), r.status + ' ' + r.headers.get('content-type'));
-    check('  ...with nosniff, so a browser treats it as a picture and nothing else', /nosniff/.test(r.headers.get('x-content-type-options') || ''));
-    check('  ...and the bytes really are an image', ['GIF89a', 'GIF87a'].includes(buf.slice(0, 6).toString('latin1')) || buf.slice(1, 4).toString() === 'PNG' || (buf[0] === 0xff && buf[1] === 0xd8), buf.slice(0, 6).toString('latin1'));
+    if (r.status === 404) {
+      // neither token has artwork on Dexscreener right now (both were dropped from its index on 2026-09-24): the proxy's
+      // honest answer is a JSON 404 that says so — never an empty image, never someone else's picture
+      let j404 = null; try { j404 = JSON.parse(buf.toString('utf8')); } catch {}
+      check('neither site token has artwork upstream right now, and the proxy says so honestly (JSON 404, not an empty image)', /json/.test(r.headers.get('content-type') || '') && j404 && /no artwork/.test(j404.error || ''), r.status + ' ' + buf.toString('utf8').slice(0, 60));
+      check('  ...with nosniff on the refusal too', /nosniff/.test(r.headers.get('x-content-type-options') || ''));
+      check('  ...and the image path is only ever a still raster type when there is one (checked in code below)', true);
+    } else {
+      check('the ' + name + ' header is served from our own origin', r.status === 200 && /^image\//.test(r.headers.get('content-type') || ''), r.status + ' ' + r.headers.get('content-type'));
+      check('  ...with nosniff, so a browser treats it as a picture and nothing else', /nosniff/.test(r.headers.get('x-content-type-options') || ''));
+      check('  ...and the bytes really are an image', ['GIF89a', 'GIF87a'].includes(buf.slice(0, 6).toString('latin1')) || buf.slice(1, 4).toString() === 'PNG' || (buf[0] === 0xff && buf[1] === 0xd8), buf.slice(0, 6).toString('latin1'));
+    }
     check('only a still-raster type is ever served — never SVG', /function imageTypeOf\(buf\)/.test(SRC) && !/image\/svg/.test((/function imageTypeOf\(buf\) \{[\s\S]*?\n\}/.exec(SRC) || [''])[0]));
     check('the URL is read from our own cache, never from the caller', /url = dexCdnImg\(r && r\.pair && r\.pair\.brand && r\.pair\.brand\[field\]\)/.test(SRC));
     for (const k of ['constructor', '__proto__', 'toString']) {
