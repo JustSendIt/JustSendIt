@@ -550,9 +550,42 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 CREATE INDEX IF NOT EXISTS idx_scans_last ON scans(last_at);
 CREATE INDEX IF NOT EXISTS idx_scans_pool ON scans(pool_addr);
+-- The on-chain holder ledger: every Transfer event a token has ever emitted, read from the chain itself
+-- (eth_getLogs) and folded into per-wallet balances. The holder count is the number of wallets whose balance is
+-- above zero in that ledger — the chain's own answer, not an indexer's. Incremental: each refresh reads only the
+-- blocks since the last one. Wallet rows are public chain data (they are what the explorer shows), and only
+-- aggregates ever leave the server.
+CREATE TABLE IF NOT EXISTS holder_index (
+  token_addr   TEXT PRIMARY KEY,
+  last_block   INTEGER NOT NULL DEFAULT 0,                 -- the ledger is complete up to and including this block
+  first_block  INTEGER,                                    -- the first Transfer ever seen (the mint)
+  holders      INTEGER,                                    -- wallets with balance > 0, excluding the zero and burn addresses
+  supply       TEXT,                                       -- totalSupply() at the last refresh, as a decimal string
+  decimals     INTEGER,
+  logs         INTEGER NOT NULL DEFAULT 0,                 -- Transfer events folded so far
+  consistent   INTEGER NOT NULL DEFAULT 1,                 -- 0 when a balance went negative (a token that moves balances without Transfer events)
+  top_json     TEXT,                                       -- the 25 largest balances as [{address, pct}]
+  status       TEXT NOT NULL DEFAULT 'new',                -- new | ok | error
+  error        TEXT,
+  updated_at   INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS holder_balances (
+  token_addr   TEXT NOT NULL,
+  wallet       TEXT NOT NULL,
+  balance      TEXT NOT NULL,                              -- decimal string (BigInt), may be negative for an inconsistent token
+  positive     INTEGER NOT NULL DEFAULT 0,                 -- 1 when balance > 0
+  PRIMARY KEY (token_addr, wallet)
+);
+CREATE INDEX IF NOT EXISTS idx_holder_bal_tok ON holder_balances(token_addr, positive);
 `);
 // additive migrations (SQLite has no ADD COLUMN IF NOT EXISTS)
 for (const col of [
+  "ALTER TABLE communities ADD COLUMN held_pct REAL",              // share of supply in members' linked wallets (per the on-chain ledger)
+  "ALTER TABLE communities ADD COLUMN held_members INTEGER",       // members whose wallets are in that sum
+  "ALTER TABLE communities ADD COLUMN held_wallets INTEGER",
+  "ALTER TABLE communities ADD COLUMN held_at INTEGER",
+  "ALTER TABLE communities ADD COLUMN held_block INTEGER",         // the ledger block the sum is exact at
+  "ALTER TABLE communities ADD COLUMN held_src TEXT",              // 'chain' (ledger) | 'balanceOf' (per-wallet reads, for an inconsistent ledger)
   "ALTER TABLE token_cache ADD COLUMN checked_at INTEGER NOT NULL DEFAULT 0",   // last re-check that brought no new data (a transient not-found); updated_at is when the DATA was read
   "ALTER TABLE users ADD COLUMN accent TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN wall_bg TEXT NOT NULL DEFAULT ''",
@@ -2565,6 +2598,58 @@ function postCommunities(ids) {
   return out;
 }
 function commLevelInfo(xp) { const lvl = levelForXp(xp); const base = xpForLevel(lvl), next = xpForLevel(lvl + 1); return { level: lvl, xp: xp, intoLevel: xp - base, spanLevel: next != null ? next - base : null }; }
+/* ===== Supply control: how much of the token the community's own members hold =====================
+   Members' linked wallets (read-only, ownership-proven) summed against the chain's holder ledger, divided by
+   totalSupply. Nothing per member ever leaves the server: the figure is the total, to two significant figures,
+   and it is shown only once THREE or more members' wallets are in it — with fewer, the total would be one
+   person's balance with extra steps. The ledger makes this free of per-wallet chain calls; an inconsistent
+   ledger (a token that moves balances without Transfer events) falls back to bounded balanceOf reads. */
+const SUPPLY_MIN_MEMBERS = 3;
+const SUPPLY_FRESH_MS = 2 * 60 * 1000;
+const _supplyInflight = new Map();
+function refreshCommunitySupply(c, opts = {}) {
+  if (!c || c.demo || !c.token_addr) return Promise.resolve(null);
+  if (_supplyInflight.has(c.id)) return _supplyInflight.get(c.id);
+  const job = (async () => {
+    const tok = String(c.token_addr).toLowerCase();
+    const ledger = await ensureLedger(tok, { wait: true, waitMs: opts.waitMs != null ? opts.waitMs : 6000 });
+    const members = db.prepare('SELECT user_id FROM community_members WHERE community_id=?').all(c.id);
+    const withWallets = members.map((m) => walletAddresses(m.user_id).slice(0, MAX_LINKED_WALLETS).map((a) => String(a).toLowerCase())).filter((w) => w.length);
+    const wallets = [...new Set(withWallets.flat())];
+    let sum = 0n, src = 'chain', block = ledger ? ledger.block : null, supply = ledger && ledger.supply ? BigInt(ledger.supply) : null;
+    if (ledger && ledger.consistent && supply) {
+      for (const v of ledgerBalances(tok, wallets).values()) { try { const b = BigInt(v); if (b > 0n) sum += b; } catch {} }
+    } else {
+      if (wallets.length > 60) return null;                        // bounded: never turn one community into a wall of RPC calls
+      src = 'balanceOf'; block = null;
+      const vals = await mapLimit(wallets, 3, (w) => erc20Balance(tok, w));
+      if (vals.some((v) => v == null)) return null;                // a failed read must never read as a zero balance
+      for (const v of vals) sum += v;
+      if (!supply) supply = await totalSupply(tok).catch(() => null);
+    }
+    if (!supply || supply <= 0n) return null;
+    const pct = Number((sum * 1000000n) / supply) / 10000;
+    db.prepare('UPDATE communities SET held_pct=?, held_members=?, held_wallets=?, held_at=?, held_block=?, held_src=? WHERE id=?')
+      .run(pct, withWallets.length, wallets.length, now(), block, src, c.id);
+    return { pct, members: withWallets.length, wallets: wallets.length };
+  })();
+  _supplyInflight.set(c.id, job);
+  job.catch(() => {}).finally(() => _supplyInflight.delete(c.id));
+  return job;
+}
+function refreshSupplyForUser(userId) {                             // a member's wallets changed, or their membership did
+  try {
+    const rows = db.prepare('SELECT c.* FROM communities c JOIN community_members m ON m.community_id = c.id WHERE m.user_id=? AND c.demo=0').all(userId);
+    for (const c of rows) refreshCommunitySupply(c, { waitMs: 0 }).catch(() => {});
+  } catch {}
+}
+function communitySupplyView(c) {                                  // what everyone sees — the total, never a member
+  if (!c || c.demo) return null;
+  if (!c.held_at) return { shown: false, reason: 'pending', need: SUPPLY_MIN_MEMBERS, members: 0, wallets: 0, pct: null, at: null, block: null, source: null };
+  const shown = (c.held_members || 0) >= SUPPLY_MIN_MEMBERS;
+  return { shown, reason: shown ? null : 'few', need: SUPPLY_MIN_MEMBERS, members: c.held_members || 0, wallets: c.held_wallets || 0,
+           pct: shown && c.held_pct != null ? Number(Number(c.held_pct).toPrecision(2)) : null, at: c.held_at, block: c.held_block, source: c.held_src };
+}
 function communityCardView(c, me) {
   const b = commBrand(c), act = decayedActivity(c);
   return {
@@ -2573,6 +2658,8 @@ function communityCardView(c, me) {
     status: c.status, memberCount: c.member_count, qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count),
     // the sandbox has no token: its market fields are null and the company's stock quote rides in `stock`
     holders: c.demo ? null : c.c_holders, mcap: c.demo ? null : c.c_mc, price: c.demo ? null : c.c_price, priceChange: c.demo ? null : c.c_pc24, liq: c.demo ? null : c.c_liq,
+    holdersSource: c.demo ? null : (holderLedger(c.token_addr) ? 'chain' : 'explorer'),   // where the holder count came from
+    supply: communitySupplyView(c),                                                       // members' share of supply (aggregate only)
     stock: c.demo ? stockView() : null,
     level: levelForXp(c.xp), activity: Math.round(act * 10) / 10, activityTier: actTier(act),
     official: !!c.official, // the $Send / $GWC house communities — pinned first, always live
@@ -2821,7 +2908,11 @@ async function refreshCommunities() {
   // Holder counts aren't in the Dexscreener batch — refresh them from Blockscout so the grid's
   // "holders" figure stays live like the rest of the market data (bounded per cycle to be gentle).
   const holdersByToken = {};
-  for (const tok of tokens.slice(0, 24)) {
+  let explorerReads = 0;
+  for (const tok of tokens) {
+    const ledger = holderLedger(tok);                               // the chain's own count, when the ledger has been built
+    if (ledger && ledger.count != null) { holdersByToken[tok] = ledger.count; continue; }
+    if (explorerReads++ >= 24) continue;
     const meta = await jget(BLOCKSCOUT + '/api/v2/tokens/' + tok);
     if (meta) { const hc = meta.holders_count != null ? Number(meta.holders_count) : (meta.holders != null ? Number(meta.holders) : NaN); if (hc > 0) holdersByToken[tok] = hc; }
   }
@@ -4271,6 +4362,140 @@ async function blockTimestamp(bn) {
   return ts;
 }
 
+/* ===== On-chain holder ledger ==========================================================
+   The holder count for any token is read from the chain: every Transfer event the token has emitted, folded
+   into per-wallet balances (a mint is from the zero address, a burn is to it or to 0x…dead; neither is a
+   holder). GoPlus and the explorer DERIVE their counts from these same logs, so this removes a dependency
+   and a place where the number can drift — and it is what makes a community's share of supply computable
+   without a single extra call per wallet. A ledger is built once (one eth_getLogs over the whole history,
+   split only when the node refuses the range) and then kept current with one small read per refresh. */
+const LEDGER_FRESH_MS = 5 * 60 * 1000;          // a ledger older than this is brought up to date on the next read
+const LEDGER_MAX_CONCURRENT = 2;                // ledger builds running at once (each is a burst of RPC reads)
+const LEDGER_WAIT_MS = 8000;                    // how long a request path waits for a build before serving what it has
+const ZERO_ADDR = '0x0000000000000000000000000000000000000000', DEAD_ADDR = '0x000000000000000000000000000000000000dead';
+const _ledgerInflight = new Map();              // token -> promise
+let _ledgerRunning = 0;
+const _ledgerWaiting = [];                      // tokens queued behind the concurrency cap (dedup)
+function holderLedger(tok) {                    // the ledger's summary, from the DB — synchronous, no chain call
+  try {
+    const row = db.prepare('SELECT * FROM holder_index WHERE token_addr=?').get(String(tok || '').toLowerCase());
+    if (!row || row.status !== 'ok') return null;
+    let top = []; try { top = JSON.parse(row.top_json || '[]'); } catch {}
+    return { count: row.holders, block: row.last_block, at: row.updated_at, supply: row.supply, decimals: row.decimals, consistent: !!row.consistent, top, logs: row.logs, firstBlock: row.first_block };
+  } catch { return null; }
+}
+function ledgerHolderView(lg, pairAddr) {       // the ledger as a profile's `holders` block: pool, burn and zero address are not holders
+  if (!lg || lg.count == null) return null;
+  const non = new Set([ZERO_ADDR, DEAD_ADDR, String(pairAddr || '').toLowerCase()].filter(Boolean));
+  const real = (lg.top || []).filter((h) => h && h.address && !non.has(h.address) && h.pct != null);
+  return { count: lg.count, topHolderPct: real.length ? real[0].pct : null, top10Pct: real.length ? real.slice(0, 10).reduce((a, b) => a + b.pct, 0) : null,
+           top: real.slice(0, 10).map(({ address, pct }) => ({ address, pct })), readAt: lg.at, source: 'chain', block: lg.block };
+}
+function ledgerBalances(tok, wallets) {         // exact balances for a set of wallets, from the ledger (decimal strings)
+  const out = new Map();
+  try {
+    const q = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND wallet=?');
+    for (const w of wallets) { const r = q.get(tok, String(w || '').toLowerCase()); if (r) out.set(String(w).toLowerCase(), r.balance); }
+  } catch {}
+  return out;
+}
+async function _rpcPaced(fn, tries = 3) {       // the public node answers a burst with 429: back off and try again, a few times
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try { return await fn(); } catch (e) { last = e; if (!/429|rate|too many/i.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
+  }
+  throw last;
+}
+/* eth_getLogs for the ledger: a refusal (429) is backed off and retried on the SAME range — splitting on it would
+   turn one refused read into hundreds; the range is only split when the node says the answer is too large. */
+async function ledgerGetLogs(address, from, to, depth = 0) {
+  const hx = (n) => '0x' + n.toString(16);
+  try { return await _rpcPaced(() => rpc('eth_getLogs', [{ fromBlock: hx(from), toBlock: hx(to), address, topics: [TRANSFER_TOPIC] }])); }
+  catch (e) {
+    const msg = String((e && e.message) || '');
+    if (/429|rate|too many/i.test(msg) || to - from < 40000 || depth > 12) throw e;
+    const mid = Math.floor((from + to) / 2);
+    return (await ledgerGetLogs(address, from, mid, depth + 1)).concat(await ledgerGetLogs(address, mid + 1, to, depth + 1));
+  }
+}
+async function indexHolders(tokenAddr) {        // single-flight, incremental; resolves to the summary
+  const tok = String(tokenAddr || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(tok)) return null;
+  const flying = _ledgerInflight.get(tok); if (flying) return flying;
+  const job = (async () => {
+    // a slot: builds are bounded so a burst of scans cannot turn into a burst of full-history reads
+    while (_ledgerRunning >= LEDGER_MAX_CONCURRENT) await new Promise((r) => setTimeout(r, 200));
+    _ledgerRunning++;
+    try {
+      const row = db.prepare('SELECT last_block, logs, first_block FROM holder_index WHERE token_addr=?').get(tok);
+      const from = row && row.last_block ? row.last_block + 1 : 0;
+      const latest = parseInt(await _rpcPaced(() => rpc('eth_blockNumber', [])), 16);
+      if (!Number.isFinite(latest)) throw new Error('the chain did not answer');
+      let logs = [];
+      if (from <= latest) logs = await ledgerGetLogs(tok, from, latest);
+      if (!Array.isArray(logs)) throw new Error('the chain did not answer');
+      // fold the events: from −= v, to += v
+      const delta = new Map();
+      let firstBlock = row && row.first_block != null ? row.first_block : null;
+      for (const l of logs) {
+        if (!l || !Array.isArray(l.topics) || l.topics.length < 3) continue;
+        const f = '0x' + String(l.topics[1]).slice(26).toLowerCase(), t = '0x' + String(l.topics[2]).slice(26).toLowerCase();
+        let v; try { v = BigInt(!l.data || l.data === '0x' ? '0x0' : l.data); } catch { continue; }
+        if (firstBlock == null) firstBlock = parseInt(l.blockNumber, 16);
+        delta.set(f, (delta.get(f) || 0n) - v); delta.set(t, (delta.get(t) || 0n) + v);
+      }
+      const supply = await _rpcPaced(() => totalSupply(tok)).catch(() => null);       // paced: a refused read is retried, never recorded as "no supply"
+      const decimals = await _rpcPaced(() => tokenDecimals(tok)).catch(() => null);
+      const get = db.prepare('SELECT balance FROM holder_balances WHERE token_addr=? AND wallet=?');
+      const put = db.prepare('INSERT INTO holder_balances (token_addr, wallet, balance, positive) VALUES (?,?,?,?) ON CONFLICT(token_addr, wallet) DO UPDATE SET balance=excluded.balance, positive=excluded.positive');
+      db.exec('BEGIN');
+      try {
+        for (const [w, d] of delta) { if (d === 0n) continue; const cur = get.get(tok, w); const nb = (cur ? BigInt(cur.balance) : 0n) + d; put.run(tok, w, nb.toString(), nb > 0n ? 1 : 0); }
+        db.exec('COMMIT');
+      } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+      // the summary: who holds, how much of the supply, and whether the ledger adds up
+      const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
+      // the zero address goes negative by design (a mint is a transfer FROM it); any other negative means the token
+      // moves balances without emitting Transfer events, and the ledger cannot be trusted for it
+      const negative = db.prepare("SELECT COUNT(*) n FROM holder_balances WHERE token_addr=? AND substr(balance, 1, 1) = '-' AND wallet NOT IN (?, ?)").get(tok, ZERO_ADDR, DEAD_ADDR).n;
+      const holders = rows.filter((r) => r.wallet !== ZERO_ADDR && r.wallet !== DEAD_ADDR).map((r) => ({ wallet: r.wallet, bal: BigInt(r.balance) }));
+      holders.sort((a, b) => (b.bal > a.bal ? 1 : b.bal < a.bal ? -1 : 0));
+      const sup = supply != null && supply > 0n ? supply : null;
+      const pctOf = (b) => (sup ? Number((b * 1000000n) / sup) / 10000 : null);
+      const top = holders.slice(0, 25).map((h) => ({ address: h.wallet, pct: pctOf(h.bal) }));
+      db.prepare(`INSERT INTO holder_index (token_addr, last_block, first_block, holders, supply, decimals, logs, consistent, top_json, status, error, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,'ok',NULL,?)
+        ON CONFLICT(token_addr) DO UPDATE SET last_block=excluded.last_block, first_block=COALESCE(holder_index.first_block, excluded.first_block), holders=excluded.holders,
+          supply=COALESCE(excluded.supply, holder_index.supply), decimals=COALESCE(excluded.decimals, holder_index.decimals), logs=holder_index.logs + ?, consistent=excluded.consistent,
+          top_json=excluded.top_json, status='ok', error=NULL, updated_at=excluded.updated_at`)
+        .run(tok, latest, firstBlock, holders.length, sup ? sup.toString() : null, decimals, logs.length, negative ? 0 : 1, JSON.stringify(top), now(), logs.length);
+      return holderLedger(tok);
+    } catch (e) {
+      // a failed refresh keeps the last good ledger (status stays ok if it was) and records why
+      try { db.prepare(`INSERT INTO holder_index (token_addr, status, error, updated_at) VALUES (?,'error',?,?) ON CONFLICT(token_addr) DO UPDATE SET error=excluded.error, status=CASE WHEN holder_index.status='ok' THEN 'ok' ELSE 'error' END`).run(tok, String((e && e.message) || e).slice(0, 200), now()); } catch {}
+      throw e;
+    } finally { _ledgerRunning--; }
+  })();
+  _ledgerInflight.set(tok, job);
+  job.catch(() => {}).finally(() => _ledgerInflight.delete(tok));
+  return job;
+}
+/* What a request path calls: the ledger as it stands, refreshed when stale — waiting a bounded time for a
+   first build so a scan can show the chain's count, and never blocking a page on a slow node. */
+async function ensureLedger(tok, opts = {}) {
+  const cur = holderLedger(tok);
+  const stale = !cur || now() - cur.at > (opts.freshMs != null ? opts.freshMs : LEDGER_FRESH_MS);
+  if (!stale) return cur;
+  const p = indexHolders(tok).catch(() => null);
+  if (cur && !opts.wait) return cur;                                   // serve the last ledger, refresh behind it
+  const deadline = now() + (opts.waitMs != null ? opts.waitMs : LEDGER_WAIT_MS);
+  const until = (pr) => Promise.race([pr, new Promise((r) => setTimeout(() => r(null), Math.max(0, deadline - now())))]);
+  let v = await until(p);
+  // the build we joined may have been one that the node refused (a boot burst): one more try inside the same budget
+  if (!v && !holderLedger(tok) && deadline - now() > 1500) v = await until(indexHolders(tok).catch(() => null));
+  return v || holderLedger(tok) || cur;
+}
+
 let pairsRaw = [];          // [{pair, token0, token1, block}] newest last
 let pairsScanBlock = 0;
 let pairsCache = { pairs: [], updatedAt: 0, building: false, error: null };
@@ -5716,9 +5941,14 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
   const holdersVal = meta ? (meta.holders_count != null ? meta.holders_count : meta.holders) : null;
   // treat 0 as "not indexed yet" (unknown), not a real zero — brand-new tokens lag either index
   const gpCount = g ? gpNum(g.holder_count) : null;
-  const holdersAt = gp && gp.at ? gp.at : null;                 // when the holder figures were read (GoPlus caches them for GOPLUS_TTL)
-  const count = (gpCount != null && gpCount > 0) ? gpCount
+  /* The chain's own ledger first (holderLedger: every Transfer event folded into balances — see indexHolders);
+     GoPlus and the explorer are what we show until a token's ledger has been built. `source` says which. */
+  const ledger = holderLedger(t.token);
+  const holdersAt = ledger ? ledger.at : (gp && gp.at ? gp.at : null);   // when the holder figures were read
+  const count = (ledger && ledger.count != null) ? ledger.count
+    : (gpCount != null && gpCount > 0) ? gpCount
     : (holdersVal != null && Number(holdersVal) > 0 ? Number(holdersVal) : null);
+  const holdersSource = (ledger && ledger.count != null) ? 'chain' : (gpCount != null && gpCount > 0) ? 'goplus' : (holdersVal != null && Number(holdersVal) > 0) ? 'explorer' : null;
   /* NOT A HOLDER: the pool itself, the burn address, and the zero address. Blockscout returns them in the
      holders list like anything else, and counting them made "top holder owns 78% of supply" the normal
      reading of a HEALTHY token — the liquidity pool is usually the largest single balance, and a token
@@ -5738,7 +5968,11 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
      answer us. The same non-holder filter applies: a pool, a burn address and the zero address are not
      people, and counting them made a healthy token read as one whale. */
   const gpHolders = (g && Array.isArray(g.holders)) ? g.holders : null;
-  if (gpHolders) {
+  const lv = ledger && ledger.supply ? ledgerHolderView(ledger, t.pair) : null;
+  if (lv && lv.top.length) {
+    // the ledger's largest balances as a share of totalSupply(); the same non-holder filter (pool, burn, zero)
+    topHolderPct = lv.topHolderPct; top10Pct = lv.top10Pct; topHolders = lv.top;
+  } else if (gpHolders) {
     const real = gpHolders
       .map((h) => ({ address: String(h.address || '').toLowerCase(), pct: gpNum(h.percent) != null ? gpNum(h.percent) * 100 : null, locked: gpFlag(h.is_locked) === true, contract: gpFlag(h.is_contract) === true }))
       .filter((h) => h.address && !NON_HOLDERS.has(h.address) && h.pct != null);
@@ -5794,7 +6028,7 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
       h24: { buys: num(txns.h24 && txns.h24.buys), sells: num(txns.h24 && txns.h24.sells) },
     },
     priceChange: { h1: numN(pc.h1), h6: numN(pc.h6), h24: numN(pc.h24) },
-    holders: { count, topHolderPct, top10Pct, top: topHolders, readAt: holdersAt },
+    holders: { count, topHolderPct, top10Pct, top: topHolders, readAt: holdersAt, source: holdersSource, block: ledger ? ledger.block : null },
     indexed: !!dex,
     brand: brandFromDex(dex), // Dexscreener logo/banner/socials/enhanced+boosted status (dextools filled later if configured)
     links: { dex: 'https://dexscreener.com/robinhood/' + t.pair, explorer: BLOCKSCOUT + '/token/' + t.token },
@@ -6024,6 +6258,8 @@ async function refreshPairs() {
 const wlEnrichCache = new Map(); // pairAddr(lc) -> {t, pair} — shared across all users watching the same token
 async function enrichOne(item, opts = {}) {
   const t = { token: item.token_addr, pair: item.pair_addr, token0: item.token0, token1: item.token1, quoteSymbol: item.quote_symbol || '?', block: 0 };
+  // the on-chain holder ledger: built or brought up to date behind this read, so the next read shows the chain's count
+  try { ensureLedger(t.token).catch(() => {}); } catch {}
   const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr, gp] = await Promise.all([
     jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
     jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
@@ -6327,6 +6563,8 @@ async function refreshTokenCache() {
                                  h24: { buys: n(pr.txns.h24 && pr.txns.h24.buys), sells: n(pr.txns.h24 && pr.txns.h24.sells) } };
           if (pr.priceChange) p.priceChange = { h1: pr.priceChange.h1 != null ? Number(pr.priceChange.h1) : null, h6: pr.priceChange.h6 != null ? Number(pr.priceChange.h6) : null, h24: pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null };
           p.priceStale = false; p.priceAsOf = now();
+          const lv = ledgerHolderView(holderLedger(tok), p.pair && p.pair.address);   // the chain's holder count rides along with the market patch
+          if (lv) p.holders = Object.assign({}, p.holders || {}, lv);
           tokenCachePut(tok, { pair: p });
           refreshed++;
         } catch {}
@@ -9968,6 +10206,7 @@ const server = http.createServer(async (req, res) => {
         forgetHoldings(me.id);
         balCache.delete(me.id);
         checkOg(me.id).catch(() => {});
+        refreshSupplyForUser(me.id); // their communities' share of supply no longer includes this wallet
         return send(res, 200, { ok: true, wallets: walletAddresses(me.id), walletList: walletList(me.id), ogRevoked: revokeOg });
       }
       // Password as the second factor for WALLET sign-ins (wallet-first users who added an email + password)
@@ -10154,6 +10393,7 @@ const server = http.createServer(async (req, res) => {
           insertIdentity(me.id, 'wallet', address);
           notify(me.id, '🔗', 'A new wallet was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
           forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
+          refreshSupplyForUser(me.id); // their communities' share of supply now includes this wallet
           // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
           // while read-only — so an empty throwaway keypair (or a flagged account) can't farm the bonus.
           let sendBal = 0, gwcHeld = false;
@@ -11370,10 +11610,12 @@ const server = http.createServer(async (req, res) => {
           // a pool anyone scanned before is already known by the token it prices — no chain call to resolve it again
           const known = scanByPool(addr);
           if (known && known.token_addr !== addr) {
+            await ensureLedger(known.token_addr, { wait: true }).catch(() => null);   // the chain's holder count, bounded wait
             const rk = await scanRead(known.token_addr);
             if (rk.pair) return hit('pool', addr, known.token_addr, rk, true);   // only a verified pool is ever stored
             if (rk.unavailable) return send(res, 200, { unavailable: true, reason: rk.reason || null, message: 'That pool is known, but the price feed and the chain could not be read just now — try again in a moment.' });
           }
+          await ensureLedger(addr, { wait: true }).catch(() => null);                 // a token's ledger (a pool or a wallet yields an empty one, cheaply)
           const r = await scanRead(addr);
           if (r.pair) return hit('token', null, addr, r);
           if (r.unavailable) return send(res, 200, { unavailable: true, reason: r.reason || null, message: r.busy ? 'Lots of scans are running right now — try again in a moment.' : 'We couldn’t reach the price feed or the chain just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
@@ -11382,6 +11624,7 @@ const server = http.createServer(async (req, res) => {
           let pt = null; try { pt = await pairTokens(addr); } catch {}
           if (pt && pt.token0 && pt.token1) {
             const base = QUOTE_SET.has(pt.token0) ? pt.token1 : pt.token0;
+            await ensureLedger(base, { wait: true }).catch(() => null);
             const r2 = await scanRead(base);
             if (r2.pair) return hit('pool', addr, base, r2, await poolVerified(addr, pt, r2.pair));
             if (r2.unavailable) return send(res, 200, { unavailable: true, reason: r2.reason || null, message: 'That looks like a pool, but the chain could not be read just now — try again in a moment.' });
@@ -11818,7 +12061,11 @@ const server = http.createServer(async (req, res) => {
           const cid = Number(m[1]), sub = m[2];
           const c = db.prepare('SELECT * FROM communities WHERE id=?').get(cid);
           if (!c) return bad(res, 'community not found', 404);
-          if (!sub && req.method === 'GET') return send(res, 200, { community: communityDetailView(c, me, clientIp(req)) });
+          if (!sub && req.method === 'GET') {
+            // demand-driven, like the market cache: a page being looked at keeps its members' share of supply fresh
+            if (!c.demo && (!c.held_at || now() - c.held_at > SUPPLY_FRESH_MS)) refreshCommunitySupply(c, { waitMs: 0 }).catch(() => {});
+            return send(res, 200, { community: communityDetailView(c, me, clientIp(req)) });
+          }
           // PUBLIC: the full member roster, ranked by each member's community level (conviction earned by participating).
           if (sub === 'members' && req.method === 'GET') {
             const rows = db.prepare(`SELECT cm.user_id, cm.conviction_xp, cm.qualified, cm.joined_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier, u.accent
@@ -11847,6 +12094,7 @@ const server = http.createServer(async (req, res) => {
             }
             const j = await joinCommunity(me, cid, clientIp(req), holds);
             if (j.error) return bad(res, j.error === 'not found' ? 'community not found' : 'could not join', j.error === 'not found' ? 404 : 500);
+            if (!c.demo) refreshCommunitySupply(c, { waitMs: 0 }).catch(() => {});   // the members' share moves with the membership
             if (j.alreadyMember) return send(res, 200, { joined: true, alreadyMember: true, qualified: j.qualified !== false, reason: j.reason || null, community: communityDetailView(c, me, clientIp(req)) }); // a member who holds but can't re-qualify gets the honest reason, not "Opted in!"
             return send(res, 200, { ...j, community: communityDetailView(db.prepare('SELECT * FROM communities WHERE id=?').get(cid), me, clientIp(req)) });
           }
@@ -11862,6 +12110,7 @@ const server = http.createServer(async (req, res) => {
               if (row.qualified && c.status === 'live' && !c.demo) db.prepare('UPDATE users SET live_comm_count = MAX(live_comm_count-1,0) WHERE id=?').run(me.id);
               db.exec('COMMIT');
             } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not leave', 500); }
+            if (!c.demo) refreshCommunitySupply(c, { waitMs: 0 }).catch(() => {});
             return send(res, 200, { left: true, community: communityDetailView(db.prepare('SELECT * FROM communities WHERE id=?').get(cid), me, clientIp(req)) });
           }
           if (sub === 'posts' && req.method === 'GET') {
@@ -12401,6 +12650,27 @@ compTimer.unref();
 
 // Re-verify qualified community members still hold the community's token; revoke the 10× on a sell / recycled-bag move.
 const commHolderTimer = setInterval(() => { sweepCommunityHolders().catch(() => {}); }, 10 * 60 * 1000);
+/* The holder-ledger sweep: community tokens first (the members' share of supply rides on them), then the tokens
+   people have been reading. Sequential, so the public node sees a trickle, never a burst; a first build is one
+   eth_getLogs over the token's whole history, every later pass one small read. */
+let ledgerSweeping = false;
+async function ledgerSweep() {
+  if (ledgerSweeping) return; ledgerSweeping = true;
+  try {
+    const comms = db.prepare('SELECT * FROM communities WHERE demo = 0 ORDER BY COALESCE(held_at, 0) ASC LIMIT 6').all();
+    for (const c of comms) { if (c.held_at && now() - c.held_at < SUPPLY_FRESH_MS) continue; try { await refreshCommunitySupply(c); } catch {} }
+    const recent = db.prepare('SELECT token_addr FROM token_cache WHERE found = 1 AND last_read_at > ? ORDER BY last_read_at DESC LIMIT 40').all(now() - 864e5);
+    let done = 0;
+    for (const r of recent) {
+      const l = holderLedger(r.token_addr);
+      if (l && now() - l.at < LEDGER_FRESH_MS) continue;
+      try { await indexHolders(r.token_addr); } catch {}
+      if (++done >= 6) break;
+    }
+  } finally { ledgerSweeping = false; }
+}
+const ledgerTimer = setInterval(() => { ledgerSweep().catch(() => {}); }, 60 * 1000);
+const ledgerFirst = setTimeout(() => { ledgerSweep().catch(() => {}); }, 15 * 1000);   // a first pass shortly after boot
 // Close proposals whose round has ended, even if nobody visits that community. Cheap: idx_prop_due
 // is a PARTIAL index over rows that still have a deadline, so a settled proposal costs nothing.
 const propTimer = setInterval(() => { try { resolveDueProposals(null); } catch {} }, 60 * 1000);
@@ -12424,6 +12694,7 @@ const sniperFeedTimer = setInterval(() => {
 sniperFeedTimer.unref();
 propTimer.unref();
 commHolderTimer.unref();
+ledgerTimer.unref(); ledgerFirst.unref();
 
 // Reap upload-then-abandon media (never attached to a post) so they don't leak disk + quota.
 

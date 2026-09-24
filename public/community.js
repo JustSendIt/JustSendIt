@@ -26,6 +26,21 @@
       '<div class="comm-xp-sub">' + (span ? into.toLocaleString('en-US') + ' / ' + span.toLocaleString('en-US') + ' XP to Lv ' + (lvl + 1) : 'max') + '</div></div>';
   }
 
+  /* Supply control: the share of the token in members' linked (read-only) wallets, from the chain's own ledger.
+     Only the total is ever shown — never a member's balance — and only once three members' wallets are in it. */
+  const ago = (t) => { const s = Math.max(0, (Date.now() - Number(t || 0)) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.round(s / 60) + 'm ago'; if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago'; };
+  const fmtPct = (v) => (v == null ? '—' : (v >= 10 ? Math.round(v) : v >= 1 ? Number(v).toFixed(1) : Number(v).toPrecision(2)) + '%');
+  function supplyChip(sp) {
+    if (!sp) return '';
+    return '<span title="Share of the supply in members’ linked wallets">🔒 <b>' + (sp.shown ? esc(fmtPct(sp.pct)) : '—') + '</b> of supply held by members</span>';
+  }
+  function supplyNote(c) {
+    const sp = c.supply; if (!sp) return '';
+    if (sp.shown) return '<p class="comm-stock-note comm-supply-note">🔒 <b>Members’ wallets hold ' + esc(fmtPct(sp.pct)) + ' of $' + esc(c.symbol) + '’s supply</b> — ' + esc(String(sp.members)) + ' members with a read-only wallet linked (' + esc(String(sp.wallets)) + ' wallet' + (sp.wallets === 1 ? '' : 's') + '), ' +
+      (sp.source === 'chain' ? 'summed from the chain’s own transfer ledger' + (sp.block ? ' as of block ' + esc(String(sp.block)) : '') : 'read wallet by wallet from the chain') + ' · updated ' + esc(ago(sp.at)) + '. Only the total is ever shown, never anyone’s balance.</p>';
+    if (sp.reason === 'few') return '<p class="comm-stock-note comm-supply-note">🔒 <b>Supply held by members</b> is shown once <b>' + esc(String(sp.need)) + '</b> members have linked a read-only wallet (' + esc(String(sp.members)) + ' so far) — so no one’s balance can be read off the figure.</p>';
+    return '<p class="comm-stock-note comm-supply-note">🔒 <b>Supply held by members</b> — being read from the chain…</p>';
+  }
   function renderHero(c) {
     if (!c) return; // a noop/degenerate response must never blow away the rendered hero
     C = c;
@@ -55,10 +70,11 @@
         '</p>'
       : '<div class="comm-hero-metrics">' +
       '<span>👥 <b>' + fmtNum(c.memberCount) + '</b> members</span>' +
-      '<span>🪙 <b>' + fmtNum(c.holders) + '</b> holders</span>' +
+      '<span title="' + (c.holdersSource === 'chain' ? 'Wallets with a balance, from the chain’s own transfer ledger' : 'Holder count from the block explorer') + '">🪙 <b>' + fmtNum(c.holders) + '</b> holders' + (c.holdersSource === 'chain' ? ' <small class="comm-src">on-chain</small>' : '') + '</span>' +
       '<span>💰 <b>' + fmtUsd(c.mcap) + '</b> MC</span>' +
       (chgChip(c.priceChange) ? '<span>' + chgChip(c.priceChange) + '</span>' : '') +
-    '</div>';
+      supplyChip(c.supply) +
+    '</div>' + supplyNote(c);
     // status / go-live panel
     let panel;
     if (live) {
@@ -453,4 +469,6 @@
   }
   load();
   document.addEventListener('auth:change', load); // re-render on login (opt-in state / composer)
+  // the hero's figures (members, holders, the members' share of supply) stay live while the tab is showing
+  setInterval(() => { if (!document.hidden && C) load(); }, 60000);
 })();

@@ -1001,6 +1001,8 @@
 
     // D. Holders — count + concentration + top-10
     const holderTxt = h.count != null ? (npNum(h.count) + ' holders') : 'not indexed yet';
+    // where the count came from: the chain's own transfer ledger (wallets with a balance, as of a block) or an indexer
+    const holderSrc = h.count == null ? '' : (h.source === 'chain' ? ' <small class="np-src np-src-chain" title="Counted from every Transfer event the token has emitted, read from the chain itself">on-chain' + (h.block ? ' · block ' + esc(String(h.block)) : '') + '</small>' : (h.source ? ' <small class="np-src" title="From an indexer (' + esc(h.source) + '); the chain’s own ledger is being built">' + esc(h.source) + '</small>' : ''));
     let conc = '';
     if (h.topHolderPct != null) {
       conc = '<div class="np-conc"><div class="np-conc-bar"><span class="np-conc-top" style="width:' + Math.min(100, h.topHolderPct).toFixed(1) + '%"></span>' +
@@ -1013,7 +1015,7 @@
         '<div class="np-holder"><span class="np-hrank">#' + (i + 1) + '</span><code>' + esc(shortAddr(x.address)) + '</code>' + copyBtn(x.address, 'address of holder #' + (i + 1) + ' ' + shortAddr(x.address)) +
         '<span class="np-hpct">' + (x.pct != null ? pctPlain(x.pct) : '—') + '</span></div>').join('') + '</div>';
     }
-    const holdersInner = '<p class="np-supply"><b>' + esc(holderTxt) + '</b></p>' + conc + top10 +
+    const holdersInner = '<p class="np-supply"><b>' + esc(holderTxt) + '</b>' + holderSrc + '</p>' + conc + top10 +
       (h.count == null ? '<p class="np-why-clean">Holder data lags for brand-new tokens — check back in a bit.</p>' : '');
 
     // E. Contract — the copy hub

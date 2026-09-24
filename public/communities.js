@@ -5,6 +5,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   function fmtUsd(n) { if (n == null || isNaN(n)) return '—'; const a = Math.abs(n); if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'k'; if (a >= 1) return '$' + n.toFixed(2); if (a > 0) return '$' + n.toPrecision(2); return '$0'; }
   function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('en-US'); }
+  const fmtPct = (v) => (v == null ? '—' : (v >= 10 ? Math.round(v) : v >= 1 ? Number(v).toFixed(1) : Number(v).toPrecision(2)) + '%');
   function chgChip(v) { if (v == null || isNaN(v)) return '<span class="price-chip">—</span>'; const up = v >= 0; return '<span class="price-chip ' + (up ? 'up' : 'down') + '">' + (up ? '▲ +' : '▼ ') + Math.abs(v).toFixed(1) + '%</span>'; }
 
   const grid = document.getElementById('comm-grid');
@@ -58,7 +59,8 @@
             '</span>'
             : '<span class="comm-card-metrics">' +
             '<span title="Members">👥 <b>' + fmtNum(c.memberCount) + '</b><span class="sr-only"> members</span></span>' +
-            '<span title="Holders">🪙 <b>' + fmtNum(c.holders) + '</b><span class="sr-only"> holders</span></span>' +
+            '<span title="' + (c.holdersSource === 'chain' ? 'Holders — from the chain’s own transfer ledger' : 'Holders — from the block explorer') + '">🪙 <b>' + fmtNum(c.holders) + '</b><span class="sr-only"> holders</span></span>' +
+            '<span title="' + (c.supply && c.supply.shown ? 'Share of the supply in members’ linked wallets (' + c.supply.members + ' members, from the chain’s ledger)' : 'Share of supply held by members — shown once ' + ((c.supply && c.supply.need) || 3) + ' members have linked a read-only wallet') + '">🔒 <b>' + (c.supply && c.supply.shown ? esc(fmtPct(c.supply.pct)) : '—') + '</b><span class="sr-only"> of supply held by members</span></span>' +
             '<span title="Market cap">💰 <b>' + fmtUsd(c.mcap) + '</b><span class="sr-only"> market cap</span></span>' +
             '<span title="Price change (24h)">' + chgChip(c.priceChange) + '<span class="sr-only"> price change, 24 hours</span></span>' +
           '</span>') +

@@ -3981,6 +3981,10 @@ pre.dk-pre { overflow-x: auto; padding: 0.75rem 0.9rem; border-radius: var(--r-2
 /* ===== 21. The sandbox community — branded for a listed company, not a token ===== */
 .comm-stock-note { margin: 0 0 0.9rem; font-size: 0.8rem; line-height: 1.55; color: var(--text-dim); padding: 0.55rem 0.7rem; border-radius: var(--r-2); background: rgba(159,224,255,0.06); border: 1px solid rgba(159,224,255,0.28); }
 .comm-stock-note b { color: var(--text); }
+.comm-supply-note { background: color-mix(in srgb, var(--green) 7%, transparent); border-color: color-mix(in srgb, var(--green) 32%, transparent); }
+.np-src { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-mute); margin-left: 0.35rem; }
+.np-src-chain { color: var(--green-bright); }
+.comm-src { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--green-bright); margin-left: 0.2rem; }
 .comm-pill-sandbox { background: rgba(159,224,255,0.12); color: var(--diamond); border-color: rgba(159,224,255,0.4); }
 .comm-card-stockline { display: block; font-size: 0.72rem; line-height: 1.45; color: var(--text-dim); margin: 0.35rem 0 0.2rem; }
 .comm-card-stockline b { color: var(--gold); }
