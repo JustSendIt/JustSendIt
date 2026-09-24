@@ -2652,13 +2652,14 @@ function communitySupplyView(c) {                                  // what every
 }
 function communityCardView(c, me) {
   const b = commBrand(c), act = decayedActivity(c);
+  const lg = c.demo ? null : holderLedger(c.token_addr);   // the chain's own count the moment a ledger exists — not the grid cache's last explorer read
   return {
     id: c.id, token: c.token_addr, pair: c.pair_addr, symbol: c.symbol, name: c.name,
     image: b.imageUrl || null, banner: b.header || null,
     status: c.status, memberCount: c.member_count, qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count),
     // the sandbox has no token: its market fields are null and the company's stock quote rides in `stock`
-    holders: c.demo ? null : c.c_holders, mcap: c.demo ? null : c.c_mc, price: c.demo ? null : c.c_price, priceChange: c.demo ? null : c.c_pc24, liq: c.demo ? null : c.c_liq,
-    holdersSource: c.demo ? null : (holderLedger(c.token_addr) ? 'chain' : 'explorer'),   // where the holder count came from
+    holders: c.demo ? null : (lg && lg.count != null ? lg.count : c.c_holders), mcap: c.demo ? null : c.c_mc, price: c.demo ? null : c.c_price, priceChange: c.demo ? null : c.c_pc24, liq: c.demo ? null : c.c_liq,
+    holdersSource: c.demo ? null : (lg && lg.count != null ? 'chain' : 'explorer'),   // where the holder count came from
     supply: communitySupplyView(c),                                                       // members' share of supply (aggregate only)
     stock: c.demo ? stockView() : null,
     level: levelForXp(c.xp), activity: Math.round(act * 10) / 10, activityTier: actTier(act),
