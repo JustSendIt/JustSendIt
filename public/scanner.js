@@ -7,7 +7,10 @@
  *                        for a member, and is parked while the other tab shows.
  *
  * URL: ?scan=0x… runs a scan on load and is kept in the address bar so a scan can be shared; ?tab=new
- * opens the radar tab. Recent scans are remembered in this browser only (localStorage), never sent.
+ * opens the radar tab. "Recent scans on this device" is localStorage, never sent; "Scanned by the
+ * community" is the server's scan store (/api/scan/recent — the token, when, how many times; never who).
+ * Every scan re-reads the chain and rewrites the stored snapshot; when the upstreams are down the server
+ * answers with the last snapshot and says so (scan.stale + scan.readAt), and the page repeats it plainly.
  * CSP-safe: addEventListener only. */
 (function () {
   'use strict';
@@ -20,6 +23,12 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortAddr = (a) => a.slice(0, 6) + '…' + a.slice(-4);
   const signedIn = () => !!(window.AUTH && AUTH.user);
+  let clockOffset = 0;   // server clock − this browser's clock, from the last answer that carried `now`; a skewed device clock must not age a fresh read
+  const ago = (t) => { const s = Math.max(0, (Date.now() + clockOffset - Number(t || 0)) / 1000); if (s < 5) return 'just now'; if (s < 60) return Math.round(s) + 's ago'; if (s < 3600) return Math.round(s / 60) + 'm ago'; if (s < 86400) return Math.round(s / 3600) + 'h ago'; return Math.round(s / 86400) + 'd ago'; };
+  // a relative time that keeps counting: "read 3s ago" is repainted every 15 s, not left to go quietly false
+  const agoEl = (t) => '<time class="sc-ago" data-t="' + Number(t || 0) + '" datetime="' + esc(new Date(Number(t || 0)).toISOString()) + '">' + esc(ago(t)) + '</time>';
+  setInterval(() => { document.querySelectorAll('.sc-ago[data-t]').forEach((el) => { const v = ago(el.getAttribute('data-t')); if (el.textContent !== v) el.textContent = v; }); }, 15000);
+  const clock = (t) => { try { return new Date(Number(t)).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
   let current = 'scan', seq = 0;
 
   /* ---------- tabs ---------- */
@@ -74,6 +83,20 @@
   }
   paintRecent();
 
+  /* ---------- scanned by the community (kept on the server: the token, the time, the count — never who) ---------- */
+  const commBox = $('sc-community'), commList = $('sc-community-list');
+  async function paintCommunity() {
+    if (!commBox || !commList) return;
+    try {
+      const r = await fetch('/api/scan/recent', { credentials: 'same-origin' });
+      const j = await r.json().catch(() => ({}));
+      const list = (r.ok && Array.isArray(j.scans)) ? j.scans.filter((x) => x && ADDR.test(x.token || '') && x.symbol) : [];
+      commBox.hidden = !list.length;
+      commList.innerHTML = list.map((x) => '<button class="np-chip" type="button" data-scan="' + esc(x.token) + '" data-tip="' + esc((x.name || x.symbol) + ' — scanned ' + x.count + (x.count === 1 ? ' time' : ' times') + ', last ' + ago(x.lastAt) + '; pulls up the latest read') + '">$' + esc(x.symbol) + '<span class="sc-chip-meta">' + (x.kind === 'pool' ? '🏊 ' : '') + esc(ago(x.lastAt)) + (x.count > 1 ? ' · ×' + Number(x.count) : '') + '</span></button>').join(' ');
+    } catch { /* the strip is optional — a failed read leaves it hidden */ }
+  }
+  paintCommunity();
+
   /* ---------- the scan ---------- */
   function setStatus(text, kind) {
     if (!status) return;
@@ -96,13 +119,25 @@
       if (r.ok && j.pair) {
         const p = j.pair, tok = (p.token && p.token.address) || addr.toLowerCase();
         const sym = (p.token && p.token.symbol) || '';
+        const sc = Object.assign({ readAt: Date.now(), stale: false, kept: false }, j.scan || {});
+        if (typeof sc.now === 'number' && Math.abs(sc.now - Date.now()) > 2000) clockOffset = sc.now - Date.now(); else if (typeof sc.now === 'number') clockOffset = 0;
+        // the holder figures are read on their own cadence (GoPlus caches them for minutes): say so when they are older than the scan
+        const hAt = p.holders && p.holders.readAt;
+        const holdersNote = (hAt && sc.readAt - hAt > 60000) ? '<span class="sc-hit-note">👥 Holder figures as of ' + agoEl(hAt) + ' — the price feed and the pool were read ' + agoEl(sc.readAt) + '.</span>' : '';
         if (window.tokenCommunityPrime && Object.prototype.hasOwnProperty.call(j, 'community')) tokenCommunityPrime(tok, j.community);
         const comm = window.tokenCommunitySlot ? tokenCommunitySlot(tok, sym, 'panel') : '';
         const head =
           '<div class="sc-hit">' +
-            '<p class="sc-hit-k">' + (j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> prices' : '🪙 Token') + '</p>' +
+            '<p class="sc-hit-k">' + (j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> ' + (j.poolVerified === true ? 'prices' : 'says it prices') : '🪙 Token') + '</p>' +
             '<h2 class="sc-hit-h">' + esc((p.token && p.token.name) || 'Token') + (sym ? ' <span class="hl">$' + esc(sym) + '</span>' : '') + '</h2>' +
-            '<p class="sc-hit-a"><code>' + esc(tok) + '</code> · 🏹 Robinhood Chain · read just now</p>' +
+            '<p class="sc-hit-a"><code>' + esc(tok) + '</code> · 🏹 Robinhood Chain · ' + (sc.stale ? 'last read ' : 'read ') + agoEl(sc.readAt) + '</p>' +
+            '<p class="sc-hit-s">🔁 ' + (!sc.kept ? 'This scan could not be kept just now — nothing was stored for others.'
+                                          : (sc.count > 1 ? 'Scanned ' + Number(sc.count) + ' times by the community · first ' + agoEl(sc.firstAt) : 'First scan of this address on record — it is kept now, so it pulls up for everyone')) +
+              holdersNote +
+              (sc.stale ? '<span class="sc-stale">⏳ ' + (sc.busy ? 'Lots of scans are running right now' : 'The price feed and the chain could not be reached just now') + ' — this is the last snapshot, read ' + agoEl(sc.readAt) + ' (' + esc(clock(sc.readAt)) + '). Nothing on it is live. Scan again in a moment.</span>' : '') +
+              // any contract can answer token0()/token1(); only the factory or the price feed can confirm it is really this token's pool
+              (j.kind === 'pool' && j.poolVerified !== true ? '<span class="sc-stale">⚠️ This address answers like a pool of ' + (sym ? '$' + esc(sym) : 'this token') + ', but ' + (j.poolVerified === false ? 'neither the chain’s main factory nor the price feed knows it as one — treat the pool itself as unverified. ' : 'that could not be confirmed with the factory just now. ') + 'The profile below is the token’s, not this address’s.</span>' : '') +
+            '</p>' +
           '</div>';
         const detail = window.NPCard ? NPCard.detailHTML(p, { sections: { why: true, chart: true, score: true, market: true, activity: true, holders: true, contract: true } }) : '<p class="tm-msg">Full detail isn’t available here.</p>';
         result.innerHTML = head + detail;
@@ -113,8 +148,9 @@
         if (window.decorateTokenCommunities) decorateTokenCommunities(result);
         // the contract section starts open here, so its lazy read is kicked off rather than waiting for a toggle
         const c = result.querySelector('.np-contract'); if (c && window.NPCard && NPCard.loadContract) NPCard.loadContract(c);
-        setStatus('Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + '.', 'ok');
+        setStatus(sc.stale ? 'Showing the last snapshot of ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + ', not live.' : 'Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + '.', sc.stale ? 'busy' : 'ok');
         remember(tok, sym);
+        paintCommunity();
         const h = result.querySelector('.sc-hit-h'); if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: false }); } catch {} }
       } else if (!r.ok || (j && j.unavailable)) {
         // "we could not check" is never dressed up as a fact about the address

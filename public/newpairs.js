@@ -833,7 +833,8 @@
      of these, and a dozen charts at one second each is a self-inflicted rate limit. */
   function chartHTML(p) {
     if (!p.indexed || !p.pair || !p.pair.address) {
-      return '<p class="np-why-clean">📈 No chart yet — this pair has not traded, so there is nothing to draw.</p>';
+      // "not indexed" is a fact about the price feed, not about the token: a pool can be trading and still be unlisted
+      return '<p class="np-why-clean">📈 No chart — the price feed does not index this pair, so there is no price history to draw. That says nothing about whether it trades.</p>';
     }
     // Our own chart, drawn from this pair's Swap events. No third-party iframe: same underlying data
     // every aggregator uses, minus the rate limit, the tracking surface and the extra hop.
@@ -996,7 +997,7 @@
     const txrow = (lbl, o) => '<tr><td>' + lbl + '</td><td class="np-tx-buy">' + npNum(o.buys) + '</td><td class="np-tx-sell">' + npNum(o.sells) + '</td></tr>';
     const txtable = '<div class="np-txwrap"><table class="np-txtable"><thead><tr><th>Window</th><th>Buys</th><th>Sells</th></tr></thead><tbody>' +
       txrow('1h', p.txns.h1) + txrow('6h', p.txns.h6) + txrow('24h', p.txns.h24) + '</tbody></table></div>';
-    const activityInner = (flow || '<p class="np-why-clean">No trades recorded yet.</p>') + txtable;
+    const activityInner = (flow || '<p class="np-why-clean">' + (p.indexed ? 'No trades recorded in the last 24 hours.' : 'No trade counts — the price feed does not index this pair, so buys and sells are not counted here.') + '</p>') + (p.indexed ? txtable : '');
 
     // D. Holders — count + concentration + top-10
     const holderTxt = h.count != null ? (npNum(h.count) + ' holders') : 'not indexed yet';

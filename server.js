@@ -532,9 +532,28 @@ CREATE TABLE IF NOT EXISTS token_cache (
 );
 CREATE INDEX IF NOT EXISTS idx_token_cache_read ON token_cache(last_read_at);
 CREATE INDEX IF NOT EXISTS idx_token_cache_fresh ON token_cache(found, updated_at);
+-- The Scanner's own store: every address anyone scans is kept here, keyed by the token it resolved to, with the last
+-- full profile read for it. A scan always re-reads the chain (see SCAN_FRESH_MS) and rewrites the snapshot, so the
+-- row is as fresh as the latest scan; when the upstreams are down the snapshot is served, labelled with read_at.
+-- Nothing about WHO scanned is stored — no user id, no IP — so the recent list can be public.
+CREATE TABLE IF NOT EXISTS scans (
+  token_addr   TEXT PRIMARY KEY,                       -- lowercased; a pool scan is recorded under the token it prices
+  pool_addr    TEXT,                                   -- the pool address when the last scan was of the pool itself
+  kind         TEXT NOT NULL DEFAULT 'token',          -- what was pasted last time: 'token' | 'pool'
+  symbol       TEXT,
+  name         TEXT,
+  pair_json    TEXT,                                   -- the last full profile read (what NPCard renders)
+  first_at     INTEGER NOT NULL,                       -- first time anyone scanned it
+  last_at      INTEGER NOT NULL,                       -- last time anyone scanned it
+  read_at      INTEGER NOT NULL,                       -- when pair_json was read from the chain / price feed
+  count        INTEGER NOT NULL DEFAULT 1              -- how many scans, by everyone
+);
+CREATE INDEX IF NOT EXISTS idx_scans_last ON scans(last_at);
+CREATE INDEX IF NOT EXISTS idx_scans_pool ON scans(pool_addr);
 `);
 // additive migrations (SQLite has no ADD COLUMN IF NOT EXISTS)
 for (const col of [
+  "ALTER TABLE token_cache ADD COLUMN checked_at INTEGER NOT NULL DEFAULT 0",   // last re-check that brought no new data (a transient not-found); updated_at is when the DATA was read
   "ALTER TABLE users ADD COLUMN accent TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN wall_bg TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE users ADD COLUMN avatar_img TEXT",
@@ -5641,6 +5660,29 @@ async function tokenDecimals(token) {                         // decimals() 0x31
   if (!r || r === '0x') return null;
   try { const d = Number(BigInt(r)); if (Number.isFinite(d) && d >= 0 && d <= 36) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(k, d); } return d; } catch { return null; }
 }
+/* name() 0x06fdde03 / symbol() 0x95d89b41 — read from the chain when neither the explorer nor the price feed
+   names a token (the explorer sits behind a bot challenge at times; a token the feed has dropped has no listing).
+   ABI string (offset, length, bytes) or the old bytes32 form; anything unreadable is null, never invented. */
+const _tokenNameCache = new Map();
+function abiText(r) {
+  if (!r || r === '0x' || r.length < 66) return null;
+  try {
+    const hex = r.slice(2);
+    let bytes;
+    if (hex.length === 64) bytes = Buffer.from(hex, 'hex');                                          // bytes32
+    else { const off = Number(BigInt('0x' + hex.slice(0, 64))) * 2, len = Number(BigInt('0x' + hex.slice(off, off + 64))) * 2; bytes = Buffer.from(hex.slice(off + 64, off + 64 + len), 'hex'); }
+    const txt = bytes.toString('utf8').replace(/\0+$/g, '').replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    return txt ? txt.slice(0, 60) : null;
+  } catch { return null; }
+}
+async function tokenNameOnChain(token) {
+  const k = String(token || '').toLowerCase();
+  if (_tokenNameCache.has(k)) return _tokenNameCache.get(k);
+  const [n, sy] = await Promise.all([ethCall(token, '0x06fdde03'), ethCall(token, '0x95d89b41')]);
+  const v = { name: abiText(n), symbol: abiText(sy) };
+  if (v.name || v.symbol) { pruneCache(_tokenNameCache, 20000); _tokenNameCache.set(k, v); }   // a miss is retried next time
+  return v;
+}
 async function getReserves(pairAddr) {                        // getReserves() 0x0902f1ac → (uint112 r0, uint112 r1, uint32 ts)
   const r = await ethCall(pairAddr, '0x0902f1ac');
   if (!r || r.length < 130) return null;
@@ -5674,6 +5716,7 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
   const holdersVal = meta ? (meta.holders_count != null ? meta.holders_count : meta.holders) : null;
   // treat 0 as "not indexed yet" (unknown), not a real zero — brand-new tokens lag either index
   const gpCount = g ? gpNum(g.holder_count) : null;
+  const holdersAt = gp && gp.at ? gp.at : null;                 // when the holder figures were read (GoPlus caches them for GOPLUS_TTL)
   const count = (gpCount != null && gpCount > 0) ? gpCount
     : (holdersVal != null && Number(holdersVal) > 0 ? Number(holdersVal) : null);
   /* NOT A HOLDER: the pool itself, the burn address, and the zero address. Blockscout returns them in the
@@ -5751,7 +5794,7 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
       h24: { buys: num(txns.h24 && txns.h24.buys), sells: num(txns.h24 && txns.h24.sells) },
     },
     priceChange: { h1: numN(pc.h1), h6: numN(pc.h6), h24: numN(pc.h24) },
-    holders: { count, topHolderPct, top10Pct, top: topHolders },
+    holders: { count, topHolderPct, top10Pct, top: topHolders, readAt: holdersAt },
     indexed: !!dex,
     brand: brandFromDex(dex), // Dexscreener logo/banner/socials/enhanced+boosted status (dextools filled later if configured)
     links: { dex: 'https://dexscreener.com/robinhood/' + t.pair, explorer: BLOCKSCOUT + '/token/' + t.token },
@@ -5995,8 +6038,14 @@ async function enrichOne(item, opts = {}) {
   if (usdgDecimals == null) { const d = await tokenDecimals(USDG_ADDR); if (d != null) usdgDecimals = d; }
   let dex = null; const arr = dexArr || [];
   for (const pr of arr) if (pr && pr.pairAddress && pr.pairAddress.toLowerCase() === t.pair.toLowerCase()) { dex = pr; break; }
+  // neither the explorer nor the feed named it → the contract itself does (two eth_calls, cached for the process)
+  let metaN = meta;
+  if (!(meta && meta.symbol && meta.name) && !(dex && dex.baseToken && dex.baseToken.symbol)) {
+    const oc = await tokenNameOnChain(t.token);
+    if (oc.name || oc.symbol) metaN = Object.assign({}, meta || {}, { name: (meta && meta.name) || oc.name, symbol: (meta && meta.symbol) || oc.symbol });
+  }
   if (!dex && !opts.strictPair && arr[0]) dex = arr[0]; // strictPair (lookups): never borrow a DIFFERENT pool's market data
-  const p = buildPair(t, dex, meta, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp);
+  const p = buildPair(t, dex, metaN, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp);
   if (DEXTOOLS_ON) p.brand.dextools = await dextoolsInfo(t.token); // opt-in; no-op unless DEXTOOLS_API_KEY+CHAIN set
   // serial-deployer flag needs a window of other launches; the live New-Pairs set (passed by lookups) supplies one
   let dc = {}, dd = {};
@@ -6018,6 +6067,7 @@ const TOKEN_CACHE_KEEP = 3000;                    // cap rows; prune the least-r
 const TOKEN_CACHE_REFRESH_BATCH = 24;             // background loop: max tokens re-fetched per cycle
 const TOKEN_CACHE_TOUCH_COALESCE = 30 * 1000;     // collapse a burst of reads of one token to one last_read_at write per this window
 const LIVE_LOOKUP_MAX = 6;                         // global cap on concurrent live _doLookup fetches (bounds RPC/Dexscreener load + open sockets)
+const LIVE_LOOKUP_RESERVE = 2;                     // slots a low-priority caller (the Scanner's forced re-read) may never take, so a burst of scans cannot 503 a Send Call open
 let liveLookups = 0;
 const lookupInflight = new Map();                 // tokenAddr(lc) -> in-flight live-fetch promise (stampede coalescing, shared by reads + bg refresh)
 const tokenTouchAt = new Map();                   // tokenAddr(lc) -> last last_read_at write (in-memory coalescer; advisory LRU, not correctness state)
@@ -6033,15 +6083,16 @@ function tokenCacheTouch(tok) { // coalesced: at most one write per token per TO
   if (tokenTouchAt.size > 5000) { const k = tokenTouchAt.keys().next().value; tokenTouchAt.delete(k); } // bound the coalescer map
   try { db.prepare('UPDATE token_cache SET last_read_at=?, reads=reads+1 WHERE token_addr=?').run(now(), tok); } catch {}
 }
-function tokenCachePut(tok, res) {                 // write-through a fresh lookup/refresh result (upsert; preserves last_read_at/reads on update)
-  try {
+function tokenCachePut(tok, res, at) {             // write-through a fresh lookup/refresh result (upsert; preserves last_read_at/reads on update)
+  try {                                            // `at`: when the data was read, if not now (a radar copy carries the radar's refresh time)
     const found = res && res.pair ? 1 : 0;
     // A reason-less "not found" (empty Dexscreener + null factory) can be a TRANSIENT upstream blip, not a real delisting —
-    // never let it demote a last-known-good found=1 row to a sticky 5-min negative. Just mark it re-checked so the
-    // refresh loop backs off briefly; the next successful fetch heals it. (A deterministic reason like 'quote' still writes.)
+    // never let it demote a last-known-good found=1 row to a sticky 5-min negative. Just mark it re-checked (checked_at,
+    // NOT updated_at — the data is no newer) so the refresh loop backs off briefly; the next successful fetch heals it.
+    // (A deterministic reason like 'quote' still writes.)
     if (!found && !(res && res.reason)) {
       const prev = tokenCacheGet(tok);
-      if (prev && prev.found) { try { db.prepare('UPDATE token_cache SET updated_at=? WHERE token_addr=?').run(now(), tok); } catch {} return; }
+      if (prev && prev.found) { try { db.prepare('UPDATE token_cache SET checked_at=? WHERE token_addr=?').run(now(), tok); } catch {} return; }
     }
     const pj = found ? JSON.stringify(res.pair) : null;
     const sym = found ? String((res.pair.token && res.pair.token.symbol) || '').slice(0, 16) : null;
@@ -6050,13 +6101,13 @@ function tokenCachePut(tok, res) {                 // write-through a fresh look
     db.prepare(`INSERT INTO token_cache (token_addr, pair_json, symbol, name, found, reason, updated_at, last_read_at, reads)
       VALUES (?,?,?,?,?,?,?,?,0)
       ON CONFLICT(token_addr) DO UPDATE SET pair_json=excluded.pair_json, symbol=excluded.symbol, name=excluded.name, found=excluded.found, reason=excluded.reason, updated_at=excluded.updated_at`)
-      .run(tok, pj, sym, nm, found, reason, now(), now());
+      .run(tok, pj, sym, nm, found, reason, at || now(), now());
   } catch {}
 }
 function fetchAndStore(tok, opts = {}) {           // single-flight live lookup that writes through to the persistent cache
   let pr = lookupInflight.get(tok);
   if (pr) return pr;                               // already fetching this token → coalesce (no new upstream load)
-  if (liveLookups >= LIVE_LOOKUP_MAX) {            // global concurrency cap: bound total live upstream fetches at any instant
+  if (liveLookups >= LIVE_LOOKUP_MAX - (opts.lowPriority ? LIVE_LOOKUP_RESERVE : 0)) {   // global concurrency cap: bound total live upstream fetches at any instant
     if (opts.failFast) return Promise.reject(new HttpError('busy — lots of lookups right now, try again in a moment', 503)); // request-path miss: don't queue behind a flood
     return Promise.resolve(null);                  // background caller: skip this cycle, try again later
   }
@@ -6113,13 +6164,17 @@ function livePairFor(tok) {                        // is this token currently in
 const PRICE_MAX_AGE_MS = 90 * 1000;
 async function lookupTokenPair(tokenAddr, opts = {}) {
   tokenAddr = tokenAddr.toLowerCase();
-  // 1) freshest: the token is in the live radar feed right now → use it, and keep the persistent copy warm for when it ages out
+  // 1) freshest: the token is in the live radar feed right now → use it, and keep the persistent copy warm for when it ages out.
+  //    The radar only refreshes while a member is looking at it, so its copy can be old; opts.liveMaxAgeMs (the Scanner)
+  //    refuses a copy older than that and reads live instead. The persistent copy is stamped with the time the radar
+  //    read it — never "now" — so nothing downstream can call old numbers fresh.
   const live = livePairFor(tokenAddr);
-  if (live) {
+  const liveAt = live ? (live.priceAsOf || pairsCache.updatedAt || now()) : 0;
+  if (live && !(opts.liveMaxAgeMs != null && now() - liveAt > opts.liveMaxAgeMs)) {
     const row = tokenCacheGet(tokenAddr);
-    if (!row || now() - row.updated_at > TOKEN_CACHE_FRESH) tokenCachePut(tokenAddr, { pair: live }); // only rewrite the JSON when it'd actually refresh
+    if (!row || row.updated_at < liveAt) tokenCachePut(tokenAddr, { pair: live }, liveAt); // only rewrite the JSON when the radar's copy is newer
     tokenCacheTouch(tokenAddr);
-    return { pair: live };
+    return { pair: live, readAt: liveAt };
   }
   // 2) persistent cache hit → serve INSTANTLY (survives restarts, no TTL eviction); revalidate in the background if stale
   const row = tokenCacheGet(tokenAddr);
@@ -6127,17 +6182,94 @@ async function lookupTokenPair(tokenAddr, opts = {}) {
   if (row && !tooOld) {
     tokenCacheTouch(tokenAddr);
     const ttl = row.found ? TOKEN_CACHE_FRESH : TOKEN_CACHE_NOTFOUND_TTL;
-    if (now() - row.updated_at > ttl && !lookupInflight.has(tokenAddr)) fetchAndStore(tokenAddr).catch(() => {}); // non-blocking refresh
+    if (now() - Math.max(row.updated_at, row.checked_at || 0) > ttl && !lookupInflight.has(tokenAddr)) fetchAndStore(tokenAddr).catch(() => {}); // non-blocking refresh (a recent re-check counts as tried)
     const res = tokenCacheRes(row);
     if (res) return res;                                         // corrupt row falls through to a live fetch
   }
   // 3) first-ever read (or unreadable row) → block on the live fetch once, then it's cached forever.
   //    failFast: if the global live-fetch cap is saturated, 503 rather than pile onto the upstream flood (cache hits stay instant).
-  const res = await fetchAndStore(tokenAddr, { failFast: true });
+  const res = await fetchAndStore(tokenAddr, { failFast: true, lowPriority: !!opts.lowPriority });
   tokenCacheTouch(tokenAddr);
   return res;
 }
 function tokenCacheGet(tok) { try { return db.prepare('SELECT * FROM token_cache WHERE token_addr=?').get(tok) || null; } catch { return null; } }
+/* ---------- the Scanner's store: kept for everyone, refreshed by every scan ----------
+   A scan is a deliberate "read this now", so unlike the popup it does not settle for a stale cached row: a row
+   younger than SCAN_FRESH_MS is accepted (two people scanning the same coin in the same few seconds share one
+   read), anything older blocks on a live re-read and the result is written through to token_cache AND to the
+   scans table. When the price feed and the chain are both unreachable the last snapshot is served instead of
+   nothing, marked stale with the time it was read — a fact about when we last looked, never dressed up as live. */
+const SCAN_FRESH_MS = 5 * 1000;                   // long enough to fold a double-click or a crowd scanning one coin into one read; short enough that every scan is a re-read
+const SCANS_KEEP = 5000;                           // cap rows; evict the least-recently-scanned beyond this
+const SCAN_RECENT_N = 12;
+let _scanRecentMemo = { at: 0, v: null };          // the public recent list is one query, memoised for a few seconds
+function scanRow(tok) { try { return db.prepare('SELECT * FROM scans WHERE token_addr=?').get(tok) || null; } catch { return null; } }
+function scanByPool(pool) { try { return db.prepare('SELECT token_addr FROM scans WHERE pool_addr=? ORDER BY last_at DESC LIMIT 1').get(pool) || null; } catch { return null; } } // a pool's tokens never change, so once resolved it is known
+function scanRecord(tok, kind, pool, pair, readAt, counted) {
+  try {
+    const t = now();
+    const sym = String((pair && pair.token && pair.token.symbol) || '').slice(0, 16) || null;
+    const nm = String((pair && pair.token && pair.token.name) || '').slice(0, 60) || null;
+    const pj = pair ? JSON.stringify(pair) : null;
+    /* `counted`: the same client scanning the same coin again inside ten minutes refreshes the snapshot but does not
+       count again or move it up the community list — the count is scans, not one person's clicks. A snapshot only
+       ever replaces an OLDER one (read_at), so a stale fallback answer can never overwrite fresher data. Only a
+       verified pool is remembered as the token's pool (the caller passes null otherwise). */
+    db.prepare(`INSERT INTO scans (token_addr, pool_addr, kind, symbol, name, pair_json, first_at, last_at, read_at, count)
+      VALUES (?,?,?,?,?,?,?,?,?,1)
+      ON CONFLICT(token_addr) DO UPDATE SET
+        pool_addr = COALESCE(excluded.pool_addr, pool_addr), kind = excluded.kind,
+        last_at = CASE WHEN ? THEN excluded.last_at ELSE last_at END, count = count + ?,
+        symbol = COALESCE(excluded.symbol, symbol), name = COALESCE(excluded.name, name),
+        pair_json = CASE WHEN excluded.pair_json IS NOT NULL AND excluded.read_at >= read_at THEN excluded.pair_json ELSE pair_json END,
+        read_at = CASE WHEN excluded.pair_json IS NOT NULL AND excluded.read_at >= read_at THEN excluded.read_at ELSE read_at END`)
+      .run(tok, pool || null, kind, sym, nm, pj, t, t, readAt || t, counted ? 1 : 0, counted ? 1 : 0);
+    _scanRecentMemo.at = 0;
+    const n = db.prepare('SELECT COUNT(*) n FROM scans').get().n;
+    if (n > SCANS_KEEP) db.prepare('DELETE FROM scans WHERE token_addr IN (SELECT token_addr FROM scans ORDER BY last_at DESC, rowid DESC LIMIT -1 OFFSET ?)').run(SCANS_KEEP);
+  } catch {}
+  return scanRow(tok);
+}
+function scanRecent() {                            // what everyone sees: the token, when, how many times — never who
+  if (_scanRecentMemo.v && now() - _scanRecentMemo.at < 5000) return _scanRecentMemo.v;
+  let v = [];
+  try {
+    v = db.prepare('SELECT token_addr, pool_addr, kind, symbol, name, last_at, read_at, count FROM scans WHERE symbol IS NOT NULL ORDER BY last_at DESC LIMIT ?').all(SCAN_RECENT_N)
+      .map((r) => ({ token: r.token_addr, pool: r.pool_addr || null, kind: r.kind, symbol: r.symbol, name: r.name, lastAt: r.last_at, readAt: r.read_at, count: r.count }));
+  } catch {}
+  _scanRecentMemo = { at: now(), v };
+  return v;
+}
+/* An address that answers token0()/token1() is CLAIMING to be a pool of those tokens; any contract can claim that.
+   It is a pool of the token when it is the profile's own pool (the price feed's most-liquid one) or when the
+   chain's main factory returns it for the two tokens. true / false / null (could not check right now). */
+async function poolVerified(addr, pt, pair) {
+  if (pair && pair.pair && lcAddr(pair.pair.address) === addr) return true;
+  try { return (await factoryGetPair(pt.token0, pt.token1, true)) === addr; } catch { return null; }
+}
+/* one token, read for a scan: fresh when it can be, the last snapshot (marked) when it cannot */
+async function scanRead(tok) {
+  let r;
+  try { r = await lookupTokenPair(tok, { maxAgeMs: SCAN_FRESH_MS, liveMaxAgeMs: SCAN_FRESH_MS, lowPriority: true }); }
+  catch (e) { r = { unavailable: true, reason: (e && e.message) || 'lookup failed', busy: !!(e && e.status === 503) }; }
+  const row = tokenCacheGet(tok);
+  if (r && r.pair) {
+    // when it was actually read: a radar copy says so itself (readAt), a cached row its updated_at (the time the DATA
+    // was read — a re-check that brought nothing moves checked_at, not this), a live fetch the moment it landed
+    const readAt = r.readAt || (row && row.found ? row.updated_at : now());
+    return { pair: r.pair, readAt, stale: false };
+  }
+  if (r && r.unavailable) {
+    // a snapshot is only worth serving if it holds a reading: a row that was itself written during a price-feed
+    // outage (unpriced, unindexed — older code cached those) is a blank, and a blank labelled "last snapshot" is a lie
+    const usable = (p) => p && (p.indexed || (p.market && p.market.priceUsd != null) || p.priceStale);
+    const cached = tokenCacheRes(row);                                             // the persistent cache, which the background loop keeps moving
+    if (cached && usable(cached.pair)) return { pair: cached.pair, readAt: row.updated_at, stale: true, reason: r.reason || null, busy: !!r.busy };
+    const s = scanRow(tok);                                                        // else the Scanner's own last snapshot
+    if (s && s.pair_json) { try { const p = JSON.parse(s.pair_json); if (usable(p)) return { pair: rescoreCachedPair(p), readAt: s.read_at, stale: true, reason: r.reason || null, busy: !!r.busy }; } catch {} }
+  }
+  return r || { unavailable: true, reason: 'no answer' };
+}
 // Background loop: keep the MOST-RECENTLY-VIEWED cached tokens fresh from on-chain data, so the popup always shows
 // current numbers without a client ever waiting on Dexscreener/Blockscout/RPC. Bounded batch + concurrency; prunes cold rows.
 let tokenCacheRefreshing = false;
@@ -6155,7 +6287,7 @@ async function refreshTokenCache() {
     // Now refresh the most-recently-viewed stale tokens from on-chain data (bounded batch + concurrency; radar tokens are
     // skipped since the pairs refresher already updates them).
     const liveSet = new Set((pairsCache.pairs || []).map(p => String((p.token && p.token.address) || '').toLowerCase()));
-    const stale = db.prepare('SELECT token_addr FROM token_cache WHERE found=1 AND updated_at < ? ORDER BY last_read_at DESC LIMIT ?')
+    const stale = db.prepare('SELECT token_addr FROM token_cache WHERE found=1 AND MAX(updated_at, checked_at) < ? ORDER BY last_read_at DESC LIMIT ?')
       .all(now() - TOKEN_CACHE_FRESH, TOKEN_CACHE_REFRESH_BATCH * 3)
       .map(r => r.token_addr).filter(t => !liveSet.has(t)).slice(0, TOKEN_CACHE_REFRESH_BATCH);
     /* ONE batched Dexscreener call for the whole tick — up to 30 tokens per request, the endpoint's own
@@ -6245,7 +6377,10 @@ async function _doLookup(tokenAddr) {
   }
   if (!pairAddr) {
     if (factoryErr) return { unavailable: true, reason: dexr.ok ? factoryErr : (dexr.reason + ', and the chain was unreachable') };
-    return { notFound: true };   // the factory answered: there really is no pool
+    // the factory answered "no WETH/USDG pool" — but a pool against another quote is only known through the price
+    // feed, so "not found" is only said when the feed was asked too; otherwise it is "could not fully check"
+    if (!dexr.ok) return { unavailable: true, reason: (dexr.reason || 'price feed unreachable') + ' — the chain has no main-quote pool for it, and other pools could not be checked' };
+    return { notFound: true };   // both sources answered: there really is no pool
   }
   const { token0, token1 } = await pairTokens(pairAddr);
   const q = (token0 && QUOTE_SET.has(token0)) ? token0 : ((token1 && QUOTE_SET.has(token1)) ? token1 : null);
@@ -6253,6 +6388,13 @@ async function _doLookup(tokenAddr) {
     { token_addr: tokenAddr, pair_addr: pairAddr, token0, token1, quote_symbol: q ? QUOTE_SYMBOL[q] : '?' },
     { strictPair: true, deployerWindow: pairsCache.pairs, dexArr: dexr.ok ? arr : undefined }   // the pairs just fetched above — not fetched again
   );
+  /* The price feed could not be ASKED (429, timeout, our own outbound meter) and the pair came back unpriced: that
+     is an outage, not a reading. Publishing it would print $0 volume, "no trades yet" and a blank chart for a
+     traded token, cache that as fresh, and — through the Scanner's store — hand the blank to everyone after.
+     The radar carries its last reading forward in this case (refreshPairs); a lookup has no row of its own to
+     carry, so it says it could not check, and the callers serve what they last read, labelled. A token the
+     feed answered about but does not index (dexr.ok, arr empty) is still profiled — that is a fact, not a gap. */
+  if (!dexr.ok && !p.indexed && (!p.market || p.market.priceUsd == null)) return { unavailable: true, reason: dexr.reason || 'price feed unreachable' };
   // if this token is only the QUOTE side of its pool, Dexscreener's price/FDV/mcap describe the OTHER token → drop them
   if (!tokenIsBase) { p.market.priceUsd = null; p.market.fdv = null; p.market.marketCap = null; p.brand = brandFromDex(null); p._quoteSide = true; } // enhanced info/branding belongs to the base token, not this quote-side token
   p._lookup = true; // marks a searched token (not necessarily a brand-new pair)
@@ -11212,21 +11354,45 @@ const server = http.createServer(async (req, res) => {
         if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'enter a valid 0x address — a token or a pool on Robinhood Chain');
         if (!rateLimit('scan:' + clientIp(req), 40, 6e4)) return bad(res, 'too many scans — slow down', 429);
         const risk = () => Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }]));
+        // a hit: record the scan (for everyone, by token — never by who asked) and answer with the profile plus the scan's own facts
+        const hit = (kind, pool, tok, r, poolOk) => {
+          const counted = rateLimit('scanc:' + clientIp(req) + '|' + tok, 1, 10 * 60e3);   // one count per client per coin per ten minutes
+          const s = scanRecord(tok, kind, poolOk === true ? pool : null, r.pair, r.readAt, counted);
+          return send(res, 200, {
+            kind, ...(pool ? { pool, poolVerified: poolOk === true ? true : (poolOk === false ? false : null) } : {}),
+            pair: r.pair, risk: risk(), community: communityForToken(tok),
+            // count/firstAt/lastAt come from the store or not at all — a failed write is "not kept", never "1 scan, just now"
+            scan: { now: now(), readAt: r.readAt, stale: !!r.stale, ...(r.stale ? { reason: r.reason || null, busy: !!r.busy } : {}),
+                    kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}) },
+          });
+        };
         try {
-          const r = await lookupTokenPair(addr);
-          if (r.pair) return send(res, 200, { kind: 'token', pair: r.pair, risk: risk(), community: communityForToken(addr) });
-          if (r.unavailable) return send(res, 200, { unavailable: true, reason: r.reason || null, message: 'We couldn’t reach the price feed or the chain just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
+          // a pool anyone scanned before is already known by the token it prices — no chain call to resolve it again
+          const known = scanByPool(addr);
+          if (known && known.token_addr !== addr) {
+            const rk = await scanRead(known.token_addr);
+            if (rk.pair) return hit('pool', addr, known.token_addr, rk, true);   // only a verified pool is ever stored
+            if (rk.unavailable) return send(res, 200, { unavailable: true, reason: rk.reason || null, message: 'That pool is known, but the price feed and the chain could not be read just now — try again in a moment.' });
+          }
+          const r = await scanRead(addr);
+          if (r.pair) return hit('token', null, addr, r);
+          if (r.unavailable) return send(res, 200, { unavailable: true, reason: r.reason || null, message: r.busy ? 'Lots of scans are running right now — try again in a moment.' : 'We couldn’t reach the price feed or the chain just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
           if (r.notFound && r.reason === 'quote') return send(res, 200, { notFound: true, reason: 'quote', message: 'That’s a base trading asset (WETH/USDG), not a token to profile here.' });
           // no pool for this address as a token — is the address itself a pool?
           let pt = null; try { pt = await pairTokens(addr); } catch {}
           if (pt && pt.token0 && pt.token1) {
             const base = QUOTE_SET.has(pt.token0) ? pt.token1 : pt.token0;
-            const r2 = await lookupTokenPair(base);
-            if (r2.pair) return send(res, 200, { kind: 'pool', pool: addr, pair: r2.pair, risk: risk(), community: communityForToken(base) });
+            const r2 = await scanRead(base);
+            if (r2.pair) return hit('pool', addr, base, r2, await poolVerified(addr, pt, r2.pair));
             if (r2.unavailable) return send(res, 200, { unavailable: true, reason: r2.reason || null, message: 'That looks like a pool, but the chain could not be read just now — try again in a moment.' });
           }
           return send(res, 200, { notFound: true, reason: r.reason || null, message: 'No token or pool found at this address on Robinhood Chain — the chain itself says so. It may be a wallet, a contract that is not a token, or an address on another chain (other chains are coming soon).' });
         } catch (e) { return bad(res, (e && e.message) || 'scan failed — try again', (e && e.status) || 502); }
+      }
+      // Public: the last few tokens anyone scanned — the token, when, how many times. Never who.
+      if (p === '/api/scan/recent' && req.method === 'GET') {
+        if (!rateLimit('scanrecent:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
+        return send(res, 200, { scans: scanRecent(), asOf: now() });
       }
 
       /* ----- same-origin image proxy: lets the client draw a Dexscreener token logo onto a
