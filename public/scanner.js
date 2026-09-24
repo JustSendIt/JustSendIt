@@ -1,0 +1,173 @@
+/* ===== The Scanner page: two tabs over newpairs.html =========================================
+ *   🔎 Scan an address — paste any token or pool on Robinhood Chain and read its full on-chain profile,
+ *                        the same detail the site shows for every coin (NPCard.detailHTML, the chart, the
+ *                        contract read, the community slot). Open to everyone.
+ *   📡 New Pairs       — the live radar, for members. The panel shows a locked card until the reader is
+ *                        signed in; the radar itself (newpairs.js) starts the first time the tab is open
+ *                        for a member, and is parked while the other tab shows.
+ *
+ * URL: ?scan=0x… runs a scan on load and is kept in the address bar so a scan can be shared; ?tab=new
+ * opens the radar tab. Recent scans are remembered in this browser only (localStorage), never sent.
+ * CSP-safe: addEventListener only. */
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const tabScan = $('sc-tab-scan'), tabNew = $('sc-tab-new'), panScan = $('sc-scan'), panNew = $('sc-new');
+  if (!tabScan || !tabNew || !panScan || !panNew) return;
+  const form = $('sc-form'), input = $('sc-addr'), go = $('sc-go'), status = $('sc-status'), result = $('sc-result');
+  const recentBox = $('sc-recent'), recentList = $('sc-recent-list'), locked = $('sc-locked'), radar = $('sc-radar'), lock = $('sc-lock');
+  const ADDR = /^0x[0-9a-fA-F]{40}$/;
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const shortAddr = (a) => a.slice(0, 6) + '…' + a.slice(-4);
+  const signedIn = () => !!(window.AUTH && AUTH.user);
+  let current = 'scan', seq = 0;
+
+  /* ---------- tabs ---------- */
+  function show(which, opts) {
+    opts = opts || {};
+    const toNew = which === 'new';
+    current = toNew ? 'new' : 'scan';
+    tabScan.classList.toggle('is-on', !toNew); tabNew.classList.toggle('is-on', toNew);
+    tabScan.setAttribute('aria-selected', String(!toNew)); tabNew.setAttribute('aria-selected', String(toNew));
+    tabScan.tabIndex = toNew ? -1 : 0; tabNew.tabIndex = toNew ? 0 : -1;
+    panScan.hidden = toNew; panNew.hidden = !toNew;
+    document.body.classList.toggle('sc-on-radar', toNew);
+    if (toNew) gateRadar(); else if (window.NPRadar) NPRadar.suspend();
+    try {
+      const u = new URL(location.href);
+      if (toNew) u.searchParams.set('tab', 'new'); else u.searchParams.delete('tab');
+      history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+    } catch {}
+    if (!opts.quiet && window.announce) announce(toNew ? 'New Pairs tab.' : 'Scanner tab.');
+  }
+  tabScan.addEventListener('click', () => show('scan'));
+  tabNew.addEventListener('click', () => show('new'));
+
+  /* ---------- the members' door on the radar ---------- */
+  function gateRadar() {
+    const ok = signedIn();
+    if (locked) locked.hidden = ok;
+    if (radar) radar.hidden = !ok;
+    if (lock) lock.hidden = ok;
+    if (ok && current === 'new' && window.NPRadar) NPRadar.start();
+  }
+  const signin = $('sc-signin');
+  if (signin) signin.addEventListener('click', () => { if (window.AUTH && AUTH.open) AUTH.open(); });
+  document.addEventListener('auth:change', () => { if (lock) lock.hidden = signedIn(); if (current === 'new') gateRadar(); });
+  if (lock) lock.hidden = signedIn();
+
+  /* ---------- recent scans (this browser only) ---------- */
+  const RECENT_KEY = 'sc:recent', RECENT_MAX = 6;
+  const recent = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter((r) => r && ADDR.test(r.addr || '')) : []; } catch { return []; } };
+  function remember(addr, sym) {
+    try {
+      const list = [{ addr: addr.toLowerCase(), sym: String(sym || '').slice(0, 16) }].concat(recent().filter((r) => r.addr !== addr.toLowerCase())).slice(0, RECENT_MAX);
+      localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+    } catch {}
+    paintRecent();
+  }
+  function paintRecent() {
+    if (!recentBox || !recentList) return;
+    const list = recent();
+    recentBox.hidden = !list.length;
+    recentList.innerHTML = list.map((r) => '<button class="np-chip" type="button" data-scan="' + esc(r.addr) + '" data-tip="Scans this address again">' + (r.sym ? '$' + esc(r.sym) : esc(shortAddr(r.addr))) + '</button>').join(' ');
+  }
+  paintRecent();
+
+  /* ---------- the scan ---------- */
+  function setStatus(text, kind) {
+    if (!status) return;
+    status.textContent = text || '';
+    status.className = 'sc-status' + (kind ? ' is-' + kind : '');
+  }
+  async function scan(raw) {
+    const addr = String(raw || '').trim();
+    if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long.', 'err'); if (input) input.focus(); return; }
+    const my = ++seq;
+    if (input) { input.value = addr; input.dispatchEvent(new Event('input')); }   // shows the ✕ for a chip or deep-link scan too
+    if (go) { go.disabled = true; go.setAttribute('aria-disabled', 'true'); }
+    setStatus('Reading the chain for ' + shortAddr(addr) + '…', 'busy');
+    result.innerHTML = '<p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading the chain for the latest on-chain detail…</p>';
+    try { const u = new URL(location.href); u.searchParams.set('scan', addr.toLowerCase()); u.searchParams.delete('tab'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {}
+    try {
+      const r = await fetch('/api/scan?address=' + encodeURIComponent(addr.toLowerCase()), { credentials: 'same-origin' });
+      const j = await r.json().catch(() => ({}));
+      if (my !== seq) return;
+      if (r.ok && j.pair) {
+        const p = j.pair, tok = (p.token && p.token.address) || addr.toLowerCase();
+        const sym = (p.token && p.token.symbol) || '';
+        if (window.tokenCommunityPrime && Object.prototype.hasOwnProperty.call(j, 'community')) tokenCommunityPrime(tok, j.community);
+        const comm = window.tokenCommunitySlot ? tokenCommunitySlot(tok, sym, 'panel') : '';
+        const head =
+          '<div class="sc-hit">' +
+            '<p class="sc-hit-k">' + (j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> prices' : '🪙 Token') + '</p>' +
+            '<h2 class="sc-hit-h">' + esc((p.token && p.token.name) || 'Token') + (sym ? ' <span class="hl">$' + esc(sym) + '</span>' : '') + '</h2>' +
+            '<p class="sc-hit-a"><code>' + esc(tok) + '</code> · 🏹 Robinhood Chain · read just now</p>' +
+          '</div>';
+        const detail = window.NPCard ? NPCard.detailHTML(p, { sections: { why: true, chart: true, score: true, market: true, activity: true, holders: true, contract: true } }) : '<p class="tm-msg">Full detail isn’t available here.</p>';
+        result.innerHTML = head + detail;
+        const honest = result.querySelector('.np-honest');
+        if (honest) honest.insertAdjacentHTML('beforebegin', comm); else result.insertAdjacentHTML('beforeend', comm);
+        if (window.NPCard && NPCard.animateRings) NPCard.animateRings(result);
+        if (window.mountOnChainCharts) mountOnChainCharts(result);
+        if (window.decorateTokenCommunities) decorateTokenCommunities(result);
+        // the contract section starts open here, so its lazy read is kicked off rather than waiting for a toggle
+        const c = result.querySelector('.np-contract'); if (c && window.NPCard && NPCard.loadContract) NPCard.loadContract(c);
+        setStatus('Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + '.', 'ok');
+        remember(tok, sym);
+        const h = result.querySelector('.sc-hit-h'); if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: false }); } catch {} }
+      } else if (!r.ok || (j && j.unavailable)) {
+        // "we could not check" is never dressed up as a fact about the address
+        result.innerHTML = '';
+        setStatus('⏳ ' + ((j && (j.message || j.error)) || 'We couldn’t check this address just now — nothing here is a judgement about it. Try again in a moment.'), 'err');
+      } else if (j && j.notFound) {
+        result.innerHTML = '';
+        setStatus('🤷 ' + (j.message || 'No token or pool found at this address on Robinhood Chain.'), 'err');
+      } else {
+        result.innerHTML = '';
+        setStatus('⏳ We couldn’t read this address just now. Try again in a moment.', 'err');
+      }
+    } catch {
+      if (my !== seq) return;
+      result.innerHTML = '';
+      setStatus('⏳ Couldn’t reach the site just now — check your connection and try again.', 'err');
+    } finally {
+      if (my === seq && go) { go.disabled = false; go.removeAttribute('aria-disabled'); }
+    }
+  }
+  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value); });
+  /* ---------- clearing the box: the ✕ inside it, or Esc while typing in it ---------- */
+  const clearBtn = $('sc-clear');
+  const syncClear = () => { if (clearBtn) clearBtn.hidden = !(input && input.value); };
+  function clearBox() {
+    if (!input) return;
+    input.value = '';
+    syncClear();
+    setStatus('', '');
+    try { const u = new URL(location.href); u.searchParams.delete('scan'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } catch {}
+    input.focus();
+  }
+  if (input) {
+    input.addEventListener('input', syncClear);
+    input.addEventListener('keydown', (e) => { if (e.key === 'Escape' && input.value) { e.preventDefault(); e.stopPropagation(); clearBox(); } });
+    syncClear();
+  }
+  if (clearBtn) clearBtn.addEventListener('click', clearBox);
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-scan]');
+    if (!b || !panScan.contains(b)) return;
+    show('scan', { quiet: true });
+    scan(b.getAttribute('data-scan'));
+  });
+  // a pasted address scans straight away — nobody pastes one to look at it
+  if (input) input.addEventListener('paste', () => { setTimeout(() => { if (ADDR.test(input.value.trim())) scan(input.value); }, 0); });
+
+  /* ---------- deep links ---------- */
+  const q = new URLSearchParams(location.search);
+  const fromHash = /^#0x[0-9a-fA-F]{40}$/.test(location.hash) ? location.hash.slice(1) : '';
+  const want = q.get('scan') || fromHash;
+  if (q.get('tab') === 'new') show('new', { quiet: true }); else show('scan', { quiet: true });
+  if (want && ADDR.test(want)) scan(want);
+  // the sign-in state arrives after the page (AUTH.ready): re-run the gate once it is known
+  if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(() => { if (lock) lock.hidden = signedIn(); if (current === 'new') gateRadar(); }).catch(() => {});
+})();

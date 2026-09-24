@@ -10993,6 +10993,9 @@ const server = http.createServer(async (req, res) => {
 
       /* ----- live new-pairs tracker (PUBLIC, server-cached, read-only on-chain data) ----- */
       if (p === '/api/pairs/new' && req.method === 'GET') {
+        // Members only: the New Pairs radar sits behind the referral gate, and an account is the only thing
+        // that gate hands out — so a session is the ticket. Reading any ONE token (the scanner) stays open.
+        if (!me) return send(res, 401, { error: 'sign in to use the New Pairs radar — reading the site is free, the radar is for members', code: 'need_signin' });
         // ?chain=<slug> — Robinhood Chain falls through to the deep pipeline below; every other
         // supported chain is served from the Dexscreener-derived cache, with its own honest limits.
         const chainQ = String(url.searchParams.get('chain') || DEFAULT_CHAIN);
@@ -11033,6 +11036,7 @@ const server = http.createServer(async (req, res) => {
 
       /* ----- look up ANY token address → full on-chain pair detail (powers the DEX-list search) ----- */
       if (p === '/api/runners' && req.method === 'GET') { // Best Runners: top gainers over a trailing window
+        if (!me) return send(res, 401, { error: 'sign in to use the New Pairs radar — reading the site is free, the radar is for members', code: 'need_signin' });   // part of the radar, same door
         if (!rateLimit('runners:' + clientIp(req), 60, 60000)) return bad(res, 'slow down', 429);
         if (!pairsCache.updatedAt && !pairsRefreshing) { pairsCache.building = true; refreshPairs(); } // ensure the store is being fed
         maybeRefreshRunners();
@@ -11198,6 +11202,31 @@ const server = http.createServer(async (req, res) => {
           });
           return send(res, 200, { pair: r.pair, risk: Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])), community: communityForToken(token) });
         } catch (e) { return bad(res, (e && e.message) || 'lookup failed — try again', (e && e.status) || 502); }
+      }
+      /* The scanner takes ANY address on the chain: a token, or the POOL that prices one. A pool answers
+         token0()/token1(); the token it exists to price is the side that is not a quote asset, and the
+         scan is that token's, with the pool named so the reader knows what was pasted. Only reached when
+         the address is not a token with a pool of its own (the lookup above is tried first). */
+      if (p === '/api/scan' && req.method === 'GET') {
+        const addr = String(url.searchParams.get('address') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'enter a valid 0x address — a token or a pool on Robinhood Chain');
+        if (!rateLimit('scan:' + clientIp(req), 40, 6e4)) return bad(res, 'too many scans — slow down', 429);
+        const risk = () => Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }]));
+        try {
+          const r = await lookupTokenPair(addr);
+          if (r.pair) return send(res, 200, { kind: 'token', pair: r.pair, risk: risk(), community: communityForToken(addr) });
+          if (r.unavailable) return send(res, 200, { unavailable: true, reason: r.reason || null, message: 'We couldn’t reach the price feed or the chain just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
+          if (r.notFound && r.reason === 'quote') return send(res, 200, { notFound: true, reason: 'quote', message: 'That’s a base trading asset (WETH/USDG), not a token to profile here.' });
+          // no pool for this address as a token — is the address itself a pool?
+          let pt = null; try { pt = await pairTokens(addr); } catch {}
+          if (pt && pt.token0 && pt.token1) {
+            const base = QUOTE_SET.has(pt.token0) ? pt.token1 : pt.token0;
+            const r2 = await lookupTokenPair(base);
+            if (r2.pair) return send(res, 200, { kind: 'pool', pool: addr, pair: r2.pair, risk: risk(), community: communityForToken(base) });
+            if (r2.unavailable) return send(res, 200, { unavailable: true, reason: r2.reason || null, message: 'That looks like a pool, but the chain could not be read just now — try again in a moment.' });
+          }
+          return send(res, 200, { notFound: true, reason: r.reason || null, message: 'No token or pool found at this address on Robinhood Chain — the chain itself says so. It may be a wallet, a contract that is not a token, or an address on another chain (other chains are coming soon).' });
+        } catch (e) { return bad(res, (e && e.message) || 'scan failed — try again', (e && e.status) || 502); }
       }
 
       /* ----- same-origin image proxy: lets the client draw a Dexscreener token logo onto a
@@ -12720,9 +12749,9 @@ function productionChecks() {
 
 server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
 
-// New Pairs Radar is hidden (unlinked from the nav) — no background refresher runs so we don't hit the
-// RPC/Blockscout/Dexscreener every 90s for a page nobody can reach. The /api/pairs/new endpoint still
-// lazy-builds on first request, so re-linking the page in the nav brings it fully back with no other change.
+// The New Pairs Radar is a members' tab on the Scanner page (newpairs.html) — no background refresher runs, so
+// the RPC/Blockscout/Dexscreener are not hit every 90s while nobody is looking. The /api/pairs/new endpoint
+// still lazy-builds on the first signed-in request, and the page only polls while that tab is showing.
 // To re-enable continuous background refresh, restore:
 //   pairsCache.building = true; refreshPairs().catch(() => {});
 //   setInterval(() => { refreshPairs().catch(() => {}); }, PAIRS_TTL);

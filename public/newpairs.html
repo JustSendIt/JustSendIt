@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>New Pairs Radar 📡 — Fresh Tokens on Robinhood Chain</title>
-<meta name="description" content="A live, honest radar of brand-new tokens launched on Robinhood Chain — market cap, liquidity, holders, and plain-English honeypot &amp; rug risk flags so you can spot the traps. Read any token's full on-chain detail and contract. Simpler than Dexscreener. Entertainment only, not financial advice.">
+<title>Scanner 🔎 — Read Any Token or Pool on Robinhood Chain</title>
+<meta name="description" content="Paste any token or pool address on Robinhood Chain and read its full on-chain profile — market cap, liquidity, holders, contract powers, and plain-English honeypot &amp; rug flags. Members also get the live New Pairs radar. Other chains coming soon. Entertainment only, not financial advice.">
 <meta name="keywords" content="new crypto tokens, new memecoins, Robinhood Chain new pairs, honeypot scanner, rug check, token risk scanner, crypto safety, dexscreener alternative, memecoin radar, new token launches, crypto due diligence, DYOR">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="theme-color" content="#c6f000">
@@ -12,13 +12,13 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="$Send — Just Send It">
 <meta property="og:url" content="https://sendrh.com/newpairs.html">
-<meta property="og:title" content="New Pairs Radar 📡 — spot fresh tokens (and traps) on Robinhood Chain">
-<meta property="og:description" content="Live scanner of brand-new Robinhood Chain tokens with honest honeypot, rug and whale risk flags. Read the full on-chain detail and contract before you ape. Entertainment only.">
+<meta property="og:title" content="Scanner 🔎 — read any token or pool on Robinhood Chain">
+<meta property="og:description" content="Paste an address, read the full on-chain detail: honest honeypot, rug and whale flags, holders, liquidity and the contract’s powers. Members get the live New Pairs radar too. Entertainment only.">
 <meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@senditrh">
-<meta name="twitter:title" content="New Pairs Radar 📡 — Robinhood Chain token scanner">
-<meta name="twitter:description" content="Live scanner of new tokens with honest honeypot &amp; rug flags. Read the on-chain detail before you ape. Entertainment only.">
+<meta name="twitter:title" content="Scanner 🔎 — Robinhood Chain token scanner">
+<meta name="twitter:description" content="Paste any token or pool address and read its on-chain detail with honest honeypot &amp; rug flags. Entertainment only.">
 <meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
 <link rel="icon" href="assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
@@ -30,7 +30,7 @@
 <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
-<a class="skip-link" href="#np-list">Skip to new pairs</a>
+<a class="skip-link" href="#sc-addr">Skip to the scanner</a>
 
 <nav class="nav" aria-label="Main">
   <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
@@ -39,7 +39,7 @@
     <a href="arcade.html">Arcade</a>
     <a href="communities.html">Communities</a>
     <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
-    <a class="active" href="newpairs.html" aria-current="page">New&nbsp;Pairs</a>
+    <a class="active" href="newpairs.html" aria-current="page">Scanner</a>
     <a href="wall.html">Send&nbsp;Wall</a>
     <a href="support.html">Support</a>
     <a href="index.html#swap">Swap</a>
@@ -56,16 +56,57 @@
 </nav>
 
 <header class="np-hero">
-  <h1 class="section-title display green" style="margin-bottom:0.35rem;">New Pairs Radar 📡</h1>
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">Scanner 🔎</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Paste any token or pool address on Robinhood Chain and read its full on-chain profile — the same detail the site shows for every coin. <span class="section-sub-note">🏹 Robinhood Chain today · other chains are coming soon.</span></p>
+  <p class="np-hero-warn">⚠️ A scan is a reading of public chain data, not an audit and not advice. We flag the obvious traps — but never do we tell you to buy. <b>Do your own research.</b></p>
+</header>
+
+<main id="main">
+  <div class="np-wrap">
+
+    <div class="sc-tabs" role="tablist" aria-label="Scanner sections">
+      <button class="sc-tab is-on" id="sc-tab-scan" type="button" role="tab" aria-selected="true" aria-controls="sc-scan" data-tip="Scan any single token or pool address on the chain">🔎 Scan an address</button>
+      <button class="sc-tab" id="sc-tab-new" type="button" role="tab" aria-selected="false" aria-controls="sc-new" tabindex="-1" data-tip="The live radar of brand-new pools — for members; sign in to use it">📡 New Pairs <span class="sc-lock" id="sc-lock" aria-hidden="true">🔒</span></button>
+    </div>
+
+    <section class="sc-panel" id="sc-scan" role="tabpanel" aria-labelledby="sc-tab-scan">
+      <form class="sc-form" id="sc-form" autocomplete="off">
+        <label class="sr-only" for="sc-addr">Token or pool address</label>
+        <div class="sc-field">
+          <input class="sc-addr" id="sc-addr" type="text" inputmode="text" spellcheck="false" autocapitalize="off" maxlength="42" placeholder="0x… paste a token or pool address" aria-describedby="sc-help">
+          <button class="sc-clear" id="sc-clear" type="button" aria-label="Clear the address" data-tip="Clears the address box (Esc does too)" hidden>✕</button>
+        </div>
+        <button class="btn btn-primary btn-sm sc-go" id="sc-go" type="submit" data-tip="Reads the address on-chain and shows its full profile">Scan 🔎</button>
+      </form>
+      <p class="sc-help" id="sc-help">Any token, or any pool, on Robinhood Chain — a pool address resolves to the token it prices. Copy the address from the token’s own page or the explorer, never from a chat.</p>
+      <div class="sc-chains" role="group" aria-label="Chains">
+        <span class="sc-chain is-on">🏹 Robinhood Chain</span>
+        <span class="sc-chain is-soon" title="Other chains are coming soon">🌐 Other chains · coming soon</span>
+      </div>
+      <p class="sc-try">Try one: <button class="np-chip" type="button" data-scan="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-tip="Scans $SEND">$SEND</button> <button class="np-chip" type="button" data-scan="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-tip="Scans $GWC">$GWC</button></p>
+      <p class="sc-status" id="sc-status" role="status" aria-live="polite"></p>
+      <div class="sc-result" id="sc-result"></div>
+      <div class="sc-recent" id="sc-recent" hidden>
+        <span class="sc-recent-lead">Recent scans on this device:</span>
+        <span class="sc-recent-list" id="sc-recent-list"></span>
+      </div>
+      <p class="np-runners-foot">🎉 Entertainment only · nothing here is a recommendation — most new tokens go to zero. DYOR.</p>
+    </section>
+
+    <section class="sc-panel" id="sc-new" role="tabpanel" aria-labelledby="sc-tab-new" hidden>
+      <div class="sc-locked" id="sc-locked" hidden>
+        <p class="sc-locked-h">🔒 The New Pairs radar is for members</p>
+        <p class="sc-locked-p">A live feed of every new pool on the chain’s main factory, scored and flagged as it lands. Reading the site is free for everyone; the radar takes an account — and an account takes an invite code from someone already inside.</p>
+        <div class="inv-actions">
+          <button class="btn btn-primary btn-sm" id="sc-signin" type="button" data-tip="Opens sign-in, where you can use an invite code or a wallet">Sign in or get your ticket 🎟️</button>
+        </div>
+      </div>
+      <div id="sc-radar" hidden>
   <!-- The radar reads ONE UniswapV2-style factory. "Every new token on the chain" was a claim the code
        cannot support: launches on other venues (pools.trade among them) never appear here at all, and a
        scanner that says it sees everything makes an absence look like a verdict. -->
   <p class="section-sub" style="margin-bottom:0.5rem;">New pools on Robinhood Chain’s main Uniswap-V2 factory — read straight from the chain, with honest flags on the ones to avoid. <span class="section-sub-note">Not every venue: launches on other DEXes won’t show up here, so a token missing from this list hasn’t been judged — it just hasn’t been seen.</span></p>
   <p class="np-hero-warn">⚠️ Fresh tokens are dangerous by default. Most go to zero. We flag the obvious traps — but never do we tell you to buy. <b>Do your own research.</b></p>
-</header>
-
-<main id="main">
-  <div class="np-wrap">
 
     <div class="np-chainbar" id="np-chainbar" role="tablist" aria-label="Blockchain"></div>
     <p class="np-chain-note" id="np-chain-note" role="status" aria-live="polite" hidden></p>
@@ -271,6 +312,8 @@
       <div class="np-tg-actions" id="np-tg-actions"></div>
       <p class="np-tg-fine">It runs the same scan as this page — same checks, same verdict rule, and the same habit of telling you what it <b>couldn't</b> read instead of counting it as a pass. Entertainment only, never a signal to buy.</p>
     </section>
+      </div><!-- /sc-radar -->
+    </section><!-- /sc-new -->
 
   </div>
 </main>
@@ -288,7 +331,7 @@
      <a href="index.html">Home</a>
      <a href="index.html#guide">How to Buy</a>
      <a href="profile.html">My Profile</a>
-     <a href="newpairs.html">New Pairs</a>
+     <a href="newpairs.html">Scanner</a>
      <a href="wall.html">Send Wall</a>
      <a href="support.html">Support</a>
      <a href="privacy.html">Privacy</a>
@@ -318,6 +361,7 @@
 <script src="tokenmodal.js"></script>
 <script src="chart.js"></script>
 <script src="newpairs.js"></script>
+<script src="scanner.js"></script>
 <script src="block0.js"></script>
 <script src="notifications.js"></script>
 <script src="voicememo.js"></script>

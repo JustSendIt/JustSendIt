@@ -1194,6 +1194,9 @@
   /* ---------- address lookup: paste any token contract → full on-chain detail (same card as a live pair) ---------- */
   const LOOKUP_RE = /^0x[0-9a-f]{40}$/;
   let lookupSeq = 0; // monotonic id so only the MOST RECENT fetch may write state.lookup (drops out-of-order results)
+  const radarPanel = document.getElementById('sc-new');   // the radar's tab panel on the Scanner page (null elsewhere)
+  let radarStarted = false, radarSuspended = false;
+  const radarShown = () => !radarSuspended && !document.hidden && !(radarPanel && radarPanel.hidden);
   // resolve a card object for an addr from either the live set OR the current lookup (ingest() rebuilds byAddr each
   // poll, so a fetched lookup lives only in state.lookup — the toggle/watch handlers must fall back to it)
   const pairFor = (addr) => {
@@ -1852,14 +1855,10 @@
     });
     statusEl.addEventListener('click', e => { const t = e.target.closest('button'); if (!t) return; if (t.id === 'np-showhidden') selectSafety('all'); else if (t.id === 'np-showhigh') selectSafety('risky'); });
     // freshness ticker + live poll (visible tab only)
-    setInterval(() => { if (!state.lastFetch || document.hidden) return; if (state.mode === 'feed') updateFeedLive(); else updateStatus(); }, 1000); // live "updated Ns ago"
-    setInterval(() => { if (!document.hidden) fetchPairs(false); }, 15000);                   // continuous live refresh (the server rebuilds this feed every 30s — polling faster only re-downloads identical bytes)
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - state.lastFetch > 60000) fetchPairs(false); });
-    // lazy-load the honeypot/contract read the first time its score section is expanded (works in DEX list AND Hot Feed)
-    document.addEventListener('toggle', e => {
-      const d = e.target; if (!d || d.tagName !== 'DETAILS' || !d.open) return;
-      const c = d.querySelector('.np-contract'); if (c && !c.dataset.loaded && c.closest('details') === d) loadContract(c);
-    }, true);
+    // the radar is one tab of the Scanner page: nothing polls while that tab is hidden or the radar is suspended
+    setInterval(() => { if (!state.lastFetch || !radarShown()) return; if (state.mode === 'feed') updateFeedLive(); else updateStatus(); }, 1000); // live "updated Ns ago"
+    setInterval(() => { if (radarShown()) fetchPairs(false); }, 15000);                   // continuous live refresh (the server rebuilds this feed every 30s — polling faster only re-downloads identical bytes)
+    document.addEventListener('visibilitychange', () => { if (radarShown() && Date.now() - state.lastFetch > 60000) fetchPairs(false); });
     // 🎬 Hot Feed wiring
     document.querySelectorAll('.np-vs-btn').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
     document.querySelectorAll('.np-runwin [data-win]').forEach(b => b.addEventListener('click', () => {
@@ -2449,10 +2448,38 @@
     animateRings,
   };
 
+  /* Lazy-load the honeypot/contract read the first time its section is expanded. Attached on EVERY page,
+     not only the radar's: the same detail renders in the token popup on the wall, in a profile and in the
+     scanner, and when this lived inside wire() none of those ever loaded the contract section. */
+  document.addEventListener('toggle', e => {
+    const d = e.target; if (!d || d.tagName !== 'DETAILS' || !d.open) return;
+    const c = d.querySelector('.np-contract'); if (c && !c.dataset.loaded && c.closest('details') === d) loadContract(c);
+  }, true);
+  window.NPCard.loadContract = loadContract;
+
   if (!listEl) return;   // everything below is New-Pairs-page wiring (listeners, live polls) — skip it elsewhere
-  render();          // list skeleton (hidden in feed mode; harmless)
-  wire();
-  document.querySelectorAll('.np-runwin [data-win]').forEach(x => { const on = x.dataset.win === state.runWin; x.classList.toggle('is-on', on); x.setAttribute('aria-checked', String(on)); x.tabIndex = on ? 0 : -1; }); // sync window selector to persisted choice
-  setMode(state.mode);   // apply persisted mode (📈 Best Runners is the default)
-  fetchPairs(false);
+  /* The radar no longer starts itself. It is the members-only tab of the Scanner page, and scanner.js starts
+     it the first time that tab is open for a signed-in reader — so a visitor who only ever scans one address
+     never pulls the feed, and nobody signed out is shown a wall of 401s. suspend()/resume() park the body
+     mode classes while the other tab is showing (feed mode hides the hero and the tab strip on purpose). */
+  function start() {
+    if (radarStarted) { if (radarSuspended) resume(); else if (state.lastFetch && Date.now() - state.lastFetch > 60000) fetchPairs(false); return; }
+    radarStarted = true;
+    render();          // list skeleton (hidden in feed mode; harmless)
+    wire();
+    document.querySelectorAll('.np-runwin [data-win]').forEach(x => { const on = x.dataset.win === state.runWin; x.classList.toggle('is-on', on); x.setAttribute('aria-checked', String(on)); x.tabIndex = on ? 0 : -1; }); // sync window selector to persisted choice
+    setMode(state.mode);   // apply persisted mode (📈 Best Runners is the default)
+    fetchPairs(false);
+  }
+  function suspend() {
+    radarSuspended = true;
+    document.body.classList.remove('np-mode-feed', 'np-mode-list', 'np-mode-runners');
+  }
+  function resume() {
+    if (!radarStarted) return;
+    radarSuspended = false;
+    setMode(state.mode);
+    if (state.lastFetch && Date.now() - state.lastFetch > 60000) fetchPairs(false);
+  }
+  window.NPRadar = { start, suspend, resume, started: () => radarStarted };
 })();
