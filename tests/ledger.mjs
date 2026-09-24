@@ -70,7 +70,9 @@ try {
   check('  ...the community grid takes the chain’s count before asking the explorer', /if \(ledger && ledger\.count != null\) \{ holdersByToken\[tok\] = ledger\.count; continue; \}/.test(SRC));
   check('  ...and the page says where a count came from', /np-src-chain/.test(NP) && /on-chain/.test(NP));
   check('a first build is single-flight, bounded in concurrency, and backs off on the node’s 429', /const flying = _ledgerInflight\.get\(tok\); if \(flying\) return flying;/.test(SRC) && /while \(_ledgerRunning >= LEDGER_MAX_CONCURRENT\)/.test(SRC) && /async function _rpcPaced\(fn, tries = 3\)/.test(SRC));
-  check('a failed refresh keeps the last good ledger', /status=CASE WHEN holder_index\.status='ok' THEN 'ok' ELSE 'error' END/.test(SRC));
+  check('a failed refresh keeps the last good ledger, and a failed build resumes from the block it reached', /status=CASE WHEN holder_index\.status='ok' THEN 'ok' ELSE excluded\.status END/.test(SRC) && /let from = row && row\.last_block \? row\.last_block \+ 1 : 0;/.test(SRC) && /firstBlock = ledgerApply\(tok, out, to, firstBlock\);/.test(SRC));
+  check('  ...the walk shrinks its window when the node says the answer is too large or too slow, and backs off on a 429', /TOO_MANY_RE\.test\(String\(\(e && e\.message\) \|\| ''\)\) && window > 50/.test(SRC) && /timed out\|timeout\|aborted/.test(SRC) && /async function _rpcSlow\(fn\)/.test(SRC));
+  check('  ...a token too large to ledger is remembered as such (a day), keeps the indexer’s count, and the quote assets are never ledgered', /const LEDGER_MAX_LOGS = 1000000;/.test(SRC) && /r\.status === 'too-big' && now\(\) - r\.updated_at < 864e5/.test(SRC) && /QUOTE_SET\.has\(tok\)\) return null;/.test(SRC));
   check('the sweep does community tokens first, then a bounded slice of what people are reading', /ORDER BY COALESCE\(held_at, 0\) ASC LIMIT 6/.test(SRC) && /if \(\+\+done >= 6\) break;/.test(SRC) && /ledgerTimer\.unref\(\)/.test(SRC));
 
   /* ═══ the community supply share ═══ */

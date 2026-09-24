@@ -4407,21 +4407,43 @@ async function _rpcPaced(fn, tries = 3) {       // the public node answers a bur
   }
   throw last;
 }
-/* eth_getLogs for the ledger: a refusal (429) is backed off and retried on the SAME range — splitting on it would
-   turn one refused read into hundreds; the range is only split when the node says the answer is too large. */
-async function ledgerGetLogs(address, from, to, depth = 0) {
-  const hx = (n) => '0x' + n.toString(16);
-  try { return await _rpcPaced(() => rpc('eth_getLogs', [{ fromBlock: hx(from), toBlock: hx(to), address, topics: [TRANSFER_TOPIC] }])); }
-  catch (e) {
-    const msg = String((e && e.message) || '');
-    if (/429|rate|too many/i.test(msg) || to - from < 40000 || depth > 12) throw e;
-    const mid = Math.floor((from + to) / 2);
-    return (await ledgerGetLogs(address, from, mid, depth + 1)).concat(await ledgerGetLogs(address, mid + 1, to, depth + 1));
+const LEDGER_MAX_LOGS = 1000000;                // a token with more Transfer events than this is too big to ledger here — the indexer's count stays, labelled as such
+const LEDGER_PAUSE_MS = 150;                    // between successful reads: a trickle the public node accepts, never a burst
+const TOO_MANY_RE = /exceeds limit|too many results|query returned more|response size|more than \d+ results|limit of \d+|timed out|timeout|aborted/i;   // "the answer is too large (or too slow)" — shrink the window
+async function _rpcSlow(fn) {                    // like _rpcPaced, with the longer backoff a full-history build needs (2, 4, 8, 16 s)
+  let last;
+  for (let i = 0; i < 5; i++) {
+    try { return await fn(); } catch (e) { last = e; if (!/429|rate|too many requests/i.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, i))); }
   }
+  throw last;
 }
-async function indexHolders(tokenAddr) {        // single-flight, incremental; resolves to the summary
+/* Fold a batch of Transfer logs into the stored balances, and move last_block forward — one transaction per window,
+   so a build that the node refuses half-way is complete up to a block and RESUMES there next time. */
+function ledgerApply(tok, logs, upTo, firstSeen) {
+  const delta = new Map();
+  let firstBlock = firstSeen;
+  for (const l of logs) {
+    if (!l || !Array.isArray(l.topics) || l.topics.length < 3) continue;
+    const f = '0x' + String(l.topics[1]).slice(26).toLowerCase(), t = '0x' + String(l.topics[2]).slice(26).toLowerCase();
+    let v; try { v = BigInt(!l.data || l.data === '0x' ? '0x0' : l.data); } catch { continue; }
+    if (firstBlock == null) firstBlock = parseInt(l.blockNumber, 16);
+    delta.set(f, (delta.get(f) || 0n) - v); delta.set(t, (delta.get(t) || 0n) + v);
+  }
+  const get = db.prepare('SELECT balance FROM holder_balances WHERE token_addr=? AND wallet=?');
+  const put = db.prepare('INSERT INTO holder_balances (token_addr, wallet, balance, positive) VALUES (?,?,?,?) ON CONFLICT(token_addr, wallet) DO UPDATE SET balance=excluded.balance, positive=excluded.positive');
+  db.exec('BEGIN');
+  try {
+    for (const [w, d] of delta) { if (d === 0n) continue; const cur = get.get(tok, w); const nb = (cur ? BigInt(cur.balance) : 0n) + d; put.run(tok, w, nb.toString(), nb > 0n ? 1 : 0); }
+    db.prepare(`INSERT INTO holder_index (token_addr, last_block, first_block, logs, status, updated_at) VALUES (?,?,?,?,'building',?)
+      ON CONFLICT(token_addr) DO UPDATE SET last_block=excluded.last_block, first_block=COALESCE(holder_index.first_block, excluded.first_block), logs=holder_index.logs + ?,
+        status=CASE WHEN holder_index.status='ok' THEN 'ok' ELSE 'building' END`).run(tok, upTo, firstBlock, logs.length, now(), logs.length);
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+  return firstBlock;
+}
+async function indexHolders(tokenAddr) {        // single-flight, incremental, resumable; resolves to the summary
   const tok = String(tokenAddr || '').toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(tok)) return null;
+  if (!/^0x[0-9a-f]{40}$/.test(tok) || QUOTE_SET.has(tok)) return null;   // the quote assets (WETH, USDG) are not profiled and would be enormous
   const flying = _ledgerInflight.get(tok); if (flying) return flying;
   const job = (async () => {
     // a slot: builds are bounded so a burst of scans cannot turn into a burst of full-history reads
@@ -4429,31 +4451,33 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental; r
     _ledgerRunning++;
     try {
       const row = db.prepare('SELECT last_block, logs, first_block FROM holder_index WHERE token_addr=?').get(tok);
-      const from = row && row.last_block ? row.last_block + 1 : 0;
-      const latest = parseInt(await _rpcPaced(() => rpc('eth_blockNumber', [])), 16);
-      if (!Number.isFinite(latest)) throw new Error('the chain did not answer');
-      let logs = [];
-      if (from <= latest) logs = await ledgerGetLogs(tok, from, latest);
-      if (!Array.isArray(logs)) throw new Error('the chain did not answer');
-      // fold the events: from −= v, to += v
-      const delta = new Map();
+      let from = row && row.last_block ? row.last_block + 1 : 0;
       let firstBlock = row && row.first_block != null ? row.first_block : null;
-      for (const l of logs) {
-        if (!l || !Array.isArray(l.topics) || l.topics.length < 3) continue;
-        const f = '0x' + String(l.topics[1]).slice(26).toLowerCase(), t = '0x' + String(l.topics[2]).slice(26).toLowerCase();
-        let v; try { v = BigInt(!l.data || l.data === '0x' ? '0x0' : l.data); } catch { continue; }
-        if (firstBlock == null) firstBlock = parseInt(l.blockNumber, 16);
-        delta.set(f, (delta.get(f) || 0n) - v); delta.set(t, (delta.get(t) || 0n) + v);
+      const latest = parseInt(await _rpcSlow(() => rpc('eth_blockNumber', [])), 16);
+      if (!Number.isFinite(latest)) throw new Error('the chain did not answer');
+      const hx = (n) => '0x' + n.toString(16);
+      /* Walk forward. The first window is the whole remaining range (a small token's entire history is one read);
+         when the node says the answer is too large the window is quartered and the same start retried; a small
+         answer lets it grow again. Every window is folded and persisted before the next is asked for. */
+      let window = Math.max(1, latest - from + 1), total = (row && row.logs) || 0, reads = 0;
+      while (from <= latest) {
+        const to = Math.min(latest, from + window - 1);
+        let out;
+        try { out = await _rpcSlow(() => rpc('eth_getLogs', [{ fromBlock: hx(from), toBlock: hx(to), address: tok, topics: [TRANSFER_TOPIC] }])); }
+        catch (e) {
+          if (TOO_MANY_RE.test(String((e && e.message) || '')) && window > 50) { window = Math.max(50, Math.floor(window / 4)); continue; }
+          throw e;
+        }
+        if (!Array.isArray(out)) throw new Error('the chain did not answer');
+        total += out.length; reads++;
+        if (total > LEDGER_MAX_LOGS) throw new Error('ledger too large');
+        firstBlock = ledgerApply(tok, out, to, firstBlock);
+        from = to + 1;
+        if (out.length < 2500) window = Math.min(window * 2, Math.max(1, latest - from + 1));
+        if (from <= latest) await new Promise((r) => setTimeout(r, LEDGER_PAUSE_MS));
       }
-      const supply = await _rpcPaced(() => totalSupply(tok)).catch(() => null);       // paced: a refused read is retried, never recorded as "no supply"
-      const decimals = await _rpcPaced(() => tokenDecimals(tok)).catch(() => null);
-      const get = db.prepare('SELECT balance FROM holder_balances WHERE token_addr=? AND wallet=?');
-      const put = db.prepare('INSERT INTO holder_balances (token_addr, wallet, balance, positive) VALUES (?,?,?,?) ON CONFLICT(token_addr, wallet) DO UPDATE SET balance=excluded.balance, positive=excluded.positive');
-      db.exec('BEGIN');
-      try {
-        for (const [w, d] of delta) { if (d === 0n) continue; const cur = get.get(tok, w); const nb = (cur ? BigInt(cur.balance) : 0n) + d; put.run(tok, w, nb.toString(), nb > 0n ? 1 : 0); }
-        db.exec('COMMIT');
-      } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+      const supply = await _rpcSlow(() => totalSupply(tok)).catch(() => null);       // paced: a refused read is retried, never recorded as "no supply"
+      const decimals = await _rpcSlow(() => tokenDecimals(tok)).catch(() => null);
       // the summary: who holds, how much of the supply, and whether the ledger adds up
       const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
       // the zero address goes negative by design (a mint is a transfer FROM it); any other negative means the token
@@ -4467,13 +4491,16 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental; r
       db.prepare(`INSERT INTO holder_index (token_addr, last_block, first_block, holders, supply, decimals, logs, consistent, top_json, status, error, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,'ok',NULL,?)
         ON CONFLICT(token_addr) DO UPDATE SET last_block=excluded.last_block, first_block=COALESCE(holder_index.first_block, excluded.first_block), holders=excluded.holders,
-          supply=COALESCE(excluded.supply, holder_index.supply), decimals=COALESCE(excluded.decimals, holder_index.decimals), logs=holder_index.logs + ?, consistent=excluded.consistent,
+          supply=COALESCE(excluded.supply, holder_index.supply), decimals=COALESCE(excluded.decimals, holder_index.decimals), consistent=excluded.consistent,
           top_json=excluded.top_json, status='ok', error=NULL, updated_at=excluded.updated_at`)
-        .run(tok, latest, firstBlock, holders.length, sup ? sup.toString() : null, decimals, logs.length, negative ? 0 : 1, JSON.stringify(top), now(), logs.length);
+        .run(tok, latest, firstBlock, holders.length, sup ? sup.toString() : null, decimals, total, negative ? 0 : 1, JSON.stringify(top), now());
       return holderLedger(tok);
     } catch (e) {
-      // a failed refresh keeps the last good ledger (status stays ok if it was) and records why
-      try { db.prepare(`INSERT INTO holder_index (token_addr, status, error, updated_at) VALUES (?,'error',?,?) ON CONFLICT(token_addr) DO UPDATE SET error=excluded.error, status=CASE WHEN holder_index.status='ok' THEN 'ok' ELSE 'error' END`).run(tok, String((e && e.message) || e).slice(0, 200), now()); } catch {}
+      // a failed build keeps what it has (complete up to last_block — the next attempt resumes there) and the last good
+      // summary if there was one; a token too large to ledger is remembered as such so the sweep does not retry it every minute
+      const tooBig = /ledger too large/.test(String((e && e.message) || ''));
+      try { db.prepare(`INSERT INTO holder_index (token_addr, status, error, updated_at) VALUES (?,?,?,?) ON CONFLICT(token_addr) DO UPDATE SET error=excluded.error, status=CASE WHEN holder_index.status='ok' THEN 'ok' ELSE excluded.status END, updated_at=CASE WHEN excluded.status='too-big' THEN excluded.updated_at ELSE holder_index.updated_at END`).run(tok, tooBig ? 'too-big' : 'error', String((e && e.message) || e).slice(0, 200), now()); } catch {}
+      if (tooBig) { try { db.prepare('DELETE FROM holder_balances WHERE token_addr=?').run(tok); db.prepare('UPDATE holder_index SET last_block=0, logs=0 WHERE token_addr=?').run(tok); } catch {} }   // a partial ledger is worse than none
       throw e;
     } finally { _ledgerRunning--; }
   })();
@@ -4484,6 +4511,7 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental; r
 /* What a request path calls: the ledger as it stands, refreshed when stale — waiting a bounded time for a
    first build so a scan can show the chain's count, and never blocking a page on a slow node. */
 async function ensureLedger(tok, opts = {}) {
+  try { const r = db.prepare('SELECT status, updated_at FROM holder_index WHERE token_addr=?').get(String(tok || '').toLowerCase()); if (r && r.status === 'too-big' && now() - r.updated_at < 864e5) return null; } catch {}   // once a day is enough to re-check a giant
   const cur = holderLedger(tok);
   const stale = !cur || now() - cur.at > (opts.freshMs != null ? opts.freshMs : LEDGER_FRESH_MS);
   if (!stale) return cur;
