@@ -150,11 +150,11 @@
   });
 
   window.burst = burst;   // eggs.js celebrates a find with the same confetti as everything else
-  window.sendToast = function (msg) {
+  window.sendToast = function (msg, ms) {   // ms: how long it stays — longer for a sentence the reader has to act on
     const t = document.createElement('div');
     t.className = 'toast'; t.textContent = msg;
     zone.appendChild(t);
-    setTimeout(() => t.remove(), 2600);
+    setTimeout(() => t.remove(), ms || 2600);
   };
 
   // --- matrix tiles: the pointer lights the cells under it (styles.css reads --mx/--my on the control) ---

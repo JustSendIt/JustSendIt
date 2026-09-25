@@ -235,8 +235,8 @@
             </div>
 
             <div id="cred-block" hidden style="margin-top:1.1rem; border-top:1px solid var(--ink-4); padding-top:0.9rem;">
-              <div class="f-label" style="margin-top:0;">Email &amp; password</div>
-              <p class="modal-note">Sign in with <b>@<span id="cred-handle"></span></b> or your email, and this password.</p>
+              <div class="f-label" style="margin-top:0;" id="cred-title">Email &amp; password</div>
+              <p class="modal-note">Sign in with <b>@<span id="cred-handle"></span></b><span id="cred-withemail"> or your email</span>, and this password.<span id="cred-noemail" hidden> There’s no email on this account yet — the one given at sign-up was already on another account, so it wasn’t added. Add one below if you want to sign in with an email too.</span></p>
               <form id="chpw-form" autocomplete="off" style="display:grid; gap:0.5rem; max-width:420px;">
                 <label class="f-label" for="chpw-new" style="margin:0;">New password (8+ characters)</label>
                 <input class="addr-input" id="chpw-new" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
@@ -246,7 +246,7 @@
                 <p class="modal-note" id="chpw-status" role="status" aria-live="polite" style="margin:0;"></p>
               </form>
               <form id="chem-form" autocomplete="off" style="display:grid; gap:0.5rem; max-width:420px; margin-top:0.9rem;">
-                <label class="f-label" for="chem-new" style="margin:0;">New email</label>
+                <label class="f-label" for="chem-new" style="margin:0;" id="chem-label">New email</label>
                 <input class="addr-input" id="chem-new" type="email" autocomplete="email" style="margin:0;" placeholder="you@example.com" required>
                 <button class="btn btn-ghost btn-sm" type="submit" id="chem-submit" data-tip="Changes the email you sign in with; your password stays the same">Change email ✉️</button>
                 <p class="modal-note" id="chem-status" role="status" aria-live="polite" style="margin:0;"></p>

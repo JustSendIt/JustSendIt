@@ -377,7 +377,7 @@ async function unlinkWallet(address) {
   const st = document.getElementById('wl-status');
   if (st) st.textContent = '';
   try {
-    const current = AUTH.user && AUTH.user.twofa ? await currentFactorBody('Unlinking a wallet changes how you sign in.') : {};
+    const current = await currentFactorBody('Unlinking a wallet changes how you sign in.');   // two-factor on or off: removing a way in is a security change
     const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, current } });
     sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: that wallet had sold out' : ''));
     await loadMe();
@@ -508,10 +508,12 @@ async function changeEmail(e) {
   st.textContent = '…';
   try {
     await currentFactorBody('Changing the email you sign in with.');
+    const had = AUTH.user && (AUTH.user.methods || []).includes('email');
     await api('/api/account/email/change', { method: 'POST', body: { email } });
     document.getElementById('chem-new').value = '';
     st.textContent = '';
-    sendToast('Email changed ✉️');
+    sendToast(had ? 'Email changed ✉️' : 'Email added ✉️ — you can sign in with it now');
+    loadMe();
   } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
 }
 /* A new account that ticked "set up two-factor right after" lands here with a note and a way back.
@@ -529,7 +531,7 @@ async function loadMe() {
     AUTH.user = me;
     const zone = document.getElementById('pf-methods');
     zone.innerHTML = '';
-    const label = { wallet: '🦊 Wallet', email: '✉️ Email', google: 'G Google', facebook: 'f Facebook' };
+    const label = { wallet: '🦊 Wallet', email: '✉️ Email', password: '🔑 Password', google: 'G Google', facebook: 'f Facebook' };
     for (const m of me.methods) {
       const s = document.createElement('span');
       s.className = 'privacy-chip';
@@ -545,11 +547,17 @@ async function loadMe() {
     if (on) document.getElementById('twofa-kind').textContent = ({ totp: 'authenticator app', wallet: 'wallet signature', password: 'account password' })[me.twofa] || me.twofa;
     document.getElementById('wallet-2fa-btn').disabled = !me.wallets.length;
     if (!me.wallets.length) document.getElementById('wallet-2fa-btn').title = 'Link a wallet first';
-    const hasEmail = me.methods.includes('email'), hasWallet = me.wallets.length > 0;
-    const aeb = document.getElementById('add-email-block'); if (aeb) aeb.hidden = hasEmail;
-    const cred = document.getElementById('cred-block'); if (cred) cred.hidden = !hasEmail;
+    // 'password' = a password with no email yet (a sign-up whose email was already on another account)
+    const hasEmail = me.methods.includes('email'), hasPw = hasEmail || me.methods.includes('password'), hasWallet = me.wallets.length > 0;
+    const aeb = document.getElementById('add-email-block'); if (aeb) aeb.hidden = hasPw;
+    const cred = document.getElementById('cred-block'); if (cred) cred.hidden = !hasPw;
     const ch = document.getElementById('cred-handle'); if (ch) ch.textContent = me.username;
-    const pwBtn = document.getElementById('pw-2fa-btn'); if (pwBtn) pwBtn.hidden = !(hasEmail && hasWallet); // password-2FA only makes sense for wallet sign-ins
+    const cn = document.getElementById('cred-noemail'); if (cn) cn.hidden = hasEmail;
+    const cw = document.getElementById('cred-withemail'); if (cw) cw.hidden = !hasEmail;
+    const ct = document.getElementById('cred-title'); if (ct) ct.textContent = hasEmail ? 'Email & password' : 'Password';
+    const cl = document.getElementById('chem-label'); if (cl) cl.textContent = hasEmail ? 'New email' : 'Add an email';
+    const cs = document.getElementById('chem-submit'); if (cs) cs.textContent = hasEmail ? 'Change email ✉️' : 'Add email ✉️';
+    const pwBtn = document.getElementById('pw-2fa-btn'); if (pwBtn) pwBtn.hidden = !(hasPw && hasWallet); // password-2FA only makes sense for wallet sign-ins
     renderWallets(me);
     renderSudo();
   } catch {}

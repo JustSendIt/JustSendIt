@@ -126,6 +126,7 @@ try {
 
     // end to end: promote a second wallet to be the key, then prove which wallet the door accepts
     const u = mkUser('__af_2fa__');
+    db.prepare('UPDATE sessions SET sudo_until = ? WHERE user_id = ?').run(Date.now() + 3600e3, u.id);   // its own setup window: linking takes "confirm it's you"
     const wA = Wallet.createRandom(), wB = Wallet.createRandom();
     const link = async (w, proof) => {
       const a = w.address.toLowerCase();

@@ -35,6 +35,8 @@ function mkUser(name) {
     .run(createHash('sha256').update(raw).digest('hex'), id, Date.now(), Date.now() + 864e5);
   return { id, sid: raw };
 }
+// the unlocked window a real account has at its own setup (or after "confirm it's you"), and closing it again
+const setSudo = (sid, on) => db.prepare('UPDATE sessions SET sudo_until = ? WHERE token = ?').run(on ? Date.now() + 3600e3 : null, createHash('sha256').update(sid).digest('hex'));
 async function link(sid, w, proof) {   // proof: a wallet already on the account signs a manage challenge (F011)
   const addr = w.address.toLowerCase();
   const n = await api('/api/auth/wallet/nonce?purpose=link&address=' + addr, { sid });
@@ -46,6 +48,7 @@ async function link(sid, w, proof) {   // proof: a wallet already on the account
 
 try {
   const u = mkUser('__tk_user__');
+  setSudo(u.sid, true);   // its setup window: linking and unlinking are security changes
   const w1 = Wallet.createRandom(), w2 = Wallet.createRandom(), w3 = Wallet.createRandom();
 
   const empty = await api('/api/wallets', { sid: u.sid });
@@ -87,6 +90,7 @@ try {
 
   // a wallet-first signup has a tracked row for its own wallet: it must be listed ONCE, as yours, free
   const dup = mkUser('__tk_dup__');
+  setSudo(dup.sid, true);
   const wd = Wallet.createRandom();
   await link(dup.sid, wd);
   db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)')

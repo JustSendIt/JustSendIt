@@ -1153,7 +1153,6 @@ function verifyNeedsOf(me) {
     code: m === 'totp',                                         // a code from the authenticator app
     wallet: m === 'wallet' ? 'twofa' : (vouch ? 'owner' : null),   // a signature: from the two-factor wallet, or (no password, no 2FA) a wallet that vouches
     signInAgain: !hasPw && !m && !vouch,                        // nothing else to prove with: signing in again is the proof
-    none: !hasPw && !m && !walletAddresses(me.id).length,       // nothing at all yet — the first wallet links without one
     minutes: Math.round(SUDO_MS / 60e3),
   };
 }
@@ -1208,7 +1207,9 @@ function themeOf(u) {
   };
 }
 function identityTypes(userId) {
-  return db.prepare('SELECT type FROM identities WHERE user_id = ?').all(userId).map(r => r.type);
+  // a password with no email reports as 'password', so a settings screen never offers email sign-in it does not have
+  return db.prepare('SELECT type, identifier FROM identities WHERE user_id = ?').all(userId)
+    .map(r => (r.type === 'email' && r.identifier === noEmailMark(userId)) ? 'password' : r.type);
 }
 function walletAddresses(userId) {
   return db.prepare("SELECT identifier_enc FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id").all(userId).map(r => decField(r.identifier_enc)).filter(Boolean);
@@ -1253,6 +1254,44 @@ function insertIdentity(userId, type, value, secret) {
   db.prepare('INSERT INTO identities (user_id, type, identifier, identifier_enc, secret, linked_at) VALUES (?,?,?,?,?,?)').run(userId, type, bidx(value), encField(value), secret || null, now());
 }
 function emailIdentity(userId) { return db.prepare("SELECT * FROM identities WHERE type = 'email' AND user_id = ?").get(userId); }
+/* An account can have a password and no email. A sign-up whose email already belongs to another account is not
+   refused (that refusal told any ticket holder, as often as they liked, whether an address was a member) — the
+   account is made, keeps its password, signs in with its @username, and simply has no email until it sets one.
+   The password sits in the same 'email' identity row every password check already reads, under the value
+   'nomail:<id>': not an address, so no email lookup and no email sign-in can ever match it. */
+const noEmailMark = (userId) => bidx('nomail:' + userId);
+function insertPasswordOnly(userId, pwHash) { insertIdentity(userId, 'email', 'nomail:' + userId, pwHash); }
+function isPasswordOnly(row) { return !!row && row.type === 'email' && row.identifier === noEmailMark(row.user_id); }
+/* "That email already belongs to another account" is a fact about somebody ELSE, and this site has no email it could
+   send instead — so wherever that answer has to come out, it is RATIONED: EMAIL_MISS_MAX of them per EMAIL_MISS_MS,
+   counted per account AND per connection, so deleting an account and making another does not reset the count. The
+   sign-up doors count too (there the answer is "account made, email not added"). Once a count is spent, every door
+   that would look an email up refuses FIRST, before the lookup, with one sentence for every address, free or taken.
+   The connection is a blind index like every IP this site keeps, and each row goes when its window passes
+   (sweepIpIndexes). */
+db.exec('CREATE TABLE IF NOT EXISTS email_misses (key TEXT NOT NULL, at INTEGER NOT NULL); CREATE INDEX IF NOT EXISTS idx_email_misses ON email_misses(key, at);');
+const EMAIL_MISS_MAX = 3, EMAIL_MISS_MS = 30 * 864e5;
+function emailMissKeys(req, userId) { const k = []; if (userId) k.push('u:' + userId); const ip = ipIdx(req); if (ip) k.push('ip:' + ip); return k; }
+// the answers left (the fewest across the keys), and when the ration next frees up
+function emailMissState(keys) {
+  let left = EMAIL_MISS_MAX, until = 0;
+  for (const k of keys) {
+    const ats = db.prepare('SELECT at FROM email_misses WHERE key = ? AND at > ? ORDER BY at').all(k, now() - EMAIL_MISS_MS).map(r => r.at);
+    left = Math.min(left, EMAIL_MISS_MAX - ats.length);
+    if (ats.length >= EMAIL_MISS_MAX) until = Math.max(until, ats[ats.length - EMAIL_MISS_MAX] + EMAIL_MISS_MS);
+  }
+  return { left: Math.max(0, left), until };
+}
+function emailMissPaused(keys, what) {
+  const st = emailMissState(keys);
+  if (st.left > 0) return null;
+  return what + ' paused until ' + new Date(st.until).toISOString().slice(0, 10) + ': ' + EMAIL_MISS_MAX + ' emails that were already in use have been tried here in the last 30 days. The pause is the same whatever address you enter.';
+}
+function emailMiss(keys) {
+  for (const k of keys) db.prepare('INSERT INTO email_misses (key, at) VALUES (?,?)').run(k, now());
+  const left = emailMissState(keys).left;
+  return 'that email already belongs to another account — ' + (left > 0 ? left + ' more ' + (left === 1 ? 'try' : 'tries') + ' with an address that is in use before email changes pause for 30 days' : 'email changes are now paused here for 30 days');
+}
 const SITE_HOST = (() => { try { return new URL(BASE_URL).host; } catch { return 'localhost'; } })();
 /* Domain-bound sign-in messages, in the EXACT EIP-4361 (Sign-In with Ethereum) layout.
    The format is not cosmetic. Naming the host inside the text only helps a reader who stops to read raw
@@ -7479,39 +7518,50 @@ function walletSignupFields(b) {
   }
   return { username, email, password };
 }
-/* The account a wallet sign-up makes. The slow part — hashing the optional password — runs FIRST; every gate
-   (ticket, per-IP cap, name, wallet, email) and every write then run in ONE synchronous transaction, with no await
-   between "is there room?" and "take it". Concurrent sign-ups therefore cannot share one ticket or overrun the
-   per-IP cap, and a UNIQUE collision rolls back without leaving a half-made account. An email that already
-   belongs to another account is NOT answered with a refusal (that would tell a ticket holder, repeatably, who is a
-   member): the account is made without it, and the reply says only that the email could not be added. */
-async function createWalletAccount(req, address, su) {
-  const pwHash = su && su.email ? await hashPassword(su.password) : null;
-  const wIp = ipIdx(req);
+/* The account a sign-up makes — email or wallet, one function. The slow part (hashing the password) runs FIRST;
+   every gate (ticket, per-IP cap, name, wallet, email) and every write then run in ONE synchronous transaction,
+   with no await between "is there room?" and "take it". Concurrent sign-ups therefore cannot share one ticket or
+   overrun the per-IP cap, and a UNIQUE collision rolls back without leaving a half-made account.
+   An email that already belongs to another account is NOT answered with a refusal — that told any ticket holder,
+   as often as they liked, who is a member. The account is made anyway: it keeps its password (sign in with the
+   @username) and has no email until it sets one (insertPasswordOnly), and the reply says the email was not added.
+   Learning that an address is in use therefore costs a whole account: a ticket, spent, and one of the
+   connection's MAX_ACCOUNTS_PER_IP sign-ups. */
+async function createAccount(req, f) {
+  const pwHash = f.password ? await hashPassword(f.password) : null;
+  const ip = ipIdx(req);
   try {
     db.exec('BEGIN IMMEDIATE');
     const gate = signupRefusal(req);
     if (gate) { db.exec('ROLLBACK'); return { error: gate.error, status: 403, gate }; }
-    const wBlock = ipSignupBlocked(wIp);
-    if (wBlock) { db.exec('ROLLBACK'); return { error: wBlock, status: 429 }; }
-    if (findIdentity('wallet', address)) { db.exec('ROLLBACK'); return { error: 'that wallet already has an account — sign in with it instead', status: 409 }; }
-    if (su && su.username && usernameTaken(su.username)) { db.exec('ROLLBACK'); return { error: 'that username was just taken — pick another', status: 409 }; }
-    const emailFree = !!(pwHash && !findIdentity('email', su.email));
-    const username = (su && su.username) || autoUsername();
-    const userId = createUser(username, !(su && su.username), wIp);
-    insertIdentity(userId, 'wallet', address);
-    if (emailFree) insertIdentity(userId, 'email', su.email, pwHash);
-    claimInvite(req, userId);
-    db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
+    const block = ipSignupBlocked(ip);
+    if (block) { db.exec('ROLLBACK'); return { error: block, status: 429 }; }
+    if (f.address && findIdentity('wallet', f.address)) { db.exec('ROLLBACK'); return { error: 'that wallet already has an account — sign in with it instead', status: 409 }; }
+    if (f.username && usernameTaken(f.username)) { db.exec('ROLLBACK'); return { error: 'that username was just taken — pick another', status: 409 }; }
+    const missKeys = f.email ? emailMissKeys(req, null) : [];
+    const paused = f.email && emailMissPaused(missKeys, 'Sign-ups with an email from this connection are');
+    if (paused) { db.exec('ROLLBACK'); return { error: paused + (f.address ? ' You can sign up with the wallet alone and add an email later.' : ' You can join with a wallet instead and add an email later.'), status: 429 }; }
+    const emailFree = !!(pwHash && f.email && !findIdentity('email', f.email));
+    const username = f.username || autoUsername();
+    const userId = createUser(username, !f.username, ip);
+    if (f.address) insertIdentity(userId, 'wallet', f.address);
+    if (pwHash) { if (emailFree) insertIdentity(userId, 'email', f.email, pwHash); else { insertPasswordOnly(userId, pwHash); emailMiss(missKeys); } }
+    claimInvite(req, userId);   // bind the code that let them in, and mint their own to hand out
+    if (f.address) db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(f.address), encField(f.address), 'My wallet', now());
     db.exec('COMMIT');
-    awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address));   // blind index, never the address — see the link path
-    checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
-    queueHolderProof(userId);        // they signed up WITH a wallet: start the participation check right away
-    return { userId, username, emailNotAdded: !!(pwHash && !emailFree) };
+    if (f.address) {
+      awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(f.address));   // blind index, never the address — see the link path
+      checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
+      queueHolderProof(userId);        // they signed up WITH a wallet: start the participation check right away
+    }
+    return { userId, username, emailNotAdded: !!(pwHash && f.email && !emailFree) };
   } catch (e) {
     try { db.exec('ROLLBACK'); } catch {}
     return { error: 'could not create the account just now — try again', status: 500 };
   }
+}
+function createWalletAccount(req, address, su) {
+  return createAccount(req, { address, username: su && su.username, email: su && su.email, password: su && su.email ? su.password : '' });
 }
 
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -8989,6 +9039,7 @@ function blockReadOnly(res, me) {
      · calls.ip           the same-network ring detector looks back SYBIL_WINDOW_MS — erased a day after that
      · users.signup_ip    the per-network account cap — erased after SIGNUP_IP_KEEP_MS, so the cap counts
                           accounts made from one network in that window, not for all time
+     · email_misses       the "that email is already in use" ration — erased when its 30-day window passes
      · join_ip, creator_ip, alerts.ip   live only while the membership, community or alert they guard does,
                           and go with it (and with the account)
    last_ip, vote_ip and author_ip are no longer written at all: nothing ever read them. */
@@ -8997,6 +9048,7 @@ function sweepIpIndexes(t) {
   try {
     db.prepare('UPDATE calls SET ip = NULL WHERE ip IS NOT NULL AND created_at < ?').run(t - SYBIL_WINDOW_MS - DAY_MS);
     db.prepare('UPDATE users SET signup_ip = NULL WHERE signup_ip IS NOT NULL AND created_at < ?').run(t - SIGNUP_IP_KEEP_MS);
+    db.prepare('DELETE FROM email_misses WHERE at < ?').run(t - EMAIL_MISS_MS);
     db.prepare('UPDATE users SET last_ip = NULL WHERE last_ip IS NOT NULL').run();
     db.prepare('UPDATE proposal_votes SET vote_ip = NULL WHERE vote_ip IS NOT NULL').run();
     db.prepare('UPDATE proposals SET author_ip = NULL WHERE author_ip IS NOT NULL').run();
@@ -9870,19 +9922,17 @@ const server = http.createServer(async (req, res) => {
         if (usernameTaken(username)) return bad(res, 'that username is taken — try another');
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
-        // The invite, enforced where it belongs: at the moment an account comes into existence — and BEFORE the
-        // email lookup, so a visitor with no ticket cannot use this door to ask whether an address is a member.
+        // The invite, enforced where it belongs: at the moment an account comes into existence. Asked first (and
+        // again inside createAccount's transaction) so a visitor with no ticket never reaches anything else.
         const regGate = signupRefusal(req);
         if (regGate) return send(res, 403, regGate);
-        // one answer for "taken" whatever the reason, so even a ticket holder learns nothing about who else is here
-        if (findIdentity('email', email)) return bad(res, 'we could not create an account with those details — if you already have one, sign in instead');
-        const regIp = ipIdx(req);
-        const regBlock = ipSignupBlocked(regIp);
-        if (regBlock) return bad(res, regBlock, 429);
-        const userId = createUser(username, false, regIp);
-        insertIdentity(userId, 'email', email, await hashPassword(password));
-        claimInvite(req, userId);   // bind the code that let them in, and mint their own to hand out
-        return send(res, 200, { ok: true, username, newAccount: true }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req), NEW_ACCOUNT_SUDO_MS)) });   // a new account's own setup never asks for the password it just chose
+        /* An email already on another account is NOT refused here: that answer told any ticket holder, repeatably,
+           who is a member. createAccount makes the account anyway — password kept, email not added — so the only
+           way to learn it is to spend a ticket and one of the connection's sign-ups on an account. */
+        const made = await createAccount(req, { username, email, password });
+        if (made.gate) return send(res, 403, made.gate);
+        if (made.error) return bad(res, made.error, made.status || 400);
+        return send(res, 200, { ok: true, username: made.username, newAccount: true, ...(made.emailNotAdded ? { emailNotAdded: true } : {}) }, { 'Set-Cookie': sessionCookie(createSession(made.userId, ipIdx(req), NEW_ACCOUNT_SUDO_MS)) });   // a new account's own setup never asks for the password it just chose
       }
       if (p === '/api/auth/login' && req.method === 'POST') {
         if (!rateLimit('login:' + clientIp(req), 20, 9e5)) return bad(res, 'slow down', 429);
@@ -10234,6 +10284,8 @@ const server = http.createServer(async (req, res) => {
         if (!wallets.length) return send(res, 200, { ok: true, wallets: [] }); // nothing linked → no-op
         if (!identityTypes(me.id).some(m => m !== 'wallet')) return bad(res, 'add an email + password first — your wallet is your only way to sign in, so disconnecting it would lock you out', 400);
         if (me.twofa_method === 'wallet') return bad(res, 'turn off wallet two-factor in your profile settings first, then disconnect', 400);
+        // removing every wallet is a security change: "confirm it's you" first, whatever the account's two-factor
+        { let body0 = {}; try { body0 = await readBody(req); } catch {} const err = await ownershipRefusal(me, body0); if (err) return bad(res, 'to disconnect your wallets, ' + err, 401); }
         // OG = held BOTH $SEND & $GWC early; selling out of EITHER revokes it permanently. Disconnecting while still holding
         // both is honest (keep OG); disconnecting AFTER selling out must still revoke — so check on-chain NOW, while the
         // wallet is still linked/readable (done before BEGIN; a transient RPC error fails safe = keep OG). Closes the
@@ -10388,7 +10440,10 @@ const server = http.createServer(async (req, res) => {
         // The 2FA wallet is the key to the account; it may only go once another one is the key, or 2FA is off.
         if (me.twofa_method === 'wallet' && (twofaWalletAddress(me.id) || linked[0]) === addr)
           return bad(res, 'that is your two-factor wallet — choose a different one for two-factor first, or turn two-factor off, then unlink it');
-        if (me.twofa_method) { const errU = await verifyCurrentFactor(me, (b.current && typeof b.current === 'object') ? b.current : b); if (errU) return bad(res, errU, 401); }   // nested: `address` here is the wallet being unlinked
+        /* Removing a way in is a security change like adding one: "confirm it's you", two-factor on or off. It
+           used to ask only when two-factor was on, so a borrowed cookie could strip wallets from any other account.
+           The proof rides nested as `current` — the top-level `address` is the wallet being unlinked, not a proof. */
+        { const errU = await ownershipRefusal(me, { current: (b.current && typeof b.current === 'object') ? b.current : {} }); if (errU) return bad(res, 'to unlink a wallet, ' + errU, 401); }
         /* Same honesty rule as a full disconnect: decide OG from the chain WHILE the wallet is still
            readable, so selling out and then unlinking cannot launder the badge. A failed read keeps it. */
         let revokeOg = false;
@@ -10446,7 +10501,7 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('addemail:' + me.id, 10, 36e5)) return bad(res, 'slow down', 429);
         const b = await readBody(req);
-        if (emailIdentity(me.id)) return bad(res, 'this account already has an email + password');
+        { const e0 = emailIdentity(me.id); if (e0) return bad(res, isPasswordOnly(e0) ? 'this account already has a password — set its email with Change email' : 'this account already has an email + password'); }
         const email = String(b.email || '').trim().toLowerCase(), password = String(b.password || '');
         if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
@@ -10455,8 +10510,11 @@ const server = http.createServer(async (req, res) => {
         // Adding an email+password is adding a PERMANENT second way into the account, so it takes proof of
         // ownership whether or not two-factor is on — not just on the accounts that already have 2FA.
         { const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
-        if (findIdentity('email', email)) return bad(res, 'that email already belongs to another account');
-        insertIdentity(me.id, 'email', email, await hashPassword(password));
+        const missKeys = emailMissKeys(req, me.id);
+        { const paused = emailMissPaused(missKeys, 'Adding or changing an email is'); if (paused) return bad(res, paused, 429); }   // before the lookup: the same answer for every address
+        const pwHash = await hashPassword(password);
+        if (findIdentity('email', email)) return bad(res, emailMiss(missKeys), 409);
+        try { insertIdentity(me.id, 'email', email, pwHash); } catch { return bad(res, 'could not add that email just now — try again', 409); }   // taken in the moment the hash ran
         sudoOthersOff(me);
         notify(me.id, '✉️', 'An email and password were added to your account. Not you? End other sessions in Settings → Security.', 'alert');
         return send(res, 200, { ok: true, methods: identityTypes(me.id) });
@@ -10468,15 +10526,18 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('chemail:' + me.id, 10, 36e5)) return bad(res, 'slow down', 429);
         const b = await readBody(req);
         const e = emailIdentity(me.id);
-        if (!e) return bad(res, 'this account has no email yet — add an email + password first');
+        if (!e) return bad(res, 'this account has no password yet — add an email + password first');
         const email = String(b.email || '').trim().toLowerCase();
         if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
         { const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
+        const missKeys = emailMissKeys(req, me.id);
+        { const paused = emailMissPaused(missKeys, 'Adding or changing an email is'); if (paused) return bad(res, paused, 429); }   // before the lookup: the same answer for every address
         const other = findIdentity('email', email);
-        if (other && other.user_id !== me.id) return bad(res, 'that email already belongs to another account');
+        if (other && other.user_id !== me.id) return bad(res, emailMiss(missKeys), 409);
+        const hadNone = isPasswordOnly(e);
         if (!other) db.prepare('UPDATE identities SET identifier = ?, identifier_enc = ? WHERE id = ?').run(bidx(email), encField(email), e.id);
         sudoOthersOff(me);
-        notify(me.id, '✉️', 'The email on your account was changed. Not you? End other sessions in Settings → Security.', 'alert');
+        notify(me.id, '✉️', (hadNone ? 'An email was added to your account — you can now sign in with it.' : 'The email on your account was changed.') + ' Not you? End other sessions in Settings → Security.', 'alert');
         return send(res, 200, { ok: true, methods: identityTypes(me.id) });
       }
       /* ----- moderation: mute / unmute (private to the muter; the muted user is never told) ----- */
@@ -10608,13 +10669,13 @@ const server = http.createServer(async (req, res) => {
         /* F011: linking a wallet ADDS A WAY INTO THE ACCOUNT, so it passes whatever guards the account — asked
            BEFORE the new wallet's signature is spent, so "confirm it's you first" can be answered and the same
            signature sent again. On a password account that is the password; on a wallet-only account a manage
-           signature from a wallet already on it; inside the unlocked window, nothing more. An account with no
-           password and no wallet yet (a social sign-in) has nothing it could prove with — its FIRST wallet links
-           on the session alone; the owner is notified and the 24h age rule (walletTooNew) keeps that wallet from
-           vouching for the account straight away. */
-        // decided from the CALLER's account only — never from whether this address has an account, or the answer
+           signature from a wallet already on it; inside the unlocked window, nothing more. That now includes an
+           account's FIRST wallet: a social-login account with nothing else to prove with used to link it on the
+           session alone, so a borrowed cookie could attach the borrower's wallet. Its proof is signing in again
+           with its social account, which unlocks it (onlyProofIsSignIn); a new account's setup is unlocked anyway. */
+        // asked of every signed-in caller alike — never shaped by whether this address has an account, or the answer
         // would tell a signed-in stranger which wallets are members before any signature is checked
-        if (me && (me.twofa_method || emailIdentity(me.id) || walletAddresses(me.id).length)) {
+        if (me) {
           const cur = Object.assign({}, b.current || {}); if (!cur.password && b.password) cur.password = b.password;
           const err = await ownershipRefusal(me, cur); if (err) return bad(res, 'to link a wallet, ' + err, 401);
         }

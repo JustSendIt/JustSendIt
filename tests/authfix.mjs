@@ -42,6 +42,8 @@ function mkUser(name) {
     .run(createHash('sha256').update(raw).digest('hex'), id, Date.now(), Date.now() + 864e5);
   return { id, sid: raw };
 }
+// the unlocked window a real account has at its own setup (or after "confirm it's you"), and closing it again
+const setSudo = (sid, on) => db.prepare('UPDATE sessions SET sudo_until = ? WHERE token = ?').run(on ? Date.now() + 3600e3 : null, createHash('sha256').update(sid).digest('hex'));
 // sign the challenge the server issues for a given purpose
 async function signFor(w, purpose) {
   const n = await api('/api/auth/wallet/nonce?purpose=' + purpose + '&address=' + w.address.toLowerCase());
@@ -55,10 +57,15 @@ try {
   const victim = mkUser('__afx_victim__');
   const attackerW = Wallet.createRandom();
 
-  // attacker holds only the cookie; tries to attach their own wallet (no factor on the account yet)
+  // attacker holds only the cookie; tries to attach their own wallet (no password, no factor, no wallet on the account yet)
   let s = await signFor(attackerW, 'link');
   const link = await api('/api/auth/wallet/verify', { method: 'POST', sid: victim.sid, body: s });
-  check('a wallet can still be linked when the account has no second factor', link.status === 200, link.status);
+  check('ATTACK CLOSED: a session alone cannot link even the FIRST wallet — it is asked to confirm it’s you (sign in again)', link.status === 401 && link.j && link.j.code === 'need_verify' && /sign in again/.test(link.j.error || ''), link.status + ' ' + JSON.stringify(link.j));
+  // the owner's unlocked window (a new account's setup, or signing in again) links it — with the SAME, unspent signature
+  setSudo(victim.sid, true);
+  const linkOwner = await api('/api/auth/wallet/verify', { method: 'POST', sid: victim.sid, body: s });
+  check('  ...inside the unlocked window the same signature links it', linkOwner.status === 200 && linkOwner.j && linkOwner.j.linked, linkOwner.status + ' ' + JSON.stringify(linkOwner.j));
+  setSudo(victim.sid, false);   // the window closes: from here on this session is what a borrowed cookie looks like
 
   // ...then tries to arm wallet 2FA with that just-linked wallet. THIS is the lockout, and it must fail:
   // the account is wallet-only, so the wallet must predate the session doing the asking.
@@ -87,7 +94,9 @@ try {
   const goodW = Wallet.createRandom(), lateW = Wallet.createRandom();
   // good wallet linked, then 2FA armed with it (wallet-only account: the wallet predates... force via DB for setup)
   let g = await signFor(goodW, 'link');
+  setSudo(u2.sid, true);    // the account's own setup window
   await api('/api/auth/wallet/verify', { method: 'POST', sid: u2.sid, body: g });
+  setSudo(u2.sid, false);
   db.prepare("UPDATE identities SET linked_at = ? WHERE user_id = ? AND type='wallet'").run(Date.now() - 6e5, u2.id); // predates the session
   g = await signFor(goodW, '2fa-on');
   const armOk = await api('/api/2fa/wallet/enable', { method: 'POST', sid: u2.sid, body: g });

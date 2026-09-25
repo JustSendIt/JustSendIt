@@ -232,8 +232,10 @@ try {
     const page = await api('/t/' + invitee.id);
     check('a shared ticket does not name who invited them', page.status === 200 && !page.text.includes('__pv_inviter__'), page.status);
     check('  ...nor does its card, nor the downloaded picture', /'INVITED SENDER'/.test(SRC) && /t\.invitedBy \? 'INVITED SENDER'/.test(readFileSync(path.join(PUB, 'invite.js'), 'utf8')));
-    check('sign-up answers "is this email a member" only to nobody: the invite comes first, the reply is generic',
-      /const regGate = signupRefusal\(req\);[\s\S]{0,300}if \(findIdentity\('email', email\)\) return bad\(res, 'we could not create an account with those details/.test(SRC));
+    check('sign-up never answers "is this email a member": the invite comes first, and a taken email makes the account without it',
+      /const regGate = signupRefusal\(req\);[\s\S]{0,700}const made = await createAccount\(req, \{ username, email, password \}\);/.test(SRC)
+      && !/findIdentity\('email', email\)\) return bad\(res, 'we could not create an account/.test(SRC)
+      && /if \(pwHash\) \{ if \(emailFree\) insertIdentity\(userId, 'email', f\.email, pwHash\); else \{ insertPasswordOnly\(userId, pwHash\); emailMiss\(missKeys\); \} \}/.test(SRC));
   }
 
   /* ═══ 8. a Data API key needs the owner, and a security change stops the old secret ═══ */

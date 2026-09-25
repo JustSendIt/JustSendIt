@@ -344,8 +344,12 @@
       }, 300);
     });
 
+    /* A sign-up whose email already belongs to another account still makes the account (refusing it told anyone
+       with a ticket who is a member): the password is kept, the email is not. Say so plainly, and long enough to read. */
+    const emailNotAddedMsg = (u) => 'That email is already on another account, so it wasn’t added. You sign in with @' + u + ' and your password — set a different email any time in Settings → Security.';
     function loginSuccess(j, opts) {
-      sendToast('Welcome, @' + j.username + '! 🚀');
+      if (j.emailNotAdded) sendToast('Welcome, @' + j.username + '! 🚀 ' + emailNotAddedMsg(j.username), 9000);
+      else sendToast('Welcome, @' + j.username + '! 🚀');
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
       closeModal();
       if (j.newAccount && opts && opts.setup2fa) { goSetup2fa(); return; }
@@ -481,7 +485,7 @@
       try { const fresh = AUTH._normMe((await api('/api/me', { _verified: true })).user); if (fresh) AUTH.user = Object.assign(AUTH.user || {}, fresh); } catch {}
       if (AUTH.user && AUTH.user.sudoUntil && AUTH.user.sudoUntil > Date.now() + 5000) return {};   // unlocked meanwhile (another tab)
       return new Promise((resolve, reject) => {
-        let need = (AUTH.user && AUTH.user.verifyNeeds) || { password: (AUTH.user && (AUTH.user.methods || []).includes('email')), code: AUTH.user && AUTH.user.twofa === 'totp', wallet: null, minutes: 30 };
+        let need = (AUTH.user && AUTH.user.verifyNeeds) || { password: (AUTH.user && (AUTH.user.methods || []).some(m => m === 'email' || m === 'password')), code: AUTH.user && AUTH.user.twofa === 'totp', wallet: null, minutes: 30 };
         openModal();
         modal.classList.add('is-confirm');
         heads[0].textContent = 'Confirm it’s you 🔐';
@@ -650,7 +654,8 @@
         try { if (/^\/(?![\/\\])/.test(location.pathname) && !/\/profile\.html/.test(location.pathname)) sessionStorage.setItem('jsi:after-claim', location.pathname + location.search + location.hash); } catch {}
         sendToast('Welcome! Pick your unique handle 👇'); location.href = '/profile.html#claim'; return;
       }
-      sendToast(j.newAccount ? 'Welcome, @' + j.username + '! 🚀' + (j.emailNotAdded ? ' — that email couldn’t be added; add one any time in Settings → Security' : '') : 'Welcome back, @' + j.username + '! 🚀');
+      if (j.newAccount && j.emailNotAdded) sendToast('Welcome, @' + j.username + '! 🚀 ' + emailNotAddedMsg(j.username), 9000);
+      else sendToast(j.newAccount ? 'Welcome, @' + j.username + '! 🚀' : 'Welcome back, @' + j.username + '! 🚀');
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
       refresh().then(onAuthChange);
     }
@@ -755,10 +760,10 @@
      another account, second factor not proven). */
   AUTH.linkWallet = async function (note) {
     /* A wallet is a way in, so linking one takes "confirm it's you" — asked BEFORE the new wallet signs,
-       because the server spends that signature first. The one exception is the server's too: a social-login
-       account with nothing to prove with links its first wallet on the session alone. */
-    const needs = AUTH.user && AUTH.user.verifyNeeds;
-    const current = (needs && needs.none) ? {} : await AUTH.stepUp(note || 'Linking a wallet adds a new way to sign in to this account.');
+       because the server spends that signature first. Every account, the first wallet included: a social-login
+       account confirms by signing in again. Inside the unlocked window (a new account's setup, or a recent
+       confirm) this resolves at once. */
+    const current = await AUTH.stepUp(note || 'Linking a wallet adds a new way to sign in to this account.');
     const { provider, address } = await WALLET.connect();
     const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
     const signature = await provider.request({ method: 'personal_sign', params: [message, address] });

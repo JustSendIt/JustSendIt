@@ -45,6 +45,8 @@ function mkUser(name) {
   return { id, sid: raw };
 }
 
+// the unlocked window a real account has at its own setup (or after "confirm it's you"), and closing it again
+const setSudo = (sid, on) => db.prepare('UPDATE sessions SET sudo_until = ? WHERE token = ?').run(on ? Date.now() + 3600e3 : null, createHash('sha256').update(sid).digest('hex'));
 // link a freshly generated wallet to an account through the real SIWE link route
 // F011: after the first wallet, linking another is a security change — proof of ownership rides along as
 // `current`: a management signature from a wallet ALREADY on the account (`proof`).
@@ -66,6 +68,7 @@ GATE = await gatePass(BASE);
 try {
   // ═══ 1. one account, several wallets ═══
   const a = mkUser('__sy_multi__');
+  setSudo(a.sid, true);   // its setup window: linking and unlinking are security changes ("confirm it's you")
   const w1 = Wallet.createRandom(), w2 = Wallet.createRandom(), w3 = Wallet.createRandom();
   const r1 = await linkWallet(a.sid, w1);
   db.prepare('UPDATE sessions SET created_at = ? WHERE user_id = ?').run(Date.now() + 5, a.id);   // as if signed in again with w1: a wallet linked mid-session cannot vouch for the next link
@@ -84,7 +87,8 @@ try {
 
   // a wallet already linked elsewhere cannot be taken
   const b = mkUser('__sy_other__');
-  const steal = await linkWallet(b.sid, w1);   // b has no wallet yet: its first link needs no proof, and must still be refused
+  setSudo(b.sid, true);   // unlocked, so the refusal below is about the wallet, not the missing confirm
+  const steal = await linkWallet(b.sid, w1);
   check('a wallet cannot be linked to two accounts', steal.status === 409 || (steal.j && steal.j.error), steal.status + ' ' + JSON.stringify(steal.j));
 
   // ═══ 2. unlink ONE wallet, keep the rest ═══
@@ -98,6 +102,7 @@ try {
 
   // last wallet on a wallet-only account is protected
   const solo = mkUser('__sy_solo__');
+  setSudo(solo.sid, true);
   const ws = Wallet.createRandom();
   await linkWallet(solo.sid, ws);
   db.prepare("DELETE FROM identities WHERE user_id = ? AND type != 'wallet'").run(solo.id); // wallet-only

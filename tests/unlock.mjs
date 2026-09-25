@@ -24,6 +24,7 @@ const IDX_KEY = createHmac('sha256', DATA_KEY).update('blind-index').digest();
 const bidx = (v) => createHmac('sha256', IDX_KEY).update(String(v == null ? '' : v)).digest('hex');
 const hex = (n) => randomBytes(n).toString('hex');
 const tag = hex(3);
+const T0 = Date.now();   // the "email already in use" ration rows this run writes are cleared from here on
 const made = { users: [], addrs: [] };
 
 const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -38,7 +39,7 @@ const freshStep = (uid) => db.prepare('UPDATE users SET twofa_last_step = 0 WHER
 
 async function api(p, opts = {}) {
   const cookie = [opts.pass || '', opts.sid ? 'sid=' + opts.sid : ''].filter(Boolean).join('; ');
-  const r = await fetch(BASE + p, { method: opts.method || 'GET', headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { Cookie: cookie } : {}) }, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const r = await fetch(BASE + p, { method: opts.method || 'GET', headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { Cookie: cookie } : {}), ...(opts.ip ? { 'X-Forwarded-For': opts.ip } : {}) }, body: opts.body ? JSON.stringify(opts.body) : undefined });
   let j = null; try { j = await r.json(); } catch {}
   const sc = r.headers.get('set-cookie') || '';
   const sid = (/(?:^|[,\s])sid=([^;]+)/.exec(sc) || [])[1] || null;
@@ -213,8 +214,11 @@ try {
   const E = { name: '__ul_e_' + tag };
   const taken = await api('/api/auth/wallet/verify', { method: 'POST', pass: passE, body: { ...s, intent: 'signup', username: E.name, email: B.email, password: 'another-pass-' + tag } });
   const uE = userByName(E.name); if (uE) made.users.push(uE.id);
-  check('a wallet sign-up with an email already in use still makes the account — just without that email', taken.status === 200 && taken.j && taken.j.newAccount === true && taken.j.emailNotAdded === true && uE && !db.prepare("SELECT 1 FROM identities WHERE user_id = ? AND type = 'email'").get(uE.id), taken.status + ' ' + JSON.stringify(taken.j));
+  const eRow = uE && db.prepare("SELECT identifier FROM identities WHERE user_id = ? AND type = 'email'").get(uE.id);
+  check('a wallet sign-up with an email already in use still makes the account — just without that email', taken.status === 200 && taken.j && taken.j.newAccount === true && taken.j.emailNotAdded === true && uE && eRow && eRow.identifier === bidx('nomail:' + uE.id) && db.prepare("SELECT user_id FROM identities WHERE type = 'email' AND identifier = ?").get(bidx(B.email)).user_id === uB.id, taken.status + ' ' + JSON.stringify(taken.j));
   check('  ...and the ticket is spent on it, so the question costs an account every time', !!db.prepare('SELECT 1 FROM invite_codes WHERE user_id = ?').get(uE && uE.id));
+  const eIn = await api('/api/auth/login', { method: 'POST', body: { identifier: E.name, password: 'another-pass-' + tag } });
+  check('  ...its password is kept: it signs in with @username + password', eIn.status === 200 && eIn.sid, eIn.status + ' ' + JSON.stringify(eIn.j));
   if (uE) drop(uE.id);
 
   /* ═══ 4. wallets: a sign-in never unlocks; the confirm step takes a wallet that can vouch ═══ */
@@ -254,12 +258,93 @@ try {
   const uD = userByName('__ul_d_' + tag); made.users.push(uD.id);
   const rawD = 'tok_ul_' + hex(8);
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(createHash('sha256').update(rawD).digest('hex'), uD.id, Date.now(), Date.now() + 864e5);
+  db.prepare("INSERT INTO identities (user_id, type, identifier, identifier_enc, linked_at) VALUES (?, 'google', ?, 'v1:test', ?)").run(uD.id, bidx('g-sub-' + tag), Date.now());   // a Google sign-in is its only way in
   me = await api('/api/me', { sid: rawD });
-  check('a social-login-only account is told that signing in again is its proof', me.j.user.sudoUntil === null && me.j.user.sudoLeftMs === 0 && me.j.user.verifyNeeds.signInAgain === true && me.j.user.verifyNeeds.none === true);
+  check('a social-login-only account is told that signing in again is its proof', me.j.user.sudoUntil === null && me.j.user.sudoLeftMs === 0 && me.j.user.verifyNeeds.signInAgain === true && !('none' in me.j.user.verifyNeeds));
   const dv = await api('/api/auth/verify', { method: 'POST', sid: rawD, body: {} });
   check('  ...and asking it to confirm says so in words', dv.status === 401 && dv.j.code === 'need_verify' && /sign in again/.test(dv.j.error || ''), JSON.stringify(dv.j));
   const dmint = await api('/api/data/key', { method: 'POST', sid: rawD, body: {} });
   check('a session that never proved anything is still refused a data key, with the route’s own words', dmint.status === 401 && /to mint a data key/.test((dmint.j && dmint.j.error) || '') && dmint.j.code === 'need_verify', JSON.stringify(dmint.j));
+
+  /* ═══ 7. the three old gaps ═══ */
+  const setSudo = (sid, on) => db.prepare('UPDATE sessions SET sudo_until = ? WHERE token = ?').run(on ? Date.now() + 3600e3 : null, createHash('sha256').update(sid).digest('hex'));
+  // (a) a Google-only account's FIRST wallet no longer links on the session alone
+  const W7 = Wallet.createRandom(), W8 = Wallet.createRandom(); made.addrs.push(W7.address.toLowerCase(), W8.address.toLowerCase());
+  const s7 = await signFor(W7, 'link');
+  const d7 = await api('/api/auth/wallet/verify', { method: 'POST', sid: rawD, body: s7 });
+  check('GAP 1 CLOSED: a social-login account’s first wallet needs "confirm it’s you" (sign in again), not just the session', d7.status === 401 && d7.j && d7.j.code === 'need_verify' && /sign in again/.test(d7.j.error || '') && !db.prepare("SELECT 1 FROM identities WHERE user_id = ? AND type = 'wallet'").get(uD.id), d7.status + ' ' + JSON.stringify(d7.j));
+  setSudo(rawD, true);   // what signing in again with Google does for an account with no other proof (onlyProofIsSignIn)
+  const d7b = await api('/api/auth/wallet/verify', { method: 'POST', sid: rawD, body: s7 });
+  check('  ...once unlocked, the same signature links it', d7b.status === 200 && d7b.j && d7b.j.linked === true, d7b.status + ' ' + JSON.stringify(d7b.j));
+  const d8 = await api('/api/auth/wallet/verify', { method: 'POST', sid: rawD, body: await signFor(W8, 'link') });
+  check('  ...and a second one while the window lasts', d8.status === 200 && d8.j && d8.j.linked === true, d8.status);
+
+  // (b) unlinking one wallet, or disconnecting them all, takes the confirm step with two-factor OFF
+  setSudo(rawD, false);
+  const un8 = await api('/api/wallet/unlink', { method: 'POST', sid: rawD, body: { address: W8.address.toLowerCase() } });
+  check('GAP 2 CLOSED: unlinking a wallet with two-factor off asks "confirm it’s you"', un8.status === 401 && un8.j && un8.j.code === 'need_verify' && /to unlink a wallet/.test(un8.j.error || ''), un8.status + ' ' + JSON.stringify(un8.j));
+  const dis = await api('/api/wallet/disconnect', { method: 'POST', sid: rawD, body: {} });
+  check('  ...and so does disconnecting every wallet', dis.status === 401 && dis.j && dis.j.code === 'need_verify' && /to disconnect your wallets/.test(dis.j.error || ''), dis.status + ' ' + JSON.stringify(dis.j));
+  check('  ...both wallets are still there', db.prepare("SELECT COUNT(*) n FROM identities WHERE user_id = ? AND type = 'wallet'").get(uD.id).n === 2);
+  const unTop = await api('/api/wallet/unlink', { method: 'POST', sid: rawD, body: { address: W8.address.toLowerCase(), signature: '0x' + '11'.repeat(65) } });
+  check('  ...a top-level address/signature is the wallet being removed, never mistaken for the proof', unTop.status === 401 && unTop.j && unTop.j.code === 'need_verify', unTop.status + ' ' + JSON.stringify(unTop.j));
+  setSudo(rawD, true);
+  const un8b = await api('/api/wallet/unlink', { method: 'POST', sid: rawD, body: { address: W8.address.toLowerCase() } });
+  const disb = await api('/api/wallet/disconnect', { method: 'POST', sid: rawD, body: {} });
+  check('  ...unlocked, both go through', un8b.status === 200 && disb.status === 200 && !db.prepare("SELECT 1 FROM identities WHERE user_id = ? AND type = 'wallet'").get(uD.id), un8b.status + ' / ' + disb.status + ' ' + JSON.stringify(disb.j));
+  // on a password account the confirm step is the password, and it works the same way
+  await api('/api/auth/verify', { method: 'DELETE', sid: B.sid });
+  const unB = await api('/api/wallet/unlink', { method: 'POST', sid: B.sid, body: { address: W5.address.toLowerCase() } });
+  await api('/api/auth/verify', { method: 'POST', sid: B.sid, body: { password: B.pw } });
+  const unB2 = await api('/api/wallet/unlink', { method: 'POST', sid: B.sid, body: { address: W5.address.toLowerCase() } });
+  check('  ...a password account: refused locked, unlinked after the password', unB.status === 401 && unB.j.code === 'need_verify' && unB2.status === 200, unB.status + ' / ' + unB2.status + ' ' + (unB2.j && unB2.j.error));
+
+  // (c) email sign-up with an email somebody already has: the account is made, the email is not added
+  const net = (n) => '198.51.100.' + ((parseInt(tag, 16) + n) % 250 + 1);   // separate connections, so each ration starts empty
+  const ipKeyOf = (ip) => 'ip:' + bidx('ip:' + ip);
+  const IP_R = net(0), IP_S = net(1), IP_C = net(2);
+  const F = { name: '__ul_f_' + tag, pw: 'f-pass-' + tag };
+  const passF = freshPass();
+  const regF = await api('/api/auth/register', { method: 'POST', pass: passF, ip: IP_R, body: { username: F.name, email: B.email, password: F.pw } });
+  const uF = userByName(F.name); if (uF) made.users.push(uF.id);
+  check('GAP 3 CLOSED: an email sign-up with a taken email is not refused — the account is made, the reply says the email was not added', regF.status === 200 && regF.j && regF.j.newAccount === true && regF.j.emailNotAdded === true && regF.sid, regF.status + ' ' + JSON.stringify(regF.j));
+  check('  ...the email stays with its owner; the new account holds a password under a marker no email lookup reaches', uF && db.prepare("SELECT user_id FROM identities WHERE type = 'email' AND identifier = ?").get(bidx(B.email)).user_id === uB.id && db.prepare("SELECT identifier FROM identities WHERE user_id = ? AND type = 'email'").get(uF.id).identifier === bidx('nomail:' + uF.id));
+  check('  ...the ticket is spent, and the connection’s ration is charged: the question costs a whole account', !!db.prepare('SELECT 1 FROM invite_codes WHERE user_id = ?').get(uF && uF.id) && db.prepare('SELECT COUNT(*) n FROM email_misses WHERE key = ?').get(ipKeyOf(IP_R)).n === 1);
+  me = await api('/api/me', { sid: regF.sid });
+  check('  ...its settings say "password", not "email"', me.j && me.j.user.methods.includes('password') && !me.j.user.methods.includes('email') && me.j.user.verifyNeeds.password === true, JSON.stringify(me.j && me.j.user.methods));
+  const fByName = await api('/api/auth/login', { method: 'POST', body: { identifier: F.name, password: F.pw } });
+  const fByMail = await api('/api/auth/login', { method: 'POST', body: { identifier: B.email, password: F.pw } });
+  check('  ...it signs in with @username + password; the email with its password opens nothing', fByName.status === 200 && fByMail.status === 401, fByName.status + ' / ' + fByMail.status);
+  const fAdd = await api('/api/account/email', { method: 'POST', sid: regF.sid, ip: IP_S, body: { email: '__ul_f2_' + tag + '@example.com', password: 'whatever-' + tag } });
+  check('  ..."add email + password" points it to Change email instead', fAdd.status === 400 && /set its email with Change email/.test((fAdd.j && fAdd.j.error) || ''), JSON.stringify(fAdd.j));
+  // setting an email in Settings: the "already in use" answer is rationed, then the same pause for every address
+  const miss = [];
+  for (let i = 0; i < 3; i++) miss.push(await api('/api/account/email/change', { method: 'POST', sid: regF.sid, ip: IP_S, body: { email: B.email } }));
+  check('Settings: "already in use" is answered, with the tries left counted down', miss[0].status === 409 && /2 more tries/.test(miss[0].j.error || '') && miss[1].status === 409 && /1 more try/.test(miss[1].j.error || '') && miss[2].status === 409 && /now paused/.test(miss[2].j.error || ''), miss.map(m => m.status + ' ' + (m.j && m.j.error)).join(' | '));
+  const freeMail = '__ul_f3_' + tag + '@example.com';
+  const pausedFree = await api('/api/account/email/change', { method: 'POST', sid: regF.sid, ip: IP_S, body: { email: freeMail } });
+  const pausedTaken = await api('/api/account/email/change', { method: 'POST', sid: regF.sid, ip: IP_S, body: { email: B.email } });
+  check('  ...after 3, a FREE address gets the same pause as a taken one — nothing left to learn', pausedFree.status === 429 && pausedTaken.status === 429 && pausedFree.j.error === pausedTaken.j.error && /paused until/.test(pausedFree.j.error) && !db.prepare("SELECT 1 FROM identities WHERE type = 'email' AND identifier = ?").get(bidx(freeMail)), pausedFree.status + ' ' + (pausedFree.j && pausedFree.j.error));
+  const fOtherNet = await api('/api/account/email/change', { method: 'POST', sid: regF.sid, ip: IP_C, body: { email: freeMail } });
+  check('  ...the pause follows the ACCOUNT to another connection', fOtherNet.status === 429 && fOtherNet.j.error === pausedFree.j.error, fOtherNet.status);
+  setSudo(c2.sid, true);
+  const cSameNet = await api('/api/account/email', { method: 'POST', sid: c2.sid, ip: IP_S, body: { email: freeMail, password: 'c-pass-' + tag } });
+  check('  ...and the CONNECTION to another account, so a fresh account does not reset it', cSameNet.status === 429 && /paused until/.test((cSameNet.j && cSameNet.j.error) || ''), cSameNet.status + ' ' + JSON.stringify(cSameNet.j));
+  db.prepare('DELETE FROM email_misses WHERE key IN (?, ?)').run('u:' + uF.id, ipKeyOf(IP_S));   // as if the 30 days had passed
+  const setMail = await api('/api/account/email/change', { method: 'POST', sid: regF.sid, ip: IP_S, body: { email: freeMail } });
+  me = await api('/api/me', { sid: regF.sid });
+  const fNew = await api('/api/auth/login', { method: 'POST', body: { identifier: freeMail, password: F.pw } });
+  check('  ...once the window passes, a free address becomes its email, and signs in', setMail.status === 200 && me.j.user.methods.includes('email') && !me.j.user.methods.includes('password') && fNew.status === 200, setMail.status + ' ' + (setMail.j && setMail.j.error) + ' / ' + fNew.status);
+  const cAdd = await api('/api/account/email', { method: 'POST', sid: c2.sid, ip: IP_C, body: { email: B.email, password: 'c-pass-' + tag } });
+  check('  ..."add email + password" with a taken email is rationed the same way', cAdd.status === 409 && /2 more tries/.test((cAdd.j && cAdd.j.error) || '') && !db.prepare("SELECT 1 FROM identities WHERE user_id = ? AND type = 'email'").get(uC.id), cAdd.status + ' ' + JSON.stringify(cAdd.j));
+  if (uF) drop(uF.id);
+  // a connection that has spent its ration cannot sign up with an email at all — free or taken, the same refusal
+  const insMiss = db.prepare('INSERT INTO email_misses (key, at) VALUES (?, ?)');
+  insMiss.run(ipKeyOf(IP_R), Date.now()); insMiss.run(ipKeyOf(IP_R), Date.now());   // with F's sign-up, three
+  const passG = freshPass();
+  const regG = await api('/api/auth/register', { method: 'POST', pass: passG, ip: IP_R, body: { username: '__ul_g_' + tag, email: '__ul_g_' + tag + '@example.com', password: 'g-pass-' + tag } });
+  const uG = userByName('__ul_g_' + tag); if (uG) made.users.push(uG.id);
+  check('  ...a spent connection’s sign-up with a FREE email is paused too, and the ticket is not spent', regG.status === 429 && /paused until/.test((regG.j && regG.j.error) || '') && /join with a wallet/.test(regG.j.error || '') && !uG && !db.prepare('SELECT user_id FROM invite_codes WHERE code = ?').get(passCodes[passCodes.length - 1]).user_id, regG.status + ' ' + JSON.stringify(regG.j));
 
   /* ═══ 6. the shape of it, in the source ═══ */
   check('the window lives on the session, NULL unless a sign-in or a proof wrote it', /ALTER TABLE sessions ADD COLUMN sudo_until INTEGER"/.test(SRC) && /INSERT INTO sessions \(token, user_id, created_at, expires_at, hashed, sudo_until\)/.test(SRC));
@@ -268,18 +353,22 @@ try {
   check('the possession proofs stay: arming a wallet still takes its own 2fa-on signature', /const proof = consumeNonce\(addr, b\.signature, '2fa-on'\)/.test(SRC) && /consumeNonce\(next, b\.newSignature, '2fa-on'\)/.test(SRC));
   check('the page retries a need_verify refusal once, after the step', /j\.code === 'need_verify' && !opts\._verified/.test(AUTHJS) && /_verified: true/.test(AUTHJS));
   check('a sign-in opens no window: only account creation and a social login with no other proof do', !/createSession\(u\.id, ipIdx\(req\), SUDO_MS\)/.test(SRC) && /createSession\(userId, ipIdxVal, !ident \? NEW_ACCOUNT_SUDO_MS : \(onlyProofIsSignIn\(userId, now\(\)\) \? SUDO_MS : 0\)\)/.test(SRC));
-  check('a wallet sign-up hashes first, then gates and writes in one transaction (no race past the ticket or the per-IP cap)', /const pwHash = su && su\.email \? await hashPassword\(su\.password\) : null;[\s\S]{0,120}db\.exec\('BEGIN IMMEDIATE'\);[\s\S]{0,120}const gate = signupRefusal\(req\);/.test(SRC));
+  check('every sign-up (email or wallet) hashes first, then gates and writes in one transaction (no race past the ticket or the per-IP cap)', /const pwHash = f\.password \? await hashPassword\(f\.password\) : null;[\s\S]{0,120}db\.exec\('BEGIN IMMEDIATE'\);[\s\S]{0,120}const gate = signupRefusal\(req\);/.test(SRC) && (SRC.match(/await createAccount\(req, /g) || []).length === 1 && (SRC.match(/await createWalletAccount\(req, /g) || []).length === 2);
   check('the unlock reaches the page as time LEFT, so a skewed device clock cannot hold a stale window open', /sudoLeftMs: sudoActive\(me\) \? me\.sudo_until - now\(\) : 0/.test(SRC) && /me\.sudoLeftMs > 0 \? Date\.now\(\) \+ me\.sudoLeftMs/.test(AUTHJS));
   check('the data page answers need_verify with the step and one retry', /r\.j\.code === 'need_verify' && window\.AUTH && AUTH\.stepUp/.test(pub('data.js')));
   check('one wallet handler still — exactly one sign-in challenge in auth.js', (AUTHJS.replace(/\/\*[\s\S]*?\*\//g, '').match(/purpose=signin/g) || []).length === 1);
   check('no clear-text password prompt() left in the settings', !/prompt\(/.test(PROFJS));
   check('the unlink and two-factor-wallet requests nest the proof instead of spreading it over `address`', /body: \{ address, current \}/.test(PROFJS) && /body: \{ address, newSignature, current \}/.test(PROFJS));
+  check('linking asks every signed-in caller for the confirm step — no first-wallet exception left', /\n        if \(me\) \{\n          const cur = Object\.assign\(\{\}, b\.current \|\| \{\}\);/.test(SRC) && !/needs\.none/.test(AUTHJS) && !/\bnone: /.test(SRC.slice(SRC.indexOf('function verifyNeedsOf'), SRC.indexOf('function grantSudo'))));
+  check('unlink and disconnect go through ownershipRefusal; the page asks before unlinking with two-factor off too', /const errU = await ownershipRefusal\(me, \{ current:/.test(SRC) && /ownershipRefusal\(me, body0\); if \(err\) return bad\(res, 'to disconnect your wallets, '/.test(SRC) && /const current = await currentFactorBody\('Unlinking a wallet/.test(PROFJS));
+  check('every door that could say "in use" checks the ration BEFORE looking the address up', (SRC.match(/\{ const paused = emailMissPaused\(missKeys, 'Adding or changing an email is'\); if \(paused\) return bad\(res, paused, 429\); \}[^\n]*\n\s+(const pwHash = await hashPassword\(password\);\n\s+)?(if \(findIdentity\('email', email\)\)|const other = findIdentity\('email', email\);)/g) || []).length === 2 && /if \(paused\) \{ db\.exec\('ROLLBACK'\);[^\n]*\n\s+const emailFree = /.test(SRC));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
 } finally {
   for (const id of made.users.slice()) drop(id);
   for (const a of made.addrs) { try { db.prepare('DELETE FROM wallet_challenges WHERE address = ?').run(bidx(a)); } catch {} }
   for (const c of passCodes) { try { db.prepare('DELETE FROM invite_codes WHERE code = ?').run(c); } catch {} }
+  try { db.prepare('DELETE FROM email_misses WHERE at >= ?').run(T0); } catch {}
   console.log('\ncleanup — throwaway users left:', db.prepare("SELECT COUNT(*) n FROM users WHERE username LIKE '\\_\\_ul\\_%' ESCAPE '\\'").get().n);
   db.close();
 }
