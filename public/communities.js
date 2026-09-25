@@ -280,6 +280,13 @@
   const sqState = { q: '', gate: 'all', time: 'all', sort: 'active' };
   let sqLocked = true, sqAuthKnown = false, sqBusy = false, sqAt = 0, sqLoadedOnce = false, sqGen = 0, sqWeek = null, sqQTimer = 0;
   const signedIn = () => !!(window.AUTH && AUTH.user);
+  /* "Start a Send Squad" pressed while signed out: remembered through the sign-in (a social login leaves the page,
+     hence sessionStorage) and carried out the moment the account is known — for fifteen minutes, not forever. */
+  const SQ_INTENT = 'jsi:sq-start', SQ_INTENT_MS = 15 * 60 * 1000;
+  let pendingStart = null, openSquadStart = null;
+  function storedStart() {
+    try { const v = JSON.parse(sessionStorage.getItem(SQ_INTENT) || 'null'); return v && Date.now() - (v.at || 0) < SQ_INTENT_MS ? v : null; } catch { return null; }
+  }
   // a live region is only written when its wording changes — the 60s refresh must not re-announce itself
   function sqSay(el, text, asHTML) { if (!el || el._said === text) return; el._said = text; if (asHTML) el.innerHTML = text; else el.textContent = text; }
   const sqPts = (v) => (v == null || isNaN(v) ? '—' : fmtNum(Math.max(0, Math.round(Number(v)))));
@@ -380,7 +387,7 @@
       const filtered = !!(sqState.q || sqState.gate !== 'all' || sqState.time !== 'all');
       sqSay(sq('sq-status'), filtered
         ? '🔎 No squads match that search or filter — <b>clear it</b> to see them all.'
-        : '🛡️ No Send Squads yet — <b>start the first one</b> above.', true);
+        : '🛡️ No Send Squads yet — <button class="linklike" type="button" data-sq-open-start data-tip="Opens the start-a-squad form at the top of this tab">start the first one</button>.', true);
       return;
     }
     paintGrid(gridEl, list.map(squadCardHTML).join(''));
@@ -452,7 +459,12 @@
   }
 
   if (sqOn) {
-    const sqSettle = () => { sqAuthKnown = true; if (squadsOn) lockSquads(!signedIn()); };
+    const sqSettle = () => {
+      sqAuthKnown = true;
+      if (squadsOn) lockSquads(!signedIn());
+      const want = pendingStart || storedStart();
+      if (want && signedIn() && openSquadStart) openSquadStart(want);   // the sign-in they did in order to start a squad
+    };
     if (window.AUTH && AUTH.ready && typeof AUTH.ready.then === 'function') AUTH.ready.then(sqSettle, sqSettle); else sqSettle();
     document.addEventListener('auth:change', sqSettle);   // sign-in unlocks, sign-out locks and wipes what was on screen
     sq('sq-signin').addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
@@ -562,6 +574,40 @@
       }
     });
 
+    /* ONE way into the start form, from anywhere on the page: the header button, the empty-grid prompt, a deep link
+       (?tab=squads&new=squad[&gate=0x…]) or a token's community page. It switches to the squads tab, opens the form,
+       carries a token address over as the gate, and puts the cursor in the name. Signed out, it asks for a sign-in
+       first and picks up where it left off afterwards. */
+    openSquadStart = (opts) => {
+      opts = opts || {};
+      if (sqTab && !squadsOn) pickTab(sqTab);
+      if (!sqAuthKnown || !signedIn()) {
+        pendingStart = { token: opts.token || '', at: Date.now() };
+        try { sessionStorage.setItem(SQ_INTENT, JSON.stringify(pendingStart)); } catch {}
+        if (sqAuthKnown && window.AUTH) AUTH.open();   // not known yet: sqSettle carries it out when auth.js answers
+        return;
+      }
+      pendingStart = null; try { sessionStorage.removeItem(SQ_INTENT); } catch {}
+      const d = sq('sq-start'); if (!d) return;
+      d.open = true;
+      const tok = String(opts.token || '').trim().toLowerCase();
+      if (/^0x[0-9a-f]{40}$/.test(tok)) {
+        const r = sq('sq-gate-tokens');
+        if (r && gateKind() === 'none') { r.checked = true; paintGate(); }
+        sfToken.value = tok;
+        sfMsg.textContent = '✅ Gate token filled in — set how many to hold (or switch to a share of the supply), or choose 🔓 Open for no gate.';
+      }
+      d.scrollIntoView({ behavior: (window.prefersReduced && prefersReduced()) ? 'auto' : 'smooth', block: 'start' });
+      setTimeout(() => { try { sfName.focus({ preventScroll: true }); } catch {} }, 350);
+    };
+    const heroSquad = document.getElementById('comm-squad-go');
+    if (heroSquad) heroSquad.addEventListener('click', () => {
+      const a = (addr && addr.value || '').trim();
+      openSquadStart(/^0x[0-9a-fA-F]{40}$/.test(a) ? { token: a } : {});
+    });
+    sqPanel.addEventListener('click', (e) => { if (e.target.closest('[data-sq-open-start]')) { e.preventDefault(); openSquadStart({}); } });
+    if (sqAuthKnown && signedIn() && (pendingStart || storedStart())) openSquadStart(pendingStart || storedStart());
+
     // coming back to a backgrounded tab: refresh if it's gone stale, otherwise just re-tick the countdown
     document.addEventListener('visibilitychange', () => {
       if (document.hidden || !squadsOn || sqLocked) return;
@@ -589,7 +635,7 @@
     const start = new URLSearchParams(location.search).get('start') || '';
     if (/^0x[0-9a-fA-F]{40}$/.test(start)) {
       addr.value = start.toLowerCase();
-      msg.textContent = '✅ Address filled in from the token you came from — tap "Start a community" (you need to hold it).';
+      msg.textContent = '✅ Address filled in from the token you came from — tap "Start a community" (you need to hold it), or "Start a Send Squad" for a private group gated by it.';
       form.scrollIntoView({ behavior: (window.prefersReduced && prefersReduced()) ? 'auto' : 'smooth', block: 'center' });
       setTimeout(() => { try { goBtn.focus(); } catch {} }, 300);
     }
@@ -601,6 +647,9 @@
     const q = (p.get('q') || '').trim().slice(0, 64);
     if (sqOn && q) { const qEl = sq('sq-q'); qEl.value = q; sqState.q = q; sq('sq-q-clear').hidden = false; }
     if (sqOn && sqTab && (p.get('tab') === 'squads' || q)) pickTab(sqTab);
+    const gate = (p.get('gate') || '').trim();
+    if (sqOn && openSquadStart && p.get('new') === 'squad') openSquadStart(/^0x[0-9a-fA-F]{40}$/.test(gate) ? { token: gate } : {});
+    else if (sqOn && openSquadStart && storedStart()) openSquadStart(storedStart());
   } catch {}
   load();
   // one timer for the community layer: refreshes the grid AND the weekly board (+ its countdown), only while

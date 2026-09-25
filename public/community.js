@@ -109,7 +109,9 @@
           twoX +
         '</div>' +
         metrics + panel + conv +
-        '<div class="comm-hero-actions">' + optBtn + '</div>' +
+        '<div class="comm-hero-actions">' + optBtn +
+          (c.demo ? '' : '<a class="btn btn-ghost comm-squad-btn" href="communities.html?tab=squads&amp;new=squad&amp;gate=' + encodeURIComponent(c.token || '') + '" data-tip="Opens the start-a-squad form with $' + esc(c.symbol) + ' already set as the gate — a private group for its holders">🛡️ Start a $' + esc(c.symbol) + ' Send Squad</a>') +
+        '</div>' +
         '<p class="comm-gate-msg" id="comm-gate" role="status" aria-live="polite" hidden></p>' +
         '<details class="grules comm-rules"><summary>📖 How points, levels &amp; the 10× work</summary><div class="grules-body"><ul class="comm-rules-list">' +
           (c.demo

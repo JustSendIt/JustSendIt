@@ -40,6 +40,10 @@
 
 /* ---------- start a squad (inside a .grules disclosure) ---------- */
 .sq-start .grules-body { padding-top: 0.5rem; }
+/* first thing in the tab, so it reads as the way in rather than a footnote */
+.sq-start { margin: 0 0 1rem; border-color: color-mix(in srgb, var(--green-bright) 45%, transparent); }
+.sq-start > summary { font-size: 1.02rem; }
+.sq-start-hint { font-weight: 500; color: var(--text-dim); font-size: 0.86rem; }
 .sq-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.2rem 1.4rem; }
 .sq-form-col { min-width: 0; }
 .sq-form-col > .f-label:first-child { margin-top: 0.4rem; }
