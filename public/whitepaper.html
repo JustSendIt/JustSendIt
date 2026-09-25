@@ -489,6 +489,7 @@
         <li><a href="#s9"><span class="n">09</span><span>Multipliers</span></a></li>
         <li><a href="#s10"><span class="n">10</span><span>Send Calls</span></a></li>
         <li><a href="#s11"><span class="n">11</span><span>Communities</span></a></li>
+        <li><a href="#s11b"><span class="n">11b</span><span>Send Squads</span></a></li>
         <li><a href="#s12"><span class="n">12</span><span>Rocket Run</span></a></li>
         <li><a href="#s13"><span class="n">13</span><span>The risk scanner</span></a></li>
         <li><a href="#s14"><span class="n">14</span><span>Posting and muting</span></a></li>
@@ -973,6 +974,49 @@ what you earn = base points &times; ( 1
         <p>The ranking measures <strong>activity only</strong>. Price, market value and holder count count for nothing. There is no prize.</p>
         <h3>Holder snapshots</h3>
         <p>Any verified holder of a live community can take a <strong>holder snapshot</strong>: the public block explorer&rsquo;s full list of the coin&rsquo;s holders, frozen at that moment, up to 30,000 wallets. Anyone may read the snapshots a community has taken. At most one can be taken every ten minutes per community, because each is hundreds of calls to a shared public explorer, and an account in read-only mode cannot take one. Every walk is checked against the explorer&rsquo;s own holder count; one the explorer cut short, rate-limited, or that came up short of that count is stored as <em>partial</em> with the reason attached and is never presented as complete. The sandbox has no coin, so it has no snapshots.</p>
+      </section>
+
+      <!-- 11b -->
+      <section id="s11b">
+        <div class="sec-head"><span class="sec-num">11b</span><h2>Send Squads</h2></div>
+        <p>A community is a fan group anyone can read. A <strong>Send Squad</strong> is the opposite: a private group with a door on it, for people who want a room of their own.</p>
+        <h3>What a squad is</h3>
+        <p>Whoever starts a squad names it, writes a short bio, gives it a picture and a banner, and sets <strong>one gate, once</strong>. The gate is decided at creation and can never be changed afterwards &mdash; there is simply no way to edit it, so a squad cannot promise one bar and later move it. The person who started it owns it and cannot leave it; deleting their account closes the squad with its posts and calls. One person may start three squads a day and run ten in all.</p>
+        <p>The site runs one squad of its own, the <strong>$GWC 2% Squad</strong>: it takes two percent of the entire $GWC supply, summed across your linked wallets, to get in. It is owned by the site&rsquo;s own account and verified like any other.</p>
+        <h3>The gate</h3>
+        <p>There are three kinds. <strong>Open</strong> &mdash; anyone with an account may join, and no balance is read. <strong>A number of tokens</strong> &mdash; hold at least that many. <strong>A share of the supply</strong> &mdash; hold at least that percentage of the token&rsquo;s total supply, anywhere from 0.01% to all of it; because it is measured against the live supply, the number of tokens it takes moves with the supply. Whoever sets a gate has to pass it themselves, read from the chain before the squad is made.</p>
+        <p>Membership is read from the blockchain: the balances of the wallets you have linked, read-only, are <strong>summed</strong> and compared with the gate when you join. It is then <strong>re-checked on a schedule</strong> &mdash; every ten minutes the site re-reads a batch of the members it has checked least recently. Fall below the gate and your place is paused: the wall and the calls close, and you can join again the moment your wallets clear it. This is worth saying plainly: a schedule is not a live feed, so a member who sells can stay verified for ten minutes or more, until the check reaches them. A read the chain cannot complete decides nothing either way. A squad holds at most 500 verified members.</p>
+        <h3>The private wall</h3>
+        <p>Squad posts exist only for verified members. The feed is refused to everyone else, and a single post, its comments, reactions and votes answer &ldquo;not found&rdquo; rather than &ldquo;not allowed&rdquo;, for the same reason the holders-only wall does (Section 11). Nothing written there appears on the Send Wall, on anyone&rsquo;s profile, or in the public data feed. Posting inside a squad draws on the same allowance as posting anywhere &mdash; twelve posts in ten minutes &mdash; and pays you the ordinary points for a post. It pays the squad nothing: a squad&rsquo;s score comes from calls and conviction alone.</p>
+        <h3>Calls that score for the squad</h3>
+        <p>A member can make a Send Call <em>to the squad</em> instead of to the public wall. The call and its scorecard are private to the squad, it takes a verified place to make one, and every rule from Section 10 still applies &mdash; the daily allowance, the $2,000 of liquidity, the deployer rule, the ring and spam checks. One call per coin per squad: a public call on the same coin is a separate call, and both may stand.</p>
+        <div class="note">
+          <span class="lbl">The person earns nothing from a squad call</span>
+          <p>Every point a squad call ever earns is written to the squad: the opening award, every X it climbs, the hold bonus while it stays in profit, and every Send It on it. The caller&rsquo;s own Send Power does not move by a single point, and neither does a Sender&rsquo;s. The squad is credited flat &mdash; no Holder Boost, no OG, no community multiplier &mdash; and never for the same thing twice.</p>
+        </div>
+        <p>The numbers are the public ones, paid to a different ledger. The opening award is 120 times the size of the caller&rsquo;s verified position (each $100 is 1&times;, the floor is 1&times;, the cap is 100&times;). Each whole X pays a rung of <span class="mono">170 + 17 &times; (X &minus; 1)</span>, up to 50X, on a price the site can trust: the lower of the live price and the past hour&rsquo;s median, sustained across two readings, with $500 of pooled liquidity behind every X. Holding in profit pays the same diamond-hands curve. A Send It on a squad call pays 30 times the Sender&rsquo;s size, only on a real position, and the Sender&rsquo;s hold bonus follows it to the squad. One lifetime budget per call, carved the same way.</p>
+        <div class="tablewrap">
+          <table>
+            <caption>What scores for a squad</caption>
+            <thead><tr><th>Action</th><th class="num">Squad points</th></tr></thead>
+            <tbody>
+              <tr><td class="name">A member opens a squad call</td><td class="num">120 &times; size</td></tr>
+              <tr><td class="name">Each X the call reaches (first rung; +17 per rung after, to 50X)</td><td class="num">170</td></tr>
+              <tr><td class="name">The call holds in profit</td><td class="num">the diamond-hands curve</td></tr>
+              <tr><td class="name">A member Sends It, on a real position</td><td class="num">30 &times; size</td></tr>
+              <tr><td class="name">A pinned coin a member still holds, per day (at least $20 of it)</td><td class="num">2 &times; (1 + days &divide; 30), days capped at 360</td></tr>
+              <tr><td class="name">A post, a comment or a reaction on the squad wall</td><td class="num">&mdash;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Conviction</h3>
+        <p>Every member&rsquo;s public <strong>Conviction Plays</strong> &mdash; the coins pinned to their wall &mdash; are gathered inside the squad. Once a day, for each verified member and each pinned coin they <strong>still hold</strong> (read from their linked wallets, worth at least $20 at the live price), the squad earns <span class="mono">2 &times; (1 + days pinned &divide; 30)</span>, with the days capped at 360: a fresh pin pays 2, a month pays 4, a year pays 26. A coin whose price cannot be read is skipped that day, neither credited nor penalised. The squad&rsquo;s conviction board shows, per coin, how many members are convicted in it, how many still held it at the last check, and the longest and average time pinned, along with the members with the most pins. Unlike a community&rsquo;s conviction (Section 11), this one <em>is</em> about time &mdash; but only time spent actually holding, checked on the chain each day.</p>
+        <h3>Level and the weekly board</h3>
+        <p>A squad has a level on the same curve as a person or a community (Section 8). A weekly board ranks squads by the points earned that week, Monday to Monday in UTC; the week rolls over on the first point of the new one, and last week&rsquo;s total is kept beside it. There is no prize.</p>
+        <h3>The lifetime tracker</h3>
+        <p>Every squad shows a running record of its calls: how many, the total and best Xs (each call counted to 50X at most), how much was in the coin when members called and Sent It, and what those positions were worth at each call&rsquo;s peak and are worth now. These are <strong>paper figures</strong>: what members&rsquo; on-chain positions, read at the moment they acted, would have been worth at the best price the sweep recorded and at the latest one. Nobody has realised anything, and a coin that has since collapsed shows the loss. Dollar figures are rounded to two significant figures, as every public stake on the site is.</p>
+        <h3>Where it lives</h3>
+        <p>Squads have their own tab on the communities page &mdash; a directory you can search by name or by a coin&rsquo;s contract address (several squads may share a coin), the weekly board, and the form to start one &mdash; and each squad has its own page with the wall, the calls, the conviction board and the members. All of it is behind a sign-in: signed out, every squad request is refused and the pages show a locked panel. A squad is a club, not an endorsement of the coin that gates it, and never a reason to buy one.</p>
       </section>
 
       <!-- 12 -->

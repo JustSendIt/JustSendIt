@@ -81,7 +81,8 @@
     let dataUrl = null;
     try { dataUrl = await shareCard(call); } catch {}
     if (dataUrl) { try { const a = document.createElement('a'); a.href = dataUrl; a.download = 'justsendit-' + (call.symbol || 'call') + '.png'; document.body.appendChild(a); a.click(); a.remove(); } catch {} }
-    const link = location.origin + (call.postId ? '/wall.html#p' + call.postId : '/wall.html');
+    // a squad call's post is private to the squad, so the link goes to the squad's Calls tab rather than to a wall post nobody else can open
+    const link = location.origin + (squadOf(call) ? '/squad.html?id=' + call.squad.id + '#calls' : (call.postId ? '/wall.html#p' + call.postId : '/wall.html'));
     let text = 'Just Send It! 🚀';
     if (call.symbol) text += ' I called $' + call.symbol + (call.entryMc != null ? ' at ' + fmtUsd(call.entryMc) + ' MC' : '');
     text += ' on $Send';
@@ -90,8 +91,15 @@
     if (window.sendToast) sendToast(dataUrl ? '🖼️ Call card saved — attach it to your tweet on X!' : 'Opening X…');
   }
 
+  // a call made "to a squad": private to its verified members, and every point it earns is the squad's
+  const squadOf = (call) => (call && call.squad && call.squad.id) ? call.squad : null;
+  function squadChipHTML(sq) {
+    return sq ? '<span class="comm-pill comm-pill-live sc-squad-chip">🛡️ Squad call · ' + esc(String(sq.name || 'Squad #' + sq.id).slice(0, 40)) + '</span>' : '';
+  }
+
   function widgetHTML(call) {
     const g = call.grade || { g: 'E', emoji: '➖', label: 'Flat' };
+    const sq = squadOf(call);
     const chart = (call.links && call.links.dex) || ('https://dexscreener.com/robinhood/' + call.pair);
     /* entry price + pair travel with the card so the X can be recomputed from a live on-chain spot price
        between server refreshes — the X is price ÷ entry, and the entry never changes. */
@@ -102,7 +110,8 @@
       (call.rugged ? '<div class="sc-rugged" role="alert">💀 RUGGED! <span>Liquidity was pulled — DO NOT BUY.</span></div>' : '') +
       '<div class="sc-top">' + logo(call) +
         '<div class="sc-id"><span class="sc-name">' + esc(call.name || 'Token') + ' <b>$' + esc(call.symbol || '?') + '</b></span>' +
-          '<span class="sc-when">📣 Send Call · ' + timeAgo(call.calledAt) + ' · entry ' + (call.entryMc != null ? fmtUsd(call.entryMc) + ' MC' : '$' + (call.entryPrice != null ? Number(call.entryPrice).toPrecision(3) : '—')) + '</span></div>' +
+          '<span class="sc-when">📣 Send Call · ' + timeAgo(call.calledAt) + ' · entry ' + (call.entryMc != null ? fmtUsd(call.entryMc) + ' MC' : '$' + (call.entryPrice != null ? Number(call.entryPrice).toPrecision(3) : '—')) + '</span>' +
+          squadChipHTML(sq) + '</div>' +
         '<span class="sc-grade" title="' + esc(g.label) + ' call">' + g.emoji + '<i>' + esc(g.g) + '</i><span class="sr-only sc-grade-sr"> — ' + esc(g.label) + ' call</span></span>' +
       '</div>' +
       '<div class="sc-xrow">' +
@@ -122,7 +131,7 @@
         '<ol class="sc-senders-list" aria-label="Others who Sent It, ranked by how much they put in">' + sendersRowsHTML((call.senders || []).slice(0, 3)) + '</ol>' +
         (call.hops > 3 ? '<button class="sc-senders-toggle" type="button" data-tip="Lists everyone who Sent It on this call" data-senders-toggle="' + call.id + '" aria-expanded="false">▾ Show all ' + call.hops + '</button>' : '') +
       '</div>' +
-      '<div class="sc-hold"' + (call.holdEarned > 0 ? '' : ' hidden') + '>💎 <b class="sc-holdn">' + (call.holdEarned || 0).toLocaleString('en-US') + '</b> diamond-hands bonus' + (call.stale ? '' : ' · grows while it stays in profit') + '</div>' +
+      '<div class="sc-hold"' + (call.holdEarned > 0 ? '' : ' hidden') + '>💎 <b class="sc-holdn">' + (call.holdEarned || 0).toLocaleString('en-US') + '</b> diamond-hands bonus' + (sq ? ' · paid to the squad' : '') + (call.stale ? '' : ' · grows while it stays in profit') + '</div>' +
       '<div class="sc-actions">' +
         '<button class="sc-btn sc-hop' + (call.hopped ? ' hopped' : '') + '" type="button" data-tip="Adds you publicly to the senders on this call — no undo" data-hop="' + call.id + '"' + (call.mineOwn ? ' disabled title="This is your own call"' : '') + '>🚀 ' + (call.hopped ? 'Sent it!' : 'Send It!') + ' <span class="sc-hopn">' + (call.hops || 0) + '</span></button>' +
         (call.wallet ? '<button class="sc-btn sc-track" type="button" data-tip="Adds that address to your wallet tracker" data-track="' + esc(call.wallet) + '" data-sym="' + esc(call.symbol || '') + '">➕ Track caller’s wallet</button>' : '') +
@@ -131,9 +140,14 @@
         '<button class="sc-btn sc-info" type="button" data-tip="Shows how Send Calls and their scores work" data-scinfo aria-expanded="false">ⓘ What’s a Send Call?</button>' +
       '</div>' +
       '<div class="sc-explain" hidden>' +
-        '<p><b>📣 What’s a Send Call?</b> A public, timestamped, <b>permanent</b> shout that a token will run. Once posted a call can never be edited or deleted — it’s on the record forever, tracked live.</p>' +
+        (sq
+          ? '<p><b>🛡️ What’s a squad call?</b> A timestamped, <b>permanent</b> shout that a token will run, made <b>privately to ' + esc(sq.name || 'this squad') + '</b> — only its verified members see it. Once posted a call can never be edited or deleted — it’s on the squad’s record forever, tracked live.</p>'
+          : '<p><b>📣 What’s a Send Call?</b> A public, timestamped, <b>permanent</b> shout that a token will run. Once posted a call can never be edited or deleted — it’s on the record forever, tracked live.</p>') +
         '<p><b>Xs</b> = how far it’s run from the entry, where <b>+100% = 1x</b> (so +340% shows as +3.4x). <b>Peak since call</b> is the highest it has reached since it was called. Every call gets a live <b>grade</b> (E → S).</p>' +
-        '<p class="sc-explain-h"><b>How a call earns Send Power 🏆</b></p>' +
+        (sq
+          ? '<p class="sc-explain-h"><b>How a squad call earns Send Power for the squad 🛡️</b></p>' +
+            '<p><b>Every point this call earns goes to the squad</b> — the opening award, each X it hits, the diamond-hands bonus and every Send It on it all land in the squad’s total, never in a member’s own score, and no personal multiplier applies. The rules are the same as a public call:</p>'
+          : '<p class="sc-explain-h"><b>How a call earns Send Power 🏆</b></p>') +
         '<ul class="sc-rules">' +
           '<li>📣 <b>+120</b> for making a call, scaled by the size of your own on-chain buy (the token needs ≥$500 liquidity, so no one can farm a dust pool). One opening award per token, ever.</li>' +
           '<li>📥 <b>Send-size boost:</b> we read on-chain the value of the tokens you bought from the pool <b>and still hold</b> — <b>every $100 = ×1 Send Power</b> (so $1,000 still held = ×10). Sell and it drops. The same applies when you 🚀 Send It on someone else’s call. The card shows what the caller and all followers put in. (Best-effort — only pool buys you still hold count.)</li>' +
@@ -257,9 +271,10 @@
           if (!r.ok) { if (window.sendToast) sendToast(j.error || 'Could not Send It'); hop.disabled = false; return; }
           hop.classList.add('hopped'); hop.innerHTML = '🚀 Sent it! <span class="sc-hopn">' + j.hops + '</span>';
           if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
-          if (window.sendToast) sendToast('🚀 Sent it on the $' + (j.symbol || '') + ' call — good luck!');
-          // reveal a track-wallet button if the caller has a public wallet and one isn't already shown
           const w = hop.closest('.sc-widget');
+          const toSquad = !!(w && w.querySelector('.sc-squad-chip'));   // on a squad call the points are the squad's, not yours
+          if (window.sendToast) sendToast('🚀 Sent it on the $' + (j.symbol || '') + ' call — ' + (toSquad ? (j.squadPoints > 0 ? 'the squad earned +' + j.squadPoints + '. Good luck!' : 'counted for the squad; points need a verified position in the token.') : 'good luck!'));
+          // reveal a track-wallet button if the caller has a public wallet and one isn't already shown
           if (j.wallet && w && !w.querySelector('.sc-track')) hop.insertAdjacentHTML('afterend', '<button class="sc-btn sc-track" type="button" data-tip="Adds that address to your wallet tracker" data-track="' + esc(j.wallet) + '" data-sym="' + esc(j.symbol || '') + '">➕ Track caller’s wallet</button>');
         } catch { if (window.sendToast) sendToast('Could not Send It'); hop.disabled = false; }
         return;

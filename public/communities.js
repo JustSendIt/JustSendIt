@@ -11,6 +11,9 @@
   const grid = document.getElementById('comm-grid');
   const statusEl = document.getElementById('comm-status');
   let state = { status: 'live', sort: 'active' };
+  // the 🛡️ Send Squads tab swaps the whole community layer out for #squads-panel; these two are read by
+  // load() so a community refresh that lands while squads are showing cannot un-hide the officials strip
+  let squadsOn = false, hasOfficials = false;
 
   // Repaint a card grid without stealing focus or re-rendering identical markup: the 45s refresh must not
   // yank a keyboard user off the card they tabbed to. Focus is restored by href, the same way wkPaint does.
@@ -84,7 +87,8 @@
       // the official $Send / $GWC communities are pinned in their own strip on every tab; the main grid lists the rest
       const officials = (j && j.officials) || [];
       const offSec = document.getElementById('comm-officials'), offGrid = document.getElementById('comm-officials-grid');
-      if (offSec && offGrid) { offSec.hidden = !officials.length; paintGrid(offGrid, officials.map(cardHTML).join('')); }
+      hasOfficials = !!officials.length;
+      if (offSec && offGrid) { offSec.hidden = !hasOfficials || squadsOn; paintGrid(offGrid, officials.map(cardHTML).join('')); }
       const list = ((j && j.communities) || []).filter(c => !c.official);
       grid.removeAttribute('aria-busy');
       if (!list.length) {
@@ -263,11 +267,318 @@
     } catch (err) { goBtn.disabled = false; msg.textContent = '⚠️ Could not start that community — try again.'; }
   });
 
-  // tabs (live / pending) + sort
-  document.querySelectorAll('.comm-tab').forEach(t => t.addEventListener('click', () => {
+  /* ===== 🛡️ Send Squads — private groups behind the sign-in gate =====
+     One request paints the whole tab: GET /api/squads answers the grid, the weekly board (this week's top 10 and
+     last week's top 3), "my squads" and the server clock. Every /api/squads route answers 401 need_signin when
+     signed out, so the tab is a locked panel until AUTH says there is a user — and locks again on sign-out.
+     Every figure on a card is the API's own (already rounded server-side); a missing field prints '—', never a
+     guess, and nothing here tells anyone to buy anything. */
+  const sqPanel = document.getElementById('squads-panel');
+  const sqOn = !!sqPanel;
+  const sq = (id) => document.getElementById(id);
+  const sqTab = document.querySelector('.comm-tab[data-cstatus="squads"]');
+  const sqState = { q: '', gate: 'all', time: 'all', sort: 'active' };
+  let sqLocked = true, sqAuthKnown = false, sqBusy = false, sqAt = 0, sqLoadedOnce = false, sqGen = 0, sqWeek = null, sqQTimer = 0;
+  const signedIn = () => !!(window.AUTH && AUTH.user);
+  // a live region is only written when its wording changes — the 60s refresh must not re-announce itself
+  function sqSay(el, text, asHTML) { if (!el || el._said === text) return; el._said = text; if (asHTML) el.innerHTML = text; else el.textContent = text; }
+  const sqPts = (v) => (v == null || isNaN(v) ? '—' : fmtNum(Math.max(0, Math.round(Number(v)))));
+
+  // the gate cell: the API's own sentence ("Hold 1,000 $ABC", "Hold 2% of $GWC supply (≈ …)") or 🔓 Open — never composed here
+  function sqGateCell(g) {
+    if (!g || !g.kind) return '<span class="sq-gate" title="Gate">🔒 <b>—</b><span class="sr-only"> gate unknown</span></span>';
+    if (g.kind === 'none') return '<span class="sq-gate" title="Anyone with an account can join">🔓 <b>Open</b><span class="sr-only"> to anyone with an account</span></span>';
+    const t = g.text || '—';
+    return '<span class="sq-gate" title="' + esc(t) + '">🔒 <b>' + esc(t) + '</b></span>';
+  }
+  // the same .comm-card frame as a community, so a squad reads as one of the family: banner, avatar (🛡️ when none),
+  // name, a one-line bio, four metrics and the pill row. avatarHTML() only accepts the server's /uploads shape.
+  function squadCardHTML(c) {
+    const banner = c.banner ? '<span class="comm-card-banner" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></span>' : '<span class="comm-card-banner comm-card-banner-none sq-card-banner-none"></span>';
+    const ava = (c.avatar && window.avatarHTML) ? window.avatarHTML(c.avatar, 'comm-card-logo', 'loading="lazy"') : '';
+    const logo = ava || '<span class="comm-card-logo comm-card-logo-none" aria-hidden="true">🛡️</span>';
+    const g = c.gate || {}, open = g.kind === 'none', gated = g.kind === 'tokens' || g.kind === 'pct';
+    const lvl = c.level != null ? c.level : (c.levelInfo && c.levelInfo.level != null ? c.levelInfo.level : null);
+    const mine = (c.mine && c.mine.member) ? c.mine : null;
+    const you = mine ? '<span class="sq-you' + (mine.verified ? '' : ' sq-you-off') + '" title="' + (mine.verified ? (mine.role === 'owner' ? 'You started this squad' : 'You are a verified member') : 'You are a member, but your linked wallets did not pass the gate at the last check') + '">' + (mine.verified ? (mine.role === 'owner' ? '👑 yours' : '✅ you’re in') : '⏸ unverified') + '</span>' : '';
+    const pills = (c.official ? '<span class="comm-pill comm-pill-official" title="Run by the site itself">🏠 Official</span> ' : '') +
+      (gated ? '<span class="comm-pill comm-pill-pending" title="' + esc(g.text || 'Token-gated') + '">🔒 Gated</span>'
+        : open ? '<span class="comm-pill comm-pill-live" title="Anyone with an account can join">🔓 Open</span>' : '');
+    const label = c.name + ' squad, ' + fmtNum(c.memberCount) + ' members, ' + (lvl == null ? 'level unknown' : 'level ' + lvl) + ', ' + sqPts(c.xpWeek) + ' points this week, '
+      + (open ? 'open to anyone with an account' : (g.text || 'token-gated')) + (mine ? (mine.verified ? (mine.role === 'owner' ? ', you started it' : ', you’re in') : ', you’re a member awaiting verification') : '');
+    return '<li class="comm-card sq-card' + (c.official ? ' comm-card-official' : '') + '">' +
+      '<a class="comm-card-link" href="squad.html?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +
+        banner +
+        '<span class="comm-card-body">' +
+          '<span class="comm-card-head">' + logo + '<span class="comm-card-id"><b class="comm-card-sym sq-card-name">' + esc(c.name) + '</b><span class="comm-card-name">' + (c.bio ? esc(c.bio) : 'No bio yet') + '</span></span></span>' +
+          '<span class="comm-card-metrics sq-card-metrics">' +
+            '<span title="Members' + (c.verifiedCount != null ? ' (' + fmtNum(c.verifiedCount) + ' verified)' : '') + '">👥 <b>' + fmtNum(c.memberCount) + '</b><span class="sr-only"> members</span></span>' +
+            '<span title="Squad level">🏅 <b>' + (lvl == null ? '—' : 'Lv ' + esc(lvl)) + '</b><span class="sr-only"> squad level</span></span>' +
+            '<span title="Points earned this week">⚡ <b>' + sqPts(c.xpWeek) + '</b> <small>this week</small></span>' +
+            sqGateCell(g) +
+          '</span>' +
+          '<span class="comm-card-foot">' + you + '<span class="sq-pills">' + pills + '</span></span>' +
+        '</span>' +
+      '</a>' +
+    '</li>';
+  }
+  // weekly rows reuse the community board's .wk-* frame (weekly.css is on this page). There is no rank in the
+  // payload — the server sends the board already ordered — so the rank is the row's position.
+  function sqRowHTML(r, i, last) {
+    const rank = i + 1, top = rank <= 3;
+    const ava = (r.avatar && window.avatarHTML) ? window.avatarHTML(r.avatar, 'wk-logo', 'loading="lazy"') : '';
+    const logo = ava || '<span class="wk-logo wk-logo-none" aria-hidden="true">🛡️</span>';
+    // last week's rows: the week's total is xpLast if the server names it so, else xpWeek as sent; never a computed figure
+    const pts = last ? (r.xpLast != null ? r.xpLast : r.xpWeek) : r.xpWeek;
+    const medal = WK_MEDAL[rank] ? '<span class="wk-medal" aria-hidden="true">' + WK_MEDAL[rank] + '</span>' : '';
+    const label = '#' + rank + ' ' + r.name + ' — ' + sqPts(pts) + ' points ' + (last ? 'last week' : 'this week') + (r.level != null ? ', squad level ' + r.level : '') + (r.memberCount != null ? ', ' + fmtNum(r.memberCount) + ' members' : '') + (r.official ? ', official' : '');
+    return '<li class="wk-item' + (top ? ' wk-top wk-r' + rank : '') + '">' +
+      '<a class="wk-link" href="squad.html?id=' + encodeURIComponent(r.id) + '" aria-label="' + esc(label) + '">' +
+        '<span class="wk-rank">' + medal + '<span class="wk-rank-n">#' + rank + '</span></span>' +
+        logo +
+        '<span class="wk-id"><b class="wk-sym">' + esc(r.name) + '</b><span class="wk-name">👥 ' + fmtNum(r.memberCount) + ' members' + (r.official ? ' · 🏠 Official' : '') + '</span></span>' +
+        '<span class="wk-score"><b class="wk-xp">' + sqPts(pts) + '</b><span class="wk-xp-l">' + (last ? 'pts last week' : 'pts this week') + '</span></span>' +
+        '<span class="wk-meta"><span class="comm-pill comm-pill-live">🏅 Lv ' + (r.level == null ? '—' : esc(r.level)) + '</span></span>' +
+      '</a>' +
+    '</li>';
+  }
+
+  function sqWkHead() {
+    const d = sq('sq-wk-dates'), c = sq('sq-wk-count');
+    if (!d || !c) return;
+    if (!sqWeek || !(sqWeek.startsAt > 0) || !(sqWeek.endsAt > 0)) { d.textContent = ''; c.textContent = ''; return; }
+    d.textContent = wkDate(sqWeek.startsAt) + ' – ' + wkDate(sqWeek.endsAt - 1) + ' (UTC)';
+    c.textContent = wkCountdown(sqWeek.endsAt);
+  }
+  function paintSquadWeekly(w) {
+    const board = sq('sq-wk-board'), empty = sq('sq-wk-empty'), lastWrap = sq('sq-wk-last'), lastBoard = sq('sq-wk-last-board');
+    if (!board || !empty || !lastWrap || !lastBoard) return;
+    sqWeek = (w && w.week) || null;
+    sqWkHead();
+    const rows = (w && w.board) || [];
+    if (!rows.length) { paintGrid(board, ''); board.hidden = true; empty.hidden = false; sqSay(sq('sq-wk-status'), 'Nothing on the squad board yet this week.'); }
+    else {
+      empty.hidden = true; paintGrid(board, rows.map((r, i) => sqRowHTML(r, i, false)).join('')); board.hidden = false;
+      sqSay(sq('sq-wk-status'), rows.length + ' squad' + (rows.length === 1 ? '' : 's') + ' on the board so far, ranked by the points earned this week.');
+    }
+    const last = (w && w.last && w.last.board) || [];
+    if (!last.length) { paintGrid(lastBoard, ''); lastWrap.hidden = true; }
+    else { paintGrid(lastBoard, last.map((r, i) => sqRowHTML(r, i, true)).join('')); lastWrap.hidden = false; }
+  }
+  function paintMine(list) {
+    const sec = sq('sq-mine'), g = sq('sq-mine-grid');
+    if (!sec || !g) return;
+    list = list || [];
+    if (!list.length) { paintGrid(g, ''); sec.hidden = true; return; }
+    paintGrid(g, list.map(squadCardHTML).join(''));
+    sec.hidden = false;
+  }
+  function paintSquadGrid(j) {
+    const list = (j && j.squads) || [], gridEl = sq('sq-grid');
+    if (!list.length) {
+      paintGrid(gridEl, '');
+      const filtered = !!(sqState.q || sqState.gate !== 'all' || sqState.time !== 'all');
+      sqSay(sq('sq-status'), filtered
+        ? '🔎 No squads match that search or filter — <b>clear it</b> to see them all.'
+        : '🛡️ No Send Squads yet — <b>start the first one</b> above.', true);
+      return;
+    }
+    paintGrid(gridEl, list.map(squadCardHTML).join(''));
+    sqSay(sq('sq-status'), list.length + ' squad' + (list.length === 1 ? '' : 's') + (sqState.q ? ' matching “' + sqState.q + '”' : '') + ' · sorted by ' + ({ active: 'most active this week', level: 'level', members: 'members', new: 'newest' }[sqState.sort] || sqState.sort));
+  }
+
+  // force: a filter/search/auth change must not be dropped because the 60s refresh is in flight; a generation
+  // counter drops the older response instead. Only the timer yields to a load already running.
+  async function loadSquads(force) {
+    if (!sqOn || !squadsOn || sqLocked) return;
+    if (sqBusy && !force) return;
+    sqBusy = true;
+    const gen = ++sqGen, gridEl = sq('sq-grid');
+    if (!sqLoadedOnce) sqSay(sq('sq-status'), 'Loading squads…');
+    gridEl.setAttribute('aria-busy', 'true');
+    try {
+      const qs = new URLSearchParams({ q: sqState.q, sort: sqState.sort, gate: sqState.gate, time: sqState.time });
+      const j = await window.api('/api/squads?' + qs.toString());
+      if (gen !== sqGen) return;                                  // a newer filter is in flight; this page is stale
+      sqLoadedOnce = true; sqAt = Date.now();
+      if (j && Number(j.serverNow) > 0) wkOffset = Number(j.serverNow) - sqAt;   // same server clock as the community board
+      paintSquadGrid(j);
+      paintSquadWeekly(j && j.weekly);
+      paintMine(j && j.mine);
+    } catch (e) {
+      if (gen !== sqGen) return;
+      if (e && (e.status === 401 || e.code === 'need_signin')) { lockSquads(true); return; }   // the session lapsed: back behind the gate
+      if (!gridEl.children.length) sqSay(sq('sq-status'), 'Couldn’t load squads — try again in a moment.');
+    } finally {
+      gridEl.removeAttribute('aria-busy');
+      if (gen === sqGen) sqBusy = false;
+    }
+  }
+  function sqReset() {
+    sqLoadedOnce = false; sqGen++; sqBusy = false;
+    paintGrid(sq('sq-grid'), ''); paintMine([]); sqSay(sq('sq-status'), '');
+    paintSquadWeekly(null);
+  }
+  // the gate: signed out → the locked panel; signed in → the body, loaded once per unlock
+  function lockSquads(locked) {
+    if (!sqOn) return;
+    const wait = sq('sq-auth-wait'); if (wait) wait.hidden = true;
+    const changed = sqLocked !== locked;
+    sqLocked = locked;
+    sq('sq-locked').hidden = !locked;
+    sq('sq-body').hidden = locked;
+    if (locked) { if (changed) sqReset(); return; }
+    if (changed || !sqLoadedOnce) loadSquads(true);
+  }
+  // swap the community layer for the squads panel (and back). The URL follows the tab so a reload or a shared
+  // link lands on the same view; ?q= is left alone.
+  function showSquads(on) {
+    if (!sqOn) return;
+    squadsOn = on;
+    const offSec = document.getElementById('comm-officials'), wkSec = document.getElementById('wk'), sorts = document.querySelector('.comm-sorts');
+    if (offSec) offSec.hidden = on || !hasOfficials;
+    if (wkSec) wkSec.hidden = on;
+    if (sorts) sorts.hidden = on;
+    statusEl.hidden = on; grid.hidden = on;
+    sqPanel.hidden = !on;
+    try {
+      const u = new URL(location.href);
+      const had = u.searchParams.get('tab') === 'squads';
+      if (on !== had) { if (on) u.searchParams.set('tab', 'squads'); else u.searchParams.delete('tab'); history.replaceState(null, '', u.pathname + u.search + u.hash); }
+    } catch {}
+    if (!on) return;
+    if (sqAuthKnown) lockSquads(!signedIn());
+    else { const w = sq('sq-auth-wait'); if (w) w.hidden = false; }   // auth.js is still asking /api/me — neither panel yet
+  }
+
+  if (sqOn) {
+    const sqSettle = () => { sqAuthKnown = true; if (squadsOn) lockSquads(!signedIn()); };
+    if (window.AUTH && AUTH.ready && typeof AUTH.ready.then === 'function') AUTH.ready.then(sqSettle, sqSettle); else sqSettle();
+    document.addEventListener('auth:change', sqSettle);   // sign-in unlocks, sign-out locks and wipes what was on screen
+    sq('sq-signin').addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
+
+    // search: a name, or a 0x address (the server matches it against the gate token)
+    const qEl = sq('sq-q'), qClear = sq('sq-q-clear');
+    const paintQClear = () => { qClear.hidden = !qEl.value; };
+    function applyQ(now) {
+      clearTimeout(sqQTimer);
+      const run = () => { const v = qEl.value.trim(); if (v === sqState.q) return; sqState.q = v; loadSquads(true); };
+      if (now) run(); else sqQTimer = setTimeout(run, 350);
+    }
+    qEl.addEventListener('input', () => { paintQClear(); applyQ(false); });
+    sq('sq-search').addEventListener('submit', (e) => { e.preventDefault(); applyQ(true); });
+    qClear.addEventListener('click', () => { qEl.value = ''; paintQClear(); applyQ(true); qEl.focus(); });
+    paintQClear();
+
+    // filters: three exclusive button groups, each reusing the sort pill
+    for (const [attr, key] of [['sqgate', 'gate'], ['sqtime', 'time'], ['sqsort', 'sort']]) {
+      const btns = [...sqPanel.querySelectorAll('[data-' + attr + ']')];
+      btns.forEach(b => b.addEventListener('click', () => {
+        btns.forEach(x => { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+        sqState[key] = b.dataset[attr]; loadSquads(true);
+      }));
+    }
+
+    // ---- start a squad ----
+    const sf = sq('sq-start-form'), sfName = sq('sq-name'), sfBio = sq('sq-bio'), sfBioCount = sq('sq-bio-count'), sfMsg = sq('sq-start-msg'), sfGo = sq('sq-start-go');
+    const sfGateFields = sq('sq-gate-fields'), sfToken = sq('sq-gate-token'), sfAmount = sq('sq-gate-amount'), sfAmountL = sq('sq-gate-amount-l');
+    const SQ_NAME_RE = /^[\w .\-'$&!?]{3,40}$/;          // mirrors SQUAD_NAME_RE on the server (after trim)
+    const SQ_IMG_MAX = 3.5 * 1024 * 1024, SQ_IMG_TYPES = /^image\/(jpeg|png|webp)$/;
+    const media = { avatar: null, banner: null };       // data: URLs, read client-side; the server accepts ≤ 3.5 MB jpeg/png/webp
+    const gateKind = () => { const r = sf.querySelector('input[name="sq-gate"]:checked'); return r ? r.value : 'none'; };
+    function paintGate() {
+      const k = gateKind();
+      sfGateFields.hidden = k === 'none';
+      sfAmountL.textContent = k === 'pct' ? 'Share of the total supply to hold (percent, 0.01 – 100)' : 'Tokens to hold (at least)';
+      sfAmount.placeholder = k === 'pct' ? '1' : '1000';
+      sfAmount.min = k === 'pct' ? '0.01' : '0';
+      if (k === 'pct') sfAmount.max = '100'; else sfAmount.removeAttribute('max');
+    }
+    sf.querySelectorAll('input[name="sq-gate"]').forEach(r => r.addEventListener('change', paintGate));
+    paintGate();
+    const setBioCount = (n) => { sfBioCount.textContent = n + ' left'; sfBioCount.setAttribute('aria-hidden', n > 20 ? 'true' : 'false'); }; // announce to SRs only when low
+    sfBio.addEventListener('input', () => setBioCount(280 - sfBio.value.length));
+
+    function wireMedia(kind) {
+      const input = sq('sq-' + kind), prev = sq('sq-' + kind + '-prev'), rm = sq('sq-' + kind + '-rm'), none = sq('sq-' + kind + '-none');
+      const clear = () => { media[kind] = null; input.value = ''; prev.hidden = true; prev.removeAttribute('src'); rm.hidden = true; if (none) none.hidden = false; };
+      input.addEventListener('change', () => {
+        const f = input.files && input.files[0]; if (!f) return;
+        if (!SQ_IMG_TYPES.test(f.type)) { sfMsg.textContent = '⚠️ The ' + kind + ' must be a jpeg, png or webp image.'; clear(); return; }
+        if (f.size > SQ_IMG_MAX) { sfMsg.textContent = '⚠️ That ' + kind + ' is over 3.5 MB — pick a smaller file.'; clear(); return; }
+        const rd = new FileReader();
+        rd.onload = () => { media[kind] = String(rd.result || ''); prev.src = media[kind]; prev.hidden = false; rm.hidden = false; if (none) none.hidden = true; sfMsg.textContent = ''; };
+        rd.onerror = () => { sfMsg.textContent = '⚠️ Could not read that file — try another.'; clear(); };
+        rd.readAsDataURL(f);
+      });
+      rm.addEventListener('click', () => { clear(); try { input.focus(); } catch {} });
+    }
+    wireMedia('avatar'); wireMedia('banner');
+
+    const disarm = () => { clearTimeout(sfGo._armT); if (sfGo._armed) { sfGo._armed = false; sfGo.textContent = sfGo.dataset.label || '🛡️ Start the squad'; sfGo.removeAttribute('aria-label'); } };
+    sf.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!signedIn()) { if (window.AUTH) AUTH.open(); return; }
+      const name = sfName.value.trim();
+      if (!SQ_NAME_RE.test(name)) { sfMsg.textContent = '⚠️ The name needs 3–40 characters: letters, numbers, spaces and . - \' $ & ! ?'; sfName.setAttribute('aria-invalid', 'true'); sfName.focus(); disarm(); return; }
+      sfName.removeAttribute('aria-invalid');
+      const bio = sfBio.value.trim();
+      if (bio.length > 280) { sfMsg.textContent = '⚠️ The bio is over 280 characters.'; sfBio.focus(); disarm(); return; }
+      const kind = gateKind(), body = { name, gateKind: kind };
+      if (bio) body.bio = bio;
+      if (kind !== 'none') {
+        const token = sfToken.value.trim();
+        if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { sfMsg.textContent = '⚠️ Paste a valid 0x token contract address for the gate.'; sfToken.setAttribute('aria-invalid', 'true'); sfToken.focus(); disarm(); return; }
+        sfToken.removeAttribute('aria-invalid');
+        const amt = Number(sfAmount.value);
+        if (!(amt > 0)) { sfMsg.textContent = '⚠️ The amount to hold must be more than zero.'; sfAmount.setAttribute('aria-invalid', 'true'); sfAmount.focus(); disarm(); return; }
+        if (kind === 'pct' && (amt < 0.01 || amt > 100)) { sfMsg.textContent = '⚠️ The share must be between 0.01% and 100% of the supply.'; sfAmount.setAttribute('aria-invalid', 'true'); sfAmount.focus(); disarm(); return; }
+        sfAmount.removeAttribute('aria-invalid');
+        body.gateToken = token.toLowerCase(); body.gateAmount = amt;
+      }
+      if (media.avatar) body.avatar = media.avatar;
+      if (media.banner) body.banner = media.banner;
+      // Creating a squad fixes its gate for good, so the button arms first — a second press within 4s sends it.
+      if (!sfGo._armed) {
+        sfGo._armed = true; sfGo.dataset.label = sfGo.textContent; sfGo.textContent = '⚠️ Tap again to create — the gate is final';
+        sfGo.setAttribute('aria-label', 'Tap again to confirm creating this squad; its gate can never be changed');
+        if (window.announce) announce('Tap the button again to create the squad. Its gate can never be changed.');
+        sfGo._armT = setTimeout(() => { if (sfGo.isConnected) disarm(); }, 4000);
+        return;
+      }
+      disarm();
+      sfGo.disabled = true; sfMsg.textContent = '🛡️ Creating your squad…';
+      try {
+        const j = await window.api('/api/squads', { method: 'POST', body });
+        if (window.sendToast) sendToast('🛡️ Squad started — welcome in!');
+        location.href = 'squad.html?id=' + encodeURIComponent(j.id);
+        return;
+      } catch (err) {
+        sfGo.disabled = false;
+        if (err && (err.status === 401 || err.code === 'need_signin')) { sfMsg.textContent = '🔒 Sign in first — squads are for members with an account.'; lockSquads(true); if (window.AUTH) AUTH.open(); return; }
+        if (err && err.status === 409) { sfMsg.textContent = '⚠️ ' + ((err && err.message) || 'You already own a squad with that name — pick another.'); sfName.setAttribute('aria-invalid', 'true'); sfName.focus(); return; }
+        if (err && err.needsProof) { sfMsg.textContent = '🪪 ' + ((err && err.message) || 'Finish the participation check, then try again.'); return; }   // auth.js already opened the proof step
+        sfMsg.textContent = '⚠️ ' + ((err && err.message) || 'Could not start that squad — try again.');   // a 403 gate refusal lands here with what you hold vs what it takes
+      }
+    });
+
+    // coming back to a backgrounded tab: refresh if it's gone stale, otherwise just re-tick the countdown
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || !squadsOn || sqLocked) return;
+      if (Date.now() - sqAt > 20000) loadSquads(); else sqWkHead();
+    });
+    setInterval(() => { if (!document.hidden && squadsOn && !sqLocked) loadSquads(); }, 60000);
+  }
+
+  // tabs (live / pending / squads) + sort
+  function pickTab(t) {
     document.querySelectorAll('.comm-tab').forEach(x => { x.classList.toggle('is-on', x === t); x.setAttribute('aria-pressed', String(x === t)); });
+    const isSq = t.dataset.cstatus === 'squads';
+    showSquads(isSq);
+    if (isSq) return;                       // the community grid keeps its last state until the reader comes back
     state.status = t.dataset.cstatus; load();
-  }));
+  }
+  document.querySelectorAll('.comm-tab').forEach(t => t.addEventListener('click', () => pickTab(t)));
   document.querySelectorAll('[data-csort]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-csort]').forEach(x => { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
     state.sort = b.dataset.csort; load();
@@ -283,7 +594,16 @@
       setTimeout(() => { try { goBtn.focus(); } catch {} }, 300);
     }
   } catch {}
+  // deep links into the squads tab: ?tab=squads opens it; ?q= prefills the squad search (and opens it — the
+  // search lives only there). The community grid still loads underneath so switching back is instant.
+  try {
+    const p = new URLSearchParams(location.search);
+    const q = (p.get('q') || '').trim().slice(0, 64);
+    if (sqOn && q) { const qEl = sq('sq-q'); qEl.value = q; sqState.q = q; sq('sq-q-clear').hidden = false; }
+    if (sqOn && sqTab && (p.get('tab') === 'squads' || q)) pickTab(sqTab);
+  } catch {}
   load();
-  // one timer for the whole page: refreshes the grid AND the weekly board (+ its countdown), only while visible
-  setInterval(() => { if (!document.hidden) { load(); loadWeekly(); } }, 45000); // keep stats + activity fresh
+  // one timer for the community layer: refreshes the grid AND the weekly board (+ its countdown), only while
+  // visible and only while that layer is showing — the squads tab has its own 60s timer above
+  setInterval(() => { if (!document.hidden && !squadsOn) { load(); loadWeekly(); } }, 45000); // keep stats + activity fresh
 })();

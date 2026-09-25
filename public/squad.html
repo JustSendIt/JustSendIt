@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Send Squad — $Send · Just Send It 🛡️</title>
+<meta name="description" content="A private Send Squad on $Send — its members-only wall, its squad calls, the conviction plays its members hold, and its weekly points. Robinhood Chain. Entertainment only.">
+<meta name="robots" content="noindex, follow">
+<meta name="theme-color" content="#c6f000">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:title" content="A Send Squad on $Send 🛡️">
+<meta property="og:description" content="A private squad: its wall, its calls, its members' conviction plays and its weekly points. Entertainment only.">
+<meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@senditrh">
+<meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
+<link rel="icon" href="assets/logo-128.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="styles.css">
+<script src="agegate.js"></script>
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="squad.css">
+<link rel="stylesheet" href="responsive.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the squad</a>
+
+<nav class="nav" aria-label="Main">
+  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <a href="about.html">About</a>
+    <a href="arcade.html">Arcade</a>
+    <a class="active" href="communities.html" aria-current="true">Communities</a>
+    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="newpairs.html">Scanner</a>
+    <a href="wall.html">Send&nbsp;Wall</a>
+    <a href="support.html">Support</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="index.html#tokens">Tokens</a>
+    <a href="watchlist.html">Watchlist</a>
+
+    <a href="whitepaper.html">White&nbsp;Paper</a>
+
+    <span id="nav-search-slot"></span>
+    </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Slides the list of site pages open or shut"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<main id="main" style="padding:0.5rem 1.25rem 4rem;">
+  <div class="wrap comm-page" style="max-width:680px;">
+    <p class="comm-back"><a class="btn btn-ghost btn-sm" href="communities.html?tab=squads" data-tip="Goes back to the list of Send Squads">← All squads</a></p>
+
+    <!-- Everything squad-related sits behind the referral gate: the server answers 401 to anyone signed out,
+         and this panel is what they see instead of a half-rendered page. It is the door, not the lock. -->
+    <section class="card sqd-locked" id="sqd-locked" role="status" hidden>
+      <div class="sqd-locked-ico" aria-hidden="true">🛡️</div>
+      <h1 class="comm-hero-name sqd-locked-h">Send Squads are for members</h1>
+      <p class="modal-note">A Send Squad is a <b>private group</b>. Its wall, its calls and its conviction board are only ever served to people who are signed in — nothing here is public.</p>
+      <button class="btn btn-primary" id="sqd-signin" type="button" data-tip="Opens the sign-in box, then brings this squad back">Sign in to see this squad 🚪</button>
+    </section>
+
+    <header class="comm-hero card" id="sqd-hero" hidden><p class="modal-note" style="text-align:center; padding:1.5rem;">Loading squad… 🛡️</p></header>
+
+    <!-- Owner-only. Rendered hidden and revealed by squad.js when the viewer's role is 'owner'. The gate can
+         never be edited (it was set once at creation), so it is not in this form on purpose. -->
+    <section class="card sqd-edit" id="sqd-edit" aria-labelledby="sqd-edit-h" hidden>
+      <h2 class="comm-members-h" id="sqd-edit-h">✏️ Edit squad</h2>
+      <p class="modal-note sqd-edit-note">Name, bio and pictures. The <b>token gate was set once</b> when the squad was started and cannot be changed.</p>
+      <form class="sqd-edit-form" id="sqd-edit-form" autocomplete="off" novalidate>
+        <label class="f-label" for="sqd-edit-name">Squad name</label>
+        <input class="addr-input" id="sqd-edit-name" type="text" maxlength="40" spellcheck="false" placeholder="3–40 characters" aria-describedby="sqd-edit-name-help">
+        <p class="hint sqd-hint" id="sqd-edit-name-help">Letters, numbers, spaces and . - ' $ &amp; ! ? — 3 to 40 characters.</p>
+        <label class="f-label" for="sqd-edit-bio">Bio</label>
+        <textarea id="sqd-edit-bio" maxlength="280" rows="3" placeholder="What this squad is about (up to 280 characters)"></textarea>
+        <div class="sqd-edit-media">
+          <div class="sqd-edit-slot">
+            <span class="f-label">Profile picture</span>
+            <div class="sqd-edit-preview" id="sqd-edit-ava-prev" aria-hidden="true"><span class="sqd-edit-fallback">🛡️</span></div>
+            <label class="file-label">🖼 Choose picture<input type="file" id="sqd-edit-ava" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Choose a squad profile picture (JPG, PNG or WebP, up to 3.5 MB)"></label>
+            <label class="sqd-edit-remove"><input type="checkbox" id="sqd-edit-ava-rm"> Remove the picture</label>
+          </div>
+          <div class="sqd-edit-slot">
+            <span class="f-label">Banner</span>
+            <div class="sqd-edit-preview sqd-edit-preview-wide" id="sqd-edit-ban-prev" aria-hidden="true"></div>
+            <label class="file-label">🖼 Choose banner<input type="file" id="sqd-edit-ban" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Choose a squad banner (JPG, PNG or WebP, up to 3.5 MB)"></label>
+            <label class="sqd-edit-remove"><input type="checkbox" id="sqd-edit-ban-rm"> Remove the banner</label>
+          </div>
+        </div>
+        <div class="prop-form-row sqd-edit-row">
+          <button class="btn btn-primary btn-sm" id="sqd-edit-save" type="submit" data-tip="Sends these changes to the server and repaints the squad">Save changes</button>
+          <button class="btn btn-ghost btn-sm" id="sqd-edit-cancel" type="button" data-tip="Closes the editor and throws away anything you changed here">Cancel</button>
+        </div>
+        <p class="modal-note" id="sqd-edit-status" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <!-- The lifetime tracker: every figure is derived from stored on-chain reads of the squad's own calls, and
+         every dollar is a paper figure — nobody here realised anything. squad.js only ever prints what the API
+         returned; a null is shown as a dash, never as a guess. -->
+    <section class="card sqd-life" id="sqd-life" aria-labelledby="sqd-life-h" hidden>
+      <h2 class="comm-members-h" id="sqd-life-h">📈 Lifetime tracker <span class="comm-members-sub">· paper figures</span></h2>
+      <div class="sc-stats sqd-life-grid" id="sqd-life-grid"></div>
+      <p class="modal-note sqd-life-note">From the squad's own calls. Dollar figures are <b>paper figures from members' on-chain positions</b> — what was put in at entry, and what that would be worth at the peak and now. Nothing here is realised, and nothing here is advice. 🎉 Entertainment only.</p>
+    </section>
+
+    <section class="comm-wall sqd-tabs-sec" id="sqd-tabs-sec" hidden>
+      <div class="cw-tabs sqd-cw-tabs" role="tablist" aria-label="Squad sections">
+        <button class="cw-tab is-on" id="sqd-tab-wall" type="button" role="tab" aria-selected="true" aria-controls="sqd-panel-wall" tabindex="0" data-stab="wall" data-tip="Shows the members-only wall — posts only verified members can read">🧱 Wall</button>
+        <button class="cw-tab" id="sqd-tab-calls" type="button" role="tab" aria-selected="false" aria-controls="sqd-panel-calls" tabindex="-1" data-stab="calls" data-tip="Shows the Send Calls members made to this squad">📣 Calls</button>
+        <button class="cw-tab" id="sqd-tab-conviction" type="button" role="tab" aria-selected="false" aria-controls="sqd-panel-conviction" tabindex="-1" data-stab="conviction" data-tip="Shows the tokens members are convicted in, and the points they earn the squad">💎 Conviction</button>
+        <button class="cw-tab" id="sqd-tab-members" type="button" role="tab" aria-selected="false" aria-controls="sqd-panel-members" tabindex="-1" data-stab="members" data-tip="Lists everyone in the squad with their role and verified state">👥 Members</button>
+      </div>
+      <p class="cw-note" id="sqd-cw-note"></p>
+
+      <!-- Wall -->
+      <div id="sqd-panel-wall" role="tabpanel" aria-labelledby="sqd-tab-wall" tabindex="0">
+        <div class="composer card is-private" id="sqd-composer" hidden>
+          <div class="composer-id"><span class="composer-ava" id="sqd-c-ava" aria-hidden="true">🚀</span><span class="composer-handle">@<span id="sqd-c-handle"></span></span></div>
+          <label for="sqd-c-text" class="sr-only">Post to the squad wall</label>
+          <textarea id="sqd-c-text" maxlength="500" placeholder="Post to the squad 🛡️ — only verified members will ever see this. Paste a contract address → it becomes a clickable $TICKER"></textarea>
+          <div id="sqd-c-preview" class="media-preview" hidden aria-label="Attached media preview"></div>
+          <div class="composer-bar">
+            <label class="file-label">📷 Photo / GIF / Video<input type="file" id="sqd-c-img" accept="image/*,video/mp4,video/webm" class="sr-only" aria-label="Attach a photo, GIF, or video"></label>
+            <button class="btn btn-primary btn-sm" id="sqd-c-send" data-tip="Sends this to the squad's private wall — verified members only">Post to squad 🔒</button>
+            <span class="hint" id="sqd-c-count" aria-hidden="true">500</span>
+          </div>
+          <p class="modal-note" id="sqd-c-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="comm-wall-locked" id="sqd-wall-locked" role="status" hidden></div>
+        <div class="wall-feed" id="sqd-feed" role="feed" aria-label="Squad posts"></div>
+        <div class="empty-wall" id="sqd-empty" style="display:none;"><div style="font-size:3rem;" aria-hidden="true">🦗</div><p>Nothing on the squad wall yet — say the first thing.</p></div>
+        <div class="comm-more-row"><button class="btn btn-ghost btn-sm" id="sqd-more" hidden data-tip="Adds older posts to the bottom of this wall">Load more ⬇️</button></div>
+      </div>
+
+      <!-- Calls -->
+      <div id="sqd-panel-calls" role="tabpanel" aria-labelledby="sqd-tab-calls" tabindex="0" hidden>
+        <div class="sqd-calls-head">
+          <button class="btn btn-primary" id="sqd-call-btn" type="button" data-tip="Opens the composer in Send Call mode with this squad already picked — the points go to the squad">📣 Call a token to this squad</button>
+          <p class="modal-note sqd-calls-note">A squad call is a Send Call <b>private to this squad</b>: same on-chain rules as a public call, but <b>every point it earns goes to the squad</b>, not the caller. Only verified members can make one, or Send It on one.</p>
+        </div>
+        <div class="comm-wall-locked" id="sqd-calls-locked" role="status" hidden></div>
+        <p class="modal-note" id="sqd-calls-status" role="status" aria-live="polite"></p>
+        <div class="wall-feed" id="sqd-calls" role="feed" aria-label="Squad calls, newest first"></div>
+        <div class="empty-wall" id="sqd-calls-empty" style="display:none;"><div style="font-size:3rem;" aria-hidden="true">📣</div><p>No squad calls yet — the first one puts the squad on the board.</p></div>
+      </div>
+
+      <!-- Conviction -->
+      <div id="sqd-panel-conviction" role="tabpanel" aria-labelledby="sqd-tab-conviction" tabindex="0" hidden>
+        <p class="modal-note sqd-conv-intro">Members' public <b>Conviction Plays</b> — the tokens pinned on their profiles — are gathered here. Once a day, every pinned token a verified member <b>still holds</b> (read on-chain across their linked wallets) earns the squad points, growing with how long the pin has been held. Selling ends it; nothing is ever taken away.</p>
+        <p class="modal-note" id="sqd-conv-status" role="status" aria-live="polite"></p>
+        <div class="sc-stats sqd-conv-points" id="sqd-conv-points"></div>
+        <h3 class="sqd-h3" id="sqd-conv-tokens-h">🪙 Tokens the squad is convicted in</h3>
+        <div class="sqd-table-wrap" id="sqd-conv-tokens" role="region" tabindex="0" aria-labelledby="sqd-conv-tokens-h"></div>
+        <h3 class="sqd-h3" id="sqd-conv-top-h">💎 Most convicted members</h3>
+        <ol class="comm-members-list sqd-conv-top" id="sqd-conv-top" aria-labelledby="sqd-conv-top-h"></ol>
+        <p class="modal-note sqd-conv-checked" id="sqd-conv-checked"></p>
+      </div>
+
+      <!-- Members -->
+      <div id="sqd-panel-members" role="tabpanel" aria-labelledby="sqd-tab-members" tabindex="0" hidden>
+        <p class="modal-note sqd-members-note" id="sqd-members-sub"></p>
+        <p class="modal-note" id="sqd-members-status" role="status" aria-live="polite"></p>
+        <ol class="comm-members-list sqd-members-list" id="sqd-members-list" tabindex="0" aria-label="Squad members"></ol>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    A squad is a fan group, not an endorsement of any token — most tokens go to zero, and nothing here is financial advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/senditrh" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+    <a href="about.html">About</a>
+    <a href="arcade.html">Arcade</a>
+    <a href="communities.html">Communities</a>
+    <a href="index.html">Home</a>
+    <a href="index.html#guide">How to Buy</a>
+    <a href="profile.html">My Profile</a>
+    <a href="newpairs.html">Scanner</a>
+    <a href="wall.html">Send Wall</a>
+    <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="tracker.html">Wallet Tracker</a>
+    <a href="index.html#swap">Swap</a>
+    <a href="index.html#tokens">Tokens</a>
+    <a href="watchlist.html">Watchlist</a>
+    <a href="whitepaper.html">White Paper</a>
+  </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="eggs.js"></script>
+<script src="matrix.js"></script>
+<script src="tips.js"></script>
+<script src="livex.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="cursor.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="chart.js"></script>
+<script src="newpairs.js"></script>
+<script src="block0.js"></script>
+<script src="tokenmodal.js"></script>
+<script src="sendcall.js"></script>
+<script src="squad.js"></script>
+<script src="notifications.js"></script>
+<script src="voicememo.js"></script>
+<script src="compose.js"></script>
+</body>
+</html>

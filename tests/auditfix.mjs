@@ -209,7 +209,7 @@ try {
     check('the one-paying-position-per-token rule is re-decided under the write lock',
       /db\.exec\('BEGIN IMMEDIATE'\);\n            paying = !db\.prepare\(dupSql\)/.test(SRC));
     check('a second call on one token is re-checked inside the transaction too',
-      /const dupNow = db\.prepare\('SELECT COUNT\(\*\) n FROM calls WHERE user_id = \? AND token_addr = \?'\)/.test(SRC));
+      /const dupNow = db\.prepare\('SELECT COUNT\(\*\) n FROM calls WHERE user_id = \? AND token_addr = \? AND COALESCE\(squad_id, 0\) = \?'\)/.test(SRC));   // per squad since Send Squads
   }
 
   /* ═══════════ 9. showing up counts even when it pays nothing ═══════════ */

@@ -827,7 +827,105 @@ for (const col of [
      successful proof (grantSudo). */
   "ALTER TABLE sessions ADD COLUMN sudo_until INTEGER",
   "ALTER TABLE users ADD COLUMN og_diamond_at INTEGER",   // when the Diamond OG question got a definitive answer (NULL = not yet asked, or the read was incomplete)
+  "ALTER TABLE posts ADD COLUMN squad_id INTEGER",         // a Send Squad's private wall (always with private = 1, so every public feed already skips it)
 ]) { try { db.exec(col); } catch {} }
+/* ===== Send Squads ===================================================================================
+   Private groups. The creator sets a token gate ONCE (none / a number of tokens / a % of supply); members are
+   verified against the sum of their linked wallets; posts and Send Calls inside are visible to verified members
+   only, and every point a squad call earns goes to the squad, not the person (awardSquadXp). */
+db.exec(`
+CREATE TABLE IF NOT EXISTS squads (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  creator_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  bio           TEXT NOT NULL DEFAULT '',
+  avatar_img    TEXT,                                  -- /uploads/<name>, the squad's own picture (saveImage, like a profile picture)
+  banner_img    TEXT,
+  gate_kind     TEXT NOT NULL DEFAULT 'none',          -- 'none' | 'tokens' | 'pct'  (fixed at creation)
+  gate_token    TEXT,                                  -- lowercased address, NULL when open
+  gate_symbol   TEXT, gate_name TEXT, gate_decimals INTEGER, gate_brand TEXT,
+  gate_amount   REAL NOT NULL DEFAULT 0,               -- tokens (whole units) or percent of total supply
+  official      INTEGER NOT NULL DEFAULT 0,            -- the house squad(s), owned by the site's own account
+  member_count  INTEGER NOT NULL DEFAULT 0,            -- verified members
+  xp            INTEGER NOT NULL DEFAULT 0,            -- squad points, all time -> levelForXp()
+  xp_week       INTEGER NOT NULL DEFAULT 0, week_key TEXT,
+  xp_last       INTEGER NOT NULL DEFAULT 0, last_week_key TEXT,
+  conv_at       INTEGER NOT NULL DEFAULT 0,            -- when the daily conviction credit last finished for this squad
+  conv_cursor   INTEGER NOT NULL DEFAULT 0,            -- the member the credit sweep got to (bounded reads per pass)
+  creator_ip    TEXT,
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_squads_gate ON squads(gate_token);
+CREATE INDEX IF NOT EXISTS idx_squads_week ON squads(week_key, xp_week DESC);
+CREATE TABLE IF NOT EXISTS squad_members (
+  squad_id      INTEGER NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at     INTEGER NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'member',        -- 'owner' | 'member'
+  verified      INTEGER NOT NULL DEFAULT 0,            -- 1 = passed the gate at the last check (reads the wall, posts, calls)
+  check_at      INTEGER,
+  join_ip       TEXT,
+  PRIMARY KEY (squad_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sqm_user ON squad_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_sqm_check ON squad_members(verified, check_at);
+CREATE TABLE IF NOT EXISTS squad_pin_state (            -- what the conviction sweep last found for a member's pin inside a squad
+  squad_id INTEGER NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_addr TEXT NOT NULL,
+  held INTEGER NOT NULL DEFAULT 0, usd REAL, days REAL, checked_at INTEGER NOT NULL,
+  PRIMARY KEY (squad_id, user_id, token_addr)
+);
+CREATE INDEX IF NOT EXISTS idx_posts_squad ON posts(squad_id, id DESC) WHERE squad_id IS NOT NULL;
+`);
+/* One Send Call per token per caller was a table constraint (UNIQUE(user_id, token_addr)); a squad call is a
+   second, private call on the same token, so the rule is now "per token per caller PER SQUAD". SQLite cannot
+   change a constraint in place: the table is rebuilt once, with foreign keys off for the copy so the DROP does
+   not cascade into call_hops. Idempotent — it only runs while `squad_id` is missing. */
+try {
+  const callCols = db.prepare('PRAGMA table_info(calls)').all().map(c => c.name);
+  if (!callCols.includes('squad_id')) {
+    db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      db.exec('BEGIN');
+      db.exec(`CREATE TABLE calls_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        post_id INTEGER REFERENCES posts(id) ON DELETE SET NULL,
+        token_addr TEXT NOT NULL, pair_addr TEXT NOT NULL,
+        symbol TEXT, name TEXT, quote_symbol TEXT, token0 TEXT, token1 TEXT,
+        entry_price REAL NOT NULL, entry_mc REAL, peak_price REAL NOT NULL, peak_at INTEGER,
+        cur_price REAL, cur_mc REAL, last_check INTEGER,
+        awarded_x INTEGER NOT NULL DEFAULT 0, wallet TEXT, snapshot TEXT, created_at INTEGER NOT NULL,
+        entry_liq REAL, dead INTEGER NOT NULL DEFAULT 0, hold_x REAL NOT NULL DEFAULT 0, hold_paid REAL NOT NULL DEFAULT 0,
+        scored INTEGER NOT NULL DEFAULT 0, entry_spend_usd REAL NOT NULL DEFAULT 0, no_dyor INTEGER NOT NULL DEFAULT 0,
+        rugged INTEGER NOT NULL DEFAULT 0, points_paid INTEGER NOT NULL DEFAULT 0, ip TEXT,
+        squad_id INTEGER
+      )`);
+      const cl = callCols.join(', ');
+      const oldSeq = (db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'calls'").get() || {}).seq || 0;   // ids of deleted calls must never be reused
+      db.exec('INSERT INTO calls_v2 (' + cl + ') SELECT ' + cl + ' FROM calls');
+      db.exec('DROP TABLE calls');
+      db.exec('ALTER TABLE calls_v2 RENAME TO calls');
+      db.prepare("INSERT INTO sqlite_sequence (name, seq) SELECT 'calls', 0 WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'calls')").run();
+      db.prepare("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'calls'").run(oldSeq);
+      db.exec(`CREATE UNIQUE INDEX idx_calls_user_token_squad ON calls(user_id, token_addr, COALESCE(squad_id, 0));
+        CREATE INDEX idx_calls_user ON calls(user_id, created_at);
+        CREATE INDEX idx_calls_created ON calls(created_at);
+        CREATE INDEX idx_calls_token ON calls(token_addr);
+        CREATE INDEX idx_calls_ip_token ON calls(ip, token_addr);
+        CREATE INDEX idx_calls_squad ON calls(squad_id, id DESC) WHERE squad_id IS NOT NULL;`);
+      db.exec('COMMIT');
+      console.log('[squads] calls table rebuilt: one call per token per caller, per squad');
+    } catch (e) {
+      try { db.exec('ROLLBACK'); } catch {}
+      // every call path now names squad_id: running on the old table would break Send Calls for the life of the process, so stop here, loudly, with the data untouched
+      console.error('[squads] the calls table could not be rebuilt (' + ((e && e.message) || e) + ') — refusing to start on a half-migrated schema; the old table is intact');
+      process.exit(1);
+    }
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+} catch (e) { console.error('[squads] schema check failed', e && e.message); }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
    REPLACED the first. That is why one generic "Read-only sign-in" signature was accepted for signing in, for
@@ -877,7 +975,7 @@ try { for (const r of db.prepare("SELECT id, tracker_prefs, site_prefs FROM user
 // existed to take out). Community XP, conviction XP and activity rows share this table but are NOT Send
 // Power — they never touch users.points — so they are excluded here and in the standings query; without
 // that exclusion a restart promoted them onto the board and the settled winner depended on deploy timing.
-try { db.prepare("UPDATE points_events SET comp_amount = amount WHERE comp_amount = 0 AND amount > 0 AND kind NOT IN ('commxp','convxp','commact')").run(); } catch {}
+try { db.prepare("UPDATE points_events SET comp_amount = amount WHERE comp_amount = 0 AND amount > 0 AND kind NOT IN ('commxp','convxp','commact','squadxp')").run(); } catch {}
 // A burn-backed key always carries an expiry: any row minted before expiries existed gets its year from its mint.
 try { db.prepare("UPDATE api_keys SET expires_at = minted_at + 31536000000 WHERE expires_at IS NULL AND source = 'burn'").run(); } catch {}
 // The repair has to clear the tier too, or a wallet-less account keeps a stale tier (and its payout).
@@ -2513,7 +2611,16 @@ const tokenHoldCache = new Map();                  // `${uid}:${token}` -> { hel
 // Does this user CURRENTLY hold a non-dust balance of an arbitrary token across their linked wallets?
 // minUsd/priceUsd: when both are known the floor is that many dollars of the token at the given price (decimals from the token
 // cache, 18 by default); otherwise the dust floor. A price that cannot be read never lowers the bar below dust, and never raises it.
-function tokenDecimalsOf(addr) { try { const tc = tokenCacheGet(String(addr || '').toLowerCase()); return tc && tc.decimals != null ? (Number(tc.decimals) || 18) : 18; } catch { return 18; } }
+function tokenDecimalsOf(addr) {   // the cached pair carries token.decimals; 18 only when nothing is known
+  try {
+    const tc = tokenCacheGet(String(addr || '').toLowerCase());
+    if (!tc) return 18;
+    if (tc.decimals != null) return Number(tc.decimals) || 18;
+    const pj = tc.pair_json ? JSON.parse(tc.pair_json) : null;
+    const d = pj && pj.token ? Number(pj.token.decimals) : NaN;
+    return Number.isInteger(d) && d >= 0 && d <= 36 ? d : 18;
+  } catch { return 18; }
+}
 /* THE DOLLAR FLOOR CANNOT SILENTLY BECOME A DUST FLOOR.
    This used to read: start `need` at OG_DUST_WEI, and raise it to the dollar equivalent only `if (minUsd > 0
    && priceUsd > 0)`. Every community caller passes `c.c_price`, a NULLABLE cached grid price — so whenever
@@ -2558,7 +2665,7 @@ async function holdsToken(uid, tokenAddr, minUsd, priceUsd) {
   if (same) tokenHoldCache.set(key, { held: false, at: now() });
   return false;
 }
-function forgetHoldings(uid) { for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k); } // wallet set changed → re-read on next gate
+function forgetHoldings(uid) { for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k); try { forgetSquadGates(uid); } catch {} } // wallet set changed → re-read on next gate (community floors and squad gates alike)
 const RPC_DOWN_MSG = "couldn't verify your holdings right now — the chain RPC is unreachable, try again in a minute";
 // How much of a token does this user hold, and since when? (Convicted-In hover; public on-chain data of the wall owner's linked wallets.)
 const HELD_TTL = 10 * 60 * 1000;
@@ -2949,6 +3056,310 @@ function communityDetailView(c, me, ip) {
   if (me) { const m = db.prepare('SELECT * FROM community_members WHERE community_id=? AND user_id=?').get(c.id, me.id); if (m) { const cvl = commLevelInfo(m.conviction_xp); mine = { joined: true, qualified: !!m.qualified, blockReason: !m.qualified ? (m.block_reason || null) : null, /* the anti-sybil block decided at join; never re-tested against the network the page is read from, which would let a member probe connections */ convictionXp: m.conviction_xp, convictionLevel: cvl.level, convictionTitle: convictionTitleFor(cvl.level), convictionInto: cvl.intoLevel, convictionSpan: cvl.spanLevel, isCreator: me.id === c.creator_id }; } }
   return { ...card, socials: (commBrand(c).socials || []), websites: (commBrand(c).websites || []), communityLevel: commLevelInfo(c.xp), goLive: { qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count) }, creator: creator ? creator.username : null, mine };
 }
+/* ===== Send Squads: rules, gate, views, points ==================================================== */
+const SQUAD_NAME_RE = /^[\w .\-'$&!?]{3,40}$/;
+const SQUAD_BIO_MAX = 280;
+const SQUAD_MAX_MEMBERS = 500;
+const SQUAD_GATE_PCT_MIN = 0.01, SQUAD_GATE_PCT_MAX = 100;   // percent of the token's total supply
+const SQUAD_CREATE_PER_DAY = 3;
+const SQUAD_GATE_TTL = 5 * 60 * 1000;                        // a passed/failed gate read is good for this long
+const SQUAD_CONV_DAY = 2, SQUAD_CONV_RAMP_DAYS = 30, SQUAD_CONV_MAX_DAYS = 360, SQUAD_CONV_MIN_USD = 20;   // conviction credit: 2 × (1 + min(days,360)/30) per held pin ≥ $20, per UTC day
+const SQUAD_CONV_READS = 300;                                // balance reads one credit pass may spend before it yields
+const squadGateCache = new Map();                            // `${uid}:${sid}` -> { at, ok, held, need }
+const squadSupplyCache = new Map();                          // token -> { at, wei } (for the "≈ N tokens" of a % gate)
+const squadBalCache = new Map();                             // `${uid}:${token}` -> { at, wei } (conviction sweep)
+// whole units → wei, exactly (no float): "2.5" with 18 decimals is 2500000000000000000n
+function toWei(amount, dec) {
+  const d = Math.max(0, Math.min(36, Number(dec) || 0));
+  // fixed form always — "1e-7" would otherwise read as the digits 17
+  const n = Number(amount); const str = Number.isFinite(n) ? n.toFixed(Math.min(d, 20)) : '0';
+  const [i, f = ''] = str.split('.');
+  return BigInt((i.replace(/\D/g, '') || '0') + f.replace(/\D/g, '').padEnd(d, '0').slice(0, d));
+}
+const fromWei = (wei, dec) => Number(wei) / Math.pow(10, Math.max(0, Number(dec) || 0));
+function fmtTok(n) {
+  if (!(n > 0)) return '0';
+  if (n >= 1000) return Math.round(n).toLocaleString('en-US');
+  return Number(n.toPrecision(4)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+}
+const usdSigned = (v) => { const n = Number(v) || 0; return n < 0 ? -senderUsdPublic(-n) : senderUsdPublic(n); };   // 2 significant figures, sign kept
+// the balance the gate needs, in wei — a % gate is measured against the live total supply (cached an hour)
+async function squadNeedWei(sq) {
+  if (sq.gate_kind === 'tokens') return toWei(sq.gate_amount, sq.gate_decimals);
+  if (sq.gate_kind === 'pct') {
+    const supply = await totalSupply(sq.gate_token);
+    squadSupplyCache.set(sq.gate_token, { at: now(), wei: supply });
+    return supply * BigInt(Math.round(Number(sq.gate_amount) * 1e4)) / 1000000n;
+  }
+  return 0n;
+}
+// the sum of a member's linked wallets; erc20Balance throws on a failed read, and so does this — never a silent 0
+async function walletsBalanceWei(uid, token) {
+  let sum = 0n;
+  for (const a of walletAddresses(uid).slice(0, MAX_LINKED_WALLETS)) sum += await erc20Balance(token, a);
+  return sum;
+}
+/* Does this account pass the squad's gate right now? { ok, heldWei, needWei }. An open squad always passes. A read that
+   cannot be completed throws (status 503): "we could not check" is never "you do not hold it". */
+async function squadHolds(uid, sq, opts = {}) {
+  if (sq.gate_kind === 'none' || !sq.gate_token) return { ok: true, heldWei: 0n, needWei: 0n };
+  const key = uid + ':' + sq.id;
+  const c = squadGateCache.get(key);
+  if (!opts.fresh && c && now() - c.at < SQUAD_GATE_TTL) return { ok: c.ok, heldWei: c.held, needWei: c.need };
+  const needWei = await squadNeedWei(sq);
+  let heldWei;
+  try { heldWei = await walletsBalanceWei(uid, sq.gate_token); }
+  catch { const e = new Error(RPC_DOWN_MSG); e.status = 503; throw e; }
+  const ok = heldWei >= needWei && needWei > 0n;
+  if (sq.id) squadGateCache.set(key, { at: now(), ok, held: heldWei, need: needWei });
+  return { ok, heldWei, needWei };
+}
+function forgetSquadGates(uid) { for (const k of squadGateCache.keys()) if (k.startsWith(uid + ':')) squadGateCache.delete(k); }
+function squadGateView(sq) {
+  if (sq.gate_kind === 'none' || !sq.gate_token) return { kind: 'none', token: null, symbol: null, name: null, image: null, amount: null, pct: null, tokensNeeded: null, text: 'Open to anyone' };
+  let brand = null; try { brand = JSON.parse(sq.gate_brand || 'null'); } catch {}
+  const sym = sq.gate_symbol || '?';
+  const g = { kind: sq.gate_kind, token: sq.gate_token, symbol: sym, name: sq.gate_name || null, image: brand && brand.imageUrl ? brand.imageUrl : null, amount: null, pct: null, tokensNeeded: null, text: '' };
+  if (sq.gate_kind === 'tokens') { g.amount = Number(sq.gate_amount); g.tokensNeeded = g.amount; g.text = 'Hold ' + fmtTok(g.amount) + ' $' + sym; }
+  else {
+    g.pct = Number(sq.gate_amount);
+    const sc = squadSupplyCache.get(sq.gate_token);
+    if (sc && sc.wei > 0n) g.tokensNeeded = fromWei(sc.wei * BigInt(Math.round(g.pct * 1e4)) / 1000000n, sq.gate_decimals);
+    g.text = 'Hold ' + Number(g.pct.toPrecision(4)) + '% of $' + sym + ' supply' + (g.tokensNeeded != null ? ' (≈ ' + fmtTok(g.tokensNeeded) + ' $' + sym + ')' : '');
+  }
+  return g;
+}
+// what the week counters mean right now: a squad that earned nothing this week still carries last week's bucket
+function squadWeekNums(sq) {
+  const wk = weekKey(now()), lastWk = weekKey(now() - 7 * 864e5);
+  const xpWeek = sq.week_key === wk ? sq.xp_week : 0;
+  const xpLast = sq.week_key === lastWk ? sq.xp_week : (sq.last_week_key === lastWk ? sq.xp_last : 0);
+  return { xpWeek, xpLast };
+}
+/* The lifetime tracker: every figure is derived from the squad's own calls — the entry/peak/current prices the refresh
+   sweep records and the positions the callers and senders held when they acted (read on-chain then). "Gains" are
+   paper figures: what those positions were worth at the peak / are worth now, against what went in. */
+function squadLifetime(sid) {
+  const r = db.prepare(`SELECT COUNT(*) calls,
+      COALESCE(SUM(MIN(c.peak_price / c.entry_price - 1, ?)), 0) totalX, COALESCE(MAX(MIN(c.peak_price / c.entry_price - 1, ?)), 0) bestX,
+      COALESCE(SUM(c.entry_spend_usd + (SELECT COALESCE(SUM(h.spend_usd), 0) FROM call_hops h WHERE h.call_id = c.id)), 0) sent,
+      COALESCE(SUM((c.entry_spend_usd + (SELECT COALESCE(SUM(h.spend_usd), 0) FROM call_hops h WHERE h.call_id = c.id)) * (c.peak_price / c.entry_price - 1)), 0) peakGain,
+      COALESCE(SUM((c.entry_spend_usd + (SELECT COALESCE(SUM(h.spend_usd), 0) FROM call_hops h WHERE h.call_id = c.id)) * (COALESCE(c.cur_price, c.entry_price) / c.entry_price - 1)), 0) nowGain
+    FROM calls c WHERE c.squad_id = ? AND c.entry_price > 0`).get(CALL_X_CAP, CALL_X_CAP, sid);
+  return { calls: r.calls, totalX: Math.round(r.totalX * 100) / 100, bestX: Math.round(r.bestX * 100) / 100, sentUsd: senderUsdPublic(r.sent), peakGainUsd: usdSigned(r.peakGain), nowGainUsd: usdSigned(r.nowGain) };
+}
+function squadMine(sid, uid, sq) {
+  if (!uid) return null;
+  const m = db.prepare('SELECT role, verified, check_at FROM squad_members WHERE squad_id = ? AND user_id = ?').get(sid, uid);
+  // what the last gate read found for THIS person (their own figures, exact) — no chain read here, only what is cached
+  const g = sq && sq.gate_kind !== 'none' ? squadGateCache.get(uid + ':' + sid) : null;
+  const holds = g ? { amount: fromWei(g.held, sq.gate_decimals), need: fromWei(g.need, sq.gate_decimals), symbol: sq.gate_symbol || '?', at: g.at } : null;
+  if (!m) return holds ? { member: false, verified: false, role: null, checkedAt: null, holds } : null;
+  return { member: true, verified: !!m.verified, role: m.role, checkedAt: m.check_at || null, holds };
+}
+const canReadSquad = (uid, sid) => !!(uid && sid && db.prepare('SELECT 1 FROM squad_members WHERE squad_id = ? AND user_id = ? AND verified = 1').get(sid, uid));
+function squadCardView(sq, me) {
+  const creator = db.prepare('SELECT username FROM users WHERE id = ?').get(sq.creator_id);
+  const wk = squadWeekNums(sq);
+  return {
+    id: sq.id, name: sq.name, bio: sq.bio || '', avatar: sq.avatar_img ? '/uploads/' + sq.avatar_img : null, banner: sq.banner_img ? '/uploads/' + sq.banner_img : null,
+    official: !!sq.official, creator: creator ? creator.username : null,
+    memberCount: sq.member_count, verifiedCount: sq.member_count,
+    level: levelForXp(sq.xp), xp: sq.xp, levelInfo: commLevelInfo(sq.xp), xpWeek: wk.xpWeek, xpLast: wk.xpLast, createdAt: sq.created_at,
+    gate: squadGateView(sq), lifetime: squadLifetime(sq.id), mine: squadMine(sq.id, me && me.id, sq),
+  };
+}
+function squadDetailView(sq, me) {
+  const card = squadCardView(sq, me);
+  const cu = db.prepare('SELECT username, avatar, avatar_img FROM users WHERE id = ?').get(sq.creator_id);
+  const conv = db.prepare(`SELECT COUNT(DISTINCT p.token_addr) tokens, COUNT(DISTINCT p.user_id) members FROM pinned_tokens p JOIN squad_members m ON m.user_id = p.user_id AND m.squad_id = ? AND m.verified = 1`).get(sq.id);
+  return { ...card,
+    creator: cu ? { username: cu.username, avatar: cu.avatar, avatar_img: cu.avatar_img ? '/uploads/' + cu.avatar_img : null } : null,
+    members: { count: sq.member_count, verified: sq.member_count },
+    conviction: { tokens: conv.tokens, members: conv.members, pointsAllTime: squadConvPoints(sq.id, 0) },
+  };
+}
+const squadBadge = (sid) => { const r = db.prepare('SELECT id, name, avatar_img FROM squads WHERE id = ?').get(sid); return r ? { id: r.id, name: r.name, avatar: r.avatar_img ? '/uploads/' + r.avatar_img : null } : null; };
+function postSquads(ids) {
+  const out = {}; const want = [...new Set(ids.filter(Boolean))];
+  if (!want.length) return out;
+  for (const r of db.prepare(`SELECT id, name, avatar_img FROM squads WHERE id IN (${want.map(() => '?').join(',')})`).all(...want)) out[r.id] = { id: r.id, name: r.name, avatar: r.avatar_img ? '/uploads/' + r.avatar_img : null };
+  return out;
+}
+function squadConvPoints(sid, since) {
+  return db.prepare('SELECT COALESCE(SUM(base),0) s FROM points_events WHERE ref >= ? AND ref < ? AND created_at >= ?').get('sq' + sid + ':conv:', 'sq' + sid + ':conv;', since || 0).s;
+}
+/* Credit a squad. The row in points_events carries amount = 0 and the XP in `base`, so no personal total, daily count or
+   "recent gains" list can ever read squad points as the person's — and the ref still dedupes. The weekly bucket rolls
+   over lazily on the first credit of a new ISO week, keeping last week's total. */
+function awardSquadXp(sid, uid, amount, ref) {
+  amount = Math.round(Number(amount) || 0);
+  if (!sid || !uid || !(amount > 0)) return 0;
+  if (ref && db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get(ref)) return 0;
+  const wk = weekKey(now());
+  let before;
+  try {
+    db.exec('BEGIN');
+    before = db.prepare('SELECT xp, xp_week, week_key FROM squads WHERE id = ?').get(sid);
+    if (!before) { db.exec('ROLLBACK'); return 0; }
+    db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, comp_amount, comp_base, ref, created_at) VALUES (?,?,?,?,1,0,0,?,?)').run(uid, 'squadxp', 0, amount, ref || null, now());
+    if (before.week_key !== wk) db.prepare('UPDATE squads SET xp_last = xp_week, last_week_key = week_key, xp_week = 0, week_key = ? WHERE id = ?').run(wk, sid);
+    db.prepare('UPDATE squads SET xp = xp + ?, xp_week = xp_week + ? WHERE id = ?').run(amount, amount, sid);
+    db.exec('COMMIT');
+  } catch { try { db.exec('ROLLBACK'); } catch {} return 0; }
+  const lvl = levelForXp(before.xp + amount);
+  if (lvl > levelForXp(before.xp)) {
+    const sq = db.prepare('SELECT name FROM squads WHERE id = ?').get(sid);
+    for (const m of db.prepare('SELECT user_id FROM squad_members WHERE squad_id = ? AND verified = 1 LIMIT 200').all(sid))
+      notify(m.user_id, '🛡️', 'Your Send Squad ' + (sq ? sq.name : '') + ' reached Level ' + lvl + '!', 'points', null, '/squad.html?id=' + sid);
+  }
+  return amount;
+}
+/* Gate sweep: every ten minutes, re-read the oldest-checked verified members of gated squads. Below the gate → the member
+   is un-verified (they can re-join once they hold it again); an unreadable chain leaves them exactly as they were. */
+let squadGateSweeping = false;
+async function sweepSquadGates() {
+  if (squadGateSweeping) return; squadGateSweeping = true;
+  try {
+  const rows = db.prepare(`SELECT m.squad_id, m.user_id FROM squad_members m JOIN squads s ON s.id = m.squad_id
+                           WHERE m.verified = 1 AND s.gate_kind <> 'none' ORDER BY COALESCE(m.check_at, 0) ASC LIMIT 40`).all();
+  for (const r of rows) {
+    const sq = db.prepare('SELECT * FROM squads WHERE id = ?').get(r.squad_id); if (!sq) continue;
+    let h;
+    // a read that fails decides nothing — but it still counts as checked, so one unreadable row can never pin the window and starve everyone behind it
+    try { h = await squadHolds(r.user_id, sq, { fresh: true }); } catch { db.prepare('UPDATE squad_members SET check_at = ? WHERE squad_id = ? AND user_id = ?').run(now(), r.squad_id, r.user_id); continue; }
+    if (h.ok) { db.prepare('UPDATE squad_members SET check_at = ? WHERE squad_id = ? AND user_id = ?').run(now(), r.squad_id, r.user_id); continue; }
+    try {
+      db.exec('BEGIN');
+      db.prepare('UPDATE squad_members SET verified = 0, check_at = ? WHERE squad_id = ? AND user_id = ?').run(now(), r.squad_id, r.user_id);
+      db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(r.squad_id, r.squad_id);
+      db.exec('COMMIT');
+    } catch { try { db.exec('ROLLBACK'); } catch {} continue; }
+    notify(r.user_id, '🛡️', 'Your place in ' + sq.name + ' is paused — your linked wallets hold less than its gate (' + squadGateView(sq).text + '). Re-join once you hold it again.', 'alert', null, '/squad.html?id=' + sq.id);
+  }
+  } finally { squadGateSweeping = false; }
+}
+/* A wallet just left the account: whatever a gate read of the OLD wallet set said is no longer about this account, so every
+   gated squad membership is paused at once — the same immediacy community qualification gets — and one tap on Join
+   re-reads the new set. Runs inside the caller's transaction. */
+function pauseSquadGatesFor(uid) {
+  const rows = db.prepare("SELECT m.squad_id, s.name FROM squad_members m JOIN squads s ON s.id = m.squad_id WHERE m.user_id = ? AND m.verified = 1 AND s.gate_kind <> 'none'").all(uid);
+  for (const r of rows) {
+    db.prepare('UPDATE squad_members SET verified = 0, check_at = ? WHERE squad_id = ? AND user_id = ?').run(now(), r.squad_id, uid);
+    db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(r.squad_id, r.squad_id);
+  }
+  return rows;
+}
+/* Conviction credit: once per UTC day per squad, each verified member's pinned tokens ("Conviction Plays") that they STILL HOLD
+   (balances read across their linked wallets) and that are worth at least SQUAD_CONV_MIN_USD at the live price earn the squad
+   SQUAD_CONV_DAY × (1 + min(days pinned, 360) / 30). Bounded: one squad per pass, at most SQUAD_CONV_READS balance reads,
+   resuming where it stopped. A price that cannot be read skips that pin for the day; nothing is decided from a failed read. */
+let squadConvSweeping = false;
+async function sweepSquadConviction() {
+  if (squadConvSweeping) return; squadConvSweeping = true;
+  try {
+    const dayStart = Math.floor(now() / 864e5) * 864e5;
+    const dd = new Date(dayStart), day = dd.getUTCFullYear() + '-' + (dd.getUTCMonth() + 1) + '-' + dd.getUTCDate();   // the day being credited, fixed for the pass
+    let reads = 0, squadsDone = 0;
+    while (reads < SQUAD_CONV_READS && squadsDone < 60) {
+      const sq = db.prepare('SELECT * FROM squads WHERE conv_at < ? ORDER BY conv_at ASC, id ASC LIMIT 1').get(dayStart);
+      if (!sq) break;
+      const members = db.prepare('SELECT user_id FROM squad_members WHERE squad_id = ? AND verified = 1 AND user_id > ? ORDER BY user_id ASC').all(sq.id, sq.conv_cursor || 0);
+      let last = sq.conv_cursor || 0, done = true;
+      for (const m of members) {
+        const pins = db.prepare('SELECT token_addr, symbol, added_at FROM pinned_tokens WHERE user_id = ?').all(m.user_id);
+        if (pins.length) {
+          const prices = await marketFor(pins.map(p => p.token_addr)).catch(() => ({}));
+          const addrs = walletAddresses(m.user_id).slice(0, MAX_LINKED_WALLETS);
+          for (const p of pins) {
+            const mk = prices[p.token_addr];
+            // a price the sweep will value at: a real pool (the same floor a Send Call needs), and not a coin this member deployed or owns
+            if (!mk || !(mk.price > 0) || !((mk.liq || 0) >= MIN_CALL_LIQ) || !addrs.length) continue;
+            let devTok = null; try { const tc = tokenCacheGet(p.token_addr); devTok = tc && tc.pair_json ? JSON.parse(tc.pair_json).token : null; } catch {}
+            if (devTok && isTokenDev(m.user_id, devTok)) continue;
+            const bk = m.user_id + ':' + p.token_addr; let bc = squadBalCache.get(bk);
+            if (!bc || now() - bc.at > 10 * 60e3) {
+              let wei = 0n, okRead = true;
+              for (const a of addrs) { try { wei += await erc20Balance(p.token_addr, a); reads++; } catch { okRead = false; break; } }
+              if (!okRead) continue;
+              bc = { at: now(), wei }; squadBalCache.set(bk, bc);
+              if (squadBalCache.size > 5000) squadBalCache.delete(squadBalCache.keys().next().value);
+            }
+            const tok = fromWei(bc.wei, tokenDecimalsOf(p.token_addr)), usd = tok * mk.price;
+            const days = Math.max(0, (dayStart - p.added_at) / 864e5);
+            const held = bc.wei > 0n && usd >= SQUAD_CONV_MIN_USD;   // the dollar floor is the dust test, whatever the token's decimals
+            db.prepare('INSERT INTO squad_pin_state (squad_id, user_id, token_addr, held, usd, days, checked_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(squad_id, user_id, token_addr) DO UPDATE SET held = excluded.held, usd = excluded.usd, days = excluded.days, checked_at = excluded.checked_at')
+              .run(sq.id, m.user_id, p.token_addr, held ? 1 : 0, usd, days, now());
+            if (held) awardSquadXp(sq.id, m.user_id, SQUAD_CONV_DAY * (1 + Math.min(days, SQUAD_CONV_MAX_DAYS) / SQUAD_CONV_RAMP_DAYS), 'sq' + sq.id + ':conv:' + m.user_id + ':' + p.token_addr + ':' + day);
+          }
+        }
+        last = m.user_id;
+        if (reads >= SQUAD_CONV_READS) { done = members[members.length - 1].user_id === m.user_id; break; }
+      }
+      // stamped with the day it credited, not the clock: a pass that straddles midnight still owes the next day its own pass
+      if (done) { db.prepare('UPDATE squads SET conv_at = ?, conv_cursor = 0 WHERE id = ?').run(dayStart, sq.id); squadsDone++; }
+      else { db.prepare('UPDATE squads SET conv_cursor = ? WHERE id = ?').run(last, sq.id); break; }
+    }
+  } finally { squadConvSweeping = false; }
+}
+function squadConvictionView(sid) {
+  const wkStart = weekWindow(now()).startsAt;
+  const rows = db.prepare(`SELECT p.token_addr, p.symbol, p.name, p.brand, p.added_at, u.username, ps.held, ps.checked_at
+                           FROM pinned_tokens p JOIN squad_members m ON m.user_id = p.user_id AND m.squad_id = ? AND m.verified = 1
+                           JOIN users u ON u.id = p.user_id
+                           LEFT JOIN squad_pin_state ps ON ps.squad_id = m.squad_id AND ps.user_id = p.user_id AND ps.token_addr = p.token_addr
+                           ORDER BY p.added_at ASC`).all(sid);
+  const byTok = {}, byUser = {};
+  let checkedAt = null;
+  for (const r of rows) {
+    const t = byTok[r.token_addr] || (byTok[r.token_addr] = { token: r.token_addr, symbol: r.symbol || '?', name: r.name || '', image: null, members: 0, held: 0, longestDays: 0, sumDays: 0, holders: [] });
+    let img = null; try { const b = JSON.parse(r.brand || 'null'); img = b && b.imageUrl ? b.imageUrl : null; } catch {}
+    if (img && !t.image) t.image = img;
+    const days = Math.max(0, (now() - r.added_at) / 864e5);
+    t.members++; t.sumDays += days; if (days > t.longestDays) t.longestDays = days;
+    if (r.held && r.checked_at && now() - r.checked_at < 2 * 864e5) t.held++;
+    if (t.holders.length < 5) t.holders.push(r.username);
+    if (r.checked_at && (!checkedAt || r.checked_at > checkedAt)) checkedAt = r.checked_at;
+    const u = byUser[r.username] || (byUser[r.username] = { username: r.username, pins: 0, longestDays: 0 });
+    u.pins++; if (days > u.longestDays) u.longestDays = days;
+  }
+  const tokens = Object.values(byTok).map(t => ({ token: t.token, symbol: t.symbol, name: t.name, image: t.image, members: t.members, held: t.held, longestDays: Math.floor(t.longestDays), avgDays: Math.floor(t.sumDays / t.members), holders: t.holders }))
+    .sort((a, b) => b.members - a.members || b.longestDays - a.longestDays);
+  const top = Object.values(byUser).sort((a, b) => b.pins - a.pins || b.longestDays - a.longestDays).slice(0, 10).map(u => {
+    const ur = db.prepare('SELECT avatar, avatar_img FROM users WHERE username = ?').get(u.username) || {};
+    return { username: u.username, avatar: ur.avatar || '🚀', avatar_img: ur.avatar_img ? '/uploads/' + ur.avatar_img : null, pins: u.pins, longestDays: Math.floor(u.longestDays) };
+  });
+  return { tokens, top, pointsAllTime: squadConvPoints(sid, 0), pointsWeek: squadConvPoints(sid, wkStart), checkedAt };
+}
+// the house squad: $GWC holders with 2% of the supply in their linked wallets — owned by the site's own account, verified like everyone
+async function seedOfficialSquad() {
+  try {
+    let owner = db.prepare('SELECT id FROM users WHERE system = 1').get();
+    if (!owner) return;
+    const tok = TOK.GWC.toLowerCase();
+    if (db.prepare('SELECT 1 FROM squads WHERE official = 1 AND gate_token = ?').get(tok)) return;
+    let dec = null; try { dec = await tokenDecimals(tok); } catch {}
+    if (dec == null) return;   // the chain would not say — seedOfficialSquadLater retries on a back-off, then the next boot
+    db.exec('BEGIN');
+    const r = db.prepare("INSERT INTO squads (creator_id, name, bio, gate_kind, gate_token, gate_symbol, gate_name, gate_decimals, gate_amount, official, member_count, created_at) VALUES (?,?,?,?,?,?,?,?,?,1,1,?)")
+      .run(owner.id, '$GWC 2% Squad', 'The house Send Squad for the biggest $GWC believers: it takes 2% of the whole $GWC supply, summed across your linked wallets, to get in — read on-chain, re-checked on a schedule. Run by the site itself.', 'pct', tok, 'GWC', 'Generational Wealth Coin', dec, 2, now());
+    db.prepare("INSERT INTO squad_members (squad_id, user_id, joined_at, role, verified, check_at) VALUES (?,?,?,?,1,?)").run(Number(r.lastInsertRowid), owner.id, now(), 'owner', now());
+    db.exec('COMMIT');
+    console.log('🛡️ seeded the official $GWC 2% Send Squad');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('official squad seed failed:', e && e.message); }
+}
+// runs after the community seeder (which creates the site's own account); a boot-time chain refusal is retried, then backed off
+let officialSquadTimer = null, officialSquadTries = 0;
+function seedOfficialSquadLater() {
+  if (officialSquadTimer) return;
+  const wait = [2500, 60e3, 5 * 60e3][officialSquadTries++] || 10 * 60e3;
+  officialSquadTimer = setTimeout(async () => {
+    officialSquadTimer = null;
+    try { await seedOfficialSquad(); } catch {}
+    if (!db.prepare('SELECT 1 FROM squads WHERE official = 1').get() && officialSquadTries < 8) seedOfficialSquadLater();
+  }, wait);
+  officialSquadTimer.unref();
+}
 // The opt-in / go-live / founder-bonus transaction — shared by create (creator auto-opt-in) and the join endpoint.
 // `holds` = verified on-chain (by the caller) that this user holds the community's own token.
 async function joinCommunity(me, cid, ip, holds) {
@@ -3155,7 +3566,9 @@ function canReadPrivateWall(userId, cid) {
 // The author always keeps sight of their own post (they wrote it, and they may still delete it) even if
 // their holder slot lapses; everyone else needs a live slot in that community.
 function postVisible(row, me) {
-  if (!row || !row.private) return true;
+  if (!row) return false;
+  if (row.squad_id) return !!(me && (me.id === row.user_id || canReadSquad(me.id, row.squad_id)));   // a Send Squad's wall: its verified members only
+  if (!row.private) return true;
   return !!(me && (me.id === row.user_id || canReadPrivateWall(me.id, row.community_id)));
 }
 // Continuously re-verify qualified community members STILL hold the community's token — a sell or a recycled-bag move
@@ -4977,8 +5390,8 @@ async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDe
     const rows = db.prepare(`SELECT c.id, c.user_id, c.created_at, c.entry_price, c.entry_mc, c.entry_spend_usd,
                                     c.cur_price, c.symbol, u.username, u.avatar
                              FROM calls c JOIN users u ON u.id = c.user_id
-                             WHERE c.token_addr = ? AND c.created_at BETWEEN ? AND ?
-                             ORDER BY c.created_at DESC LIMIT ?`).all(tokenAddr, fromMs, toMs, MARKER_MAX);
+                             WHERE c.token_addr = ? AND c.created_at BETWEEN ? AND ? AND c.squad_id IS NULL
+                             ORDER BY c.created_at DESC LIMIT ?`).all(tokenAddr, fromMs, toMs, MARKER_MAX);   // a squad call is private: never a public marker
     out.types.call = markerCluster(rows.map(r => ({
       /* priceUsd, not price. calls.entry_price is the DOLLAR price at call time (it comes from
          market.priceUsd), while the chart's y-axis is in the pool's own quote units — WETH here, which
@@ -5004,7 +5417,7 @@ async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDe
     const rows = db.prepare(`SELECT h.user_id, h.created_at, h.entry_price, h.spend_usd, h.bought_usd, h.held_usd,
                                     c.id AS call_id, c.entry_mc, c.entry_price AS call_entry, c.cur_price, u.username, u.avatar
                              FROM call_hops h JOIN calls c ON c.id = h.call_id JOIN users u ON u.id = h.user_id
-                             WHERE c.token_addr = ? AND h.created_at BETWEEN ? AND ? AND h.entry_price IS NOT NULL
+                             WHERE c.token_addr = ? AND h.created_at BETWEEN ? AND ? AND h.entry_price IS NOT NULL AND c.squad_id IS NULL
                              ORDER BY h.created_at DESC LIMIT ?`).all(tokenAddr, fromMs, toMs, MARKER_MAX);
     out.types.sent = markerCluster(rows.map(r => ({
       kind: 'sent', t: r.created_at, priceUsd: r.entry_price,   // dollars, like calls.entry_price — see above
@@ -7478,6 +7891,7 @@ function postView(p, me) {
     call_id: p.call_id || null,
     private: !!p.private,          // a holders-only community post — the client badges it 🔒
     community: p.community_id ? (postCommunities([p.community_id])[p.community_id] || null) : null,
+    squad: p.squad_id ? squadBadge(p.squad_id) : null,   // a Send Squad's wall post — the client badges it 🛡️
     tokens: parseTokens(p.tokens), // [{addr,symbol,name}] → the client renders each $TICKER as a token chip
   };
   attachCalls([out], me); // if this post is a Send Call, attach its live widget data
@@ -7494,6 +7908,7 @@ function postsView(rows, me) {
   const cc = {}; // post_id -> comment count
   for (const r of db.prepare(`SELECT post_id, COUNT(*) n FROM comments WHERE post_id IN (${ph}) GROUP BY post_id`).all(...ids)) cc[r.post_id] = r.n;
   const comms = postCommunities(rows.map(r => r.community_id));   // one lookup for the page, not one per post
+  const sqs = postSquads(rows.map(r => r.squad_id));
   const authorIds = [...new Set(rows.map(r => r.user_id))];
   const authors = {};
   for (const a of db.prepare(`SELECT id, username, avatar, avatar_img, accent, og, og_tier FROM users WHERE id IN (${authorIds.map(() => '?').join(',')})`).all(...authorIds)) authors[a.id] = a;
@@ -7516,6 +7931,7 @@ function postsView(rows, me) {
       call_id: p.call_id || null,
       private: !!p.private,          // a holders-only community post — the client badges it 🔒
       community: p.community_id ? (comms[p.community_id] || null) : null,
+      squad: p.squad_id ? (sqs[p.squad_id] || null) : null,
       tokens: parseTokens(p.tokens), // $TICKER chips in feeds too, not just single-post views
     };
   });
@@ -7904,7 +8320,7 @@ function competitionRows(win) {
       SUM(COALESCE(e.comp_base, e.base)) pts, COUNT(*) n       -- what you DID: every boost, prize and position-size scaling taken out
     FROM points_events e JOIN users u ON u.id = e.user_id
     WHERE e.created_at >= ? AND e.created_at < ? AND u.system = 0
-      AND e.kind NOT IN ('commxp','convxp','commact','decay')  -- community XP is not Send Power; decay is not an action
+      AND e.kind NOT IN ('commxp','convxp','commact','decay','squadxp')  -- community/squad XP is not Send Power; decay is not an action
     GROUP BY e.user_id HAVING pts > 0 ORDER BY pts DESC, u.id ASC`).all(win.startsAt, win.endsAt)
     .map((r, i, arr) => { // competition ranking: ties share a rank, as the all-time board does
       let rank = i + 1; while (rank > 1 && arr[rank - 2].pts === r.pts) rank--;
@@ -9517,6 +9933,12 @@ function callView(row, me) {
     noDyor: !!row.no_dyor, // caller made this call without opening the token's full on-chain detail first
     rugged: !!row.rugged, // the token's liquidity was pulled — a rug
     stale: !!row.dead, // Dexscreener stopped pricing it (delisted/rugged) → "Now" is unknown; the peak record still stands
+    squadId: row.squad_id || null, squad: row.squad_id ? squadBadge(row.squad_id) : null,   // a call sent to a Send Squad: private to it, its points went to it
+    ...(row.squad_id ? (() => {   // inside a squad the card names its caller, carries the note, and knows whether it is yours
+      const cu = db.prepare('SELECT username, avatar, avatar_img, og_tier, accent FROM users WHERE id = ?').get(row.user_id);
+      const wp = row.post_id ? db.prepare('SELECT text, tokens FROM posts WHERE id = ?').get(row.post_id) : null;
+      return cu ? { username: cu.username, avatar: cu.avatar, avatarImg: cu.avatar_img ? '/uploads/' + cu.avatar_img : null, callerOg: cu.og_tier || 0, accent: cu.accent || '', note: wp ? wp.text : '', tokens: wp ? parseTokens(wp.tokens) : [], mine: !!(me && me.id === row.user_id) } : {};
+    })() : {}),
     brand: (snap && snap.brand) || null,
     links: (snap && snap.links) || { dex: 'https://dexscreener.com/robinhood/' + row.pair_addr, explorer: BLOCKSCOUT + '/token/' + row.token_addr },
   };
@@ -9545,7 +9967,7 @@ async function refreshCalls() {
        CALLS_REFRESH_BATCH bounds the sweep. This ran over every call ever made, in one synchronous loop,
        on a 45-second timer that an anonymous visit to any profile wall can trigger — so the cost grew
        without limit as the site did. Oldest-checked first, so nothing is starved. */
-    const rows = db.prepare('SELECT id, user_id, token_addr, symbol, entry_price, cur_price, peak_price, awarded_x, dead, rugged, hold_x, hold_paid, points_paid, last_check FROM calls ORDER BY COALESCE(last_check, 0) ASC, id DESC LIMIT ?').all(CALLS_REFRESH_BATCH);
+    const rows = db.prepare('SELECT id, user_id, token_addr, symbol, entry_price, cur_price, peak_price, awarded_x, dead, rugged, hold_x, hold_paid, points_paid, last_check, squad_id FROM calls ORDER BY COALESCE(last_check, 0) ASC, id DESC LIMIT ?').all(CALLS_REFRESH_BATCH);
     if (!rows.length) return;
     const tokens = [...new Set(rows.map(r => r.token_addr))];
     const byToken = {};
@@ -9602,6 +10024,11 @@ async function refreshCalls() {
       }
       const curX = creditable ? Math.min(callX(creditPrice, r.entry_price), depthX) : 0;
       const dtH = (t - (r.last_check || t)) / 3600000;
+      /* Who a credit goes to. A squad call pays its SQUAD: the same rungs, the same hold curve, the same per-call budget —
+         flat (no personal multiplier), through awardSquadXp. A public call pays the person through awardPoints as ever. */
+      const pay = r.squad_id
+        ? (uid, kind, amt, ref, cap) => awardSquadXp(r.squad_id, uid, Math.min(amt, cap == null ? amt : cap), ref)
+        : (uid, kind, amt, ref, cap) => awardPoints(uid, kind, amt, ref, cap);
       // diamond-hands: accrue the caller's hold integral (positive Xs × time) and pay out super-linearly — only while liquid
       // Senders are read once here: the caller's accrual needs to know how many are in profit, and the
       // hopper loop below reuses the same rows
@@ -9613,7 +10040,7 @@ async function refreshCalls() {
       // award (SQLITE_BUSY/FULL) is simply retried next tick instead of being silently swallowed. No ref: dedup is the hold_paid delta.
       let holdPaid = r.hold_paid, paidPts = r.points_paid || 0;
       if (hc.award > 0) {
-        const got = awardPoints(r.user_id, 'call_hold', hc.award, null, callHeadroom(paidPts, CALL_POINTS_CAP));
+        const got = pay(r.user_id, 'call_hold', hc.award, null, callHeadroom(paidPts, CALL_POINTS_CAP));
         // hold_paid advances only if the credit landed, so a rolled-back award is retried rather than
         // swallowed — but a refusal because the call is CAPPED must still advance it, or the same
         // award is re-attempted forever on every 45s refresh for the life of the position.
@@ -9633,15 +10060,15 @@ async function refreshCalls() {
         if (newMax > r.awarded_x && newMax >= 1) {
           // what the ladder has already taken from this call, read off the refs it was paid under. A
           // range on the ref index rather than LIKE, so it stays cheap as points_events grows.
-          const xSpent = db.prepare("SELECT COALESCE(SUM(amount),0) s FROM points_events WHERE ref >= ? AND ref < ?").get('callx:' + r.id + ':', 'callx:' + r.id + ';').s;
+          const xSpent = db.prepare("SELECT COALESCE(SUM(CASE WHEN kind = 'squadxp' THEN base ELSE amount END),0) s FROM points_events WHERE ref >= ? AND ref < ?").get('callx:' + r.id + ':', 'callx:' + r.id + ';').s;   // squad rungs carry the XP in `base`
           let xRoom = Math.max(0, Math.floor(CALL_POINTS_CAP * CALL_X_BUDGET_SHARE) - xSpent);
           for (let m = Math.max(1, r.awarded_x + 1); m <= newMax; m++) {
             const rung = Math.round(PTS.call_x * addBonus(1 + (m - 1) * CALL_X_STEP)); // additive rung, not m× the base
-            const got = awardPoints(r.user_id, 'call_x', rung, 'callx:' + r.id + ':' + m, Math.min(callHeadroom(paidPts, CALL_POINTS_CAP), xRoom)); // bigger call → more points, out of the ladder's slice of the budget
+            const got = pay(r.user_id, 'call_x', rung, 'callx:' + r.id + ':' + m, Math.min(callHeadroom(paidPts, CALL_POINTS_CAP), xRoom)); // bigger call → more points, out of the ladder's slice of the budget
             paidPts += got; xRoom -= got;
           }
           db.prepare('UPDATE calls SET awarded_x=?, points_paid=? WHERE id=?').run(newMax, paidPts, r.id);
-          notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + ' Send Call hit ' + newMax + 'x! Send Power for the call.', 'points');
+          notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + (r.squad_id ? ' squad call hit ' + newMax + 'x! Send Power for your squad.' : ' Send Call hit ' + newMax + 'x! Send Power for the call.'), 'points', null, r.squad_id ? '/squad.html?id=' + r.squad_id + '#calls' : null);
         }
         // reward hoppers who are ALSO in positive Xs (from their own hop-in price), same diamond-hands mechanic + same Finding-1-safe advance
         for (const hop of hops) {
@@ -9649,7 +10076,7 @@ async function refreshCalls() {
           const ha = accrueHold(hop.hold_x, hop.hold_paid, Math.min(callX(creditPrice, hop.entry_price), depthX), (t - (hop.last_check || t)) / 3600000);
           let hopPaid = hop.hold_paid, hopPts = hop.points_paid || 0;
           if (ha.award > 0) {
-            const got = awardPoints(hop.user_id, 'hop_hold', ha.award, null, callHeadroom(hopPts, HOP_POINTS_CAP));
+            const got = pay(hop.user_id, 'hop_hold', ha.award, null, callHeadroom(hopPts, HOP_POINTS_CAP));
             if (got > 0) { hopPaid = ha.holdPaid; hopPts += got; }
             else if (callHeadroom(hopPts, HOP_POINTS_CAP) <= 0) hopPaid = ha.holdPaid;   // capped, not failed — don't retry forever
           }
@@ -9670,8 +10097,8 @@ function callLeaderboard(windowKey) {
            COUNT(*) calls, MAX(MIN(c.peak_price / c.entry_price - 1, ?)) best,
            SUM(MIN(c.peak_price / c.entry_price - 1, ?)) totalX
     FROM calls c JOIN users u ON u.id = c.user_id
-    WHERE c.created_at > ? AND c.entry_price > 0 AND c.entry_liq >= ?
-    GROUP BY c.user_id ORDER BY totalX DESC, best DESC LIMIT 25`).all(CALL_X_CAP, CALL_X_CAP, since, MIN_CALL_LIQ);
+    WHERE c.created_at > ? AND c.entry_price > 0 AND c.entry_liq >= ? AND c.squad_id IS NULL
+    GROUP BY c.user_id ORDER BY totalX DESC, best DESC LIMIT 25`).all(CALL_X_CAP, CALL_X_CAP, since, MIN_CALL_LIQ);   // squad calls are private: never on a public board
   let rank = 0;
   return rows.map(r => ({
     rank: ++rank, username: r.username, avatar: r.avatar,
@@ -9680,7 +10107,7 @@ function callLeaderboard(windowKey) {
   }));
 }
 function callStats(userId, me) {
-  const rows = db.prepare('SELECT * FROM calls WHERE user_id=? ORDER BY created_at DESC').all(userId);
+  const rows = db.prepare('SELECT * FROM calls WHERE user_id=? AND squad_id IS NULL ORDER BY created_at DESC').all(userId);   // a squad call lives on its squad's page only
   const views = rows.map(r => callView(r, me));
   const best = views.reduce((m, v) => v.maxX > (m ? m.maxX : -Infinity) ? v : m, null);
   const totalX = views.reduce((s, v) => s + Math.max(0, v.maxX), 0);
@@ -10107,7 +10534,7 @@ const server = http.createServer(async (req, res) => {
           // holder's OWN private data, so the owner's own posts come through and nobody else's do
           case 'posts': { const rows = db.prepare('SELECT * FROM posts WHERE id < ? AND (private = 0 OR user_id = ?) ORDER BY id DESC LIMIT ?').all(before, owner.id, limit); return send(res, 200, page(rows.map(p => ({ ...postView(p, null), community_id: p.community_id || null })), r => r.id)); }
           case 'comments': { const rows = db.prepare('SELECT c.id, c.post_id, c.text, c.tokens, c.created_at, u.username FROM comments c JOIN users u ON u.id = c.user_id JOIN posts po ON po.id = c.post_id WHERE c.id < ? AND (po.private = 0 OR po.user_id = ?) ORDER BY c.id DESC LIMIT ?').all(before, owner.id, limit); return send(res, 200, page(rows.map(c => ({ ...c, tokens: parseTokens(c.tokens) })), r => r.id)); } // the discussion under a holders-only post is private too
-          case 'calls': { const rows = db.prepare('SELECT c.*, u.username FROM calls c JOIN users u ON u.id = c.user_id WHERE c.id < ? ORDER BY c.id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(r => ({ username: r.username, ...callView(r, null) })), r => r.id)); }
+          case 'calls': { const rows = db.prepare('SELECT c.*, u.username FROM calls c JOIN users u ON u.id = c.user_id WHERE c.id < ? AND (c.squad_id IS NULL OR c.user_id = ?) ORDER BY c.id DESC LIMIT ?').all(before, owner.id, limit); /* a squad call is private: only its own caller exports it, as with private posts */ return send(res, 200, page(rows.map(r => ({ username: r.username, ...callView(r, null) })), r => r.id)); }
           case 'communities': { const rows = db.prepare('SELECT * FROM communities WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(c => communityCardView(c, null)), r => r.id)); }
           case 'leaderboard': { const rows = db.prepare('SELECT * FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT ?').all(limit); return send(res, 200, { data: rows.map((u, i) => ({ rank: i + 1, ...publicUserView(u) })), limit }); }
           case 'competition': { const { win, rows } = competitionStandings(); return send(res, 200, { data: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, standings: rows.slice(0, 20).map(r => ({ rank: r.rank, username: r.username, points: r.pts })), last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES } } }); } // top 20 only — the same window the public board shows; the key changes the shape, never the scope
@@ -10367,8 +10794,9 @@ const server = http.createServer(async (req, res) => {
         const kind = ['post', 'comment', 'user'].includes(b.kind) ? b.kind : null;
         const target = Number(b.id);
         if (!kind || !Number.isInteger(target) || target < 1) return bad(res, 'what are you reporting?');
-        const exists = kind === 'post' ? db.prepare('SELECT 1 FROM posts WHERE id = ?').get(target)
-          : kind === 'comment' ? db.prepare('SELECT 1 FROM comments WHERE id = ?').get(target)
+        // a post the reporter cannot read does not exist for them (404, as on every other verb) — otherwise this was an existence oracle for holders-only and squad posts
+        const exists = kind === 'post' ? (() => { const pr = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(target); return pr && postVisible(pr, me) ? pr : null; })()
+          : kind === 'comment' ? (() => { const cr = db.prepare('SELECT c.id, p.user_id, p.community_id, p.private, p.squad_id FROM comments c JOIN posts p ON p.id = c.post_id WHERE c.id = ?').get(target); return cr && postVisible(cr, me) ? cr : null; })()
           : db.prepare('SELECT 1 FROM users WHERE id = ? AND system = 0').get(target);
         if (!exists) return bad(res, 'not found', 404);
         const reason = String(b.reason || '').trim().slice(0, 500);
@@ -10467,7 +10895,15 @@ const server = http.createServer(async (req, res) => {
             db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id = ?').run(q.community_id);
           for (const q of db.prepare('SELECT community_id FROM community_members WHERE user_id = ?').all(uid))
             db.prepare('UPDATE communities SET member_count = MAX(member_count-1,0) WHERE id = ?').run(q.community_id);
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache'])
+          // Send Squads they own go with them (a private group with no owner is nobody's), with their pictures, posts and calls
+          for (const sqr of db.prepare('SELECT id, avatar_img, banner_img FROM squads WHERE creator_id = ?').all(uid)) {
+            for (const k of ['avatar_img', 'banner_img']) if (sqr[k]) media.push(sqr[k]);
+            db.prepare('DELETE FROM posts WHERE squad_id = ?').run(sqr.id);
+            db.prepare('DELETE FROM calls WHERE squad_id = ?').run(sqr.id);
+            db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
+          }
+          const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -10475,6 +10911,7 @@ const server = http.createServer(async (req, res) => {
              not yet finished signing up with: the pass WAS the invite. Codes already used to make an account stay,
              as the record of who came in on them. */
           db.prepare('DELETE FROM invite_codes WHERE owner_id = ? AND user_id IS NULL').run(uid);
+          for (const sqid of memberOf) { try { db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sqid, sqid); } catch {} }
           try { db.prepare('DELETE FROM mutes WHERE user_id = ? OR muted_id = ?').run(uid, uid); } catch {}
           try { db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(uid, uid); } catch {}
           try { db.prepare('DELETE FROM notifications WHERE actor_id = ?').run(uid); } catch {}
@@ -10555,6 +10992,7 @@ const server = http.createServer(async (req, res) => {
           // multiplier through effectiveMult() after the wallet behind it is gone.
           db.prepare('UPDATE users SET og = 0, og_tier = 0' + (revokeOg ? ', og_revoked = 1' : '') + ' WHERE id = ?').run(me.id);
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet'").run(me.id);
+          var pausedSquads = pauseSquadGatesFor(me.id);   // gated Send Squads: re-verified against the new (empty) wallet set on the next Join
           forgetHoldings(me.id); // no cached "holds $X" may survive the wallets it was read from
           db.prepare('DELETE FROM holder_state WHERE user_id = ?').run(me.id); // boost was verified against those wallets → reset it honestly
           db.prepare("UPDATE users SET holder_verified_at = NULL, holder_state = 'none', holder_proof_reason = 'no wallet linked' WHERE id = ?").run(me.id);   // N05: the participation pass was earned by those wallets too
@@ -10568,6 +11006,7 @@ const server = http.createServer(async (req, res) => {
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not disconnect right now — try again', 500); }
         if (me.og && !revokeOg) notify(me.id, '🔌', 'OG badge paused — it follows your wallet. Relink your early-buyer wallet to restore it (verified on-chain).', 'og'); // honest: "permanent" means never expires, not "survives having no wallet"
+        if (pausedSquads && pausedSquads.length) notify(me.id, '🛡️', 'Your place in ' + pausedSquads.map(r => r.name).slice(0, 3).join(', ') + (pausedSquads.length > 3 ? ' and ' + (pausedSquads.length - 3) + ' more' : '') + ' is paused — a gated squad is checked against your linked wallets. Link a wallet and tap Join to be re-verified.', 'alert');
         sudoOthersOff(me);
         return send(res, 200, { ok: true, wallets: [] });
       }
@@ -10707,6 +11146,7 @@ const server = http.createServer(async (req, res) => {
         try {
           db.exec('BEGIN');
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").run(me.id, bidx(addr));
+          var pausedSquadsU = pauseSquadGatesFor(me.id);   // the gate was read against a wallet set that just shrank — Join re-reads the rest
           if (revokeOg) db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1 WHERE id = ?').run(me.id);
           if (linked.length === 1) {
             /* F022/N05: that was the last wallet. Everything holdings-verified came from it — the boost, the
@@ -10728,6 +11168,7 @@ const server = http.createServer(async (req, res) => {
         checkOg(me.id).catch(() => {});
         refreshSupplyForUser(me.id); // their communities' share of supply no longer includes this wallet
         sudoOthersOff(me);
+        if (pausedSquadsU && pausedSquadsU.length) notify(me.id, '🛡️', 'Your place in ' + pausedSquadsU.map(r => r.name).slice(0, 3).join(', ') + (pausedSquadsU.length > 3 ? ' and ' + (pausedSquadsU.length - 3) + ' more' : '') + ' is paused — a gated squad is checked against your linked wallets, and one just left. Tap Join on the squad to be re-verified with the wallets you still have.', 'alert');
         return send(res, 200, { ok: true, wallets: walletAddresses(me.id), walletList: walletList(me.id), ogRevoked: revokeOg });
       }
       // Password as the second factor for WALLET sign-ins (wallet-first users who added an email + password)
@@ -11206,7 +11647,7 @@ const server = http.createServer(async (req, res) => {
         if (byUser) {
           const u = db.prepare('SELECT id FROM users WHERE username = ?').get(byUser);
           if (!u) return bad(res, 'no such user', 404);
-          rows = db.prepare('SELECT * FROM posts WHERE user_id = ? AND community_id IS NULL AND board IS NULL AND id < ? ORDER BY id DESC LIMIT 30').all(u.id, beforeId || Number.MAX_SAFE_INTEGER);
+          rows = db.prepare('SELECT * FROM posts WHERE user_id = ? AND community_id IS NULL AND squad_id IS NULL AND board IS NULL AND id < ? ORDER BY id DESC LIMIT 30').all(u.id, beforeId || Number.MAX_SAFE_INTEGER);
         } else {
           const following = feed === 'following';
           if (following && !me) return bad(res, 'sign in to see your following feed', 401);
@@ -11400,7 +11841,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const kind = b.kind === 'rocket' ? 'rocket' : 'fire';
         const postId = Number(m[1]);
-        const pr = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(postId);
+        const pr = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(postId);
         if (!pr || !postVisible(pr, me)) return bad(res, 'not found', 404);
         const existing = db.prepare('SELECT 1 FROM reactions WHERE post_id = ? AND user_id = ? AND kind = ?').get(postId, me.id, kind);
         let earned = 0;
@@ -11438,7 +11879,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const dir = b.dir === 'down' ? -1 : (b.dir === 'up' ? 1 : 0);
         const postId = Number(m[1]);
-        const post = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(postId);
+        const post = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(postId);
         if (!post || !postVisible(post, me)) return bad(res, 'not found', 404);
         if (post.user_id === me.id) return bad(res, "you can't vote on your own post", 400); // keep score authoritative (no self-inflation)
         const prev = db.prepare('SELECT value FROM post_votes WHERE post_id = ? AND user_id = ?').get(postId, me.id);
@@ -11465,7 +11906,7 @@ const server = http.createServer(async (req, res) => {
       }
       m = /^\/api\/posts\/(\d+)\/comments$/.exec(p);
       if (m && req.method === 'GET') {
-        const cvp = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(Number(m[1]));
+        const cvp = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(Number(m[1]));
         if (!cvp || !postVisible(cvp, me)) return bad(res, 'not found', 404); // the discussion under a holders-only post is holders-only too
         const rows = me
           ? db.prepare('SELECT c.id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og, u.og_tier FROM comments c JOIN users u ON u.id = c.user_id WHERE c.post_id = ? AND c.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY c.id ASC LIMIT 100').all(Number(m[1]), me.id)
@@ -11480,7 +11921,7 @@ const server = http.createServer(async (req, res) => {
         const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 300));
         const text = rt.text;
         if (!text) return bad(res, 'empty comment');
-        const cPost = db.prepare('SELECT id, user_id, community_id, private FROM posts WHERE id = ?').get(Number(m[1]));
+        const cPost = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(Number(m[1]));
         if (!cPost || !postVisible(cPost, me)) return bad(res, 'not found', 404);
         const cr = db.prepare('INSERT INTO comments (post_id, user_id, text, tokens, created_at) VALUES (?,?,?,?,?)').run(Number(m[1]), me.id, text, rt.tokens, now());
         const cEarned = awardPoints(me.id, 'comment', PTS.comment, 'comment:' + Number(cr.lastInsertRowid));
@@ -11503,7 +11944,7 @@ const server = http.createServer(async (req, res) => {
         let uname; try { uname = decodeURIComponent(m[1]); } catch { return bad(res, 'bad username', 400); }
         const u = db.prepare('SELECT * FROM users WHERE username = ?').get(uname);
         if (!u) return bad(res, 'no such user', 404);
-        const posts = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ?').get(u.id).n;
+        const posts = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND private = 0 AND squad_id IS NULL').get(u.id).n;   // what the public wall shows — private and squad posts are not counted in public
         const followers = db.prepare('SELECT COUNT(*) n FROM follows WHERE followee_id = ?').get(u.id).n;
         const following = db.prepare('SELECT COUNT(*) n FROM follows WHERE follower_id = ?').get(u.id).n;
         const fires = db.prepare('SELECT COUNT(*) n FROM reactions r JOIN posts po ON po.id = r.post_id WHERE po.user_id = ?').get(u.id).n;
@@ -11550,7 +11991,7 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('search:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
         const like = '%' + q.replace(/[%_]/g, '') + '%';
         const rows = db.prepare(`
-          SELECT u.*, (SELECT COUNT(*) FROM posts po WHERE po.user_id = u.id) posts,
+          SELECT u.*, (SELECT COUNT(*) FROM posts po WHERE po.user_id = u.id AND po.private = 0 AND po.squad_id IS NULL) posts,
                  (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) followers
           FROM users u
           WHERE (u.username LIKE ? OR u.bio LIKE ?) AND u.system = 0
@@ -11581,7 +12022,8 @@ const server = http.createServer(async (req, res) => {
           .map(s => Number(s.trim())).filter(n => Number.isInteger(n) && n > 0))].slice(0, LIVE_BATCH_MAX);
         if (!ids.length) return send(res, 200, { calls: [], at: now() });
         maybeRefreshCalls();   // same 45s-throttled on-chain re-read the single-call route triggers
-        const rows = db.prepare('SELECT * FROM calls WHERE id IN (' + ids.map(() => '?').join(',') + ')').all(...ids);
+        const rows = db.prepare('SELECT * FROM calls WHERE id IN (' + ids.map(() => '?').join(',') + ')').all(...ids)
+          .filter(r => !r.squad_id || canReadSquad(me && me.id, r.squad_id));   // a squad call is simply absent for anyone outside it
         return send(res, 200, { calls: rows.map(r => callView(r, me)), at: now() });
       }
       if (p === '/api/calls' && req.method === 'GET') {
@@ -11601,7 +12043,16 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const token = String(b.token || '').toLowerCase().trim();
         if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'that is not a valid token address');
-        if (db.prepare('SELECT 1 FROM calls WHERE user_id = ? AND token_addr = ?').get(me.id, token)) return bad(res, 'you already have an active Send Call on this token');
+        /* A call can be sent to a Send Squad instead of the public wall: private to the squad's verified members, and
+           every point it ever earns goes to the squad. One call per token per caller applies per squad, so calling a
+           token publicly and to your squad are two different calls. */
+        const squadId = Number(b.squadId) || 0;
+        let squadRow = null;
+        if (squadId) {
+          squadRow = db.prepare('SELECT * FROM squads WHERE id = ?').get(squadId);
+          if (!squadRow || !canReadSquad(me.id, squadId)) return bad(res, 'you can only send a call to a Send Squad you are a verified member of', 403);
+        }
+        if (db.prepare('SELECT 1 FROM calls WHERE user_id = ? AND token_addr = ? AND COALESCE(squad_id, 0) = ?').get(me.id, token, squadId)) return bad(res, squadId ? 'you already have a Send Call on this token in that squad' : 'you already have an active Send Call on this token');
         // dynamic daily call limit (earned quality × diamond boost) — reject over-limit BEFORE spending a price lookup
         const allow = callAllowance(me);
         if (allow.remaining <= 0) {
@@ -11642,8 +12093,8 @@ const server = http.createServer(async (req, res) => {
         let callId, postId;
         try {
           db.exec('BEGIN');
-          const cr = db.prepare('INSERT INTO calls (user_id, token_addr, pair_addr, symbol, name, quote_symbol, token0, token1, entry_price, entry_mc, entry_liq, peak_price, cur_price, cur_mc, last_check, wallet, snapshot, created_at, entry_spend_usd, no_dyor, ip) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-            .run(me.id, token, p2.pair.address, sym, name, p2.pair.quoteSymbol || '?', p2.pair.token0 || null, p2.pair.token1 || null, price, mc, liq, price, price, mc, null, wallet, JSON.stringify(p2).slice(0, 40000), t, spendUsd, noDyor, callIp); // last_check=NULL: the first sweep stamps it and credits 0 hold for the unobserved pre-sample gap
+          const cr = db.prepare('INSERT INTO calls (user_id, token_addr, pair_addr, symbol, name, quote_symbol, token0, token1, entry_price, entry_mc, entry_liq, peak_price, cur_price, cur_mc, last_check, wallet, snapshot, created_at, entry_spend_usd, no_dyor, ip, squad_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+            .run(me.id, token, p2.pair.address, sym, name, p2.pair.quoteSymbol || '?', p2.pair.token0 || null, p2.pair.token1 || null, price, mc, liq, price, price, mc, null, wallet, JSON.stringify(p2).slice(0, 40000), t, spendUsd, noDyor, callIp, squadId || null); // last_check=NULL: the first sweep stamps it and credits 0 hold for the unobserved pre-sample gap
           callId = Number(cr.lastInsertRowid);
           // TOCTOU guard: the allowance was checked before the awaited lookups above, so re-verify under the write lock —
           // two near-simultaneous calls can't both slip past the pre-await remaining>0 check and exceed the daily limit.
@@ -11651,9 +12102,10 @@ const server = http.createServer(async (req, res) => {
           if (cntNow > allow.limit) { db.exec('ROLLBACK'); return bad(res, 'You’ve just used your last Send Call for now — it frees up soon.', 429); }
           // Same shape, same fix: one call per token per caller was checked before a multi-second price
           // lookup and a chain read, so two taps could both pass it and open two calls on one token.
-          const dupNow = db.prepare('SELECT COUNT(*) n FROM calls WHERE user_id = ? AND token_addr = ?').get(me.id, token).n;
+          const dupNow = db.prepare('SELECT COUNT(*) n FROM calls WHERE user_id = ? AND token_addr = ? AND COALESCE(squad_id, 0) = ?').get(me.id, token, squadId).n;
           if (dupNow > 1) { db.exec('ROLLBACK'); return bad(res, 'you already have an active Send Call on this token'); }
-          const pr = db.prepare('INSERT INTO posts (user_id, text, created_at, call_id) VALUES (?,?,?,?)').run(me.id, text, t, callId);
+          // a squad call's widget post is a squad post: private, and never on any public feed
+          const pr = db.prepare('INSERT INTO posts (user_id, text, created_at, call_id, squad_id, private) VALUES (?,?,?,?,?,?)').run(me.id, text, t, callId, squadId || null, squadId ? 1 : 0);
           postId = Number(pr.lastInsertRowid);
           db.prepare('UPDATE calls SET post_id = ? WHERE id = ?').run(postId, callId);
           db.exec('COMMIT');
@@ -11664,18 +12116,22 @@ const server = http.createServer(async (req, res) => {
         const openBase = Math.round(PTS.send_call * sm);
         // compBase = the unscaled PTS.send_call: making a call is one action's worth of work in the weekly
         // race however large the position behind it is. The PAID award still scales with the position.
-        const earned = awardPoints(me.id, 'send_call', openBase, 'callopen:' + me.id + ':' + token, Math.min(callHeadroom(0, CALL_POINTS_CAP), openBase * OPEN_STACK_MAX), PTS.send_call); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever, and at most 10× the size-scaled base
-        if (earned > 0) db.prepare('UPDATE calls SET points_paid = points_paid + ? WHERE id = ?').run(earned, callId);
+        // A squad call pays the squad, flat: the person earns nothing personally — the whole point of the squad game.
+        const earned = squadId ? 0 : awardPoints(me.id, 'send_call', openBase, 'callopen:' + me.id + ':' + token, Math.min(callHeadroom(0, CALL_POINTS_CAP), openBase * OPEN_STACK_MAX), PTS.send_call); // bigger on-chain buy → bigger Send Power; ONE opening award per token per caller, ever, and at most 10× the size-scaled base
+        const squadPoints = squadId ? awardSquadXp(squadId, me.id, Math.min(openBase, callHeadroom(0, CALL_POINTS_CAP)), 'callopen:' + me.id + ':' + token + ':sq' + squadId) : 0;
+        if (earned + squadPoints > 0) db.prepare('UPDATE calls SET points_paid = points_paid + ? WHERE id = ?').run(earned + squadPoints, callId);
         // A Send Call on a community's own token IS participation in that community, so it scores for it — but only
         // from a qualified member. Otherwise anyone could push a community up the weekly board from the outside.
-        const callComm = communityForToken(token);
+        // (A squad call is private and scores for its squad alone.)
+        const callComm = squadId ? null : communityForToken(token);
         if (callComm && callComm.status === 'live' &&
             db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? AND qualified=1').get(callComm.id, me.id)) {
           awardCommunityXp(callComm.id, me.id, 'send_call', COMM_XP.send_call, 'c' + callComm.id + ':send_call:' + callId);
           awardConviction(callComm.id, me.id, 'send_call', CONV_XP.send_call, 'v' + callComm.id + ':send_call:' + callId);
         }
         scanWriteAction(me.id, 'post', text);
-        notify(me.id, '📣', 'Send Call posted on $' + sym + ' — your Xs track live on your wall.', 'points');
+        if (squadId) notify(me.id, '🛡️', 'Squad call posted on $' + sym + ' in ' + squadRow.name + ' — its Xs and points go to the squad.', 'points', null, '/squad.html?id=' + squadId + '#calls');
+        else notify(me.id, '📣', 'Send Call posted on $' + sym + ' — your Xs track live on your wall.', 'points');
         /* Same-IP ring on the same coin. Checked AFTER the row is committed so this call counts toward its
            own ring, and only on a token the ring actually shares. Sharing a connection is not the offence
            — several accounts behind one connection all pushing the SAME coin is, because that is what
@@ -11707,7 +12163,7 @@ const server = http.createServer(async (req, res) => {
         if (postId && !restriction) {
           try { fanOutAlert(db.prepare('SELECT * FROM posts WHERE id = ?').get(postId), 'made a Send Call on $' + alertSymbol(sym) + '.', '📣'); } catch {}
         }
-        return send(res, 200, { post: postView(db.prepare('SELECT * FROM posts WHERE id = ?').get(postId), me), pointsEarned: earned, restriction });
+        return send(res, 200, { post: postView(db.prepare('SELECT * FROM posts WHERE id = ?').get(postId), me), pointsEarned: earned, squadPoints, squadId: squadId || null, restriction });
       }
       // Take the wallet address back off one of your own calls. The call, its entry price and its record
       // stay exactly as they are — this only unpublishes the address attached to it.
@@ -11722,7 +12178,7 @@ const server = http.createServer(async (req, res) => {
       if (cm && req.method === 'GET') {
         maybeRefreshCalls();
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(Number(cm[1]));
-        if (!c) return bad(res, 'call not found', 404);
+        if (!c || (c.squad_id && !canReadSquad(me && me.id, c.squad_id))) return bad(res, 'call not found', 404);
         let snapshot = null; try { snapshot = JSON.parse(c.snapshot || 'null'); } catch {} // call-time enriched pair (fallback detail if the token later delists)
         return send(res, 200, { call: callView(c, me), snapshot });
       }
@@ -11730,7 +12186,7 @@ const server = http.createServer(async (req, res) => {
       cm = /^\/api\/calls\/(\d+)\/senders$/.exec(p);
       if (cm && req.method === 'GET') {
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(Number(cm[1]));
-        if (!c) return bad(res, 'call not found', 404);
+        if (!c || (c.squad_id && !canReadSquad(me && me.id, c.squad_id))) return bad(res, 'call not found', 404);
         refreshSenderSpends(c).catch(() => {}); // fire-and-forget: keeps the amounts current without blocking the expand
         return send(res, 200, { senders: callSenders(c, null, me) });
       }
@@ -11741,7 +12197,7 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('hop:' + me.id, 40, 6e5)) return bad(res, 'slow down', 429);
         const callId = Number(cm[1]);
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-        if (!c) return bad(res, 'call not found', 404);
+        if (!c || (c.squad_id && !canReadSquad(me.id, c.squad_id))) return bad(res, 'call not found', 404);   // only a verified member can Send It inside a squad
         if (c.user_id === me.id) return bad(res, 'that’s your own Send Call');
         const isNew = !db.prepare('SELECT 1 FROM call_hops WHERE call_id = ? AND user_id = ?').get(callId, me.id);
         // ONE paying Sender position per token, mirroring the caller's one-call-per-token rule. Without it, N calls on the
@@ -11751,7 +12207,7 @@ const server = http.createServer(async (req, res) => {
         const dupSql = 'SELECT 1 FROM call_hops h JOIN calls c2 ON c2.id = h.call_id WHERE h.user_id = ? AND c2.token_addr = ? AND h.call_id != ? AND h.entry_price IS NOT NULL';
         const dupTok = !!db.prepare(dupSql).get(me.id, c.token_addr, callId);
         const tHop = now();
-        let earned = 0, paying = !dupTok;
+        let earned = 0, squadPts = 0, paying = !dupTok;
         if (isNew) {
           const pos = dupTok ? { spendUsd: 0, boughtUsd: 0, heldUsd: 0 } // already holding a paying position on this token — no chain read needed
             : await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price), c.entry_liq); // what this follower bought / still holds
@@ -11771,15 +12227,17 @@ const server = http.createServer(async (req, res) => {
           } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not record that — try again', 500); }
           const spendUsd = paying ? pos.spendUsd : 0;
           const hopBase = Math.round(PTS.hop_on * addBonus(sizeMult(spendUsd)));   // one factor today, but the same rule as the rest
-          earned = spendUsd > 0 ? awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX), PTS.hop_on) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
-          if (earned > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned, callId, me.id);
+          // inside a squad the Send-It points go to the squad, flat; the person earns nothing personally
+          earned = spendUsd > 0 ? (c.squad_id ? 0 : awardPoints(me.id, 'hop_on', hopBase, 'hop:' + me.id + ':' + callId, Math.min(callHeadroom(0, HOP_POINTS_CAP), hopBase * OPEN_STACK_MAX), PTS.hop_on)) : 0; // paid on a verified buy only, and at most 10× the size-scaled base — a tap with nothing in the token earns nothing
+          squadPts = (spendUsd > 0 && c.squad_id) ? awardSquadXp(c.squad_id, me.id, Math.min(hopBase, callHeadroom(0, HOP_POINTS_CAP)), 'hop:' + me.id + ':' + callId) : 0;
+          if (earned + squadPts > 0) db.prepare('UPDATE call_hops SET points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(earned + squadPts, callId, me.id);
           notify(c.user_id, '🚀', 'Someone Sent It on your $' + c.symbol + ' Send Call!' + (spendUsd >= 100 ? ' (about $' + senderUsdPublic(spendUsd) + ' in)' : ''), 'points');
         } else {
           const hopEntry = dupTok ? null : ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null);
           db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check) VALUES (?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING').run(callId, me.id, tHop, hopEntry, tHop);
         }
         const hops = db.prepare('SELECT COUNT(*) n FROM call_hops WHERE call_id = ?').get(callId).n;
-        return send(res, 200, { ok: true, hops, hopped: true, wallet: c.wallet || null, symbol: c.symbol, pointsEarned: earned, paying });
+        return send(res, 200, { ok: true, hops, hopped: true, wallet: c.wallet || null, symbol: c.symbol, pointsEarned: earned, squadPoints: squadPts, squadId: c.squad_id || null, paying });
       }
 
       /* ----- gamification ----- */
@@ -12433,6 +12891,250 @@ const server = http.createServer(async (req, res) => {
           amountTok: h.held ? floor10(h.amountTok) : 0, amountUsd: amountUsd != null && h.held ? floor10(amountUsd) : null, heldFor });
       }
 
+      /* ===== Send Squads: private, token-gated groups. Every route needs an account — the referral gate ===== */
+      if (p === '/api/squads' || p.startsWith('/api/squads/')) {
+        if (!me) return send(res, 401, { error: 'sign in to use Send Squads — they are for members with an account', code: 'need_signin' });
+        // a squad picture: a jpeg/png/webp data URL (saveImage) or one of the caller's own /uploads (claimed, so the sweeper keeps it)
+        /* A squad picture, in two steps so a refused request never leaves a file or a claim behind: check() validates without
+           touching anything; commit() writes the data URL (saveImage) or claims the upload — atomically, and only an UNCLAIMED
+           one, so a picture can never share a file with a post that would delete it. undo() reverses a commit on a later failure. */
+        const squadImage = {
+          check: (v) => {
+            if (typeof v !== 'string' || !v) return null;
+            if (v.startsWith('/uploads/')) {
+              const ref = v.slice('/uploads/'.length);
+              if (!/^[a-f0-9]{24}\.(jpg|png|webp|gif)$/.test(ref)) return { error: 'bad media reference' };
+              const row = db.prepare('SELECT claimed FROM uploads WHERE name = ? AND user_id = ?').get(ref, me.id);
+              if (!row) return { error: 'that upload is not yours' };
+              if (row.claimed) return { error: 'that upload is already used by a post or another picture — upload it again' };
+              return { ref };
+            }
+            if (!/^data:image\/(jpeg|png|webp);base64,/.test(v)) return { error: 'send a jpeg/png/webp data URL, or an /uploads/ reference' };
+            if (v.length > 5 * 1024 * 1024) return { error: 'a picture is at most 3.5 MB' };
+            return { data: v };
+          },
+          commit: (c) => {
+            if (!c) return null;
+            if (c.ref) { const r = db.prepare('UPDATE uploads SET claimed = 1 WHERE name = ? AND user_id = ? AND claimed = 0').run(c.ref, me.id); return r.changes === 1 ? { name: c.ref, claimed: true } : { error: 'that upload was just used elsewhere' }; }
+            try { const name = saveImage(c.data, 3.5 * 1024 * 1024); return name ? { name, fresh: true } : { error: 'could not read the image — try re-exporting it' }; }
+            catch (e) { return { error: e.message || 'bad image' }; }
+          },
+          undo: (im) => { if (!im || !im.name) return; try { if (im.fresh) deleteUpload(im.name); else if (im.claimed) db.prepare('UPDATE uploads SET claimed = 0 WHERE name = ?').run(im.name); } catch {} },
+          // dropping a picture the squad no longer shows: an upload that was charged to the owner's quota is refunded; a data-URL picture never was
+          drop: (name) => { if (!name) return; try { deleteUpload(name, db.prepare('SELECT 1 FROM uploads WHERE name = ? AND user_id = ?').get(name, me.id) ? me.id : undefined); } catch {} },
+        };
+        const gateRefusal = (sq, h) => {
+          const dec = sq.gate_decimals, sym = sq.gate_symbol || '?';
+          const need = fromWei(h.needWei, dec), held = fromWei(h.heldWei, dec);
+          const noWallet = !walletAddresses(me.id).length;
+          return send(res, 403, {
+            error: noWallet ? 'this squad is token-gated (' + squadGateView(sq).text + ') — link a wallet on your profile so it can be checked, read-only'
+              : 'the gate is ' + squadGateView(sq).text + ': that is ' + fmtTok(need) + ' $' + sym + ' across your linked wallets, and they hold ' + fmtTok(held) + ' $' + sym + ' right now',
+            code: 'gate', need: { kind: sq.gate_kind, amount: Number(sq.gate_amount), symbol: sym, tokens: need }, held: { tokens: held, wallets: walletAddresses(me.id).length },
+          });
+        };
+        const lightCard = (sq) => ({ id: sq.id, name: sq.name, avatar: sq.avatar_img ? '/uploads/' + sq.avatar_img : null, level: levelForXp(sq.xp), xpWeek: squadWeekNums(sq).xpWeek, xpLast: squadWeekNums(sq).xpLast, memberCount: sq.member_count, official: !!sq.official });
+        const weeklyBoard = () => {
+          const wk = weekKey(now()), lastWk = weekKey(now() - 7 * 864e5);
+          const board = db.prepare('SELECT * FROM squads WHERE week_key = ? AND xp_week > 0 ORDER BY xp_week DESC, member_count DESC, id ASC LIMIT 20').all(wk).map((sq, i) => ({ ...lightCard(sq), rank: i + 1 }));
+          const lastRows = db.prepare('SELECT * FROM squads WHERE (week_key = ? AND xp_week > 0) OR (last_week_key = ? AND xp_last > 0)').all(lastWk, lastWk)
+            .map(sq => lightCard(sq)).filter(c => c.xpLast > 0).sort((a, b) => b.xpLast - a.xpLast || b.memberCount - a.memberCount).slice(0, 3).map((c, i) => ({ ...c, rank: i + 1 }));
+          return { week: weekWindow(now()), serverNow: now(), board, last: lastRows.length ? { key: lastWk, board: lastRows } : null };
+        };
+        if (p === '/api/squads' && req.method === 'GET') {
+          if (!rateLimit('sqlist:' + me.id, 120, 6e4)) return bad(res, 'slow down', 429);
+          const q = String(url.searchParams.get('q') || url.searchParams.get('token') || '').trim().slice(0, 60);
+          const sort = String(url.searchParams.get('sort') || 'active'), gate = String(url.searchParams.get('gate') || 'all'), time = String(url.searchParams.get('time') || 'all');
+          const where = [], args = [];
+          if (/^0x[0-9a-fA-F]{40}$/.test(q)) { where.push('gate_token = ?'); args.push(q.toLowerCase()); }
+          else if (q) { where.push("(name LIKE ? ESCAPE '\\' OR gate_symbol = ? COLLATE NOCASE)"); args.push('%' + q.replace(/[%_\\]/g, '\\$&') + '%', q.replace(/^\$/, '')); }
+          if (gate === 'open') where.push("gate_kind = 'none'"); else if (gate === 'gated') where.push("gate_kind <> 'none'");
+          const tm = { day: 864e5, week: 7 * 864e5, month: 30 * 864e5 }[time];
+          if (tm) { where.push('created_at > ?'); args.push(now() - tm); }
+          let order = 'created_at DESC, id DESC';
+          if (sort === 'level') order = 'xp DESC, id ASC'; else if (sort === 'members') order = 'member_count DESC, xp DESC, id ASC';
+          else if (sort === 'active') { order = '(CASE WHEN week_key = ? THEN xp_week ELSE 0 END) DESC, xp DESC, id ASC'; args.push(weekKey(now())); }
+          const rows = db.prepare('SELECT * FROM squads' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY official DESC, ' + order + ' LIMIT 120').all(...args);
+          // a % gate reads as "≈ N tokens" once the supply is known: warm a few per listing (one eth_call each, cached an hour)
+          let warm = 0; for (const sq of rows) if (sq.gate_kind === 'pct' && !squadSupplyCache.has(sq.gate_token) && warm++ < 4) squadNeedWei(sq).catch(() => {});
+          const mine = db.prepare('SELECT s.* FROM squads s JOIN squad_members m ON m.squad_id = s.id AND m.user_id = ? ORDER BY m.joined_at DESC').all(me.id);
+          return send(res, 200, { squads: rows.map(sq => squadCardView(sq, me)), weekly: weeklyBoard(), mine: mine.map(sq => squadCardView(sq, me)), serverNow: now(), q, sort, gate, time });
+        }
+        if (p === '/api/squads/mine' && req.method === 'GET') {
+          const rows = db.prepare('SELECT s.id, s.name, s.avatar_img, m.verified, m.role FROM squads s JOIN squad_members m ON m.squad_id = s.id AND m.user_id = ? ORDER BY m.joined_at DESC').all(me.id);
+          return send(res, 200, { squads: rows.map(r => ({ id: r.id, name: r.name, avatar: r.avatar_img ? '/uploads/' + r.avatar_img : null, verified: !!r.verified, role: r.role })) });
+        }
+        if (p === '/api/squads/weekly' && req.method === 'GET') return send(res, 200, weeklyBoard());
+        if (p === '/api/squads' && req.method === 'POST') {
+          if (blockReadOnly(res, me)) return;
+          if (!rateLimit('sqcreatetry:' + me.id, 30, 36e5)) return bad(res, 'too many attempts — try again in a while', 429);   // attempts (each may read the chain); the daily count is taken only once a squad is actually made
+          const b = await readBody(req, 12 * 1024 * 1024);   // two pictures may ride along as data URLs
+          const name = String(b.name || '').trim().replace(/\s+/g, ' ');
+          if (!SQUAD_NAME_RE.test(name)) return bad(res, 'the name is 3–40 characters: letters, numbers, spaces and . - _ \' $ & ! ?');
+          const bio = String(b.bio || '').trim().slice(0, SQUAD_BIO_MAX);
+          const gateKind = ['none', 'tokens', 'pct'].includes(b.gateKind) ? b.gateKind : null;
+          if (!gateKind) return bad(res, 'the gate is one of: none, tokens, pct');
+          const gate = { token: null, symbol: null, name: null, decimals: null, brand: null, amount: 0 };
+          if (gateKind !== 'none') {
+            const token = String(b.gateToken || '').toLowerCase().trim();
+            if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'paste the contract address of the token that gates the squad');
+            const amount = Number(b.gateAmount);
+            if (gateKind === 'pct') { if (!(amount >= SQUAD_GATE_PCT_MIN && amount <= SQUAD_GATE_PCT_MAX)) return bad(res, 'the gate is a percentage of the supply between ' + SQUAD_GATE_PCT_MIN + ' and ' + SQUAD_GATE_PCT_MAX); }
+            else if (!(amount > 0 && amount <= 1e18)) return bad(res, 'enter how many tokens it takes to get in (more than 0)');
+            let dec = null; try { dec = await tokenDecimals(token); } catch {}
+            if (dec == null) return bad(res, 'that address is not a token this site can read (no decimals()) — check it and try again');
+            let symbol = null, tname = null, image = null;
+            try { const lr = await lookupTokenPair(token); const pr = lr && lr.pair; if (pr && pr.token && !lr.notFound) { symbol = pr.token.symbol; tname = pr.token.name; image = pr.brand && pr.brand.imageUrl ? dexCdnImg(pr.brand.imageUrl) : null; } } catch {}
+            if (!symbol) { try { const oc = await tokenNameOnChain(token); symbol = oc.symbol; tname = tname || oc.name; } catch {} }
+            gate.token = token; gate.decimals = dec;
+            gate.symbol = String(symbol || '').replace(/[^\w.\-]/g, '').slice(0, 16) || 'TOKEN'; gate.name = String(tname || '').slice(0, 60);
+            gate.brand = image ? JSON.stringify({ imageUrl: image }) : null;
+            gate.amount = gateKind === 'pct' ? Math.round(amount * 1e4) / 1e4 : amount;
+            if (gateKind === 'tokens' && toWei(gate.amount, dec) <= 0n) return bad(res, 'that amount is below one unit of the token — enter more');
+            // the creator has to pass the gate they set — a gate nobody can pass is not a squad
+            const probe = { id: 0, gate_kind: gateKind, gate_token: token, gate_decimals: dec, gate_amount: gate.amount, gate_symbol: gate.symbol };
+            let h; try { h = await squadHolds(me.id, probe, { fresh: true }); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+            if (!h.ok) return gateRefusal(probe, h);
+          }
+          if (db.prepare('SELECT 1 FROM squads WHERE creator_id = ? AND name = ? COLLATE NOCASE').get(me.id, name)) return bad(res, 'you already run a squad called that', 409);
+          if (db.prepare('SELECT COUNT(*) n FROM squads WHERE creator_id = ?').get(me.id).n >= 10) return bad(res, 'ten squads per person is the limit');
+          const avC = squadImage.check(b.avatar), bnC = squadImage.check(b.banner);
+          if (avC && avC.error) return bad(res, 'picture: ' + avC.error);
+          if (bnC && bnC.error) return bad(res, 'banner: ' + bnC.error);
+          if (avC && bnC && avC.ref && avC.ref === bnC.ref) return bad(res, 'the picture and the banner cannot be the same upload');
+          // the daily budget is spent here, after every check: a typo, a gate you do not pass or a bad picture costs no squad for the day
+          if (!rateLimit('sqcreate:' + me.id, SQUAD_CREATE_PER_DAY, 864e5)) return bad(res, 'you can start ' + SQUAD_CREATE_PER_DAY + ' Send Squads a day — try again tomorrow', 429);
+          if (!rateLimit('sqcreateip:' + clientIp(req), 5, 864e5)) return bad(res, 'too many new squads from this connection today', 429);
+          const av = squadImage.commit(avC); if (av && av.error) return bad(res, 'picture: ' + av.error);
+          const bn = squadImage.commit(bnC); if (bn && bn.error) { squadImage.undo(av); return bad(res, 'banner: ' + bn.error); }
+          let sid;
+          try {
+            db.exec('BEGIN');
+            const r = db.prepare('INSERT INTO squads (creator_id, name, bio, avatar_img, banner_img, gate_kind, gate_token, gate_symbol, gate_name, gate_decimals, gate_brand, gate_amount, member_count, creator_ip, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?,?)')
+              .run(me.id, name, bio, av ? av.name : null, bn ? bn.name : null, gateKind, gate.token, gate.symbol, gate.name, gate.decimals, gate.brand, gate.amount, ipIdx(req), now());
+            sid = Number(r.lastInsertRowid);
+            db.prepare("INSERT INTO squad_members (squad_id, user_id, joined_at, role, verified, check_at, join_ip) VALUES (?,?,?,'owner',1,?,?)").run(sid, me.id, now(), now(), ipIdx(req));
+            db.exec('COMMIT');
+          } catch (e) { try { db.exec('ROLLBACK'); } catch {} squadImage.undo(av); squadImage.undo(bn); return bad(res, 'could not start the squad just now — try again', 500); }
+          scanWriteAction(me.id, 'post', name + ' ' + bio);
+          notify(me.id, '🛡️', 'Your Send Squad ' + name + ' is live. Calls sent to it earn points for the squad; its level and weekly points are public.', 'points', null, '/squad.html?id=' + sid);
+          return send(res, 200, { id: sid, squad: squadDetailView(db.prepare('SELECT * FROM squads WHERE id = ?').get(sid), me) });
+        }
+        const sqm = /^\/api\/squads\/(\d+)(?:\/(join|posts|calls|members|conviction|settings))?$/.exec(p);
+        if (!sqm) return bad(res, 'not found', 404);
+        const sid = Number(sqm[1]), sub = sqm[2] || '';
+        const sq = db.prepare('SELECT * FROM squads WHERE id = ?').get(sid);
+        if (!sq) return bad(res, 'squad not found', 404);
+        if (sq.gate_kind === 'pct' && !squadSupplyCache.has(sq.gate_token)) squadNeedWei(sq).catch(() => {});   // so the "≈ N tokens" can be shown next time
+        if (!sub && req.method === 'GET') return send(res, 200, { squad: squadDetailView(sq, me) });
+        if (sub === 'join' && req.method === 'POST') {
+          if (blockReadOnly(res, me)) return;
+          holdWatchTick(me.id);
+          if (!rateLimit('sqjoin:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
+          const ex = db.prepare('SELECT verified FROM squad_members WHERE squad_id = ? AND user_id = ?').get(sid, me.id);
+          if (ex && ex.verified) return send(res, 200, { joined: true, alreadyMember: true, verified: true, squad: squadDetailView(sq, me) });
+          if (!ex && sq.member_count >= SQUAD_MAX_MEMBERS) return bad(res, 'this squad is full (' + SQUAD_MAX_MEMBERS + ' members)');
+          let h; try { h = await squadHolds(me.id, sq, { fresh: true }); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+          if (!h.ok) return gateRefusal(sq, h);
+          try {
+            db.exec('BEGIN');
+            // re-decided under the lock: the count was read before a chain read, and two joins at 499 must not both land
+            if (!ex && db.prepare('SELECT COUNT(*) n FROM squad_members WHERE squad_id = ? AND verified = 1').get(sid).n >= SQUAD_MAX_MEMBERS) { db.exec('ROLLBACK'); return bad(res, 'this squad is full (' + SQUAD_MAX_MEMBERS + ' members)'); }
+            db.prepare("INSERT INTO squad_members (squad_id, user_id, joined_at, role, verified, check_at, join_ip) VALUES (?,?,?,'member',1,?,?) ON CONFLICT(squad_id, user_id) DO UPDATE SET verified = 1, check_at = excluded.check_at").run(sid, me.id, now(), now(), ipIdx(req));
+            db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sid, sid);
+            db.exec('COMMIT');
+          } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not join just now — try again', 500); }
+          if (!ex && sq.creator_id !== me.id) notify(sq.creator_id, '🛡️', '@' + me.username + ' joined your Send Squad ' + sq.name + '.', 'points', me.id, '/squad.html?id=' + sid);
+          return send(res, 200, { joined: true, verified: true, requalified: !!ex, squad: squadDetailView(db.prepare('SELECT * FROM squads WHERE id = ?').get(sid), me) });
+        }
+        if (sub === 'join' && req.method === 'DELETE') {
+          if (!rateLimit('sqjoin:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
+          if (sq.creator_id === me.id) return bad(res, 'the owner cannot leave their own squad — delete your account to close it, or keep it');
+          const r = db.prepare('DELETE FROM squad_members WHERE squad_id = ? AND user_id = ?').run(sid, me.id);
+          db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sid, sid);
+          return send(res, 200, { left: true, noop: !r.changes });
+        }
+        if (sub === 'settings' && req.method === 'POST') {
+          if (sq.creator_id !== me.id) return bad(res, 'only the squad owner can change this', 403);
+          if (blockSanctioned(res, me)) return;
+          if (!rateLimit('sqedit:' + me.id, 20, 36e5)) return bad(res, 'too many changes — try later', 429);
+          const b = await readBody(req, 12 * 1024 * 1024);
+          const sets = [], args = [];
+          if (b.name != null) { const name = String(b.name).trim().replace(/\s+/g, ' '); if (!SQUAD_NAME_RE.test(name)) return bad(res, 'the name is 3–40 characters: letters, numbers, spaces and . - _ \' $ & ! ?'); if (db.prepare('SELECT 1 FROM squads WHERE creator_id = ? AND name = ? COLLATE NOCASE AND id <> ?').get(me.id, name, sid)) return bad(res, 'you already run a squad called that', 409); sets.push('name = ?'); args.push(name); }
+          if (b.bio != null) { sets.push('bio = ?'); args.push(String(b.bio).trim().slice(0, SQUAD_BIO_MAX)); }
+          const drop = [], checks = {};
+          for (const [k, col, rm] of [['avatar', 'avatar_img', 'removeAvatar'], ['banner', 'banner_img', 'removeBanner']]) {
+            if (b[rm] === true) { sets.push(col + ' = NULL'); if (sq[col]) drop.push(sq[col]); continue; }
+            if (b[k]) { const c = squadImage.check(b[k]); if (c && c.error) return bad(res, k + ': ' + c.error); if (c) checks[k] = { c, col }; }
+          }
+          if (checks.avatar && checks.banner && checks.avatar.c.ref && checks.avatar.c.ref === checks.banner.c.ref) return bad(res, 'the picture and the banner cannot be the same upload');
+          if (!sets.length && !Object.keys(checks).length) return bad(res, 'nothing to change');
+          const committed = [];   // every check passed: only now is anything written or claimed
+          for (const k of Object.keys(checks)) {
+            const im = squadImage.commit(checks[k].c);
+            if (im && im.error) { for (const x of committed) squadImage.undo(x); return bad(res, k + ': ' + im.error); }
+            committed.push(im); sets.push(checks[k].col + ' = ?'); args.push(im.name); if (sq[checks[k].col]) drop.push(sq[checks[k].col]);
+          }
+          try { db.prepare('UPDATE squads SET ' + sets.join(', ') + ' WHERE id = ?').run(...args, sid); }
+          catch { for (const x of committed) squadImage.undo(x); return bad(res, 'could not save that just now — try again', 500); }
+          for (const n of drop) squadImage.drop(n);
+          return send(res, 200, { squad: squadDetailView(db.prepare('SELECT * FROM squads WHERE id = ?').get(sid), me) });
+        }
+        if (sub === 'members' && req.method === 'GET') {
+          if (!canReadSquad(me.id, sid)) return send(res, 200, { members: [], count: sq.member_count, membersOnly: true });
+          const rows = db.prepare(`SELECT u.username, u.avatar, u.avatar_img, u.og_tier, u.accent, m.role, m.verified, m.joined_at,
+                                   (SELECT COUNT(*) FROM pinned_tokens p WHERE p.user_id = u.id) pins,
+                                   (SELECT MIN(added_at) FROM pinned_tokens p WHERE p.user_id = u.id) firstPin
+                                   FROM squad_members m JOIN users u ON u.id = m.user_id WHERE m.squad_id = ? ORDER BY m.role = 'owner' DESC, m.verified DESC, m.joined_at ASC LIMIT 200`).all(sid);
+          const total = db.prepare('SELECT COUNT(*) n FROM squad_members WHERE squad_id = ?').get(sid).n;
+          return send(res, 200, { members: rows.map(r => ({ username: r.username, avatar: r.avatar, avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, og: r.og_tier || 0, accent: r.accent || '', role: r.role, verified: !!r.verified, joinedAt: r.joined_at, pins: r.pins, longestDays: r.firstPin ? Math.floor((now() - r.firstPin) / 864e5) : 0 })), count: total, verified: sq.member_count, paused: total - sq.member_count });
+        }
+        if (sub === 'conviction' && req.method === 'GET') {
+          if (!canReadSquad(me.id, sid)) return send(res, 403, { error: 'the conviction board is for verified members of this squad', code: 'members' });
+          return send(res, 200, squadConvictionView(sid));
+        }
+        if (sub === 'calls' && req.method === 'GET') {
+          if (!canReadSquad(me.id, sid)) return send(res, 403, { error: 'squad calls are for verified members of this squad', code: 'members' });
+          maybeRefreshCalls();
+          const rows = db.prepare('SELECT * FROM calls WHERE squad_id = ? ORDER BY id DESC LIMIT 50').all(sid);
+          return send(res, 200, { calls: rows.map(r => callView(r, me)), lifetime: squadLifetime(sid) });
+        }
+        if (sub === 'posts' && req.method === 'GET') {
+          if (!canReadSquad(me.id, sid)) return send(res, 403, { error: 'this wall is for verified members of the squad' + (sq.gate_kind !== 'none' ? ' (' + squadGateView(sq).text + ')' : ''), code: 'members' });
+          const before = Number(url.searchParams.get('before')) || Number.MAX_SAFE_INTEGER;
+          const rows = db.prepare('SELECT * FROM posts WHERE squad_id = ? AND id < ? AND user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) ORDER BY id DESC LIMIT 30').all(sid, before, me.id);
+          return send(res, 200, { posts: postsView(rows, me), canRead: true });
+        }
+        if (sub === 'posts' && req.method === 'POST') {
+          if (blockReadOnly(res, me)) return;
+          if (!canReadSquad(me.id, sid)) return send(res, 403, { error: 'posting here is for verified members of the squad', code: 'members' });
+          if (sq.gate_kind !== 'none') {   // a gated wall re-checks the holding before every post, like a community wall does
+            let h; try { h = await squadHolds(me.id, sq); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+            if (!h.ok) {
+              db.prepare('UPDATE squad_members SET verified = 0, check_at = ? WHERE squad_id = ? AND user_id = ?').run(now(), sid, me.id);
+              db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sid, sid);
+              return gateRefusal(sq, h);
+            }
+          }
+          if (!rateLimit('post:' + me.id, 12, 6e5)) return bad(res, 'posting too fast — take a breath 😅', 429);   // the same bucket as every wall
+          const bigUpload = Number(req.headers['content-length'] || 0) > MEDIA_GATE_BYTES;
+          if (bigUpload && (bigPostInFlight >= BIG_POST_CONCURRENCY || (bigPostByUser.get(me.id) || 0) >= 1)) return bad(res, 'lots of large posts right now — try again in a moment', 503);
+          let b, image = null;
+          if (bigUpload) { bigPostInFlight++; bigPostByUser.set(me.id, (bigPostByUser.get(me.id) || 0) + 1); }
+          try { b = await readBody(req, 12 * 1024 * 1024); if (b.image) image = resolvePostMedia(b.image, me.id); }
+          catch (e) { return bad(res, e.message || 'bad media', (e && e.status) || 400); }
+          finally { if (bigUpload) { bigPostInFlight--; const n = (bigPostByUser.get(me.id) || 1) - 1; if (n > 0) bigPostByUser.set(me.id, n); else bigPostByUser.delete(me.id); } }
+          const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 500));
+          const text = rt.text;
+          if (!text && !image) return bad(res, 'write something or attach a photo, GIF or video');
+          const info = db.prepare('INSERT INTO posts (user_id, text, image, score, created_at, squad_id, tokens, private) VALUES (?,?,?,?,?,?,?,1)').run(me.id, text, image, 0, now(), sid, rt.tokens);
+          const earned = awardPoints(me.id, 'post', PTS.post, 'post:' + info.lastInsertRowid);   // a post is a post for the person; the squad scores only on calls and conviction
+          scanWriteAction(me.id, 'post', text);
+          return send(res, 200, { post: postView(db.prepare('SELECT * FROM posts WHERE id = ?').get(info.lastInsertRowid), me), pointsEarned: earned });
+        }
+        return bad(res, 'not found', 404);
+      }
+
       /* ===== Communities: token communities that go live at 10 opt-ins; being in one = a flat 10× Send Power ===== */
       if (p === '/api/communities' && req.method === 'POST') { // start a community from a pasted contract address
         if (!me) return bad(res, 'sign in first', 401);
@@ -13025,7 +13727,7 @@ const server = http.createServer(async (req, res) => {
          it is cheap to walk, and walking it maps the whole id space to where each post lives. A limit
          leaves a real click (one per notification) untouched and makes enumeration pointless. */
       if (!rateLimit('perma:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
-      const row = db.prepare('SELECT id, user_id, community_id, board, private FROM posts WHERE id = ?').get(Number(mperma[1]));
+      const row = db.prepare('SELECT id, user_id, community_id, board, private, squad_id FROM posts WHERE id = ?').get(Number(mperma[1]));
       const to = (!row || !postVisible(row, me)) ? '/wall.html?gone=' + Number(mperma[1])
         : row.community_id ? '/community.html?id=' + row.community_id + '#p' + row.id
         : row.board ? '/support.html#p' + row.id
@@ -13239,6 +13941,9 @@ compTimer.unref();
 
 // Re-verify qualified community members still hold the community's token; revoke the 10× on a sell / recycled-bag move.
 const commHolderTimer = setInterval(() => { sweepCommunityHolders().catch(() => {}); }, 10 * 60 * 1000);
+// Send Squads: gated members re-verified every 10 min; the daily conviction credit advances one squad per 5-minute pass
+const squadGateTimer = setInterval(() => { sweepSquadGates().catch(() => {}); }, 10 * 60 * 1000); squadGateTimer.unref();
+const squadConvTimer = setInterval(() => { sweepSquadConviction().catch(() => {}); }, 5 * 60 * 1000); squadConvTimer.unref();
 /* The holder-ledger sweep: community tokens first (the members' share of supply rides on them), then the tokens
    people have been reading. Sequential, so the public node sees a trickle, never a burst; a first build is one
    eth_getLogs over the token's whole history, every later pass one small read. */
@@ -13773,7 +14478,7 @@ function productionChecks() {
   }
 }
 
-server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}); }, 2500).unref(); });
+server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}).then(() => seedOfficialSquadLater()); }, 2500).unref(); });
 
 // The New Pairs Radar is a members' tab on the Scanner page (newpairs.html) — no background refresher runs, so
 // the RPC/Blockscout/Dexscreener are not hit every 90s while nobody is looking. The /api/pairs/new endpoint

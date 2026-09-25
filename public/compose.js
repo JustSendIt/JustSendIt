@@ -33,7 +33,7 @@
         '<div id="compose-in" hidden>' +
           '<div class="cmp-modes" role="tablist" aria-label="What are you sending?">' +
             '<button class="cmp-mode is-on" type="button" role="tab" id="cmp-mode-post" aria-selected="true" aria-controls="compose-post-pane" data-tip="Switches to writing a plain post for the wall">🧱 Post</button>' +
-            '<button class="cmp-mode" type="button" role="tab" id="cmp-mode-call" aria-selected="false" aria-controls="compose-call-pane" data-tip="Switches to making a permanent public call on a token">📣 Send Call</button>' +
+            '<button class="cmp-mode" type="button" role="tab" id="cmp-mode-call" aria-selected="false" aria-controls="compose-call-pane" data-tip="Switches to making a permanent call on a token — public, or private to one of your squads">📣 Send Call</button>' +
           '</div>' +
           '<p class="modal-note" style="text-align:center; margin-top:0;">Posting as <b>@<span id="compose-handle"></span></b></p>' +
 
@@ -52,7 +52,12 @@
           '</div>' +
 
           '<div id="compose-call-pane" role="tabpanel" aria-labelledby="cmp-mode-call" hidden>' +
-            '<label class="f-label" for="compose-call-addr" style="margin-top:0;">Token contract address</label>' +
+            // Where the call lands: the public Send Wall, or privately inside one of the person's verified Send
+            // Squads (filled from /api/squads/mine each time the modal opens; signed-out → the public option only).
+            '<label class="f-label" for="compose-call-target" style="margin-top:0;">Where does this call go?</label>' +
+            '<select class="ab-select" id="compose-call-target" data-tip="Chooses whether this call goes to the public Send Wall or privately to one of your Send Squads"><option value="">🌐 Public — the Send Wall</option></select>' +
+            '<p class="modal-note" id="compose-call-target-note" hidden>🛡️ A squad call is <b>private to that squad</b> — only its verified members see it — and <b>every point it earns goes to the squad</b>, not to you.</p>' +
+            '<label class="f-label" for="compose-call-addr">Token contract address</label>' +
             '<input class="addr-input" id="compose-call-addr" type="text" spellcheck="false" autocomplete="off" inputmode="text" placeholder="Paste 0x… contract address" aria-describedby="compose-call-help">' +
             '<div id="compose-call-preview" class="cmp-call-preview" role="status" aria-live="polite"></div>' +
             '<label class="sr-only" for="compose-call-note">Why are you calling it? (optional)</label>' +
@@ -64,7 +69,7 @@
               '<button class="btn btn-primary btn-sm" id="compose-call-go" data-tip="Posts a permanent scored call on this token — it cannot be deleted" title="Posts a permanent scored call on this token — it cannot be deleted" disabled>📣 Make the call</button>' +
               '<span class="hint" id="compose-call-left"></span>' +
             '</div>' +
-            '<p class="modal-note" id="compose-call-help">A Send Call posts a <b>live scorecard</b> to your wall that tracks how far this token runs, forever. It is <b>public, timestamped and permanent — calls can never be deleted</b>. Needs a real pool (≥&nbsp;$500 liquidity). 🎉 Entertainment only, never advice.</p>' +
+            '<p class="modal-note" id="compose-call-help">A Send Call posts a <b>live scorecard</b> to your wall that tracks how far this token runs, forever. It is <b>public, timestamped and permanent — calls can never be deleted</b>. Needs a real pool (≥&nbsp;$2,000 liquidity). 🎉 Entertainment only, never advice.</p>' +
           '</div>' +
 
           '<p class="modal-note" id="compose-status" role="status" aria-live="polite"></p>' +
@@ -100,6 +105,7 @@
       if (AUTH.user.og && window.ogBadge) ch.insertAdjacentHTML('afterend', ogBadge(AUTH.user.og));
       showPanel('compose-in');
       paintAllowance();
+      loadSquads();
       setTimeout(() => { const t = modal.querySelector(mode === 'call' ? '#compose-call-addr' : '#compose-text'); if (t) t.focus(); }, 30);
     } else {
       showPanel('compose-out');
@@ -118,6 +124,7 @@
   }
   function close() {
     modal.setAttribute('hidden', '');
+    pendingSquad = null; setCallTarget(null);   // a squad chosen for one call never carries over to the next opening
     if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) { try { lastFocus.focus(); } catch {} }
@@ -139,15 +146,64 @@
     modal.querySelector('#compose-call-note').value = '';
     const shareBox = modal.querySelector('#compose-call-wallet'); if (shareBox) shareBox.checked = false; // never carries over to the next call
     callPreview(''); setCallReady(false); callLookupSeq++; viewedDetail = false;
+    pendingSquad = null; setCallTarget(null);   // back to the public wall — a squad is chosen per call
     setStatus('');
   }
 
   /* ===== Send Call mode: paste a contract address and post a live call scorecard =====
    * Same button, second job: 🧱 Post writes to the Send Wall, 📣 Send Call goes on the record for a token. */
   const ADDR_RE = /0x[0-9a-fA-F]{40}/;
-  const MIN_CALL_LIQ = 500;                 // mirrors the server's MIN_CALL_LIQ so we can warn before the round-trip
+  const MIN_CALL_LIQ = 2000;                // mirrors the server's MIN_CALL_LIQ so we can warn before the round-trip
   let callTok = null;                       // { addr, symbol, name, liq } once a pasted address resolves
   let callLookupSeq = 0, callLookupTimer = null, viewedDetail = false;
+  /* ---- Send Squads: a call can be made "to a squad" instead of to the public wall ----
+     pendingSquad = { id, name } asked for by COMPOSE.openCall (a squad page's "Call a token to this squad")
+     — it is kept selected even when /api/squads/mine has not answered yet, or answers without it. */
+  let pendingSquad = null, squadsSeq = 0;
+  function targetEl() { return modal.querySelector('#compose-call-target'); }
+  const HELP_PUBLIC = 'A Send Call posts a <b>live scorecard</b> to your wall that tracks how far this token runs, forever. It is <b>public, timestamped and permanent — calls can never be deleted</b>. Needs a real pool (≥&nbsp;$2,000 liquidity). 🎉 Entertainment only, never advice.';
+  const HELP_SQUAD = 'A squad call posts the same <b>live scorecard</b>, but <b>private to that squad</b> — only its verified members ever see it, on the squad’s Calls tab. It is timestamped and permanent, and <b>every point it earns goes to the squad, not to you</b>. Needs a real pool (≥&nbsp;$2,000 liquidity). 🎉 Entertainment only, never advice.';
+  function squadNote() {
+    const on = !!(targetEl() && targetEl().value);
+    const n = modal.querySelector('#compose-call-target-note'); if (n) n.hidden = !on;
+    const h = modal.querySelector('#compose-call-help'); if (h) h.innerHTML = on ? HELP_SQUAD : HELP_PUBLIC;   // the help says where the call goes
+  }
+  // one <option> per squad; adds the option when the list does not carry it yet (openCall before /mine answers)
+  function ensureSquadOption(id, name) {
+    const sel = targetEl(); if (!sel || !(id > 0)) return null;
+    let opt = sel.querySelector('option[value="' + id + '"]');
+    if (!opt) { opt = document.createElement('option'); opt.value = String(id); opt.textContent = '🛡️ ' + String(name || 'Squad #' + id).slice(0, 40); sel.appendChild(opt); }
+    return opt;
+  }
+  function setCallTarget(id) {
+    const sel = targetEl(); if (!sel) return;
+    sel.value = id > 0 && sel.querySelector('option[value="' + id + '"]') ? String(id) : '';
+    squadNote();
+  }
+  // the public option + one per VERIFIED squad the person belongs to; a 401 (signed out) leaves only the public one
+  async function loadSquads() {
+    const sel = targetEl(); if (!sel) return;
+    const seq = ++squadsSeq;
+    let list = [];
+    try { const j = await window.api('/api/squads/mine'); list = (j && j.squads) || []; }
+    catch (e) { if (!(e && e.status === 401)) return; }   // signed out → public only; any other failure keeps what is shown
+    if (seq !== squadsSeq || !modal) return;
+    const keep = Number(sel.value) || (pendingSquad && pendingSquad.id) || 0;
+    sel.querySelectorAll('option[value]:not([value=""])').forEach(o => o.remove());
+    list.filter(s => s && s.verified && s.id > 0).forEach(s => ensureSquadOption(s.id, s.name));
+    if (pendingSquad) ensureSquadOption(pendingSquad.id, pendingSquad.name);
+    setCallTarget(keep);
+  }
+  // squad.js: open the composer in call mode with this squad already chosen
+  function openCall(o) {
+    if (!modal) return;
+    o = o || {};
+    const id = Number(o.squadId);
+    pendingSquad = id > 0 ? { id, name: String(o.squadName || '') } : null;
+    setMode('call');
+    if (modal.hasAttribute('hidden')) open(); else showForAuth();
+    if (pendingSquad) { ensureSquadOption(pendingSquad.id, pendingSquad.name); setCallTarget(pendingSquad.id); }
+  }
 
   function money(n) {
     if (n == null || isNaN(n)) return '—';
@@ -211,7 +267,7 @@
           '</div>' +
         '</div>' +
         (thin
-          ? '<p class="modal-note cmp-call-warn">⚠️ Too thin to call — a pool needs <b>$' + MIN_CALL_LIQ + '+</b> of liquidity (this one has ' + esc(money(liq)) + '). Thin pools are easy to manipulate.</p>'
+          ? '<p class="modal-note cmp-call-warn">⚠️ Too thin to call — a pool needs <b>$' + MIN_CALL_LIQ.toLocaleString('en-US') + '+</b> of liquidity (this one has ' + esc(money(liq)) + '). Thin pools are easy to manipulate.</p>'
           : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens the full on-chain detail and records that you looked">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>')
       );
       setCallReady(!thin);
@@ -229,7 +285,12 @@
     gate(btn, true); setStatus('Calling it… 📣');
     try {
       const shareWallet = !!(modal.querySelector('#compose-call-wallet') || {}).checked;
-      const j = await window.api('/api/calls', { method: 'POST', body: { token: callTok.addr, note, viewedDetail, shareWallet } });
+      const sel = targetEl();
+      const squadId = sel && Number(sel.value) > 0 ? Number(sel.value) : null;
+      const squadName = squadId ? String((sel.options[sel.selectedIndex] || {}).textContent || '').replace(/^🛡️\s*/, '') : '';
+      const body = { token: callTok.addr, note, viewedDetail, shareWallet };
+      if (squadId) body.squadId = squadId;
+      const j = await window.api('/api/calls', { method: 'POST', body });
       // a call that tripped the anti-spam guard comes back with a fresh restriction — surface the banner immediately
       if (j.restriction && window.AUTH) {
         AUTH.user.restriction = j.restriction; AUTH.user.probation = null;
@@ -240,18 +301,39 @@
         AUTH.user.callAllowance.remaining--; AUTH.user.callAllowance.used++;
       }
       resetForm();
-      modal.querySelector('#compose-done-ico').textContent = '📣';
-      modal.querySelector('#compose-done-msg').textContent = 'Send Call posted on $' + callTok.symbol + '!';
+      modal.querySelector('#compose-done-ico').textContent = squadId ? '🛡️' : '📣';
+      modal.querySelector('#compose-done-msg').textContent = squadId
+        ? 'Squad call posted on $' + callTok.symbol + ' — ' + squadName + ' earned the points!'
+        : 'Send Call posted on $' + callTok.symbol + '!';
       modal.querySelector('#compose-again').textContent = 'Call another 📣';
       showPanel('compose-done');
       setTimeout(() => { const v = modal.querySelector('#compose-view'); if (v) v.focus(); }, 30);
-      if (window.sendToast) sendToast('📣 Send Call live on $' + callTok.symbol + ' — your Xs track from here.');
+      if (window.sendToast) {
+        // the squad's points come back as squadPoints; only a number the server sent is ever shown
+        const sp = squadId && typeof j.squadPoints === 'number' && j.squadPoints > 0 ? ' +' + j.squadPoints.toLocaleString('en-US') + ' Send Power to the squad.' : '';
+        sendToast(squadId
+          ? '🛡️ Squad call live on $' + callTok.symbol + ' — the squad earned the points, not you.' + sp
+          : '📣 Send Call live on $' + callTok.symbol + ' — your Xs track from here.');
+      }
       const r = fab.getBoundingClientRect();
       if (window.sendConfetti) sendConfetti(r.left + r.width / 2, r.top, { count: 50, emojiRatio: 0.5 });
       if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned, r.left, r.top);
-      if (j.post) document.dispatchEvent(new CustomEvent('post:created', { detail: j.post }));
+      /* A squad call's post is private to the squad: post:created would prepend it into the public wall /
+         profile feed on this screen, so it gets its own event instead (squad.html can refresh its Calls tab). */
+      if (j.post && !squadId) document.dispatchEvent(new CustomEvent('post:created', { detail: j.post }));
+      if (squadId) document.dispatchEvent(new CustomEvent('squad:call', { detail: { squadId, post: j.post || null, squadPoints: j.squadPoints == null ? null : j.squadPoints } }));
       const view = modal.querySelector('#compose-view');
-      if (view) view.href = (j.post && j.post.id) ? '/wall.html#p' + j.post.id : '/wall.html';
+      if (view) {
+        if (squadId) {
+          view.href = '/squad.html?id=' + squadId + '#calls';
+          view.textContent = 'View in the squad →';
+          view.setAttribute('data-tip', 'Closes this and opens the Calls tab of that squad');
+        } else {
+          view.href = (j.post && j.post.id) ? '/wall.html#p' + j.post.id : '/wall.html';
+          view.textContent = 'View on the Wall →';
+          view.setAttribute('data-tip', 'Closes this and shows your new post on the wall');
+        }
+      }
       callTok = null;
     } catch (err) {
       setStatus('⚠️ ' + ((err && err.message) || 'could not make that call'));
@@ -280,7 +362,11 @@
       document.dispatchEvent(new CustomEvent('post:created', { detail: j.post }));
       // point "View on the Wall" at the new post — never yank the user off the page they chose to post from
       const view = modal.querySelector('#compose-view');
-      if (view && j.post && j.post.id) view.href = '/wall.html#p' + j.post.id;
+      if (view) {
+        view.href = (j.post && j.post.id) ? '/wall.html#p' + j.post.id : '/wall.html';
+        view.textContent = 'View on the Wall →';   // a squad call before this may have pointed it at the squad
+        view.setAttribute('data-tip', 'Closes this and shows your new post on the wall');
+      }
     } catch (err) {
       setStatus('⚠️ ' + (err.message || 'could not post'));
       gate(btn, false);
@@ -351,6 +437,8 @@
       callLookupTimer = setTimeout(() => lookupCallToken(hit[0].toLowerCase()), 350);
     });
     modal.querySelector('#compose-call-go').addEventListener('click', makeCall);
+    const targetSel = targetEl();
+    if (targetSel) targetSel.addEventListener('change', squadNote);
     modal.querySelector('#compose-call-note').addEventListener('keydown', e => {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !modal.querySelector('#compose-call-go').disabled) makeCall();
     });
@@ -387,18 +475,23 @@
 
     // signed-out gate → close composer, open sign-in, reopen composer once signed in
     modal.querySelector('#compose-signin').addEventListener('click', () => {
+      const keepSquad = pendingSquad;   // a squad page's "call to this squad" survives the sign-in detour
       close();
+      pendingSquad = keepSquad;
       if (window.AUTH) AUTH.open();
       pendingCompose = true;
       // abandon the reopen if no successful sign-in follows shortly, so a later unrelated
       // login can't pop the composer open uninvited (covers the async post-login refresh)
       clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(() => { pendingCompose = false; }, 8000);
+      pendingTimer = setTimeout(() => { pendingCompose = false; pendingSquad = null; }, 8000);
     });
     modal.querySelector('#compose-again').addEventListener('click', () => { showForAuth(); });
 
     document.addEventListener('auth:change', e => {
-      if (pendingCompose && e.detail) { pendingCompose = false; clearTimeout(pendingTimer); open(); }
+      if (pendingCompose && e.detail) {
+        pendingCompose = false; clearTimeout(pendingTimer); open();
+        if (pendingSquad) { setMode('call'); ensureSquadOption(pendingSquad.id, pendingSquad.name); setCallTarget(pendingSquad.id); }
+      }
       else if (!modal.hasAttribute('hidden')) showForAuth();
     });
 
@@ -419,4 +512,6 @@
   function init() { build(); wire(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+  // squad.html: COMPOSE.openCall({ squadId, squadName }) opens the composer in call mode with that squad chosen
+  window.COMPOSE = { openCall };
 })();

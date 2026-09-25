@@ -1,0 +1,134 @@
+/* ===== squads.css — 🛡️ Send Squads tab on communities.html =====
+ * Private groups behind the sign-in gate. Depends on the design tokens and the shared helpers in styles.css
+ * (.comm-card*, .comm-pill*, .sort-btn, .grules, .addr-input, .addr-clear, .file-label, .f-label, .btn) and on
+ * weekly.css for the .wk-* board rows. Owns only the sq-* classes and the #squads-panel shell.
+ * No control here needs the matrix-tile list: every button reuses .btn / .sort-btn / .comm-tab / .addr-clear / .file-label. */
+
+/* ---------- the panel shell (a flex column with the page's own section gap; [hidden] still wins — it is !important) ---------- */
+.squads-panel { display: flex; flex-direction: column; gap: var(--sec-gap); }
+.sq-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: 1.5rem; margin: 0; letter-spacing: 0.02em; line-height: 1.2; }
+.sq-intro { margin: 0; max-width: 78ch; color: var(--text-dim); font-size: 0.92rem; line-height: 1.6; }
+.sq-intro b { color: var(--text); }
+.sq-status { margin: 0; color: var(--text-dim); font-size: 0.88rem; }
+.sq-status:empty { display: none; }
+
+/* ---------- signed out: the locked panel ---------- */
+.sq-locked {
+  text-align: center; padding: 1.6rem 1.2rem 1.5rem; border-radius: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 10%, transparent), color-mix(in srgb, var(--green) 3%, transparent));
+  border: 1.5px dashed color-mix(in srgb, var(--green) 45%, transparent);
+}
+.sq-locked-h { font-family: 'Luckiest Guy', cursive; color: var(--text); font-size: 1.3rem; margin: 0 0 0.4rem; letter-spacing: 0.02em; line-height: 1.25; }
+.sq-locked-p { margin: 0 auto 1rem; max-width: 60ch; color: var(--text-dim); font-size: 0.92rem; line-height: 1.55; }
+
+/* ---------- signed in: the body — one column, one rhythm (the helpers' own top/bottom margins are reset) ---------- */
+.sq-body { display: flex; flex-direction: column; gap: var(--sec-gap); }
+.sq-body > * { margin-top: 0; margin-bottom: 0; }
+.sq-rules { max-width: none; }
+
+/* search: a name or a 0x address, with the same ✕ the start-a-community form has */
+.sq-search { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; max-width: 760px; }
+.sq-q-field { position: relative; display: flex; flex: 1 1 300px; min-width: 0; }
+.sq-q-field .addr-input { flex: 1 1 auto; min-width: 0; margin: 0; padding-right: 3rem; font-family: 'Rubik', sans-serif; color: var(--text); -webkit-appearance: none; appearance: none; }
+.sq-q-field .addr-input::-webkit-search-cancel-button, .sq-q-field .addr-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+.sq-search .btn { flex: 0 0 auto; }
+
+/* filters: three exclusive groups of sort pills, each with a small caption */
+.sq-filters { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; }
+.sq-filter { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.sq-filter-l { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-right: 0.15rem; }
+
+/* ---------- start a squad (inside a .grules disclosure) ---------- */
+.sq-start .grules-body { padding-top: 0.5rem; }
+.sq-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.2rem 1.4rem; }
+.sq-form-col { min-width: 0; }
+.sq-form-col > .f-label:first-child { margin-top: 0.4rem; }
+.sq-f-note { font-weight: 400; color: var(--text-dim); }
+.sq-text { font-family: 'Rubik', sans-serif; color: var(--text); }          /* a squad name is words, not an address */
+.sq-bio {
+  display: block; box-sizing: border-box; width: 100%; min-height: 5.5rem; resize: vertical;
+  background: var(--ink-1); color: var(--text); border: 1px solid var(--edge-ctl); border-radius: var(--r-2);
+  padding: 0.85rem 1rem; font-family: 'Rubik', sans-serif; font-size: 16px; line-height: 1.5; margin: 0;
+}
+.sq-bio:focus { border-color: var(--green); outline: none; }
+.sq-bio[aria-invalid="true"], .sq-start-form .addr-input[aria-invalid="true"] { border-color: var(--red); }
+.sq-count { margin: 0.25rem 0 0; text-align: right; font-size: 0.75rem; color: var(--text-dim); }
+
+/* the gate: three native radios in pill-shaped labels, the checked one lit green */
+.sq-gate-kinds { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.1rem 0 0.6rem; }
+.sq-radio {
+  display: flex; align-items: center; gap: 0.55rem; min-height: 44px; padding: 0.5rem 0.85rem; border-radius: 12px; cursor: pointer;
+  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font-weight: 700; font-size: 0.88rem;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.sq-radio:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); }
+.sq-radio:has(input:checked) { background: color-mix(in srgb, var(--green) 16%, var(--ink-2)); border-color: var(--green); color: var(--text); }
+.sq-radio:has(input:focus-visible) { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.sq-radio input { accent-color: var(--green); width: 18px; height: 18px; margin: 0; flex: 0 0 auto; cursor: pointer; }
+.sq-gate-fields { margin-top: 0.1rem; }
+.sq-gate-fields .addr-input { margin-bottom: 0.2rem; }
+.sq-gate-note { margin: 0.5rem 0 0; }
+
+/* pictures: the preview sits beside its picker; the shield stands in until a picture is chosen */
+.sq-media { display: grid; grid-template-columns: 1fr 1fr; gap: 0.2rem 1.4rem; margin-top: 0.6rem; }
+.sq-media-slot { min-width: 0; }
+.sq-media-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.sq-prev { display: block; object-fit: cover; background: var(--ink-4); border: 2px solid var(--ink-4); border-radius: 13px; }
+.sq-prev-avatar { width: 56px; height: 56px; flex: 0 0 auto; }
+.sq-prev-none { display: grid; place-items: center; font-size: 1.6rem; }
+.sq-prev-banner { width: 100%; max-width: 320px; height: 72px; border-radius: 12px; }
+
+.sq-start-bar { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 1rem; }
+.sq-start-msg { margin: 0; flex: 1 1 240px; color: var(--text-dim); font-size: 0.88rem; line-height: 1.5; min-height: 1.2em; }
+
+/* ---------- weekly board: last week's top three sit under this week's, deliberately smaller ---------- */
+.sq-wk-last { margin-top: 0.9rem; padding-top: 0.8rem; border-top: 1px dashed rgba(255,179,64,0.35); }
+.sq-wk-last-h { font-family: 'Luckiest Guy', cursive; color: var(--text-dim); font-size: 1rem; margin: 0 0 0.5rem; letter-spacing: 0.02em; }
+.sq-wk-last-board .wk-top .wk-link { min-height: 56px; padding: 0.5rem 0.7rem; border-radius: 14px; }
+.sq-wk-last-board .wk-top .wk-rank { min-width: 2.2rem; }
+.sq-wk-last-board .wk-top .wk-medal { font-size: 1.3rem; }
+.sq-wk-last-board .wk-top .wk-rank-n { font-size: 0.9rem; }
+.sq-wk-last-board .wk-top .wk-logo { width: 38px; height: 38px; border-radius: 11px; }
+.sq-wk-last-board .wk-top .wk-logo-none { font-size: 1.1rem; }
+.sq-wk-last-board .wk-top .wk-sym { font-size: 1rem; }
+.sq-wk-last-board .wk-top .wk-name { font-size: 0.78rem; }
+.sq-wk-last-board .wk-top .wk-xp { font-size: 1.15rem; }
+
+/* ---------- "my squads" strip (the same green band as the official communities) ---------- */
+.sq-mine {
+  padding: 1rem 1rem 1.1rem; border-radius: 18px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 10%, transparent), color-mix(in srgb, var(--green) 3%, transparent));
+  border: 1.5px solid color-mix(in srgb, var(--green) 35%, transparent);
+}
+.sq-mine-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: 1.35rem; margin: 0 0 0.3rem; letter-spacing: 0.02em; }
+.sq-mine-note { margin: 0 0 0.8rem; }
+
+/* ---------- squad cards: the .comm-card frame, tuned for a name instead of a $SYM ---------- */
+.sq-card-banner-none { background: radial-gradient(120% 120% at 30% 20%, rgba(255,179,64,0.22), var(--ink-3) 70%); }   /* a gold cast says "squad", not "token" */
+.sq-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a 40-character name in the display face must not push the card wider */
+.sq-card-metrics small { font-size: 0.72rem; color: var(--text-dim); font-weight: 600; }
+.sq-card-metrics .sq-gate { grid-column: 1 / -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sq-pills { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+.sq-you {
+  display: inline-flex; align-items: center; gap: 0.2rem; white-space: nowrap; padding: 0.15rem 0.5rem; border-radius: 999px;
+  background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid color-mix(in srgb, var(--green) 42%, transparent);
+  color: var(--green-bright); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.01em;
+}
+.sq-you-off { background: rgba(255,179,64,0.14); border-color: rgba(255,179,64,0.38); color: var(--gold); }
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 700px) {
+  .sq-form-grid, .sq-media { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  /* three tabs in the strip now (Live / Starting up / Send Squads): let the pill wrap rather than push the page wider at 320px */
+  .comm-tabs { flex-wrap: wrap; justify-content: center; }
+  .sq-h { font-size: 1.25rem; }
+  .sq-locked { padding: 1.2rem 0.9rem 1.1rem; }
+  .sq-locked-h { font-size: 1.1rem; }
+  .sq-mine { padding: 0.8rem; }
+  .sq-mine-h { font-size: 1.15rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sq-radio { transition: none; }
+}

@@ -26,6 +26,7 @@
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="weekly.css">
+<link rel="stylesheet" href="squads.css">
 <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
@@ -120,6 +121,7 @@
       <div class="comm-tabs" role="group" aria-label="Filter communities by status">
         <button class="comm-tab is-on" type="button" aria-pressed="true" data-cstatus="live" data-tip="Lists only the communities that have gone live">🟢 Live</button>
         <button class="comm-tab" type="button" aria-pressed="false" data-cstatus="pending" data-tip="Lists only communities still gathering members to go live">⏳ Starting up</button>
+        <button class="comm-tab" type="button" aria-pressed="false" data-cstatus="squads" data-tip="Switches to private Send Squads instead of token communities — you need an account to see them">🛡️ Send Squads</button>
       </div>
       <div class="comm-sorts" role="group" aria-label="Sort communities">
         <button class="sort-btn is-on" type="button" data-csort="active" aria-pressed="true" data-tip="Reorders the grid so the busiest communities come first">🔥 Most active</button>
@@ -130,6 +132,150 @@
     </div>
     <p class="comm-status" id="comm-status" role="status" aria-live="polite"></p>
     <ul class="comm-grid" id="comm-grid" aria-label="Communities"></ul>
+
+    <!-- 🛡️ Send Squads: private groups behind the sign-in gate. Shown only while the Send Squads tab is on. -->
+    <section class="squads-panel" id="squads-panel" aria-labelledby="sq-h" hidden>
+      <h2 class="sq-h" id="sq-h">🛡️ Send Squads</h2>
+      <p class="sq-intro">A Send Squad is a <b>private group</b>: its own wall, its own Send Calls, and a <b>level</b> its members build together. The owner sets a <b>token gate</b> once — none, a number of tokens, or a share of the supply — and it can never be changed. Membership is checked against your linked wallets, on-chain. Every point a squad call earns goes to the <b>squad</b>, never the person. Entertainment only.</p>
+
+      <p class="sq-status sq-auth-wait" id="sq-auth-wait" role="status" aria-live="polite">Checking your sign-in…</p>
+
+      <div class="sq-locked" id="sq-locked" hidden>
+        <p class="sq-locked-h">🔒 Send Squads are for members with an account.</p>
+        <p class="sq-locked-p">Sign in to browse squads, join one that fits your bags, or start your own. Squads are private — nothing inside them is shown to anyone who isn't a verified member.</p>
+        <button class="btn btn-primary" id="sq-signin" type="button" data-tip="Opens the sign-in box — squads are only shown to signed-in members">🔑 Sign in to see squads</button>
+      </div>
+
+      <div class="sq-body" id="sq-body" hidden>
+        <details class="grules sq-rules" id="sq-rules">
+          <summary>📖 How squads &amp; their points work — read this</summary>
+          <div class="grules-body">
+            <ul class="comm-rules-list">
+              <li>🛡️ <b>Anyone with an account can start one.</b> Name it, write a bio, add a picture and a banner, and choose the gate. A squad is a fan group, <b>not an endorsement</b> of any token.</li>
+              <li>🚪 <b>The gate is set once, forever:</b> <b>open</b> (anyone with an account), <b>hold a number of tokens</b>, or <b>hold a share of the token's total supply</b>. Holdings are summed across all of your linked read-only wallets and read on-chain — and re-checked, so selling out can close the door again.</li>
+              <li>🔒 <b>Private by design.</b> Posts inside a squad are only ever served to its verified members — never the Send Wall, never a profile, never the public feed.</li>
+              <li>📣 <b>Calls to the squad:</b> members make Send Calls "to the squad". Every point those calls generate — the call itself, the X ladder, diamond hands, members who Send It — is paid to the <b>squad</b>, not the caller.</li>
+              <li>💎 <b>Conviction:</b> members' public <b>Conviction Plays</b> (the tokens pinned on their profile, that they still hold) earn the squad points daily, growing with how long the pin has been held.</li>
+              <li>✍️ <b>Posts, comments and reactions earn the squad nothing</b> — only calls and conviction do. Your own personal points for posting are unchanged.</li>
+              <li>🏆 <b>Level &amp; the weekly board:</b> squads level on the same curve as communities and compete Monday 00:00 UTC → Monday 00:00 UTC. There's nothing to win but bragging rights, and nothing to buy — <b>entertainment only</b>.</li>
+            </ul>
+          </div>
+        </details>
+
+        <form class="sq-search" id="sq-search" autocomplete="off" novalidate role="search" aria-label="Search squads">
+          <label class="sr-only" for="sq-q">Search squads by name or token address</label>
+          <span class="addr-field sq-q-field">
+            <input class="addr-input" id="sq-q" type="search" inputmode="text" spellcheck="false" maxlength="64" placeholder="Search squads by name, or paste a 0x token address">
+            <button class="addr-clear" id="sq-q-clear" type="button" aria-label="Clear the search" title="Clear the search" hidden data-tip="Empties the search box and shows every squad again">✕</button>
+          </span>
+          <button class="btn btn-ghost btn-sm" id="sq-q-go" type="submit" data-tip="Runs the search now instead of waiting for the pause after you stop typing">🔎 Search</button>
+        </form>
+
+        <div class="sq-filters">
+          <div class="sq-filter" role="group" aria-label="Filter squads by gate">
+            <span class="sq-filter-l">Gate</span>
+            <button class="sort-btn is-on" type="button" data-sqgate="all" aria-pressed="true" data-tip="Shows open and token-gated squads together">All</button>
+            <button class="sort-btn" type="button" data-sqgate="open" aria-pressed="false" data-tip="Shows only squads anyone with an account can join">🔓 Open</button>
+            <button class="sort-btn" type="button" data-sqgate="gated" aria-pressed="false" data-tip="Shows only squads that need you to hold a token to join">🔒 Gated</button>
+          </div>
+          <div class="sq-filter" role="group" aria-label="Filter squads by when they were started">
+            <span class="sq-filter-l">Started</span>
+            <button class="sort-btn is-on" type="button" data-sqtime="all" aria-pressed="true" data-tip="Shows squads from any time">Any time</button>
+            <button class="sort-btn" type="button" data-sqtime="day" aria-pressed="false" data-tip="Shows only squads started in the last 24 hours">24h</button>
+            <button class="sort-btn" type="button" data-sqtime="week" aria-pressed="false" data-tip="Shows only squads started in the last 7 days">7d</button>
+            <button class="sort-btn" type="button" data-sqtime="month" aria-pressed="false" data-tip="Shows only squads started in the last 30 days">30d</button>
+          </div>
+          <div class="sq-filter" role="group" aria-label="Sort squads">
+            <span class="sq-filter-l">Sort</span>
+            <button class="sort-btn is-on" type="button" data-sqsort="active" aria-pressed="true" data-tip="Reorders the grid so the squads scoring the most this week come first">🔥 Most active</button>
+            <button class="sort-btn" type="button" data-sqsort="level" aria-pressed="false" data-tip="Reorders the grid by each squad's all-time level">🏅 Level</button>
+            <button class="sort-btn" type="button" data-sqsort="members" aria-pressed="false" data-tip="Reorders the grid by how many members each squad has">👥 Members</button>
+            <button class="sort-btn" type="button" data-sqsort="new" aria-pressed="false" data-tip="Reorders the grid to put the newest squads first">🆕 New</button>
+          </div>
+        </div>
+
+        <details class="grules sq-start" id="sq-start">
+          <summary>🛡️ Start a Send Squad</summary>
+          <div class="grules-body">
+            <form class="sq-start-form" id="sq-start-form" autocomplete="off" novalidate>
+              <div class="sq-form-grid">
+                <div class="sq-form-col">
+                  <label class="f-label" for="sq-name">Squad name <span class="sq-f-note">(3–40 characters: letters, numbers, spaces and . - ' $ &amp; ! ?)</span></label>
+                  <input class="addr-input sq-text" id="sq-name" type="text" maxlength="40" spellcheck="false" placeholder="e.g. Diamond Hands Only" aria-describedby="sq-start-msg">
+                  <label class="f-label" for="sq-bio">Bio <span class="sq-f-note">(optional, up to 280 characters)</span></label>
+                  <textarea class="sq-bio" id="sq-bio" maxlength="280" rows="3" placeholder="What is this squad about?"></textarea>
+                  <p class="sq-count" id="sq-bio-count" aria-live="polite" aria-hidden="true">280 left</p>
+                </div>
+                <div class="sq-form-col">
+                  <span class="f-label" id="sq-gate-l">Token gate <span class="sq-f-note">(set once — it can never be changed)</span></span>
+                  <div class="sq-gate-kinds" role="radiogroup" aria-labelledby="sq-gate-l">
+                    <label class="sq-radio"><input type="radio" name="sq-gate" id="sq-gate-none" value="none" checked> 🔓 Open — anyone with an account</label>
+                    <label class="sq-radio"><input type="radio" name="sq-gate" id="sq-gate-tokens" value="tokens"> 🪙 Hold a number of tokens</label>
+                    <label class="sq-radio"><input type="radio" name="sq-gate" id="sq-gate-pct" value="pct"> 📊 Hold a share of the supply</label>
+                  </div>
+                  <div class="sq-gate-fields" id="sq-gate-fields" hidden>
+                    <label class="f-label" for="sq-gate-token">Token contract address</label>
+                    <input class="addr-input" id="sq-gate-token" type="text" inputmode="text" spellcheck="false" maxlength="42" placeholder="0x… (Robinhood Chain)" pattern="0x[0-9a-fA-F]{40}">
+                    <label class="f-label" for="sq-gate-amount" id="sq-gate-amount-l">Tokens to hold (at least)</label>
+                    <input class="addr-input" id="sq-gate-amount" type="number" inputmode="decimal" min="0" step="any" placeholder="1000">
+                    <p class="modal-note sq-gate-note" id="sq-gate-note">To start a gated squad you must pass the gate yourself — your linked wallets are summed and read on-chain.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sq-media">
+                <div class="sq-media-slot">
+                  <span class="f-label">Profile picture <span class="sq-f-note">(jpeg, png or webp, up to 3.5 MB)</span></span>
+                  <div class="sq-media-row">
+                    <img class="sq-prev sq-prev-avatar" id="sq-avatar-prev" alt="" hidden>
+                    <span class="sq-prev sq-prev-avatar sq-prev-none" id="sq-avatar-none" aria-hidden="true">🛡️</span>
+                    <label class="file-label" for="sq-avatar">🖼 Choose picture<input type="file" id="sq-avatar" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Choose a profile picture for the squad"></label>
+                    <button class="btn btn-ghost btn-sm" id="sq-avatar-rm" type="button" hidden data-tip="Drops the picture you picked so the squad starts with the shield instead">Remove</button>
+                  </div>
+                </div>
+                <div class="sq-media-slot">
+                  <span class="f-label">Banner <span class="sq-f-note">(jpeg, png or webp, up to 3.5 MB — wide works best)</span></span>
+                  <div class="sq-media-row">
+                    <img class="sq-prev sq-prev-banner" id="sq-banner-prev" alt="" hidden>
+                    <label class="file-label" for="sq-banner">🖼 Choose banner<input type="file" id="sq-banner" accept="image/jpeg,image/png,image/webp" class="sr-only" aria-label="Choose a banner image for the squad"></label>
+                    <button class="btn btn-ghost btn-sm" id="sq-banner-rm" type="button" hidden data-tip="Drops the banner you picked so the squad starts with the plain gradient instead">Remove</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="sq-start-bar">
+                <button class="btn btn-primary" id="sq-start-go" type="submit" data-tip="Creates the squad after a second press — the gate you chose can never be changed afterwards">🛡️ Start the squad</button>
+                <p class="sq-start-msg" id="sq-start-msg" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          </div>
+        </details>
+
+        <section class="wk sq-weekly" id="sq-weekly" aria-labelledby="sq-wk-h">
+          <div class="wk-head">
+            <h2 class="wk-h" id="sq-wk-h">🏆 This week's squad board</h2>
+            <p class="wk-when"><span class="wk-dates" id="sq-wk-dates"></span> <span class="wk-count" id="sq-wk-count"></span></p>
+          </div>
+          <p class="wk-explain">Which squad earned the most points this week — from its members' <b>calls to the squad</b> and their <b>conviction</b>. Posts count for nothing here, and neither does market cap. Nothing to win but bragging rights.</p>
+          <p class="wk-status" id="sq-wk-status" role="status" aria-live="polite"></p>
+          <p class="wk-empty" id="sq-wk-empty" hidden><b>No squad has scored yet this week.</b> The board opens the moment a member calls a token to their squad — or when a squad's conviction ticks over. 🏁</p>
+          <ol class="wk-board" id="sq-wk-board" aria-label="Squads ranked by points earned this week" hidden></ol>
+          <div class="sq-wk-last" id="sq-wk-last" hidden>
+            <h3 class="sq-wk-last-h" id="sq-wk-last-h">🗓️ Last week's top squads</h3>
+            <ol class="wk-board sq-wk-last-board" id="sq-wk-last-board" aria-labelledby="sq-wk-last-h"></ol>
+          </div>
+        </section>
+
+        <section class="sq-mine" id="sq-mine" aria-labelledby="sq-mine-h" hidden>
+          <h2 class="sq-mine-h" id="sq-mine-h">🛡️ My squads</h2>
+          <p class="modal-note sq-mine-note">The squads you're in. A squad only counts you as verified while your linked wallets still pass its gate.</p>
+          <ul class="comm-grid" id="sq-mine-grid" aria-label="Squads you are in"></ul>
+        </section>
+
+        <p class="comm-status" id="sq-status" role="status" aria-live="polite"></p>
+        <ul class="comm-grid" id="sq-grid" aria-label="Send Squads"></ul>
+      </div>
+    </section>
   </div>
 </main>
 
