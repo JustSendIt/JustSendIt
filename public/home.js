@@ -128,7 +128,7 @@ async function refreshMcap(opts) {
       const lbl = document.getElementById('mcap-label-' + key);
       if (lbl) lbl.textContent = '$' + key + (hasMc ? ' Market Cap · Live' : ' FDV (fully diluted) · Live');
       const sub = document.getElementById('mcap-sub-' + key);
-      if (sub) sub.textContent = '$' + Number(p.priceUsd).toPrecision(3) + ' per $' + key + ' · 24h vol ' + fmtUsd(p.volume && p.volume.h24 || 0);
+      if (sub) sub.textContent = '$' + Number(p.priceUsd).toPrecision(3) + ' per $' + key + ' · 24h vol ' + (p.volume && p.volume.h24 != null ? fmtUsd(p.volume.h24) : '—') + (p.source === 'reserves' ? ' · from the pool’s reserves' : '');
       // 24h delta chip (never color-only — always an arrow + sign)
       const chg = p.priceChange && p.priceChange.h24 != null ? Number(p.priceChange.h24) : null;
       const deltaEl = document.getElementById('mcap-delta-' + key);

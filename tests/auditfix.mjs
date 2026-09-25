@@ -51,20 +51,13 @@ function mkUser(name) {
 try {
   GATE = await gatePass(BASE);
 
-  /* ═══════════ 1. the price path that silently answered null for every token ═══════════ */
+  /* ═══════════ 1. the price path that silently answered null for every token ═══════════
+     tokenPriceUsdOf read r.pair.priceUsd (undefined) and blocked every OG badge; it then read Dexscreener,
+     which stopped listing $GWC. Both coins are now priced from their own pools, guarded, at every payout gate. */
   {
-    const row = db.prepare("SELECT pair_json FROM token_cache WHERE found=1 AND symbol='GWC'").get()
-             || db.prepare('SELECT pair_json FROM token_cache WHERE found=1 LIMIT 1').get();
-    const fn = grab(/async function tokenPriceUsdOf\(addr\)[^\n]*\n/, 'tokenPriceUsdOf');
-    check('tokenPriceUsdOf reads the price off .market, not the pool descriptor',
-      !!fn && /r\.pair\.market\.priceUsd/.test(fn) && !/r\.pair\.priceUsd/.test(fn), fn && fn.trim().slice(0, 90));
-    if (row) {
-      const P = JSON.parse(row.pair_json);
-      // the shape the old code assumed vs the shape that actually exists
-      check('  ...and the shape proves why: pair.priceUsd is undefined, pair.market.priceUsd is a number',
-        P.priceUsd === undefined && typeof (P.market && P.market.priceUsd) === 'number',
-        'top=' + P.priceUsd + ' market=' + (P.market && P.market.priceUsd));
-    }
+    check('no payout gate reads a price through the Dexscreener lookup any more', !/tokenPriceUsdOf\(/.test(SRC));
+    check('the OG badge prices BOTH coins from their pools', /sendPx = await guardedPriceUsd\(TOK\.SEND\); gwcPx = await guardedPriceUsd\(TOK\.GWC\);/.test(SRC));
+    check('  ...and so does the hold-streak floor', /\[sendPx, gwcPx\] = await Promise\.all\(\[guardedPriceUsd\(TOK\.SEND\), guardedPriceUsd\(TOK\.GWC\)\]\)/.test(SRC));
   }
 
   /* ═══════════ 2. the $100 hold floor, every token on the site ═══════════ */

@@ -5007,3 +5007,6 @@ html.motion-off #age-gate, html.motion-off #age-gate.age-leaving, html.motion-of
   .age-card, .age-check { border: 2px solid CanvasText; }
   html.age-pending::after { background: Canvas; }
 }
+
+/* where a price came from, when it is not the index (chain.js) */
+.price-src { margin: 0.35rem 0 0; font-size: 0.78rem; color: var(--text-dim); }

@@ -1901,7 +1901,7 @@ async function refreshHolder(userId) {
      stands, so a Dexscreener outage can never reset an honest holder's months-long streak — while a first-
      ever read with no price simply does not start one yet (fail-closed for new, fail-safe for existing). */
   let sendPx = null, gwcPx = null;
-  try { [sendPx, gwcPx] = await Promise.all([sendPriceUsd().catch(() => null), tokenPriceUsdOf(TOK.GWC).catch(() => null)]); } catch {}
+  try { [sendPx, gwcPx] = await Promise.all([guardedPriceUsd(TOK.SEND), guardedPriceUsd(TOK.GWC)]); } catch {}   // both from their own pools, guarded
   const sendUsd = sendPx > 0 ? sendTok * sendPx : null;
   const gwcUsd = gwcPx > 0 ? gwcTok * gwcPx : null;
   const qualOf = (usd, before) => usd == null ? (before == null ? null : (before ? 1 : 0)) : (usd >= MIN_HOLD_USD ? 1 : 0);
@@ -2165,7 +2165,7 @@ async function checkOg(userId) {
     // A badge that pays up to 10× needs a real bag behind it: BOTH coins must be worth at least OG_MIN_HOLD_USD right now
     // (1e-9 tokens of each used to qualify). Priced at the live market; an unreadable price is no answer — retried, never a "no".
     let sendPx = null, gwcPx = null;
-    try { sendPx = await sendPriceUsd(); gwcPx = await tokenPriceUsdOf(TOK.GWC); } catch { sendPx = null; }
+    try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch { sendPx = null; }
     if (!(sendPx > 0) || !(gwcPx > 0)) return 0;
     const usdSend = Number(best.SEND.balWei || 0) / 1e18 * sendPx, usdGwc = Number(best.GWC.balWei || 0) / 1e18 * gwcPx;
     if (!(usdSend >= OG_MIN_HOLD_USD && usdGwc >= OG_MIN_HOLD_USD)) {
@@ -2460,14 +2460,6 @@ const tokenHoldCache = new Map();                  // `${uid}:${token}` -> { hel
 // minUsd/priceUsd: when both are known the floor is that many dollars of the token at the given price (decimals from the token
 // cache, 18 by default); otherwise the dust floor. A price that cannot be read never lowers the bar below dust, and never raises it.
 function tokenDecimalsOf(addr) { try { const tc = tokenCacheGet(String(addr || '').toLowerCase()); return tc && tc.decimals != null ? (Number(tc.decimals) || 18) : 18; } catch { return 18; } }
-/* lookupTokenPair returns { pair: P } where P is the ENRICHED object — and P has its own `pair` key
-   holding the pool descriptor (address / quoteSymbol / token0 / token1 / createdAt). The price lives at
-   P.market.priceUsd. Reading r.pair.priceUsd therefore read the POOL descriptor's non-existent price and
-   returned undefined for every token that has ever existed, so this function answered null always. It is
-   the sole price source for checkOg's "$25 of BOTH coins" floor, which meant no OG badge could be granted
-   at all, and for the $GWC leg of the swap reward. Silent because null is also the honest answer for a
-   token with no market — nothing ever threw. */
-async function tokenPriceUsdOf(addr) { try { const r = await lookupTokenPair(String(addr || '').toLowerCase()); const px = r && r.pair && r.pair.market && Number(r.pair.market.priceUsd); return px > 0 ? px : null; } catch { return null; } }
 /* THE DOLLAR FLOOR CANNOT SILENTLY BECOME A DUST FLOOR.
    This used to read: start `need` at OG_DUST_WEI, and raise it to the dollar equivalent only `if (minUsd > 0
    && priceUsd > 0)`. Every community caller passes `c.c_price`, a NULLABLE cached grid price — so whenever
@@ -2587,6 +2579,7 @@ async function marketFor(tokens) {
       const liq = (pr.liquidity && Number(pr.liquidity.usd)) || 0;
       if (!byTok[base] || liq > byTok[base].liq) byTok[base] = { price: pr.priceUsd != null ? Number(pr.priceUsd) : null, mc: pr.marketCap != null ? Number(pr.marketCap) : (pr.fdv != null ? Number(pr.fdv) : null), pc24: pr.priceChange && pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null, liq };
     }
+    for (const k of batch) if (ownPoolOf(k) && !(byTok[k] && byTok[k].price > 0)) { const r = await ownPoolRow(k); if (r) byTok[k] = r; }   // $SEND / $GWC from their pools
     for (const k of batch) { const m = byTok[k]; if (m) { marketCache.set(k, { m, at: now() }); out[k] = m; } } // don't cache a miss (transient throttle)
   }
   return out;
@@ -3002,6 +2995,7 @@ async function refreshCommunities() {
       if (!byToken[base] || liq > byToken[base].liq) byToken[base] = { price: pr.priceUsd != null ? Number(pr.priceUsd) : null, mc: pr.marketCap != null ? Number(pr.marketCap) : (pr.fdv != null ? Number(pr.fdv) : null), pc24: pr.priceChange && pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null, liq };
     }
   }
+  for (const k of tokens) if (ownPoolOf(k) && !(byToken[k] && byToken[k].price > 0)) { const r = await ownPoolRow(k); if (r) byToken[k] = r; }   // $SEND / $GWC from their pools
   // Holder counts aren't in the Dexscreener batch — refresh them from Blockscout so the grid's
   // "holders" figure stays live like the rest of the market data (bounded per cycle to be gentle).
   const holdersByToken = {};
@@ -6418,6 +6412,7 @@ async function enrichOne(item, opts = {}) {
   }
   if (!dex && !opts.strictPair && arr[0]) dex = arr[0]; // strictPair (lookups): never borrow a DIFFERENT pool's market data
   const p = buildPair(t, dex, metaN, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp);
+  if (p.market.priceUsd == null && ownPoolOf(t.token)) await fillFromOwnPool(p);   // $SEND / $GWC: the pool prices them when the feed does not
   if (DEXTOOLS_ON) p.brand.dextools = await dextoolsInfo(t.token); // opt-in; no-op unless DEXTOOLS_API_KEY+CHAIN set
   // serial-deployer flag needs a window of other launches; the live New-Pairs set (passed by lookups) supplies one
   let dc = {}, dd = {};
@@ -8041,40 +8036,219 @@ async function burnedSend(userId, fresh) {
   if ((burnBump.get(userId) || 0) <= startedAt) burnCache.set(userId, { at: now(), val }); // a mint landed mid-read → this value is already stale, do not cache it
   return val;
 }
-// The $SEND price in dollars, from the pair's own reserves. spotPrice() gives quote-units per token;
-// which leg is the quote decides what that means — a dollar stable is dollars already, WETH needs
-// ETH/USD. Anything else, or any failed read, returns null: a burn is then "cannot be valued", never
-// "worth nothing".
-/* The spot is a single reserves read on a small pool, and a momentary pump is cheap — measured, a 10x
-   spike on the $SEND pair costs a few hundred dollars in tax, fees and gas. So the gate is valued at
-   the LOWER of the live spot and the median close of the last 24 hours of on-chain candles, and it
-   refuses outright when the spot is more than 3x that median (a pump in progress) or when there are
-   too few candles to know. A burner cannot make their burn worth more by moving the price for a
-   minute; they can only ever be valued at what the coin has actually traded around all day. */
-const PRICE_MEDIAN_HOURS = 24, PRICE_MIN_CANDLES = 6, PRICE_MAX_SPIKE = 3;
-async function sendPriceUsd() {
-  try {
-    const [spot, t0raw, t1raw, chart] = await Promise.all([spotPrice(OG_PAIR.SEND, TOK.SEND), ethCall(OG_PAIR.SEND, '0x0dfe1681'), ethCall(OG_PAIR.SEND, '0xd21220a7'), buildCandles(OG_PAIR.SEND, TOK.SEND, '1h', PRICE_MEDIAN_HOURS).catch(() => null)]);
-    if (!(spot > 0) || !t0raw || !t1raw) return null;
-    const candles = Array.isArray(chart) ? chart : (chart && (chart.candles || chart.data)) || [];
-    const closes = candles.map(c => Number(c && c.c)).filter(v => v > 0).sort((x, y) => x - y);
-    if (closes.length < PRICE_MIN_CANDLES) return null;                       // not enough history to know what it trades around
-    const median = closes[Math.floor(closes.length / 2)];
-    if (spot > median * PRICE_MAX_SPIKE) return null;                         // a spike is in progress — refuse to value anything against it
-    const q = Math.min(spot, median);
-    const leg = (h) => ('0x' + String(h).slice(-40)).toLowerCase();
-    const quote = leg(t0raw) === TOK.SEND.toLowerCase() ? leg(t1raw) : leg(t0raw);
-    if (quote === String(USDG_ADDR).toLowerCase()) return q;
-    if (quote === String(WETH_ADDR).toLowerCase()) {
-      const eth = await ethUsd();
-      // ethUsd() deliberately serves its last good value when CoinGecko is down; for a dollar gate that
-      // value must be recent, or the burn cannot be valued at all
-      if (!(eth > 0) || now() - (ethUsdCache.at || 0) > 10 * 60 * 1000) return null;
-      return q * eth;
+/* ===== $SEND and $GWC, priced from their own pools ================================================
+   Most prices on this site come from Dexscreener, and Dexscreener does not always list these two coins: in
+   September 2026 it dropped both for a while, and $GWC has not come back. So the site reads them from the
+   pools themselves (OG_PAIR — Uniswap v2 pairs against WETH). A v2 pool's reserves ARE its price: what the
+   next swap pays, token for token. Everything here is read from the chain except one exchange rate — what a
+   WETH is worth in dollars (quoteValue: a CoinGecko ETH/USD read in the last ten minutes, or 1 for the dollar
+   stablecoin) — and any figure the chain did not give is null, never guessed.
+
+   Two prices come out of it, for two jobs:
+     · the SPOT (poolMarket) — the live reserves, for showing: the home page cards, the tracker, Send Calls,
+       communities and the Scanner, wherever Dexscreener has no answer for these two coins.
+     · the GUARDED price (guardedPriceUsd) — for the checks that pay out or open doors: the $100 hold, the OG
+       badge, Send Power on a swap, the data-key burn. A momentary pump on a small pool is cheap (measured: a
+       10x spike on the $SEND pair costs a few hundred dollars in tax, fees and gas), so these value at the
+       LOWER of the spot and the price the pool actually sat at for the last 24 hours — its time-weighted
+       median — and refuse outright while the spot is more than PRICE_MAX_SPIKE times that median.
+
+   Where the 24 hours come from. This used to be the median close of hourly candles built from Swap logs, and
+   it needed six hours WITH A TRADE in the last day. These are quiet pools — three $SEND swaps and one $GWC
+   swap in the 24 hours before this was written — so it almost never had six, and every check above read
+   "price unknown". The public node keeps no history (a read at any past block is refused), so the path is
+   rebuilt instead from the pool's own Sync events: a v2 pair emits one every time its reserves change, so
+   between two Syncs the price is exactly the price of the first. A quiet day is not missing data — it is a
+   flat line, and a flat line has a median. */
+const OWN_POOLS = {
+  [TOK.SEND]: { sym: 'SEND', name: 'SEND IT', pair: OG_PAIR.SEND },
+  [TOK.GWC]: { sym: 'GWC', name: 'Generational Wealth Coin', pair: OG_PAIR.GWC },
+};
+const ownPoolOf = (addr) => OWN_POOLS[String(addr || '').toLowerCase()] || null;
+const BURN_ADDRS = ['0x000000000000000000000000000000000000dead', '0x0000000000000000000000000000000000000000'];
+const PRICE_MEDIAN_HOURS = 24;            // the window the guarded price looks back over (the ticket states it)
+const POOL_WINDOW_MS = PRICE_MEDIAN_HOURS * 3600e3;
+const POOL_TTL = 15 * 1000;              // the home page polls; one read per pool per 15 s serves every visitor
+const POOL_LOOKBACK_MAX_MS = 90 * 864e5;   // how far back to look for the Sync that set the price the window opened on
+const PRICE_MAX_SPIKE = 3;
+const poolStateCache = new Map(), poolStateInflight = new Map();
+const burnedCache = new Map();           // token -> { at, wei }
+const hex32 = (d, i) => { try { return BigInt('0x' + d.slice(i * 64, i * 64 + 64)); } catch { return null; } };
+/* Pure: the time-weighted median of a price path. `open` holds from `start` until the first point, each point's
+   price holds until the next, and the last until `end`. Each price counts for as long as the pool sat at it, so
+   a pump has to last half the window before it moves the answer at all. */
+function twMedian(open, path, start, end) {
+  const segs = [];
+  let at = start, cur = open;
+  for (const q of path) { if (q.t > at) segs.push({ p: cur, ms: q.t - at }); at = Math.max(at, q.t); cur = q.p; }
+  segs.push({ p: cur, ms: Math.max(0, end - at) });
+  const total = segs.reduce((a, x) => a + x.ms, 0);
+  if (!(total > 0)) return null;
+  let acc = 0;
+  for (const x of segs.slice().sort((a, b) => a.p - b.p)) { acc += x.ms; if (acc >= total / 2) return x.p; }
+  return null;
+}
+async function blockTime(n) {
+  const b = await rpc('eth_getBlockByNumber', ['0x' + n.toString(16), false]);
+  return b && b.timestamp ? parseInt(b.timestamp, 16) * 1000 : null;
+}
+// tokens that can never move again: sent to the dead address or to zero (Dexscreener leaves them out of market cap too)
+async function burnedWei(token) {
+  const c = burnedCache.get(token);
+  if (c && now() - c.at < 10 * 60e3) return c.wei;
+  let wei = 0n;
+  for (const a of BURN_ADDRS) wei += await erc20Balance(token, a);
+  burnedCache.set(token, { at: now(), wei });
+  return wei;
+}
+/* One pool, read in full: the live reserves, the 24-hour price path, and the day's swaps. Throws on a failed
+   read — the callers turn that into null, "could not read", and a failed read is never cached. */
+async function readPoolState(token, pair) {
+  const headHex = await rpc('eth_blockNumber', []);
+  const head = parseInt(headHex, 16);
+  if (!(head > 0)) throw new Error('no block number');
+  const [t0, decT, res, headTs] = await Promise.all([ethCallStrict(pair, '0x0dfe1681'), tokenDecimals(token), ethCallStrict(pair, '0x0902f1ac'), blockTime(head)]);
+  const token0 = '0x' + String(t0 || '').slice(-40).toLowerCase();
+  const d = String(res || '').replace(/^0x/, '');
+  const r0 = hex32(d, 0), r1 = hex32(d, 1);
+  if (decT == null || r0 == null || r1 == null || !headTs) throw new Error('pool unreadable');
+  const tokIs0 = token0 === token;
+  const quote = await pairQuote(pair, token);
+  const decQ = quote === USDG_ADDR ? (usdgDecimals != null ? usdgDecimals : 6) : 18;
+  const px = (ra, rb) => {   // quote units per token, from (reserve0, reserve1)
+    const rt = tokIs0 ? ra : rb, rq = tokIs0 ? rb : ra;
+    if (!(rt > 0n) || !(rq > 0n)) return null;
+    return (Number(rq) / 10 ** decQ) / (Number(rt) / 10 ** decT);
+  };
+  const spot = px(r0, r1);
+  if (!(spot > 0)) throw new Error('empty pool');
+  // where the window opens: the block rate is ~10/s but not promised, so one probe measures it
+  const guess = Math.max(1, head - Math.round(POOL_WINDOW_MS / 1000 * 10));
+  const guessTs = await blockTime(guess);
+  if (!guessTs || guessTs >= headTs) throw new Error('block times unreadable');
+  const rate = (head - guess) / (headTs - guessTs);                       // blocks per ms, measured
+  const from = Math.max(1, head - Math.round(POOL_WINDOW_MS * rate));
+  const tsOf = (n) => headTs - (head - n) / rate;                           // straight-line between two measured points
+  const [syncs, swaps] = await Promise.all([
+    rpc('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: headHex }]),
+    rpc('eth_getLogs', [{ address: pair, topics: [SWAP_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: headHex }]),
+  ]);
+  if (!Array.isArray(syncs) || !Array.isArray(swaps)) throw new Error('logs unreadable');
+  const path = syncs.map((l) => { const x = String(l.data || '').replace(/^0x/, ''); return { t: tsOf(parseInt(l.blockNumber, 16)), p: px(hex32(x, 0), hex32(x, 1)) }; }).filter((q) => q.p > 0);
+  // the price the window opened on: unchanged all day if nothing synced; otherwise the last Sync before it
+  let openP = path.length ? null : spot, covered = POOL_WINDOW_MS;
+  if (path.length) {
+    let span = Math.round(POOL_WINDOW_MS * rate), to = from - 1;
+    while (openP == null && span <= POOL_LOOKBACK_MAX_MS * rate && to > 1) {
+      const lo = Math.max(1, to - span);
+      const back = await rpc('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: '0x' + lo.toString(16), toBlock: '0x' + to.toString(16) }]);
+      if (!Array.isArray(back)) throw new Error('logs unreadable');
+      if (back.length) { const x = String(back[back.length - 1].data || '').replace(/^0x/, ''); openP = px(hex32(x, 0), hex32(x, 1)); break; }
+      to = lo - 1; span *= 2;
     }
-    return null;
+    // a pool younger than the window: its path starts at its first Sync, and only that much of the day is known
+    if (openP == null) { openP = path[0].p; covered = Math.max(0, headTs - path[0].t); }
+  }
+  const median = twMedian(openP, path, headTs - covered, headTs);
+  // the day's swaps, decoded from the same pair: buys take the token out of the pool, sells put it in
+  let buys = 0, sells = 0, volQuote = 0;
+  for (const l of swaps) {
+    const x = String(l.data || '').replace(/^0x/, '');
+    const a0In = hex32(x, 0), a1In = hex32(x, 1), a0Out = hex32(x, 2), a1Out = hex32(x, 3);
+    if ([a0In, a1In, a0Out, a1Out].some((v) => v == null)) continue;
+    const tokOut = tokIs0 ? a0Out : a1Out, qIn = tokIs0 ? a1In : a0In, qOut = tokIs0 ? a1Out : a0Out;
+    if (tokOut > 0n) buys++; else sells++;
+    volQuote += Number(qIn > 0n ? qIn : qOut) / 10 ** decQ;
+  }
+  const [supplyWei, burned] = await Promise.all([totalSupply(token).catch(() => null), burnedWei(token).catch(() => null)]);
+  return {
+    token, pair, quote, tokIs0, decT, decQ, at: now(),
+    spot, open: openP, median, covered,
+    reserveToken: Number(tokIs0 ? r0 : r1) / 10 ** decT, reserveQuote: Number(tokIs0 ? r1 : r0) / 10 ** decQ,
+    buys, sells, volQuote,
+    supply: supplyWei != null ? Number(supplyWei) / 10 ** decT : null,
+    circulating: supplyWei != null && burned != null ? Number(supplyWei - burned) / 10 ** decT : null,
+  };
+}
+async function poolState(token) {
+  const own = ownPoolOf(token); if (!own) return null;
+  const k = String(token).toLowerCase();
+  const c = poolStateCache.get(k);
+  if (c && now() - c.at < POOL_TTL) return c;
+  if (poolStateInflight.has(k)) return poolStateInflight.get(k);
+  const job = readPoolState(k, own.pair)
+    .then((v) => { poolStateCache.set(k, v); return v; })
+    .catch((e) => { console.warn('[pool] ' + own.sym + ' could not be read: ' + ((e && e.message) || e)); return null; })
+    .finally(() => poolStateInflight.delete(k));
+  poolStateInflight.set(k, job);
+  return job;
+}
+/* The same pool, in the shape Dexscreener answers in — so every page that already reads Dexscreener's fields
+   reads these without a special case. `source: 'reserves'` says where it came from; the pages that show it say
+   so. What only an index could know (the 5-minute, 1-hour and 6-hour splits, artwork, socials) is left out. */
+async function poolMarket(token) {
+  const own = ownPoolOf(token); if (!own) return null;
+  const st = await poolState(token); if (!st) return null;
+  const qv = await quoteValue(st.pair, st.token);
+  const usd = qv && qv.usd > 0 ? qv.usd : null;
+  const priceUsd = usd ? st.spot * usd : null;
+  return {
+    chainId: 'robinhood', dexId: 'uniswap', labels: ['v2'], url: 'https://dexscreener.com/robinhood/' + st.pair,
+    pairAddress: st.pair,
+    baseToken: { address: st.token, name: own.name, symbol: own.sym },
+    quoteToken: { address: st.quote, name: qv && qv.symbol === 'USDG' ? 'Global Dollar' : 'Wrapped Ether', symbol: (qv && qv.symbol) || '?' },
+    priceNative: String(st.spot),
+    priceUsd: priceUsd != null ? String(priceUsd) : null,
+    txns: { h24: { buys: st.buys, sells: st.sells } },
+    volume: { h24: usd ? st.volQuote * usd : null },
+    priceChange: { h24: st.covered >= POOL_WINDOW_MS && st.open > 0 ? (st.spot / st.open - 1) * 100 : null },
+    liquidity: { usd: usd ? st.reserveQuote * usd * 2 : null, base: st.reserveToken, quote: st.reserveQuote },   // a v2 pool holds equal value on both sides at its own price
+    fdv: priceUsd != null && st.supply != null ? priceUsd * st.supply : null,
+    marketCap: priceUsd != null && st.circulating != null ? priceUsd * st.circulating : null,   // burned tokens left out, as Dexscreener does
+    source: 'reserves', readAt: st.at,
+  };
+}
+// fill a Dexscreener token/pair list with our own pools for any of the two coins it did not answer for
+async function withOwnPools(arr, tokens) {
+  const list = Array.isArray(arr) ? arr.slice() : [];
+  const have = new Set(list.filter((p) => p && p.priceUsd != null).map((p) => ((p.baseToken && p.baseToken.address) || '').toLowerCase()));
+  for (const t of tokens) {
+    const k = String(t || '').toLowerCase();
+    if (!ownPoolOf(k) || have.has(k)) continue;
+    const m = await poolMarket(k).catch(() => null);
+    if (m && m.priceUsd != null) { for (let i = list.length - 1; i >= 0; i--) if (list[i] && list[i].pairAddress && list[i].pairAddress.toLowerCase() === m.pairAddress) list.splice(i, 1); list.push(m); have.add(k); }
+  }
+  return list;
+}
+// the {price, mc, pc24, liq} row the batch readers keep, for one of the two coins
+async function ownPoolRow(token) {
+  const m = await poolMarket(token).catch(() => null);
+  if (!m || m.priceUsd == null) return null;
+  return { price: Number(m.priceUsd), mc: m.marketCap != null ? m.marketCap : m.fdv, pc24: m.priceChange.h24, liq: m.liquidity.usd || 0 };
+}
+// an enriched Scanner/lookup pair for one of the two coins that the price feed left unpriced: its market from the pool
+async function fillFromOwnPool(p) {
+  const m = await poolMarket(p.token.address).catch(() => null);
+  if (!m || m.priceUsd == null || m.pairAddress !== String(p.pair.address || '').toLowerCase()) return;
+  Object.assign(p.market, { priceUsd: Number(m.priceUsd), liquidityUsd: m.liquidity.usd, fdv: m.fdv, marketCap: m.marketCap, source: 'reserves' });
+  p.priceChange.h24 = m.priceChange.h24;
+  if (m.volume.h24 != null) p.volume.h24 = m.volume.h24;
+  p.txns.h24 = { buys: m.txns.h24.buys, sells: m.txns.h24.sells };
+}
+/* The guarded dollar price of $SEND or $GWC for anything that pays out or opens a door — see the top of this
+   section. Null when it cannot be read, when the dollar rate is stale, when less than the whole day is known,
+   or while a spike is in progress: a check then says "try again", never "you do not qualify". */
+async function guardedPriceUsd(token) {
+  try {
+    const st = await poolState(token);
+    if (!st || !(st.spot > 0) || !(st.median > 0) || st.covered < POOL_WINDOW_MS) return null;
+    if (st.spot > st.median * PRICE_MAX_SPIKE) return null;
+    const qv = await quoteValue(st.pair, st.token);                 // quoteValue's ETH rate is null once it is ten minutes old
+    if (!(qv && qv.usd > 0)) return null;
+    return Math.min(st.spot, st.median) * qv.usd;
   } catch { return null; }
 }
+async function sendPriceUsd() { return guardedPriceUsd(TOK.SEND); }
 function dataKeyOf(req) {
   const m = /^Bearer\s+(sk_[0-9a-f]{48})$/i.exec(String(req.headers.authorization || '').trim());
   if (!m) return null;
@@ -9322,6 +9496,8 @@ async function refreshCalls() {
         if (!byToken[base] || liq > byToken[base]._liq) byToken[base] = { price: Number(pr.priceUsd), mc: pr.marketCap != null ? Number(pr.marketCap) : null, _liq: liq };
       }
     }
+    // $SEND / $GWC: priced from their pools when the feed did not — a pool read is a definitive answer for these two
+    for (const k of tokens) if (ownPoolOf(k) && !(byToken[k] && byToken[k].price > 0)) { const r = await ownPoolRow(k); if (r) { byToken[k] = { price: r.price, mc: r.mc, _liq: r.liq }; fetched.add(k); } }
     const t = now();
     /* F003: record this sweep's spot for every priced token, prune, and build the hour-median per token.
        Crediting below uses min(spot, median) and pauses while spot runs more than PRICE_MAX_SPIKE× above it. */
@@ -9631,7 +9807,7 @@ const server = http.createServer(async (req, res) => {
             holdMinUsd: MIN_HOLD_USD,
             coins: PROOF_COINS.map(c => c.label),
             sellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
-            priceMedianHours: PRICE_MEDIAN_HOURS,   // the bag is valued at the LOWER of spot and this median (sendPriceUsd)
+            priceMedianHours: PRICE_MEDIAN_HOURS,   // the bag is valued at the LOWER of spot and the pool's time-weighted median over this many hours (guardedPriceUsd)
           },
           ticket: u ? ticketFor(u) : null,
         });
@@ -11665,7 +11841,7 @@ const server = http.createServer(async (req, res) => {
           if (val > movedIn) { movedIn = val; movedTok = la; }
         }
         if (!(movedIn > 0n)) return bad(res, 'that transaction did not move any $Send or $GWC to your wallet');
-        const px = await tokenPriceUsdOf(movedTok);
+        const px = await guardedPriceUsd(movedTok);   // Send Power on a swap is a payout: the guarded pool price, as for the $100 check
         if (!(px > 0)) return bad(res, 'the coin price cannot be read right now — try again in a minute', 503);
         if (Number(movedIn) / 1e18 * px < SWAP_MIN_USD) return bad(res, 'that swap brought in under $' + SWAP_MIN_USD + ' of the coin — Send Power is paid on real buys');
         // a raw tx hash beside a user id is the account→wallet link in plain text (one RPC call away), so the
@@ -12023,8 +12199,12 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/chain/pairs' && req.method === 'GET') {   // the homepage's live $SEND / $GWC pair data
         if (!rateLimit('chainp:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
         const j = await jgetCached('https://api.dexscreener.com/latest/dex/pairs/robinhood/' + OG_PAIR.SEND + ',' + OG_PAIR.GWC, 20000);
-        if (!j) return bad(res, 'market data could not be read right now', 502);
-        return send(res, 200, j);
+        // either coin the feed does not price comes from its own pool (source: 'reserves'), so the cards are never blank
+        const pairs = await withOwnPools(j && Array.isArray(j.pairs) ? j.pairs : [], [TOK.SEND, TOK.GWC]);
+        if (!pairs.length) return bad(res, 'market data could not be read right now', 502);
+        // and the guarded price the $100 check, the OG badge and swap rewards value at right now (null = cannot say)
+        const [cs, cg] = await Promise.all([guardedPriceUsd(TOK.SEND), guardedPriceUsd(TOK.GWC)]);
+        return send(res, 200, { schemaVersion: (j && j.schemaVersion) || '1.0.0', pairs, checkPrices: { SEND: cs, GWC: cg } });
       }
       if (p === '/api/chain/dex-tokens' && req.method === 'GET') {   // the tracker's price batch (≤30 tokens)
         if (!me) return bad(res, 'sign in first', 401);
@@ -12032,8 +12212,9 @@ const server = http.createServer(async (req, res) => {
         const addrs = [...new Set(String(url.searchParams.get('addrs') || '').toLowerCase().split(',').map(s => s.trim()).filter(a => /^0x[0-9a-f]{40}$/.test(a)))].sort().slice(0, 30);
         if (!addrs.length) return send(res, 200, []);
         const j = await jgetCached('https://api.dexscreener.com/tokens/v1/robinhood/' + addrs.join(','), 60000);
-        if (!j) return bad(res, 'prices could not be read right now', 502);
-        return send(res, 200, Array.isArray(j) ? j : []);
+        // a feed outage is still an outage for every other token — unless all that was asked for is our two coins
+        if (!j && !addrs.every((a) => ownPoolOf(a))) return bad(res, 'prices could not be read right now', 502);
+        return send(res, 200, await withOwnPools(Array.isArray(j) ? j : [], addrs));
       }
       if (p === '/api/chain/explorer' && req.method === 'GET') {   // the tracker's explorer reads, by allow-list
         if (!me) return bad(res, 'sign in first', 401);

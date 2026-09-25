@@ -205,6 +205,7 @@ async function initTokenCards() {
       if (liq && p.liquidity) liq.innerHTML = 'Liquidity <b>' + fmtUsd(p.liquidity.usd) + '</b>';
       if (vol && p.volume) vol.innerHTML = '24h Vol <b>' + fmtUsd(p.volume.h24) + '</b>';
       if (fdv && p.fdv != null) fdv.innerHTML = 'FDV <b>' + fmtUsd(p.fdv) + '</b>';
+      const src = document.getElementById('src-' + key); if (src) src.hidden = p.source !== 'reserves';   // say where a price came from when it is not the index
       // Dexscreener branding (logo + banner) so the cards match the token's on-chain listing
       const info = p.info || {};
       const logo = dexImg(info.imageUrl), banner = dexImg(info.header || info.openGraph);
