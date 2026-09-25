@@ -66,13 +66,13 @@ initTokenCards();
      and checking is the only step this site performs). Already OG → your badge. Never "buy": the banner says
      itself that it is not a reason to buy, and a CTA must not contradict the sentence beside it. */
   const cta = document.getElementById('og-banner-cta');
-  const TIER = { 3: ['Gold', 10], 2: ['Silver', 5], 1: ['Bronze', 3] };
+  const TIER = { 4: ['Diamond', 20], 3: ['Gold', 10], 2: ['Silver', 5], 1: ['Bronze', 3] };
   function paintCta() {
     if (!banner || !cta) return;
     const u = (window.AUTH && AUTH.user) ? AUTH.user : null;
     const base = banner.dataset.ariaBase || '';
     let text, href, tail;
-    const tier = u ? (Number(u.og) || 0) : 0;   // /api/me reports `og` as the tier (3 gold · 2 silver · 1 bronze · 0 none)
+    const tier = u ? (Number(u.og) || 0) : 0;   // /api/me reports `og` as the tier (4 diamond · 3 gold · 2 silver · 1 bronze · 0 none)
     if (u && TIER[tier]) { text = 'You are OG ' + TIER[tier][0] + ' · ' + TIER[tier][1] + '×'; href = 'profile.html'; tail = 'You hold OG ' + TIER[tier][0] + '. Tap to open your profile.'; }
     else if (u) { text = 'Check my wallet for OG'; href = 'profile.html#connected-wallet'; tail = 'Tap to link a wallet and have it checked on-chain. Not a recommendation to buy.'; }
     else { text = 'How OG works'; href = 'about.html#og-rules'; tail = 'Tap to read how it works. Not a recommendation to buy.'; }

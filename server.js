@@ -728,7 +728,7 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN upload_bytes INTEGER NOT NULL DEFAULT 0",     // running total of stored upload bytes for this user (per-account media quota)
   // OG tiers: the same standard, three entry windows. `og` stays as the boolean every existing read
   // depends on; og_tier is the payout. Appended at the tail so no existing statement's position moves.
-  "ALTER TABLE users ADD COLUMN og_tier INTEGER NOT NULL DEFAULT 0",          // 0 none · 1 bronze (3×) · 2 silver (5×) · 3 gold (10×)
+  "ALTER TABLE users ADD COLUMN og_tier INTEGER NOT NULL DEFAULT 0",          // 0 none · 1 bronze (3×) · 2 silver (5×) · 3 gold (10×) · 4 diamond (20×)
   "ALTER TABLE users ADD COLUMN og_buy_ms INTEGER NOT NULL DEFAULT 0",        // earliest verified market acquisition of the LATER of the two coins — the timestamp the tier was derived from
   "ALTER TABLE users ADD COLUMN og_dq INTEGER NOT NULL DEFAULT 0",            // 1 = failed the dump / net-accumulator standard (distinct from og_revoked, which is a later sell-out)
   "ALTER TABLE calls ADD COLUMN points_paid INTEGER NOT NULL DEFAULT 0",     // lifetime Send Power this ONE call has paid its caller (post-multiplier) — the basis for CALL_POINTS_CAP
@@ -826,6 +826,7 @@ for (const col of [
      column did, so nobody is unlocked by a migration. Written only by createSession (a fresh sign-in) and by a
      successful proof (grantSudo). */
   "ALTER TABLE sessions ADD COLUMN sudo_until INTEGER",
+  "ALTER TABLE users ADD COLUMN og_diamond_at INTEGER",   // when the Diamond OG question got a definitive answer (NULL = not yet asked, or the read was incomplete)
 ]) { try { db.exec(col); } catch {} }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
@@ -1461,7 +1462,7 @@ function isTokenDev(userId, tok) {
 function effectiveMult(userId) {
   const holder = holderMultiplier(userId);
   const row = db.prepare('SELECT og, og_tier, live_comm_count, beta_rank FROM users WHERE id = ?').get(userId);
-  // The tier decides the bonus — gold 10×, silver 5×, bronze 3× — and ONLY while the holdings behind
+  // The tier decides the bonus — diamond 20×, gold 10×, silver 5×, bronze 3× — and ONLY while the holdings behind
   // it are recently on-chain-verified AND non-zero (still holding both). Reading `og` here instead of
   // `og_tier` would pay every silver and bronze the gold multiplier.
   let og = 1;
@@ -2037,6 +2038,8 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
          genuinely begins, whatever the first buy says. */
   const sinceMs = opts && opts.sinceMs ? opts.sinceMs : null;
   let boughtWei = 0n, soldWei = 0n, balAtSince = null, lastZeroMs = null, firstInMs = null, lastBuyMs = null;
+  let monthBoughtWei = 0n, monthSoldWei = 0n;   // market flows inside $GWC's first month — the Diamond question
+  const inMonth = (ts) => ts >= OG_DIAMOND_START && ts <= OG_DIAMOND_END;
   for (const r of rows) {
     const from = ((r.from && r.from.hash) || '').toLowerCase();
     const to = ((r.to && r.to.hash) || '').toLowerCase();
@@ -2051,6 +2054,7 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
       bal += v;
       if (firstInMs === null) firstInMs = ts;
       if (isAcquisition(from)) boughtWei += v;
+      if (isAcquisition(from) && inMonth(ts)) monthBoughtWei += v;
       if (firstBuyMs === null && isAcquisition(from)) firstBuyMs = ts;      // EARLIEST market acquisition — the tier basis
       /* LATEST market acquisition. The OG tier asks when you got in; the participation gate asks when you
          last put money in, because that is what its 24-hour window runs from. Rows are already sorted by
@@ -2060,6 +2064,7 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
     if (from === w) {
       bal -= v;
       if (isMarket(to)) soldWei += v;
+      if (isMarket(to) && inMonth(ts)) monthSoldWei += v;
     }
     if (bal <= OG_DUST_WEI) lastZeroMs = ts;                                 // a continuous hold restarts here
     if (firstBuyMs !== null) {
@@ -2092,7 +2097,39 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
     firstInMs,                                             // first inbound of any kind, market or not
     lastZeroMs,                                            // last time the position was dust — a hold starts after this
     balAtSinceWei: balAtSince === null ? null : balAtSince.toString(),   // null = no activity after sinceMs
+    monthBoughtWei: monthBoughtWei.toString(), monthSoldWei: monthSoldWei.toString(),
   };
+}
+/* Gold → Diamond, for an account already holding Gold. The same $100-of-each floor a grant needs (a 20× badge
+   needs a real bag behind it at least as much as a 10× one does); a price that cannot be read, or a bag under
+   the floor today, is not a definitive "no" — the question stays open and the sweep asks again. The claim
+   rows follow the tier, and the badge only moves while it is still a live, unrevoked Gold. */
+// Pure: does this account's complete read make it Diamond? Bought both inside $GWC's first month (a gold-window buy,
+// still held) and, for EACH coin, more came in from the market that month than went back to it.
+function ogDiamondOk(complete, best, holdsAny, month) {
+  return !!complete && ['SEND', 'GWC'].every((k) => !!(best[k] && holdsAny[k] && best[k].tier >= OG_TIER.GOLD && month[k] && month[k].in > 0n && month[k].in > month[k].out));
+}
+async function grantDiamondUpgrade(userId, best) {
+  let sendPx = null, gwcPx = null;
+  try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
+  if (!(sendPx > 0) || !(gwcPx > 0)) return OG_TIER.GOLD;                                   // no price, no answer — asked again within the hour
+  // valued the way a grant is: the wallets that earned the tier, at the guarded price
+  if (!(Number(best.SEND.balWei || 0) / 1e18 * sendPx >= OG_MIN_HOLD_USD && Number(best.GWC.balWei || 0) / 1e18 * gwcPx >= OG_MIN_HOLD_USD)) {
+    db.prepare('UPDATE users SET og_checked_at = ? WHERE id = ?').run(now(), userId);        // a real answer for today: re-asked every 6 hours, as a grant is
+    return OG_TIER.GOLD;
+  }
+  const wallets = [best.SEND.wallet, best.GWC.wallet];
+  let g;
+  try {
+    db.exec('BEGIN');
+    g = db.prepare('UPDATE users SET og_tier = ?, og_diamond_at = ? WHERE id = ? AND og_tier = ? AND og = 1 AND og_revoked = 0').run(OG_TIER.DIAMOND, now(), userId, OG_TIER.GOLD);
+    if (g.changes) for (const a of [...new Set(wallets.filter(Boolean))]) db.prepare('UPDATE og_claims SET tier = ? WHERE addr_idx = ? AND user_id = ?').run(OG_TIER.DIAMOND, bidx(a), userId);
+    db.exec('COMMIT');
+  } catch { try { db.exec('ROLLBACK'); } catch {} return OG_TIER.GOLD; }
+  if (!g.changes) return OG_TIER.GOLD;
+  notify(userId, '💎', 'OG Diamond unlocked! You bought BOTH $SEND and $GWC in the first month of $GWC and bought more of each than you sold that month (checked on-chain) — your Gold badge is now Diamond: ' +
+    OG_DIAMOND_MULT + '× Send Power on everything (+' + (OG_DIAMOND_MULT - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Keep holding both: sell out of either and it goes for good.', 'og');
+  return OG_TIER.DIAMOND;
 }
 const _ogScanning = new Set(); // coalesce concurrent scans of the same user
 /* Decide (or re-decide) a user's OG tier from chain history. Returns the tier, 0 for none.
@@ -2107,11 +2144,14 @@ const _ogScanning = new Set(); // coalesce concurrent scans of the same user
    for it — the backfill at boot handles the ones granted before tiers existed, and this handles the
    rest. A tier can never improve on a re-scan (it is fixed by when you bought), so re-entry is safe. */
 async function checkOg(userId) {
-  const u = db.prepare('SELECT og, og_tier, og_revoked FROM users WHERE id = ?').get(userId);
+  const u = db.prepare('SELECT og, og_tier, og_revoked, og_diamond_at FROM users WHERE id = ?').get(userId);
   if (!u) return 0;
-  if (u.og_tier > 0) return u.og_tier;          // already tiered — permanent unless revoked by a full sell-out
   if (u.og_revoked) return 0;                   // sold out completely once → gone for good, never re-granted
-  if (now() > OG_GRANT_UNTIL_MS) return 0;      // past the windows AND past the grace — stop paying the explorer
+  // A Gold account is asked the Diamond question once (every Diamond bought inside gold's window, so it may
+  // already hold Gold); any other tier is final — permanent unless revoked by a full sell-out.
+  const upgrading = u.og_tier === OG_TIER.GOLD && !u.og_diamond_at;
+  if (u.og_tier > 0 && !upgrading) return u.og_tier;
+  if (now() > OG_GRANT_UNTIL_MS) return u.og_tier || 0;   // past the windows AND past the grace — stop paying the explorer
   if (_ogScanning.has(userId)) return 0;
   _ogScanning.add(userId);
   try {
@@ -2126,6 +2166,7 @@ async function checkOg(userId) {
     ];
     const best = {};                 // coin -> the best qualifying scan across this user's wallets
     const holdsAny = {};             // coin -> does ANY linked wallet still hold it
+    const month = { SEND: { in: 0n, out: 0n }, GWC: { in: 0n, out: 0n } };   // coin -> market flows in $GWC's first month, every wallet summed
     let sawDq = false;               // a wallet bought in a window and still holds, but failed the standard
     let scanFailed = false;          // at least one (wallet, coin) could not be read completely
     for (const c of COINS) {
@@ -2143,6 +2184,9 @@ async function checkOg(userId) {
         // hold denied anyone who moved their bag to a hardware wallet after buying, which the rules
         // never said and the previous behaviour allowed.
         if (s.holds) holdsAny[c.key] = true;
+        // summed over EVERY wallet, disqualified or not: moving tokens between your own wallets is neither a buy
+        // nor a sell, so the account's net for the month is the honest answer to "accumulated or distributed"
+        month[c.key].in += BigInt(s.monthBoughtWei || '0'); month[c.key].out += BigInt(s.monthSoldWei || '0');
         if (s.tier === OG_TIER.NONE) continue;
         // this wallet bought inside a window, but fails the standard for this coin
         if (ogDisqualified(s)) { sawDq = true; continue; }
@@ -2150,6 +2194,14 @@ async function checkOg(userId) {
       }
     }
     const qualifies = (k) => best[k] && holdsAny[k];
+    /* Diamond, decided only on a COMPLETE read — a wallet that could not be read might hold the sells that
+       would make this account a net distributor. Bought both in the month, net accumulator of both. */
+    const diamondOk = ogDiamondOk(!scanFailed, best, holdsAny, month);
+    if (upgrading) {
+      if (scanFailed) return OG_TIER.GOLD;                        // not an answer — asked again on the next sweep
+      if (!diamondOk) { db.prepare('UPDATE users SET og_diamond_at = ? WHERE id = ?').run(now(), userId); return OG_TIER.GOLD; }
+      return grantDiamondUpgrade(userId, best);
+    }
     if (!qualifies('SEND') || !qualifies('GWC')) {
       // Only a COMPLETE read may be recorded as a real "did not qualify" — an incomplete one writes
       // nothing at all, so it is retried rather than frozen in as an answer.
@@ -2161,8 +2213,9 @@ async function checkOg(userId) {
       db.prepare('UPDATE users SET og_checked_at = ?, og_dq = ? WHERE id = ?').run(now(), sawDq ? 1 : 0, userId);
       return 0;
     }
-    const tier = Math.min(best.SEND.tier, best.GWC.tier);
-    // A badge that pays up to 10× needs a real bag behind it: BOTH coins must be worth at least OG_MIN_HOLD_USD right now
+    let tier = Math.min(best.SEND.tier, best.GWC.tier);
+    if (tier === OG_TIER.GOLD && diamondOk) tier = OG_TIER.DIAMOND;
+    // A badge that pays up to 20× needs a real bag behind it: BOTH coins must be worth at least OG_MIN_HOLD_USD right now
     // (1e-9 tokens of each used to qualify). Priced at the live market; an unreadable price is no answer — retried, never a "no".
     let sendPx = null, gwcPx = null;
     try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch { sendPx = null; }
@@ -2193,8 +2246,8 @@ async function checkOg(userId) {
     let g;
     try {
       db.exec('BEGIN');
-      g = db.prepare("UPDATE users SET og = 1, og_tier = ?, og_buy_ms = ?, og_checked_at = ? WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')")
-        .run(tier, buyMs, now(), userId);
+      g = db.prepare("UPDATE users SET og = 1, og_tier = ?, og_buy_ms = ?, og_checked_at = ?, og_diamond_at = ? WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')")
+        .run(tier, buyMs, now(), scanFailed ? null : now(), userId);   // a partial read leaves the Diamond question open for the sweep
       if (g.changes) {
         // INSERT (not INSERT OR REPLACE): a row already held by another account makes the whole grant
         // fail rather than quietly stealing their claim.
@@ -2204,8 +2257,9 @@ async function checkOg(userId) {
       db.exec('COMMIT');
     } catch { try { db.exec('ROLLBACK'); } catch {} return 0; }
     if (!g.changes) return 0;   // the invariant moved under us (disconnect / concurrent grant) — change nothing else
-    notify(userId, '🏅', 'OG ' + OG_TIER_NAME[tier] + ' unlocked! You bought BOTH $SEND and $GWC inside the ' +
-      OG_TIER_NAME[tier].toLowerCase() + ' window and still hold both (checked on-chain) — a permanent badge and a ' +
+    notify(userId, tier === OG_TIER.DIAMOND ? '💎' : '🏅', 'OG ' + OG_TIER_NAME[tier] + ' unlocked! You bought BOTH $SEND and $GWC ' +
+      (tier === OG_TIER.DIAMOND ? 'in the first month of $GWC and bought more of each than you sold that month' : 'inside the ' + OG_TIER_NAME[tier].toLowerCase() + ' window') +
+      ', and still hold both (checked on-chain) — a permanent badge and a ' +
       OG_TIER_MULT[tier] + '× Send Power bonus on everything (+' + (OG_TIER_MULT[tier] - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Keep holding both: sell out of either and it goes.', 'og');
     return tier;
   } finally {
@@ -3343,7 +3397,18 @@ const OG_BONUS = 10;                          // OGs earn 10× Send Power on eve
    on day 2 and $GWC on day 100 makes you bronze, not gold. Nothing schedules this — a tier is a pure
    function of an on-chain timestamp, so the campaign advances on its own and closes on its own. */
 const OG_MONTH_MS = OG_WINDOW_MS;
-const OG_TIER = { GOLD: 3, SILVER: 2, BRONZE: 1, NONE: 0 };
+const OG_TIER = { DIAMOND: 4, GOLD: 3, SILVER: 2, BRONZE: 1, NONE: 0 };
+/* ===== DIAMOND: the first month of $GWC ==========================================================
+   Above gold, and for the earliest believers only: bought BOTH coins in the first month (30 days) after
+   $GWC launched — 2026-08-19 to 2026-09-18, a window that has already closed, so nobody can buy their way
+   into it now — AND was a NET ACCUMULATOR of both over that month: across every linked wallet, more of
+   each coin came in from the market than went back to it inside the window. It pays 20×. Like every tier
+   it is kept only while both coins are held; selling out of either loses it for good (refreshHolder).
+   Every Diamond is also a Gold buyer (the month sits inside gold's window), so a Gold account is asked
+   the Diamond question once — og_diamond_at records that it got a definitive answer. */
+const OG_DIAMOND_START = OG_LAUNCH.GWC;
+const OG_DIAMOND_END = OG_LAUNCH.GWC + OG_MONTH_MS;
+const OG_DIAMOND_MULT = 20;
 /* ===== THE THREE DEADLINES ARE DATES, NOT OFFSETS ==================================================
    They used to be measured from each coin's own launch (day 30 / day 90 / day 360), which put $GWC's
    deadlines six days ahead of $SEND's and made "when does Gold close" a question with two answers. They
@@ -3371,8 +3436,8 @@ const OG_TIER_CLOSE = {
 };
 // kept for anything still thinking in offsets; the deadlines above are what decide a tier
 const OG_TIER_END = { 3: OG_TIER_CLOSE[3] - OG_LAUNCH.GWC, 2: OG_TIER_CLOSE[2] - OG_LAUNCH.GWC, 1: OG_TIER_CLOSE[1] - OG_LAUNCH.GWC };
-const OG_TIER_MULT = { 3: OG_BONUS, 2: 5, 1: 3, 0: 1 };
-const OG_TIER_NAME = { 3: 'Gold', 2: 'Silver', 1: 'Bronze', 0: '' };
+const OG_TIER_MULT = { 4: OG_DIAMOND_MULT, 3: OG_BONUS, 2: 5, 1: 3, 0: 1 };
+const OG_TIER_NAME = { 4: 'Diamond', 3: 'Gold', 2: 'Silver', 1: 'Bronze', 0: '' };
 // Two different "ends", and conflating them would be wrong in both directions.
 // OG_LAST_CHANCE_MS is the honest public deadline: a tier is the LOWER of your two coins' tiers, so
 // once the EARLIER coin's bronze window shuts nobody can earn anything, whatever $SEND still says.
@@ -3413,6 +3478,7 @@ function ogCampaign() {
     endsAt: OG_LAST_CHANCE_MS,
     // the binding deadline per tier is the EARLIER of the two coins', because you need both
     closes: { gold: OG_TIER_CLOSE[OG_TIER.GOLD], silver: OG_TIER_CLOSE[OG_TIER.SILVER], bronze: OG_TIER_CLOSE[OG_TIER.BRONZE] },
+    diamond: { from: OG_DIAMOND_START, until: OG_DIAMOND_END, mult: OG_DIAMOND_MULT, closed: t > OG_DIAMOND_END },   // the first month of $GWC — already over
     betaEndsAt: BETA_END_MS,   // gold closes with it, silver ninety days later — said once, here
     mult: OG_TIER_MULT,
     name: OG_TIER_NAME,
@@ -7952,7 +8018,7 @@ const DATA_BURN_ADDR = '0x000000000000000000000000000000000000dead';
 const DATA_BURN_USD = 1000;
 const DATA_KEY_LIFE_MS = 365 * 864e5;      // a burn-backed key lives a year; renewing adds a year
 // OG discounts on the burn: Gold is free forever, Silver pays half, Bronze pays three quarters
-const DATA_TIER_DISCOUNT = { 3: 1, 2: 0.5, 1: 0.25, 0: 0 };
+const DATA_TIER_DISCOUNT = { 4: 1, 3: 1, 2: 0.5, 1: 0.25, 0: 0 };   // Diamond keeps every Gold perk
 function dataThresholdFor(u) {
   const tier = (u && u.og && u.og_tier) || 0;          // an OG discount needs the badge to be LIVE, not just once earned
   const off = DATA_TIER_DISCOUNT[tier] || 0;
@@ -8257,7 +8323,7 @@ function dataKeyOf(req) {
   if (row.expires_at != null && row.expires_at <= now()) return null;                 // a year is a year
   // A Gold key is free WHILE the badge is live. If it replaced a paid key, the paid remainder rides along as
   // expires_at, and that remainder is honoured even after the badge goes — nobody loses time they paid for.
-  if (row.source === 'og_gold' && !(row.og && row.og_tier === OG_TIER.GOLD) && !(row.expires_at != null && row.expires_at > now())) return null;
+  if (row.source === 'og_gold' && !(row.og && row.og_tier >= OG_TIER.GOLD) && !(row.expires_at != null && row.expires_at > now())) return null;   // Gold or Diamond
   if (now() - (row.last_used_at || 0) > 60000) db.prepare('UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?').run(now(), row.key_hash);
   return row;
 }
@@ -13156,7 +13222,7 @@ const ogGrantTimer = setInterval(async () => {
     // the queue always drains. The two windows differ on purpose: a clean "did not qualify" is worth
     // re-testing every 6h, but a failure is worth retrying within the hour.
     const rows = db.prepare(`SELECT u.id FROM users u
-      WHERE u.og_tier = 0 AND u.og_revoked = 0 AND u.system = 0
+      WHERE (u.og_tier = 0 OR (u.og_tier = 3 AND u.og_diamond_at IS NULL)) AND u.og_revoked = 0 AND u.system = 0
         AND u.og_checked_at < ? AND u.og_try_at < ?
         AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.type = 'wallet')
       ORDER BY u.og_try_at ASC LIMIT ?`).all(now() - OG_RESCAN_MS, now() - OG_RETRY_MS, OG_GRANT_SWEEP_CAP);

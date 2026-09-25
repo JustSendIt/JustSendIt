@@ -216,7 +216,8 @@
     .then(c => {
       if (!c || !c.closes) return;
       const fmt = ms => new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-      cells.forEach(el => { const at = c.closes[el.dataset.ogClose]; if (at) el.textContent = fmt(at); });
+      const dm = c.diamond || {};
+      cells.forEach(el => { const k = el.dataset.ogClose; const at = k === 'diamond' ? dm.until : k === 'diamond-from' ? dm.from : c.closes[k]; if (at) el.textContent = fmt(at); });
       if (!state) return;
       if (!c.open) state.textContent = 'Every window has now closed; no new OG badges are granted.';
       else if (c.tierNow && c.name) state.textContent = 'Right now the ' + String(c.name[c.tierNow] || '').toLowerCase() + ' window is open.';

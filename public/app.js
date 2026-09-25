@@ -75,6 +75,7 @@
      rather than guessing a tier. 0 is falsy, so every existing `if (u.og)` call site still gates
      correctly with no change. */
   window.OG_TIERS = {
+    4: { name: 'Diamond', mult: 20, when: 'in the first month of $GWC, as a net buyer of both that month,' },
     3: { name: 'Gold', mult: 10, when: 'before the beta ended' },
     2: { name: 'Silver', mult: 5, when: 'in the 90 days after the beta ended' },
     1: { name: 'Bronze', mult: 3, when: 'before $GWC turned one year old' },

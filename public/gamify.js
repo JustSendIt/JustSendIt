@@ -425,7 +425,7 @@
   // which tier's colour a block/chip wears — '' is gold, which the base rules already paint
   function ogVariant(g) {
     const t = Number(g.ogTier || g.og) || 0;
-    return t === 2 ? '--silver' : t === 1 ? '--bronze' : '';
+    return t === 4 ? '--diamond' : t === 2 ? '--silver' : t === 1 ? '--bronze' : '';
   }
   // OG status banner on your own dashboard. Every number and every window phrase comes from the
   // server's own tier record — none of it is written into this file, because the three tiers pay
@@ -433,11 +433,12 @@
   function ogBlock(g) {
     const tier = Number(g.ogTier || g.og) || 0;
     if (tier) {
-      const when = tier === 3 ? 'before the beta ended'
+      const when = tier === 4 ? 'in the first month of $GWC and bought more of each than you sold that month'
+        : tier === 3 ? 'before the beta ended'
         : tier === 2 ? 'in the 90 days after the beta ended'
         : 'before $GWC turned one year old';
       const v = ogVariant(g);
-      return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">🏅 OG ' + (g.ogTierName || '') + '</span>'
+      return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">' + (tier === 4 ? '💎' : '🏅') + ' OG ' + (g.ogTierName || '') + '</span>'
         + '<div class="og-block-body"><b>You’re an OG ' + (g.ogTierName || '') + '.</b> You bought <b>both $Send and $GWC</b> '
         + when + ' (checked on-chain) — a permanent <b>' + (Number(g.ogBonus) || 1) + '× Send Power</b> bonus on <b>everything</b> you do (+' + ((Number(g.ogBonus) || 1) - 1) + '× on top of any other boosts — boosts add, they don’t multiply). '
         + 'Keep holding <b>both</b>: sell out of either and it’s gone for good.</div></div>';
@@ -464,7 +465,7 @@
            the sentence that matters (what you have to do) into the middle of a paragraph. The full
            ladder is in the rulebook below, which is where a ladder belongs. */
         + '<div class="og-block-body"><b>The OG ' + esc(name) + ' window is open' + (left ? ' — it closes in ' + left : '') + '.</b> '
-        + 'Buy <b>both $Send and $GWC</b> before it shuts and keep holding both: a permanent badge and <b>' + mult + '× Send Power</b> on everything you earn. '
+        + 'A wallet that got into <b>both $Send and $GWC</b> before it shuts, and keeps holding both, earns a permanent badge and <b>' + mult + '× Send Power</b> on everything. '
         + 'Sell out of either and it’s gone for good. Not a reason to buy.</div></div>';
     }
     return '';
@@ -1291,8 +1292,10 @@
     const dt = (ms) => { try { return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return ''; } };
     const closes = (k) => (c && c.closes && c.closes[k]) ? ' (closes ' + dt(c.closes[k]) + ')' : '';
     const state = !c ? '' : !c.open ? ' <b>Every window has now closed; no new OG badges are granted.</b>' : c.tierNow ? ' <b>Right now the ' + esc((c.name && c.name[c.tierNow]) || '').toLowerCase() + ' window is open.</b>' : '';
-    return '<p><b>🏅 OG — being early, three ways.</b> Hold <b>both $Send and $GWC</b>, bought from the market, and keep holding both: you earn a permanent OG badge and a Send Power multiplier. There is <b>one standard</b>; only when you got in changes the size. Windows are counted from each coin’s own launch, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.' + state + '</p>' +
+    const dm = c && c.diamond;
+    return '<p><b>🏅 OG — being early, four tiers.</b> Hold <b>both $Send and $GWC</b>, bought from the market, and keep holding both: you earn a permanent OG badge and a Send Power multiplier. There is <b>one standard</b>; only when you got in changes the size, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.' + state + '</p>' +
       '<ul>' +
+        '<li><b>💎 Diamond — 20×.</b> Bought both in the first month of $GWC' + (dm ? ' (' + dt(dm.from) + ' – ' + dt(dm.until) + ')' : '') + ' <b>and</b> bought more of each than you sold that month, across all your linked wallets. That month is over, so Diamond is already decided by what happened on-chain then; a Gold badge that qualifies is upgraded on its own.</li>' +
         '<li><b>🥇 Gold — 10×.</b> Bought both before the beta ends' + closes('gold') + '.</li>' +
         '<li><b>🥈 Silver — 5×.</b> Bought both in the 90 days after the beta ended' + closes('silver') + '.</li>' +
         '<li><b>🥉 Bronze — 3×.</b> Bought both before $GWC turns one year old' + closes('bronze') + '.</li>' +
