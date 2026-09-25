@@ -2217,6 +2217,7 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
   const isAcquisition = (from) => isMarket(from);
   const rows = await ogTransfers(wallet, token);
   rows.sort((a, b) => (Number(a.block_number) - Number(b.block_number)) || (Number(a.log_index) - Number(b.log_index)));
+  const routed = await routedPoolFlows(token, pair, wallet, rows, isMarket);   // routed buys and sells, from what the pool itself did
   let bal = 0n, firstBuyMs = null, dumped = false, balAtMonthEnd = null;
   /* Extra facts the participation gate needs, gathered in the SAME single pass — a second walk of this
      history would double the explorer traffic for data we are already holding in our hands.
@@ -2241,21 +2242,24 @@ async function ogScan(wallet, token, pair, launchMs, opts) {
     let v;
     try { v = BigInt(raw); } catch { throw new Error('og scan: unparseable value'); }
     if (sinceMs && balAtSince === null && ts > sinceMs) balAtSince = bal;   // first row past the mark: the balance entering the window
+    // what of this row was a market buy / sale: all of it from the pool or a measured router, else what the pool itself moved in that transaction
+    const buyAmt = to === w ? (isAcquisition(from) ? v : routed.take(r, 'out', v)) : 0n;
+    const sellAmt = from === w ? (isMarket(to) ? v : routed.take(r, 'in', v)) : 0n;
     if (to === w) {
       bal += v;
       if (firstInMs === null) firstInMs = ts;
-      if (isAcquisition(from)) boughtWei += v;
-      if (isAcquisition(from) && inMonth(ts)) monthBoughtWei += v;
-      if (firstBuyMs === null && isAcquisition(from)) firstBuyMs = ts;      // EARLIEST market acquisition — the tier basis
+      if (buyAmt > 0n) boughtWei += buyAmt;
+      if (buyAmt > 0n && inMonth(ts)) monthBoughtWei += buyAmt;
+      if (firstBuyMs === null && buyAmt > 0n) firstBuyMs = ts;      // EARLIEST market acquisition — the tier basis
       /* LATEST market acquisition. The OG tier asks when you got in; the participation gate asks when you
          last put money in, because that is what its 24-hour window runs from. Rows are already sorted by
          block then log index, so the last assignment wins without a second comparison. */
-      if (isAcquisition(from)) lastBuyMs = ts;
+      if (buyAmt > 0n) lastBuyMs = ts;
     }
     if (from === w) {
       bal -= v;
-      if (isMarket(to)) soldWei += v;
-      if (isMarket(to) && inMonth(ts)) monthSoldWei += v;
+      if (sellAmt > 0n) soldWei += sellAmt;
+      if (sellAmt > 0n && inMonth(ts)) monthSoldWei += sellAmt;
     }
     if (bal <= OG_DUST_WEI) lastZeroMs = ts;                                 // a continuous hold restarts here
     if (firstBuyMs !== null) {
@@ -2321,6 +2325,58 @@ async function grantDiamondUpgrade(userId, best) {
   notify(userId, '💎', 'OG Diamond unlocked! You bought BOTH $SEND and $GWC in the first month of $GWC and bought more of each than you sold that month (checked on-chain) — your Gold badge is now Diamond: ' +
     OG_DIAMOND_MULT + '× Send Power on everything (+' + (OG_DIAMOND_MULT - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Keep holding both: sell out of either and it goes for good.', 'og');
   return OG_TIER.DIAMOND;
+}
+/* ===== A buy is a buy, whichever contract carried it ===============================================
+   "Market acquisition" used to mean tokens that arrived FROM the pool or from one measured router. Most buys on
+   this chain go through a router or an aggregator that takes the pool's tokens and passes them on, and every
+   router not on that list turned a real buyer into "no market buy behind it" — measured on the live site: a
+   2.47M $SEND buy through a router contract, refused. The chain can answer the question directly: in the
+   transaction that brought tokens to this wallet, did the POOL send tokens out? Then it was a routed buy — and
+   it counts for no more than the pool actually sent in that transaction, so a contract that buys a dollar and
+   forwards a million from its own stock is credited a dollar. Sells are the mirror: tokens that left the wallet
+   in a transaction where the pool RECEIVED tokens, capped at what the pool received.
+   Only transfers whose counterparty the caller does not already count in full (`direct`: the pool, and for the
+   OG replay one measured router) are looked at, and only their blocks are read: two eth_getLogs per block.
+   What the caller counts in full is taken off the pool's flow first, so a transaction is never counted twice —
+   a taxed sell (wallet → pool plus wallet → tax contract) is one sale, not a sale and a routed sale. */
+async function routedPoolFlows(token, pair, wallet, rows, direct) {
+  const tok = String(token).toLowerCase(), pl = String(pair).toLowerCase(), w = String(wallet).toLowerCase();
+  const txOf = (r) => String(r.tx_hash || r.transaction_hash || r.hash || '').toLowerCase();
+  const ends = (r) => [((r.from && r.from.hash) || '').toLowerCase(), ((r.to && r.to.hash) || '').toLowerCase()];
+  if (typeof direct !== 'function') direct = (a) => a === pl;
+  const need = rows.filter((r) => {
+    const [f, t] = ends(r), cp = t === w ? f : t;
+    return cp && cp !== w && !direct(cp) && !/^0x0{40}$/.test(cp) && txOf(r) && Number(r.block_number) > 0;
+  });
+  const flows = new Map();
+  const take = (r, dir, v) => {
+    const [a, b] = ends(r); if (a === b) return 0n;   // a wallet paying itself neither bought nor sold
+    const f = flows.get(txOf(r)); if (!f || !(f[dir] > 0n)) return 0n;
+    const n = v < f[dir] ? v : f[dir]; f[dir] -= n; return n;
+  };
+  if (!need.length) return { take };
+  const blocks = [...new Set(need.map((r) => Number(r.block_number)))];
+  if (blocks.length > 400) throw new Error('too many routed transfers to verify');
+  const pt = '0x' + pl.slice(2).padStart(64, '0'), hx = (n) => '0x' + n.toString(16);
+  await mapLimit(blocks, 3, async (b) => {
+    const [outs, ins] = await Promise.all([
+      rpcRetry(() => rpc('eth_getLogs', [{ address: tok, topics: [TRANSFER_TOPIC, pt], fromBlock: hx(b), toBlock: hx(b) }])),         // the pool sending
+      rpcRetry(() => rpc('eth_getLogs', [{ address: tok, topics: [TRANSFER_TOPIC, null, pt], fromBlock: hx(b), toBlock: hx(b) }])),   // the pool receiving
+    ]);
+    if (!Array.isArray(outs) || !Array.isArray(ins)) throw new Error('the chain did not answer');
+    for (const [list, dir] of [[outs, 'out'], [ins, 'in']]) for (const l of list) {
+      if (l.removed) continue;
+      const k = String(l.transactionHash || '').toLowerCase(), f = flows.get(k) || { out: 0n, in: 0n };
+      f[dir] += BigInt(l.data); flows.set(k, f);
+    }
+  });
+  for (const r of rows) {                              // what the caller already counts in full uses up its transaction's flow
+    const f = flows.get(txOf(r)); if (!f) continue;
+    const [from, to] = ends(r); let v = 0n; try { v = BigInt((r.total && r.total.value) || '0'); } catch { continue; }
+    if (to === w && from !== w && direct(from)) f.out = f.out > v ? f.out - v : 0n;
+    if (from === w && to !== w && direct(to)) f.in = f.in > v ? f.in - v : 0n;
+  }
+  return { take };
 }
 const _ogScanning = new Set(); // coalesce concurrent scans of the same user
 /* Decide (or re-decide) a user's OG tier from chain history. Returns the tier, 0 for none.
@@ -4339,14 +4395,15 @@ async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd, liqUsd
       // the wallet's whole history for this token: the explorer when a keyed one answers, the chain's own Transfer logs otherwise
       let items = [];
       try { items = await ogTransfers(a, tokenAddr, { noTime: true, tries: 2, backoffMs: 800 }); } catch { items = []; }
+      let routedPos; try { routedPos = await routedPoolFlows(tokenAddr, pair, me, items); } catch { routedPos = { take: () => 0n }; }   // unread: only direct pool transfers count, as before
       let inRaw = 0n, outRaw = 0n, dec = posDec != null ? posDec : 18;
       for (const it of items) {
         if (posDec == null && it.token && it.token.decimals != null) dec = Number(it.token.decimals) || 18;
         const from = ((it.from && it.from.hash) || '').toLowerCase();
         const to = ((it.to && it.to.hash) || '').toLowerCase();
         let v = 0n; try { v = BigInt((it.total && it.total.value) || '0'); } catch { continue; }
-        if (to === me && from === pair) inRaw += v;        // tokens the POOL sent this wallet
-        else if (from === me && to === pair) outRaw += v;  // tokens this wallet sent the POOL
+        if (to === me) inRaw += from === pair ? v : routedPos.take(it, 'out', v);          // tokens the POOL sent this wallet (directly, or through a router in the same transaction)
+        if (from === me) outRaw += to === pair ? v : routedPos.take(it, 'in', v);          // tokens this wallet sent the POOL (the same, the other way)
       }
       /* NET, not gross. "Anything the pair sent me is a buy" is not true of a Uniswap V2 pair: skim(to)
          and burn(to) both transfer pair → you with no purchase behind them. So a token deployer pulling
@@ -9661,7 +9718,23 @@ function requeueUnreadProofs(limit) {
     if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' check(s) that could not read the chain');
   } catch (e) { console.error('proof requeue', e && e.message); }
 }
+/* Refusals the routed-buy rule (routedPoolFlows) can change: "no market buy" and "sold more than bought" were
+   decided by a replay that only saw the pool and one router. Every such refusal made before the rule shipped is
+   asked once more after boot — a refusal decided afterwards was decided by the rule and is not re-asked. */
+const ROUTED_BUY_RULE_AT = Date.UTC(2026, 8, 26, 1, 0);   // shortly after the deploy; a boot before it re-asks a few refusals the new rule already made, which costs one read each
+function requeueRuleChangedProofs() {
+  try {
+    const rows = db.prepare(`SELECT u.id FROM users u WHERE u.holder_verified_at IS NULL AND u.system = 0 AND u.deleted_at IS NULL
+                               AND u.holder_state = 'failed' AND u.holder_proof_at IS NOT NULL AND u.holder_proof_at < ?
+                               AND (u.holder_proof_reason LIKE '%no market buy behind it%' OR u.holder_proof_reason LIKE '%have sold back more%')
+                               AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.type = 'wallet')
+                             ORDER BY u.holder_proof_at ASC LIMIT 200`).all(ROUTED_BUY_RULE_AT);
+    for (const r of rows) if (!proofQueue.includes(r.id)) queueHolderProof(r.id);
+    if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' refusal(s) made before routed buys were counted');
+  } catch (e) { console.error('proof rule requeue', e && e.message); }
+}
 setTimeout(() => requeueUnreadProofs('boot'), 20000).unref();
+setTimeout(() => requeueRuleChangedProofs(), 25000).unref();
 setInterval(() => requeueUnreadProofs(), PROOF_RETRY_MS).unref();
 
 /* ═══ THE PARTICIPATION GATE ═══════════════════════════════════════════════════════════════════════

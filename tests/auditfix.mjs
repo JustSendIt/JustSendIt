@@ -187,7 +187,7 @@ try {
   {
     const wtp = grab(/async function walletTokenPosition\(userId, tokenAddr, pairAddr, priceUsd, liqUsd\) \{[\s\S]*?\n\}/, 'walletTokenPosition');
     check('transfers INTO the pair are subtracted from what the pair sent you',
-      !!wtp && /else if \(from === me && to === pair\) outRaw \+= v;/.test(wtp) && /inRaw > outRaw \? inRaw - outRaw : 0n/.test(wtp));
+      !!wtp && /if \(from === me\) outRaw \+= to === pair \? v : routedPos\.take\(it, 'in', v\);/.test(wtp) && /inRaw > outRaw \? inRaw - outRaw : 0n/.test(wtp));
     check('  ...so skim() and burn() net to zero rather than paying the size multiplier', !!wtp && /netRaw/.test(wtp));
     check('  ...and the position can never be worth more than the pool it is priced against',
       !!wtp && /Math\.min\(tok \* priceUsd, cap\)/.test(wtp));

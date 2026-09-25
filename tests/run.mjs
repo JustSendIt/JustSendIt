@@ -25,6 +25,7 @@ import { ROOT } from './_paths.mjs';
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const args = process.argv.slice(2);
 const keep = args.includes('--keep');
+const verbose = args.includes('--verbose');   // every check a suite printed, not only the failures
 const filters = args.filter(a => !a.startsWith('--'));
 
 /* Suites that are slow on purpose go last, so a fast failure is reported in seconds rather than
@@ -105,6 +106,7 @@ try {
     console.log((r.skipped ? '  – ' : ok ? '  ✓ ' : '  ✗ ') + s.padEnd(14) +
       (r.ran ? r.pass + '/' + r.total : r.skipped ? 'skipped' : 'DID NOT REPORT'));
     for (const f of r.fails) console.log('      ' + f);
+    if (verbose) for (const l of r.out.split('\n')) if (l.startsWith('PASS ')) console.log('      ' + l);
     // a suite that neither reported nor skipped has gone wrong in a way the summary cannot express — show it
     if (!r.ran && !r.skipped) for (const l of r.out.split('\n').slice(0, 14)) if (l.trim()) console.log('      ' + l);
   }

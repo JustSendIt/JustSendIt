@@ -34,7 +34,8 @@ try {
   check('Diamond is tier 4, named Diamond, paying 20×', /const OG_TIER = \{ DIAMOND: 4, GOLD: 3/.test(SRC) && /const OG_DIAMOND_MULT = 20;/.test(SRC)
     && /const OG_TIER_MULT = \{ 4: OG_DIAMOND_MULT, 3: OG_BONUS/.test(SRC) && /const OG_TIER_NAME = \{ 4: 'Diamond', 3: 'Gold'/.test(SRC));
   check('  ...its window is the first month (30 days) of $GWC', /const OG_DIAMOND_START = OG_LAUNCH\.GWC;/.test(SRC) && /const OG_DIAMOND_END = OG_LAUNCH\.GWC \+ OG_MONTH_MS;/.test(SRC) && /const OG_WINDOW_MS = 30 \* 24 \* 3600 \* 1000;/.test(SRC));
-  check('  ...the scan counts market buys and sells inside that month, per wallet', /if \(isAcquisition\(from\) && inMonth\(ts\)\) monthBoughtWei \+= v;/.test(SRC) && /if \(isMarket\(to\) && inMonth\(ts\)\) monthSoldWei \+= v;/.test(SRC));
+  check('  ...the scan counts market buys and sells inside that month, per wallet', /if \(buyAmt > 0n && inMonth\(ts\)\) monthBoughtWei \+= buyAmt;/.test(SRC) && /if \(sellAmt > 0n && inMonth\(ts\)\) monthSoldWei \+= sellAmt;/.test(SRC)
+    && /const buyAmt = to === w \? \(isAcquisition\(from\) \? v : routed\.take\(r, 'out', v\)\) : 0n;/.test(SRC));   // a routed buy counts too, capped at what the pool sent
   check('  ...summed across EVERY linked wallet, disqualified or not', /month\[c\.key\]\.in \+= BigInt\(s\.monthBoughtWei \|\| '0'\); month\[c\.key\]\.out \+= BigInt\(s\.monthSoldWei \|\| '0'\);\n\s+if \(s\.tier === OG_TIER\.NONE\) continue;/.test(SRC));
   check('Diamond keeps every Gold perk (a free data key)', /const DATA_TIER_DISCOUNT = \{ 4: 1, 3: 1,/.test(SRC) && /row\.og_tier >= OG_TIER\.GOLD/.test(SRC));
   check('a live Gold account is asked the Diamond question by the sweep, once', /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\)\) AND u\.og_revoked = 0/.test(SRC)
