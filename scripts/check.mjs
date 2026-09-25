@@ -183,6 +183,15 @@ const scanForButtons = (rel, rawSrc, isHtml) => {
   }
 };
 for (const f of htmlFiles) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'), true);
+/* One id, one element. A page carrying two elements with the same id wires only the first — getElementById never
+   sees the second — so a doubled control renders, looks fine, and does nothing. A bulk copy edit once shipped
+   exactly that on the About page (two "Connect a wallet" buttons, one dead). */
+for (const f of htmlFiles) {
+  const src = readFileSync(path.join(PUBLIC, f), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+  const seen = new Map();
+  for (const m of src.matchAll(/\bid="([^"]+)"/g)) seen.set(m[1], (seen.get(m[1]) || 0) + 1);
+  for (const [id, n] of seen) if (n > 1) note('public/' + f, 'the id "' + id + '" is used ' + n + ' times — only the first is ever wired');
+}
 for (const f of readdirSync(PUBLIC).filter(f => f.endsWith('.js'))) scanForButtons('public/' + f, readFileSync(path.join(PUBLIC, f), 'utf8'), false);
 if (untipped.length) {
   note('button descriptions', untipped.length + ' control' + (untipped.length === 1 ? '' : 's') +

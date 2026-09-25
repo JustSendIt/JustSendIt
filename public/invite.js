@@ -146,15 +146,15 @@
           '<p class="inv-sub">You are in. Your Send ID is set and it never changes — everything below is yours to shape.</p>' +
           '<div class="inv-panel">' +
             '<ul class="inv-tests" id="inv-setup">' +
-              '<li><span class="inv-tick">1</span><div><b>Claim your handle</b><small>The name on your ticket, your wall and every call you make. <b>Required</b> — pick it once.</small></div></li>' +
+              '<li><span class="inv-tick">1</span><div><b>Your @handle</b><small>The name on your ticket, your wall and every call you make — and a way to sign in. You picked it when you joined (a wallet that joined without one gets to pick it now), and you can change it any time.</small></div></li>' +
               '<li><span class="inv-tick">2</span><div><b>Add an email &amp; password <em>(optional)</em></b><small>A second way in if you ever lose the wallet, and what two-factor is built on. You can skip this and stay wallet-only.</small></div></li>' +
               '<li><span class="inv-tick">3</span><div><b>Turn on two-factor <em>(optional)</em></b><small>An authenticator app, your password, or a wallet you nominate as the key.</small></div></li>' +
               '<li><span class="inv-tick">4</span><div><b>Link more wallets <em>(optional)</em></b><small>Every wallet you link counts toward the same Send Power — and all of them stay read-only.</small></div></li>' +
             '</ul>' +
-            '<p class="inv-safe">🔒 All of it is read-only. Linking a wallet is one signature over a sentence: it moves nothing, approves nothing, and costs no gas.</p>' +
+            '<p class="inv-safe">🔒 All of it is read-only. Linking a wallet is one signature over a sentence: it moves nothing, approves nothing, and costs no gas. For your first hour, none of these settings stops to ask for your password.</p>' +
           '</div>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-setup-go" type="button" data-tip="Closes this and opens your profile page to claim a handle">Set up my profile →</button>' +
+            '<button class="g-btn g-btn-primary" id="inv-setup-go" type="button" data-tip="Closes this and opens your profile settings">Set up my profile →</button>' +
             '<button class="g-btn g-btn-ghost" id="inv-setup-ticket" type="button" data-tip="Shows your ticket and loads your own invite codes">See my ticket 🎟️</button>' +
           '</div>' +
           '<button class="inv-browse" id="inv-browse5" type="button" data-tip="Closes this and reloads the page you were on">Later — take me to the site →</button>' +
@@ -789,7 +789,8 @@
     on('inv-browse4', close);
     on('inv-proof-go', () => runProof(true));
     on('inv-browse5', () => { close(); location.reload(); });
-    on('inv-setup-go', () => { close(); location.href = '/profile.html#claim'; });
+    // a placeholder name still needs claiming; a name picked at sign-up goes straight to the security settings
+    on('inv-setup-go', () => { close(); location.href = (window.AUTH && AUTH.user && !AUTH.user.auto_named) ? '/profile.html#sec-security' : '/profile.html#claim'; });
     on('inv-setup-ticket', () => show('step-codes'));
     on('inv-proof-again', () => runProof(false));
     on('inv-dl', downloadTicket);

@@ -2,6 +2,11 @@
 (function () {
   const AUTH = { user: null, config: { auth: { wallet: true, email: true } }, ready: null };
   window.AUTH = AUTH;
+  // the server says how long this session stays unlocked; turn that into a deadline on THIS clock
+  AUTH._normMe = function (me) {
+    if (me) me.sudoUntil = me.sudoLeftMs > 0 ? Date.now() + me.sudoLeftMs - 1500 : null;
+    return me;
+  };
 
   async function api(path, opts = {}) {
     const res = await fetch(path, {
@@ -11,10 +16,19 @@
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
     const j = await res.json().catch(() => ({}));
+    /* A security change refused only because this session has not confirmed it's you (or its window ran
+       out): open that one step, then make the same request again — once. Every settings control gets this
+       without having to remember it, including the ones that used to send no proof and simply fail. */
+    if (res.status === 401 && j.code === 'need_verify' && !opts._verified && AUTH.user && AUTH.stepUp) {
+      AUTH.user.sudoUntil = null;
+      await AUTH.stepUp(j.error, { force: true });   // throws 'cancelled' if they close it
+      return api(path, Object.assign({}, opts, { _verified: true }));
+    }
     if (!res.ok) {
       const e = new Error(j.error || ('request failed (' + res.status + ')'));
       e.status = res.status;
       e.code = j.code;      // machine-readable refusals (need_invite, need_tos, code_spent, daily_limit…)
+      if (j.verifyNeeds) e.verifyNeeds = j.verifyNeeds;   // a wrong "confirm it's you" answer says what the step needs now
       e.needsProof = !!j.needsProof;   // the participation gate — the client opens the check, not a toast
       e.proof = j.proof || null;
       /* Raise the check HERE rather than at each of the ~20 places that write. Every one of them would
@@ -44,8 +58,28 @@
     </div>
 
     <div id="pane-wallet" role="tabpanel" aria-labelledby="tab-wallet">
-      <p class="modal-note">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
-      <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a login message">Continue with Wallet 🦊</button>
+      <div class="auth-segment" role="group" aria-label="Sign in or create an account with a wallet">
+        <button type="button" class="auth-seg active" id="wseg-login" aria-pressed="true" data-tip="Sets this up for a wallet that already has an account">Sign in</button>
+        <button type="button" class="auth-seg" id="wseg-signup" aria-pressed="false" data-tip="Switches to making a new account with your wallet, and asks for an invite">Create account</button>
+      </div>
+      <div id="w-reg" hidden>
+        <label class="f-label" for="w-username">Pick your @username <span class="f-hint">— your public name; you can also sign in with it</span></label>
+        <input class="addr-input" id="w-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
+        <p class="modal-note" id="w-uname-status" aria-live="polite"></p>
+        <details class="w-extra" id="w-extra">
+          <summary>➕ Add an email &amp; password too <span class="f-hint">(optional)</span></summary>
+          <p class="modal-note">A second way in: sign in with your @username or email and this password, even without the wallet. Leave both empty to skip.</p>
+          <label class="f-label" for="w-email">Email</label>
+          <input class="addr-input" id="w-email" type="email" autocomplete="email" placeholder="you@example.com">
+          <label class="f-label" for="w-pw">Password <span class="f-hint">(8+ characters)</span></label>
+          <input class="addr-input" id="w-pw" type="password" autocomplete="new-password" placeholder="••••••••">
+          <label class="f-label" for="w-pw2">Confirm password</label>
+          <input class="addr-input" id="w-pw2" type="password" autocomplete="new-password" placeholder="••••••••">
+        </details>
+        <label class="w-opt"><input type="checkbox" id="w-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
+      </div>
+      <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
+      <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
     </div>
 
@@ -56,7 +90,7 @@
       </div>
       <form id="email-form" novalidate>
         <div id="reg-fields" hidden>
-          <label class="f-label" for="f-username">Pick a unique username</label>
+          <label class="f-label" for="f-username">Pick your @username <span class="f-hint">— your public name; sign in with it or your email</span></label>
           <input class="addr-input" id="f-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
           <p class="modal-note" id="uname-status" aria-live="polite"></p>
         </div>
@@ -64,6 +98,7 @@
         <input class="addr-input" id="f-email" type="text" autocomplete="username" placeholder="you@example.com or your @handle">
         <label class="f-label" for="f-password">Password</label>
         <input class="addr-input" id="f-password" type="password" autocomplete="current-password" placeholder="••••••••">
+        <label class="w-opt" id="f-2fa-opt" hidden><input type="checkbox" id="f-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
         <button class="btn btn-primary" type="submit" style="width:100%;" id="email-submit" data-tip="Sends these details to sign in or make your account">Sign In 🚪</button>
       </form>
       <p class="modal-note" id="email-status" aria-live="polite"></p>
@@ -87,6 +122,28 @@
         <button class="btn btn-primary" id="pw2fa-submit" style="width:100%;" data-tip="Checks your account password and finishes signing in">Verify ✅</button>
       </div>
       <p class="modal-note" id="twofa-status" aria-live="polite"></p>
+    </div>
+
+    <div id="pane-confirm" hidden>
+      <p class="modal-note" id="cf-lead"></p>
+      <div id="cf-pw-row" hidden>
+        <label class="f-label" for="cf-pw">Account password</label>
+        <input class="addr-input" id="cf-pw" type="password" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <div id="cf-code-row" hidden>
+        <label class="f-label" for="cf-code">Code from your authenticator app</label>
+        <input class="addr-input" id="cf-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="text-align:center; letter-spacing:0.3em;">
+      </div>
+      <div id="cf-wallet-row" hidden>
+        <p class="modal-note" id="cf-wallet-note"></p>
+        <button class="btn btn-ghost" id="cf-wallet" type="button" style="width:100%;" data-tip="Asks your wallet to sign a free message — nothing moves, nothing is approved">Sign with wallet 🦊</button>
+      </div>
+      <div id="cf-again-row" hidden>
+        <p class="modal-note">This account signs in through a social login, and signing in is the proof. Sign out, sign in again the same way, and security changes are unlocked for the next while.</p>
+        <button class="btn btn-ghost" id="cf-signout" type="button" style="width:100%;" data-tip="Signs you out so you can sign in again and unlock security changes">Sign out and sign in again</button>
+      </div>
+      <button class="btn btn-primary" id="cf-go" type="button" style="width:100%;" data-tip="Checks what you entered and unlocks security changes on this device for a while">Unlock 🔓</button>
+      <p class="modal-note" id="cf-status" aria-live="polite"></p>
     </div>
 
     <div id="oauth-row" class="oauth-row" hidden>
@@ -116,13 +173,14 @@
     modal.removeAttribute('hidden');
     document.body.style.overflow = 'hidden';
     if (AUTH._reset2fa) AUTH._reset2fa();
+    if (AUTH._resetModes) AUTH._resetModes();   // sign-in by default; openSignup switches both panes after this
     modal.querySelector('.auth-tab.active').focus();
     releaseTrap = window.trapFocus ? window.trapFocus(modal.querySelector('.modal-card')) : null;
     document.dispatchEvent(new CustomEvent('jsi:modalopen'));
   }
   function closeModal() {
     modal.setAttribute('hidden', '');
-    for (const id of ['f-2fa-pw', 'f-totp']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
+    for (const id of ['f-2fa-pw', 'f-totp', 'cf-pw', 'cf-code', 'w-pw', 'w-pw2']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
     document.body.style.overflow = prevOverflow;
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) lastFocus.focus();
@@ -178,7 +236,10 @@
     openModal();
     const seg = modal.querySelector('#seg-signup');
     if (seg) seg.click();
+    const wseg = modal.querySelector('#wseg-signup');   // the wallet tab too: @username first, then the wallet
+    if (wseg) wseg.click();
     if (opts && opts.tab === 'wallet') { const t = modal.querySelector('#tab-wallet'); if (t) t.click(); }
+    if (opts && opts.tab === 'email') { const t = modal.querySelector('#tab-email'); if (t) t.click(); }
   };
   AUTH.startJoin = async function (opts) {
     const g = await gate();
@@ -251,6 +312,7 @@
       modal.querySelector('#f-email').placeholder = regMode ? 'you@example.com' : 'you@example.com or your @handle';
       segLogin.classList.toggle('active', !regMode); segLogin.setAttribute('aria-pressed', String(!regMode));
       segSignup.classList.toggle('active', regMode); segSignup.setAttribute('aria-pressed', String(regMode));
+      modal.querySelector('#f-2fa-opt').hidden = !regMode;
       modal.querySelector('#email-status').textContent = '';
     }
     const ticketLink = modal.querySelector('#auth-ticket');
@@ -282,11 +344,24 @@
       }, 300);
     });
 
-    function loginSuccess(j) {
+    function loginSuccess(j, opts) {
       sendToast('Welcome, @' + j.username + '! 🚀');
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
       closeModal();
+      if (j.newAccount && opts && opts.setup2fa) { goSetup2fa(); return; }
       refresh().then(onAuthChange);
+    }
+    /* "Set up two-factor right after": the profile's Security card does it, and a brand-new account's own
+       session is unlocked for its setup, so nothing there asks for the password it just chose. Remember
+       where they were so the card can offer the way back. */
+    function goSetup2fa() {
+      const onProfile = /\/profile\.html$/.test(location.pathname);
+      try {
+        sessionStorage.setItem('jsi:setup-2fa', '1');
+        if (!onProfile && /^\/(?![\/\\])/.test(location.pathname)) sessionStorage.setItem('jsi:after-2fa', location.pathname + location.search + location.hash);
+      } catch {}
+      if (onProfile) { location.hash = '#sec-security'; location.reload(); return; }   // same document: a hash change alone would not sign the page in
+      location.href = '/profile.html#sec-security';
     }
 
     function show2fa(j) {
@@ -356,6 +431,7 @@
       modal.querySelector('.auth-invite').hidden = false;
       modal.querySelector('.auth-tabs').hidden = false;
       modal.querySelector('#pane-2fa').hidden = true;
+      modal.querySelector('#pane-confirm').hidden = true;
       panes.wallet.hidden = !tabs.wallet.classList.contains('active');
       panes.email.hidden = !tabs.email.classList.contains('active');
     };
@@ -397,6 +473,85 @@
       });
     };
 
+    /* ═══ "Confirm it's you" — once, then change what you like ═══════════════════════════════════════
+       One pane for every security change: the password when the account has one, the authenticator code
+       or the two-factor wallet's signature when two-factor is on — together, in one go. The server then
+       unlocks this session for a while (me.verifyNeeds.minutes), and the settings stop asking. */
+    AUTH._confirmIt = async function (note) {
+      try { const fresh = AUTH._normMe((await api('/api/me', { _verified: true })).user); if (fresh) AUTH.user = Object.assign(AUTH.user || {}, fresh); } catch {}
+      if (AUTH.user && AUTH.user.sudoUntil && AUTH.user.sudoUntil > Date.now() + 5000) return {};   // unlocked meanwhile (another tab)
+      return new Promise((resolve, reject) => {
+        let need = (AUTH.user && AUTH.user.verifyNeeds) || { password: (AUTH.user && (AUTH.user.methods || []).includes('email')), code: AUTH.user && AUTH.user.twofa === 'totp', wallet: null, minutes: 30 };
+        openModal();
+        modal.classList.add('is-confirm');
+        heads[0].textContent = 'Confirm it’s you 🔐';
+        heads[1].textContent = 'Once — then every security setting on this device is unlocked for ' + (need.minutes || 30) + ' minutes.';
+        modal.querySelector('.auth-tabs').hidden = true;
+        modal.querySelector('.auth-invite').hidden = true;
+        panes.wallet.hidden = true; panes.email.hidden = true;
+        modal.querySelector('#pane-2fa').hidden = true;
+        const pane = modal.querySelector('#pane-confirm');
+        pane.hidden = false;
+        const q = (id) => modal.querySelector('#' + id);
+        const reason = String(note || '').replace(/^.*?confirm it’s you first\s*[—-]?\s*/i, '');
+        q('cf-lead').textContent = reason && !/^to\s/i.test(note || '') ? reason.charAt(0).toUpperCase() + reason.slice(1) + (/[.!?]$/.test(reason) ? '' : '.') : 'This change needs you to confirm it’s you.';
+        const rows = () => {
+          q('cf-pw-row').hidden = !need.password;
+          q('cf-code-row').hidden = !need.code;
+          q('cf-wallet-row').hidden = !need.wallet;
+          q('cf-again-row').hidden = !need.signInAgain;
+          q('cf-go').hidden = !need.password && !need.code && !need.wallet;   // "sign in again" is its own button
+          q('cf-wallet-note').textContent = need.wallet === 'twofa' ? 'Sign with your two-factor wallet.' : 'Sign with the wallet you created this account with (or one linked more than a day ago).';
+        };
+        rows();
+        q('cf-wallet').textContent = 'Sign with wallet 🦊';
+        let signed = null;
+        const status = q('cf-status');
+        setStatus(status, '');
+        q('cf-pw').value = ''; q('cf-code').value = '';
+        const first = need.password ? q('cf-pw') : need.code ? q('cf-code') : need.wallet ? q('cf-wallet') : q('cf-signout');
+        try { first.focus(); } catch {}
+        confirmReject = reject;
+        q('cf-signout').onclick = async () => { confirmReject = null; closeModal(); reject(new Error('cancelled')); await AUTH.logout(); openModal(); };
+        q('cf-wallet').onclick = async () => {
+          try {
+            setStatus(status, 'Choose the wallet… 👛');
+            const { provider, address } = await WALLET.connect();
+            const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
+            setStatus(status, 'Approve the signature… ✍️');
+            const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+            signed = { address, signature };
+            q('cf-wallet').textContent = 'Signed ✅ ' + address.slice(0, 6) + '…' + address.slice(-4);
+            setStatus(status, '');
+            if (!need.password && !need.code) q('cf-go').click();   // nothing else to fill in
+          } catch (err) { setStatus(status, err.message === 'cancelled' ? '' : '⚠️ ' + (err.message || 'cancelled'), err.message !== 'cancelled'); }
+        };
+        q('cf-go').onclick = async () => {
+          const body = {};
+          if (need.password) { body.password = q('cf-pw').value; if (!body.password) { setStatus(status, 'Enter your password.', true); q('cf-pw').focus(); return; } }
+          if (need.code) { body.code = q('cf-code').value.trim(); if (!/^\d{6}$/.test(body.code)) { setStatus(status, 'Enter the 6-digit code from your app.', true); q('cf-code').focus(); return; } }
+          if (need.wallet) { if (!signed) { setStatus(status, 'Sign with your wallet first.', true); return; } Object.assign(body, signed); }
+          setStatus(status, 'Checking… 🔐');
+          try {
+            const j = await api('/api/auth/verify', { method: 'POST', body, _verified: true });
+            if (AUTH.user) AUTH.user.sudoUntil = Date.now() + (j.sudoLeftMs || 0) - 1500;
+            q('cf-pw').value = ''; q('cf-code').value = '';
+            confirmReject = null;
+            closeModal();
+            document.dispatchEvent(new CustomEvent('auth:sudo', { detail: { until: j.sudoUntil } }));
+            resolve({});
+          } catch (err) {
+            // the server says what the step needs now — another device may have turned two-factor on meanwhile
+            if (err.verifyNeeds) { need = err.verifyNeeds; if (AUTH.user) AUTH.user.verifyNeeds = need; rows(); }
+            q('cf-code').value = '';                 // a code is single-use; a wrong one is spent anyway
+            if (need.wallet) { signed = null; q('cf-wallet').textContent = 'Sign with wallet 🦊'; }   // so is a signature
+            setStatus(status, '⚠️ ' + err.message, true);
+          }
+        };
+        for (const id of ['cf-pw', 'cf-code']) q(id).onkeydown = ev => { if (ev.key === 'Enter') q('cf-go').click(); };
+      });
+    };
+
     modal.querySelector('#email-form').addEventListener('submit', async e => {
       e.preventDefault();
       const status = modal.querySelector('#email-status');
@@ -412,7 +567,7 @@
         const j = await api(regMode ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body });
         setStatus(status, '');
         if (j.twofa) { show2fa(j); return; }
-        loginSuccess(j);
+        loginSuccess(j, { setup2fa: regMode && modal.querySelector('#f-2fa').checked });
       } catch (err) {
         // "you need a ticket" is not an error to read, it is a door to open
         if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
@@ -420,36 +575,131 @@
       }
     });
 
-    // wallet sign-in
-    modal.querySelector('#btn-wallet-signin').addEventListener('click', async () => {
+    /* ═══ the wallet pane: sign in, or create an account ═══════════════════════════════════════════
+       Creating an account with a wallet asks for the @username FIRST, then connects the wallet — and can
+       add an email + password as a second way in, and offer two-factor straight after. Both optional.
+       Signing in with a wallet this site has never seen, while holding a ticket, lands on the same form:
+       the server answers "pick a name" instead of inventing one, and the proof the wallet just gave is
+       carried over, so choosing the name costs no second signature. */
+    let wRegMode = false, pendingSignup = null;
+    const wSegLogin = modal.querySelector('#wseg-login'), wSegSignup = modal.querySelector('#wseg-signup');
+    const wBtn = modal.querySelector('#btn-wallet-signin');
+    function setWalletMode(v, opts) {
+      wRegMode = v;
+      if (!v) pendingSignup = null;
+      modal.querySelector('#w-reg').hidden = !v;
+      wSegLogin.classList.toggle('active', !v); wSegLogin.setAttribute('aria-pressed', String(!v));
+      wSegSignup.classList.toggle('active', v); wSegSignup.setAttribute('aria-pressed', String(v));
+      modal.querySelector('#w-lead').textContent = pendingSignup
+        ? 'Your wallet is connected and proved. Pick your @username to finish — nothing else to sign.'
+        : v ? 'Then connect your wallet and sign a free message — no transaction, no gas, and it never lets this site move funds.'
+            : 'Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.';
+      wBtn.textContent = pendingSignup ? 'Create my account ✨' : v ? 'Connect wallet & create account 🦊' : 'Continue with Wallet 🦊';
+      if (!(opts && opts.keepStatus)) setStatus(modal.querySelector('#wallet-status'), '');
+    }
+    wSegLogin.addEventListener('click', () => setWalletMode(false));
+    wSegSignup.addEventListener('click', async () => {
+      setWalletMode(true);
+      const g = await gate();
+      if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
+    });
+    AUTH._resetModes = () => { setRegMode(false); setWalletMode(false); };
+    setWalletMode(false);
+
+    // the same live availability check as the email form, for the wallet form's @username
+    let wUnameTimer;
+    modal.querySelector('#w-username').addEventListener('input', e => {
+      clearTimeout(wUnameTimer);
+      const v = e.target.value.trim();
+      const el = modal.querySelector('#w-uname-status');
+      if (!v) { el.textContent = ''; return; }
+      wUnameTimer = setTimeout(async () => {
+        try {
+          const j = await api('/api/username-check?u=' + encodeURIComponent(v));
+          el.textContent = j.available ? '✅ available' : ('❌ ' + (j.reason || 'taken — try another'));
+          el.style.color = j.available ? 'var(--green-bright)' : 'var(--red)';
+        } catch {}
+      }, 300);
+    });
+
+    // what the wallet sign-up form asks for, checked here so a typo never costs a wallet signature
+    async function walletSignupFields() {
+      const username = modal.querySelector('#w-username').value.trim();
+      const email = modal.querySelector('#w-email').value.trim();
+      const pw = modal.querySelector('#w-pw').value, pw2 = modal.querySelector('#w-pw2').value;
+      if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(username)) throw new Error('pick a @username first: 3–24 letters, numbers, _ . -');
+      if (email || pw || pw2) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('enter a valid email — or leave the email and password both empty');
+        if (pw.length < 8) throw new Error('the password needs at least 8 characters');
+        if (pw !== pw2) throw new Error('the two passwords don’t match');
+      }
+      const chk = await api('/api/username-check?u=' + encodeURIComponent(username));
+      if (!chk.available) throw new Error('@' + username + ' is ' + (chk.reason || 'taken') + ' — pick another');
+      const out = { username };
+      if (email) { out.email = email; out.password = pw; }
+      return out;
+    }
+
+    function walletDone(j, setup2fa) {
+      closeModal();
+      if (j.alreadyLinked) { refresh().then(onAuthChange); sendToast('That wallet is already linked to @' + j.username + ' ✅'); return; }
+      if (j.linked) { refresh().then(onAuthChange); sendToast('Wallet linked to @' + j.username + ' 🔗'); return; }
+      if (j.newAccount && setup2fa) { sendToast('Welcome, @' + j.username + '! Now the optional extra lock 🔐'); goSetup2fa(); return; }
+      if (j.newAccount && !j.named) {
+        // the old one-step path (a caller that sent no name): the account has a placeholder name to change
+        try { if (/^\/(?![\/\\])/.test(location.pathname) && !/\/profile\.html/.test(location.pathname)) sessionStorage.setItem('jsi:after-claim', location.pathname + location.search + location.hash); } catch {}
+        sendToast('Welcome! Pick your unique handle 👇'); location.href = '/profile.html#claim'; return;
+      }
+      sendToast(j.newAccount ? 'Welcome, @' + j.username + '! 🚀' + (j.emailNotAdded ? ' — that email couldn’t be added; add one any time in Settings → Security' : '') : 'Welcome back, @' + j.username + '! 🚀');
+      if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
+      refresh().then(onAuthChange);
+    }
+
+    wBtn.addEventListener('click', async () => {
       const status = modal.querySelector('#wallet-status');
+      const setup2fa = wRegMode && modal.querySelector('#w-2fa').checked;
       try {
-        status.textContent = 'Choose your wallet… 👛';
+        let fields = null;
+        if (wRegMode) {
+          fields = await walletSignupFields();
+          // making an account takes a ticket — ask before the wallet pops up, not after it has signed
+          const g = await gate();
+          if (!g.signedIn && !g.access) { closeModal(); openInvite(); return; }
+        }
+        if (pendingSignup) {
+          // the wallet already proved itself a moment ago: this only names the account
+          setStatus(status, 'Creating your account… ✨');
+          const j = await api('/api/auth/wallet/signup', { method: 'POST', body: Object.assign({ signup: pendingSignup }, fields) });
+          pendingSignup = null;
+          setStatus(status, '');
+          walletDone(Object.assign({ named: true }, j), setup2fa);
+          return;
+        }
+        setStatus(status, 'Choose your wallet… 👛');
         const { provider, address } = await WALLET.connect();
-        status.textContent = 'Approve the signature in your wallet… ✍️';
+        setStatus(status, 'Approve the signature in your wallet… ✍️');
         const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
         const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-        const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature } });
+        const body = Object.assign({ address, signature, intent: wRegMode ? 'signup' : 'signin' }, fields || {});
+        const j = await api('/api/auth/wallet/verify', { method: 'POST', body });
         setStatus(status, '');
         if (j.twofa) { show2fa(j); return; } // account has an authenticator / password second factor — the wallet was only the first
-        closeModal();
-        await refresh();
-        if (j.alreadyLinked) sendToast('That wallet is already linked to @' + j.username + ' ✅');
-        else if (j.linked) sendToast('Wallet linked to @' + j.username + ' 🔗');
-        else if (j.newAccount) {
-          // remember where they were so the profile page can bring them straight back after the handle claim
-          // (same-origin, single-leading-slash paths only — never a protocol-relative '//host' pathname)
-          try { if (/^\/(?![\/\\])/.test(location.pathname) && !/\/profile\.html/.test(location.pathname)) sessionStorage.setItem('jsi:after-claim', location.pathname + location.search + location.hash); } catch {}
-          sendToast('Welcome! Pick your unique handle 👇'); location.href = '/profile.html#claim'; return;
+        if (j.needUsername) {
+          // a wallet with no account yet, and a ticket in hand: this is a sign-up — ask for the name
+          pendingSignup = j.signup;
+          setWalletMode(true, { keepStatus: true });
+          setStatus(status, 'No account for ' + address.slice(0, 6) + '…' + address.slice(-4) + ' yet — pick your @username to create one.');
+          modal.querySelector('#w-username').focus();
+          return;
         }
-        else sendToast('Welcome back, @' + j.username + '! 🚀');
-        if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
-        onAuthChange();
+        walletDone(Object.assign({ named: !!(fields && fields.username) }, j), setup2fa);
       } catch (err) {
         // A wallet nobody has signed in with before is a NEW ACCOUNT, so the server asks for a ticket
         // here too. Somebody who connected expecting to sign in gets the door, not a refusal.
         if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
-        status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled');
+        // the connection behind a "pick a name" hand-off expired: start again from the wallet
+        if (pendingSignup && err.status === 401) { pendingSignup = null; setWalletMode(true, { keepStatus: true }); }
+        setStatus(status, (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'), err.message !== 'cancelled');
       }
     });
 
@@ -477,49 +727,38 @@
      profile.js, which meant only the profile page could link a wallet; the How-to-Buy guide needs it too,
      and two copies of a security check is one copy too many. Returns the body fields the server expects,
      or throws 'cancelled'. */
-  AUTH.currentFactor = async function (note) {
-    const m = AUTH.user && AUTH.user.twofa;
-    if (!m) return {};
-    // the masked pane of the sign-in modal, never a native prompt() — that shows the secret as typed
-    if (m === 'password' || m === 'totp') {
-      if (!AUTH._confirmFactor) throw new Error('cancelled');   // the pane is built on DOMContentLoaded
-      return AUTH._confirmFactor(m, note);
-    }
-    // wallet 2FA: sign a management challenge with the wallet the account's two-factor is set to
-    sendToast('Connect the wallet your two-factor is set to, and sign to confirm ✍️');
-    const { provider, address } = await WALLET.connect();
-    const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
-    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    return { address, signature };
+  /* Unlock security changes on this session: resolves at once when it already is (a fresh sign-in, a new
+     account's setup, or a confirm inside the last while), otherwise opens "Confirm it's you" once. Resolves
+     to {} — the server remembers the unlock, so there is nothing to attach to the request. Throws
+     'cancelled' if the pane is closed. opts.force: the server just said the window is shut, so ask anyway. */
+  AUTH.stepUp = async function (note, opts) {
+    if (!AUTH.user) throw new Error('sign in first');
+    if (!(opts && opts.force) && AUTH.user.sudoUntil && AUTH.user.sudoUntil > Date.now() + 5000) return {};
+    if (!AUTH._confirmIt) throw new Error('cancelled');   // the pane is built on DOMContentLoaded
+    return AUTH._confirmIt(note);
   };
+  AUTH.lockSecurity = async function () {
+    const j = await api('/api/auth/verify', { method: 'DELETE' });
+    if (AUTH.user) AUTH.user.sudoUntil = null;
+    document.dispatchEvent(new CustomEvent('auth:sudo', { detail: { until: null } }));
+    return j;
+  };
+  /* Both older names now mean "confirm it's you, once": the proof used to be collected per change and sent
+     with it, and several settings never collected it at all. */
+  AUTH.currentFactor = function (note) { return AUTH.stepUp(note); };
 
-  /* Prove you OWN the account, for a change that adds a way in (linking a wallet). currentFactor answers
-     "did you pass the second factor" and is rightly empty when there is none — but the server now asks
-     for ownership on every link (a stolen cookie must not be able to attach its own key): the password
-     on an account that has one, otherwise a management signature from a wallet ALREADY on the account. */
-  AUTH.ownershipProof = async function (note) {
-    if (!AUTH.user) return {};
-    if (AUTH.user.twofa) return AUTH.currentFactor(note);
-    const methods = AUTH.user.methods || [];
-    if (methods.includes('email')) {
-      if (!AUTH._confirmFactor) throw new Error('cancelled');
-      return AUTH._confirmFactor('password', note);
-    }
-    // wallet-only account: sign with a wallet that is already linked — then connect the NEW one to link it
-    sendToast('First, sign with a wallet already linked to this account to confirm it’s you ✍️');
-    const { provider, address } = await WALLET.connect();
-    const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
-    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    return { address, signature };
-  };
+  AUTH.ownershipProof = function (note) { return AUTH.stepUp(note); };
 
   /* Link another wallet to the account you are already signed in to. Read-only: one personal_sign, no
      transaction, no approval. Resolves to the server's answer so a caller can tell linked from
      already-linked; throws with the server's own message on a refusal (wallet cap, wallet owned by
      another account, second factor not proven). */
   AUTH.linkWallet = async function (note) {
-    const current = await AUTH.ownershipProof(note || 'Linking a wallet adds a new way to sign in to this account.');
-    if (current && current.address && !AUTH.user.twofa) sendToast('Now connect the wallet you want to link 🔗');
+    /* A wallet is a way in, so linking one takes "confirm it's you" — asked BEFORE the new wallet signs,
+       because the server spends that signature first. The one exception is the server's too: a social-login
+       account with nothing to prove with links its first wallet on the session alone. */
+    const needs = AUTH.user && AUTH.user.verifyNeeds;
+    const current = (needs && needs.none) ? {} : await AUTH.stepUp(note || 'Linking a wallet adds a new way to sign in to this account.');
     const { provider, address } = await WALLET.connect();
     const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
     const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
@@ -953,7 +1192,7 @@
 
   let lastMeStatus = 0;   // a definite 401 from /api/me means the session is gone; anything else is weather
   async function refresh() {
-    try { AUTH.user = (await api('/api/me')).user; lastMeStatus = 200; }
+    try { AUTH.user = AUTH._normMe((await api('/api/me')).user); lastMeStatus = 200; }
     catch (e) { AUTH.user = null; lastMeStatus = (e && e.status) || 0; }
   }
   // re-read /api/me and repaint the nav badge — for anything that changes points or the boost stack out of band

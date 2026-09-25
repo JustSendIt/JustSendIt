@@ -821,6 +821,11 @@ for (const col of [
   "ALTER TABLE runner_tokens ADD COLUMN qual_mc REAL",      // market cap when it first earned the default verdict
   "ALTER TABLE runner_tokens ADD COLUMN qual_at INTEGER",   // when that was
   "ALTER TABLE runner_tokens ADD COLUMN peak_mc REAL",
+  /* "Confirm it's you" once, then change settings for a while: the end of this session's unlocked window.
+     NULL on every session that has not proved anything — including every session that existed before this
+     column did, so nobody is unlocked by a migration. Written only by createSession (a fresh sign-in) and by a
+     successful proof (grantSudo). */
+  "ALTER TABLE sessions ADD COLUMN sudo_until INTEGER",
 ]) { try { db.exec(col); } catch {} }
 
 /* The nonces table was keyed on (address) alone, so asking for a second challenge for the same wallet
@@ -1111,9 +1116,59 @@ function createUser(username, autoNamed, ipIdxVal) {
     .run(username, autoNamed ? 1 : 0, now(), ipIdxVal || null);
   return Number(r.lastInsertRowid);
 }
-function createSession(userId, ipIdxVal) {
+/* ===== "Confirm it's you" — one proof, then a window =============================================
+   Every security change used to demand the password (or the second factor) again, per change — and
+   several of the settings screens never sent it, so they simply failed. Now a session proves itself ONCE
+   and is then unlocked for SUDO_MS: the password if the account has one, AND the two-factor factor if it
+   is on (ownershipRefusal). Signing in does NOT open the window — the owner confirms at the first change,
+   so a cookie lifted right after a sign-in is not already unlocked. Two exceptions: the session that CREATES
+   an account is unlocked for NEW_ACCOUNT_SUDO_MS, so a new member sets everything up without a prompt, and a
+   social-login account with nothing else to prove with is unlocked by signing in (onlyProofIsSignIn).
+   The window is per session and is never extended by use — a stolen cookie cannot keep it alive — and any
+   change to how the account signs in closes it on every OTHER session (sudoOthersOff). The possession proofs
+   are untouched: arming a wallet still takes that wallet's signature, and turning on an authenticator still
+   takes a code from it. */
+const SUDO_MS = (Number(process.env.SUDO_MINUTES) > 0 ? Number(process.env.SUDO_MINUTES) : 30) * 60e3;
+const NEW_ACCOUNT_SUDO_MS = 60 * 60e3;
+const NEED_VERIFY_MSG = 'confirm it’s you first';   // the one phrase `bad` turns into code:'need_verify' for the client
+function sudoActive(me) { return !!(me && me.sudo_until && me.sudo_until > now()); }
+// wallets that could sign a management proof for a session begun at sidAt (walletTooNew's rule, counted)
+function vouchingWallets(userId, sidAt) {
+  try {
+    const u = db.prepare('SELECT created_at FROM users WHERE id = ?').get(userId);
+    return db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet'").all(userId).filter((w) =>
+      !w.linked_at || (!(sidAt && w.linked_at > sidAt) && (w.linked_at <= ((u && u.created_at) || 0) + 60000 || now() - w.linked_at >= 864e5))).length;
+  } catch { return 0; }
+}
+// no password, no two-factor and no wallet that can vouch: signing in again is the only proof this account has
+function onlyProofIsSignIn(userId, sidAt) {
+  const u = db.prepare('SELECT twofa_method FROM users WHERE id = ?').get(userId);
+  return !emailIdentity(userId) && !(u && u.twofa_method) && !vouchingWallets(userId, sidAt);
+}
+function verifyNeedsOf(me) {
+  const hasPw = !!emailIdentity(me.id), m = me.twofa_method || null;
+  const vouch = !hasPw && !m ? vouchingWallets(me.id, me.sid_at) : 0;
+  return {
+    password: hasPw,                                            // the account password
+    code: m === 'totp',                                         // a code from the authenticator app
+    wallet: m === 'wallet' ? 'twofa' : (vouch ? 'owner' : null),   // a signature: from the two-factor wallet, or (no password, no 2FA) a wallet that vouches
+    signInAgain: !hasPw && !m && !vouch,                        // nothing else to prove with: signing in again is the proof
+    none: !hasPw && !m && !walletAddresses(me.id).length,       // nothing at all yet — the first wallet links without one
+    minutes: Math.round(SUDO_MS / 60e3),
+  };
+}
+function grantSudo(me, ms) {
+  const until = now() + (ms || SUDO_MS);
+  try { db.prepare('UPDATE sessions SET sudo_until = ? WHERE token = ?').run(until, hashToken(me.sid)); } catch {}
+  me.sudo_until = until;
+  return until;
+}
+function endSudo(me) { try { db.prepare('UPDATE sessions SET sudo_until = NULL WHERE token = ?').run(hashToken(me.sid)); } catch {} me.sudo_until = 0; }
+// a change to how the account signs in: what other sessions proved no longer describes it
+function sudoOthersOff(me) { try { db.prepare('UPDATE sessions SET sudo_until = NULL WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)); } catch {} }
+function createSession(userId, ipIdxVal, sudoMs) {
   const token = rand();
-  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(hashToken(token), userId, now(), now() + 30 * 864e5); // a DB leak never yields a usable cookie
+  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed, sudo_until) VALUES (?,?,?,?,1,?)').run(hashToken(token), userId, now(), now() + 30 * 864e5, sudoMs ? now() + sudoMs : null); // a DB leak never yields a usable cookie
   // (A last-sign-in IP index used to be written here. Nothing ever read it, so it is no longer kept at all.)
   return token;
 }
@@ -1141,7 +1196,7 @@ function getUser(req) {
   // forgotten one, without a DB write on literally every request.
   if (!s.last_seen || now() - s.last_seen > 3e5) { try { db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), s.token); } catch {} }
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id);
-  return u && !u.deleted_at ? { ...u, sid: cookies.sid, sid_at: s.created_at } : null;   // sid_at: credential changes check what predates this session; a deleted account is nobody
+  return u && !u.deleted_at ? { ...u, sid: cookies.sid, sid_at: s.created_at, sudo_until: s.sudo_until || 0 } : null;   // sid_at: credential changes check what predates this session; sudo_until: its unlocked window; a deleted account is nobody
 }
 function themeOf(u) {
   return {
@@ -2670,7 +2725,7 @@ function communityCardView(c, me) {
 }
 // The house communities: $Send and $GWC exist from day one (owned by the site's own system account), live immediately,
 // pinned to the top of the Communities page so a newcomer can see what participating looks like and join in one tap.
-let officialSeedTimer = null;
+let officialSeedTimer = null, officialSeedTries = 0;
 // The open sandbox: a community branded for Robinhood Chain itself that ANYONE can join with no
 // tokens at all, so a newcomer can try posting, proposing, voting and snapshots before they own
 // anything. It is pointed at the chain's WETH contract so the snapshot feature reads real on-chain
@@ -2796,7 +2851,9 @@ async function seedOfficialCommunities() {
           pr.market ? pr.market.priceUsd : null, pr.market ? pr.market.marketCap : null, (pr.priceChange && pr.priceChange.h24) || null, pr.market ? pr.market.liquidityUsd : null, (pr.holders && pr.holders.count) || null, now(), now());
       console.log('🏘️ seeded the official $' + key + ' community');
     }
-    if (missing && !officialSeedTimer) { officialSeedTimer = setTimeout(() => { officialSeedTimer = null; seedOfficialCommunities().catch(() => {}); }, 10 * 60 * 1000); officialSeedTimer.unref(); } // Dexscreener was unreachable → retry later
+    // the price feed or the chain refused the lookup (a boot-time burst, a rate limit): try again soon, then back off
+    if (missing && !officialSeedTimer) { const wait = [60e3, 5 * 60e3][officialSeedTries++] || 10 * 60e3; officialSeedTimer = setTimeout(() => { officialSeedTimer = null; seedOfficialCommunities().catch(() => {}); }, wait); officialSeedTimer.unref(); }
+    if (!missing) officialSeedTries = 0;
   } catch (e) { console.error('official community seed failed:', e && e.message); }
 }
 function communityDetailView(c, me, ip) {
@@ -4371,7 +4428,7 @@ async function blockTimestamp(bn) {
    without a single extra call per wallet. A ledger is built once (one eth_getLogs over the whole history,
    split only when the node refuses the range) and then kept current with one small read per refresh. */
 const LEDGER_FRESH_MS = 5 * 60 * 1000;          // a ledger older than this is brought up to date on the next read
-const LEDGER_MAX_CONCURRENT = 2;                // ledger builds running at once (each is a burst of RPC reads)
+const LEDGER_MAX_CONCURRENT = 1;                // ledger builds running at once — one trickle, never a burst
 const LEDGER_WAIT_MS = 8000;                    // how long a request path waits for a build before serving what it has
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000', DEAD_ADDR = '0x000000000000000000000000000000000000dead';
 const _ledgerInflight = new Map();              // token -> promise
@@ -4408,14 +4465,18 @@ async function _rpcPaced(fn, tries = 3) {       // the public node answers a bur
   throw last;
 }
 const LEDGER_MAX_LOGS = 1000000;                // a token with more Transfer events than this is too big to ledger here — the indexer's count stays, labelled as such
-const LEDGER_PAUSE_MS = 150;                    // between successful reads: a trickle the public node accepts, never a burst
+const LEDGER_PAUSE_MS = 250;                    // between successful reads: a trickle the public node accepts, never a burst
+const LEDGER_COOL_MS = Number(process.env.LEDGER_COOL_MS) > 0 ? Number(process.env.LEDGER_COOL_MS) : 60 * 1000;   // after the node refuses a ledger read, all ledger work stands down this long
+let ledgerCoolUntil = 0;
 const TOO_MANY_RE = /exceeds limit|too many results|query returned more|response size|more than \d+ results|limit of \d+|timed out|timeout|aborted/i;   // "the answer is too large (or too slow)" — shrink the window
-async function _rpcSlow(fn) {                    // like _rpcPaced, with the longer backoff a full-history build needs (2, 4, 8, 16 s)
-  let last;
-  for (let i = 0; i < 5; i++) {
-    try { return await fn(); } catch (e) { last = e; if (!/429|rate|too many requests/i.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 2000 * Math.pow(2, i))); }
-  }
-  throw last;
+/* The ledger is BACKGROUND work on the same public node that answers the reads that matter now — a holder
+   check, a factory lookup, a chart. So it never argues with a refusal: the first 429 stands every ledger build
+   down for LEDGER_COOL_MS (no retries into it, which only added four more hits per refusal), and the build
+   that was refused simply resumes from the block it reached, next time. */
+async function _rpcSlow(fn) {
+  if (now() < ledgerCoolUntil) throw new Error('ledger cooling down after a rate limit');
+  try { return await fn(); }
+  catch (e) { if (/429|rate|too many requests/i.test(String(e && e.message))) ledgerCoolUntil = now() + LEDGER_COOL_MS; throw e; }
 }
 /* Fold a batch of Transfer logs into the stored balances, and move last_block forward — one transaction per window,
    so a build that the node refuses half-way is complete up to a block and RESUMES there next time. */
@@ -4476,8 +4537,14 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental, r
         if (out.length < 2500) window = Math.min(window * 2, Math.max(1, latest - from + 1));
         if (from <= latest) await new Promise((r) => setTimeout(r, LEDGER_PAUSE_MS));
       }
-      const supply = await _rpcSlow(() => totalSupply(tok)).catch(() => null);       // paced: a refused read is retried, never recorded as "no supply"
+      let supplyErr = null;
+      const supply = await _rpcSlow(() => totalSupply(tok)).catch((e) => { supplyErr = e; return null; });
       const decimals = await _rpcSlow(() => tokenDecimals(tok)).catch(() => null);
+      // a first summary without the supply would publish holders with no shares — when the read was REFUSED (a rate
+      // limit, a timeout), the logs are saved and the summary waits; when there simply is no totalSupply() (a wallet,
+      // a contract that is not a token), the empty summary is the truth and is cached like any other
+      const transient = supplyErr && /429|rate|too many|cool|timed out|timeout|abort|fetch failed|unreachable|ECONN|http 5\d\d/i.test(String(supplyErr.message || supplyErr));
+      if (supply == null && transient && !(db.prepare('SELECT supply FROM holder_index WHERE token_addr = ?').get(tok) || {}).supply) throw new Error('totalSupply() could not be read yet — the summary waits for it');
       // the summary: who holds, how much of the supply, and whether the ledger adds up
       const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
       // the zero address goes negative by design (a mint is a transfer FROM it); any other negative means the token
@@ -4515,6 +4582,7 @@ async function ensureLedger(tok, opts = {}) {
   const cur = holderLedger(tok);
   const stale = !cur || now() - cur.at > (opts.freshMs != null ? opts.freshMs : LEDGER_FRESH_MS);
   if (!stale) return cur;
+  if (now() < ledgerCoolUntil) return cur;                             // the node just refused us: serve what we have, ask nothing
   const p = indexHolders(tok).catch(() => null);
   if (cur && !opts.wait) return cur;                                   // serve the last ledger, refresh behind it
   const deadline = now() + (opts.waitMs != null ? opts.waitMs : LEDGER_WAIT_MS);
@@ -6825,7 +6893,8 @@ function send(res, code, body, headers = {}) {
   res.writeHead(code, h);
   res.end(data);
 }
-const bad = (res, msg, code = 400) => send(res, code, { error: msg });
+// a refusal that only wants the "confirm it's you" step carries a code, so the client opens it and retries
+const bad = (res, msg, code = 400) => send(res, code, (code === 401 && typeof msg === 'string' && msg.includes(NEED_VERIFY_MSG)) ? { error: msg, code: 'need_verify' } : { error: msg });
 
 class HttpError extends Error {
   constructor(msg, code) { super(msg); this.status = code; }
@@ -7395,6 +7464,55 @@ const csrfWarned = new Set();   // one CSRF-reject log line per offending origin
 const BOARDS = new Set(['support']);
 const oauthStates = new Map();
 const pendingLogins = new Map(); // token -> {userId, expires}
+const pendingSignups = new Map(); // token -> {address, expires}: a proved wallet waiting for its owner to pick a @username
+/* What a wallet sign-up may carry: the @username (optional — without it the account gets a placeholder it
+   can rename), and an email + password as a second way in (optional, both or neither). Format only. */
+function walletSignupFields(b) {
+  const username = b && b.username != null ? String(b.username).trim() : '';
+  const email = b && b.email != null ? String(b.email).trim().toLowerCase() : '';
+  const password = b && b.password != null ? String(b.password) : '';
+  if (username && !USERNAME_RE.test(username)) return { error: 'username must be 3–24 chars: letters, numbers, _ . -' };
+  if (email || password) {
+    if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { error: 'enter a valid email — or leave the email and password both empty' };
+    if (password.length < 8) return { error: 'password needs at least 8 characters' };
+    if (password.length > MAX_PW) return { error: 'password is too long' };
+  }
+  return { username, email, password };
+}
+/* The account a wallet sign-up makes. The slow part — hashing the optional password — runs FIRST; every gate
+   (ticket, per-IP cap, name, wallet, email) and every write then run in ONE synchronous transaction, with no await
+   between "is there room?" and "take it". Concurrent sign-ups therefore cannot share one ticket or overrun the
+   per-IP cap, and a UNIQUE collision rolls back without leaving a half-made account. An email that already
+   belongs to another account is NOT answered with a refusal (that would tell a ticket holder, repeatably, who is a
+   member): the account is made without it, and the reply says only that the email could not be added. */
+async function createWalletAccount(req, address, su) {
+  const pwHash = su && su.email ? await hashPassword(su.password) : null;
+  const wIp = ipIdx(req);
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    const gate = signupRefusal(req);
+    if (gate) { db.exec('ROLLBACK'); return { error: gate.error, status: 403, gate }; }
+    const wBlock = ipSignupBlocked(wIp);
+    if (wBlock) { db.exec('ROLLBACK'); return { error: wBlock, status: 429 }; }
+    if (findIdentity('wallet', address)) { db.exec('ROLLBACK'); return { error: 'that wallet already has an account — sign in with it instead', status: 409 }; }
+    if (su && su.username && usernameTaken(su.username)) { db.exec('ROLLBACK'); return { error: 'that username was just taken — pick another', status: 409 }; }
+    const emailFree = !!(pwHash && !findIdentity('email', su.email));
+    const username = (su && su.username) || autoUsername();
+    const userId = createUser(username, !(su && su.username), wIp);
+    insertIdentity(userId, 'wallet', address);
+    if (emailFree) insertIdentity(userId, 'email', su.email, pwHash);
+    claimInvite(req, userId);
+    db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
+    db.exec('COMMIT');
+    awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address));   // blind index, never the address — see the link path
+    checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
+    queueHolderProof(userId);        // they signed up WITH a wallet: start the participation check right away
+    return { userId, username, emailNotAdded: !!(pwHash && !emailFree) };
+  } catch (e) {
+    try { db.exec('ROLLBACK'); } catch {}
+    return { error: 'could not create the account just now — try again', status: 500 };
+  }
+}
 
 const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const CLEAR_OAUTH_STATE = 'oauth_state=; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=0';
@@ -7458,7 +7576,10 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
     });
     return res.end();
   }
-  const token = createSession(userId, ipIdxVal);
+  /* A sign-in does not unlock security changes — the owner confirms once, at the first change (see SUDO_MS). The
+     exceptions: a brand-new account's own setup, and an account whose ONLY possible proof is this sign-in (a
+     social login with no password, no two-factor and no wallet old enough to vouch). */
+  const token = createSession(userId, ipIdxVal, !ident ? NEW_ACCOUNT_SUDO_MS : (onlyProofIsSignIn(userId, now()) ? SUDO_MS : 0));
   res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile.html' });
   res.end();
 }
@@ -8011,6 +8132,8 @@ function lockoutAlert(userId) {
   try { notify(userId, '🚨', 'Too many failed two-factor attempts on your account. If that was not you, someone may have your password — change it and end other sessions in Settings → Security.', 'alert'); } catch {}
 }
 async function verifyCurrentFactor(me, b) {
+  // a session that confirmed it's you inside the window proved this factor then (ownershipRefusal asks for it)
+  if (sudoActive(me)) return null;
   /* Guess budget. The SIGN-IN doors have always burned a try per attempt and killed the pending token
      after five — but these management routes had no counter at all, so a stolen session cookie could sit
      on /api/2fa/disable and walk all 1,000,000 authenticator codes (or every password) as fast as the
@@ -8018,6 +8141,8 @@ async function verifyCurrentFactor(me, b) {
      deliberately slow hash, so the same requests were a CPU-exhaustion lever on the single event loop.
      Keyed per account, not per IP: the attacker chooses their IP, never their victim's account id. */
   if (!rateLimit('factor:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
+  // nothing offered at all: that is not a wrong answer, it is the question not asked yet
+  if (me.twofa_method && !(b && (b.code || b.password || b.address || b.signature))) return NEED_VERIFY_MSG + ' — your two-factor step is needed for this change';
   if (me.twofa_method === 'totp') {
     return totpConsume(me.id, decField(me.twofa_secret), b.code) ? null : 'enter a valid, unused code from your authenticator app first';
   }
@@ -8043,33 +8168,46 @@ async function verifyCurrentFactor(me, b) {
   }
   return null;
 }
-/* Prove you OWN this account, for a security change on an account that has no second factor yet.
-   verifyCurrentFactor answers "did you pass the factor" and returns null when there ISN'T one — which is
-   correct for what it asks, and was being read as "this change is fine" by every route that guarded
-   itself with `if (me.twofa_method) …`. So on the accounts with no 2FA at all — the ones with the least
-   protection — turning ON an authenticator or attaching an email+password took nothing but the session
-   cookie, and either of those is a permanent second way in that the real owner cannot see or remove.
-   The rule mirrors /api/2fa/wallet/enable, which already got this right:
-     · has a password        → the password
-     · wallet-only           → a wallet that PREDATES this session, so a wallet attached by a borrowed
-                               cookie can never be the thing that authorises the next step
-   Returns null when it passes, else the reason. */
+/* Prove you OWN this account — the "confirm it's you" step. verifyCurrentFactor answers "did you pass
+   the factor" and returns null when there ISN'T one; this answers "is this the owner", which on an account
+   with no second factor still takes something only the owner has. The rule, all of it at once:
+     · the account's PASSWORD, when it has one
+     · AND its SECOND FACTOR, when one is on (a code, or a signature from the two-factor wallet) — password
+       two-factor is the password itself, one check
+     · a wallet-only account with no second factor: a management signature from a wallet that PREDATES this
+       session and is old enough to vouch (walletTooNew), so a wallet attached by a borrowed cookie can never
+       be the thing that authorises the next step
+   A session that passes is unlocked for SUDO_MS (grantSudo): the next change does not ask again. A session
+   already inside its window passes without being asked. Returns null when it passes, else the reason. */
 async function ownershipRefusal(me, b) {
-  // the profile page sends the factor nested as `current` (a code, a password, a wallet signature); the
-  // second-factor check reads the top level, so an account with 2FA on could never prove itself here
-  if (me.twofa_method) return verifyCurrentFactor(me, Object.assign({}, (b && b.current) || {}, b || {}));
-  if (!rateLimit('own:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
+  if (sudoActive(me)) return null;
+  // the profile page sends the proof nested as `current`; older callers put it at the top level. Nested wins,
+  // because at /api/account/email a top-level `password` is the NEW one being added, not a proof.
+  const pick = (k) => { const c = b && b.current; if (c && typeof c === 'object' && c[k] != null && c[k] !== '') return c[k]; return b ? b[k] : undefined; };
+  const offered = ['password', 'code', 'address', 'signature'].some((k) => pick(k));
   const e = emailIdentity(me.id);
-  if (e) {
-    const pw = String((b && b.current && b.current.password) || (b && b.password) || '');
-    return (await checkPassword(pw, e.secret)) ? null : 'enter your account password to make this change';
+  if (!offered) {
+    if (e || me.twofa_method) return NEED_VERIFY_MSG + (e ? ' — enter your password' + (me.twofa_method && me.twofa_method !== 'password' ? ' and your two-factor step' : '') : ' — your two-factor step is needed') + ' to unlock security changes';
+    if (!vouchingWallets(me.id, me.sid_at)) return NEED_VERIFY_MSG + ' — sign out and sign in again to unlock security changes' + (walletAddresses(me.id).length ? ' (your wallets were linked too recently to vouch for the account yet)' : '');
+    return NEED_VERIFY_MSG + ' — sign with the wallet you signed in with to unlock security changes';
   }
-  const addr = String((b && b.address) || (b && b.current && b.current.address) || '').toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(addr)) return 'sign with the wallet you signed in with to make this change';
-  if (!walletAddresses(me.id).includes(addr)) return 'sign with a wallet linked to this account';
-  const tooNew = walletTooNew(me, addr); if (tooNew) return tooNew;
-  const sig = consumeNonce(addr, (b && b.signature) || (b && b.current && b.current.signature), 'manage');
-  return sig.error || null;
+  // metered from the first real answer on: an empty request is the question, not a guess
+  if (!rateLimit('own:' + me.id, 12, 9e5)) return 'too many attempts — wait 15 minutes and try again';
+  if (e && !(await checkPassword(String(pick('password') || ''), e.secret))) return 'enter your account password to make this change';
+  if (me.twofa_method && !(me.twofa_method === 'password' && e)) {
+    const f = await verifyCurrentFactor(me, { code: pick('code'), password: pick('password'), address: pick('address'), signature: pick('signature') });
+    if (f) return f;
+  }
+  if (!e && !me.twofa_method) {
+    const addr = String(pick('address') || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) return 'sign with the wallet you signed in with to make this change';
+    if (!walletAddresses(me.id).includes(addr)) return 'sign with a wallet linked to this account';
+    const tooNew = walletTooNew(me, addr); if (tooNew) return tooNew;
+    const sig = consumeNonce(addr, pick('signature'), 'manage');
+    if (sig.error) return sig.error;
+  }
+  grantSudo(me);
+  return null;
 }
 /* F000: "linked before this session" was the whole test, and the session is the attacker's to mint —
    sign in with the wallet you just attached and it predates the new session. So a wallet also has to be
@@ -8820,6 +8958,12 @@ function holderProofState(u) {
        that sentence. It cannot move a token, and nothing here ever calls eth_sendTransaction. */
     readOnly: 'Connecting is read-only. You sign a sentence to prove the wallet is yours — that signature moves nothing, approves nothing, and costs no gas. This site can never send your funds anywhere.',
   };
+}
+// only the read-only SANCTION — for an account's own profile, which a new member may set up before the $SEND check
+function blockSanctioned(res, me) {
+  const r = restrictionOf(me);
+  if (r) { send(res, 403, { error: "You're in read-only mode — this action is paused. See the banner up top for why and when it lifts.", readOnly: true, restriction: r }); return true; }
+  return false;
 }
 function blockReadOnly(res, me) {
   const r = restrictionOf(me);
@@ -9683,6 +9827,10 @@ const server = http.createServer(async (req, res) => {
             twofaWallet: twofaWalletAddress(me.id),  // the wallet that actually unlocks sign-in (null = legacy: any pre-2FA wallet)
             maxWallets: MAX_LINKED_WALLETS,
             twofa: me.twofa_method || null,
+            // "confirm it's you": until when this session is unlocked (null = locked), and what unlocking takes
+            sudoUntil: sudoActive(me) ? me.sudo_until : null,
+            sudoLeftMs: sudoActive(me) ? me.sudo_until - now() : 0,   // relative: the page's clock need not agree with ours
+            verifyNeeds: verifyNeedsOf(me),
             mutes: mutedNames(me.id), // usernames this user has muted (private to them)
             alerts: alertsOf(me.id),  // usernames this user gets post alerts about (private to them too)
             theme: themeOf(me),
@@ -9734,7 +9882,7 @@ const server = http.createServer(async (req, res) => {
         const userId = createUser(username, false, regIp);
         insertIdentity(userId, 'email', email, await hashPassword(password));
         claimInvite(req, userId);   // bind the code that let them in, and mint their own to hand out
-        return send(res, 200, { ok: true, username }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
+        return send(res, 200, { ok: true, username, newAccount: true }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req), NEW_ACCOUNT_SUDO_MS)) });   // a new account's own setup never asks for the password it just chose
       }
       if (p === '/api/auth/login' && req.method === 'POST') {
         if (!rateLimit('login:' + clientIp(req), 20, 9e5)) return bad(res, 'slow down', 429);
@@ -9873,6 +10021,25 @@ const server = http.createServer(async (req, res) => {
          for a month with no way for the owner to see it or stop it. Tokens are stored hashed and are
          never returned; a session is identified to the user by when it started and when it was last
          seen, which is all they need to recognise one that is not theirs. */
+      /* "Confirm it's you": one proof — the password if the account has one, and the two-factor step if it is
+         on — unlocks every security change on THIS session for SUDO_MS. The settings routes accept the window
+         in place of re-asking; the page calls this once, then just makes the changes. */
+      if (p === '/api/auth/verify' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        let b = {}; try { b = await readBody(req); } catch {}
+        if (!sudoActive(me)) {
+          const err = await ownershipRefusal(me, b);
+          // a wrong answer is not "the question was not asked": the page keeps the pane open and shows this
+          if (err) return send(res, 401, { error: err, code: err.includes(NEED_VERIFY_MSG) ? 'need_verify' : 'verify_failed', verifyNeeds: verifyNeedsOf(me) });
+        }
+        return send(res, 200, { ok: true, sudoUntil: me.sudo_until, sudoLeftMs: me.sudo_until - now() });
+      }
+      // lock it again now — for a shared computer, or simply when finished
+      if (p === '/api/auth/verify' && req.method === 'DELETE') {
+        if (!me) return bad(res, 'sign in first', 401);
+        endSudo(me);
+        return send(res, 200, { ok: true, sudoUntil: null, sudoLeftMs: 0 });
+      }
       if (p === '/api/auth/sessions' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
         const mine = hashToken(me.sid);
@@ -10039,11 +10206,19 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const e = emailIdentity(me.id);
         if (!e) return bad(res, 'this account has no password yet — add an email + password first');
-        if (!(await checkPassword(String(b.current || ''), e.secret))) return bad(res, 'that is not your current password', 401);
         const next = String(b.password || '');
         if (next.length < 8) return bad(res, 'password needs at least 8 characters');
         if (next.length > MAX_PW) return bad(res, 'password is too long');
-        if (me.twofa_method) { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
+        if (!sudoActive(me)) {
+          const old = typeof b.current === 'string' ? b.current : String((b.current && b.current.password) || '');
+          if (!old) return bad(res, NEED_VERIFY_MSG + ' — enter your current password to change it', 401);
+          if (!(await checkPassword(old, e.secret))) return bad(res, 'that is not your current password', 401);
+          // the old password already proved password two-factor; any other factor is asked for itself
+          if (me.twofa_method && me.twofa_method !== 'password') {
+            const cf = (b.current && typeof b.current === 'object') ? b.current : b;
+            const err = await verifyCurrentFactor(me, { code: cf.code, address: cf.address, signature: cf.signature }); if (err) return bad(res, err, 401);
+          }
+        }
         db.prepare('UPDATE identities SET secret = ? WHERE id = ?').run(await hashPassword(next), e.id);
         const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
         resetDataKeySecret(me.id, 'your password was changed');
@@ -10088,6 +10263,7 @@ const server = http.createServer(async (req, res) => {
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not disconnect right now — try again', 500); }
         if (me.og && !revokeOg) notify(me.id, '🔌', 'OG badge paused — it follows your wallet. Relink your early-buyer wallet to restore it (verified on-chain).', 'og'); // honest: "permanent" means never expires, not "survives having no wallet"
+        sudoOthersOff(me);
         return send(res, 200, { ok: true, wallets: [] });
       }
 
@@ -10111,6 +10287,7 @@ const server = http.createServer(async (req, res) => {
         if (!totpConsume(me.id, decField(me.twofa_pending), b.code)) return bad(res, 'wrong code — check your authenticator app');   // F017: the setup code is spent too
         db.prepare("UPDATE users SET twofa_method = 'totp', twofa_secret = twofa_pending, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // promote only on proof
         notify(me.id, '🔐', 'Authenticator two-factor is on. Every sign-in now needs a code from your app.', 'alert');
+        sudoOthersOff(me);   // this session just proved the new factor; the others never did
         return send(res, 200, { ok: true });
       }
       if (p === '/api/2fa/wallet/enable' && req.method === 'POST') {
@@ -10131,7 +10308,9 @@ const server = http.createServer(async (req, res) => {
                so a wallet attached by a stolen cookie can never be the one that locks the door
            Both are checked before anything is written. */
         let alreadyProved = false;   // the current-factor check may itself have proved this exact wallet
-        if (me.twofa_method) {
+        if (sudoActive(me)) {
+          // confirmed it's you inside the window — ownership is settled; the wallet's own signature below is not
+        } else if (me.twofa_method) {
           const cur = b.current || b;
           const err = await verifyCurrentFactor(me, cur); if (err) return bad(res, err, 401);
           // wallet→wallet: verifyCurrentFactor consumed the nonce for this address, and nonces are one row per
@@ -10139,6 +10318,7 @@ const server = http.createServer(async (req, res) => {
           if (me.twofa_method === 'wallet' && String(cur.address || '').toLowerCase() === addr) alreadyProved = true;
         } else if (emailIdentity(me.id)) {
           const e = emailIdentity(me.id);
+          if (!((b.current && b.current.password) || b.password)) return bad(res, NEED_VERIFY_MSG + ' — enter your password to turn wallet two-factor on', 401);
           if (!(await checkPassword(String((b.current && b.current.password) || b.password || ''), e.secret))) {
             return bad(res, 'enter your account password to turn wallet two-factor on', 401);
           }
@@ -10157,6 +10337,7 @@ const server = http.createServer(async (req, res) => {
         }
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
         setTwofaWallet(me.id, addr);   // THIS wallet is the key from now on — the others are for holdings only
+        sudoOthersOff(me);
         notify(me.id, '🔐', 'Wallet two-factor is on. The wallet you chose is now the key to this account — Settings → Security shows which one.', 'alert');
         return send(res, 200, { ok: true, twofaWallet: addr });
       }
@@ -10167,6 +10348,7 @@ const server = http.createServer(async (req, res) => {
         const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401);
         db.prepare('UPDATE users SET twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL WHERE id = ?').run(me.id);
         setTwofaWallet(me.id, null);   // the wallets stay linked and keep counting for Send Power; none of them is a key any more
+        sudoOthersOff(me);
         resetDataKeySecret(me.id, 'two-factor was turned off');
         notify(me.id, '🔓', 'Two-factor was turned OFF on your account. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
         return send(res, 200, { ok: true });
@@ -10181,12 +10363,13 @@ const server = http.createServer(async (req, res) => {
         const next = String(b.address || '').toLowerCase();
         if (!/^0x[0-9a-f]{40}$/.test(next)) return bad(res, 'pick one of your linked wallets');
         if (!walletAddresses(me.id).includes(next)) return bad(res, 'that wallet is not linked to this account');
-        const err2 = await verifyCurrentFactor(me, b); if (err2) return bad(res, err2, 401);
+        const err2 = await verifyCurrentFactor(me, (b.current && typeof b.current === 'object') ? b.current : b); if (err2) return bad(res, err2, 401);   // nested: `address` here is the NEW wallet
         // Prove the NEW wallet too, exactly as enabling does — otherwise the lock could be pointed at an
         // address whose key is already lost, and the owner would find out at the next sign-in.
         const proof = consumeNonce(next, b.newSignature, '2fa-on');
         if (proof.error) return bad(res, proof.error, 401);
         setTwofaWallet(me.id, next);
+        sudoOthersOff(me);
         notify(me.id, '🔐', 'Your two-factor wallet changed — sign-ins now need the wallet you just chose (Settings → Security shows which).', 'wallet');
         return send(res, 200, { ok: true, twofaWallet: next });
       }
@@ -10205,7 +10388,7 @@ const server = http.createServer(async (req, res) => {
         // The 2FA wallet is the key to the account; it may only go once another one is the key, or 2FA is off.
         if (me.twofa_method === 'wallet' && (twofaWalletAddress(me.id) || linked[0]) === addr)
           return bad(res, 'that is your two-factor wallet — choose a different one for two-factor first, or turn two-factor off, then unlink it');
-        if (me.twofa_method) { const errU = await verifyCurrentFactor(me, b); if (errU) return bad(res, errU, 401); }
+        if (me.twofa_method) { const errU = await verifyCurrentFactor(me, (b.current && typeof b.current === 'object') ? b.current : b); if (errU) return bad(res, errU, 401); }   // nested: `address` here is the wallet being unlinked
         /* Same honesty rule as a full disconnect: decide OG from the chain WHILE the wallet is still
            readable, so selling out and then unlinking cannot launder the badge. A failed read keeps it. */
         let revokeOg = false;
@@ -10236,6 +10419,7 @@ const server = http.createServer(async (req, res) => {
         balCache.delete(me.id);
         checkOg(me.id).catch(() => {});
         refreshSupplyForUser(me.id); // their communities' share of supply no longer includes this wallet
+        sudoOthersOff(me);
         return send(res, 200, { ok: true, wallets: walletAddresses(me.id), walletList: walletList(me.id), ogRevoked: revokeOg });
       }
       // Password as the second factor for WALLET sign-ins (wallet-first users who added an email + password)
@@ -10247,9 +10431,13 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const e = emailIdentity(me.id);
         if (!e) return bad(res, 'add an email + password to your account first (Profile → Security)');
-        if (!(await checkPassword(String(b.password || ''), e.secret))) return bad(res, 'wrong password', 401);
+        // the password is what this factor IS: prove you know it now, window or not — a forgotten backup password
+        // armed as the second factor would lock every door (sign-in, email login, and there is no reset)
+        if (!b.password) return bad(res, 'enter your account password — it becomes the second step at wallet sign-in, so it has to be one you know', 401);
+        if (!(await checkPassword(String(b.password), e.secret))) return bad(res, 'wrong password', 401);
         if (me.twofa_method && me.twofa_method !== 'password') { const err = await verifyCurrentFactor(me, b); if (err) return bad(res, err, 401); }
         db.prepare("UPDATE users SET twofa_method = 'password', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id);
+        sudoOthersOff(me);
         return send(res, 200, { ok: true });
       }
       // Wallet-first accounts add an email + password: a second way in, and the prerequisite for password-2FA and for
@@ -10263,11 +10451,32 @@ const server = http.createServer(async (req, res) => {
         if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
+        delete b.password;   // the NEW password: ownershipRefusal must not mistake it for a proof (a proof arrives as b.current)
         // Adding an email+password is adding a PERMANENT second way into the account, so it takes proof of
         // ownership whether or not two-factor is on — not just on the accounts that already have 2FA.
         { const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
         if (findIdentity('email', email)) return bad(res, 'that email already belongs to another account');
         insertIdentity(me.id, 'email', email, await hashPassword(password));
+        sudoOthersOff(me);
+        notify(me.id, '✉️', 'An email and password were added to your account. Not you? End other sessions in Settings → Security.', 'alert');
+        return send(res, 200, { ok: true, methods: identityTypes(me.id) });
+      }
+      /* Change the email an account signs in with. The password stays; the new address must be free. Inside the
+         "confirm it's you" window this is one step, like every other setting. */
+      if (p === '/api/account/email/change' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('chemail:' + me.id, 10, 36e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        const e = emailIdentity(me.id);
+        if (!e) return bad(res, 'this account has no email yet — add an email + password first');
+        const email = String(b.email || '').trim().toLowerCase();
+        if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
+        { const err = await ownershipRefusal(me, b); if (err) return bad(res, err, 401); }
+        const other = findIdentity('email', email);
+        if (other && other.user_id !== me.id) return bad(res, 'that email already belongs to another account');
+        if (!other) db.prepare('UPDATE identities SET identifier = ?, identifier_enc = ? WHERE id = ?').run(bidx(email), encField(email), e.id);
+        sudoOthersOff(me);
+        notify(me.id, '✉️', 'The email on your account was changed. Not you? End other sessions in Settings → Security.', 'alert');
         return send(res, 200, { ok: true, methods: identityTypes(me.id) });
       }
       /* ----- moderation: mute / unmute (private to the muter; the muted user is never told) ----- */
@@ -10389,6 +10598,26 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const address = String(b.address || '').toLowerCase();
         if (!/^0x[0-9a-f]{40}$/.test(address)) return bad(res, 'bad address');
+        /* A wallet sign-UP can carry the account it is making: the @username picked before the wallet was
+           connected, and optionally an email + password as a second way in. Their FORMAT is checked here,
+           before the signature is spent, so a typo never costs a second signature; whether the name or the
+           email is free is only asked once the wallet is proved (below), so this door never answers "is
+           this taken" for a wallet somebody does not hold. */
+        const su = (!me) ? walletSignupFields(b) : null;
+        if (su && su.error) return bad(res, su.error);
+        /* F011: linking a wallet ADDS A WAY INTO THE ACCOUNT, so it passes whatever guards the account — asked
+           BEFORE the new wallet's signature is spent, so "confirm it's you first" can be answered and the same
+           signature sent again. On a password account that is the password; on a wallet-only account a manage
+           signature from a wallet already on it; inside the unlocked window, nothing more. An account with no
+           password and no wallet yet (a social sign-in) has nothing it could prove with — its FIRST wallet links
+           on the session alone; the owner is notified and the 24h age rule (walletTooNew) keeps that wallet from
+           vouching for the account straight away. */
+        // decided from the CALLER's account only — never from whether this address has an account, or the answer
+        // would tell a signed-in stranger which wallets are members before any signature is checked
+        if (me && (me.twofa_method || emailIdentity(me.id) || walletAddresses(me.id).length)) {
+          const cur = Object.assign({}, b.current || {}); if (!cur.password && b.password) cur.password = b.password;
+          const err = await ownershipRefusal(me, cur); if (err) return bad(res, 'to link a wallet, ' + err, 401);
+        }
         const sig = consumeNonce(address, b.signature, me ? 'link' : 'signin');   // signed in ⇒ this is a link, not a sign-in
         if (sig.error) return bad(res, sig.error, 401);
         let ident = findIdentity('wallet', address);
@@ -10398,29 +10627,18 @@ const server = http.createServer(async (req, res) => {
           if (ident.user_id === me.id) return send(res, 200, { ok: true, linked: true, alreadyLinked: true, username: me.username });
           return bad(res, 'that wallet is already linked to another account — sign out and sign in with it, or disconnect it from that account first', 409);
         }
-        let userId, username;
+        let userId, username, emailNotAdded = false;
         if (ident) {
           userId = ident.user_id;
           username = db.prepare('SELECT username FROM users WHERE id = ?').get(userId).username;
         } else if (me) {
           if (walletAddresses(me.id).length >= MAX_LINKED_WALLETS) return bad(res, 'you can link up to ' + MAX_LINKED_WALLETS + ' wallets — tap Disconnect wallet to start over');
-          /* Linking a wallet ADDS A WAY INTO THE ACCOUNT, so it has to pass whatever already guards the account.
-             Without this, a stolen session cookie was enough to attach an attacker's own wallet — and from there
-             to enable wallet 2FA with it and lock the real owner out for good, since every exit then demands a
-             signature only the attacker can produce. /api/account/email is gated for exactly this reason; the
-             wallet door was not. A curl request sends no Origin header, so the CSRF check never covered it. */
-          /* F011: ownershipRefusal, not "only if 2FA is on". On a password account that is the password; on a
-             wallet-only account it is a manage-signature from a wallet already on the account — so a borrowed
-             cookie cannot attach a key of its own. b.current carries that proof; b.password is accepted too. */
-          if (me.twofa_method || emailIdentity(me.id) || walletAddresses(me.id).length) {
-            const cur = Object.assign({}, b.current || {}); if (!cur.password && b.password) cur.password = b.password;
-            const err = await ownershipRefusal(me, cur); if (err) return bad(res, 'to link a wallet, ' + err, 401);
-          }
-          // else: an account with no password and no wallet yet (a social sign-in) has nothing it could prove with —
-          // its FIRST wallet links on the session alone; the owner is notified below and the 24h age rule
-          // (walletTooNew) keeps that wallet from becoming the account's key straight away
+          /* Linking a wallet ADDS A WAY INTO THE ACCOUNT: without a proof, a stolen session cookie was enough to
+             attach an attacker's own wallet, enable wallet 2FA with it and lock the real owner out for good. The
+             proof is asked at the top of this route, before the signature is spent (F011). */
           insertIdentity(me.id, 'wallet', address);
           notify(me.id, '🔗', 'A new wallet was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
+          sudoOthersOff(me);
           forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
           refreshSupplyForUser(me.id); // their communities' share of supply now includes this wallet
           // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
@@ -10453,17 +10671,21 @@ const server = http.createServer(async (req, res) => {
           // either of them would be a wallet.
           const wGate = signupRefusal(req);
           if (wGate) return send(res, 403, wGate);
-          const wIp = ipIdx(req);
-          const wBlock = ipSignupBlocked(wIp);
-          if (wBlock) return bad(res, wBlock, 429);
-          username = autoUsername();
-          userId = createUser(username, true, wIp);
-          insertIdentity(userId, 'wallet', address);
-          claimInvite(req, userId);
-          db.prepare('INSERT OR IGNORE INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(userId, bidx(address), encField(address), 'My wallet', now());
-          awardPoints(userId, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address));   // blind index, never the address — see the link path above
-          checkOg(userId).catch(() => {}); // brand-new wallet account might be an early buyer → verify OG in the background
-          queueHolderProof(userId);        // they signed in WITH a wallet: start the participation check right away
+          /* Someone pressed "sign in" with a wallet this site has never seen, and holds a ticket. That is a
+             sign-UP, and they have not picked a name yet — so ask, instead of inventing one. The wallet is
+             already proved; a short-lived token carries that proof to /api/auth/wallet/signup, so choosing
+             the name does not cost a second signature. (A caller that says nothing about intent still gets
+             the old one-step account with a placeholder name it can change later.) */
+          if (b.intent === 'signin' && !su.username) {
+            const tok = rand(16);
+            for (const [k, v] of pendingSignups) if (v.expires < now()) pendingSignups.delete(k);
+            pendingSignups.set(tok, { address, expires: now() + 6e5 });
+            return send(res, 200, { needUsername: true, signup: tok });
+          }
+          const made = await createWalletAccount(req, address, su);
+          if (made.gate) return send(res, 403, made.gate);
+          if (made.error) return bad(res, made.error, made.status || 400);
+          userId = made.userId; username = made.username; emailNotAdded = made.emailNotAdded;
         }
         // an existing account with a NON-wallet second factor (authenticator / password) must still pass it — a wallet
         // signature alone is the first factor here, not both
@@ -10491,7 +10713,26 @@ const server = http.createServer(async (req, res) => {
             if (refusal) return bad(res, refusal, 401);
           }
         }
-        return send(res, 200, { ok: true, username, newAccount: !ident }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req))) });
+        return send(res, 200, { ok: true, username, newAccount: !ident, ...(emailNotAdded ? { emailNotAdded: true } : {}) }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req), ident ? 0 : NEW_ACCOUNT_SUDO_MS)) });   // a new account's setup is unlocked; a sign-in is not
+      }
+
+      /* The second half of a wallet sign-up that started as a sign-in: the wallet was proved moments ago
+         (the token says which), the person has now picked their @username — and optionally an email and
+         password. Every gate a sign-up passes is asked again here, because the ticket or the age cookie can
+         have changed in between. */
+      if (p === '/api/auth/wallet/signup' && req.method === 'POST') {
+        if (!rateLimit('wsignup:' + clientIp(req), 30, 9e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        const entry = pendingSignups.get(String(b.signup || ''));
+        if (!entry || entry.expires < now()) return bad(res, 'that wallet connection expired — connect your wallet again', 401);
+        const su = walletSignupFields(b);
+        if (su.error) return bad(res, su.error);   // a typo does not spend the token
+        if (!su.username) return bad(res, 'pick a username first');
+        pendingSignups.delete(String(b.signup));   // from here on, one attempt per proved wallet: nothing below can be probed repeatedly
+        const made = await createWalletAccount(req, entry.address, su);
+        if (made.gate) return send(res, 403, made.gate);
+        if (made.error) return bad(res, made.error, made.status || 400);
+        return send(res, 200, { ok: true, username: made.username, newAccount: true, ...(made.emailNotAdded ? { emailNotAdded: true } : {}) }, { 'Set-Cookie': sessionCookie(createSession(made.userId, ipIdx(req), NEW_ACCOUNT_SUDO_MS)) });
       }
 
       /* ----- oauth ----- */
@@ -10541,7 +10782,7 @@ const server = http.createServer(async (req, res) => {
       /* ----- profile + theme ----- */
       if (p === '/api/profile' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
-        if (blockReadOnly(res, me)) return;
+        if (blockSanctioned(res, me)) return;   // your own profile is yours to set up before the $SEND check — a read-only sanction still pauses it
         const b = await readBody(req);
         if (b.username !== undefined) {
           const u = String(b.username).trim();
@@ -10591,13 +10832,13 @@ const server = http.createServer(async (req, res) => {
           if (j.length > 4000) return bad(res, 'prefs too large');
           db.prepare('UPDATE users SET site_prefs = ? WHERE id = ?').run(encField(j), me.id);
         }
-        const czEarned = awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd()); // once/day for tuning your profile
+        const czEarned = needsHolderProof(me) ? 0 : awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd()); // once/day for tuning your profile — points start once the participation check passes
         const u2 = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
         return send(res, 200, { ok: true, user: { username: u2.username, avatar: u2.avatar, bio: u2.bio, theme: themeOf(u2) }, pointsEarned: czEarned });
       }
       if (p === '/api/profile/image' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
-        if (blockReadOnly(res, me)) return;
+        if (blockReadOnly(res, me)) return;   // pictures are uploads like any other: they wait for the participation check
         if (!rateLimit('img:' + me.id, 20, 36e5)) return bad(res, 'too many uploads — try later', 429);
         const b = await readBody(req, 6 * 1024 * 1024); // a 3.5 MB image arrives base64'd (~4.7 MB) — this route is the reason the default is not enough
         /* __proto__: null matters here. A plain object literal inherits from Object.prototype, so

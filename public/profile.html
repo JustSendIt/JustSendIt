@@ -176,6 +176,11 @@
         <details class="setting-card" id="sec-security">
           <summary>🔐 Security <span class="sec-state" id="sec-state" aria-live="polite"></span></summary>
           <div class="setting-body">
+            <div class="sudo-bar" id="sudo-bar" role="status" aria-live="polite">
+              <span id="sudo-text">🔒 Security changes ask you to confirm it’s you — once, then everything here is unlocked for a while.</span>
+              <button class="btn btn-ghost btn-sm" id="sudo-btn" type="button" data-tip="Confirms it's you now, so the changes below don't stop to ask">Unlock 🔓</button>
+            </div>
+            <p class="modal-note setup-2fa-note" id="setup-2fa-note" hidden>🔐 <b>Optional:</b> add a second lock to your new account below — an authenticator app, or (if you added a password) your password on wallet sign-ins. Nothing here asks for your password again for your first hour. <button class="linklike" id="setup-2fa-skip" type="button" data-tip="Skips two-factor for now and takes you back to where you were">Skip for now →</button></p>
             <div class="f-label" style="margin-top:0;">Sign-in methods</div>
             <div id="pf-methods" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin:0.4rem 0 0.7rem;"></div>
 
@@ -195,15 +200,7 @@
                 <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                   <button class="btn btn-primary btn-sm" id="totp-start-btn" data-tip="Shows a QR code to scan in your authenticator app">📱 Set up phone app</button>
                   <button class="btn btn-ghost btn-sm" id="wallet-2fa-btn" data-tip="Requires this wallet to sign in, and to turn this off again">🦊 Use wallet as 2FA</button>
-                  <button class="btn btn-ghost btn-sm" id="pw-2fa-btn" hidden data-tip="Opens the field where you confirm your password">🔑 Use my password as 2FA</button>
-                </div>
-                <div id="pw2fa-setup" hidden style="margin-top:0.9rem; max-width:420px;">
-                  <p class="modal-note">With password-2FA on, signing in with your wallet also asks for your account password — two different things a thief would need.</p>
-                  <label class="f-label" for="pw2fa-pass">Confirm your account password</label>
-                  <div style="display:flex; gap:0.5rem;">
-                    <input class="addr-input" id="pw2fa-pass" type="password" autocomplete="current-password" style="margin:0;" placeholder="••••••••">
-                    <button class="btn btn-primary btn-sm" id="pw2fa-confirm-btn" data-tip="Turns on asking for your password at wallet sign-in">Enable ✅</button>
-                  </div>
+                  <button class="btn btn-ghost btn-sm" id="pw-2fa-btn" hidden data-tip="Makes wallet sign-ins also ask for your account password">🔑 Use my password as 2FA</button>
                 </div>
                 <div id="totp-setup" hidden style="margin-top:0.9rem; text-align:center;">
                   <img id="totp-qr" alt="QR code — scan with your authenticator app" style="border-radius:12px; border:4px solid #fff;">
@@ -217,14 +214,8 @@
               </div>
               <div id="twofa-on" hidden>
                 <p class="modal-note">✅ Two-factor is protecting this account (<span id="twofa-kind"></span>).</p>
-                <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-                  <!-- one-time-code lets the phone offer the code it just received, as the sign-in field already does -->
-                  <label class="f-label" for="twofa-disable-code" id="twofa-disable-code-lab" style="margin:0;">Authenticator code</label>
-                  <input class="addr-input" id="twofa-disable-code" style="margin:0; width:130px; text-align:center;" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="code">
-                  <input class="addr-input" id="twofa-disable-pw" type="password" autocomplete="current-password" style="margin:0; width:180px;" placeholder="account password" aria-label="Account password" hidden>
-                  <button class="btn btn-ghost btn-sm" id="twofa-disable-btn" data-tip="Removes the second step after you prove the current one">Turn off 2FA</button>
-                </div>
-                <p class="modal-note">Turning it off always needs the current factor — a code, your password, or a wallet signature.</p>
+                <button class="btn btn-ghost btn-sm" id="twofa-disable-btn" data-tip="Removes the second step — after you confirm it's you with it">Turn off 2FA</button>
+                <p class="modal-note">Turning it off needs the current factor — the confirm step asks for it.</p>
               </div>
             </div>
 
@@ -238,9 +229,27 @@
                 <input class="addr-input" id="ae-pw" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
                 <label class="f-label" for="ae-pw2" style="margin:0;">Confirm password</label>
                 <input class="addr-input" id="ae-pw2" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
-                <div id="ae-factor" hidden><label class="f-label" for="ae-code" style="margin:0;">Your current authenticator code</label><input class="addr-input" id="ae-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="margin:0;" placeholder="123456"></div>
                 <button class="btn btn-primary btn-sm" type="submit" id="ae-submit" data-tip="Adds an email and password as another way in">Add email + password 🔐</button>
                 <p class="modal-note" id="ae-status" role="status" aria-live="polite" style="margin:0;"></p>
+              </form>
+            </div>
+
+            <div id="cred-block" hidden style="margin-top:1.1rem; border-top:1px solid var(--ink-4); padding-top:0.9rem;">
+              <div class="f-label" style="margin-top:0;">Email &amp; password</div>
+              <p class="modal-note">Sign in with <b>@<span id="cred-handle"></span></b> or your email, and this password.</p>
+              <form id="chpw-form" autocomplete="off" style="display:grid; gap:0.5rem; max-width:420px;">
+                <label class="f-label" for="chpw-new" style="margin:0;">New password (8+ characters)</label>
+                <input class="addr-input" id="chpw-new" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
+                <label class="f-label" for="chpw-new2" style="margin:0;">Confirm new password</label>
+                <input class="addr-input" id="chpw-new2" type="password" autocomplete="new-password" minlength="8" style="margin:0;" required>
+                <button class="btn btn-primary btn-sm" type="submit" id="chpw-submit" data-tip="Changes your password and signs out your other devices">Change password 🔑</button>
+                <p class="modal-note" id="chpw-status" role="status" aria-live="polite" style="margin:0;"></p>
+              </form>
+              <form id="chem-form" autocomplete="off" style="display:grid; gap:0.5rem; max-width:420px; margin-top:0.9rem;">
+                <label class="f-label" for="chem-new" style="margin:0;">New email</label>
+                <input class="addr-input" id="chem-new" type="email" autocomplete="email" style="margin:0;" placeholder="you@example.com" required>
+                <button class="btn btn-ghost btn-sm" type="submit" id="chem-submit" data-tip="Changes the email you sign in with; your password stays the same">Change email ✉️</button>
+                <p class="modal-note" id="chem-status" role="status" aria-live="polite" style="margin:0;"></p>
               </form>
             </div>
           </div>

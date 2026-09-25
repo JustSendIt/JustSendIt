@@ -250,11 +250,36 @@ function setWallLinks(name) {
 }
 
 /* ---------- security ---------- */
-/* Proof of the account's CURRENT second factor, for changes that add or remove a way in. Linking a wallet is
-   one of those: a wallet on the account can sign in with it, so attaching one from a borrowed session was
-   enough to take the account permanently. Returns {} when the account has no factor to prove. */
-// One implementation, in auth.js, so every page proves the second factor the same way.
-const currentFactorBody = (note) => AUTH.currentFactor(note);
+/* "Confirm it's you", once: every change in this card goes through AUTH.stepUp, which asks only when this
+   session is not already unlocked (a fresh sign-in, a new account's setup, or a confirm in the last while)
+   and then remembers it server-side. One implementation, in auth.js, so every page asks the same way. */
+const currentFactorBody = (note) => AUTH.stepUp(note);
+
+// the unlock state, in words: when it ends, and a way to end it now (a shared computer) or start it now
+let sudoTimer = null;
+function renderSudo() {
+  const bar = document.getElementById('sudo-bar'), txt = document.getElementById('sudo-text'), btn = document.getElementById('sudo-btn');
+  if (!bar || !txt || !btn) return;
+  const until = AUTH.user && AUTH.user.sudoUntil;
+  const open = !!(until && until > Date.now());
+  const mins = (AUTH.user && AUTH.user.verifyNeeds && AUTH.user.verifyNeeds.minutes) || 30;
+  bar.classList.toggle('is-open', open);
+  txt.textContent = open
+    ? '🔓 Unlocked on this device until ' + new Date(until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ' — the changes below won’t ask again.'
+    : '🔒 Security changes ask you to confirm it’s you — once, then everything here is unlocked for ' + mins + ' minutes.';
+  btn.textContent = open ? 'Lock now 🔒' : 'Unlock 🔓';
+  btn.setAttribute('data-tip', open ? 'Ends the unlock on this device now — the next change asks again' : 'Confirms it\'s you now, so the changes below don\'t stop to ask');
+  clearTimeout(sudoTimer);
+  if (open) sudoTimer = setTimeout(renderSudo, Math.min(until - Date.now() + 500, 60e3));   // repaint when it runs out
+}
+async function toggleSudo() {
+  try {
+    if (AUTH.user && AUTH.user.sudoUntil && AUTH.user.sudoUntil > Date.now()) { await AUTH.lockSecurity(); sendToast('Locked 🔒 — the next security change will ask again'); }
+    else { await AUTH.stepUp('Unlocking security changes on this device.'); sendToast('Unlocked 🔓'); }
+  } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + e.message); }
+  renderSudo();
+}
+document.addEventListener('auth:sudo', renderSudo);
 
 /* Everything about how you get into this account lives in one place — wallets, sign-in methods and the
    second factor — and that place is a <details> that opens shut. A closed panel labelled only "Security"
@@ -352,8 +377,8 @@ async function unlinkWallet(address) {
   const st = document.getElementById('wl-status');
   if (st) st.textContent = '';
   try {
-    const current = await currentFactorBody('Unlinking a wallet changes how you sign in.');
-    const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, ...current } });
+    const current = AUTH.user && AUTH.user.twofa ? await currentFactorBody('Unlinking a wallet changes how you sign in.') : {};
+    const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, current } });
     sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: that wallet had sold out' : ''));
     await loadMe();
     refocus('wl-status');   // the button that had focus was just re-rendered away
@@ -377,7 +402,7 @@ async function makeTwofaWallet(address) {
     if (got !== address) throw new Error('that is ' + shortAddr(got) + ' — switch to ' + shortAddr(address) + ' in your wallet app, then try again');
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const newSignature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    await api('/api/2fa/wallet/primary', { method: 'POST', body: { address, newSignature, ...current } });
+    await api('/api/2fa/wallet/primary', { method: 'POST', body: { address, newSignature, current } });
     sendToast('Two-factor wallet is now ' + shortAddr(address) + ' 🔐');
     await loadMe();
     refocus('wl-status');   // the button that had focus was just re-rendered away
@@ -390,20 +415,22 @@ async function makeTwofaWallet(address) {
 
 async function startTotp() {
   try {
-    const j = await api('/api/2fa/totp/setup', { method: 'POST' });
+    await currentFactorBody('Setting up an authenticator app changes how you sign in.');
+    const j = await api('/api/2fa/totp/setup', { method: 'POST', body: {} });
     document.getElementById('totp-setup').hidden = false;
     document.getElementById('totp-qr').src = j.qr;
     document.getElementById('totp-secret').textContent = j.secret;
     document.getElementById('totp-confirm').focus();
-  } catch (e) { sendToast('⚠️ ' + e.message); }
+  } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + e.message); }
 }
 async function confirmTotp() {
   try {
     await api('/api/2fa/totp/enable', { method: 'POST', body: { code: document.getElementById('totp-confirm').value.trim() } });
     sendToast('2FA is ON 🔐');
     sendConfetti(innerWidth / 2, innerHeight / 2, { count: 40, emojiRatio: 0.3 });
+    setupDone();
     loadMe();
-  } catch (e) { sendToast('⚠️ ' + e.message); }
+  } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + e.message); }
 }
 async function enableWallet2fa() {
   try {
@@ -412,21 +439,16 @@ async function enableWallet2fa() {
        right now. One click used to be enough, and a wallet whose seed was already gone locked the account
        permanently with no warning at all. */
     if (!confirm('Turn on wallet two-factor?\n\nFrom now on, signing in will need a signature from this wallet — and so will turning two-factor back off. If you lose access to the wallet, you lose access to the account.\n\nYou will be asked to sign now to prove you can.')) return;
-    const current = await currentFactorBody('Turning on wallet two-factor changes how you sign in.');
+    // confirm it's you FIRST: the server spends the wallet's signature below, so it must not be asked for after
+    await currentFactorBody('Turning on wallet two-factor changes how you sign in.');
     const { provider, address } = await WALLET.connect();
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    const body = { address, signature, current };
-    // an account with a password proves it with the password, so a borrowed session alone can never arm the lock
-    if (!(AUTH.user && AUTH.user.twofa) && AUTH.user && (AUTH.user.methods || []).includes('email')) {
-      const pw = prompt('Turning on wallet two-factor means this wallet becomes required to sign in.\n\nEnter your account password to confirm:');
-      if (!pw) throw new Error('cancelled');
-      body.password = pw;
-    }
-    await api('/api/2fa/wallet/enable', { method: 'POST', body });
+    await api('/api/2fa/wallet/enable', { method: 'POST', body: { address, signature } });
     sendToast('Wallet 2FA is ON 🔐');
+    setupDone();
     loadMe();
-  } catch (e) { sendToast('⚠️ ' + (e.message || 'cancelled')); }
+  } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + (e.message || 'cancelled')); }
 }
 // wallet-first accounts add an email + password (a second way in; unlocks password-2FA and safe wallet disconnect)
 async function addEmail(e) {
@@ -435,51 +457,75 @@ async function addEmail(e) {
   const email = document.getElementById('ae-email').value.trim(), pw = document.getElementById('ae-pw').value, pw2 = document.getElementById('ae-pw2').value;
   if (pw.length < 8) { st.textContent = '⚠️ Password needs at least 8 characters.'; return; }
   if (pw !== pw2) { st.textContent = '⚠️ Passwords don’t match.'; return; }
-  const body = { email, password: pw };
-  // adding a login credential is a 2FA-gated change: supply the current factor
-  if (AUTH.user && AUTH.user.twofa === 'totp') body.code = document.getElementById('ae-code').value.trim();
-  if (AUTH.user && AUTH.user.twofa === 'wallet') {
-    try {
-      st.textContent = 'Sign with your linked wallet to confirm… ✍️';
-      const { provider, address } = await WALLET.connect();
-      const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
-      body.address = address; body.signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-    } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + (err.message || 'cancelled'); return; }
-  }
   st.textContent = '…';
   try {
-    await api('/api/account/email', { method: 'POST', body });
+    await currentFactorBody('Adding an email and password adds a way to sign in.');
+    await api('/api/account/email', { method: 'POST', body: { email, password: pw } });
     st.textContent = ''; document.getElementById('ae-pw').value = ''; document.getElementById('ae-pw2').value = '';
     sendToast('Email + password added ✅'); loadMe();
-  } catch (err) { st.textContent = '⚠️ ' + err.message; }
+  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
 }
 async function confirmPassword2fa() {
   try {
-    await api('/api/2fa/password/enable', { method: 'POST', body: { password: document.getElementById('pw2fa-pass').value } });
-    document.getElementById('pw2fa-pass').value = '';
-    sendToast('Password 2FA is ON 🔐'); loadMe();
-  } catch (e) { sendToast('⚠️ ' + e.message); }
+    if (!confirm('Use your password as two-factor?\n\nSigning in with a wallet will then also ask for your account password — two different things a thief would need.')) return;
+    /* The password IS this factor, so it is typed here even when the session is unlocked: arming a password you
+       no longer remember would lock every way in. The masked pane — never the browser's clear-text dialog. */
+    const typed = await AUTH._confirmFactor('password', 'Type your account password — it becomes the second step at wallet sign-in.');
+    await api('/api/2fa/password/enable', { method: 'POST', body: { password: typed.password } });
+    sendToast('Password 2FA is ON 🔐'); setupDone(); loadMe();
+  } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + e.message); }
 }
 async function disable2fa() {
   try {
-    if (AUTH.user && AUTH.user.twofa === 'password') {
-      await api('/api/2fa/disable', { method: 'POST', body: { password: document.getElementById('twofa-disable-pw').value } });
-    } else if (AUTH.user && AUTH.user.twofa === 'wallet') {
-      // wallet 2FA can only be removed by signing with a linked wallet
-      const { provider, address } = await WALLET.connect();
-      const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
-      const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
-      await api('/api/2fa/disable', { method: 'POST', body: { address, signature } });
-    } else {
-      await api('/api/2fa/disable', { method: 'POST', body: { code: document.getElementById('twofa-disable-code').value.trim() } });
-    }
+    if (!confirm('Turn two-factor off?\n\nSigning in will need only your password or wallet again.')) return;
+    await currentFactorBody('Turning two-factor off changes how you sign in.');
+    await api('/api/2fa/disable', { method: 'POST', body: {} });
     sendToast('2FA turned off');
     loadMe();
-  } catch (e) { sendToast('⚠️ ' + (e.message || 'cancelled')); }
+  } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + (e.message || 'cancelled')); }
+}
+// change the password: the confirm step is the old-password check, so this asks only for the new one
+async function changePassword(e) {
+  e.preventDefault();
+  const st = document.getElementById('chpw-status');
+  const pw = document.getElementById('chpw-new').value, pw2 = document.getElementById('chpw-new2').value;
+  if (pw.length < 8) { st.textContent = '⚠️ Password needs at least 8 characters.'; return; }
+  if (pw !== pw2) { st.textContent = '⚠️ Passwords don’t match.'; return; }
+  st.textContent = '…';
+  try {
+    await currentFactorBody('Changing your password.');
+    const j = await api('/api/account/password', { method: 'POST', body: { password: pw } });
+    document.getElementById('chpw-new').value = ''; document.getElementById('chpw-new2').value = '';
+    st.textContent = '';
+    sendToast('Password changed 🔑' + (j.endedOthers ? ' — ' + j.endedOthers + ' other ' + (j.endedOthers === 1 ? 'device was' : 'devices were') + ' signed out' : ''));
+  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
+}
+async function changeEmail(e) {
+  e.preventDefault();
+  const st = document.getElementById('chem-status');
+  const email = document.getElementById('chem-new').value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { st.textContent = '⚠️ Enter a valid email.'; return; }
+  st.textContent = '…';
+  try {
+    await currentFactorBody('Changing the email you sign in with.');
+    await api('/api/account/email/change', { method: 'POST', body: { email } });
+    document.getElementById('chem-new').value = '';
+    st.textContent = '';
+    sendToast('Email changed ✉️');
+  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
+}
+/* A new account that ticked "set up two-factor right after" lands here with a note and a way back.
+   Finishing (or skipping) sends them back to where they signed up. */
+function setupDone() {
+  let pending = false; try { pending = sessionStorage.getItem('jsi:setup-2fa') === '1'; sessionStorage.removeItem('jsi:setup-2fa'); } catch {}
+  const note = document.getElementById('setup-2fa-note'); if (note) note.hidden = true;
+  if (!pending) return;
+  let back = null; try { back = sessionStorage.getItem('jsi:after-2fa'); sessionStorage.removeItem('jsi:after-2fa'); } catch {}
+  if (back && /^\/(?![\/\\])/.test(back)) setTimeout(() => { location.href = back; }, 900);
 }
 async function loadMe() {
   try {
-    const me = (await api('/api/me')).user;
+    const me = AUTH._normMe ? AUTH._normMe((await api('/api/me')).user) : (await api('/api/me')).user;   // the unlock as a deadline on this clock
     AUTH.user = me;
     const zone = document.getElementById('pf-methods');
     zone.innerHTML = '';
@@ -497,18 +543,15 @@ async function loadMe() {
     document.getElementById('twofa-on').hidden = !on;
     document.getElementById('totp-setup').hidden = true;
     if (on) document.getElementById('twofa-kind').textContent = ({ totp: 'authenticator app', wallet: 'wallet signature', password: 'account password' })[me.twofa] || me.twofa;
-    // the disable control matches the factor: a code for authenticator 2FA, the password for password-2FA, a signature (no field) for wallet 2FA
-    const codeShow = (on && me.twofa === 'totp') ? '' : 'none';
-    document.getElementById('twofa-disable-code').style.display = codeShow;
-    const codeLab = document.getElementById('twofa-disable-code-lab'); if (codeLab) codeLab.style.display = codeShow;   // its visible label follows it
-    const dpw = document.getElementById('twofa-disable-pw'); if (dpw) dpw.hidden = !(on && me.twofa === 'password');
     document.getElementById('wallet-2fa-btn').disabled = !me.wallets.length;
     if (!me.wallets.length) document.getElementById('wallet-2fa-btn').title = 'Link a wallet first';
     const hasEmail = me.methods.includes('email'), hasWallet = me.wallets.length > 0;
-    const aeb = document.getElementById('add-email-block'); if (aeb) { aeb.hidden = hasEmail; const f = document.getElementById('ae-factor'); if (f) f.hidden = me.twofa !== 'totp'; }
+    const aeb = document.getElementById('add-email-block'); if (aeb) aeb.hidden = hasEmail;
+    const cred = document.getElementById('cred-block'); if (cred) cred.hidden = !hasEmail;
+    const ch = document.getElementById('cred-handle'); if (ch) ch.textContent = me.username;
     const pwBtn = document.getElementById('pw-2fa-btn'); if (pwBtn) pwBtn.hidden = !(hasEmail && hasWallet); // password-2FA only makes sense for wallet sign-ins
-    const pws = document.getElementById('pw2fa-setup'); if (pws) pws.hidden = true;
     renderWallets(me);
+    renderSudo();
   } catch {}
 }
 
@@ -683,9 +726,18 @@ document.getElementById('totp-confirm-btn').addEventListener('click', confirmTot
 document.getElementById('wallet-2fa-btn').addEventListener('click', enableWallet2fa);
 document.getElementById('twofa-disable-btn').addEventListener('click', disable2fa);
 document.getElementById('add-email-form').addEventListener('submit', addEmail);
-document.getElementById('pw-2fa-btn').addEventListener('click', () => { const b = document.getElementById('pw2fa-setup'); b.hidden = false; document.getElementById('pw2fa-pass').focus(); });
-document.getElementById('pw2fa-confirm-btn').addEventListener('click', confirmPassword2fa);
-document.getElementById('pw2fa-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmPassword2fa(); });
+document.getElementById('pw-2fa-btn').addEventListener('click', confirmPassword2fa);
+document.getElementById('chpw-form').addEventListener('submit', changePassword);
+document.getElementById('chem-form').addEventListener('submit', changeEmail);
+document.getElementById('sudo-btn').addEventListener('click', toggleSudo);
+document.getElementById('setup-2fa-skip').addEventListener('click', () => { sendToast('Skipped — two-factor is always here in Settings → Security'); setupDone(); });
+/* Arriving from a sign-up that ticked "set up two-factor right after": open the card on it, with the note. */
+try {
+  if (sessionStorage.getItem('jsi:setup-2fa') === '1') {
+    const note = document.getElementById('setup-2fa-note'); if (note) note.hidden = false;
+    setTimeout(() => { openSecurity(true); const t = document.getElementById('totp-start-btn'); if (t) { try { t.focus({ preventScroll: true }); } catch {} } }, 120);
+  }
+} catch {}
 
 /* Delegated, and guarded: the rows are re-rendered on every loadMe, so per-button listeners would leak,
    and this block must never throw — the listeners above it have no null guards, and a TypeError here

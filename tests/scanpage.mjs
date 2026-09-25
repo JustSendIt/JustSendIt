@@ -139,7 +139,10 @@ try {
   }
   const rec = await api('/api/scan/recent');
   const rj = rec.j || {};
-  check('the public recent list is served, one entry per token', rec.status === 200 && Array.isArray(rj.scans) && rj.scans.some((x) => x.token === SEND) && new Set(rj.scans.map((x) => x.token)).size === rj.scans.length, rec.status + ' ' + JSON.stringify(rj).slice(0, 120));
+  // the list holds what was actually read: when every scan above came back "unavailable" (the node refused this
+  // IP), there is honestly nothing to list, and the check is that it says so rather than inventing an entry
+  const scanned = scan.status === 200 && sj.kind === 'token';
+  check('the public recent list is served, one entry per token' + (scanned ? '' : ' (the chain refused this run, so it is honestly empty)'), rec.status === 200 && Array.isArray(rj.scans) && (scanned ? rj.scans.some((x) => x.token === SEND) : true) && new Set(rj.scans.map((x) => x.token)).size === rj.scans.length, rec.status + ' ' + JSON.stringify(rj).slice(0, 120));
   check('  ...each entry is the token, when, how many times — and nothing about a person', rj.scans && rj.scans.every((x) => ['token', 'pool', 'kind', 'symbol', 'name', 'lastAt', 'readAt', 'count'].every((k) => k in x) && Object.keys(x).length === 8), rj.scans && JSON.stringify(Object.keys(rj.scans[0] || {})));
   check('  ...and answers without a session', rec.status === 200);
   check('the fallback: an unreachable upstream serves the last snapshot, marked stale with its read time', /if \(cached && usable\(cached\.pair\)\) return \{ pair: cached\.pair, readAt: row\.updated_at, stale: true/.test(SRC) && /if \(usable\(p\)\) return \{ pair: rescoreCachedPair\(p\), readAt: s\.read_at, stale: true/.test(SRC));

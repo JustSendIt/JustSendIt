@@ -46,7 +46,8 @@ writeFileSync(path.join(dataDir, '.data_key'), randomBytes(32).toString('hex'), 
 
 const PORT = 8000 + Math.floor(Math.random() * 1500);
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
-              BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1' };   // the terms step and voice memos are hidden by default; the suites still cover both
+              BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1',   // the terms step and voice memos are hidden by default; the suites still cover both
+              LEDGER_COOL_MS: '5000' };   // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });

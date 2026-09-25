@@ -151,8 +151,10 @@ try {
                         'Uploading images or video', 'Starting, joining or posting in a community',
                         'Creating or voting on proposals'])
       check('blocked list names: ' + item, b.includes(item));
-    const sites = (SRC.match(/blockReadOnly\(res, me\)\) return;/g) || []).length;
-    check('blockReadOnly still guards the routes the list describes', sites >= 20, sites + ' call sites');
+    // an account's own profile answers only to the SANCTION (blockSanctioned) — a new member may set it up before the
+    // $SEND check — so both guards count: every route on the list still pauses for read-only mode
+    const sites = (SRC.match(/(?:blockReadOnly|blockSanctioned)\(res, me\)\) return;/g) || []).length;
+    check('the read-only guards still cover the routes the list describes', sites >= 20 && /if \(blockSanctioned\(res, me\)\) return;   \/\/ your own profile/.test(SRC), sites + ' call sites');
     check('the check-in is deliberately NOT among them', /\/api\/checkin[\s\S]{0,400}?rateLimit\('checkin:/.test(SRC) && !/\/api\/checkin[\s\S]{0,200}?blockReadOnly/.test(SRC));
   }
 

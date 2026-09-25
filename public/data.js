@@ -5,7 +5,17 @@
   const usd = n => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const tok = n => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const say = t => { if (sr) sr.textContent = t; if (window.sendToast) sendToast(t); };
-  const J = (p, opt) => fetch(p, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opt || {})).then(async r => ({ ok: r.ok, status: r.status, j: await r.json().catch(() => null) }));
+  const J0 = (p, opt) => fetch(p, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opt || {})).then(async r => ({ ok: r.ok, status: r.status, j: await r.json().catch(() => null) }));
+  /* The unlock this page trusted can have ended (another tab pressed "Lock now", another device changed how the
+     account signs in): the server then answers need_verify, and the answer is the step, then the same request. */
+  const J = async (p, opt) => {
+    const r = await J0(p, opt);
+    if (r.status === 401 && r.j && r.j.code === 'need_verify' && window.AUTH && AUTH.stepUp) {
+      try { await AUTH.stepUp(r.j.error, { force: true }); } catch { return r; }
+      return J0(p, opt);
+    }
+    return r;
+  };
 
   async function load(fresh) {
     const r = await J('/api/data/eligibility' + (fresh ? '?fresh=1' : ''));

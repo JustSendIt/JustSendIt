@@ -38,9 +38,17 @@ const membersBefore = { count: null, qual: null };
 
 try {
   /* ═══ the ledger ═══ */
-  const scan = await api('/api/scan?address=' + SEND);
+  /* The public node rate-limits by IP, and this run shares that IP with every other suite (and, on this Mac, with
+     the live site). When it refuses, the ledger stands down for LEDGER_COOL_MS (5 s under the runner) and resumes
+     from the block it reached — so the honest test is to wait that out and ask again, a few times. */
+  let scan, idx;
+  for (let i = 0; i < 8; i++) {
+    scan = await api('/api/scan?address=' + SEND);
+    idx = db.prepare('SELECT * FROM holder_index WHERE token_addr=?').get(SEND);
+    if (idx && idx.status === 'ok') break;
+    await sleep(6000);
+  }
   const h = (scan.j && scan.j.pair && scan.j.pair.holders) || {};
-  const idx = db.prepare('SELECT * FROM holder_index WHERE token_addr=?').get(SEND);
   if (!idx || idx.status !== 'ok') check('the ledger for $SEND was built by the scan (or the chain could not be read from here: ' + JSON.stringify(idx && idx.error) + ')', false, JSON.stringify(idx));
   else {
     check('a scan builds the token’s on-chain ledger: every Transfer event, folded into balances', idx.logs > 1000 && idx.last_block > idx.first_block && idx.first_block > 0, JSON.stringify({ logs: idx.logs, first: idx.first_block, last: idx.last_block }));
@@ -76,7 +84,9 @@ try {
   check('the sweep does community tokens first, then a bounded slice of what people are reading', /ORDER BY COALESCE\(held_at, 0\) ASC LIMIT 6/.test(SRC) && /if \(\+\+done >= 6\) break;/.test(SRC) && /ledgerTimer\.unref\(\)/.test(SRC));
 
   /* ═══ the community supply share ═══ */
-  const c0 = comm();
+  // seeded at boot from a live lookup; a refused lookup is retried a minute later
+  let c0 = comm();
+  for (let i = 0; !c0 && i < 16; i++) { await sleep(5000); c0 = comm(); }
   check('the official $SEND community exists to measure', !!c0, c0 && c0.id);
   if (c0) {
     cid = c0.id;
