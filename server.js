@@ -8488,6 +8488,11 @@ try {
     db.prepare('INSERT OR IGNORE INTO invite_codes (code, owner_id, created_at) VALUES (?,NULL,?)').run(normCode(seed), now());
   }
 } catch {}
+// One-time, idempotent: accounts deleted before deletion voided their unused codes (see /api/account/delete)
+try {
+  const voided = db.prepare('DELETE FROM invite_codes WHERE user_id IS NULL AND owner_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run().changes;
+  if (voided) console.log('[gate] voided ' + voided + ' unused invite code' + (voided === 1 ? '' : 's') + ' left by deleted accounts');
+} catch {}
 
 function passRow(req) {
   const c = parseCookies(req.headers.cookie);
@@ -10222,6 +10227,12 @@ const server = http.createServer(async (req, res) => {
             db.prepare('UPDATE communities SET member_count = MAX(member_count-1,0) WHERE id = ?').run(q.community_id);
           for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
+          /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
+             in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
+             and the ten codes it was handed would otherwise live on. That includes a code a friend has redeemed but
+             not yet finished signing up with: the pass WAS the invite. Codes already used to make an account stay,
+             as the record of who came in on them. */
+          db.prepare('DELETE FROM invite_codes WHERE owner_id = ? AND user_id IS NULL').run(uid);
           try { db.prepare('DELETE FROM mutes WHERE user_id = ? OR muted_id = ?').run(uid, uid); } catch {}
           try { db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(uid, uid); } catch {}
           try { db.prepare('DELETE FROM notifications WHERE actor_id = ?').run(uid); } catch {}

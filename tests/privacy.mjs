@@ -15,7 +15,7 @@ const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH);
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
-const made = { users: [], communities: [], files: [] };
+const made = { users: [], communities: [], files: [], codes: [] };
 const SRC = readFileSync(SERVER_JS, 'utf8');
 const PUB = path.join(ROOT, 'public');
 const UPLOADS = path.join(DATA_DIR, 'uploads');
@@ -81,6 +81,17 @@ try {
     made.communities.push(cid);
     db.prepare("INSERT INTO proposals (community_id, author_id, title, body, status, created_at, author_ip) VALUES (?,?,?,?,?,?,?)").run(cid, u.id, 'draft idea', 'secret draft', 'draft', Date.now(), hex(32));
     db.prepare("INSERT INTO proposals (community_id, author_id, title, body, status, created_at, author_ip) VALUES (?,?,?,?,?,?,?)").run(cid, u.id, 'open idea', 'public words', 'open', Date.now(), hex(32));
+    // their invite codes: one never given out, one a friend redeemed but has not signed up with, one already used —
+    // and somebody else's unused code, which the deletion must not touch
+    const joiner = mkUser('__pv_joiner__'), other = mkUser('__pv_other__');
+    const code = (tag) => { const c = 'PV' + tag + hex(3).toUpperCase(); made.codes.push(c); return c; };
+    const cUnused = code('UN'), cRedeemed = code('RD'), cUsed = code('US'), cOthers = code('OT');
+    const passTok = hex(24);
+    const insCode = db.prepare('INSERT INTO invite_codes (code, owner_id, created_at, used_at, user_id, pass, tos_at) VALUES (?,?,?,?,?,?,?)');
+    insCode.run(cUnused, u.id, Date.now(), null, null, null, null);
+    insCode.run(cRedeemed, u.id, Date.now(), Date.now(), null, createHash('sha256').update(passTok).digest('hex'), Date.now());
+    insCode.run(cUsed, u.id, Date.now(), Date.now(), joiner.id, null, Date.now());
+    insCode.run(cOthers, other.id, Date.now(), null, null, null, null);
 
     const del = await api('/api/account/delete', { method: 'POST', sid: u.sid, body: { confirm: 'DELETE', current: { code: totp(secret) } } });
     check('an account with an authenticator can delete itself (the factor arrives nested, as the page sends it)', del.status === 200 && del.j && del.j.ok, del.status + ' ' + (del.j && del.j.error));
@@ -98,6 +109,17 @@ try {
       db.prepare("SELECT COUNT(*) n FROM proposals WHERE author_id=? AND status='draft'").get(u.id).n === 0 &&
       db.prepare("SELECT COUNT(*) n FROM proposals WHERE author_id=? AND status='open' AND title='[deleted]' AND body='' AND author_ip IS NULL").get(u.id).n === 1);
     check('  ...and the community forgets the network it was started from', db.prepare('SELECT creator_ip FROM communities WHERE id=?').get(cid).creator_ip == null);
+    const codeRow = (c) => db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(c);
+    check('  ...the invite codes it had not given out are voided — unused, and redeemed-but-unfinished alike', !codeRow(cUnused) && !codeRow(cRedeemed));
+    check('  ...a code already used to join stays, as the record of who came in on it; another account’s codes are untouched', !!codeRow(cUsed) && codeRow(cUsed).user_id === joiner.id && !!codeRow(cOthers) && !codeRow(cOthers).used_at);
+    const redeem = await api('/api/gate/redeem', { method: 'POST', body: { code: cUnused } });
+    check('  ...so the unused one no longer opens the door', redeem.status === 400 && /not one of ours/.test((redeem.j && redeem.j.error) || ''), redeem.status + ' ' + JSON.stringify(redeem.j));
+    const lateJoin = await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'jsi_pass=' + passTok + '; jsi_age=18' },
+      body: JSON.stringify({ username: '__pv_late_' + hex(2), email: 'pv.late.' + hex(3) + '@example.com', password: 'late-pass-' + hex(3) }) });
+    const lateJ = await lateJoin.json().catch(() => null);
+    check('  ...and the redeemed one no longer makes an account', lateJoin.status === 403 && lateJ && lateJ.code === 'need_invite', lateJoin.status + ' ' + JSON.stringify(lateJ));
+    check('  ...accounts deleted before this rule get the same at boot', /DELETE FROM invite_codes WHERE user_id IS NULL AND owner_id IN \(SELECT id FROM users WHERE deleted_at IS NOT NULL\)/.test(SRC)
+      && /DELETE FROM invite_codes WHERE owner_id = \? AND user_id IS NULL/.test(SRC));
     const pub = await api('/api/users/deleted-' + u.id);
     check('  ...and the public profile carries nothing that identifies them', pub.status !== 200 || (!/leaver_x|leaver_ig/.test(pub.text) && !files.some((f) => pub.text.includes(f))), pub.status);
   }
@@ -260,6 +282,7 @@ try {
     try { db.prepare('DELETE FROM users WHERE id=?').run(id); } catch {}
   }
   for (const c of made.communities) { try { db.prepare('DELETE FROM proposals WHERE community_id=?').run(c); db.prepare('DELETE FROM communities WHERE id=?').run(c); } catch {} }
+  for (const c of made.codes) { try { db.prepare('DELETE FROM invite_codes WHERE code=?').run(c); } catch {} }
   for (const f of made.files) { try { unlinkSync(path.join(UPLOADS, f)); } catch {} }
   const left = db.prepare("SELECT COUNT(*) n FROM users WHERE username LIKE '\\_\\_pv\\_%' ESCAPE '\\' OR username LIKE 'deleted-%'").get().n;
   console.log('\ncleanup — throwaway users left:', left);

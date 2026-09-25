@@ -921,7 +921,7 @@ All of them call one function (`signupRefusal`), and nothing else on the site ca
 4. They enter a code. **Each code works once.**
 5. *(Hidden by default.)* A terms step — scroll to the end, twelve seconds — exists behind `TOS_GATE=1` for an operator who wants it; the site ships without it, and `need_tos` is only ever answered when it is on. (The 18+ tick that used to sit here is the age question above now.)
 6. They make their account — the sign-in panel opens in **Create account** mode on both tabs. **Email:** a @username, the email and a password. **Wallet:** the **@username first**, then *optionally* an email + password as a second way in (sign in later with @username or email and that password, no wallet needed), then the wallet connects and signs once. Either way a box offers **"Set up two-factor right after (optional)"**, which lands them on Settings → Security with nothing asking for a password during their first hour. (Somebody who presses the wallet's plain *Sign in* with a wallet the site has never seen, ticket in hand, is asked for the @username instead of being given a placeholder: the server answers `needUsername` with a ten‑minute, single-use token, and naming the account costs no second signature. Both forms hash the password first and then run every gate and write in one transaction, so concurrent sign-ups cannot share a ticket or overrun the per-network cap. On **either** form, an email that already belongs to another account is not refused — a refusal told any ticket holder, as often as they liked, who is a member. The account is made anyway: it keeps its password, signs in with its @username, has no email until it sets one in Settings → Security, and the page says so. Learning that an address is in use therefore costs a whole account and a ticket, and it counts against the connection's ration of that answer (below): three per 30 days, after which sign-ups *with an email* from that connection pause, with the same refusal for every address.) Their **Send ID** — their place in line — is set at that moment and never changes. It is the user id: already monotonic, already unique, already means "how early you were", so a second counter would only be a way for the two to disagree.
-7. They get **ten codes of their own**, shown immediately, one tap each to copy.
+7. They get **ten codes of their own**, shown immediately, one tap each to copy. They last as long as the account does: deleting it voids every code not yet used.
 
 **Their codes live on their dashboard too** (`/profile.html#invites`), so "where are my codes" has an answer that is not "reopen the modal you closed". A code that has been used is shown there **for the record but cannot be copied** — the server withholds its characters entirely and returns only a two‑character hint plus who took it. There is nothing to copy: it will never work again, and handing someone a dead code is worse than handing them none.
 
@@ -1023,7 +1023,10 @@ from a wallet already on the account, or your current second factor), and the ac
 methods, sessions, profile, posts, comments, uploads, tracked wallets, points and notifications are removed and
 you are signed out everywhere. Send Calls are permanent and stay under a placeholder name. A wallet that verified
 an account for the participation check, or earned an OG badge, stays recorded (as a hash) so it cannot verify or
-badge another account — the [Privacy Policy](public/privacy.html) says exactly what stays and why.
+badge another account. **Invite codes the account had not given out are voided** — deleted, including one a friend
+has redeemed but not yet used to finish signing up — so making an account and deleting it never leaves a supply of
+working tickets behind; codes already used stay, as the record of who came in on them. (A boot-time repair voids the
+unused codes of accounts deleted before this rule.) The [Privacy Policy](public/privacy.html) says exactly what stays and why.
 
 ## 4. How to participate — in 4 steps
 
