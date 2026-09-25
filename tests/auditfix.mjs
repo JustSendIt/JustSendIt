@@ -191,7 +191,7 @@ try {
     check('  ...so skim() and burn() net to zero rather than paying the size multiplier', !!wtp && /netRaw/.test(wtp));
     check('  ...and the position can never be worth more than the pool it is priced against',
       !!wtp && /Math\.min\(tok \* priceUsd, cap\)/.test(wtp));
-    check('  ...and the transfer history is paged, not a single page', !!wtp && /POS_PAGES/.test(wtp));
+    check('  ...and the transfer history is the whole history (explorer or chain), not a single page', !!wtp && /items = await ogTransfers\(a, tokenAddr, \{ noTime: true/.test(wtp));
     check('a Send Call passes the pool liquidity in', /callSpendUsd\(me\.id, token, p2\.pair\.address, price, liq\)/.test(SRC));
   }
 

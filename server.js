@@ -2090,7 +2090,100 @@ const OG_SCAN_GAP_MS = 220;      // politeness gap between pages — a burst of 
 // the safe direction to be wrong in for something that grants a reward.
 const OG_ROUTERS = ['0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f']; // RelayRouterV3 (verified contract)
 const OG_PAGE_TRIES = 4;         // this explorer 429s readily; one shot per page meant almost no scan ever finished
+/* ===== A wallet's token history, straight from the chain ===========================================
+   Every read-only wallet check on the site — the participation check (the $100 of $SEND that opens the
+   door), OG badges, the data-key burn, Send Call and Send-It sizing, conviction hold times — replays a
+   wallet's transfer history. That history used to come ONLY from the Blockscout explorer, and the public
+   explorer refuses server traffic: with no keyed BLOCKSCOUT_URL, every one of those checks ended in "we
+   could not finish reading the chain", so nobody could get in by holding $SEND.
+
+   The chain itself has the same history: every ERC-20 transfer is a Transfer(from, to, value) log. Two
+   eth_getLogs reads — transfers FROM the wallet and transfers TO it — over the token's life give every row
+   the explorer would have, in the same shape, so everything downstream (the replay, its reconciliation
+   against balanceOf, the verdicts) is unchanged. Block times come from one block read per distinct block.
+   The window starts at the token's first Transfer when the holder ledger knows it, and splits itself when
+   the node says an answer is too large, exactly as the ledger's own walk does. */
+const CHAIN_HISTORY_MAX = 20000;                  // transfers one wallet may have for one token before we stop
+const chainBlockMs = new Map();                   // block -> ms (successful reads only; a failed read is asked again)
+const _chainHistInflight = new Map();
+async function chainBlockTime(b) {
+  if (chainBlockMs.has(b)) return chainBlockMs.get(b);
+  const ms = await blockTime(b);
+  if (!ms) throw new Error('block time unreadable');
+  chainBlockMs.set(b, ms);
+  if (chainBlockMs.size > 50000) chainBlockMs.delete(chainBlockMs.keys().next().value);
+  return ms;
+}
+async function rpcRetry(fn) {                     // the public node answers 429 in bursts; a person is waiting, so back off briefly
+  for (let i = 0; ; i++) {
+    try { return await fn(); }
+    catch (e) { if (i >= 3 || !/429|rate|too many requests/i.test(String((e && e.message) || e))) throw e; await new Promise(r => setTimeout(r, 1200 * (i + 1))); }
+  }
+}
+async function rpcTokenTransfers(wallet, token, opts) {
+  const w = String(wallet || '').toLowerCase(), tok = String(token || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(w) || !/^0x[0-9a-f]{40}$/.test(tok)) throw new Error('bad address');
+  const key = w + ':' + tok + ':' + (opts && opts.noTime ? 'n' : 't');
+  if (_chainHistInflight.has(key)) return _chainHistInflight.get(key);
+  const job = (async () => {
+    const wt = '0x' + w.slice(2).padStart(64, '0'), hx = (n) => '0x' + n.toString(16);
+    const idx = db.prepare('SELECT first_block FROM holder_index WHERE token_addr = ?').get(tok);
+    const start = idx && idx.first_block != null ? idx.first_block : 0;
+    const head = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16);
+    if (!(head > 0)) throw new Error('the chain did not answer');
+    const logs = [];
+    for (const topics of [[TRANSFER_TOPIC, wt], [TRANSFER_TOPIC, null, wt]]) {   // sent by the wallet, then received by it
+      let from = start, window = Math.max(1, head - start + 1);
+      while (from <= head) {
+        const to = Math.min(head, from + window - 1);
+        let out;
+        try { out = await rpcRetry(() => rpc('eth_getLogs', [{ fromBlock: hx(from), toBlock: hx(to), address: tok, topics }])); }
+        catch (e) { if (TOO_MANY_RE.test(String((e && e.message) || '')) && window > 50) { window = Math.max(50, Math.floor(window / 4)); continue; } throw e; }
+        if (!Array.isArray(out)) throw new Error('the chain did not answer');
+        for (const l of out) if (!l.removed) logs.push(l);
+        if (logs.length > CHAIN_HISTORY_MAX) throw new Error('history longer than the chain read budget');
+        from = to + 1;
+        if (out.length < 2500) window = Math.min(window * 2, Math.max(1, head - from + 1));
+      }
+    }
+    // a transfer to yourself answers both reads — count it once
+    const seen = new Set(), uniq = [];
+    for (const l of logs) { const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue; seen.add(k); uniq.push(l); }
+    const blocks = [...new Set(uniq.map(l => parseInt(l.blockNumber, 16)))];
+    const ms = new Map();
+    if (!(opts && opts.noTime)) await mapLimit(blocks, 4, async (b) => { ms.set(b, await rpcRetry(() => chainBlockTime(b))); });
+    return uniq.map((l) => {
+      if (!l.topics || l.topics.length < 3 || !l.data || l.data === '0x') throw new Error('a transfer this reader cannot decode');   // never a silent 0
+      const b = parseInt(l.blockNumber, 16);
+      return {
+        from: { hash: '0x' + String(l.topics[1]).slice(-40).toLowerCase() },
+        to: { hash: '0x' + String(l.topics[2]).slice(-40).toLowerCase() },
+        total: { value: BigInt(l.data).toString() },
+        timestamp: ms.has(b) ? new Date(ms.get(b)).toISOString() : null,
+        block_number: b, log_index: parseInt(l.logIndex, 16), tx_hash: l.transactionHash, source: 'chain',
+      };
+    });
+  })();
+  _chainHistInflight.set(key, job);
+  try { return await job; } finally { _chainHistInflight.delete(key); }
+}
+/* Which source answers. A keyed explorer (BLOCKSCOUT_URL set) is asked first — it is one paged read — and the chain
+   answers whenever it refuses; the explorer is then left alone for ten minutes rather than asked, and made to wait
+   for, on every wallet. With no keyed explorer the chain answers directly: the public host refuses servers. */
+const EXPLORER_KEYED = !!process.env.BLOCKSCOUT_URL;
+const EXPLORER_REST_MS = 10 * 60 * 1000;
+let explorerRestUntil = 0;
 async function ogTransfers(wallet, token, opts) {
+  if (EXPLORER_KEYED && now() > explorerRestUntil) {
+    try { return await explorerTransfers(wallet, token, opts); }
+    catch (e) {
+      explorerRestUntil = now() + EXPLORER_REST_MS;
+      console.warn('[history] the explorer did not answer (' + ((e && e.message) || e) + ') — reading wallet histories from the chain for the next 10 minutes');
+    }
+  }
+  return rpcTokenTransfers(wallet, token, opts);
+}
+async function explorerTransfers(wallet, token, opts) {
   const tries = (opts && opts.tries) || OG_PAGE_TRIES, backoff = (opts && opts.backoffMs) || 1500;
   const w = wallet.toLowerCase();
   const base = BLOCKSCOUT + '/api/v2/addresses/' + w + '/token-transfers?type=ERC-20&token=' + token;
@@ -2682,22 +2775,16 @@ async function convictionHolding(uid, tokenAddr) {
   for (const a of addrs.slice(0, SIZE_MAX_WALLETS)) {
     const meAddr = a.toLowerCase();
     try { amountRaw += await erc20Balance(t, a); ok = true; } catch {}
-    try { // earliest incoming transfer of this token to this wallet (Blockscout is newest-first → page to the end, capped)
-      const base = BLOCKSCOUT + '/api/v2/addresses/' + a + '/token-transfers?type=ERC-20&filter=to&token=' + t;
-      let url = base, pages = 0, wEarliest = 0;
-      while (url && pages < 3) {
-        const j = await jget(url);
-        if (!j || !Array.isArray(j.items)) break;
-        for (const it of j.items) {
-          if (((it.to && it.to.hash) || '').toLowerCase() !== meAddr) continue;
-          const ts = Date.parse(it.timestamp || it.block_timestamp || '') || 0;
-          if (ts && (!wEarliest || ts < wEarliest)) wEarliest = ts;
-        }
-        const np = j.next_page_params; url = np ? base + '&' + new URLSearchParams(np).toString() : null; pages++;
+    try { // earliest incoming transfer of this token to this wallet — the full history, from the explorer or the chain
+      const rows = await ogTransfers(a, t, { tries: 2, backoffMs: 800 });
+      let wEarliest = 0;
+      for (const it of rows) {
+        if (((it.to && it.to.hash) || '').toLowerCase() !== meAddr) continue;
+        const ts = Date.parse(it.timestamp || it.block_timestamp || '') || 0;
+        if (ts && (!wEarliest || ts < wEarliest)) wEarliest = ts;
       }
-      if (url) approx = true; // hit the page cap → true first acquisition may be even earlier
       if (wEarliest && (!earliest || wEarliest < earliest)) earliest = wEarliest;
-    } catch {}
+    } catch { approx = true; }   // unread: the hold time shown is at best a lower bound
   }
   // Coarsen the exposed figures: a wall owner's EXACT balance + exact first-held ms would let anyone match the public
   // Blockscout holder list back to their wallet. Round the amount to 3 sig-figs and the first-held time to the day —
@@ -3106,6 +3193,8 @@ async function squadHolds(uid, sq, opts = {}) {
   const key = uid + ':' + sq.id;
   const c = squadGateCache.get(key);
   if (!opts.fresh && c && now() - c.at < SQUAD_GATE_TTL) return { ok: c.ok, heldWei: c.held, needWei: c.need };
+  // no linked wallet: nothing to read, and no reason to ask the chain — the answer is "link one first"
+  if (!walletAddresses(uid).length) { const sc = squadSupplyCache.get(sq.gate_token); return { ok: false, heldWei: 0n, needWei: sq.gate_kind === 'tokens' ? toWei(sq.gate_amount, sq.gate_decimals) : (sc && sc.wei > 0n ? sc.wei * BigInt(Math.round(Number(sq.gate_amount) * 1e4)) / 1000000n : 0n) }; }
   const needWei = await squadNeedWei(sq);
   let heldWei;
   try { heldWei = await walletsBalanceWei(uid, sq.gate_token); }
@@ -4235,31 +4324,24 @@ const SIZE_MULT_CAP = 100;               // cap the size boost at 100× ($10k+ s
 const SIZE_MAX_WALLETS = MAX_LINKED_WALLETS;
 function sizeMult(spendUsd) { return Math.min(SIZE_MULT_CAP, Math.max(1, (spendUsd || 0) / 100)); } // each $100 held-from-buys = 1×, floor 1×
 // full on-chain position: what they BOUGHT from the pool, what they still HOLD, and spend = min(both) (the anti-cheat basis).
-const POS_PAGES = 4;                     // transfer pages walked per wallet (~200 transfers) before we stop
 async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd, liqUsd) {
   const addrs = walletAddresses(userId);
   if (!addrs.length || !pairAddr || !(priceUsd > 0)) return { boughtUsd: 0, heldUsd: 0, spendUsd: 0 };
   const pair = pairAddr.toLowerCase();
   let boughtTok = 0, heldTok = 0, spendTok = 0;
+  let posDec = null; try { posDec = await tokenDecimals(tokenAddr); } catch {}   // chain rows carry no token metadata
   for (const a of addrs.slice(0, SIZE_MAX_WALLETS)) {
     try {
       const me = a.toLowerCase();
       /* Walk more than one page. A single default page is ~50 transfers; a wallet that has traded the
          token at all can push its own buys off the end of it, and the netting below is only honest over
          the whole history we can see. Bounded, and a failed page simply ends the walk with what we have. */
-      const base = BLOCKSCOUT + '/api/v2/addresses/' + a + '/token-transfers?token=' + tokenAddr;
-      const items = [];
-      let url = base;
-      for (let page = 0; page < POS_PAGES; page++) {
-        const j = await jget(url);
-        if (!j || !Array.isArray(j.items)) break;
-        items.push(...j.items);
-        if (!j.next_page_params) break;
-        url = base + '&' + new URLSearchParams(j.next_page_params).toString();
-      }
-      let inRaw = 0n, outRaw = 0n, dec = 18;
+      // the wallet's whole history for this token: the explorer when a keyed one answers, the chain's own Transfer logs otherwise
+      let items = [];
+      try { items = await ogTransfers(a, tokenAddr, { noTime: true, tries: 2, backoffMs: 800 }); } catch { items = []; }
+      let inRaw = 0n, outRaw = 0n, dec = posDec != null ? posDec : 18;
       for (const it of items) {
-        if (it.token && it.token.decimals != null) dec = Number(it.token.decimals) || 18;
+        if (posDec == null && it.token && it.token.decimals != null) dec = Number(it.token.decimals) || 18;
         const from = ((it.from && it.from.hash) || '').toLowerCase();
         const to = ((it.to && it.to.hash) || '').toLowerCase();
         let v = 0n; try { v = BigInt((it.total && it.total.value) || '0'); } catch { continue; }
@@ -9565,6 +9647,22 @@ async function runProofQueue() {
 }
 const proofTimer = setInterval(() => { runProofQueue().catch(() => {}); }, 4000);
 proofTimer.unref();
+/* A check that could not read the chain decided nothing — so it is asked again without waiting for the person to
+   press the button: every 15 minutes, the accounts with a linked wallet whose last check ended unread (oldest first),
+   and once shortly after boot, so a fix to the reader reaches the people it stranded. */
+const PROOF_RETRY_MS = 15 * 60 * 1000;
+function requeueUnreadProofs(limit) {
+  try {
+    const rows = db.prepare(`SELECT u.id FROM users u WHERE u.holder_verified_at IS NULL AND u.system = 0 AND u.deleted_at IS NULL
+                               AND u.holder_state = 'none' AND u.holder_proof_at IS NOT NULL AND u.holder_proof_at < ?
+                               AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.type = 'wallet')
+                             ORDER BY u.holder_proof_at ASC LIMIT ?`).all(now() - (limit === 'boot' ? 0 : PROOF_RETRY_MS), limit === 'boot' ? 200 : 20);
+    for (const r of rows) if (!proofQueue.includes(r.id)) queueHolderProof(r.id);
+    if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' check(s) that could not read the chain');
+  } catch (e) { console.error('proof requeue', e && e.message); }
+}
+setTimeout(() => requeueUnreadProofs('boot'), 20000).unref();
+setInterval(() => requeueUnreadProofs(), PROOF_RETRY_MS).unref();
 
 /* ═══ THE PARTICIPATION GATE ═══════════════════════════════════════════════════════════════════════
    Anyone may make an account with an email alone, and anyone may READ the whole site. Doing things —
@@ -9622,7 +9720,6 @@ function holderProofVerdict(scans, nowMs, prices) {
        ~116 wallets can clear this bar at the same time. That is a deliberate choice, made with the
        arithmetic in hand — it is a small, early community by design, not an accident of a round number. */
     const px = prices && prices[c.key];
-    if (!(px > 0)) return { ok: false, unknown: true, reason: 'We could not read the ' + c.label + ' price just now, so we cannot value your holding. Nothing has been decided — try again in a minute.', detail };
     let bal = 0n, bought = 0n, sold = 0n, firstBuyMs = null, lastBuyMs = null;
     for (const r of rows) {
       try {
@@ -9635,16 +9732,21 @@ function holderProofVerdict(scans, nowMs, prices) {
       if (r.lastBuyMs && (lastBuyMs === null || r.lastBuyMs > lastBuyMs)) lastBuyMs = r.lastBuyMs;
     }
     const heldMs = firstBuyMs ? t - firstBuyMs : 0;
-    const usd = Number(bal) / 1e18 * px;
-    detail[c.key] = { balWei: bal.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs, lastBuyMs, heldMs, usd, priceUsd: px };
+    detail[c.key] = { balWei: bal.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs, lastBuyMs, heldMs, usd: px > 0 ? Number(bal) / 1e18 * px : null, priceUsd: px > 0 ? px : null };
+    /* What the history alone decides comes first. None of these needs a price, so an unreadable price must never
+       turn them into "try again in a minute" — somebody who never bought, or sold more than they bought, gets
+       the real answer and what to do about it, whatever the price feed is doing. */
     if (bal <= OG_DUST_WEI) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. You need to hold at least $' + MIN_HOLD_USD + ' of ' + c.label + '.', detail };
-    if (usd < MIN_HOLD_USD) return { ok: false, short: true, reason: 'You hold about $' + usd.toFixed(2) + ' of ' + c.label + '. It takes $' + MIN_HOLD_USD + ' — the same floor that counts toward Diamond levels.', detail };
     /* A market buy is still required, and the reason changed with the rule. It is no longer "so we can
        tell how long you have held it" — nothing is timed at the door any more. It is that the sell window
        has to run from something, and a bag that arrived without ever passing through the market gives it
        no anchor. Tokens that came from a friend or an airdrop are somebody else's conviction. */
     if (!firstBuyMs || !lastBuyMs) return { ok: false, reason: 'We can see your ' + c.label + ', but no market buy behind it. The bag has to be one you bought.', detail };
     if (sold > bought) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders — buy back in and the check will pass.', detail };
+    // only the dollar floor needs the price
+    if (!(px > 0)) return { ok: false, unknown: true, reason: 'We could not read the ' + c.label + ' price just now, so we cannot value your holding. Nothing has been decided — try again in a minute.', detail };
+    const usd = Number(bal) / 1e18 * px;
+    if (usd < MIN_HOLD_USD) return { ok: false, short: true, reason: 'You hold about $' + usd.toFixed(2) + ' of ' + c.label + '. It takes $' + MIN_HOLD_USD + ' — the same floor that counts toward Diamond levels.', detail };
   }
   return { ok: true, reason: null, detail };
 }
@@ -11468,6 +11570,8 @@ const server = http.createServer(async (req, res) => {
             if (refusal) return bad(res, refusal, 401);
           }
         }
+        // the wallet that just signed in is read on-chain for the participation check, if this account has not passed it yet
+        if (ident) { try { const uu = db.prepare('SELECT * FROM users WHERE id = ?').get(userId); if (uu && needsHolderProof(uu) && !proofQueue.includes(userId)) queueHolderProof(userId); } catch {} }
         return send(res, 200, { ok: true, username, newAccount: !ident, ...(emailNotAdded ? { emailNotAdded: true } : {}) }, { 'Set-Cookie': sessionCookie(createSession(userId, ipIdx(req), ident ? 0 : NEW_ACCOUNT_SUDO_MS)) });   // a new account's setup is unlocked; a sign-in is not
       }
 

@@ -203,9 +203,9 @@ try {
   check('a token chart’s markers never show a squad call or a squad Send It (anonymous read)', mk1.status === 200 && !mkTxt.includes('"callId":' + c1) && !mkTxt.includes('"callId":' + c2) && !mkTxt.includes(B.name), mk1.status + ' ' + mkTxt.slice(0, 120));
   const keyC = 'sk_' + randomBytes(24).toString('hex'), keyB = 'sk_' + randomBytes(24).toString('hex');
   for (const [k, u] of [[keyC, C.id], [keyB, B.id]]) db.prepare("INSERT INTO api_keys (key_hash, user_id, burned_wei, burned_usd, price_usd, minted_at, expires_at, source) VALUES (?,?,'0',0,0,?,?,'burn')").run(createHash('sha256').update(k).digest('hex'), u, Date.now(), Date.now() + 864e5);
-  const dataAs = async (k) => { const r = await fetch(BASE + '/api/data/v1/calls', { headers: { Authorization: 'Bearer ' + k, Origin: BASE } }); return { status: r.status, text: await r.text() }; };
+  const dataAs = async (k) => { const r = await fetch(BASE + '/api/data/v1/calls', { headers: { Authorization: 'Bearer ' + k, Origin: BASE } }); let j = null; try { j = await r.json(); } catch {} return { status: r.status, ids: ((j && j.data) || []).map(x => x.id) }; };
   const dC = await dataAs(keyC), dB = await dataAs(keyB);
-  check('the Data API exports a squad call to its own caller only', dC.status === 200 && !dC.text.includes('"id":' + c1) && !dC.text.includes('"id":' + c2) && dB.status === 200 && dB.text.includes('"id":' + c2) && !dB.text.includes('"id":' + c1), dC.status + '/' + dB.status + ' ' + dC.text.slice(0, 80));
+  check('the Data API exports a squad call to its own caller only', dC.status === 200 && !dC.ids.includes(c1) && !dC.ids.includes(c2) && dB.status === 200 && dB.ids.includes(c2) && !dB.ids.includes(c1), 'c1=' + c1 + ' c2=' + c2 + ' outsider ' + dC.status + ' ' + JSON.stringify(dC.ids) + ' / caller B ' + dB.status + ' ' + JSON.stringify(dB.ids));
   db.prepare('DELETE FROM api_keys WHERE user_id IN (?, ?)').run(C.id, B.id);
   const rep1 = await api('/api/report', { method: 'POST', sid: C.sid, body: { kind: 'post', id: pid, reason: 'spam' } });
   check('reporting a squad post from outside is a 404, not a confirmation that it exists', rep1.status === 404, rep1.status + ' ' + JSON.stringify(rep1.j));

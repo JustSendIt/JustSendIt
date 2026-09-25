@@ -50,8 +50,17 @@ try {
   check('a failed read is never cached', /\.then\(\(v\) => \{ poolStateCache\.set\(k, v\); return v; \}\)\s+\.catch\(/.test(SRC));
 
   /* ═══ 3. the live answer, against an independent read of the chain ═══ */
-  const r = await fetch(BASE + '/api/chain/pairs');
-  const j = await r.json().catch(() => null);
+  /* A pool-priced figure is null, never guessed, when one of its chain reads was refused (the public node throttles
+     bursts, and this suite runs after others that read the chain). The pool read is cached 15 s and a failed part is
+     not cached, so ask again after it lapses — twice at most — before judging the figures. */
+  let r, j;
+  for (let i = 0; i < 3; i++) {
+    r = await fetch(BASE + '/api/chain/pairs');
+    j = await r.json().catch(() => null);
+    const pooled = ((j && j.pairs) || []).filter(p => p && p.source === 'reserves');
+    if (!pooled.some(p => p.marketCap == null || p.fdv == null || p.liquidity == null || p.liquidity.usd == null)) break;
+    await new Promise(ok => setTimeout(ok, 16000));
+  }
   check('/api/chain/pairs answers', r.status === 200 && j && Array.isArray(j.pairs), r.status);
   const byPair = {}; for (const p of (j && j.pairs) || []) if (p && p.pairAddress) byPair[p.pairAddress.toLowerCase()] = p;
   console.log('pairs:', ((j && j.pairs) || []).map((p) => p.baseToken.symbol + ' ' + p.priceUsd + ' src=' + (p.source || 'dexscreener') + ' liq=' + (p.liquidity && p.liquidity.usd) + ' mc=' + p.marketCap + ' vol=' + (p.volume && p.volume.h24) + ' chg=' + (p.priceChange && p.priceChange.h24)).join(' | '), 'check:', JSON.stringify(j && j.checkPrices));
