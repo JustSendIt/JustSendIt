@@ -164,6 +164,35 @@ try {
   const quote = await api('/api/scan?address=0x0bd7d308f8e1639fab988df18a8011f41eacad73');
   check('a quote asset (WETH) is named as one, not profiled', quote.status === 200 && quote.j && quote.j.notFound && quote.j.reason === 'quote', quote.status + ' ' + JSON.stringify(quote.j).slice(0, 80));
   check('the scan route says "other chains are coming soon" when nothing is found', /other chains are coming soon/.test(SRC.slice(SRC.indexOf("p === '/api/scan'"), SRC.indexOf("p === '/api/scan'") + 8000)));
+
+  /* ═══ a Send Call straight from a scan: to the Wall, or to the reader's Send Squad when they are in one ═══ */
+  const CMP = read('compose.js');
+  check('a scanned token\'s result carries a "Send Call to the Wall" button', /callRowHTML\(tok\) \+/.test(SC) && /data-sc-call="wall"/.test(SC) && /📣 Send Call to the Wall/.test(SC));
+  check('  ...and a squad button only for a VERIFIED member of a squad — none at all otherwise', /\.filter\(\(q\) => q && q\.verified && q\.id > 0\)/.test(SC) && /if \(!list\.length\) return;\s+\/\/ not in a squad: there is no squad button/.test(SC) && /data-sc-call="squad"/.test(SC));
+  check('  ...both open the site\'s one composer with the token filled in, public or to that squad', /COMPOSE\.openCall\(\{\s+token: row\.dataset\.tok,/.test(SC) && /squadId: squad \? Number\(b\.dataset\.squadId\) : 0/.test(SC));
+  check('  ...a call made from the full detail on screen is not flagged "without DYOR" — only for that token, and only when the detail rendered', /viewedDetail: !!result\.querySelector\('\.np-detail-group, \.np-contract'\)/.test(SC)
+    && /detailSeenFor = tok && o\.viewedDetail \? tok : null;/.test(CMP) && /viewedDetail = !!detailSeenFor && detailSeenFor === String\(addr\)\.toLowerCase\(\);/.test(CMP));
+  check('  ...the composer fills and reads the handed-over token, keeps it through a sign-in, and forgets it on close', /function fillCallToken\(tok\)/.test(CMP) && /lookupCallToken\(tok\);/.test(CMP)
+    && /pendingSquad = keepSquad; pendingToken = keepToken; detailSeenFor = keepSeen;/.test(CMP) && /if \(tok\) fillCallToken\(tok\);/.test(CMP) && /pendingToken = null; detailSeenFor = null;\s+\/\/ nor does a token another page handed over/.test(CMP));
+  check('  ...a new sign-in re-reads the reader\'s squads, and so does a scan a minute later or a return to the tab (a gate re-check, a join or a leave elsewhere)', /document\.addEventListener\('auth:change', repaintSquadCall\);/.test(SC) && /Date\.now\(\) - mySquadsAt < 60e3/.test(SC) && /document\.addEventListener\('visibilitychange'/.test(SC));
+  check('  ...and a Send Call box opened before a sign-in comes back after it, however long the sign-in takes', /const onAuthClosed = \(\) =>/.test(CMP) && /pendingTimer = setTimeout\(abandon, 10 \* 60 \* 1000\);/.test(CMP));
+  // the list the squad button is built from, and the call it leads to
+  const tag = randomBytes(3).toString('hex');
+  const owner = mkUser('__sp_sqown_' + tag), loner = mkUser('__sp_loner_' + tag);
+  const sq = Number(db.prepare("INSERT INTO squads (creator_id, name, gate_kind, member_count, created_at) VALUES (?, ?, 'none', 1, ?)").run(owner.id, 'Scan Squad ' + tag, Date.now()).lastInsertRowid);
+  db.prepare("INSERT INTO squad_members (squad_id, user_id, joined_at, role, verified) VALUES (?, ?, ?, 'owner', 1)").run(sq, owner.id, Date.now());
+  const mine = await api('/api/squads/mine', { sid: owner.sid }), none = await api('/api/squads/mine', { sid: loner.sid });
+  check('the squad list the button reads names a verified member\'s squad', mine.status === 200 && mine.j && mine.j.squads.some((q) => q.id === sq && q.verified === true), mine.status + ' ' + JSON.stringify(mine.j && mine.j.squads));
+  check('  ...and is empty for someone in no squad, so they get no squad button', none.status === 200 && none.j && Array.isArray(none.j.squads) && none.j.squads.length === 0, none.status + ' ' + JSON.stringify(none.j));
+  const call = await api('/api/calls', { method: 'POST', sid: owner.sid, body: { token: SEND, note: '', viewedDetail: true, shareWallet: false, squadId: sq } });
+  const crow = db.prepare('SELECT squad_id, no_dyor FROM calls WHERE user_id = ? ORDER BY id DESC LIMIT 1').get(owner.id);
+  if (call.status === 200) check('  ...and a Send Call made the way the scanner opens it lands in that squad, private, not flagged "without DYOR"', crow && crow.squad_id === sq && crow.no_dyor === 0, JSON.stringify(crow));
+  else check('the scanner-style squad call could not be made this run (' + call.status + ': ' + ((call.j && call.j.error) || '') + ') — not asserted', call.status === 502 || call.status === 503 || /liquidity|slow/i.test((call.j && call.j.error) || ''), call.status);   // the chain or the price feed refused: said as an outage, never as "no pair"
+  try {
+    for (const t of ['calls', 'posts', 'points_events', 'notifications']) db.prepare(`DELETE FROM ${t} WHERE user_id IN (?, ?)`).run(owner.id, loner.id);
+    db.prepare('DELETE FROM squad_members WHERE squad_id = ?').run(sq);
+    db.prepare('DELETE FROM squads WHERE id = ?').run(sq);
+  } catch {}
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
 } finally {

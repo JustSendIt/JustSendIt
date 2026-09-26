@@ -4839,6 +4839,9 @@ html.motion-off #matrix-rain { display: none; }
 .sc-result { margin: 1rem auto 0; }
 .sc-result:empty { display: none; }
 .sc-hit { text-align: center; margin: 0 0 0.8rem; }
+/* the scanned token's Send Call buttons: the wall, and the reader's squad when they are in one */
+.sc-hit-call { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin: 0.6rem 0 0.35rem; }
+.sc-hit-call .btn { max-width: 100%; overflow-wrap: anywhere; }   /* a 40-character squad name wraps inside the pill on a phone */
 .sc-hit-k { margin: 0; font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 800; color: var(--text-mute); }
 .sc-hit-k code { letter-spacing: 0; text-transform: none; font-size: 0.85rem; }
 .sc-hit-h { margin: 0.2rem 0 0.1rem; font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; font-size: clamp(1.4rem, 5vw, 2rem); line-height: 1.1; color: var(--text); overflow-wrap: anywhere; }

@@ -97,6 +97,59 @@
   }
   paintCommunity();
 
+  /* ---------- a Send Call on what was just scanned ----------
+     📣 to the public Send Wall — anyone sees it; a visitor is asked to sign in by the composer — and 🛡️ to a Send
+     Squad, a button that only exists when the reader is a verified member of one (the most recently joined is chosen;
+     the composer's picker lists every squad they can call to). Both open the same composer every page has, in call
+     mode, with this token filled in and read. The token's full on-chain detail is on screen here, so the call is not
+     flagged "made without DYOR" — for this token only. Everything a call needs (sign-in, the $SEND check, today's
+     allowance, enough liquidity) is still asked by the composer and the server, exactly as for any other call. */
+  // the reader's VERIFIED squads, whose they are, and when they were read — kept a minute: a gate re-check or a
+  // join or leave in another tab changes them, and the Scanner is a page people keep open
+  let mySquads = null, mySquadsFor = null, mySquadsAt = 0;
+  async function verifiedSquads() {
+    const uid = window.AUTH && AUTH.user && AUTH.user.username;   // the signed-in account (the client is not given its numeric id)
+    if (!uid || !window.api) return [];
+    if (mySquads && mySquadsFor === uid && Date.now() - mySquadsAt < 60e3) return mySquads;
+    try {
+      const j = await window.api('/api/squads/mine');
+      mySquads = ((j && j.squads) || []).filter((q) => q && q.verified && q.id > 0);
+      mySquadsFor = uid; mySquadsAt = Date.now();
+    } catch { return []; }                           // could not tell: no squad button rather than a wrong one
+    return mySquads;
+  }
+  const callRowHTML = (tok) =>
+    '<p class="sc-hit-call" id="sc-call-row" data-tok="' + esc(tok) + '">' +
+      '<button class="btn btn-primary btn-sm" type="button" data-sc-call="wall" data-tip="Opens a Send Call on this token for the public Send Wall — a permanent, live scorecard that starts at today’s price">📣 Send Call to the Wall</button>' +
+    '</p>';
+  async function paintSquadCall(tok) {
+    const list = await verifiedSquads();
+    const row = $('sc-call-row');
+    if (!row || row.dataset.tok !== tok) return;     // a newer scan replaced it
+    const old = row.querySelector('[data-sc-call="squad"]'); if (old) old.remove();
+    if (!list.length) return;                         // not in a squad: there is no squad button
+    const q = list[0], one = list.length === 1;
+    row.insertAdjacentHTML('beforeend',
+      '<button class="btn btn-ghost btn-sm" type="button" data-sc-call="squad" data-squad-id="' + Number(q.id) + '" data-squad-name="' + esc(q.name) + '" data-tip="' +
+        (one ? 'Opens a Send Call on this token for ' + esc(q.name) + ' — private to the squad, and its points go to the squad'
+             : 'Opens a Send Call on this token for one of your Send Squads — pick which one in the box; private to that squad, and its points go to it') + '">' +
+        '🛡️ Send Call to ' + (one ? esc(q.name) : 'your Squad') + '</button>');
+  }
+  result.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sc-call]'); if (!b) return;
+    const row = b.closest('#sc-call-row'); if (!row) return;
+    if (!window.COMPOSE || !COMPOSE.openCall) { if (window.sendToast) sendToast('The Send Call box could not load on this page — reload and try again'); return; }
+    const squad = b.dataset.scCall === 'squad';
+    COMPOSE.openCall({
+      token: row.dataset.tok,
+      viewedDetail: !!result.querySelector('.np-detail-group, .np-contract'),   // only when the full detail really rendered
+      squadId: squad ? Number(b.dataset.squadId) : 0, squadName: squad ? b.dataset.squadName : '',
+    });
+  });
+  const repaintSquadCall = () => { mySquads = null; mySquadsFor = null; mySquadsAt = 0; const row = $('sc-call-row'); if (row) paintSquadCall(row.dataset.tok); };
+  document.addEventListener('auth:change', repaintSquadCall);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && mySquadsAt && Date.now() - mySquadsAt > 60e3) repaintSquadCall(); });   // back from joining or leaving a squad in another tab
+
   /* ---------- the scan ---------- */
   function setStatus(text, kind) {
     if (!status) return;
@@ -131,6 +184,7 @@
             '<p class="sc-hit-k">' + (j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> ' + (j.poolVerified === true ? 'prices' : 'says it prices') : '🪙 Token') + '</p>' +
             '<h2 class="sc-hit-h">' + esc((p.token && p.token.name) || 'Token') + (sym ? ' <span class="hl">$' + esc(sym) + '</span>' : '') + '</h2>' +
             '<p class="sc-hit-a"><code>' + esc(tok) + '</code> · 🏹 Robinhood Chain · ' + (sc.stale ? 'last read ' : 'read ') + agoEl(sc.readAt) + '</p>' +
+            callRowHTML(tok) +
             '<p class="sc-hit-s">🔁 ' + (!sc.kept ? 'This scan could not be kept just now — nothing was stored for others.'
                                           : (sc.count > 1 ? 'Scanned ' + Number(sc.count) + ' times by the community · first ' + agoEl(sc.firstAt) : 'First scan of this address on record — it is kept now, so it pulls up for everyone')) +
               holdersNote +
@@ -151,6 +205,7 @@
         setStatus(sc.stale ? 'Showing the last snapshot of ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + ', not live.' : 'Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + '.', sc.stale ? 'busy' : 'ok');
         remember(tok, sym);
         paintCommunity();
+        paintSquadCall(tok);
         const h = result.querySelector('.sc-hit-h'); if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: false }); } catch {} }
       } else if (!r.ok || (j && j.unavailable)) {
         // "we could not check" is never dressed up as a fact about the address

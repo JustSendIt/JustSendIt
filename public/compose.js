@@ -125,6 +125,7 @@
   function close() {
     modal.setAttribute('hidden', '');
     pendingSquad = null; setCallTarget(null);   // a squad chosen for one call never carries over to the next opening
+    pendingToken = null; detailSeenFor = null;  // nor does a token another page handed over
     if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) { try { lastFocus.focus(); } catch {} }
@@ -147,6 +148,7 @@
     const shareBox = modal.querySelector('#compose-call-wallet'); if (shareBox) shareBox.checked = false; // never carries over to the next call
     callPreview(''); setCallReady(false); callLookupSeq++; viewedDetail = false;
     pendingSquad = null; setCallTarget(null);   // back to the public wall — a squad is chosen per call
+    pendingToken = null; detailSeenFor = null;
     setStatus('');
   }
 
@@ -160,6 +162,10 @@
      pendingSquad = { id, name } asked for by COMPOSE.openCall (a squad page's "Call a token to this squad")
      — it is kept selected even when /api/squads/mine has not answered yet, or answers without it. */
   let pendingSquad = null, squadsSeq = 0;
+  /* A token handed over by another page (the Scanner's "Send Call" buttons): filled in and looked up when the
+     composer opens, kept through a sign-in detour like the squad. `detailSeenFor` is the one token whose full on-chain
+     detail the caller already had on screen — only that token's call is not flagged "made without DYOR". */
+  let pendingToken = null, detailSeenFor = null;
   function targetEl() { return modal.querySelector('#compose-call-target'); }
   const HELP_PUBLIC = 'A Send Call posts a <b>live scorecard</b> to your wall that tracks how far this token runs, forever. It is <b>public, timestamped and permanent — calls can never be deleted</b>. Needs a real pool (≥&nbsp;$2,000 liquidity). 🎉 Entertainment only, never advice.';
   const HELP_SQUAD = 'A squad call posts the same <b>live scorecard</b>, but <b>private to that squad</b> — only its verified members ever see it, on the squad’s Calls tab. It is timestamped and permanent, and <b>every point it earns goes to the squad, not to you</b>. Needs a real pool (≥&nbsp;$2,000 liquidity). 🎉 Entertainment only, never advice.';
@@ -194,15 +200,28 @@
     if (pendingSquad) ensureSquadOption(pendingSquad.id, pendingSquad.name);
     setCallTarget(keep);
   }
-  // squad.js: open the composer in call mode with this squad already chosen
+  /* Open the composer in call mode — squad.js with its squad chosen; the Scanner with the scanned token filled in
+     (o.token), public or to a squad (o.squadId), and o.viewedDetail when the caller has the token's full detail open. */
   function openCall(o) {
     if (!modal) return;
     o = o || {};
     const id = Number(o.squadId);
     pendingSquad = id > 0 ? { id, name: String(o.squadName || '') } : null;
+    const tok = /^0x[0-9a-fA-F]{40}$/.test(String(o.token || '')) ? String(o.token).toLowerCase() : null;
+    pendingToken = tok;
+    detailSeenFor = tok && o.viewedDetail ? tok : null;
     setMode('call');
     if (modal.hasAttribute('hidden')) open(); else showForAuth();
     if (pendingSquad) { ensureSquadOption(pendingSquad.id, pendingSquad.name); setCallTarget(pendingSquad.id); }
+    if (tok) fillCallToken(tok);
+  }
+  // put a handed-over token in the address box and read it, then leave the cursor on the note
+  function fillCallToken(tok) {
+    const inp = modal.querySelector('#compose-call-addr'); if (!inp) return;
+    inp.value = tok; inp.removeAttribute('aria-invalid');
+    clearTimeout(callLookupTimer);
+    lookupCallToken(tok);
+    if (window.AUTH && AUTH.user) setTimeout(() => { const n = modal.querySelector('#compose-call-note'); if (n) try { n.focus(); } catch {} }, 60);
   }
 
   function money(n) {
@@ -245,7 +264,8 @@
 
   async function lookupCallToken(addr) {
     const seq = ++callLookupSeq;
-    callTok = null; setCallReady(false); viewedDetail = false;
+    callTok = null; setCallReady(false);
+    viewedDetail = !!detailSeenFor && detailSeenFor === String(addr).toLowerCase();   // the Scanner showed this very token's full detail
     callPreview('<p class="modal-note" style="margin:0;">🔎 Reading that token on-chain…</p>');
     try {
       const j = await window.api('/api/pairs/lookup?token=' + encodeURIComponent(addr));
@@ -268,7 +288,9 @@
         '</div>' +
         (thin
           ? '<p class="modal-note cmp-call-warn">⚠️ Too thin to call — a pool needs <b>$' + MIN_CALL_LIQ.toLocaleString('en-US') + '+</b> of liquidity (this one has ' + esc(money(liq)) + '). Thin pools are easy to manipulate.</p>'
-          : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens the full on-chain detail and records that you looked">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>')
+          : viewedDetail
+            ? '<p class="modal-note">✅ You had its full on-chain detail on screen on the Scanner — this call is not flagged as made without looking.</p>'   // said only for the token the Scanner handed over
+            : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens the full on-chain detail and records that you looked">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>')
       );
       setCallReady(!thin);
       if (window.decorateTokenCommunities) window.decorateTokenCommunities(modal.querySelector('#compose-call-preview'));
@@ -475,22 +497,31 @@
 
     // signed-out gate → close composer, open sign-in, reopen composer once signed in
     modal.querySelector('#compose-signin').addEventListener('click', () => {
-      const keepSquad = pendingSquad;   // a squad page's "call to this squad" survives the sign-in detour
+      const keepSquad = pendingSquad, keepToken = pendingToken, keepSeen = detailSeenFor;   // a squad page's "call to this squad", or the Scanner's token, survives the sign-in detour
       close();
-      pendingSquad = keepSquad;
+      pendingSquad = keepSquad; pendingToken = keepToken; detailSeenFor = keepSeen;
       if (window.AUTH) AUTH.open();
       pendingCompose = true;
-      // abandon the reopen if no successful sign-in follows shortly, so a later unrelated
-      // login can't pop the composer open uninvited (covers the async post-login refresh)
+      /* Abandon the reopen if no successful sign-in follows, so a later unrelated login can't pop the composer open
+         uninvited. The short window starts when the sign-in box CLOSES (success or cancel — it covers the async
+         post-login refresh), not when it opens: typing a password or making an account takes longer than seconds.
+         A sign-in box left open and walked away from gives up after ten minutes. */
+      const abandon = () => { pendingCompose = false; pendingSquad = null; pendingToken = null; detailSeenFor = null; };
       clearTimeout(pendingTimer);
-      pendingTimer = setTimeout(() => { pendingCompose = false; pendingSquad = null; }, 8000);
+      pendingTimer = setTimeout(abandon, 10 * 60 * 1000);
+      const onAuthClosed = () => { document.removeEventListener('jsi:modalclose', onAuthClosed); if (pendingCompose) { clearTimeout(pendingTimer); pendingTimer = setTimeout(abandon, 8000); } };
+      setTimeout(() => document.addEventListener('jsi:modalclose', onAuthClosed), 0);   // after this composer's own close has fired
     });
     modal.querySelector('#compose-again').addEventListener('click', () => { showForAuth(); });
 
     document.addEventListener('auth:change', e => {
       if (pendingCompose && e.detail) {
-        pendingCompose = false; clearTimeout(pendingTimer); open();
-        if (pendingSquad) { setMode('call'); ensureSquadOption(pendingSquad.id, pendingSquad.name); setCallTarget(pendingSquad.id); }
+        pendingCompose = false; clearTimeout(pendingTimer);
+        const tok = pendingToken;
+        open();
+        if (pendingSquad || tok) setMode('call');
+        if (pendingSquad) { ensureSquadOption(pendingSquad.id, pendingSquad.name); setCallTarget(pendingSquad.id); }
+        if (tok) fillCallToken(tok);
       }
       else if (!modal.hasAttribute('hidden')) showForAuth();
     });

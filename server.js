@@ -12711,6 +12711,7 @@ const server = http.createServer(async (req, res) => {
         }
         // A LIVE price, never a saved one: this number becomes entry_price and every X the call ever pays.
         let r; try { r = await lookupTokenPair(token, { maxAgeMs: PRICE_MAX_AGE_MS }); } catch { return bad(res, 'could not price that token right now — try again in a moment', 502); }
+        if (r && r.unavailable) return bad(res, 'could not price that token right now — try again in a moment', 502);   // the feed or the chain did not answer: that is not "no pair"
         if (!r || r.notFound || !r.pair) return bad(res, (r && r.reason === 'quote') ? 'that is a base asset (WETH/USDG), not a callable token' : 'no trading pair found for that token');
         const p2 = r.pair, price = p2.market && p2.market.priceUsd;
         if (!(price > 0)) return bad(res, 'no live price for that token yet — can’t track Xs');
