@@ -125,7 +125,7 @@ try {
       !/check.?in[^.]{0,50}(inside|within) the last 24 hours/i.test(served + WP + README));
     check('no page still claims there is no appeal route',
       !/there(’s| is| was)? no appeal route and/i.test(served + WP + README));
-    check('the free appeal address is given where a restricted account will see it', /GWCRH@atomicmail\.io/.test(ABOUT) && /appealEmail/.test(SRC));
+    check('the free appeal address is given where a restricted account will see it', /SendRH@Atomicmail\.io/.test(ABOUT) && /appealEmail/.test(SRC));
     check('the decay sweep batch is stated as 500, not 200', !/takes up to \*\*200\*\*/.test(README));
     check('conviction is not described as accruing over time', !/conviction[^.]{0,60}(rises|climbs) the longer/i.test(served));
     check('going live is described as verified slots, not taps of Join', /verified holder slots/.test(served));

@@ -9616,7 +9616,7 @@ const postLog = new Map();  // userId -> [{t,h},...] long-post fingerprints (dup
    routes out and they are different in kind: the buy-out (fast, on-chain, automatic) and an APPEAL to a
    human, which costs nothing. The appeal address is carried in the restriction object so the banner can
    put it in front of the person it concerns, rather than leaving them to hunt for it. */
-const APPEAL_EMAIL = 'GWCRH@atomicmail.io';
+const APPEAL_EMAIL = 'SendRH@Atomicmail.io';
 function restrictionOf(u) {
   if (!u || !u.restricted_until || u.restricted_until <= now()) return null;
   return {
@@ -11464,7 +11464,7 @@ const server = http.createServer(async (req, res) => {
           const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
           if (!row) return bad(res, 'post not found', 404);
           takeDownPost(row, note);
-          notify(row.user_id, '🧹', 'A post of yours was removed by a moderator' + (note ? ': ' + note : '.') + ' Questions: GWCRH@atomicmail.io', 'alert');
+          notify(row.user_id, '🧹', 'A post of yours was removed by a moderator' + (note ? ': ' + note : '.') + ' Questions: SendRH@Atomicmail.io', 'alert');
         } else if (b.kind === 'comment') {
           const row = db.prepare('SELECT * FROM comments WHERE id = ?').get(id);
           if (!row) return bad(res, 'comment not found', 404);
@@ -11496,7 +11496,7 @@ const server = http.createServer(async (req, res) => {
         } else {
           const until = days ? now() + days * DAY_MS : PERM_UNTIL;
           db.prepare('UPDATE users SET restricted_until = ?, restrict_level = ?, restrict_reason = ?, redeem_dur = ? WHERE id = ?').run(until, days ? 1 : 3, reason, days ? days * DAY_MS : DAY_MS, uid);
-          notify(uid, '🔇', 'A moderator put your account in read-only mode' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' indefinitely') + ': ' + reason + ' Questions: GWCRH@atomicmail.io', 'restriction');
+          notify(uid, '🔇', 'A moderator put your account in read-only mode' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' indefinitely') + ': ' + reason + ' Questions: SendRH@Atomicmail.io', 'restriction');
         }
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE resolved_at IS NULL AND kind = 'user' AND target_id = ?").run(now(), me.id, b.lift ? 'lifted' : 'restricted', uid);
         return send(res, 200, { ok: true });

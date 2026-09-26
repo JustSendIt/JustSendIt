@@ -366,7 +366,7 @@ try {
     check('the radar no longer claims to see every token on the chain', !/Every new token launched on Robinhood Chain/.test(NPH));
     check('  ...and says what it actually reads', /Uniswap-V2 factory/.test(NPH) && /hasn’t been judged/.test(NPH));
     check('a permanent restriction offers a free appeal, not only a purchase', /appealEmail: APPEAL_EMAIL/.test(SRC));
-    check('  ...to a real address', /const APPEAL_EMAIL = 'GWCRH@atomicmail\.io';/.test(SRC));
+    check('  ...to a real address', /const APPEAL_EMAIL = 'SendRH@Atomicmail\.io';/.test(SRC));
     const AJS = readFileSync(ROOT + '/public/auth.js', 'utf8');
     check('  ...and the banner puts it in front of the person it concerns', /appeal it<\/b> — email/.test(AJS));
     check('a restriction buy-out is priced with the spike-protected median', /price = \(await sendPriceUsd\(\)\) \|\| 0;/.test(SRC));

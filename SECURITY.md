@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **GWCRH@atomicmail.io** with "SECURITY" in the subject. Please include what you found, the
+Email **SendRH@Atomicmail.io** with "SECURITY" in the subject. Please include what you found, the
 steps to reproduce it, and what an attacker could do with it. A proof of concept helps enormously.
 
 Please report privately first rather than opening a public issue, and give a reasonable window for a
