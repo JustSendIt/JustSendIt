@@ -47,7 +47,7 @@
   const nameLink = u => '<a class="cmp-name" href="/u/' + encodeURIComponent(u.username) + '"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + '</a>';
   function move(prev, u) {
     if (!prev) return '';
-    const was = prev[u.username];
+    const was = prev[String(u.username || '').toLowerCase()];   // a name is one name in any capitals — re-casing is not a newcomer
     if (was == null) return '<span class="cmp-move cmp-move--new" title="Not on this board when you last looked">NEW</span>';
     const d = was - u.rank;
     if (!d) return '';
@@ -240,7 +240,7 @@
   const SNAP = 'sendit_cmp_ranks';
   function readSnap() { try { const j = JSON.parse(localStorage.getItem(SNAP) || 'null'); return j && typeof j === 'object' ? j : {}; } catch { return {}; } }
   function writeSnap(d) {
-    const m = rows => { const o = {}; (rows || []).forEach(u => { if (u && u.username) o[u.username] = u.rank; }); return o; };
+    const m = rows => { const o = {}; (rows || []).forEach(u => { if (u && u.username) o[String(u.username).toLowerCase()] = u.rank; }); return o; };
     try { localStorage.setItem(SNAP, JSON.stringify({ at: Date.now(), bs: m(d.biggestSender.top), calls: m(d.sendCalls.top), all: m(d.allTime.top) })); } catch {}
   }
   const prev = (function () { const s = readSnap(); return { bs: s.bs || null, calls: s.calls || null, all: s.all || null }; })();

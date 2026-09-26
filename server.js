@@ -1200,7 +1200,11 @@ function totpConsume(userId, secretB32, code) {
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-function usernameTaken(u) { return !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(u); }
+/* One name, one account, whatever its capitals: the column is UNIQUE COLLATE NOCASE, so "send", "Send" and "SeNd"
+   are the same name to every lookup and to the database itself. And 'deleted-<id>' is what erasing an account
+   renames it to — so nobody may hold it, in any casing, or they could stop account <id> from ever being erased. */
+const DELETED_NAME_RE = /^deleted-\d+(-[0-9a-f]+)?$/i;
+function usernameTaken(u) { return DELETED_NAME_RE.test(String(u)) || !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(u); }
 function autoUsername() {
   for (let i = 0; i < 50; i++) {
     const u = 'sender_' + crypto.randomBytes(3).toString('hex');
@@ -11101,6 +11105,8 @@ const server = http.createServer(async (req, res) => {
              person: no picture, no social handles, no IP indexes, no age record, no balances, no preferences.
              accent/wall_bg/tracker_prefs/site_prefs are NOT NULL columns — writing NULL there made SQLite refuse
              the whole statement, so every deletion rolled back and nobody's data was ever erased. */
+          let tombstone = 'deleted-' + uid;   // compared through the NOCASE column, so "Deleted-7" counts as taken too
+          while (db.prepare('SELECT 1 FROM users WHERE username = ? AND id <> ?').get(tombstone, uid)) tombstone = 'deleted-' + uid + '-' + rand(2);
           db.prepare(`UPDATE users SET username = ?, avatar = '👻', avatar_img = NULL, header_img = NULL, bg_img = NULL, bio = '',
             accent = '', wall_bg = '', tracker_prefs = '{}', site_prefs = '{}', twitter_handle = NULL, ig_handle = NULL,
             points = 0, og = 0, og_tier = 0, og_buy_ms = 0,
@@ -11108,7 +11114,7 @@ const server = http.createServer(async (req, res) => {
             holder_verified_at = NULL, holder_state = 'none', holder_proof = NULL, holder_proof_reason = NULL, holder_proof_at = NULL,
             gate_wallets = NULL, gate_hold_until = 0, gate_floor = 0, redeem_base_send = 0, redeem_floor = 0,
             signup_ip = NULL, last_ip = NULL, age_at = NULL, restrict_reason = NULL,
-            live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?`).run('deleted-' + uid, now(), uid);
+            live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?`).run(tombstone, now(), uid);
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('account delete', e && e.message); return bad(res, 'could not delete the account right now — try again', 500); }
         for (const n of media) { try { deleteUpload(n, null); } catch {} }
@@ -11660,6 +11666,7 @@ const server = http.createServer(async (req, res) => {
         const su = walletSignupFields(b);
         if (su.error) return bad(res, su.error);   // a typo does not spend the token
         if (!su.username) return bad(res, 'pick a username first');
+        if (usernameTaken(su.username)) return bad(res, 'that username is taken — try another', 409);   // in any capitals; says nothing /api/username-check does not, and keeps the wallet's proof for the next try
         pendingSignups.delete(String(b.signup));   // from here on, one attempt per proved wallet: nothing below can be probed repeatedly
         const made = await createWalletAccount(req, entry.address, su);
         if (made.gate) return send(res, 403, made.gate);
@@ -11720,7 +11727,8 @@ const server = http.createServer(async (req, res) => {
           const u = String(b.username).trim();
           if (!USERNAME_RE.test(u)) return bad(res, 'username must be 3–24 chars: letters, numbers, _ . -');
           if (u.toLowerCase() !== me.username.toLowerCase() && usernameTaken(u)) return bad(res, 'that username is taken');
-          db.prepare('UPDATE users SET username = ?, auto_named = 0 WHERE id = ?').run(u, me.id);
+          try { db.prepare('UPDATE users SET username = ?, auto_named = 0 WHERE id = ?').run(u, me.id); }
+          catch (e) { if (/UNIQUE/.test(String(e && e.message))) return bad(res, 'that username is taken', 409); throw e; }   // taken in between, in some casing
         }
         if (b.avatar !== undefined) db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(String(b.avatar).slice(0, 8), me.id);
         if (b.bio !== undefined) db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(String(b.bio).slice(0, 200), me.id);

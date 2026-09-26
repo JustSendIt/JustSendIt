@@ -1,5 +1,6 @@
 /* ===== Public wall page: profile header, follow, posts + full interactions ===== */
-const uname = decodeURIComponent((location.pathname.split('/u/')[1] || '').split('/')[0] || new URLSearchParams(location.search).get('u') || '');
+// the name as typed in the address; replaced by the account's own spelling once it loads (/u/SEND and /u/send are one wall)
+let uname = decodeURIComponent((location.pathname.split('/u/')[1] || '').split('/')[0] || new URLSearchParams(location.search).get('u') || '');
 
 // attribute-safe HTML escape (also encodes quotes so it's safe inside src="…"/style="…")
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -528,6 +529,10 @@ async function loadPage() {
   try {
     const j = await api('/api/users/' + encodeURIComponent(uname));
     const u = j.user;
+    if (u.username && u.username !== uname) {
+      uname = u.username;
+      try { if (location.pathname.startsWith('/u/')) history.replaceState(history.state, '', '/u/' + encodeURIComponent(u.username) + location.search + location.hash); } catch {}
+    }
     document.title = '@' + u.username + ' — $Send · Just Send It 👤';
     // per-user canonical + meta so each public wall is its own indexable page (SEO)
     try {
