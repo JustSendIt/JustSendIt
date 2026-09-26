@@ -14358,7 +14358,7 @@ const server = http.createServer(async (req, res) => {
 <meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}">
 <meta property="og:image" content="${e(card)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${e('A Just Send It ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
-<meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@senditrh">
+<meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@sendrh_">
 <meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(desc)}">
 <meta name="twitter:image" content="${e(card)}">
 <link rel="icon" href="/assets/logo-128.png">

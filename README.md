@@ -1180,7 +1180,7 @@ unused codes of accounts deleted before this rule.) The [Privacy Policy](public/
 
 - 🌐 [GenerationalWealthCoin.com](http://GenerationalWealthCoin.com)
 - 💬 Telegram: [t.me/generationalwealthcoin](https://t.me/generationalwealthcoin)
-- 🐦 X / Twitter: [x.com/senditrh](https://x.com/senditrh)
+- 🐦 X / Twitter: [x.com/sendrh_](https://x.com/sendrh_)
 
 ---
 
