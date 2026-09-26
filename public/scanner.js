@@ -29,7 +29,7 @@
   const agoEl = (t) => '<time class="sc-ago" data-t="' + Number(t || 0) + '" datetime="' + esc(new Date(Number(t || 0)).toISOString()) + '">' + esc(ago(t)) + '</time>';
   setInterval(() => { document.querySelectorAll('.sc-ago[data-t]').forEach((el) => { const v = ago(el.getAttribute('data-t')); if (el.textContent !== v) el.textContent = v; }); }, 15000);
   const clock = (t) => { try { return new Date(Number(t)).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
-  let current = 'scan', seq = 0;
+  let current = 'scan', seq = 0, lastPair = null;   // lastPair: the pair the scan on screen shows (its ☆ saves this)
 
   /* ---------- tabs ---------- */
   function show(which, opts) {
@@ -98,57 +98,13 @@
   paintCommunity();
 
   /* ---------- a Send Call on what was just scanned ----------
-     📣 to the public Send Wall — anyone sees it; a visitor is asked to sign in by the composer — and 🛡️ to a Send
-     Squad, a button that only exists when the reader is a verified member of one (the most recently joined is chosen;
-     the composer's picker lists every squad they can call to). Both open the same composer every page has, in call
-     mode, with this token filled in and read. The token's full on-chain detail is on screen here, so the call is not
-     flagged "made without DYOR" — for this token only. Everything a call needs (sign-in, the $SEND check, today's
-     allowance, enough liquidity) is still asked by the composer and the server, exactly as for any other call. */
-  // the reader's VERIFIED squads, whose they are, and when they were read — kept a minute: a gate re-check or a
-  // join or leave in another tab changes them, and the Scanner is a page people keep open
-  let mySquads = null, mySquadsFor = null, mySquadsAt = 0;
-  async function verifiedSquads() {
-    const uid = window.AUTH && AUTH.user && AUTH.user.username;   // the signed-in account (the client is not given its numeric id)
-    if (!uid || !window.api) return [];
-    if (mySquads && mySquadsFor === uid && Date.now() - mySquadsAt < 60e3) return mySquads;
-    try {
-      const j = await window.api('/api/squads/mine');
-      mySquads = ((j && j.squads) || []).filter((q) => q && q.verified && q.id > 0);
-      mySquadsFor = uid; mySquadsAt = Date.now();
-    } catch { return []; }                           // could not tell: no squad button rather than a wrong one
-    return mySquads;
-  }
-  const callRowHTML = (tok) =>
-    '<p class="sc-hit-call" id="sc-call-row" data-tok="' + esc(tok) + '">' +
-      '<button class="btn btn-primary btn-sm" type="button" data-sc-call="wall" data-tip="Opens a Send Call on this token for the public Send Wall — a permanent, live scorecard that starts at today’s price">📣 Send Call to the Wall</button>' +
-    '</p>';
-  async function paintSquadCall(tok) {
-    const list = await verifiedSquads();
-    const row = $('sc-call-row');
-    if (!row || row.dataset.tok !== tok) return;     // a newer scan replaced it
-    const old = row.querySelector('[data-sc-call="squad"]'); if (old) old.remove();
-    if (!list.length) return;                         // not in a squad: there is no squad button
-    const q = list[0], one = list.length === 1;
-    row.insertAdjacentHTML('beforeend',
-      '<button class="btn btn-ghost btn-sm" type="button" data-sc-call="squad" data-squad-id="' + Number(q.id) + '" data-squad-name="' + esc(q.name) + '" data-tip="' +
-        (one ? 'Opens a Send Call on this token for ' + esc(q.name) + ' — private to the squad, and its points go to the squad'
-             : 'Opens a Send Call on this token for one of your Send Squads — pick which one in the box; private to that squad, and its points go to it') + '">' +
-        '🛡️ Send Call to ' + (one ? esc(q.name) : 'your Squad') + '</button>');
-  }
-  result.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-sc-call]'); if (!b) return;
-    const row = b.closest('#sc-call-row'); if (!row) return;
-    if (!window.COMPOSE || !COMPOSE.openCall) { if (window.sendToast) sendToast('The Send Call box could not load on this page — reload and try again'); return; }
-    const squad = b.dataset.scCall === 'squad';
-    COMPOSE.openCall({
-      token: row.dataset.tok,
-      viewedDetail: !!result.querySelector('.np-detail-group, .np-contract'),   // only when the full detail really rendered
-      squadId: squad ? Number(b.dataset.squadId) : 0, squadName: squad ? b.dataset.squadName : '',
-    });
-  });
-  const repaintSquadCall = () => { mySquads = null; mySquadsFor = null; mySquadsAt = 0; const row = $('sc-call-row'); if (row) paintSquadCall(row.dataset.tok); };
-  document.addEventListener('auth:change', repaintSquadCall);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && mySquadsAt && Date.now() - mySquadsAt > 60e3) repaintSquadCall(); });   // back from joining or leaving a squad in another tab
+     📣 to the public Send Wall, and 🛡️ to a Send Squad when the reader is a verified member of one — the same pair
+     every view of a token ends in (compose.js: COMPOSE.callRowHTML, squad button filled in as the row appears, the
+     composer opened in call mode with this token read). The token's full on-chain detail is on screen here, so the
+     call is not flagged "made without DYOR" — for this token only, and only when the detail rendered. Everything a
+     call needs (sign-in, the $SEND check, today's allowance, enough liquidity) is still asked by the composer and
+     the server, exactly as for any other call. */
+  const callRowHTML = (tok) => (window.COMPOSE && COMPOSE.callRowHTML) ? COMPOSE.callRowHTML(tok, { cls: 'sc-hit-call', viewed: !!window.NPCard }) : '';
 
   /* ---------- the scan ---------- */
   function setStatus(text, kind) {
@@ -160,6 +116,7 @@
     const addr = String(raw || '').trim();
     if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long.', 'err'); if (input) input.focus(); return; }
     const my = ++seq;
+    lastPair = null;                                                   // the ☆ saves only the pair on screen, never the one before
     if (input) { input.value = addr; input.dispatchEvent(new Event('input')); }   // shows the ✕ for a chip or deep-link scan too
     if (go) { go.disabled = true; go.setAttribute('aria-disabled', 'true'); }
     setStatus('Reading the chain for ' + shortAddr(addr) + '…', 'busy');
@@ -171,6 +128,7 @@
       if (my !== seq) return;
       if (r.ok && j.pair) {
         const p = j.pair, tok = (p.token && p.token.address) || addr.toLowerCase();
+        lastPair = p;
         const sym = (p.token && p.token.symbol) || '';
         const sc = Object.assign({ readAt: Date.now(), stale: false, kept: false }, j.scan || {});
         if (typeof sc.now === 'number' && Math.abs(sc.now - Date.now()) > 2000) clockOffset = sc.now - Date.now(); else if (typeof sc.now === 'number') clockOffset = 0;
@@ -205,7 +163,6 @@
         setStatus(sc.stale ? 'Showing the last snapshot of ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + ', not live.' : 'Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + '.', sc.stale ? 'busy' : 'ok');
         remember(tok, sym);
         paintCommunity();
-        paintSquadCall(tok);
         const h = result.querySelector('.sc-hit-h'); if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: false }); } catch {} }
       } else if (!r.ok || (j && j.unavailable)) {
         // "we could not check" is never dressed up as a fact about the address
@@ -227,6 +184,14 @@
     }
   }
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value); });
+  // the ☆ at the foot of the scan: saves this pair to the watchlist (or takes it off)
+  result.addEventListener('click', (e) => {
+    const w = e.target.closest('.np-watch[data-wpair]');
+    if (!w || !lastPair || !lastPair.pair || !window.Watchlist) return;
+    if (String(w.dataset.wpair).toLowerCase() !== String(lastPair.pair.address).toLowerCase()) return;
+    e.preventDefault();
+    Watchlist.toggle(lastPair);
+  });
   /* ---------- clearing the box: the ✕ inside it, or Esc while typing in it ---------- */
   const clearBtn = $('sc-clear');
   const syncClear = () => { if (clearBtn) clearBtn.hidden = !(input && input.value); };

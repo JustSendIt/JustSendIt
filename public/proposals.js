@@ -25,6 +25,10 @@
   const countEl = document.getElementById('prop-count');
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  // a person's @name opens their Send Wall (/u/<name>); no name, no link
+
+  const wallLink = (u) => u ? '<a class="wall-link" href="/u/' + encodeURIComponent(u) + '">@' + esc(u) + '</a>' : '@—';
   const say = (t) => { if (window.announce) window.announce(t); };
   let CID = null, cache = [];
 
@@ -136,7 +140,7 @@
         '<h3 class="prop-title" id="prop-t-' + p.id + '">' + esc(p.title) + '</h3>' +
       '</div>' +
       (p.body ? '<p class="prop-body">' + esc(p.body) + '</p>' : '') +
-      '<p class="prop-by">by @' + esc(p.author ? p.author.username : '—') +
+      '<p class="prop-by">by ' + wallLink(p.author && p.author.username) +
         (p.electorate ? ' · ' + p.electorate + (sec.dataset.demo ? ' sandbox members' : ' verified holders') + ' on the roll' : '') + '</p>' + // the sandbox verifies nobody
       inner +
     '</li>';

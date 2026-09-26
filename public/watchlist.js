@@ -125,7 +125,14 @@
       group('chart', '📈 Chart', true, chartHTML(p)) +
       group('market', '📊 Market', true, market) + group('activity', '🔁 Activity', false, activity) + group('holders', '👥 Holders', false, holders) + group('contract', '📄 Contract &amp; copy', false, contract) +
       group('block0', '🎯 Block 0 — the first buyers', true, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
-      '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p></div>';
+      '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
+      /* what you can do with a saved token: open its full profile in the Scanner (the score breakdown lives there,
+         not in this lighter card), or call it — the same Send Call pair every view of a token ends in. A call from
+         here is not marked "detail viewed": the composer offers the full detail first. */
+      '<div class="np-body-actions wl-actions">' +
+        '<a class="btn btn-sm btn-ghost" href="newpairs.html?scan=' + encodeURIComponent(p.token.address) + '" data-tip="Opens this token in the Scanner — its full on-chain profile: score breakdown, market, holders, contract">🔎 Full scan</a>' +
+        (window.COMPOSE && COMPOSE.callRowHTML ? COMPOSE.callRowHTML(p.token.address, { cls: 'np-call-row' }) : '') +
+      '</div></div>';
   }
   function rowHTML(p) {
     const isOpen = state.open.has(p.pair.address);
@@ -136,7 +143,7 @@
   function setStatus(html) { if (statusEl) statusEl.innerHTML = html; }
   function signedOut(el, what) { el.innerHTML = '<li class="np-msg">Sign in to keep a ' + what + '. <button class="btn btn-sm btn-primary" data-tip="Opens the sign-in panel so saved tokens stick to your account" data-wl-signin type="button">Sign In 🚀</button></li>'; }
   function render() {
-    if (!state.items.length) { listEl.innerHTML = '<li class="np-msg">⭐ No saved tokens yet. Open <a class="np-msg-link" href="newpairs.html">New Pairs</a>, tap the ☆ on any token, and it lands here.</li>'; setStatus(''); return; }
+    if (!state.items.length) { listEl.innerHTML = '<li class="np-msg">⭐ No saved tokens yet. Open the <a class="np-msg-link" href="newpairs.html">Scanner</a>, scan any token, tap its ☆, and it lands here.</li>'; setStatus(''); return; }
     listEl.innerHTML = state.items.map(rowHTML).join('');
     setStatus('<span class="np-live-dot" aria-hidden="true"></span> ' + state.items.length + ' saved token' + (state.items.length === 1 ? '' : 's'));
     if (window.Watchlist) Watchlist.syncButtons(listEl);

@@ -4,7 +4,7 @@
  * Accessibility: role=dialog + aria-modal, labelled title, focus trap, Esc + backdrop + ✕ to close, focus restore. */
 (function () {
   'use strict';
-  var modal, dialog, body, titleEl, releaseTrap = null, lastFocus = null, seq = 0;
+  var modal, dialog, body, titleEl, releaseTrap = null, lastFocus = null, seq = 0, shown = null;   // shown: the pair the popup is showing (its ☆ saves this)
 
   function build() {
     modal = document.createElement('div');
@@ -24,7 +24,12 @@
     dialog = modal.querySelector('.tm-dialog');
     body = modal.querySelector('#tm-body');
     titleEl = modal.querySelector('#tm-title');
-    modal.addEventListener('click', function (e) { if (e.target.closest('[data-tm-close]')) close(); });
+    modal.addEventListener('click', function (e) {
+      if (e.target.closest('[data-tm-close]')) { close(); return; }
+      // the ☆ at the foot of the detail: saves the pair this popup shows (the watchlist script is not on every page)
+      var w = e.target.closest('.np-watch[data-wpair]');
+      if (w && shown && shown.pair && window.Watchlist && String(w.dataset.wpair).toLowerCase() === String(shown.pair.address).toLowerCase()) { e.preventDefault(); window.Watchlist.toggle(shown); }
+    });
     modal.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Esc') { e.stopPropagation(); close(); } });
   }
 
@@ -49,6 +54,7 @@
     releaseTrap = window.trapFocus ? window.trapFocus(dialog) : null;
     var xBtn = modal.querySelector('.tm-x'); if (xBtn) xBtn.focus(); // focus synchronously — the dialog is already un-hidden, so no Tab-escape window
     var my = ++seq;
+    shown = null;
     if (!window.NPCard || !token) { body.innerHTML = '<p class="tm-msg">Full detail isn’t available here.</p>'; return; }
     try {
       var r = await fetch('/api/pairs/lookup?token=' + encodeURIComponent(token), { credentials: 'same-origin' });
@@ -60,6 +66,7 @@
       if (window.tokenCommunityPrime && j && Object.prototype.hasOwnProperty.call(j, 'community')) tokenCommunityPrime(token, j.community);
       var comm = window.tokenCommunitySlot ? tokenCommunitySlot(token, sym, 'panel') : '';
       if (r.ok && j.pair) {
+        shown = j.pair;
         body.innerHTML = window.NPCard.detailHTML(j.pair);
         var honest = body.querySelector('.np-honest'); // sit inside the detail, just above its closing honesty note
         if (honest) honest.insertAdjacentHTML('beforebegin', comm); else body.insertAdjacentHTML('beforeend', comm);

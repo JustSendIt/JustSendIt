@@ -167,14 +167,34 @@ try {
 
   /* ═══ a Send Call straight from a scan: to the Wall, or to the reader's Send Squad when they are in one ═══ */
   const CMP = read('compose.js');
-  check('a scanned token\'s result carries a "Send Call to the Wall" button', /callRowHTML\(tok\) \+/.test(SC) && /data-sc-call="wall"/.test(SC) && /📣 Send Call to the Wall/.test(SC));
-  check('  ...and a squad button only for a VERIFIED member of a squad — none at all otherwise', /\.filter\(\(q\) => q && q\.verified && q\.id > 0\)/.test(SC) && /if \(!list\.length\) return;\s+\/\/ not in a squad: there is no squad button/.test(SC) && /data-sc-call="squad"/.test(SC));
-  check('  ...both open the site\'s one composer with the token filled in, public or to that squad', /COMPOSE\.openCall\(\{\s+token: row\.dataset\.tok,/.test(SC) && /squadId: squad \? Number\(b\.dataset\.squadId\) : 0/.test(SC));
-  check('  ...a call made from the full detail on screen is not flagged "without DYOR" — only for that token, and only when the detail rendered', /viewedDetail: !!result\.querySelector\('\.np-detail-group, \.np-contract'\)/.test(SC)
+  check('a scanned token\'s result carries the shared Send Call pair, marked "detail on screen" only when the detail rendered', /COMPOSE\.callRowHTML\(tok, \{ cls: 'sc-hit-call', viewed: !!window\.NPCard \}\)/.test(SC) && /callRowHTML\(tok\) \+/.test(SC)
+    && /data-call-go="wall"/.test(CMP) && /📣 Send Call to the Wall/.test(CMP));
+  check('  ...and a squad button only for a VERIFIED member of a squad — none at all otherwise', /\.filter\(\(q\) => q && q\.verified && q\.id > 0\)/.test(CMP) && /if \(!list\.length\) \{ if \(old\) old\.remove\(\); continue; \}\s+\/\/ not in a squad: there is no squad button/.test(CMP) && /data-call-go="squad"/.test(CMP));
+  check('  ...both open the site\'s one composer with the token filled in, public or to that squad', /openCall\(\{ token: row\.dataset\.tok, viewedDetail: viewed, squadId: squad \? Number\(b\.dataset\.squadId\) : 0/.test(CMP));
+  check('  ...a call is not flagged "without DYOR" only where the full detail of that token is on screen (a marked row), and only for that token', /const viewed = row\.dataset\.viewed === '1';/.test(CMP)
     && /detailSeenFor = tok && o\.viewedDetail \? tok : null;/.test(CMP) && /viewedDetail = !!detailSeenFor && detailSeenFor === String\(addr\)\.toLowerCase\(\);/.test(CMP));
+  check('the full token detail — the radar, the token popup, a call\'s detail, the Scanner\'s lower section — ends in the same Send Call pair', /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row', viewed: true \}\)/.test(NP) && /detailHTML: \(p, opts\) => bodyHTML\(p, [^\n]*Object\.assign\(\{\}, opts\)\)/.test(NP) && !/Object\.assign\(\{ hideCall: true \}, opts\)/.test(NP));
+  check('  ...and a call button inside the token popup closes the popup before the composer opens', /row\.closest\('#token-modal, \.token-modal'\) && window\.TokenModal && TokenModal\.close/.test(CMP));
+  const WL = read('watchlist.js'), WLH = read('watchlist.html');
+  check('  ...the composer\'s "see the full detail" clears the flag only where the popup can really show it; elsewhere it opens the Scanner in a new tab and the call stays flagged',
+    /if \(window\.TokenModal && window\.NPCard\) \{ viewedDetail = true; TokenModal\.open\(/.test(CMP) && /else window\.open\('newpairs\.html\?scan=' \+ encodeURIComponent\(callTok\.addr\), '_blank', 'noopener'\);/.test(CMP)
+    && !/Open this token from New Pairs to see its full detail/.test(CMP) && /one made from the Scanner is not/.test(CMP));
+  check('  ...a Wall button always lands on the public Wall, even with the composer left on a squad', /setCallTarget\(pendingSquad \? pendingSquad\.id : null\);/.test(CMP));
+  check('  ...on a squad\'s own page the squad button calls to that squad when the reader is verified there', /const q = \(ctx && list\.find\(\(s\) => s\.id === ctx\)\) \|\| list\[0\]/.test(CMP) && /old\.dataset\.one === String\(one\)/.test(CMP));
+  const TMJ = read('tokenmodal.js');
+  check('the ☆ at the foot of a scan and of the token popup saves that pair (the watchlist copy tells people to tap it)',
+    /lastPair = p;/.test(SC) && /Watchlist\.toggle\(lastPair\)/.test(SC) && /shown = j\.pair;/.test(TMJ) && /window\.Watchlist\.toggle\(shown\)/.test(TMJ));
+  check('  ...a long squad name wraps inside its Send Call button wherever the pair sits', /\.call-row \.btn \{ max-width: 100%; min-width: 0; overflow-wrap: anywhere; \}/.test(CSS));
+  check('the watchlist sends people to the token Scanner, not the New Pairs radar', /href="newpairs\.html" data-tip="Opens the token Scanner/.test(WLH) && !/newpairs\.html\?tab=new/.test(WLH) && /Open the <a class="np-msg-link" href="newpairs\.html">Scanner<\/a>/.test(WL));
+  check('  ...each saved token opens in the Scanner and carries the Send Call pair (not marked "detail viewed": the card is lighter)', /href="newpairs\.html\?scan=' \+ encodeURIComponent\(p\.token\.address\)/.test(WL) && /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row' \}\)/.test(WL));
+  const CJ = read('community.js'), SJ = read('squad.js'), PJ = read('proposals.js');
+  const wl = /const wallLink = \(u\) => u \? '<a class="wall-link" href="\/u\/' \+ encodeURIComponent\(u\) \+ '">@' \+ esc\(u\) \+ '<\/a>' : '@—';/;
+  check('a community\'s and a Send Squad\'s "started by", and a proposal\'s author, open that person\'s Send Wall', wl.test(CJ) && wl.test(SJ) && wl.test(PJ)
+    && (CJ.match(/started by ' \+ wallLink\(c\.creator\)/g) || []).length === 2 && /Send Squad · started by ' \+ wallLink\(/.test(SJ) && /by ' \+ wallLink\(p\.author && p\.author\.username\)/.test(PJ) && !/started by @' \+ esc\(/.test(CJ + SJ));
   check('  ...the composer fills and reads the handed-over token, keeps it through a sign-in, and forgets it on close', /function fillCallToken\(tok\)/.test(CMP) && /lookupCallToken\(tok\);/.test(CMP)
     && /pendingSquad = keepSquad; pendingToken = keepToken; detailSeenFor = keepSeen;/.test(CMP) && /if \(tok\) fillCallToken\(tok\);/.test(CMP) && /pendingToken = null; detailSeenFor = null;\s+\/\/ nor does a token another page handed over/.test(CMP));
-  check('  ...a new sign-in re-reads the reader\'s squads, and so does a scan a minute later or a return to the tab (a gate re-check, a join or a leave elsewhere)', /document\.addEventListener\('auth:change', repaintSquadCall\);/.test(SC) && /Date\.now\(\) - mySquadsAt < 60e3/.test(SC) && /document\.addEventListener\('visibilitychange'/.test(SC));
+  check('  ...a new sign-in re-reads the reader\'s squads, and so does a scan a minute later or a return to the tab (a gate re-check, a join or a leave elsewhere)', /document\.addEventListener\('auth:change', repaintCallRows\);/.test(CMP) && /Date\.now\(\) - mySquadsAt < 60e3/.test(CMP) && /document\.addEventListener\('visibilitychange'/.test(CMP));
+  check('  ...rows get their squad button as they appear, wherever they appear (one paint at a time, not tied to animation frames)', /new MutationObserver\(\(ms\) => \{/.test(CMP) && /do \{ paintAgain = false; await paintCallRows\(document\); \} while \(paintAgain\);/.test(CMP));
   check('  ...and a Send Call box opened before a sign-in comes back after it, however long the sign-in takes', /const onAuthClosed = \(\) =>/.test(CMP) && /pendingTimer = setTimeout\(abandon, 10 \* 60 \* 1000\);/.test(CMP));
   // the list the squad button is built from, and the call it leads to
   const tag = randomBytes(3).toString('hex');

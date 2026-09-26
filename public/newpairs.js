@@ -1056,7 +1056,8 @@
          read before the buttons, not after them. Nothing here recommends anything; they are the three
          actions the reader already had, gathered where the reading ends. */
       '<div class="np-body-actions">' +
-        (opts.hideCall ? '' : '<button class="btn btn-sm btn-primary np-call" type="button" data-tip="Posts a call on your wall that can never be deleted" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button>') +
+        // the same Send Call pair every view of a token ends in — 📣 to the Wall, 🛡️ to your Send Squad when you are in one — opening the composer (compose.js)
+        (opts.hideCall || !(window.COMPOSE && COMPOSE.callRowHTML) ? '' : COMPOSE.callRowHTML(p.token.address, { cls: 'np-call-row', viewed: true })) +   // this card IS the full detail
         pinBtnHTML(p) +
         (window.Watchlist ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
       '</div></div>';
@@ -2447,7 +2448,8 @@
 
   // Expose the full token-detail renderer so the Send Wall / profiles can pop down the exact same New Pairs detail.
   window.NPCard = {
-    detailHTML: (p, opts) => bodyHTML(p, (opts && opts.sections) || { why: true, chart: true, score: true, market: true, activity: false, holders: false, contract: false }, Object.assign({ hideCall: true }, opts)),
+    // the Send Call buttons show wherever this detail renders (the Scanner, the token popup, a call's detail); pass { hideCall: true } to leave them out
+    detailHTML: (p, opts) => bodyHTML(p, (opts && opts.sections) || { why: true, chart: true, score: true, market: true, activity: false, holders: false, contract: false }, Object.assign({}, opts)),
     animateRings,
   };
 

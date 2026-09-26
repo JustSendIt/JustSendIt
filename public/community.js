@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // a person's @name opens their Send Wall (/u/<name>); no name, no link
+  const wallLink = (u) => u ? '<a class="wall-link" href="/u/' + encodeURIComponent(u) + '">@' + esc(u) + '</a>' : '@—';
   function timeAgo(ts) { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; }
   function fmtUsd(n) { if (n == null || isNaN(n)) return '—'; const a = Math.abs(n); if (a >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'k'; if (a >= 1) return '$' + n.toFixed(2); if (a > 0) return '$' + n.toPrecision(2); return '$0'; }
   function fmtNum(n) { return n == null ? '—' : Number(n).toLocaleString('en-US'); }
@@ -104,8 +106,8 @@
         '<div class="comm-hero-top">' + logo +
           '<div class="comm-hero-id"><h1 class="comm-hero-name">' + esc(c.name) + ' <b>$' + esc(c.symbol) + '</b></h1>' +
           (c.demo
-            ? '<p class="comm-hero-sub">The open sandbox · started by @' + esc(c.creator || '—') + ' · <a href="' + esc((st && st.quoteUrl) || 'https://www.nasdaq.com/market-activity/stocks/hood') + '" target="_blank" rel="noopener nofollow">' + esc((st && st.exchange) || 'NASDAQ') + ': ' + esc(c.symbol) + ' ↗</a></p></div>'
-            : '<p class="comm-hero-sub">Community · started by @' + esc(c.creator || '—') + ' · <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">View token on-chain ↗</button></p></div>') +
+            ? '<p class="comm-hero-sub">The open sandbox · started by ' + wallLink(c.creator) + ' · <a href="' + esc((st && st.quoteUrl) || 'https://www.nasdaq.com/market-activity/stocks/hood') + '" target="_blank" rel="noopener nofollow">' + esc((st && st.exchange) || 'NASDAQ') + ': ' + esc(c.symbol) + ' ↗</a></p></div>'
+            : '<p class="comm-hero-sub">Community · started by ' + wallLink(c.creator) + ' · <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">View token on-chain ↗</button></p></div>') +
           twoX +
         '</div>' +
         metrics + panel + conv +

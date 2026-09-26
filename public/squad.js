@@ -5,6 +5,8 @@
 (function () {
   'use strict';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // a person's @name opens their Send Wall (/u/<name>); no name, no link
+  const wallLink = (u) => u ? '<a class="wall-link" href="/u/' + encodeURIComponent(u) + '">@' + esc(u) + '</a>' : '@—';
   function timeAgo(ts) { const s = Math.max(0, (Date.now() - ts) / 1000); if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + 'm ago'; if (s < 86400) return Math.floor(s / 3600) + 'h ago'; return Math.floor(s / 86400) + 'd ago'; }
   // the API's dollar figures arrive already rounded — this only abbreviates them, and never fills a gap
   function fmtUsd(n) { if (n == null || isNaN(n)) return '—'; n = Number(n); const a = Math.abs(n); const sign = n < 0 ? '−' : ''; if (a >= 1e9) return sign + '$' + (a / 1e9).toFixed(2) + 'B'; if (a >= 1e6) return sign + '$' + (a / 1e6).toFixed(2) + 'M'; if (a >= 1e3) return sign + '$' + (a / 1e3).toFixed(1) + 'k'; if (a >= 1) return sign + '$' + a.toFixed(2); if (a > 0) return sign + '$' + a.toPrecision(2); return '$0'; }
@@ -103,7 +105,7 @@
       '<div class="comm-hero-body">' +
         '<div class="comm-hero-top">' + logo +
           '<div class="comm-hero-id"><h1 class="comm-hero-name">' + esc(s.name) + '</h1>' +
-          '<p class="comm-hero-sub">Send Squad · started by @' + esc((s.creator && typeof s.creator === 'object') ? (s.creator.username || '—') : (s.creator || '—')) + (s.createdAt ? ' · ' + esc(timeAgo(s.createdAt)) : '') + '</p>' + pills + '</div>' +
+          '<p class="comm-hero-sub">Send Squad · started by ' + wallLink((s.creator && typeof s.creator === 'object') ? s.creator.username : s.creator) + (s.createdAt ? ' · ' + esc(timeAgo(s.createdAt)) : '') + '</p>' + pills + '</div>' +
           badge +
         '</div>' +
         (s.bio ? '<p class="sqd-bio">' + esc(s.bio) + '</p>' : '') +

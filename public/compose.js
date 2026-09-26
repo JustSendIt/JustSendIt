@@ -212,7 +212,9 @@
     detailSeenFor = tok && o.viewedDetail ? tok : null;
     setMode('call');
     if (modal.hasAttribute('hidden')) open(); else showForAuth();
-    if (pendingSquad) { ensureSquadOption(pendingSquad.id, pendingSquad.name); setCallTarget(pendingSquad.id); }
+    // a Wall button always lands on the public Wall, even when the box was left on a squad from an earlier call
+    if (pendingSquad) ensureSquadOption(pendingSquad.id, pendingSquad.name);
+    setCallTarget(pendingSquad ? pendingSquad.id : null);
     if (tok) fillCallToken(tok);
   }
   // put a handed-over token in the address box and read it, then leave the cursor on the note
@@ -289,8 +291,10 @@
         (thin
           ? '<p class="modal-note cmp-call-warn">⚠️ Too thin to call — a pool needs <b>$' + MIN_CALL_LIQ.toLocaleString('en-US') + '+</b> of liquidity (this one has ' + esc(money(liq)) + '). Thin pools are easy to manipulate.</p>'
           : viewedDetail
-            ? '<p class="modal-note">✅ You had its full on-chain detail on screen on the Scanner — this call is not flagged as made without looking.</p>'   // said only for the token the Scanner handed over
-            : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens the full on-chain detail and records that you looked">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>')
+            ? '<p class="modal-note">✅ You had its full on-chain detail on screen — this call is not flagged as made without looking.</p>'   // said only for the token a full detail card (or the Scanner) handed over
+            : (window.TokenModal && window.NPCard)
+              ? '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens the full on-chain detail and records that you looked">See the full on-chain detail first</button> — calls made without looking are flagged on your wall.</p>'
+              : '<p class="modal-note">📖 <button class="linklike" type="button" id="compose-call-detail" data-tip="Opens this token in the Scanner in a new tab. This page cannot see what you read there, so a call made here stays flagged — use the Send Call button on the Scanner instead">Scan it first</button> — calls made without looking are flagged on your wall; one made from the Scanner is not.</p>')
       );
       setCallReady(!thin);
       if (window.decorateTokenCommunities) window.decorateTokenCommunities(modal.querySelector('#compose-call-preview'));
@@ -467,9 +471,10 @@
     // "see the full on-chain detail" — opens the same popup as everywhere else and clears the no-DYOR flag
     modal.querySelector('#compose-call-preview').addEventListener('click', e => {
       if (!e.target.closest('#compose-call-detail') || !callTok) return;
-      viewedDetail = true;
-      if (window.TokenModal) TokenModal.open(callTok.addr, { symbol: callTok.symbol, name: callTok.name });
-      else if (window.sendToast) sendToast('Open this token from New Pairs to see its full detail');
+      /* only a popup that really opened with the full detail clears the flag. A page without one opens the Scanner in a
+         new tab — the draft stays put, and the call stays flagged, since this page cannot see what was read there */
+      if (window.TokenModal && window.NPCard) { viewedDetail = true; TokenModal.open(callTok.addr, { symbol: callTok.symbol, name: callTok.name }); }
+      else window.open('newpairs.html?scan=' + encodeURIComponent(callTok.addr), '_blank', 'noopener');
     });
 
     const clearComposeMedia = () => { pendingImg = null; const ci = modal.querySelector('#compose-img'); ci._attachGen = (ci._attachGen || 0) + 1; ci.value = ''; window.setMediaPreview(modal.querySelector('#compose-preview'), null); gate(sendBtn, !modal.querySelector('#compose-text').value.trim()); };
@@ -543,6 +548,83 @@
   function init() { build(); wire(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
-  // squad.html: COMPOSE.openCall({ squadId, squadName }) opens the composer in call mode with that squad chosen
-  window.COMPOSE = { openCall };
+  /* ===== Send Call buttons for any view of a token =====
+     The Scanner's result and the detail card under every token — the radar, the token popup, the watchlist, a
+     call's own detail — end in the same pair: 📣 to the public Send Wall, and 🛡️ to a Send Squad, a button that
+     only exists when the reader is a VERIFIED member of one (the most recently joined is chosen; the composer's
+     picker lists them all). Both open this composer in call mode with the token filled in and read. A row marked
+     data-viewed (the full detail card writes its rows that way, and so does the Scanner once its detail rendered)
+     says the full on-chain detail is on screen, so that call is not flagged "made without DYOR" — for that token
+     only; a lighter card (the watchlist's) is not marked, and the composer offers the full detail first.
+     callRowHTML(token, { viewed, cls }) writes a row; rows are given their squad button as they appear. */
+  let mySquads = null, mySquadsFor = null, mySquadsAt = 0, mySquadsP = null;   // the reader's verified squads, whose, when read (kept a minute)
+  function verifiedSquads() {
+    const uid = window.AUTH && AUTH.user && AUTH.user.username;   // the signed-in account (the page is not given its numeric id)
+    if (!uid || !window.api) return Promise.resolve([]);
+    if (mySquads && mySquadsFor === uid && Date.now() - mySquadsAt < 60e3) return Promise.resolve(mySquads);
+    if (mySquadsP) return mySquadsP;
+    mySquadsP = window.api('/api/squads/mine')
+      .then((j) => { mySquads = ((j && j.squads) || []).filter((q) => q && q.verified && q.id > 0); mySquadsFor = uid; mySquadsAt = Date.now(); return mySquads; })
+      .catch(() => [])                                            // could not tell: no squad button rather than a wrong one
+      .finally(() => { mySquadsP = null; });
+    return mySquadsP;
+  }
+  function callRowHTML(token, opts) {
+    const tok = String(token || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(tok)) return '';
+    opts = opts || {};
+    return '<div class="call-row' + (opts.cls ? ' ' + opts.cls : '') + '" data-call-row data-tok="' + tok + '"' + (opts.viewed ? ' data-viewed="1"' : '') + '>' +
+      '<button class="btn btn-primary btn-sm" type="button" data-call-go="wall" data-tip="Opens a Send Call on this token for the public Send Wall — a permanent, live scorecard that starts at today’s price">📣 Send Call to the Wall</button>' +
+    '</div>';
+  }
+  async function paintCallRows(root) {
+    const rows = Array.from((root || document).querySelectorAll('[data-call-row]'));
+    if (!rows.length) return;
+    const list = await verifiedSquads();
+    // on a squad's own page, a squad you are verified in there is the one the button calls to
+    const ctx = /\/squad(\.html)?$/.test(location.pathname) ? Number(new URLSearchParams(location.search).get('id')) || 0 : 0;
+    const q = (ctx && list.find((s) => s.id === ctx)) || list[0], one = list.length === 1 || !!(ctx && q && q.id === ctx);
+    for (const row of rows) {
+      if (!row.isConnected) continue;
+      const old = row.querySelector('[data-call-go="squad"]');
+      if (!list.length) { if (old) old.remove(); continue; }   // not in a squad: there is no squad button
+      if (old && Number(old.dataset.squadId) === q.id && old.dataset.n === String(list.length) && old.dataset.one === String(one)) continue;
+      if (old) old.remove();
+      row.insertAdjacentHTML('beforeend',
+        '<button class="btn btn-ghost btn-sm" type="button" data-call-go="squad" data-squad-id="' + Number(q.id) + '" data-squad-name="' + esc(q.name) + '" data-n="' + list.length + '" data-one="' + one + '" data-tip="' +
+          (one ? 'Opens a Send Call on this token for ' + esc(q.name) + ' — private to the squad, and its points go to the squad'
+               : 'Opens a Send Call on this token for one of your Send Squads — pick which one in the box; private to that squad, and its points go to it') + '">' +
+          '🛡️ Send Call to ' + (one ? esc(q.name) : 'your Squad') + '</button>');
+    }
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-call-go]'); if (!b) return;
+    const row = b.closest('[data-call-row]'); if (!row) return;
+    e.preventDefault();
+    const squad = b.dataset.callGo === 'squad';
+    const viewed = row.dataset.viewed === '1';   // written only where the full on-chain detail of this token is on screen
+    // a row inside the token popup: close the popup so the composer is not opened underneath it
+    if (row.closest('#token-modal, .token-modal') && window.TokenModal && TokenModal.close) { try { TokenModal.close(); } catch {} }
+    openCall({ token: row.dataset.tok, viewedDetail: viewed, squadId: squad ? Number(b.dataset.squadId) : 0, squadName: squad ? b.dataset.squadName : '' });
+  });
+  /* Rows arrive with every detail card and every scan: each gets its squad button as it appears. One paint at a time,
+     and one more if rows arrived meanwhile — not tied to animation frames, which a background tab barely runs. */
+  let painting = false, paintAgain = false;
+  async function queuePaint() {
+    if (painting) { paintAgain = true; return; }
+    painting = true;
+    try { do { paintAgain = false; await paintCallRows(document); } while (paintAgain); } catch {} finally { painting = false; }
+  }
+  new MutationObserver((ms) => {
+    for (const m of ms) for (const n of m.addedNodes) {
+      if (n.nodeType === 1 && (n.matches('[data-call-row]') || n.querySelector('[data-call-row]'))) { queuePaint(); return; }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  const repaintCallRows = () => { mySquads = null; mySquadsFor = null; mySquadsAt = 0; if (document.querySelector('[data-call-row]')) paintCallRows(document); };
+  document.addEventListener('auth:change', repaintCallRows);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && mySquadsAt && Date.now() - mySquadsAt > 60e3) repaintCallRows(); });   // back from joining or leaving a squad in another tab
+
+  // COMPOSE.openCall({ squadId, squadName, token, viewedDetail }) opens the composer in call mode; callRowHTML /
+  // paintCallRows give any view of a token its Send Call buttons
+  window.COMPOSE = { openCall, callRowHTML, paintCallRows };
 })();
