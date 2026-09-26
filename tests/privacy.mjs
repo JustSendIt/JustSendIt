@@ -178,7 +178,11 @@ try {
     const woff = await fetch(BASE + '/fonts/' + refs[0]);
     check('  ...served as a font', woff.status === 200 && (woff.headers.get('content-type') || '').startsWith('font/woff2'), woff.status + ' ' + woff.headers.get('content-type'));
     const CHAIN = readFileSync(path.join(PUB, 'chain.js'), 'utf8');
-    check('the price feed, wallet history and token prices are read through this site', /fetch\('\/api\/chain\/pairs'/.test(CHAIN) && /fetch\('\/api\/chain\/explorer\?path='/.test(CHAIN) && /fetch\('\/api\/chain\/dex-tokens\?addrs='/.test(CHAIN) && !/api\.dexscreener\.com/.test(CHAIN));
+    const TRKJS = readFileSync(path.join(PUB, 'tracker.js'), 'utf8');
+    check('the price feed, wallet history and token prices are read through this site', /fetch\('\/api\/chain\/pairs'/.test(CHAIN) && /fetch\('\/api\/chain\/wallet\?address='/.test(TRKJS) && /fetch\('\/api\/chain\/dex-tokens\?addrs='/.test(CHAIN)
+      && !/api\.dexscreener\.com/.test(CHAIN + TRKJS) && !/blockscout\.com\/api|\/api\/v2\//.test(CHAIN + TRKJS));
+    const anonW = await api('/api/chain/wallet?address=0x' + '1'.repeat(40));
+    check('  ...the whole-wallet chain read is for signed-in members only', anonW.status === 401, anonW.status);
     const anonX = await api('/api/chain/explorer?path=' + encodeURIComponent('/api/v2/addresses/0x' + '1'.repeat(40)));
     check('  ...wallet history is for signed-in members only', anonX.status === 401, anonX.status);
     const m = mkUser('__pv_chain__');

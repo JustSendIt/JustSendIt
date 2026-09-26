@@ -1813,7 +1813,7 @@ function communityForToken(addr) {
   const c = db.prepare('SELECT id, status, member_count, qual_count, official, demo FROM communities WHERE token_addr = ? COLLATE NOCASE AND demo = 0').get(String(addr || '').toLowerCase()); // the sandbox has no token: it tags nothing
   return c ? { id: c.id, status: c.status, memberCount: c.member_count, qualCount: c.qual_count, official: !!c.official, demo: !!c.demo } : null;
 }
-async function rpc(method, params) {
+async function rpc(method, params, paced) {
   /* Robinhood publishes no limit for the public node, so no ceiling is assumed here — but a paid endpoint
      (Alchemy sells compute units per second) has one, and OUTBOUND_RPM_RPC makes it a number the site
      keeps itself under rather than one it discovers by being refused. Unset means unmetered. */
@@ -1822,9 +1822,9 @@ async function rpc(method, params) {
   const to = setTimeout(() => ctrl.abort(), 10000); // fast-fail a stalled RPC so a hung read can't freeze the pairs refresher
   try {
     const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': BROWSER_UA }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctrl.signal });
-    if (!res.ok) throw new Error('rpc http ' + res.status); // an HTTP error (429/500/503) must FAIL, not silently return null (which would read as a 0 balance → false OG revoke / streak reset)
+    if (!res.ok) { if (!paced && res.status === 429) paceYield(); throw new Error('rpc http ' + res.status); } // an HTTP error (429/500/503) must FAIL, not silently return null (which would read as a 0 balance → false OG revoke / streak reset)
     const j = await res.json();
-    if (j.error) throw new Error(j.error.message);
+    if (j.error) { if (!paced && (j.error.code === 429 || /too many requests/i.test(String(j.error.message || '')))) paceYield(); throw new Error(j.error.message); }   // the site's own reads were refused: the wallet tracker steps back
     return j.result;
   } finally { clearTimeout(to); }
 }
@@ -2130,29 +2130,12 @@ async function rpcTokenTransfers(wallet, token, opts) {
   const key = w + ':' + tok + ':' + (opts && opts.noTime ? 'n' : 't');
   if (_chainHistInflight.has(key)) return _chainHistInflight.get(key);
   const job = (async () => {
-    const wt = '0x' + w.slice(2).padStart(64, '0'), hx = (n) => '0x' + n.toString(16);
+    const wt = '0x' + w.slice(2).padStart(64, '0');
     const idx = db.prepare('SELECT first_block FROM holder_index WHERE token_addr = ?').get(tok);
     const start = idx && idx.first_block != null ? idx.first_block : 0;
     const head = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16);
     if (!(head > 0)) throw new Error('the chain did not answer');
-    const logs = [];
-    for (const topics of [[TRANSFER_TOPIC, wt], [TRANSFER_TOPIC, null, wt]]) {   // sent by the wallet, then received by it
-      let from = start, window = Math.max(1, head - start + 1);
-      while (from <= head) {
-        const to = Math.min(head, from + window - 1);
-        let out;
-        try { out = await rpcRetry(() => rpc('eth_getLogs', [{ fromBlock: hx(from), toBlock: hx(to), address: tok, topics }])); }
-        catch (e) { if (TOO_MANY_RE.test(String((e && e.message) || '')) && window > 50) { window = Math.max(50, Math.floor(window / 4)); continue; } throw e; }
-        if (!Array.isArray(out)) throw new Error('the chain did not answer');
-        for (const l of out) if (!l.removed) logs.push(l);
-        if (logs.length > CHAIN_HISTORY_MAX) throw new Error('history longer than the chain read budget');
-        from = to + 1;
-        if (out.length < 2500) window = Math.min(window * 2, Math.max(1, head - from + 1));
-      }
-    }
-    // a transfer to yourself answers both reads — count it once
-    const seen = new Set(), uniq = [];
-    for (const l of logs) { const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue; seen.add(k); uniq.push(l); }
+    const uniq = await transferLogWalk(tok, [[TRANSFER_TOPIC, wt], [TRANSFER_TOPIC, null, wt]], start, head, CHAIN_HISTORY_MAX);   // sent by the wallet, then received by it
     const blocks = [...new Set(uniq.map(l => parseInt(l.blockNumber, 16)))];
     const ms = new Map();
     if (!(opts && opts.noTime)) await mapLimit(blocks, 4, async (b) => { ms.set(b, await rpcRetry(() => chainBlockTime(b))); });
@@ -2170,6 +2153,483 @@ async function rpcTokenTransfers(wallet, token, opts) {
   })();
   _chainHistInflight.set(key, job);
   try { return await job; } finally { _chainHistInflight.delete(key); }
+}
+/* The window walk both history readers use: eth_getLogs for each topic filter over [start, head], one window at a
+   time. The public node times a log query out at ~2 s at random (measured: a 36M-block window answered in 64 ms
+   while 9M-block windows timed out), so a timed-out window is asked again, twice, before it is split; a window the
+   node says is too LARGE is quartered at once and never grows back past that size (one split only for slowness
+   does); one that answered small doubles. A window of 50 blocks that is still too large is a wallet too dense to
+   read in full here — said so, not retried.
+   `address` null reads every token at once (the node filters on the indexed topics, not the contract). A transfer
+   to yourself answers both the "from" and the "to" read, so rows are de-duplicated by transaction and log index. */
+async function transferLogWalk(address, topicSets, start, head, max, read) {
+  const getLogs = read || ((q) => rpcRetry(() => rpc('eth_getLogs', [q])));
+  const hx = (n) => '0x' + n.toString(16), logs = [], seen = new Set();   // a transfer to yourself answers both the "from" and the "to" read: kept once
+  for (const topics of topicSets) {
+    let from = start, window = Math.max(1, head - start + 1), ceiling = Infinity, tries = 0;
+    while (from <= head) {
+      const to = Math.min(head, from + window - 1);
+      const q = { fromBlock: hx(from), toBlock: hx(to), topics };
+      if (address) q.address = address;
+      let out;
+      try { out = await getLogs(q); }
+      catch (e) {
+        const m = String((e && e.message) || '');
+        const slow = /timed out|timeout|aborted/i.test(m);
+        if (slow && tries < 2) { tries++; await sleep(300); continue; }   // the same window, once more
+        if (TOO_MANY_RE.test(m) && window > 50) { window = Math.max(50, Math.floor(window / 4)); if (!slow) ceiling = window; tries = 0; continue; }
+        if (!slow && TOO_MANY_RE.test(m)) throw new Error('history too dense: one ' + window + '-block window holds more transfers than the node will return');
+        throw e;
+      }
+      tries = 0;
+      if (!Array.isArray(out)) throw new Error('the chain did not answer');
+      for (const l of out) { if (l.removed) continue; const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue; seen.add(k); logs.push(l); }
+      if (logs.length > max) throw new Error('history longer than the chain read budget');
+      from = to + 1;
+      if (out.length < 2500) window = Math.min(window * 2, ceiling, Math.max(1, head - from + 1));
+    }
+  }
+  return logs;
+}
+/* Several JSON-RPC calls in one request — the public node answers a batch of 50 in about the time of one call, and
+   a batch is one request against its per-address throttle rather than fifty. Answers are matched by id. A call the
+   node refused for its own reason (a revert, a token with no name()) comes back null; a throttle on any item throws,
+   so rpcRetry backs off and asks for the whole batch again rather than reading a refusal as "nothing there". */
+async function rpcBatch(calls) {
+  if (!calls.length) return [];
+  if (RPC_RPM > 0) { for (let i = 0; i < calls.length; i++) { try { await outboundTake('rpc'); } catch { throw new Error('rpc budget spent — try again shortly'); } } }
+  const ctrl = new AbortController();
+  const to = setTimeout(() => ctrl.abort(), 20000);
+  try {
+    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': BROWSER_UA }, body: JSON.stringify(calls.map((c, i) => ({ jsonrpc: '2.0', id: i, method: c[0], params: c[1] }))), signal: ctrl.signal });
+    if (!res.ok) throw new Error('rpc http ' + res.status);
+    const j = await res.json();
+    if (!Array.isArray(j)) throw new Error((j && j.error && j.error.message) || 'the chain did not answer');   // a throttled batch comes back as ONE error object
+    const out = new Array(calls.length).fill(null);
+    for (const r of j) {
+      if (!r || !Number.isInteger(r.id) || r.id < 0 || r.id >= calls.length) continue;
+      if (r.error) {
+        const e = r.error, m = String(e.message || '');
+        const reverted = e.code === 3 || /revert/i.test(m);   // a contract's own revert text can say anything ("generate", "rate")
+        if (!reverted && (e.code === 429 || e.code === -32005 || /\b429\b|too many requests|rate.?limit|capacity/i.test(m))) throw new Error('Too Many Requests');
+        continue;
+      }
+      out[r.id] = r.result;
+    }
+    return out;
+  } finally { clearTimeout(to); }
+}
+
+/* ===== The wallet tracker, read from the chain =====================================================================
+   The tracker used to read the block explorer (through this server, so the explorer never saw who looks at which
+   wallet). The public explorer now answers servers with a bot challenge, so every report failed — and even when it
+   answered, a report stopped at 400 transfers and valued at most 60 trades. The chain answers all of it directly:
+     · every ERC-20 transfer the wallet ever sent or received, in every token, over the chain's whole life — two
+       eth_getLogs reads filtered on the wallet's indexed topic (no token address), window-split if the node balks;
+     · when each happened (block times, read in batches);
+     · every token it ever touched: decimals, symbol, name and its LIVE balance (balanceOf, in batches);
+     · for every transaction that could be a trade (one moving a token that has a market): every WETH / USDG /
+       touched-token Transfer in it — enough for the browser to find the pool that traded and exactly what it paid
+       or received, through any router;
+     · the ETH balance, the number of transactions the wallet has sent (its nonce), and whether it is a contract.
+   The report is still computed in the viewer's browser. Plain ETH sent between wallets leaves no log, so it is not
+   listed — the live ETH balance is. NFT (ERC-721) transfers share the Transfer topic with four topics; they are
+   counted, not valued. */
+const TRACKER_HISTORY_MAX = 20000;   // token transfers one report reads before it says the wallet is too busy to read in full
+const TRACKER_TX_MAX = 5000;         // the wallet's own transactions whose receipts are read (the newest); older trades are listed, unvalued
+const WALLET_HIST_TTL = 3 * 60 * 1000, WALLET_HIST_PARALLEL = 2, WALLET_JOB_ERR_KEEP = 60 * 1000, WALLET_TOO_BIG_KEEP = 30 * 60 * 1000;
+const WALLET_JOBS_MAX = 20, WALLET_JOBS_PER_MEMBER = 1, WALLET_JOB_IDLE_MS = 60 * 1000, WALLET_JOB_STALL_MS = 5 * 60 * 1000, WALLET_JOB_DEADLINE_MS = 2 * 60 * 60 * 1000;
+/* The pace. Measured on the public node (2026-09-26): one batch of 50 reads goes through, the next one sent at once
+   is refused (429), it forgives within ~2 s, and ~25 reads a second hold — for everything this server reads, from
+   one address. So every whole-wallet read shares ONE pace, capped at half that budget (PACE_MS_MIN: 12.5 a second)
+   so the holder checks, the ledger and prices keep the other half. It adapts: faster by 10% a batch while the node
+   answers, slower by half when the tracker is refused — and when one of the site's own unpaced reads is refused
+   (paceYield, from rpc()), because then the tracker is the one that gives way. A log read weighs 5. */
+const PACE_MS_MIN = 80, PACE_MS_START = 100, PACE_MS_MAX = 400, PACE_LOG_WEIGHT = 5, PACE_BATCH = 25, PACE_TRIES = 8;
+let _paceAt = 0, _paceMs = PACE_MS_START;
+async function paceTake(weight) {
+  const at = Math.max(now(), _paceAt);
+  _paceAt = at + Math.ceil(weight * _paceMs);
+  const wait = at - now();
+  if (wait > 0) await sleep(wait);
+}
+const paceOk = () => { _paceMs = Math.max(PACE_MS_MIN, _paceMs * 0.9); };
+const paceRefused = (attempt) => { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + Math.min(20000, 2500 * (attempt + 1))); };
+function paceYield() { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + 2000); }
+const isThrottle = (e) => { const m = String((e && e.message) || e); return !/revert/i.test(m) && /\b429\b|too many requests|rate.?limit|capacity/i.test(m); };
+// a dropped connection or a load balancer's 5xx is a blip, not an answer: asked again twice before it fails a read
+const isBlip = (e, withTimeouts) => { const m = String((e && e.message) || e); return !/revert/i.test(m) && (/fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket|rpc http 5\d\d/i.test(m) || (!!withTimeouts && /aborted|timed out|timeout/i.test(m))); };
+async function pacedCall(method, params, weight, guard) {
+  for (let attempt = 0, blips = 0; ; attempt++) {
+    if (guard) guard();
+    await paceTake(weight || 1);
+    try { const r = await rpc(method, params, true); paceOk(); return r; }
+    catch (e) {
+      if (attempt < PACE_TRIES && isThrottle(e)) { paceRefused(attempt); continue; }
+      if (blips < 2 && isBlip(e, false)) { blips++; await sleep(2000 * blips); continue; }   // a slow log window is transferLogWalk's to handle
+      throw e;
+    }
+  }
+}
+/* `onPart(results, from)`, when given, takes each batch as it arrives — so a caller can turn receipts into the little it
+   keeps and drop the rest, instead of holding thousands of raw receipts at once. */
+async function pacedBatchAll(calls, onStep, guard, onPart) {
+  const out = onPart ? null : new Array(calls.length).fill(null);
+  for (let i = 0; i < calls.length; i += PACE_BATCH) {
+    const part = calls.slice(i, i + PACE_BATCH);
+    let r;
+    for (let attempt = 0, blips = 0; ; attempt++) {
+      if (guard) guard();
+      await paceTake(part.length);
+      try { r = await rpcBatch(part); paceOk(); break; }
+      catch (e) {
+        if (attempt < PACE_TRIES && isThrottle(e)) { paceRefused(attempt); continue; }
+        if (blips < 2 && isBlip(e, true)) { blips++; await sleep(2000 * blips); continue; }
+        throw e;
+      }
+    }
+    if (onPart) onPart(r, i); else for (let k = 0; k < r.length; k++) out[i + k] = r[k];
+    if (onStep) onStep(Math.min(calls.length, i + part.length), calls.length);
+  }
+  return out;
+}
+
+/* ----- What a transaction did, kept once read (a mined receipt is final) -----
+   From each receipt: who sent the transaction (and, for a smart account, whose ERC-4337 UserOperation it carried),
+   and — in log order — every Transfer of WETH or USDG plus every token move along the flows of an address that moved
+   one (closed over three hops, so a router forwarding a pool's tokens is kept, and a 2,000-recipient airdrop is not).
+   A pool always moves a quote coin in the transaction it trades in, so nothing a trade needs is dropped. Bounded by
+   the number of moves kept; a receipt with more than TX_LEG_ENTRY_MAX is used for the read in hand but not kept. */
+const TX_LEG_CACHE_LEGS = 400000, TX_LEG_ENTRY_MAX = 600;   // (ZERO_ADDR / DEAD_ADDR are the module's own, further down)
+const ENTRY_POINTS = new Set(['0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789', '0x0000000071727de22e5e9d8baf0edac6f37da032', '0x4337084d9e255ff0702461cf8895ce9e3b5ff108']);   // ERC-4337 EntryPoint v0.6 / v0.7 / v0.8
+const USEROP_TOPIC = '0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f';   // UserOperationEvent(bytes32,address indexed sender,address,uint256,bool success,uint256,uint256)
+const _txLegCache = new Map();
+let _txLegTotal = 0;
+function receiptLegs(rc) {
+  const isQ = (t) => t === WETH_ADDR || t === USDG_ADDR;
+  const all = [], ops = [];
+  for (const l of rc.logs || []) {
+    const addr = String(l.address || '').toLowerCase();
+    if (ENTRY_POINTS.has(addr) && l.topics && l.topics.length === 4 && l.topics[0] === USEROP_TOPIC && /^0x[0-9a-fA-F]{256}/.test(l.data || '')) {
+      if (BigInt('0x' + l.data.slice(66, 130)) === 1n) ops.push('0x' + l.topics[2].slice(-40).toLowerCase());   // a UserOperation that succeeded: its sender acted
+      continue;
+    }
+    if (!l.topics || l.topics.length !== 3 || l.topics[0] !== TRANSFER_TOPIC || !/^0x[0-9a-fA-F]{64}$/.test(l.data || '')) continue;
+    all.push([addr, '0x' + l.topics[1].slice(-40).toLowerCase(), '0x' + l.topics[2].slice(-40).toLowerCase(), BigInt(l.data)]);
+  }
+  const S = new Set(), keep = all.map((l) => isQ(l[0]));
+  for (const l of all) if (isQ(l[0])) { S.add(l[1]); S.add(l[2]); }
+  S.delete(ZERO_ADDR);
+  for (let pass = 0; pass < 3; pass++) {
+    let grew = false;
+    for (let i = 0; i < all.length; i++) {
+      if (keep[i]) continue;
+      const f = all[i][1], t = all[i][2];
+      if (!S.has(f) && !S.has(t)) continue;
+      keep[i] = true;
+      for (const x of [f, t]) if (x !== ZERO_ADDR && !S.has(x)) { S.add(x); grew = true; }
+    }
+    if (!grew) break;
+  }
+  return { from: String(rc.from || '').toLowerCase(), ops, legs: all.filter((_, i) => keep[i]), seen: new Set() };
+}
+function keepTxLegs(h, entry) {
+  if (entry.legs.length > TX_LEG_ENTRY_MAX || _txLegCache.has(h)) return;   // a mined receipt is final: the kept copy is the same
+  while (_txLegCache.size && _txLegTotal + entry.legs.length > TX_LEG_CACHE_LEGS) {
+    const [k, v] = _txLegCache.entries().next().value;
+    _txLegCache.delete(k); _txLegTotal -= v.legs.length;
+  }
+  _txLegCache.set(h, entry); _txLegTotal += entry.legs.length;
+}
+const sentBy = (e, w) => !!e && (e.from === w || e.ops.includes(w));   // the wallet's own transaction: it sent it, or its smart-account UserOperation ran in it
+/* Did this wallet trade token `a` in this transaction, and for how much? Followed swap by swap, in log order. A pool
+   (an address that moved WETH or USDG, not the wallet) takes in and pays out; one turn between the two is one swap —
+   in either order: a v2 pair is paid first, a v3 / concentrated-liquidity pool pays first and is paid in its callback.
+   An address that passed a coin straight through (took it in and paid it out in one turn) is a router, not a pool.
+   A swap is the wallet's BUY when its token output reached the wallet (straight, or through routers and forwarders —
+   never through another pool's reserves); its SELL when its token input came along the wallet's own path. Tax and
+   burn legs (to the token contract, 0x0, 0x…dead) are nobody's buy and nobody's swap input; a recipient of the pool's
+   output that paid no quote coin (a tax wallet, a hook) takes no share of the cost. A swap that also moved another
+   token through the same pool (a shared vault) cannot have its quote split by token, so it is marked unvalued.
+   Returns [bought, WETH paid, USDG paid, sold, WETH got, USDG got, sold-before-bought, unvalued (1 buy, 2 sell)], where
+   bought / sold is 1 in the wallet's own transaction and 2 in someone else's (its cost is not the wallet's to read). */
+function tradeLegs(entry, w, a) {
+  if (!entry) return null;
+  const isQ = (t) => t === WETH_ADDR || t === USDG_ADDR;
+  const sink = (x) => x === a || x === ZERO_ADDR || x === DEAD_ADDR;
+  const legs = entry.legs;
+  const net = new Map();                                    // [a, WETH, USDG] each address gained (+) or gave (-) in this tx
+  for (const [t, f, to, v] of legs) {
+    const i = t === a ? 0 : t === WETH_ADDR ? 1 : t === USDG_ADDR ? 2 : -1;
+    if (i < 0) continue;
+    for (const [x, d] of [[f, -v], [to, v]]) { let n = net.get(x); if (!n) net.set(x, (n = [0n, 0n, 0n])); n[i] += d; }
+  }
+  const swapped = (x) => { const n = net.get(x); return !!n && ((n[0] > 0n && (n[1] < 0n || n[2] < 0n)) || (n[0] < 0n && (n[1] > 0n || n[2] > 0n))); };
+  const outPath = new Set([w]), inPath = new Set([w]);
+  for (let pass = 0; pass < 3; pass++) for (const [t, f, to] of legs) if (t === a) {
+    if (outPath.has(f) && !sink(to) && !swapped(to)) outPath.add(to);
+    if (inPath.has(to) && !sink(f) && !swapped(f)) inPath.add(f);
+  }
+  const pools = new Set(), payers = new Set();
+  for (const [t, f, to] of legs) if (isQ(t)) {
+    if (f !== w && f !== ZERO_ADDR) pools.add(f);
+    if (to !== w && to !== ZERO_ADDR) pools.add(to);
+    if (f !== ZERO_ADDR) payers.add(f);
+  }
+  const seg = new Map(), done = [];
+  const fresh = (at) => ({ at, inA: 0n, inAmine: 0n, inW: 0n, inU: 0n, outA: 0n, outAmine: 0n, outW: 0n, outU: 0n, other: false, took: false, sent: false, last: 0 });
+  const segOf = (p, dir, at) => {                             // dir 1 = takes in, 2 = pays out; a second change of direction starts the next swap
+    let g = seg.get(p);
+    if (g && g.took && g.sent && g.last !== dir) { done.push(g); g = null; }
+    if (!g) { g = fresh(at); seg.set(p, g); }
+    g.last = dir; if (dir === 1) g.took = true; else g.sent = true;
+    return g;
+  };
+  for (let i = 0; i < legs.length; i++) {
+    const [t, f, to, v] = legs[i];
+    const other = t !== a && !isQ(t);
+    if (pools.has(to) && !(other && f === ZERO_ADDR)) {       // the pool takes something in (an LP mint to it is not a trade)
+      const g = segOf(to, 1, i);
+      if (other) g.other = true;
+      else if (t === a) { if (!sink(f)) { g.inA += v; if (outPath.has(f)) g.inAmine += v; } }
+      else if (t === WETH_ADDR) g.inW += v; else g.inU += v;
+    }
+    if (pools.has(f) && !(other && to === ZERO_ADDR)) {       // the pool pays something out (an LP burn from it is not a trade)
+      const g = segOf(f, 2, i);
+      if (other) g.other = true;
+      else if (t === a) { if (!sink(to) && (inPath.has(to) || payers.has(to))) { g.outA += v; if (inPath.has(to)) g.outAmine += v; } }
+      else if (t === WETH_ADDR) g.outW += v; else g.outU += v;
+    }
+  }
+  for (const g of seg.values()) done.push(g);
+  let bought = 0, sold = 0, unvalued = 0, bW = 0n, bU = 0n, sW = 0n, sU = 0n, bAt = Infinity, sAt = Infinity;
+  for (const g of done) {
+    if ((g.inA > 0n && g.outA > 0n) || (g.inW > 0n && g.outW > 0n) || (g.inU > 0n && g.outU > 0n)) continue;   // passed a coin through: a router
+    if ((g.inW > 0n || g.inU > 0n) && g.outAmine > 0n && g.outA > 0n) {
+      bought = 1; bAt = Math.min(bAt, g.at);
+      if (g.other) unvalued |= 1; else { bW += g.inW * g.outAmine / g.outA; bU += g.inU * g.outAmine / g.outA; }
+    }
+    if ((g.outW > 0n || g.outU > 0n) && g.inAmine > 0n && g.inA > 0n) {
+      sold = 1; sAt = Math.min(sAt, g.at);
+      if (g.other) unvalued |= 2; else { sW += g.outW * g.inAmine / g.inA; sU += g.outU * g.inAmine / g.inA; }
+    }
+  }
+  if (!bought && !sold) return null;
+  if (!sentBy(entry, w)) return [bought ? 2 : 0, '0', '0', sold ? 2 : 0, '0', '0', 0, 0];
+  return [bought, bW.toString(), bU.toString(), sold, sW.toString(), sU.toString(), bought && sold && sAt < bAt ? 1 : 0, unvalued];
+}
+
+/* ----- The read runs as a job -----
+   A whole-wallet read takes seconds for a quiet wallet and a minute or more for a busy one the first time — longer
+   than a proxy holds a request open (Cloudflare: 100 s). So it runs as a job: the first GET starts it and answers
+   202 with its progress, the page asks again every couple of seconds, and the finished history is kept a few
+   minutes. Jobs and finished histories belong to the member who asked (so no one learns what anyone else looked
+   up); only what never changes — receipts, block times, token names — is shared, and a receipt another member's
+   read left in the cache is still paced for this member as if it were read. At most WALLET_HIST_PARALLEL run at
+   once and the rest wait in order; a member has one read at a time; a read nobody has asked about for a minute
+   stops at its next step (and one still queued is retired), and one that makes no progress for five minutes fails. */
+const _walletHistCache = new Map(), _walletJobs = new Map(), _walletTooBig = new Map(), _walletWaiters = [];
+let _walletHistRunning = 0;
+const walletTurn = (job) => new Promise((r) => { if (_walletHistRunning < WALLET_HIST_PARALLEL) { _walletHistRunning++; r(); } else { job.turn = true; _walletWaiters.push({ job, r }); } });
+const walletTurnDone = () => { const next = _walletWaiters.shift(); if (next) { next.job.turn = false; next.r(); } else _walletHistRunning--; };   // the slot passes straight to the oldest waiter
+const walletJobsAhead = (job) => _walletWaiters.findIndex((x) => x.job === job) + 1;   // reads that must finish before this one starts (0: not waiting)
+function walletJob(uid, address, fresh, mayStart) {
+  const w = String(address || '').toLowerCase(), key = uid + ':' + w;
+  for (const [k, j] of _walletJobs) {                        // retire what nobody is waiting for
+    if (j.error) { if (now() - j.endedAt > WALLET_JOB_ERR_KEEP) _walletJobs.delete(k); }
+    else if (j.turn && now() - j.polledAt > WALLET_JOB_IDLE_MS) { const i = _walletWaiters.findIndex((x) => x.job === j); if (i >= 0) _walletWaiters.splice(i, 1); _walletJobs.delete(k); }
+  }
+  const big = _walletTooBig.get(key);
+  if (big && now() - big.at < WALLET_TOO_BIG_KEEP) return { tooBig: big.dense ? 'dense' : 'big' };
+  let job = _walletJobs.get(key);
+  if (job && !job.error) { job.polledAt = now(); return job; }          // a read in progress (a Refresh's included) outranks an older copy
+  const c = _walletHistCache.get(key);
+  if (c && now() - c.at < WALLET_HIST_TTL && !(fresh && now() - c.at > 30000)) return { ready: true, entry: c };
+  if (job) return job;                                                  // a real failure, reported for a minute
+  let live = 0, mine = 0;
+  for (const j of _walletJobs.values()) if (!j.error) { live++; if (j.uid === uid) mine++; }
+  if (mine >= WALLET_JOBS_PER_MEMBER) return { mine: true };
+  if (live >= WALLET_JOBS_MAX) return { busy: true };                   // a queue with no end is a queue nobody reaches the front of
+  if (mayStart && !mayStart()) return { slow: true };                   // only a read that really starts is charged
+  job = { uid, address: w, startedAt: now(), polledAt: now(), runAt: 0, movedAt: 0, stage: 'waiting for a turn', done: 0, total: 0, error: null, endedAt: 0, turn: false };
+  _walletJobs.set(key, job);
+  const guard = () => {
+    if (now() - job.polledAt > WALLET_JOB_IDLE_MS) throw new Error('abandoned: nobody is waiting for this read');
+    if (now() - job.movedAt > WALLET_JOB_STALL_MS || now() - job.runAt > WALLET_JOB_DEADLINE_MS) throw new Error('the read took too long');
+  };
+  job.promise = (async () => {
+    await walletTurn(job);
+    job.runAt = job.movedAt = now();
+    try {
+      const v = await readWalletHistory(w, uid, (stage, done, total) => { if (stage !== job.stage || (done || 0) !== job.done) job.movedAt = now(); job.stage = stage; job.done = done || 0; job.total = total || 0; }, guard);
+      pruneCache(_walletHistCache, 40, WALLET_HIST_TTL, (e) => e.at);
+      _walletHistCache.set(key, { at: now(), v, json: null, enc: {} });
+      _walletJobs.delete(key);
+    } catch (e) {
+      job.error = String((e && e.message) || e); job.endedAt = now();
+      if (/longer than|too dense/.test(job.error)) { pruneCache(_walletTooBig, 2000); _walletTooBig.set(key, { at: now(), dense: /too dense/.test(job.error) }); }
+      if (/^abandoned/.test(job.error)) { if (_walletJobs.get(key) === job) _walletJobs.delete(key); }   // nobody was waiting: nothing failed, the next ask starts afresh
+      else console.warn('[tracker] whole-wallet read failed: ' + job.error.slice(0, 200));
+    } finally { walletTurnDone(); }
+  })();
+  return job;
+}
+/* A finished history, serialized once and compressed once per encoding — a warm answer costs a write, not a
+   re-encode of megabytes. How long ago the chain was read rides in a header. */
+function sendWalletHistory(res, entry) {
+  if (!entry.json) entry.json = JSON.stringify(entry.v);
+  const h = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS, 'X-Read-Age-Ms': String(Math.max(0, now() - ((entry.v && entry.v.readAt) || entry.at))) };
+  let data = entry.json;
+  const enc = res._enc === 'br' ? 'br' : res._gzip ? 'gzip' : null;
+  if (enc && Buffer.byteLength(data) > 1024) {
+    if (!entry.enc[enc]) entry.enc[enc] = enc === 'br' ? zlib.brotliCompressSync(Buffer.from(data), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } }) : zlib.gzipSync(data);
+    data = entry.enc[enc]; h['Content-Encoding'] = enc; h['Vary'] = 'Accept-Encoding';
+  }
+  res.writeHead(200, h);
+  res.end(data);
+}
+async function readWalletHistory(w, uid, step, guard) {
+  const hx = (n) => '0x' + n.toString(16), wt = '0x' + w.slice(2).padStart(64, '0');
+  const say = (stage, done, total) => { if (step) step(stage, done, total); };
+  const readAt = now();                                     // stamped before the first read: the age shown can only be overstated
+  say('reading the account');
+  const [headHex, balHex, nonceHex, code] = await pacedBatchAll([['eth_blockNumber', []], ['eth_getBalance', [w, 'latest']], ['eth_getTransactionCount', [w, 'latest']], ['eth_getCode', [w, 'latest']]], null, guard);
+  const head = parseInt(headHex, 16);
+  if (!(head > 0) || balHex == null || nonceHex == null) throw new Error('the chain did not answer');
+
+  // 1. every Transfer from and to the wallet, in every token, over the chain's whole life
+  let windows = 0;
+  say('reading every token transfer', 0, 0);
+  const raw = await transferLogWalk(null, [[TRANSFER_TOPIC, wt], [TRANSFER_TOPIC, null, wt]], 0, head, TRACKER_HISTORY_MAX, (q) => { say('reading every token transfer', ++windows, 0); return pacedCall('eth_getLogs', [q], PACE_LOG_WEIGHT, guard); });
+  let nftTransfers = 0;
+  const logs = [];
+  for (const l of raw) {
+    if (l.topics && l.topics.length === 3 && /^0x[0-9a-fA-F]{64}$/.test(l.data || '')) logs.push(l);   // ERC-20: two indexed addresses and a 32-byte amount
+    else if (l.topics && l.topics.length === 4) nftTransfers++;                                       // ERC-721: the token id is the third indexed topic
+  }
+  logs.sort((a, b) => (parseInt(b.blockNumber, 16) - parseInt(a.blockNumber, 16)) || (parseInt(b.logIndex, 16) - parseInt(a.logIndex, 16)));   // newest first
+
+  // 2. every token touched: what it is (kept for the life of the process once read) and what the wallet held at `head`
+  const toks = [...new Set(logs.map((l) => l.address.toLowerCase()))];
+  const calls = [], plan = [];
+  for (const t of toks) {
+    calls.push(['eth_call', [{ to: t, data: '0x70a08231' + wt.slice(2) }, hx(head)]]); plan.push([t, 'bal']);   // at the block the transfers were read to, so the two agree
+    if (!_decimalsCache.has(t)) { calls.push(['eth_call', [{ to: t, data: '0x313ce567' }, 'latest']]); plan.push([t, 'dec']); }
+    if (!_tokenNameCache.has(t)) { calls.push(['eth_call', [{ to: t, data: '0x95d89b41' }, 'latest']], ['eth_call', [{ to: t, data: '0x06fdde03' }, 'latest']]); plan.push([t, 'sym'], [t, 'name']); }
+  }
+  let usdgDec = _decimalsCache.has(USDG_ADDR) ? _decimalsCache.get(USDG_ADDR) : usdgDecimals;   // the scale USDG legs are read in, whether or not this wallet ever held USDG
+  if (usdgDec == null && !toks.includes(USDG_ADDR)) { calls.push(['eth_call', [{ to: USDG_ADDR, data: '0x313ce567' }, 'latest']]); plan.push([USDG_ADDR, 'dec']); }
+  say('reading ' + toks.length + ' tokens', 0, toks.length);
+  const tr = await pacedBatchAll(calls, (d, n) => say('reading ' + toks.length + ' tokens', Math.floor(toks.length * d / n), toks.length), guard);
+  const bal = {}, got = {};
+  plan.forEach(([t, k], i) => { (got[t] = got[t] || {})[k] = tr[i]; });
+  const parseDec = (x) => { if (!x || x === '0x') return null; try { const d = Number(BigInt(x)); return Number.isFinite(d) && d >= 0 && d <= 36 ? d : null; } catch { return null; } };
+  for (const t of toks) {
+    const g = got[t] || {};
+    bal[t] = g.bal && g.bal !== '0x' && g.bal.length >= 66 ? BigInt(g.bal.slice(0, 66)).toString() : null;   // unreadable is null, never 0
+    const d = parseDec(g.dec);
+    if (d != null) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(t, d); }
+    if (g.sym !== undefined || g.name !== undefined) { const v = { name: abiText(g.name), symbol: abiText(g.sym) }; if (v.name || v.symbol) { pruneCache(_tokenNameCache, 20000); _tokenNameCache.set(t, v); } }
+  }
+  if (usdgDec == null) { usdgDec = _decimalsCache.has(USDG_ADDR) ? _decimalsCache.get(USDG_ADDR) : parseDec(got[USDG_ADDR] && got[USDG_ADDR].dec); if (usdgDec != null) usdgDecimals = usdgDec; }
+
+  // 3. when: every distinct block, from this read's own map (a shared cache can drop an entry mid-read)
+  const blocks = [...new Set(logs.map((l) => parseInt(l.blockNumber, 16)))];
+  const blockMs = new Map();
+  for (const b of blocks) if (chainBlockMs.has(b)) blockMs.set(b, chainBlockMs.get(b));
+  const unknown = blocks.filter((b) => !blockMs.has(b));
+  const dStage = 'dating ' + blocks.length + ' blocks';
+  say(dStage, 0, blocks.length);
+  const bt = await pacedBatchAll(unknown.map((b) => ['eth_getBlockByNumber', [hx(b), false]]), (d, n) => say(dStage, Math.floor(blocks.length * d / n), blocks.length), guard);   // progress in the read's own terms, whatever was cached
+  unknown.forEach((b, i) => { const r = bt[i]; if (r && r.timestamp) { const ms = parseInt(r.timestamp, 16) * 1000; blockMs.set(b, ms); chainBlockMs.set(b, ms); if (chainBlockMs.size > 200000) chainBlockMs.delete(chainBlockMs.keys().next().value); } });
+
+  /* 4. The receipts of the transactions that could be trades — ones moving a token with a market (a wallet's
+     airdropped junk costs no reads; if the market list cannot be read, every one is read). Newest first,
+     TRACKER_TX_MAX of them. Each batch is turned into its trade summaries as it arrives; only what the leg cache
+     keeps outlives the batch. */
+  const marketToks = new Set();
+  let marketsKnown = true;
+  for (let i = 0; i < toks.length; i += 30) {
+    if (guard) guard();
+    say('finding markets for ' + toks.length + ' tokens', i, toks.length);
+    const chunk = toks.slice(i, i + 30);
+    const j = await jgetCached('https://api.dexscreener.com/tokens/v1/robinhood/' + chunk.join(','), 60000);
+    if (!Array.isArray(j)) { if (!chunk.every((a) => ownPoolOf(a))) marketsKnown = false; }
+    for (const p of Array.isArray(j) ? j : []) { const b = ((p.baseToken && p.baseToken.address) || '').toLowerCase(), q = ((p.quoteToken && p.quoteToken.address) || '').toLowerCase(); if (b) marketToks.add(b); if (q) marketToks.add(q); }
+    for (const a of chunk) if (ownPoolOf(a)) marketToks.add(a);
+  }
+  const tokens = toks.map((t) => {
+    const nm = _tokenNameCache.get(t) || {}, d = _decimalsCache.get(t);
+    return { address: t, symbol: nm.symbol || null, name: nm.name || null, decimals: d != null ? d : null, balance: bal[t], market: marketsKnown ? marketToks.has(t) : null };
+  });
+  const tradeTx = [], seenTx = new Set(), txBlock = {}, txLi = {};
+  for (const l of logs) {
+    const h = l.transactionHash.toLowerCase(), li = parseInt(l.logIndex, 16);
+    if (seenTx.has(h)) { if (h in txLi && li < txLi[h]) txLi[h] = li; continue; }
+    if (marketsKnown && !marketToks.has(l.address.toLowerCase())) continue;
+    seenTx.add(h); tradeTx.push(h); txBlock[h] = parseInt(l.blockNumber, 16); txLi[h] = li;
+  }
+  const legHashes = tradeTx.slice(0, TRACKER_TX_MAX);
+  const walletToksIn = {};
+  for (const l of logs) { const h = l.transactionHash.toLowerCase(); (walletToksIn[h] = walletToksIn[h] || new Set()).add(l.address.toLowerCase()); }
+  const txs = {}, read = new Set();
+  const use = (h, e) => {
+    read.add(h);
+    const sum = {};
+    for (const a of walletToksIn[h] || []) {
+      if (a === WETH_ADDR || a === USDG_ADDR) continue;
+      const t = tradeLegs(e, w, a);
+      if (t) sum[a] = t;
+    }
+    if (Object.keys(sum).length) txs[h] = sum;
+  };
+  const R = legHashes.length, rStage = 'reading ' + R + ' of its transactions';
+  say(rStage, 0, R);
+  const pad = [];
+  for (const h of legHashes) {
+    const e = _txLegCache.get(h);
+    if (!e) continue;
+    use(h, e);
+    if (!e.seen.has(uid)) pad.push(e);                       // another member's read left it here
+  }
+  let doneR = read.size - pad.length;
+  let toRead = legHashes.filter((h) => !read.has(h));
+  for (let i = 0; i < pad.length; i += PACE_BATCH) {         // …so it costs this member the time a read would: nobody learns who looked before
+    if (guard) guard();
+    const part = pad.slice(i, i + PACE_BATCH);
+    await sleep(part.length * _paceMs);
+    for (const e of part) { e.seen.add(uid); if (e.seen.size > 64) e.seen.delete(e.seen.values().next().value); }
+    doneR += part.length; say(rStage, doneR, R);
+  }
+  for (let pass = 0; pass < 2 && toRead.length; pass++) {   // a receipt the node did not give is asked once more
+    if (pass) await sleep(1500);
+    const batch = toRead;
+    await pacedBatchAll(batch.map((h) => ['eth_getTransactionReceipt', [h]]), null, guard, (r, from) => {
+      r.forEach((rc, k) => {
+        if (!rc || !Array.isArray(rc.logs)) return;
+        const h = batch[from + k], e = receiptLegs(rc);
+        e.seen.add(uid); keepTxLegs(h, e); use(h, e); doneR++;
+      });
+      say(rStage, doneR, R);
+    });
+    toRead = toRead.filter((h) => !read.has(h));
+  }
+  const txsMissing = toRead;                                 // still unread: its trades are listed, unvalued — never guessed
+  say('done', R, R);
+  const delegated = !!(code && code.length === 48 && code.toLowerCase().startsWith('0xef0100'));   // EIP-7702: an EOA pointing at code, still a person's wallet
+  const lastH = legHashes[legHashes.length - 1];
+  return {
+    address: w, head, readAt, source: 'chain', complete: txsMissing.length === 0,
+    isContract: !!(code && code !== '0x' && !delegated), delegated, ethBalance: BigInt(balHex).toString(), txSent: parseInt(nonceHex, 16), nftTransfers,
+    ethUsd: await ethUsdFresh().catch(() => null),
+    quotes: { [WETH_ADDR]: { symbol: 'WETH', decimals: 18 }, [USDG_ADDR]: { symbol: 'USDG', decimals: usdgDec } },
+    tokens,
+    // [block, logIndex, txHash, token, from, to, amount, timeMs] — newest first
+    transfers: logs.map((l) => { const b = parseInt(l.blockNumber, 16); return [b, parseInt(l.logIndex, 16), l.transactionHash.toLowerCase(), l.address.toLowerCase(), '0x' + l.topics[1].slice(-40).toLowerCase(), '0x' + l.topics[2].slice(-40).toLowerCase(), BigInt(l.data).toString(), blockMs.get(b) || null]; }),
+    // per transaction the wallet traded in: { token: [bought, WETH paid, USDG paid, sold, WETH got, USDG got, sold first, unvalued] }
+    txs, legsRead: legHashes.length - txsMissing.length, legsCapped: tradeTx.length > legHashes.length,
+    legsFrom: lastH ? [txBlock[lastH], txLi[lastH]] : null, txsMissing, marketsKnown,
+  };
 }
 /* Which source answers. A keyed explorer (BLOCKSCOUT_URL set) is asked first — it is one paged read — and the chain
    answers whenever it refuses; the explorer is then left alone for ten minutes rather than asked, and made to wait
@@ -12924,6 +13384,27 @@ const server = http.createServer(async (req, res) => {
         // a feed outage is still an outage for every other token — unless all that was asked for is our two coins
         if (!j && !addrs.every((a) => ownPoolOf(a))) return bad(res, 'prices could not be read right now', 502);
         return send(res, 200, await withOwnPools(Array.isArray(j) ? j : [], addrs));
+      }
+      if (p === '/api/chain/wallet' && req.method === 'GET') {   // the tracker's whole-wallet read, from the chain (walletJob → readWalletHistory)
+        if (!me) return bad(res, 'sign in first', 401);
+        const addr = String(url.searchParams.get('address') || '').toLowerCase();
+        if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'bad address', 400);
+        if (!rateLimit('chainwp:' + me.id, 240, 6e4)) return bad(res, 'slow down', 429);   // asking how a read is going costs the chain nothing
+        const job = walletJob(me.id, addr, url.searchParams.get('fresh') === '1', () => rateLimit('chainw:' + me.id, 40, 6e5));   // starting one does, and only that is charged
+        const tooBig = (kind) => send(res, 422, { error: kind === 'dense' ? 'this wallet’s history is too dense to read in full here' : 'this wallet has more than ' + TRACKER_HISTORY_MAX.toLocaleString('en-US') + ' token transfers — too many to read in full here', code: 'too_big' });
+        if (job.tooBig) return tooBig(job.tooBig);
+        if (job.ready) {
+          if (!rateLimit('chainwf:' + me.id, 60, 6e5)) return bad(res, 'slow down', 429);   // a full answer is megabytes at most: the page needs one per read
+          return sendWalletHistory(res, job.entry);
+        }
+        if (job.slow) return bad(res, 'slow down — try again in a few minutes', 429);
+        if (job.mine) return send(res, 429, { error: 'another of your wallets is being read — this one is next', code: 'mine' });
+        if (job.busy) return bad(res, 'the chain reader is busy with other wallets — try again in a minute', 503);
+        if (job.error) {
+          if (/longer than|too dense/.test(job.error)) return tooBig(/too dense/.test(job.error) ? 'dense' : 'big');
+          return send(res, 502, { error: 'the chain could not be read right now — try again in a minute', reason: isThrottle(job.error) ? 'throttled' : /timed out|timeout|aborted|too long/i.test(job.error) ? 'timeout' : 'unreadable' });
+        }
+        return send(res, 202, { pending: true, stage: job.stage, done: job.done, total: job.total, ahead: walletJobsAhead(job) });
       }
       if (p === '/api/chain/explorer' && req.method === 'GET') {   // the tracker's explorer reads, by allow-list
         if (!me) return bad(res, 'sign in first', 401);

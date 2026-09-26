@@ -275,49 +275,36 @@ async function watchToken(tokenKey) {
   } catch { /* user closed */ }
 }
 
-/* ---- Blockscout history, read by this site's server ----
-   These reads carry wallet addresses — the visitor's own and the ones they track. From the browser they told
-   Blockscout which IP owns which wallets; through /api/chain/explorer the explorer only ever sees the server. */
-async function bsFetch(path) {
-  const res = await fetch('/api/chain/explorer?path=' + encodeURIComponent(path), { credentials: 'same-origin', headers: { accept: 'application/json' } });
-  if (!res.ok) throw new Error('explorer ' + res.status);
-  return res.json();
-}
-
 /* ---- full wallet breakdown: every ERC-20 held + ETH, prices, best-effort PNL ---- */
 async function ethBalance(wallet) {
   const res = await rpcCall('eth_getBalance', [wallet, 'latest']);
   return toNum(BigInt(res || '0x0'), 18);
 }
 
-async function walletErc20s(wallet) {
-  const j = await bsFetch('/api/v2/addresses/' + wallet + '/tokens?type=ERC-20');
-  return (j.items || []).map(it => ({
-    address: (it.token && it.token.address_hash || it.token && it.token.address || '').toLowerCase(),
-    symbol: (it.token && it.token.symbol) || '?',
-    name: (it.token && it.token.name) || 'Unknown token',
-    decimals: Number(it.token && it.token.decimals) || 18,
-    balance: toNum(BigInt(it.value || '0'), Number(it.token && it.token.decimals) || 18),
-  })).filter(t => t.address && t.balance > 0);
-}
-
-async function dexPricesFor(addresses) {
-  // batch price lookup, up to 30 per call; returns {addrLower: pairInfo}
+async function dexPricesFor(addresses, failed) {
+  // batch price lookup, up to 30 per call; returns {addrLower: pairInfo}. A batch that could not be read is waited
+  // out once or twice when throttled, then named in `failed` — a price that was not read is unknown, not zero.
   const out = {};
   for (let i = 0; i < addresses.length; i += 30) {
     const chunk = addresses.slice(i, i + 30);
-    try {
-      const res = await fetch('/api/chain/dex-tokens?addrs=' + encodeURIComponent(chunk.join(',')), { credentials: 'same-origin' });   // via this site: the token list is a fingerprint of the wallet
-      if (!res.ok) throw new Error('prices ' + res.status);
-      const arr = await res.json();
-      for (const pairInfo of arr || []) {
-        const base = (pairInfo.baseToken && pairInfo.baseToken.address || '').toLowerCase();
-        // keep the deepest pool per token
-        if (base && (!out[base] || (pairInfo.liquidity && pairInfo.liquidity.usd || 0) > (out[base].liquidity && out[base].liquidity.usd || 0))) {
-          out[base] = pairInfo;
+    let ok = false;
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try {
+        const res = await fetch('/api/chain/dex-tokens?addrs=' + encodeURIComponent(chunk.join(',')), { credentials: 'same-origin' });   // via this site: the token list is a fingerprint of the wallet
+        if (res.status === 429 && attempt < 2) { await new Promise(r => setTimeout(r, 15000 * (attempt + 1))); continue; }
+        if (!res.ok) throw new Error('prices ' + res.status);
+        const arr = await res.json();
+        for (const pairInfo of arr || []) {
+          const base = (pairInfo.baseToken && pairInfo.baseToken.address || '').toLowerCase();
+          // keep the deepest pool per token
+          if (base && (!out[base] || (pairInfo.liquidity && pairInfo.liquidity.usd || 0) > (out[base].liquidity && out[base].liquidity.usd || 0))) {
+            out[base] = pairInfo;
+          }
         }
-      }
-    } catch (e) { console.warn('price batch failed', e); }
+        ok = true;
+      } catch (e) { console.warn('price batch failed', e); break; }
+    }
+    if (!ok && Array.isArray(failed)) failed.push(...chunk);
   }
   return out;
 }

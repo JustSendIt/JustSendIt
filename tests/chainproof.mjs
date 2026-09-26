@@ -67,8 +67,9 @@ try {
   check('every wallet-history reader goes through ogTransfers: the explorer only when a keyed one is set, the chain otherwise and as its fallback',
     /const EXPLORER_KEYED = !!process\.env\.BLOCKSCOUT_URL;/.test(SRC) && /return rpcTokenTransfers\(wallet, token, opts\);/.test(SRC)
     && /items = await ogTransfers\(a, tokenAddr, \{ noTime: true/.test(SRC) && /const rows = await ogTransfers\(a, t, \{ tries: 2/.test(SRC) && /const rows = await ogTransfers\(w, TOK\.SEND/.test(SRC));
-  check('  ...the chain reader reads transfers FROM and TO the wallet, splits a too-large window, and never reads an undecodable log as 0',
-    /for \(const topics of \[\[TRANSFER_TOPIC, wt\], \[TRANSFER_TOPIC, null, wt\]\]\)/.test(SRC) && /TOO_MANY_RE\.test\(String\(\(e && e\.message\) \|\| ''\)\) && window > 50/.test(SRC) && /a transfer this reader cannot decode/.test(SRC));
+  check('  ...the chain reader reads transfers FROM and TO the wallet, asks a timed-out window again before splitting it, quarters a too-large one, and never reads an undecodable log as 0',
+    /await transferLogWalk\(tok, \[\[TRANSFER_TOPIC, wt\], \[TRANSFER_TOPIC, null, wt\]\], start, head, CHAIN_HISTORY_MAX\)/.test(SRC) && /if \(TOO_MANY_RE\.test\(m\) && window > 50\) \{ window = Math\.max\(50, Math\.floor\(window \/ 4\)\); if \(!slow\) ceiling = window;/.test(SRC)
+    && /const slow = \/timed out\|timeout\|aborted\/i\.test\(m\);\s+if \(slow && tries < 2\) \{ tries\+\+;/.test(SRC) && /a transfer this reader cannot decode/.test(SRC));
   check('  ...and the replay still has to reconcile with balanceOf before anything is decided', /if \(onChain !== bal\) throw new Error\('og scan: replay did not reconcile with chain balance'\)/.test(SRC));
   check('signing in with a wallet queues the check for an account that has not passed it', /if \(ident\) \{ try \{ const uu = db\.prepare\('SELECT \* FROM users WHERE id = \?'\)\.get\(userId\); if \(uu && needsHolderProof\(uu\) && !proofQueue\.includes\(userId\)\) queueHolderProof\(userId\); \} catch \{\} \}/.test(SRC));
   check('a buy through ANY router counts: the replay asks what the pool itself sent (or received) in that transaction, capped at that amount',

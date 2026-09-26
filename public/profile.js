@@ -659,14 +659,25 @@ function initSitePrefs() {
 window.saveTrackerPrefs = function (prefs) {
   api('/api/profile', { method: 'POST', body: { tracker_prefs: prefs } }).catch(() => {});
 };
+/* A read can take a minute now, and the wallet picker can start another meanwhile: only the latest one paints. */
+let cwRun = 0;
 async function runTracker(zone, address) {
+  const run = ++cwRun;
   zone.innerHTML = '<p class="modal-note" aria-live="polite">Reading the chain… ⛓️</p>';
   const note = zone.firstChild;
+  let lastStage = '', lastAt = 0;   // a live region: speak when the stage changes, or every 15 s — not at every percent
   try {
-    const r = await trackerReport(address, m => { note.textContent = '⛓️ ' + m; });
+    const r = await trackerReport(address, m => {
+      if (run !== cwRun) return;
+      const t = Date.now(), stage = m.replace(/…\s*\d+%$/, '…');
+      if (stage !== lastStage || t - lastAt > 15000) { lastStage = stage; lastAt = t; note.textContent = '⛓️ ' + m; }
+    }, { isStale: () => run !== cwRun || !zone.isConnected });   // a read nobody will see stops asking — and the server stops reading it
+    if (run !== cwRun || !zone.isConnected) return;
     renderTracker(zone, r, AUTH.user && AUTH.user.tracker_prefs);
   } catch (e) {
-    zone.innerHTML = '<p class="modal-note">⚠️ Could not read this wallet right now — the explorer may be busy. Try again in a minute.</p>';
+    if (run !== cwRun || !zone.isConnected) return;
+    const why = (e && e.message) || 'the chain may be busy — try again in a minute';
+    zone.innerHTML = '<p class="modal-note">⚠️ Could not read this wallet right now — ' + String(why).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) + '.</p>';
   }
 }
 

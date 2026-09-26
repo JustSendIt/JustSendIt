@@ -26,6 +26,7 @@
     selected: null,       // lowercase address of the wallet whose report is shown
     runId: 0,             // bumps on every select/refresh so a slow, stale run can't paint over a newer one
     reports: {},          // addr → { report, updatedAt, source: 'cache'|'live', failed?, failedAt?, failedMsg? } (session memory)
+    listen: {},           // addr → the progress handler of the report on screen for it (see relay)
     prefs: null,          // display prefs (mirrors AUTH.user.tracker_prefs)
     refreshing: null,     // address whose live read currently owns the UI (null when idle)
     inflight: {},         // addr → promise of a running trackerReport (dedupes reads per address)
@@ -309,9 +310,29 @@
     const entry = state.reports[addr];
     const busy = !!state.inflight[addr];
     if (!entry) return setBanner('', '');
-    if (entry.failed) return setBanner('warn', entry.failedMsg || ('⚠️ Live refresh failed — showing the report from <b>' + esc(ago(entry.updatedAt)) + '</b>. The explorer may be busy; try Refresh in a minute.'));
+    if (entry.failed) return setBanner('warn', entry.failedMsg || ('⚠️ Live refresh failed — showing the report from <b>' + esc(ago(entry.updatedAt)) + '</b>. The chain may be busy; try Refresh in a minute.'));
     if (busy) return setBanner('info', '<span class="np-live-dot" aria-hidden="true"></span> Last updated <b>' + esc(ago(entry.updatedAt)) + '</b> · refreshing…');
     return setBanner(entry.source === 'live' ? 'fresh' : 'info', (entry.source === 'live' ? '✅ ' : '🗂️ ') + 'Updated <b>' + esc(ago(entry.updatedAt)) + '</b>' + (entry.source === 'live' ? '' : ' (saved report)'));
+  }
+  /* The live read can land minutes after the saved report went up, while someone is reading it: keep the token
+     sections they opened, and put focus back where it was. */
+  function rerenderKeepingPlace(report) {
+    const tokOf = (el) => { const d = el.closest('details.trk-token'); return d ? d.dataset.tok : ''; };
+    const infoKey = (b) => tokOf(b) + '|' + (b.getAttribute('aria-label') || '');   // ⓘ labels repeat in every token: keyed by token too
+    const open = new Set(Array.from(reportEl.querySelectorAll('details.trk-token[open]'), (d) => d.dataset.tok));
+    const openInfo = new Set(Array.from(reportEl.querySelectorAll('.trk-info[aria-expanded="true"]'), infoKey));
+    const a = document.activeElement, inside = !!(a && a !== reportEl && reportEl.contains(a));
+    const tog = inside && a.dataset ? a.dataset.trkToggle : null;
+    const info = inside && a.classList.contains('trk-info') ? infoKey(a) : null;
+    const tok = inside ? tokOf(a) : '';
+    renderReport(report);
+    reportEl.querySelectorAll('details.trk-token').forEach((d) => { if (open.has(d.dataset.tok)) d.open = true; });
+    reportEl.querySelectorAll('.trk-info').forEach((b) => { if (openInfo.has(infoKey(b))) toggleInfo(b); });
+    let back = null;
+    if (tog) back = reportEl.querySelector('[data-trk-toggle="' + tog + '"]');
+    else if (info) back = Array.from(reportEl.querySelectorAll('.trk-info')).find((b) => infoKey(b) === info);
+    else if (tok) { const d = Array.from(reportEl.querySelectorAll('details.trk-token')).find((x) => x.dataset.tok === tok); back = d && d.querySelector('summary'); }
+    if (back) back.focus();
   }
   function renderReport(report) {
     if (typeof renderTracker !== 'function') { reportEl.innerHTML = '<p class="modal-note">Tracker unavailable on this page.</p>'; return; }
@@ -333,9 +354,9 @@
     const mem = state.reports[addr];
     if (mem && mem.report) {
       renderReport(mem.report);
-      // a live report from the last couple of minutes is fresh enough — don't hammer the explorer on every click
+      // a live report from the last couple of minutes is fresh enough — don't re-read the chain on every click
       if (mem.source === 'live' && !mem.failed && Date.now() - mem.updatedAt < 120000 && !state.inflight[addr]) { progress.textContent = ''; setBusy(); return; }
-      // a live read that just failed (explorer down / balances unreadable) is not retried on every click either — the
+      // a live read that just failed (chain busy / balances unreadable) is not retried on every click either — the
       // saved report stays on screen with its warning; Refresh is the explicit retry
       if (mem.failed && Date.now() - (mem.failedAt || 0) < 120000 && !state.inflight[addr]) { progress.textContent = ''; setBusy(); return; }
     } else {
@@ -361,18 +382,30 @@
     refreshBtn.disabled = busy; reportEl.setAttribute('aria-busy', String(busy));
     paintBanner();
   }
-  async function refresh(addr, run) {
+  /* Every read's progress goes through one listener per address, so opening a wallet whose read is already running
+     (the combined view started it) shows how far it has got. The line is a live region: it speaks when the stage
+     changes, or every 15 s — not at every percent. */
+  const relay = (addr) => (m) => { const f = state.listen[addr]; if (f) f(m); };
+  function listenTo(addr) {
+    let lastMsg = 0, lastStage = '';
+    state.listen[addr] = (m) => {
+      if (state.selected !== addr) return;
+      const t = Date.now(), stage = m.replace(/…\s*\d+%$/, '…');
+      if (stage !== lastStage || t - lastMsg > 15000) { lastStage = stage; lastMsg = t; progress.textContent = '⛓️ ' + m; }
+    };
+  }
+  async function refresh(addr, run, fresh) {
     if (typeof trackerReport !== 'function') { progress.textContent = ''; reportEl.innerHTML = '<p class="modal-note">Tracker unavailable on this page.</p>'; return; }
     const hadCached = !!(state.reports[addr] && state.reports[addr].report);
     if (!hadCached) reportEl.innerHTML = skeletonHTML();
     progress.textContent = '⛓️ reading account…';
+    listenTo(addr);
     // one chain read per address at a time: switching back and forth between wallets joins the read already running
     let p = state.inflight[addr];
     if (!p) {
-      let lastMsg = 0;
-      p = state.inflight[addr] = trackerReport(addr, m => { const t = Date.now(); if (state.selected === addr && t - lastMsg > 250) { lastMsg = t; progress.textContent = '⛓️ ' + m; } })
+      p = state.inflight[addr] = trackerReport(addr, relay(addr), { fresh: !!fresh })
         .then(rep => {
-          const entry = { report: rep, updatedAt: Date.now(), source: 'live' };
+          const entry = { report: rep, updatedAt: rep.readAt || Date.now(), source: 'live' };   // when the chain was read, not when it arrived
           // a failed balance read must not overwrite a good saved report (server or memory) — it would show "$0 held"
           // on the next open. It still renders live now, with tracker.js's own warning.
           if (!rep.holdingsFailed) { state.reports[addr] = entry; postCache(addr, rep); }
@@ -388,33 +421,43 @@
       const entry = state.reports[addr];
       if (rep.holdingsFailed && hadCached && entry && entry.report) {
         // balances unreadable but we hold a good report: keep it on screen (memory + banner + screen all agree) and
-        // flag the entry so switching wallets and back doesn't re-read a flaky explorer on every click
+        // flag the entry so switching wallets and back doesn't re-read a busy chain on every click
         entry.failed = true; entry.failedAt = Date.now();
         entry.failedMsg = '⚠️ Token balances could not be read on this refresh — showing the saved report from <b>' + esc(ago(entry.updatedAt)) + '</b>. Try Refresh in a minute.';
         progress.textContent = 'Balances unreadable — showing the saved report.';
       } else {
-        renderReport(rep);
-        progress.textContent = rep.holdingsFailed ? 'Report built, but token balances could not be read.' : 'Report updated just now.';
+        rerenderKeepingPlace(rep);
+        progress.textContent = rep.holdingsFailed ? 'Report built, but token balances could not be read.' : 'Report updated.';
       }
-    } catch {
+    } catch (e) {
       if (run !== state.runId) return;
       const entry = state.reports[addr];
-      if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); delete entry.failedMsg; progress.textContent = 'Live refresh failed — showing the saved report.'; }
+      const why = (e && e.message) || 'the chain may be busy';   // the server says why: busy, throttled, or a wallet too large to read in full
+      if (e && e.permanent) {
+        if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); entry.failedMsg = '⚠️ ' + esc(why) + ' — showing the saved report from <b>' + esc(ago(entry.updatedAt)) + '</b>.'; progress.textContent = why + '.'; }
+        else { progress.textContent = ''; reportEl.innerHTML = '<p class="np-msg">⚠️ ' + esc(why) + '. The explorer link above shows its full history.</p>'; }
+      } else if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); delete entry.failedMsg; progress.textContent = 'Live refresh failed (' + why + ') — showing the saved report.'; }
       else {
         progress.textContent = '';
-        reportEl.innerHTML = '<p class="np-msg">⚠️ Couldn\'t read this wallet right now — the explorer may be busy. <button class="btn btn-sm btn-ghost trk-retry" type="button" data-tip="Attempts the chain read for this wallet again" data-retry>Try again</button></p>';
+        reportEl.innerHTML = '<p class="np-msg">⚠️ Couldn\'t read this wallet right now — ' + esc(why) + '. <button class="btn btn-sm btn-ghost trk-retry" type="button" data-tip="Attempts the chain read for this wallet again" data-retry>Try again</button></p>';
       }
     } finally {
       if (run === state.runId) setBusy(); // paints the banner (fresh / saved / warning) from the entry's state
     }
   }
+  /* The saved copy has to fit the server's 400 KB. Trim in steps, keeping every total and every token's figures:
+     first the trade tables to the 40 the page shows, then to 10, then drop the rows of tokens with no value and no
+     trades (the dust the page hides anyway). The next live read replaces it. */
   function postCache(addr, rep) {
+    const CAP = 380 * 1024, fits = b => JSON.stringify(b).length <= CAP;
     let body = rep;
     try {
-      if (JSON.stringify(rep).length > 380 * 1024) { // server cap is 400 KB — trim trade tables (the UI shows 40 per token anyway)
-        body = { ...rep, tokens: rep.tokens.map(t => ({ ...t, trades: (t.trades || []).slice(0, 40) })), trimmedForCache: true };
-        if (JSON.stringify(body).length > 380 * 1024) return;
-      }
+      if (!fits(body)) body = { ...rep, tokens: rep.tokens.map(t => ({ ...t, trades: (t.trades || []).slice(0, 40) })), trimmedForCache: true };
+      if (!fits(body)) body = { ...body, tokens: body.tokens.map(t => ({ ...t, trades: t.trades.slice(0, 10) })) };
+      if (!fits(body)) body = { ...body, tokens: body.tokens.filter(t => (t.valueUsd != null && t.valueUsd >= 1) || t.buys + t.sells > 0 || t.balanceUnread) };
+      if (!fits(body)) body = { ...body, tokens: body.tokens.map(t => ({ ...t, trades: [] })) };   // counts and PNL stay; only the trade tables go
+      if (!fits(body)) body = { ...body, tokens: body.tokens.filter(t => (t.valueUsd != null && t.valueUsd >= 1) || t.balanceUnread || t.unrealizedUsd != null), tokensTrimmed: true };   // last: closed positions' rows (the report's totals are untouched)
+      if (!fits(body)) return;
     } catch { return; }
     api('/api/tracker/cache', { method: 'POST', body: { address: addr, report: body } }).catch(() => {});
   }
@@ -423,7 +466,7 @@
     const entry = state.reports[state.selected];
     if (entry) { delete entry.failed; delete entry.failedAt; delete entry.failedMsg; }
     say('Refreshing report');
-    refresh(state.selected, ++state.runId);
+    refresh(state.selected, ++state.runId, true);   // a new read from the chain, not the server's copy of the last one
   });
   reportEl.addEventListener('click', (e) => {
     if (e.target.closest('[data-retry]')) { if (state.selected) refresh(state.selected, ++state.runId); return; }
@@ -443,11 +486,12 @@
     'Unrealized PNL': 'Paper profit or loss on tokens still held: today\'s value minus what the wallet paid for them (average cost).',
     'Realized PNL': 'Profit or loss already locked in by selling: sale proceeds minus the average cost of what was sold.',
     'Avg entry': 'Average cost: the mean price paid per token in ETH across all buys. Tokens transferred in count as free, which pulls it down.',
-    'Spent on buys': 'Total ETH this wallet paid into the pool when buying this token.',
-    'Sell proceeds': 'Total ETH this wallet received from the pool when selling this token.',
+    'Spent on buys': 'Total ETH the pool took in for the tokens this wallet bought — straight from the pool or through any router or swap app.',
+    'Sell proceeds': 'Total ETH the pool paid out for the tokens this wallet sold, however the swap was routed.',
     'Realized': 'Profit or loss locked in on this token by selling: proceeds minus the average cost of what was sold.',
     'Unrealized': 'Paper profit or loss on the amount still held: value today minus its average cost.',
     'Tokens traded': 'How many different tokens this wallet has bought or sold against a DEX pool (and how many are in profit overall).',
+    'Transactions sent': 'How many transactions this wallet has signed and sent — its nonce, read from the chain. Transfers other people sent to it are not counted here.',
   };
   const HELD_DEF = 'How many of that token the wallet holds right now, read from the chain.';
   let infoSeq = 0;
@@ -491,12 +535,13 @@
      the page is actually opened with. It reuses the same cache-first machinery a
      single report uses — saved report first so numbers appear at once, then a live
      read per wallet — and it runs them one at a time on purpose: each report is
-     dozens of explorer calls, and firing five at once is how you get rate-limited
+     a whole-wallet read of the chain, and firing five at once is how you get rate-limited
      into a page full of dashes. */
   const combTotals = $('trk-comb-totals'), combRows = $('trk-comb-rows'), combNote = $('trk-comb-note'),
         combRun = $('trk-comb-run'), combSec = $('trk-comb'), combSub = $('trk-comb-sub');
 
-  const portfolioOf = (r) => (r.ethValueUsd || 0) + (r.totalTokenValueUsd || 0);
+  // unknown (no balances, or no ETH price to put the ETH in dollars) is null, never a $0 that quietly drops out of a sum
+  const portfolioOf = (r) => (r.holdingsFailed || (r.source === 'chain' && r.ethUsd == null)) ? null : (r.ethValueUsd || 0) + (r.totalTokenValueUsd || 0);
   /* Its own formatter rather than trkUsd: these figures sit in a column under tabular-nums, and trkUsd's
      `maximumFractionDigits` with no minimum renders 12000.30 as "$12,000.3" and 27 as "$27" — so the
      decimal points do not line up, which is the one thing a totals column has to get right. */
@@ -549,8 +594,8 @@
     if (typeof trackerReport !== 'function') return null;
     let p2 = state.inflight[addr];
     if (!p2) {
-      p2 = state.inflight[addr] = trackerReport(addr, () => {})
-        .then(rep => { if (!rep.holdingsFailed) { state.reports[addr] = { report: rep, updatedAt: Date.now(), source: 'live' }; postCache(addr, rep); } return rep; })
+      p2 = state.inflight[addr] = trackerReport(addr, relay(addr))   // if this wallet is opened meanwhile, its progress line follows this read
+        .then(rep => { if (!rep.holdingsFailed) { state.reports[addr] = { report: rep, updatedAt: rep.readAt || Date.now(), source: 'live' }; postCache(addr, rep); } return rep; })
         .finally(() => { delete state.inflight[addr]; });
     }
     return p2;
@@ -562,7 +607,7 @@
     if (!mine.length) return;
     state.combRunning = true;
     combRun.disabled = true;
-    state.comb = { portfolio: 0, realized: 0, unrealized: 0, rows: mine.map(w => ({ address: w.address, label: w.label, pending: true })) };
+    state.comb = { portfolio: null, realized: null, unrealized: null, partial: false, rows: mine.map(w => ({ address: w.address, label: w.label, pending: true })) };
     renderCombined();
     let done = 0, failed = 0;
     for (const w of mine) {
@@ -574,18 +619,18 @@
         row.pending = false;
         row.portfolio = portfolioOf(rep);
         row.realized = rep.totalRealizedUsd;
-        row.unrealized = rep.totalUnrealizedUsd;
-        // A wallet whose balances could not be read contributes its PNL but not a fake $0 portfolio.
-        if (!rep.holdingsFailed) state.comb.portfolio += row.portfolio; else row.failed = true;
-        state.comb.realized += (row.realized || 0);
-        state.comb.unrealized += (row.unrealized || 0);
-      } catch { row.pending = false; row.failed = true; failed++; }
+        row.unrealized = rep.holdingsFailed ? null : rep.totalUnrealizedUsd;
+        // what is known is added; what is not makes the total a partial one — never a fake $0 in the sum
+        const c = state.comb, add = (k, v) => { if (v == null) c.partial = true; else c[k] = (c[k] || 0) + v; };
+        if (row.portfolio == null) { row.failed = true; failed++; } else if (rep.portfolioPartial || rep.pnlUnknown) c.partial = true;
+        add('portfolio', row.portfolio); add('realized', row.realized); add('unrealized', row.unrealized);
+      } catch { row.pending = false; row.failed = true; failed++; state.comb.partial = true; }
       done++;
       renderCombined();
     }
     combNote.textContent = failed
-      ? failed + ' of ' + mine.length + ' could not be read — the explorer may be busy. The rest are added up above.'
-      : 'Added up across ' + mine.length + ' wallet' + (mine.length === 1 ? '' : 's') + ' · same average-cost basis as a single report.';
+      ? failed + ' of ' + mine.length + ' could not be read or priced — the chain may be busy. The rest are added up above, so the totals are partial.'
+      : 'Added up across ' + mine.length + ' wallet' + (mine.length === 1 ? '' : 's') + ' · same average-cost basis as a single report' + (state.comb.partial ? ' · partial: some balances, prices or trades could not be read or valued, and are left out' : '') + '.';
     combRun.disabled = false; combRun.textContent = '↻ Recheck';
     state.combRunning = false;
     say('Combined totals ready');
