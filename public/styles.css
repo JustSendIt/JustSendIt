@@ -1430,6 +1430,10 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .gb-rank { min-width: 26px; text-align: center; font-weight: 800; font-size: 0.9rem; }
 .gb-ava { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 0.9rem; object-fit: cover; background: var(--ink-3); flex-shrink: 0; }
 .gb-name { flex: 1; font-weight: 800; font-size: 0.85rem; text-decoration: none; color: var(--green-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* a board name inside a sentence ("pts to overtake @name"): the board's colour, without the row layout of .gb-name */
+.lb-inline-name { font-weight: 800; color: var(--green-bright); text-decoration: none; overflow-wrap: anywhere; }
+.lb-inline-name:hover { text-decoration: underline; }
+.lb-inline-name:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 .gb-lv { font-size: 0.72rem; font-weight: 800; color: var(--text-dim); }
 .gb-pts { font-weight: 800; font-size: 0.85rem; color: var(--gold); }
 
@@ -4146,7 +4150,9 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
   background: color-mix(in srgb, var(--gold) 8%, var(--ink-2)); }
 .beta-pl { font-weight: 800; color: var(--gold); min-width: 2.1rem; font-variant-numeric: tabular-nums; }
 .beta-av { font-size: 1.05rem; }
-.beta-nm { font-weight: 700; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.beta-nm { font-weight: 700; color: var(--text); overflow-wrap: anywhere; min-width: 0; text-decoration: none; }
+.beta-nm:hover { text-decoration: underline; }
+.beta-nm:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 .beta-pt { margin-left: auto; font-weight: 800; color: var(--green-bright); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .beta-empty { color: var(--text-dim); font-size: 0.9rem; padding: 0.5rem 0; }
 

@@ -447,7 +447,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
         ? j.top.map(t => '<li class="beta-row' + (t.rank <= 3 ? ' is-top' : '') + '">' +
             '<span class="beta-pl">' + (['🥇', '🥈', '🥉'][t.rank - 1] || ('#' + t.rank)) + '</span>' +
             '<span class="beta-av" aria-hidden="true">' + esc(t.avatar || '🚀') + '</span>' +
-            '<span class="beta-nm">@' + esc(t.username) + '</span>' +
+            '<a class="beta-nm" href="/u/' + encodeURIComponent(t.username) + '">@' + esc(t.username) + '</a>' +   // every name on a board opens that person's Send Wall
             '<span class="beta-pt">' + Number(t.points || 0).toLocaleString('en-US') + '</span></li>').join('')
         : '<li class="beta-empty">Nobody on the board yet — every point counts from here.</li>';
       const meEl = document.getElementById('beta-me');

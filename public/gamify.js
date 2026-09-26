@@ -1201,7 +1201,7 @@
       const meRank = lb.me.rank;
       const ahead = lb.top.find(u => u.rank === meRank - 1);
       if (ahead && lb.me.points != null && ahead.points >= lb.me.points) {
-        html += '<p class="modal-note" style="text-align:center; margin-top:0.5rem;">You\'re <b>#' + meRank + '</b> · <b>' + nf(ahead.points - lb.me.points + 1) + '</b> pts to overtake @' + esc(ahead.username) + ' 📈</p>';
+        html += '<p class="modal-note" style="text-align:center; margin-top:0.5rem;">You\'re <b>#' + meRank + '</b> · <b>' + nf(ahead.points - lb.me.points + 1) + '</b> pts to overtake <a class="lb-inline-name" href="/u/' + encodeURIComponent(ahead.username) + '">@' + esc(ahead.username) + '</a> 📈</p>';
       } else if (meRank > 6) {
         html += '<p class="modal-note" style="text-align:center; margin-top:0.5rem;">You\'re <b>#' + meRank + '</b> · keep sending to climb 📈</p>';
       }
