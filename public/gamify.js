@@ -33,7 +33,7 @@
 
   /* ---------- action metadata ---------- */
   const ACTION_LABEL = {
-    egg: ['🥚', 'Find a hidden egg'],
+    egg: ['👻', 'Find a hidden ghost'],
     swap: ['🚀', 'Swap for $Send / $GWC'],
     connect_wallet: ['🔗', 'Connect your wallet'],
     first_post: ['✨', 'Your first post'],
@@ -89,7 +89,7 @@
      it allows 10. A cap is a promise about what the site will pay you; a wrong one is worse than none.
      capLine() below appends the real figure from g.rules.dailyCap at render time, so it cannot drift again. */
   const EARN_DESC = {
-    egg: 'You found one of the hidden eggs. A hundred are tucked away across the site; each pays once — if today\'s allowance is full, it pays on a later visit.',
+    egg: 'You found one of the hidden ghosts. A hundred haunt the site; each pays once — if today\'s allowance is full, it pays on a later visit.',
     swap: 'Swap ETH for $SEND or $GWC via the in-page swap. Verified on-chain — the biggest fixed award on the board.',
     connect_wallet: 'Link a wallet holding $SEND/$GWC (read-only signature). Once per wallet.',
     first_post: 'A one-time bonus for your very first post on the Send Wall.',
@@ -285,7 +285,7 @@
         '<div class="pc-chips">' +
           (boosted ? '<span class="pc-mult">⚡ ' + mult.toFixed(2) + '× boost</span>' : '<span class="pc-mult pc-mult-off">⚡ 1× · unlock boost ↓</span>') +
           (g.todayPoints ? '<span class="pc-today' + (g.todayPoints < 0 ? ' is-down' : '') + '">' + signed(g.todayPoints) + ' today</span>' : '') +
-          (g.eggs && g.eggs.total ? '<span class="pc-eggs" title="Easter eggs found — a hundred are hidden across the site">🥚 ' + (g.eggs.found || 0) + '/' + g.eggs.total + ' eggs<span class="sr-only"> — Easter eggs found; the rest are still hidden across the site</span></span>' : '') +
+          (g.eggs && g.eggs.total ? '<span class="pc-eggs" title="Hidden ghosts found — a hundred haunt the site">👻 ' + (g.eggs.found || 0) + '/' + g.eggs.total + ' ghosts<span class="sr-only"> — hidden ghosts found; the rest are still haunting the site</span></span>' : '') +
           (g.weekBoost && g.weekBoost.boost > 1 ? '<span class="pc-week" title="' + weekTip + '">🏆 ' + g.weekBoost.boost + '× prize<span class="sr-only"> — ' + weekTip + '</span></span>' : '') +
         '</div>' +
         (multParts ? '<div class="pc-mult-parts">' + esc(multParts) + ' on every point</div>' : '') +
@@ -887,7 +887,7 @@
       if (done) row = '<div class="gearn-row gearn-done">' + inner + '<span class="ge-go" aria-hidden="true">✓ today</span></div>';
       else if (t.wall) row = '<a class="gearn-row" href="' + wallHref + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
       else if (t.href) row = '<a class="gearn-row" href="' + t.href + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
-      else if (t.egg) row = '<div class="gearn-row gearn-still">' + inner + '<span class="ge-go" aria-hidden="true">🥚</span></div>';   // no arrow, no button: the eggs are out there, not here
+      else if (t.egg) row = '<div class="gearn-row gearn-still">' + inner + '<span class="ge-go" aria-hidden="true">👻</span></div>';   // no arrow, no button: the ghosts are out there, not here
       else row = '<button class="gearn-row" type="button" data-tip="Jumps to the part of this page where you do it" data-earn="' + k + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></button>';
       // ⓘ toggle so the rule text is reachable by tap, not just hover (audit #24 — mobile has no hover)
       const info = tip ? '<button class="ge-info" type="button" data-tip="Opens the full rules for this way of earning" aria-expanded="false" aria-label="Rules for ' + esc(label) + '">ⓘ</button>' : '';
@@ -1670,9 +1670,9 @@
   window.loadGamify = load;
   if (window.AUTH && AUTH.user) load();
   document.addEventListener('auth:change', e => { if (e.detail) load(); });
-  // the 🥚 chip follows a find made on this page, or banked from the queue, without a reload
+  // the 👻 chip follows a find made on this page, or banked from the queue, without a reload
   document.addEventListener('egg:found', (e) => {
     const chip = dash.querySelector('.pc-eggs'); const d = e.detail || {};
-    if (chip && d.found != null && d.total) chip.textContent = '🥚 ' + d.found + '/' + d.total + ' eggs';
+    if (chip && d.found != null && d.total) chip.textContent = '👻 ' + d.found + '/' + d.total + ' ghosts';
   });
 })();

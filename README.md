@@ -1036,10 +1036,14 @@ The checks that pay out or open doors — the $100 hold, the OG badge, the hold 
 
 ---
 
-### 3.17 The hunt — a hundred easter eggs 🥚
+### 3.17 The hunt — a hundred hidden ghosts 👻
 
-A hundred eggs are hidden across the site. Finding one pays Send Power; finding all hundred is the only
-thing on the site that has seen more of it than the people who built it.
+A hundred easter eggs are hidden across the site, and they are Halloween-themed: every find is a **hidden
+ghost**. Finding one pays Send Power, and ghosts (with the odd 🎃, 🦇 and 🕸️) pop out of the spot it was found
+at — where the last tap, click or hover was, or the middle of the screen for a typed word or a hash — then
+float up and fade; each find has its own spooky line. Finding all hundred is the only thing on the site that
+has seen more of it than the people who built it. (The code still calls them eggs: `eggs.js`, `/api/eggs`,
+`easter_eggs`.)
 
 **What an egg is.** A small, deliberate interaction that nothing advertises — a decoration that turns out
 to respond, a word typed where no field is focused, a place reached by patience. `public/eggs.js` is the
@@ -1061,10 +1065,19 @@ constants ship in `rules` so the client reads them rather than copying them.
 **Rules the eggs follow, because an egg that gets in the way is a bug.** None sits on a control's primary
 job (the click still does what the control does). None needs money, a wallet or a purchase. Wherever the
 trigger is an element, Enter/Space count as well as a click. Reduced-motion readers get the toast without
-the confetti. A find made while signed out is kept in the browser and banked on the next signed-in load,
-so nobody loses one.
+the ghosts. A find made while signed out is kept in the browser and banked on the next signed-in load,
+so nobody loses one — finds banked that way are said once ("N ghosts you found earlier are banked now"),
+not one toast each (a find made live meanwhile still gets its own ghosts). A find made while an allowance is
+full — the 25-a-day, or the shared rolling-24h Send Power budget — stays recorded and unpaid: `GET /api/eggs`
+lists it (`unpaid`, from the server's own records, never a browser list) and the page re-sends it at most
+hourly, quietly unless it pays. For a ghost, `awardPoints` writes no zero-point row when the shared budget is
+spent, so that ref can still pay later — "nothing found is ever burned" holds for both caps. A signed-in claim
+the server refuses (rate limit, wallet check, network) is kept in the browser under that account's username and
+re-sent on its next load. The "all 100" notification fires once, on the claim that records the hundredth. Who is signed in is the account's **username** (the page is never given its numeric id;
+keying on the id, until September 2026, made every member look signed out, so their finds waited in the
+browser — they bank on the next visit).
 
-**Where you see it.** The power core on your dashboard shows `🥚 N/100`; the Quest Board lists the hunt;
+**Where you see it.** The power core on your dashboard shows `👻 N/100 ghosts`; the Quest Board lists the hunt;
 the Loot Log names each find.
 
 ### 3.17b The tape — the transactions behind the line ⛓️

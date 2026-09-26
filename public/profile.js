@@ -731,7 +731,7 @@ document.getElementById('link-wallet-btn').addEventListener('click', linkWallet)
       btn.disabled = true; st.textContent = 'Deleting…';
       await api('/api/account/delete', { method: 'POST', body: Object.assign({ confirm: 'DELETE', current: proof }, proof && proof.password ? { password: proof.password } : {}) });
       st.textContent = 'Your account is gone. Thanks for sending it with us.';
-      try { localStorage.removeItem('send.eggs.pending'); localStorage.removeItem('send.eggs.seen'); localStorage.removeItem('send.eggs.unpaid'); } catch {}
+      try { localStorage.removeItem('send.eggs.pending'); localStorage.removeItem('send.eggs.seen'); localStorage.removeItem('send.eggs.unpaid'); localStorage.removeItem('send.eggs.mine'); localStorage.removeItem('send.eggs.retry'); } catch {}
       AUTH.user = null; if (AUTH.redraw) AUTH.redraw();
       setTimeout(() => { location.href = 'index.html'; }, 1600);
     } catch (e) {

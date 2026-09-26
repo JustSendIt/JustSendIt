@@ -3163,8 +3163,11 @@ function awardPoints(userId, kind, base, ref, maxAmount, compBase) {
     amount = Math.min(amount, SOCIAL_DAY_CAP - spent);
     /* F026: an action the day cap squeezes to nothing still HAPPENED. Record a 0-amount row (with its
        comp_base) so the weekly race and the ledger see it, and so the same ref cannot pay later when the
-       cap rolls — the row is the idempotency key. Nothing is credited, nobody is notified. */
+       cap rolls — the row is the idempotency key. Nothing is credited, nobody is notified.
+       Except a hidden ghost (kind 'egg'): the hunt promises a find made while an allowance is full pays on a later
+       visit, so it writes no row here — the find stays recorded in easter_eggs, unpaid, and a later claim pays it. */
     if (!(amount > 0)) {
+      if (kind === 'egg') return 0;
       try { db.prepare('INSERT INTO points_events (user_id, kind, amount, base, mult, comp_amount, comp_base, ref, created_at) VALUES (?,?,0,?,?,0,?,?,?)').run(userId, kind, base, effMult, Math.min(base, (compBase != null && compBase > 0) ? compBase : base), ref || null, now()); } catch {}
       return 0;
     }
@@ -12902,7 +12905,9 @@ const server = http.createServer(async (req, res) => {
       // the hunt: what this account has found, and the total, so the dashboard can draw N / 100
       if (p === '/api/eggs' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
-        return send(res, 200, { found: eggsOf(me.id), total: EGG_TOTAL, points: PTS.egg });
+        // `unpaid`: found, not yet paid (a find made while an allowance was full) — the client re-sends these, at most hourly
+        const unpaid = db.prepare("SELECT e.egg_id FROM easter_eggs e WHERE e.user_id = ? AND NOT EXISTS (SELECT 1 FROM points_events p WHERE p.ref = 'egg:' || e.user_id || ':' || e.egg_id AND p.amount > 0) ORDER BY e.found_at").all(me.id).map((r) => r.egg_id);
+        return send(res, 200, { found: eggsOf(me.id), unpaid, total: EGG_TOTAL, points: PTS.egg });
       }
       if (p === '/api/eggs/claim' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
@@ -12921,8 +12926,9 @@ const server = http.createServer(async (req, res) => {
         if (!recorded) db.prepare('INSERT OR IGNORE INTO easter_eggs (user_id, egg_id, found_at) VALUES (?,?,?)').run(me.id, id, now());
         const awarded = awardPoints(me.id, 'egg', PTS.egg, ref);   // idempotent per (user, egg) via the ref
         const found = eggsOf(me.id);
+        // said once: on the claim that records the hundredth, not again on each later payment of an earlier unpaid one
+        if (!recorded && found.length === EGG_TOTAL) notify(me.id, '👻', 'All ' + EGG_TOTAL + ' ghosts. Every single one. You have haunted more of this site than the people who built it. 🎃', 'points');
         if (!awarded) return send(res, 200, { already: false, awarded: 0, capped: true, found, total: EGG_TOTAL });
-        if (found.length === EGG_TOTAL) notify(me.id, '🥚', 'All ' + EGG_TOTAL + ' eggs. Every single one. You have seen more of this site than the people who built it. 🚀', 'points');
         return send(res, 200, { already: false, awarded, found, total: EGG_TOTAL });
       }
       if (p === '/api/checkin' && req.method === 'POST') {

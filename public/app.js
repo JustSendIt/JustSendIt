@@ -12,20 +12,25 @@
   const COLORS = ['#c6f000', '#a8ce00', '#ffb340', '#00C805', '#ffffff'];
   const EMOJI = ['🚀', '💸', '🪙', '💰', '🔥'];
 
+  /* opts: count, emojiRatio, and for a burst with its own character (the hunt's ghosts rise and linger):
+     emoji — the set to draw from · gravity — per-frame pull (negative floats upward) · lift — the initial upward
+     kick · speed / fade / scale — multipliers on how fast they fly, how fast they fade, how big they are. */
   function burst(x, y, opts = {}) {
     if (window.__confettiEnabled === false) return;
     if (document.hidden) return; // don't queue particles the paused rAF can't animate until refocus
     try { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch {} // global reduced-motion gate for every call site
     const n = opts.count || 26;
+    const set = Array.isArray(opts.emoji) && opts.emoji.length ? opts.emoji : EMOJI;
+    const g = opts.gravity != null ? opts.gravity : 0.22, lift = opts.lift != null ? opts.lift : 3;
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 7;
+      const a = Math.random() * Math.PI * 2, sp = (opts.speed || 1) * (4 + Math.random() * 7);
       parts.push({
         x, y,
-        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 3,
-        rot: Math.random() * Math.PI * 2, vr: (Math.random() - 0.5) * 0.3,
-        life: 1, decay: 0.012 + Math.random() * 0.012,
-        size: 5 + Math.random() * 6,
-        emoji: Math.random() < (opts.emojiRatio ?? 0.22) ? EMOJI[(Math.random() * EMOJI.length) | 0] : null,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - lift, g,
+        rot: Math.random() * Math.PI * 2, vr: (Math.random() - 0.5) * 0.3 * (opts.speed || 1),
+        life: 1, decay: (0.012 + Math.random() * 0.012) * (opts.fade || 1),
+        size: (5 + Math.random() * 6) * (opts.scale || 1),
+        emoji: Math.random() < (opts.emojiRatio ?? 0.22) ? set[(Math.random() * set.length) | 0] : null,
         color: COLORS[(Math.random() * COLORS.length) | 0],
       });
     }
@@ -37,7 +42,7 @@
     ctx.clearRect(0, 0, innerWidth, innerHeight);
     parts = parts.filter(p => p.life > 0);
     for (const p of parts) {
-      p.x += p.vx; p.y += p.vy; p.vy += 0.22; p.vx *= 0.99; p.rot += p.vr; p.life -= p.decay;
+      p.x += p.vx; p.y += p.vy; p.vy += p.g; p.vx *= 0.99; p.rot += p.vr; p.life -= p.decay;
       ctx.save();
       ctx.globalAlpha = Math.max(0, p.life);
       ctx.translate(p.x, p.y); ctx.rotate(p.rot);

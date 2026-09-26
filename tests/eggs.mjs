@@ -6,7 +6,8 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { DB_PATH, SERVER_JS } from './_paths.mjs';
+import vm from 'node:vm';
+import { DB_PATH, SERVER_JS, ROOT } from './_paths.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -104,6 +105,73 @@ try {
 
   // the rate limiter exists in front of it
   check('the claim route is rate-limited', /rateLimit\('egg:' \+ me\.id/.test(SRC));
+
+  /* ═══ the hunt is Halloween: every find is a hidden ghost, and ghosts pop out ═══ */
+  const EGGS = readFileSync(ROOT + '/public/eggs.js', 'utf8'), APP = readFileSync(ROOT + '/public/app.js', 'utf8'), GAM = readFileSync(ROOT + '/public/gamify.js', 'utf8');
+  const cat = EGGS.match(/const CATALOG = \[[\s\S]*?\n  \];/)[0];
+  const lines = [...cat.matchAll(/\[(\d+), "[^"]*", "(?:[^"\\]|\\.)*", ("(?:[^"\\]|\\.)*")\]/g)].map((m) => JSON.parse(m[2]));
+  check('all ' + TOTAL + ' finds have their own Halloween line', lines.length === TOTAL && new Set(lines).size === TOTAL, lines.length);
+  check('  ...and no egg is left anywhere a member looks', !/🥚/.test(EGGS + GAM) && !/🥚/.test(SRC) && /'👻 Ghost #' \+ id/.test(EGGS) && /👻 ' \+ d\.found \+ '\/' \+ d\.total \+ ' ghosts'/.test(GAM));
+  check('ghosts pop out: the burst takes its own emoji set and floats them up (negative gravity), from where the find was made', /const GHOSTS = \['👻'/.test(EGGS) && /emoji: GHOSTS, gravity: -0\.05/.test(EGGS) && /addEventListener\('pointerdown', markPtr/.test(EGGS)
+    && /const set = Array\.isArray\(opts\.emoji\) && opts\.emoji\.length \? opts\.emoji : EMOJI;/.test(APP) && /p\.vy \+= p\.g;/.test(APP));
+  check('  ...and reduced-motion readers get the toast without them', /if \(!window\.burst \|\| reduced\(\)\) return;/.test(EGGS) && /prefers-reduced-motion: reduce\)'\)\.matches\) return;/.test(APP));
+
+  /* ═══ the fix: a signed-in member is signed in (the page knows the username, never the numeric id) ═══ */
+  check('who is signed in is the username — not AUTH.user.id, which the page is never given', /const account = \(\) => \(window\.AUTH && AUTH\.user && AUTH\.user\.username\) \|\| null;/.test(EGGS) && !/AUTH\.user\.id\b/.test(EGGS.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')));   // in code, not the comment that explains the bug
+  // …proved by running the real eggs.js against this server, signed in the way the page is: a user object with a username and no id
+  const m = mkUser('__egg_live', true);
+  const toasts = [], bursts = [], store = {};
+  const listeners = {};
+  const fakeDoc = {
+    readyState: 'complete', hidden: false, body: {},
+    addEventListener: (t, f) => { (listeners[t] = listeners[t] || []).push(f); }, removeEventListener() {},
+    querySelectorAll: () => [], querySelector: () => null, dispatchEvent: () => true,
+    documentElement: { scrollHeight: 1000 },
+  };
+  const ls = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
+  const ctx = {
+    console, JSON, Math, Date, Number, String, Array, Set, Map, Promise, Object, Error, clearTimeout,
+    // the "stay on the page for ten minutes" egg arms a real ten-minute timer: it must not hold this process open
+    setTimeout: (f, ms) => { const t = setTimeout(f, ms); if (t && t.unref) t.unref(); return t; },
+    document: fakeDoc, localStorage: ls, sessionStorage: { getItem: () => null, setItem() {} },
+    location: { pathname: '/', hash: '' }, innerWidth: 1000, innerHeight: 800, scrollY: 0,
+    matchMedia: () => ({ matches: false }), getComputedStyle: () => ({ pointerEvents: 'auto' }), getSelection: () => '',
+    MutationObserver: class { observe() {} }, CustomEvent: class { constructor(t, o) { this.type = t; this.detail = o && o.detail; } },
+    addEventListener() {},
+    fetch: (u, o) => fetch(BASE + u, { ...(o || {}), headers: { ...((o && o.headers) || {}), Origin: BASE, Cookie: 'sid=' + m.sid } }),
+    sendToast: (t) => toasts.push(t), burst: (x, y, o) => bursts.push(o), showPoints() {},
+    AUTH: { user: { username: '__egg_live' } },   // no id — exactly what /api/me gives the page
+  };
+  ctx.window = ctx;
+  store['send.eggs.pending'] = JSON.stringify([11, 26, 27, 28]);   // four finds parked by the old bug, waiting to bank
+  vm.createContext(ctx);
+  vm.runInContext(EGGS, ctx);
+  // a live find made while the replay is still banking the saved ones (it takes a breath between claims)
+  await new Promise((r) => setTimeout(r, 250));
+  check('EGGS.found(id) is the function a page script calls to report a find (and EGGS.ids the list)', typeof ctx.EGGS.found === 'function' && Array.isArray(ctx.EGGS.ids), typeof ctx.EGGS.found);
+  const live = ctx.EGGS.found(34);
+  await live;
+  const liveToast = toasts.find((t) => /^👻 Ghost #34/.test(t)), liveBursts = bursts.length;
+  check('a live find during the replay gets its own toast and its own ghosts, right away', /^👻 Ghost #34 — boo\. The ghost jumped\. So did you\. \+\d+ Send Power/.test(liveToast || '') && liveBursts >= 1 && !toasts.some((t) => /banked now/.test(t)), JSON.stringify(toasts));
+  check('  ...the ghost set, floating up', bursts[0] && bursts[0].emoji && bursts[0].emoji.includes('👻') && bursts[0].gravity < 0, JSON.stringify(bursts[0]));
+  for (let i = 0; i < 40 && db.prepare('SELECT COUNT(*) n FROM easter_eggs WHERE user_id = ?').get(m.id).n < 5; i++) await new Promise((r) => setTimeout(r, 250));
+  await new Promise((r) => setTimeout(r, 600));
+  const banked = db.prepare('SELECT egg_id FROM easter_eggs WHERE user_id = ? ORDER BY egg_id').all(m.id).map((r) => r.egg_id);
+  check('finds parked by the old bug bank on the next load — all of them, paid — and a signed-in member is never "sign in to bank it"', banked.join() === '11,26,27,28,34' && JSON.parse(store['send.eggs.pending'] || '[]').length === 0 && !toasts.some((t) => /sign in to bank it/.test(t)), JSON.stringify(banked));
+  const summary = toasts.filter((t) => /ghosts you found earlier are banked now/.test(t));
+  check('  ...said once for the four it banked (not the live one), with one more burst', summary.length === 1 && /^👻 4 ghosts you found earlier are banked now · \+80 Send Power/.test(summary[0]) && bursts.length === liveBursts + 1, JSON.stringify(summary) + ' bursts ' + bursts.length);
+
+  /* ═══ unpaid ghosts: the server keeps the list; nothing found is burned ═══ */
+  db.prepare('INSERT INTO easter_eggs (user_id, egg_id, found_at) VALUES (?, 50, ?)').run(m.id, Date.now());   // recorded while an allowance was full, never paid
+  const listed = await api('/api/eggs', { sid: m.sid });
+  check('the server lists found-but-unpaid ghosts (from its own records)', listed.status === 200 && Array.isArray(listed.j.unpaid) && listed.j.unpaid.join() === '50', JSON.stringify(listed.j && listed.j.unpaid));
+  const paid50 = await api('/api/eggs/claim', { method: 'POST', sid: m.sid, body: { id: 50 } });
+  const after50 = await api('/api/eggs', { sid: m.sid });
+  check('  ...a later claim of it pays, and it leaves the list', paid50.status === 200 && paid50.j.awarded > 0 && after50.j.unpaid.length === 0, JSON.stringify(paid50.j) + ' ' + JSON.stringify(after50.j.unpaid));
+  check('  ...the page re-sends that list at most hourly, and says nothing unless one pays', /const UNPAID_RETRY_MS = 60 \* 60 \* 1000;/.test(EGGS) && /if \(awarded > 0 \|\| fresh\) acc\.banked\+\+;/.test(EGGS) && !/send\.eggs\.unpaid'\)\s*\|\|/.test(EGGS));
+  check('a ghost squeezed out by the shared daily budget writes no zero-point row, so it can still pay later', /if \(kind === 'egg'\) return 0;/.test(SRC));
+  check('the "all 100" notification is sent once — on the claim that records the hundredth', /if \(!recorded && found\.length === EGG_TOTAL\) notify\(/.test(SRC));
+  check('a refused signed-in claim is kept for that account (not the anonymous list a sign-out empties), and the replay stops if the account changes', /keepMine\(id\);/.test(EGGS) && /if \(account\(\) !== me\) \{ for \(const rest of ids\.slice\(i\)\) keepMine\(rest, me\); break; \}/.test(EGGS) && /if \(!flushP\) flushP = flushOnce\(\)/.test(EGGS));
 } finally {
   for (const id of made) {
     try { db.prepare('DELETE FROM points_events WHERE user_id=?').run(id); } catch {}
