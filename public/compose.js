@@ -102,7 +102,8 @@
   function showForAuth() {
     if (window.AUTH && AUTH.user) {
       const ch = modal.querySelector('#compose-handle'); ch.textContent = AUTH.user.username;
-      if (AUTH.user.og && window.ogBadge) ch.insertAdjacentHTML('afterend', ogBadge(AUTH.user.og));
+      const oldOg = ch.parentElement.querySelector('.og-badge'); if (oldOg) oldOg.remove();   // opened again: one badge, not two
+      if (AUTH.user.og && window.ogBadge) ch.insertAdjacentHTML('afterend', ogBadge(AUTH.user.og, 'new-tab'));
       showPanel('compose-in');
       paintAllowance();
       loadSquads();

@@ -93,18 +93,37 @@
   };
   // kept for anything still reading the old global; gold is the tier it always described
   window.OG_TIP = window.ogTip(3);
-  window.ogBadge = function (og) {
+  // Every OG badge opens the About page's OG section, where the tiers, dates and rules are written out.
+  window.OG_RULES_HREF = '/about.html#og-rules';
+  window.ogBadge = function (og, where) {
     // native title = hover explanation (browser-positioned, never clips); aria-label = screen readers.
-    // No tabindex: many badges on a leaderboard shouldn't each become an empty keyboard tab-stop.
     var tier = Number(og) || 0;
     var t = window.OG_TIERS[tier];
     if (!t) return '';
     // every tier keeps the base `og-badge` class: profile.js, wall.js and upage.js each find and
     // remove a stale badge by that selector before re-inserting, and a variant-only class would
     // leave them behind to duplicate.
-    return '<span class="og-badge og-badge--' + t.name.toLowerCase() + '" role="img" aria-label="OG ' + t.name
-      + ', verified early buyer with a ' + t.mult + ' times Send Power bonus" title="' + window.ogTip(tier) + '">OG</span>';
+    var cls = 'og-badge og-badge--' + t.name.toLowerCase();
+    var label = 'OG ' + t.name + ', verified early buyer with a ' + t.mult + ' times Send Power bonus';
+    var tip = window.ogTip(tier) + ' Click the badge to read how OG badges work.';
+    // where = 'in-link': the badge sits inside another link (the nav's name pill, a search hit, a call's sender row).
+    // A link inside a link is invalid HTML, so it stays a span and the click handler below takes it to the same place.
+    if (where === 'in-link') return '<span class="' + cls + '" data-og-link role="img" aria-label="' + label + '" title="' + tip + '">OG</span>';
+    // where = 'new-tab': a modal with a draft in it (the composer), so the draft stays put
+    return '<a class="' + cls + '" href="' + window.OG_RULES_HREF + '"' + (where === 'new-tab' ? ' target="_blank" rel="noopener"' : '')
+      + ' aria-label="' + label + '. Read how OG badges work" title="' + tip + '">OG</a>';
   };
+  // Capture phase, so a card or row that opens on click never fires as well. A real badge link then follows its
+  // own href; a span badge inside another link cancels that link and goes to the OG section instead.
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest ? e.target.closest('.og-badge') : null;
+    if (!b || e.button) return;
+    e.stopPropagation();
+    if (b.tagName === 'A') return;
+    e.preventDefault();
+    if (e.metaKey || e.ctrlKey || e.shiftKey) window.open(window.OG_RULES_HREF, '_blank', 'noopener');
+    else location.href = window.OG_RULES_HREF;
+  }, true);
 
   /* ===== Shared avatar renderer =====================================================================
      A profile picture can be a still image, an animated GIF, or a short video (mp4/webm). A GIF animates

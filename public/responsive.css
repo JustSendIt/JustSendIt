@@ -83,7 +83,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 .np-stat-lbl, .np-liq-lbl { font-size: max(var(--text-floor), 0.72rem); }        /* was 0.66rem ≈ 10.6px */
 .np-slide-newtag { font-size: max(var(--text-floor), 0.72rem); }
 .np-badge--dex { font-size: max(var(--text-floor), 0.72rem); }
-.pc-lbl { font-size: max(var(--text-floor), 11px); }                             /* SVG chart axis labels, were 9px */
+.pc-lbl { font-size: var(--gfx-ring-lbl); }   /* drawn inside the ring: sized with it (styles.css --gfx-ring-lbl) */                             /* SVG chart axis labels, were 9px */
 .kpi-sub, .kpi-up { font-size: max(var(--text-floor), 0.72rem); }
 .ll-top { font-size: max(var(--text-floor), 0.72rem); }
 .cmp-cava--txt, .cmp-sandbox, .cmp-move { font-size: max(var(--text-floor), 0.72rem); }
@@ -303,3 +303,16 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 /* the swap's quick-amount presets: 44px everywhere, not only under pointer:coarse — a touch-screen laptop
    reports pointer:fine and was getting ~30px targets */
 [data-amt] { min-height: 44px; }
+
+/* ═══ Every word visible ═══════════════════════════════════════════════════════════════════════════════
+   Names, titles and one-line readings used to be cut with "…" when they did not fit, so part of the text could
+   not be read at all. They wrap instead, breaking a long handle or address anywhere rather than running out of
+   their box. (The nav's @name is the one exception: shown whole or not at all — nav.js hides it when the bar
+   has no room.) Loaded last, so it outranks each component sheet's own one-line rule. */
+/* under html: invite.css and a few others are added by script after this sheet, so equal specificity would lose */
+html :is(.cmp-name, .cmp-comm-main small, .inv-chars, .sq-card-name, .sq-card-metrics .sq-gate, .post-comm-name, .post-comm-sub,
+.sqd-tok-name, .wk-sym, .wk-name, .np-meta .tok-comm, .t-sym, .trk-token .t-sym, .search-hit .h-sub, .gb-name, .np-name,
+.np-vs-txt, .sc-name, .lb-name, .sc-sender-name, .comm-card-name, .cm-name, .cmp-call-name, .gsec-d, .trk-w-label) {
+  white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+}
+html .post-comm-name { max-width: none; }

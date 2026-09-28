@@ -178,6 +178,14 @@
      of it — about 12–13px bold, so "9+" sits inside the red circle at every width instead of spilling out of it */
   --notif-badge: clamp(20px, calc(20px + (100vw - 375px) * 0.00178), 22px);
   --nav-fs-badge: calc(var(--notif-badge) * 0.58);
+  /* ---------- TEXT DRAWN INSIDE A GRAPHIC ----------
+     A label painted into a ring or a medal has to fit the graphic's geometry, so it is sized in the graphic's own
+     units and grows with the graphic — the page floor would push it into its neighbours (the level ring's "LEVEL"
+     sat on its number). The dashboard ring itself grows with the text scale: 148px on a phone to 188px. */
+  --gfx-ring: clamp(148px, calc(var(--text-floor) * 7), 188px);
+  --gfx-ring-num: 30px;     /* SVG user units in a 120-unit viewBox: 37px on a phone, 44–47px on a desktop */
+  --gfx-ring-lbl: 11px;     /* 13.6px on a phone, 16–17px on a desktop */
+  --gfx-relic-lv: 13px;     /* the diamond medal's "LV n", in its own 120-unit viewBox */
   --fs-micro: 0.75rem; --fs-xs: 0.8125rem; --fs-s: 0.875rem; --fs-base: 1rem;
   --fs-m: 1.125rem; --fs-l: 1.375rem;
   --fs-xl: clamp(1.5rem, 3.4vw, 2rem);
@@ -215,6 +223,8 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { scroll-behavior: smooth; font-size: var(--text-base); }
+/* a contract address or a hash is one unbreakable string: it may break anywhere rather than run off a phone's screen */
+code, .mono, .addr { overflow-wrap: anywhere; }
 
 body {
   background: var(--ink);
@@ -248,12 +258,15 @@ a { color: var(--gold); }
 }
 /* the balances pill never rides in the bar: one row to spend, and the balances live on the profile and the connected-wallet card */
 .nav .nav-bal { display: none !important; }
+/* while nav.js measures the bar, the pop-down's open/close transitions are off — or every measurement (page load,
+   resize, sign-in) would briefly fade the closed menu in and out */
+.nav.is-measuring .nav-menu, .nav.is-measuring .nav-menu * { transition: none !important; }
 /* nothing in the row is ever squashed — a pill, the bell or the logo mark at the wrong width is a broken graphic. When
    the row cannot fit, nav.js steps down through measured tiers instead: .is-tight drops the live count and the
    Send Power figures; .is-tighter the wordmark and the @name (the avatar stays); .is-tightest the level pill. */
 .nav > *:not(.nav-menu), #nav-auth.nav-persist > *, .nav-profile > * { flex-shrink: 0; }
 .nav-logo img { flex: 0 0 auto; }
-.profile-link .pl-name { display: inline-block; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.profile-link .pl-name { display: inline-block; white-space: nowrap; vertical-align: bottom; }   /* shown whole or not at all: nav.js hides it (.is-tighter) when the bar has no room */
 .nav.is-tight .nav-live, .nav.is-tight .nav-xp-sep, .nav.is-tight .nav-xp-pts, .nav.is-tight .nav-xp-boost { display: none; }
 .nav.is-tighter .nav-logo span, .nav.is-tighter .profile-link .pl-name { display: none; }
 .nav.is-tighter { gap: 0.5rem; }
@@ -274,9 +287,9 @@ a { color: var(--gold); }
 .profile-link:hover { transform: translateY(-1px); }
 .profile-link:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 .pl-ava { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-right: 0.4rem; border-radius: 50%; overflow: hidden; }
-.pl-ava-emo { font-size: max(var(--text-floor), 1.05rem); }
+.pl-ava-emo { font-size: var(--nav-fs-s); line-height: 1; }   /* inside a 24px circle: the nav's scale, not the page floor */
 .pl-img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; display: block; }
-.pl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* the name is the only shrinkable part → it ellipsizes; caret/badge stay pinned */
+.pl-name { min-width: 0; white-space: nowrap; }   /* whole or hidden, never cut (see .profile-link .pl-name) */
 .np-caret { flex: 0 0 auto; font-size: max(var(--text-floor), 0.7rem); line-height: 1; transition: transform 0.15s ease; }
 .profile-link .og-badge { flex: 0 0 auto; }
 .nav-profile.open .np-caret { transform: rotate(180deg); }
@@ -376,7 +389,7 @@ a { color: var(--gold); }
 .nav.is-compact #nav-search-slot.nav-search input, .nav.is-compact .nav-menu .nav-search input:focus { width: 100% !important; }
 .nav.is-compact .nav-bal { display: none !important; }
 .nav.is-compact #nav-auth.nav-persist, .nav.is-compact .nav-profile { min-width: 0; }
-.nav.is-compact .profile-link { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav.is-compact .profile-link { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   .nav-menu { transition: none; }
   .nav-toggle-bars, .nav-toggle-bars::before, .nav-toggle-bars::after { transition: none; }
@@ -626,7 +639,7 @@ section { padding: 3.6rem 1.25rem; position: relative; }
   background: #000;
 }
 .feature-frame video { display: block; width: 100%; height: auto; }
-.clip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.6rem; max-width: 760px; margin: 0 auto; }
+.clip-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 1.6rem; max-width: 760px; margin: 0 auto; }
 .clip-card {
   border-radius: 20px; overflow: hidden; border: 3px solid rgba(255,179,64,0.5);
   box-shadow: 0 0 40px rgba(255,179,64,0.14), 0 18px 40px rgba(0,0,0,0.5);
@@ -649,6 +662,18 @@ section { padding: 3.6rem 1.25rem; position: relative; }
 .gwc-hero p { color: var(--text-dim); margin-bottom: 1.6rem; }
 .gwc-hero p strong { color: var(--green-bright); }
 .community-links { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin-top: 0.4rem; }
+/* The $GWC card and the OG $SEND site's card side by side where two fit, stacked on a phone and a tablet. Each card is a
+   column, so the two button rows sit on the same line whatever the copy's length. */
+.origin-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: 1.4rem; max-width: 1240px; margin: 0 auto; }
+.origin-pair > .gwc-hero { max-width: none; margin: 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.origin-pair > .gwc-hero > p:not(.og-site-tag) { flex: 1 0 auto; max-width: 34em; }
+.origin-pair > .gwc-hero > .community-links { margin-top: 0; }
+@media (max-width: 1099px) { .origin-pair { max-width: 620px; } }
+/* the OG site in the site's own green: $SEND's colour, where the $GWC card is gold */
+.gwc-hero.og-site { border-color: color-mix(in srgb, var(--green-bright) 45%, transparent); box-shadow: 0 0 50px color-mix(in srgb, var(--green) 14%, transparent), 0 24px 50px rgba(0,0,0,0.5); }
+.gwc-hero.og-site h3 { color: var(--green-bright); text-shadow: 0 2px 0 var(--green-dark); margin-top: 0.5rem; overflow-wrap: anywhere; }
+.gwc-hero.og-site em { color: var(--text); font-style: normal; font-weight: 700; }
+.gwc-hero .og-site-tag { display: inline-block; margin: 0.7rem 0 0; padding: 0.15em 0.8em; border-radius: 999px; font-size: max(var(--text-floor), 0.8rem); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-gold); background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%); }
 
 /* ===== Profile ===== */
 .profile-hero { text-align: center; padding: 3rem 1.25rem 1.5rem; }
@@ -818,7 +843,9 @@ video.media-preview-el { width: auto; }
    ~710px the top rail reaches the logo and the 45px glow around it. Hiding the field is the one-line fix, and
    561-700px is already this file's landscape-phone cohort. .float-emoji is shared with about.html, whose three
    spans are hidden across the same band; they are decoration, and that page loses nothing by it. */
-@media (max-width: 700px) {
+/* …and with the larger text the content column spans nearly the whole hero up to a small laptop, so the field
+   would drift over the market-cap cards and the buy button: it shows only where the page has side gutters */
+@media (max-width: 1099px) {
   .float-emoji { display: none; }
 }
 
@@ -1319,7 +1346,7 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 .reassure[open] > summary::after { content: ' ▴'; }
 .reassure-body { padding: 0 1.2rem 1.1rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); line-height: 1.6; }
 .reassure-body ul { margin: 0.5rem 0 0 1.1rem; display: grid; gap: 0.4rem; }
-.do-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; max-width: 900px; margin: 2rem auto 0; }
+.do-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 1rem; max-width: 900px; margin: 2rem auto 0; }
 .do-card { display: block; text-decoration: none; color: var(--text); background: var(--ink-2); border: 1px solid var(--hair); border-radius: var(--r-2); padding: 1.1rem 1.2rem; transition: transform 0.15s ease, border-color 0.15s ease; }
 .do-card:hover { transform: translateY(-3px); border-color: var(--green); }
 .do-card .do-ico { font-size: max(var(--text-floor), 1.6rem); }
@@ -1351,10 +1378,17 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .gpoints { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 2rem); color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; }
 .gpoints-box .glbl { font-size: max(var(--text-floor), 0.78rem); font-weight: 700; color: var(--text-dim); }
 .gxp {
-  position: relative; height: 26px; border-radius: 999px; background: var(--ink); overflow: hidden;
+  position: relative; height: var(--bar-h, 26px); border-radius: 999px; background: var(--ink); overflow: hidden;
   border: 1.5px solid var(--ink-4); margin: 1rem 0;
 }
 .gxp-fill { height: 100%; background: linear-gradient(90deg, var(--green-dark), var(--green-bright)); border-radius: 999px; transition: width 0.6s cubic-bezier(0.2,0.8,0.3,1); }
+/* A bar with a label inside takes its height from the label: the label sits in the flow (so when it has to wrap on
+   a narrow screen, the bar grows with it instead of cutting the second line off) and the fill lies underneath. */
+.gxp:has(.gxp-text) { font-size: max(var(--text-floor), 0.75rem); height: auto; min-height: max(var(--bar-h, 26px), calc(1.3em + 6px)); display: grid; align-items: center; }
+.gd-bar:has(.gd-text) { height: auto; min-height: max(20px, calc(1.3em + 6px)); display: grid; align-items: center; }
+.gs-progress { display: grid; align-items: center; }
+.gxp:has(.gxp-text) > .gxp-fill, .gd-bar:has(.gd-text) > .gd-fill { position: absolute; left: 0; top: 0; bottom: 0; height: auto; }
+.gxp:has(.gxp-text) > .gxp-text, .gd-bar:has(.gd-text) > .gd-text, .gs-progress > .gs-progress-text { position: relative; inset: auto; display: block; padding: 0.12em 0.7em; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
 .gxp-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: max(var(--text-floor), 0.75rem); font-weight: 800; color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 @media (prefers-reduced-motion: reduce) { .gxp-fill { transition: none; } }
 
@@ -1377,7 +1411,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .gd-emoji { font-size: max(var(--text-floor), 1.9rem); line-height: 1; }
 .gd-name { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.1rem); color: var(--diamond); letter-spacing: 0.02em; }
 .gd-lvl { font-size: max(var(--text-floor), 0.78rem); font-weight: 700; color: var(--text-dim); }
-.gd-bar { position: relative; height: 20px; border-radius: 999px; background: var(--ink); border: 1.5px solid var(--ink-4); overflow: hidden; margin-top: 0.55rem; }
+.gd-bar { position: relative; font-size: max(var(--text-floor), 0.72rem); height: 20px; border-radius: 999px; background: var(--ink); border: 1.5px solid var(--ink-4); overflow: hidden; margin-top: 0.55rem; }
 .gd-fill { height: 100%; background: linear-gradient(90deg, var(--diamond-deep), var(--diamond)); border-radius: 999px; transition: width 0.6s ease; }
 .gd-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: max(var(--text-floor), 0.7rem); font-weight: 800; color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.6); }
 @media (prefers-reduced-motion: reduce) { .gd-fill { transition: none; } }
@@ -1489,18 +1523,18 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 /* ===== Send Power dashboard v2 ===== */
 /* 1 — Hero Power Core */
 .pc-hero { display: flex; align-items: center; gap: 1.3rem; flex-wrap: wrap; }
-.pc-core { width: 148px; height: 148px; flex-shrink: 0; filter: drop-shadow(0 0 22px var(--g-veil)); }
+.pc-core { width: var(--gfx-ring); height: var(--gfx-ring); flex-shrink: 0; filter: drop-shadow(0 0 22px var(--g-veil)); }
 .pc-svg { width: 100%; height: 100%; display: block; }
 .pc-track { fill: none; stroke: var(--ink-4); stroke-width: 8; }
 .pc-arc { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.2,0.8,0.3,1); }
 .pc-arc-xp { stroke: url(#gXp); }
 .pc-arc-dia { stroke: url(#gDia); stroke-width: 7; }
-.pc-num { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 33px); fill: var(--text); dominant-baseline: middle; }
-.pc-lbl { font-size: max(var(--text-floor), 9px); font-weight: 800; letter-spacing: 0.18em; fill: var(--text-dim); }
-.pc-name { flex: 1; min-width: 200px; }
+.pc-num { font-family: 'Luckiest Guy', cursive; font-size: var(--gfx-ring-num); fill: var(--text); dominant-baseline: middle; }
+.pc-lbl { font-size: var(--gfx-ring-lbl); font-weight: 800; letter-spacing: 0.18em; fill: var(--text-dim); }
+.pc-name { flex: 1 1 220px; min-width: 0; }   /* a 220px basis: beside the ring where it fits, underneath it on a phone — never past the screen */
 .pc-title { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.5rem); color: var(--green-bright); letter-spacing: 0.02em; line-height: 1.06; }
 .pc-rank { font-weight: 800; font-size: max(var(--text-floor), 0.9rem); color: var(--gold); margin-top: 0.1rem; }
-.pc-power { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 2.9rem); color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 var(--gold-deep), 0 0 26px rgba(255,179,64,0.35); margin-top: 0.35rem; }
+.pc-power { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.8rem, 8.5vw, 2.9rem)); color: var(--gold); line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 var(--gold-deep), 0 0 26px rgba(255,179,64,0.35); margin-top: 0.35rem; }
 .pc-power-lbl { font-size: max(var(--text-floor), 0.72rem); font-weight: 800; letter-spacing: 0.14em; color: var(--text-dim); }
 .pc-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
 .pc-mult { background: linear-gradient(180deg, rgba(255,179,64,0.2), rgba(255,179,64,0.06)); border: 1.5px solid rgba(255,179,64,0.5); color: var(--gold); font-weight: 800; font-size: max(var(--text-floor), 0.82rem); border-radius: 999px; padding: 0.25rem 0.7rem; }
@@ -1537,7 +1571,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .xprow { display: flex; align-items: center; gap: 0.55rem; }
 .xp-cap { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 0.78rem); color: var(--green-bright); flex-shrink: 0; }
 .xp-cap.ghost { color: var(--text-dim); }
-.xpwrap .gxp { margin: 0; flex: 1; height: 24px; }
+.xpwrap .gxp { margin: 0; flex: 1; --bar-h: 24px; }
 .gxp-notches { position: absolute; inset: 0; pointer-events: none; border-radius: 999px; background: repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), color-mix(in srgb, var(--ink) calc(0.5 * 100%), transparent) calc(10% - 1px), color-mix(in srgb, var(--ink) calc(0.5 * 100%), transparent) 10%); }
 .gxp.near .gxp-fill { background: linear-gradient(90deg, var(--gold-deep), var(--gold), var(--green-bright)); animation: xp-pulse 1.4s ease-in-out infinite; }
 .gxp.maxed .gxp-fill { background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
@@ -1602,7 +1636,7 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .relic-pip.cur { fill: var(--gold); stroke: rgba(255,255,255,0.25); stroke-width: 1.5; animation: pip-pulse 1.6s ease-in-out infinite; }
 @keyframes pip-pulse { 0%, 100% { opacity: 0.78; } 50% { opacity: 1; } }
 .relic-emoji { font-size: max(var(--text-floor), 30px); dominant-baseline: middle; }
-.relic-lv { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 13px); fill: var(--diamond); letter-spacing: 0.06em; }
+.relic-lv { font-family: 'Luckiest Guy', cursive; font-size: var(--gfx-relic-lv); fill: var(--diamond); letter-spacing: 0.06em; }
 .relic-name { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.15rem); color: var(--diamond); }
 .relic-meta { font-size: max(var(--text-floor), 0.8rem); color: var(--text-dim); margin: 0.1rem 0 0.6rem; }
 .relic-meta b { color: var(--text); }
@@ -1769,9 +1803,12 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .wall-soc-x:hover { color: #1d9bf0; }
 .wall-soc-ig:hover { color: #e1306c; }
 
-/* OG badge — shown next to a verified early-buyer's name everywhere. cursor:help signals the hover explanation. */
+/* OG badge — shown next to a verified early-buyer's name everywhere. The title carries the hover explanation; a click
+   opens the About page's OG section (a link, or a span with data-og-link where it sits inside another link). */
 .og-badge { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 0.35rem; padding: 0.02rem 0.4rem; border-radius: 999px; font-size: max(var(--text-floor), 0.62rem); font-weight: 900; letter-spacing: 0.06em; line-height: 1.5; color: var(--on-gold); background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%); border: 1px solid rgba(255,179,64,0.65); box-shadow: 0 0 8px rgba(255,179,64,0.4); text-transform: uppercase; cursor: help; white-space: nowrap; }
 .og-badge:hover, .og-badge:focus-visible { box-shadow: 0 0 13px rgba(255,179,64,0.75); }
+a.og-badge, .og-badge[data-og-link] { cursor: pointer; text-decoration: none; }
+a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .og-badge { box-shadow: none; } }
 .og-block { display: flex; align-items: center; gap: 0.8rem; margin: 0.9rem 0; padding: 0.8rem 1rem; border-radius: 14px; background: linear-gradient(100deg, rgba(255,179,64,0.14), rgba(255,179,64,0.05)); border: 1.5px solid rgba(255,179,64,0.5); line-height: 1.5; }
 .og-block-badge { flex: 0 0 auto; font-weight: 900; font-size: max(var(--text-floor), 0.95rem); color: var(--on-gold); background: linear-gradient(180deg, var(--gold), var(--gold-deep)); border-radius: 999px; padding: 0.3rem 0.7rem; box-shadow: 0 0 10px rgba(255,179,64,0.5); }
@@ -2306,7 +2343,7 @@ details[open] .np-chev { transform: rotate(180deg); }
 .verify-note b { color: var(--green-bright); }
 
 /* --- Get started: progress rail + check-offs --- */
-.gs-progress { position: relative; max-width: 780px; margin: 0 auto 1.6rem; min-height: 26px; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 999px; overflow: hidden; }
+.gs-progress { position: relative; max-width: 780px; margin: 0 auto 1.6rem; font-size: max(var(--text-floor), 0.8rem); min-height: max(26px, calc(1.3em + 6px)); background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 999px; overflow: hidden; }
 .gs-progress-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, var(--green-dark), var(--green-bright)); transition: width 0.4s cubic-bezier(.2,.8,.2,1); }
 .gs-progress-text { position: absolute; inset: 0; display: grid; place-items: center; font-size: max(var(--text-floor), 0.8rem); font-weight: 800; color: var(--text); mix-blend-mode: normal; line-height: 1.2; }
 .gs-steps { max-width: 780px; margin: 0 auto; }
@@ -3160,14 +3197,14 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .comm-golive-panel { background: var(--ink); border: 1.5px dashed rgba(255,179,64,0.4); border-radius: 14px; padding: 1rem 1.1rem; margin: 0.6rem 0; }
 .comm-golive-head { font-size: max(var(--text-floor), 1.05rem); font-weight: 700; color: var(--text); margin-bottom: 0.6rem; }
 .comm-golive-head b { color: var(--gold); }
-.comm-golive-panel .gxp { margin: 0; height: 20px; }
+.comm-golive-panel .gxp { margin: 0; --bar-h: 20px; }
 .comm-golive-panel .gxp-fill { background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
 
 /* level bars (community + conviction) */
 .comm-xp { margin: 0.9rem 0; }
 .comm-xp-head { display: flex; align-items: baseline; justify-content: space-between; font-weight: 700; font-size: max(var(--text-floor), 0.92rem); color: var(--text); margin-bottom: 0.3rem; }
 .comm-xp-head b { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.05rem); letter-spacing: 0.03em; }
-.comm-xp .gxp { margin: 0; height: 22px; }
+.comm-xp .gxp { margin: 0; --bar-h: 22px; }
 .comm-xp-sub { font-size: max(var(--text-floor), 0.78rem); color: var(--text-dim); margin-top: 0.25rem; text-align: right; }
 .comm-xp-community .gxp-fill { background: linear-gradient(90deg, var(--green-dark), var(--green-bright)); }
 .comm-xp-community .comm-xp-head b { color: var(--green-bright); }
@@ -3228,7 +3265,7 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
 .comm-block .og-block-body b { color: var(--green-bright); }
 .comm-block-badge { background: linear-gradient(180deg, var(--green-bright), var(--green-dark)) !important; color: var(--on-green) !important; box-shadow: 0 0 12px color-mix(in srgb, var(--green) 50%, transparent) !important; }
 .comm-invite .og-block-body b { color: var(--green-bright); }
-.comm-mini-grid { display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); margin-top: 0.8rem; }
+.comm-mini-grid { display: grid; gap: 0.7rem; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); margin-top: 0.8rem; }
 .comm-mini { display: block; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 12px; padding: 0.7rem 0.8rem; text-decoration: none; color: var(--text); transition: border-color 0.15s ease, transform 0.15s ease; }
 .comm-mini:hover { border-color: var(--green); transform: translateY(-2px); text-decoration: none; }
 .comm-mini:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--green-bright); }
@@ -3236,7 +3273,7 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
 .comm-mini-head b { color: var(--green-bright); font-family: 'Luckiest Guy', cursive; letter-spacing: 0.02em; }
 .comm-mini-name { color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); }
 .comm-mini .comm-xp { margin: 0.45rem 0 0; }
-.comm-mini .comm-xp .gxp { height: 16px; }
+.comm-mini .comm-xp .gxp { --bar-h: 16px; }
 .comm-mini .comm-xp-head { font-size: max(var(--text-floor), 0.82rem); }
 .comm-mini .comm-xp-head b { font-size: max(var(--text-floor), 0.9rem); }
 
@@ -4314,7 +4351,7 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .grekt-lede { margin: 0.2rem 0 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.55; max-width: 70ch; }
 
 /* auto-fit, so this is one column on a phone and two or three on a desk without a media query per breakpoint */
-.grekt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.9rem; align-items: start; }
+.grekt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 0.9rem; align-items: start; }
 
 .rekt-card {
   background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 14px;
@@ -4381,7 +4418,7 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .kpi-dn { color: var(--red-soft); }
 
 /* ---- 🗂️ your record: name/value pairs, announced as such ---- */
-.rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 0.55rem; margin: 0; }
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(168px, 100%), 1fr)); gap: 0.55rem; margin: 0; }
 .rec { background: var(--ink); border: 1.5px solid var(--ink-4); border-left-width: 3px; border-radius: 11px; padding: 0.55rem 0.65rem; }
 .rec-k { margin: 0; font-size: max(var(--text-floor), 0.66rem); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-mute); }
 .rec-v { margin: 0.15rem 0 0; font-size: max(var(--text-floor), 1.02rem); font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
@@ -4753,9 +4790,9 @@ html.motion-off #matrix-rain { display: none; }
 @media (prefers-reduced-motion: reduce) { .gsec-chev { transition: none; } }
 
 /* the two tabs: quests, or the boards */
-.play-tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: var(--r-pill); background: var(--ctl-fill-lo); border: 1px solid var(--ctl-fill-lo); margin-bottom: 0.9rem; }
+.play-tabs { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 4px; padding: 4px; border-radius: var(--r-pill); background: var(--ctl-fill-lo); border: 1px solid var(--ctl-fill-lo); margin-bottom: 0.9rem; }
 .play-tab { min-height: 44px; padding: 0 1.1rem; border: 0; border-radius: var(--r-pill); background: none; color: var(--ctl-ink);
-  font: inherit; font-weight: 800; font-size: max(var(--text-floor), 0.92rem); cursor: pointer; white-space: nowrap; }
+  font: inherit; font-weight: 800; font-size: max(var(--text-floor), 0.92rem); cursor: pointer; white-space: normal; text-align: center; }
 .play-tab:hover { background: var(--ctl-fill-hi); }
 .play-tab.is-on { background: linear-gradient(180deg, var(--green-bright), var(--green)); color: var(--on-green); box-shadow: 0 2px 10px var(--glow-g); }
 .play-tab:focus-visible { outline: 3px solid var(--ctl-ink); outline-offset: -2px; }

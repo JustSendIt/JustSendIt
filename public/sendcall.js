@@ -31,7 +31,7 @@
         ? '<span class="sc-sender-hold sc-holding" title="Still holding for ' + shortDur(s.holdMs) + '">💎 <span class="sr-only">still holding for </span>' + shortDur(s.holdMs) + '</span>'
         : (s.sold ? '<span class="sc-sender-hold sc-soldout" title="Sold out">💀 sold<span class="sr-only"> out</span></span>' : '<span class="sc-sender-hold sc-nobuy" title="Sent It — no on-chain buy found"><span aria-hidden="true">—</span><span class="sr-only">Sent It — no on-chain buy found</span></span>');
       return '<li class="sc-sender' + (s.holding ? '' : ' sc-sender-out') + '">' +
-        '<a class="sc-sender-who" href="/u/' + encodeURIComponent(s.username) + '">' + senderAva(s) + dia + '<span class="sc-sender-name">@' + esc(s.username) + '</span>' + (window.ogBadge ? ogBadge(s.og) : '') + '</a>' +
+        '<a class="sc-sender-who" href="/u/' + encodeURIComponent(s.username) + '">' + senderAva(s) + dia + '<span class="sc-sender-name">@' + esc(s.username) + '</span>' + (window.ogBadge ? ogBadge(s.og, 'in-link') : '') + '</a>' +
         '<span class="sc-sender-stats">' +
           '<span class="sc-sender-mc"><span class="sr-only">got in at </span>@ <b>' + (s.entryMc != null ? fmtUsd(s.entryMc) : '—') + '</b></span>' +
           '<span class="sc-sender-sent"><span class="sr-only">put in </span>💸 <b>' + fmtUsd(s.sentUsd || 0) + '</b></span>' +

@@ -45,7 +45,7 @@
             ? window.avatarHTML(u.avatar_img, 'h-ava')
             : '<span class="h-ava" aria-hidden="true">' + esc(u.avatar) + '</span>';
           a.innerHTML = ava +
-            '<div><div class="h-name"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + (window.ogBadge ? ogBadge(u.og) : '') + '</div>' +
+            '<div><div class="h-name"' + (u.accent ? ' style="color:' + esc(u.accent) + '"' : '') + '>@' + esc(u.username) + (window.ogBadge ? ogBadge(u.og, 'in-link') : '') + '</div>' +
             '<div class="h-sub">' + (u.bio ? esc(u.bio) : (u.posts + ' posts · ' + u.followers + ' followers')) + '</div></div>';
           drop.appendChild(a);
         }

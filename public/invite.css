@@ -76,7 +76,7 @@
 .inv-panel h3 { margin: 0 0 0.5rem; font-size: max(var(--text-floor), 1.05rem); }
 
 /* ---- the codes: the thing people came for ---- */
-.inv-codes { list-style: none; margin: 0.8rem 0 0; padding: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.inv-codes { list-style: none; margin: 0.8rem 0 0; padding: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); }
 .inv-codes li { margin: 0; }
 .inv-code {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
@@ -130,7 +130,7 @@
 .inv-dash-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
 .inv-dash-head h3 { margin: 0; font-size: max(var(--text-floor), 1.05rem); }
 .inv-dash-count { font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim, #9aa); font-variant-numeric: tabular-nums; }
-.inv-dash .inv-codes { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+.inv-dash .inv-codes { grid-template-columns: repeat(auto-fill, minmax(min(165px, 100%), 1fr)); }
 .inv-dash .inv-code {
   background: var(--green-bright, #c6f000); border-color: var(--green-bright, #c6f000); color: var(--ink-1, #020301);
 }

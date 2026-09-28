@@ -851,7 +851,7 @@
     trg.className = 'profile-link'; trg.id = 'nav-profile-trigger'; trg.href = '/u/' + encodeURIComponent(user.username);
     trg.setAttribute('aria-label', 'Your public Send Wall — @' + user.username);
     trg.setAttribute('data-tip', 'Opens your own public Send Wall');
-    trg.innerHTML = AUTH.navIdentity(user) + ((user.og && window.ogBadge) ? ogBadge(user.og) : '');
+    trg.innerHTML = AUTH.navIdentity(user) + ((user.og && window.ogBadge) ? ogBadge(user.og, 'in-link') : '');
     const caret = document.createElement('button');
     caret.type = 'button'; caret.className = 'np-caret-btn'; caret.id = 'nav-profile-caret';
     caret.setAttribute('aria-haspopup', 'true'); caret.setAttribute('aria-expanded', 'false'); caret.setAttribute('aria-controls', 'nav-profile-menu');

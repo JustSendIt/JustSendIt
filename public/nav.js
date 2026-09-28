@@ -56,6 +56,7 @@
     function overflowing() { return nav.scrollWidth > nav.clientWidth + 1; }
     function fit() {
       var wasCompact = nav.classList.contains('is-compact');
+      nav.classList.add('is-measuring');   // no transitions while the classes flip, or the closed menu flashes
       nav.classList.remove('is-compact');
       TIERS.forEach(function (t) { nav.classList.remove(t); });
       var links = menu.querySelectorAll('a');
@@ -74,6 +75,8 @@
       if (compact) nav.classList.add('is-compact'); else close();
       // still too wide (a long name, a big level, a phone): step down one tier at a time until the row fits
       if (compact) for (var i = 0; i < TIERS.length && overflowing(); i++) nav.classList.add(TIERS[i]);
+      void menu.offsetHeight;   // settle the final state with transitions still off…
+      nav.classList.remove('is-measuring');   // …so switching them back on animates nothing
       if (compact !== wasCompact) syncNavHeight();
     }
     function fitSoon() { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 60); }

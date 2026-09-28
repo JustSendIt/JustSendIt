@@ -273,8 +273,8 @@
           '<circle cx="60" cy="60" r="54" class="pc-arc pc-arc-xp" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" data-fill="' + (100 - xpPct) + '" data-fillkind="dash" transform="rotate(-90 60 60)"/>' +
           '<circle cx="60" cy="60" r="41" class="pc-track"/>' +
           '<circle cx="60" cy="60" r="41" class="pc-arc pc-arc-dia" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" data-fill="' + (100 - diaPct) + '" data-fillkind="dash" transform="rotate(-90 60 60)"/>' +
-          '<text x="60" y="60" text-anchor="middle" class="pc-num">' + g.level + '</text>' +
-          '<text x="60" y="77" text-anchor="middle" class="pc-lbl">LEVEL</text>' +
+          '<text x="60" y="53" text-anchor="middle" class="pc-num">' + g.level + '</text>' +   // number above centre, label below: apart even by their line boxes, not just their ink
+          '<text x="60" y="84" text-anchor="middle" class="pc-lbl">LEVEL</text>' +
         '</svg>' +
       '</div>' +
       '<div class="pc-name">' +

@@ -8,7 +8,7 @@ import { ROOT } from './_paths.mjs';
 const PUB = path.join(ROOT, 'public');
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
-const SKIP = /^(inherit|initial|unset|revert|0|0px|0rem|0em)$|--ava\b|^var\(--text-base\)$|^(var\(--nav-fs(-s|-badge)?\)|calc\(var\(--nav-fs(-s)?\) \* [0-9.]+\))$/;   // values that are not text sizes (an avatar glyph scales with its circle), and the nav's own two tokens (a bar has one row to spend; they carry floors of their own)
+const SKIP = /^(inherit|initial|unset|revert|0|0px|0rem|0em)$|--ava\b|^var\(--text-base\)$|^(var\(--nav-fs(-s|-badge)?\)|calc\(var\(--nav-fs(-s)?\) \* [0-9.]+\))$|^var\(--gfx-[a-z-]+\)$/;   // …and text drawn inside a graphic (a ring, a medal), sized with the graphic   // values that are not text sizes (an avatar glyph scales with its circle), and the nav's own two tokens (a bar has one row to spend; they carry floors of their own)
 
 try {
   const files = readdirSync(PUB).filter((f) => /\.(css|js|html)$/.test(f));
