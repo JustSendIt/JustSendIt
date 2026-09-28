@@ -28,7 +28,7 @@
       '<div class="modal-backdrop" data-close></div>' +
       '<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="compose-title">' +
         '<button class="modal-x" data-close aria-label="Close composer" data-tip="Closes the composer without posting anything">✕</button>' +
-        '<h2 id="compose-title" class="display" style="color:var(--green-bright); text-align:center; font-size:1.5rem;">Send it to the Wall 🧱</h2>' +
+        '<h2 id="compose-title" class="display" style="color:var(--green-bright); text-align:center; font-size:max(var(--text-floor), 1.5rem);">Send it to the Wall 🧱</h2>' +
 
         '<div id="compose-in" hidden>' +
           '<div class="cmp-modes" role="tablist" aria-label="What are you sending?">' +
@@ -82,8 +82,8 @@
         '</div>' +
 
         '<div id="compose-done" hidden style="text-align:center;">' +
-          '<div style="font-size:2.6rem;" aria-hidden="true" id="compose-done-ico">🚀</div>' +
-          '<p style="font-weight:800; color:var(--green-bright); font-size:1.1rem;" id="compose-done-msg">Sent to the Wall!</p>' +
+          '<div style="font-size:max(var(--text-floor), 2.6rem);" aria-hidden="true" id="compose-done-ico">🚀</div>' +
+          '<p style="font-weight:800; color:var(--green-bright); font-size:max(var(--text-floor), 1.1rem);" id="compose-done-msg">Sent to the Wall!</p>' +
           '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:0.9rem;">' +
             '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall.html" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
             '<button class="btn btn-ghost btn-sm" id="compose-again" type="button" data-tip="Returns to the empty composer to send another">Post another ✏️</button>' +

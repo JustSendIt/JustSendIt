@@ -86,7 +86,7 @@
     background: var(--paper);
     color: var(--wp-ink);
     font-family: var(--body);
-    font-size: 17px;
+    font-size: max(var(--text-floor), 17px);
     line-height: 1.65;
     -webkit-font-smoothing: antialiased;
   }
@@ -108,7 +108,7 @@
   }
   .eyebrow {
     font-family: var(--mono);
-    font-size: 12px;
+    font-size: max(var(--text-floor), 12px);
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--accent);
@@ -117,7 +117,7 @@
   h1 {
     font-family: var(--display);
     font-weight: 600;
-    font-size: clamp(38px, 6vw, 62px);
+    font-size: max(var(--text-floor), clamp(38px, 6vw, 62px));
     line-height: 1.04;
     letter-spacing: -0.02em;
     margin: 0 0 20px;
@@ -125,7 +125,7 @@
   }
   .standfirst {
     font-family: var(--display);
-    font-size: clamp(19px, 2.4vw, 23px);
+    font-size: max(var(--text-floor), clamp(19px, 2.4vw, 23px));
     line-height: 1.5;
     color: var(--muted);
     margin: 0 0 28px;
@@ -133,7 +133,7 @@
   }
   .byline {
     font-family: var(--mono);
-    font-size: 12.5px;
+    font-size: max(var(--text-floor), 12.5px);
     color: var(--faint);
     display: flex;
     flex-wrap: wrap;
@@ -158,16 +158,16 @@
      collapses it. Sticky lives on .toc-wrap, the grid child: the nav inside it is exactly as tall as its
      parent, so it had nothing to stick within. */
   .toc-wrap { margin: 0 0 22px; }
-  .toc-wrap > summary { cursor: pointer; list-style: none; display: inline-block; font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 8px 14px; border: 1px solid var(--rule); border-radius: 999px; }
+  .toc-wrap > summary { cursor: pointer; list-style: none; display: inline-block; font-family: var(--mono); font-size: max(var(--text-floor), 12px); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding: 8px 14px; border: 1px solid var(--rule); border-radius: 999px; }
   .toc-wrap > summary::-webkit-details-marker { display: none; }
   .toc-wrap > summary::after { content: ' ▾'; }
   .toc-wrap[open] > summary::after { content: ' ▴'; }
   .toc-wrap > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .toc { display: block; padding-top: 14px; font-size: 14px; line-height: 1.5; }
+  .toc { display: block; padding-top: 14px; font-size: max(var(--text-floor), 14px); line-height: 1.5; }
   .toc h2 { display: none; }
   .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
   .toc a { color: var(--muted); text-decoration: none; display: grid; grid-template-columns: 26px 1fr; gap: 4px; }
-  .toc .n { font-family: var(--mono); font-size: 11.5px; color: var(--faint); padding-top: 2px; }
+  .toc .n { font-family: var(--mono); font-size: max(var(--text-floor), 11.5px); color: var(--faint); padding-top: 2px; }
   @media (min-width: 1100px) {
     .toc-wrap {
       margin: 0;
@@ -182,12 +182,12 @@
     .toc {
       display: block;
       padding-top: 52px;
-      font-size: 13.5px;
+      font-size: max(var(--text-floor), 13.5px);
       line-height: 1.45;
     }
     .toc h2 {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: max(var(--text-floor), 11px);
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--faint);
@@ -197,7 +197,7 @@
     .toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
     .toc a { color: var(--muted); text-decoration: none; display: grid; grid-template-columns: 26px 1fr; gap: 4px; }
     .toc a:hover { color: var(--accent); }
-    .toc .n { font-family: var(--mono); font-size: 11.5px; color: var(--faint); padding-top: 2px; }
+    .toc .n { font-family: var(--mono); font-size: max(var(--text-floor), 11.5px); color: var(--faint); padding-top: 2px; }
   }
 
   main { max-width: var(--measure); }
@@ -209,7 +209,7 @@
   .sec-head { display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: baseline; margin: 0 0 18px; }
   .sec-num {
     font-family: var(--mono);
-    font-size: 13px;
+    font-size: max(var(--text-floor), 13px);
     color: var(--accent);
     font-weight: 600;
     padding-top: 6px;
@@ -217,7 +217,7 @@
   h2 {
     font-family: var(--display);
     font-weight: 600;
-    font-size: clamp(25px, 3.4vw, 33px);
+    font-size: max(var(--text-floor), clamp(25px, 3.4vw, 33px));
     line-height: 1.18;
     letter-spacing: -0.012em;
     margin: 0;
@@ -226,7 +226,7 @@
   h3 {
     font-family: var(--body);
     font-weight: 600;
-    font-size: 17px;
+    font-size: max(var(--text-floor), 17px);
     letter-spacing: 0.005em;
     margin: 32px 0 10px;
   }
@@ -256,7 +256,7 @@
   strong { font-weight: 600; }
   em { font-style: italic; }
 
-  code, .mono { font-family: var(--mono); font-size: 0.88em; }
+  code, .mono { font-family: var(--mono); font-size: max(var(--text-floor), 0.88em); }
   p code, li code, td code {
     background: var(--mono-bg);
     padding: 1.5px 5px;
@@ -273,13 +273,13 @@
     border-radius: 0 6px 6px 0;
     padding: 16px 20px;
     margin: 0 0 20px;
-    font-size: 15.5px;
+    font-size: max(var(--text-floor), 15.5px);
   }
   .note :last-child { margin-bottom: 0; }
   .note .lbl {
     display: block;
     font-family: var(--mono);
-    font-size: 10.5px;
+    font-size: max(var(--text-floor), 10.5px);
     letter-spacing: 0.13em;
     text-transform: uppercase;
     color: var(--accent);
@@ -298,13 +298,13 @@
     padding: 18px 20px;
     margin: 0 0 20px;
     font-family: var(--mono);
-    font-size: 14px;
+    font-size: max(var(--text-floor), 14px);
     line-height: 1.75;
     overflow-x: auto;
   }
   .figure .cap {
     font-family: var(--body);
-    font-size: 13.5px;
+    font-size: max(var(--text-floor), 13.5px);
     color: var(--muted);
     margin-top: 12px;
     padding-top: 12px;
@@ -317,14 +317,14 @@
   table {
     border-collapse: collapse;
     width: 100%;
-    font-size: 14.5px;
+    font-size: max(var(--text-floor), 14.5px);
     min-width: 380px;
   }
   caption {
     caption-side: top;
     text-align: left;
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: max(var(--text-floor), 11px);
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--faint);
@@ -333,7 +333,7 @@
   th, td { padding: 9px 14px 9px 0; text-align: left; vertical-align: top; }
   thead th {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: max(var(--text-floor), 11px);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--faint);
@@ -352,7 +352,7 @@
   /* ---------- misc ---------- */
   .kicker {
     font-family: var(--mono);
-    font-size: 11px;
+    font-size: max(var(--text-floor), 11px);
     letter-spacing: 0.13em;
     text-transform: uppercase;
     color: var(--faint);
@@ -371,7 +371,7 @@
     padding-top: 26px;
     border-top: 2px solid var(--wp-ink);
     max-width: var(--measure);
-    font-size: 14px;
+    font-size: max(var(--text-floor), 14px);
     color: var(--muted);
   }
   @media (min-width: 1100px) { .wp-colophon { margin-left: 266px; } }
@@ -390,38 +390,38 @@
       --measure: 100%;
     }
     @page { margin: 15mm 14mm 16mm; }
-    body { background: #fff; font-size: 10pt; line-height: 1.5; }
+    body { background: #fff; font-size: max(var(--text-floor), 10pt); line-height: 1.5; }
     .page { max-width: none; padding: 0; display: block; }
     .body-grid { display: block; }
     .toc-wrap { display: none !important; }   /* the whole block, or the "Contents" pill prints without its list */
     main, .masthead, .wp-colophon { max-width: none; margin-left: 0; }
 
     .masthead { padding: 0 0 18px; border-bottom-width: 1.5px; break-after: avoid; }
-    h1 { font-size: 30pt; margin-bottom: 12px; }
-    .standfirst { font-size: 12pt; margin-bottom: 14px; }
+    h1 { font-size: max(var(--text-floor), 30pt); margin-bottom: 12px; }
+    .standfirst { font-size: max(var(--text-floor), 12pt); margin-bottom: 14px; }
     .eyebrow { margin-bottom: 10px; }
-    .byline { font-size: 8.5pt; }
+    .byline { font-size: max(var(--text-floor), 8.5pt); }
 
     section { padding-top: 20px; break-inside: auto; }
     section + section { margin-top: 16px; border-top-color: var(--rule-soft); }
     .sec-head { break-after: avoid; page-break-after: avoid; margin-bottom: 12px; }
-    h2 { font-size: 16pt; }
-    h3 { font-size: 11pt; margin: 18px 0 7px; break-after: avoid; page-break-after: avoid; }
+    h2 { font-size: max(var(--text-floor), 16pt); }
+    h3 { font-size: max(var(--text-floor), 11pt); margin: 18px 0 7px; break-after: avoid; page-break-after: avoid; }
     p, li { orphans: 3; widows: 3; }
     main > section > p, main > section > ul, main > section > ol,
     main > section > h3, main > section > .note, main > section > .figure,
     main > section > .tablewrap { margin-left: 34px; }
 
-    .note, .figure { break-inside: avoid; page-break-inside: avoid; font-size: 9.5pt; }
-    .figure { font-size: 9pt; line-height: 1.6; }
+    .note, .figure { break-inside: avoid; page-break-inside: avoid; font-size: max(var(--text-floor), 9.5pt); }
+    .figure { font-size: max(var(--text-floor), 9pt); line-height: 1.6; }
     .tablewrap { overflow: visible; break-inside: auto; }
-    table { font-size: 8.8pt; min-width: 0; }
+    table { font-size: max(var(--text-floor), 8.8pt); min-width: 0; }
     thead { display: table-header-group; }
     tr { break-inside: avoid; page-break-inside: avoid; }
     th, td { padding: 5px 10px 5px 0; }
 
     a { color: var(--wp-ink); text-decoration: none; }
-    .wp-colophon { margin-top: 26px; padding-top: 14px; font-size: 8.5pt; break-inside: avoid; }
+    .wp-colophon { margin-top: 26px; padding-top: 14px; font-size: max(var(--text-floor), 8.5pt); break-inside: avoid; }
   }
 </style>
 </head>

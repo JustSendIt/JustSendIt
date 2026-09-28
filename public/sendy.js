@@ -149,32 +149,32 @@
       '@media (prefers-reduced-motion:reduce){.sendy-sprite{animation:none}}' +
       '.sendy-widget.is-flying .sendy-sprite{animation-duration:.6s}' +
       /* the popup: above the rocket, aligned to its right edge; flipped when the rocket sits near the top or the left */
-      '.sendy-popup{position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;width:320px;max-width:calc(100vw - 2rem);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1}' +
+      '.sendy-popup{position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;width:360px;max-width:calc(100vw - 2rem);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1;overflow:hidden;display:flex;flex-direction:column}' +
       '@media (min-width:768px){.sendy-widget.is-up .sendy-popup{bottom:auto;top:calc(var(--sendy-size) + 10px)}' +
         '.sendy-widget.is-left .sendy-popup{right:auto;left:0}}' +
-      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:min(70vh,520px);display:flex;flex-direction:column}}' +
-      '.sendy-popup[hidden]{display:none}' +
+      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px);display:flex;flex-direction:column}}' +
+      '.sendy-popup[hidden]{display:none !important}' +
       '.sendy-head{display:flex;align-items:center;gap:.6rem;padding:.65rem .8rem;border-bottom:1px solid var(--edge-ctl)}' +
       '.sendy-avatar{width:28px;height:28px;flex:none}' +
-      '.sendy-title{flex:1;font-weight:800;font-size:.95rem;color:var(--text);display:flex;flex-direction:column;line-height:1.15}' +
-      '.sendy-title small{font-weight:500;font-size:.72rem;color:var(--text-mute)}' +
-      '.sendy-close{background:none;border:0;color:var(--text-mute);cursor:pointer;font-size:1.1rem;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px}' +
+      '.sendy-title{flex:1;font-weight:800;font-size:max(var(--text-floor), .95rem);color:var(--text);display:flex;flex-direction:column;line-height:1.15}' +
+      '.sendy-title small{font-weight:500;font-size:max(var(--text-floor), .72rem);color:var(--text-mute)}' +
+      '.sendy-close{background:none;border:0;color:var(--text-mute);cursor:pointer;font-size:max(var(--text-floor), 1.1rem);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px}' +
       '.sendy-close:hover{color:var(--text)}' +
       '.sendy-close:focus-visible,.sendy-btn:focus-visible,.sendy-back-btn:focus-visible,.sendy-chat-send:focus-visible,.sendy-link:focus-visible{outline:3px solid var(--focus);outline-offset:2px}' +
-      '.sendy-body{padding:.85rem;display:flex;flex-direction:column;gap:.7rem;min-height:0}' +
+      '.sendy-body{padding:.85rem;display:flex;flex-direction:column;gap:.7rem;min-height:0;overflow:auto;overscroll-behavior:contain}' +
       '.sendy-body[hidden]{display:none}' +
-      '.sendy-greeting,.sendy-tip{margin:0;font-size:.9rem;line-height:1.4}' +
+      '.sendy-greeting,.sendy-tip{margin:0;font-size:max(var(--text-floor), .9rem);line-height:1.4}' +
       '.sendy-greeting{font-weight:700;color:var(--green-bright)}' +
       '.sendy-tip{color:var(--text-dim)}' +
       '.sendy-actions{display:flex;flex-direction:column;gap:.45rem}' +
-      '.sendy-btn{padding:.5rem .75rem;font:inherit;font-size:.86rem;font-weight:600;border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;text-align:center;transition:background .15s ease,border-color .15s ease}' +
+      '.sendy-btn{padding:.5rem .75rem;font:inherit;font-size:max(var(--text-floor), .86rem);font-weight:600;border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;text-align:center;transition:background .15s ease,border-color .15s ease}' +
       '.sendy-btn-primary{background:var(--green);color:var(--ink-1);border-color:var(--green)}' +
       '.sendy-btn-primary:hover{background:var(--green-bright);border-color:var(--green-bright)}' +
       '.sendy-btn-secondary{background:transparent;color:var(--text)}' +
       '.sendy-btn-secondary:hover{border-color:var(--edge-ctl-lit);background:var(--g-wash)}' +
-      '.sendy-btn-tertiary{background:transparent;color:var(--text-dim);font-weight:500;font-size:.8rem}' +
+      '.sendy-btn-tertiary{background:transparent;color:var(--text-dim);font-weight:500;font-size:max(var(--text-floor), .8rem)}' +
       '.sendy-btn-tertiary:hover{color:var(--text);border-color:var(--text-mute)}' +
-      '.sendy-fine{margin:0;font-size:.74rem;line-height:1.4;color:var(--text-mute)}' +
+      '.sendy-fine{margin:0;font-size:max(var(--text-floor), .74rem);line-height:1.4;color:var(--text-mute)}' +
       '.sendy-link{color:var(--green-bright);font-weight:600;text-decoration:underline;text-underline-offset:2px;border-radius:3px}' +
       /* chat */
       '.sendy-chat-messages{display:flex;flex-direction:column;gap:.55rem;max-height:300px;overflow-y:auto;overscroll-behavior:contain;padding:.1rem 0}' +
@@ -183,19 +183,19 @@
       '@keyframes sendy-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}' +
       '@media (prefers-reduced-motion:reduce){.sendy-msg{animation:none}}' +
       '.sendy-msg-user{justify-content:flex-end}' +
-      '.sendy-msg-bubble{padding:.55rem .8rem;border-radius:10px;max-width:88%;overflow-wrap:anywhere;font-size:.88rem;line-height:1.4;white-space:pre-line}' +
+      '.sendy-msg-bubble{padding:.55rem .8rem;border-radius:10px;max-width:88%;overflow-wrap:anywhere;font-size:max(var(--text-floor), .88rem);line-height:1.4;white-space:pre-line}' +
       '.sendy-msg-sendy .sendy-msg-bubble{background:var(--g-wash);color:var(--text);border:1px solid var(--edge-ctl);border-bottom-left-radius:3px}' +
       '.sendy-msg-user .sendy-msg-bubble{background:var(--green);color:var(--ink-1);border-bottom-right-radius:3px}' +
       '.sendy-msg-links{display:flex;flex-wrap:wrap;gap:.3rem .9rem;margin-top:.45rem}' +
       '.sendy-typing .sendy-msg-bubble{color:var(--text-mute);letter-spacing:.15em}' +
       '.sendy-chat-form{display:flex;gap:.45rem}' +
-      '.sendy-chat-input{flex:1;min-width:0;padding:.55rem .7rem;border:1px solid var(--edge-ctl);border-radius:6px;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:.9rem}' +
+      '.sendy-chat-input{flex:1;min-width:0;padding:.55rem .7rem;border:1px solid var(--edge-ctl);border-radius:6px;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:max(var(--text-floor), .9rem)}' +
       '.sendy-chat-input::placeholder{color:var(--text-mute)}' +
       '.sendy-chat-input:focus{outline:2px solid var(--focus);outline-offset:-1px;border-color:var(--edge-ctl-lit)}' +
       '.sendy-chat-send{padding:.5rem .8rem;background:var(--green);color:var(--ink-1);border:1px solid var(--green);border-radius:6px;cursor:pointer;font:inherit;font-weight:800}' +
       '.sendy-chat-send:hover{background:var(--green-bright);border-color:var(--green-bright)}' +
       '.sendy-chat-send[disabled]{opacity:.6;cursor:default}' +
-      '.sendy-back-btn{width:100%;padding:.45rem;background:transparent;color:var(--text-mute);border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;font:inherit;font-size:.82rem}' +
+      '.sendy-back-btn{width:100%;padding:.45rem;background:transparent;color:var(--text-mute);border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;font:inherit;font-size:max(var(--text-floor), .82rem)}' +
       '.sendy-back-btn:hover{color:var(--text);border-color:var(--text-mute)}';
   }
 
@@ -222,10 +222,11 @@
     /* desktop only: a rocket near the top opens its popup downward, one near the left edge opens it rightward.
        On a phone the popup spans the width above the rocket (fixed), and these flips must never touch it. */
     function placePopup() {
-      if (isMobile()) { widget.classList.remove('is-up', 'is-left'); return; }
-      const r = rocket.getBoundingClientRect();
-      widget.classList.toggle('is-up', r.top < 480);      // a chat is up to ~470px tall
-      widget.classList.toggle('is-left', r.left < 340);   // the popup is 320px wide, hung from the rocket's right edge
+      if (isMobile()) { widget.classList.remove('is-up', 'is-left'); popup.style.maxHeight = ''; return; }
+      const r = rocket.getBoundingClientRect(), above = r.top - 12, below = window.innerHeight - r.bottom - 12;
+      widget.classList.toggle('is-up', below > above);      // open toward whichever side has more room…
+      widget.classList.toggle('is-left', r.left < 380);     // …and rightward when hung near the left edge (the popup is 360px wide)
+      popup.style.maxHeight = Math.max(260, Math.floor(Math.max(above, below))) + 'px';   // …and never past the viewport: the body scrolls instead
     }
     function openPopup() { placePopup(); popup.removeAttribute('hidden'); rocket.setAttribute('aria-expanded', 'true'); }
     function closePopup() { popup.setAttribute('hidden', ''); rocket.setAttribute('aria-expanded', 'false'); clearTimeout(autoHide); }

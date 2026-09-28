@@ -85,7 +85,7 @@
       </div>
       <div id="composer-signedin" hidden>
         <div style="display:flex; gap:0.7rem; margin-bottom:0.7rem; align-items:center;">
-          <span style="font-size:1.6rem;" id="my-avatar" aria-hidden="true">🚀</span>
+          <span style="font-size:max(var(--text-floor), 1.6rem);" id="my-avatar" aria-hidden="true">🚀</span>
           <span style="font-weight:800;">@<span id="my-handle"></span></span>
         </div>
         <label for="post-text" class="sr-only">Write your question</label>
@@ -103,7 +103,7 @@
 
     <div class="wall-feed" id="feed" role="feed" aria-label="Support questions"></div>
     <div class="empty-wall" id="empty" style="display:none;">
-      <div style="font-size:3rem;" aria-hidden="true">🛟</div>
+      <div style="font-size:max(var(--text-floor), 3rem);" aria-hidden="true">🛟</div>
       <p>No questions yet. Ask the first one — someone else probably has the same one.</p>
     </div>
     <div style="text-align:center; margin-top:1.4rem;">

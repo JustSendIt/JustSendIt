@@ -4,7 +4,7 @@
 .tok-chip {
   display: inline-flex; align-items: center; vertical-align: baseline; position: relative;
   margin: 0 0.05em; padding: 0.02em 0.5em; min-height: 1.5em; line-height: 1.35;
-  font: inherit; font-weight: 800; font-size: 0.92em; letter-spacing: 0.01em;
+  font: inherit; font-weight: 800; font-size: max(var(--text-floor), 0.92em); letter-spacing: 0.01em;
   color: var(--on-green); background: var(--green);
   border: 1.5px solid var(--green); border-radius: 999px; cursor: pointer;
   white-space: nowrap; transition: background 0.12s ease, border-color 0.12s ease, transform 0.12s ease;
@@ -15,13 +15,13 @@
 
 /* unresolved raw address: shortened, monospace, with a copy button */
 .tok-addr {
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.9em; color: var(--green-bright);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: max(var(--text-floor), 0.9em); color: var(--green-bright);
   background: color-mix(in srgb, var(--green) 8%, transparent); border: 1px solid color-mix(in srgb, var(--green) 25%, transparent); border-radius: 6px; padding: 0 0.3em; white-space: nowrap;
 }
 .tok-copy {
   display: inline-flex; align-items: center; justify-content: center; vertical-align: baseline; position: relative;
   min-width: 1.7em; min-height: 1.5em; margin-left: 0.15em; padding: 0 0.3em; line-height: 1;
-  font: inherit; font-size: 0.85em; color: var(--ctl-ink); background: var(--ctl-fill-lo); border: none; border-radius: 7px; cursor: pointer;
+  font: inherit; font-size: max(var(--text-floor), 0.85em); color: var(--ctl-ink); background: var(--ctl-fill-lo); border: none; border-radius: 7px; cursor: pointer;
 }
 .tok-copy:hover { background: var(--green); color: var(--on-green); }
 .tok-copy:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
@@ -31,7 +31,7 @@
 .tok-comm-slot:empty { min-width: 0; }
 .tok-comm {
   display: inline-flex; align-items: center; gap: 0.25rem; position: relative;
-  font-family: 'Rubik', system-ui, sans-serif; font-size: 0.7rem; font-weight: 800; line-height: 1.3;
+  font-family: 'Rubik', system-ui, sans-serif; font-size: max(var(--text-floor), 0.7rem); font-weight: 800; line-height: 1.3;
   padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid; text-decoration: none; white-space: nowrap;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
@@ -58,11 +58,11 @@
 /* Best Runners: the tag sits at the end of the full-width name row (never in the metrics cell, which shares grid
    cell 3 with the ticker at ≥560px). The name row is nowrap + overflow hidden, so keep the focus ring inside it. */
 .np-runner-name .tok-comm-slot { margin-left: 0.4rem; }
-.np-runner-name .tok-comm { font-size: 0.66rem; padding: 0.06rem 0.45rem; }
+.np-runner-name .tok-comm { font-size: max(var(--text-floor), 0.66rem); padding: 0.06rem 0.45rem; }
 .np-runner-name .tok-comm:focus-visible { outline-offset: -2px; outline-color: var(--ctl-ink); } /* an inset ring sits ON the fill, so it has to be the ink, not the accent */
 .np-slide-sub .tok-comm-slot { margin-left: 0.25rem; }
 .pin-chip .tok-comm-slot { margin-left: 0.15rem; }
-.pin-chip .tok-comm { font-size: 0.66rem; padding: 0.06rem 0.42rem; }
+.pin-chip .tok-comm { font-size: max(var(--text-floor), 0.66rem); padding: 0.06rem 0.42rem; }
 
 /* --- fuller community section (token-detail popup) --- */
 .tok-comm-slot-panel { display: block; }
@@ -70,8 +70,8 @@
   display: grid; gap: 0.45rem; margin: 0 0 0.9rem; padding: 0.8rem 0.9rem; min-height: 5.6rem;
   background: color-mix(in srgb, var(--green) 6%, transparent); border: 1.5px solid var(--ink-4); border-left: 3px solid var(--green); border-radius: 14px;
 }
-.tok-comm-h { font-family: 'Luckiest Guy', cursive; font-weight: 400; font-size: 1rem; letter-spacing: 0.02em; color: var(--green-bright); margin: 0; }
-.tok-comm-txt { margin: 0; font-size: 0.9rem; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.tok-comm-h { font-family: 'Luckiest Guy', cursive; font-weight: 400; font-size: max(var(--text-floor), 1rem); letter-spacing: 0.02em; color: var(--green-bright); margin: 0; }
+.tok-comm-txt { margin: 0; font-size: max(var(--text-floor), 0.9rem); line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
 .tok-comm-txt b { color: var(--text); }
 .tok-comm-loading { color: var(--text-dim); }
 .tok-comm-live { color: var(--green-bright); font-weight: 800; }
@@ -79,7 +79,7 @@
 .tok-comm-offtxt { color: var(--gold); font-weight: 800; }
 .tok-comm-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .tok-comm-acts .btn { text-decoration: none; }
-.tok-comm-note { margin: 0; font-size: 0.72rem; line-height: 1.45; color: var(--text-dim); }
+.tok-comm-note { margin: 0; font-size: max(var(--text-floor), 0.72rem); line-height: 1.45; color: var(--text-dim); }
 
 @media (prefers-reduced-motion: reduce) {
   .tok-chip, .tok-comm { transition: none; }

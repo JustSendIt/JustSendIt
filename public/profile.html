@@ -64,11 +64,11 @@
     <div class="wrap">
 
       <div style="display:flex; align-items:center; gap:0.8rem; margin-bottom:1.2rem; flex-wrap:wrap;">
-        <span id="pf-avatar" style="font-size:2.2rem;" aria-hidden="true">🚀</span>
+        <span id="pf-avatar" style="font-size:max(var(--text-floor), 2.2rem);" aria-hidden="true">🚀</span>
         <div>
           <!-- h2, not h1: the "Your Send Station" h1 above both sections is the page heading, and two h1s on one
                page leaves a screen-reader user with two competing answers to "what is this page". -->
-          <h2 style="font-weight:800; font-size:1.2rem; margin:0;">@<span id="pf-username-show"></span></h2>
+          <h2 style="font-weight:800; font-size:max(var(--text-floor), 1.2rem); margin:0;">@<span id="pf-username-show"></span></h2>
           <a id="pf-wall-link" class="btn btn-primary btn-sm" href="#" data-tip="Opens your public wall at your handle" style="margin-top:0.4rem;">🧱 View My Public Wall →</a>
         </div>
         <button class="btn btn-ghost btn-sm" id="signout-btn" style="margin-left:auto;" data-tip="Ends your session and reloads the page signed out">Sign Out 👋</button>
@@ -112,7 +112,7 @@
       </p>
 
       <div class="card" id="connected-wallet" style="margin-bottom:1.6rem;">
-        <h2 class="display" style="color:var(--green-bright); font-size:1.5rem; margin-bottom:0.3rem;">My Connected Wallet 👛</h2>
+        <h2 class="display" style="color:var(--green-bright); font-size:max(var(--text-floor), 1.5rem); margin-bottom:0.3rem;">My Connected Wallet 👛</h2>
         <p class="privacy-chip" style="margin-bottom:0.2rem;">🔒 Read-only · we can never move your funds</p>
         <div id="cw-selector" style="margin:0.6rem 0;"></div>
         <div id="cw-body"></div>
@@ -134,7 +134,7 @@
 
       <!-- ===== TRACKER: now its own page ===== -->
       <div class="card gold-card" style="margin-bottom:1.6rem;">
-        <h2 class="display" style="color:var(--gold); font-size:1.7rem; margin-bottom:0.4rem;">Wallet Tracker 💼</h2>
+        <h2 class="display" style="color:var(--gold); font-size:max(var(--text-floor), 1.7rem); margin-bottom:0.4rem;">Wallet Tracker 💼</h2>
         <p class="privacy-chip" style="margin-bottom:0.8rem;">🔒 Private — only you can see it</p>
         <p class="modal-note" style="margin:0 0 0.9rem;">Follow any wallet on Robinhood Chain — holdings, trades, cost basis and PNL, read from the chain by this site, so the explorer never learns which wallets you watch and cached so it opens instantly next time. It has its own page now (also in your account menu ▾).</p>
         <a class="btn btn-gold" href="/tracker.html" data-tip="Goes to the wallet tracker page">Open the Wallet Tracker 💼 →</a>
@@ -143,7 +143,7 @@
 
       <div class="dpanel" role="tabpanel" id="dpanel-settings" aria-labelledby="dtab-settings" tabindex="0" hidden>
       <!-- ===== SETTINGS: collapsible ===== -->
-      <h2 class="display" style="color:var(--green-bright); font-size:1.3rem; margin-bottom:0.8rem;">Settings ⚙️</h2>
+      <h2 class="display" style="color:var(--green-bright); font-size:max(var(--text-floor), 1.3rem); margin-bottom:0.8rem;">Settings ⚙️</h2>
       <div class="settings-group">
 
         <details class="setting-card" id="sec-account">

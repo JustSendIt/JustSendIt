@@ -17,10 +17,14 @@
 <link rel="icon" href="/assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/logo-180.png">
 <style>
+  /* the text-size floor, as in styles.css — this page styles itself */
+  :root { --text-floor: clamp(14px, calc(14px + (100vw - 375px) * 0.01252), 19pt); --text-base: clamp(1rem, calc(1rem + (100vw - 375px) * 0.00442), 1.25rem); }
+  html { font-size: var(--text-base); }
+  body { font-size: max(var(--text-floor), 1rem); }
   html, body { margin: 0; height: 100%; background: #070312; color: #f2eaff;
                font-family: 'Rubik', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   main { min-height: 100%; display: grid; place-items: center; text-align: center; padding: 2rem 1rem; gap: 0.6rem; }
-  h1 { font-size: 1.5rem; margin: 0; }
+  h1 { font-size: max(var(--text-floor), 1.5rem); margin: 0; }
   p { margin: 0; color: #b9a8dd; }
   a { color: var(--g-green-hi, var(--green-bright)); font-weight: 700; }
 </style>

@@ -41,9 +41,9 @@
     welcome.innerHTML =
       '<div class="tour-welcome-backdrop"></div>' +
       '<div class="tour-welcome" role="dialog" aria-modal="true" aria-labelledby="tw-title" aria-describedby="tw-body">' +
-        '<div style="font-size:2.6rem;" aria-hidden="true">🚀</div>' +
-        '<h2 id="tw-title" class="display" style="color:var(--green-bright); font-size:1.7rem;">Welcome to $Send</h2>' +
-        '<p id="tw-body" class="modal-note" style="font-size:0.95rem;">New to crypto? You\'re exactly where you should be. Take a 60-second tour — where to buy safely, how to track your bags, where the memes live, and how you <b>earn points &amp; level up to Biggest Sender</b> 🏆. No pressure.<br><span style="opacity:0.8;">Entertainment only, not financial advice, not affiliated with Robinhood.</span></p>' +
+        '<div style="font-size:max(var(--text-floor), 2.6rem);" aria-hidden="true">🚀</div>' +
+        '<h2 id="tw-title" class="display" style="color:var(--green-bright); font-size:max(var(--text-floor), 1.7rem);">Welcome to $Send</h2>' +
+        '<p id="tw-body" class="modal-note" style="font-size:max(var(--text-floor), 0.95rem);">New to crypto? You\'re exactly where you should be. Take a 60-second tour — where to buy safely, how to track your bags, where the memes live, and how you <b>earn points &amp; level up to Biggest Sender</b> 🏆. No pressure.<br><span style="opacity:0.8;">Entertainment only, not financial advice, not affiliated with Robinhood.</span></p>' +
         '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:1rem;">' +
           '<button class="btn btn-primary" id="tw-start" type="button" data-tip="Starts the step-by-step walkthrough of this page">Show me around 👀</button>' +
           '<button class="btn btn-ghost btn-sm" id="tw-skip" type="button" data-tip="Closes this and stops the tour reopening later">I\'ll explore myself</button>' +

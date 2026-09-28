@@ -49,7 +49,7 @@
   <div class="modal-backdrop" data-close></div>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
     <button class="modal-x" data-close aria-label="Close sign-in dialog" data-tip="Closes this dialog without signing you in">✕</button>
-    <h2 id="auth-title" class="display" style="color:var(--green-bright); text-align:center; font-size:1.6rem;">Welcome to The Send 🚀</h2>
+    <h2 id="auth-title" class="display" style="color:var(--green-bright); text-align:center; font-size:max(var(--text-floor), 1.6rem);">Welcome to The Send 🚀</h2>
     <p class="modal-sub">One account. Your wall, your reactions, your private wallet tracker.</p>
 
     <div class="auth-tabs" role="tablist" aria-label="Sign-in method">
@@ -108,7 +108,7 @@
       <div id="twofa-totp" hidden>
         <p class="modal-note">🔐 Two-factor is on for this account. Enter the 6-digit code from your authenticator app.</p>
         <label class="f-label" for="f-totp">Authentication code</label>
-        <input class="addr-input" id="f-totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="text-align:center; font-size:1.3rem; letter-spacing:0.3em;">
+        <input class="addr-input" id="f-totp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="text-align:center; font-size:max(var(--text-floor), 1.3rem); letter-spacing:0.3em;">
         <button class="btn btn-primary" id="totp-submit" style="width:100%;" data-tip="Checks the code you typed and finishes signing in">Verify ✅</button>
       </div>
       <div id="twofa-wallet" hidden>

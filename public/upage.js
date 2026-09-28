@@ -704,7 +704,7 @@ async function loadCalls(u) {
         '<div class="sc-stat"><b>' + _xf(s.totalX, 1) + '</b><i>Total Xs</i></div>' +
         '<div class="sc-stat"><b>' + s.hits + '</b><i>2x+ hits</i></div>'
       : '';
-    if (!s.count) { listEl.innerHTML = '<div class="empty-wall"><div style="font-size:2.5rem;" aria-hidden="true">📣</div><p>' + (u.isMe ? 'No Send Calls yet — head to <a href="/newpairs.html">New Pairs</a> and call a token! 🚀' : '@' + esc(u.username) + ' hasn’t made any Send Calls yet.') + '</p></div>'; return; }
+    if (!s.count) { listEl.innerHTML = '<div class="empty-wall"><div style="font-size:max(var(--text-floor), 2.5rem);" aria-hidden="true">📣</div><p>' + (u.isMe ? 'No Send Calls yet — head to <a href="/newpairs.html">New Pairs</a> and call a token! 🚀' : '@' + esc(u.username) + ' hasn’t made any Send Calls yet.') + '</p></div>'; return; }
     listEl.innerHTML = s.calls.map(c => SendCall.widgetHTML(Object.assign(c, { mineOwn: u.isMe }))).join('');
     if (window.SendCall) { SendCall.wire(listEl); SendCall.live(listEl); SendCall.observe(listEl); }
   } catch { statsEl.innerHTML = ''; listEl.innerHTML = '<div class="empty-wall"><p>Couldn’t load Send Calls.</p></div>'; }

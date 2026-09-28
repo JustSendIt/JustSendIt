@@ -9,16 +9,16 @@
 
 .arc-game-h, .arc-h {
   font-family: 'Luckiest Guy', 'Rubik', cursive; letter-spacing: 0.03em;
-  color: var(--green-bright); margin: 0 0 0.8rem; text-align: center; font-size: 1.5rem;
+  color: var(--green-bright); margin: 0 0 0.8rem; text-align: center; font-size: max(var(--text-floor), 1.5rem);
 }
-.arc-h { font-size: 1.25rem; text-align: left; }
+.arc-h { font-size: max(var(--text-floor), 1.25rem); text-align: left; }
 
 /* ---------- status badges ---------- */
 .arc-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin: 0 0 0.9rem; }
 .arc-badges:empty { display: none; }
 .arc-badge {
   display: inline-flex; align-items: center; gap: 0.4rem; border-radius: 999px;
-  padding: 0.4rem 0.85rem; font-weight: 800; font-size: 0.88rem; line-height: 1.3;
+  padding: 0.4rem 0.85rem; font-weight: 800; font-size: max(var(--text-floor), 0.88rem); line-height: 1.3;
   border: 1.5px solid var(--ink-4); background: var(--ink-2); color: var(--text);
 }
 .arc-badge b { font-variant-numeric: tabular-nums; }
@@ -41,7 +41,7 @@
 }
 /* these two set display explicitly, so the UA's [hidden] rule needs help to win */
 .arc-canvas[hidden], .arc-static[hidden] { display: none !important; }
-.arc-static-ico { font-size: 3.4rem; line-height: 1; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--green) 50%, transparent)); }
+.arc-static-ico { font-size: max(var(--text-floor), 3.4rem); line-height: 1; filter: drop-shadow(0 0 18px color-mix(in srgb, var(--green) 50%, transparent)); }
 
 .arc-overlay {
   grid-area: 1 / 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -49,7 +49,7 @@
 }
 .arc-x {
   margin: 0; font-family: 'Luckiest Guy', 'Rubik', cursive; line-height: 1;
-  font-size: clamp(2.6rem, 13vw, 4.6rem); letter-spacing: 0.02em;
+  font-size: max(var(--text-floor), clamp(2.6rem, 13vw, 4.6rem)); letter-spacing: 0.02em;
   color: var(--green-bright); font-variant-numeric: tabular-nums;
   text-shadow: 0 3px 0 #172a00, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1);
   overflow-wrap: anywhere;
@@ -58,7 +58,7 @@
 .arc-x.is-hot  { color: #ff8f4d; text-shadow: 0 3px 0 #3d1500, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1); }
 .arc-x.is-over { color: var(--red); text-shadow: 0 3px 0 #3d0000, 0 0 26px rgba(10,14,20,0.95), 0 0 8px rgba(10,14,20,1); }
 .arc-sub {
-  margin: 0; font-weight: 800; font-size: 0.95rem; color: var(--text);
+  margin: 0; font-weight: 800; font-size: max(var(--text-floor), 0.95rem); color: var(--text);
   text-shadow: 0 1px 6px rgba(7,10,16,0.95), 0 0 12px rgba(7,10,16,0.9); overflow-wrap: anywhere;
 }
 .arc-sub.is-bad { color: var(--red); }
@@ -70,7 +70,7 @@
    auto-confetti selector, and a burst of celebration on the tap that turns out to be a bust would be a lie.
    Confetti here fires only on a real cash-out. */
 .arc-btn {
-  width: 100%; max-width: 460px; min-height: 60px; font-size: 1.3rem;
+  width: 100%; max-width: 460px; min-height: 60px; font-size: max(var(--text-floor), 1.3rem);
   white-space: normal; overflow-wrap: anywhere;
 }
 .arc-btn--go {
@@ -93,7 +93,7 @@
 }
 .arc-btn:disabled { cursor: not-allowed; transform: none !important; }
 .arc-btn:disabled:hover, .arc-btn:disabled:active { transform: none !important; }
-.arc-hint { margin: 0; font-size: 0.84rem; color: var(--text-dim); text-align: center; line-height: 1.5; min-height: 1.3em; }
+.arc-hint { margin: 0; font-size: max(var(--text-floor), 0.84rem); color: var(--text-dim); text-align: center; line-height: 1.5; min-height: 1.3em; }
 .arc-hint kbd {
   font-family: inherit; font-weight: 800; color: var(--text);
   border: 1px solid var(--ink-4); border-radius: 5px; padding: 0 0.3em; background: var(--ink);
@@ -104,14 +104,14 @@
 .arc-panel:empty { display: none; }
 .arc-msg {
   border: 1.5px solid var(--ink-4); background: var(--ink-2); border-radius: 14px;
-  padding: 0.9rem 1rem; color: var(--text); line-height: 1.6; font-size: 0.94rem;
+  padding: 0.9rem 1rem; color: var(--text); line-height: 1.6; font-size: max(var(--text-floor), 0.94rem);
 }
 .arc-msg:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
 .arc-msg + .arc-msg { margin-top: 0.6rem; }
 .arc-msg p { margin: 0 0 0.5rem; }
 .arc-msg p:last-child { margin-bottom: 0; }
 .arc-msg .arc-msg-h {
-  font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: 1.15rem; letter-spacing: 0.03em;
+  font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: max(var(--text-floor), 1.15rem); letter-spacing: 0.03em;
   color: var(--text); margin: 0 0 0.4rem;
 }
 .arc-msg--win { border-color: color-mix(in srgb, var(--green) 50%, transparent); background: color-mix(in srgb, var(--green) 8%, transparent); }
@@ -128,27 +128,27 @@
 /* ---------- how it works / payout curve ---------- */
 .arc-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1.2rem; align-items: start; }
 .arc-how, .arc-curve-card { padding: 1.2rem; }
-.arc-steps { margin: 0 0 0.9rem; padding-left: 1.2rem; color: var(--text); line-height: 1.65; font-size: 0.94rem; }
+.arc-steps { margin: 0 0 0.9rem; padding-left: 1.2rem; color: var(--text); line-height: 1.65; font-size: max(var(--text-floor), 0.94rem); }
 .arc-steps li { margin-bottom: 0.45rem; }
 .arc-steps b { color: var(--green-bright); }
-.arc-note { margin: 0 0 0.7rem; font-size: 0.88rem; line-height: 1.6; color: var(--text-dim); }
+.arc-note { margin: 0 0 0.7rem; font-size: max(var(--text-floor), 0.88rem); line-height: 1.6; color: var(--text-dim); }
 .arc-note:last-child { margin-bottom: 0; }
 .arc-note b { color: var(--text); }
-.arc-note sup { font-size: 0.72em; }
+.arc-note sup { font-size: max(var(--text-floor), 0.72em); }
 .arc-note-honest {
   border-top: 1px solid var(--ink-4); padding-top: 0.7rem; margin-top: 0.9rem; color: var(--text-dim);
 }
 
 .arc-tablewrap { overflow-x: auto; margin: 0 0 0.7rem; }
-.arc-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.arc-table { width: 100%; border-collapse: collapse; font-size: max(var(--text-floor), 0.88rem); }
 .arc-table th, .arc-table td { padding: 0.45rem 0.5rem; text-align: left; border-bottom: 1px solid var(--ink-4); white-space: nowrap; }
-.arc-table thead th { color: var(--text-dim); font-weight: 800; font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase; }
-.arc-table tbody th { color: var(--text); font-weight: 800; font-size: 0.88rem; letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
+.arc-table thead th { color: var(--text-dim); font-weight: 800; font-size: max(var(--text-floor), 0.76rem); letter-spacing: 0.06em; text-transform: uppercase; }
+.arc-table tbody th { color: var(--text); font-weight: 800; font-size: max(var(--text-floor), 0.88rem); letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
 .arc-table td { color: var(--text); font-variant-numeric: tabular-nums; }
 .arc-table td:nth-child(2) { color: var(--green-bright); font-weight: 700; }
 .arc-table td:nth-child(3) { color: var(--gold); font-weight: 800; }
 .arc-table tbody tr:last-child td { border-bottom: none; }
-.arc-table tr.is-cap td:nth-child(3)::after { content: ' (max)'; color: var(--text-dim); font-weight: 600; font-size: 0.85em; }
+.arc-table tr.is-cap td:nth-child(3)::after { content: ' (max)'; color: var(--text-dim); font-weight: 600; font-size: max(var(--text-floor), 0.85em); }
 
 /* ---------- focus ---------- */
 .arc-game :focus-visible, .arc-info :focus-visible, #main:focus-visible {
@@ -159,12 +159,12 @@
 @media (max-width: 620px) {
   .arc-game, .arc-how, .arc-curve-card { padding: 1rem; }
   .arc-canvas, .arc-static { height: 200px; }
-  .arc-btn { min-height: 56px; font-size: 1.1rem; }
-  .arc-game-h { font-size: 1.3rem; }
+  .arc-btn { min-height: 56px; font-size: max(var(--text-floor), 1.1rem); }
+  .arc-game-h { font-size: max(var(--text-floor), 1.3rem); }
 }
 @media (max-width: 360px) {
   .arc-game, .arc-how, .arc-curve-card { padding: 0.8rem; }
-  .arc-badge { font-size: 0.8rem; padding: 0.35rem 0.65rem; }
+  .arc-badge { font-size: max(var(--text-floor), 0.8rem); padding: 0.35rem 0.65rem; }
   .arc-table th, .arc-table td { padding: 0.4rem 0.35rem; }
 }
 

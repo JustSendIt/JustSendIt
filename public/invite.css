@@ -47,15 +47,15 @@
   display: inline-flex; align-items: center; gap: 0.4rem;
   background: var(--g-green, var(--green)); color: var(--g-on, #020301);
   border: 1px solid var(--g-green, var(--green)); border-radius: 999px;
-  padding: 0.5rem 0.95rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+  padding: 0.5rem 0.95rem; font: inherit; font-size: max(var(--text-floor), 0.85rem); font-weight: 600; cursor: pointer;
 }
 .inv-close:hover { background: var(--g-green-hi, var(--green-bright)); border-color: var(--g-green-hi, var(--green-bright)); }
 .inv-close:focus-visible { outline: 3px solid var(--g-focus, #f2f6ec); outline-offset: 2px; }
 
-.inv-kicker { margin: 0; font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--g-green-hi, #c6f000); }
-.inv-title { margin: 0.2rem 0 0; font-size: clamp(1.6rem, 5.2vw, 2.5rem); line-height: 1.1; text-align: center; font-weight: 800; }
+.inv-kicker { margin: 0; font-size: max(var(--text-floor), 0.78rem); letter-spacing: 0.18em; text-transform: uppercase; color: var(--g-green-hi, #c6f000); }
+.inv-title { margin: 0.2rem 0 0; font-size: max(var(--text-floor), clamp(1.6rem, 5.2vw, 2.5rem)); line-height: 1.1; text-align: center; font-weight: 800; }
 .inv-title .hl { color: var(--g-green-hi, var(--green-bright)); }
-.inv-sub { margin: 0; max-width: 48ch; text-align: center; color: var(--g-dim, #b6beac); font-size: 0.95rem; line-height: 1.55; }
+.inv-sub { margin: 0; max-width: 48ch; text-align: center; color: var(--g-dim, #b6beac); font-size: max(var(--text-floor), 0.95rem); line-height: 1.55; }
 
 .inv-step { display: none; width: 100%; flex-direction: column; align-items: center; gap: 1rem; }
 .inv-step[data-active] { display: flex; }
@@ -63,7 +63,7 @@
 .inv-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; }
 /* The read-only exit, stated as a real option rather than a refusal. */
 .inv-browse {
-  background: var(--g-green-lo, var(--green-dark)); border: 0; padding: 0.35rem 0.9rem; border-radius: 999px; font: inherit; font-size: 0.88rem;
+  background: var(--g-green-lo, var(--green-dark)); border: 0; padding: 0.35rem 0.9rem; border-radius: 999px; font: inherit; font-size: max(var(--text-floor), 0.88rem);
   color: var(--g-on, #020301); text-decoration: none; cursor: pointer;
 }
 .inv-browse:hover { background: var(--g-green, var(--green)); }
@@ -73,7 +73,7 @@
   background: color-mix(in srgb, var(--g-ink-2, #0c0e09) 90%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent);
   border-radius: 16px; padding: 1.1rem 1.15rem;
 }
-.inv-panel h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.inv-panel h3 { margin: 0 0 0.5rem; font-size: max(var(--text-floor), 1.05rem); }
 
 /* ---- the codes: the thing people came for ---- */
 .inv-codes { list-style: none; margin: 0.8rem 0 0; padding: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
@@ -83,7 +83,7 @@
   padding: 0.62rem 0.8rem; border-radius: 10px; cursor: pointer; overflow: hidden;
   background: var(--g-green-hi, var(--green-bright)); border: 1px solid var(--g-green-hi, var(--green-bright));
   color: var(--g-on, #020301);
-  font-family: ui-monospace, Menlo, monospace; font-size: 1rem; font-weight: 700; letter-spacing: 0.08em;
+  font-family: ui-monospace, Menlo, monospace; font-size: max(var(--text-floor), 1rem); font-weight: 700; letter-spacing: 0.08em;
 }
 /* Both halves must be allowed to shrink. min-width:0 is the load-bearing part: a flex item's default
    min-width is auto, so without it the code characters refuse to compress, and a long "used · @handle"
@@ -103,7 +103,7 @@
 .inv-tag {
   flex: 0 1 auto; min-width: 0;
   white-space: normal; overflow-wrap: anywhere;   /* the whole 'used · @handle' is the accessible name now — nothing else to fall back on */
-  font-family: 'Rubik', system-ui, sans-serif; font-size: 0.72rem; font-weight: 700;
+  font-family: 'Rubik', system-ui, sans-serif; font-size: max(var(--text-floor), 0.72rem); font-weight: 700;
   letter-spacing: 0.09em; text-transform: uppercase; padding: 0.2rem 0.45rem; border-radius: 999px;
   background: color-mix(in srgb, var(--g-ink, #050604) 35%, transparent); color: inherit; text-decoration: none;
 }
@@ -111,14 +111,14 @@
    the only text that records who used the code pulled it under 4.5:1 (3.5:1 on the dashboard). On the chip
    itself it clears with room to spare; the wash is for the bright unused chips, where it is a highlight. */
 .inv-code.is-used .inv-tag { background: none; }
-.inv-note { margin: 0.65rem 0 0; font-size: 0.84rem; color: var(--g-dim, #b6beac); line-height: 1.5; }
-.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: 0.88rem; color: var(--red-soft, #ffb4b4); }
+.inv-note { margin: 0.65rem 0 0; font-size: max(var(--text-floor), 0.84rem); color: var(--g-dim, #b6beac); line-height: 1.5; }
+.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: max(var(--text-floor), 0.88rem); color: var(--red-soft, #ffb4b4); }
 .inv-err.is-ok { color: var(--g-green-hi, var(--green-bright)); }
 
 .inv-in {
   width: 100%; padding: 0.85rem 1rem; border-radius: 12px; margin-top: 0.5rem;
   background: rgba(0,0,0,0.35); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent); color: var(--g-text, #f2f6ec);
-  font-family: ui-monospace, Menlo, monospace; font-size: 1.25rem; letter-spacing: 0.22em; text-align: center;
+  font-family: ui-monospace, Menlo, monospace; font-size: max(var(--text-floor), 1.25rem); letter-spacing: 0.22em; text-align: center;
   text-transform: uppercase;
 }
 .inv-in:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; border-color: var(--g-green, var(--green)); }
@@ -128,8 +128,8 @@
    person already knows, so it should look like the rest of it. */
 .inv-dash { margin-top: 1.4rem; }
 .inv-dash-head { display: flex; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
-.inv-dash-head h3 { margin: 0; font-size: 1.05rem; }
-.inv-dash-count { font-size: 0.82rem; color: var(--text-dim, #9aa); font-variant-numeric: tabular-nums; }
+.inv-dash-head h3 { margin: 0; font-size: max(var(--text-floor), 1.05rem); }
+.inv-dash-count { font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim, #9aa); font-variant-numeric: tabular-nums; }
 .inv-dash .inv-codes { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
 .inv-dash .inv-code {
   background: var(--green-bright, #c6f000); border-color: var(--green-bright, #c6f000); color: var(--ink-1, #020301);
@@ -142,11 +142,11 @@
   background: var(--g-tint, rgba(168,206,0,0.13)); border: 1px solid var(--g-edge, rgba(168,206,0,0.33)); color: var(--green-bright, #c6f000);
   font-weight: 800; font-variant-numeric: tabular-nums;
 }
-.inv-sendid small { font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
+.inv-sendid small { font-size: max(var(--text-floor), 0.68rem); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
 
 @media (max-width: 560px) {
   .inv-codes { grid-template-columns: 1fr 1fr; }
-  .inv-code { font-size: 0.9rem; padding: 0.55rem 0.6rem; letter-spacing: 0.05em; }
+  .inv-code { font-size: max(var(--text-floor), 0.9rem); padding: 0.55rem 0.6rem; letter-spacing: 0.05em; }
 }
 @media (prefers-reduced-motion: reduce) {
   #invite-overlay * { animation: none !important; transition: none !important; }
@@ -162,12 +162,12 @@
 .inv-tests li { display: flex; align-items: flex-start; gap: 0.7rem; }
 /* The direct child only. A bare `li b` also caught the <b> inside the <small> below it, which pushed
    "Required" onto its own line and split the sentence it belongs to in half. */
-.inv-tests li > div > b { display: block; font-size: 0.95rem; }
+.inv-tests li > div > b { display: block; font-size: max(var(--text-floor), 0.95rem); }
 .inv-tests li em { font-style: normal; font-weight: 600; opacity: 0.75; }
-.inv-tests li small { display: block; margin-top: 0.15rem; font-size: 0.82rem; line-height: 1.45; color: var(--g-dim, #b6beac); }
+.inv-tests li small { display: block; margin-top: 0.15rem; font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; color: var(--g-dim, #b6beac); }
 .inv-tick {
   flex: none; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: grid; place-items: center;
-  font-size: 0.85rem; font-weight: 800; line-height: 1;
+  font-size: max(var(--text-floor), 0.85rem); font-weight: 800; line-height: 1;
   background: color-mix(in srgb, var(--g-green, var(--green)) 6%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 20%, transparent); color: var(--g-dim, #b6beac);
 }
 /* mixes of the token the tick's own text uses, not an rgba copy of it: a second copy is what a rebrand leaves behind */
@@ -177,7 +177,7 @@
    over a sentence and nothing else, and this site never calls eth_sendTransaction — not a promise about
    outcomes, which is not ours to make. */
 .inv-safe {
-  margin: 1rem 0 0; padding: 0.8rem 0.9rem; border-radius: 12px; font-size: 0.85rem; line-height: 1.55;
+  margin: 1rem 0 0; padding: 0.8rem 0.9rem; border-radius: 12px; font-size: max(var(--text-floor), 0.85rem); line-height: 1.55;
   background: color-mix(in srgb, var(--g-green, #a8ce00) 8%, transparent); border: 1px solid color-mix(in srgb, var(--g-green, #a8ce00) 30%, transparent); color: var(--g-text, #f2f6ec);
 }
 

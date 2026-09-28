@@ -463,7 +463,7 @@
   // must not land a screen-reader user on an unheaded document still titled "Community".
   function renderFailure(msg) {
     document.title = msg + ' — $Send 🏘️';
-    heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:1.4rem;">' + esc(msg) + '</h1>' +
+    heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:max(var(--text-floor), 1.4rem);">' + esc(msg) + '</h1>' +
       '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="communities.html">Browse all communities →</a></p></div>';
   }
   async function load() {

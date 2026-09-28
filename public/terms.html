@@ -23,9 +23,9 @@
 <style>
   body.terms { background: var(--g-ink); padding: 0; }
   .t-wrap { position: relative; z-index: 4; max-width: 52rem; margin: 0 auto; padding: 2rem 1.15rem 5rem; }
-  .t-h1 { font-family: 'Luckiest Guy', cursive; font-size: clamp(1.8rem, 6vw, 2.8rem); margin: 0 0 0.3rem;
+  .t-h1 { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.8rem, 6vw, 2.8rem)); margin: 0 0 0.3rem;
     color: var(--g-text); text-shadow: 0 0 18px color-mix(in srgb, var(--g-green) 35%, transparent); }
-  .t-meta { color: var(--g-dim); font-size: 0.85rem; margin: 0 0 1.4rem; }
+  .t-meta { color: var(--g-dim); font-size: max(var(--text-floor), 0.85rem); margin: 0 0 1.4rem; }
   .t-lede { background: color-mix(in srgb, var(--g-green) 8%, transparent); border: 1.5px solid color-mix(in srgb, var(--g-green) 42%, transparent); border-radius: 14px;
     padding: 1rem 1.15rem; margin: 0 0 1.6rem; line-height: 1.65; }
   .t-lede b { color: var(--g-text); }
@@ -35,15 +35,15 @@
     padding: 0.9rem 1.1rem; margin: 0 0 2rem; }
   .t-toc ol { margin: 0.4rem 0 0; padding-left: 1.3rem; columns: 2; column-gap: 1.4rem; }
   @media (max-width: 640px) { .t-toc ol { columns: 1; } }
-  .t-toc li { margin: 0.2rem 0; font-size: 0.85rem; break-inside: avoid; }
+  .t-toc li { margin: 0.2rem 0; font-size: max(var(--text-floor), 0.85rem); break-inside: avoid; }
   .t-toc a { color: var(--g-green-hi); text-decoration: none; }
   .t-toc a:hover { text-decoration: underline; }
   .t-sec { margin: 0 0 1.8rem; scroll-margin-top: 1rem; }
-  .t-sec h3 { color: var(--g-green-hi); font-size: 1.05rem; margin: 0 0 0.5rem; line-height: 1.35; }
-  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #dfe5d6; font-size: 0.93rem; }
+  .t-sec h3 { color: var(--g-green-hi); font-size: max(var(--text-floor), 1.05rem); margin: 0 0 0.5rem; line-height: 1.35; }
+  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #dfe5d6; font-size: max(var(--text-floor), 0.93rem); }
   .t-sec b { color: var(--g-text); }
   .t-back { display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 1.2rem;
-    color: var(--g-green-hi); text-decoration: none; font-weight: 700; font-size: 0.9rem; }
+    color: var(--g-green-hi); text-decoration: none; font-weight: 700; font-size: max(var(--text-floor), 0.9rem); }
 </style>
 </head>
 <body class="gate terms">

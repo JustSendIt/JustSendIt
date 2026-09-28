@@ -6,10 +6,10 @@
 
 /* ---------- the panel shell (a flex column with the page's own section gap; [hidden] still wins — it is !important) ---------- */
 .squads-panel { display: flex; flex-direction: column; gap: var(--sec-gap); }
-.sq-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: 1.5rem; margin: 0; letter-spacing: 0.02em; line-height: 1.2; }
-.sq-intro { margin: 0; max-width: 78ch; color: var(--text-dim); font-size: 0.92rem; line-height: 1.6; }
+.sq-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: max(var(--text-floor), 1.5rem); margin: 0; letter-spacing: 0.02em; line-height: 1.2; }
+.sq-intro { margin: 0; max-width: 78ch; color: var(--text-dim); font-size: max(var(--text-floor), 0.92rem); line-height: 1.6; }
 .sq-intro b { color: var(--text); }
-.sq-status { margin: 0; color: var(--text-dim); font-size: 0.88rem; }
+.sq-status { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
 .sq-status:empty { display: none; }
 
 /* ---------- signed out: the locked panel ---------- */
@@ -18,8 +18,8 @@
   background: linear-gradient(180deg, color-mix(in srgb, var(--green) 10%, transparent), color-mix(in srgb, var(--green) 3%, transparent));
   border: 1.5px dashed color-mix(in srgb, var(--green) 45%, transparent);
 }
-.sq-locked-h { font-family: 'Luckiest Guy', cursive; color: var(--text); font-size: 1.3rem; margin: 0 0 0.4rem; letter-spacing: 0.02em; line-height: 1.25; }
-.sq-locked-p { margin: 0 auto 1rem; max-width: 60ch; color: var(--text-dim); font-size: 0.92rem; line-height: 1.55; }
+.sq-locked-h { font-family: 'Luckiest Guy', cursive; color: var(--text); font-size: max(var(--text-floor), 1.3rem); margin: 0 0 0.4rem; letter-spacing: 0.02em; line-height: 1.25; }
+.sq-locked-p { margin: 0 auto 1rem; max-width: 60ch; color: var(--text-dim); font-size: max(var(--text-floor), 0.92rem); line-height: 1.55; }
 
 /* ---------- signed in: the body — one column, one rhythm (the helpers' own top/bottom margins are reset) ---------- */
 .sq-body { display: flex; flex-direction: column; gap: var(--sec-gap); }
@@ -36,14 +36,14 @@
 /* filters: three exclusive groups of sort pills, each with a small caption */
 .sq-filters { display: flex; flex-wrap: wrap; gap: 0.6rem 1.4rem; align-items: center; }
 .sq-filter { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-.sq-filter-l { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-right: 0.15rem; }
+.sq-filter-l { font-size: max(var(--text-floor), 0.7rem); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-right: 0.15rem; }
 
 /* ---------- start a squad (inside a .grules disclosure) ---------- */
 .sq-start .grules-body { padding-top: 0.5rem; }
 /* first thing in the tab, so it reads as the way in rather than a footnote */
 .sq-start { margin: 0 0 1rem; border-color: color-mix(in srgb, var(--green-bright) 45%, transparent); }
-.sq-start > summary { font-size: 1.02rem; }
-.sq-start-hint { font-weight: 500; color: var(--text-dim); font-size: 0.86rem; }
+.sq-start > summary { font-size: max(var(--text-floor), 1.02rem); }
+.sq-start-hint { font-weight: 500; color: var(--text-dim); font-size: max(var(--text-floor), 0.86rem); }
 .sq-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.2rem 1.4rem; }
 .sq-form-col { min-width: 0; }
 .sq-form-col > .f-label:first-child { margin-top: 0.4rem; }
@@ -52,17 +52,17 @@
 .sq-bio {
   display: block; box-sizing: border-box; width: 100%; min-height: 5.5rem; resize: vertical;
   background: var(--ink-1); color: var(--text); border: 1px solid var(--edge-ctl); border-radius: var(--r-2);
-  padding: 0.85rem 1rem; font-family: 'Rubik', sans-serif; font-size: 16px; line-height: 1.5; margin: 0;
+  padding: 0.85rem 1rem; font-family: 'Rubik', sans-serif; font-size: max(var(--text-floor), 16px); line-height: 1.5; margin: 0;
 }
 .sq-bio:focus { border-color: var(--green); outline: none; }
 .sq-bio[aria-invalid="true"], .sq-start-form .addr-input[aria-invalid="true"] { border-color: var(--red); }
-.sq-count { margin: 0.25rem 0 0; text-align: right; font-size: 0.75rem; color: var(--text-dim); }
+.sq-count { margin: 0.25rem 0 0; text-align: right; font-size: max(var(--text-floor), 0.75rem); color: var(--text-dim); }
 
 /* the gate: three native radios in pill-shaped labels, the checked one lit green */
 .sq-gate-kinds { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.1rem 0 0.6rem; }
 .sq-radio {
   display: flex; align-items: center; gap: 0.55rem; min-height: 44px; padding: 0.5rem 0.85rem; border-radius: 12px; cursor: pointer;
-  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font-weight: 700; font-size: 0.88rem;
+  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font-weight: 700; font-size: max(var(--text-floor), 0.88rem);
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 .sq-radio:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); }
@@ -79,24 +79,24 @@
 .sq-media-row { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .sq-prev { display: block; object-fit: cover; background: var(--ink-4); border: 2px solid var(--ink-4); border-radius: 13px; }
 .sq-prev-avatar { width: 56px; height: 56px; flex: 0 0 auto; }
-.sq-prev-none { display: grid; place-items: center; font-size: 1.6rem; }
+.sq-prev-none { display: grid; place-items: center; font-size: max(var(--text-floor), 1.6rem); }
 .sq-prev-banner { width: 100%; max-width: 320px; height: 72px; border-radius: 12px; }
 
 .sq-start-bar { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 1rem; }
-.sq-start-msg { margin: 0; flex: 1 1 240px; color: var(--text-dim); font-size: 0.88rem; line-height: 1.5; min-height: 1.2em; }
+.sq-start-msg { margin: 0; flex: 1 1 240px; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.5; min-height: 1.2em; }
 
 /* ---------- weekly board: last week's top three sit under this week's, deliberately smaller ---------- */
 .sq-wk-last { margin-top: 0.9rem; padding-top: 0.8rem; border-top: 1px dashed rgba(255,179,64,0.35); }
-.sq-wk-last-h { font-family: 'Luckiest Guy', cursive; color: var(--text-dim); font-size: 1rem; margin: 0 0 0.5rem; letter-spacing: 0.02em; }
+.sq-wk-last-h { font-family: 'Luckiest Guy', cursive; color: var(--text-dim); font-size: max(var(--text-floor), 1rem); margin: 0 0 0.5rem; letter-spacing: 0.02em; }
 .sq-wk-last-board .wk-top .wk-link { min-height: 56px; padding: 0.5rem 0.7rem; border-radius: 14px; }
 .sq-wk-last-board .wk-top .wk-rank { min-width: 2.2rem; }
-.sq-wk-last-board .wk-top .wk-medal { font-size: 1.3rem; }
-.sq-wk-last-board .wk-top .wk-rank-n { font-size: 0.9rem; }
+.sq-wk-last-board .wk-top .wk-medal { font-size: max(var(--text-floor), 1.3rem); }
+.sq-wk-last-board .wk-top .wk-rank-n { font-size: max(var(--text-floor), 0.9rem); }
 .sq-wk-last-board .wk-top .wk-logo { width: 38px; height: 38px; border-radius: 11px; }
-.sq-wk-last-board .wk-top .wk-logo-none { font-size: 1.1rem; }
-.sq-wk-last-board .wk-top .wk-sym { font-size: 1rem; }
-.sq-wk-last-board .wk-top .wk-name { font-size: 0.78rem; }
-.sq-wk-last-board .wk-top .wk-xp { font-size: 1.15rem; }
+.sq-wk-last-board .wk-top .wk-logo-none { font-size: max(var(--text-floor), 1.1rem); }
+.sq-wk-last-board .wk-top .wk-sym { font-size: max(var(--text-floor), 1rem); }
+.sq-wk-last-board .wk-top .wk-name { font-size: max(var(--text-floor), 0.78rem); }
+.sq-wk-last-board .wk-top .wk-xp { font-size: max(var(--text-floor), 1.15rem); }
 
 /* ---------- "my squads" strip (the same green band as the official communities) ---------- */
 .sq-mine {
@@ -104,19 +104,19 @@
   background: linear-gradient(180deg, color-mix(in srgb, var(--green) 10%, transparent), color-mix(in srgb, var(--green) 3%, transparent));
   border: 1.5px solid color-mix(in srgb, var(--green) 35%, transparent);
 }
-.sq-mine-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: 1.35rem; margin: 0 0 0.3rem; letter-spacing: 0.02em; }
+.sq-mine-h { font-family: 'Luckiest Guy', cursive; color: var(--green-bright); font-size: max(var(--text-floor), 1.35rem); margin: 0 0 0.3rem; letter-spacing: 0.02em; }
 .sq-mine-note { margin: 0 0 0.8rem; }
 
 /* ---------- squad cards: the .comm-card frame, tuned for a name instead of a $SYM ---------- */
 .sq-card-banner-none { background: radial-gradient(120% 120% at 30% 20%, rgba(255,179,64,0.22), var(--ink-3) 70%); }   /* a gold cast says "squad", not "token" */
 .sq-card-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }   /* a 40-character name in the display face must not push the card wider */
-.sq-card-metrics small { font-size: 0.72rem; color: var(--text-dim); font-weight: 600; }
+.sq-card-metrics small { font-size: max(var(--text-floor), 0.72rem); color: var(--text-dim); font-weight: 600; }
 .sq-card-metrics .sq-gate { grid-column: 1 / -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sq-pills { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
 .sq-you {
   display: inline-flex; align-items: center; gap: 0.2rem; white-space: nowrap; padding: 0.15rem 0.5rem; border-radius: 999px;
   background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid color-mix(in srgb, var(--green) 42%, transparent);
-  color: var(--green-bright); font-size: 0.68rem; font-weight: 800; letter-spacing: 0.01em;
+  color: var(--green-bright); font-size: max(var(--text-floor), 0.68rem); font-weight: 800; letter-spacing: 0.01em;
 }
 .sq-you-off { background: rgba(255,179,64,0.14); border-color: rgba(255,179,64,0.38); color: var(--gold); }
 
@@ -127,11 +127,11 @@
 @media (max-width: 480px) {
   /* three tabs in the strip now (Live / Starting up / Send Squads): let the pill wrap rather than push the page wider at 320px */
   .comm-tabs { flex-wrap: wrap; justify-content: center; }
-  .sq-h { font-size: 1.25rem; }
+  .sq-h { font-size: max(var(--text-floor), 1.25rem); }
   .sq-locked { padding: 1.2rem 0.9rem 1.1rem; }
-  .sq-locked-h { font-size: 1.1rem; }
+  .sq-locked-h { font-size: max(var(--text-floor), 1.1rem); }
   .sq-mine { padding: 0.8rem; }
-  .sq-mine-h { font-size: 1.15rem; }
+  .sq-mine-h { font-size: max(var(--text-floor), 1.15rem); }
 }
 @media (prefers-reduced-motion: reduce) {
   .sq-radio { transition: none; }

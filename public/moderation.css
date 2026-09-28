@@ -5,7 +5,7 @@
 .is-muted { color: var(--red) !important; text-shadow: none !important; }
 a.is-muted { text-decoration: line-through; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-decoration: line-through underline; }
-.mute-mark { font-size: 0.9em; }
+.mute-mark { font-size: max(var(--text-floor), 0.9em); }
 /* "also Sent It" sender rows wrap avatar + 💎 pill + name in one link: strike only the name text */
 .sc-sender-who.is-muted { text-decoration: none; }
 .sc-sender-who.is-muted .sc-sender-name { text-decoration: line-through; text-decoration-thickness: 1px; text-underline-offset: 2px; }
@@ -13,14 +13,14 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
 .sc-sender-who.is-muted:hover, .sc-sender-who.is-muted:focus-visible { text-decoration: none; }
 .sc-sender-who.is-muted:hover .sc-sender-name, .sc-sender-who.is-muted:focus-visible .sc-sender-name { text-decoration: line-through underline; }
 #pub-name-line.is-muted { text-shadow: 0 0 24px rgba(255,93,93,0.35) !important; }
-#pub-name-line .mute-mark { font-size: 0.7em; vertical-align: middle; }
+#pub-name-line .mute-mark { font-size: max(var(--text-floor), 0.7em); vertical-align: middle; }
 
 /* --- the 🔇 flag button next to a muted name --- */
 .mute-flag {
   display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
   min-width: 28px; min-height: 28px; margin-left: 0.25rem; padding: 0 0.3rem;
   border-radius: 999px; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo);
-  color: var(--ctl-ink); font-size: 0.85rem; line-height: 1; cursor: pointer; vertical-align: middle;
+  color: var(--ctl-ink); font-size: max(var(--text-floor), 0.85rem); line-height: 1; cursor: pointer; vertical-align: middle;
   transition: background 0.12s ease, transform 0.12s ease;
 }
 .mute-flag:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); transform: translateY(-1px); }   /* the site's green hover, not the pale-pink wash; red is kept for the OPEN state below */
@@ -38,16 +38,16 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
   box-shadow: 0 14px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,93,93,0.15);
   color: var(--text); font-family: 'Rubik', sans-serif;
 }
-.mute-pop-title { margin: 0 0 0.25rem; font-weight: 800; font-size: 0.95rem; }
+.mute-pop-title { margin: 0 0 0.25rem; font-weight: 800; font-size: max(var(--text-floor), 0.95rem); }
 .mute-pop-title b { color: var(--red); }
-.mute-pop-sub { margin: 0 0 0.7rem; color: var(--text-dim); font-size: 0.82rem; line-height: 1.45; }
+.mute-pop-sub { margin: 0 0 0.7rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; }
 .mute-pop-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .mute-pop-actions .btn { flex: 1 1 auto; }
 
 /* --- u.html: "🛡️ Moderation ▾" menu button in the wall header --- */
 .mod-wrap { position: relative; display: inline-flex; }
 .mod-trigger { gap: 0.35rem; }
-.mod-caret { font-size: 0.7rem; line-height: 1; transition: transform 0.15s ease; }
+.mod-caret { font-size: max(var(--text-floor), 0.7rem); line-height: 1; transition: transform 0.15s ease; }
 .mod-wrap.open .mod-caret { transform: rotate(180deg); }
 .mod-menu {
   position: absolute; top: calc(100% + 0.5rem); right: 0; z-index: 70; width: min(300px, calc(100vw - 16px));
@@ -57,7 +57,7 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
 .mod-item {
   display: flex; align-items: center; gap: 0.55rem; width: 100%; text-align: left; min-height: 44px;
   padding: 0.6rem 0.7rem; border-radius: 10px; border: none; background: var(--ctl-fill-lo); cursor: pointer;
-  color: var(--ctl-ink); font-family: 'Rubik', sans-serif; font-weight: 700; font-size: 0.9rem;
+  color: var(--ctl-ink); font-family: 'Rubik', sans-serif; font-weight: 700; font-size: max(var(--text-floor), 0.9rem);
   transition: background 0.12s ease, color 0.12s ease;
 }
 .mod-item:hover, .mod-item:focus-visible { background: var(--red); color: var(--on-red); outline: none; }
@@ -69,13 +69,13 @@ a.is-muted:hover, a.is-muted:focus-visible { color: var(--red) !important; text-
 .mod-item-unmute:hover, .mod-item-unmute:focus-visible { background: var(--green); color: var(--on-green); }
 .mod-item[disabled] { background: var(--ctl-fill-dis); color: var(--ctl-ink); opacity: 1; cursor: wait; }
 .mod-ico { flex: 0 0 auto; width: 1.2em; text-align: center; }
-.mod-hint { margin: 0.2rem 0.3rem 0.3rem; color: var(--text-dim); font-size: 0.8rem; line-height: 1.45; }
+.mod-hint { margin: 0.2rem 0.3rem 0.3rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; }
 
 /* the "you muted @name" note under the wall name */
 .mod-note {
   margin: 0.35rem 0 0.2rem; padding: 0.55rem 0.8rem; border-radius: 12px; max-width: 52ch;
   background: rgba(255,93,93,0.1); border: 1.5px solid rgba(255,93,93,0.35);
-  color: var(--text); font-size: 0.85rem; line-height: 1.5;
+  color: var(--text); font-size: max(var(--text-floor), 0.85rem); line-height: 1.5;
 }
 .mod-note b { color: var(--red); }
 
