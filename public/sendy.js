@@ -106,13 +106,14 @@
       '<div class="sendy-say" id="sendy-say" role="status" hidden></div>' +
       '<div class="sendy-popup" id="sendy-popup" role="dialog" aria-label="Sendy" hidden>' +
         '<div class="sendy-head">' +
+          '<button class="sendy-hbtn sendy-back-btn" id="sendy-back" type="button" data-tip="Leaves the chat and shows the tips again" hidden>← Tips</button>' +
           '<img class="sendy-avatar" src="/assets/sendy.png" alt="" width="28" height="28">' +
           '<span class="sendy-title">Sendy <small>your $Send guide</small></span>' +
-          '<button class="sendy-close" id="sendy-close" type="button" aria-label="Close Sendy" data-tip="Closes Sendy — the rocket stays in the corner">✕</button>' +
+          '<button class="sendy-hbtn sendy-close" id="sendy-close" type="button" aria-label="Close Sendy" data-tip="Closes Sendy — the rocket stays in the corner"><span class="sendy-x" aria-hidden="true"></span></button>' +
         '</div>' +
         '<div class="sendy-body" id="sendy-tips-mode">' +
           '<p class="sendy-greeting" id="sendy-greeting">' + esc(greeting()) + '</p>' +
-          '<p class="sendy-tip" id="sendy-tip">💡 ' + esc(tip) + '</p>' +
+          '<p class="sendy-tip" id="sendy-tip" aria-live="polite">💡 ' + esc(tip) + '</p>' +
           '<div class="sendy-actions">' +
             '<button class="sendy-btn sendy-btn-primary" id="sendy-chat" type="button" data-tip="Opens a chat with Sendy — it answers from the site\'s own pages">💬 Ask Sendy a question</button>' +
             '<button class="sendy-btn sendy-btn-secondary" id="sendy-support" type="button" data-tip="Opens the Support board, where you can ask in public and answer others">Support board</button>' +
@@ -123,11 +124,10 @@
         '<div class="sendy-body" id="sendy-chat-mode" hidden>' +
           '<div class="sendy-chat-messages" id="sendy-chat-messages" role="log" aria-live="polite"></div>' +
           '<form class="sendy-chat-form" id="sendy-chat-form">' +
-            '<input type="text" id="sendy-chat-input" class="sendy-chat-input" placeholder="Ask Sendy…" autocomplete="off" maxlength="600" aria-label="Your question for Sendy">' +
-            '<button type="submit" class="sendy-chat-send" id="sendy-chat-send" aria-label="Send the question" data-tip="Sends your question to Sendy">→</button>' +
+            '<textarea id="sendy-chat-input" class="sendy-chat-input" rows="1" placeholder="Ask Sendy anything — Enter sends" autocomplete="off" maxlength="600" aria-label="Your question for Sendy"></textarea>' +
+            '<button type="submit" class="sendy-chat-send" id="sendy-chat-send" aria-label="Send the question" data-tip="Sends your question to Sendy">Send</button>' +
           '</form>' +
           '<p class="sendy-fine">Sendy\'s answers are generated and can be wrong — check the page it points to. Entertainment only, not financial advice, not affiliated with Robinhood.</p>' +
-          '<button class="sendy-back-btn" id="sendy-back" type="button" data-tip="Leaves the chat and shows the tips again">← Tips</button>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -135,6 +135,9 @@
 
   /* ---------- styles ---------- */
   function css() {
+    /* Every size in the popup is in em of the popup's own text (the page floor, 14px on a phone to 19pt on a desktop), so
+       the box grows with its words: about 45 characters a line at every width, controls that stay in proportion, and a
+       44px minimum for anything a finger taps. */
     return '' +
       '#sendy-widget{--sendy-size:76px;--sendy-z:190;position:fixed;right:1rem;bottom:var(--fab-clear,5.5rem);z-index:var(--sendy-z);font-family:inherit;width:var(--sendy-size);height:var(--sendy-size)}' +
       '#sendy-widget:not([hidden]){display:block}' +
@@ -148,69 +151,95 @@
         'filter:drop-shadow(0 0 9px color-mix(in srgb,var(--green) 55%,transparent));animation:sendy-idle 2s steps(' + FRAMES + ') infinite}' +
       '@keyframes sendy-idle{to{background-position:0 calc(var(--sendy-size) * -' + FRAMES + ')}}' +
       '@media (prefers-reduced-motion:reduce){.sendy-sprite{animation:none}}' +
+      'html.motion-off .sendy-sprite,html.motion-off .sendy-msg,html.motion-off .sendy-say{animation:none}html.motion-off .sendy-widget.is-hyped .sendy-rocket{animation:none}' +
+      '@media (prefers-reduced-motion:reduce){.sendy-say{animation:none}}' +
       '.sendy-widget.is-flying .sendy-sprite{animation-duration:.6s}' +
-      /* a reaction: a speech bubble by the rocket, and a hop */
-      '.sendy-say{position:absolute;bottom:calc(var(--sendy-size) + 8px);right:0;width:max-content;max-width:300px;padding:.5rem .75rem;border-radius:12px;border-bottom-right-radius:4px;background:var(--green);color:var(--ink-1);font-weight:600;font-size:max(var(--text-floor), .86rem);line-height:1.3;box-shadow:0 8px 24px rgba(0,0,0,.35);animation:sendy-in .25s ease;z-index:1}' +
+      /* a reaction: a speech bubble by the rocket, and a hop — as wide as its words allow, never wider than the screen */
+      '.sendy-say{position:absolute;bottom:calc(var(--sendy-size) + 8px);right:0;width:max-content;max-width:min(16em,calc(100vw - 1.5rem));padding:.5em .75em;border-radius:.8em;border-bottom-right-radius:4px;background:var(--green);color:var(--ink-1);font-weight:600;font-size:max(var(--text-floor), .86rem);line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.35);animation:sendy-in .25s ease;z-index:1}' +
       '.sendy-say[hidden]{display:none}' +
-      '.sendy-widget.say-up .sendy-say{bottom:auto;top:calc(var(--sendy-size) + 8px);border-radius:12px;border-top-right-radius:4px}' +
-      '.sendy-widget.say-left .sendy-say{right:auto;left:0;border-radius:12px;border-bottom-left-radius:4px}' +
+      '.sendy-widget.say-up .sendy-say{bottom:auto;top:calc(var(--sendy-size) + 8px);border-radius:.8em;border-top-right-radius:4px}' +
+      '.sendy-widget.say-left .sendy-say{right:auto;left:0;border-radius:.8em;border-bottom-left-radius:4px}' +
       '@media (max-width:767px){.sendy-say{position:fixed;right:.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);max-width:calc(100vw - 1.5rem)}}' +
       '.sendy-widget.is-hyped .sendy-sprite{animation-duration:.5s}' +
       '@media (prefers-reduced-motion:no-preference){.sendy-widget.is-hyped .sendy-rocket{animation:sendy-hop .6s ease}}' +
       '@keyframes sendy-hop{0%,100%{transform:none}40%{transform:translateY(-12px) rotate(-6deg)}70%{transform:translateY(-4px) rotate(4deg)}}' +
-      /* the popup: above the rocket, aligned to its right edge; flipped when the rocket sits near the top or the left */
-      '.sendy-popup{position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;width:360px;max-width:calc(100vw - 2rem);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1;overflow:hidden;display:flex;flex-direction:column}' +
+      /* the popup: above the rocket, aligned to its right edge; flipped when the rocket sits near the top or the left.
+         25em wide (capped to the screen) and, in the chat, a steady 40em tall (capped to the room there is), with the
+         conversation taking whatever the header and the question box leave */
+      '.sendy-popup{position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;font-size:max(var(--text-floor), .92rem);width:min(25em,calc(100vw - 2rem));max-height:calc(100vh - 24px);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:.7em;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1;overflow:hidden;display:flex;flex-direction:column}' +
+      '.sendy-popup.is-chat{height:40em}' +
       '@media (min-width:768px){.sendy-widget.is-up .sendy-popup{bottom:auto;top:calc(var(--sendy-size) + 10px)}' +
-        '.sendy-widget.is-left .sendy-popup{right:auto;left:0}}' +
+        '.sendy-widget.is-left .sendy-popup{right:auto;left:0}' +
+        '.sendy-widget.is-side .sendy-popup{position:fixed;top:auto;bottom:var(--fab-clear,5.5rem);right:auto;left:auto}}' +   /* beside the rocket: placePopup sets the side and the width */
       '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px);display:flex;flex-direction:column}}' +
+      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px)}}}' +
+      /* a phone on its side: above the rocket there is almost no height, so the panel stands left of the rocket's column
+         instead, from near the top down to the strip the music player and the SEND IT button own */
+      '@media (max-width:767px) and (max-height:500px){.sendy-popup{right:calc(var(--sendy-size) + 1.5rem);bottom:var(--fab-clear,5.5rem);max-height:calc(100vh - var(--fab-clear,5.5rem) - 12px)}}' +
+      '@supports (height:100dvh){@media (max-width:767px) and (max-height:500px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - 12px)}}}' +
       '.sendy-popup[hidden]{display:none !important}' +
-      '.sendy-head{display:flex;align-items:center;gap:.6rem;padding:.65rem .8rem;border-bottom:1px solid var(--edge-ctl)}' +
-      '.sendy-avatar{width:28px;height:28px;flex:none}' +
-      '.sendy-title{flex:1;font-weight:800;font-size:max(var(--text-floor), .95rem);color:var(--text);display:flex;flex-direction:column;line-height:1.15}' +
-      '.sendy-title small{font-weight:500;font-size:max(var(--text-floor), .72rem);color:var(--text-mute)}' +
-      '.sendy-close{background:none;border:0;color:var(--text-mute);cursor:pointer;font-size:max(var(--text-floor), 1.1rem);width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:6px}' +
-      '.sendy-close:hover{color:var(--text)}' +
+      /* header: the way back to the tips (chat only), Sendy, and the close — both controls a finger can hit */
+      '.sendy-head{display:flex;align-items:center;gap:.5em;padding:.45em .5em .45em .8em;border-bottom:1px solid var(--edge-ctl);flex:none}' +
+      '.sendy-avatar{width:1.9em;height:1.9em;flex:none}' +
+      '.sendy-title{flex:1;min-width:0;font-weight:800;font-size:max(var(--text-floor), calc(var(--text-floor) * 1.1), 1.05em);color:var(--text);display:flex;flex-direction:column;line-height:1.15}' +
+      '.sendy-title small{font-weight:500;font-size:max(var(--text-floor), .8em);color:var(--text-mute)}' +
+      '.sendy-hbtn{flex:none;min-width:2.4em;min-height:2.4em;display:inline-flex;align-items:center;justify-content:center;padding:0 .55em;border-radius:.45em;cursor:pointer;font:inherit;font-size:max(var(--text-floor), .92em);font-weight:700;line-height:1.2}' +
+      '.sendy-hbtn[hidden]{display:none}' +
+      '.sendy-close{background:none;border:0;color:var(--text-mute);padding:0;width:2.4em}' +
+      '.sendy-close:hover{color:var(--text);background:var(--g-wash)}' +
+      '.sendy-x{position:relative;display:block;width:1em;height:1em}' +
+      '.sendy-x::before,.sendy-x::after{content:"";position:absolute;left:50%;top:50%;width:1.15em;height:.14em;border-radius:1px;background:currentColor;translate:-50% -50%;rotate:45deg}' +
+      '.sendy-x::after{rotate:-45deg}' +
+      '.sendy-back-btn{background:transparent;color:var(--text-dim);border:1px solid var(--edge-ctl)}' +
+      '.sendy-back-btn:hover{color:var(--text);border-color:var(--text-mute)}' +
+      '@media (max-width:420px),(max-height:700px){.sendy-popup.is-chat .sendy-title small{display:none}}' +   /* a narrow or short screen in the chat: one row for the header */   /* a phone in the chat: the back, Sendy and the close on one row */
       '.sendy-close:focus-visible,.sendy-btn:focus-visible,.sendy-back-btn:focus-visible,.sendy-chat-send:focus-visible,.sendy-link:focus-visible{outline:3px solid var(--focus);outline-offset:2px}' +
-      '.sendy-body{padding:.85rem;display:flex;flex-direction:column;gap:.7rem;min-height:0;overflow:auto;overscroll-behavior:contain}' +
+      '.sendy-body{padding:.8em;display:flex;flex-direction:column;gap:.7em;min-height:0;flex:1 1 auto;overflow:auto;overscroll-behavior:contain}' +
       '.sendy-body[hidden]{display:none}' +
-      '.sendy-greeting,.sendy-tip{margin:0;font-size:max(var(--text-floor), .9rem);line-height:1.4}' +
+      '.sendy-greeting,.sendy-tip{margin:0;font-size:max(var(--text-floor), 1em);line-height:1.45}' +
       '.sendy-greeting{font-weight:700;color:var(--green-bright)}' +
       '.sendy-tip{color:var(--text-dim)}' +
-      '.sendy-actions{display:flex;flex-direction:column;gap:.45rem}' +
-      '.sendy-btn{padding:.5rem .75rem;font:inherit;font-size:max(var(--text-floor), .86rem);font-weight:600;border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;text-align:center;transition:background .15s ease,border-color .15s ease}' +
+      '.sendy-actions{display:flex;flex-direction:column;gap:.5em}' +
+      '.sendy-btn{min-height:2.6em;padding:.45em .8em;font:inherit;font-size:max(var(--text-floor), .95em);font-weight:600;line-height:1.25;border:1px solid var(--edge-ctl);border-radius:.45em;cursor:pointer;text-align:center;transition:background .15s ease,border-color .15s ease}' +
       '.sendy-btn-primary{background:var(--green);color:var(--ink-1);border-color:var(--green)}' +
       '.sendy-btn-primary:hover{background:var(--green-bright);border-color:var(--green-bright)}' +
       '.sendy-btn-secondary{background:transparent;color:var(--text)}' +
       '.sendy-btn-secondary:hover{border-color:var(--edge-ctl-lit);background:var(--g-wash)}' +
-      '.sendy-btn-tertiary{background:transparent;color:var(--text-dim);font-weight:500;font-size:max(var(--text-floor), .8rem)}' +
+      '.sendy-btn-tertiary{background:transparent;color:var(--text-dim);font-weight:500}' +
       '.sendy-btn-tertiary:hover{color:var(--text);border-color:var(--text-mute)}' +
-      '.sendy-fine{margin:0;font-size:max(var(--text-floor), .74rem);line-height:1.4;color:var(--text-mute)}' +
+      '.sendy-fine{margin:0;font-size:max(var(--text-floor), .8em);line-height:1.4;color:var(--text-mute)}' +
       '.sendy-link{color:var(--green-bright);font-weight:600;text-decoration:underline;text-underline-offset:2px;border-radius:3px}' +
-      /* chat */
-      '.sendy-chat-messages{display:flex;flex-direction:column;gap:.55rem;max-height:300px;overflow-y:auto;overscroll-behavior:contain;padding:.1rem 0}' +
-      '@media (max-width:767px){.sendy-chat-messages{max-height:none;flex:1 1 auto}}' +
+      /* chat: the conversation fills the body, the question box and the fine print sit under it */
+      '.sendy-chat-messages{display:flex;flex-direction:column;gap:.6em;flex:1 1 auto;min-height:4.5em;overflow-y:auto;overscroll-behavior:contain;padding:.1em .15em .1em 0}' +
       '.sendy-msg{display:flex;animation:sendy-in .25s ease}' +
       '@keyframes sendy-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}' +
       '@media (prefers-reduced-motion:reduce){.sendy-msg{animation:none}}' +
       '.sendy-msg-user{justify-content:flex-end}' +
-      '.sendy-msg-bubble{padding:.55rem .8rem;border-radius:10px;max-width:88%;overflow-wrap:anywhere;font-size:max(var(--text-floor), .88rem);line-height:1.4;white-space:pre-line}' +
+      '.sendy-msg-bubble{padding:.55em .8em;border-radius:.7em;max-width:90%;overflow-wrap:anywhere;font-size:max(var(--text-floor), 1em);line-height:1.45;white-space:pre-line}' +
       '.sendy-msg-sendy .sendy-msg-bubble{background:var(--g-wash);color:var(--text);border:1px solid var(--edge-ctl);border-bottom-left-radius:3px}' +
       '.sendy-msg-user .sendy-msg-bubble{background:var(--green);color:var(--ink-1);border-bottom-right-radius:3px}' +
-      '.sendy-msg-links{display:flex;flex-wrap:wrap;gap:.3rem .9rem;margin-top:.45rem}' +
+      /* the routes to a person under an answer: pills, not bare words */
+      '.sendy-msg-links{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.55em;white-space:normal}' +
+      '.sendy-msg-links .sendy-link{display:inline-flex;align-items:center;min-height:2.2em;padding:.2em .75em;border:1px solid var(--edge-ctl);border-radius:999px;text-decoration:none;line-height:1.2}' +
+      '.sendy-msg-links .sendy-link:hover{border-color:var(--edge-ctl-lit);background:var(--g-wash)}' +
       '.sendy-typing .sendy-msg-bubble{color:var(--text-mute);letter-spacing:.15em}' +
-      '.sendy-rate{display:flex;align-items:center;gap:.4rem;margin-top:.45rem;font-size:max(var(--text-floor), .8rem);color:var(--text-mute)}' +
-      '.sendy-rate-btn{background:transparent;border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;padding:.1rem .5rem;font:inherit;line-height:1.3}' +
+      '.sendy-rate{display:flex;flex-wrap:wrap;align-items:center;gap:.4em;margin-top:.55em;font-size:max(var(--text-floor), .9em);color:var(--text-mute);white-space:normal}' +
+      '.sendy-rate-btn{min-width:2.4em;min-height:2.2em;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--edge-ctl);border-radius:.45em;cursor:pointer;padding:0 .5em;font:inherit;line-height:1}' +
       '.sendy-rate-btn:hover{border-color:var(--edge-ctl-lit);background:var(--g-wash)}' +
       '.sendy-rate-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px}' +
-      '.sendy-chat-form{display:flex;gap:.45rem}' +
-      '.sendy-chat-input{flex:1;min-width:0;padding:.55rem .7rem;border:1px solid var(--edge-ctl);border-radius:6px;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:max(var(--text-floor), .9rem)}' +
+      '.sendy-chat-form{display:flex;align-items:flex-end;gap:.5em;flex:none}' +
+      /* the question box: at least 16px (an iPhone zooms the whole page into a smaller one), growing to five lines */
+      '.sendy-chat-input{flex:1;min-width:0;min-height:2.6em;max-height:8em;padding:.55em .7em;border:1px solid var(--edge-ctl);border-radius:.45em;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:max(var(--text-floor), 16px, 1em);line-height:1.35;resize:none;overflow-y:auto;field-sizing:content}' +
       '.sendy-chat-input::placeholder{color:var(--text-mute)}' +
       '.sendy-chat-input:focus{outline:2px solid var(--focus);outline-offset:-1px;border-color:var(--edge-ctl-lit)}' +
-      '.sendy-chat-send{padding:.5rem .8rem;background:var(--green);color:var(--ink-1);border:1px solid var(--green);border-radius:6px;cursor:pointer;font:inherit;font-weight:800}' +
+      '.sendy-chat-send{flex:none;min-width:2.6em;min-height:2.6em;padding:0 .9em;background:var(--green);color:var(--ink-1);border:1px solid var(--green);border-radius:.45em;cursor:pointer;font:inherit;font-size:max(var(--text-floor), 1em);font-weight:800;line-height:1.2}' +
       '.sendy-chat-send:hover{background:var(--green-bright);border-color:var(--green-bright)}' +
       '.sendy-chat-send[disabled]{opacity:.6;cursor:default}' +
-      '.sendy-back-btn{width:100%;padding:.45rem;background:transparent;color:var(--text-mute);border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;font:inherit;font-size:max(var(--text-floor), .82rem)}' +
-      '.sendy-back-btn:hover{color:var(--text);border-color:var(--text-mute)}';
+      '#sendy-chat-mode .sendy-fine{flex:none}' +
+      /* a finger does the tapping: every control at least 44px */
+      '@media (pointer:coarse){.sendy-hbtn,.sendy-close,.sendy-rate-btn{min-height:max(44px,2.4em)}.sendy-btn,.sendy-chat-send,.sendy-chat-input{min-height:max(44px,2.6em)}.sendy-msg-links .sendy-link{min-height:max(44px,2.2em)}.sendy-close,.sendy-rate-btn{min-width:max(44px,2.4em)}.sendy-chat-send{min-width:max(44px,2.6em)}}' +
+      /* forced colours: the drawn close mark keeps the system's button-text colour */
+      '@media (forced-colors:active){.sendy-x::before,.sendy-x::after{forced-color-adjust:none;background:ButtonText}}';
   }
 
   /* ---------- state that survives a page change: the chat, and whether the greeting was shown ---------- */
@@ -233,17 +262,56 @@
 
     /* ---------- open / close ---------- */
     const size = () => rocket.getBoundingClientRect().width || 76;
+    // the strip at the bottom that the music player and the SEND IT button own, in pixels: --fab-clear is a calc()
+    // with rem and a safe-area inset, so it is measured on a probe box rather than parsed
+    function fabClearPx() {
+      const d = document.createElement('div'); d.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;height:var(--fab-clear,5.5rem);width:0';
+      document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h || 88;
+    }
     /* desktop only: a rocket near the top opens its popup downward, one near the left edge opens it rightward.
        On a phone the popup spans the width above the rocket (fixed), and these flips must never touch it. */
     function placePopup() {
-      if (isMobile()) { widget.classList.remove('is-up', 'is-left'); popup.style.maxHeight = ''; return; }
-      const r = rocket.getBoundingClientRect(), above = r.top - 12, below = window.innerHeight - r.bottom - 12;
+      if (isMobile()) { widget.classList.remove('is-up', 'is-left'); popup.style.maxHeight = ''; fitPhone(); return; }
+      popup.style.bottom = ''; popup.style.left = ''; popup.style.right = ''; popup.style.width = ''; widget.classList.remove('is-side');
+      const strip = fabClearPx();
+      const r = rocket.getBoundingClientRect(), above = r.top - 12, below = window.innerHeight - r.bottom - 12 - strip;   // downward stops above the player strip
       widget.classList.toggle('is-up', below > above);      // open toward whichever side has more room…
-      widget.classList.toggle('is-left', r.left < 380);     // …and rightward when hung near the left edge (the popup is 360px wide)
+      // …and rightward when hung too near the left edge for the popup (25em of its own text, capped to the screen)
+      const fs = parseFloat(getComputedStyle(popup).fontSize), pw = Math.min(fs * 25, window.innerWidth - 32);
+      widget.classList.toggle('is-left', r.right - pw < 8);
       popup.style.maxHeight = Math.max(260, Math.floor(Math.max(above, below))) + 'px';   // …and never past the viewport: the body scrolls instead
+      /* A short window (a laptop with a small browser, a phone on its side): above and below the rocket there is not
+         the height the popup wants, so it opens beside the rocket instead and takes the screen's full height. */
+      const want = Math.min(fs * (popup.classList.contains('is-chat') ? 40 : 24), window.innerHeight - strip - 20);
+      const leftRoom = r.left - 18, rightRoom = window.innerWidth - r.right - 18;
+      // a rocket dragged near the middle of a narrow window: the popup fits neither hung left nor right of it, so it is
+      // slid along until it is wholly on the screen
+      const left0 = widget.classList.contains('is-left') ? r.left : r.right - pw, fit = Math.max(8, Math.min(left0, window.innerWidth - 8 - pw));
+      if (Math.abs(fit - left0) > 0.5) { popup.style.left = Math.round(fit - r.left) + 'px'; popup.style.right = 'auto'; }
+      if (Math.max(above, below) < want * 0.87 && Math.max(leftRoom, rightRoom) >= Math.min(pw, fs * 16)) {   // only when it gains a sixth or more
+        popup.style.left = ''; popup.style.right = '';
+        widget.classList.add('is-side');
+        popup.style.width = Math.floor(Math.min(pw, Math.max(leftRoom, rightRoom))) + 'px';
+        if (leftRoom >= rightRoom) popup.style.right = Math.round(window.innerWidth - r.left + 10) + 'px'; else popup.style.left = Math.round(r.right + 10) + 'px';
+        popup.style.maxHeight = Math.floor(window.innerHeight - strip - 20) + 'px';
+      }
     }
-    function openPopup() { placePopup(); popup.removeAttribute('hidden'); rocket.setAttribute('aria-expanded', 'true'); }
-    function closePopup() { popup.setAttribute('hidden', ''); rocket.setAttribute('aria-expanded', 'false'); clearTimeout(autoHide); }
+    /* A phone's keyboard covers the bottom of the screen without moving a fixed box, which would leave the question
+       box under it. While it is up (the visual viewport is shorter than the page's), the popup sits on top of it. */
+    function fitPhone() {
+      const vv = window.visualViewport;
+      if (!isMobile() || !vv || !isOpen()) { popup.style.bottom = ''; if (isMobile()) popup.style.maxHeight = ''; return; }
+      const covered = window.innerHeight - vv.height - vv.offsetTop;
+      if (covered > 80) { popup.style.bottom = Math.round(covered + 8) + 'px'; popup.style.maxHeight = Math.floor(vv.height - 16) + 'px'; }
+      else { popup.style.bottom = ''; popup.style.maxHeight = ''; }
+    }
+    if (window.visualViewport) { visualViewport.addEventListener('resize', fitPhone); visualViewport.addEventListener('scroll', fitPhone); }
+    function openPopup() { popup.removeAttribute('hidden'); placePopup(); rocket.setAttribute('aria-expanded', 'true'); }
+    function closePopup() {
+      const hadFocus = popup.contains(document.activeElement);
+      popup.setAttribute('hidden', ''); rocket.setAttribute('aria-expanded', 'false'); clearTimeout(autoHide);
+      if (hadFocus) rocket.focus();   // focus was in the box that just closed: back to the rocket, not to <body>
+    }
     const isOpen = () => !popup.hasAttribute('hidden');
 
     /* ---------- tips ---------- */
@@ -288,6 +356,7 @@
         b.setAttribute('aria-label', tip); b.setAttribute('data-tip', tip);
         b.addEventListener('click', async () => {
           bar.textContent = v > 0 ? 'Thanks — noted 👍' : 'Thanks — I\'ll do better 👎';
+          chatInput.focus();   // the button just replaced itself with the thanks
           try { await fetch('/api/sendy/rate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, vote: v }) }); } catch {}
         });
         return b;
@@ -327,15 +396,31 @@
       }
       chatInput.focus();
     }
-    function showChat() { tipsMode.setAttribute('hidden', ''); chatMode.removeAttribute('hidden'); paintHistory(); setTimeout(() => chatInput.focus(), 60); }
-    function showTips() { chatMode.setAttribute('hidden', ''); tipsMode.removeAttribute('hidden'); }
+    function showChat() { tipsMode.setAttribute('hidden', ''); chatMode.removeAttribute('hidden'); popup.classList.add('is-chat'); $('sendy-back').removeAttribute('hidden'); placePopup(); paintHistory(); setTimeout(() => chatInput.focus(), 60); }
+    function showTips() {
+      const fromBack = document.activeElement === $('sendy-back');
+      chatMode.setAttribute('hidden', ''); tipsMode.removeAttribute('hidden'); popup.classList.remove('is-chat'); $('sendy-back').setAttribute('hidden', ''); placePopup();
+      if (fromBack) $('sendy-chat').focus();   // the back button just hid itself: focus lands on the way back into the chat
+    }
     $('sendy-chat').addEventListener('click', showChat);
     $('sendy-back').addEventListener('click', showTips);
-    chatForm.addEventListener('submit', (e) => { e.preventDefault(); const q = chatInput.value.trim(); if (!q || chatSend.disabled) return; chatInput.value = ''; ask(q); });
+    chatForm.addEventListener('submit', (e) => { e.preventDefault(); const q = chatInput.value.trim(); if (!q || chatSend.disabled) return; chatInput.value = ''; grow(); ask(q); });
+    // the question box grows with what is typed (up to its max-height, then it scrolls): natively where the browser
+    // sizes a field to its content, by hand elsewhere. Enter sends; Shift+Enter starts a new line.
+    const nativeGrow = !!(window.CSS && CSS.supports && CSS.supports('field-sizing', 'content'));
+    function grow() { if (nativeGrow) return; chatInput.style.height = 'auto'; chatInput.style.height = chatInput.scrollHeight + 2 + 'px'; }
+    chatInput.addEventListener('input', grow);
+    chatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); if (chatForm.requestSubmit) chatForm.requestSubmit(); else chatForm.dispatchEvent(new Event('submit', { cancelable: true })); }
+    });
 
     /* ---------- the rocket: tap opens, drag moves (desktop) ---------- */
     let drag = null;
-    rocket.addEventListener('click', (e) => { if (drag && drag.moved) { drag = null; return; } drag = null; e.stopPropagation(); if (isOpen()) closePopup(); else openPopup(); });
+    rocket.addEventListener('click', (e) => {
+      if (drag && drag.moved) { drag = null; return; } drag = null; e.stopPropagation();
+      if (isOpen()) closePopup();
+      else { openPopup(); if (e.detail === 0) { const first = chatMode.hasAttribute('hidden') ? $('sendy-chat') : chatInput; if (first) first.focus(); } }   // opened from the keyboard: focus goes in with it
+    });
     rocket.addEventListener('pointerdown', (e) => {
       if (isMobile() || e.button !== 0) return;
       const r = widget.getBoundingClientRect();
@@ -359,10 +444,10 @@
       widget.style.left = x + 'px'; widget.style.top = y + 'px'; widget.style.right = 'auto'; widget.style.bottom = 'auto';
       placePopup();
     }
-    window.addEventListener('resize', () => { if (widget.style.left) { const r = widget.getBoundingClientRect(); setPos(r.left, r.top); } });
+    window.addEventListener('resize', () => { if (widget.style.left) { const r = widget.getBoundingClientRect(); setPos(r.left, r.top); } else if (isOpen()) placePopup(); });
 
     /* ---------- the flights: a short glide along the edges now and then (desktop, popup closed, nobody typing) ---------- */
-    const fabClear = () => { const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fab-clear')); return isNaN(v) ? 88 : v; };
+    const fabClear = fabClearPx;   // the strip in pixels (parsing the calc() gave 5.5, and a flight landed in the strip)
     function anchors() {
       const s = size(), W = window.innerWidth, H = window.innerHeight, m = 16, low = H - fabClear() - s;
       return [{ x: W - s - m, y: low }, { x: W - s - m, y: H * 0.42 }, { x: W - s - m, y: H * 0.16 }, { x: m, y: H * 0.42 }, { x: m, y: low }];
@@ -392,7 +477,7 @@
 
     /* ---------- outside click / escape ---------- */
     document.addEventListener('click', (e) => { if (isOpen() && !widget.contains(e.target)) closePopup(); });
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { closePopup(); rocket.focus(); } });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) closePopup(); });   // closePopup returns focus to the rocket only if it was inside
     document.addEventListener('auth:change', () => { const g = $('sendy-greeting'); if (g) g.textContent = greeting(); });
 
     /* ---------- reactions: a line in a speech bubble when something happens on the site ----------
@@ -426,7 +511,7 @@
       let i = Math.floor(Math.random() * lines.length); if (lines.length > 1 && i === lastLine[kind]) i = (i + 1) % lines.length;
       lastLine[kind] = i; lastSayAt = t;
       sayEl.textContent = lines[i].replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null) ? String(vars[k]) : m);
-      if (!isMobile()) { const r = rocket.getBoundingClientRect(); widget.classList.toggle('say-up', r.top < 140); widget.classList.toggle('say-left', r.left < 320); }
+      if (!isMobile()) { const r = rocket.getBoundingClientRect(), bw = Math.min(parseFloat(getComputedStyle(sayEl).fontSize) * 16, window.innerWidth - 24); widget.classList.toggle('say-up', r.top < 140); widget.classList.toggle('say-left', r.right - bw < 8); }
       sayEl.removeAttribute('hidden');
       if (!reduced()) { widget.classList.remove('is-hyped'); void widget.offsetWidth; widget.classList.add('is-hyped'); }
       clearTimeout(sayTimer); sayTimer = setTimeout(hideSay, 4500);
@@ -460,7 +545,7 @@
         store.set('greeted', true);
         $('sendy-greeting').textContent = greeting();
         openPopup();
-        autoHide = setTimeout(() => { if (isOpen() && chatMode.hasAttribute('hidden')) closePopup(); }, 9000);   // only the tips view hides itself — never a chat someone started
+        autoHide = setTimeout(() => { if (isOpen() && chatMode.hasAttribute('hidden') && !popup.contains(document.activeElement) && !popup.matches(':hover')) closePopup(); }, 9000);   // only the tips view hides itself — never a chat someone started, never under a pointer or a focus
       }
       if (!isMobile()) scheduleFlight();
     }, 1400);
