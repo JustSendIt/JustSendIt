@@ -91,7 +91,7 @@
 <body data-intro="1">
 <a class="skip-link" href="#main">Skip to content</a>
 
-<nav class="nav" aria-label="Primary">
+<nav class="nav is-compact" aria-label="Primary">
   <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send logo" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
@@ -126,29 +126,33 @@
      OG_TIER_END constants. With three windows per coin that is six numbers to keep in sync by hand,
      so home.js now fills them from /api/og/campaign and there is one source of truth. The `—`
      placeholders are what shows if that request fails: no number is better than a stale one. -->
-<a class="og-banner" id="og-banner" href="about.html#og-rules" aria-label="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Diamond, 20 times Send Power, went to those who bought both in the first month of $GWC and bought more of each than they sold that month. Then three windows: gold until the beta ends for 10 times, silver for the 90 days after that for 5 times, bronze until $GWC turns one year old for 3 times. Tap to read how it works. Not a recommendation to buy." data-aria-base="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Diamond, 20 times Send Power, went to those who bought both in the first month of $GWC and bought more of each than they sold that month. Then three windows: gold until the beta ends for 10 times, silver for the 90 days after that for 5 times, bronze until $GWC turns one year old for 3 times.">
+<div class="og-banner" id="og-banner" data-aria-base="OG status — hold BOTH $SEND and $GWC and you earn a permanent OG badge. Diamond, 20 times Send Power, went to those who bought both in the first month of $GWC and bought more of each than they sold that month. Then three windows: gold until the beta ends for 10 times, silver for the 90 days after that for 5 times, bronze until $GWC turns one year old for 3 times.">
   <span class="og-shine" aria-hidden="true"></span>
   <span class="og-confetti" aria-hidden="true"><span>✨</span><span>🏆</span><span>💎</span><span>🚀</span><span>✨</span><span>👑</span></span>
-  <span class="og-banner-badge" aria-hidden="true"><span class="og-medal">🏅</span></span>
-  <span class="og-banner-copy">
+  <!-- A strip, not a billboard: the head is one row (medal, title, one line, the live countdown, a chevron) and the
+       full copy, both timers and the one honest action pop down when it is tapped. The countdown appears twice so the
+       strip shows it closed and open; home.js fills every [data-og-deadline] alike. -->
+  <button class="og-banner-head" id="og-banner-head" type="button" aria-expanded="false" aria-controls="og-banner-more" data-tip="Opens the OG badge details — the tiers, the windows, and how a badge is kept or lost">
+    <span class="og-banner-badge" aria-hidden="true"><span class="og-medal">🏅</span></span>
     <span class="og-banner-title">Become an <span class="og-word">OG</span> <span class="og-tag">legend</span></span>
-    <!-- One sentence per idea, in the order a reader needs them: what it takes, what it pays, when, how it
-         stacks, how you lose it. This used to be a single 70-word paragraph that also carried the $100
-         floor, the per-coin launch clocks and the "+9×, +4×, +2×" parenthetical — which cannot be parsed
-         without already knowing the additive convention. All of that lives in the rules card this banner
-         links to; a banner's job is to be read, not to be complete. The one thing kept from the fine
-         print is "never multiplied", because without it "10×" invites the reader to stack it themselves. -->
-    <span class="og-banner-sub">Hold <b>both $SEND &amp; $GWC</b>, and keep holding: a <b>permanent badge</b> and a Send Power bonus on everything you earn. <b class="og-diamond-word">💎 Diamond 20×</b> for those who bought both in $GWC’s first month and bought more of each than they sold that month (that month has closed). <b>Gold 10×</b> until the beta ends, <b>silver 5×</b> for the 90 days after, <b>bronze 3×</b> until $GWC turns one — added to your other boosts, never multiplied. Sell out of either and it's gone <b>for good</b>. Not a reason to buy.</span>
-  </span>
-  <span class="og-banner-timers">
+    <span class="og-banner-brief">Hold <b>both $SEND &amp; $GWC</b> — a <b>permanent badge</b> and a Send Power bonus.</span>
+    <span class="og-timer og-timer-head"><i>⏳ <b class="og-tier-label">this window</b> closes in</i><b data-og-deadline="" data-og-window="current">—</b></span>
+    <span class="og-chev" aria-hidden="true">▾</span>
+  </button>
+  <div class="og-banner-more" id="og-banner-more" hidden>
+    <span class="og-banner-copy">
+      <span class="og-banner-sub">Hold <b>both $SEND &amp; $GWC</b>, and keep holding: a <b>permanent badge</b> and a Send Power bonus on everything you earn. <b class="og-diamond-word">💎 Diamond 20×</b> for those who bought both in $GWC’s first month and bought more of each than they sold that month (that month has closed). <b>Gold 10×</b> until the beta ends, <b>silver 5×</b> for the 90 days after, <b>bronze 3×</b> until $GWC turns one — added to your other boosts, never multiplied. Sell out of either and it's gone <b>for good</b>. Not a reason to buy.</span>
+    </span>
+    <span class="og-banner-timers">
     <span class="og-timer"><i>⏳ <b class="og-tier-label">this window</b> closes in</i><b data-og-deadline="" data-og-window="current">—</b></span>
     <span class="og-timer"><i>⏳ everything closes</i><b data-og-deadline="" data-og-window="bronze">—</b></span>
   </span>
-  <!-- the CTA is the one action the site can honestly offer, chosen by home.js: read the rules (signed out), get your linked
-       wallet checked (signed in), or see your badge (already OG). It never says "buy" — the badge is earned by holding, and
-       the banner already says it is not a reason to buy. -->
-  <span class="og-banner-cta" id="og-banner-cta" aria-hidden="true">How OG works <span class="og-cta-arrow">→</span></span>
-</a>
+    <!-- the CTA is the one action the site can honestly offer, chosen by home.js: read the rules (signed out), get your linked
+         wallet checked (signed in), or see your badge (already OG). It never says "buy" — the badge is earned by holding, and
+         the banner already says it is not a reason to buy. -->
+    <a class="og-banner-cta" id="og-banner-cta" href="about.html#og-rules">How OG works <span class="og-cta-arrow">→</span></a>
+  </div>
+</div>
 <header class="hero">
   <!-- The field reads bottom-up: fire at the base, rockets through the middle, moons in the sky, so twelve
        glyphs land as one launch column rather than twelve unrelated stickers. Both rails stay inside the

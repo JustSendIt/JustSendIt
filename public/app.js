@@ -632,6 +632,7 @@
     });
     const before = nav.querySelector('#nav-notif') || nav.querySelector('#nav-auth') || nav.lastElementChild;
     nav.insertBefore(b, before);
+    window.dispatchEvent(new Event('resize'));   // the bar gained a control: nav.js measures the row again
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount); else mount();
 })();

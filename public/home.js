@@ -11,7 +11,7 @@ initTokenCards();
   const els = document.querySelectorAll('[data-og-deadline]');
   if (!els.length) return;
   const banner = document.querySelector('.og-banner');
-  const label = document.querySelector('.og-tier-label');
+  const labels = document.querySelectorAll('.og-tier-label');   // the strip shows the countdown closed and open: two labels, one window
   let loaded = false;   // three states, not two: open, closed, and "we don't know yet"
   fetch('/api/og/campaign', { credentials: 'same-origin' })
     .then(r => (r.ok ? r.json() : null))
@@ -25,7 +25,7 @@ initTokenCards();
         const w = el.dataset.ogWindow === 'current' ? openKey : el.dataset.ogWindow;
         if (w && c.closes[w]) el.dataset.ogDeadline = String(c.closes[w]);
       });
-      if (label && openKey) label.textContent = openKey;
+      if (openKey) labels.forEach((l) => { l.textContent = openKey; });
       loaded = true;
       tick();
     })
@@ -77,8 +77,17 @@ initTokenCards();
     else if (u) { text = 'Check my wallet for OG'; href = 'profile.html#connected-wallet'; tail = 'Tap to link a wallet and have it checked on-chain. Not a recommendation to buy.'; }
     else { text = 'How OG works'; href = 'about.html#og-rules'; tail = 'Tap to read how it works. Not a recommendation to buy.'; }
     cta.innerHTML = text + ' <span class="og-cta-arrow">→</span>';
-    banner.setAttribute('href', href);
-    if (base) banner.setAttribute('aria-label', base + ' ' + tail);
+    cta.setAttribute('href', href);
+    cta.setAttribute('aria-label', text + '. ' + tail);
+    if (base) banner.setAttribute('aria-label', base);
+  }
+  /* the strip: tap the head to pop the rest down; remembered for the visit so a return to the page finds it as left */
+  const head = document.getElementById('og-banner-head'), more = document.getElementById('og-banner-more');
+  if (head && more && banner) {
+    const setOpen = (on) => { more.hidden = !on; head.setAttribute('aria-expanded', String(on)); banner.classList.toggle('og-open', on); try { sessionStorage.setItem('og-open', on ? '1' : ''); } catch {} };
+    let was = false; try { was = sessionStorage.getItem('og-open') === '1'; } catch {}
+    if (was) setOpen(true);
+    head.addEventListener('click', () => setOpen(more.hidden));
   }
   paintCta();
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(paintCta, paintCta);

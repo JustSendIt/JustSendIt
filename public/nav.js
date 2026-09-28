@@ -47,13 +47,40 @@
       if (isOpen() && !nav.contains(e.target)) close();
     });
 
-    // Grow past the collapse breakpoint → the menu becomes inline again; drop the open state.
-    if (window.matchMedia) {
-      var mq = matchMedia('(min-width: 1281px)'); // must match the CSS collapse breakpoint (styles.css @media (max-width: 1280px))
-      var onChange = function () { if (mq.matches) close(); };
-      if (mq.addEventListener) mq.addEventListener('change', onChange);
-      else if (mq.addListener) mq.addListener(onChange);
+    /* Compact or not is measured, not guessed by width: the row of links either fits beside the logo and the
+       account cluster on one line, or the menu becomes the pop-down (.is-compact). The cluster changes size on
+       sign-in (bell, level, live count, balances, name), so it is measured again whenever it does. The pages ship
+       the bar compact, so nothing flashes; only a bar that fits opens up. */
+    var fitTimer = null;
+    var TIERS = ['is-tight', 'is-tighter', 'is-tightest'];
+    function overflowing() { return nav.scrollWidth > nav.clientWidth + 1; }
+    function fit() {
+      var wasCompact = nav.classList.contains('is-compact');
+      nav.classList.remove('is-compact');
+      TIERS.forEach(function (t) { nav.classList.remove(t); });
+      var links = menu.querySelectorAll('a');
+      var first = links[0], last = links[links.length - 1];
+      function rowFits() {   // every link on one line (the search box counts too) and nothing past the edge
+        var wrapped = first && last && (Math.abs(last.getBoundingClientRect().top - first.getBoundingClientRect().top) > 4 || menu.getBoundingClientRect().height > first.getBoundingClientRect().height * 1.5);
+        return !wrapped && !overflowing();
+      }
+      /* The links are the bar's main job, so on a wide screen the row is tried twice before it collapses: as it is,
+         then without the live count and the Send Power figures (.is-tight). Below 900px it never fits. */
+      var compact = true;
+      if (window.innerWidth >= 900) {
+        if (rowFits()) compact = false;
+        else { nav.classList.add('is-tight'); if (rowFits()) compact = false; else nav.classList.remove('is-tight'); }
+      }
+      if (compact) nav.classList.add('is-compact'); else close();
+      // still too wide (a long name, a big level, a phone): step down one tier at a time until the row fits
+      if (compact) for (var i = 0; i < TIERS.length && overflowing(); i++) nav.classList.add(TIERS[i]);
+      if (compact !== wasCompact) syncNavHeight();
     }
+    function fitSoon() { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 60); }
+    window.addEventListener('resize', fitSoon);
+    document.addEventListener('auth:change', function () { fitSoon(); setTimeout(fit, 800); });   // the balances pill arrives a moment later
+    if (window.ResizeObserver) { var cluster = document.getElementById('nav-auth'); if (cluster) new ResizeObserver(fitSoon).observe(cluster); }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit, fit);   // the wordmark font changes the row's width
 
     // Publish the real nav height so sticky sub-bars (e.g. #np-controls) offset correctly
     // rather than assuming a fixed height — the persistent bar (logo+level+account) is one row.
@@ -62,6 +89,7 @@
       if (h) document.documentElement.style.setProperty('--nav-h', Math.round(h) + 'px');
     }
     syncNavHeight();
+    fit();
     addEventListener('resize', syncNavHeight, { passive: true });
     addEventListener('load', syncNavHeight);
     // the bar's height can change without a resize (balances pill arriving, search expanding, a wrap) — track it directly
