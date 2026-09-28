@@ -381,3 +381,12 @@ html :is(.post-avatar, .search-hit .h-ava, .sc-sender-ava-emoji, .gb-ava, .post-
   .np-chev { color: CanvasText; } .np-caret { color: ButtonText; }   /* Firefox keeps a transparent colour; name a system one */
   .gs-steps .step.is-done .step-num { forced-color-adjust: none; }
 }
+/* Buttons: a letter-spaced label also carries the tracking after its last letter, so it sat half of that left of the
+   button's middle. The same amount before the first letter balances it (plain-text labels; child elements reset it). */
+html .btn { text-indent: 0.04em; }
+html .btn > * { text-indent: 0; }
+/* The "Send it" button: the label's trailing tracking cancelled, and the ✏️ nudged onto the line's middle like the
+   other emoji in shapes (Apple's artwork sits about 0.04em high) */
+html #compose-fab .fab-label { margin-right: -0.03em; line-height: normal; }   /* normal: the display font's ascent + descent is exactly 1em, so there is no leading for Chrome to round against the top */
+html #compose-fab .fab-ico { padding-top: 0.08em; }
+html .inv-tag { text-indent: 0.09em; }   /* the COPY tag's tracking after its last letter, balanced before the first */

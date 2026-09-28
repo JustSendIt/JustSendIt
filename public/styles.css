@@ -5158,7 +5158,7 @@ html.motion-off #age-gate, html.motion-off #age-gate.age-leaving, html.motion-of
 button, input, select, textarea { font-size: max(var(--text-floor), 1em); }
 /* A button's line is a fixed 1.2, not 'normal': with 'normal' an emoji in the label (Apple Color Emoji is taller than
    Rubik) grows the line box at the top and pushes the words about 2px below the button's middle on a phone. */
-button { line-height: 1.2; }
+button { line-height: 1.2; font-family: inherit; }   /* and the page's typeface, which a <button> does not inherit on its own (every button without one of its own was drawn in Arial) */
 
 /* a finger does the pointing: every control in the bar grows to the 44px touch target */
 @media (pointer: coarse) { :root { --nav-ctl: 44px; } }

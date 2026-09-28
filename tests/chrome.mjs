@@ -81,6 +81,12 @@ try {
   check('  ...its description is the site\'s own: its tagline, and the 1% liquidity tax this site states too', OGS.includes('“You don’t hold it. You send it.”') && /1% tax that feeds the liquidity pool/.test(OGS) && /1% buy \/ sell \/ transfer tax → auto-adds to liquidity/.test(INDEX));
   check('  ...no buy language in the card', !/\bbuy\b|\bape\b|\bpurchase\b/i.test(OGS.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ')));
   check('  ...side by side where two fit, stacked below 1100px, never a fixed-minimum column', /\.origin-pair \{ display: grid; grid-template-columns: repeat\(auto-fit, minmax\(min\(22rem, 100%\), 1fr\)\);/.test(CSS) && /@media \(max-width: 1099px\) \{ \.origin-pair \{ max-width: 620px; \} \}/.test(CSS));
+  /* ═══ button labels centred in their buttons ═══ */
+  const RESP2 = read('responsive.css');
+  check('buttons draw their label in the page font (a <button> does not inherit it; the chart amounts and copy buttons were Arial) on a fixed line, so an emoji cannot push the words down', /button \{ line-height: 1\.2; font-family: inherit; \}/.test(CSS));
+  check('  ...a letter-spaced .btn balances the tracking after its last letter with the same indent before its first (child elements reset it)', /html \.btn \{ text-indent: 0\.04em; \}\nhtml \.btn > \* \{ text-indent: 0; \}/.test(RESP2) && /\.btn \{[^}]*letter-spacing: 0\.04em/.test(CSS));
+  check('  ...the "Send it" button: the label\'s trailing tracking cancelled and the ✏️ nudged onto the line\'s middle', /html #compose-fab \.fab-label \{ margin-right: -0\.03em; line-height: normal; \}/.test(RESP2) && /html #compose-fab \.fab-ico \{ padding-top: 0\.08em; \}/.test(RESP2) && /#compose-fab \{[^}]*letter-spacing: 0\.03em/.test(CSS));
+  check('  ...and the display font\'s capitals sit on the middle of the line (patched ascent 1736 / descent 312 in the served files)', /luckiest-guy-latin-09b57828\.woff2/.test(read('fonts/fonts.css')) && /luckiest-guy-latin-ext-be6f3912\.woff2/.test(read('fonts/fonts.css')));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);
