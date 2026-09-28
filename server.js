@@ -1212,7 +1212,18 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
    are the same name to every lookup and to the database itself. And 'deleted-<id>' is what erasing an account
    renames it to — so nobody may hold it, in any casing, or they could stop account <id> from ever being erased. */
 const DELETED_NAME_RE = /^deleted-\d+(-[0-9a-f]+)?$/i;
-function usernameTaken(u) { return DELETED_NAME_RE.test(String(u)) || !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(u); }
+/* The site's own names: nobody may hold them, and they are never anyone's profile. Matched whatever the capitals, the
+   separators (_ . -) or the lookalike characters (0 for o; 1 or l for i; 5 s, 3 e, 7 t, 4 a), so "just_send_it" and
+   "JustSend1t" are the same name. Asking for one is answered "unavailable" — never "taken", which would suggest a
+   member has it. The site's system account (not a person: it owns the official communities and cannot sign in) keeps
+   "JustSendIt"; it is made by seedOfficialCommunities, which checks the table itself rather than this rule. */
+const RESERVED_NAMES = ['JustSendIt', 'SendRH', 'SendItRH', 'JustSend', 'JustSendItRH'];
+const nameKey = (u) => String(u).toLowerCase().replace(/[_.-]/g, '').replace(/[01l5374]/g, (c) => ({ 0: 'o', 1: 'i', l: 'i', 5: 's', 3: 'e', 7: 't', 4: 'a' }[c]));
+const RESERVED_KEYS = new Set(RESERVED_NAMES.map(nameKey));
+function isReservedName(u) { return RESERVED_KEYS.has(nameKey(u)); }
+function usernameTaken(u) { return DELETED_NAME_RE.test(String(u)) || isReservedName(u) || !!db.prepare('SELECT 1 FROM users WHERE username = ?').get(u); }
+// the refusal a person reads: a reserved name is "unavailable", a name a member holds is "taken"
+const nameRefusal = (u) => isReservedName(u) ? 'that username is unavailable — try another' : 'that username is taken — try another';
 function autoUsername() {
   for (let i = 0; i < 50; i++) {
     const u = 'sender_' + crypto.randomBytes(3).toString('hex');
@@ -3703,7 +3714,7 @@ async function seedOfficialCommunities() {
   try {
     let owner = db.prepare('SELECT id FROM users WHERE system = 1').get();
     if (!owner) {
-      const uname = usernameTaken('JustSendIt') ? 'JustSendIt_Official' : 'JustSendIt';
+      const uname = db.prepare('SELECT 1 FROM users WHERE username = ?').get('JustSendIt') ? 'JustSendIt_Official' : 'JustSendIt';   // the table, not usernameTaken: the reserved rule is for people
       const r = db.prepare('INSERT INTO users (username, auto_named, created_at, system, bio, avatar) VALUES (?,?,?,?,?,?)').run(uname, 0, now(), 1, 'The site itself — not a person. Owns the official $Send and $GWC communities.', '🚀');
       owner = { id: Number(r.lastInsertRowid) };
     }
@@ -8788,7 +8799,7 @@ async function createAccount(req, f) {
     const block = ipSignupBlocked(ip);
     if (block) { db.exec('ROLLBACK'); return { error: block, status: 429 }; }
     if (f.address && findIdentity('wallet', f.address)) { db.exec('ROLLBACK'); return { error: 'that wallet already has an account — sign in with it instead', status: 409 }; }
-    if (f.username && usernameTaken(f.username)) { db.exec('ROLLBACK'); return { error: 'that username was just taken — pick another', status: 409 }; }
+    if (f.username && usernameTaken(f.username)) { db.exec('ROLLBACK'); return { error: isReservedName(f.username) ? nameRefusal(f.username) : 'that username was just taken — pick another', status: 409 }; }
     const missKeys = f.email ? emailMissKeys(req, null) : [];
     const paused = f.email && emailMissPaused(missKeys, 'Sign-ups with an email from this connection are');
     if (paused) { db.exec('ROLLBACK'); return { error: paused + (f.address ? ' You can sign up with the wallet alone and add an email later.' : ' You can join with a wallet instead and add an email later.'), status: 429 }; }
@@ -11391,6 +11402,7 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('ucheck:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
         const u = url.searchParams.get('u') || '';
         if (!USERNAME_RE.test(u)) return send(res, 200, { available: false, reason: '3–24 chars: letters, numbers, _ . -' });
+        if (isReservedName(u)) return send(res, 200, { available: false, reason: 'unavailable' });   // the site's own names: never anyone's profile
         return send(res, 200, { available: !usernameTaken(u) || !!(me && me.username.toLowerCase() === u.toLowerCase()) });
       }
 
@@ -11403,7 +11415,7 @@ const server = http.createServer(async (req, res) => {
         const password = String(b.password || '');
         if (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return bad(res, 'enter a valid email');
         if (!USERNAME_RE.test(username)) return bad(res, 'username must be 3–24 chars: letters, numbers, _ . -');
-        if (usernameTaken(username)) return bad(res, 'that username is taken — try another');
+        if (usernameTaken(username)) return bad(res, nameRefusal(username));
         if (password.length < 8) return bad(res, 'password needs at least 8 characters');
         if (password.length > MAX_PW) return bad(res, 'password is too long');
         // The invite, enforced where it belongs: at the moment an account comes into existence. Asked first (and
@@ -12297,7 +12309,7 @@ const server = http.createServer(async (req, res) => {
         const su = walletSignupFields(b);
         if (su.error) return bad(res, su.error);   // a typo does not spend the token
         if (!su.username) return bad(res, 'pick a username first');
-        if (usernameTaken(su.username)) return bad(res, 'that username is taken — try another', 409);   // in any capitals; says nothing /api/username-check does not, and keeps the wallet's proof for the next try
+        if (usernameTaken(su.username)) return bad(res, nameRefusal(su.username), 409);   // in any capitals; says nothing /api/username-check does not, and keeps the wallet's proof for the next try
         pendingSignups.delete(String(b.signup));   // from here on, one attempt per proved wallet: nothing below can be probed repeatedly
         const made = await createWalletAccount(req, entry.address, su);
         if (made.gate) return send(res, 403, made.gate);
@@ -12357,6 +12369,7 @@ const server = http.createServer(async (req, res) => {
         if (b.username !== undefined) {
           const u = String(b.username).trim();
           if (!USERNAME_RE.test(u)) return bad(res, 'username must be 3–24 chars: letters, numbers, _ . -');
+          if (isReservedName(u) && !me.system) return bad(res, nameRefusal(u));   // not even by changing the capitals of a name one already has
           if (u.toLowerCase() !== me.username.toLowerCase() && usernameTaken(u)) return bad(res, 'that username is taken');
           try { db.prepare('UPDATE users SET username = ?, auto_named = 0 WHERE id = ?').run(u, me.id); }
           catch (e) { if (/UNIQUE/.test(String(e && e.message))) return bad(res, 'that username is taken', 409); throw e; }   // taken in between, in some casing

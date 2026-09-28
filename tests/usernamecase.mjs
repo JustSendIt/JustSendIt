@@ -143,6 +143,23 @@ try {
   let threw = '';
   try { db.prepare('INSERT INTO users (username, created_at) VALUES (?, ?)').run(base.toLowerCase().replace('send', 'SeNd'), Date.now()); track(base); } catch (e) { threw = String(e && e.message); }
   check('a direct insert of "' + base.replace('send', 'SeNd') + '" is refused by the UNIQUE rule', /UNIQUE constraint failed: users\.username/.test(threw), threw);
+
+  /* ═══ 9. the site's own names are unavailable to everyone ═══ */
+  const RESERVED = ['JustSendIt', 'SendRH', 'SendItRH', 'JustSend', 'JustSendItRH'];
+  const lookalikes = ['justsendit', 'JUSTSENDIT', 'Just_Send_It', 'just.send.it', 'Just-Send-It', 'JustSend1t', 'JustSendlt', 'send_rh', 'S3ndRH', 'Send1tRH', 'just_send', 'JustSendIt_RH', 'justsenditrh'];
+  const answers = [];
+  for (const n of RESERVED.concat(lookalikes)) { const c = await api('/api/username-check?u=' + encodeURIComponent(n)); answers.push([n, c.j]); }
+  const wrong = answers.filter(([, j]) => !(j && j.available === false && j.reason === 'unavailable'));
+  check('the site\'s own names (JustSendIt, SendRH, SendItRH, JustSend, JustSendItRH) are "unavailable" in any capitals, with _ . - or lookalike characters', wrong.length === 0, wrong.map(([n, j]) => n + ' ' + JSON.stringify(j)).join(' | '));
+  const R = mkUser('rsv' + randomBytes(3).toString('hex'));
+  const r1 = await api('/api/profile', { method: 'POST', sid: R.sid, body: { username: 'JustSend' } });
+  const r2 = await api('/api/profile', { method: 'POST', sid: R.sid, body: { username: 'Send_It_RH' } });
+  check('  ...renaming into one is refused with "unavailable" (never "taken"), and nobody ends up holding it', r1.status === 400 && /unavailable/i.test((r1.j && r1.j.error) || '') && !/taken/i.test((r1.j && r1.j.error) || '') && r2.status === 400 && /unavailable/i.test((r2.j && r2.j.error) || '') && rowsLike('JustSend').length === 0 && rowsLike('Send_It_RH').length === 0, r1.status + ' ' + JSON.stringify(r1.j) + ' / ' + r2.status + ' ' + JSON.stringify(r2.j));
+  const fan = await api('/api/username-check?u=justsendit_fan'), sender = await api('/api/username-check?u=sendrhino');
+  check('  ...a longer name that only contains one is still free (justsendit_fan, sendrhino)', fan.j && fan.j.available === true && sender.j && sender.j.available === true, JSON.stringify(fan.j) + ' ' + JSON.stringify(sender.j));
+  check('  ...every sign-up path says "unavailable" for one: email, wallet (both checks), and the rename', /if \(usernameTaken\(username\)\) return bad\(res, nameRefusal\(username\)\);/.test(SRC) && /if \(usernameTaken\(su\.username\)\) return bad\(res, nameRefusal\(su\.username\), 409\);/.test(SRC) && /error: isReservedName\(f\.username\) \? nameRefusal\(f\.username\)/.test(SRC) && /if \(isReservedName\(u\) && !me\.system\) return bad\(res, nameRefusal\(u\)\);/.test(SRC));
+  const sys = db.prepare('SELECT username FROM users WHERE system = 1').get();
+  check('  ...the site\'s own system account (not a person; it owns the official communities) keeps "JustSendIt": its seed checks the table, not the reserved rule', /const uname = db\.prepare\('SELECT 1 FROM users WHERE username = \?'\)\.get\('JustSendIt'\) \? 'JustSendIt_Official' : 'JustSendIt';/.test(SRC) && (!sys || sys.username === 'JustSendIt'), sys ? sys.username : 'no system account yet');
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);
