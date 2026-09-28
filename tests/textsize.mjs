@@ -8,7 +8,7 @@ import { ROOT } from './_paths.mjs';
 const PUB = path.join(ROOT, 'public');
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
-const SKIP = /^(inherit|initial|unset|revert|0|0px|0rem|0em)$|--ava\b|^var\(--text-base\)$|^(var\(--nav-fs(-s)?\)|calc\(var\(--nav-fs(-s)?\) \* [0-9.]+\))$/;   // values that are not text sizes (an avatar glyph scales with its circle), and the nav's own two tokens (a bar has one row to spend; they carry floors of their own)
+const SKIP = /^(inherit|initial|unset|revert|0|0px|0rem|0em)$|--ava\b|^var\(--text-base\)$|^(var\(--nav-fs(-s|-badge)?\)|calc\(var\(--nav-fs(-s)?\) \* [0-9.]+\))$/;   // values that are not text sizes (an avatar glyph scales with its circle), and the nav's own two tokens (a bar has one row to spend; they carry floors of their own)
 
 try {
   const files = readdirSync(PUB).filter((f) => /\.(css|js|html)$/.test(f));
@@ -33,6 +33,7 @@ try {
   const FLOOR = 'clamp(14px, calc(14px + (100vw - 375px) * 0.01252), 19pt)', BASE = 'clamp(1rem, calc(1rem + (100vw - 375px) * 0.00442), 1.25rem)';
   check('the floor and the base are fluid: a phone keeps its 1rem base with a 14px floor, a 1280px display gets a 1.25rem base and a 19pt floor', CSS.includes('--text-floor: ' + FLOOR + ';') && CSS.includes('--text-base: ' + BASE + ';') && /html \{ scroll-behavior: smooth; font-size: var\(--text-base\); \}/.test(CSS));
   check('  ...and the pages that style themselves (gate.css: privacy, terms; gate.html inline) carry the same two tokens', readFileSync(path.join(PUB, 'gate.css'), 'utf8').includes('--text-floor: ' + FLOOR + ';') && readFileSync(path.join(PUB, 'gate.html'), 'utf8').includes('--text-base: ' + BASE + ';'));
+  check('the notification count is sized with its red circle (digits at 58% of a 20–22px circle), not the page floor', /--notif-badge: clamp\(20px, calc\(20px \+ \(100vw - 375px\) \* 0\.00178\), 22px\);/.test(CSS) && /--nav-fs-badge: calc\(var\(--notif-badge\) \* 0\.58\);/.test(CSS));
   check('the nav\'s own two tokens carry floors of their own (15px and 13px) and are the only sizes allowed outside the page floor', /--nav-fs: clamp\(15px, calc\(15px \+ \(100vw - 375px\) \* 0\.00178\), 17px\);/.test(CSS) && /--nav-fs-s: clamp\(13px, calc\(13px \+ \(100vw - 375px\) \* 0\.00178\), 15px\);/.test(CSS));
   check('body copy is set at line-height 1.5 (WCAG 1.4.12 text spacing)', /\n  line-height: 1\.5;\s+\/\* body copy at the spacing WCAG/.test(CSS));
   check('the body itself is floored, so text with no size of its own (a paragraph, a list item, a bold word) inherits the floor, not the 20px root', /font-size: max\(var\(--text-floor\), 1rem\);   \/\* what every element with no size of its own inherits/.test(CSS));

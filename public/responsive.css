@@ -79,7 +79,7 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 /* Nothing below ~11.5px. Each of these was measured under it on a phone. */
 .og-tag { font-size: max(var(--text-floor), 0.72rem); }                          /* was 0.58rem ≈ 9.3px */
 .og-timer i { font-size: max(var(--text-floor), 0.7rem); }                       /* was 0.57rem ≈ 9.1px */
-.notif-badge { font-size: max(var(--text-floor), 0.72rem); }                     /* was 0.62rem ≈ 9.9px */
+.notif-badge { font-size: var(--nav-fs-badge); }                                  /* sized with its circle (styles.css --notif-badge): ~12–13px bold, always inside it */
 .np-stat-lbl, .np-liq-lbl { font-size: max(var(--text-floor), 0.72rem); }        /* was 0.66rem ≈ 10.6px */
 .np-slide-newtag { font-size: max(var(--text-floor), 0.72rem); }
 .np-badge--dex { font-size: max(var(--text-floor), 0.72rem); }
