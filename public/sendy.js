@@ -103,6 +103,7 @@
       '<button class="sendy-rocket" id="sendy-rocket" type="button" aria-label="Sendy, your $Send guide" aria-expanded="false" data-tip="Opens Sendy — ask a question, or get a tip about this page. Drag to move (desktop)">' +
         '<span class="sendy-sprite" aria-hidden="true"></span>' +
       '</button>' +
+      '<div class="sendy-say" id="sendy-say" role="status" hidden></div>' +
       '<div class="sendy-popup" id="sendy-popup" role="dialog" aria-label="Sendy" hidden>' +
         '<div class="sendy-head">' +
           '<img class="sendy-avatar" src="/assets/sendy.png" alt="" width="28" height="28">' +
@@ -148,6 +149,15 @@
       '@keyframes sendy-idle{to{background-position:0 calc(var(--sendy-size) * -' + FRAMES + ')}}' +
       '@media (prefers-reduced-motion:reduce){.sendy-sprite{animation:none}}' +
       '.sendy-widget.is-flying .sendy-sprite{animation-duration:.6s}' +
+      /* a reaction: a speech bubble by the rocket, and a hop */
+      '.sendy-say{position:absolute;bottom:calc(var(--sendy-size) + 8px);right:0;width:max-content;max-width:300px;padding:.5rem .75rem;border-radius:12px;border-bottom-right-radius:4px;background:var(--green);color:var(--ink-1);font-weight:600;font-size:max(var(--text-floor), .86rem);line-height:1.3;box-shadow:0 8px 24px rgba(0,0,0,.35);animation:sendy-in .25s ease;z-index:1}' +
+      '.sendy-say[hidden]{display:none}' +
+      '.sendy-widget.say-up .sendy-say{bottom:auto;top:calc(var(--sendy-size) + 8px);border-radius:12px;border-top-right-radius:4px}' +
+      '.sendy-widget.say-left .sendy-say{right:auto;left:0;border-radius:12px;border-bottom-left-radius:4px}' +
+      '@media (max-width:767px){.sendy-say{position:fixed;right:.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);max-width:calc(100vw - 1.5rem)}}' +
+      '.sendy-widget.is-hyped .sendy-sprite{animation-duration:.5s}' +
+      '@media (prefers-reduced-motion:no-preference){.sendy-widget.is-hyped .sendy-rocket{animation:sendy-hop .6s ease}}' +
+      '@keyframes sendy-hop{0%,100%{transform:none}40%{transform:translateY(-12px) rotate(-6deg)}70%{transform:translateY(-4px) rotate(4deg)}}' +
       /* the popup: above the rocket, aligned to its right edge; flipped when the rocket sits near the top or the left */
       '.sendy-popup{position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;width:360px;max-width:calc(100vw - 2rem);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:10px;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1;overflow:hidden;display:flex;flex-direction:column}' +
       '@media (min-width:768px){.sendy-widget.is-up .sendy-popup{bottom:auto;top:calc(var(--sendy-size) + 10px)}' +
@@ -384,6 +394,64 @@
     document.addEventListener('click', (e) => { if (isOpen() && !widget.contains(e.target)) closePopup(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { closePopup(); rocket.focus(); } });
     document.addEventListener('auth:change', () => { const g = $('sendy-greeting'); if (g) g.textContent = greeting(); });
+
+    /* ---------- reactions: a line in a speech bubble when something happens on the site ----------
+       Built on the events the pages already dispatch. Never while the popup is open (the person is reading),
+       never mid-flight, at most one every few seconds — a ghost find is the one thing that jumps the queue.
+       Every line is a joke about the rocket or the moment, never a nudge: nothing here says buy, sell or moon. */
+    const LINES = {
+      callopen: ['Composer\'s open. Say something worth the Wall.', 'A Send Call! Deep breath. Read the chart, not the tea leaves.', 'Ooh, a call. I\'ll hold your coffee. Wait — fins. No hands. Well, some hands.'],
+      call: ['Sent to the Wall. That\'s on the record now — like a tattoo, but cheaper.', 'Logged. The Wall never forgets. I forget everything at reload, personally.', 'Bold. I like bold. I am, technically, shaped like bold.'],
+      squadcall: ['Squad-only. Whispered it. Very hush-hush. 🫡', 'Private call, logged for the squad. My lips are sealed. I don\'t have lips.'],
+      post: ['Posted. The Wall just grew a brick taller.', 'On the Wall. Very load-bearing.', 'Sent it. Somewhere, a scroll wheel twitched.'],
+      save: ['Starred. I\'ll keep an eye on it. I have two.', 'Watchlisted. Like a bookmark, but with more suspense.', 'Saved. It\'s on the list now. The list is honoured.'],
+      unsave: ['Un-starred. Breakups are hard.', 'Off the list. We had a good run.', 'Removed. The list will heal.'],
+      egg: ['👻 BOO. You found one. Points minted, ghost evicted.', 'A hidden ghost! {found} of {total}. The others are getting nervous.', 'Ghost busted. I felt a chill. Might be the altitude.'],
+      scanned: ['Scan\'s in. Read it like a menu, not a prophecy.', 'Every number the chain would give me. Your turn to think.', 'Done. Liquidity is the pool, not the vibes.'],
+      signin: ['Welcome back, @{name}! I kept your seat warm. Rockets run hot.', 'Signed in. The leaderboard senses a disturbance.', 'Hey @{name}. Mission control is back online.'],
+      signout: ['Logged out. I\'ll just… float here.', 'Bye for now. Orbiting nothing in particular until you\'re back.'],
+      theme: ['Ooh, new paint job. Do I look faster? I feel faster.', 'Theme changed. Same rocket, different mood lighting.', 'Fresh colours. My fins approve.'],
+      boost: ['Holder boost updated. Diamond hands, meet rocket fins.', 'Boost check done. The chain has spoken; I merely relay.'],
+      entered: ['You\'re in! Please keep arms and fins inside the rocket at all times.', 'Ticket accepted. Welcome aboard — the seatbelt is decorative.'],
+      firstvisit: ['First time here? I\'m Sendy. Tap me whenever you\'re lost. Or bored. Or both.'],
+      oops: ['The chain hiccupped. Happens to the best of us. Give it a minute.', 'That didn\'t go through. Not you — the tubes. Try again shortly.', 'Turbulence. Nothing decided, nothing lost. Retry in a bit.']
+    };
+    const SAY_COOLDOWN = 8000, sayEl = $('sendy-say');
+    let sayTimer = null, lastSayAt = 0; const lastLine = {};
+    function hideSay() { sayEl.setAttribute('hidden', ''); widget.classList.remove('is-hyped'); }
+    function say(kind, vars, urgent) {
+      const lines = LINES[kind]; if (!lines || widget.hasAttribute('hidden')) return false;
+      if (isOpen() || flying) return false;
+      const t = Date.now(); if (!urgent && t - lastSayAt < SAY_COOLDOWN) return false;
+      let i = Math.floor(Math.random() * lines.length); if (lines.length > 1 && i === lastLine[kind]) i = (i + 1) % lines.length;
+      lastLine[kind] = i; lastSayAt = t;
+      sayEl.textContent = lines[i].replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null) ? String(vars[k]) : m);
+      if (!isMobile()) { const r = rocket.getBoundingClientRect(); widget.classList.toggle('say-up', r.top < 140); widget.classList.toggle('say-left', r.left < 320); }
+      sayEl.removeAttribute('hidden');
+      if (!reduced()) { widget.classList.remove('is-hyped'); void widget.offsetWidth; widget.classList.add('is-hyped'); }
+      clearTimeout(sayTimer); sayTimer = setTimeout(hideSay, 4500);
+      return true;
+    }
+    rocket.addEventListener('click', () => { if (!sayEl.hasAttribute('hidden')) hideSay(); }, true);   // opening the popup clears a bubble
+    document.addEventListener('egg:found', (e) => { const d = e.detail || {}; if (d.id != null) say('egg', { found: d.found, total: d.total }, true); });
+    document.addEventListener('post:created', (e) => { say(e.detail && e.detail.call_id ? 'call' : 'post'); });
+    document.addEventListener('squad:call', () => { say('squadcall'); });
+    document.addEventListener('auth:change', (e) => { if (e.detail && e.detail.username) say('signin', { name: e.detail.username }); else if (!e.detail) say('signout'); });
+    document.addEventListener('site-prefs', () => { say('theme'); });
+    document.addEventListener('boost:changed', () => { say('boost'); });
+    document.addEventListener('jsi:entered', (e) => { say(e.detail && e.detail.firstVisit ? 'firstvisit' : 'entered', null, true); });
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-call-go]')) { setTimeout(() => say('callopen'), 250); return; }
+      const w = e.target.closest('.np-watch');   // the ☆: read its state once the toggle has landed; signed out it only opens the sign-in
+      if (w && window.AUTH && AUTH.user) setTimeout(() => say(w.getAttribute('aria-pressed') === 'true' ? 'save' : 'unsave'), 150);
+    }, true);
+    const scanOut = document.querySelector('#sc-result');   // the Scanner's result box — only on that page, so optional (querySelector: not one of Sendy's own ids)
+    if (scanOut) new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && (n.matches('.sc-hit') || n.querySelector('.sc-hit'))) { say('scanned'); return; } }).observe(scanOut, { childList: true });
+    if (typeof window.sendToast === 'function') {   // a ⚠️ toast is the site saying something did not go through
+      const toast = window.sendToast;
+      window.sendToast = function (msg) { try { if (/^\s*⚠️/.test(String(msg))) say('oops'); } catch {} return toast.apply(this, arguments); };
+    }
+    window.SENDY = { say };   // the pages can ask for a reaction of their own: SENDY.say('post')
 
     /* ---------- show up: the greeting once per visit, then just the rocket ---------- */
     setTimeout(() => {

@@ -91,6 +91,14 @@ try {
   check('  ...the idle loop and the flights honour reduced motion', /prefers-reduced-motion:reduce\)\{\.sendy-sprite\{animation:none\}/.test(SRC));
   check('the greeting shows once per visit and hides itself again; the chat survives a page change', /store\.get\('greeted'\)/.test(SRC) && /closePopup\(\); \}, 9000\)/.test(SRC) && /sessionStorage\.(get|set)Item\('sendy:'/.test(SRC));
   check('the popup flips (down / rightward) only on a desktop; on a phone it always spans the width above the rocket', /if \(isMobile\(\)\) \{ widget\.classList\.remove\('is-up', 'is-left'\); popup\.style\.maxHeight = ''; return; \}/.test(SRC) && /widget\.classList\.toggle\('is-up', below > above\)/.test(SRC) && /popup\.style\.maxHeight = Math\.max\(260/.test(SRC) && /@media \(min-width:768px\)\{\.sendy-widget\.is-up \.sendy-popup/.test(SRC));
+  /* ═══ reactions ═══ */
+  const linesSrc = SRC.slice(SRC.indexOf('const LINES = {'), SRC.indexOf('const SAY_COOLDOWN'));
+  check('Sendy reacts to what happens on the site: a call, a squad call, a post, a ghost found, a save, a scan, sign-in and out, a theme change, the gate, a boost, a failure', ['callopen', 'call', 'squadcall', 'post', 'save', 'unsave', 'egg', 'scanned', 'signin', 'signout', 'theme', 'boost', 'entered', 'firstvisit', 'oops'].every((k) => new RegExp('\\b' + k + ': \\[').test(linesSrc)));
+  check('  ...on the events the pages already dispatch, not on guesses', ['egg:found', 'post:created', 'squad:call', 'site-prefs', 'boost:changed', 'jsi:entered'].every((ev) => SRC.includes("addEventListener('" + ev + "'")) && /e\.detail && e\.detail\.call_id \? 'call' : 'post'/.test(SRC));
+  check('  ...every line is a joke, never a nudge: nothing says buy, sell, moon, pump or promises anything', !/\b(buy|sell|moon|pump|guarantee|profit|safe bet)\b/i.test(linesSrc));
+  check('  ...a bubble shows for a few seconds, never while the popup is open or mid-flight, at most one every 8 s (a ghost find jumps the queue)', /const SAY_COOLDOWN = 8000/.test(SRC) && /sayTimer = setTimeout\(hideSay, 4500\)/.test(SRC) && /if \(isOpen\(\) \|\| flying\) return false;/.test(SRC) && /say\('egg', \{ found: d\.found, total: d\.total \}, true\)/.test(SRC));
+  check('  ...the hop honours reduced motion and the words are text, never markup', /if \(!reduced\(\)\) \{ widget\.classList\.remove\('is-hyped'\)/.test(SRC) && /sayEl\.textContent = lines\[i\]/.test(SRC) && !/sayEl\.innerHTML/.test(SRC));
+  check('  ...and a page can ask for one of its own (window.SENDY.say)', /window\.SENDY = \{ say \};/.test(SRC));
   check('it sits above the nav but under every dialog and the token popup (z 200), so it is never on top of one', /--sendy-z:190/.test(SRC));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
