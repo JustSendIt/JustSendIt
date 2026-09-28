@@ -51,6 +51,20 @@ try {
   check('  ...rate-limited per address, per account and site-wide, question capped, history capped', /rateLimit\('sendy:ip:'/.test(route) && /rateLimit\('sendy:u:'/.test(route) && /rateLimit\('sendy:all'/.test(route) && /slice\(0, SENDY_Q_MAX\)/.test(route) && /slice\(-SENDY_HISTORY_MAX\)/.test(route));
   check('  ...the question is never logged (only the status of a failure is)', !/console\.(log|error|warn)\([^)]*\b(q|msgs|history|answer)\b/.test(route));
   check('  ...the key comes from the environment, never from the page', /process\.env\.ANTHROPIC_API_KEY/.test(SERVER) && !/ANTHROPIC|api-key|x-api-key/i.test(SRC));
+  /* ═══ what it is fed ═══ */
+  check('the white paper is in the cached corpus in full, and the Terms as a section index', /'privacy', 'whitepaper'\]/.test(SERVER) && /the white paper, in full/.test(SERVER) && /the Terms of Service \(\/terms\.html\), by section/.test(SERVER));
+  const live = SERVER.slice(SERVER.indexOf('function sendyLive()'), SERVER.indexOf('const sendyVoted = new Map()'));
+  check('a live block of the site\'s public figures follows the cached prefix (market, communities, leaderboard, counts, scans, the Support board, rated answers)', /\{ type: 'text', text: sendyLive\(\) \}\]/.test(route) && ['market', 'communities', 'leaderboard', 'counts', 'scans', 'support board', 'rated answers'].every((k) => live.includes("part('" + k + "'")));
+  check('  ...built from public columns only — never an email, a wallet, an address or a session', !/\b(email|wallets?|tracked_wallets|sessions|identities|ip)\b/.test(live) && /squad_id IS NULL/.test(live) && /private IS NULL OR private = 0/.test(live));
+  check('  ...a section that cannot be read is said in the log and left out, never guessed', /console\.warn\('\[sendy\] live block: ' \+ name \+ ' could not be read/.test(live) && /never invent one that is not here/.test(live));
+  check('  ...and the memo is rebuilt every five minutes, sooner after a new rating', /now\(\) - sendyLiveMemo\.at < 5 \* 60e3/.test(live) && /sendyLiveMemo\.at = 0;/.test(SERVER));
+  const qaTable = ((/CREATE TABLE IF NOT EXISTS sendy_qa \(([^;]*)\)/.exec(SERVER) || [])[1] || '').replace(/--[^\n]*/g, '');   // the columns, not the comments beside them
+  check('an answer is kept for rating without who asked: the table has no account, address or session column', qaTable.length > 0 && !/user|ip\b|session|addr/i.test(qaTable) && /INSERT INTO sendy_qa \(q, a, page, at\)/.test(route));
+  const badVote = await api('/api/sendy/rate', { method: 'POST', body: { id: 1, vote: 5 } });
+  const noSuch = await api('/api/sendy/rate', { method: 'POST', body: { id: 999999999, vote: 1 } });
+  check('a rating needs a real answer and a vote of 1 or -1', badVote.status === 400 && noSuch.status === 404, badVote.status + ' ' + noSuch.status);
+  check('  ...and the operator can read the whole live block (admins only)', /p === '\/api\/sendy\/live'/.test(SERVER) && /if \(!isAdmin\(me\)\) return bad\(res, 'admins only', 403\);/.test(SERVER));
+  check('the chat shows a thumb under each model answer and sends it to the rate route', /function rateBar\(row, id\)/.test(SRC) && /'\/api\/sendy\/rate'/.test(SRC) && /if \(qaId\) rateBar\(row, qaId\)/.test(SRC));
   const empty = await api('/api/sendy/ask', { method: 'POST', body: { q: '   ' } });
   check('an empty question is refused', empty.status === 400, empty.status);
   const asked = await api('/api/sendy/ask', { method: 'POST', body: { q: 'What is a Send Call?', page: '/about.html', history: [] } });
@@ -61,7 +75,7 @@ try {
 
   /* ═══ what people are told ═══ */
   const PRIV = read('privacy.html');
-  check('the Privacy Policy says a question to Sendy goes to Anthropic with the page and the chat, and nothing about the account', /When you ask Sendy a question, our server sends that question, the page you are on and the last few messages of that chat to Anthropic/.test(PRIV) && /Nothing about your account goes with it/.test(PRIV) && /we do not store the questions/.test(PRIV));
+  check('the Privacy Policy says a question to Sendy goes to Anthropic with the page and the chat, that the question and answer are kept without who asked, rated, and that Sendy sees the public figures', /When you ask Sendy a question, our server sends that question, the page you are on and the last few messages of that chat to Anthropic/.test(PRIV) && /Nothing about your account goes with it/.test(PRIV) && /We keep the question and the answer, without who asked/.test(PRIV) && /figures the site already shows to everyone/.test(PRIV));
   check('  ...and the policy\'s version moved for it', /Version 2026-09-28 · \$Send \/ JustSendIt/.test(PRIV));
 
   /* ═══ where it rides ═══ */

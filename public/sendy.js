@@ -188,6 +188,10 @@
       '.sendy-msg-user .sendy-msg-bubble{background:var(--green);color:var(--ink-1);border-bottom-right-radius:3px}' +
       '.sendy-msg-links{display:flex;flex-wrap:wrap;gap:.3rem .9rem;margin-top:.45rem}' +
       '.sendy-typing .sendy-msg-bubble{color:var(--text-mute);letter-spacing:.15em}' +
+      '.sendy-rate{display:flex;align-items:center;gap:.4rem;margin-top:.45rem;font-size:max(var(--text-floor), .8rem);color:var(--text-mute)}' +
+      '.sendy-rate-btn{background:transparent;border:1px solid var(--edge-ctl);border-radius:6px;cursor:pointer;padding:.1rem .5rem;font:inherit;line-height:1.3}' +
+      '.sendy-rate-btn:hover{border-color:var(--edge-ctl-lit);background:var(--g-wash)}' +
+      '.sendy-rate-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px}' +
       '.sendy-chat-form{display:flex;gap:.45rem}' +
       '.sendy-chat-input{flex:1;min-width:0;padding:.55rem .7rem;border:1px solid var(--edge-ctl);border-radius:6px;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:max(var(--text-floor), .9rem)}' +
       '.sendy-chat-input::placeholder{color:var(--text-mute)}' +
@@ -266,6 +270,22 @@
       row.appendChild(bubble); chatLog.appendChild(row); chatLog.scrollTop = chatLog.scrollHeight;
       return row;
     }
+    // a thumb under a model answer: rated up, an answer is reused for the next person who asks the same thing
+    function rateBar(row, id) {
+      const bar = document.createElement('div'); bar.className = 'sendy-rate';
+      const mk = (v, label, tip) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'sendy-rate-btn'; b.textContent = label;
+        b.setAttribute('aria-label', tip); b.setAttribute('data-tip', tip);
+        b.addEventListener('click', async () => {
+          bar.textContent = v > 0 ? 'Thanks — noted 👍' : 'Thanks — I\'ll do better 👎';
+          try { await fetch('/api/sendy/rate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, vote: v }) }); } catch {}
+        });
+        return b;
+      };
+      bar.appendChild(mk(1, '👍', 'Marks this answer helpful — Sendy reuses answers people rate up'));
+      bar.appendChild(mk(-1, '👎', 'Marks this answer unhelpful — it will not be reused'));
+      row.querySelector('.sendy-msg-bubble').appendChild(bar);
+    }
     const ROUTES = [{ text: 'Support board', href: '/support.html' }, { text: 'Email ' + EMAIL, href: MAILTO }];
     const NO_ANSWER = "I don't have an answer for that yet. Ask it on the Support board, where the community and the team answer in public — or email if it's private.";
     function remember(role, text) { history.push({ role, text }); history = history.slice(-12); store.set('chat', history); }
@@ -278,17 +298,17 @@
       addMessage(q, 'user'); remember('user', q);
       const typing = addMessage('· · ·', 'sendy'); typing.classList.add('sendy-typing');
       chatSend.disabled = true;
-      let answer = null, note = null, offline = false;
+      let answer = null, note = null, offline = false, qaId = 0;
       try {
         const r = await fetch('/api/sendy/ask', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q, page: location.pathname, history: history.slice(-9, -1) }) });
         const j = await r.json().catch(() => ({}));
-        if (r.ok && j.answer) answer = String(j.answer);
+        if (r.ok && j.answer) { answer = String(j.answer); qaId = Number(j.id) || 0; }
         else if (r.ok && j.unavailable) offline = true;
         else if (r.status === 429) note = String(j.error || 'Sendy needs a breather — try again in a few minutes.');
       } catch {}
       typing.remove(); chatSend.disabled = false;
-      if (answer) { addMessage(answer, 'sendy'); remember('assistant', answer); }
+      if (answer) { const row = addMessage(answer, 'sendy'); remember('assistant', answer); if (qaId) rateBar(row, qaId); }
       else {
         const local = findAnswer(q);
         if (note) addMessage(note, 'sendy', ROUTES);
