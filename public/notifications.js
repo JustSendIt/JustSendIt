@@ -10,7 +10,7 @@
   let items = [], open = false, poll = null, loaded = false;
   let pending = null;   // rows a poll fetched while the reader was inside the panel — applied once they leave it
   const bellLabel = (n) => 'Notifications' + (n ? ', ' + n + ' in your list' : '');
-  const badgeHTML = (n) => n ? '<span class="notif-badge" aria-hidden="true">' + (n > 9 ? '9+' : n) + '</span>' : '';
+  const badgeHTML = (n) => n ? '<span class="notif-badge" aria-hidden="true"><span class="notif-badge-n">' + (n > 9 ? '9+' : n) + '</span></span>' : '';
 
   function render() {
     if (!signedIn()) { mount.innerHTML = ''; return; }
@@ -25,7 +25,7 @@
       /* role="list", not role="menu". A menu is a set of commands and traps the arrow keys; this is a list
          of rows, some of which are links and each of which has its own dismiss button. Calling it a menu
          made a screen reader promise menu keyboard behaviour that was never implemented. */
-      '<div class="notif-panel' + (open ? ' open' : '') + '" id="notif-panel" aria-label="Notifications"' + (open ? '' : ' hidden') + '>' +
+      '<div class="notif-panel' + (open ? ' open' : '') + '" id="notif-panel" tabindex="-1" aria-label="Notifications"' + (open ? '' : ' hidden') + '>' +
         '<div class="notif-head"><span id="notif-head-title">🔔 Notifications</span>' + (n ? '<button class="notif-clearall" id="notif-clearall" type="button" data-tip="Removes every notification from your list for good">Clear all</button>' : '') + '</div>' +
         '<ul class="notif-list" role="list" aria-labelledby="notif-head-title">' + (n ? items.map(it => {
           /* A link ONLY for a server-built, site-relative path. The href is validated again here rather
@@ -109,7 +109,13 @@
   }
 
   mount.addEventListener('click', e => {
-    if (e.target.closest('#notif-bell')) { toggle(); if (open) load(); return; }
+    if (e.target.closest('#notif-bell')) {
+      toggle(); if (open) load();
+      // opened from the keyboard (a click with no pointer): take focus into the list, which can be a screen away from
+      // the bell, so a magnifier that follows focus shows it
+      if (open && e.detail === 0) { const p = document.getElementById('notif-panel'); if (p) p.focus(); }
+      return;
+    }
     if (e.target.closest('#notif-clearall')) { clearAll(); return; }
     const x = e.target.closest('[data-clear]'); if (x) { clearOne(x.dataset.clear); return; }
     /* A followed link leaves the panel open behind the navigation, and on a same-page hash it would stay
@@ -125,15 +131,10 @@
     toggle(false);
     if (inside) { const b = document.getElementById('notif-bell'); if (b) b.focus(); }
   });
-  // hover-away closes it (mouse only — the whole bell+panel is inside #nav-notif, so moving bell→panel doesn't leave;
-  // keyboard/touch users keep click + Esc + outside-click). A short grace avoids closing on a stray flick.
-  let hoverTimer = null;
-  const finePointer = () => window.matchMedia && matchMedia('(pointer: fine)').matches;
-  mount.addEventListener('mouseleave', () => {
-    // never close under a keyboard user's hands just because the mouse drifted off
-    if (open && finePointer() && !mount.contains(document.activeElement)) hoverTimer = setTimeout(() => toggle(false), 350);
-  });
-  mount.addEventListener('mouseenter', () => { if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; } });
+  /* No hover-away close. The panel opens on the left of the screen, so from a bell on the right the pointer crosses the
+     bar to reach it and crosses back to close it; a timer on leaving closed the list on the way and turned the click on
+     the bell into a reopen. (Chrome never ran it anyway: a clicked bell holds focus.) The panel closes on the bell, an
+     outside click, Esc, or a followed link. */
   document.addEventListener('auth:change', () => { items = []; pending = null; open = false; render(); load(); startPoll(); });
   document.addEventListener('points:changed', () => { if (signedIn()) setTimeout(load, 900); }); // catch level-ups / gains soon after
   function startPoll() { if (poll) clearInterval(poll); if (signedIn()) poll = setInterval(() => { if (!document.hidden) load(); }, 25000); }

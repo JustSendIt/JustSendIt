@@ -6,7 +6,7 @@
 /* decorative separator only — the alt-text form keeps it out of the accessibility tree (engines without it show no arrow) */
 .rz-steps li + li::before { content: '→' / ''; color: var(--text-dim); font-weight: 800; margin-right: 0.3rem; }
 .rz-step-num {
-  width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; flex: 0 0 30px;
+  width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; place-content: center; line-height: 1; flex: 0 0 30px;
   font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: max(var(--text-floor), 1rem); color: var(--on-green);
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); box-shadow: 0 3px 0 var(--green-dark);
 }

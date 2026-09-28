@@ -269,6 +269,7 @@ a { color: var(--gold); }
 .profile-link .pl-name { display: inline-block; white-space: nowrap; vertical-align: bottom; }   /* shown whole or not at all: nav.js hides it (.is-tighter) when the bar has no room */
 .nav.is-tight .nav-live, .nav.is-tight .nav-xp-sep, .nav.is-tight .nav-xp-pts, .nav.is-tight .nav-xp-boost { display: none; }
 .nav.is-tighter .nav-logo span, .nav.is-tighter .profile-link .pl-name { display: none; }
+.nav.is-tighter .profile-link .pl-ava { margin-right: 0; }   /* with the name hidden, the gap it kept sat on one side and pushed the avatar 3px off the pill's middle */
 .nav.is-tighter { gap: 0.5rem; }
 .nav.is-tightest .nav-xp { display: none; }
 .nav.is-tightest { gap: 0.35rem; padding-left: 0.6rem; padding-right: 0.6rem; }
@@ -806,11 +807,11 @@ video.media-preview-el { width: auto; }
    already spoken for by #music-player and #compose-fab, and a toast landing there had to either cover
    them or dodge them; at the top it answers where the reader's attention already is after pressing
    something in the page chrome. z-index stays 200, above the nav's 50, so a toast is never clipped. */
-#toast-zone { position: fixed; top: calc(var(--nav-h, 58px) + 0.75rem); left: 50%; transform: translateX(-50%); z-index: 9200; display: grid; gap: 0.5rem; justify-items: center; pointer-events: none; max-width: calc(100vw - 2rem); padding: 0 1rem; }
+#toast-zone { position: fixed; top: calc(var(--nav-h, 58px) + 0.75rem); left: 1rem; right: 1rem; z-index: 9200; display: grid; gap: 0.5rem; justify-items: center; pointer-events: none; }   /* both edges pinned: a left:50% box only ever had half the screen, so a toast wrapped into a narrow column */
 .toast {
   background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); color: var(--on-green);
-  font-weight: 800; padding: 0.65rem 1.4rem; border-radius: 999px; font-size: max(var(--text-floor), 0.95rem);
-  max-width: 100%;
+  font-weight: 800; padding: 0.65rem 1.4rem; border-radius: 999px; border-radius: calc(0.65rem + 0.5lh); font-size: max(var(--text-floor), 0.95rem);
+  max-width: 100%; text-align: center; text-wrap: balance;   /* a wrapped toast keeps its lines centred, and its corners (half a one-line toast's height) clear of them */
   box-shadow: 0 8px 30px rgba(0,0,0,0.5); animation: toast-in 0.25s ease, toast-out 0.3s ease 2.2s forwards;
 }
 /* Direction follows position: it drops in from above the fold and withdraws upward. */
@@ -1039,6 +1040,12 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
   display: grid; place-items: center; color: var(--on-green);
   transition: transform 0.12s;
 }
+/* The play and pause marks are drawn, not typed: ▶ and ⏸ come from whatever symbol font the device falls back to, and
+   sat about 2px off the circle's middle. Sized from the circle (--ava), centred by the grid. */
+#music-player .mp-btn { --ava: 38px; }
+@media (max-width: 560px) { #music-player .mp-btn { --ava: 48px; } }
+#music-player .mp-ico { display: block; width: calc(var(--ava) * 0.34); height: calc(var(--ava) * 0.38); background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+#music-player .mp-btn.is-playing .mp-ico { width: calc(var(--ava) * 0.3); clip-path: none; background: linear-gradient(90deg, currentColor 0 34%, transparent 34% 66%, currentColor 66%); }
 #music-player .mp-btn:active { transform: scale(0.88); }
 #music-player .mp-title { font-size: max(var(--text-floor), 0.75rem); font-weight: 800; color: var(--text-dim); max-width: 110px; overflow: hidden; white-space: nowrap; }
 #music-player .mp-title .eq { color: var(--green-bright); }
@@ -1253,6 +1260,9 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
   background: var(--green); color: var(--on-green);
   border: 1.5px solid var(--green); border-radius: 999px;
   padding: 0.35rem 0.7rem; font: 800 max(var(--text-floor), 0.72rem) 'Rubik', sans-serif; white-space: nowrap; cursor: pointer;
+  /* the 44px tap height is taller than the words: centre them in it (a block put them at the top), and restate the line
+     height the font shorthand just reset to 'normal' */
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1.25;
 }
 #music-player .mp-hint::after { content: ''; position: absolute; top: 100%; left: 18px; border: 6px solid transparent; border-top-color: var(--green); }
 #music-player .mp-btn.wants { animation: mp-pulse 1.4s ease-out infinite; }
@@ -1873,7 +1883,7 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .og-banner-copy { position: relative; z-index: 1; flex: 1 1 520px; max-width: 62ch; }
 .og-banner-title { display: block; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.2rem); letter-spacing: 0.5px; color: var(--gold); text-shadow: 0 0 12px rgba(255,179,64,0.5); }
 .og-word { background: linear-gradient(180deg, #fff, var(--gold)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: var(--gold); }
-.og-tag { display: inline-block; font-family: 'Rubik', sans-serif; font-size: max(var(--text-floor), 0.58rem); font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; color: var(--on-gold); background: var(--gold); border-radius: 999px; padding: 0.14rem 0.5rem; vertical-align: middle; transform: rotate(-3deg); }
+.og-tag { display: inline-block; font-family: 'Rubik', sans-serif; font-size: max(var(--text-floor), 0.58rem); font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; text-indent: 0.1em; color: var(--on-gold); background: var(--gold); border-radius: 999px; padding: 0.14rem 0.5rem; vertical-align: middle; transform: rotate(-3deg); }
 .og-banner-sub { display: block; font-size: max(var(--text-floor), 0.82rem); color: var(--text); margin-top: 0.15rem; }
 .og-banner-sub b { color: var(--gold); }
 /* timers */
@@ -1985,7 +1995,7 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .np-sort, .np-more, .np-refresh { background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font: inherit; font-weight: 700; border-radius: 10px; padding: 0.45rem 0.6rem; cursor: pointer; }
 .np-sort { font-size: max(var(--text-floor), 1rem); }
 .np-more[aria-expanded="true"] { border-color: var(--green); background: var(--green); color: var(--on-green); }
-.np-refresh { font-size: max(var(--text-floor), 1.05rem); line-height: 1; width: 40px; }
+.np-refresh { font-size: max(var(--text-floor), 1.05rem); line-height: 1; width: 40px; display: inline-flex; align-items: center; justify-content: center; padding-inline: 0; }   /* a 40px block with 0.6rem padding left 13px for a 25px ↻, which ran off to the right */
 .np-refresh.spin { animation: np-spin 0.5s linear; }
 @keyframes np-spin { to { transform: rotate(360deg); } }
 .np-filters { display: flex; flex-wrap: wrap; gap: 0.7rem 1.1rem; padding: 0.7rem 0.9rem; margin-bottom: 0.5rem; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; align-items: center; }
@@ -2040,6 +2050,11 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .np-chg-slot { flex: 0 0 auto; }
 .np-chg-none { color: var(--text-dim); }
 .np-chev { flex: 0 0 auto; margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font-size: max(var(--text-floor), 0.85rem); transition: transform 0.2s ease, background 0.15s ease, border-color 0.15s ease; } /* --tok (a per-token hue) is never the glyph colour */
+/* The ▾ is drawn, not typed: the glyph comes from whatever symbol font the device falls back to, and on a Mac its
+   triangle sits 1–2px below the middle of its box. A clipped square is centred by geometry on every device. */
+.np-chev, .np-caret { position: relative; color: transparent; }
+.np-chev::before, .np-caret::before { content: ''; position: absolute; left: 50%; top: 50%; translate: -50% -50%; margin: 0; width: 0.62em; height: 0.36em; background: var(--ctl-ink); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.np-caret::before { background: var(--on-gold); }
 .np-sum:hover .np-chev { background: var(--ctl-fill-hi); border-color: var(--tok, var(--green)); }
 details[open] .np-chev { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .np-chev { transition: background 0.15s ease, border-color 0.15s ease; } }
@@ -2147,9 +2162,9 @@ details[open] .np-chev { transform: rotate(180deg); }
 .np-stats .val.red { color: var(--red); }
 .np-soft { opacity: 0.8; } /* was 0.62 → 4.07:1; 0.8 keeps dimmed stat labels above the 4.5:1 AA floor */
 .np-runners-note { font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim); margin: 0 0 0.5rem; }
-.np-vol { display: flex; align-items: flex-end; gap: 0.5rem; height: 64px; margin: 0.8rem 0; padding: 0 0.3rem; }
+.np-vol { display: flex; align-items: flex-end; gap: 0.5rem; height: 64px; margin: 0.8rem 0 calc(1rem + max(var(--text-floor), 0.72rem)); padding: 0 0.3rem; }
 .np-vbar { flex: 1; background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); border-radius: 5px 5px 0 0; position: relative; min-height: 4px; display: flex; align-items: flex-end; justify-content: center; }
-.np-vbar i { position: absolute; bottom: -1.15rem; font-size: max(var(--text-floor), 0.66rem); color: var(--text-dim); font-style: normal; font-weight: 700; }
+.np-vbar i { position: absolute; top: calc(100% + 0.2rem); bottom: auto; line-height: 1; font-size: max(var(--text-floor), 0.66rem); color: var(--text-dim); font-style: normal; font-weight: 700; }
 .np-moves { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 1.4rem 0 0.8rem; }
 .np-flow { margin: 0.8rem 0; }
 .np-flow-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--ink); }
@@ -2352,7 +2367,9 @@ details[open] .np-chev { transform: rotate(180deg); }
 .gs-check:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
 .gs-steps .step.is-done { border-color: color-mix(in srgb, var(--green) 60%, transparent); }
 .gs-steps .step.is-done .step-num { background: linear-gradient(180deg, var(--green-bright), var(--green)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 35%, transparent), 0 4px 0 var(--green-dark); }
-.gs-steps .step.is-done .step-num::after { content: '✓'; position: absolute; margin-top: -2px; }
+.gs-check .step-num { position: relative; }
+.gs-steps .step.is-done .step-num { color: transparent; }   /* hides the digit (or 🔐) the ✓ stands in for */
+.gs-steps .step.is-done .step-num::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--on-green); }
 .gs-steps .step.is-done h3 { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--green) 50%, transparent); }
 .gs-check[aria-pressed="true"] .step-num { transform: scale(1.04); }
 .gs-done-msg { text-align: center; margin-top: 1.4rem; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.3rem); color: var(--green-bright); }
@@ -2807,7 +2824,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
      slide reserves for it. 46px keeps the site's 44px touch-target floor. */
   .np-slide { padding-bottom: calc(0.6rem + 46px + 0.6rem); }
   .np-slide-rail { flex-direction: row; left: 50%; right: auto; transform: translateX(-50%); bottom: 0.6rem; gap: 0.45rem; }
-  .np-slide-rail .np-rail-btn { width: 46px; height: 46px; }
+  .np-slide-rail .np-rail-btn { width: 46px; height: 46px; --ava: 46px; }
 
   /* Reserving the rail's strip costs the card 65px, so the card has to give 65px back — out of SPACING and
      out of the gauge, never out of the honesty paragraph. Measured at 375x812: content 660px in a 596px
@@ -2824,8 +2841,13 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .np-rail-btn { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 50%; background: var(--ctl-fill-lo); backdrop-filter: blur(6px); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font-size: max(var(--text-floor), 1.3rem); text-decoration: none; cursor: pointer; }
 .np-rail-btn:hover { border-color: var(--green); background: var(--ctl-fill-hi); color: var(--ctl-ink); }
 .np-rail-btn:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 2px; }
-.np-feed-react { flex-direction: column; gap: 0; font-size: max(var(--text-floor), 1.15rem); }
-.np-rail-count { font-size: max(var(--text-floor), 0.6rem); font-weight: 800; color: var(--ctl-ink); }
+/* The rail's discs: glyphs sized from the disc (--ava), no inherited .copy-btn padding squeezing the 📋 off-centre, and the
+   🚀 with its private "you ×N" tally stacked and centred as one group (a two-row grid split the disc in half, so the
+   rocket sat in the top half even with no tally). */
+.np-rail-btn { --ava: 52px; padding: 0; font-family: inherit; line-height: 1; font-size: calc(var(--ava) * 0.46); }
+.np-feed-react { grid-auto-flow: row; place-content: center; gap: 1px; }
+.np-rail-count { font-size: max(11px, calc(var(--ava) * 0.22)); font-weight: 800; line-height: 1; white-space: nowrap; color: var(--ctl-ink); }
+.np-rail-count:empty { display: none; }
 /* chrome */
 .np-feed-chrome { position: absolute; top: 0.5rem; left: 0; right: 0; z-index: 5; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; padding: 0 0.6rem; pointer-events: none; }
 .np-feed-live { display: inline-flex; align-items: center; gap: 0.35rem; font-size: max(var(--text-floor), 0.72rem); font-weight: 800; color: var(--text-dim); background: color-mix(in srgb, var(--ink) calc(0.7 * 100%), transparent); border: 1px solid var(--ink-4); border-radius: 999px; padding: 0.25rem 0.6rem; }
@@ -2835,7 +2857,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
    actually a gutter to put it in. `display: none` under (hover: none) is replaced by a positive test, so
    the rule cannot leave a touch reader with no forward control and no rail either. */
 .np-feed-nav { position: absolute; left: 0.6rem; right: auto; top: 50%; transform: translateY(-50%); z-index: 4; display: none; flex-direction: column; gap: 0.5rem; }
-.np-feed-nav .np-rail-btn { width: 44px; height: 44px; font-size: max(var(--text-floor), 1rem); }
+.np-feed-nav .np-rail-btn { width: 44px; height: 44px; --ava: 44px; font-size: calc(var(--ava) * 0.46); }
 @media (hover: hover) and (min-width: 700px) { .np-feed-nav { display: flex; } }
 .np-feed-hint { position: absolute; bottom: 1.2rem; left: 50%; transform: translateX(-50%); z-index: 5; font-size: max(var(--text-floor), 0.75rem); font-weight: 800; color: var(--text); background: color-mix(in srgb, var(--ink) calc(0.75 * 100%), transparent); border: 1px solid var(--ink-4); border-radius: 999px; padding: 0.35rem 0.8rem; pointer-events: none; }
 .np-slide--intro .np-slide-inner { text-align: center; align-items: center; }
@@ -2871,17 +2893,23 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 
 /* notifications bell + dropdown */
 #nav-notif { position: relative; display: inline-flex; }
-.notif-bell { position: relative; background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); width: var(--nav-ctl); height: var(--nav-ctl); border-radius: 999px; cursor: pointer; font-size: var(--nav-fs); display: inline-grid; place-items: center; }
+.notif-bell { position: relative; background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); width: var(--nav-ctl); height: var(--nav-ctl); padding: 0; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: var(--nav-fs); line-height: 1; display: inline-grid; place-items: center; }   /* a button does not inherit the page font on its own: the count was drawn in Arial */
 .notif-bell:hover { border-color: var(--green); }
 .notif-bell:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 2px; }
 .notif-badge { position: absolute; top: calc(var(--notif-badge) * -0.28); right: calc(var(--notif-badge) * -0.28); box-sizing: border-box; min-width: var(--notif-badge); height: var(--notif-badge); padding: 0 0.3em; background: var(--red); color: var(--on-red); /* dark-on-red ≈ 6:1; white-on-red was 3:1 */ border-radius: 999px; font-size: var(--nav-fs-badge); font-weight: 800; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--ink-2); pointer-events: none; }   /* a ring in the page colour separates it from the bell */
-/* The panel is pinned just under the bar and anchored to the screen's right edge — it used to hang from the bell's
-   left edge below 1280px, which ran a 360px panel off the right side of every tablet. Its width is in text units
+/* The digits sit in their own block trimmed to cap height and baseline, so the circle centres the ink of "3" or "9+" itself
+   rather than a line box whose ascent and descent differ (which left them a pixel high). Browsers without text-box
+   centre the line box, as before. */
+.notif-badge-n { display: block; text-box: trim-both cap alphabetic; }
+/* The panel pops up on the LEFT side of the screen, pinned just under the bar, at every width (the owner's call; in the
+   pop-down bar the bell sits beside the logo, so the list opens right under it). It once hung from the bell's left edge,
+   which ran a 360px panel off the right side of every tablet, and then sat at the screen's right edge, which on a laptop
+   put it 400px or more from the bell. Its width is in text units
    (26em ≈ 50 characters a line), capped to the screen, so the text can follow the site's size floor on a wide
    display without turning each notification into a narrow column; its height stops short of the screen's bottom
    and the list scrolls inside. (Fixed inside the nav: the nav's backdrop-filter makes the bar the containing block,
    and the bar is full-width and pinned to the top, so the offsets land where they read.) */
-.notif-panel { position: fixed; top: calc(var(--nav-h, 60px) + 8px); right: 8px; left: auto; font-size: max(var(--text-floor), 0.95rem); width: min(26em, calc(100vw - 16px)); max-height: calc(100vh - var(--nav-h, 60px) - 24px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.55); z-index: 100; }
+.notif-panel { position: fixed; top: calc(var(--nav-h, 60px) + 8px); left: 8px; right: auto; font-size: max(var(--text-floor), 0.95rem); width: min(26em, calc(100vw - 16px)); max-height: calc(100vh - var(--nav-h, 60px) - 24px); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.55); z-index: 100; }
 .notif-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6em; padding: 0.6em 0.8em; border-bottom: 1px solid var(--ink-4); font-weight: 800; font-size: max(var(--text-floor), 1em); position: sticky; top: 0; z-index: 1; background: var(--ink-2); }
 .notif-clearall { flex-shrink: 0; background: var(--gold); border: none; color: var(--on-gold); font: inherit; font-weight: 700; font-size: max(var(--text-floor), 0.85em); cursor: pointer; min-height: max(36px, 1.9em); padding: 0 0.8em; border-radius: var(--r-pill); white-space: nowrap; }
 .notif-list { display: flex; flex-direction: column; }
@@ -2902,6 +2930,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 /* Sendy, the ✏️ button and the music player float above the page; while the list is open the bar (and the panel
    inside it) rises above them, so no notification is ever hidden under one */
 .nav:has(#notif-panel.open) { z-index: 300; }
+.notif-panel:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }   /* opened from the keyboard, focus moves into the list */
 
 /* keep the signed-in persistent cluster (logo + 🔔 + Lv + account + ≡) on one row on small phones */
 
@@ -3144,7 +3173,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .comm-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }   /* the LIVE pill takes its own line when the card is narrow */
 
 /* pill + activity pulse (shared grid + detail) */
-.comm-pill { font-size: max(var(--text-floor), 0.72rem); font-weight: 800; padding: 0.22rem 0.6rem; border-radius: 999px; max-width: 100%; }   /* a long pill (the sandbox one) wraps inside its card rather than running out of it */
+.comm-pill { font-size: max(var(--text-floor), 0.72rem); font-weight: 800; padding: 0.22rem 0.6rem; border-radius: 1.1em; max-width: 100%; text-align: center; }   /* 1.1em: a full pill on one line; a wrapped one is a rounded box whose centred lines stay clear of its corners */   /* a long pill (the sandbox one) wraps inside its card rather than running out of it */
 .comm-pill-live { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-bright); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); }
 .comm-pill-pending { background: rgba(255,179,64,0.14); color: var(--gold); border: 1px solid rgba(255,179,64,0.35); }
 .comm-pulse { display: inline-flex; align-items: center; gap: 0.35rem; font-size: max(var(--text-floor), 0.74rem); font-weight: 800; color: var(--text-dim); }
@@ -4064,7 +4093,7 @@ video.post-avatar, video.c-ava, video.cm-ava, video.gb-ava, video.lb-ava, video.
 .nav-profile > .profile-link { border-radius: 999px 0 0 999px; padding-right: 0.55rem; } /* only the split chip — the signed-out Sign In pill shares the class */
 .nav-profile:hover > .profile-link, .nav-profile:hover > .np-caret-btn { transform: translateY(-1px); } /* the two halves lift together */
 .np-caret-btn {
-  display: inline-flex; align-items: center; justify-content: center; min-height: 40px; min-width: 44px; padding: 0 0.7rem 0 0.45rem; margin-left: -1px; /* 44px: on touch it is the only route into the menu */
+  display: inline-flex; align-items: center; justify-content: center; min-height: 40px; min-width: 44px; padding: 0 0.575rem; margin-left: -1px; /* 44px: on touch it is the only route into the menu */
   border: none; border-radius: 0 999px 999px 0; cursor: pointer; color: var(--on-gold); font: inherit;
   background: linear-gradient(180deg, var(--gold), var(--gold-deep)); transition: transform 0.15s ease;
 }
@@ -4187,6 +4216,7 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .b0-w-stats i { font-style: normal; opacity: 0.75; }
 .b0-conn { margin-top: 0.45rem; }
 .b0-conn summary { cursor: pointer; font-size: max(var(--text-floor), 0.8rem); color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: var(--r-pill); padding: 0.3rem 0.7rem; font-weight: 700; min-height: 32px; display: inline-flex; align-items: center; list-style: none; transition: background 0.15s ease; }
+.b0-conn summary::-webkit-details-marker { display: none; }   /* Safari before 18.4 drew its triangle inside the pill, off-centring the label */
 .b0-conn summary:hover { background: var(--ctl-fill-hi); }
 .b0-conn summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .b0-conn ul { list-style: none; margin: 0.35rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
@@ -4253,9 +4283,17 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 /* The glyph sits in the same margin as the axis labels, so it carries its own ground rather than
    printing itself through whatever number happens to be behind it. */
 .oc-grab > span {
-  display: block; padding: 0 0.28rem; border-radius: 5px; line-height: 1.35;
+  display: grid; place-items: center; height: 1.35em; padding: 0 0.28rem; border-radius: 5px; line-height: 1;
   background: var(--ctl-fill-lo);
 }
+/* The double arrows are drawn (an SVG mask in the text colour), not typed: ↔ and ↕ come from a fallback symbol font
+   whose arrows sit 1–2px off the middle of the tab. */
+.oc-grab-ico { display: block; width: 1em; height: 0.6em; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 12'%3E%3Cpath d='M0 6 5 1v3h10V1l5 5-5 5V8H5v3z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 12'%3E%3Cpath d='M0 6 5 1v3h10V1l5 5-5 5V8H5v3z'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+.oc-grab-ico-y { width: 0.6em; height: 1em;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 20'%3E%3Cpath d='M6 0l5 5H8v10h3l-5 5-5-5h3V5H1z'/%3E%3C/svg%3E");
+          mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 20'%3E%3Cpath d='M6 0l5 5H8v10h3l-5 5-5-5h3V5H1z'/%3E%3C/svg%3E"); }
 .oc-plot:hover .oc-grab, .oc-grab:focus-visible, .oc-grab.is-dragging { opacity: 1; }
 /* An edge, not a fill. A tinted block over the axis washes out the very labels you are dragging the
    scale to read; a line along the edge the strip owns says the same thing and leaves them legible. */
@@ -4382,7 +4420,7 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 
 .rekt-ladder { list-style: none; counter-reset: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
 .rekt-rung { display: flex; align-items: center; gap: 0.5rem; font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim); padding: 0.35rem 0.5rem; border-radius: 9px; background: var(--ink-3); border: 1px solid transparent; }
-.rekt-rung-n { flex: none; width: 1.35rem; height: 1.35rem; border-radius: 50%; display: grid; place-items: center; font-size: max(var(--text-floor), 0.72rem); font-weight: 800; background: var(--ink-4); color: var(--text-dim); }
+.rekt-rung-n { flex: none; width: 1.35rem; height: 1.35rem; border-radius: 50%; display: grid; place-items: center; place-content: center; line-height: 1; font-size: max(var(--text-floor), 0.72rem); font-weight: 800; background: var(--ink-4); color: var(--text-dim); }   /* line-height 1: a 1.5 line box is taller than the disc and grew from its top, which dropped the digit 4px */
 .rekt-rung.is-on { border-color: rgba(255,93,93,0.5); background: rgba(255,93,93,0.09); color: var(--text); }
 .rekt-rung.is-on .rekt-rung-n { background: var(--red); color: #2a0a0a; }
 .rekt-rung-you { margin-left: auto; font-size: max(var(--text-floor), 0.64rem); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--red-soft); }
@@ -4829,7 +4867,7 @@ html.motion-off #matrix-rain { display: none; }
 .oc-tape tr.is-buy .oc-side { color: var(--green-bright); }
 .oc-tape tr.is-sell .oc-side { color: var(--red-soft); }
 /* the wallet chip: address above, state word (and its P/L) below, both inside the link */
-.oc-w { display: inline-flex; flex-direction: column; gap: 0.05rem; line-height: 1.2; padding: 0.2rem 0.5rem;
+.oc-w { display: inline-flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 0.05rem; line-height: 1.2; padding: 0.2rem 0.5rem;
   border-radius: var(--r-1, 8px); border: 1px solid transparent; text-decoration: none; font-family: var(--mono, ui-monospace, monospace); }
 .oc-w-a { font-size: max(var(--text-floor), 0.8rem); }
 .oc-w-s { font-size: max(var(--text-floor), 0.66rem); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.95; font-family: 'Rubik', sans-serif; }
@@ -5054,7 +5092,7 @@ html.age-open, html.age-open body { overflow: hidden; }
 .age-brand span { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.35rem); letter-spacing: 0.02em; color: var(--green-bright); }
 
 .age-kicker {
-  margin: 0.2rem 0 0; padding: 0.2rem 0.65rem; border-radius: var(--r-pill, 999px);
+  margin: 0.2rem 0 0; padding: 0.2rem 0.65rem 0.2rem calc(0.65rem + 0.22em); border-radius: var(--r-pill, 999px);   /* the tracking after the last letter, matched on the left */
   font-size: max(var(--text-floor), 0.72rem); font-weight: 800; letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--on-green); background: var(--green-bright);
 }
@@ -5118,6 +5156,9 @@ html.motion-off #age-gate, html.motion-off #age-gate.age-leaving, html.motion-of
 /* Form controls do not inherit the page's size (the browser gives them 13.33px): floored like everything else.
    Element selectors, so any class rule for a control still wins. */
 button, input, select, textarea { font-size: max(var(--text-floor), 1em); }
+/* A button's line is a fixed 1.2, not 'normal': with 'normal' an emoji in the label (Apple Color Emoji is taller than
+   Rubik) grows the line box at the top and pushes the words about 2px below the button's middle on a phone. */
+button { line-height: 1.2; }
 
 /* a finger does the pointing: every control in the bar grows to the 44px touch target */
 @media (pointer: coarse) { :root { --nav-ctl: 44px; } }

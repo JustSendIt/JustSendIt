@@ -16,7 +16,7 @@
     const wrap = document.createElement('div');
     wrap.id = 'music-player';
     wrap.innerHTML =
-      '<button class="mp-btn" id="mp-toggle" data-tip="Plays the theme tune, or pauses it and keeps it off" aria-label="Play the Just Send It theme" aria-pressed="false">▶</button>' +
+      '<button class="mp-btn" id="mp-toggle" data-tip="Plays the theme tune, or pauses it and keeps it off" aria-label="Play the Just Send It theme" aria-pressed="false"><span class="mp-ico" aria-hidden="true"></span></button>' +
       '<div class="mp-title"><span class="eq" aria-hidden="true"><span>▮</span><span>▮</span><span>▮</span></span> Just $Send It</div>' +
       '<input type="range" id="mp-vol" min="0" max="100" value="70" aria-label="Music volume">' +
       '<button class="mp-hint" id="mp-hint" data-tip="Turns the music on and hides this nudge" hidden>🔊 Tap for the theme</button>';
@@ -44,7 +44,7 @@
 
     function setUI(playing) {
       wrap.classList.toggle('playing', playing);
-      btn.textContent = playing ? '⏸' : '▶';
+      btn.classList.toggle('is-playing', playing);   // the ▶ / ⏸ is drawn by CSS (.mp-ico), centred in the circle on every device
       btn.setAttribute('aria-pressed', String(playing));
       btn.setAttribute('aria-label', playing ? 'Pause the Just Send It theme' : 'Play the Just Send It theme');
     }

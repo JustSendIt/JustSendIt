@@ -21,7 +21,6 @@
 .ci-title {
   margin: 0; font-family: 'Luckiest Guy', cursive; font-weight: 400;
   font-size: max(var(--text-floor), 1.15rem); letter-spacing: 0.4px; color: var(--gold);
-  /* Luckiest Guy sits low in its box — nudge it back onto the emoji's baseline */
   line-height: 1.25;
 }
 .ci-card-done .ci-title { color: var(--green-bright); }

@@ -118,7 +118,7 @@
 .inv-in {
   width: 100%; padding: 0.85rem 1rem; border-radius: 12px; margin-top: 0.5rem;
   background: rgba(0,0,0,0.35); border: 1px solid color-mix(in srgb, var(--g-green, var(--green)) 22%, transparent); color: var(--g-text, #f2f6ec);
-  font-family: ui-monospace, Menlo, monospace; font-size: max(var(--text-floor), 1.25rem); letter-spacing: 0.22em; text-align: center;
+  font-family: ui-monospace, Menlo, monospace; font-size: max(var(--text-floor), 1.25rem); letter-spacing: 0.22em; text-indent: 0.22em; text-align: center;
   text-transform: uppercase;
 }
 .inv-in:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; border-color: var(--g-green, var(--green)); }
@@ -142,7 +142,7 @@
   background: var(--g-tint, rgba(168,206,0,0.13)); border: 1px solid var(--g-edge, rgba(168,206,0,0.33)); color: var(--green-bright, #c6f000);
   font-weight: 800; font-variant-numeric: tabular-nums;
 }
-.inv-sendid small { font-size: max(var(--text-floor), 0.68rem); letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
+.inv-sendid small { font-size: max(var(--text-floor), 0.68rem); letter-spacing: 0.1em; margin-inline-end: -0.1em; text-transform: uppercase; opacity: 0.75; font-weight: 700; }
 
 @media (max-width: 560px) {
   .inv-codes { grid-template-columns: 1fr 1fr; }

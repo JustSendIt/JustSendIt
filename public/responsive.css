@@ -316,3 +316,68 @@ html :is(.cmp-name, .cmp-comm-main small, .inv-chars, .sq-card-name, .sq-card-me
   white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
 }
 html .post-comm-name { max-width: none; }
+
+/* ═══ Text centred in its graphic ═══════════════════════════════════════════════════════════════════════════
+   A glyph inside a fixed-size disc (an emoji avatar, a coin, a ✕, an ⓘ, a count, a gauge's number) is sized
+   from the disc, not from the page's text floor. At the floor's 19pt a 25px emoji sat in a 20–38px circle: its
+   1.5 line box was taller than the circle, the grid row grew from the circle's top, and the glyph hung 1–5px low
+   and past the edge. --ava is the disc's size; the glyph is a share of it, on a line-height of 1, with the
+   content centred even when it is larger than the box. (tests/textsize.mjs allows --ava: a glyph that scales
+   with its circle is a drawing, like the --gfx sizes.) */
+html :is(.post-avatar, .search-hit .h-ava, .sc-sender-ava-emoji, .cmp-cava--txt, .gb-ava, .post-comm-logo-none,
+  .sqd-tok-logo, .pin-chip-logo-none, .ll-info, .lb-ava, .wc-ico-emoji, .np-count-badge, .np-search-clear, .pin-chip-rm,
+  .cmp-ava, .trk-report .trk-info, .media-preview-rm, .modal-x, .mute-flag, .cm-ava, .ge-info) { line-height: 1; place-content: center; }
+html .post-avatar { --ava: 38px; font-size: calc(var(--ava) * 0.6); }
+html .search-hit .h-ava { --ava: 36px; font-size: calc(var(--ava) * 0.6); }
+html .sc-sender-ava-emoji { --ava: 20px; font-size: calc(var(--ava) * 0.62); }
+html .cmp-cava--txt { --ava: 32px; font-size: calc(var(--ava) * 0.36); }   /* up to three capitals of a ticker */
+html .gb-ava { --ava: 26px; font-size: calc(var(--ava) * 0.6); }
+html .post-comm-logo-none { --ava: 22px; font-size: calc(var(--ava) * 0.62); }
+html .sqd-tok-logo { --ava: 28px; font-size: calc(var(--ava) * 0.6); }
+html .pin-chip-logo-none { --ava: 24px; font-size: calc(var(--ava) * 0.6); }
+html .ll-info { --ava: 24px; font-size: calc(var(--ava) * 0.6); }
+html .lb-ava { --ava: 34px; font-size: calc(var(--ava) * 0.6); }
+html .wc-ico-emoji { --ava: 34px; font-size: calc(var(--ava) * 0.6); }
+html .np-count-badge { --ava: 1.25rem; font-size: calc(var(--ava) * 0.6); }
+html .np-search-clear { --ava: 22px; font-size: calc(var(--ava) * 0.55); }
+html .pin-chip-rm { --ava: 24px; width: var(--ava); height: var(--ava); min-width: var(--ava); min-height: var(--ava); padding: 0; font-size: calc(var(--ava) * 0.55); }
+html .cmp-ava { --ava: 44px; font-size: calc(var(--ava) * 0.55); }
+html .cmp-step--1 .cmp-ava { --ava: 56px; }
+@media (max-width: 420px) { html .cmp-ava { --ava: 38px; } html .cmp-step--1 .cmp-ava { --ava: 48px; } }
+html .cmp-ava.cmp-ava--sm { --ava: 28px; }   /* the leaderboard's small avatar: its own 28px circle */
+@media (max-width: 420px) { html .cmp-ava.cmp-ava--sm { --ava: 38px; } }   /* compete.css makes every .cmp-ava 38px on a phone */
+html .trk-report .trk-info { --ava: 28px; font-size: calc(var(--ava) * 0.6); }
+@media (max-width: 560px) { html .trk-report .trk-info { --ava: 36px; } }
+html .trk-report .trk-info { font-family: Rubik, system-ui, sans-serif; }   /* it inherited the heading's Luckiest Guy */
+html .media-preview-rm { --ava: 30px; font-size: calc(var(--ava) * 0.5); }
+html .modal-x { --ava: 34px; font-size: calc(var(--ava) * 0.5); }
+@media (max-width: 560px) { html .modal-x { --ava: 44px; } }
+html .mute-flag { --ava: 28px; font-size: calc(var(--ava) * 0.6); }
+html .cm-ava { --ava: 30px; font-size: calc(var(--ava) * 0.6); }
+html .ge-info { --ava: 30px; font-size: calc(var(--ava) * 0.6); }
+html .np-rail-count { font-size: max(11px, calc(var(--ava) * 0.22)); }   /* the private "you ×N" tally: inside its 46–52px disc, never under 11px (the size of the notification count's digits) */
+/* the gauge's number sits in the ring's 34px hole (104px and 80px rings on the slide) */
+html .np-gauge { --ava: 44px; }
+html .np-slide .np-gauge { --ava: 104px; }
+@media (max-width: 640px), (max-height: 700px) { html .np-slide .np-gauge { --ava: 80px; } }
+html .np-gauge-num, html .np-slide .np-gauge-num { font-size: calc(var(--ava) * 0.34); line-height: 1; }
+/* a touch-sized pin button kept its 📌 packed to the start of the 44px square */
+html .np-row-pin { justify-content: center; }
+/* the invite codes: cells sized from the text, and the fixed word in the tag kept whole */
+html .inv-codes, html .inv-dash .inv-codes { grid-template-columns: repeat(auto-fill, minmax(min(100%, 13em), 1fr)); }
+html .inv-code:not(.is-used) .inv-tag { flex: none; white-space: nowrap; }
+/* An emoji drawn by Apple Color Emoji sits about 0.03–0.05em above the middle of the line that centres it (its artwork
+   runs from about 0.1em below the baseline to 0.87em above, where the line's middle is 0.34em up). A top padding of
+   0.08em in its own size moves the glyph down half of that, onto the disc's centre. Text avatars only: an <img> or
+   <video> with the same class must not lose part of its picture to padding. */
+html :is(.post-avatar, .search-hit .h-ava, .sc-sender-ava-emoji, .gb-ava, .post-comm-logo-none, .sqd-tok-logo, .pin-chip-logo-none,
+  .lb-ava, .wc-ico-emoji, .cmp-ava, .mute-flag, .notif-bell, .pl-ava-emo, .cm-ava):not(img, video) { padding-top: 0.08em; }
+/* Forced colours (Windows High Contrast): the system repaints backgrounds and text. The drawn marks keep their own
+   ink in the system's button-text colour; the ▾ glyphs the drawings stand in for are shown instead of a drawing. */
+@media (forced-colors: active) {
+  #music-player .mp-ico, .oc-grab-ico { forced-color-adjust: none; color: ButtonText; background-color: ButtonText; }
+  #music-player .mp-btn.is-playing .mp-ico { background-color: transparent; }   /* the two bars are a gradient in currentColor */
+  .np-chev::before, .np-caret::before { display: none; }
+  .np-chev { color: CanvasText; } .np-caret { color: ButtonText; }   /* Firefox keeps a transparent colour; name a system one */
+  .gs-steps .step.is-done .step-num { forced-color-adjust: none; }
+}

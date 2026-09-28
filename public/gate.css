@@ -149,7 +149,7 @@ body.gate {
    <span> and has to be given a display explicitly. Forgetting one collapses its children onto one line. */
 .tk-logo { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 auto; }
 .tk-brand { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.05rem); color: var(--g-green-hi); letter-spacing: 0.02em; }
-.tk-admit { display: inline-block; margin-left: auto; font-size: max(var(--text-floor), 0.7rem); font-weight: 800; letter-spacing: 0.22em;
+.tk-admit { display: inline-block; margin-left: auto; font-size: max(var(--text-floor), 0.7rem); font-weight: 800; letter-spacing: 0.22em; text-indent: 0.22em;
   text-transform: uppercase; color: var(--g-on); background: var(--g-green-hi);
   padding: 0.22rem 0.5rem; border-radius: 4px; white-space: nowrap; }
 
@@ -245,7 +245,7 @@ body.gate {
 
 .g-code-in {
   width: 100%; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: max(var(--text-floor), clamp(1.2rem, 6vw, 1.9rem)); font-weight: 800; letter-spacing: 0.32em; text-align: center;
+  font-size: max(var(--text-floor), clamp(1.2rem, 6vw, 1.9rem)); font-weight: 800; letter-spacing: 0.32em; text-indent: 0.32em; text-align: center;
   text-transform: uppercase; padding: 0.8rem 0.6rem; border-radius: 12px;
   background: rgba(0,0,0,0.42); color: var(--g-green-hi);
   border: 2px solid color-mix(in srgb, var(--g-green) 40%, transparent); caret-color: var(--g-green-hi);

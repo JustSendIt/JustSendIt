@@ -1,14 +1,21 @@
 /* The site's typefaces, served from this origin.
    They used to load from fonts.googleapis.com / fonts.gstatic.com, which handed Google the IP address and
    browser of every visitor on every page. Latin and Latin Extended subsets only; anything outside them falls
-   back to the system stack each rule names. Licences: see LICENSES.md in this folder. */
+   back to the system stack each rule names. Licences: see LICENSES.md in this folder.
+   Luckiest Guy is served with its vertical metrics changed (ascender 1440→1736, descender −608→−312 of 2048 units, in
+   hhea and OS/2 typo; same total, so its line height is unchanged). As published, its capitals fill the whole ascent and
+   the box keeps 0.3em of empty descent below them, so every button, pill and badge that centres its line drew its
+   label about 0.15em high. With the ascent and descent balanced around the cap height, centring the line centres the
+   letters on macOS, iOS, Android and Linux, which lay text out from hhea (CSS ascent-override would miss Safari). Windows
+   reads usWinAscent/usWinDescent, left as published (2006/504), which already centre the capitals to within 0.02em;
+   USE_TYPO_METRICS stays off so Windows line heights do not change. The glyphs are untouched. */
 /* latin-ext */
 @font-face {
   font-family: 'Luckiest Guy';
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(luckiest-guy-latin-ext-76d8d95e.woff2) format('woff2');
+  src: url(luckiest-guy-latin-ext-be6f3912.woff2) format('woff2');
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 /* latin */
@@ -17,7 +24,7 @@
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url(luckiest-guy-latin-dc461b6f.woff2) format('woff2');
+  src: url(luckiest-guy-latin-09b57828.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 /* latin-ext */

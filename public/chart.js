@@ -989,10 +989,10 @@
            pan-y so a phone can still scroll the page by dragging over the chart. */
         '<button class="oc-grab oc-grab-x" type="button" data-tip="Stretches or squeezes the time axis — drag or use arrow keys" data-grab="x"' +
           ' aria-label="Time scale. Drag right to stretch time and see less of it, left to fit more in. Arrow keys also work; press Home to fit the window."' +
-          ' title="Drag to stretch or compress time"><span>↔</span></button>' +
+          ' title="Drag to stretch or compress time"><span><i class="oc-grab-ico" aria-hidden="true"></i></span></button>' +
         '<button class="oc-grab oc-grab-y" type="button" data-tip="Stretches or squeezes the price scale — drag or use arrow keys" data-grab="y"' +
           ' aria-label="Price scale. Drag up to stretch the price range and see it in more detail, down to fit more in. Arrow keys also work; press Home to fit the window."' +
-          ' title="Drag to stretch or compress the price scale"><span>↕</span></button>' +
+          ' title="Drag to stretch or compress the price scale"><span><i class="oc-grab-ico oc-grab-ico-y" aria-hidden="true"></i></span></button>' +
         '<button class="oc-reset" type="button" data-tip="Puts the whole window back and follows the live price" hidden>↺ Fit</button>' +
       '</div>' +
       '<div class="oc-legend" role="group" aria-label="Which markers to show"></div>' +

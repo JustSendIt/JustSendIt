@@ -273,8 +273,10 @@
           '<circle cx="60" cy="60" r="54" class="pc-arc pc-arc-xp" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" data-fill="' + (100 - xpPct) + '" data-fillkind="dash" transform="rotate(-90 60 60)"/>' +
           '<circle cx="60" cy="60" r="41" class="pc-track"/>' +
           '<circle cx="60" cy="60" r="41" class="pc-arc pc-arc-dia" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100" data-fill="' + (100 - diaPct) + '" data-fillkind="dash" transform="rotate(-90 60 60)"/>' +
-          '<text x="60" y="53" text-anchor="middle" class="pc-num">' + g.level + '</text>' +   // number above centre, label below: apart even by their line boxes, not just their ink
-          '<text x="60" y="84" text-anchor="middle" class="pc-lbl">LEVEL</text>' +
+          // number above, label below, apart even by their line boxes; placed so the ink of the pair (the number's cap
+          // height to LEVEL's baseline) is centred on the ring's centre (60,60), not just each on its own line
+          '<text x="60" y="49.7" text-anchor="middle" class="pc-num">' + g.level + '</text>' +
+          '<text x="61" y="80.7" text-anchor="middle" class="pc-lbl">LEVEL</text>' +   // x 61: middle-anchoring counts the 0.18em tracking after the last L, so the word sat a unit left
         '</svg>' +
       '</div>' +
       '<div class="pc-name">' +
