@@ -2161,30 +2161,84 @@ async function rpcTokenTransfers(wallet, token, opts) {
    does); one that answered small doubles. A window of 50 blocks that is still too large is a wallet too dense to
    read in full here — said so, not retried.
    `address` null reads every token at once (the node filters on the indexed topics, not the contract). A transfer
-   to yourself answers both the "from" and the "to" read, so rows are de-duplicated by transaction and log index. */
-async function transferLogWalk(address, topicSets, start, head, max, read) {
+   to yourself answers both the "from" and the "to" read, so rows are de-duplicated by transaction and log index.
+   Since 2026-09-28 the public node caps a query with no contract filter at a span it names (100,000 blocks — ~5
+   hours of this chain), so a whole-wallet read is hundreds of windows: once the cap is known they go ten to a
+   request through `opts.readMany` (a refused item is read again on its own), and with
+   `opts.laterPassesStartAtFirstHit` the "from the wallet" pass starts at the first transfer that ever reached it.
+   `read(q, { window, done, total })` lets the caller price a capped window below a whole-chain one and show progress. */
+const LOG_WINDOWS_PER_BATCH = 10;   // measured 2026-09-28: ten 100k-block windows answer in one request in ~0.1 s; twenty-five take 10 s with timeouts, then the node answers 429
+async function transferLogWalk(address, topicSets, start, head, max, read, opts) {
+  opts = opts || {};
   const getLogs = read || ((q) => rpcRetry(() => rpc('eth_getLogs', [q])));
   const hx = (n) => '0x' + n.toString(16), logs = [], seen = new Set();   // a transfer to yourself answers both the "from" and the "to" read: kept once
-  for (const topics of topicSets) {
-    let from = start, window = Math.max(1, head - start + 1), ceiling = Infinity, tries = 0;
+  let earliest = Infinity, cap = Infinity, done = 0, total = 0;          // earliest: the lowest block a kept transfer sits in; cap: the span the node named
+  const keep = (out) => {
+    for (const l of out) { if (l.removed) continue; const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue; seen.add(k); logs.push(l); const bn = parseInt(l.blockNumber, 16); if (bn < earliest) earliest = bn; }
+    if (logs.length > max) throw new Error('history longer than the chain read budget');
+  };
+  const info = (window) => ({ window, done, total });
+  const spanOf = (m) => { const sp = /only (\d+) (?:blocks )?are allowed/i.exec(m); return sp ? Number(sp[1]) : 0; };
+  const left = (from, s) => Math.ceil((head - from + 1) / cap) + (topicSets.length - s - 1) * Math.ceil((head - start + 1) / cap);   // windows still to read, at the cap
+  /* one window on its own, with the single-window rules: a slow one is asked again, twice; one the node says is too
+     large is quartered and read in pieces; a window of 50 blocks that is still too large is a wallet too dense */
+  async function readOne(fromB, toB, topics) {
+    for (let tries = 0; ;) {
+      const q = { fromBlock: hx(fromB), toBlock: hx(toB), topics }; if (address) q.address = address;
+      let out;
+      try { out = await getLogs(q, info(toB - fromB + 1)); }
+      catch (e) {
+        const m = String((e && e.message) || ''), slow = /timed out|timeout|aborted/i.test(m), span = toB - fromB + 1;
+        if (slow && tries < 2) { tries++; await sleep(300); continue; }
+        if (TOO_MANY_RE.test(m) && span > 50) { const part = Math.max(50, Math.ceil(span / 4)); for (let f = fromB; f <= toB; f += part) await readOne(f, Math.min(toB, f + part - 1), topics); return; }
+        if (!slow && TOO_MANY_RE.test(m)) throw new Error('history too dense: one ' + span + '-block window holds more transfers than the node will return');
+        throw e;
+      }
+      if (!Array.isArray(out)) throw new Error('the chain did not answer');
+      keep(out); done++; return;
+    }
+  }
+  for (let s = 0; s < topicSets.length; s++) {
+    const topics = topicSets[s];
+    let from = start;
+    /* a later pass can begin where the first hit was, when the caller says the passes are "to the wallet" then
+       "from the wallet": nothing leaves a wallet that never arrived (a mint arrives as a Transfer from 0x0) */
+    if (s > 0 && opts.laterPassesStartAtFirstHit) { if (earliest === Infinity) continue; from = Math.max(start, earliest); }
+    let window = Math.min(cap, Math.max(1, head - from + 1)), ceiling = cap, tries = 0;
+    if (cap !== Infinity) total = done + left(from, s);
     while (from <= head) {
+      // pinned at the node's span with a batch reader on hand: several windows per request for the rest of this pass
+      if (opts.readMany && cap !== Infinity && window >= cap && head - from + 1 > cap) {
+        const qs = [];
+        for (let f = from; f <= head && qs.length < LOG_WINDOWS_PER_BATCH; f += cap) { const q = { fromBlock: hx(f), toBlock: hx(Math.min(head, f + cap - 1)), topics }; if (address) q.address = address; qs.push(q); }
+        const outs = await opts.readMany(qs, info(cap));
+        for (let i = 0; i < qs.length; i++) {
+          if (Array.isArray(outs && outs[i])) { keep(outs[i]); done++; }
+          else await readOne(parseInt(qs[i].fromBlock, 16), parseInt(qs[i].toBlock, 16), topics);   // the node refused that one window (slow, or dense): on its own
+        }
+        from = parseInt(qs[qs.length - 1].toBlock, 16) + 1;
+        continue;
+      }
       const to = Math.min(head, from + window - 1);
       const q = { fromBlock: hx(from), toBlock: hx(to), topics };
       if (address) q.address = address;
       let out;
-      try { out = await getLogs(q); }
+      try { out = await getLogs(q, info(window)); }
       catch (e) {
         const m = String((e && e.message) || '');
         const slow = /timed out|timeout|aborted/i.test(m);
         if (slow && tries < 2) { tries++; await sleep(300); continue; }   // the same window, once more
+        /* Since 2026-09-28 the public node caps a query with no contract filter at a span it names ("query spans N
+           blocks … but only 100000 are allowed"): go straight to that span, for every pass, and never past it. */
+        const span = spanOf(m);
+        if (span >= 50 && span < window) { cap = ceiling = window = span; total = done + left(from, s); tries = 0; continue; }
         if (TOO_MANY_RE.test(m) && window > 50) { window = Math.max(50, Math.floor(window / 4)); if (!slow) ceiling = window; tries = 0; continue; }
         if (!slow && TOO_MANY_RE.test(m)) throw new Error('history too dense: one ' + window + '-block window holds more transfers than the node will return');
         throw e;
       }
       tries = 0;
       if (!Array.isArray(out)) throw new Error('the chain did not answer');
-      for (const l of out) { if (l.removed) continue; const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue; seen.add(k); logs.push(l); }
-      if (logs.length > max) throw new Error('history longer than the chain read budget');
+      keep(out); done++;
       from = to + 1;
       if (out.length < 2500) window = Math.min(window * 2, ceiling, Math.max(1, head - from + 1));
     }
@@ -2420,8 +2474,9 @@ function tradeLegs(entry, w, a) {
 }
 
 /* ----- The read runs as a job -----
-   A whole-wallet read takes seconds for a quiet wallet and a minute or more for a busy one the first time — longer
-   than a proxy holds a request open (Cloudflare: 100 s). So it runs as a job: the first GET starts it and answers
+   A whole-wallet read is a minute or two the first time (since 2026-09-28 the public node reads history 100,000
+   blocks at a time, so it is hundreds of windows at the tracker's pace), longer for a busy wallet — longer than a
+   proxy holds a request open (Cloudflare: 100 s). So it runs as a job: the first GET starts it and answers
    202 with its progress, the page asks again every couple of seconds, and the finished history is kept a few
    minutes. Jobs and finished histories belong to the member who asked (so no one learns what anyone else looked
    up); only what never changes — receipts, block times, token names — is shared, and a receipt another member's
@@ -2498,9 +2553,11 @@ async function readWalletHistory(w, uid, step, guard) {
   if (!(head > 0) || balHex == null || nonceHex == null) throw new Error('the chain did not answer');
 
   // 1. every Transfer from and to the wallet, in every token, over the chain's whole life
-  let windows = 0;
   say('reading every token transfer', 0, 0);
-  const raw = await transferLogWalk(null, [[TRANSFER_TOPIC, wt], [TRANSFER_TOPIC, null, wt]], 0, head, TRACKER_HISTORY_MAX, (q) => { say('reading every token transfer', ++windows, 0); return pacedCall('eth_getLogs', [q], PACE_LOG_WEIGHT, guard); });
+  // "to the wallet" first, then "from" it from the first arrival on; a capped window (~75 ms) is priced at 1, a whole-chain one at PACE_LOG_WEIGHT
+  const raw = await transferLogWalk(null, [[TRANSFER_TOPIC, null, wt], [TRANSFER_TOPIC, wt]], 0, head, TRACKER_HISTORY_MAX,
+    (q, i) => { say('reading every token transfer', i.done, i.total); return pacedCall('eth_getLogs', [q], i.window <= 200000 ? 1 : PACE_LOG_WEIGHT, guard); },
+    { laterPassesStartAtFirstHit: true, readMany: (qs, i) => { say('reading every token transfer', i.done, i.total); return pacedBatchAll(qs.map((q) => ['eth_getLogs', [q]]), null, guard); } });
   let nftTransfers = 0;
   const logs = [];
   for (const l of raw) {
@@ -5586,7 +5643,7 @@ const LEDGER_MAX_LOGS = 1000000;                // a token with more Transfer ev
 const LEDGER_PAUSE_MS = 250;                    // between successful reads: a trickle the public node accepts, never a burst
 const LEDGER_COOL_MS = Number(process.env.LEDGER_COOL_MS) > 0 ? Number(process.env.LEDGER_COOL_MS) : 60 * 1000;   // after the node refuses a ledger read, all ledger work stands down this long
 let ledgerCoolUntil = 0;
-const TOO_MANY_RE = /exceeds limit|too many results|query returned more|response size|more than \d+ results|limit of \d+|timed out|timeout|aborted/i;   // "the answer is too large (or too slow)" — shrink the window
+const TOO_MANY_RE = /exceeds limit|too many results|query returned more|response size|more than \d+ results|limit of \d+|only \d+ (?:blocks )?are allowed|narrow the block range|timed out|timeout|aborted/i;   // "the answer is too large (or too slow)" — shrink the window
 /* The ledger is BACKGROUND work on the same public node that answers the reads that matter now — a holder
    check, a factory lookup, a chart. So it never argues with a refusal: the first 429 stands every ledger build
    down for LEDGER_COOL_MS (no retries into it, which only added four more hits per refusal), and the build

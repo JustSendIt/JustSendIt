@@ -10,7 +10,7 @@ const TRK = {
   prefs: { hideDust: true, showHoldings: true, showTrades: true, showActivity: true, usd: true },
 };
 
-/* The server reads the chain as a job (a busy wallet's first read can take a minute or more): it answers 202 with how
+/* The server reads the chain as a job (a first read is a minute or two — the node reads history 100,000 blocks at a time — and a busy wallet's is longer): it answers 202 with how
    far it has got, then 200 with the history. A busy or throttled answer is waited out; the page only gives up when
    the server reports no progress for five minutes, or says the wallet is too large to read in full. */
 async function trkChainWallet(addr, say, fresh, isStale) {
