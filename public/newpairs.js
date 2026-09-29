@@ -294,8 +294,9 @@
        used to leave out entirely — so a token whose health had been cut by up to 42 points for them was
        shown a breakdown in which every section read "nothing tripped", and the two numbers disagreed with
        no explanation visible anywhere on the page. */
-    sniperDump: { ico: '🎯', word: () => 'Snipers sold out', sev: 'bad', say: p => { const sn = p.risk && p.risk.snipers; return sn && sn.wallets ? `Of the ${npNum(sn.wallets)} wallet${sn.wallets === 1 ? '' : 's'} that bought in the very first block, most have already sold out.` : 'Wallets that bought in the very first block have already sold out.'; } },
-    sniperHeavy: { ico: '🎯', word: () => 'Sniped launch', sev: 'warn', say: p => { const sn = p.risk && p.risk.snipers; return sn && sn.snipedPct != null ? `Block-0 wallets took ${pctPlain(sn.snipedPct)} of the supply in the first block${sn.holdsPct != null ? ` and still hold ${pctPlain(sn.holdsPct)}` : ''} — they got in before anyone else could.` : 'Wallets buying in the very first block took a large share of the supply.'; } },
+    // what the server knows (sniperVerdict): how many block-0 wallets are net sellers — not that "most" sold, and not that they sold everything
+    sniperDump: { ico: '🎯', word: () => 'Snipers sold', sev: 'bad', say: p => { const sn = p.risk && p.risk.snipers; return sn && sn.wallets && sn.netSellers != null ? `${npNum(sn.netSellers)} of the ${npNum(sn.wallets)} wallet${sn.wallets === 1 ? '' : 's'} that bought in the very first block ${sn.netSellers === 1 ? 'has' : 'have'} sold since.` : 'Wallets that bought in the very first block have sold since.'; } },
+    sniperHeavy: { ico: '🎯', word: () => 'Sniped launch', sev: 'warn', say: p => { const sn = p.risk && p.risk.snipers; return sn && sn.snipedPct != null ? `Block-0 wallets took ${pctPlain(sn.snipedPct)} of the circulating float in the first block${sn.holdsPct != null ? ` and still hold ${pctPlain(sn.holdsPct)}` : ''} — they got in before anyone else could.` : 'Wallets buying in the very first block took a large share of the circulating float.'; } },   // the server's shares are of the float (sniperVerdict), which is what block0.js calls it too
   };
   const FLAG_ORDER = ['honeypotSuspect', 'dumping', 'serialDeployer', 'lowLiquidity', 'sniperDump', 'lowHolders', 'concentrated', 'unverified', 'sniperHeavy', 'sellPressure', 'deadVolume'];
   const activeFlags = (p) => FLAG_ORDER.filter(k => p.risk && p.risk[k]);
@@ -344,7 +345,7 @@
       return { key: sec.key, label: sec.label, ico: sec.ico, score, grade: gradeOf(score), fails, wins: sectionPositives(sec.key, p) };
     });
   }
-  function breakdownHTML(p) {
+  function breakdownHTML(p, noContract) {   // noContract: the dashboard reads the contract on its own card, so the slot here would fetch it twice
     const health = Math.round((p.risk && p.risk.health) || 0);
     const secs = scoreBreakdown(p);
     const totalPenalty = 100 - health;
@@ -357,7 +358,7 @@
         s.wins.map(w => '<li class="np-bd-win"><span class="np-bd-check" aria-hidden="true">✓</span> ' + esc(w) + '</li>').join('') +
         (!s.fails.length && !s.wins.length ? '<li class="np-bd-neutral">No signal either way yet.</li>' : '');
       // the Contract section's dropdown lazy-loads the deep honeypot / contract-code read
-      const contractSlot = s.key === 'contract'
+      const contractSlot = s.key === 'contract' && !noContract
         ? '<div class="np-contract" data-token="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '"><p class="np-contract-load"><span class="np-live-dot" aria-hidden="true"></span> Reading the contract code…</p></div>'
         : '';
       return '<details class="np-bd-sec np-bd-g' + s.grade + '">' +
@@ -710,7 +711,8 @@
        label (copy, community, call, pin, watch) plus their warnings. aria-labelledby pins the name to the
        one-line sr summary below instead; the pair address makes the id unique per row. */
     const srId = 'np-sum-sr-' + esc(p.pair.address);
-    return '<summary class="np-sum" aria-labelledby="' + srId + '"><div class="np-head">' +
+    const dash = !!window.TokenModal;   // the row opens the dashboard popup rather than unfolding here
+    return '<summary class="np-sum' + (dash ? ' np-sum--dash' : '') + '" aria-labelledby="' + srId + '"' + (dash ? ' aria-haspopup="dialog"' : '') + '><div class="np-head">' +
       gaugeHTML(p, tri, health) +
       logoHTML(p) +
       '<span class="np-id">' +
@@ -727,7 +729,7 @@
       rowPinHTML(p) +
       (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
-      '<span class="sr-only" id="' + srId + '">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.</span>' +
+      '<span class="sr-only" id="' + srId + '">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (dash ? '. Opens the full dashboard.' : '. Expand for full detail.') + '</span>' +
     '</div>' + flagstripHTML(p) + '</summary>';
   }
 
@@ -792,8 +794,17 @@
   function commDecorate(root) { if (window.decorateTokenCommunities) decorateTokenCommunities(root); }
   const viewedDetails = new Set(); // token addresses whose FULL on-chain detail the user has opened this session (drives the "did they DYOR?" flag)
   function markViewed(addr) { if (addr) viewedDetails.add(String(addr).toLowerCase()); }
+  /* Reading more about a token opens its dashboard in the token popup, drawn from the pair this view already
+     holds (no second read). false when the popup is not on this page — the caller then falls back to the
+     classic detail inline. Opening it counts as having seen the full detail, the same as expanding a row did. */
+  function openDash(p) {
+    if (!p || !p.token || !(window.TokenModal && TokenModal.open)) return false;
+    markViewed(p.token.address);
+    TokenModal.open(p.token.address, { symbol: p.token.symbol, name: p.token.name, pair: p });
+    return true;
+  }
   // deep honeypot / contract-code read (lazy-loaded into the Contract score section when it expands)
-  function contractHTML(j) {
+  function contractHTML(j, dash) {   // dash: the dashboard's Contract card — the owner powers go one click down, their count stays in view
     j = j || {};
     const liq = j.liquidity;
     let liqLine = '';
@@ -803,8 +814,11 @@
         : '<p class="np-hp-bad">⚠️ <b>Liquidity does NOT look locked</b> — only about <b>' + Math.round(liq.lockedPct) + '%</b> of the LP is burned/locked, so it could be pulled (rug risk).</p>';
     } else if (liq) liqLine = '<p class="np-hp-note">🤷 Couldn’t tell whether the liquidity is locked.</p>';
     const sevCls = { critical: 'crit', high: 'high', medium: 'med' };
-    const powers = (j.powers || []).length
-      ? '<p class="np-hp-sub">The owner’s code appears able to:</p><ul class="np-hp-powers">' + j.powers.map(x => '<li class="np-hp-' + (sevCls[x.sev] || 'med') + '"><b>' + esc(x.can) + '</b> — ' + esc(x.why) + '</li>').join('') + '</ul>'
+    const plist = j.powers || [];
+    const pul = '<ul class="np-hp-powers">' + plist.map(x => '<li class="np-hp-' + (sevCls[x.sev] || 'med') + '"><b>' + esc(x.can) + '</b> — ' + esc(x.why) + '</li>').join('') + '</ul>';
+    const powers = plist.length
+      ? (dash ? '<details class="tkd-more tkd-more--in"><summary class="tkd-more-s"><span class="tkd-more-lbl">⚠️ The owner’s code appears able to do ' + (plist.length === 1 ? 'one thing' : plist.length + ' things') + ' — see what</span><span class="tkd-more-caret" aria-hidden="true"></span></summary><div class="tkd-more-b">' + pul + '</div></details>'
+              : '<p class="np-hp-sub">The owner’s code appears able to:</p>' + pul)
       : (j.verified ? '<p class="np-hp-ok">✔ No mint, blacklist, pause, trading-toggle or tax-changing powers were found in the source.</p>' : '');
     return '<div class="np-hp">' +
       '<p class="np-hp-h">🍯 Honeypot &amp; contract read</p>' +
@@ -818,7 +832,7 @@
     try {
       const r = await fetch('/api/pairs/contract?token=' + encodeURIComponent(el.dataset.token) + '&pair=' + encodeURIComponent(el.dataset.pair || ''), { credentials: 'same-origin' });
       const j = await r.json();
-      if (r.ok) { el.innerHTML = contractHTML(j); el.dataset.loaded = '1'; } else el.innerHTML = '<p class="np-contract-load">Couldn’t read the contract right now.</p>';
+      if (r.ok) { el.innerHTML = contractHTML(j, !!el.dataset.dash); el.dataset.loaded = '1'; } else el.innerHTML = '<p class="np-contract-load">Couldn’t read the contract right now.</p>';
     } catch { el.innerHTML = '<p class="np-contract-load">Couldn’t read the contract right now.</p>'; }
     finally { delete el.dataset.loading; }
   }
@@ -838,9 +852,10 @@
     }
     // Our own chart, drawn from this pair's Swap events. No third-party iframe: same underlying data
     // every aggregator uses, minus the rate limit, the tracking surface and the extra hop.
+    const dex = p.links && p.links.dex;   // a stored snapshot can carry no link (the server drops any that is not plain http/https)
     return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
-      '<p class="np-chart-note">Built live from on-chain swaps. ' +
-      '<a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a></p>';
+      '<p class="np-chart-note">Built live from on-chain swaps.' +
+      (dex ? ' <a href="' + esc(dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a>' : '') + '</p>';
   }
   function mountCharts(root) { if (window.mountOnChainCharts) mountOnChainCharts(root || document); }
   function group(id, title, openDefault, inner) {
@@ -857,9 +872,16 @@
      sentence about it — it goes in the "couldn't check" line instead, because a confident summary that
      quietly omits what it does not know is worse than no summary. Nothing here is new information; it is the
      same numbers the sections below show, said the way a person would say them. */
-  function auditHTML(p) {
+  /* The audit's pieces, so the same sentences can be laid out two ways: stacked as "The short version"
+     at the top of the classic detail body, or split across the dashboard (the bottom line and the gaps on
+     its Safety card, the full rows one click away). One source of wording, so the two can never disagree. */
+  // how deep the pool is against the claimed value, said the way a person would say it (the audit and the Market card share it)
+  const depthSay = (ratio) => ratio < 2 ? 'A pool that thin cannot pay everyone out; getting back to cash may not be possible at the price shown.'
+    : ratio < 8 ? 'Thin enough that a large sell moves the price a long way.'
+    : 'Deep enough to trade in and out of at something near the price shown.';
+  function auditParts(p) {
     const r = p.risk || {}, m = p.market || {}, h = p.holders || {}, t = p.token || {};
-    const T = verdictOf(p), flags = activeFlags(p), health = healthOf(p);
+    const flags = activeFlags(p), health = healthOf(p);
     const sym = t.symbol ? '$' + esc(t.symbol) : 'This token';
 
     // ---- the bottom line, in one sentence ----
@@ -883,10 +905,7 @@
         // the number people cannot read on their own: what the pool is worth RELATIVE to the claim
         if (m.marketCap != null && m.marketCap > 0) {
           const ratio = m.liquidityUsd / m.marketCap * 100;
-          s += ' — about <b>' + pctPlain(ratio) + '</b> of the market cap';
-          s += ratio < 2 ? '. A pool that thin cannot pay everyone out; getting back to cash may not be possible at the price shown.'
-             : ratio < 8 ? '. Thin enough that a large sell moves the price a long way.'
-             : '. Deep enough to trade in and out of at something near the price shown.';
+          s += ' — about <b>' + pctPlain(ratio) + '</b> of the market cap. ' + depthSay(ratio);
         } else s += '.';
       } else s += ', but the pool behind it could not be read.';
       if (p.volume && p.volume.h24 != null) s += ' <b>' + npFmtUsd(p.volume.h24) + '</b> changed hands in the last 24 hours.';
@@ -929,28 +948,23 @@
     rows.push(['❓', 'What we could not check',
       gaps.length ? 'We could not read ' + esc(gaps.join(', ')) + '. That is missing information, <b>not a pass</b> — every check above is only as good as the data behind it.'
                   : 'Nothing — every check above had the data it needed.']);
-
+    return { line, rows, gaps };
+  }
+  const auditRowsHTML = (rows) => '<dl class="np-audit-rows">' +
+    rows.map(([ico, k, v]) => '<div class="np-audit-row"><dt><span aria-hidden="true">' + ico + '</span> ' + esc(k) + '</dt><dd>' + v + '</dd></div>').join('') + '</dl>';
+  const AUDIT_FINE = '<p class="np-audit-fine">Read from public on-chain data and automated heuristics — not an audit, not a guarantee, and never advice to buy. Most new tokens go to zero.</p>';
+  function auditHTML(p) {
+    const A = auditParts(p);
     return '<section class="np-audit">' +
       '<h3 class="np-audit-h">📋 The short version</h3>' +
-      '<p class="np-audit-lead">' + line + '</p>' +
-      '<dl class="np-audit-rows">' +
-        rows.map(([ico, k, v]) => '<div class="np-audit-row"><dt><span aria-hidden="true">' + ico + '</span> ' + esc(k) + '</dt><dd>' + v + '</dd></div>').join('') +
-      '</dl>' +
-      '<p class="np-audit-fine">Read from public on-chain data and automated heuristics — not an audit, not a guarantee, and never advice to buy. Most new tokens go to zero.</p>' +
+      '<p class="np-audit-lead">' + A.line + '</p>' +
+      auditRowsHTML(A.rows) + AUDIT_FINE +
     '</section>';
   }
 
-  function bodyHTML(p, sections, opts) {
-    const S = sections || state.sections; opts = opts || {}; // S = which sections start open; opts.hideCall hides the "Make a Send Call" CTA (e.g. inside a Send Call widget)
-    const tri = triageOf(p), T = verdictOf(p);
-    const flags = activeFlags(p);
-    const h = p.holders, m = p.market, r = p.risk || {};
-
-    // A0. The audit summary — the whole token in sentences, before any of the sections below
-    const audit = auditHTML(p);
-
-    // A. Why verdict (always shown)
-    let why;
+  // "Why we say …": the flags in sentences, or the clean line (the classic body and the dashboard's Safety card)
+  function whyHTML(p, hTag) {
+    const T = verdictOf(p), flags = activeFlags(p), hx = hTag || 'h3';
     if (flags.length) {
       /* Off the scanner page this heading is the ONLY verdict text there is — window.NPCard.detailHTML
          ships this panel into the Send Wall, communities, support, profiles and the token modal, where
@@ -958,77 +972,112 @@
          It also cannot be left alone: this branch renders only when flags.length is truthy, and a
          reader-bar pass can carry flags, so the old wording would print "Why we say Looks Good, Send It"
          directly above a list of warnings the site itself raised. */
-      why = '<section class="np-why"><h3 class="np-why-h">' + (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></h3><ul class="np-why-list">';
+      let why = '<section class="np-why"><' + hx + ' class="np-why-h">' + (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></' + hx + '><ul class="np-why-list">';
       flags.forEach(k => { why += '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].say(p)) + '</li>'; });
-      why += '</ul></section>';
-    } else {
-      why = '<section class="np-why"><p class="np-why-clean">✔ No automatic red flags tripped. That doesn\'t mean it\'s safe — most new tokens still go to zero. Do your own research.</p></section>';
+      return why + '</ul></section>';
     }
+    return '<section class="np-why"><p class="np-why-clean">✔ No automatic red flags tripped. That doesn\'t mean it\'s safe — most new tokens still go to zero. Do your own research.</p></section>';
+  }
 
-    // B. Market
-    const supply = supplyOf(p);
-    const resv = m.reserves ? '<p class="np-reserves">💧 Pooled: <b>' + npCompact(m.reserves.tokenAmount) + '</b> ' + esc(p.token.symbol) + ' + <b>' + npCompact(m.reserves.quoteAmount) + '</b> ' + esc(m.reserves.quoteSymbol) + '</p>' : '';
-    const vmax = Math.max(p.volume.m5, p.volume.h1, p.volume.h6, p.volume.h24, 1);
-    const vbar = (v, lbl) => '<span class="np-vbar" style="height:' + Math.max(4, Math.round(v / vmax * 100)) + '%"><i>' + lbl + '</i></span>';
-    const vol = '<div class="np-vol" role="img" aria-label="Volume: 5m ' + npFmtUsd(p.volume.m5) + ', 1h ' + npFmtUsd(p.volume.h1) + ', 6h ' + npFmtUsd(p.volume.h6) + ', 24h ' + npFmtUsd(p.volume.h24) + '">' +
-      vbar(p.volume.m5, '5m') + vbar(p.volume.h1, '1h') + vbar(p.volume.h6, '6h') + vbar(p.volume.h24, '24h') + '</div>';
-    const move = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
-    const marketInner =
-      '<div class="np-kv">' +
-        '<div class="hstat"><div class="lbl">Price</div><div class="val">' + npPrice(m.priceUsd) + '</div></div>' +
-        '<div class="hstat"><div class="lbl">Liquidity</div><div class="val' + (r.lowLiquidity ? ' red' : '') + '">' + npFmtUsd(m.liquidityUsd) + '</div></div>' +
-        '<div class="hstat np-soft"><div class="lbl">Market cap ⚠︎</div><div class="val">' + npFmtUsd(m.marketCap) + '</div></div>' +
-        '<div class="hstat np-soft"><div class="lbl">FDV ⚠︎</div><div class="val">' + npFmtUsd(m.fdv) + '</div></div>' +
-        '<div class="hstat"><div class="lbl">Total supply</div><div class="val">' + (supply != null ? npCompact(supply) : '—') + '</div></div>' +
-        '<div class="hstat"><div class="lbl">Decimals</div><div class="val">' + (p.token.decimals != null ? p.token.decimals : '—') + '</div></div>' +
-      '</div>' + resv + capTrail(p) +
-      '<div class="np-vol-wrap"><div class="lbl">Volume</div>' + vol + '</div>' +
-      '<div class="np-moves">' + move('1h', p.priceChange.h1) + move('6h', p.priceChange.h6) + move('24h', p.priceChange.h24) + '</div>';
-
-    // C. Activity — flow bar + full txn table
-    const b = p.txns.h24.buys, s = p.txns.h24.sells;
-    let flow = '';
-    if (b + s > 0) {
-      flow = '<div class="np-flow"><div class="np-flow-bar" role="img" aria-label="' + npNum(b) + ' buys, ' + npNum(s) + ' sells, 24h">' +
-        '<span class="np-flow-buy" style="flex:' + Math.max(b, 0.001) + '"></span><span class="np-flow-sell" style="flex:' + Math.max(s, 0.001) + '"></span></div>' +
-        '<p class="np-flow-legend"><span class="np-buy">' + npNum(b) + ' buys</span> · <span class="np-sell">' + npNum(s) + ' sells</span>' +
-        (r.honeypotSuspect ? ' <span class="np-flow-note">— here, buys with almost no sells is a <b>red flag</b>, not a green one.</span>' : '') + '</p></div>';
-    }
+  /* ---------- the detail's building blocks (the classic body and the dashboard both use these) ---------- */
+  const moveChip = (lbl, v) => v == null ? '' : '<span class="price-chip ' + (v >= 0 ? 'up' : 'down') + '">' + lbl + ' ' + (v >= 0 ? '▲' : '▼') + pctPlain(Math.abs(v)) + '</span>';
+  function reservesHTML(p) {
+    const m = p.market || {};
+    return m.reserves ? '<p class="np-reserves">💧 Pooled: <b>' + npCompact(m.reserves.tokenAmount) + '</b> ' + esc(p.token.symbol) + ' + <b>' + npCompact(m.reserves.quoteAmount) + '</b> ' + esc(m.reserves.quoteSymbol) + '</p>' : '';
+  }
+  function volBarsHTML(p) {
+    const v = p.volume || {};
+    const vmax = Math.max(v.m5 || 0, v.h1 || 0, v.h6 || 0, v.h24 || 0, 1);
+    const vbar = (x, lbl) => '<span class="np-vbar" style="height:' + Math.max(4, Math.round((x || 0) / vmax * 100)) + '%"><i>' + lbl + '</i></span>';
+    return '<div class="np-vol" role="img" aria-label="Volume: 5m ' + npFmtUsd(v.m5) + ', 1h ' + npFmtUsd(v.h1) + ', 6h ' + npFmtUsd(v.h6) + ', 24h ' + npFmtUsd(v.h24) + '">' +
+      vbar(v.m5, '5m') + vbar(v.h1, '1h') + vbar(v.h6, '6h') + vbar(v.h24, '24h') + '</div>';
+  }
+  function marketKvHTML(p) {
+    const m = p.market || {}, r = p.risk || {}, supply = supplyOf(p);
+    return '<div class="np-kv">' +
+      '<div class="hstat"><div class="lbl">Price</div><div class="val">' + npPrice(m.priceUsd) + '</div></div>' +
+      '<div class="hstat"><div class="lbl">Liquidity</div><div class="val' + (r.lowLiquidity ? ' red' : '') + '">' + npFmtUsd(m.liquidityUsd) + '</div></div>' +
+      '<div class="hstat np-soft"><div class="lbl">Market cap ⚠︎</div><div class="val">' + npFmtUsd(m.marketCap) + '</div></div>' +
+      '<div class="hstat np-soft"><div class="lbl">FDV ⚠︎</div><div class="val">' + npFmtUsd(m.fdv) + '</div></div>' +
+      '<div class="hstat"><div class="lbl">Total supply</div><div class="val">' + (supply != null ? npCompact(supply) : '—') + '</div></div>' +
+      // a stored watchlist snapshot is client-supplied: coerced, never printed raw
+      '<div class="hstat"><div class="lbl">Decimals</div><div class="val">' + (p.token.decimals != null && Number.isFinite(+p.token.decimals) ? String(+p.token.decimals) : '—') + '</div></div>' +
+    '</div>';
+  }
+  // the 24h buy/sell flow bar, or '' when nothing traded
+  function flowHTML(p) {
+    const r = p.risk || {}, t24 = (p.txns && p.txns.h24) || {};
+    const b = t24.buys || 0, s = t24.sells || 0;
+    if (!(b + s > 0)) return '';
+    return '<div class="np-flow"><div class="np-flow-bar" role="img" aria-label="' + npNum(b) + ' buys, ' + npNum(s) + ' sells, 24h">' +
+      '<span class="np-flow-buy" style="flex:' + Math.max(b, 0.001) + '"></span><span class="np-flow-sell" style="flex:' + Math.max(s, 0.001) + '"></span></div>' +
+      '<p class="np-flow-legend"><span class="np-buy">' + npNum(b) + ' buys</span> · <span class="np-sell">' + npNum(s) + ' sells</span>' +
+      (r.honeypotSuspect ? ' <span class="np-flow-note">— here, buys with almost no sells is a <b>red flag</b>, not a green one.</span>' : '') + '</p></div>';
+  }
+  // a coin the price feed does not index but whose market was read from its own pool (market.source 'reserves') has real 24h counts
+  const poolRead = (p) => !!(p.market && p.market.source === 'reserves');
+  const noTradesHTML = (p) => '<p class="np-why-clean">' + (p.indexed || poolRead(p) ? 'No trades recorded in the last 24 hours.' : 'No trade counts — the price feed does not index this pair, so buys and sells are not counted here.') + '</p>';
+  function txTableHTML(p) {
+    const tx = p.txns || {}, z = { buys: 0, sells: 0 };
     const txrow = (lbl, o) => '<tr><td>' + lbl + '</td><td class="np-tx-buy">' + npNum(o.buys) + '</td><td class="np-tx-sell">' + npNum(o.sells) + '</td></tr>';
-    const txtable = '<div class="np-txwrap"><table class="np-txtable"><thead><tr><th>Window</th><th>Buys</th><th>Sells</th></tr></thead><tbody>' +
-      txrow('1h', p.txns.h1) + txrow('6h', p.txns.h6) + txrow('24h', p.txns.h24) + '</tbody></table></div>';
-    const activityInner = (flow || '<p class="np-why-clean">' + (p.indexed ? 'No trades recorded in the last 24 hours.' : 'No trade counts — the price feed does not index this pair, so buys and sells are not counted here.') + '</p>') + (p.indexed ? txtable : '');
+    return '<div class="np-txwrap"><table class="np-txtable"><thead><tr><th>Window</th><th>Buys</th><th>Sells</th></tr></thead><tbody>' +
+      txrow('1h', tx.h1 || z) + txrow('6h', tx.h6 || z) + txrow('24h', tx.h24 || z) + '</tbody></table></div>';
+  }
+  // where a holder count came from: the chain's own transfer ledger (wallets with a balance, as of a block) or an indexer
+  function holderSrcHTML(h) {
+    if (h.count == null) return '';
+    if (h.source === 'chain') return ' <small class="np-src np-src-chain" title="Counted from every Transfer event the token has emitted, read from the chain itself">on-chain' + (h.block ? ' · block ' + esc(String(h.block)) : '') + '</small>';
+    return h.source ? ' <small class="np-src" title="From an indexer (' + esc(h.source) + '); the chain’s own ledger is being built">' + esc(h.source) + '</small>' : '';
+  }
+  function holderCountHTML(h) { return '<p class="np-supply"><b>' + esc(h.count != null ? (npNum(h.count) + ' holders') : 'not indexed yet') + '</b>' + holderSrcHTML(h) + '</p>'; }
+  function concHTML(h) {
+    if (h.topHolderPct == null) return '';
+    return '<div class="np-conc"><div class="np-conc-bar"><span class="np-conc-top" style="width:' + Math.min(100, h.topHolderPct).toFixed(1) + '%"></span>' +
+      (h.top10Pct != null ? '<span class="np-conc-10" style="width:' + Math.min(100, Math.max(0, h.top10Pct - h.topHolderPct)).toFixed(1) + '%"></span>' : '') + '</div>' +
+      '<p class="np-conc-txt">👥 Top wallet owns <b>' + pctPlain(h.topHolderPct) + '</b>' + (h.top10Pct != null ? ', top 10 own <b>' + pctPlain(h.top10Pct) + '</b>' : '') + '.</p></div>';
+  }
+  // holders #from+1 … #to, each with its share and a copy button
+  function topHoldersHTML(h, from, to) {
+    const list = (h.top || []).slice(from, to);
+    if (!list.length) return '';
+    return '<div class="np-holders" role="list" aria-label="' + (from ? 'Holders #' + (from + 1) + ' to #' + (from + list.length) : 'Top holders') + '">' + list.map((x, i) => {
+      const n = from + i + 1;
+      return '<div class="np-holder" role="listitem"><span class="np-hrank">#' + n + '</span><code>' + esc(shortAddr(x.address)) + '</code>' + copyBtn(x.address, 'address of holder #' + n + ' ' + shortAddr(x.address)) +
+        '<span class="np-hpct">' + (x.pct != null ? pctPlain(x.pct) : '—') + '</span></div>';
+    }).join('') + '</div>';
+  }
+  function ownerLineHTML(p) {
+    if (p.token.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — the deployer can no longer change the contract.</p>';
+    if (p.token.owner) return '<p class="np-owner owned">🔑 Owner <code>' + esc(shortAddr(p.token.owner)) + '</code> ' + copyBtn(p.token.owner, 'owner address') + ' <b>— can still change the contract.</b></p>';
+    return '<p class="np-owner">🔑 Owner unknown (no standard owner() function).</p>';
+  }
+  const verifiedLineHTML = (p) => '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' : '📄 Verification unknown') + '</p>';
+  function addrRowsHTML(p) {
+    const r = p.risk || {};
+    return '<div class="np-addr-row"><span class="np-addr-lbl">Token</span><code>' + esc(p.token.address) + '</code>' + copyBtn(p.token.address, 'token contract address') + '</div>' +
+      '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span><code>' + esc(p.pair.address) + '</code>' + copyBtn(p.pair.address, 'pair address') + '</div>' +
+      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + npNum(r.deployerLaunches) + ' launched' + (r.deployerDied ? ' · ' + npNum(r.deployerDied) + ' dead' : '') + '</span>' : '') + '</div>' : '');
+  }
+  const HONEST = '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>';
 
-    // D. Holders — count + concentration + top-10
-    const holderTxt = h.count != null ? (npNum(h.count) + ' holders') : 'not indexed yet';
-    // where the count came from: the chain's own transfer ledger (wallets with a balance, as of a block) or an indexer
-    const holderSrc = h.count == null ? '' : (h.source === 'chain' ? ' <small class="np-src np-src-chain" title="Counted from every Transfer event the token has emitted, read from the chain itself">on-chain' + (h.block ? ' · block ' + esc(String(h.block)) : '') + '</small>' : (h.source ? ' <small class="np-src" title="From an indexer (' + esc(h.source) + '); the chain’s own ledger is being built">' + esc(h.source) + '</small>' : ''));
-    let conc = '';
-    if (h.topHolderPct != null) {
-      conc = '<div class="np-conc"><div class="np-conc-bar"><span class="np-conc-top" style="width:' + Math.min(100, h.topHolderPct).toFixed(1) + '%"></span>' +
-        (h.top10Pct != null ? '<span class="np-conc-10" style="width:' + Math.min(100, Math.max(0, h.top10Pct - h.topHolderPct)).toFixed(1) + '%"></span>' : '') + '</div>' +
-        '<p class="np-conc-txt">👥 Top wallet owns <b>' + pctPlain(h.topHolderPct) + '</b>' + (h.top10Pct != null ? ', top 10 own <b>' + pctPlain(h.top10Pct) + '</b>' : '') + '.</p></div>';
-    }
-    let top10 = '';
-    if (h.top && h.top.length) {
-      top10 = '<div class="np-holders" aria-label="Top holders">' + h.top.map((x, i) =>
-        '<div class="np-holder"><span class="np-hrank">#' + (i + 1) + '</span><code>' + esc(shortAddr(x.address)) + '</code>' + copyBtn(x.address, 'address of holder #' + (i + 1) + ' ' + shortAddr(x.address)) +
-        '<span class="np-hpct">' + (x.pct != null ? pctPlain(x.pct) : '—') + '</span></div>').join('') + '</div>';
-    }
-    const holdersInner = '<p class="np-supply"><b>' + esc(holderTxt) + '</b>' + holderSrc + '</p>' + conc + top10 +
+  function bodyHTML(p, sections, opts) {
+    const S = sections || state.sections; opts = opts || {}; // S = which sections start open; opts.hideCall hides the "Make a Send Call" CTA (e.g. inside a Send Call widget)
+    const h = p.holders;
+
+    // A. Market
+    const marketInner = marketKvHTML(p) + reservesHTML(p) + capTrail(p) +
+      '<div class="np-vol-wrap"><div class="lbl">Volume</div>' + volBarsHTML(p) + '</div>' +
+      '<div class="np-moves">' + moveChip('1h', p.priceChange.h1) + moveChip('6h', p.priceChange.h6) + moveChip('24h', p.priceChange.h24) + '</div>';
+
+    // B. Activity — flow bar + full txn table
+    const activityInner = (flowHTML(p) || noTradesHTML(p)) + (p.indexed ? txTableHTML(p) : '');
+
+    // C. Holders — count + concentration + top-10
+    const holdersInner = holderCountHTML(h) + concHTML(h) + topHoldersHTML(h, 0, 10) +
       (h.count == null ? '<p class="np-why-clean">Holder data lags for brand-new tokens — check back in a bit.</p>' : '');
 
-    // E. Contract — the copy hub
-    let ownerLine = '';
-    if (p.token.renounced === true) ownerLine = '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — the deployer can no longer change the contract.</p>';
-    else if (p.token.owner) ownerLine = '<p class="np-owner owned">🔑 Owner <code>' + esc(shortAddr(p.token.owner)) + '</code> ' + copyBtn(p.token.owner, 'owner address') + ' <b>— can still change the contract.</b></p>';
-    else ownerLine = '<p class="np-owner">🔑 Owner unknown (no standard owner() function).</p>';
-    const contractInner =
-      '<div class="np-addr-row"><span class="np-addr-lbl">Token</span><code>' + esc(p.token.address) + '</code>' + copyBtn(p.token.address, 'token contract address') + '</div>' +
-      '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span><code>' + esc(p.pair.address) + '</code>' + copyBtn(p.pair.address, 'pair address') + '</div>' +
-      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + r.deployerLaunches + ' launched' + (r.deployerDied ? ' · ' + r.deployerDied + ' dead' : '') + '</span>' : '') + '</div>' : '') +
-      ownerLine +
-      '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' : '📄 Verification unknown') + '</p>' +
+    // D. Contract — the copy hub
+    const contractInner = addrRowsHTML(p) + ownerLineHTML(p) + verifiedLineHTML(p) +
       /* Send Call and Pin used to sit here as well. They are state-changing — one of them permanently —
          and this group is collapsed by default, so they were both buried AND duplicated by the action bar
          at the foot of the panel. Two "Make a Send Call" buttons on one card, each arming separately, is
@@ -1038,7 +1087,7 @@
         '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' +
       '</div>';
 
-    return '<div class="np-body">' + brandHeadHTML(p) + audit + why +
+    return '<div class="np-body">' + brandHeadHTML(p) + auditHTML(p) + whyHTML(p) +
       group('chart', '📈 Chart', S.chart !== false, chartHTML(p)) +
       group('score', '🎯 Score breakdown', S.score, breakdownHTML(p)) +
       group('market', '📊 Market', S.market, marketInner) +
@@ -1048,7 +1097,7 @@
       group('block0', '🎯 Block 0 — the first buyers', S.block0 !== false, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
       group('contract', '📄 Contract &amp; copy', S.contract, contractInner) +
       (tgTokenLink(p.token.address) ? '<p class="np-tg-row">' + tgTokenLink(p.token.address) + '</p>' : '') +
-      '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
+      HONEST +
       /* THE FOOT OF THE RESEARCH. Somebody who has just read the score breakdown, the market, the holders
          and block 0 has finished doing their research, and the three things they might now want to DO are
          right here rather than hidden inside a collapsed group: call it, keep it, or watch it. It sits
@@ -1061,6 +1110,201 @@
         pinBtnHTML(p) +
         (window.Watchlist ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
       '</div></div>';
+  }
+
+  /* ═══ THE TOKEN DASHBOARD ═════════════════════════════════════════════════════════════════════════
+     The default view of a token everywhere the site lets someone read more about one: the Scanner's
+     result (newpairs.html?scan=…, the page a link can share), the token popup that every $TICKER chip,
+     runner row, community and squad button opens, a radar row, a Hot Feed slide, a call's "full
+     on-chain detail" and a saved watchlist row.
+
+     Laid out the way people already read a token on a DEX screener — who it is and what it trades at
+     across the top, the headline figures in one strip, the chart in the middle — but every figure on it
+     is the same read the classic detail body shows, and nothing is added that we do not read. Each card
+     shows what matters at a glance and keeps the rest one click away in its "More" pop-down.
+
+     Carried over unchanged:
+       · a figure we could not read says "not read yet" — never a 0, a dash beside real numbers, or a pass
+       · the caveat sits before the buttons, so it is read before anything is done
+       · the Send Call pair is marked viewed: this IS the full detail, so a call made from it is not
+         flagged "without DYOR" (compose.js clears that flag for this token only)
+     The columns come from a container query on the dashboard itself, so the same markup reads as a page,
+     inside the popup and at phone width without knowing where it was put. The heavy reading (chart,
+     activity, the score breakdown) is the wide middle column; the safety read and the contract are on its
+     left; the market, holders, block 0, community and links on its right. On a phone it is one column in
+     source order, which is also the order focus and a screen reader take. */
+  let dashSeq = 0;
+  const UNREAD = '<span class="tkd-unread">not read yet</span>';
+  const dashUsd = (n) => (n == null || !isFinite(n)) ? UNREAD : npFmtUsd(n);
+  // one figure in the strip; a flagged figure names its flag in words (🚩 a red flag, ⚠︎ a warning) — never colour alone
+  function dashStat(k, lbl, val, sub, p, flagKey) {
+    const f = flagKey && FLAG[flagKey], sev = f ? (f.sev === 'bad' ? 'bad' : 'warn') : '';
+    return '<div class="tkd-stat' + (sev ? ' is-' + sev : '') + '" data-k="' + k + '"><dt>' + lbl + '</dt>' +
+      '<dd><b class="tkd-stat-v">' + val + '</b>' + (sub ? '<span class="tkd-stat-sub">' + sub + '</span>' : '') +
+      (f ? '<span class="tkd-stat-flag">' + (sev === 'bad' ? '🚩 ' : '⚠︎ ') + '<span class="sr-only">' + (sev === 'bad' ? 'Red flag: ' : 'Warning: ') + '</span>' + esc(flagWord(flagKey, p)) + '</span>' : '') + '</dd></div>';
+  }
+  // one card: a heading, what matters at a glance, and — when there is more — a pop-down with the rest
+  function dashCard(u, id, hn, title, body, more, moreLbl, aside) {
+    const hid = u + '-' + id;
+    return '<section class="tkd-card tkd-card--' + id + '" aria-labelledby="' + hid + '">' +
+      '<h' + hn + ' class="tkd-card-h" id="' + hid + '"><span class="tkd-card-t">' + title + '</span>' + (aside ? '<span class="tkd-card-aside">' + aside + '</span>' : '') + '</h' + hn + '>' +
+      '<div class="tkd-card-b">' + body + '</div>' +
+      (more ? '<details class="tkd-more"><summary class="tkd-more-s"><span class="tkd-more-lbl">' + moreLbl + '</span><span class="tkd-more-caret" aria-hidden="true"></span></summary><div class="tkd-more-b">' + more + '</div></details>' : '') +
+    '</section>';
+  }
+  // the first-block read in a sentence and three figures; block0.js draws the whole ledger in the card's pop-down
+  function block0SummaryHTML(p) {
+    const r = p.risk || {}, sn = r.snipers || {};
+    if (sn.wallets == null) return '<p class="tkd-note">🌫️ The first-block read isn’t finished for this token — who bought in block 0 is still an open question, not a pass.</p>';
+    if (sn.wallets === 0) return '<p class="tkd-line">✔ Nobody bought in the very first block' + (sn.block0 ? ' (block ' + esc(String(sn.block0)) + ')' : '') + '.</p>';
+    // the server's own three answers (sniperVerdict): passed, sold, or not every wallet could be followed yet
+    const say = r.sniperDump ? FLAG.sniperDump.say(p) : r.sniperHeavy ? FLAG.sniperHeavy.say(p)
+      : r.sniperOk === true ? 'Nothing in the first block tripped our check — which is not the same as safe.'
+      : r.sniperOk === false ? 'Some of these wallets have sold since — the pop-down shows each one.'
+      : 'Not every one of these wallets could be followed yet, so this is still an open question, not a pass.';
+    return '<dl class="tkd-mini">' +
+      '<div><dt>Wallets in block 0</dt><dd>' + npNum(sn.wallets) + '</dd></div>' +
+      '<div><dt>Took</dt><dd>' + (sn.snipedPct != null ? pctPlain(sn.snipedPct) + ' of the circulating float' : UNREAD) + '</dd></div>' +
+      '<div><dt>Still hold</dt><dd>' + (sn.holdsPct != null ? pctPlain(sn.holdsPct) + ' of the float' : UNREAD) + '</dd></div>' +
+    '</dl><p class="tkd-line' + (r.sniperDump ? ' tkd-bad' : r.sniperHeavy ? ' tkd-warn' : '') + '">' + (r.sniperDump || r.sniperHeavy ? '🎯 ' : '') + esc(say) + '</p>';
+  }
+  function dashboardHTML(p, opts) {
+    opts = opts || {};
+    const u = 'tkd' + (++dashSeq), hl = opts.level === 3 ? 3 : 2, hc = hl + 1;
+    const t = p.token || {}, m = p.market || {}, h = p.holders || {}, r = p.risk || {}, v = p.volume || {}, pc = p.priceChange || {}, pr = p.pair || {}, lk = p.links || {};
+    const tri = triageOf(p), health = healthOfP(p), T = verdictOf(p);
+    const mono = (Array.from(String(t.symbol || t.name || '?'))[0] || '?').toUpperCase();
+
+    // ---- who it is, what it trades at, and what our checks make of it ----
+    const logo = '<span class="tkd-logo" aria-hidden="true"><span class="tkd-mono">' + esc(mono) + '</span>' +
+      (p.brand && p.brand.imageUrl ? '<img class="np-logo-img" src="' + esc(p.brand.imageUrl) + '" alt="" loading="lazy" decoding="async" width="64" height="64">' : '') + '</span>';
+    const head =
+      '<div class="tkd-head">' +
+        '<div class="tkd-id">' + logo +
+          '<div class="tkd-idt">' +
+            '<p class="tkd-kicker">' + (opts.kicker || '🪙 Token') + ' · 🏹 Robinhood Chain</p>' +
+            '<h' + hl + ' class="tkd-h" id="' + u + '-h" tabindex="-1">' + esc(t.name || 'Token') + (t.symbol ? ' <span class="tkd-sym">$' + esc(t.symbol) + '</span>' : '') + '</h' + hl + '>' +
+            '<p class="tkd-sub"><span class="tkd-addr"><code title="' + esc(t.address) + '">' + esc(shortAddr(t.address)) + '</code>' + copyBtn(t.address, 'token contract address') + '</span>' +
+              '<span>🕐 ' + (pr.ageMinutes != null ? esc(npFmtAge(pr.ageMinutes)) + ' old' : 'age not read yet') + '</span>' +
+              (pr.quoteSymbol ? '<span>/ ' + esc(pr.quoteSymbol) + '</span>' : '') + '</p>' +
+            badgesHTML(p) +
+          '</div>' +
+        '</div>' +
+        '<div class="tkd-price">' +
+          '<span class="tkd-price-l">' + (p.priceStale ? '⏳ Price at the last read' : 'Price') + '</span>' +
+          '<b class="tkd-price-v">' + (m.priceUsd != null && isFinite(m.priceUsd) ? npPrice(m.priceUsd) : UNREAD) + '</b>' +
+          '<span class="tkd-moves">' + moveChip('1h', pc.h1) + moveChip('6h', pc.h6) + moveChip('24h', pc.h24) + '</span>' +
+        '</div>' +
+        '<div class="tkd-verdict">' + gaugeHTML(p, tri, health) +
+          '<div class="tkd-verdict-t">' +
+            '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
+            '<span class="tkd-health">Health <b' + ratingInk(health) + '>' + health + '</b>/100</span>' +
+          '</div>' +
+          (T.why ? '<p class="tkd-verdict-why">' + esc(T.why) + '</p>' : '') +
+        '</div>' +
+      '</div>';
+
+    // ---- the headline figures, in one strip ----
+    const tx24 = (p.txns && p.txns.h24) || null;
+    const liqPct = (m.liquidityUsd != null && m.marketCap > 0) ? m.liquidityUsd / m.marketCap * 100 : null;
+    const supply = supplyOf(p);
+    const notIdx = 'the price feed doesn’t index this pair';
+    // volume and trades: the index's windows when it lists the pair; for a coin priced from its own pool, the pool's 24h
+    // read (market.source 'reserves' — the 5m/1h/6h splits only an index knows are not shown, never as $0); otherwise unread
+    const pool = !p.indexed && poolRead(p);
+    const volKnown = (p.indexed || pool) && v.h24 != null, txKnown = (p.indexed || pool) && !!tx24;
+    const stats = '<dl class="tkd-stats">' +
+      dashStat('mc', 'Market cap', dashUsd(m.marketCap)) +
+      dashStat('fdv', 'FDV', dashUsd(m.fdv)) +
+      dashStat('liq', 'Liquidity', dashUsd(m.liquidityUsd), liqPct != null ? pctPlain(liqPct) + ' of market cap' : '', p, r.lowLiquidity ? 'lowLiquidity' : '') +
+      dashStat('vol', 'Volume 24h', volKnown ? dashUsd(v.h24) : UNREAD, volKnown ? (pool ? 'read from its pool' : (v.h1 != null ? '1h ' + npFmtUsd(v.h1) : '')) : notIdx, p, r.deadVolume ? 'deadVolume' : '') +
+      dashStat('holders', 'Holders', h.count != null ? npNum(h.count) : UNREAD, h.count != null ? (h.source === 'chain' ? '⛓️ on-chain' : esc(h.source || '')) : '', p, r.lowHolders ? 'lowHolders' : '') +
+      dashStat('top10', 'Top 10 hold', h.top10Pct != null ? pctPlain(h.top10Pct) : UNREAD, h.topHolderPct != null ? 'largest ' + pctPlain(h.topHolderPct) : '', p, r.concentrated ? 'concentrated' : '') +
+      dashStat('tx', 'Trades 24h', txKnown ? '<span class="np-buy">' + npNum(tx24.buys) + '</span> / <span class="np-sell">' + npNum(tx24.sells) + '</span>' : UNREAD,
+        txKnown ? 'buys / sells' + (pool ? ' · read from its pool' : '') : notIdx, p, r.honeypotSuspect ? 'honeypotSuspect' : r.sellPressure ? 'sellPressure' : '') +
+      dashStat('supply', 'Total supply', supply != null ? npCompact(supply) : UNREAD, supply != null && t.symbol ? esc(t.symbol) : '') +
+    '</dl>';
+
+    // ---- what the reader can do: the caveat first, then the buttons ----
+    const acts =
+      '<div class="tkd-actbar">' +
+        '<p class="tkd-caveat">⚠️ Read from public chain data by automated checks — not an audit, not advice, never a tip to buy. Most new tokens go to zero.</p>' +
+        '<div class="tkd-acts" role="group" aria-label="' + esc('What you can do with ' + (t.symbol ? '$' + t.symbol : 'this token')) + '">' +
+          // 📣 to the Wall, and 🛡️ to your Send Squad when you are a verified member of one (compose.js adds that button as the row appears)
+          (opts.hideCall || !(window.COMPOSE && COMPOSE.callRowHTML) ? '' : COMPOSE.callRowHTML(t.address, { cls: 'tkd-call', viewed: true })) +   // this IS the full detail
+          (window.Watchlist ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
+          pinBtnHTML(p) +
+          (lk.explorer ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(lk.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' : '') +
+          (lk.dex ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab to cross-check the figures" href="' + esc(lk.dex) + '" target="_blank" rel="noopener nofollow">📈 Dexscreener ↗</a>' : '') +
+        '</div>' +
+      '</div>';
+
+    // ---- the cards ----
+    const A = auditParts(p);
+    const cSafety = dashCard(u, 'safety', hc, '🛡️ Safety read',
+      '<p class="np-audit-lead">' + A.line + '</p>' + whyHTML(p, 'h' + Math.min(6, hc + 1)) +
+      (A.gaps.length ? '<p class="tkd-gaps">❓ We could not read ' + esc(A.gaps.join(', ')) + ' — missing information, <b>not a pass</b>.</p>' : ''),
+      auditRowsHTML(A.rows) + AUDIT_FINE, '📋 The short version, in full');
+    const cContract = dashCard(u, 'contract', hc, '📄 Contract',
+      verifiedLineHTML(p) + ownerLineHTML(p) +
+      (r.serialDeployer ? '<p class="np-owner owned">🔁 <b>Serial deployer</b> — ' + esc(FLAG.serialDeployer.say(p)) + '</p>' : '') +
+      // the honeypot / owner-powers / LP-lock read, fetched as soon as the dashboard mounts (mountDashboard)
+      '<div class="np-contract" data-dash="1" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '"><p class="np-contract-load"><span class="np-live-dot" aria-hidden="true"></span> Reading the contract code…</p></div>',
+      addrRowsHTML(p) + (tgTokenLink(t.address) ? '<p class="np-tg-row">' + tgTokenLink(t.address) + '</p>' : ''), '📋 Token, pool and deployer addresses');
+    const cScore = dashCard(u, 'score', hc, '🎯 Score breakdown', breakdownHTML(p, true), '', '', '<b' + ratingInk(health) + '>' + health + '</b>/100');
+    const cChart = dashCard(u, 'chart', hc, '📈 Price chart', chartHTML(p));
+    const flow = flowHTML(p);
+    const cActivity = dashCard(u, 'activity', hc, '🔁 Trading activity',
+      (flow || noTradesHTML(p)) + (p.indexed ? '<div class="np-vol-wrap"><div class="lbl">Volume by window</div>' + volBarsHTML(p) + '</div>' : ''),
+      p.indexed ? txTableHTML(p) : '', 'Buys and sells by window');
+    const cBlock0 = dashCard(u, 'block0', hc, '🎯 Block 0 — the first buyers', block0SummaryHTML(p),
+      '<div class="np-b0" data-token="' + esc(t.address) + '"></div>', 'Every first buyer, wallet by wallet');
+    const caps = p.caps;
+    const mBody = (liqPct != null ? '<p class="tkd-line">💧 Liquidity is <b>' + pctPlain(liqPct) + '</b> of the market cap. ' + depthSay(liqPct) + '</p>' : '') +
+      reservesHTML(p) +
+      (caps && caps.peakMc > 0 && caps.offPeakPct != null && caps.offPeakPct > 0 ? '<p class="tkd-line">🏔️ The highest market cap this scanner has recorded for it is <b>' + npFmtUsd(caps.peakMc) + '</b>; it is <b>' + pctPlain(caps.offPeakPct) + '</b> below that now.</p>' : '');
+    // with nothing else to say, say which figure is missing — the pool, or only the market cap to measure it against
+    const mNote = m.liquidityUsd == null ? '<p class="tkd-note">The pool could not be read just now, so there is no depth figure to show.</p>'
+      : '<p class="tkd-note">💧 Liquidity is <b>' + npFmtUsd(m.liquidityUsd) + '</b>. The market cap was not read, so there is no depth ratio to show.</p>';
+    const cMarket = dashCard(u, 'market', hc, '📊 Market', mBody || mNote,
+      marketKvHTML(p) + capTrail(p), '📊 Every market figure, then → now');
+    const topN = (h.top || []).length;
+    const cHolders = dashCard(u, 'holders', hc, '👥 Holders',
+      holderCountHTML(h) + concHTML(h) + topHoldersHTML(h, 0, 3) +
+        (h.count == null ? '<p class="tkd-note">Holder data lags for brand-new tokens — check back in a bit.</p>' : ''),
+      topN > 3 ? topHoldersHTML(h, 3, topN) : '', 'Holders #4 to #' + topN);
+    const comm = window.tokenCommunitySlot ? '<div class="tkd-slot">' + tokenCommunitySlot(t.address, t.symbol || '', 'panel', hc) + '</div>' : '';   // its heading at the cards' level
+    const cLinks = dashCard(u, 'links', hc, '🔗 Links &amp; listings',
+      (socialsHTML(p) || '<p class="tkd-note">No website or socials are listed for this token.</p>') + brandStatusHTML(p));
+
+    return '<div class="tkd" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '" style="' + tokVars(p) + '">' +
+      '<div class="tkd-in">' +
+        head + (opts.meta ? '<div class="tkd-meta">' + opts.meta + '</div>' : '') + flagstripHTML(p) + stats + acts +
+        // source order is the phone's reading order: the chart and the trading, then the safety read and the contract,
+        // the market, holders, block 0, community and links, and last the score breakdown. Wider, styles.css places the
+        // same wrappers as columns (the side pair beside the chart, or split either side of it) without reordering them.
+        '<div class="tkd-grid">' +
+          '<div class="tkd-col tkd-col--c">' + cChart + cActivity + '</div>' +
+          '<div class="tkd-side">' +
+            '<div class="tkd-col tkd-col--l">' + cSafety + cContract + '</div>' +
+            '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cBlock0 + comm + cLinks + '</div>' +
+          '</div>' +
+          '<div class="tkd-col tkd-col--c2">' + cScore + '</div>' +
+        '</div>' +
+        HONEST +
+      '</div>' +
+    '</div>';
+  }
+  // everything a freshly inserted dashboard needs to come alive: the ring, the chart, the community slot,
+  // the contract read (straight away — it is not behind a pop-down here) and the ☆ state
+  function mountDashboard(root) {
+    if (!root) return;
+    animateRings(root);
+    mountCharts(root);
+    commDecorate(root);
+    root.querySelectorAll('.tkd .np-contract[data-dash]').forEach(el => loadContract(el));
+    if (window.Watchlist && Watchlist.syncButtons) Watchlist.syncButtons(root);
+    root.querySelectorAll('.tkd[data-token]').forEach(d => markViewed(d.dataset.token));
   }
   function rowHTML(p) {
     const tri = triageOf(p);
@@ -1278,11 +1522,12 @@
       statusEl.innerHTML = '';
       return;
     }
-    // done — one detail card, rendered OPEN inline (without mutating the shared state.open Set) so full detail shows now
+    // done — the token's row, and a button straight to its dashboard (the row opens it too, like every row here)
     const p = lk.p;
-    listEl.innerHTML = '<li class="np-lookup-note">🔎 On-chain lookup for a pasted address' + (lk.fromLive ? ' · also live in the radar' : '') + ' <button class="np-lookup-clear" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">✕ Clear</button></li>' +
-      '<li class="np-row' + (isBranded(p) ? ' np-branded' : '') + '" data-addr="' + esc(p.pair.address) + '" data-level="' + triageOf(p) + '" style="' + tokVars(p) + '"><details class="np-card" open>' + summaryHTML(p) + bodyHTML(p) + '</details></li>';
-    markViewed(p.token.address); // pasted-address lookup opens the full detail
+    const dash = window.TokenModal ? ' <button class="btn btn-sm btn-primary" id="np-lookup-open" type="button" data-tip="Opens this token’s full dashboard: the chart, the safety read, holders, contract and the Send Call buttons">📊 Open its dashboard</button>' : '';
+    listEl.innerHTML = '<li class="np-lookup-note">🔎 On-chain lookup for a pasted address' + (lk.fromLive ? ' · also live in the radar' : '') + dash + ' <button class="np-lookup-clear" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">✕ Clear</button></li>' +
+      '<li class="np-row' + (isBranded(p) ? ' np-branded' : '') + '" data-addr="' + esc(p.pair.address) + '" data-level="' + triageOf(p) + '" style="' + tokVars(p) + '"><details class="np-card"' + (window.TokenModal ? '' : ' open') + '>' + summaryHTML(p) + (window.TokenModal ? '' : bodyHTML(p)) + '</details></li>';
+    if (!window.TokenModal) markViewed(p.token.address); // without the popup the lookup opens the full detail inline
     animateRings(listEl);
     commDecorate(listEl);
     statusEl.innerHTML = '<span class="np-live-dot" aria-hidden="true"></span> On-chain detail for this token · always DYOR';
@@ -1300,7 +1545,7 @@
     const cs = li.querySelector('.np-chg-slot'); if (cs) cs.innerHTML = chgChipHTML(p.priceChange.h1);
     const strip = li.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
     const sr = li.querySelector('.np-sum .np-head > .sr-only');
-    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + spokenWhy(T) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '. Expand for full detail.';
+    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + spokenWhy(T) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (window.TokenModal ? '. Opens the full dashboard.' : '. Expand for full detail.');
     const det = li.querySelector('details.np-card');
     if (det && det.open) {
       const body = li.querySelector('.np-body');
@@ -1369,7 +1614,8 @@
       patchExisting();
       const freshNew = newAddrs.filter(a => { const p = state.byAddr.get(a); return p && passFilters(p) && (state.safety === 'safer' ? saferOk(p) : state.safety === 'risky' ? hideFromMain(p) : !hideFromMain(p)); });
       // don't tear down the list while the user is reading/focused/selecting inside it (or has a row open)
-      const listBusy = state.open.size > 0 || listEl.contains(document.activeElement) || (window.getSelection && getSelection().anchorNode && listEl.contains(getSelection().anchorNode));
+      const tm = document.getElementById('token-modal');
+      const listBusy = state.open.size > 0 || !!(tm && !tm.hidden) || listEl.contains(document.activeElement) || (window.getSelection && getSelection().anchorNode && listEl.contains(getSelection().anchorNode));
       const prevOrder = state.view.map(p => p.pair.address).join(',');
       applyView();
       const orderChanged = state.view.map(p => p.pair.address).join(',') !== prevOrder;
@@ -1850,7 +2096,14 @@
       if (w) { e.preventDefault(); e.stopPropagation(); const p = pairFor(w.dataset.wpair); if (p && window.Watchlist) Watchlist.toggle(p); return; }
       const cl = e.target.closest('.np-call');
       if (cl) { e.preventDefault(); e.stopPropagation(); makeSendCall(cl); return; }
+      // a row opens its token's dashboard in the popup; the row's own controls (copy, pin, the community tag) keep their jobs
+      const sum = e.target.closest('summary.np-sum');
+      if (sum && !e.target.closest('button, a, input')) {
+        const li = sum.closest('li[data-addr]');
+        if (li && openDash(pairFor(li.dataset.addr))) { e.preventDefault(); return; }
+      }
       const t = e.target.closest('button'); if (!t) return;
+      if (t.id === 'np-lookup-open') { if (state.lookup && state.lookup.p) openDash(state.lookup.p); return; }
       if (t.id === 'np-retry') fetchPairs(true);
       else if (t.id === 'np-clearq') { $('np-q').value = ''; state.q = ''; const cb = $('np-q-clear'); if (cb) cb.hidden = true; clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); }
       else if (t.id === 'np-lookup-retry') { const addr = state.q.toLowerCase(); if (LOOKUP_RE.test(addr)) { const seq = ++lookupSeq; state.lookup = { addr, status: 'loading', p: null }; render(); fetchLookup(addr, seq); } }
@@ -1886,8 +2139,13 @@
         if (!reduced()) { react.classList.remove('pop'); void react.offsetWidth; react.classList.add('pop'); }
         if (window.sendToast) sendToast('Hyped \ud83d\ude80 — a private tap only you see. Still DYOR, not advice.'); return;
       }
-      const exp = e.target.closest('.np-slide-expand');
-      if (exp) { const d = exp.closest('.np-slide').querySelector('.np-slide-details'); if (d) d.open = !d.open; }
+      // ℹ️ and "Full dashboard" open the token's dashboard in the popup (the inline detail only where there is no popup)
+      const exp = e.target.closest('.np-slide-expand, .np-slide-more');
+      if (exp) {
+        const slide = exp.closest('.np-slide');
+        if (openDash(slide && state.byAddr.get(slide.dataset.addr))) { e.preventDefault(); return; }
+        if (exp.classList.contains('np-slide-expand')) { const d = slide.querySelector('.np-slide-details'); if (d) d.open = !d.open; }
+      }
     });
     feedEl.addEventListener('toggle', e => {   // lazy full detail on first open
       const d = e.target; if (!(d.classList && d.classList.contains('np-slide-details')) || !d.open) return;
@@ -2042,8 +2300,10 @@
         flagstripHTML(p) +
         '<p class="np-slide-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
         '<div class="np-slide-cta"><button class="btn btn-primary np-call np-slide-call" type="button" data-tip="Posts a call on your wall that can never be deleted" data-call-token="' + esc(p.token.address) + '" data-call-sym="' + esc(p.token.symbol) + '">📣 Make a Send Call</button></div>' +
-        '<details class="np-slide-details"><summary class="np-slide-more"><span class="np-slide-more-lbl">Full on-chain detail</span></summary></details>' +
-        '<span class="sr-only np-slide-sr">' + srLine(p) + ' Press Enter for full detail.</span>' +
+        (window.TokenModal
+          ? '<div class="np-slide-dashrow"><button class="np-slide-more np-slide-more--dash" type="button" aria-haspopup="dialog" data-tip="Opens the full dashboard for this token">📊 Full dashboard</button></div>'
+          : '<details class="np-slide-details"><summary class="np-slide-more"><span class="np-slide-more-lbl">Full on-chain detail</span></summary></details>') +
+        '<span class="sr-only np-slide-sr">' + srLine(p) + ' Press Enter for the full dashboard.</span>' +
       '</div>' +
       '<div class="np-slide-rail" aria-label="Actions">' +
         (window.Watchlist ? Watchlist.btnHTML(p, 'np-rail-btn') : '') +
@@ -2051,7 +2311,7 @@
         '<a class="np-rail-btn" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" aria-label="Open chart">📈</a>' +
         '<a class="np-rail-btn" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" aria-label="Open explorer">🔍</a>' +
         '<button class="copy-btn np-rail-btn" type="button" data-tip="Copies the contract address to your clipboard" data-copy="' + esc(p.token.address) + '" aria-label="Copy contract address">📋</button>' +
-        '<button class="np-rail-btn np-slide-expand" type="button" data-tip="Opens or closes the full on-chain detail for this token" aria-label="Show full detail">ℹ️</button>' +
+        '<button class="np-rail-btn np-slide-expand" type="button" data-tip="Opens the full dashboard for this token" aria-label="Open the full dashboard">ℹ️</button>' +
       '</div>' +
     '</article>';
   }
@@ -2139,7 +2399,7 @@
     /* The slide's spoken line is repainted here too. It was the one thing patchFeedSlide left alone, and
        with both bars sharing a word a stale line does not merely go out of date — it asserts the wrong
        bar, on the surface that is spoken most often. */
-    const srSlide = el.querySelector('.np-slide-sr'); if (srSlide) srSlide.textContent = srLine(p) + ' Press Enter for full detail.';
+    const srSlide = el.querySelector('.np-slide-sr'); if (srSlide) srSlide.textContent = srLine(p) + ' Press Enter for the full dashboard.';
     const hp = el.querySelector('.np-slide-health'); if (hp) { hp.textContent = 'Health ' + health + '/100'; hp.style.color = ringColor(health); }
     const priceRow = el.querySelector('.np-slide-price'); if (priceRow) priceRow.innerHTML = '<span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24);
     patchStats(el, p);
@@ -2192,6 +2452,7 @@
   function flip(dir) { const cur = activeIndex(); scrollToSlide((cur < 0 ? 0 : cur) + dir); }
   function feedKeydown(e) {
     if (state.mode !== 'feed') return;
+    const tm = document.getElementById('token-modal'); if (tm && !tm.hidden) return;   // the dashboard popup is open over the feed: its keys are its own
     /* Only take the keyboard when nothing interactive owns it. The old guard skipped form fields and
        nothing else, so a keyboard user who tabbed onto a button, link or summary inside the feed and
        pressed Enter got the card's details toggled instead of the control they were on — every control in
@@ -2207,7 +2468,11 @@
       case 'ArrowUp': case 'k': case 'K': case 'PageUp': e.preventDefault(); flip(-1); break;
       case 'Home': e.preventDefault(); scrollToSlide(0); break;
       case 'End': e.preventDefault(); scrollToSlide(1e6); break;
-      case 'Enter': { const d = feedTrack.querySelector('.np-slide.is-active .np-slide-details'); if (d) { e.preventDefault(); d.open = !d.open; } break; }
+      case 'Enter': {
+        const a = feedTrack.querySelector('.np-slide.is-active');
+        if (a && openDash(state.byAddr.get(a.dataset.addr))) { e.preventDefault(); break; }
+        const d = a && a.querySelector('.np-slide-details'); if (d) { e.preventDefault(); d.open = !d.open; } break;
+      }
       case 'Escape': { const d = feedTrack.querySelector('.np-slide.is-active .np-slide-details[open]'); if (d) { e.preventDefault(); d.open = false; } break; }
     }
   }
@@ -2450,6 +2715,9 @@
   window.NPCard = {
     // the Send Call buttons show wherever this detail renders (the Scanner, the token popup, a call's detail); pass { hideCall: true } to leave them out
     detailHTML: (p, opts) => bodyHTML(p, (opts && opts.sections) || { why: true, chart: true, score: true, market: true, activity: false, holders: false, contract: false }, Object.assign({}, opts)),
+    // the dashboard — the default view wherever someone reads more about a token; insert it, then call mountDashboard(root)
+    dashboardHTML,
+    mountDashboard,
     animateRings,
   };
 

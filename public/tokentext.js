@@ -113,7 +113,7 @@
     // accessible name starts with the visible text ("Start community") so voice control / label-in-name (WCAG 2.5.3) match
     return '<a class="tok-comm none" href="/communities.html?start=' + esc(addr) + '" aria-label="Start community — ' + esc(symTxt) + '" title="No ' + esc(symTxt) + ' community yet — start one">＋ Start community</a>';
   }
-  function panelHTML(addr, info, sym) {
+  function panelHTML(addr, info, sym, hl) {
     addr = normAddr(addr); var symTxt = sym ? '$' + esc(sym) : 'This token';
     var inner;
     if (info && info.id) {
@@ -125,25 +125,27 @@
       inner = '<p class="tok-comm-txt">No ' + symTxt + ' community yet.</p>' +
         '<div class="tok-comm-acts"><a class="btn btn-sm btn-ghost" data-tip="Opens the start-a-community form with this address filled in" href="/communities.html?start=' + esc(addr) + '">＋ Start a community</a></div>';
     } else inner = '<p class="tok-comm-txt">Community info isn’t available for this token.</p>';
-    return '<section class="tok-comm-panel" aria-label="Community"><h3 class="tok-comm-h">🏘️ Community</h3>' + inner +
+    return panelOpen(hl) + inner +
       '<p class="tok-comm-note">Communities are holder-run hangouts on $Send — not an endorsement of the token.</p></section>';
   }
-  function slotHTML(addr, sym, variant) {
+  // the panel's heading sits at the level of the view it is in (the token dashboard in the popup puts its cards at h4)
+  function panelOpen(hl) { var n = hl >= 2 && hl <= 6 ? hl : 3; return '<section class="tok-comm-panel" aria-label="Community"><h' + n + ' class="tok-comm-h">🏘️ Community</h' + n + '>'; }
+  function slotHTML(addr, sym, variant, hl) {
     addr = normAddr(addr); if (!addr) return '';
     var full = variant === 'panel';
-    return (full ? '<div' : '<span') + ' class="tok-comm-slot' + (full ? ' tok-comm-slot-panel' : '') + '" data-tok-comm="' + esc(addr) + '"' + (sym ? ' data-sym="' + esc(String(sym).slice(0, 16)) + '"' : '') + (full ? ' data-variant="panel"' : '') + '>' +
-      (full ? '<section class="tok-comm-panel" aria-label="Community"><h3 class="tok-comm-h">🏘️ Community</h3><p class="tok-comm-txt tok-comm-loading">Checking for a community…</p></section>' : '') +
+    return (full ? '<div' : '<span') + ' class="tok-comm-slot' + (full ? ' tok-comm-slot-panel' : '') + '" data-tok-comm="' + esc(addr) + '"' + (sym ? ' data-sym="' + esc(String(sym).slice(0, 16)) + '"' : '') + (full ? ' data-variant="panel"' + (hl ? ' data-hl="' + (Number(hl) || 3) + '"' : '') : '') + '>' +
+      (full ? panelOpen(hl) + '<p class="tok-comm-txt tok-comm-loading">Checking for a community…</p></section>' : '') +
       (full ? '</div>' : '</span>');
   }
   // info === undefined → the lookup FAILED (rate-limit / outage): we don't know, so never assert "no community". The small
   // tag stays empty; the popup panel shows a neutral "couldn't check" line. data-tok-done is NOT set so a later pass retries.
   function fill(slot, info) {
     var addr = slot.getAttribute('data-tok-comm'), sym = slot.getAttribute('data-sym') || '';
-    var panel = slot.getAttribute('data-variant') === 'panel';
+    var panel = slot.getAttribute('data-variant') === 'panel', hl = Number(slot.getAttribute('data-hl')) || 3;
     if (info === undefined) {
       if (slot.getAttribute('data-tok-done')) return;   // keep whatever real answer we already rendered
       if (panel && !slot.querySelector('.tok-comm-unknown')) {
-        slot.innerHTML = '<section class="tok-comm-panel" aria-label="Community"><h3 class="tok-comm-h">🏘️ Community</h3>' +
+        slot.innerHTML = panelOpen(hl) +
           '<p class="tok-comm-txt tok-comm-unknown">Couldn’t check for a community right now — try again in a moment.</p></section>';
       }
       return;
@@ -151,7 +153,7 @@
     var key = info && info.id ? (info.id + ':' + info.status + ':' + (info.memberCount | 0) + ':' + (info.qualCount | 0) + ':' + (info.official ? 1 : 0)) : 'none';
     if (slot.getAttribute('data-tok-done') === key) return;
     slot.setAttribute('data-tok-done', key);
-    slot.innerHTML = panel ? panelHTML(addr, info, sym) : tagHTML(addr, info, sym);
+    slot.innerHTML = panel ? panelHTML(addr, info, sym, hl) : tagHTML(addr, info, sym);
   }
   // Collect slots under root (plus any [data-token]/[data-addr] hosts passed as root itself), fill from cache NOW
   // (no flash on re-renders), then batch-fetch the misses and fill when they land.
@@ -203,7 +205,7 @@
     var addr = normAddr(chip.getAttribute('data-addr')); if (!addr) return;
     try { chip.focus(); } catch (_) {} // Safari/iOS don't focus a button element on click — focus it so the popup restores focus HERE, not <body>
     if (window.TokenModal && window.TokenModal.open) TokenModal.open(addr, { symbol: chip.getAttribute('data-symbol') || '', name: chip.getAttribute('data-name') || '' });
-    else if (window.sendToast) sendToast('Token detail isn’t available on this page.');
+    else window.open('/newpairs.html?scan=' + encodeURIComponent(addr), '_blank', 'noopener');   // no popup on this page: the token's dashboard, as its own page
   }, true);
   window.tokenCommunitySlot = slotHTML;
   window.decorateTokenCommunities = decorate;

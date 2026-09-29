@@ -73,7 +73,8 @@
   function summaryHTML(p) {
     const tri = triageOf(p), T = verdictOf(p), health = Math.round((p.risk && p.risk.health) || 0);
     const saved = p._wl && p._wl.source === 'saved';
-    return '<summary class="np-sum"><div class="np-head">' + gaugeHTML(p, tri, health) +
+    const dash = !!window.TokenModal;   // the row opens the dashboard popup rather than unfolding here
+    return '<summary class="np-sum' + (dash ? ' np-sum--dash' : '') + '"' + (dash ? ' aria-haspopup="dialog"' : '') + '><div class="np-head">' + gaugeHTML(p, tri, health) +
       '<span class="np-id"><span class="np-name">' + esc(p.token.name) + ' <span class="np-sym">$' + esc(p.token.symbol) + '</span></span>' +
       '<span class="np-meta"><span class="np-age">🕐 ' + npFmtAge(p.pair.ageMinutes) + '</span><span class="np-quote">/ ' + esc(p.pair.quoteSymbol) + '</span>' + (saved ? '<span class="np-quote" title="Shown from your last saved snapshot">· saved</span>' : '') + '</span></span>' +
       '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
@@ -81,7 +82,7 @@
       '<span class="np-chg-slot">' + chgChipHTML(p.priceChange.h1) + '</span>' +
       '<button class="np-wl-remove" type="button" data-tip="Takes this token off your watchlist straight away" data-remove="' + esc(p.pair.address) + '" aria-label="Remove ' + esc(p.token.symbol) + ' from watchlist" title="Remove from watchlist">✕</button>' +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
-      '<span class="sr-only">' + esc(p.token.name) + ' ' + esc(p.token.symbol) + ', verdict ' + T.word + ', health ' + health + ' of 100. Expand for detail.</span>' +
+      '<span class="sr-only">' + esc(p.token.name) + ' ' + esc(p.token.symbol) + ', verdict ' + T.word + ', health ' + health + ' of 100. ' + (window.TokenModal ? 'Opens the full dashboard.' : 'Expand for detail.') + '</span>' +
       '</div>' + flagstripHTML(p) + '</summary>';
   }
   // same 📈 chart the New Pairs detail shows — the watchlist renders its own (lighter) body, so it needs its own copy
@@ -130,7 +131,7 @@
          not in this lighter card), or call it — the same Send Call pair every view of a token ends in. A call from
          here is not marked "detail viewed": the composer offers the full detail first. */
       '<div class="np-body-actions wl-actions">' +
-        '<a class="btn btn-sm btn-ghost" href="newpairs.html?scan=' + encodeURIComponent(p.token.address) + '" data-tip="Opens this token in the Scanner — its full on-chain profile: score breakdown, market, holders, contract">🔎 Full scan</a>' +
+        '<a class="btn btn-sm btn-ghost" href="newpairs.html?scan=' + encodeURIComponent(p.token.address) + '" data-tip="Opens this token’s full dashboard on the Scanner page — score breakdown, market, holders, contract">📊 Full dashboard</a>' +
         (window.COMPOSE && COMPOSE.callRowHTML ? COMPOSE.callRowHTML(p.token.address, { cls: 'np-call-row' }) : '') +
       '</div></div>';
   }
@@ -159,7 +160,41 @@
       render();
     } catch { setStatus('⚠️ Couldn\'t load your tokens.'); }
   }
+  /* A saved token opens its dashboard in the token popup (the same view as everywhere else on the site): drawn at
+     once from the live read this page already has, or — when the row is only your saved snapshot — read live, with
+     the snapshot shown and marked as one if the token no longer prices. Without the popup, the row expands the
+     lighter detail below as before. */
+  function openDash(p) {
+    if (!p || !p.token || !(window.TokenModal && window.NPCard && window.NPCard.dashboardHTML)) return false;
+    if (!(p._wl && p._wl.source === 'saved')) { TokenModal.open(p.token.address, { symbol: p.token.symbol, name: p.token.name, pair: p }); return true; }
+    /* A saved row: read it live. Only a real scored snapshot is offered as the fallback — the server's stand-in for a
+       row it could not read at all carries no scores (no risk.dataKnown), and drawing it would show a health of 0 for
+       data nobody read. The note says why the live read is missing: the chain said there is no pool, or we could not ask. */
+    const scored = !!(p.risk && p.risk.dataKnown);
+    TokenModal.open(p.token.address, { symbol: p.token.symbol, name: p.token.name, fallback: scored ? async (ans) => ({ pair: p, note: ans && ans.notFound
+      ? '<p class="tm-msg tm-note">🤷 The chain reports no trading pool for this token now. Below is your saved snapshot of it, not a live read.</p>'
+      : '<p class="tm-msg tm-note">⏳ We couldn’t read it live just now — below is your saved snapshot of it, not a live read. Nothing here is a judgement about the token.</p>' }) : null });
+    return true;
+  }
+  /* The ☆ inside the dashboard popup can take a token off the watchlist while this page lists it: the row leaves too,
+     and comes back if the server refuses (watch.js puts the id back and says so). The ✕ on a row does its own removal. */
+  const offPage = new Map();   // pair → row taken off this page by the popup's ☆, kept until the id is gone for good
+  document.addEventListener('watchlist:changed', () => {
+    if (!window.Watchlist || !(window.AUTH && AUTH.user)) return;
+    let changed = false;
+    state.items = state.items.filter((it) => { if (Watchlist.has(it.pair.address)) return true; offPage.set(it.pair.address, it); changed = true; return false; });
+    offPage.forEach((it, a) => { if (Watchlist.has(a)) { state.items.push(it); offPage.delete(a); changed = true; } });
+    if (!changed) return;
+    state.items.sort((x, y) => ((y._wl && y._wl.added_at) || 0) - ((x._wl && x._wl.added_at) || 0));
+    state.open.forEach((a) => { if (!state.items.some((it) => it.pair.address === a)) state.open.delete(a); });
+    render();
+  });
   listEl.addEventListener('click', async e => {
+    const sum = e.target.closest('summary.np-sum');
+    if (sum && !e.target.closest('button, a, input')) {
+      const li = sum.closest('li[data-addr]'), p = li && state.items.find(x => x.pair.address === li.dataset.addr);
+      if (openDash(p)) { e.preventDefault(); return; }
+    }
     const rm = e.target.closest('.np-wl-remove');
     if (rm) {
       e.preventDefault(); e.stopPropagation();

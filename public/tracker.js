@@ -337,7 +337,7 @@ function renderTracker(zone, r, prefs) {
           (t.fromOthers ? '<p class="modal-note">' + t.fromOthers + ' transfer' + (t.fromOthers === 1 ? '' : 's') + ' in came from a swap in someone else\'s transaction (a reward, a gift, or a bridge or solver fill) — counted at zero cost, like any transfer in.</p>' : '') +
           (t.legsUnread ? '<p class="modal-note">' + t.legsUnread + ' transaction' + (t.legsUnread === 1 ? '' : 's') + ' of this token could not be read (or lie beyond the newest ' + (r.legsRead || 0).toLocaleString('en-US') + ' read) — listed as transfers, not valued.</p>' : '') +
           (P.showTrades && t.trades.length ? trkTradeTable(t, exp) : '') +
-          '<p class="modal-note"><a href="' + exp + '/token/' + trkSeg(t.address) + '" target="_blank" rel="noopener">token on explorer ↗</a>' +
+          '<p class="modal-note"><a href="/newpairs.html?scan=' + trkSeg(t.address) + '">📊 token dashboard</a> · <a href="' + exp + '/token/' + trkSeg(t.address) + '" target="_blank" rel="noopener">token on explorer ↗</a>' +
           (t.pair ? ' · <a href="https://dexscreener.com/robinhood/' + trkSeg(t.pair) + '" target="_blank" rel="noopener">chart ↗</a>' : '') + '</p>' +
         '</div>' +
       '</details>';

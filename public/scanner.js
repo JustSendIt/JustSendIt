@@ -1,7 +1,7 @@
 /* ===== The Scanner page: two tabs over newpairs.html =========================================
- *   🔎 Scan an address — paste any token or pool on Robinhood Chain and read its full on-chain profile,
- *                        the same detail the site shows for every coin (NPCard.detailHTML, the chart, the
- *                        contract read, the community slot). Open to everyone.
+ *   🔎 Scan an address — paste any token or pool on Robinhood Chain and read its full on-chain profile as a
+ *                        dashboard, the same view the site opens for every coin (NPCard.dashboardHTML: the
+ *                        chart, the contract read, the community slot). Open to everyone.
  *   📡 New Pairs       — the live radar, for members. The panel shows a locked card until the reader is
  *                        signed in; the radar itself (newpairs.js) starts the first time the tab is open
  *                        for a member, and is parked while the other tab shows.
@@ -97,15 +97,6 @@
   }
   paintCommunity();
 
-  /* ---------- a Send Call on what was just scanned ----------
-     📣 to the public Send Wall, and 🛡️ to a Send Squad when the reader is a verified member of one — the same pair
-     every view of a token ends in (compose.js: COMPOSE.callRowHTML, squad button filled in as the row appears, the
-     composer opened in call mode with this token read). The token's full on-chain detail is on screen here, so the
-     call is not flagged "made without DYOR" — for this token only, and only when the detail rendered. Everything a
-     call needs (sign-in, the $SEND check, today's allowance, enough liquidity) is still asked by the composer and
-     the server, exactly as for any other call. */
-  const callRowHTML = (tok) => (window.COMPOSE && COMPOSE.callRowHTML) ? COMPOSE.callRowHTML(tok, { cls: 'sc-hit-call', viewed: !!window.NPCard }) : '';
-
   /* ---------- the scan ---------- */
   function setStatus(text, kind) {
     if (!status) return;
@@ -136,34 +127,27 @@
         const hAt = p.holders && p.holders.readAt;
         const holdersNote = (hAt && sc.readAt - hAt > 60000) ? '<span class="sc-hit-note">👥 Holder figures as of ' + agoEl(hAt) + ' — the price feed and the pool were read ' + agoEl(sc.readAt) + '.</span>' : '';
         if (window.tokenCommunityPrime && Object.prototype.hasOwnProperty.call(j, 'community')) tokenCommunityPrime(tok, j.community);
-        const comm = window.tokenCommunitySlot ? tokenCommunitySlot(tok, sym, 'panel') : '';
-        const head =
-          '<div class="sc-hit">' +
-            '<p class="sc-hit-k">' + (j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> ' + (j.poolVerified === true ? 'prices' : 'says it prices') : '🪙 Token') + '</p>' +
-            '<h2 class="sc-hit-h">' + esc((p.token && p.token.name) || 'Token') + (sym ? ' <span class="hl">$' + esc(sym) + '</span>' : '') + '</h2>' +
-            '<p class="sc-hit-a"><code>' + esc(tok) + '</code> · 🏹 Robinhood Chain · ' + (sc.stale ? 'last read ' : 'read ') + agoEl(sc.readAt) + '</p>' +
-            callRowHTML(tok) +
-            '<p class="sc-hit-s">🔁 ' + (!sc.kept ? 'This scan could not be kept just now — nothing was stored for others.'
+        /* What this scan was — a token, or a pool that resolved to one — and how old the read is. The rest of
+           the page is the token's dashboard (newpairs.js: NPCard.dashboardHTML): the chart in the middle, every
+           figure one click from its detail, and the Send Call pair — 📣 to the Wall, 🛡️ to a Send Squad the
+           reader is a verified member of — marked as made with the full detail on screen, for this token only.
+           Everything a call needs (sign-in, the $SEND check, today's allowance, enough liquidity) is still
+           asked by the composer and the server, exactly as for any other call. */
+        const kicker = j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> ' + (j.poolVerified === true ? 'prices this token' : 'says it prices this token') : '🪙 Token';
+        const meta =
+          '<p class="sc-hit-s">' + (sc.stale ? 'Last read ' : 'Read ') + agoEl(sc.readAt) + ' · 🔁 ' + (!sc.kept ? 'This scan could not be kept just now — nothing was stored for others.'
                                           : (sc.count > 1 ? 'Scanned ' + Number(sc.count) + ' times by the community · first ' + agoEl(sc.firstAt) : 'First scan of this address on record — it is kept now, so it pulls up for everyone')) +
-              holdersNote +
-              (sc.stale ? '<span class="sc-stale">⏳ ' + (sc.busy ? 'Lots of scans are running right now' : 'The price feed and the chain could not be reached just now') + ' — this is the last snapshot, read ' + agoEl(sc.readAt) + ' (' + esc(clock(sc.readAt)) + '). Nothing on it is live. Scan again in a moment.</span>' : '') +
-              // any contract can answer token0()/token1(); only the factory or the price feed can confirm it is really this token's pool
-              (j.kind === 'pool' && j.poolVerified !== true ? '<span class="sc-stale">⚠️ This address answers like a pool of ' + (sym ? '$' + esc(sym) : 'this token') + ', but ' + (j.poolVerified === false ? 'neither the chain’s main factory nor the price feed knows it as one — treat the pool itself as unverified. ' : 'that could not be confirmed with the factory just now. ') + 'The profile below is the token’s, not this address’s.</span>' : '') +
-            '</p>' +
-          '</div>';
-        const detail = window.NPCard ? NPCard.detailHTML(p, { sections: { why: true, chart: true, score: true, market: true, activity: true, holders: true, contract: true } }) : '<p class="tm-msg">Full detail isn’t available here.</p>';
-        result.innerHTML = head + detail;
-        const honest = result.querySelector('.np-honest');
-        if (honest) honest.insertAdjacentHTML('beforebegin', comm); else result.insertAdjacentHTML('beforeend', comm);
-        if (window.NPCard && NPCard.animateRings) NPCard.animateRings(result);
-        if (window.mountOnChainCharts) mountOnChainCharts(result);
-        if (window.decorateTokenCommunities) decorateTokenCommunities(result);
-        // the contract section starts open here, so its lazy read is kicked off rather than waiting for a toggle
-        const c = result.querySelector('.np-contract'); if (c && window.NPCard && NPCard.loadContract) NPCard.loadContract(c);
+            holdersNote +
+            (sc.stale ? '<span class="sc-stale">⏳ ' + (sc.busy ? 'Lots of scans are running right now' : 'The price feed and the chain could not be reached just now') + ' — this is the last snapshot, read ' + agoEl(sc.readAt) + ' (' + esc(clock(sc.readAt)) + '). Nothing on it is live. Scan again in a moment.</span>' : '') +
+            // any contract can answer token0()/token1(); only the factory or the price feed can confirm it is really this token's pool
+            (j.kind === 'pool' && j.poolVerified !== true ? '<span class="sc-stale">⚠️ This address answers like a pool of ' + (sym ? '$' + esc(sym) : 'this token') + ', but ' + (j.poolVerified === false ? 'neither the chain’s main factory nor the price feed knows it as one — treat the pool itself as unverified. ' : 'that could not be confirmed with the factory just now. ') + 'The profile below is the token’s, not this address’s.</span>' : '') +
+          '</p>';
+        result.innerHTML = (window.NPCard && NPCard.dashboardHTML) ? NPCard.dashboardHTML(p, { kicker, meta }) : '<p class="tm-msg">Full detail isn’t available here.</p>';
+        if (window.NPCard && NPCard.mountDashboard) NPCard.mountDashboard(result);   // ring, chart, community slot, the contract read, the ☆ state
         setStatus(sc.stale ? 'Showing the last snapshot of ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + ', not live.' : 'Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + '.', sc.stale ? 'busy' : 'ok');
         remember(tok, sym);
         paintCommunity();
-        const h = result.querySelector('.sc-hit-h'); if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: false }); } catch {} }
+        const h = result.querySelector('.tkd-h'); if (h) { try { h.focus({ preventScroll: false }); } catch {} }
       } else if (!r.ok || (j && j.unavailable)) {
         // "we could not check" is never dressed up as a fact about the address
         result.innerHTML = '';
@@ -184,7 +168,7 @@
     }
   }
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value); });
-  // the ☆ at the foot of the scan: saves this pair to the watchlist (or takes it off)
+  // the ☆ on the dashboard: saves this pair to the watchlist (or takes it off)
   result.addEventListener('click', (e) => {
     const w = e.target.closest('.np-watch[data-wpair]');
     if (!w || !lastPair || !lastPair.pair || !window.Watchlist) return;

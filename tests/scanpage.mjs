@@ -66,7 +66,8 @@ try {
   check('  ...its polls stop while its tab is hidden or the radar is parked', /const radarShown = \(\) => !radarSuspended && !document\.hidden && !\(radarPanel && radarPanel\.hidden\);/.test(NP) && /setInterval\(\(\) => \{ if \(radarShown\(\)\) fetchPairs\(false\); \}, 15000\)/.test(NP));
   check('  ...and scanner.js starts it only for a member on that tab', /if \(ok && current === 'new' && window\.NPRadar\) NPRadar\.start\(\);/.test(SC) && /if \(toNew\) gateRadar\(\); else if \(window\.NPRadar\) NPRadar\.suspend\(\);/.test(SC));
   check('the contract read is wired on every page now, not only inside the radar', /window\.NPCard\.loadContract = loadContract;/.test(NP) && NP.indexOf("document.addEventListener('toggle'") > NP.indexOf('window.NPCard = {'));
-  check('the scan shows every section open, the contract included', /sections: \{ why: true, chart: true, score: true, market: true, activity: true, holders: true, contract: true \}/.test(SC) && /NPCard\.loadContract\(c\)/.test(SC));
+  check('the scan renders the token dashboard and mounts it, the contract read starting at once', /NPCard\.dashboardHTML\(p, \{ kicker, meta \}\)/.test(SC) && /NPCard\.mountDashboard\(result\)/.test(SC)
+    && /root\.querySelectorAll\('\.tkd \.np-contract\[data-dash\]'\)\.forEach\(el => loadContract\(el\)\)/.test(NP) && /el\.innerHTML = contractHTML\(j, !!el\.dataset\.dash\)/.test(NP));
   check('a scan is shareable (?scan=) and a pasted address scans at once', /u\.searchParams\.set\('scan', addr\.toLowerCase\(\)\)/.test(SC) && /input\.addEventListener\('paste'/.test(SC));
   check('recent scans on this device stay in this browser (localStorage; the page never POSTs anything)', /localStorage\.setItem\(RECENT_KEY/.test(SC) && !/method:\s*'POST'/.test(SC) && !/body:/.test(SC));
 
@@ -167,13 +168,13 @@ try {
 
   /* ═══ a Send Call straight from a scan: to the Wall, or to the reader's Send Squad when they are in one ═══ */
   const CMP = read('compose.js');
-  check('a scanned token\'s result carries the shared Send Call pair, marked "detail on screen" only when the detail rendered', /COMPOSE\.callRowHTML\(tok, \{ cls: 'sc-hit-call', viewed: !!window\.NPCard \}\)/.test(SC) && /callRowHTML\(tok\) \+/.test(SC)
+  check('a scanned token\'s dashboard carries the shared Send Call pair, marked "detail on screen" (it IS the full detail)', /COMPOSE\.callRowHTML\(t\.address, \{ cls: 'tkd-call', viewed: true \}\)/.test(NP) && !/sc-hit-call/.test(SC)
     && /data-call-go="wall"/.test(CMP) && /📣 Send Call to the Wall/.test(CMP));
   check('  ...and a squad button only for a VERIFIED member of a squad — none at all otherwise', /\.filter\(\(q\) => q && q\.verified && q\.id > 0\)/.test(CMP) && /if \(!list\.length\) \{ if \(old\) old\.remove\(\); continue; \}\s+\/\/ not in a squad: there is no squad button/.test(CMP) && /data-call-go="squad"/.test(CMP));
   check('  ...both open the site\'s one composer with the token filled in, public or to that squad', /openCall\(\{ token: row\.dataset\.tok, viewedDetail: viewed, squadId: squad \? Number\(b\.dataset\.squadId\) : 0/.test(CMP));
   check('  ...a call is not flagged "without DYOR" only where the full detail of that token is on screen (a marked row), and only for that token', /const viewed = row\.dataset\.viewed === '1';/.test(CMP)
     && /detailSeenFor = tok && o\.viewedDetail \? tok : null;/.test(CMP) && /viewedDetail = !!detailSeenFor && detailSeenFor === String\(addr\)\.toLowerCase\(\);/.test(CMP));
-  check('the full token detail — the radar, the token popup, a call\'s detail, the Scanner\'s lower section — ends in the same Send Call pair', /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row', viewed: true \}\)/.test(NP) && /detailHTML: \(p, opts\) => bodyHTML\(p, [^\n]*Object\.assign\(\{\}, opts\)\)/.test(NP) && !/Object\.assign\(\{ hideCall: true \}, opts\)/.test(NP));
+  check('the classic detail body (kept for a page without the popup) still ends in the same Send Call pair', /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row', viewed: true \}\)/.test(NP) && /detailHTML: \(p, opts\) => bodyHTML\(p, [^\n]*Object\.assign\(\{\}, opts\)\)/.test(NP) && !/Object\.assign\(\{ hideCall: true \}, opts\)/.test(NP));
   check('  ...and a call button inside the token popup closes the popup before the composer opens', /row\.closest\('#token-modal, \.token-modal'\) && window\.TokenModal && TokenModal\.close/.test(CMP));
   const WL = read('watchlist.js'), WLH = read('watchlist.html');
   check('  ...the composer\'s "see the full detail" clears the flag only where the popup can really show it; elsewhere it opens the Scanner in a new tab and the call stays flagged',
@@ -187,6 +188,34 @@ try {
   check('  ...a long squad name wraps inside its Send Call button wherever the pair sits', /\.call-row \.btn \{ max-width: 100%; min-width: 0; overflow-wrap: anywhere; \}/.test(CSS));
   check('the watchlist sends people to the token Scanner, not the New Pairs radar', /href="newpairs\.html" data-tip="Opens the token Scanner/.test(WLH) && !/newpairs\.html\?tab=new/.test(WLH) && /Open the <a class="np-msg-link" href="newpairs\.html">Scanner<\/a>/.test(WL));
   check('  ...each saved token opens in the Scanner and carries the Send Call pair (not marked "detail viewed": the card is lighter)', /href="newpairs\.html\?scan=' \+ encodeURIComponent\(p\.token\.address\)/.test(WL) && /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row' \}\)/.test(WL));
+  /* ═══ the token dashboard is the default view wherever someone reads more about a token ═══ */
+  const SCJ = read('sendcall.js'), TT = read('tokentext.js');
+  const dashIdx = NP.indexOf('function dashboardHTML(');
+  const DASH = NP.slice(dashIdx, NP.indexOf('function mountDashboard(', dashIdx));
+  check('the dashboard: the caveat is read before the buttons, an unread figure says so, and the chart heads the middle column',
+    dashIdx > 0 && DASH.indexOf('tkd-caveat') > 0 && DASH.indexOf('tkd-caveat') < DASH.indexOf('tkd-acts')
+    && /const UNREAD = '<span class="tkd-unread">not read yet<\/span>';/.test(NP) && /'<div class="tkd-col tkd-col--c">' \+ cChart \+/.test(DASH)
+    && /Watchlist\.btnHTML\(p, 'btn btn-sm btn-ghost np-watch-wide', true\)/.test(DASH) && /pinBtnHTML\(p\)/.test(DASH) && /HONEST \+/.test(DASH));
+  check('  ...its columns follow its own width (a container query), three across with the chart in the middle when there is room',
+    /\.tkd \{ container: tkd \/ inline-size;/.test(CSS) && /@container tkd \(min-width: 52em\) \{\n  \.tkd-grid \{ grid-template-columns: minmax\(0, 1fr\) minmax\(0, 1\.6fr\) minmax\(0, 1fr\);/.test(CSS)
+    && /\.tkd-col--c \{ grid-column: 2; grid-row: 1; \}/.test(CSS));
+  const TKCSS = CSS.slice(CSS.indexOf('/* ===== The token dashboard'), CSS.indexOf('.sc-result:has(> .tkd)'));
+  check('  ...one column on a phone in source order (no CSS order), with a focus trap that stops on its pop-downs',
+    TKCSS.length > 1000 && !/\border:\s*\d/.test(TKCSS) && /'<div class="tkd-side">' \+/.test(DASH)
+    && /details > summary/.test(read('app.js')) && /aria-haspopup="dialog"/.test(NP));
+  check('  ...the token popup draws it (from a pair the caller already holds, or a live read, or a caller\'s own snapshot)',
+    /window\.NPCard\.dashboardHTML\(pair, \{ level: 3 \}\)/.test(TMJ) && /shown = meta\.pair; paint\(meta\.pair\);/.test(TMJ) && /typeof meta\.fallback === 'function'/.test(TMJ)
+    && /fullLink\.href = '\/newpairs\.html\?scan=' \+ encodeURIComponent/.test(TMJ));
+  check('  ...a radar row, the Hot Feed\'s ℹ️ and "Full dashboard", a call\'s detail and a watchlist row all open it',
+    /function openDash\(p\)/.test(NP) && /if \(li && openDash\(pairFor\(li\.dataset\.addr\)\)\)/.test(NP) && /openDash\(slide && state\.byAddr\.get\(slide\.dataset\.addr\)\)/.test(NP)
+    && /window\.TokenModal\.open\(w\.dataset\.token, \{ symbol: w\.dataset\.sym, name: w\.dataset\.name, fallback:/.test(SCJ)
+    && /function openDash\(p\)/.test(WL) && WLH.indexOf('<script src="newpairs.js">') > 0 && WLH.indexOf('<script src="tokenmodal.js">') > WLH.indexOf('<script src="newpairs.js">'));
+  check('  ...a $TICKER chip on a page with no popup opens the dashboard page, and token notifications link to it',
+    /else window\.open\('\/newpairs\.html\?scan=' \+ encodeURIComponent\(addr\), '_blank', 'noopener'\);/.test(TT) && !/Token detail isn’t available on this page/.test(TT)
+    && (SRC.match(/tokenDashLink\(r\.token_addr\)/g) || []).length === 2 && /'watchlist', null, tokenDashLink\(token\)\);/.test(SRC));
+  const popupPages = readdirSync(PUB).filter((f) => f.endsWith('.html') && /<script src="\/?tokenmodal\.js">/.test(read(f)));
+  check('  ...and every page with the popup loads the watchlist script, so ☆ Save to watchlist is on the dashboard everywhere',
+    popupPages.length >= 7 && popupPages.every((f) => /<script src="\/?watch\.js">/.test(read(f))), popupPages.filter((f) => !/<script src="\/?watch\.js">/.test(read(f))).join(','));
   const CJ = read('community.js'), SJ = read('squad.js'), PJ = read('proposals.js');
   const wl = /const wallLink = \(u\) => u \? '<a class="wall-link" href="\/u\/' \+ encodeURIComponent\(u\) \+ '">@' \+ esc\(u\) \+ '<\/a>' : '@—';/;
   check('a community\'s and a Send Squad\'s "started by", and a proposal\'s author, open that person\'s Send Wall', wl.test(CJ) && wl.test(SJ) && wl.test(PJ)

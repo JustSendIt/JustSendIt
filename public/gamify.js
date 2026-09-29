@@ -319,7 +319,7 @@
     if (maxed && (!d || d.nextDays == null)) primary = '👑 You\'ve maxed everything — you are the <b>Biggest Sender</b>. Flex it. 🚀';
     else if (d && d.nextDays != null && diaProg >= xpPct) primary = '💎 <b>' + diaLeft + '</b> day' + (diaLeft === 1 ? '' : 's') + ' of holding to <b>' + esc(nextLbl) + '</b> — just don\'t sell →';
     else if (!maxed) primary = '🔥 <b>' + nf(xpGap) + '</b> XP from <b>Level ' + (g.level + 1) + '</b> — <a href="/index.html#swap">one boosted swap can do it →</a>';
-    else primary = '🚀 <a href="/wall.html">Keep sending on the Wall to climb →</a>';
+    else primary = '🚀 <a href="/wall.html">Keep posting on the Wall to climb →</a>';
 
     let secondary;
     if (d && h.streakStart) {

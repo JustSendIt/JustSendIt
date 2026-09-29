@@ -28,7 +28,7 @@
       '<div class="modal-backdrop" data-close></div>' +
       '<div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="compose-title">' +
         '<button class="modal-x" data-close aria-label="Close composer" data-tip="Closes the composer without posting anything">✕</button>' +
-        '<h2 id="compose-title" class="display" style="color:var(--green-bright); text-align:center; font-size:max(var(--text-floor), 1.5rem);">Send it to the Wall 🧱</h2>' +
+        '<h2 id="compose-title" class="display" style="color:var(--green-bright); text-align:center; font-size:max(var(--text-floor), 1.5rem);">Post on the Wall 🧱</h2>' +
 
         '<div id="compose-in" hidden>' +
           '<div class="cmp-modes" role="tablist" aria-label="What are you sending?">' +
@@ -83,7 +83,7 @@
 
         '<div id="compose-done" hidden style="text-align:center;">' +
           '<div style="font-size:max(var(--text-floor), 2.6rem);" aria-hidden="true" id="compose-done-ico">🚀</div>' +
-          '<p style="font-weight:800; color:var(--green-bright); font-size:max(var(--text-floor), 1.1rem);" id="compose-done-msg">Sent to the Wall!</p>' +
+          '<p style="font-weight:800; color:var(--green-bright); font-size:max(var(--text-floor), 1.1rem);" id="compose-done-msg">Posted on the Wall!</p>' +
           '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:0.9rem;">' +
             '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall.html" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
             '<button class="btn btn-ghost btn-sm" id="compose-again" type="button" data-tip="Returns to the empty composer to send another">Post another ✏️</button>' +
@@ -239,7 +239,7 @@
   function setMode(m) {
     mode = m === 'call' ? 'call' : 'post';
     const isCall = mode === 'call';
-    modal.querySelector('#compose-title').textContent = isCall ? 'Make a Send Call 📣' : 'Send it to the Wall 🧱';
+    modal.querySelector('#compose-title').textContent = isCall ? 'Make a Send Call 📣' : 'Post on the Wall 🧱';
     modal.querySelector('#compose-post-pane').hidden = isCall;
     modal.querySelector('#compose-call-pane').hidden = !isCall;
     modal.querySelector('#cmp-mode-post').classList.toggle('is-on', !isCall);
@@ -378,7 +378,7 @@
       const j = await window.api('/api/posts', { method: 'POST', body: { text, image: pendingImg } });
       resetForm();
       modal.querySelector('#compose-done-ico').textContent = '🚀';
-      modal.querySelector('#compose-done-msg').textContent = 'Sent to the Wall!';
+      modal.querySelector('#compose-done-msg').textContent = 'Posted on the Wall!';
       modal.querySelector('#compose-again').textContent = 'Post another ✏️';
       showPanel('compose-done');
       setTimeout(() => { const v = modal.querySelector('#compose-view'); if (v) v.focus(); }, 30);

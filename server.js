@@ -3068,6 +3068,8 @@ const NOTIF_KEEP_SYSTEM = 200; // level-ups / OG / calls / wallet events are bou
    public/notifications.js renders rows with innerHTML, so a value carrying a scheme, a protocol-relative
    '//evil.example', a quote or an angle bracket would be an open redirect and an injection in one row.
    A site-relative path with a conservative character set is the whole of what a notification may link to. */
+// a token's dashboard (the Scanner page, newpairs.html?scan=…) — the link a notification about a token carries
+const tokenDashLink = (addr) => /^0x[0-9a-fA-F]{40}$/.test(String(addr || '')) ? '/newpairs.html?scan=' + String(addr).toLowerCase() : null;
 function notifyLink(href) {
   const h = String(href == null ? '' : href);
   if (!h) return null;
@@ -10840,7 +10842,7 @@ async function refreshCalls() {
       if (!r.rugged && info._liq < RUG_LIQ_FLOOR) {
         db.prepare('UPDATE calls SET rugged=1 WHERE id=?').run(r.id);
         db.prepare('UPDATE users SET call_limit = MAX(?, call_limit - ?) WHERE id=?').run(CALL_LIMIT_MIN, RUG_PENALTY, r.user_id);
-        notify(r.user_id, '💀', 'Your $' + (r.symbol || '') + ' Send Call just got RUGGED — its liquidity was pulled. Your daily call limit dropped by ' + RUG_PENALTY + '.', 'restriction');
+        notify(r.user_id, '💀', 'Your $' + (r.symbol || '') + ' Send Call just got RUGGED — its liquidity was pulled. Your daily call limit dropped by ' + RUG_PENALTY + '.', 'restriction', null, tokenDashLink(r.token_addr));
         r.rugged = 1;
       }
       const curX = creditable ? Math.min(callX(creditPrice, r.entry_price), depthX) : 0;
@@ -10889,7 +10891,7 @@ async function refreshCalls() {
             paidPts += got; xRoom -= got;
           }
           db.prepare('UPDATE calls SET awarded_x=?, points_paid=? WHERE id=?').run(newMax, paidPts, r.id);
-          notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + (r.squad_id ? ' squad call hit ' + newMax + 'x! Send Power for your squad.' : ' Send Call hit ' + newMax + 'x! Send Power for the call.'), 'points', null, r.squad_id ? '/squad.html?id=' + r.squad_id + '#calls' : null);
+          notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + (r.squad_id ? ' squad call hit ' + newMax + 'x! Send Power for your squad.' : ' Send Call hit ' + newMax + 'x! Send Power for the call.'), 'points', null, r.squad_id ? '/squad.html?id=' + r.squad_id + '#calls' : tokenDashLink(r.token_addr));
         }
         // reward hoppers who are ALSO in positive Xs (from their own hop-in price), same diamond-hands mechanic + same Finding-1-safe advance
         for (const hop of hops) {
@@ -13693,7 +13695,7 @@ const server = http.createServer(async (req, res) => {
         if (isNew) {
           earned = awardPoints(me.id, 'watch_token', PTS.watch_token, 'watch:' + me.id + ':' + pair); // once per token, ever
           const sym = String(b.symbol || '').replace(/[^\w]/g, '').slice(0, 16);
-          notify(me.id, '⭐', 'Added ' + (sym ? '$' + sym : 'a token') + ' to your watchlist' + (earned ? ' — +' + earned + ' Send Power' : '') + '.', 'watchlist');
+          notify(me.id, '⭐', 'Added ' + (sym ? '$' + sym : 'a token') + ' to your watchlist' + (earned ? ' — +' + earned + ' Send Power' : '') + '.', 'watchlist', null, tokenDashLink(token));
         }
         return send(res, 200, { ok: true, pointsEarned: earned });
       }

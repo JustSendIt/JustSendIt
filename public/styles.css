@@ -1930,14 +1930,19 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .tm-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
 .tm-modal[hidden] { display: none; }
 .tm-backdrop { position: absolute; inset: 0; background: rgba(4,7,4,0.72); backdrop-filter: blur(3px); }
-.tm-dialog { position: relative; z-index: 1; width: min(680px, 100%); max-height: 90vh; display: flex; flex-direction: column; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); overflow: hidden; }
-.tm-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.85rem 1.05rem; border-bottom: 1px solid var(--ink-4); }
-.tm-title { font-size: max(var(--text-floor), 1.02rem); font-weight: 800; color: var(--text); margin: 0; overflow-wrap: anywhere; }
+/* The popup holds the token's dashboard, so it takes the whole window less a margin (all of it on a phone) — room
+   for the dashboard's columns, with the chart in the middle once there is width for three. */
+.tm-dialog { position: relative; z-index: 1; width: min(1680px, 100%); height: 100%; max-height: 100%; display: flex; flex-direction: column; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.6); overflow: hidden; }
+.tm-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.6rem 0.8rem 0.6rem 1.05rem; border-bottom: 1px solid var(--ink-4); background: var(--ink-2); }
+.tm-title { flex: 1 1 auto; min-width: 0; font-size: max(var(--text-floor), 0.9rem); font-weight: 800; color: var(--text-dim); margin: 0; overflow-wrap: anywhere; }
+.tm-full { flex: 0 0 auto; }
+.tm-full[hidden] { display: none; }
 .tm-x { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink); font-size: max(var(--text-floor), 1rem); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0; }
 .tm-x:hover, .tm-x:focus-visible { border-color: var(--green); background: var(--ctl-fill-hi); color: var(--ctl-ink); }
-.tm-body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 1rem 1.05rem 1.3rem; }
+.tm-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 1rem 1.05rem calc(1.3rem + var(--fab-clear)); }   /* the Send it button and the music strip sit over the popup's foot: the last card scrolls clear of them */
 .tm-loading, .tm-msg { text-align: center; color: var(--text-dim); padding: 1.6rem 0.5rem; }
-@media (max-width: 560px) { .tm-dialog { max-height: 94vh; } }
+.tm-msg.tm-note { text-align: left; color: var(--gold); padding: 0 0 0.85rem; margin: 0; font-weight: 700; }
+@media (max-width: 640px) { .tm-modal { padding: 0; } .tm-dialog { border-radius: 0; border: 0; } .tm-body { padding-left: 0.75rem; padding-right: 0.75rem; } }
 
 /* ===== "Conviction Plays" pinned tokens on the public wall ===== */
 .wall-pins { margin: 0.5rem 0; } /* tight: same 0.5rem rhythm as the gap between the convicted chips */
@@ -3036,6 +3041,12 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .sc-toggle { display: flex; align-items: center; justify-content: center; gap: 0.55rem; width: 100%; text-align: center; font-weight: 800; font-size: max(var(--text-floor), 0.9rem); color: var(--ctl-ink); background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); border-radius: 12px; padding: 0.7rem 1rem; cursor: pointer; margin-top: 0.7rem; min-height: 48px; transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease; }
 .sc-toggle::after { content: '▾'; font-size: max(var(--text-floor), 0.95rem); line-height: 1; color: currentColor; transition: transform 0.2s ease; }
 .sc-toggle[aria-expanded="true"]::after { transform: rotate(180deg); }
+.sc-toggle--dash::after { content: none; }   /* it opens the dashboard popup — nothing unfolds here, so no caret */
+/* a radar or watchlist row, and the Hot Feed's "Full dashboard", open the dashboard popup: no unfold caret on them */
+.np-sum--dash .np-chev { display: none; }
+.np-slide-dashrow { border-top: 1px solid var(--ink-4); margin-top: 0.45rem; padding-top: 0.5rem; }
+.np-slide-more.np-slide-more--dash { width: 100%; font-family: inherit; }
+.np-slide-more.np-slide-more--dash::after { content: none; }
 .sc-toggle:hover, .sc-toggle:focus-visible { background: var(--ctl-fill-hi); border-color: var(--tok, var(--green)); color: var(--ctl-ink); }
 @media (prefers-reduced-motion: reduce) { .sc-toggle::after { transition: none; } }
 .sc-widget.sc-expanded { cursor: default; }
@@ -3743,7 +3754,7 @@ body::after {
 /* wrap, not overflow: five timeframe buttons, a live price and a source chip do not fit across a phone,
    and a row that refuses to wrap makes the whole PAGE scroll sideways rather than just itself */
 .oc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem 0.6rem; margin-bottom: 0.4rem; }
-.oc-tfs { display: flex; gap: 0.25rem; }
+.oc-tfs { display: flex; flex-wrap: wrap; gap: 0.25rem; }   /* seven timeframes wrap on a narrow phone rather than push the chart past the screen */
 .oc-tf {
   background: var(--ctl-fill-lo); color: var(--ctl-ink); border: 1px solid var(--ctl-fill-lo);
   border-radius: var(--r-1); padding: 0.2rem 0.5rem; font-size: max(var(--text-floor), 0.75rem); font-weight: 700; cursor: pointer;
@@ -5162,3 +5173,183 @@ button { line-height: 1.2; font-family: inherit; }   /* and the page's typeface,
 
 /* a finger does the pointing: every control in the bar grows to the 44px touch target */
 @media (pointer: coarse) { :root { --nav-ctl: 44px; } }
+
+/* ===== The token dashboard (newpairs.js: NPCard.dashboardHTML) ======================================
+   The default view of a token wherever someone reads more about one — the Scanner's result, the token
+   popup, a radar row, a Hot Feed slide, a call's detail, a watchlist row. Header, one strip of headline
+   figures, the actions (caveat first), then three columns of cards with the chart in the middle.
+
+   The columns follow the dashboard's OWN width (a container query), not the window's: the same markup
+   is a page on the Scanner, fills the popup, and stacks on a phone. The breakpoints are in em because
+   every size on this site starts from the text floor (14px on a phone, 19pt from 1280px up), so a
+   column is only wide enough when it holds enough words, not enough pixels.
+     < 40em  one column, in source order — the order focus and a screen reader take: chart, activity, safety,
+             contract, market, holders, block 0, community, links, then the score breakdown
+     ≥ 40em  the chart column (chart and activity, the score breakdown under them) beside the side column
+     ≥ 52em  three columns: safety + contract | the chart column | market, holders, block 0, community, links
+   The side pair spans both rows of the chart column, and the second row is 1fr: in a grid of auto height an item
+   spanning a flexible row sizes only that row, so the score breakdown starts right under the activity card whatever
+   the height of the columns beside it. */
+.tkd { container: tkd / inline-size; text-align: left; }
+.tkd-in { display: flex; flex-direction: column; gap: 0.85rem; }
+
+/* header: who it is · what it trades at · what our checks make of it */
+.tkd-head {
+  display: grid; gap: 0.9rem 1.4rem; align-items: center; grid-template-columns: minmax(0, 1fr);
+  padding: 1rem 1.1rem; border: 1.5px solid var(--ink-4); border-radius: 16px;
+  background: linear-gradient(120deg, var(--tok-soft, transparent), transparent 55%), var(--ink-2);
+}
+.tkd-id { display: flex; align-items: center; gap: 0.85rem; min-width: 0; }
+.tkd-idt { min-width: 0; display: grid; gap: 0.3rem; justify-items: start; }
+/* the logo disc: the team's image when there is one, the ticker's first letter under it either way (a failed
+   image is removed by newpairs.js and the letter shows through). The letter is sized from the disc. */
+.tkd-logo {
+  --ava: calc(var(--text-floor) * 3);
+  position: relative; flex: 0 0 auto; width: var(--ava); height: var(--ava); border-radius: 50%; overflow: hidden;
+  display: grid; place-content: center; background: var(--tok-soft, var(--ink-3)); border: 2px solid var(--tok, var(--green));
+}
+.tkd-mono { font-family: 'Luckiest Guy', cursive; font-size: calc(var(--ava) * 0.46); line-height: 1; color: var(--tok, var(--green-bright)); }
+.tkd-logo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tkd-kicker { margin: 0; font-size: max(var(--text-floor), 0.72rem); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-mute); overflow-wrap: anywhere; }
+.tkd-kicker code { letter-spacing: 0; text-transform: none; font-size: max(var(--text-floor), 0.8rem); }
+.tkd-h { margin: 0; font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; line-height: 1.1; color: var(--text); overflow-wrap: anywhere; font-size: max(var(--text-floor), clamp(1.45rem, 4.2cqi, 2.3rem)); }
+.tkd-h:focus:not(:focus-visible) { outline: none; }
+.tkd-sym { color: var(--green-bright); }
+.tkd-sub { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.9rem; font-size: max(var(--text-floor), 0.84rem); color: var(--text-dim); }
+.tkd-addr { display: inline-flex; align-items: center; gap: 0.3rem; }
+.tkd-addr code { font-size: max(var(--text-floor), 0.84rem); color: var(--text); }
+.tkd-idt .np-badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tkd-price { display: grid; gap: 0.25rem; justify-items: start; min-width: 0; }
+.tkd-price-l { font-size: max(var(--text-floor), 0.72rem); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.tkd-price-v { font-size: max(var(--text-floor), 1.9rem); font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--text); overflow-wrap: anywhere; }
+.tkd-moves { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tkd-verdict { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.35rem 0.75rem; align-items: center; min-width: 0; }
+.tkd-verdict .np-gauge { --ava: calc(var(--text-floor) * 3.1); width: var(--ava); height: var(--ava); }
+.tkd-verdict .np-gauge-svg { width: 100%; height: 100%; }
+.tkd-verdict-t { display: flex; flex-direction: column; align-items: flex-start; gap: 0.3rem; min-width: 0; }
+.tkd-verdict .np-verdict { white-space: normal; }
+.tkd-health { font-size: max(var(--text-floor), 0.84rem); font-weight: 700; color: var(--text-dim); }
+.tkd-health b { font-size: max(var(--text-floor), 1rem); }
+.tkd-verdict-why { grid-column: 1 / -1; margin: 0; font-size: max(var(--text-floor), 0.78rem); line-height: 1.45; color: var(--text-dim); }
+@container tkd (min-width: 40em) {
+  .tkd-head { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id price" "verdict verdict"; }
+  .tkd-id { grid-area: id; } .tkd-price { grid-area: price; justify-items: end; text-align: right; } .tkd-verdict { grid-area: verdict; }
+  .tkd-moves { justify-content: flex-end; }
+}
+@container tkd (min-width: 52em) {
+  .tkd-head { grid-template-columns: minmax(0, 1.35fr) auto minmax(0, 1fr); grid-template-areas: "id price verdict"; }
+}
+.tkd-meta .sc-hit-s { margin: 0; text-align: left; }
+.tkd .np-flagstrip { padding: 0; }
+
+/* the headline figures: 2 or 4 across, so a row is never left with one tile on its own (the page caps the dashboard
+   near 66em at the 19pt floor, too narrow for eight readable tiles in a row) */
+.tkd-stats { margin: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container tkd (min-width: 30em) { .tkd-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tkd-stat { min-width: 0; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 12px; padding: 0.6rem 0.75rem; }
+.tkd-stat dt { font-size: max(var(--text-floor), 0.72rem); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.tkd-stat dd { margin: 0.15rem 0 0; display: grid; gap: 0.1rem; }
+.tkd-stat-v { font-size: max(var(--text-floor), 1.15rem); font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text); overflow-wrap: anywhere; }
+.tkd-stat-sub { font-size: max(var(--text-floor), 0.74rem); line-height: 1.35; color: var(--text-mute); overflow-wrap: anywhere; }
+.tkd-stat.is-bad { border-color: color-mix(in srgb, var(--red) 55%, transparent); }
+.tkd-stat.is-bad .tkd-stat-v, .tkd-stat.is-bad .tkd-stat-flag { color: var(--red); }
+.tkd-stat.is-warn { border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+.tkd-stat.is-warn .tkd-stat-v, .tkd-stat.is-warn .tkd-stat-flag { color: var(--gold); }
+.tkd-stat-flag { font-size: max(var(--text-floor), 0.74rem); font-weight: 800; line-height: 1.35; overflow-wrap: anywhere; }
+/* "not read yet": an unknown, set apart from a figure — never a 0 and never a dash beside real numbers */
+.tkd-unread { font-size: max(var(--text-floor), 0.86rem); font-weight: 700; font-style: italic; color: var(--text-mute); }
+
+/* the actions: the caveat is read first, then the buttons */
+.tkd-actbar { display: grid; gap: 0.6rem; padding: 0.8rem 0.9rem; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; }
+.tkd-caveat { margin: 0; font-size: max(var(--text-floor), 0.78rem); line-height: 1.45; color: var(--text-dim); }
+.tkd-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.tkd-acts .call-row { display: contents; }
+.tkd-acts .btn, .tkd-acts .np-pin { flex: 0 1 auto; min-height: 44px; }
+.tkd-acts .np-pin { border-radius: 999px; padding: 0.5rem 1.1rem; font-size: max(var(--text-floor), 0.95rem); }
+@container tkd (max-width: 26em) {
+  .tkd-acts .btn, .tkd-acts .np-pin, .tkd-acts .np-watch-wide { flex: 1 1 100%; justify-content: center; }
+  .tkd-acts > a.btn { flex-basis: calc(50% - 0.25rem); }   /* the two outside links share a row; the actions keep theirs */
+}
+
+/* the columns */
+.tkd-grid { display: grid; gap: 0.85rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.tkd-col, .tkd-side { display: grid; gap: 0.85rem; align-content: start; min-width: 0; grid-template-columns: minmax(0, 1fr); }
+@container tkd (min-width: 40em) {
+  .tkd-grid { grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); grid-template-rows: auto 1fr; }
+  .tkd-col--c { grid-column: 1; grid-row: 1; }
+  .tkd-col--c2 { grid-column: 1; grid-row: 2; }
+  .tkd-side { grid-column: 2; grid-row: 1 / span 2; }
+}
+@container tkd (min-width: 52em) {
+  .tkd-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr); }
+  .tkd-side { display: contents; }
+  .tkd-col--l { grid-column: 1; grid-row: 1 / span 2; }
+  .tkd-col--c { grid-column: 2; grid-row: 1; }
+  .tkd-col--c2 { grid-column: 2; grid-row: 2; }
+  .tkd-col--r { grid-column: 3; grid-row: 1 / span 2; }
+}
+
+/* a card: heading, what matters at a glance, and the rest one click down */
+.tkd-card { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; align-content: start; padding: 0.85rem 0.95rem; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; }
+.tkd-card-h { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 0.6rem; font-size: max(var(--text-floor), 0.98rem); font-weight: 800; line-height: 1.3; color: var(--text); }
+.tkd-card-aside { font-size: max(var(--text-floor), 0.8rem); font-weight: 700; color: var(--text-dim); }
+.tkd-card-b { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }   /* minmax(0, …): a wide child (the chart's controls, a table) scrolls or wraps inside, never widens the card */
+.tkd-card-b > p, .tkd-card-b > section, .tkd-card-b > div { margin: 0; }
+.tkd-card .np-why { margin: 0; padding: 0; }   /* a <section>: the page-level section padding is not for a card */
+.tkd-card .np-why-clean { margin: 0; }
+.tkd-card .np-audit-lead { margin: 0; }
+.tkd-card .np-audit-row { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }   /* the label over its answer: a side column is too narrow for both across */
+.tkd-card .np-audit-row dd { overflow-wrap: anywhere; }
+.tkd-card .np-flow, .tkd-card .np-conc, .tkd-card .np-contract { margin: 0; }
+.tkd-card .np-reserves { margin: 0; }
+.tkd-card .np-holders { max-height: none; margin: 0; }
+.tkd-card .np-holder { flex-wrap: wrap; }
+.tkd-card .np-holder code { white-space: nowrap; }   /* a short address never breaks mid-way: the share wraps under it instead */
+.tkd-card .np-brandstat { padding: 0; }
+.tkd-card .np-socials { margin: 0; }
+.tkd-card .np-kv { grid-template-columns: repeat(auto-fit, minmax(min(8em, 100%), 1fr)); }
+.tkd-card--chart .oc-canvas { height: clamp(230px, min(46vh, 70cqi), 540px); }
+.tkd-line { margin: 0; line-height: 1.5; font-size: max(var(--text-floor), 0.9rem); color: var(--text); }
+.tkd-line.tkd-bad { color: var(--red); }
+.tkd-line.tkd-warn { color: var(--gold); }
+.tkd-gaps { margin: 0; font-size: max(var(--text-floor), 0.84rem); line-height: 1.45; color: var(--gold); }
+/* a neutral note for what we could not read — deliberately not the green "clean" box, which reads as a pass */
+.tkd-note, .tkd-card--chart .np-why-clean, .tkd-card--activity .np-why-clean {
+  margin: 0; font-size: max(var(--text-floor), 0.86rem); line-height: 1.45; color: var(--text-dim);
+  background: var(--ink); border: 1px dashed var(--ink-5); border-radius: 10px; padding: 0.55rem 0.7rem;
+}
+.tkd-mini { margin: 0; display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fit, minmax(min(9em, 100%), 1fr)); }   /* three across, or one per row — never two and a lone third */
+.tkd-mini > div { min-width: 0; background: var(--ink); border-radius: 10px; padding: 0.45rem 0.6rem; }
+.tkd-mini dt { font-size: max(var(--text-floor), 0.7rem); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim); }
+.tkd-mini dd { margin: 0.1rem 0 0; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); overflow-wrap: anywhere; }
+.tkd-slot .tok-comm-panel { margin: 0; }
+
+/* "More" — a pop-down at the foot of a card. The caret is drawn, not typed, so it sits in the middle of its disc. */
+.tkd-more { border-top: 1px solid var(--ink-4); }
+.tkd-more-s {
+  list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; min-height: 44px;
+  padding: 0.4rem 0 0; cursor: pointer; border-radius: 8px;
+  font-size: max(var(--text-floor), 0.86rem); font-weight: 800; color: var(--green-bright);
+}
+.tkd-more-s::-webkit-details-marker { display: none; }
+.tkd-more-s:hover .tkd-more-lbl { text-decoration: underline; text-underline-offset: 0.2em; }
+.tkd-more-s:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.tkd-more-caret { position: relative; flex: 0 0 auto; width: 1.75em; height: 1.75em; border-radius: 50%; background: var(--ctl-fill-lo); transition: transform 0.2s ease, background 0.15s ease; }
+.tkd-more-caret::before { content: ''; position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 0.62em; height: 0.36em; background: var(--ctl-ink); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.tkd-more-s:hover .tkd-more-caret { background: var(--ctl-fill-hi); }
+.tkd-more[open] > .tkd-more-s .tkd-more-caret { transform: rotate(180deg); }
+.tkd-more-b { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; padding: 0.5rem 0 0.1rem; min-width: 0; }
+.tkd-more-b > p, .tkd-more-b > div { margin: 0; }
+.tkd-more--in { margin-top: 0.5rem; }
+.tkd .np-honest { margin: 0; }
+@media (prefers-reduced-motion: reduce) { .tkd-more-caret { transition: none; } }
+html.motion-off .tkd-more-caret { transition: none; }
+@media (forced-colors: active) {
+  .tkd-more-caret { background: ButtonFace; border: 1px solid ButtonText; }
+  .tkd-more-caret::before { forced-color-adjust: none; background: ButtonText; }
+  .tkd-card, .tkd-stat, .tkd-head, .tkd-actbar { border: 1px solid CanvasText; }
+}
+
+/* On the Scanner page the result breaks out of the 900px column so three columns have room; the other
+   controls keep their width. Same centre as the column, never wider than the window less 1rem a side. */
+.sc-result:has(> .tkd) { width: min(1680px, calc(100vw - 2rem)); margin-left: calc(50% - min(840px, 50vw - 1rem)); }

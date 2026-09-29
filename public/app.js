@@ -280,7 +280,7 @@
 
   // trap Tab focus inside a container; returns a release() to remove the trap
   window.trapFocus = function (container) {
-    const SEL = 'a[href],button:not([disabled]),textarea,input:not([disabled]),select,[tabindex]:not([tabindex="-1"])';
+    const SEL = 'a[href],button:not([disabled]),textarea,input:not([disabled]),select,details > summary,[tabindex]:not([tabindex="-1"])';   // a pop-down's <summary> is a stop too (the token dashboard can end on one)
     function onKey(e) {
       if (e.key !== 'Tab') return;
       const items = [...container.querySelectorAll(SEL)].filter(el => el.offsetParent !== null || el === document.activeElement);

@@ -486,7 +486,7 @@
        Every line is a joke about the rocket or the moment, never a nudge: nothing here says buy, sell or moon. */
     const LINES = {
       callopen: ['Composer\'s open. Say something worth the Wall.', 'A Send Call! Deep breath. Read the chart, not the tea leaves.', 'Ooh, a call. I\'ll hold your coffee. Wait — fins. No hands. Well, some hands.'],
-      call: ['Sent to the Wall. That\'s on the record now — like a tattoo, but cheaper.', 'Logged. The Wall never forgets. I forget everything at reload, personally.', 'Bold. I like bold. I am, technically, shaped like bold.'],
+      call: ['Posted on the Wall. That\'s on the record now — like a tattoo, but cheaper.', 'Logged. The Wall never forgets. I forget everything at reload, personally.', 'Bold. I like bold. I am, technically, shaped like bold.'],
       squadcall: ['Squad-only. Whispered it. Very hush-hush. 🫡', 'Private call, logged for the squad. My lips are sealed. I don\'t have lips.'],
       post: ['Posted. The Wall just grew a brick taller.', 'On the Wall. Very load-bearing.', 'Sent it. Somewhere, a scroll wheel twitched.'],
       save: ['Starred. I\'ll keep an eye on it. I have two.', 'Watchlisted. Like a bookmark, but with more suspense.', 'Saved. It\'s on the list now. The list is honoured.'],
@@ -530,8 +530,8 @@
       const w = e.target.closest('.np-watch');   // the ☆: read its state once the toggle has landed; signed out it only opens the sign-in
       if (w && window.AUTH && AUTH.user) setTimeout(() => say(w.getAttribute('aria-pressed') === 'true' ? 'save' : 'unsave'), 150);
     }, true);
-    const scanOut = document.querySelector('#sc-result');   // the Scanner's result box — only on that page, so optional (querySelector: not one of Sendy's own ids)
-    if (scanOut) new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && (n.matches('.sc-hit') || n.querySelector('.sc-hit'))) { say('scanned'); return; } }).observe(scanOut, { childList: true });
+    const scanOut = document.querySelector('#sc-result');   // the Scanner's result box — only on that page, so optional (querySelector: not one of Sendy's own ids); a scan's result is the token dashboard, .tkd
+    if (scanOut) new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && (n.matches('.sc-hit, .tkd') || n.querySelector('.sc-hit, .tkd'))) { say('scanned'); return; } }).observe(scanOut, { childList: true });
     if (typeof window.sendToast === 'function') {   // a ⚠️ toast is the site saying something did not go through
       const toast = window.sendToast;
       window.sendToast = function (msg) { try { if (/^\s*⚠️/.test(String(msg))) say('oops'); } catch {} return toast.apply(this, arguments); };

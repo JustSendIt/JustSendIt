@@ -103,7 +103,7 @@
     const chart = (call.links && call.links.dex) || ('https://dexscreener.com/robinhood/' + call.pair);
     /* entry price + pair travel with the card so the X can be recomputed from a live on-chain spot price
        between server refreshes — the X is price ÷ entry, and the entry never changes. */
-    return '<div class="sc-widget sc-g' + esc(g.g) + (call.rugged ? ' sc-is-rugged' : '') + '" data-call="' + call.id + '" data-token="' + esc(call.token) + '"' +
+    return '<div class="sc-widget sc-g' + esc(g.g) + (call.rugged ? ' sc-is-rugged' : '') + '" data-call="' + call.id + '" data-token="' + esc(call.token) + '" data-sym="' + esc(call.symbol || '') + '" data-name="' + esc(call.name || '') + '"' +
       ' data-pair="' + esc(call.pair || '') + '" data-entry="' + esc(call.entryPrice == null ? '' : String(call.entryPrice)) + '"' +
       ' data-entrymc="' + esc(call.entryMc == null ? '' : String(call.entryMc)) + '"' +
       ' style="--tok:hsl(' + hue(call.token) + ' 72% 60%)">' +
@@ -159,7 +159,9 @@
         '</ul>' +
         '<p class="sc-explain-note">Not financial advice. Most tokens go to zero — <b>always DYOR</b>.</p>' +
       '</div>' +
-      '<button class="sc-toggle" type="button" data-tip="Expands the live on-chain data for this token" data-sctoggle aria-expanded="false"><span class="sc-toggle-lbl">Full on-chain detail</span></button>' +
+      // the token's dashboard opens in the token popup where the page has one; inline, the classic detail otherwise
+      (dashPopup() ? '<button class="sc-toggle sc-toggle--dash" type="button" data-tip="Opens this token’s full dashboard: chart, safety read, holders and contract" data-sctoggle aria-haspopup="dialog"><span class="sc-toggle-lbl">📊 Full dashboard</span></button>'
+                   : '<button class="sc-toggle" type="button" data-tip="Expands the live on-chain data for this token" data-sctoggle aria-expanded="false"><span class="sc-toggle-lbl">Full on-chain detail</span></button>') +
       '<div class="sc-detail" hidden></div>' +
     '</div>';
   }
@@ -200,9 +202,26 @@
     }
   }
 
+  function dashPopup() { return !!(window.TokenModal && window.NPCard && window.NPCard.dashboardHTML); }
+  // the call-time snapshot, for a token that no longer prices — so its detail never dead-ends
+  async function callSnapshot(id) {
+    try { const sr = await fetch('/api/calls/' + encodeURIComponent(id), { credentials: 'same-origin' }); const sj = await sr.json(); return sj && sj.snapshot; } catch { return null; }
+  }
   // expand/collapse the full New-Pairs token detail under a widget (fetches the LIVE token on first open)
   async function toggleDetail(w) {
     if (!w) return;
+    // the token's dashboard, in the token popup: the live read first, the call-time snapshot if the token no longer prices
+    if (dashPopup()) {
+      const id = w.dataset.call;
+      window.TokenModal.open(w.dataset.token, { symbol: w.dataset.sym, name: w.dataset.name, fallback: async (ans) => {
+        const snap = await callSnapshot(id);
+        // the note says why there is no live read: the chain said the pool is gone, or we simply could not ask just now
+        return snap && snap.token ? { pair: snap, note: ans && ans.notFound
+          ? '<p class="tm-msg tm-note">🤷 The chain reports no trading pool for this token now. Below is the on-chain detail from when it was called, not a live read.</p>'
+          : '<p class="tm-msg tm-note">⏳ We couldn’t read it live just now — below is the on-chain detail from when it was called, not a live read. Nothing here is a judgement about the token.</p>' } : null;
+      } });
+      return;
+    }
     const detail = w.querySelector('.sc-detail'), tog = w.querySelector('[data-sctoggle]');
     const opening = !w.classList.contains('sc-expanded');
     w.classList.toggle('sc-expanded', opening);
@@ -219,8 +238,7 @@
       const j = await r.json();
       if (r.ok && j.pair) { renderDetail(j.pair); return; }
       // live lookup failed (delisted/rugged) → fall back to the call-time snapshot so the detail never dead-ends
-      let snap = null;
-      try { const sr = await fetch('/api/calls/' + encodeURIComponent(id), { credentials: 'same-origin' }); const sj = await sr.json(); snap = sj && sj.snapshot; } catch {}
+      const snap = await callSnapshot(id);
       if (snap && snap.token) renderDetail(snap, '<p class="sc-detail-msg" style="text-align:left;margin:0 0 .6rem">⚠︎ Not priced right now — showing the on-chain detail from when it was called.</p>');
       // only the chain saying "no pool" justifies the harder wording; an outage gets the honest one
       else if (j && j.unavailable) detail.innerHTML = '<p class="sc-detail-msg">⏳ We couldn’t reach the price feed or the chain just now, so we can’t show the current detail. Nothing here is a judgement about this token — reopen in a moment.</p>';
