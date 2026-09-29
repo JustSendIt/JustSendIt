@@ -5,8 +5,9 @@
    transparent (black pupils and the flame's dark core stay solid), then a premultiplied box downscale gives
    soft edges. Dependency-free — the PNG decode/encode is done by hand on top of node:zlib, because this
    machine has no ImageMagick, PIL or ffmpeg.
-     node scripts/sendy-sprite.mjs [frameSize=384] [everyNthFrame=2] [assetPack=~/Desktop/Sendy3D]
-   (384px frames: the rocket shows at 228px on a desktop and 180px on a phone, and stays sharp on a 2x screen)
+     node scripts/sendy-sprite.mjs [frameSize=192] [everyNthFrame=2] [assetPack=~/Desktop/Sendy3D]
+   (192px frames: the rocket shows at 114px on a desktop and 90px on a phone — frames about 1.7 times that, the
+   ratio the first 76px rocket had with 128px frames)
    The client (public/sendy.js) assumes 30 square frames stacked vertically; tests/sendy.mjs checks it. */
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import zlib from 'node:zlib';
@@ -93,7 +94,7 @@ function scaleInto(img, box, S, dst, dstOff, dstW) {
     if (a > 0) { dst[d] = Math.round(r / a); dst[d + 1] = Math.round(g / a); dst[d + 2] = Math.round(b / a); dst[d + 3] = Math.round(255 * a / n); } else { dst[d] = dst[d + 1] = dst[d + 2] = dst[d + 3] = 0; }
   }
 }
-const S = Number(process.argv[2] || 384), STEP = Number(process.argv[3] || 2), TOL = 18;
+const S = Number(process.argv[2] || 192), STEP = Number(process.argv[3] || 2), TOL = 18;
 const files = readdirSync(SRC + '/idle-alpha-png').filter((f) => f.endsWith('.png')).sort().filter((_, i) => i % STEP === 0);
 const frames = files.map((f) => { const img = decode(readFileSync(SRC + '/idle-alpha-png/' + f)); const bb = keyBackground(img, TOL); return { img, bb }; });
 const u = frames.reduce((a, { bb }) => ({ minx: Math.min(a.minx, bb.minx), miny: Math.min(a.miny, bb.miny), maxx: Math.max(a.maxx, bb.maxx), maxy: Math.max(a.maxy, bb.maxy) }), { minx: 1e9, miny: 1e9, maxx: -1, maxy: -1 });

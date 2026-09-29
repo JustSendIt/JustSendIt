@@ -144,10 +144,10 @@
        the box grows with its words: about 45 characters a line at every width, controls that stay in proportion, and a
        44px minimum for anything a finger taps. */
     return '' +
-      /* Three times the first size — 228px, 180px on a phone — but never more than 30% of the screen's height: on a
-         landscape phone or a short window the full size left no clear strip above or below it, and covered the nav.
-         On :root, so the footer can keep that much room free at the end of every page. */
-      ':root{--sendy-size:min(228px,30vh)}@media (max-width:767px){:root{--sendy-size:min(180px,30vh)}}' +
+      /* One and a half times the first size — 114px, 90px on a phone — and never more than 30% of the screen's height
+         (a landscape phone or a short window keeps a clear strip above and below it). On :root, so the footer can keep
+         that much room free at the end of every page. */
+      ':root{--sendy-size:min(114px,30vh)}@media (max-width:767px){:root{--sendy-size:min(90px,30vh)}}' +
       '#sendy-widget{--sendy-z:190;position:fixed;right:1rem;bottom:var(--fab-clear,5.5rem);z-index:var(--sendy-z);font-family:inherit;width:var(--sendy-size);height:var(--sendy-size)}' +
       '#sendy-widget:not([hidden]){display:block}' +
       '@media (max-width:767px){#sendy-widget{right:0.75rem}}' +
@@ -156,8 +156,8 @@
          where nothing else belongs), the arcade's multiplier while a flight runs, and the Scanner's settings sheet on a phone */
       'body.np-mode-feed #sendy-widget,html.arc-flying #sendy-widget{display:none}' +
       '@media (max-width:760px){body:has(#np-filters:not([hidden])) #sendy-widget{display:none}}' +
-      /* Only the rocket's body takes a tap. The frame is a square and most of it is transparent; at this size the whole
-         square used to catch taps meant for whatever showed through it. The button keeps its focus ring, hover and drag:
+      /* Only the rocket's body takes a tap. The frame is a square and most of it is transparent, and the whole square
+         used to catch taps meant for whatever showed through it. The button keeps its focus ring, hover and drag:
          a hit on its ::before is a hit on the button. */
       '#sendy-widget,.sendy-rocket,.sendy-sprite{pointer-events:none}.sendy-popup,.sendy-say{pointer-events:auto}' +
       '.sendy-rocket::before{content:"";position:absolute;inset:3% 15% 2%;border-radius:45%;pointer-events:auto}' +
@@ -193,10 +193,8 @@
       '@media (min-width:768px){.sendy-widget.is-up .sendy-popup{bottom:auto;top:calc(var(--sendy-size) + 10px)}' +
         '.sendy-widget.is-left .sendy-popup{right:auto;left:0}' +
         '.sendy-widget.is-side .sendy-popup{position:fixed;top:auto;bottom:var(--fab-clear,5.5rem);right:auto;left:auto}}' +   /* beside the rocket: placePopup sets the side and the width */
-      /* on a phone the popup spans the width above the strip, over the rocket's upper part (a hand's breadth of it
-         stays in view): leaving the whole 180px rocket clear cost a short phone most of the conversation */
-      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + 68px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - 84px);display:flex;flex-direction:column}}' +
-      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - 84px)}}}' +
+      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px);display:flex;flex-direction:column}}' +
+      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px)}}}' +
       /* a phone on its side: above the rocket there is almost no height, so the panel stands left of the rocket's column
          instead, from near the top down to the strip the music player and the SEND IT button own */
       '@media (max-width:767px) and (max-height:500px){.sendy-popup{right:calc(var(--sendy-size) + 1.5rem);bottom:var(--fab-clear,5.5rem);max-height:calc(100vh - var(--fab-clear,5.5rem) - 12px)}}' +
@@ -476,7 +474,7 @@
       const s = size(), W = window.innerWidth, H = window.innerHeight, m = 16, low = H - fabClear() - s;
       if (low < 8) return [];
       const y = (v) => Math.max(8, Math.min(v, low));   // never down into the strip the music player and SEND IT own
-      // along the right edge, the side it rests on: at this size a glide to the left edge parked it on the page
+      // along the right edge, the side it rests on: a glide to the left edge parked it on the page
       return [{ x: W - s - m, y: low }, { x: W - s - m, y: y(H * 0.42) }, { x: W - s - m, y: y(H * 0.16) }];
     }
     // a spot where the rocket's body would sit on a link, a button or a field is not a place to land (sticky bars included)
@@ -550,7 +548,7 @@
       sayEl.textContent = lines[i].replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null) ? String(vars[k]) : m);
       if (!isMobile()) {
         // measured, not guessed: above the rocket if it fits there, below it if it fits there (never into the SEND IT
-        // strip), otherwise beside it — a 140px rule of thumb was drawn for a 76px rocket
+        // strip), otherwise beside it — a fixed 140px rule of thumb only suited the first 76px rocket
         sayEl.style.visibility = 'hidden'; sayEl.removeAttribute('hidden');
         const r = rocket.getBoundingClientRect(), bw = Math.min(parseFloat(getComputedStyle(sayEl).fontSize) * 16, window.innerWidth - 24), bh = sayEl.offsetHeight;
         const above = r.top - 8, below = window.innerHeight - fabClearPx() - r.bottom - 8, side = above < bh && below < bh;
