@@ -563,6 +563,7 @@
   // recomputed here, because disabling a focused button has already thrown focus back to <body> by the time we run.
   function setMode(m, opts) {
     S.mode = m;
+    document.documentElement.classList.toggle('arc-flying', m === 'flying');   // Sendy (sendy.js) steps off the multiplier while it climbs
     if (m === 'flying') { autoCashed = false; S.netErr = ''; S.freeze = null; boom = null; }
     render();
     if (m === 'flying') ensureLoop();

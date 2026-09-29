@@ -17,7 +17,7 @@
     wrap.id = 'music-player';
     wrap.innerHTML =
       '<button class="mp-btn" id="mp-toggle" data-tip="Plays the theme tune, or pauses it and keeps it off" aria-label="Play the Just Send It theme" aria-pressed="false"><span class="mp-ico" aria-hidden="true"></span></button>' +
-      '<div class="mp-title"><span class="eq" aria-hidden="true"><span>▮</span><span>▮</span><span>▮</span></span> Just $Send It</div>' +
+      '<div class="mp-title"><span class="eq" aria-hidden="true"><span></span><span></span><span></span></span><span class="mp-name">Just $Send It</span></div>' +   // the bars are drawn (styles.css), not typed
       '<input type="range" id="mp-vol" min="0" max="100" value="70" aria-label="Music volume">' +
       '<button class="mp-hint" id="mp-hint" data-tip="Turns the music on and hides this nudge" hidden>🔊 Tap for the theme</button>';
     // right after the skip link (before it, on a page without one): the pause control is the second tab stop,

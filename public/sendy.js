@@ -95,6 +95,11 @@
     const u = window.AUTH && AUTH.user && AUTH.user.username;
     return (u ? 'Hey @' + u + '! ' : 'Hey, I\'m Sendy! ') + 'Ask me anything about $Send, or how to use this site. 🚀';
   };
+  // the chat's first line (the tips greeting reworded by a regex used to read "Hey there —, I'm Sendy!")
+  const chatHello = () => {
+    const u = window.AUTH && AUTH.user && AUTH.user.username;
+    return 'Hey ' + (u ? '@' + u : 'there') + ' — I\'m Sendy! Ask me anything about $Send, or how to use this site. 🚀';
+  };
 
   /* ---------- markup ---------- */
   function html() {
@@ -139,16 +144,19 @@
        the box grows with its words: about 45 characters a line at every width, controls that stay in proportion, and a
        44px minimum for anything a finger taps. */
     return '' +
-      '#sendy-widget{--sendy-size:76px;--sendy-z:190;position:fixed;right:1rem;bottom:var(--fab-clear,5.5rem);z-index:var(--sendy-z);font-family:inherit;width:var(--sendy-size);height:var(--sendy-size)}' +
+      '#sendy-widget{--sendy-size:228px;--sendy-z:190;position:fixed;right:1rem;bottom:var(--fab-clear,5.5rem);z-index:var(--sendy-z);font-family:inherit;width:var(--sendy-size);height:var(--sendy-size)}' +
       '#sendy-widget:not([hidden]){display:block}' +
-      '@media (max-width:767px){#sendy-widget{--sendy-size:60px;right:0.75rem}}' +
+      '@media (max-width:767px){#sendy-widget{--sendy-size:180px;right:0.75rem}}' +
+      /* at this size the rocket would sit on controls that never move: the Hot Feed's action rail (a full-screen
+         player, where nothing else belongs) and the arcade's multiplier while a flight is running — it steps aside */
+      'body.np-mode-feed #sendy-widget,html.arc-flying #sendy-widget{display:none}' +   /* three times the first size: 228px, 180px on a phone */
       '.sendy-rocket{width:var(--sendy-size);height:var(--sendy-size);padding:0;margin:0;border:0;background:none;cursor:grab;display:block;border-radius:50%;transition:transform .2s ease;touch-action:manipulation}' +
       '@media (max-width:767px){.sendy-rocket{cursor:pointer}}' +
       '.sendy-rocket:hover{transform:scale(1.08)}' +
       '.sendy-rocket:active{cursor:grabbing}' +
       '.sendy-rocket:focus-visible{outline:3px solid var(--focus);outline-offset:3px}' +
       '.sendy-sprite{display:block;width:var(--sendy-size);height:var(--sendy-size);background:url(/assets/sendy-idle.png) no-repeat 0 0/var(--sendy-size) auto;' +
-        'filter:drop-shadow(0 0 9px color-mix(in srgb,var(--green) 55%,transparent));animation:sendy-idle 2s steps(' + FRAMES + ') infinite}' +
+        'filter:drop-shadow(0 0 calc(var(--sendy-size) * .12) color-mix(in srgb,var(--green) 55%,transparent));animation:sendy-idle 2s steps(' + FRAMES + ') infinite}' +
       '@keyframes sendy-idle{to{background-position:0 calc(var(--sendy-size) * -' + FRAMES + ')}}' +
       '@media (prefers-reduced-motion:reduce){.sendy-sprite{animation:none}}' +
       'html.motion-off .sendy-sprite,html.motion-off .sendy-msg,html.motion-off .sendy-say{animation:none}html.motion-off .sendy-widget.is-hyped .sendy-rocket{animation:none}' +
@@ -162,7 +170,7 @@
       '@media (max-width:767px){.sendy-say{position:fixed;right:.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);max-width:calc(100vw - 1.5rem)}}' +
       '.sendy-widget.is-hyped .sendy-sprite{animation-duration:.5s}' +
       '@media (prefers-reduced-motion:no-preference){.sendy-widget.is-hyped .sendy-rocket{animation:sendy-hop .6s ease}}' +
-      '@keyframes sendy-hop{0%,100%{transform:none}40%{transform:translateY(-12px) rotate(-6deg)}70%{transform:translateY(-4px) rotate(4deg)}}' +
+      '@keyframes sendy-hop{0%,100%{transform:none}40%{transform:translateY(calc(var(--sendy-size) * -.16)) rotate(-6deg)}70%{transform:translateY(calc(var(--sendy-size) * -.05)) rotate(4deg)}}' +   /* the glow and the hop scale with the rocket */
       /* the popup: above the rocket, aligned to its right edge; flipped when the rocket sits near the top or the left.
          25em wide (capped to the screen) and, in the chat, a steady 40em tall (capped to the room there is), with the
          conversation taking whatever the header and the question box leave */
@@ -261,7 +269,7 @@
     let userPlaced = false, flying = false, hovering = false, autoHide = null;
 
     /* ---------- open / close ---------- */
-    const size = () => rocket.getBoundingClientRect().width || 76;
+    const size = () => rocket.getBoundingClientRect().width || 228;
     // the strip at the bottom that the music player and the SEND IT button own, in pixels: --fab-clear is a calc()
     // with rem and a safe-area inset, so it is measured on a probe box rather than parsed
     function fabClearPx() {
@@ -370,7 +378,7 @@
     function remember(role, text) { history.push({ role, text }); history = history.slice(-12); store.set('chat', history); }
     function paintHistory() {
       chatLog.textContent = '';
-      if (!history.length) addMessage(greeting().replace(/^Hey/, 'Hey there —'), 'sendy');
+      if (!history.length) addMessage(chatHello(), 'sendy');
       for (const m of history) addMessage(m.text, m.role === 'assistant' ? 'sendy' : 'user');
     }
     async function ask(q) {

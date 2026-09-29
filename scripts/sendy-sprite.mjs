@@ -5,7 +5,8 @@
    transparent (black pupils and the flame's dark core stay solid), then a premultiplied box downscale gives
    soft edges. Dependency-free — the PNG decode/encode is done by hand on top of node:zlib, because this
    machine has no ImageMagick, PIL or ffmpeg.
-     node scripts/sendy-sprite.mjs [frameSize=128] [everyNthFrame=2] [assetPack=~/Desktop/Sendy3D]
+     node scripts/sendy-sprite.mjs [frameSize=384] [everyNthFrame=2] [assetPack=~/Desktop/Sendy3D]
+   (384px frames: the rocket shows at 228px on a desktop and 180px on a phone, and stays sharp on a 2x screen)
    The client (public/sendy.js) assumes 30 square frames stacked vertically; tests/sendy.mjs checks it. */
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import zlib from 'node:zlib';
@@ -36,9 +37,38 @@ function decode(buf) {                                   // 8-bit RGB / RGBA, no
 }
 function crc32(b) { let c, t = crc32.t || (crc32.t = (() => { const t = new Int32Array(256); for (let n = 0; n < 256; n++) { c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c; } return t; })()); c = -1; for (let i = 0; i < b.length; i++) c = t[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; }
 function chunk(type, data) { const l = Buffer.alloc(4); l.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type, 'latin1'), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc32(td)); return Buffer.concat([l, td, c]); }
-function encode(w, h, px) {                              // RGBA, filter 0
-  const raw = Buffer.alloc((w * 4 + 1) * h);
-  for (let y = 0; y < h; y++) { raw[y * (w * 4 + 1)] = 0; px.copy(raw, y * (w * 4 + 1) + 1, y * w * 4, (y + 1) * w * 4); }
+/* RGBA, with the usual per-row filter choice: each row is written with whichever of the five PNG filters (none, sub,
+   up, average, Paeth) gives the smallest sum of absolute byte values — the standard heuristic, and on these soft 3D
+   renders it takes a large share off the sheet, which every page loads. decode() above already reads all five. */
+function encode(w, h, px) {
+  const stride = w * 4, raw = Buffer.alloc((stride + 1) * h), cand = [0, 1, 2, 3, 4].map(() => Buffer.alloc(stride));
+  const zero = Buffer.alloc(stride);
+  for (let y = 0; y < h; y++) {
+    const row = px.subarray(y * stride, (y + 1) * stride), up = y ? px.subarray((y - 1) * stride, y * stride) : zero;
+    let best = 0, bestSum = Infinity;
+    for (let f = 0; f < 5; f++) {
+      const out = cand[f]; let sum = 0;
+      for (let i = 0; i < stride; i++) {
+        const a = i >= 4 ? row[i - 4] : 0, b = up[i], c = i >= 4 ? up[i - 4] : 0;
+        let pred = 0;
+        if (f === 1) pred = a; else if (f === 2) pred = b; else if (f === 3) pred = (a + b) >> 1;
+        else if (f === 4) { const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c); pred = (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c); }
+        const v = (row[i] - pred) & 255; out[i] = v; sum += v < 128 ? v : 256 - v;
+        if (sum >= bestSum) break;
+      }
+      if (sum < bestSum) { bestSum = sum; best = f; }
+    }
+    // recompute the winner in full (the loop above stops early on losers, and may have stopped early on this one too)
+    const out = cand[best];
+    for (let i = 0; i < stride; i++) {
+      const a = i >= 4 ? row[i - 4] : 0, b = up[i], c = i >= 4 ? up[i - 4] : 0;
+      let pred = 0;
+      if (best === 1) pred = a; else if (best === 2) pred = b; else if (best === 3) pred = (a + b) >> 1;
+      else if (best === 4) { const pp = a + b - c, pa = Math.abs(pp - a), pb = Math.abs(pp - b), pc = Math.abs(pp - c); pred = (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c); }
+      out[i] = (row[i] - pred) & 255;
+    }
+    raw[y * (stride + 1)] = best; out.copy(raw, y * (stride + 1) + 1);
+  }
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
@@ -63,7 +93,7 @@ function scaleInto(img, box, S, dst, dstOff, dstW) {
     if (a > 0) { dst[d] = Math.round(r / a); dst[d + 1] = Math.round(g / a); dst[d + 2] = Math.round(b / a); dst[d + 3] = Math.round(255 * a / n); } else { dst[d] = dst[d + 1] = dst[d + 2] = dst[d + 3] = 0; }
   }
 }
-const S = Number(process.argv[2] || 128), STEP = Number(process.argv[3] || 2), TOL = 18;
+const S = Number(process.argv[2] || 384), STEP = Number(process.argv[3] || 2), TOL = 18;
 const files = readdirSync(SRC + '/idle-alpha-png').filter((f) => f.endsWith('.png')).sort().filter((_, i) => i % STEP === 0);
 const frames = files.map((f) => { const img = decode(readFileSync(SRC + '/idle-alpha-png/' + f)); const bb = keyBackground(img, TOL); return { img, bb }; });
 const u = frames.reduce((a, { bb }) => ({ minx: Math.min(a.minx, bb.minx), miny: Math.min(a.miny, bb.miny), maxx: Math.max(a.maxx, bb.maxx), maxy: Math.max(a.maxy, bb.maxy) }), { minx: 1e9, miny: 1e9, maxx: -1, maxy: -1 });

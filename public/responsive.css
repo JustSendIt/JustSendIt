@@ -377,6 +377,7 @@ html :is(.post-avatar, .search-hit .h-ava, .sc-sender-ava-emoji, .gb-ava, .post-
 @media (forced-colors: active) {
   #music-player .mp-ico, .oc-grab-ico { forced-color-adjust: none; color: ButtonText; background-color: ButtonText; }
   #music-player .mp-btn.is-playing .mp-ico { background-color: transparent; }   /* the two bars are a gradient in currentColor */
+  #music-player .mp-title .eq span { forced-color-adjust: none; background-color: CanvasText; }   /* the drawn equaliser bars stay visible too */
   .np-chev::before, .np-caret::before { display: none; }
   .np-chev { color: CanvasText; } .np-caret { color: ButtonText; }   /* Firefox keeps a transparent colour; name a system one */
   .gs-steps .step.is-done .step-num { forced-color-adjust: none; }

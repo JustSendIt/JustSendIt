@@ -1047,9 +1047,15 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
 #music-player .mp-ico { display: block; width: calc(var(--ava) * 0.34); height: calc(var(--ava) * 0.38); background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
 #music-player .mp-btn.is-playing .mp-ico { width: calc(var(--ava) * 0.3); clip-path: none; background: linear-gradient(90deg, currentColor 0 34%, transparent 34% 66%, currentColor 66%); }
 #music-player .mp-btn:active { transform: scale(0.88); }
-#music-player .mp-title { font-size: max(var(--text-floor), 0.75rem); font-weight: 800; color: var(--text-dim); max-width: 110px; overflow: hidden; white-space: nowrap; }
-#music-player .mp-title .eq { color: var(--green-bright); }
-#music-player.playing .mp-title .eq span { display: inline-block; animation: eq 0.8s ease-in-out infinite; }
+/* The song's full title, at the site's text floor: the box is sized in em of that text (13em holds "Just $Send It"
+   with its bars at any floor size), where it used to stop at 110px — about "Just" at the 19pt desktop floor. The
+   three bars are drawn, not typed (a ▮ comes from whatever symbol font the device falls back to), and sit on the
+   text's baseline at its cap height. */
+#music-player .mp-title { display: inline-flex; align-items: center; gap: 0.4em; font-size: max(var(--text-floor), 0.8rem); line-height: 1.1; font-weight: 800; color: var(--text-dim); max-width: 13em; overflow: hidden; white-space: nowrap; }
+#music-player .mp-title .eq { display: inline-flex; align-items: flex-end; gap: 0.12em; height: 0.72em; color: var(--green-bright); flex: 0 0 auto; }
+#music-player .mp-title .eq span { display: block; width: 0.2em; height: 100%; background: currentColor; border-radius: 1px; transform-origin: 50% 100%; }
+#music-player .mp-title .eq span:nth-child(2) { height: 70%; }
+#music-player.playing .mp-title .eq span { animation: eq 0.8s ease-in-out infinite; }
 #music-player.playing .mp-title .eq span:nth-child(2) { animation-delay: 0.2s; }
 #music-player.playing .mp-title .eq span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes eq { 0%,100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.2); } }
@@ -1069,7 +1075,7 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
   max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
   transition: max-width var(--dur-3, 0.24s) var(--ease-out, ease), opacity var(--dur-2, 0.16s) ease;
 }
-#music-player:hover .mp-title, #music-player:focus-within .mp-title { max-width: 110px; opacity: 1; }
+#music-player:hover .mp-title, #music-player:focus-within .mp-title { max-width: 13em; opacity: 1; }
 #music-player:hover input[type=range], #music-player:focus-within input[type=range] { max-width: 64px; opacity: 1; }
 #music-player:not(:hover):not(:focus-within) { gap: 0; padding: 0.3rem; }
 @media (prefers-reduced-motion: reduce) { #music-player .mp-title, #music-player input[type=range] { transition: none; } }

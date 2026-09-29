@@ -34,7 +34,11 @@ try {
   check('the rocket is drawn from the idle sprite sheet — RGBA, 30 square frames stacked', sheet.colorType === 6 && sheet.h === sheet.w * 30 && sheet.w >= 96, JSON.stringify(sheet));
   check('  ...the sheet is referenced by the script with the matching frame count', /url\(\/assets\/sendy-idle\.png\)/.test(SRC) && /const FRAMES = 30;/.test(SRC) && /steps\(' \+ FRAMES \+ '\)/.test(SRC));
   check('  ...and the chat header shows the still (RGBA, square)', still.colorType === 6 && still.w === still.h && still.w >= 128 && /src="\/assets\/sendy\.png"/.test(SRC), JSON.stringify(still));
-  check('  ...both small enough to ride on every page', sheet.bytes < 450e3 && still.bytes < 100e3, sheet.bytes + ' + ' + still.bytes + ' bytes');
+  /* The rocket is three times its first size (228px, 180px on a phone). Its frames are 384px, about 1.7 times the size
+     it is drawn at, the same ratio the 76px rocket had with 128px frames, so it stays sharp on a 2x screen; the rows
+     are PNG-filtered to keep that near 1.5 MB. A frame at exactly 228px would still be 700 KB, and blurry on a 2x screen. */
+  check('  ...both within the page budget for a rocket three times the first size', sheet.bytes < 1.6e6 && still.bytes < 100e3 && sheet.w >= 384, sheet.bytes + ' + ' + still.bytes + ' bytes, ' + sheet.w + 'px frames');
+  check('  ...drawn at three times the first size: 228px, 180px on a phone', /#sendy-widget\{--sendy-size:228px;/.test(SRC) && /@media \(max-width:767px\)\{#sendy-widget\{--sendy-size:180px;/.test(SRC));
 
   /* ═══ what Sendy says ═══ */
   check('a question with no answer says so and hands over both routes to a person — as links', /I don.t have an answer for that yet/.test(SRC) && /href: '\/support\.html'/.test(SRC) && /'mailto:' \+ EMAIL/.test(SRC) && /const EMAIL = 'SendRH@Atomicmail\.io';/.test(SRC));
