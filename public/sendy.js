@@ -13,7 +13,7 @@
   const MAILTO = 'mailto:' + EMAIL + '?subject=Question%20about%20sendrh.com';
   const FRAMES = 30;                                        // frames in the sprite sheet (2s loop)
   const isMobile = () => window.innerWidth < 768;
-  const reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.classList.contains('motion-off');   // the site's ⏸ switch counts too
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   /* ---------- the built-in notes: what Sendy can say with no model behind it ---------- */
@@ -144,13 +144,25 @@
        the box grows with its words: about 45 characters a line at every width, controls that stay in proportion, and a
        44px minimum for anything a finger taps. */
     return '' +
-      '#sendy-widget{--sendy-size:228px;--sendy-z:190;position:fixed;right:1rem;bottom:var(--fab-clear,5.5rem);z-index:var(--sendy-z);font-family:inherit;width:var(--sendy-size);height:var(--sendy-size)}' +
+      /* Three times the first size — 228px, 180px on a phone — but never more than 30% of the screen's height: on a
+         landscape phone or a short window the full size left no clear strip above or below it, and covered the nav.
+         On :root, so the footer can keep that much room free at the end of every page. */
+      ':root{--sendy-size:min(228px,30vh)}@media (max-width:767px){:root{--sendy-size:min(180px,30vh)}}' +
+      '#sendy-widget{--sendy-z:190;position:fixed;right:1rem;bottom:var(--fab-clear,5.5rem);z-index:var(--sendy-z);font-family:inherit;width:var(--sendy-size);height:var(--sendy-size)}' +
       '#sendy-widget:not([hidden]){display:block}' +
-      '@media (max-width:767px){#sendy-widget{--sendy-size:180px;right:0.75rem}}' +
-      /* at this size the rocket would sit on controls that never move: the Hot Feed's action rail (a full-screen
-         player, where nothing else belongs) and the arcade's multiplier while a flight is running — it steps aside */
-      'body.np-mode-feed #sendy-widget,html.arc-flying #sendy-widget{display:none}' +   /* three times the first size: 228px, 180px on a phone */
-      '.sendy-rocket{width:var(--sendy-size);height:var(--sendy-size);padding:0;margin:0;border:0;background:none;cursor:grab;display:block;border-radius:50%;transition:transform .2s ease;touch-action:manipulation}' +
+      '@media (max-width:767px){#sendy-widget{right:0.75rem}}' +
+      'footer{padding-bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px)}' +   /* the footer's last links scroll clear of the rocket */
+      /* where it would sit on controls that never move, it steps aside: the Hot Feed's action rail (a full-screen player,
+         where nothing else belongs), the arcade's multiplier while a flight runs, and the Scanner's settings sheet on a phone */
+      'body.np-mode-feed #sendy-widget,html.arc-flying #sendy-widget{display:none}' +
+      '@media (max-width:760px){body:has(#np-filters:not([hidden])) #sendy-widget{display:none}}' +
+      /* Only the rocket's body takes a tap. The frame is a square and most of it is transparent; at this size the whole
+         square used to catch taps meant for whatever showed through it. The button keeps its focus ring, hover and drag:
+         a hit on its ::before is a hit on the button. */
+      '#sendy-widget,.sendy-rocket,.sendy-sprite{pointer-events:none}.sendy-popup,.sendy-say{pointer-events:auto}' +
+      '.sendy-rocket::before{content:"";position:absolute;inset:3% 15% 2%;border-radius:45%;pointer-events:auto}' +
+      '.sendy-widget.is-flying .sendy-rocket::before{pointer-events:none}' +
+      '.sendy-rocket{position:relative;width:var(--sendy-size);height:var(--sendy-size);padding:0;margin:0;border:0;background:none;cursor:grab;display:block;border-radius:50%;transition:transform .2s ease;touch-action:manipulation}' +
       '@media (max-width:767px){.sendy-rocket{cursor:pointer}}' +
       '.sendy-rocket:hover{transform:scale(1.08)}' +
       '.sendy-rocket:active{cursor:grabbing}' +
@@ -167,6 +179,8 @@
       '.sendy-say[hidden]{display:none}' +
       '.sendy-widget.say-up .sendy-say{bottom:auto;top:calc(var(--sendy-size) + 8px);border-radius:.8em;border-top-right-radius:4px}' +
       '.sendy-widget.say-left .sendy-say{right:auto;left:0;border-radius:.8em;border-bottom-left-radius:4px}' +
+      '.sendy-widget.say-side .sendy-say{bottom:auto;top:0;right:calc(var(--sendy-size) + 8px);left:auto;border-radius:.8em;border-top-right-radius:4px}' +
+      '.sendy-widget.say-side.say-left .sendy-say{right:auto;left:calc(var(--sendy-size) + 8px);border-radius:.8em;border-top-left-radius:4px}' +
       '@media (max-width:767px){.sendy-say{position:fixed;right:.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);max-width:calc(100vw - 1.5rem)}}' +
       '.sendy-widget.is-hyped .sendy-sprite{animation-duration:.5s}' +
       '@media (prefers-reduced-motion:no-preference){.sendy-widget.is-hyped .sendy-rocket{animation:sendy-hop .6s ease}}' +
@@ -179,8 +193,10 @@
       '@media (min-width:768px){.sendy-widget.is-up .sendy-popup{bottom:auto;top:calc(var(--sendy-size) + 10px)}' +
         '.sendy-widget.is-left .sendy-popup{right:auto;left:0}' +
         '.sendy-widget.is-side .sendy-popup{position:fixed;top:auto;bottom:var(--fab-clear,5.5rem);right:auto;left:auto}}' +   /* beside the rocket: placePopup sets the side and the width */
-      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px);display:flex;flex-direction:column}}' +
-      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px)}}}' +
+      /* on a phone the popup spans the width above the strip, over the rocket's upper part (a hand's breadth of it
+         stays in view): leaving the whole 180px rocket clear cost a short phone most of the conversation */
+      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + 68px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - 84px);display:flex;flex-direction:column}}' +
+      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - 84px)}}}' +
       /* a phone on its side: above the rocket there is almost no height, so the panel stands left of the rocket's column
          instead, from near the top down to the strip the music player and the SEND IT button own */
       '@media (max-width:767px) and (max-height:500px){.sendy-popup{right:calc(var(--sendy-size) + 1.5rem);bottom:var(--fab-clear,5.5rem);max-height:calc(100vh - var(--fab-clear,5.5rem) - 12px)}}' +
@@ -458,13 +474,26 @@
     const fabClear = fabClearPx;   // the strip in pixels (parsing the calc() gave 5.5, and a flight landed in the strip)
     function anchors() {
       const s = size(), W = window.innerWidth, H = window.innerHeight, m = 16, low = H - fabClear() - s;
-      return [{ x: W - s - m, y: low }, { x: W - s - m, y: H * 0.42 }, { x: W - s - m, y: H * 0.16 }, { x: m, y: H * 0.42 }, { x: m, y: low }];
+      if (low < 8) return [];
+      const y = (v) => Math.max(8, Math.min(v, low));   // never down into the strip the music player and SEND IT own
+      // along the right edge, the side it rests on: at this size a glide to the left edge parked it on the page
+      return [{ x: W - s - m, y: low }, { x: W - s - m, y: y(H * 0.42) }, { x: W - s - m, y: y(H * 0.16) }];
+    }
+    // a spot where the rocket's body would sit on a link, a button or a field is not a place to land (sticky bars included)
+    const CONTROL = 'a[href],button,input,select,textarea,summary,[role="button"],[tabindex]:not([tabindex="-1"])';
+    function coversControl(a) {
+      const s = size();
+      for (const fx of [0.25, 0.5, 0.75]) for (const fy of [0.15, 0.5, 0.85]) {
+        const top = document.elementsFromPoint(a.x + s * fx, a.y + s * fy).find((el) => !widget.contains(el));
+        if (top && top.closest(CONTROL)) return true;
+      }
+      return false;
     }
     function typing() { const a = document.activeElement; return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable); }
     function fly() {
       if (isMobile() || reduced() || userPlaced || flying || hovering || isOpen() || document.visibilityState !== 'visible' || typing()) return;
       const r = widget.getBoundingClientRect(), from = { x: r.left, y: r.top };
-      const opts = anchors().filter((a) => Math.hypot(a.x - from.x, a.y - from.y) > 120);
+      const opts = anchors().filter((a) => Math.hypot(a.x - from.x, a.y - from.y) > 120 && !coversControl(a));
       if (!opts.length) return;
       const to = opts[Math.floor(Math.random() * opts.length)];
       const dx = to.x - from.x, dy = to.y - from.y, len = Math.hypot(dx, dy), bend = Math.min(90, len / 4) * (Math.random() < 0.5 ? -1 : 1);
@@ -519,7 +548,17 @@
       let i = Math.floor(Math.random() * lines.length); if (lines.length > 1 && i === lastLine[kind]) i = (i + 1) % lines.length;
       lastLine[kind] = i; lastSayAt = t;
       sayEl.textContent = lines[i].replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null) ? String(vars[k]) : m);
-      if (!isMobile()) { const r = rocket.getBoundingClientRect(), bw = Math.min(parseFloat(getComputedStyle(sayEl).fontSize) * 16, window.innerWidth - 24); widget.classList.toggle('say-up', r.top < 140); widget.classList.toggle('say-left', r.right - bw < 8); }
+      if (!isMobile()) {
+        // measured, not guessed: above the rocket if it fits there, below it if it fits there (never into the SEND IT
+        // strip), otherwise beside it — a 140px rule of thumb was drawn for a 76px rocket
+        sayEl.style.visibility = 'hidden'; sayEl.removeAttribute('hidden');
+        const r = rocket.getBoundingClientRect(), bw = Math.min(parseFloat(getComputedStyle(sayEl).fontSize) * 16, window.innerWidth - 24), bh = sayEl.offsetHeight;
+        const above = r.top - 8, below = window.innerHeight - fabClearPx() - r.bottom - 8, side = above < bh && below < bh;
+        widget.classList.toggle('say-up', !side && above < bh);
+        widget.classList.toggle('say-side', side);
+        widget.classList.toggle('say-left', side ? r.left - bw < 8 : r.right - bw < 8);
+        sayEl.style.visibility = '';
+      }
       sayEl.removeAttribute('hidden');
       if (!reduced()) { widget.classList.remove('is-hyped'); void widget.offsetWidth; widget.classList.add('is-hyped'); }
       clearTimeout(sayTimer); sayTimer = setTimeout(hideSay, 4500);

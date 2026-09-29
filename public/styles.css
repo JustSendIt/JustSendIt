@@ -2941,6 +2941,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 /* Sendy, the ✏️ button and the music player float above the page; while the list is open the bar (and the panel
    inside it) rises above them, so no notification is ever hidden under one */
 .nav:has(#notif-panel.open) { z-index: 300; }
+.nav:has(.nav-menu.open), .nav:has(.nav-profile.open) { z-index: 300; }   /* and the open menu and account menu, which Sendy at 228px would otherwise cover */
 .notif-panel:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }   /* opened from the keyboard, focus moves into the list */
 
 /* keep the signed-in persistent cluster (logo + 🔔 + Lv + account + ≡) on one row on small phones */

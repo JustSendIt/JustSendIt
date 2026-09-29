@@ -38,7 +38,9 @@ try {
      it is drawn at, the same ratio the 76px rocket had with 128px frames, so it stays sharp on a 2x screen; the rows
      are PNG-filtered to keep that near 1.5 MB. A frame at exactly 228px would still be 700 KB, and blurry on a 2x screen. */
   check('  ...both within the page budget for a rocket three times the first size', sheet.bytes < 1.6e6 && still.bytes < 100e3 && sheet.w >= 384, sheet.bytes + ' + ' + still.bytes + ' bytes, ' + sheet.w + 'px frames');
-  check('  ...drawn at three times the first size: 228px, 180px on a phone', /#sendy-widget\{--sendy-size:228px;/.test(SRC) && /@media \(max-width:767px\)\{#sendy-widget\{--sendy-size:180px;/.test(SRC));
+  check('  ...drawn at three times the first size (228px, 180px on a phone), never more than 30% of the screen\'s height', /:root\{--sendy-size:min\(228px,30vh\)\}@media \(max-width:767px\)\{:root\{--sendy-size:min\(180px,30vh\)\}\}/.test(SRC));
+  check('  ...only the rocket\'s body takes a tap, not the transparent square around it, and the footer keeps room for it', /#sendy-widget,\.sendy-rocket,\.sendy-sprite\{pointer-events:none\}/.test(SRC) && /\.sendy-rocket::before\{content:"";position:absolute;inset:3% 15% 2%;border-radius:45%;pointer-events:auto\}/.test(SRC)
+    && /footer\{padding-bottom:calc\(var\(--fab-clear,5\.5rem\) \+ var\(--sendy-size\) \+ 8px\)\}/.test(SRC) && /function coversControl\(a\)/.test(SRC) && /classList\.contains\('motion-off'\)/.test(SRC));
 
   /* ═══ what Sendy says ═══ */
   check('a question with no answer says so and hands over both routes to a person — as links', /I don.t have an answer for that yet/.test(SRC) && /href: '\/support\.html'/.test(SRC) && /'mailto:' \+ EMAIL/.test(SRC) && /const EMAIL = 'SendRH@Atomicmail\.io';/.test(SRC));
