@@ -64,7 +64,7 @@
   function renderHero(s) {
     if (!s) return;   // a noop/degenerate response must never blow away the rendered hero
     S = s;
-    document.title = s.name + ' — Send Squad · $Send 🛡️';
+    document.title = s.name + ' — Send Squad — $Send';
     const banner = s.banner ? '<div class="comm-hero-banner has-img" style="background-image:url(&quot;' + esc(s.banner) + '&quot;)"></div>' : '<div class="comm-hero-banner"></div>';
     const logo = s.avatar ? '<img class="comm-hero-logo" src="' + esc(s.avatar) + '" alt="" loading="lazy">' : '<span class="comm-hero-logo comm-hero-logo-none" aria-hidden="true">🛡️</span>';
     const g = s.gate || {}, li = s.levelInfo || {};
@@ -610,7 +610,7 @@
   }
   // The hero carries the page's only <h1> and its <title>, so a failure has to paint both too.
   function renderFailure(msg) {
-    document.title = msg + ' — $Send 🛡️';
+    document.title = msg + ' — $Send';
     showLocked(false);
     heroEl.hidden = false;
     heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:max(var(--text-floor), 1.4rem);">' + esc(msg) + '</h1>' +

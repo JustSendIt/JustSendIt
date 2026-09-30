@@ -46,7 +46,7 @@
   function renderHero(c) {
     if (!c) return; // a noop/degenerate response must never blow away the rendered hero
     C = c;
-    document.title = c.name + ' ($' + c.symbol + ') Community — $Send 🏘️';
+    // no document.title here: the server writes this community's final <title> into the page it serves
     // always rendered: an empty one paints the gradient fallback. When it was omitted for a community with no
     // banner image, the hero body's negative offset pulled the name up into nothing and the card clipped it away.
     const banner = c.banner ? '<div class="comm-hero-banner has-img" style="background-image:url(&quot;' + esc(c.banner) + '&quot;)"></div>' : '<div class="comm-hero-banner"></div>';
@@ -85,8 +85,8 @@
         xpBar('🏆 Community level', cl.level, cl.intoLevel, cl.spanLevel, 'comm-xp-community');
     } else {
       const pct = Math.min(100, Math.round(c.goLive.qualCount / c.goLive.need * 100));
-      panel = '<div class="comm-golive-panel"><div class="comm-golive-head">⏳ <b>' + c.goLive.qualCount + ' / ' + c.goLive.need + '</b> members to go <b>LIVE</b></div>' +
-        '<div class="gxp" role="progressbar" aria-valuenow="' + c.goLive.qualCount + '" aria-valuemin="0" aria-valuemax="' + c.goLive.need + '" aria-label="Go-live progress: ' + c.goLive.qualCount + ' of ' + c.goLive.need + ' members"><span class="gxp-fill" style="width:' + pct + '%"></span></div>' +
+      panel = '<div class="comm-golive-panel"><div class="comm-golive-head">⏳ <b>' + c.goLive.qualCount + ' / ' + c.goLive.need + '</b> verified holders to go <b>LIVE</b></div>' +
+        '<div class="gxp" role="progressbar" aria-valuenow="' + c.goLive.qualCount + '" aria-valuemin="0" aria-valuemax="' + c.goLive.need + '" aria-label="Go-live progress: ' + c.goLive.qualCount + ' of ' + c.goLive.need + ' verified holders"><span class="gxp-fill" style="width:' + pct + '%"></span></div>' +
         '<p class="modal-note" style="margin:0.5rem 0 0;">Opt in to help it reach ' + c.goLive.need + '. The starter earns a <b>founder bonus</b> when it goes live — and everyone in gets <b>10× Send Power</b>.</p></div>';
     }
     // opt-in button + your conviction
@@ -117,7 +117,7 @@
         '<p class="comm-gate-msg" id="comm-gate" role="status" aria-live="polite" hidden></p>' +
         '<details class="grules comm-rules"><summary>📖 How points, levels &amp; the 10× work</summary><div class="grules-body"><ul class="comm-rules-list">' +
           (c.demo
-            ? '<li>🧪 <b>The sandbox:</b> there is no token to hold — anyone can opt in with no wallet and try everything (posting, proposals and voting). It grants <b>no Send Power multiplier</b>; live token communities do.</li>'
+            ? '<li>🧪 <b>The sandbox:</b> there is no token of its own to hold — any member who has passed the $100 $SEND wallet check can opt in and try everything (posting, proposals and voting). It grants <b>no Send Power multiplier</b>; live token communities do.</li>'
             : '<li>🪙 <b>Holders only:</b> you must <b>hold $' + esc(c.symbol) + '</b> (verified on-chain from a linked wallet) to opt in and post — it keeps communities real.</li>') +
           '<li>⚡ <b>10× Send Power</b> on <b>everything</b> while you’re in ≥1 live <b>token</b> community (flat — five communities is still one 10×; it adds on top of your Holder Boost &amp; OG — boosts add, they don’t multiply).</li>' +
           '<li>🏆 <b>Community level</b> climbs with active members posting &amp; reacting (exponential curve, daily-capped so it can’t be farmed).</li>' +
@@ -200,7 +200,7 @@
         ? '🔒 <b>This wall is for verified holders of $' + (C ? esc(C.symbol) : '') + '.</b> Its posts are never sent to anyone else — not to this page, not to the Send Wall, not to the public data feed. To read it, <b>opt in</b> above: connect a wallet (a free signature, never a transaction) and hold the token, checked on-chain. Sell it and the wall closes again.'
         : joined ? ''
         : ((C && C.demo)
-          ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no tokens and no wallet</b> and try everything — posting, proposals and voting. It is for learning, so it earns <b>no Send Power multiplier</b>.'
+          ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no token of its own to hold</b> (the $100 $SEND wallet check still applies) and try everything — posting, proposals and voting. It is for learning, so it earns <b>no Send Power multiplier</b>.'
           : '👀 <b>Anyone can read this wall.</b> To post, <b>opt in</b> above — that means <b>connecting a wallet</b> and confirming you <b>hold this token</b> on-chain. Members also earn <b>10× Send Power</b>. ⚡');
     }
   }
@@ -461,15 +461,19 @@
 
   // The hero carries the page's only <h1> and its <title>, so a failure has to paint both too — a stale shared link
   // must not land a screen-reader user on an unheaded document still titled "Community".
-  function renderFailure(msg) {
-    document.title = msg + ' — $Send 🏘️';
+  function renderFailure(msg, notFound) {
+    if (notFound) document.title = 'Community Not Found — $Send';   // a failed read keeps the server's <title>: the community may well exist
     heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:max(var(--text-floor), 1.4rem);">' + esc(msg) + '</h1>' +
       '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="communities.html">Browse all communities →</a></p></div>';
   }
   async function load() {
-    if (!id) { renderFailure('No community specified'); return; }
-    try { const j = await window.api('/api/communities/' + id); if (j.community) renderHero(j.community); else if (!C) renderFailure('Community not found'); }
-    catch (e) { renderFailure('Community not found'); }
+    if (!id) { renderFailure('No community specified', true); return; }
+    try { const j = await window.api('/api/communities/' + id); if (j.community) renderHero(j.community); else if (!C) renderFailure('Community not found', true); }
+    catch (e) {
+      if (C) return;   // a failed refresh (or auth re-render) keeps the community already on screen; the next tick tries again
+      if (e && e.status === 404) renderFailure('Community not found', true);
+      else renderFailure('Couldn’t load this community just now — try again in a moment.');
+    }
   }
   load();
   document.addEventListener('auth:change', load); // re-render on login (opt-in state / composer)

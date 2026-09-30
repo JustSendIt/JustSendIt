@@ -18,6 +18,7 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { createServer } from 'node:net';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { ROOT } from './_paths.mjs';
@@ -45,7 +46,21 @@ const dataDir = mkdtempSync(path.join(tmpdir(), 'jsi-test-'));
 mkdirSync(path.join(dataDir, 'uploads'), { recursive: true });
 writeFileSync(path.join(dataDir, '.data_key'), randomBytes(32).toString('hex'), { mode: 0o600 });
 
-const PORT = 8000 + Math.floor(Math.random() * 1500);
+/* The port is one the OS hands out as free, never a random pick from a range. A random pick could land on
+   the live server's port (8642): the throwaway server would fail to bind, and every suite would then run its
+   writes against the live server and its real database. */
+const LIVE_PORT = 8642;
+async function freePort() {
+  for (let i = 0; i < 20; i++) {
+    const p = await new Promise((resolve, reject) => {
+      const s = createServer(); s.unref(); s.on('error', reject);
+      s.listen(0, () => { const port = s.address().port; s.close(() => resolve(port)); });
+    });
+    if (p !== LIVE_PORT) return p;
+  }
+  throw new Error('no free port');
+}
+const PORT = await freePort();
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
               BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1',   // the terms step and voice memos are hidden by default; the suites still cover both
               LEDGER_COOL_MS: '5000' };   // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out

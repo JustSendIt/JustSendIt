@@ -48,12 +48,16 @@
     el.innerHTML =
       '<div class="intro-stage">' +
         '<span class="intro-rocket" aria-hidden="true">🚀</span>' +
-        '<img class="intro-logo" src="/assets/logo-mark.png" alt="">' +
+        '<img class="intro-logo" alt="">' +
         '<div class="intro-tag">JUST SEND IT!</div>' +
         '<div class="intro-mcap" id="intro-mcap" aria-hidden="true">$0</div>' +
       '</div>' +
       '<button class="intro-skip" type="button" data-tip="Ends the opening animation and shows the homepage now">Skip intro ⏭</button>' +
       '<span class="sr-only" role="status">Loading Just Send It.</span>';
+    /* The same logo the hero is already fetching, by the exact URL it asked for: the server versions the page's
+       src with ?v=, so the bare '/assets/logo-mark.png' was a second cache entry and a second 577 KB download. */
+    const hero = document.querySelector('.hero-logo');
+    el.querySelector('.intro-logo').src = (hero && (hero.currentSrc || hero.src)) || '/assets/logo-mark.png';
     document.body.appendChild(el);
     // the loading screen is up, so the plain cover agegate.js put over the page has done its job
     document.documentElement.classList.remove('age-pending');

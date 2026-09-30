@@ -8072,8 +8072,10 @@ const viaImgProxy = (u) => '/api/img?u=' + encodeURIComponent(u);
 function send(res, code, body, headers = {}) {
   let data = typeof body === 'string' ? body : JSON.stringify(body);
   if (!res._rawImg && typeof data === 'string' && data.includes('dexscreener.com/')) data = data.replace(CDN_IMG_JSON, (m, u) => JSON.stringify(viaImgProxy(u)));
-  // API/JSON responses must never be cached (they carry private, per-session data)
-  const h = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS, ...headers };
+  // API/JSON responses must never be cached (they carry private, per-session data), and never listed by a search
+  // engine as pages of their own: robots.txt lets crawlers fetch the public JSON the pages render from, and this
+  // header is what keeps those URLs out of the results (see the /api/ header in the router, which covers the rest).
+  const h = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex', ...SEC_HEADERS, ...headers };
   // gzip larger payloads when the client accepts it (big feeds/leaderboards/pairs) → fewer packets, lower latency.
   // res._gzip is set once per request from Accept-Encoding; skip tiny bodies (gzip overhead isn't worth it < ~1KB).
   // Brotli beats gzip by ~7% on JSON and the client already told us it accepts it (res._enc); quality 5 keeps the
@@ -8980,13 +8982,111 @@ const OPTIONAL_MEDIA = {
   audio: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-audio.m4a')),
 };
 function notFoundPage(res) {
-  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title>' +
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title><meta name="robots" content="noindex">' +
     '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;font:16px/1.5 Rubik,system-ui,sans-serif;text-align:center;padding:2rem}h1{font-size:2.2rem;margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
     '<body><main><h1>🚀 That page didn’t send.</h1><p>We couldn’t find what you were looking for.</p><a href="/">Back to $Send home →</a></main></body></html>';
   res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html) });
   res.end(html);
 }
-function serveFile(req, res, filePath, extraHeaders = {}) {
+/* If-None-Match is a list, and the comparison it asks for is the WEAK one (RFC 9110 §13.1.2): W/"x" and "x" are the
+   same validator. Cloudflare turns a strong ETag weak when it compresses a response, so an exact string test never
+   matched a revalidation that came back through it — every crawler re-downloaded every page. */
+function inmMatches(req, etag) {
+  const inm = req.headers['if-none-match'];
+  if (!inm || !etag) return false;
+  const bare = (t) => String(t).trim().replace(/^W\//, '');
+  const want = bare(etag);
+  return String(inm).split(',').some((t) => { const b = bare(t); return b === '*' || b === want; });
+}
+
+/* ===== Text that goes into a page's <head> =====================================================================
+   The per-profile and per-community heads carry text people typed (a bio) or a token's deployer chose (a name).
+   Three rules, one helper each, and every interpolated value goes through them:
+     escHtml   — for attribute values and element text (the /t/ page's escaper, shared).
+     cleanText — strips control, zero-width and bidi characters (a U+202E in a bio would reverse the rest of the
+                 search result), collapses whitespace, and cuts by CODE POINTS so an emoji is never split in half.
+     ldJson    — JSON for a <script type="application/ld+json"> block: < > & and the two JS line separators are
+                 escaped, so no value can close the script element. */
+const escHtml = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const xmlEsc = escHtml;   // the same five characters are the ones XML reserves
+// controls, bidi marks/embeddings/overrides/isolates, line separators, zero-width space, invisible operators, BOM,
+// blank-looking fillers, interlinear annotation, and lone surrogates (which would reach the page as U+FFFD)
+const SEO_STRIP = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b\u200e\u200f\u2028-\u202e\u2060-\u2064\u2066-\u206f\u3164\ufeff\ufff9-\ufffb]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+// titles and descriptions carry no emoji: the pictographs, flags, skin tones, keycaps, and the joiner and variation
+// selectors that glue emoji sequences together (kept where emoji are kept, so a JSON-LD bio reads as on the wall)
+const EMOJI_RE = /\p{Extended_Pictographic}|\p{Regional_Indicator}|[\u{1f3fb}-\u{1f3ff}\u20e3\u200d\ufe0e\ufe0f]/gu;
+function cutCp(s, max) {
+  const cp = Array.from(s);
+  if (cp.length <= max) return s;
+  let out = cp.slice(0, Math.max(1, max - 1)).join('');
+  const sp = out.lastIndexOf(' ');
+  if (sp > out.length * 0.6) out = out.slice(0, sp);   // end on a whole word when one ends close to the cut
+  return out.replace(/[\s,.;:!?·–—-]+$/u, '') + '…';
+}
+function cleanText(v, max, { emoji = false } = {}) {
+  let s = String(v == null ? '' : v).replace(SEO_STRIP, ' ');
+  if (!emoji) s = s.replace(EMOJI_RE, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  return max ? cutCp(s, max) : s;
+}
+const cpLen = (s) => Array.from(String(s)).length;
+const ldJson = (o) => JSON.stringify(o).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+
+/* The head a page is served with is the block between <!--seo--> and <!--/seo--> in its file. What sits there on
+   disk is the fail-closed fallback (noindex, no canonical): it is what goes out if the server cannot build the real
+   one. The swap runs AFTER rewriteHtml, so text a member typed never passes through swapOrigin or ASSET_REF — the
+   head builders write SITE_ORIGIN themselves. */
+let seoMarkerWarned = false;
+function applySeoPatch(str, patch) {
+  const { head, swaps } = typeof patch === 'string' ? { head: patch, swaps: [] } : patch;
+  const i = str.indexOf('<!--seo-->'), j = str.indexOf('<!--/seo-->');
+  if (i < 0 || j < i) {
+    if (!seoMarkerWarned) { seoMarkerWarned = true; console.warn('[seo] a page served with a built head has no <!--seo--> … <!--/seo--> markers, so its static fallback head went out instead'); }
+    return str;
+  }
+  let out = str.slice(0, i) + '<!--seo-->\n' + head + '\n' + str.slice(j);
+  // exact, already-escaped swaps in the body (the same element the page's script fills later): first match only
+  for (const [from, to] of swaps || []) { const k = out.indexOf(from, i); if (k >= 0) out = out.slice(0, k) + to + out.slice(k + from.length); }
+  return out;
+}
+/* Compressed bodies of per-entity pages, keyed by ETag — a hash of the finished bytes, so two requests share an entry
+   exactly when they would get the same page. Bounded in entries and bytes, least-recently-used out. The per-file
+   memo (e._brC) holds ONE body per file; per-profile pages going through it would evict each other on every request
+   and re-run brotli-q9 each time, the event-loop flood that memo exists to prevent. */
+const SEO_HTML = new Map();
+const SEO_HTML_MAX = 256, SEO_HTML_BYTES = 8 * 1024 * 1024;
+let seoHtmlBytes = 0;
+function seoCompressed(etag, html, enc) {
+  if (!enc) return html;
+  let hit = SEO_HTML.get(etag);
+  if (hit) SEO_HTML.delete(etag); else hit = {};
+  SEO_HTML.set(etag, hit);                                            // most recently used goes to the back
+  if (!hit[enc]) { hit[enc] = enc === 'br' ? brc(html) : zlib.gzipSync(html); seoHtmlBytes += hit[enc].length; }
+  while ((SEO_HTML.size > SEO_HTML_MAX || seoHtmlBytes > SEO_HTML_BYTES) && SEO_HTML.size > 1) {
+    const [k, v] = SEO_HTML.entries().next().value;
+    SEO_HTML.delete(k); seoHtmlBytes -= (v.br ? v.br.length : 0) + (v.gz ? v.gz.length : 0);
+  }
+  return hit[enc];
+}
+/* Font files whose name carries a content hash (name-1a2b3c4d.woff2: the first 8 hex of the file's SHA-1) can be
+   cached for a year — a changed font gets a new name. That is checked here rather than trusted, once per file
+   version, so a font re-patched under its old name is revalidated instead of frozen in every visitor's cache. */
+const FONT_DIR = path.join(PUBLIC_DIR, 'fonts');
+const fontHashMemo = new Map();   // filePath -> { size, mtimeMs, ok }
+function hashedFont(filePath, st) {
+  const m = /-([0-9a-f]{8})\.woff2$/.exec(filePath);
+  if (!m || path.dirname(filePath) !== FONT_DIR) return false;
+  const c = fontHashMemo.get(filePath);
+  if (c && c.size === st.size && c.mtimeMs === st.mtimeMs) return c.ok;
+  let ok = false;
+  try { ok = crypto.createHash('sha1').update(fs.readFileSync(filePath)).digest('hex').slice(0, 8) === m[1]; } catch {}
+  if (fontHashMemo.size >= 64) fontHashMemo.clear();
+  fontHashMemo.set(filePath, { size: st.size, mtimeMs: st.mtimeMs, ok });
+  return ok;
+}
+/* serveFile(req, res, filePath, extraHeaders, patch) — `patch`, when given, is the built <head> for this request
+   (see applySeoPatch); only HTML takes one. */
+function serveFile(req, res, filePath, extraHeaders = {}, patch = null) {
   fs.stat(filePath, (err, st) => {
     if (err || !st.isFile()) { notFoundPage(res); return; }
     const ext = path.extname(filePath).toLowerCase();
@@ -8997,16 +9097,22 @@ function serveFile(req, res, filePath, extraHeaders = {}) {
     if (ext === '.html') {
       const e = staticEntry(filePath, ext, st);
       if (!e) { notFoundPage(res); return; }
-      const html = Buffer.from(rewriteHtml(e.buf), 'utf8');
+      let str = rewriteHtml(e.buf);
+      if (patch) str = applySeoPatch(str, patch);   // after the rewrite: member text never meets swapOrigin or ASSET_REF
+      const html = Buffer.from(str, 'utf8');
+      // the ETag hashes the FINISHED bytes, so it moves with the file, any asset version, and every fact in a built head
       const etag = '"' + crypto.createHash('sha1').update(html).digest('base64url').slice(0, 20) + '"';
       const head = { 'Content-Type': type, 'Cache-Control': 'no-cache', 'ETag': etag, 'Vary': 'Accept-Encoding', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'X-Frame-Options': 'DENY', ...extraHeaders };
-      if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); res.end(); return; }
+      if (inmMatches(req, etag)) { res.writeHead(304, head); res.end(); return; }   // before any compression
       // Compress ONCE per version and cache it on the entry (keyed by the ETag, which already changes when the file OR
       // any referenced asset's version changes). Brotli-q9 is ~2.5ms/call — recomputing it per request let an
       // unauthenticated flood pin the single event-loop thread; the memo makes the hot path a cache hit.
+      // A page with a built head uses the bounded per-ETag cache instead, so it never evicts the file's own slot.
       let body = html;
-      if (res._enc === 'br') { if (!e._brC || e._brC.etag !== etag) e._brC = { etag, buf: brc(html) }; body = e._brC.buf; head['Content-Encoding'] = 'br'; }
-      else if (res._gzip) { if (!e._gzC || e._gzC.etag !== etag) e._gzC = { etag, buf: zlib.gzipSync(html) }; body = e._gzC.buf; head['Content-Encoding'] = 'gzip'; }
+      const enc = res._enc === 'br' ? 'br' : res._gzip ? 'gz' : null;
+      if (patch && enc) { body = seoCompressed(etag, html, enc); head['Content-Encoding'] = enc === 'br' ? 'br' : 'gzip'; }
+      else if (enc === 'br') { if (!e._brC || e._brC.etag !== etag) e._brC = { etag, buf: brc(html) }; body = e._brC.buf; head['Content-Encoding'] = 'br'; }
+      else if (enc === 'gz') { if (!e._gzC || e._gzC.etag !== etag) e._gzC = { etag, buf: zlib.gzipSync(html) }; body = e._gzC.buf; head['Content-Encoding'] = 'gzip'; }
       head['Content-Length'] = body.length;
       res.writeHead(200, head); res.end(req.method === 'HEAD' ? undefined : body);
       return;
@@ -9016,7 +9122,8 @@ function serveFile(req, res, filePath, extraHeaders = {}) {
     // ?v (or an unrelated ?utm=… tracking query) is never frozen for a year; it falls through to revalidate instead.
     // (This is the big returning-visitor win. /uploads forces immutable via extraHeaders — content-addressed names.)
     const vm = /[?&]v=([^&]*)/.exec(req.url);
-    const immutable = !!(vm && filePath.startsWith(PUBLIC_DIR + path.sep) && vm[1] === assetVer(path.relative(PUBLIC_DIR, filePath)));
+    const immutable = !!(vm && filePath.startsWith(PUBLIC_DIR + path.sep) && vm[1] === assetVer(path.relative(PUBLIC_DIR, filePath)))
+      || (ext === '.woff2' && hashedFont(filePath, st));   // fonts/fonts.css names them by content hash, with no ?v=
     // sitemap.xml / robots.txt are served with the placeholder origin swapped for BASE_URL (staticEntry), so their bytes
     // depend on BASE_URL too: fold it into the validator, skip the mtime-only shortcut, and never serve them by range
     const swapped = ext === '.xml' || ext === '.txt';
@@ -9026,7 +9133,7 @@ function serveFile(req, res, filePath, extraHeaders = {}) {
     if (COMPRESSIBLE.has(ext)) head['Vary'] = 'Accept-Encoding'; // set BEFORE the 304 so 200 and 304 advertise the same metadata
     const inm = req.headers['if-none-match'];
     const ims = req.headers['if-modified-since'];
-    if ((inm && inm === etag) || (!inm && !swapped && ims && Date.parse(ims) >= Math.floor(st.mtimeMs / 1000) * 1000)) {
+    if ((inm && inmMatches(req, etag)) || (!inm && !swapped && ims && Date.parse(ims) >= Math.floor(st.mtimeMs / 1000) * 1000)) {
       res.writeHead(304, head); res.end(); return;
     }
     const range = req.headers.range && /bytes=(\d*)-(\d*)/.exec(req.headers.range);
@@ -9074,6 +9181,256 @@ function serveFile(req, res, filePath, extraHeaders = {}) {
     rs.on('error', () => res.destroyed || res.destroy());
     rs.pipe(res);
   });
+}
+
+/* ===== Per-entity pages: /u/<name> and /community.html?id=N ====================================================
+   Two pages on this site are one file serving many things: every Send Wall is u.html and every community is
+   community.html. Served as they are, each one is the same head for every entity — and every unknown name or id is
+   a 200 "not found" shell a search engine keeps as a page of its own. So these two are resolved here first:
+     · an unknown, invalid or erased entity is a real 404, and a case variant of a name is a 301 to its own capitals;
+     · a real one is served with a head built from the database (title, description, robots, canonical, og:*,
+       twitter:*, and JSON-LD when it may be indexed), swapped into the file between <!--seo--> and <!--/seo-->.
+   The head is the same for every viewer: it never reads `me`, moderation state, holdings, badges, rank or level,
+   nor any holders-only or squad post. So the ETag and every cache stay viewer-independent, and nothing about one
+   visitor's relationship to a wall (a mute, a follow, an alert) can leak into another's copy. */
+const SEO_THEME = '#c6f000';                              // --green-bright in styles.css; tests/seo-server.mjs holds the two together
+const SEO_PAGE_RATE = 600;                                // per IP per minute — ten a second, far above any crawler's normal pace
+const SEO_OG_ALT = '$Send — Just Send It logo';
+const SEO_SANDBOX_TITLE = 'Open Sandbox Community — $Send';
+const SEO_SANDBOX_DESC = 'The $Send sandbox: try posting, proposals and voting with no token of its own to hold. The $100 $SEND wallet check still applies. Entertainment only.';
+const SEO_ROBOTS_INDEX = 'index, follow, max-image-preview:large, max-snippet:-1';
+const SEO_ROBOTS_NOINDEX = 'noindex, follow';
+/* A public wall post: the posts a Send Wall's own timeline shows (GET /api/posts?user= — not a community's, a
+   squad's or the Support board's) and that anyone may read. */
+const wallPostWhere = (a = '') => `${a}community_id IS NULL AND ${a}squad_id IS NULL AND ${a}board IS NULL AND ${a}private = 0`;
+/* WHO MAY BE INDEXED. One predicate each, shared by the robots meta, the JSON-LD and the sitemaps, so the three can
+   never disagree. A profile: not the site's own account (it is not a person), not erased, not an auto-made
+   "sender_xxxxxx" name the member never chose, and with at least one public wall post — publishing something is
+   the act that puts a wall in search, and a wall with nothing on it is thin anyway. Moderation state is NOT a
+   condition: a noindex or a missing sitemap row is public, and would leak a restriction the profile keeps private.
+   A community: live, and not the open sandbox. */
+function profileIndexable(u, wallPosts) { return !!u && !u.system && !u.deleted_at && !u.auto_named && Number(wallPosts) > 0; }
+function communityIndexable(c) { return !!c && c.status === 'live' && !c.demo; }
+const SEO_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// the wall's "sending since" — toLocaleDateString('en-US', { month: 'short', year: 'numeric' }), read in UTC
+const seoSince = (ms) => { const d = new Date(Number(ms) || 0); return SEO_MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const seoWebsite = () => ({ '@type': 'WebSite', '@id': SITE_ORIGIN + '/#website', name: 'Just Send It', url: SITE_ORIGIN + '/' });
+
+// The head block, in the site's standard order. canonical and og:url appear only on a page that may be indexed.
+function seoHeadHtml({ title, desc, robots, canonical, ogType = 'website', ogTitle, ogDesc, extraOg = [], jsonLd = null }) {
+  const img = SITE_ORIGIN + '/assets/logo-og.png';
+  const L = [
+    '<title>' + escHtml(title) + '</title>',
+    '<meta name="description" content="' + escHtml(desc) + '">',
+    '<meta name="robots" content="' + escHtml(robots) + '">',
+    '<meta name="theme-color" content="' + SEO_THEME + '">',
+  ];
+  if (canonical) L.push('<link rel="canonical" href="' + escHtml(canonical) + '">');
+  L.push('<link rel="manifest" href="/site.webmanifest">',
+    '<meta property="og:type" content="' + escHtml(ogType) + '">',
+    ...extraOg,
+    '<meta property="og:site_name" content="$Send — Just Send It">',
+    '<meta property="og:locale" content="en_US">');
+  if (canonical) L.push('<meta property="og:url" content="' + escHtml(canonical) + '">');
+  L.push('<meta property="og:title" content="' + escHtml(ogTitle || title) + '">',
+    '<meta property="og:description" content="' + escHtml(ogDesc || desc) + '">',
+    '<meta property="og:image" content="' + escHtml(img) + '">',
+    '<meta property="og:image:type" content="image/png">',
+    '<meta property="og:image:width" content="1200">',
+    '<meta property="og:image:height" content="630">',
+    '<meta property="og:image:alt" content="' + escHtml(SEO_OG_ALT) + '">',
+    '<meta name="twitter:card" content="summary_large_image">',
+    '<meta name="twitter:site" content="@sendrh_">',
+    '<meta name="twitter:title" content="' + escHtml(ogTitle || title) + '">',
+    '<meta name="twitter:description" content="' + escHtml(ogDesc || desc) + '">',
+    '<meta name="twitter:image" content="' + escHtml(img) + '">',
+    '<meta name="twitter:image:alt" content="' + escHtml(SEO_OG_ALT) + '">');
+  if (jsonLd) L.push('<script type="application/ld+json">' + ldJson(jsonLd) + '</script>');
+  return L.join('\n');
+}
+
+/* ---- a Send Wall ---- */
+// The figures the wall itself shows, read the way /api/users/<name> reads them for the page.
+function profileFacts(u) {
+  return {
+    wallPosts: db.prepare('SELECT COUNT(*) n FROM (SELECT 1 FROM posts WHERE user_id = ? AND ' + wallPostWhere() + ' LIMIT 1)').get(u.id).n,
+    posts: db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND private = 0 AND squad_id IS NULL').get(u.id).n,   // the "Posts" stat
+    followers: db.prepare('SELECT COUNT(*) n FROM follows WHERE followee_id = ?').get(u.id).n,
+    following: db.prepare('SELECT COUNT(*) n FROM follows WHERE follower_id = ?').get(u.id).n,
+  };
+}
+// The first candidate of 160 characters or less. The facts are never cut; a bio is, by code points, at a word.
+function profileDesc(at, bio, posts, since) {
+  const lead = at + ' on $Send: ';
+  const core = String(posts) + (posts === 1 ? ' post' : ' posts') + ', sending since ' + since + '.';
+  const end = ' Entertainment only.';
+  const tails = [' Their public Send Wall in the $SEND and $GWC meme community on Robinhood Chain.', ' Their public Send Wall on Robinhood Chain.', ''];
+  const q = (b) => '“' + b + '” — ';
+  for (const t of tails) { const s = lead + (bio ? q(bio) : '') + core + t + end; if (cpLen(s) <= 160) return s; }
+  const room = 160 - cpLen(lead + q('') + core + end);
+  if (bio && room >= 12) return lead + q(cutCp(bio, room)) + core + end;
+  return lead + core + end;
+}
+function profilePatch(u, f) {
+  const shown = cleanText(u.username, 40, { emoji: true }) || String(u.username);
+  const url = SITE_ORIGIN + '/u/' + encodeURIComponent(u.username);   // always the stored capitals
+  const title = '@' + shown + ' — Send Wall Profile on $Send';
+  const bio = cleanText(u.bio, 200);                                  // for the description: no emoji, no controls
+  const desc = profileDesc('@' + shown, bio, f.posts, seoSince(u.created_at));
+  const indexable = profileIndexable(u, f.wallPosts);
+  let jsonLd = null;
+  if (indexable) {
+    const bioLd = cleanText(u.bio, 200, { emoji: true });            // the wall's bio as it reads there
+    const avatar = u.avatar_img && /^[A-Za-z0-9._-]{1,120}$/.test(u.avatar_img) && /\.(?:jpe?g|png|webp|gif|avif)$/i.test(u.avatar_img) ? SITE_ORIGIN + '/uploads/' + u.avatar_img : null;
+    jsonLd = { '@context': 'https://schema.org', '@type': 'ProfilePage', '@id': url + '#webpage', url, name: title, description: desc,
+      inLanguage: 'en', isPartOf: seoWebsite(),
+      mainEntity: { '@type': 'Person', '@id': url + '#person', name: shown, alternateName: '@' + shown, identifier: shown, url,
+        ...(bioLd ? { description: bioLd } : {}), ...(avatar ? { image: avatar } : {}),
+        interactionStatistic: [{ '@type': 'InteractionCounter', interactionType: 'https://schema.org/FollowAction', userInteractionCount: f.followers }],
+        agentInteractionStatistic: [
+          { '@type': 'InteractionCounter', interactionType: 'https://schema.org/WriteAction', userInteractionCount: f.posts },
+          { '@type': 'InteractionCounter', interactionType: 'https://schema.org/FollowAction', userInteractionCount: f.following },
+        ] } };
+  }
+  // canonical and og:url only when the wall may be indexed: a noindex page names no canonical (the site's head rule)
+  const head = seoHeadHtml({ title, desc, robots: indexable ? SEO_ROBOTS_INDEX : SEO_ROBOTS_NOINDEX, canonical: indexable ? url : null, ogType: 'profile',
+    extraOg: ['<meta property="profile:username" content="' + escHtml(shown) + '">'], jsonLd });
+  // the name in the <h1> before the page's script has run (upage.js fills the same span with the same text)
+  return { head, swaps: [['<span id="pub-username">…</span>', '<span id="pub-username">' + escHtml(u.username) + '</span>']] };
+}
+
+/* ---- a community ---- */
+function communityPatch(c) {
+  if (c.demo) return seoHeadHtml({ title: SEO_SANDBOX_TITLE, desc: SEO_SANDBOX_DESC, robots: SEO_ROBOTS_NOINDEX });   // never the company's name
+  const sym = cleanText(c.symbol, 16).replace(/\s+/g, '');
+  const tick = sym ? ' ($' + sym + ')' : '';
+  const fixed = tick + ' Community — $Send';
+  const name = cleanText(c.name, Math.max(8, 60 - cpLen(fixed))) || sym || 'Token';
+  const title = name + fixed;
+  const dollar = sym ? '$' + sym : 'token';
+  if (!communityIndexable(c)) {   // pending: the page is real, but thin until it goes live
+    const cands = [name + tick + ' on $Send is not live yet: it goes live when it reaches ' + LIVE_THRESHOLD + ' verified holder slots, wallets that really hold the token. Entertainment only.',
+      'This ' + dollar + ' community on $Send is not live yet: it goes live at ' + LIVE_THRESHOLD + ' verified holder slots. Entertainment only.'];
+    return seoHeadHtml({ title, desc: cands.find((s) => cpLen(s) <= 160) || cands[cands.length - 1], robots: SEO_ROBOTS_NOINDEX });
+  }
+  const url = SITE_ORIGIN + '/community.html?id=' + Number(c.id);
+  const cands = [
+    name + tick + ' fan community on $Send: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
+    'The ' + dollar + ' fan community on $Send: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
+    'The ' + dollar + ' fan community on $Send: verified holders post on its public wall, with member levels and proposals. Entertainment only.',
+  ];
+  const desc = cands.find((s) => cpLen(s) <= 160) || cands[cands.length - 1];
+  const jsonLd = { '@context': 'https://schema.org', '@graph': [
+    { '@type': 'CollectionPage', '@id': url + '#webpage', url, name: title, description: desc, inLanguage: 'en', isPartOf: seoWebsite(), breadcrumb: { '@id': url + '#breadcrumb' } },
+    { '@type': 'BreadcrumbList', '@id': url + '#breadcrumb', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_ORIGIN + '/' },
+      { '@type': 'ListItem', position: 2, name: 'Communities', item: SITE_ORIGIN + '/communities.html' },
+      { '@type': 'ListItem', position: 3, name: name + tick, item: url },
+    ] },
+  ] };
+  return seoHeadHtml({ title, desc, robots: SEO_ROBOTS_INDEX, canonical: url, jsonLd });
+}
+
+function seoRateOk(req, res) {
+  if (rateLimit('seo:' + clientIp(req), SEO_PAGE_RATE, 6e4)) return true;
+  send(res, 429, { error: 'slow down' }, { 'Retry-After': '30' });
+  return false;
+}
+function serveProfilePage(req, res, raw, search) {
+  if (!seoRateOk(req, res)) return;
+  let name = ''; try { name = decodeURIComponent(raw); } catch { return notFoundPage(res); }
+  if (!name || name.length > 64) return notFoundPage(res);
+  const u = db.prepare('SELECT id, username, bio, avatar_img, created_at, system, deleted_at, auto_named FROM users WHERE username = ?').get(name);   // username is COLLATE NOCASE
+  if (!u) return notFoundPage(res);            // unknown or renamed away: a real 404
+  /* An erased account's tombstone (deleted-<id>) stays a page: its Send Calls survive, and the feed and /p/ permalinks
+     still link to it. profileIndexable() is false for it, so it is served noindex with no canonical and no JSON-LD. */
+  if (u.username !== name) {
+    /* The account's own capitals. no-store, because the owner may re-case the name later: a cached 301 from the old
+       spelling would then loop against the new one. */
+    res.writeHead(301, { Location: '/u/' + encodeURIComponent(u.username) + (search || ''), 'Cache-Control': 'no-store', ...SEC_HEADERS });
+    return res.end();
+  }
+  return serveFile(req, res, path.join(PUBLIC_DIR, 'u.html'), {}, profilePatch(u, profileFacts(u)));
+}
+function serveCommunityPage(req, res, url) {
+  if (!seoRateOk(req, res)) return;
+  const idRaw = url.searchParams.get('id');
+  if (idRaw == null || idRaw === '') {   // the template with no community in it is the list's job
+    res.writeHead(301, { Location: '/communities.html', 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
+    return res.end();
+  }
+  if (!/^[1-9]\d{0,8}$/.test(idRaw)) return notFoundPage(res);
+  const c = db.prepare('SELECT id, symbol, name, status, demo, official FROM communities WHERE id = ?').get(Number(idRaw));
+  if (!c) return notFoundPage(res);
+  return serveFile(req, res, path.join(PUBLIC_DIR, 'community.html'), {}, communityPatch(c));
+}
+
+/* ===== Sitemaps =================================================================================================
+   /sitemap.xml is an index over three children: the static pages (public/sitemap-pages.xml), the live communities
+   and the indexable Send Walls — the last two built here with the SAME predicates the robots meta uses. A child is
+   listed only when it has at least one URL. lastmod is only ever a real timestamp (a wall's latest public post; a
+   community's creation, go-live or latest public post) — the static pages carry none rather than an invented one.
+   Never listed: squads, pending communities, the sandbox, /t/ tickets, ?scan= addresses, #fragments.
+   Each body is built at most every ten minutes and compressed once. A change another process made to the database
+   (PRAGMA data_version moves only for other connections: a maintenance script, the test suite) rebuilds it sooner. */
+const SITEMAP_TTL = 10 * 60e3;
+const SITEMAP_MAX_URLS = 50000;                              // the protocol's per-file limit
+const SITEMAP_CHILDREN = ['/sitemap-communities.xml', '/sitemap-profiles.xml'];
+const sitemapMemo = new Map();                               // path -> { at, dv, buf, etag, count, lastmod, br, gz }
+const sitemapIso = (ms) => new Date(Number(ms)).toISOString().replace(/\.\d{3}Z$/, 'Z');
+const dbDataVersion = () => { try { return db.prepare('PRAGMA data_version').get().data_version; } catch { return 0; } };
+function sitemapEntries(p) {
+  if (p === '/sitemap-communities.xml') {
+    return db.prepare(`SELECT c.id, c.status, c.demo, c.official, c.created_at, c.went_live_at,
+        (SELECT MAX(po.created_at) FROM posts po WHERE po.community_id = c.id AND po.private = 0) AS last_post
+      FROM communities c WHERE c.status = 'live' AND c.demo = 0 ORDER BY c.official DESC, c.id LIMIT ?`).all(SITEMAP_MAX_URLS)
+      .filter(communityIndexable)
+      .map((c) => ({ loc: SITE_ORIGIN + '/community.html?id=' + Number(c.id), lastmod: Math.max(Number(c.created_at) || 0, Number(c.went_live_at) || 0, Number(c.last_post) || 0) || null }));
+  }
+  return db.prepare(`SELECT u.id, u.username, u.system, u.deleted_at, u.auto_named, COUNT(po.id) AS wall_posts, MAX(po.created_at) AS last_post
+      FROM users u JOIN posts po ON po.user_id = u.id AND ${wallPostWhere('po.')}
+      WHERE u.system = 0 AND u.deleted_at IS NULL AND u.auto_named = 0
+      GROUP BY u.id ORDER BY last_post DESC LIMIT ?`).all(SITEMAP_MAX_URLS)
+    .filter((u) => profileIndexable(u, u.wall_posts))
+    .map((u) => ({ loc: SITE_ORIGIN + '/u/' + encodeURIComponent(u.username), lastmod: Number(u.last_post) || null }));
+}
+function sitemapBuild(p) {
+  const dv = dbDataVersion();
+  const m = sitemapMemo.get(p);
+  if (m && now() - m.at < SITEMAP_TTL && m.dv === dv) return m;
+  let body, count = 0, lastmod = null;
+  if (p === '/sitemap.xml') {
+    const kids = [{ loc: SITE_ORIGIN + '/sitemap-pages.xml', lastmod: null }];
+    for (const k of SITEMAP_CHILDREN) { const e = sitemapBuild(k); if (e.count > 0) kids.push({ loc: SITE_ORIGIN + k, lastmod: e.lastmod }); }
+    count = kids.length;
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+      kids.map((k) => '  <sitemap><loc>' + xmlEsc(k.loc) + '</loc>' + (k.lastmod ? '<lastmod>' + sitemapIso(k.lastmod) + '</lastmod>' : '') + '</sitemap>\n').join('') +
+      '</sitemapindex>\n';
+  } else {
+    const entries = sitemapEntries(p);
+    count = entries.length;
+    for (const e of entries) if (e.lastmod && (!lastmod || e.lastmod > lastmod)) lastmod = e.lastmod;
+    body = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+      entries.map((e) => '  <url><loc>' + xmlEsc(e.loc) + '</loc>' + (e.lastmod ? '<lastmod>' + sitemapIso(e.lastmod) + '</lastmod>' : '') + '</url>\n').join('') +
+      '</urlset>\n';
+  }
+  const buf = Buffer.from(body, 'utf8');
+  const e = { at: now(), dv, buf, etag: 'W/"' + crypto.createHash('sha1').update(buf).digest('base64url').slice(0, 20) + '"', count, lastmod, br: null, gz: null };
+  sitemapMemo.set(p, e);
+  return e;
+}
+function serveSitemap(req, res, p) {
+  if (!rateLimit('sitemap:' + clientIp(req), 60, 6e4)) return send(res, 429, { error: 'slow down' }, { 'Retry-After': '60' });
+  let e;
+  try { e = sitemapBuild(p); } catch (err) { console.error('[seo] sitemap ' + p + ' could not be built:', err && err.message); return send(res, 503, { error: 'sitemap unavailable — try again shortly' }, { 'Retry-After': '120' }); }
+  const head = { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache', 'ETag': e.etag, 'Vary': 'Accept-Encoding', ...SEC_HEADERS };
+  if (inmMatches(req, e.etag)) { res.writeHead(304, head); return res.end(); }
+  let body = e.buf;
+  if (res._enc === 'br') { if (!e.br) e.br = brc(e.buf); body = e.br; head['Content-Encoding'] = 'br'; }
+  else if (res._gzip) { if (!e.gz) e.gz = zlib.gzipSync(e.buf); body = e.gz; head['Content-Encoding'] = 'gzip'; }
+  head['Content-Length'] = body.length;
+  res.writeHead(200, head);
+  return res.end(req.method === 'HEAD' ? undefined : body);
 }
 
 /* ===== Biggest Sender — the weekly competition and its game master ==================================
@@ -10987,7 +11344,7 @@ const server = http.createServer(async (req, res) => {
      monitor actually fires. */
   if (req.url === '/healthz' || req.url === '/api/health') {
     const h = healthCheck();
-    res.writeHead(h.ok ? 200 : 503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.writeHead(h.ok ? 200 : 503, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
     return res.end(JSON.stringify(h));
   }
   /* F024: Node's parser accepts targets new URL() rejects — "//", "/\\", "//[" — and the throw used to land
@@ -10998,8 +11355,13 @@ const server = http.createServer(async (req, res) => {
   const wd = setTimeout(() => { if (!res.writableEnded) { try { res.writeHead(500, { 'Content-Type': 'text/plain' }); res.end('timeout'); } catch {} try { res.destroy(); } catch {} } }, ROUTE_WATCHDOG_MS);
   res.on('close', () => clearTimeout(wd));
   let url;
-  try { url = new URL(req.url, BASE_URL); } catch { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', ...SEC_HEADERS }); return res.end('{"error":"bad request"}'); }
+  try { url = new URL(req.url, BASE_URL); } catch { res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8', 'X-Robots-Tag': 'noindex', ...SEC_HEADERS }); return res.end('{"error":"bad request"}'); }
   const p = url.pathname;
+  /* Every answer under /api/ — JSON, the proxied token artwork, the compressed feeds that write their own head —
+     carries X-Robots-Tag: noindex. robots.txt opens the public read-only JSON to crawlers because the pages are
+     built from it while they render; this keeps those URLs out of search results. setHeader merges with whatever
+     each route later passes to writeHead, so no route can forget it. */
+  if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
   /* One hostname. A request that arrives on www.<host> — a DNS record somebody added, a proxy that serves
      both names — goes to the apex before anything else happens. Left alone, the pages would render on www
      and then every POST would fail the Origin check against BASE_URL: a site that looks broken rather than
@@ -14337,7 +14699,7 @@ const server = http.createServer(async (req, res) => {
           if (sub === 'posts' && req.method === 'POST') {
             if (!me) return bad(res, 'sign in first', 401);
             if (blockReadOnly(res, me)) return;
-            if (c.status !== 'live') return bad(res, 'this community isn’t live yet — it needs ' + LIVE_THRESHOLD + ' members', 403);
+            if (c.status !== 'live') return bad(res, 'this community isn’t live yet — it goes live at ' + LIVE_THRESHOLD + ' verified holder slots', 403);   // qual_count, not member_count (see joinCommunity)
             // posting needs a VERIFIED slot (qualified=1), not just a membership row — the anti-sybil caps must gate the wall too, exactly as the opt-in copy promises
             if (!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? AND qualified=1').get(cid, me.id)) return bad(res, 'posting needs a verified holder slot — opt in (and re-verify if your slot was paused) to post on this wall', 403);
             if (!c.demo) {   // the sandbox has no token to hold, so the holding gate does not apply there
@@ -14541,14 +14903,16 @@ const server = http.createServer(async (req, res) => {
       return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=86400' });   // F119: a day, not a year — a takedown must reach the CDN edge in hours, not months
     }
     /* ===== /t/<sendId> — the ticket share page ========================================================
-       The ONE page on this site rendered per-request rather than served from disk, and it exists for a
+       The ONE page on this site built entirely per-request rather than served from disk, and it exists for a
        specific reason: X puts a picture in a post by fetching the shared link and reading its og: tags.
-       Every other page here ships static tags (see /u/<name>, which is why sharing a wall shows the site
-       logo rather than the person). A ticket has to carry ITS OWN card, so its tags have to be built for
-       it. Nothing is published until the owner presses Share — before that this 404s like any other
-       address that is not a page. The only facts on it are ones already public on that person's profile:
-       their handle, their Send ID and when they joined. Not who invited them — that person never agreed to be
-       named on somebody else's share. No wallet, no email, no balance. */
+       A Send Wall and a community get a per-entity head swapped into their file (see "Per-entity pages"),
+       but still show the site logo as their picture. A ticket has to carry ITS OWN card, so its tags have to
+       be built for it. Nothing is published until the owner presses Share — before that this 404s like any
+       other address that is not a page. The only facts on it are ones already public on that person's
+       profile: their handle, their Send ID and when they joined. Not who invited them — that person never
+       agreed to be named on somebody else's share. No wallet, no email, no balance.
+       It is noindex: its job is the unfurl (X's card crawler reads og: tags whatever the robots meta says),
+       and as a search result it would be a thin near-duplicate of the member's own wall. */
     /* The card itself, at /t/<id>.png — deliberately NOT under /api/.
        robots.txt carries `Disallow: /api/`, and a social crawler that respects robots.txt (X's does)
        will not fetch an og:image it is told to stay out of. The card would have rendered perfectly and
@@ -14595,16 +14959,15 @@ const server = http.createServer(async (req, res) => {
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${e(title)} 🎟️</title>
 <meta name="description" content="${e(desc)}">
-<link rel="canonical" href="${e(SITE_ORIGIN + '/t/' + u.id)}">
-<meta name="robots" content="index, follow, max-image-preview:large">
-<meta property="og:type" content="profile"><meta property="og:site_name" content="$Send — Just Send It">
+<meta name="robots" content="noindex, follow">
+<meta property="og:type" content="profile"><meta property="og:site_name" content="$Send — Just Send It"><meta property="og:locale" content="en_US">
 <meta property="og:url" content="${e(SITE_ORIGIN + '/t/' + u.id)}">
 <meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}">
 <meta property="og:image" content="${e(card)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${e('A Just Send It ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@sendrh_">
 <meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(desc)}">
-<meta name="twitter:image" content="${e(card)}">
+<meta name="twitter:image" content="${e(card)}"><meta name="twitter:image:alt" content="${e('A Just Send It ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
 <link rel="icon" href="/assets/logo-128.png">
 <link rel="stylesheet" href="/gate.css"><link rel="stylesheet" href="/invite.css">
 </head><body class="gate">
@@ -14653,8 +15016,41 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    let rel = p === '/' ? '/index.html' : p;
-    if (/^\/u\/[^/]+$/.test(rel)) rel = '/u.html';
+    /* ===== addresses that answer for search engines and browsers before the static files =====
+       See "Per-entity pages" and "Sitemaps" above for the two built kinds. */
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      // browsers and crawlers ask for /favicon.ico whatever the page says; answer with the site's icon, not a 404
+      if (p === '/favicon.ico') return serveFile(req, res, path.join(PUBLIC_DIR, 'assets', 'logo-128.png'), { 'Cache-Control': 'public, max-age=604800' });
+      if (p === '/sitemap.xml' || SITEMAP_CHILDREN.includes(p)) return serveSitemap(req, res, p);
+      // one address for the home page: /index.html was a byte-identical duplicate of /
+      if (p === '/index.html') { res.writeHead(301, { Location: '/' + url.search, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS }); return res.end(); }
+      /* /About.html and /WALL.HTML were 200 duplicates wherever the disk is case-insensitive (the live Mac's is). Pages
+         only: asset names such as assets/SendLogo.png really are mixed-case. */
+      if (/\.html$/i.test(p) && p !== p.toLowerCase()) {
+        const lower = p.toLowerCase(), fp = path.normalize(path.join(PUBLIC_DIR, lower));
+        let isFile = false; try { isFile = fp.startsWith(PUBLIC_DIR + path.sep) && fs.statSync(fp).isFile(); } catch {}
+        // the Location is rebuilt from the normalised file path, so a raw target such as /.//host/X.html can never
+        // become a protocol-relative //host/… redirect off the site
+        const to = '/' + path.relative(PUBLIC_DIR, fp).split(path.sep).join('/');
+        if (isFile) { res.writeHead(301, { Location: (to === '/index.html' ? '/' : to) + url.search, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS }); return res.end(); }
+      }
+      const um = /^\/u\/([^/]+)$/.exec(p);
+      if (um) return serveProfilePage(req, res, um[1], url.search);
+      if (p === '/u.html') {
+        /* The wall template is never a page of its own. The old ?u= form still reaches the wall it named (the rest of
+           the query goes along); with no name it is a 404, not an indexable "no sender" shell. */
+        const q = url.searchParams.get('u');
+        if (q && q.length <= 64) {
+          const rest = new URLSearchParams(url.search); rest.delete('u');
+          const qs = rest.toString();
+          res.writeHead(301, { Location: '/u/' + encodeURIComponent(q) + (qs ? '?' + qs : ''), 'Cache-Control': 'no-store', ...SEC_HEADERS });
+          return res.end();
+        }
+        return notFoundPage(res);
+      }
+      if (p === '/community.html') return serveCommunityPage(req, res, url);
+    }
+    const rel = p === '/' ? '/index.html' : p;
     const filePath = path.normalize(path.join(PUBLIC_DIR, rel));
     if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) return bad(res, 'nope', 400);
     return serveFile(req, res, filePath);

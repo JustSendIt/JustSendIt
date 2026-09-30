@@ -22,7 +22,7 @@ check('and falls back to the house icon, never a borrowed logo', /post-comm-logo
 
 check('the sandbox gets the same badge and link', /post-comm-sandbox/.test(sbx) && /href="\/community\.html\?id=3"/.test(sbx));
 check('in its own diamond-blue class, not the token green', /class="post-comm post-comm-sandbox"/.test(sbx));
-check('it says anyone can join', /sandbox · anyone can join/.test(sbx));
+check('it says it is open to members (joining still takes the $100 $SEND wallet check, so never "anyone")', /sandbox · open to members/.test(sbx) && !/anyone can join/.test(sbx));
 check('it does NOT claim to be a token community', !/>community</.test(sbx));
 check('it uses the flask, not a borrowed brand mark', /🧪/.test(sbx) && !/<img/.test(sbx));
 check('a post with no community renders nothing at all', none === '');

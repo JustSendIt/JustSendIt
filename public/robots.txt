@@ -1,16 +1,32 @@
 User-agent: *
 Allow: /
-Disallow: /profile.html
-Disallow: /watchlist.html
-Disallow: /gate.html
-# the terms page is unlinked and not part of joining
-Disallow: /terms.html
+
+# Pages kept out of search (profile, watchlist, terms, gate, admin, data, squad) say so themselves with a robots
+# meta tag. They are deliberately NOT disallowed here: a crawler that is told to stay out of a page never reads its
+# noindex, and can still list the bare address.
+
+# The public, read-only JSON the pages are built from while they render. Search engines run a page's JavaScript and
+# fetch nothing this file blocks, so without these lines a profile renders as "No sender with that name", a
+# community as "Community not found", and the Send Wall, the Support board, the Arcade boards and the Scanner's
+# community strip as load errors. Every /api/ answer carries X-Robots-Tag: noindex, so the JSON itself is never
+# listed. The most specific rule wins, so each Allow below beats the Disallow: /api/ at the end.
+Allow: /api/config$
+Allow: /api/og/campaign$
+Allow: /api/beta$
+Allow: /api/chain/pairs$
+Allow: /api/posts
+Allow: /api/users/
+Allow: /api/pins?user=
+Allow: /api/calls
+Allow: /api/communities
+Allow: /api/competitions
+Allow: /api/scan/recent$
+
+# Everything else under /api/ is personal, write-only, or a fresh chain read for an address the caller picks
+# (token lookups, contract scans, charts, the image proxies).
 # The ticket share cards live at /t/<id>.png, outside /api/, precisely so this line cannot block them:
 # a crawler that is told to stay out of /api/ will not fetch an og:image there, and the card would
 # render perfectly and never once appear in a post.
 Disallow: /api/
 
 Sitemap: https://sendrh.com/sitemap.xml
-
-# The moderation queue is for operators only (the server answers 404 to everyone else); nothing to index.
-Disallow: /admin.html

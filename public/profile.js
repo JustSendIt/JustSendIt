@@ -733,7 +733,7 @@ document.getElementById('link-wallet-btn').addEventListener('click', linkWallet)
       st.textContent = 'Your account is gone. Thanks for sending it with us.';
       try { localStorage.removeItem('send.eggs.pending'); localStorage.removeItem('send.eggs.seen'); localStorage.removeItem('send.eggs.unpaid'); localStorage.removeItem('send.eggs.mine'); localStorage.removeItem('send.eggs.retry'); } catch {}
       AUTH.user = null; if (AUTH.redraw) AUTH.redraw();
-      setTimeout(() => { location.href = 'index.html'; }, 1600);
+      setTimeout(() => { location.href = '/'; }, 1600);
     } catch (e) {
       btn.disabled = false;
       st.textContent = e.message === 'cancelled' ? '' : '⚠️ ' + (e.message || 'could not delete the account');

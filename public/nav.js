@@ -105,7 +105,7 @@
       var tax = document.createElement('p');
       tax.className = 'footer-tax';
       tax.innerHTML = '💧 <b>$Send</b> charges a <b>1% tax on every buy, sell &amp; transfer</b> — 100% of it is automatically added to the liquidity pool (in batches, as volume builds), so the LP keeps building on itself. ' +
-        '<a href="index.html#tokens">More ↗</a>';
+        '<a href="/#tokens">More ↗</a>';
       var discl = footer.querySelector('.disclaimer');
       if (discl && discl.parentNode === footer) footer.insertBefore(tax, discl.nextSibling);
       else footer.insertBefore(tax, footer.firstChild);
@@ -116,7 +116,7 @@
     var host = notif || document.getElementById('nav-auth');
     if (host && host.parentNode && !document.getElementById('nav-live')) {
       var live = document.createElement('a');
-      live.id = 'nav-live'; live.className = 'nav-live'; live.href = 'wall.html';
+      live.id = 'nav-live'; live.className = 'nav-live'; live.href = '/wall.html';
       live.title = 'People Sending it right now — active on the platform. Join in →';
       live.setAttribute('aria-label', 'People active right now');
       live.innerHTML = '<span class="nav-live-dot" aria-hidden="true"></span><b class="nav-live-n">·</b><span class="nav-live-lbl">Sending&nbsp;it</span>';

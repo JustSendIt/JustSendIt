@@ -1,0 +1,16 @@
+{
+  "name": "Just Send It",
+  "short_name": "$Send",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "browser",
+  "lang": "en",
+  "theme_color": "#c6f000",
+  "background_color": "#050604",
+  "icons": [
+    { "src": "/assets/logo-128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "/assets/logo-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/assets/logo-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

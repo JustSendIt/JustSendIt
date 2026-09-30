@@ -533,20 +533,9 @@ async function loadPage() {
       uname = u.username;
       try { if (location.pathname.startsWith('/u/')) history.replaceState(history.state, '', '/u/' + encodeURIComponent(u.username) + location.search + location.hash); } catch {}
     }
-    document.title = '@' + u.username + ' — $Send · Just Send It 👤';
-    // per-user canonical + meta so each public wall is its own indexable page (SEO)
-    try {
-      const canonUrl = location.origin + '/u/' + encodeURIComponent(u.username);
-      let canon = document.querySelector('link[rel="canonical"]');
-      if (!canon) { canon = document.createElement('link'); canon.rel = 'canonical'; document.head.appendChild(canon); }
-      canon.href = canonUrl;
-      const desc = '@' + u.username + ' on the $Send Send Wall — their sends, Send Calls, and the tokens they’re convicted in. Follow, react, and join the $Send / $GWC meme community on Robinhood Chain. Entertainment only.';
-      const setMeta = (sel, val) => { const m = document.querySelector(sel); if (m) m.setAttribute('content', val); };
-      setMeta('meta[name="description"]', desc);
-      setMeta('meta[property="og:title"]', '@' + u.username + ' — $Send · Just Send It 🚀');
-      setMeta('meta[property="og:description"]', desc);
-      setMeta('meta[property="og:url"]', canonUrl);
-    } catch (e) {}
+    /* The <head> is the server's: /u/<name> arrives with its final <title>, description, canonical, og:* and
+       JSON-LD already written for this sender. Nothing here rewrites them, so the page Google renders keeps
+       the same head the server sent. */
     document.getElementById('pub-avatar').textContent = u.avatar;
     document.getElementById('pub-username').textContent = u.username;
     const nl = document.getElementById('pub-name-line'); // permanent OG badge in the header, next to the @name
@@ -565,7 +554,7 @@ async function loadPage() {
     document.getElementById('st-followers').textContent = u.followers;
     document.getElementById('st-following').textContent = u.following;
     document.getElementById('st-fires').textContent = u.reactionsReceived;
-    document.getElementById('pub-joined').textContent = new Date(u.joined).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    document.getElementById('pub-joined').textContent = new Date(u.joined).toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' });
     if (u.level != null) {
       const lvl = document.getElementById('pub-level');
       lvl.textContent = '⭐ Lvl ' + u.level + ' · ' + (u.title || '') + (u.rank ? ' · #' + u.rank : '');

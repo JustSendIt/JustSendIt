@@ -41,7 +41,7 @@
     // the sandbox is branded for a listed company: its numbers are the stock's, labelled as such, never a token's
     const st = c.demo && c.stock ? c.stock : null, hasQ = !!(st && st.price != null);
     const tierClass = 'tier-' + String(c.activityTier || 'Dormant').toLowerCase();
-    const statusPill = (c.demo ? '<span class="comm-pill comm-pill-sandbox" title="Open to everyone — no token, no wallet, and no multiplier">🧪 Sandbox · stock, not a token</span> ' : '') + (c.official ? '<span class="comm-pill comm-pill-official" title="Run by the site itself">🏠 Official</span> ' : '') + (c.status === 'live'
+    const statusPill = (c.demo ? '<span class="comm-pill comm-pill-sandbox" title="Open to every member: no token of its own to hold (the $100 $SEND wallet check still applies), and no multiplier">🧪 Sandbox · stock, not a token</span> ' : '') + (c.official ? '<span class="comm-pill comm-pill-official" title="Run by the site itself">🏠 Official</span> ' : '') + (c.status === 'live'
       ? '<span class="comm-pill comm-pill-live">🟢 LIVE · Lv ' + c.level + '</span>'
       : '<span class="comm-pill comm-pill-pending" role="progressbar" aria-valuenow="' + c.qualCount + '" aria-valuemin="0" aria-valuemax="' + c.need + '" aria-label="' + c.qualCount + ' of ' + c.need + ' to go live">⏳ ' + c.qualCount + '/' + c.need + ' to LIVE</span>');
     const goLiveBar = c.status === 'live' ? '' :
@@ -51,7 +51,8 @@
         ? ' sandbox community, ' + c.memberCount + ' members, stock ' + (hasQ ? '$' + Number(st.price).toFixed(2) + (st.changePct != null ? ', ' + (st.changePct >= 0 ? 'up ' : 'down ') + Math.abs(st.changePct).toFixed(2) + '% today' : '') : 'quote unavailable') + ', '
         : ' community, ' + c.memberCount + ' members, ' + fmtNum(c.holders) + ' holders, ' + fmtUsd(c.mcap) + ' market cap, ' + (c.priceChange != null ? (c.priceChange >= 0 ? 'up ' : 'down ') + Math.abs(c.priceChange).toFixed(1) + '% 24h, ' : '')) + (c.status === 'live' ? 'live level ' + c.level : c.qualCount + ' of ' + c.need + ' to go live') + '">' +
         banner +
-        '<span class="comm-card-body">' +
+        // data-nosnippet: the sandbox is branded for a listed company, and a search result must never quote that as this site's
+        '<span class="comm-card-body"' + (c.demo ? ' data-nosnippet' : '') + '>' +
           '<span class="comm-card-head">' + logo + '<span class="comm-card-id"><b class="comm-card-sym">$' + esc(c.symbol) + '</b><span class="comm-card-name">' + esc(c.name) + '</span></span></span>' +
           (c.demo
             ? '<span class="comm-card-metrics">' +
@@ -94,7 +95,7 @@
       if (!list.length) {
         paintGrid(grid, '');
         setStatus(state.status === 'live'
-          ? '🌱 No other live communities yet — <b>be the first to start one</b> above. It goes live at 10 members.'
+          ? '🌱 No other live communities yet — <b>be the first to start one</b> above. It goes live at 10 verified holders.'
           : '⏳ No communities are starting up right now. Paste a token address above to kick one off.', true);
         return;
       }
@@ -159,7 +160,7 @@
       '<a class="wk-link" href="community.html?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +
         '<span class="wk-rank">' + medal + '<span class="wk-rank-n">#' + rank + '</span></span>' +
         logo +
-        '<span class="wk-id">' +
+        '<span class="wk-id"' + (c.demo ? ' data-nosnippet' : '') + '>' +
           '<b class="wk-sym">$' + esc(c.symbol) + '</b>' +
           '<span class="wk-name">' + esc(c.name) + '</span>' + you +
         '</span>' +
@@ -260,7 +261,7 @@
     try {
       const r = await fetch('/api/communities', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
       const j = await r.json().catch(() => ({}));
-      if (r.ok) { if (window.sendToast) sendToast('🏛️ Community started! Get 10 members to go live 🚀'); location.href = 'community.html?id=' + j.id; return; }
+      if (r.ok) { if (window.sendToast) sendToast('🏛️ Community started! Get 10 verified holders to go live 🚀'); location.href = 'community.html?id=' + j.id; return; }
       goBtn.disabled = false;
       if (j.existingId) msg.innerHTML = 'A community already exists for that token — <a href="community.html?id=' + j.existingId + '">open it →</a>';
       else msg.textContent = '⚠️ ' + (j.error || 'Could not start that community.');

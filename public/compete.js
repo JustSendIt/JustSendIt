@@ -126,7 +126,7 @@
     const sc = d.sendCalls, rows = mark(sc.top, ctx.username);
     const val = u => '<b>' + xf(u.totalX) + '</b> <small>' + u.calls + ' call' + (u.calls === 1 ? '' : 's') + (u.bestGrade ? ' · best ' + esc(u.bestGrade.emoji) : '') + '</small>';
     let me = '';
-    if (!ctx.signedIn) me = 'Call a token in public and get paid as it climbs. ' + signInBtn('Sign in to call');
+    if (!ctx.signedIn) me = 'Call a token in public and earn Send Power as it climbs. ' + signInBtn('Sign in to call');
     else if (sc.me && sc.me.rank) me = 'You are <b>#' + sc.me.rank + '</b> on the 7-day board at <b>' + xf(sc.me.totalX) + '</b> across ' + sc.me.calls + ' call' + (sc.me.calls === 1 ? '' : 's') + (sc.me.bestGrade ? ' — best ' + esc(sc.me.bestGrade.emoji) + ' ' + esc(sc.me.bestGrade.label) : '') + '.';
     else if (sc.me) me = 'No call of yours is on the 7-day board. Paste a contract on the Send Wall to make one.';
     return card('calls', {
@@ -144,7 +144,7 @@
       '<li' + (c.joined ? ' class="is-me"' : '') + '><span class="cmp-rank">' + (medal[c.rank - 1] || '#' + c.rank) + '</span>' +
         (c.image ? '<img class="cmp-cava" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="cmp-cava cmp-cava--txt" aria-hidden="true">' + (c.demo ? '📈' : esc(String(c.symbol || '?').slice(0, 3))) + '</span>') +
         '<span class="cmp-comm-main"><a class="cmp-name" href="community.html?id=' + encodeURIComponent(c.id) + '">$' + esc(c.symbol) + '</a>' +
-          (c.demo ? '<span class="cmp-sandbox" title="Open to everyone: no token, no wallet, no multiplier">🧪 Sandbox · stock, not a token · no 10×</span>' : '') +
+          (c.demo ? '<span class="cmp-sandbox" title="Open to every member: no token of its own to hold (the $100 $SEND wallet check still applies), no multiplier">🧪 Sandbox · stock, not a token · no 10×</span>' : '') +
           '<small>' + esc(c.name) + ' · ' + nf(c.memberCount) + ' member' + (c.memberCount === 1 ? '' : 's') + ' · Lv ' + c.level + (c.joined ? ' · <b>joined ✓</b>' : '') + '</small>' +
         '<span class="cmp-xpbar" aria-hidden="true"><span style="width:' + Math.max(4, Math.round(c.xpWeek / max * 100)) + '%"></span></span></span>' +
         '<span class="cmp-val">' + compact(c.xpWeek) + ' XP</span></li>').join('') + '</ol>' +

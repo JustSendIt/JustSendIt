@@ -63,7 +63,7 @@
   // where clicking a "how to earn" row takes you to actually do it
   const EARN_ACTION = {
     egg: { egg: true },   // there is nowhere to send them — the point is to look; rendered as a plain row, not a button
-    swap: { href: '/index.html#swap' },
+    swap: { href: '/#swap' },
     connect_wallet: { open: 'sec-security' },
     first_post: { href: '/wall.html' },
     post: { href: '/wall.html' },
@@ -318,7 +318,7 @@
     let primary;
     if (maxed && (!d || d.nextDays == null)) primary = '👑 You\'ve maxed everything — you are the <b>Biggest Sender</b>. Flex it. 🚀';
     else if (d && d.nextDays != null && diaProg >= xpPct) primary = '💎 <b>' + diaLeft + '</b> day' + (diaLeft === 1 ? '' : 's') + ' of holding to <b>' + esc(nextLbl) + '</b> — just don\'t sell →';
-    else if (!maxed) primary = '🔥 <b>' + nf(xpGap) + '</b> XP from <b>Level ' + (g.level + 1) + '</b> — <a href="/index.html#swap">one boosted swap can do it →</a>';
+    else if (!maxed) primary = '🔥 <b>' + nf(xpGap) + '</b> XP from <b>Level ' + (g.level + 1) + '</b> — <a href="/#swap">one boosted swap can do it →</a>';
     else primary = '🚀 <a href="/wall.html">Keep posting on the Wall to climb →</a>';
 
     let secondary;
@@ -694,7 +694,7 @@
     // nudge an untried high-value action
     if (!bd.find(x => x.kind === 'swap')) {
       rows += '<li class="ll-nudge"><span class="ll-ico" aria-hidden="true">🚀</span>' +
-        '<a class="ll-label" href="/index.html#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
+        '<a class="ll-label" href="/#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
     }
     /* What was taken, listed under what was given rather than left out of the ledger entirely. It is kept
        visually separate because it is not loot — it is the counterweight, and mixing a loss into the same

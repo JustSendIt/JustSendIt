@@ -3,18 +3,32 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Community — $Send · Just Send It 🏘️</title>
-<meta name="description" content="A token community on $Send — its wall, its members, its exponentially-levelling community level, and your member level. Go live at 10 members, earn 10× Send Power. Robinhood Chain. Entertainment only.">
-<meta name="robots" content="index, follow, max-image-preview:large">
+<!--seo-->
+<!-- The server swaps this block for the community's own head (see "Per-entity pages" in server.js). What is here
+     goes out only if it cannot: noindex, no canonical. The 10 is LIVE_THRESHOLD in server.js — verified holder
+     slots (wallets that really hold the token), not taps of Join; tests/seo-server.mjs keeps the two equal. -->
+<title>Community — $Send</title>
+<meta name="description" content="A token fan community on $Send: verified holders post on its wall and vote on proposals. It goes live at 10 verified holder slots. Entertainment only.">
+<meta name="robots" content="noindex, follow">
 <meta name="theme-color" content="#c6f000">
+<link rel="manifest" href="/site.webmanifest">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="$Send — Just Send It">
-<meta property="og:title" content="A token community on $Send 🏘️">
-<meta property="og:description" content="Its wall, its members, its community level, and your conviction. Go live at 10 members, earn 10× Send Power. Entertainment only.">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="A token fan community on $Send 🏘️">
+<meta property="og:description" content="A token fan community on $Send: verified holders post on its wall and vote on proposals. It goes live at 10 verified holder slots. Entertainment only.">
 <meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="$Send — Just Send It logo">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@sendrh_">
+<meta name="twitter:title" content="A token fan community on $Send 🏘️">
+<meta name="twitter:description" content="A token fan community on $Send: verified holders post on its wall and vote on proposals. It goes live at 10 verified holder slots. Entertainment only.">
 <meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
+<meta name="twitter:image:alt" content="$Send — Just Send It logo">
+<!--/seo-->
 <link rel="icon" href="assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
 <link rel="stylesheet" href="fonts/fonts.css">
@@ -29,17 +43,17 @@
 <a class="skip-link" href="#main">Skip to the community</a>
 
 <nav class="nav is-compact" aria-label="Main">
-  <a class="nav-logo" href="index.html"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
+  <a class="nav-logo" href="/"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
     <a class="active" href="communities.html" aria-current="true">Communities</a>
-    <a href="index.html#guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="/#guide">How&nbsp;to&nbsp;Buy</a>
     <a href="newpairs.html">Scanner</a>
     <a href="wall.html">Send&nbsp;Wall</a>
     <a href="support.html">Support</a>
-    <a href="index.html#swap">Swap</a>
-    <a href="index.html#tokens">Tokens</a>
+    <a href="/#swap">Swap</a>
+    <a href="/#tokens">Tokens</a>
     <a href="watchlist.html">Watchlist</a>
 
     <a href="whitepaper.html">White&nbsp;Paper</a>
@@ -58,8 +72,8 @@
 
     <section class="comm-members card" id="comm-members" aria-labelledby="comm-members-h" hidden>
       <h2 class="comm-members-h" id="comm-members-h">👥 Members <span class="comm-members-sub" id="comm-members-sub"></span></h2>
-      <p class="modal-note comm-members-note">Ranked by <b>community level</b> — earned by posting, reacting &amp; commenting here. Every member helps the community level up. 💎</p>
-      <ol class="comm-members-list" id="comm-members-list" tabindex="0" aria-label="Community members ranked by community level"></ol>
+      <p class="modal-note comm-members-note">Ranked by <b>member level</b> — the conviction a verified holder earns here by joining, posting, commenting, reacting, calling the token and voting. What members do here levels the community up too. 💎</p>
+      <ol class="comm-members-list" id="comm-members-list" tabindex="0" aria-label="Community members ranked by member level"></ol>
     </section>
 
     <section class="comm-props card" id="comm-props" aria-labelledby="comm-props-h" hidden>
@@ -137,16 +151,16 @@
     <a href="about.html">About</a>
     <a href="arcade.html">Arcade</a>
     <a href="communities.html">Communities</a>
-    <a href="index.html">Home</a>
-    <a href="index.html#guide">How to Buy</a>
+    <a href="/">Home</a>
+    <a href="/#guide">How to Buy</a>
     <a href="profile.html">My Profile</a>
     <a href="newpairs.html">Scanner</a>
     <a href="wall.html">Send Wall</a>
     <a href="support.html">Support</a>
     <a href="privacy.html">Privacy</a>
     <a href="tracker.html">Wallet Tracker</a>
-    <a href="index.html#swap">Swap</a>
-    <a href="index.html#tokens">Tokens</a>
+    <a href="/#swap">Swap</a>
+    <a href="/#tokens">Tokens</a>
     <a href="watchlist.html">Watchlist</a>
     <a href="whitepaper.html">White Paper</a>
   </div>

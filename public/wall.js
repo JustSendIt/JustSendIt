@@ -63,7 +63,7 @@ function postEl(p) {
         ' title="Go to the ' + esc('$' + p.community.symbol) + ' community">' +
         (p.community.image ? '<img class="post-comm-logo" src="' + esc(p.community.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="post-comm-logo-none" aria-hidden="true">' + (p.community.demo ? '🧪' : '🏘️') + '</span>') +
         '<span class="post-comm-name">' + esc('$' + p.community.symbol) + '</span>' +
-        '<span class="post-comm-sub">' + (p.community.demo ? 'sandbox · anyone can join'
+        '<span class="post-comm-sub">' + (p.community.demo ? 'sandbox · open to members'
           : p.community.status === 'live' ? 'community' : 'community · not live yet') + '</span>' +
         '<span class="post-comm-go" aria-hidden="true">→</span>' +
       '</a>'

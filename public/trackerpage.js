@@ -73,7 +73,7 @@
       note.innerHTML = fullHint + 'Diamond-handing $GWC unlocked <b>' + limit + '</b> slots. Keep holding (never sell) to climb Diamond tiers — <b>+100 wallets per level</b>.';
     } else {
       tier.textContent = '';
-      note.innerHTML = fullHint + 'Everyone tracks up to <b>' + (state.base || 10) + '</b> wallets. Hold <b>$GWC</b> and diamond-hand it to <b>Diamond Lv 1</b> → <b>100</b> wallets, then <b>+100 per Diamond level</b>. <a href="index.html#swap">Get $GWC →</a>';
+      note.innerHTML = fullHint + 'Everyone tracks up to <b>' + (state.base || 10) + '</b> wallets. Hold <b>$GWC</b> and diamond-hand it to <b>Diamond Lv 1</b> → <b>100</b> wallets, then <b>+100 per Diamond level</b>. <a href="/#swap">Get $GWC →</a>';
     }
     addBtn.disabled = full; // the visible .track-cap-full-hint above already says why (a disabled button can't be focused, so no title=)
   }

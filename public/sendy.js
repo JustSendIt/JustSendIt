@@ -77,7 +77,7 @@
   const pageTips = {
     '/': { tips: ['New here? The How to Buy guide is on this page, under the hero.', 'Drag me anywhere on a desktop — I stay where you put me.', 'Anything you cannot find: ask me, or the Support board.'] },
     '/about.html': { tips: ['Everything about Send Power and the leaderboard is on this page.', 'Send Calls are permanent — they outlive the account that made them.', 'Strikes never expire on their own, but an appeal by email is free.'] },
-    '/newpairs.html': { tips: ['Paste any token or pool address to read its full on-chain profile.', 'Tap the ☆ on a scan to save the token to your Watchlist.', 'The buttons under a scan open a Send Call — to the Wall, or to your Squad.', 'A scan is public chain data, not an audit. Nothing here is a promise.'] },
+    '/newpairs.html': { tips: ['Paste any token or pool address to read its market, holders, contract and first buyers.', 'Tap the ☆ on a scan to save the token to your Watchlist.', 'The buttons under a scan open a Send Call — to the Wall, or to your Squad.', 'A scan is public chain data, not an audit. Nothing here is a promise.'] },
     '/wall.html': { tips: ['The Send Wall is every Send Call, live, as a permanent scorecard.', 'Tap a name to open that person\'s own Send Wall.', 'Deep liquidity and steady price make a call easier to read — never a guarantee.'] },
     '/support.html': { tips: ['Ask in public here; answers that solve it get voted up.', 'Prefer private? Email ' + EMAIL + ' — a person reads it.', 'Answering someone else\'s question counts too.'] },
     '/profile.html': { tips: ['Link a wallet here — it is how the site checks what you hold.', 'Two-factor keeps the account yours; nobody here asks for passwords.', 'Deleting the account is permanent; Send Calls stay under a placeholder.'] },
@@ -104,7 +104,8 @@
   /* ---------- markup ---------- */
   function html() {
     const tip = tipsFor()[Math.floor(Math.random() * tipsFor().length)];
-    return '<div id="sendy-widget" class="sendy-widget" hidden>' +
+    // data-nosnippet: the greeting and the tips are the helper talking, never a search result's description of the page
+    return '<div id="sendy-widget" class="sendy-widget" data-nosnippet hidden>' +
       '<button class="sendy-rocket" id="sendy-rocket" type="button" aria-label="Sendy, your $Send guide" aria-expanded="false" data-tip="Opens Sendy — ask a question, or get a tip about this page. Drag to move (desktop)">' +
         '<span class="sendy-sprite" aria-hidden="true"></span>' +
       '</button>' +
@@ -593,8 +594,36 @@
         autoHide = setTimeout(() => { if (isOpen() && chatMode.hasAttribute('hidden') && !popup.contains(document.activeElement) && !popup.matches(':hover')) closePopup(); }, 9000);   // only the tips view hides itself — never a chat someone started, never under a pointer or a focus
       }
       if (!isMobile()) scheduleFlight();
+      shownUp = true;
+      // the intro ended while Sendy was still waiting for the page to load: say now what he would have said then
+      if (earlyEntered) { const d = earlyEntered; earlyEntered = null; say(d.firstVisit ? 'firstvisit' : 'entered', null, true); }
     }, 1400);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+  /* ---------- start after the page, never alongside it ----------
+     The idle sprite sheet is over half a megabyte, and the still, the styles and the markup come with it. None of it
+     may compete with the page's own first paint (the hero image first of all), so nothing of Sendy's is added before
+     the window's load event has fired, and then only in an idle moment: requestIdleCallback, or a short timer where a
+     browser has none. The sheet itself is fetched only once the widget unhides, 1.4 s after that. A page whose load
+     event never comes (a request that hangs) still gets its rocket after LOAD_CAP_MS. */
+  const LOAD_CAP_MS = 15000;
+  let started = false;
+  /* The homepage's intro can end (jsi:entered) before this deferred start has put Sendy on screen. Before the deferral
+     he was up 1.4 s after DOMContentLoaded, so an intro that ended later than that got his line; one that ended sooner
+     did not (say() stays quiet while he is hidden). Keep exactly that: remember a late-enough event, and replay it
+     once he shows up. Earlier ones are dropped, as they always were. */
+  let shownUp = false, earlyEntered = null;
+  document.addEventListener('jsi:entered', (e) => {
+    if (shownUp) return;   // he is on screen: init's own listener answers it
+    const nav = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+    const dcl = nav && nav.domContentLoadedEventEnd;
+    if (dcl && performance.now() - dcl >= 1400) earlyEntered = e.detail || {};
+  });
+  function whenIdle() {
+    if (started) return; started = true;
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => init(), { timeout: 2000 });
+    else setTimeout(init, 200);
+  }
+  if (document.readyState === 'complete') whenIdle();
+  else { window.addEventListener('load', whenIdle, { once: true }); setTimeout(whenIdle, LOAD_CAP_MS); }
 })();

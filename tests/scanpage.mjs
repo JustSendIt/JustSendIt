@@ -47,7 +47,7 @@ try {
   const stale = pages.filter((f) => /New&nbsp;Pairs<\/a>|>New Pairs<\/a>/.test(read(f)));
   check('the nav tab and the footer link say Scanner on every page', stale.length === 0, stale.join(','));
   check('  ...and the Scanner page marks itself current', /<a class="active" href="newpairs\.html" aria-current="page">Scanner<\/a>/.test(HTML));
-  check('the page is titled as the Scanner', /<title>Scanner 🔎/.test(HTML) && /<h1 class="section-title display green"[^>]*>Scanner 🔎<\/h1>/.test(HTML));
+  check('the page is titled as the Scanner', /<title>Robinhood Chain Token Scanner &amp; New Pairs — \$Send<\/title>/.test(HTML) && /<h1 class="section-title display green"[^>]*>Scanner 🔎<\/h1>/.test(HTML));
 
   /* ═══ two tabs ═══ */
   check('two tabs: scan an address, and New Pairs', /id="sc-tab-scan" type="button" role="tab" aria-selected="true" aria-controls="sc-scan"/.test(HTML) && /id="sc-tab-new" type="button" role="tab" aria-selected="false" aria-controls="sc-new"/.test(HTML));
