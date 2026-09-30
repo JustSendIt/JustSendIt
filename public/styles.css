@@ -3161,6 +3161,7 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 /* --- the square grid --- */
 .comm-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 1.1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }   /* wide enough for a name and its LIVE pill at the floor size */
 .comm-card {
+  --comm-lift: 22px;   /* how far the body rises into the banner, so the logo straddles its bottom edge */
   border-radius: 20px; overflow: hidden; position: relative;   /* the card is as tall as its text (it was a fixed square, which clipped at the floor size) */
   background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 1px solid color-mix(in srgb, var(--green) 18%, transparent);
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
@@ -3175,15 +3176,18 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 }
 .comm-card-banner::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, color-mix(in srgb, var(--ink) calc(0.05 * 100%), transparent), color-mix(in srgb, var(--ink-2) calc(0.85 * 100%), transparent)); }
 .comm-card-banner-none, .comm-hero-banner:not(.has-img) { background: radial-gradient(120% 120% at 30% 20%, color-mix(in srgb, var(--green) 28%, transparent), var(--ink-3) 70%); }
-.comm-card-body { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; padding: 0 0.9rem 0.85rem; margin-top: -22px; position: relative; z-index: 1; }
-.comm-card-head { display: flex; align-items: flex-end; gap: 0.55rem; flex-wrap: wrap; }   /* the LIVE pill drops under the name when the card is narrow */
+.comm-card-body { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; padding: 0 0.9rem 0.85rem; margin-top: calc(-1 * var(--comm-lift)); position: relative; z-index: 1; }
+/* The logo straddles the banner's edge; the symbol and name sit beside it, starting BELOW that edge. They used to be
+   bottom-aligned with the 46px logo, and at the larger text sizes the two lines are taller than it, so "$SEND" rode
+   up into the banner (22px at desktop width, 17px on every card on a phone). A long name wraps in its own column. */
+.comm-card-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; column-gap: 0.55rem; }
 .comm-card-logo {
   width: 46px; height: 46px; border-radius: 13px; object-fit: cover; flex-shrink: 0;
   border: 2.5px solid var(--ink-2); background: var(--ink-4); box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
 .comm-card-logo-none { display: grid; place-items: center; font-size: max(var(--text-floor), 1.5rem); }
-.comm-card-id { min-width: 0; padding-bottom: 2px; }
-.comm-card-sym { display: block; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.15rem); color: var(--green-bright); letter-spacing: 0.02em; line-height: 1.1; }
+.comm-card-id { min-width: 0; padding-top: calc(var(--comm-lift) + 0.3rem); }
+.comm-card-sym { display: block; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.15rem); color: var(--green-bright); letter-spacing: 0.02em; line-height: 1.1; overflow-wrap: anywhere; }
 .comm-card-name { display: block; font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .comm-card-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem 0.5rem; font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim); margin-top: auto; }
 .comm-card-metrics b { color: var(--text); font-weight: 800; }
