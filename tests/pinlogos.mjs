@@ -27,8 +27,14 @@ const pure = new Function(
   'const LOGO_PX = ' + (SRC.match(/const LOGO_PX = (\d+);/) || [])[1] + ';\n' +
   grab(/function logoVariant\(u\) \{[\s\S]*?\n\}/, 'logoVariant') + '\n' +
   grab(/function dexLogoFrom\(pairs, tok\) \{[\s\S]*?\n\}/, 'dexLogoFrom') + '\n' +
-  'return { logoVariant, dexLogoFrom };')();
-const { logoVariant, dexLogoFrom } = pure;
+  grab(/function safeHttpUrl\(u\) \{[\s\S]*?\n\}/, 'safeHttpUrl') + '\n' +
+  grab(/function brandLinks\(arr\) \{[\s\S]*?\n\}/, 'brandLinks') + '\n' +
+  grab(/const SOCIAL_TYPES = new Set\([^\n]*\n/, 'SOCIAL_TYPES') +
+  grab(/function brandSocials\(arr\) \{[\s\S]*?\n\}/, 'brandSocials') + '\n' +
+  grab(/function brandFromDex\(dex\) \{[\s\S]*?\n\}/, 'brandFromDex') + '\n' +
+  grab(/function dexBrandFrom\(pairs, tok\) \{[\s\S]*?\n\}/, 'dexBrandFrom') + '\n' +
+  'return { logoVariant, dexLogoFrom, dexBrandFrom };')();
+const { logoVariant, dexLogoFrom, dexBrandFrom } = pure;
 
 const CMS = 'https://cdn.dexscreener.com/cms/images/';
 check('a Dexscreener logo is asked for at 128 px, whatever size the answer named', logoVariant(CMS + 'sEfAWRHDNXBrtZLY?width=800&height=800&quality=95&format=auto') === CMS + 'sEfAWRHDNXBrtZLY?width=128&height=128', logoVariant(CMS + 'sEfAWRHDNXBrtZLY?width=800&height=800&quality=95&format=auto'));
@@ -45,6 +51,14 @@ const pairs = [
 ];
 check('the logo is read from the deepest pool of THAT token that carries one', dexLogoFrom(pairs, T) === CMS + 'deep?width=128&height=128', dexLogoFrom(pairs, T));
 check('  ...no pool with artwork means no logo (null), never another token\'s', dexLogoFrom([pairs[2], pairs[3]], T) === null && dexLogoFrom(null, T) === null);
+
+const withInfo = [
+  { baseToken: { address: T }, liquidity: { usd: 10 }, info: { imageUrl: CMS + 'small', header: CMS + 'smallhead' } },
+  { baseToken: { address: T }, liquidity: { usd: 5000 }, info: { imageUrl: CMS + 'big?width=800', header: CMS + 'bighead?width=1500', websites: [{ url: 'https://example.org', label: 'Site' }], socials: [{ type: 'twitter', url: 'https://x.com/example' }] } },
+];
+const bb = dexBrandFrom(withInfo, T);
+check('a community\'s branding is read from the deepest pool of its token that carries any, at full size', bb && bb.imageUrl === CMS + 'big?width=800' && bb.header === CMS + 'bighead?width=1500' && bb.websites.length === 1 && bb.socials.length === 1, JSON.stringify(bb));
+check('  ...an answer with no artwork gives nothing, so a community\'s stored banner is never blanked', dexBrandFrom([{ baseToken: { address: T }, liquidity: { usd: 9 }, info: { websites: [{ url: 'https://example.org' }] } }], T) === null && dexBrandFrom([], T) === null && dexBrandFrom(withInfo, O) === null);
 
 // ---- the server ----
 const get = async (p, headers = {}, method = 'GET', body) => { const r = await fetch(BASE + p, { method, headers, body }); const buf = Buffer.from(await r.arrayBuffer()); return { status: r.status, h: (k) => r.headers.get(k) || '', buf, json: () => JSON.parse(buf.toString('utf8')) }; };
@@ -138,10 +152,45 @@ try {
   const rC = await get('/api/logo/' + tokC);
   check('  ...and /api/logo no longer serves it', rC.status === 404, rC.status);
 
-  // 7. the rules that live in the code
+  // 7. communities: the same one logo per token, on the card, the page, and a pin of the same token
+  const mkComm = (tok, o) => Number(db.prepare('INSERT INTO communities (creator_id, token_addr, pair_addr, symbol, name, status, demo, official, created_at, went_live_at, brand) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+    .run(uid, tok, tok, o.symbol, o.name, 'live', o.demo ? 1 : 0, 0, Date.now(), Date.now(), JSON.stringify(o.brand || null)).lastInsertRowid);
+  made.comms = [];
+  const tokD = '0x' + randomBytes(20).toString('hex'), tokE = '0x' + randomBytes(20).toString('hex'); made.toks.push(tokD, tokE);
+  const cD = mkComm(tokD, { symbol: 'DDD', name: 'Token D', brand: { imageUrl: CMS + 'zzOldD' + tag + '?width=800&height=800', header: CMS + 'zzHeadD' + tag + '?width=1500&height=500' } });
+  const cE = mkComm(tokE, { symbol: 'EEE', name: 'Token E', brand: { imageUrl: CMS + 'zzOldE' + tag + '?width=800&height=800' } });
+  made.comms.push(cD, cE);
+  const eD = putLogo(tokD, PNG, CMS + 'ddd?width=128&height=128');
+  r = await get('/api/communities/' + cD);
+  const cd = r.status === 200 ? r.json().community : null;
+  check('a community\'s page shows its token\'s cached logo, versioned', cd && cd.image === '/api/logo/' + tokD + '?v=' + eD, r.status + ' ' + (cd && cd.image));
+  check('  ...and its banner still comes from its stored branding, through the proxy', cd && cd.banner === '/api/img?u=' + encodeURIComponent(CMS + 'zzHeadD' + tag + '?width=1500&height=500'), cd && cd.banner);
+  r = await get('/api/communities?status=live&sort=new');
+  const listD = r.status === 200 ? (r.json().communities || []).find((x) => x.id === cD) : null;
+  check('  ...and so does its card in the list', listD && listD.image === '/api/logo/' + tokD + '?v=' + eD, listD && listD.image);
+  r = await get('/api/communities/' + cE);
+  const ce = r.status === 200 ? r.json().community : null;
+  check('a community with nothing cached yet shows its stored logo at 128 px, through /api/img', ce && ce.image === '/api/img?u=' + encodeURIComponent(CMS + 'zzOldE' + tag + '?width=128&height=128'), ce && ce.image);
+  const demo = db.prepare('SELECT id FROM communities WHERE demo = 1 LIMIT 1').get();
+  if (demo) {
+    r = await get('/api/communities/' + demo.id);
+    const cs = r.status === 200 ? r.json().community : null;
+    check('the sandbox never shows a token logo (it has no token)', cs && !/^\/api\/logo\//.test(cs.image || ''), cs && cs.image);
+  }
+  // a pin of a community's token: unpinning it keeps the logo, because the community still tracks the token
+  pin.run(uid, tokD, null, 'DDD', 'Token D', null, Date.now());
+  const delD = await get('/api/pins', { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'sid=' + raw + '; jsi_age=18' }, 'DELETE', JSON.stringify({ token: tokD }));
+  const rowD = db.prepare('SELECT etag FROM token_logos WHERE token_addr = ?').get(tokD);
+  check('unpinning a token that has a community keeps its logo', delD.status === 200 && rowD && rowD.etag === eD && existsSync(path.join(LOGO_DIR, tokD + '-' + eD + '.png')), delD.status + ' ' + JSON.stringify(rowD));
+
+  // 8. the rules that live in the code
   check('the pins API reads the shared logo, not the address the pin stored', /const logo = logoUrlFor\(r\.token_addr, r\.brand\);/.test(SRC));
   check('the squad\'s conviction view reads the same logo', /if \(!t\.image\) t\.image = logoUrlFor\(r\.token_addr, r\.brand\);/.test(SRC));
-  check('the market batch the pins already fetch keeps each convicted token\'s logo in step', /if \(Array\.isArray\(arr\)\) for \(const k of batch\) \{ try \{ noteDexLogo\(k, dexLogoFrom\(arr, k\)\); \} catch \{\} \}/.test(SRC));
+  check('the market batch the pins already fetch keeps each tracked token\'s logo in step', /if \(Array\.isArray\(arr\)\) for \(const k of batch\) noteDexAnswer\(k, arr\);\n/.test(SRC));
+  check('  ...and so does the communities\' market refresh', /if \(Array\.isArray\(arr\)\) for \(const k of batch\) noteDexAnswer\(k, arr\);   \/\/ the same answer keeps each token's logo and banner current/.test(SRC));
+  check('every place a community logo is drawn reads the shared logo: cards and page, post badges, the weekly board', (SRC.match(/image: communityLogo\(c\)/g) || []).length === 3);
+  check('a community\'s stored branding keeps its Dextools status when Dexscreener updates it', /JSON\.stringify\(\{ \.\.\.b, dextools: cur\.dextools \|\| null \}\)/.test(SRC));
+  check('a token with a community (not the sandbox) is tracked, and so never loses its logo in the sweep', /FROM communities WHERE token_addr = \? COLLATE NOCASE AND demo = 0 LIMIT 1/.test(SRC) && /AND NOT EXISTS \(SELECT 1 FROM communities c WHERE c\.token_addr = l\.token_addr COLLATE NOCASE AND c\.demo = 0\)/.test(SRC));
   check('an answer with no logo never blanks one we hold (latest_url is only ever replaced, never nulled)', /latest_url = COALESCE\(excluded\.latest_url, token_logos\.latest_url\)/.test(SRC) && /else if \(!url && !row\.file\) logoFallback\(tok\);/.test(SRC));
   check('the fallback is the community\'s branding only, never a pin\'s stored address', /function logoFallback\(tok\) \{\n  let u = null;\n  try \{ const c = db\.prepare\('SELECT brand FROM communities/.test(SRC) && !/function logoFallback[\s\S]{0,600}pinned_tokens/.test(SRC));
   check('a new pin reads Dexscreener live, never the lookup\'s cached brand', /try \{ logoOnPin\(token\); \} catch \{\}/.test(SRC) && /jgetR\('https:\/\/api\.dexscreener\.com\/tokens\/v1\/robinhood\/' \+ tok\)/.test(SRC));
@@ -152,6 +201,7 @@ try {
 } catch (e) {
   check('the suite ran to the end', false, e && e.stack);
 } finally {
+  for (const id of made.comms || []) { try { db.prepare('DELETE FROM communities WHERE id = ?').run(id); } catch {} }
   for (const t of made.toks) { try { db.prepare('DELETE FROM pinned_tokens WHERE token_addr = ?').run(t); db.prepare('DELETE FROM token_logos WHERE token_addr = ?').run(t); } catch {} }
   for (const h of made.sessions || []) { try { db.prepare('DELETE FROM sessions WHERE token = ?').run(h); } catch {} }
   for (const id of made.users) { try { db.prepare('DELETE FROM pinned_tokens WHERE user_id = ?').run(id); db.prepare('DELETE FROM users WHERE id = ?').run(id); } catch {} }

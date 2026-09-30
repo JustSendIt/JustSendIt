@@ -398,6 +398,7 @@ CREATE TABLE IF NOT EXISTS communities (
 );
 CREATE INDEX IF NOT EXISTS idx_comm_status_act ON communities(status, activity DESC);
 CREATE INDEX IF NOT EXISTS idx_comm_creator ON communities(creator_id);
+CREATE INDEX IF NOT EXISTS idx_comm_token ON communities(token_addr COLLATE NOCASE);   -- the logo cache asks "does this token have a community?"
 CREATE TABLE IF NOT EXISTS community_members (
   community_id  INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
   user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -3445,7 +3446,7 @@ async function marketFor(tokens) {
       if (!byTok[base] || liq > byTok[base].liq) byTok[base] = { price: pr.priceUsd != null ? Number(pr.priceUsd) : null, mc: pr.marketCap != null ? Number(pr.marketCap) : (pr.fdv != null ? Number(pr.fdv) : null), pc24: pr.priceChange && pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null, liq };
     }
     // the same answer carries each token's current branding: a convicted token's logo is kept in step with it
-    if (Array.isArray(arr)) for (const k of batch) { try { noteDexLogo(k, dexLogoFrom(arr, k)); } catch {} }
+    if (Array.isArray(arr)) for (const k of batch) noteDexAnswer(k, arr);
     for (const k of batch) if (ownPoolOf(k) && !(byTok[k] && byTok[k].price > 0)) { const r = await ownPoolRow(k); if (r) byTok[k] = r; }   // $SEND / $GWC from their pools
     for (const k of batch) { const m = byTok[k]; if (m) { marketCache.set(k, { m, at: now() }); out[k] = m; } } // don't cache a miss (transient throttle)
   }
@@ -3546,8 +3547,7 @@ function postCommunities(ids) {
   if (!uniq.length) return out;
   const rows = db.prepare(`SELECT id, symbol, name, brand, status, demo, token_addr FROM communities WHERE id IN (${uniq.map(() => '?').join(',')})`).all(...uniq);
   for (const c of rows) {
-    const b = commBrand(c);
-    out[c.id] = { id: c.id, symbol: c.symbol, name: c.name, image: b.imageUrl || null, status: c.status, demo: !!c.demo, token: c.token_addr };
+    out[c.id] = { id: c.id, symbol: c.symbol, name: c.name, image: communityLogo(c), status: c.status, demo: !!c.demo, token: c.token_addr };
   }
   return out;
 }
@@ -3609,7 +3609,7 @@ function communityCardView(c, me) {
   const lg = c.demo ? null : holderLedger(c.token_addr);   // the chain's own count the moment a ledger exists — not the grid cache's last explorer read
   return {
     id: c.id, token: c.token_addr, pair: c.pair_addr, symbol: c.symbol, name: c.name,
-    image: b.imageUrl || null, banner: b.header || null,
+    image: communityLogo(c), banner: b.header || null,
     status: c.status, memberCount: c.member_count, qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count),
     // the sandbox has no token: its market fields are null and the company's stock quote rides in `stock`
     holders: c.demo ? null : (lg && lg.count != null ? lg.count : c.c_holders), mcap: c.demo ? null : c.c_mc, price: c.demo ? null : c.c_price, priceChange: c.demo ? null : c.c_pc24, liq: c.demo ? null : c.c_liq,
@@ -4160,6 +4160,7 @@ async function refreshCommunities() {
     const batch = tokens.slice(i, i + 30);
     const arr = await jget('https://api.dexscreener.com/tokens/v1/robinhood/' + batch.join(','));
     if (arr == null) continue;
+    if (Array.isArray(arr)) for (const k of batch) noteDexAnswer(k, arr);   // the same answer keeps each token's logo and banner current
     for (const pr of arr) {
       const base = pr.baseToken && pr.baseToken.address && pr.baseToken.address.toLowerCase();
       if (!base) continue;
@@ -5591,10 +5592,13 @@ function sanitizeSnapshot(snap) {
    for good, and a token with no artwork yet when it was pinned never got one. (On 2026-09-30 both $SEND pins
    showed a logo $SEND had since replaced, and the $GWC pin showed none: Dexscreener no longer lists $GWC.)
 
-   Now there is ONE logo per convicted token (token_logos), shared by every pin of it:
-     · every Dexscreener answer the site already gets about a convicted token is read for its current logo: the
-       pins' market batch (marketFor), a new pin's lookup, and a background re-check (logoSweep) for tokens nobody
-       has looked at for LOGO_RECHECK_MS;
+   Now there is ONE logo per tracked token (token_logos): every token someone holds a conviction on, and every
+   token community's token (not the sandbox, which has none). Every pin of it, its community's card and page,
+   its post badges and the weekly board all show that one logo:
+     · every live Dexscreener answer the site already gets about a tracked token is read for its current logo:
+       the pins' market batch (marketFor), the communities' market refresh, a new pin's own read, and a
+       background re-check (logoSweep) for tokens nobody has looked at for LOGO_RECHECK_MS. The same answer
+       keeps a community's stored branding (banner, links) current, and never blanks it;
      · an address not seen before is downloaded once, checked to be a real raster image, and written to
        DATA_DIR/logos. Pins then point at /api/logo/<token>?v=<etag>: a browser keeps that for good, and the
        version changes the moment the artwork does;
@@ -5605,7 +5609,7 @@ function sanitizeSnapshot(snap) {
        logo every other pinner sees. It only ever shows on its own pin, until the shared logo lands;
      · the shared logo moves only on a LIVE Dexscreener answer (the pins' market batch, a new pin's own read, the
        sweep), never on lookupTokenPair's cached pair, which can be days old and would roll the artwork back;
-     · a token nobody holds a conviction on any more loses its cached logo at once (unpin) or in the sweep.
+     · a token nobody tracks any more (no pin, no community) loses its cached logo at once (unpin) or in the sweep.
    The bytes are ours, so a logo survives a restart and a token dropping off Dexscreener, and the visitor's
    browser never talks to Dexscreener (the same rule as /api/img). Only Dexscreener's CDN is ever fetched
    (dexCdnImg), with redirects refused, the same size ceiling as the brand proxy, and the type read from the bytes. */
@@ -5641,7 +5645,11 @@ function dexLogoFrom(pairs, tok) {
 }
 const LOGO_TOK = /^0x[0-9a-f]{40}$/;
 const logoRow = (tok) => { try { return db.prepare('SELECT * FROM token_logos WHERE token_addr = ?').get(tok) || null; } catch { return null; } };
-const isConvicted = (tok) => { try { return !!db.prepare('SELECT 1 FROM pinned_tokens WHERE token_addr = ? LIMIT 1').get(tok); } catch { return false; } };
+// a token whose logo is kept: someone holds a conviction on it, or it has a real token community (never the sandbox)
+const isTracked = (tok) => {
+  try { return !!(db.prepare('SELECT 1 FROM pinned_tokens WHERE token_addr = ? LIMIT 1').get(tok) || db.prepare('SELECT 1 FROM communities WHERE token_addr = ? COLLATE NOCASE AND demo = 0 LIMIT 1').get(tok)); }
+  catch { return false; }
+};
 function logoMemDrop(tok) { const h = logoMem.get(tok); if (h) { logoMemBytes -= h.buf.length; logoMem.delete(tok); } }
 function logoUnlink(file) { if (file && /^[0-9a-fx]+-[0-9a-f]{16}\.(?:png|jpeg|gif|webp)$/.test(file)) fs.promises.unlink(path.join(LOGO_DIR, file)).catch(() => {}); }
 // Download `url` as `tok`'s logo. Resolves true when the logo on disk is now that address's picture.
@@ -5673,7 +5681,7 @@ function fetchLogo(tok, url, source) {
       await fs.promises.rename(tmp, path.join(LOGO_DIR, file));
       const old = logoRow(tok);
       const drop = () => { if (!old || old.file !== file) logoUnlink(file); return false; };
-      if (!isConvicted(tok)) return drop();                                           // unpinned while it downloaded
+      if (!isTracked(tok)) return drop();                                             // untracked while it downloaded
       // two downloads can race: the site's own copy never replaces Dexscreener's, and an older Dexscreener address
       // never replaces the newest one it gave
       if (source !== 'dexscreener' && old && old.file && old.source === 'dexscreener') return drop();
@@ -5702,10 +5710,10 @@ function logoFallback(tok) {
   try { const c = db.prepare('SELECT brand FROM communities WHERE token_addr = ? COLLATE NOCASE ORDER BY official DESC, id LIMIT 1').get(tok); u = logoVariant(commBrand(c || {}).imageUrl); } catch {}
   if (u) fetchLogo(tok, u, 'community').catch(() => {});
 }
-// a token nobody holds a conviction on any more: its row and its file go now (an unpin), not at the next sweep
-function dropLogoIfUnconvicted(tok) {
+// a token nobody tracks any more (its last pin went, and it has no community): its row and its file go now, not at the next sweep
+function dropLogoIfUntracked(tok) {
   tok = String(tok || '').toLowerCase();
-  if (!LOGO_TOK.test(tok) || isConvicted(tok)) return;
+  if (!LOGO_TOK.test(tok) || isTracked(tok)) return;
   const r = logoRow(tok);
   if (!r) return;
   db.prepare('DELETE FROM token_logos WHERE token_addr = ?').run(tok);
@@ -5718,7 +5726,7 @@ function logoOnPin(tok) {
   if (row && now() - row.seen_at < 10 * 60 * 1000) { ensureLogo(tok); return; }
   (async () => {
     const r = await jgetR('https://api.dexscreener.com/tokens/v1/robinhood/' + tok);
-    if (r.ok && Array.isArray(r.data)) noteDexLogo(tok, dexLogoFrom(r.data, tok));
+    if (r.ok && Array.isArray(r.data)) noteDexAnswer(tok, r.data);
     else ensureLogo(tok);                                                // could not ask: whatever we already know, or the community's
   })().catch(() => {});
 }
@@ -5727,7 +5735,7 @@ function logoOnPin(tok) {
    hold nothing at all. */
 function noteDexLogo(tok, url) {
   tok = String(tok || '').toLowerCase();
-  if (!LOGO_TOK.test(tok) || !isConvicted(tok)) return;
+  if (!LOGO_TOK.test(tok) || !isTracked(tok)) return;
   try {
     db.prepare(`INSERT INTO token_logos (token_addr, latest_url, seen_at) VALUES (?,?,?)
       ON CONFLICT(token_addr) DO UPDATE SET seen_at = excluded.seen_at, latest_url = COALESCE(excluded.latest_url, token_logos.latest_url)`).run(tok, url || null, now());
@@ -5736,6 +5744,35 @@ function noteDexLogo(tok, url) {
   if (!row) return;
   if (url && (!row.file || row.src_url !== url)) fetchLogo(tok, url, 'dexscreener');   // new artwork, or never downloaded
   else if (!url && !row.file) logoFallback(tok);
+}
+// the branding a live answer gives `tok` (from its deepest pool that carries any), or null when it carries no artwork
+function dexBrandFrom(pairs, tok) {
+  let best = null, bestLiq = -1;
+  for (const pr of Array.isArray(pairs) ? pairs : []) {
+    if (!pr || !pr.info || String((pr.baseToken && pr.baseToken.address) || '').toLowerCase() !== tok) continue;
+    const liq = (pr.liquidity && Number(pr.liquidity.usd)) || 0;
+    if (liq > bestLiq) { best = pr; bestLiq = liq; }
+  }
+  if (!best) return null;
+  const b = brandFromDex(best);
+  return (b.imageUrl || b.header) ? b : null;                              // an answer without artwork never replaces artwork
+}
+// a token community's stored branding (the banner, the links, the full-size logo) follows the same live answer
+function noteDexCommunityBrand(tok, pairs) {
+  const b = dexBrandFrom(pairs, tok);
+  if (!b) return;
+  for (const c of db.prepare('SELECT id, brand FROM communities WHERE token_addr = ? COLLATE NOCASE AND demo = 0').all(tok)) {
+    const cur = commBrand(c);
+    const next = JSON.stringify({ ...b, dextools: cur.dextools || null });   // Dextools status is read elsewhere: keep it
+    if (next !== c.brand) db.prepare('UPDATE communities SET brand = ? WHERE id = ?').run(next, c.id);
+  }
+}
+// every live Dexscreener answer about a token goes through here: its logo, and its community's branding
+function noteDexAnswer(tok, pairs) {
+  tok = String(tok || '').toLowerCase();
+  if (!LOGO_TOK.test(tok)) return;
+  try { noteDexLogo(tok, dexLogoFrom(pairs, tok)); } catch {}
+  try { noteDexCommunityBrand(tok, pairs); } catch {}
 }
 // a pin shown with no logo on disk yet: start the download (or the fallback) now instead of waiting for the next answer
 function ensureLogo(tok) {
@@ -5754,6 +5791,13 @@ function logoUrlFor(tok, pinBrandJson) {
   let b = null; try { b = JSON.parse(pinBrandJson || 'null'); } catch {}
   return (row && row.latest_url) || logoVariant(b && b.imageUrl) || null;
 }
+// what a community's logo is: the token's one current logo (the sandbox has no token, so it shows its own mark)
+function communityLogo(c) {
+  if (!c || c.demo || !c.token_addr) return (c && commBrand(c).imageUrl) || null;
+  const u = logoUrlFor(c.token_addr, c.brand);
+  if (!/^\/api\/logo\//.test(u || '')) { try { ensureLogo(String(c.token_addr).toLowerCase()); } catch {} }
+  return u;
+}
 let logoSweeping = false;
 async function logoSweep() {
   if (logoSweeping) return;
@@ -5761,7 +5805,8 @@ async function logoSweep() {
   try {
     // a token nobody holds a conviction on any more: its row and its file go (all of them, 200 at a time)
     for (let pass = 0; pass < 50; pass++) {
-      const orphans = db.prepare('SELECT token_addr, file FROM token_logos l WHERE NOT EXISTS (SELECT 1 FROM pinned_tokens p WHERE p.token_addr = l.token_addr) LIMIT 200').all();
+      const orphans = db.prepare(`SELECT token_addr, file FROM token_logos l WHERE NOT EXISTS (SELECT 1 FROM pinned_tokens p WHERE p.token_addr = l.token_addr)
+                                  AND NOT EXISTS (SELECT 1 FROM communities c WHERE c.token_addr = l.token_addr COLLATE NOCASE AND c.demo = 0) LIMIT 200`).all();
       for (const r of orphans) { db.prepare('DELETE FROM token_logos WHERE token_addr = ?').run(r.token_addr); logoUnlink(r.file); logoMemDrop(r.token_addr); }
       if (orphans.length < 200) break;
     }
@@ -5774,14 +5819,15 @@ async function logoSweep() {
         if (st && st.isFile() && now() - st.mtimeMs > 10 * 60 * 1000) fs.promises.unlink(path.join(LOGO_DIR, f)).catch(() => {});   // never one still being written
       }
     } catch {}
-    // convicted tokens Dexscreener has not been asked about lately, 30 to a request (its batch limit), oldest first
-    const stale = db.prepare(`SELECT p.token_addr t, MIN(COALESCE(l.seen_at, 0)) s FROM pinned_tokens p LEFT JOIN token_logos l ON l.token_addr = p.token_addr
-                              GROUP BY p.token_addr HAVING s < ? ORDER BY s LIMIT 90`).all(now() - LOGO_RECHECK_MS).map((r) => r.t).filter((t) => LOGO_TOK.test(t));
+    // tracked tokens Dexscreener has not been asked about lately, 30 to a request (its batch limit), oldest first
+    const stale = db.prepare(`SELECT x.t t, COALESCE(l.seen_at, 0) s
+                              FROM (SELECT token_addr t FROM pinned_tokens UNION SELECT lower(token_addr) FROM communities WHERE demo = 0 AND token_addr IS NOT NULL) x
+                              LEFT JOIN token_logos l ON l.token_addr = x.t WHERE COALESCE(l.seen_at, 0) < ? ORDER BY s LIMIT 90`).all(now() - LOGO_RECHECK_MS).map((r) => r.t).filter((t) => LOGO_TOK.test(t));
     for (let i = 0; i < stale.length; i += 30) {
       const batch = stale.slice(i, i + 30);
       const r = await jgetR('https://api.dexscreener.com/tokens/v1/robinhood/' + batch.join(','));
       if (!r.ok || !Array.isArray(r.data)) break;                            // could not ask: nothing is concluded, try next time
-      for (const t of batch) noteDexLogo(t, dexLogoFrom(r.data, t));
+      for (const t of batch) noteDexAnswer(t, r.data);
     }
   } catch (e) { console.warn('logo sweep:', e && e.message); }
   finally { logoSweeping = false; }
@@ -9779,7 +9825,7 @@ function competitionsPublic() {
     biggestSender: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, top: rows.filter(r => r.rank <= WEEK_WINNERS).slice(0, WEEK_WINNERS).map(view), entrants: rows.length, // exactly what the payout pays: ten places, ties to the older account
       last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES, lastsDays: 7, byRank: true, tiesTo: 'joined first', excludedFromStandings: true, rankedBy: 'base' } },
     sendCalls: { window: 'week', top: calls.slice(0, 10), entrants: calls.length, cap: CALL_X_CAP, minLiq: MIN_CALL_LIQ, all: calls },
-    communities: { week: w, board: comms.map((c, i) => { const b = commBrand(c); return { id: c.id, symbol: c.symbol, name: c.name, image: b.imageUrl || null, rank: i + 1, xpWeek: c.xp_week, memberCount: c.member_count, level: levelForXp(c.xp), official: !!c.official, demo: !!c.demo }; }) },
+    communities: { week: w, board: comms.map((c, i) => { return { id: c.id, symbol: c.symbol, name: c.name, image: communityLogo(c), rank: i + 1, xpWeek: c.xp_week, memberCount: c.member_count, level: levelForXp(c.xp), official: !!c.official, demo: !!c.demo }; }) },
     og: { ...og, tierNowName: OG_TIER_NAME[og.tierNow] || '' },
     rocketRun: { day, resetsAt: nextUtcMidnight(t), flightsToday: rr.flights || 0, cashedToday: rr.cashed || 0, bestXToday: rr.bestX == null ? null : Math.round(rr.bestX * 100) / 100, bestBoostToday: rr.bestBoost == null ? null : Math.round(rr.bestBoost * 100) / 100,
       boostedNow: boosted, growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, maxBoost: ARCADE_BOOST_MAX },
@@ -14405,7 +14451,7 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         const b = await readBody(req);
         db.prepare('DELETE FROM pinned_tokens WHERE user_id=? AND token_addr=?').run(me.id, String(b.token || '').toLowerCase());
-        try { dropLogoIfUnconvicted(b.token); } catch {}
+        try { dropLogoIfUntracked(b.token); } catch {}
         return send(res, 200, { ok: true, pinned: false });
       }
       if (p === '/api/pins/holding' && req.method === 'GET') { // Convicted-In hover: the wall owner's on-chain holding + how long (scoped to tokens they publicly convicted)
