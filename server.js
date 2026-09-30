@@ -398,7 +398,7 @@ CREATE TABLE IF NOT EXISTS communities (
 );
 CREATE INDEX IF NOT EXISTS idx_comm_status_act ON communities(status, activity DESC);
 CREATE INDEX IF NOT EXISTS idx_comm_creator ON communities(creator_id);
-CREATE INDEX IF NOT EXISTS idx_comm_token ON communities(token_addr COLLATE NOCASE);   -- the logo cache asks "does this token have a community?"
+-- (no index of its own for "does this token have a community?": token_addr's UNIQUE COLLATE NOCASE constraint already indexes it, and the logo cache's lookups use that)
 CREATE TABLE IF NOT EXISTS community_members (
   community_id  INTEGER NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
   user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -983,6 +983,8 @@ CREATE INDEX IF NOT EXISTS idx_pe_created ON points_events(created_at);         
 `);
 // idx_hops_call duplicated call_hops' own PRIMARY KEY index — pure write overhead, so drop the one already on disk
 try { db.exec('DROP INDEX IF EXISTS idx_hops_call'); } catch {}
+// idx_comm_token duplicated communities.token_addr's own UNIQUE NOCASE index and served no read: drop it wherever it was made
+try { db.exec('DROP INDEX IF EXISTS idx_comm_token'); } catch {}
 db.exec('PRAGMA optimize;'); // let SQLite build/refresh stat samples for the query planner on boot
 // One-time repair: OG badges left on accounts with NO linked wallet (the badge now follows the wallet — see /api/wallet/disconnect).
 // Not a revoke: relinking the early-buyer wallet re-verifies on-chain and re-grants.
@@ -3760,7 +3762,7 @@ function communityDetailView(c, me, ip) {
   const creator = db.prepare('SELECT username FROM users WHERE id=?').get(c.creator_id);
   let mine = null;
   if (me) { const m = db.prepare('SELECT * FROM community_members WHERE community_id=? AND user_id=?').get(c.id, me.id); if (m) { const cvl = commLevelInfo(m.conviction_xp); mine = { joined: true, qualified: !!m.qualified, blockReason: !m.qualified ? (m.block_reason || null) : null, /* the anti-sybil block decided at join; never re-tested against the network the page is read from, which would let a member probe connections */ convictionXp: m.conviction_xp, convictionLevel: cvl.level, convictionTitle: convictionTitleFor(cvl.level), convictionInto: cvl.intoLevel, convictionSpan: cvl.spanLevel, isCreator: me.id === c.creator_id }; } }
-  return { ...card, socials: (commBrand(c).socials || []), websites: (commBrand(c).websites || []), communityLevel: commLevelInfo(c.xp), goLive: { qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count) }, creator: creator ? creator.username : null, mine };
+  return { ...card, image: communityHeroLogo(c), socials: (commBrand(c).socials || []), websites: (commBrand(c).websites || []), communityLevel: commLevelInfo(c.xp), goLive: { qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count) }, creator: creator ? creator.username : null, mine };
 }
 /* ===== Send Squads: rules, gate, views, points ==================================================== */
 const SQUAD_NAME_RE = /^[\w .\-'$&!?]{3,40}$/;
@@ -5797,6 +5799,16 @@ function communityLogo(c) {
   const u = logoUrlFor(c.token_addr, c.brand);
   if (!/^\/api\/logo\//.test(u || '')) { try { ensureLogo(String(c.token_addr).toLowerCase()); } catch {} }
   return u;
+}
+/* The community page's hero draws the logo at 86 px (a 78 px picture, up to ~234 device pixels on a phone), which the
+   128 px cached copy would stretch. It gets the same current artwork at 256 px, through /api/img (send() rewrites the
+   address); cards, badges and the board keep the cached copy. With no Dexscreener address to size, the cached copy. */
+function communityHeroLogo(c) {
+  const small = communityLogo(c);
+  if (!c || c.demo || !c.token_addr) return small;
+  const r = logoRow(String(c.token_addr).toLowerCase());
+  const m = r && /^(https:\/\/cdn\.dexscreener\.com\/cms\/images\/[A-Za-z0-9_-]+)\?/.exec(r.latest_url || r.src_url || '');
+  return m ? m[1] + '?width=256&height=256' : small;
 }
 let logoSweeping = false;
 async function logoSweep() {

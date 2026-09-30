@@ -163,11 +163,11 @@ try {
   const eD = putLogo(tokD, PNG, CMS + 'ddd?width=128&height=128');
   r = await get('/api/communities/' + cD);
   const cd = r.status === 200 ? r.json().community : null;
-  check('a community\'s page shows its token\'s cached logo, versioned', cd && cd.image === '/api/logo/' + tokD + '?v=' + eD, r.status + ' ' + (cd && cd.image));
+  check('a community\'s page hero shows the same current artwork at 256 px (it is drawn at 86 px), through /api/img', cd && cd.image === '/api/img?u=' + encodeURIComponent(CMS + 'ddd?width=256&height=256'), r.status + ' ' + (cd && cd.image));
   check('  ...and its banner still comes from its stored branding, through the proxy', cd && cd.banner === '/api/img?u=' + encodeURIComponent(CMS + 'zzHeadD' + tag + '?width=1500&height=500'), cd && cd.banner);
   r = await get('/api/communities?status=live&sort=new');
   const listD = r.status === 200 ? (r.json().communities || []).find((x) => x.id === cD) : null;
-  check('  ...and so does its card in the list', listD && listD.image === '/api/logo/' + tokD + '?v=' + eD, listD && listD.image);
+  check('  ...while its card in the list shows the cached copy, versioned', listD && listD.image === '/api/logo/' + tokD + '?v=' + eD, listD && listD.image);
   r = await get('/api/communities/' + cE);
   const ce = r.status === 200 ? r.json().community : null;
   check('a community with nothing cached yet shows its stored logo at 128 px, through /api/img', ce && ce.image === '/api/img?u=' + encodeURIComponent(CMS + 'zzOldE' + tag + '?width=128&height=128'), ce && ce.image);
@@ -190,6 +190,7 @@ try {
   check('  ...and so does the communities\' market refresh', /if \(Array\.isArray\(arr\)\) for \(const k of batch\) noteDexAnswer\(k, arr\);   \/\/ the same answer keeps each token's logo and banner current/.test(SRC));
   check('every place a community logo is drawn reads the shared logo: cards and page, post badges, the weekly board', (SRC.match(/image: communityLogo\(c\)/g) || []).length === 3);
   check('a community\'s stored branding keeps its Dextools status when Dexscreener updates it', /JSON\.stringify\(\{ \.\.\.b, dextools: cur\.dextools \|\| null \}\)/.test(SRC));
+  check('no duplicate index on a community\'s token: its UNIQUE NOCASE constraint already indexes it, and a stray copy is dropped', !/CREATE INDEX IF NOT EXISTS idx_comm_token/.test(SRC) && /DROP INDEX IF EXISTS idx_comm_token/.test(SRC));
   check('a token with a community (not the sandbox) is tracked, and so never loses its logo in the sweep', /FROM communities WHERE token_addr = \? COLLATE NOCASE AND demo = 0 LIMIT 1/.test(SRC) && /AND NOT EXISTS \(SELECT 1 FROM communities c WHERE c\.token_addr = l\.token_addr COLLATE NOCASE AND c\.demo = 0\)/.test(SRC));
   check('an answer with no logo never blanks one we hold (latest_url is only ever replaced, never nulled)', /latest_url = COALESCE\(excluded\.latest_url, token_logos\.latest_url\)/.test(SRC) && /else if \(!url && !row\.file\) logoFallback\(tok\);/.test(SRC));
   check('the fallback is the community\'s branding only, never a pin\'s stored address', /function logoFallback\(tok\) \{\n  let u = null;\n  try \{ const c = db\.prepare\('SELECT brand FROM communities/.test(SRC) && !/function logoFallback[\s\S]{0,600}pinned_tokens/.test(SRC));
