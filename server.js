@@ -98,6 +98,23 @@ function decField(s) {
     return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
   } catch { return null; }
 }
+/* The same cipher over BYTES, for the one thing too big for a text column: a saved wallet history (brotli'd JSON,
+   megabytes). Layout: 1 version byte, 12-byte iv, 16-byte tag, ciphertext. decBlob answers null for anything it
+   cannot open — a row written under another key is unreadable, never half-read. */
+function encBlob(buf) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', DATA_KEY, iv);
+  const ct = Buffer.concat([c.update(buf), c.final()]);
+  return Buffer.concat([Buffer.from([1]), iv, c.getAuthTag(), ct]);
+}
+function decBlob(buf) {
+  if (!buf || buf.length < 29) return null;
+  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);   // node:sqlite hands a BLOB back as a Uint8Array
+  if (b[0] !== 1) return null;
+  try {
+    const d = crypto.createDecipheriv('aes-256-gcm', DATA_KEY, b.subarray(1, 13)); d.setAuthTag(b.subarray(13, 29));
+    return Buffer.concat([d.update(b.subarray(29)), d.final()]);
+  } catch { return null; }
+}
 const bidx = (s) => crypto.createHmac('sha256', IDX_KEY).update(String(s == null ? '' : s)).digest('hex'); // equality lookups only
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');                     // session cookie → stored form
 const safeJson = (s) => { try { const v = JSON.parse(s || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
@@ -1072,6 +1089,19 @@ CREATE TABLE IF NOT EXISTS tracker_cache (
   addr_idx   TEXT NOT NULL,                 -- blind index of the tracked address
   report     TEXT NOT NULL,                 -- encrypted JSON report (what the browser computed from chain data)
   updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, addr_idx)
+);
+/* The chain's answer for a tracked wallet, kept so the next read starts where this one stopped (readWalletHistory
+   reads only the blocks after read_to) and a stalled first read resumes from its transfers (partial = 1). hist is
+   encBlob(brotli(JSON)) and sits LAST so a listing never reads it. A row lives only while the wallet is tracked
+   or linked (untrack, unlink, account deletion and the boot sweep remove it). */
+CREATE TABLE IF NOT EXISTS wallet_hist (
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  addr_idx   TEXT NOT NULL,                 -- blind index of the wallet address
+  read_to    INTEGER NOT NULL,              -- the block the history is complete to
+  updated_at INTEGER NOT NULL,
+  partial    INTEGER NOT NULL DEFAULT 0,    -- 1: a checkpoint after the transfer walk, not a finished history
+  hist       BLOB NOT NULL,
   PRIMARY KEY (user_id, addr_idx)
 );
 CREATE INDEX IF NOT EXISTS idx_mutes_muted ON mutes(muted_id);
@@ -2331,6 +2361,17 @@ const TRACKER_HISTORY_MAX = 20000;   // token transfers one report reads before 
 const TRACKER_TX_MAX = 5000;         // the wallet's own transactions whose receipts are read (the newest); older trades are listed, unvalued
 const WALLET_HIST_TTL = 3 * 60 * 1000, WALLET_HIST_PARALLEL = 2, WALLET_JOB_ERR_KEEP = 60 * 1000, WALLET_TOO_BIG_KEEP = 30 * 60 * 1000;
 const WALLET_JOBS_MAX = 20, WALLET_JOBS_PER_MEMBER = 1, WALLET_JOB_IDLE_MS = 60 * 1000, WALLET_JOB_STALL_MS = 5 * 60 * 1000, WALLET_JOB_DEADLINE_MS = 2 * 60 * 60 * 1000;
+/* A read that has made progress is finished whether or not anyone is still asking. Measured 2026-09-30: the public
+   node answers 429 to every batch of log windows during a whole-wallet walk, so the walk runs at ~1.7 windows a
+   second and a from-scratch first read is about an hour (≈5,100 windows at 30,000 blocks) — longer than a page stays
+   open. Such a read ends only when it stalls (WALLET_JOB_STALL_MS without movement), hits WALLET_JOB_DEADLINE_MS, or
+   finishes; the result is saved, and the member's bell rings when nobody asked in the last WALLET_NOTIFY_QUIET_MS.
+   The line is bounded; a job in it costs the chain nothing. */
+const WALLET_QUEUE_MAX = 6, WALLET_NOTIFY_QUIET_MS = 30 * 1000, WALLET_STAGES = 5;
+/* The saved history: a later read starts WALLET_REORG_OVERLAP blocks before the saved head (a reorg on this chain is
+   shallower than that); a checkpoint older than WALLET_RESUME_MAX_BLOCKS (≈5.5 hours) is not resumed; a history whose
+   JSON is over WALLET_HIST_JSON_MAX is not kept; all members' rows together stay under WALLET_HIST_TOTAL_MAX. */
+const WALLET_REORG_OVERLAP = 5000, WALLET_RESUME_MAX_BLOCKS = 200000, WALLET_HIST_JSON_MAX = 8 * 1024 * 1024, WALLET_HIST_TOTAL_MAX = 64 * 1024 * 1024;
 /* The pace. Measured on the public node (2026-09-26): one batch of 50 reads goes through, the next one sent at once
    is refused (429), it forgives within ~2 s, and ~25 reads a second hold — for everything this server reads, from
    one address. So every whole-wallet read shares ONE pace, capped at half that budget (PACE_MS_MIN: 12.5 a second)
@@ -2512,60 +2553,207 @@ function tradeLegs(entry, w, a) {
 }
 
 /* ----- The read runs as a job -----
-   A whole-wallet read is a minute or two the first time (since 2026-09-28 the public node reads history 100,000
-   blocks at a time, so it is hundreds of windows at the tracker's pace), longer for a busy wallet — longer than a
-   proxy holds a request open (Cloudflare: 100 s). So it runs as a job: the first GET starts it and answers
+   A whole-wallet read is about an hour the first time (the public node reads history 30,000 blocks at a time with
+   no contract filter — ≈5,100 windows — and refuses every batch of them once, so the walk runs at ~1.7 windows a
+   second; measured 2026-09-30), longer for a busy wallet — far longer than a proxy holds a request open
+   (Cloudflare: 100 s). So it runs as a job: the first GET starts it and answers
    202 with its progress, the page asks again every couple of seconds, and the finished history is kept a few
-   minutes. Jobs and finished histories belong to the member who asked (so no one learns what anyone else looked
-   up); only what never changes — receipts, block times, token names — is shared, and a receipt another member's
-   read left in the cache is still paced for this member as if it were read. At most WALLET_HIST_PARALLEL run at
-   once and the rest wait in order; a member has one read at a time; a read nobody has asked about for a minute
-   stops at its next step (and one still queued is retired), and one that makes no progress for five minutes fails. */
-const _walletHistCache = new Map(), _walletJobs = new Map(), _walletTooBig = new Map(), _walletWaiters = [];
+   minutes in memory and — for a wallet the member tracks or linked — saved (wallet_hist), so the next read starts
+   where this one stopped and a read that stalls after its transfer walk resumes from them. Jobs and finished
+   histories belong to the member who asked (so no one learns what anyone else looked up); only what never changes —
+   receipts, block times, token names — is shared, and a receipt another member's read left in the cache is still
+   paced for this member as if it were read. At most WALLET_HIST_PARALLEL run at once and the rest wait in a bounded
+   line, keeping their place without being asked about (a place costs the chain nothing); a running read nobody asks
+   about stops at its next step after a minute — unless it has made progress, when it runs to the end however long
+   nobody asks (its page may be closed: the result is saved and the member's bell rings) — and one that makes no
+   progress for five minutes, or runs past the deadline, fails. */
+const _walletHistCache = new Map(), _walletJobs = new Map(), _walletTooBig = new Map(), _walletWaiters = [], _walletReadMs = [];
 let _walletHistRunning = 0;
-const walletTurn = (job) => new Promise((r) => { if (_walletHistRunning < WALLET_HIST_PARALLEL) { _walletHistRunning++; r(); } else { job.turn = true; _walletWaiters.push({ job, r }); } });
-const walletTurnDone = () => { const next = _walletWaiters.shift(); if (next) { next.job.turn = false; next.r(); } else _walletHistRunning--; };   // the slot passes straight to the oldest waiter
-const walletJobsAhead = (job) => _walletWaiters.findIndex((x) => x.job === job) + 1;   // reads that must finish before this one starts (0: not waiting)
+/* The line. A free slot goes to the oldest waiter somebody is still asking about, then to the oldest of the rest —
+   except one nobody EVER asked about after starting it, once a minute has passed: that one is retired (resolved
+   false) rather than read for no one. */
+const walletTurn = (job) => new Promise((r) => { if (_walletHistRunning < WALLET_HIST_PARALLEL) { _walletHistRunning++; r(true); } else { job.turn = true; _walletWaiters.push({ job, r }); } });
+const walletWatched = (job, t) => (t || now()) - job.polledAt <= WALLET_JOB_IDLE_MS;                        // asked about within the last minute
+const walletNeverAsked = (job, t) => job.polls === 0 && (t || now()) - job.startedAt > WALLET_JOB_IDLE_MS;  // started, never asked about again, a minute gone
+function walletTurnDone() {
+  const t = now();
+  for (;;) {
+    let i = _walletWaiters.findIndex((x) => walletWatched(x.job, t));
+    if (i < 0) i = 0;
+    const next = _walletWaiters.splice(i, 1)[0];
+    if (!next) { _walletHistRunning--; return; }
+    next.job.turn = false;
+    if (walletNeverAsked(next.job, t)) { next.r(false); continue; }   // the slot is still free: the next in line
+    next.r(true); return;                                              // the slot passes on
+  }
+}
+// reads that must finish before this one starts (0: not waiting) — the watched waiters ahead of it, and one running read
+const walletJobsAhead = (job) => { const i = _walletWaiters.findIndex((x) => x.job === job); if (i < 0) return 0; const t = now(); let n = 1; for (let k = 0; k < i; k++) if (walletWatched(_walletWaiters[k].job, t)) n++; return n; };
+/* When a running read has lost its page: a minute with no poll — unless it has made progress, which is never abandoned
+   for lack of polls (a first read is about an hour; it ends only by stalling, at the deadline, or by finishing) —
+   except a read nobody ever asked about after starting it, which gets its minute and no more, progressed or not. */
+const walletJobAbandoned = (job, t) => { const idle = (t || now()) - job.polledAt; return job.polls === 0 ? idle > WALLET_JOB_IDLE_MS : !job.progressed && idle > WALLET_JOB_IDLE_MS; };
+// which of the five steps a stage string is: 1 transfers · 2 tokens · 3 dating · 4 markets · 5 receipts (0: still in line)
+function walletStageOf(stage) {
+  const s = String(stage || '');
+  const n = /^waiting/.test(s) ? 0 : /^reading \d+ tokens/.test(s) ? 2 : /^dating/.test(s) ? 3 : /^finding markets/.test(s) ? 4 : /^reading \d+ of its transactions|^done/.test(s) ? 5 : 1;
+  return { n, of: WALLET_STAGES };
+}
+/* How long is left, measured, never guessed — in milliseconds. In line: the reads ahead × the mean length of the
+   last ten first reads (null until one has finished). Running: the rest of this stage at the pace this stage has
+   shown so far, (total − done) × (elapsed in the stage ÷ done), once five steps are in (null before). */
+function walletJobEta(job, t) {
+  t = t || now();
+  if (job.turn) { if (!_walletReadMs.length) return null; return Math.round(walletJobsAhead(job) * _walletReadMs.reduce((a, b) => a + b, 0) / _walletReadMs.length); }
+  const done = job.done || 0, total = job.total || 0;
+  if (done < 5 || total <= done || !job.stageAt) return null;
+  return Math.round((total - done) * ((t - job.stageAt) / done));
+}
+/* The gate on starting a read: a member starts at most 40 in ten minutes, and rebuilds a wallet from block 0 twice
+   an hour (a Refresh reads only what is new; a rebuild reads everything again). Charged only when a read starts. */
+function walletStartGate(uid, fresh) {
+  if (!rateLimit('chainw:' + uid, 40, 6e5)) return 'slow';
+  if (fresh === 2 && !rateLimit('chainw2:' + uid, 2, 3600e3)) return 'rebuild';
+  return null;
+}
+// fresh: 0 the copy in memory is fine · 1 read what is new (a copy under 30 s old still answers) · 2 rebuild from block 0
 function walletJob(uid, address, fresh, mayStart) {
   const w = String(address || '').toLowerCase(), key = uid + ':' + w;
   for (const [k, j] of _walletJobs) {                        // retire what nobody is waiting for
     if (j.error) { if (now() - j.endedAt > WALLET_JOB_ERR_KEEP) _walletJobs.delete(k); }
-    else if (j.turn && now() - j.polledAt > WALLET_JOB_IDLE_MS) { const i = _walletWaiters.findIndex((x) => x.job === j); if (i >= 0) _walletWaiters.splice(i, 1); _walletJobs.delete(k); }
+    // a queued read keeps its place however long it waits — unless nobody ever asked about it after starting it
+    else if (j.turn && walletNeverAsked(j)) { const i = _walletWaiters.findIndex((x) => x.job === j); if (i >= 0) _walletWaiters.splice(i, 1)[0].r(false); _walletJobs.delete(k); }
   }
   const big = _walletTooBig.get(key);
   if (big && now() - big.at < WALLET_TOO_BIG_KEEP) return { tooBig: big.dense ? 'dense' : 'big' };
   let job = _walletJobs.get(key);
-  if (job && !job.error) { job.polledAt = now(); return job; }          // a read in progress (a Refresh's included) outranks an older copy
+  if (job && !job.error) { job.polledAt = now(); job.polls++; return job; }   // a read in progress (a Refresh's included) outranks an older copy
   const c = _walletHistCache.get(key);
-  if (c && now() - c.at < WALLET_HIST_TTL && !(fresh && now() - c.at > 30000)) return { ready: true, entry: c };
+  if (c && fresh !== 2 && now() - c.at < WALLET_HIST_TTL && !(fresh && now() - c.at > 30000)) return { ready: true, entry: c };   // a rebuild is never answered from a copy
   if (job) return job;                                                  // a real failure, reported for a minute
   let live = 0, mine = 0;
   for (const j of _walletJobs.values()) if (!j.error) { live++; if (j.uid === uid) mine++; }
   if (mine >= WALLET_JOBS_PER_MEMBER) return { mine: true };
   if (live >= WALLET_JOBS_MAX) return { busy: true };                   // a queue with no end is a queue nobody reaches the front of
-  if (mayStart && !mayStart()) return { slow: true };                   // only a read that really starts is charged
-  job = { uid, address: w, startedAt: now(), polledAt: now(), runAt: 0, movedAt: 0, stage: 'waiting for a turn', done: 0, total: 0, error: null, endedAt: 0, turn: false };
+  if (_walletWaiters.length >= WALLET_QUEUE_MAX) return { queueFull: true };   // the line is bounded, so a place in it means something
+  const why = mayStart ? mayStart() : null;
+  if (why) return { slow: true, why };                                  // only a read that really starts is charged
+  job = { uid, address: w, startedAt: now(), polledAt: now(), polls: 0, runAt: 0, movedAt: 0, stageAt: 0, stage: 'waiting for a turn', done: 0, total: 0,
+    progressed: false, resuming: false, incremental: null, readFrom: null, error: null, endedAt: 0, turn: false };
+  // a checkpoint on file (the transfers of a read that stalled) means this one resumes rather than starts over — said while it waits, decided for sure once it reads the head
+  if (fresh !== 2) { try { const r = db.prepare('SELECT partial FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').get(uid, bidx(w)); job.resuming = !!(r && r.partial); } catch {} }
   _walletJobs.set(key, job);
+  job.promise = walletJobRun(job, key, fresh);
+  return job;
+}
+async function walletJobRun(job, key, fresh) {
+  const { uid, address: w } = job;
+  const go = await walletTurn(job);
+  if (!go) { if (_walletJobs.get(key) === job) _walletJobs.delete(key); return; }   // retired in line: nobody ever asked about it
+  job.runAt = job.movedAt = now();
   const guard = () => {
-    if (now() - job.polledAt > WALLET_JOB_IDLE_MS) throw new Error('abandoned: nobody is waiting for this read');
+    if (walletJobAbandoned(job)) throw new Error('abandoned: nobody is waiting for this read');
     if (now() - job.movedAt > WALLET_JOB_STALL_MS || now() - job.runAt > WALLET_JOB_DEADLINE_MS) throw new Error('the read took too long');
   };
-  job.promise = (async () => {
-    await walletTurn(job);
-    job.runAt = job.movedAt = now();
-    try {
-      const v = await readWalletHistory(w, uid, (stage, done, total) => { if (stage !== job.stage || (done || 0) !== job.done) job.movedAt = now(); job.stage = stage; job.done = done || 0; job.total = total || 0; }, guard);
-      pruneCache(_walletHistCache, 40, WALLET_HIST_TTL, (e) => e.at);
-      _walletHistCache.set(key, { at: now(), v, json: null, enc: {} });
-      _walletJobs.delete(key);
-    } catch (e) {
-      job.error = String((e && e.message) || e); job.endedAt = now();
-      if (/longer than|too dense/.test(job.error)) { pruneCache(_walletTooBig, 2000); _walletTooBig.set(key, { at: now(), dense: /too dense/.test(job.error) }); }
-      if (/^abandoned/.test(job.error)) { if (_walletJobs.get(key) === job) _walletJobs.delete(key); }   // nobody was waiting: nothing failed, the next ask starts afresh
-      else console.warn('[tracker] whole-wallet read failed: ' + job.error.slice(0, 200));
-    } finally { walletTurnDone(); }
-  })();
-  return job;
+  const step = (stage, done, total) => {
+    done = done || 0; total = total || 0;
+    if (stage !== job.stage || done !== job.done) job.movedAt = now();
+    if (stage !== job.stage) { job.stage = stage; job.stageAt = now(); }
+    if (done > 0) job.progressed = true;                       // sticky: a read that has moved is worth finishing without its page
+    job.done = done; job.total = total;
+  };
+  try {
+    let prior = null;
+    if (fresh !== 2) { const saved = await walletHistLoad(uid, w); if (saved) prior = saved.hist; }   // decoded here, in the job — never on a request
+    const v = await readWalletHistory(w, uid, step, guard, prior, {
+      onPlan: (p) => { job.incremental = p.incremental; job.readFrom = p.readFrom; job.resuming = p.resuming; },
+      checkpoint: (h) => (walletHistKeeps(uid, w) ? walletHistSave(uid, w, h, true) : null),
+    });
+    if (walletHistKeeps(uid, w)) { const s = await walletHistSave(uid, w, v, false); v.saved = s.saved; v.savedWhy = s.savedWhy; }
+    else { v.saved = false; v.savedWhy = 'not tracked'; db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(uid, bidx(w)); }
+    if (!v.incremental && !v.resumed) { _walletReadMs.push(now() - job.runAt); if (_walletReadMs.length > 10) _walletReadMs.shift(); }   // a first read's length, for the line's estimate
+    pruneCache(_walletHistCache, 40, WALLET_HIST_TTL, (e) => e.at);
+    _walletHistCache.set(key, { at: now(), v, json: null, enc: {} });
+    _walletJobs.delete(key);
+    if (now() - job.polledAt > WALLET_NOTIFY_QUIET_MS) walletReadNotify(uid, w);   // the page has gone: the bell says it is ready
+  } catch (e) {
+    job.error = String((e && e.message) || e); job.endedAt = now();
+    if (/longer than|too dense/.test(job.error)) { pruneCache(_walletTooBig, 2000); _walletTooBig.set(key, { at: now(), dense: /too dense/.test(job.error) }); }
+    if (/^abandoned/.test(job.error)) { if (_walletJobs.get(key) === job) _walletJobs.delete(key); }   // nobody was waiting: nothing failed, the next ask starts afresh (from the checkpoint, if one was written)
+    else console.warn('[tracker] whole-wallet read failed: ' + job.error.slice(0, 200));
+  } finally { walletTurnDone(); }
+}
+
+/* ----- The saved history (wallet_hist): encBlob(brotli(JSON)), compressed and decompressed off the event loop -----
+   A row is kept only for a wallet the member tracks or linked, at most trackLimit + linked rows per member, and all
+   rows together under WALLET_HIST_TOTAL_MAX (the oldest go first). */
+const brotliAsync = require('node:util').promisify(zlib.brotliCompress), unbrotliAsync = require('node:util').promisify(zlib.brotliDecompress);
+const walletHistKeeps = (uid, w) => !!db.prepare('SELECT 1 FROM tracked_wallets WHERE user_id = ? AND address = ?').get(uid, bidx(w)) || walletList(uid).some((x) => x.address === w);
+async function walletHistLoad(uid, w) {
+  const row = db.prepare('SELECT hist, read_to, updated_at, partial FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').get(uid, bidx(w));
+  if (!row) return null;
+  try {
+    const packed = decBlob(row.hist); if (!packed) return null;
+    const hist = JSON.parse((await unbrotliAsync(packed)).toString('utf8'));
+    if (!hist || typeof hist !== 'object' || !(hist.head > 0) || !Array.isArray(hist.transfers)) return null;
+    return { hist, readTo: row.read_to, updatedAt: row.updated_at, partial: !!row.partial };
+  } catch { return null; }
+}
+async function walletHistSave(uid, w, hist, partial) {
+  try {
+    const json = JSON.stringify(hist);
+    if (Buffer.byteLength(json) > WALLET_HIST_JSON_MAX) return { saved: false, savedWhy: 'too large' };
+    const blob = encBlob(await brotliAsync(Buffer.from(json), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } }));
+    db.prepare('INSERT INTO wallet_hist (user_id, addr_idx, read_to, updated_at, partial, hist) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id, addr_idx) DO UPDATE SET read_to = excluded.read_to, updated_at = excluded.updated_at, partial = excluded.partial, hist = excluded.hist')
+      .run(uid, bidx(w), hist.head, now(), partial ? 1 : 0, blob);
+    walletHistBound(uid);
+    return { saved: true, savedWhy: null };
+  } catch (e) { console.warn('[tracker] a wallet history could not be saved: ' + ((e && e.message) || e)); return { saved: false, savedWhy: 'not saved' }; }
+}
+function walletHistBound(uid) {
+  let dropped = 0;
+  if (uid) {
+    const max = trackLimit(uid) + walletList(uid).length;
+    for (const r of db.prepare('SELECT addr_idx FROM wallet_hist WHERE user_id = ? ORDER BY updated_at DESC, addr_idx').all(uid).slice(max)) { db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(uid, r.addr_idx); dropped++; }
+  }
+  let total = db.prepare('SELECT COALESCE(SUM(length(hist)), 0) n FROM wallet_hist').get().n;
+  if (total > WALLET_HIST_TOTAL_MAX) {
+    for (const r of db.prepare('SELECT user_id, addr_idx, length(hist) n FROM wallet_hist ORDER BY updated_at ASC').all()) {
+      if (total <= WALLET_HIST_TOTAL_MAX) break;
+      db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(r.user_id, r.addr_idx); total -= r.n; dropped++;
+    }
+  }
+  return dropped;
+}
+/* At boot: a row whose wallet that member no longer tracks or has linked goes (an untrack or unlink that missed it,
+   a row from before this rule), and the total is brought under its cap. */
+function sweepWalletHist() {
+  try {
+    let dropped = 0;
+    for (const { user_id: uid } of db.prepare('SELECT DISTINCT user_id FROM wallet_hist').all()) {
+      const keep = new Set(db.prepare('SELECT address FROM tracked_wallets WHERE user_id = ?').all(uid).map((r) => r.address));
+      for (const x of walletList(uid)) keep.add(bidx(x.address));
+      for (const r of db.prepare('SELECT addr_idx FROM wallet_hist WHERE user_id = ?').all(uid)) if (!keep.has(r.addr_idx)) { db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(uid, r.addr_idx); dropped++; }
+    }
+    dropped += walletHistBound(null);
+    if (dropped) console.log('[tracker] saved wallet histories swept: ' + dropped + ' removed');
+  } catch (e) { console.warn('[tracker] the saved-history sweep failed: ' + ((e && e.message) || e)); }
+}
+/* The bell for a read that finished after its page had gone. The row names the wallet by its tracker id (?wid=) or its
+   link id (?lid=), never by any part of its address — notifications are plain text; the label is the member's own
+   words for it, unless those quote an address. */
+function walletReadNotice(uid, w) {
+  const row = db.prepare('SELECT id, label FROM tracked_wallets WHERE user_id = ? AND address = ?').get(uid, bidx(w));
+  const linked = walletList(uid).find((x) => x.address === w);
+  if (!row && !linked) return null;
+  const clean = (s) => { s = String(s || '').trim(); return s && !/0x[0-9a-f]{4,}/i.test(s) ? s : ''; };
+  return { label: clean(row && row.label) || clean(linked && linked.label), href: row ? '/tracker.html?wid=' + row.id : '/tracker.html?lid=' + linked.id };
+}
+function walletReadNotify(uid, w) {
+  const n = walletReadNotice(uid, w);
+  if (!n) return false;
+  notify(uid, '💼', 'Your wallet report for ' + (n.label || 'one of your wallets') + ' is ready.', 'tracker', null, n.href);
+  return true;
 }
 /* A finished history, serialized once and compressed once per encoding — a warm answer costs a write, not a
    re-encode of megabytes. How long ago the chain was read rides in a header. */
@@ -2581,55 +2769,153 @@ function sendWalletHistory(res, entry) {
   res.writeHead(200, h);
   res.end(data);
 }
-async function readWalletHistory(w, uid, step, guard) {
+/* The saved history plus a newly read window: everything from `readFrom` on is what the window holds (the saved rows
+   there are dropped first — a reorg could have changed them), everything before it is kept as saved. One row per
+   transfer (transaction hash + log index), newest first; the NFT count is kept per block, so dropped rows take their
+   count with them and the total stays the true one. */
+function mergeWalletHistory(prior, readFrom, rows, nftNew) {
+  const nftByBlock = {};
+  for (const [b, n] of Object.entries((prior && prior.nftByBlock) || {})) if (Number(b) < readFrom && n > 0) nftByBlock[b] = n;
+  for (const [b, n] of Object.entries(nftNew || {})) if (n > 0) nftByBlock[b] = (nftByBlock[b] || 0) + n;
+  const seen = new Set(), transfers = [];
+  for (const t of [...rows, ...((prior && prior.transfers) || []).filter((t) => t[0] < readFrom)]) { const k = t[2] + ':' + t[1]; if (seen.has(k)) continue; seen.add(k); transfers.push(t); }
+  transfers.sort((a, b) => (b[0] - a[0]) || (b[1] - a[1]));
+  let nftTransfers = 0; for (const n of Object.values(nftByBlock)) nftTransfers += n;
+  return { transfers, nftByBlock, nftTransfers };
+}
+// the tokens a read asks the market feed about: every one not already known to have a market (new ones, and a saved "no" or "unknown" asked again)
+const tokensToRecheck = (toks, priorTok) => toks.filter((t) => { const p = priorTok && priorTok.get(t); return !(p && p.market === true); });
+/* A token the market feed does not list may still have its own v2 pool — the site prices it from that pool's reserves
+   (reservesPrices), so its trades must be valued too: the factory is asked for the token's pool with WETH, then, for
+   those without one, with USDG — at most two reads a token, batched and paced. The answer is kept per token: a pool
+   found is final (a pool is never removed), "no pool" for FACTORY_POOL_NONE_TTL; an unreadable answer is asked again.
+   The saved history keeps the factory's "no" per token (poolAt): an incremental read asks again only for a token that
+   is new, moved in its window, or whose "no" is older than FACTORY_POOL_RECHECK_MS — not every poolless token on
+   every Refresh past the cache's ten minutes (two paced reads each; the whole chain cost of a junk-heavy refresh). */
+const FACTORY_POOL_NONE_TTL = 10 * 60 * 1000, FACTORY_POOL_CACHE_MAX = 5000, FACTORY_POOL_RECHECK_MS = 24 * 3600e3;
+const _factoryPoolCache = new Map();   // token -> { at, pool: address | null }
+const factoryPoolCached = (t, at) => { const c = _factoryPoolCache.get(t); if (!c) return undefined; if (c.pool) return c.pool; return (at || now()) - c.at < FACTORY_POOL_NONE_TTL ? null : undefined; };
+async function factoryPoolsFor(toks, guard) {
+  const out = new Map(), ask = [];
+  for (const t of toks) { const c = factoryPoolCached(t); if (c !== undefined) out.set(t, c); else ask.push(t); }
+  if (!ask.length) return out;
+  const enc = (x) => x.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const addrOf = (r) => (r && r.length >= 66) ? ('0x' + r.slice(26, 66)).toLowerCase() : null;
+  const isPool = (x) => !!x && !/^0x0{40}$/.test(x);
+  const remember = (t, pool) => { pruneCache(_factoryPoolCache, FACTORY_POOL_CACHE_MAX); _factoryPoolCache.set(t, { at: now(), pool }); out.set(t, pool); };
+  const withWeth = await pacedBatchAll(ask.map((t) => ['eth_call', [{ to: FACTORY, data: '0xe6a43905' + enc(t) + enc(WETH_ADDR) }, 'latest']]), null, guard);
+  const noWeth = [];
+  ask.forEach((t, i) => { const p = addrOf(withWeth[i]); if (isPool(p)) remember(t, p); else if (p != null) noWeth.push(t); });   // the zero address: no WETH pool, so USDG is asked; unreadable: nothing kept
+  if (!noWeth.length) return out;
+  const withUsdg = await pacedBatchAll(noWeth.map((t) => ['eth_call', [{ to: FACTORY, data: '0xe6a43905' + enc(t) + enc(USDG_ADDR) }, 'latest']]), null, guard);
+  noWeth.forEach((t, i) => { const p = addrOf(withUsdg[i]); if (isPool(p)) remember(t, p); else if (p != null) remember(t, null); });   // both answered the zero address: no pool, for ten minutes
+  return out;
+}
+/* `prior`: the saved history for this (member, wallet), when there is one — a finished read (read on from just before
+   its head) or a checkpoint with `stage: 'transfers'` (its later stages run in full). `opts.onPlan({incremental,
+   readFrom, resuming})` hears what this read will do once the head is known; `opts.checkpoint(hist)` is handed the
+   transfers of a from-scratch read as soon as they are walked, and again once dated. */
+async function readWalletHistory(w, uid, step, guard, prior, opts) {
+  opts = opts || {};
   const hx = (n) => '0x' + n.toString(16), wt = '0x' + w.slice(2).padStart(64, '0');
   const say = (stage, done, total) => { if (step) step(stage, done, total); };
+  const parseBal = (x) => x && x !== '0x' && x.length >= 66 ? BigInt(x.slice(0, 66)).toString() : null;   // unreadable is null, never 0
+  const parseDec = (x) => { if (!x || x === '0x') return null; try { const d = Number(BigInt(x)); return Number.isFinite(d) && d >= 0 && d <= 36 ? d : null; } catch { return null; } };
   const readAt = now();                                     // stamped before the first read: the age shown can only be overstated
   say('reading the account');
   const [headHex, balHex, nonceHex, code] = await pacedBatchAll([['eth_blockNumber', []], ['eth_getBalance', [w, 'latest']], ['eth_getTransactionCount', [w, 'latest']], ['eth_getCode', [w, 'latest']]], null, guard);
   const head = parseInt(headHex, 16);
   if (!(head > 0) || balHex == null || nonceHex == null) throw new Error('the chain did not answer');
+  const delegated = !!(code && code.length === 48 && code.toLowerCase().startsWith('0xef0100'));   // EIP-7702: an EOA pointing at code, still a person's wallet
+  const account = { isContract: !!(code && code !== '0x' && !delegated), delegated, ethBalance: BigInt(balHex).toString(), txSent: parseInt(nonceHex, 16) };
 
-  // 1. every Transfer from and to the wallet, in every token, over the chain's whole life
-  say('reading every token transfer', 0, 0);
-  // "to the wallet" first, then "from" it from the first arrival on; a capped window (~75 ms) is priced at 1, a whole-chain one at PACE_LOG_WEIGHT
-  const raw = await transferLogWalk(null, [[TRANSFER_TOPIC, null, wt], [TRANSFER_TOPIC, wt]], 0, head, TRACKER_HISTORY_MAX,
-    (q, i) => { say('reading every token transfer', i.done, i.total); return pacedCall('eth_getLogs', [q], i.window <= 200000 ? 1 : PACE_LOG_WEIGHT, guard); },
-    { laterPassesStartAtFirstHit: true, readMany: (qs, i) => { say('reading every token transfer', i.done, i.total); return pacedBatchAll(qs.map((q) => ['eth_getLogs', [q]]), null, guard); } });
-  let nftTransfers = 0;
-  const logs = [];
-  for (const l of raw) {
-    if (l.topics && l.topics.length === 3 && /^0x[0-9a-fA-F]{64}$/.test(l.data || '')) logs.push(l);   // ERC-20: two indexed addresses and a 32-byte amount
-    else if (l.topics && l.topics.length === 4) nftTransfers++;                                       // ERC-721: the token id is the third indexed topic
+  /* What the saved copy lets this read skip. A finished history is read on from WALLET_REORG_OVERLAP blocks before its
+     head; a checkpoint the same, with every later stage run in full. Neither is used past a head that went BACKWARDS
+     by more than a thousand blocks (the chain does not rewind: that is a broken answer, or another chain), nor is a
+     checkpoint older than WALLET_RESUME_MAX_BLOCKS. */
+  const usable = (p) => !!(p && typeof p === 'object' && p.head > 0 && Array.isArray(p.transfers) && p.nftByBlock && typeof p.nftByBlock === 'object' && head >= p.head - 1000);
+  let partial = prior && prior.stage === 'transfers' ? prior : null;
+  if (partial) prior = null;
+  if (!(usable(prior) && Array.isArray(prior.tokens) && prior.txs && typeof prior.txs === 'object')) prior = null;
+  if (!(usable(partial) && head - partial.head <= WALLET_RESUME_MAX_BLOCKS)) partial = null;
+
+  // nothing new on the chain since the saved read: only what changes without a log is read again — the account, and the live balances
+  if (prior && prior.head >= head) {
+    if (opts.onPlan) opts.onPlan({ incremental: true, readFrom: null, resuming: false });
+    const live = prior.tokens.filter((t) => t && t.address && t.market !== false), lStage = 'reading ' + live.length + ' tokens';
+    say(lStage, 0, live.length);
+    const br = await pacedBatchAll(live.map((t) => ['eth_call', [{ to: t.address, data: '0x70a08231' + wt.slice(2) }, 'latest']]), (d, n) => say(lStage, Math.floor(live.length * d / n), live.length), guard);
+    const fresh = new Map(); live.forEach((t, i) => fresh.set(t.address, parseBal(br[i])));
+    const tokens = prior.tokens.map((t) => {
+      const row = { ...t }; delete row.balanceAt;
+      const b = fresh.has(t.address) ? fresh.get(t.address) : null;
+      if (b != null) row.balance = b;
+      else if (!fresh.has(t.address) && t.balance != null) { row.balance = t.balance; row.balanceAt = t.balanceAt || prior.head; }   // not re-read (no market): the saved figure, dated
+      else row.balance = null;   // asked and unreadable: unread, never the saved figure
+      return row;
+    });
+    say('done', live.length, live.length);
+    return { ...prior, readAt, ...account, ethUsd: await ethUsdFresh().catch(() => null), tokens, incremental: true, readFrom: null, resumed: false };
   }
-  logs.sort((a, b) => (parseInt(b.blockNumber, 16) - parseInt(a.blockNumber, 16)) || (parseInt(b.logIndex, 16) - parseInt(a.logIndex, 16)));   // newest first
 
-  // 2. every token touched: what it is (kept for the life of the process once read) and what the wallet held at `head`
-  const toks = [...new Set(logs.map((l) => l.address.toLowerCase()))];
-  const calls = [], plan = [];
+  const base = prior || partial;
+  const readFrom = base ? Math.max(0, base.head - WALLET_REORG_OVERLAP) : 0;
+  const resuming = !!partial;
+  if (opts.onPlan) opts.onPlan({ incremental: !!prior, readFrom, resuming });
+  const kept = base ? base.transfers.filter((t) => t[0] < readFrom).length : 0;
+
+  // 1. every Transfer from and to the wallet, in every token — over the chain's whole life, or only the blocks after the saved copy
+  say('reading every token transfer', 0, 0);
+  /* "to the wallet" first, then "from" it from the first arrival on — for a from-scratch read only: a window after a saved copy may
+     hold nothing but departures. A capped window (~75 ms) is priced at 1, a whole-chain one at PACE_LOG_WEIGHT. */
+  const raw = await transferLogWalk(null, [[TRANSFER_TOPIC, null, wt], [TRANSFER_TOPIC, wt]], readFrom, head, Math.max(0, TRACKER_HISTORY_MAX - kept),
+    (q, i) => { say('reading every token transfer', i.done, i.total); return pacedCall('eth_getLogs', [q], i.window <= 200000 ? 1 : PACE_LOG_WEIGHT, guard); },
+    { laterPassesStartAtFirstHit: !base, readMany: (qs, i) => { say('reading every token transfer', i.done, i.total); return pacedBatchAll(qs.map((q) => ['eth_getLogs', [q]]), null, guard); } });
+  const nftNew = {}, fresh = [];
+  for (const l of raw) {
+    if (l.topics && l.topics.length === 3 && /^0x[0-9a-fA-F]{64}$/.test(l.data || '')) fresh.push(l);   // ERC-20: two indexed addresses and a 32-byte amount
+    else if (l.topics && l.topics.length === 4) { const b = parseInt(l.blockNumber, 16); nftNew[b] = (nftNew[b] || 0) + 1; }   // ERC-721: the token id is the third indexed topic
+  }
+  // [block, logIndex, txHash, token, from, to, amount, timeMs] — the time is filled in at step 3
+  const rowOf = (l) => { const b = parseInt(l.blockNumber, 16); return [b, parseInt(l.logIndex, 16), l.transactionHash.toLowerCase(), l.address.toLowerCase(), '0x' + l.topics[1].slice(-40).toLowerCase(), '0x' + l.topics[2].slice(-40).toLowerCase(), BigInt(l.data).toString(), null]; };
+  const merged = mergeWalletHistory(base, readFrom, fresh.map(rowOf), nftNew);
+  const rows = merged.transfers;                            // newest first
+  if (rows.length > TRACKER_HISTORY_MAX) throw new Error('history longer than the chain read budget');
+  const checkpoint = async () => { if (!prior && opts.checkpoint) await opts.checkpoint({ stage: 'transfers', head, transfers: rows, nftByBlock: merged.nftByBlock }); };
+  await checkpoint();                                       // the walk is the long part: a read that stalls after it resumes from here
+
+  // 2. every token touched: what it is (kept for the life of the process once read; a saved answer is kept, a saved null asked again) and what the wallet held at `head`
+  const toks = [...new Set(rows.map((t) => t[3]))];
+  const priorTok = new Map(prior ? prior.tokens.filter((t) => t && t.address).map((t) => [t.address, t]) : []);
+  const touched = new Set(fresh.map((l) => l.address.toLowerCase()));
+  const calls = [], plan = [], balRead = new Set();
   for (const t of toks) {
-    calls.push(['eth_call', [{ to: t, data: '0x70a08231' + wt.slice(2) }, hx(head)]]); plan.push([t, 'bal']);   // at the block the transfers were read to, so the two agree
-    if (!_decimalsCache.has(t)) { calls.push(['eth_call', [{ to: t, data: '0x313ce567' }, 'latest']]); plan.push([t, 'dec']); }
-    if (!_tokenNameCache.has(t)) { calls.push(['eth_call', [{ to: t, data: '0x95d89b41' }, 'latest']], ['eth_call', [{ to: t, data: '0x06fdde03' }, 'latest']]); plan.push([t, 'sym'], [t, 'name']); }
+    const pt = priorTok.get(t);
+    // the live balance: every token that may have a market, and every one this window moved — the rest keep the saved figure, dated
+    if (!pt || pt.market !== false || touched.has(t)) { calls.push(['eth_call', [{ to: t, data: '0x70a08231' + wt.slice(2) }, hx(head)]]); plan.push([t, 'bal']); balRead.add(t); }   // at the block the transfers were read to, so the two agree
+    if (!_decimalsCache.has(t) && !(pt && pt.decimals != null)) { calls.push(['eth_call', [{ to: t, data: '0x313ce567' }, 'latest']]); plan.push([t, 'dec']); }
+    if (!_tokenNameCache.has(t) && !(pt && pt.symbol && pt.name)) { calls.push(['eth_call', [{ to: t, data: '0x95d89b41' }, 'latest']], ['eth_call', [{ to: t, data: '0x06fdde03' }, 'latest']]); plan.push([t, 'sym'], [t, 'name']); }
   }
   let usdgDec = _decimalsCache.has(USDG_ADDR) ? _decimalsCache.get(USDG_ADDR) : usdgDecimals;   // the scale USDG legs are read in, whether or not this wallet ever held USDG
   if (usdgDec == null && !toks.includes(USDG_ADDR)) { calls.push(['eth_call', [{ to: USDG_ADDR, data: '0x313ce567' }, 'latest']]); plan.push([USDG_ADDR, 'dec']); }
-  say('reading ' + toks.length + ' tokens', 0, toks.length);
-  const tr = await pacedBatchAll(calls, (d, n) => say('reading ' + toks.length + ' tokens', Math.floor(toks.length * d / n), toks.length), guard);
+  const tStage = 'reading ' + toks.length + ' tokens';
+  say(tStage, 0, toks.length);
+  const tr = await pacedBatchAll(calls, (d, n) => say(tStage, Math.floor(toks.length * d / n), toks.length), guard);
   const bal = {}, got = {};
   plan.forEach(([t, k], i) => { (got[t] = got[t] || {})[k] = tr[i]; });
-  const parseDec = (x) => { if (!x || x === '0x') return null; try { const d = Number(BigInt(x)); return Number.isFinite(d) && d >= 0 && d <= 36 ? d : null; } catch { return null; } };
   for (const t of toks) {
-    const g = got[t] || {};
-    bal[t] = g.bal && g.bal !== '0x' && g.bal.length >= 66 ? BigInt(g.bal.slice(0, 66)).toString() : null;   // unreadable is null, never 0
+    const g = got[t] || {}, pt = priorTok.get(t);
+    const live = balRead.has(t) ? parseBal(g.bal) : null;
+    bal[t] = live != null ? { v: live, at: 0 } : (!balRead.has(t) && pt && pt.balance != null) ? { v: pt.balance, at: pt.balanceAt || prior.head } : { v: null, at: 0 };   // unreadable is null, never 0; only a figure the read did not ask for is the saved one, dated
     const d = parseDec(g.dec);
     if (d != null) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(t, d); }
+    else if (pt && pt.decimals != null && !_decimalsCache.has(t)) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(t, pt.decimals); }
     if (g.sym !== undefined || g.name !== undefined) { const v = { name: abiText(g.name), symbol: abiText(g.sym) }; if (v.name || v.symbol) { pruneCache(_tokenNameCache, 20000); _tokenNameCache.set(t, v); } }
   }
   if (usdgDec == null) { usdgDec = _decimalsCache.has(USDG_ADDR) ? _decimalsCache.get(USDG_ADDR) : parseDec(got[USDG_ADDR] && got[USDG_ADDR].dec); if (usdgDec != null) usdgDecimals = usdgDec; }
 
-  // 3. when: every distinct block, from this read's own map (a shared cache can drop an entry mid-read)
-  const blocks = [...new Set(logs.map((l) => parseInt(l.blockNumber, 16)))];
+  // 3. when: every block a transfer sits in that has no time yet (a saved row keeps its own), from this read's own map (a shared cache can drop an entry mid-read)
+  const blocks = [...new Set(rows.filter((t) => t[7] == null).map((t) => t[0]))];
   const blockMs = new Map();
   for (const b of blocks) if (chainBlockMs.has(b)) blockMs.set(b, chainBlockMs.get(b));
   const unknown = blocks.filter((b) => !blockMs.has(b));
@@ -2637,37 +2923,76 @@ async function readWalletHistory(w, uid, step, guard) {
   say(dStage, 0, blocks.length);
   const bt = await pacedBatchAll(unknown.map((b) => ['eth_getBlockByNumber', [hx(b), false]]), (d, n) => say(dStage, Math.floor(blocks.length * d / n), blocks.length), guard);   // progress in the read's own terms, whatever was cached
   unknown.forEach((b, i) => { const r = bt[i]; if (r && r.timestamp) { const ms = parseInt(r.timestamp, 16) * 1000; blockMs.set(b, ms); chainBlockMs.set(b, ms); if (chainBlockMs.size > 200000) chainBlockMs.delete(chainBlockMs.keys().next().value); } });
+  for (const t of rows) if (t[7] == null && blockMs.has(t[0])) t[7] = blockMs.get(t[0]);
+  await checkpoint();                                       // dated now, so a resume does not date them again
 
-  /* 4. The receipts of the transactions that could be trades — ones moving a token with a market (a wallet's
-     airdropped junk costs no reads; if the market list cannot be read, every one is read). Newest first,
-     TRACKER_TX_MAX of them. Each batch is turned into its trade summaries as it arrives; only what the leg cache
-     keeps outlives the batch. */
-  const marketToks = new Set();
-  let marketsKnown = true;
-  for (let i = 0; i < toks.length; i += 30) {
+  /* 4. Which tokens have a market (so only transactions that could be trades cost a receipt). Asked for every token not
+     already known to have one — a saved "no market" is asked again, a market once found stays found (the ask is cheap:
+     batches of thirty, cached a minute). The house coins have their own pools. A token whose chunk the feed did not
+     answer and that no saved copy knew is null: unknown, and its transactions are read as if they could be trades. */
+  const recheck = tokensToRecheck(toks, priorTok);
+  const marketToks = new Set(), answered = new Set();
+  for (const t of toks) if (priorTok.get(t) && priorTok.get(t).market === true) marketToks.add(t);
+  for (let i = 0; i < recheck.length; i += 30) {
     if (guard) guard();
-    say('finding markets for ' + toks.length + ' tokens', i, toks.length);
-    const chunk = toks.slice(i, i + 30);
+    say('finding markets for ' + recheck.length + ' tokens', i, recheck.length);
+    const chunk = recheck.slice(i, i + 30);
     const j = await jgetCached('https://api.dexscreener.com/tokens/v1/robinhood/' + chunk.join(','), 60000);
-    if (!Array.isArray(j)) { if (!chunk.every((a) => ownPoolOf(a))) marketsKnown = false; }
-    for (const p of Array.isArray(j) ? j : []) { const b = ((p.baseToken && p.baseToken.address) || '').toLowerCase(), q = ((p.quoteToken && p.quoteToken.address) || '').toLowerCase(); if (b) marketToks.add(b); if (q) marketToks.add(q); }
-    for (const a of chunk) if (ownPoolOf(a)) marketToks.add(a);
+    if (Array.isArray(j)) {
+      for (const a of chunk) answered.add(a);
+      for (const p of j) { const b = ((p.baseToken && p.baseToken.address) || '').toLowerCase(), q = ((p.quoteToken && p.quoteToken.address) || '').toLowerCase(); if (b) marketToks.add(b); if (q) marketToks.add(q); }
+    }
+    for (const a of chunk) if (ownPoolOf(a)) { marketToks.add(a); answered.add(a); }
+  }
+  /* A token the feed did not list (or could not answer for) may still have its own v2 pool, which the site prices from
+     its reserves: the factory is asked (a saved "no" is asked again, within the cache's ten minutes), and a pool found
+     makes it a market — its transactions' receipts are read and its trades valued like any other. "No pool" leaves the
+     feed's answer as it was: a pool the factory does not know (another quote, another kind) is still the feed's to list. */
+  const unlisted = toks.filter((t) => {
+    if (marketToks.has(t) || t === WETH_ADDR || t === USDG_ADDR) return false;
+    const pt = priorTok.get(t);   // a saved "no pool" under a day old, for a token this window did not move, stands (a pool that appears is caught by the feed's recheck, by the token trading, or in a day)
+    return !(pt && pt.market === false && pt.poolAt > 0 && readAt - pt.poolAt < FACTORY_POOL_RECHECK_MS && !touched.has(t));
+  });
+  const poolNo = new Set();   // the factory's "no pool" this read heard (or holds in its cache): kept in the saved row, dated
+  if (unlisted.length) for (const [t, pool] of await factoryPoolsFor(unlisted, guard)) { if (pool) { marketToks.add(t); answered.add(t); } else if (pool === null) poolNo.add(t); }
+  const marketOf = (t) => { const pt = priorTok.get(t); if (pt && pt.market === true) return true; if (answered.has(t)) return marketToks.has(t); return pt && typeof pt.market === 'boolean' ? pt.market : null; };
+  const marketsKnown = toks.every((t) => marketOf(t) !== null);
+  // a saved "no market" token that turns out to have one is valued by the report: its balance is read live after all (step 2 skipped it)
+  const late = toks.filter((t) => !balRead.has(t) && marketOf(t) === true);
+  if (late.length) {
+    const lr = await pacedBatchAll(late.map((t) => ['eth_call', [{ to: t, data: '0x70a08231' + wt.slice(2) }, hx(head)]]), null, guard);
+    late.forEach((t, i) => { const b = parseBal(lr[i]); if (b != null) bal[t] = { v: b, at: 0 }; });
   }
   const tokens = toks.map((t) => {
-    const nm = _tokenNameCache.get(t) || {}, d = _decimalsCache.get(t);
-    return { address: t, symbol: nm.symbol || null, name: nm.name || null, decimals: d != null ? d : null, balance: bal[t], market: marketsKnown ? marketToks.has(t) : null };
+    const pt = priorTok.get(t) || {}, nm = _tokenNameCache.get(t) || {};
+    const row = { address: t, symbol: nm.symbol || pt.symbol || null, name: nm.name || pt.name || null, decimals: _decimalsCache.has(t) ? _decimalsCache.get(t) : (pt.decimals != null ? pt.decimals : null), balance: bal[t].v, market: marketOf(t) };
+    if (bal[t].at) row.balanceAt = bal[t].at;              // "as of block N": the saved figure, not re-read this time
+    if (row.market === false) { const at = poolNo.has(t) ? readAt : pt.poolAt; if (at > 0) row.poolAt = at; }   // when the factory last said "no pool" (this read, or the saved one): the next read may skip the ask
+    return row;
   });
-  const tradeTx = [], seenTx = new Set(), txBlock = {}, txLi = {};
-  for (const l of logs) {
-    const h = l.transactionHash.toLowerCase(), li = parseInt(l.logIndex, 16);
+
+  /* 5. The receipts of the transactions that could be trades — ones moving a token with a market, or one whose market is
+     unknown (a wallet's airdropped junk costs no reads). Newest first, TRACKER_TX_MAX of them. After a saved copy: only
+     the window's own transactions, those of tokens that just turned out to have a market, and the ones the saved read
+     could not get — a transaction already summed stays summed. Each batch is turned into its trade summaries as it
+     arrives; only what the leg cache keeps outlives the batch. */
+  const txsHere = new Set(rows.map((t) => t[2]));
+  const txs = {};
+  if (prior) for (const h of Object.keys(prior.txs)) if (txsHere.has(h)) txs[h] = prior.txs[h];   // a summed transaction whose rows a reorg took goes with them
+  const newTx = new Set(fresh.map((l) => l.transactionHash.toLowerCase()));
+  const newMarket = new Set(toks.filter((t) => marketOf(t) === true && !(priorTok.get(t) && priorTok.get(t).market === true)));   // markets this read found: new tokens with one, a saved "no" or "unknown" now "yes"
+  const retry = new Set(prior ? prior.txsMissing || [] : []);
+  const tradeTx = [], seenTx = new Set(), txBlock = {}, txLi = {}, walletToksIn = {};
+  for (const t of rows) (walletToksIn[t[2]] = walletToksIn[t[2]] || new Set()).add(t[3]);
+  for (const t of rows) {
+    const h = t[2], li = t[1], a = t[3];
     if (seenTx.has(h)) { if (h in txLi && li < txLi[h]) txLi[h] = li; continue; }
-    if (marketsKnown && !marketToks.has(l.address.toLowerCase())) continue;
-    seenTx.add(h); tradeTx.push(h); txBlock[h] = parseInt(l.blockNumber, 16); txLi[h] = li;
+    if (marketOf(a) === false) continue;
+    if (prior && (txs[h] || !(newTx.has(h) || retry.has(h) || newMarket.has(a)))) continue;
+    seenTx.add(h); tradeTx.push(h); txBlock[h] = t[0]; txLi[h] = li;
   }
   const legHashes = tradeTx.slice(0, TRACKER_TX_MAX);
-  const walletToksIn = {};
-  for (const l of logs) { const h = l.transactionHash.toLowerCase(); (walletToksIn[h] = walletToksIn[h] || new Set()).add(l.address.toLowerCase()); }
-  const txs = {}, read = new Set();
+  const read = new Set();
   const use = (h, e) => {
     read.add(h);
     const sum = {};
@@ -2711,19 +3036,23 @@ async function readWalletHistory(w, uid, step, guard) {
   }
   const txsMissing = toRead;                                 // still unread: its trades are listed, unvalued — never guessed
   say('done', R, R);
-  const delegated = !!(code && code.length === 48 && code.toLowerCase().startsWith('0xef0100'));   // EIP-7702: an EOA pointing at code, still a person's wallet
-  const lastH = legHashes[legHashes.length - 1];
+  // the oldest transaction whose receipt was read, over this read and the saved ones; whether any trade older than it was left unread for the cap
+  let legsFrom = null;
+  for (let i = legHashes.length - 1; i >= 0; i--) if (read.has(legHashes[i])) { legsFrom = [txBlock[legHashes[i]], txLi[legHashes[i]]]; break; }
+  const older = (a, b) => !a ? b : !b ? a : (a[0] < b[0] || (a[0] === b[0] && a[1] < b[1])) ? a : b;
+  if (prior) legsFrom = older(legsFrom, Array.isArray(prior.legsFrom) ? prior.legsFrom : null);
   return {
     address: w, head, readAt, source: 'chain', complete: txsMissing.length === 0,
-    isContract: !!(code && code !== '0x' && !delegated), delegated, ethBalance: BigInt(balHex).toString(), txSent: parseInt(nonceHex, 16), nftTransfers,
+    ...account, nftTransfers: merged.nftTransfers, nftByBlock: merged.nftByBlock,
     ethUsd: await ethUsdFresh().catch(() => null),
     quotes: { [WETH_ADDR]: { symbol: 'WETH', decimals: 18 }, [USDG_ADDR]: { symbol: 'USDG', decimals: usdgDec } },
     tokens,
     // [block, logIndex, txHash, token, from, to, amount, timeMs] — newest first
-    transfers: logs.map((l) => { const b = parseInt(l.blockNumber, 16); return [b, parseInt(l.logIndex, 16), l.transactionHash.toLowerCase(), l.address.toLowerCase(), '0x' + l.topics[1].slice(-40).toLowerCase(), '0x' + l.topics[2].slice(-40).toLowerCase(), BigInt(l.data).toString(), blockMs.get(b) || null]; }),
+    transfers: rows,
     // per transaction the wallet traded in: { token: [bought, WETH paid, USDG paid, sold, WETH got, USDG got, sold first, unvalued] }
-    txs, legsRead: legHashes.length - txsMissing.length, legsCapped: tradeTx.length > legHashes.length,
-    legsFrom: lastH ? [txBlock[lastH], txLi[lastH]] : null, txsMissing, marketsKnown,
+    txs, legsRead: (prior ? Number(prior.legsRead) || 0 : 0) + (legHashes.length - txsMissing.length), legsCapped: !!(prior && prior.legsCapped) || tradeTx.length > legHashes.length,
+    legsFrom, txsMissing, marketsKnown,
+    incremental: !!prior, readFrom, resumed: resuming,
   };
 }
 /* Which source answers. A keyed explorer (BLOCKSCOUT_URL set) is asked first — it is one paged read — and the chain
@@ -10140,6 +10469,443 @@ async function fillFromOwnPool(p) {
   if (m.volume.h24 != null) p.volume.h24 = m.volume.h24;
   p.txns.h24 = { buys: m.txns.h24.buys, sells: m.txns.h24.sells };
 }
+
+/* ===== A token's price over time, from its pair's own Sync events (GET /api/chain/pricehist) ========================
+   A Uniswap-v2-style pair emits Sync(reserve0, reserve1) every time its reserves change, so its price is exact at every
+   Sync and unchanged between two — the pool's own spot price, carried forward. Dexscreener keeps no history for this
+   chain and the public node keeps no historical state, so the Syncs are the only price history there is; pools of any
+   other type (v3/CL/v4/Solidly) emit no such event and are not charted.
+
+   What is kept per pair is a GRID, not the logs: one cell per PHIST_CELL blocks that saw a Sync, holding the last
+   reserves in it and how many Syncs it saw, plus the span the grid covers and the one Sync before it (the price the
+   range opens on). A walk folds every answer into the grid at once and keeps nothing else, so a 200,000-Sync pool
+   costs one answer of transient memory. The grid is append-only: a block range is walked once per pair and then
+   served from memory (a smaller range, a wider bucket, a second member — no chain read); only the tail after the last
+   head is read again, and only once the head on file is a minute old.
+
+   Measured on the public node (2026-09-30, head 76,965,411): a one-address eth_getLogs may span 10,000,000 blocks
+   (10,000,001 refused: "only 10000000 are allowed"); the $SEND pair has 1,039 Syncs over its life, $GWC 2,106 — a
+   whole-life walk is 8 answers. The walk is indexHolders' (forward, quarter when refused, double back when small),
+   through the tracker's pace: a window over 200,000 blocks weighs PACE_LOG_WEIGHT, a narrower one 1. */
+const PHIST_SIZES = new Set([10000, 50000, 100000, 500000]);   // bucket widths a request may ask for (multiples of the cell)
+const PHIST_POINTS_MAX = 1000;                                 // points one request may ask for (the page's widest range is ≤ 778): from=0 at the narrowest bucket is not a way to date 7,700 edges
+const PHIST_CELL = 10000;                                      // the grid's cell: the last reserves of every 10,000 blocks that saw a Sync
+const PHIST_WINDOW_MAX = 10000000;                             // the public node's one-address log window (measured)
+const PHIST_SYNC_CAP = 200000;                                 // Syncs one walk folds before the pool is "too busy to chart"
+const PHIST_GRIDS_MAX = 300, PHIST_CELLS_MAX = 400000;         // pairs kept (LRU by last use), and cells across all of them
+const PHIST_HEAD_TTL = 5 * 60 * 1000;                          // a head read this recently still stands (a bucket is ≥ 17 min wide; the last point takes the live price anyway): the request is a cache hit
+const PHIST_DENSE_KEEP = 10 * 60 * 1000;                       // a "too busy to chart" verdict is remembered this long
+const PHIST_WALK_WAIT_MS = 20 * 1000, PHIST_WALK_LINE_MAX = 8; // one Sync walk at a time: the rest wait this long for the slot, in a line this short
+const PHIST_MISSES_PER_MEMBER = 2;                             // walks one member may have in flight
+const PHIST_MISS_WINDOW_MS = 10 * 60 * 1000, PHIST_MISSES_MAX = 12;   // pools one member may make the server walk in ten minutes
+const PHIST_DRAIN_WETH = 1e-4, PHIST_DRAIN_USDG = 0.1;         // quote reserve below this = a drained pool: no price from that Sync on, until one restores it
+const PHIST_FAR_WINDOW = 200000;                               // a log window wider than this weighs PACE_LOG_WEIGHT (the wallet read's rule)
+const _phistGrids = new Map();     // pair -> grid (Map order is the LRU order: a use re-inserts)
+const _phistWalks = new Map();     // pair -> the walk in flight (a second request for the pair joins it)
+const _phistDating = new Map();    // 'from0:size:headBucket' -> the edge dating in flight (eight token requests date the edges once)
+const _phistMisses = new Map();    // member -> walks in flight
+const _phistCharged = new Map();   // 'member:pair' -> when the miss limit was charged for it
+const _phistBad = new Map();       // pair -> when it was found not to be a v2 pair (kept PHIST_DENSE_KEEP): a refused pair never takes a grid slot
+const _phistLine = [];
+let _phistWalking = false;
+function phistGrid(pair) {
+  let g = _phistGrids.get(pair);
+  if (g) { _phistGrids.delete(pair); _phistGrids.set(pair, g); g.used = now(); return g; }
+  g = { pair, cells: new Map(), readFrom: null, readTo: null, before: null, beforeKnown: false, first: null, last: null, headAt: 0, used: now(), dense: 0 };
+  _phistGrids.set(pair, g);
+  phistGridsBound();
+  return g;
+}
+function phistGridsBound() {   // the least recently used pairs go first; a pair being walked stays
+  let cells = 0; for (const g of _phistGrids.values()) cells += g.cells.size;
+  for (const [k, g] of _phistGrids) {
+    if (_phistGrids.size <= PHIST_GRIDS_MAX && cells <= PHIST_CELLS_MAX) break;
+    if (_phistWalks.has(k)) continue;
+    _phistGrids.delete(k); cells -= g.cells.size;
+  }
+}
+/* Fold one answer into the cells: per cell the LAST Sync's reserves (by block, then log index) and the count; the
+   answer's own first and last Sync come back for the grid's edges. The logs are not kept. */
+function phistFold(cells, logs) {
+  let n = 0, first = null, last = null;
+  for (const l of logs) {
+    if (!l || l.removed) continue;
+    const bn = parseInt(l.blockNumber, 16), li = parseInt(l.logIndex, 16) || 0;
+    if (!Number.isFinite(bn)) continue;
+    const d = String(l.data || '').replace(/^0x/, ''), r0 = hex32(d, 0), r1 = hex32(d, 1);
+    if (r0 == null || r1 == null) continue;
+    const ci = Math.floor(bn / PHIST_CELL), c = cells.get(ci);
+    if (!c) cells.set(ci, { r0: r0.toString(), r1: r1.toString(), n: 1, block: bn, li });
+    else { c.n++; if (bn > c.block || (bn === c.block && li > c.li)) { c.r0 = r0.toString(); c.r1 = r1.toString(); c.block = bn; c.li = li; } }
+    n++;
+    if (!first || bn < first.block || (bn === first.block && li < first.li)) first = { block: bn, li, r0: r0.toString(), r1: r1.toString() };
+    if (!last || bn > last.block || (bn === last.block && li > last.li)) last = { block: bn, li, r0: r0.toString(), r1: r1.toString() };
+  }
+  return { n, first, last };
+}
+const phistSpanOf = (m) => { const sp = /only (\d+) (?:blocks )?are allowed/i.exec(m); return sp ? Number(sp[1]) : 0; };
+/* The walker: forward over [from … to], address-filtered on the pair's Sync topic, windows up to PHIST_WINDOW_MAX
+   blocks — pinned to the span the node names, quartered when it refuses an answer, doubled back when one is small.
+   Every answer is folded at once; `onWindow(upTo)` lets the grid's cover advance window by window. */
+async function phistWalk(pair, cells, from, to, guard, onWindow) {
+  const hx = (n) => '0x' + n.toString(16);
+  let window = Math.min(PHIST_WINDOW_MAX, Math.max(1, to - from + 1)), n = 0, first = null, last = null;
+  while (from <= to) {
+    const upTo = Math.min(to, from + window - 1);
+    let out;
+    try { out = await pacedCall('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: hx(from), toBlock: hx(upTo) }], upTo - from + 1 <= PHIST_FAR_WINDOW ? 1 : PACE_LOG_WEIGHT, guard); }
+    catch (e) {
+      const m = String((e && e.message) || ''), span = phistSpanOf(m);
+      if (span >= 50 && span < window) { window = span; continue; }
+      if (TOO_MANY_RE.test(m) && window > 50) { window = Math.max(50, Math.floor(window / 4)); continue; }
+      throw e;
+    }
+    if (!Array.isArray(out)) throw new Error('the chain did not answer');
+    const f = phistFold(cells, out);
+    n += f.n; if (n > PHIST_SYNC_CAP) throw new Error('too busy to chart');
+    if (f.first && (!first || f.first.block < first.block)) first = f.first;
+    if (f.last && (!last || f.last.block > last.block)) last = f.last;
+    from = upTo + 1;
+    if (onWindow) onWindow(upTo, f);
+    if (out.length < 2500) window = Math.min(window * 2, PHIST_WINDOW_MAX, Math.max(1, to - from + 1));
+  }
+  return { n, first, last };
+}
+/* The last Sync before a block, so the price a range opens on is the pool's real one and not "unknown until the first
+   Sync inside it": windows ending at `before − 1`, the latest quarter first when the node refuses one, doubling back
+   through empty ones, down to block 0 — none there means the pool's first Sync is inside the grid. */
+async function phistLookBack(pair, before, guard) {
+  const hx = (n) => '0x' + n.toString(16);
+  let to = before - 1, window = PHIST_WINDOW_MAX;
+  while (to >= 0) {
+    const lo = Math.max(0, to - window + 1);
+    let out;
+    try { out = await pacedCall('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: hx(lo), toBlock: hx(to) }], to - lo + 1 <= PHIST_FAR_WINDOW ? 1 : PACE_LOG_WEIGHT, guard); }
+    catch (e) {
+      const m = String((e && e.message) || ''), span = phistSpanOf(m);
+      if (span >= 50 && span < window) { window = span; continue; }
+      if (TOO_MANY_RE.test(m) && window > 50) { window = Math.max(50, Math.floor(window / 4)); continue; }
+      throw e;
+    }
+    if (!Array.isArray(out)) throw new Error('the chain did not answer');
+    const f = phistFold(new Map(), out);   // transient: one answer, dropped at once
+    if (f.last) return f.last;
+    to = lo - 1; window = Math.min(window * 2, PHIST_WINDOW_MAX);
+  }
+  return null;
+}
+// the one Sync walk at a time: take the slot, or wait for it a bounded while in a bounded line
+function phistSlot() {
+  if (!_phistWalking) { _phistWalking = true; return Promise.resolve(); }
+  if (_phistLine.length >= PHIST_WALK_LINE_MAX) return Promise.reject(new Error('busy'));
+  return new Promise((resolve, reject) => {
+    const w = { resolve, timer: null };
+    w.timer = setTimeout(() => { const i = _phistLine.indexOf(w); if (i >= 0) _phistLine.splice(i, 1); reject(new Error('busy')); }, PHIST_WALK_WAIT_MS);
+    _phistLine.push(w);
+  });
+}
+function phistSlotDone() {
+  const w = _phistLine.shift();
+  if (!w) { _phistWalking = false; return; }
+  clearTimeout(w.timer); w.resolve();   // the slot passes on, still taken
+}
+// what a grid lacks for [from0 … head]: the tail after it, the older part before it, or the Sync before its first block
+function phistLacks(g, from0, head) {
+  if (g.readFrom == null) return { kind: 'all', from: from0, to: head };
+  if (head > g.readTo) return { kind: 'tail', from: g.readTo + 1, to: head };
+  if (from0 < g.readFrom) return { kind: 'older', from: from0, to: g.readFrom - 1 };
+  if (g.readFrom > 0 && !g.beforeKnown) return { kind: 'before' };
+  return null;
+}
+/* Bring a pair's grid to cover [from0 … head]. One walk per pair at a time: a second request for the same pair joins
+   the walk in flight (and is counted as waiting for it), then asks again for what is still missing. A walk whose
+   requests have all gone is abandoned between windows; the older part is folded apart and merged only when whole, so
+   an abandoned one never leaves a half-read span inside the cover. */
+async function phistEnsure(g, from0, head, att) {
+  for (let i = 0; i < 6; i++) {
+    const live = _phistWalks.get(g.pair);
+    if (live) { live.attached.add(att); try { await live; } catch (e) { if (!/^abandoned/.test(String((e && e.message) || ''))) throw e; } continue; }
+    const lack = phistLacks(g, from0, head);
+    if (!lack) return;
+    const attached = new Set([att]);
+    const guard = () => { for (const a of attached) if (!a.closed) return; throw new Error('abandoned: nobody is waiting for this price history'); };
+    const job = (async () => {
+      guard();
+      await phistSlot();
+      // a forward window is folded: the cover and the edges advance with it, so an abandoned walk leaves a true grid
+      const forward = (upTo, f) => { g.readTo = upTo; if (f.first && (!g.first || f.first.block < g.first.block)) g.first = f.first; if (f.last && (!g.last || f.last.block > g.last.block)) g.last = f.last; };
+      try {
+        if (lack.kind === 'all') {
+          g.readFrom = from0; g.readTo = from0 - 1;
+          await phistWalk(g.pair, g.cells, from0, head, guard, forward);
+          g.readTo = head; g.headAt = now();
+        } else if (lack.kind === 'tail') {
+          await phistWalk(g.pair, g.cells, lack.from, lack.to, guard, forward);
+          g.readTo = head; g.headAt = now();
+        } else if (lack.kind === 'older') {
+          const tmp = new Map();
+          const f = await phistWalk(g.pair, tmp, lack.from, lack.to, guard);
+          for (const [k, v] of tmp) g.cells.set(k, v);
+          if (f.first) g.first = f.first; if (f.last && !g.last) g.last = f.last;
+          g.readFrom = from0;
+          if (g.before && g.before.block >= from0) { g.before = null; g.beforeKnown = false; }   // it is inside the grid now; the one before the new start is asked for next
+        } else {
+          g.before = await phistLookBack(g.pair, g.readFrom, guard);
+          g.beforeKnown = true;
+        }
+      } catch (e) {
+        if (/too busy to chart/.test(String((e && e.message) || ''))) g.dense = now();
+        throw e;
+      } finally { phistSlotDone(); }
+    })();
+    job.attached = attached;
+    _phistWalks.set(g.pair, job);
+    job.catch(() => {}).finally(() => { if (_phistWalks.get(g.pair) === job) _phistWalks.delete(g.pair); });
+    await job;
+  }
+  throw new Error('busy');
+}
+/* The points, one per bucket of `size` blocks from `from0` to `head` (the last clamped to head): `close` is the last
+   cell's reserves in the bucket, oriented by `priceOf` — carried forward from the previous bucket when the bucket saw
+   no Sync, null before the pool's first Sync, null and drained from a Sync that left the pool empty until one restores
+   it. `before` is the Sync before the GRID; the range opens on phistOpening(). Pure. */
+// the Sync a range opens on: the latest cell the grid holds below from0 (the grid may start earlier than the range —
+// a narrower range after a wider one, or a 7d whose from0 has stepped past the grid's first cell), else the Sync
+// before the grid. Every cell below from0 is inside the cover (the older slice is merged only when whole), and from0
+// is a multiple of the cell, so `ci < c0` is exactly "entirely below the range".
+function phistOpening(cells, before, from0) {
+  let open = before || null;
+  const c0 = Math.floor(from0 / PHIST_CELL);
+  for (const [ci, c] of cells) if (ci < c0 && (!open || c.block > open.block || (c.block === open.block && (c.li || 0) > (open.li || 0)))) open = c;
+  return open;
+}
+function pricehistPoints(cells, before, from0, size, head, priceOf) {
+  const out = [];
+  let carry = phistOpening(cells, before, from0);
+  for (let start = from0; start <= head; start += size) {
+    const end = Math.min(start + size - 1, head);
+    let last = null, n = 0;
+    for (let ci = Math.floor(start / PHIST_CELL); ci <= Math.floor(end / PHIST_CELL); ci++) { const c = cells.get(ci); if (!c) continue; n += c.n; last = c; }
+    if (last) { carry = last; const q = priceOf(last.r0, last.r1); out.push({ b: end, ms: null, p: q.p, n, carried: false, drained: q.drained }); }
+    else if (carry) { const q = priceOf(carry.r0, carry.r1); out.push({ b: end, ms: null, p: q.p, n: 0, carried: true, drained: q.drained }); }
+    else out.push({ b: end, ms: null, p: null, n: 0, carried: false, drained: false });
+  }
+  return out;
+}
+/* Block times, read once and kept in the tracker's block map (a failed read stays unknown and is asked again). The
+   bucket ends of a (from0, size, head bucket) are the same for every pair on the grid, so eight parallel token requests
+   date them once; the head and a pair's own Syncs are dated per request (cached after the first). Batch by batch,
+   each kept as it arrives: a read that is cut or abandoned never loses what it dated, and what another request dated
+   meanwhile is skipped — so overlapping requests converge on the shared map instead of buying the same blocks twice. */
+async function phistDate(blocks, guard) {
+  const want = [...new Set(blocks.filter((b) => Number.isFinite(b) && b >= 0))];
+  for (let i = 0; i < want.length; i += PACE_BATCH) {
+    const part = want.slice(i, i + PACE_BATCH).filter((b) => !chainBlockMs.has(b));
+    if (!part.length) continue;
+    const bt = await pacedBatchAll(part.map((b) => ['eth_getBlockByNumber', ['0x' + b.toString(16), false]]), null, guard);
+    part.forEach((b, k) => { const r = bt[k]; if (r && r.timestamp) { chainBlockMs.set(b, parseInt(r.timestamp, 16) * 1000); if (chainBlockMs.size > 200000) chainBlockMs.delete(chainBlockMs.keys().next().value); } });
+  }
+}
+/* The lattice of bucket ends is shared by every pair and every later request at that bucket, and bounded by
+   PHIST_POINTS_MAX edges (40 batches of PACE_BATCH) — so its job runs without the requester's guard: a page that has
+   gone (the proxy cuts a long GET) leaves a dating that finishes for the next request, instead of one that starts over. */
+function phistDateEdges(from0, size, head) {
+  const key = from0 + ':' + size + ':' + Math.floor(head / size);
+  const live = _phistDating.get(key);
+  if (live) return live;
+  const ends = []; for (let e = from0 + size - 1; e < head; e += size) ends.push(e);
+  const job = phistDate(ends, null);
+  _phistDating.set(key, job);
+  job.catch(() => {}).finally(() => { if (_phistDating.get(key) === job) _phistDating.delete(key); });
+  return job;
+}
+// the miss limit is charged once per pool a member makes the server walk, per window: a range change on a pool already charged is free
+function phistChargeMiss(uid, pair) {
+  const k = uid + ':' + pair, t = now();
+  for (const [key, at] of _phistCharged) if (t - at > PHIST_MISS_WINDOW_MS) _phistCharged.delete(key);
+  if (_phistCharged.has(k)) return true;
+  if (!rateLimit('phistm:' + uid, PHIST_MISSES_MAX, PHIST_MISS_WINDOW_MS)) return false;
+  _phistCharged.set(k, t);
+  return true;
+}
+// decimals through the tracker's pace, for what the process has not read yet (a miss is never cached or scaled)
+async function phistDecimals(addrs, guard) {
+  const want = [...new Set(addrs)].filter((a) => !_decimalsCache.has(a));
+  if (want.length) {
+    const r = await pacedBatchAll(want.map((a) => ['eth_call', [{ to: a, data: '0x313ce567' }, 'latest']]), null, guard);
+    want.forEach((a, i) => { let d = null; try { if (r[i] && r[i] !== '0x') { d = Number(BigInt(r[i])); if (!(Number.isFinite(d) && d >= 0 && d <= 36)) d = null; } } catch { d = null; } if (d != null) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(a, d); } });
+  }
+  return addrs.map((a) => (_decimalsCache.has(a) ? _decimalsCache.get(a) : null));
+}
+const phistRefusal = (body) => Object.assign(new Error(body.error), { status: 400, body });
+/* One request: the pool's orientation and type, the grid brought up to the range, the points, their dates. Throws
+   'busy' (503), 'misses' (429), 'too busy to chart' (422), an {status: 400} refusal, or a read error (502). */
+async function priceHistory(uid, pair, token, fromAsked, size, att) {
+  const unsupported = () => phistRefusal({ error: 'pool type not supported', unsupported: true });
+  if (now() - (_phistBad.get(pair) || 0) < PHIST_DENSE_KEEP) throw unsupported();   // remembered without a grid: junk addresses never evict a real pair's grid
+  const bad = () => { pruneCache(_phistBad, 2000); _phistBad.set(pair, now()); return unsupported(); };
+  // a chain read for a pair the process has not confirmed is a miss, not a hit on the grid: charged like a walk, before
+  // the read (idempotent per member and pair within the window, so the walk that follows is free — one charge per pool)
+  const charge = () => { if (!phistChargeMiss(uid, pair)) throw new Error('misses'); };
+  const guard = () => { if (att.closed) throw new Error('abandoned: nobody is waiting for this price history'); };
+  // orientation and quote from the pair's own token0()/token1() — kept for the process life once both have answered
+  let pt = _pairTokensCache.get(pair);
+  if (!pt) {
+    charge();
+    const [t0, t1] = await pacedBatchAll([['eth_call', [{ to: pair, data: '0x0dfe1681' }, 'latest']], ['eth_call', [{ to: pair, data: '0xd21220a7' }, 'latest']]], null, guard);
+    const dec = (r) => (r && r.length >= 66) ? ('0x' + r.slice(26, 66)).toLowerCase() : null;
+    pt = { token0: dec(t0), token1: dec(t1) };
+    if (!pt.token0 && !pt.token1) throw bad();   // no token0()/token1() at all: not a pair
+    if (!pt.token0 || !pt.token1) throw new Error('the chain did not answer');
+    pruneCache(_pairTokensCache, 20000); _pairTokensCache.set(pair, pt);
+  }
+  if (pt.token0 !== token && pt.token1 !== token) throw phistRefusal({ error: 'that pool does not hold this token' });
+  const tokenIsZero = pt.token0 === token, quoteAddr = tokenIsZero ? pt.token1 : pt.token0;
+  if (!QUOTE_SET.has(quoteAddr)) throw phistRefusal({ error: 'that pool is not quoted in WETH or USDG' });
+  const quote = quoteAddr === WETH_ADDR ? 'WETH' : 'USDG';
+  // the pool type, probed once per grid: a v2-style pair answers getReserves(); v3/CL/v4/Solidly pools revert, and emit no Sync(uint112,uint112)
+  if (!_phistGrids.has(pair)) {
+    charge();
+    const [r] = await pacedBatchAll([['eth_call', [{ to: pair, data: '0x0902f1ac' }, 'latest']]], null, guard);
+    if (!r || String(r).length < 130) throw bad();
+  }
+  const g = phistGrid(pair);   // only now: a v2 pair that holds the token, quoted in WETH or USDG, takes (or re-touches) a grid slot
+  if (g.dense && now() - g.dense < PHIST_DENSE_KEEP) throw new Error('too busy to chart');
+  const [decToken, decQuote] = await phistDecimals([token, quoteAddr], guard);
+  if (decToken == null || decQuote == null) throw new Error('decimals could not be read');
+  if (quote === 'USDG' && usdgDecimals == null) usdgDecimals = decQuote;
+  // the head: the one on file while it is under PHIST_HEAD_TTL old, else read — and then the grid's tail is read up to it
+  let head, walked = false, headRead = false;
+  if (g.readTo != null && now() - g.headAt < PHIST_HEAD_TTL) head = g.readTo;
+  else { const h = parseInt(await pacedCall('eth_blockNumber', [], 1, guard), 16); if (!(h > 0)) throw new Error('the chain did not answer'); head = Math.max(h, g.readTo || 0); headRead = true; }
+  const from = Math.min(Math.max(0, Math.floor(fromAsked) || 0), head), from0 = Math.floor(from / size) * size;
+  if (Math.floor((head - from0) / size) + 1 > PHIST_POINTS_MAX) throw phistRefusal({ error: 'too many points for that bucket — ask for a wider one', tooMany: true });   // before any walk or dating
+  if (phistLacks(g, from0, head)) {
+    walked = true;
+    if (!phistChargeMiss(uid, pair)) throw new Error('misses');
+    const inFlight = _phistMisses.get(uid) || 0;
+    if (inFlight >= PHIST_MISSES_PER_MEMBER) throw new Error('busy');
+    _phistMisses.set(uid, inFlight + 1);
+    try { await phistEnsure(g, from0, head, att); }
+    finally { const n = (_phistMisses.get(uid) || 1) - 1; if (n > 0) _phistMisses.set(uid, n); else _phistMisses.delete(uid); }
+    head = g.readTo;   // every Sync in the last cell is at or before it
+  } else if (headRead) g.headAt = now();   // the head was read and the grid already reached it: that read stands for PHIST_HEAD_TTL (polling never extends it)
+  // the points, oriented to the request: quote per token, scaled by the two decimals; a drained pool prices as null
+  const drainMin = BigInt(Math.round((quote === 'WETH' ? PHIST_DRAIN_WETH : PHIST_DRAIN_USDG) * 10 ** decQuote));
+  const priceOf = (r0, r1) => {
+    const rt = BigInt(tokenIsZero ? r0 : r1), rq = BigInt(tokenIsZero ? r1 : r0);
+    if (rt === 0n || rq < drainMin) return { p: null, drained: true };
+    const p = (Number(rq) / Number(rt)) * 10 ** (decToken - decQuote);
+    return p > 0 && Number.isFinite(p) ? { p, drained: false } : { p: null, drained: false };
+  };
+  const opening = phistOpening(g.cells, g.before, from0);   // the Sync the first buckets carry: the latest the grid holds below the range, else the one before the grid
+  const points = pricehistPoints(g.cells, g.before, from0, size, head, priceOf);
+  const genesisKnown = g.readFrom === 0 || (g.beforeKnown && !g.before);   // nothing before the grid: the pool's first Sync is the grid's
+  const firstBlock = genesisKnown && g.first ? g.first.block : null, lastBlock = g.last ? g.last.block : null, priorBlock = opening ? opening.block : null;
+  // the edge dating is bounded per member the way walks are (joining a dating already in flight is free): at most
+  // PHIST_MISSES_PER_MEMBER jobs of up to PHIST_POINTS_MAX edges each, on the one shared pace
+  const dKey = from0 + ':' + size + ':' + Math.floor(head / size), startsDating = !_phistDating.has(dKey);
+  if (startsDating) { const n = _phistMisses.get(uid) || 0; if (n >= PHIST_MISSES_PER_MEMBER) throw new Error('busy'); _phistMisses.set(uid, n + 1); }
+  try { await Promise.all([phistDateEdges(from0, size, head), phistDate([head, firstBlock, lastBlock, priorBlock].filter((b) => b != null), guard)]); }
+  finally { if (startsDating) { const n = (_phistMisses.get(uid) || 1) - 1; if (n > 0) _phistMisses.set(uid, n); else _phistMisses.delete(uid); } }
+  guard();
+  const msOf = (b) => (b != null && chainBlockMs.has(b) ? chainBlockMs.get(b) : null);
+  for (const q of points) q.ms = msOf(q.b);
+  let syncs = 0; for (const q of points) syncs += q.n;
+  return {
+    pair, token, quote, quoteUsd: quote === 'WETH' ? await ethUsdFresh() : 1, decimals: decToken, size, from0, head, readTo: g.readTo,
+    firstSync: firstBlock != null ? { block: firstBlock, ms: msOf(firstBlock) } : null,
+    lastSync: lastBlock != null ? { block: lastBlock, ms: msOf(lastBlock) } : null,
+    priorSync: priorBlock != null ? { block: priorBlock, ms: msOf(priorBlock) } : null,   // the Sync before from0 that the first buckets carry
+    points, syncs, source: 'on-chain Sync events', cached: !walked,
+  };
+}
+
+/* ===== A price for any token from its own pool, when the index has none (/api/chain/dex-tokens) ====================
+   Measured 2026-10-01: of 240 tokens the tracker had recently seen, 2 still had a Dexscreener pair — so a wallet's
+   holdings read "no market" with liquidity sitting on chain. For every requested token the index and the house pools
+   left unpriced: the factory's pool with WETH and its pool with USDG (a token with both answers both records — the
+   page keeps the deeper, as it does with the index's pairs); each pool's token0() and getReserves(); the decimals and
+   name the process has not read yet — all in two paced batches, at most five reads a token with one pool (plus its
+   name when nothing has read it). A pool holding under RESERVES_THIN_* of quote is shown with its liquidity and no
+   price (a near-empty pool is not a price). A price is kept a minute, "no pool" ten. */
+const RESERVES_PRICE_TTL = 60 * 1000, RESERVES_NONE_TTL = 10 * 60 * 1000, RESERVES_CACHE_MAX = 2000;
+const RESERVES_THIN_WETH = 0.05, RESERVES_THIN_USDG = 100;
+/* The factory lookups are chain reads on the ONE shared pace (two a token, 25 a batch): a member's cache misses are
+   budgeted the way the chart's are — RESERVES_MISSES_MAX tokens the server asks the factory about in ten minutes, a
+   cached answer free — ≈ 400 paced calls, about 32 s of the pace at its floor, instead of 3,600 a minute from one
+   account cycling fresh addresses. A token over the budget is named unread, never "no market". */
+const RESERVES_MISSES_MAX = 200, RESERVES_MISS_WINDOW_MS = 10 * 60 * 1000;
+const reservesPriceCache = new Map();   // token -> { at, recs: [] } (an empty list = no pool, kept RESERVES_NONE_TTL)
+const reservesCached = (k, t) => { const c = reservesPriceCache.get(k); return c && (t || now()) - c.at < (c.recs.length ? RESERVES_PRICE_TTL : RESERVES_NONE_TTL) ? c.recs : null; };   // the records while they stand ([] = no pool), else null
+async function reservesPrices(tokens, guard) {
+  const t = now(), out = [], ask = [];
+  for (const k of tokens) { const recs = reservesCached(k, t); if (recs) out.push(...recs); else ask.push(k); }
+  if (!ask.length) return out;
+  const remember = (k, recs) => { pruneCache(reservesPriceCache, RESERVES_CACHE_MAX, RESERVES_NONE_TTL, (v) => v.at); reservesPriceCache.set(k, { at: now(), recs }); };
+  const enc = (x) => x.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const call = (to, data) => ['eth_call', [{ to, data }, 'latest']];
+  const addrOf = (r) => (r && r.length >= 66) ? ('0x' + r.slice(26, 66)).toLowerCase() : null;
+  const isPool = (a) => !!a && !/^0x0{40}$/.test(a);
+  // 1. the factory: the token's pool with WETH and its pool with USDG — two reads a token; a token with both answers both (the page keeps the deeper)
+  const q1 = [];
+  for (const k of ask) q1.push(call(FACTORY, '0xe6a43905' + enc(k) + enc(WETH_ADDR)), call(FACTORY, '0xe6a43905' + enc(k) + enc(USDG_ADDR)));
+  const a1 = await pacedBatchAll(q1, null, guard);
+  const found = [];
+  ask.forEach((k, i) => {
+    const w = addrOf(a1[2 * i]), u = addrOf(a1[2 * i + 1]);
+    if (isPool(w)) found.push({ token: k, pool: w, quote: WETH_ADDR });
+    if (isPool(u)) found.push({ token: k, pool: u, quote: USDG_ADDR });
+    if (!isPool(w) && !isPool(u) && a1[2 * i] != null && a1[2 * i + 1] != null) remember(k, []);   // both answered the zero address: no pool (a read that failed is asked again next time)
+  });
+  if (!found.length) return out;
+  // 2. each pool's order and reserves, and whatever the process has not read about the tokens and the quotes
+  const q2 = [], plan = [], meta = {};
+  for (const f of found) { q2.push(call(f.pool, '0x0dfe1681'), call(f.pool, '0x0902f1ac')); plan.push([f, 'token0'], [f, 'reserves']); }
+  for (const k of [...new Set(found.map((f) => f.token))]) {
+    const m = meta[k] = {};
+    if (!_decimalsCache.has(k)) { q2.push(call(k, '0x313ce567')); plan.push([m, 'dec']); }
+    const nm = _tokenNameCache.get(k);
+    if (!(nm && nm.symbol && nm.name)) { q2.push(call(k, '0x95d89b41'), call(k, '0x06fdde03')); plan.push([m, 'sym'], [m, 'name']); }
+  }
+  for (const q of [WETH_ADDR, USDG_ADDR]) if (!_decimalsCache.has(q) && found.some((f) => f.quote === q)) { const m = meta[q] = {}; q2.push(call(q, '0x313ce567')); plan.push([m, 'dec']); }
+  const a2 = await pacedBatchAll(q2, null, guard);
+  plan.forEach(([o, what], i) => { o[what] = a2[i]; });
+  const parseDecimals = (r) => { if (!r || r === '0x') return null; try { const d = Number(BigInt(r)); return Number.isFinite(d) && d >= 0 && d <= 36 ? d : null; } catch { return null; } };
+  for (const [k, m] of Object.entries(meta)) {
+    if (m.dec !== undefined) { const d = parseDecimals(m.dec); if (d != null) { pruneCache(_decimalsCache, 20000); _decimalsCache.set(k, d); } }
+    if (m.sym !== undefined || m.name !== undefined) { const v = { name: abiText(m.name), symbol: abiText(m.sym) }; if (v.name || v.symbol) { pruneCache(_tokenNameCache, 20000); _tokenNameCache.set(k, v); } }
+  }
+  const ethNow = found.some((f) => f.quote === WETH_ADDR) ? await ethUsdFresh() : null;   // null when the ETH price is stale: a WETH-quoted price is then native only
+  const recsOf = {};
+  for (const f of found) {
+    const token0 = addrOf(f.token0), d = String(f.reserves || '').replace(/^0x/, ''), r0 = hex32(d, 0), r1 = hex32(d, 1);
+    const decT = _decimalsCache.has(f.token) ? _decimalsCache.get(f.token) : null, decQ = _decimalsCache.has(f.quote) ? _decimalsCache.get(f.quote) : null;
+    if (!token0 || r0 == null || r1 == null || decT == null || decQ == null || (token0 !== f.token && token0 !== f.quote)) continue;   // unreadable: no record, nothing remembered
+    const tokIs0 = token0 === f.token, rt = tokIs0 ? r0 : r1, rq = tokIs0 ? r1 : r0;
+    if (!_pairTokensCache.has(f.pool)) { pruneCache(_pairTokensCache, 20000); _pairTokensCache.set(f.pool, { token0, token1: tokIs0 ? f.quote : f.token }); }   // the pool's order, for the price history
+    if (!pairQuoteCache.has(f.pool)) pairQuoteCache.set(f.pool, f.quote);
+    const reserveToken = Number(rt) / 10 ** decT, reserveQuote = Number(rq) / 10 ** decQ;
+    const weth = f.quote === WETH_ADDR, quoteUsd = weth ? ethNow : 1;
+    const thin = !(reserveToken > 0) || reserveQuote < (weth ? RESERVES_THIN_WETH : RESERVES_THIN_USDG);
+    const spot = reserveToken > 0 && reserveQuote > 0 ? reserveQuote / reserveToken : null;
+    const priceUsd = !thin && spot != null && quoteUsd != null ? spot * quoteUsd : null;
+    const nm = _tokenNameCache.get(f.token) || {};
+    const rec = {
+      chainId: 'robinhood', dexId: 'uniswap', labels: ['v2'], url: 'https://dexscreener.com/robinhood/' + f.pool, pairAddress: f.pool,
+      baseToken: { address: f.token, name: nm.name || null, symbol: nm.symbol || null },
+      quoteToken: { address: f.quote, name: weth ? 'Wrapped Ether' : 'Global Dollar', symbol: weth ? 'WETH' : 'USDG' },
+      priceNative: spot != null ? String(spot) : null, priceUsd: priceUsd != null ? String(priceUsd) : null,
+      txns: { h24: { buys: null, sells: null } }, volume: { h24: null }, priceChange: { h24: null },
+      liquidity: { usd: quoteUsd != null ? reserveQuote * quoteUsd * 2 : null, base: reserveToken, quote: reserveQuote },   // a v2 pool holds equal value on both sides at its own price
+      fdv: null, marketCap: null, source: 'reserves', readAt: now(),
+    };
+    if (thin) rec.thin = true;
+    (recsOf[f.token] || (recsOf[f.token] = [])).push(rec); out.push(rec);
+  }
+  for (const [k, recs] of Object.entries(recsOf)) remember(k, recs);   // a token whose every pool was unreadable is remembered as nothing, and asked again
+  return out;
+}
 /* The guarded dollar price of $SEND or $GWC for anything that pays out or opens a door — see the top of this
    section. Null when it cannot be read, when the dollar rate is stale, when less than the whole day is known,
    or while a spike is in progress: a check then says "try again", never "you do not qualify". */
@@ -12368,7 +13134,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache'])
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -12459,6 +13225,7 @@ const server = http.createServer(async (req, res) => {
           // multiplier through effectiveMult() after the wallet behind it is gone.
           db.prepare('UPDATE users SET og = 0, og_tier = 0' + (revokeOg ? ', og_revoked = 1' : '') + ' WHERE id = ?').run(me.id);
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet'").run(me.id);
+          db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx NOT IN (SELECT address FROM tracked_wallets WHERE user_id = ?)').run(me.id, me.id);   // their saved histories go with them, unless the wallet is still on the watch-list
           var pausedSquads = pauseSquadGatesFor(me.id);   // gated Send Squads: re-verified against the new (empty) wallet set on the next Join
           forgetHoldings(me.id); // no cached "holds $X" may survive the wallets it was read from
           db.prepare('DELETE FROM holder_state WHERE user_id = ?').run(me.id); // boost was verified against those wallets → reset it honestly
@@ -12613,6 +13380,7 @@ const server = http.createServer(async (req, res) => {
         try {
           db.exec('BEGIN');
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").run(me.id, bidx(addr));
+          if (!db.prepare('SELECT 1 FROM tracked_wallets WHERE user_id = ? AND address = ?').get(me.id, bidx(addr))) db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(me.id, bidx(addr));   // its saved history goes too, unless the wallet is still on the watch-list
           var pausedSquadsU = pauseSquadGatesFor(me.id);   // the gate was read against a wallet set that just shrank — Join re-reads the rest
           if (revokeOg) db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1 WHERE id = ?').run(me.id);
           if (linked.length === 1) {
@@ -14307,28 +15075,89 @@ const server = http.createServer(async (req, res) => {
         const j = await jgetCached('https://api.dexscreener.com/tokens/v1/robinhood/' + addrs.join(','), 60000);
         // a feed outage is still an outage for every other token — unless all that was asked for is our two coins
         if (!j && !addrs.every((a) => ownPoolOf(a))) return bad(res, 'prices could not be read right now', 502);
-        return send(res, 200, await withOwnPools(Array.isArray(j) ? j : [], addrs));
+        const list = await withOwnPools(Array.isArray(j) ? j : [], addrs);
+        // a house pool the chain would not read just now (a 429 in poolState) used to vanish from the answer, and the
+        // page then read the gap as "no pool found": it is named as unread instead, so the page says the price could
+        // not be read and counts the total as partial
+        for (const a of addrs) if (ownPoolOf(a) && !list.some((p) => p && p.priceUsd != null && ((p.baseToken && p.baseToken.address) || '').toLowerCase() === a)) list.push({ baseToken: { address: a }, priceUsd: null, unread: true, source: 'reserves' });
+        // any token still unpriced is asked its own pool (the factory, then the reserves): most tokens the tracker sees have liquidity on chain and no index listing
+        const have = new Set(list.filter((p) => p && p.priceUsd != null).map((p) => ((p.baseToken && p.baseToken.address) || '').toLowerCase()));
+        const rest = addrs.filter((a) => !have.has(a) && !ownPoolOf(a) && !QUOTE_SET.has(a));
+        if (rest.length) {
+          // the factory lookups are chain reads on the ONE shared pace: a member's cache misses are budgeted (as the
+          // chart's are) and a token over the budget is named unread — the page says the price could not be read,
+          // never "no market"; a page that has gone stops the reads at its next batch (the pricehist route's pattern)
+          const ask = [], over = [];
+          for (const a of rest) { if (reservesCached(a) || rateLimit('chaindm:' + me.id, RESERVES_MISSES_MAX, RESERVES_MISS_WINDOW_MS)) ask.push(a); else over.push(a); }
+          const att = { closed: false }, gone = () => { if (!res.writableEnded) att.closed = true; };
+          req.on('close', gone); res.on('close', gone);
+          const guard = () => { if (att.closed) throw new Error('abandoned: nobody is waiting for these prices'); };
+          let pooled = [];
+          try { if (ask.length) pooled = await reservesPrices(ask, guard); }
+          catch (e) {
+            const m = String((e && e.message) || e);
+            if (att.closed || /^abandoned/.test(m)) return;
+            console.warn('[prices] pool read failed: ' + m.slice(0, 160)); return bad(res, 'prices could not be read right now', 502);   // unread is unread, never "no market"
+          }
+          if (att.closed) return;
+          for (const r of pooled) { for (let i = list.length - 1; i >= 0; i--) if (list[i] && list[i].pairAddress && String(list[i].pairAddress).toLowerCase() === r.pairAddress) list.splice(i, 1); list.push(r); }
+          for (const a of over) list.push({ baseToken: { address: a }, priceUsd: null, unread: true, source: 'reserves' });   // not asked this time: unread, which the page counts as a partial total
+        }
+        return send(res, 200, list);
+      }
+      if (p === '/api/chain/pricehist' && req.method === 'GET') {   // a token's price over time, from its pair's own Sync events (the tracker's chart)
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('phist:' + me.id, 120, 6e4)) return bad(res, 'slow down', 429);   // a hit on the grid costs the chain nothing
+        const pair = String(url.searchParams.get('pair') || '').toLowerCase().trim(), token = String(url.searchParams.get('token') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(pair) || !/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'bad pair or token address');
+        if (pair === token) return bad(res, 'the pair and the token are the same address');
+        if (QUOTE_SET.has(token)) return bad(res, 'WETH and USDG are what prices are quoted in — not charted');
+        const size = Number(url.searchParams.get('size'));
+        if (!PHIST_SIZES.has(size)) return bad(res, 'size must be one of 10000, 50000, 100000 or 500000');
+        const from = Math.max(0, Math.floor(Number(url.searchParams.get('from')) || 0));
+        // the page has gone: the walk stops at its next window (unless another request for the same pair is waiting on it)
+        const att = { closed: false }, gone = () => { if (!res.writableEnded) att.closed = true; };
+        req.on('close', gone); res.on('close', gone);
+        let out;
+        try { out = await priceHistory(me.id, pair, token, from, size, att); }
+        catch (e) {
+          const m = String((e && e.message) || e);
+          if (att.closed || /^abandoned/.test(m)) return;
+          if (e && e.status === 400) return send(res, 400, e.body);
+          if (m === 'busy') return send(res, 503, { error: 'the price reader is busy — try again in a moment', busy: true }, { 'Retry-After': '5' });
+          if (m === 'misses') return send(res, 429, { error: 'too many pools read in ten minutes — try again later', code: 'phist_limit' });
+          if (/too busy to chart/.test(m)) return send(res, 422, { error: 'too busy to chart', dense: true });
+          console.warn('[pricehist] ' + m.slice(0, 160));
+          return send(res, 502, { error: 'the chain could not be read right now — try again in a minute', reason: isThrottle(e) ? 'throttled' : /timed out|timeout|aborted/i.test(m) ? 'timeout' : 'unreadable' });
+        }
+        if (att.closed) return;
+        return send(res, 200, out);
       }
       if (p === '/api/chain/wallet' && req.method === 'GET') {   // the tracker's whole-wallet read, from the chain (walletJob → readWalletHistory)
         if (!me) return bad(res, 'sign in first', 401);
         const addr = String(url.searchParams.get('address') || '').toLowerCase();
         if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'bad address', 400);
         if (!rateLimit('chainwp:' + me.id, 240, 6e4)) return bad(res, 'slow down', 429);   // asking how a read is going costs the chain nothing
-        const job = walletJob(me.id, addr, url.searchParams.get('fresh') === '1', () => rateLimit('chainw:' + me.id, 40, 6e5));   // starting one does, and only that is charged
+        // fresh=1: read what is new since the saved history (a copy under 30 s old still answers) · fresh=2: rebuild from block 0 (twice an hour)
+        const fresh = url.searchParams.get('fresh') === '2' ? 2 : url.searchParams.get('fresh') === '1' ? 1 : 0;
+        const job = walletJob(me.id, addr, fresh, () => walletStartGate(me.id, fresh));   // starting one does, and only that is charged
         const tooBig = (kind) => send(res, 422, { error: kind === 'dense' ? 'this wallet’s history is too dense to read in full here' : 'this wallet has more than ' + TRACKER_HISTORY_MAX.toLocaleString('en-US') + ' token transfers — too many to read in full here', code: 'too_big' });
         if (job.tooBig) return tooBig(job.tooBig);
         if (job.ready) {
           if (!rateLimit('chainwf:' + me.id, 60, 6e5)) return bad(res, 'slow down', 429);   // a full answer is megabytes at most: the page needs one per read
           return sendWalletHistory(res, job.entry);
         }
-        if (job.slow) return bad(res, 'slow down — try again in a few minutes', 429);
+        if (job.slow) return job.why === 'rebuild' ? send(res, 429, { error: 'a rebuild from scratch is limited to two an hour — Refresh reads only what is new', code: 'rebuild_limit' }) : bad(res, 'slow down — try again in a few minutes', 429);
         if (job.mine) return send(res, 429, { error: 'another of your wallets is being read — this one is next', code: 'mine' });
         if (job.busy) return bad(res, 'the chain reader is busy with other wallets — try again in a minute', 503);
+        if (job.queueFull) return send(res, 503, { error: 'the chain reader has a long line right now — try again in a while', queueFull: true });
         if (job.error) {
           if (/longer than|too dense/.test(job.error)) return tooBig(/too dense/.test(job.error) ? 'dense' : 'big');
           return send(res, 502, { error: 'the chain could not be read right now — try again in a minute', reason: isThrottle(job.error) ? 'throttled' : /timed out|timeout|aborted|too long/i.test(job.error) ? 'timeout' : 'unreadable' });
         }
-        return send(res, 202, { pending: true, stage: job.stage, done: job.done, total: job.total, ahead: walletJobsAhead(job) });
+        // eta is in milliseconds, measured (null until the stage has shown its pace, or the line its mean first-read length); stageOf.n 0 = still in line
+        return send(res, 202, { pending: true, stage: job.stage, done: job.done, total: job.total, ahead: walletJobsAhead(job), startedAt: job.startedAt, progressed: job.progressed, resuming: job.resuming,
+          incremental: job.incremental, readFrom: job.readFrom, stageOf: walletStageOf(job.stage), eta: walletJobEta(job) });
       }
       if (p === '/api/chain/explorer' && req.method === 'GET') {   // the tracker's explorer reads, by allow-list
         if (!me) return bad(res, 'sign in first', 401);
@@ -15170,11 +15999,15 @@ const server = http.createServer(async (req, res) => {
         const byAddr = new Map(tracked.map(w => [w.address, w]));
         // A linked wallet may already have a watch-list row (wallet-first signups get one) — keep that row's
         // id and label so rename/remove still work on it, but list it once, as yours.
+        // when each wallet's history was last read from the chain and to which block (one query, never the blob itself); null = never
+        const lastReads = new Map(db.prepare('SELECT addr_idx, updated_at, read_to, partial FROM wallet_hist WHERE user_id = ?').all(me.id).map(r => [r.addr_idx, { updatedAt: r.updated_at, readTo: r.read_to, partial: !!r.partial }]));
+        const lastRead = (a) => lastReads.get(bidx(a)) || null;
         const mine = linked.map(w => {
           const row = byAddr.get(w.address);
-          return { id: row ? row.id : null, address: w.address, label: (row && row.label) || w.label || '', mine: true, is2fa: !!w.is2fa };
+          // lid: the link's own id, so a notification can name a linked wallet without its address (?lid=) even when it has no watch-list row
+          return { id: row ? row.id : null, lid: w.id, address: w.address, label: (row && row.label) || w.label || '', mine: true, is2fa: !!w.is2fa, lastRead: lastRead(w.address) };
         });
-        const others = tracked.filter(w => !linkedSet.has(w.address)).map(w => ({ ...w, mine: false }));
+        const others = tracked.filter(w => !linkedSet.has(w.address)).map(w => ({ ...w, mine: false, lastRead: lastRead(w.address) }));
         return send(res, 200, {
           wallets: [...mine, ...others],
           trackedCount: others.length,   // what the capacity meter counts: the watch-list, not your own wallets
@@ -15204,7 +16037,12 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         const row = db.prepare('SELECT * FROM tracked_wallets WHERE id = ? AND user_id = ?').get(Number(m[1]), me.id);
         if (!row) return bad(res, 'not found', 404);
-        if (req.method === 'DELETE') { db.prepare('DELETE FROM tracked_wallets WHERE id = ?').run(row.id); db.prepare('DELETE FROM tracker_cache WHERE user_id = ? AND addr_idx = ?').run(me.id, row.address); return send(res, 200, { ok: true }); } // the cached report goes with it
+        if (req.method === 'DELETE') {   // the cached report and the saved history go with it — the history stays only when the wallet is still yours by proof (linked), so still in your tracker
+          db.prepare('DELETE FROM tracked_wallets WHERE id = ?').run(row.id);
+          db.prepare('DELETE FROM tracker_cache WHERE user_id = ? AND addr_idx = ?').run(me.id, row.address);
+          if (!walletList(me.id).some((x) => bidx(x.address) === row.address)) db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(me.id, row.address);
+          return send(res, 200, { ok: true });
+        }
         const b = await readBody(req);
         db.prepare('UPDATE tracked_wallets SET label = ? WHERE id = ?').run(String(b.label || '').slice(0, 40), row.id);
         return send(res, 200, { ok: true });
@@ -16061,6 +16899,7 @@ function runDecaySweep() {
 }
 
 const decayTimer = setInterval(() => { try { settleBeta(); } catch {} try { runDecaySweep(); } catch {} }, 5 * 60 * 1000);
+sweepWalletHist();   // saved wallet histories: rows for wallets no longer tracked or linked go, and the total stays under its cap
 const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();
 

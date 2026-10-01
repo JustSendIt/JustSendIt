@@ -1,0 +1,214 @@
+/* ===== trackerdash.css — the wallet report dashboard (tracker.js + walletchart.js) =====
+ * Everything the report renders lives under .trk-dash, a size container: the page shell (tracker.css) and the
+ * profile card both embed it, and the columns, the KPI grid and the chart's shape follow the CONTAINER's width,
+ * not the viewport's. Builds on styles.css tokens only.
+ * Rules: every text size is max(var(--text-floor), …) — hierarchy sits above the floor, never under it; labels are
+ * sentence case at weight 600; every number is tabular; no word is ever cut with "…" or forced onto one line
+ * (symbols and names wrap, addresses break anywhere); gains and losses carry a sign or an arrow, never colour
+ * alone; 44px targets where a finger does the pointing; focus rings on everything; forced colours and reduced
+ * motion honoured. */
+
+.trk-dash { container: trk / inline-size; min-width: 0; display: grid; gap: 0.9rem; }
+.trk-dash * { box-sizing: border-box; }
+.trk-dash > section { padding: 0; margin: 0; position: static; min-width: 0; }   /* styles.css pads every <section> like a landing-page band */
+.trk-dash code { font-family: ui-monospace, Menlo, monospace; word-break: break-all; overflow-wrap: anywhere; }
+.trk-dash .num, .trk-dash .val, .trk-dash .t-pnl, .trk-dash .a-leg, .trk-dash .a-val, .trk-dash .wc-tbl, .trk-dash .trk-act-count { font-variant-numeric: tabular-nums; }
+.trk-dash :is(button, a, select, summary, [tabindex]):focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+
+/* ---- headings and the ⓘ row ---- */
+.trk-dash .trk-h-row { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; margin: 0.2rem 0 0.5rem; }
+.trk-dash .trk-h { font-family: 'Luckiest Guy', cursive; font-weight: 400; color: var(--green-bright); font-size: max(var(--text-floor), 1.4rem); margin: 0; letter-spacing: 0.02em; line-height: 1.15; overflow-wrap: anywhere; }
+.trk-dash .trk-h-row .trk-info-panel { flex: 1 1 100%; }
+.trk-dash .trk-defs-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink); font-size: max(var(--text-floor), 0.95rem); line-height: 1; cursor: pointer; flex: 0 0 auto; }
+.trk-dash .trk-defs-btn:hover, .trk-dash .trk-defs-btn[aria-expanded="true"] { border-color: var(--green); background: var(--green); color: var(--on-green); }
+.trk-dash .trk-defs { margin: -0.2rem 0 0.6rem; }
+.trk-dash .trk-defs dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.25rem 0.8rem; margin: 0; font-size: max(var(--text-floor), 0.85rem); line-height: 1.5; }
+.trk-dash .trk-defs dt { font-weight: 700; color: var(--text); }
+.trk-dash .trk-defs dd { margin: 0; color: var(--text-dim); }
+
+/* ---- the option bar ---- */
+.trk-dash .trk-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0; }
+.trk-dash .trk-warn { margin: 0; }
+
+/* ---- stat tiles: KPIs and facts ---- */
+.trk-dash .hstat { background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; padding: 0.7rem 0.9rem; min-width: 0; }
+.trk-dash .hstat .lbl { display: flex; align-items: center; gap: 0.3rem; flex-wrap: wrap; font-size: max(var(--text-floor), 0.85rem); font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--text-dim); line-height: 1.35; }
+.trk-dash .hstat .lbl .unit { font-weight: 500; }
+/* a value wraps at its spaces (arrow / number / unit) and, as a last resort, anywhere: a 7-figure PNL or a 15-character
+   ETH figure in a third-width tile is never painted over by the next tile */
+.trk-dash .hstat .val { font-size: max(var(--text-floor), 1.05rem); font-weight: 800; margin-top: 0.15rem; color: var(--text); line-height: 1.25; overflow-wrap: anywhere; }
+.trk-dash .hstat .sub { margin-top: 0.2rem; font-size: max(var(--text-floor), 0.8rem); color: var(--text-dim); line-height: 1.45; }
+.trk-dash .hstat .val.pos { color: var(--green-bright); }
+.trk-dash .hstat .val.neg { color: var(--red); }
+.trk-dash .trk-kpis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+.trk-dash .kpi .val { font-size: max(var(--text-floor), 1.55rem); }
+.trk-dash .kpi-main .val { font-size: max(var(--text-floor), 2rem); }
+.trk-dash .trk-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+.trk-dash .trk-facts .val { font-size: max(var(--text-floor), 1.25rem); white-space: normal; }
+@container trk (min-width: 600px) {
+  .trk-dash .trk-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .trk-dash .kpi-main { grid-column: 1 / -1; }
+  .trk-dash .trk-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ---- the chart card ---- */
+.trk-dash .trk-chart { min-width: 0; }
+.trk-dash .wc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; min-width: 0; }   /* an implicit auto track would grow to the widest child's min-content (a long symbol in the note, the open table) and push the card past its column */
+.trk-dash .wc-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; flex-wrap: wrap; }
+.trk-dash .wc-ranges, .trk-dash .wc-series { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.trk-dash .wc-range, .trk-dash .wc-sw {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4em; min-height: 36px;
+  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink);
+  border-radius: 999px; padding: 0.3rem 0.8rem; font-weight: 700; font-size: max(var(--text-floor), 0.85rem); cursor: pointer; transition: background 0.12s ease, border-color 0.12s ease;
+}
+.trk-dash .wc-range:hover, .trk-dash .wc-sw:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); }
+.trk-dash .wc-range[aria-checked="true"] { background: var(--gold); border-color: var(--gold); color: var(--on-gold); }
+.trk-dash .wc-sw[aria-pressed="false"] { opacity: 0.72; }
+.trk-dash .wc-swatch { display: inline-block; width: 1.1em; height: 0; border-top: 3px solid var(--diamond); border-radius: 2px; }
+.trk-dash .wc-swatch-invested { border-top-style: dashed; border-top-color: var(--gold); }
+.trk-dash .wc-plot { position: relative; width: 100%; aspect-ratio: 16 / 7; min-height: 220px; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; overflow: hidden; }
+.trk-dash .wc-canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: crosshair; }
+.trk-dash .wc-tip { position: absolute; z-index: 4; pointer-events: none; min-width: 170px; max-width: 280px; padding: 0.5rem 0.65rem; background: color-mix(in srgb, var(--ink-2, #10131f) 94%, transparent); border: 1px solid var(--hair); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; color: var(--text); }
+.trk-dash .wc-tip-t { color: var(--text-mute); margin-bottom: 0.3rem; font-weight: 600; }
+.trk-dash .wc-tip-row { display: flex; justify-content: space-between; gap: 1rem; }
+.trk-dash .wc-tip-row b { font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+.trk-dash .wc-tip-note { margin-top: 0.3rem; padding-top: 0.25rem; border-top: 1px solid var(--hair); font-size: max(var(--text-floor), 0.75rem); line-height: 1.35; color: var(--text-dim); }
+/* the crosshair reader: a focusable track under the plot, driven by the arrow keys */
+.trk-dash .wc-slider { position: relative; height: 14px; margin: 0.1rem 0 0; border-radius: 999px; background: var(--ink-4); cursor: ew-resize; touch-action: pan-y; }
+.trk-dash .wc-slider-k { position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: color-mix(in srgb, var(--diamond) 45%, transparent); border-radius: 2px; }
+.trk-dash .wc-slider:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
+.trk-dash .wc-status { margin: 0; min-height: 0; font-size: max(var(--text-floor), 0.85rem); color: var(--text-dim); font-weight: 600; line-height: 1.45; }
+.trk-dash .wc-status:empty { display: none; }
+.trk-dash .wc-summary { margin: 0; font-size: max(var(--text-floor), 0.95rem); line-height: 1.5; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.trk-dash .wc-table { background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; }
+.trk-dash .wc-table > summary { list-style: none; cursor: pointer; padding: 0.55rem 0.9rem; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: max(var(--text-floor), 0.9rem); color: var(--ctl-ink); background: var(--ctl-fill-lo); border-radius: 10px; }
+.trk-dash .wc-table > summary::-webkit-details-marker { display: none; }
+.trk-dash .wc-table > summary::after { content: '▾'; margin-left: auto; transition: transform 0.2s; }
+.trk-dash .wc-table[open] > summary { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.trk-dash .wc-table[open] > summary::after { transform: rotate(180deg); }
+.trk-dash .wc-table-wrap { overflow-x: auto; max-height: 320px; overflow-y: auto; padding: 0 0.6rem 0.5rem; }
+.trk-dash .wc-tbl { width: 100%; border-collapse: collapse; font-size: max(var(--text-floor), 0.82rem); }
+.trk-dash .wc-tbl caption { text-align: left; padding: 0.5rem 0.2rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); }
+.trk-dash .wc-tbl th { position: sticky; top: 0; background: var(--ink); color: var(--text-dim); font-weight: 600; text-align: left; padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--ink-4); }
+.trk-dash .wc-tbl td { padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--hair); }
+.trk-dash .wc-tbl .num { text-align: right; white-space: nowrap; }
+.trk-dash .wc-note, .trk-dash .wc-status { margin: 0; overflow-wrap: anywhere; }   /* the one place symbols are printed outside .t-sym: they wrap like everywhere else */
+.trk-dash .wc-probe { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); font-size: max(var(--text-floor), 0.8rem); }
+@container trk (max-width: 599px) {
+  .trk-dash .wc-plot { aspect-ratio: 4 / 3; }
+  .trk-dash .wc-tip { max-width: 220px; }
+}
+
+/* ---- tables (holdings, transactions, trades) ---- */
+.trk-dash .trk-scroll { overflow-x: auto; min-width: 0; position: relative; }   /* contains the header's clipped sr-only text (and the card-mode thead) so they scroll and clip with the table instead of widening the page */
+.trk-dash table { width: 100%; border-collapse: collapse; }
+.trk-dash .trk-htable, .trk-dash .trk-atable, .trk-dash .trk-table { font-size: max(var(--text-floor), 0.88rem); }
+.trk-dash th { text-align: left; color: var(--text-dim); font-weight: 600; font-size: max(var(--text-floor), 0.8rem); padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--ink-4); vertical-align: bottom; }
+.trk-dash td { padding: 0.5rem 0.4rem; border-bottom: 1px solid var(--hair); vertical-align: top; }
+.trk-dash th.num, .trk-dash td.num { text-align: right; }
+/* words may wrap anywhere as a last resort, so the table algorithm must not squeeze the word columns to nothing */
+/* the floors are in em so they scale with the text, and small enough that the five desktop holdings columns
+   (≈ 200 + 160 + 110 + 170 + 56 px at the 25 px floor, for a Held of up to ~10 digits) and the four transaction
+   columns fit a 732 px column; the Token and What-moved cells wrap instead of widening. A wider Held, Value or PNL
+   (numbers never wrap) makes the table wider than its wrapper, which scrolls — and the control column is pinned to
+   the wrapper's right edge below so the row's one control stays in view */
+.trk-dash .trk-htable th:first-child { width: 27%; min-width: 7.5em; }
+.trk-dash .trk-atable th:nth-child(3) { width: 44%; min-width: 9.5em; }
+.trk-dash .trk-atable th:first-child { width: 7.5em; }
+.trk-dash td.num { white-space: nowrap; }
+.trk-dash .num .t-src { display: block; white-space: normal; }
+.trk-dash .t-sym { display: block; font-weight: 800; color: var(--text); max-width: none; white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.trk-dash .t-name { display: block; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); overflow-wrap: anywhere; }
+.trk-dash .t-src { color: var(--text-mute); font-size: max(var(--text-floor), 0.78rem); font-weight: 500; }
+.trk-dash .t-pnl { font-weight: 700; }
+.trk-dash .t-pnl.pos { color: var(--green-bright); }
+.trk-dash .t-pnl.neg { color: var(--red); }
+.trk-dash .c-more { width: 1%; text-align: right; }
+.trk-dash .trk-more { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink); font-size: max(var(--text-floor), 0.95rem); cursor: pointer; transition: transform 0.15s ease, background 0.12s ease; }
+.trk-dash .trk-more:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); }
+.trk-dash .trk-more[aria-expanded="true"] { transform: rotate(180deg); background: var(--green); border-color: var(--green); color: var(--on-green); }
+.trk-dash .trk-hdetail > td { padding: 0.6rem 0.6rem 0.9rem; background: var(--ink-2); border-bottom: 1px solid var(--ink-4); white-space: normal; }
+.trk-dash .trk-tgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin-bottom: 0.4rem; }
+.trk-dash .trk-tgrid .hstat { padding: 0.5rem 0.7rem; }
+.trk-dash .trk-tgrid .hstat .val { white-space: normal; }
+.trk-dash .trk-table { margin-top: 0.5rem; }
+.trk-dash .trk-table a { color: var(--gold); text-decoration: none; font-weight: 700; }
+.trk-dash .trk-table a:hover { text-decoration: underline; }
+@container trk (min-width: 600px) {
+  /* a wide Held/Value/PNL can push the table past its wrapper (scrollable); the row's one control stays in view.
+     Table layouts only: in the <600px cards the cells are flex rows and a sticky strip would paint over the card */
+  .trk-dash .trk-htable th:last-child, .trk-dash .trk-htable td.c-more { position: sticky; right: 0; z-index: 1; background: var(--ink-3); }
+}
+/* column sets by container width: Avg entry, Share and Price fold into the detail panel below 1000px;
+   the name drops under the symbol below 800px; below 600px every row becomes a card */
+@container trk (max-width: 999px) {
+  .trk-dash .c-price, .trk-dash .c-share, .trk-dash .c-avg { display: none; }
+}
+@container trk (min-width: 800px) {
+  .trk-dash .trk-htable .t-sym { display: inline; margin-right: 0.4rem; }
+  .trk-dash .trk-htable .t-name { display: inline; }
+}
+@container trk (max-width: 599px) {
+  .trk-dash .trk-htable thead, .trk-dash .trk-atable thead, .trk-dash .trk-table thead { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+  .trk-dash .trk-htable, .trk-dash .trk-atable, .trk-dash .trk-table, .trk-dash .trk-htable tbody, .trk-dash .trk-atable tbody, .trk-dash .trk-table tbody { display: block; }
+  .trk-dash .trk-htable tr, .trk-dash .trk-atable tr, .trk-dash .trk-table tr { display: block; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 12px; padding: 0.45rem 0.7rem; margin: 0 0 0.5rem; }
+  .trk-dash .trk-htable td, .trk-dash .trk-atable td, .trk-dash .trk-table td { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; padding: 0.25rem 0; border: 0; text-align: right; }
+  .trk-dash .trk-htable td::before, .trk-dash .trk-atable td::before, .trk-dash .trk-table td::before { content: attr(data-l) / ""; color: var(--text-dim); font-weight: 600; text-align: left; flex: 0 0 auto; }
+  .trk-dash td.c-more::before, .trk-dash .trk-hdetail > td::before { content: none; }
+  .trk-dash .trk-htable td.c-price, .trk-dash .trk-htable td.c-share, .trk-dash .trk-htable td.c-avg { display: none; }   /* the card rule above would otherwise bring them back; they live in the detail panel */
+  .trk-dash .trk-htable td.c-more, .trk-dash .trk-atable td.c-tx { width: auto; }   /* the 1% column width would squeeze the control to a sliver */
+  .trk-dash .trk-more, .trk-dash .a-tx { flex: 0 0 auto; }
+  .trk-dash .trk-hdetail > td { display: block; text-align: left; padding: 0.4rem 0.2rem; background: transparent; }
+  .trk-dash .trk-hdetail { margin-top: -0.5rem; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+  .trk-dash td.c-more { justify-content: flex-end; }
+  .trk-dash .trk-htable td[data-l="Token"] { text-align: left; justify-content: flex-start; }
+  .trk-dash .trk-htable .t-sym, .trk-dash .trk-htable .t-name { display: inline; margin-right: 0.4rem; }
+  .trk-dash .trk-atable td[data-l="What moved"] { flex-direction: column; align-items: flex-start; text-align: left; }
+  .trk-dash .trk-atable td[data-l="What moved"]::before { margin-bottom: 0.1rem; }
+  .trk-dash .trk-table { min-width: 0; }   /* tracker.css floors the legacy trade table at 420px for its scroll wrapper; a card must fit the column */
+}
+
+/* ---- transactions ---- */
+.trk-dash .trk-act-tools { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 0.6rem; }
+.trk-dash .trk-act-tok { font-size: max(var(--text-floor), 0.85rem); font-weight: 600; color: var(--text-dim); margin-left: 0.3rem; }
+.trk-dash select[data-act-token] { min-height: 36px; padding: 0.3rem 0.6rem; border-radius: 10px; border: 1.5px solid var(--ink-4); background: var(--ink); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.85rem); max-width: 100%; }
+.trk-dash .trk-act-count { margin: 0 0 0 auto; font-size: max(var(--text-floor), 0.85rem); color: var(--text-dim); font-weight: 600; }
+.trk-dash .c-when { white-space: nowrap; }
+.trk-dash .a-date { display: block; font-weight: 700; }
+.trk-dash .a-time { display: block; color: var(--text-dim); font-size: max(var(--text-floor), 0.78rem); }
+.trk-dash .a-kind { display: inline-flex; align-items: baseline; gap: 0.3em; font-weight: 700; }
+.trk-dash .a-kind-buy, .trk-dash .a-kind-mint { color: var(--green-bright); }
+.trk-dash .a-kind-sell, .trk-dash .a-kind-burn { color: var(--red); }
+.trk-dash .a-kind-swap { color: var(--gold); }
+.trk-dash .a-leg { overflow-wrap: anywhere; }
+.trk-dash .a-val { color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); margin-top: 0.15rem; overflow-wrap: anywhere; }
+.trk-dash .c-tx { width: 1%; }
+.trk-dash .a-tx { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: var(--ctl-fill-lo); color: var(--ctl-ink); text-decoration: none; font-weight: 800; font-size: max(var(--text-floor), 1rem); }
+.trk-dash .a-tx:hover { background: var(--green); color: var(--on-green); }
+.trk-dash .trk-act-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.6rem 0 0; }
+.trk-dash .trk-foot { margin: 0; }
+
+/* ---- a finger, not a pointer ---- */
+@media (pointer: coarse) {
+  .trk-dash .react-btn, .trk-dash .wc-range, .trk-dash .wc-sw, .trk-dash .trk-more, .trk-dash .trk-defs-btn, .trk-dash select[data-act-token], .trk-dash .btn-sm { min-height: 44px; }
+  .trk-dash .trk-more, .trk-dash .trk-defs-btn { width: 44px; height: 44px; }
+  .trk-dash .wc-slider { height: 24px; }
+}
+
+/* ---- forced colours: system colours, and every pressed or checked control marked by a glyph, not a fill ----
+ * The report toggles and the range radios carry a "✓ " in their text already (every mode); the series switches are
+ * the one pressed control without it, so only they get the ::after glyph here — never "✓ 7 days ✓". */
+@media (forced-colors: active) {
+  .trk-dash .wc-canvas, .trk-dash .wc-plot { border: 1px solid CanvasText; }
+  .trk-dash .wc-sw[aria-pressed="true"]::after { content: " ✓"; }
+  .trk-dash .wc-swatch { border-top-color: CanvasText; }
+  .trk-dash .wc-swatch-invested { border-top-color: LinkText; }
+  .trk-dash .wc-slider { border: 1px solid CanvasText; }
+  .trk-dash .wc-sw[aria-pressed="false"] { opacity: 1; }
+}
+
+/* ---- reduced motion: nothing moves ---- */
+@media (prefers-reduced-motion: reduce) {
+  .trk-dash *, .trk-dash *::before, .trk-dash *::after { transition: none !important; animation: none !important; }
+}
+html.motion-off .trk-dash *, html.motion-off .trk-dash *::before, html.motion-off .trk-dash *::after { transition: none !important; animation: none !important; }

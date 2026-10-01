@@ -1,6 +1,13 @@
 /* ===== trackerpage.js — the Wallet Tracker page =====
  * Left: your tracked wallets (add / rename / remove / select). Right: the selected wallet's on-chain report.
  * Report flow: server cache (instant) → live trackerReport() in the background → fresh render + cache write.
+ * A first read is an hour or more on the public node (measured 2026-09-30: the node refuses every batch of log
+ * windows, so the walk runs at ~1.7 windows a second): the progress block shows the step, the stage, the percent
+ * and a per-stage ETA that never rises (and the place in line while queued); the read keeps going without the page
+ * and is saved, so a later Refresh reads only the blocks after it, in seconds ("Rebuild from scratch" reads from
+ * block 0 again).
+ * Signed out, the address field still works: it opens sign-in and keeps the address (sessionStorage trk:pending).
+ * ?wid=<tracked id> / ?lid=<linked id> (the notification's link) select that wallet.
  * Reuses tracker.js (trackerReport + renderTracker) and chain.js. CSP-safe: addEventListener only, esc() on every
  * user/third-party string that touches innerHTML. Read-only, honest: nothing here signs or moves anything. */
 (function () {
@@ -9,13 +16,17 @@
   const $ = (id) => document.getElementById(id);
   const signedOut = $('trk-signedout'), wlist = $('trk-wlist'), wstatus = $('trk-wstatus'), chips = $('trk-chips'), chipsRow = $('trk-chips-row');
   const addForm = $('trk-add'), addrIn = $('trk-addr'), labelIn = $('trk-label'), addBtn = $('trk-add-btn'), addrErr = $('trk-addr-err');
-  const reportEl = $('trk-report'), banner = $('trk-banner'), progress = $('trk-progress'), refreshBtn = $('trk-refresh'), selectedEl = $('trk-selected'), srEl = $('trk-sr');
+  const soForm = $('trk-so-form'), soAddr = $('trk-so-addr'), soErr = $('trk-so-err');
+  const reportEl = $('trk-report'), banner = $('trk-banner'), progress = $('trk-progress'), refreshBtn = $('trk-refresh'), rebuildBtn = $('trk-rebuild'), selectedEl = $('trk-selected'), srEl = $('trk-sr'), noteEl = $('trk-note');
+  const progLine = $('trk-prog-line'), progBar = $('trk-prog-bar'), progFill = $('trk-prog-fill'), progNote = $('trk-prog-note'), progLive = $('trk-prog-live');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortAddr = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
   const toast = (m) => { if (window.sendToast) sendToast(m); };
   const say = (m) => { if (window.announce) announce(m); else if (srEl) srEl.textContent = m; };
   const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
   const LS_KEY = 'trk:last';
+  const PENDING_KEY = 'trk:pending';   // an address typed while signed out, tracked the moment the account is in
+  const QUEUE_FULL_COPY = 'The chain reader has a long line right now — try again in a while.';
 
   const state = {
     wallets: [], limit: 10, base: 10, diamondLevel: 0, holdsGwc: false,
@@ -27,12 +38,92 @@
     runId: 0,             // bumps on every select/refresh so a slow, stale run can't paint over a newer one
     reports: {},          // addr → { report, updatedAt, source: 'cache'|'live', failed?, failedAt?, failedMsg? } (session memory)
     listen: {},           // addr → the progress handler of the report on screen for it (see relay)
+    prog: {},             // addr → { stage, etaEnd, info, msg }: the structured progress of the read running for it
+    rebuilding: {},       // addr → true while a "Rebuild from scratch" (fresh=2) read runs for it
     prefs: null,          // display prefs (mirrors AUTH.user.tracker_prefs)
     refreshing: null,     // address whose live read currently owns the UI (null when idle)
     inflight: {},         // addr → promise of a running trackerReport (dedupes reads per address)
     confirmT: null,       // pending two-tap remove { id, timer }
+    rebuildT: null,       // pending two-tap rebuild timer
+    deepLinkDone: false,  // ?wid= / ?lid= is honoured once, on the first list load
     tick: null,
   };
+
+  /* ---- pure helpers (lifted by tests/trackerpage.mjs between these two markers: no closure, no DOM) ---- */
+  // The server's stage strings → the words on the page. An unknown stage is shown as it came, capitalized.
+  function stageWords(stage) {
+    const s = String(stage || '').trim();
+    let m;
+    if (/^reading every token transfer/.test(s)) return 'Reading every token transfer this wallet ever made';
+    if ((m = /^reading (\d+) tokens?\b/.exec(s))) return 'Reading ' + m[1] + ' token' + (m[1] === '1' ? '\'s balance' : 's\' balances');
+    if ((m = /^dating (\d+) blocks?\b/.exec(s))) return 'Dating ' + m[1] + ' block' + (m[1] === '1' ? '' : 's');
+    if (/^finding markets/.test(s)) return 'Finding markets';
+    if ((m = /^reading (\d+) of its transactions?\b/.exec(s))) return 'Reading ' + m[1] + ' transaction' + (m[1] === '1' ? '\'s receipt' : 's\' receipts');
+    if (/^waiting for a turn/.test(s)) return 'Waiting for a free reader';
+    if (/^resuming/.test(s)) return 'Resuming from the saved transfers';
+    if (/^reading the account/.test(s)) return 'Reading the account';
+    if (/^starting/.test(s)) return 'Starting the read';   // tracker.js's own first word, before the server answers
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
+  }
+  // Milliseconds → words: whole minutes, "under a minute" below 60 s, hours past two hours of minutes.
+  function etaWords(ms) {
+    if (ms == null || !(ms >= 0)) return '';
+    if (ms < 60000) return 'under a minute';
+    const min = Math.round(ms / 60000);
+    if (min < 120) return 'about ' + min + ' min';
+    const h = Math.floor(min / 60), r = min % 60;
+    return 'about ' + h + ' h' + (r ? ' ' + r + ' min' : '');
+  }
+  // An ETA that never rises: the end time kept for a stage is the earliest the server has ever predicted for it.
+  // A poll with no estimate keeps the one it has (the countdown goes on); a new stage starts from null.
+  function etaEndAt(prevEnd, now, eta) {
+    if (eta == null || !(eta >= 0)) return prevEnd == null ? null : prevEnd;
+    const end = now + eta;
+    return prevEnd == null ? end : Math.min(prevEnd, end);
+  }
+  function ordinal(n) {
+    n = Math.max(1, Math.floor(Number(n) || 1));
+    const r = n % 100;
+    if (r >= 11 && r <= 13) return n + 'th';
+    return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+  }
+  // The one visible line, from the 202's structured fields and the clamped time left in this stage.
+  function progressLine(info, remainMs) {
+    if (!info || typeof info !== 'object') return '';
+    if (info.queueFull) return QUEUE_FULL_COPY;
+    const stage = String(info.stage || '');
+    if (/^waiting for a turn/.test(stage) || (info.ahead > 0 && !info.total)) {
+      const ahead = Math.max(0, Math.floor(Number(info.ahead) || 0));
+      const eta = etaWords(remainMs);
+      return eta ? ordinal(ahead + 1) + ' in line · ' + eta : 'in line (' + ahead + ' ahead)';
+    }
+    const parts = [];
+    const so = info.stageOf;
+    if (so && so.n > 0 && so.of > 0) parts.push('Step ' + so.n + ' of ' + so.of);
+    parts.push(stageWords(stage) || 'Reading the chain');
+    if (info.total > 0) parts.push(Math.min(100, Math.floor(100 * (Number(info.done) || 0) / info.total)) + '%');
+    const eta = etaWords(remainMs);
+    if (eta) parts.push(eta + ' for this step');
+    return parts.join(' · ');
+  }
+  // What the live region says: the step and the stage only — never the percent or the ETA.
+  function progressSpoken(info) {
+    if (!info || typeof info !== 'object') return '';
+    if (info.queueFull) return QUEUE_FULL_COPY;
+    const stage = String(info.stage || '');
+    if (/^waiting for a turn/.test(stage)) return ordinal((Math.floor(Number(info.ahead) || 0)) + 1) + ' in line';
+    const so = info.stageOf;
+    return (so && so.n > 0 && so.of > 0 ? 'Step ' + so.n + ' of ' + so.of + ': ' : '') + (stageWords(stage) || 'Reading the chain');
+  }
+  // ?wid=<tracked_wallets.id> / ?lid=<identities.id> → the wallet in the list, or null when it is no longer there.
+  function resolveDeepLink(wallets, params) {
+    const wid = params.get('wid'), lid = params.get('lid');
+    if (wid) { const w = wallets.find(x => x.id != null && String(x.id) === String(wid)); if (w) return w; }
+    if (lid) { const w = wallets.find(x => x.lid != null && String(x.lid) === String(lid)); if (w) return w; }
+    return null;
+  }
+  /* ---- end pure helpers ---- */
+  window.TRKPAGE = { stageWords, etaWords, etaEndAt, ordinal, progressLine, progressSpoken, resolveDeepLink };
 
   /* ---------- helpers ---------- */
   function ago(ts) {
@@ -48,6 +139,46 @@
   const nameOf = (w) => w.label || shortAddr(w.address);
   function rememberSelected(addr) { try { if (addr) localStorage.setItem(LS_KEY, addr); else localStorage.removeItem(LS_KEY); } catch {} }
   function recallSelected() { try { return localStorage.getItem(LS_KEY) || null; } catch { return null; } }
+  function stashPending(addr) { try { if (addr) sessionStorage.setItem(PENDING_KEY, addr); } catch {} }
+  function takePending() { try { const v = sessionStorage.getItem(PENDING_KEY); if (v) sessionStorage.removeItem(PENDING_KEY); return v && ADDR_RE.test(v) ? v.toLowerCase() : null; } catch { return null; } }
+  function setNote(msg) { if (!noteEl) return; noteEl.hidden = !msg; noteEl.textContent = msg || ''; }
+
+  /* ---- the progress block: a visible line + bar, and a separate spoken line (step and stage only) ---- */
+  let liveLast = { text: '', at: 0 };
+  function speak(text, force) {
+    if (!progLive) return;
+    const t = Date.now();
+    if (!text) { progLive.textContent = ''; liveLast = { text: '', at: 0 }; return; }
+    if (force || text !== liveLast.text || t - liveLast.at > 20000) { liveLast = { text, at: t }; progLive.textContent = text; }
+  }
+  // a plain status ("Report updated.", "Checking for a saved report…"): shown, spoken once; empty hides the block
+  function setProgress(text) {
+    progress.hidden = !text;
+    progLine.textContent = text || '';
+    progBar.hidden = true; progNote.hidden = true;
+    speak(text, true);
+  }
+  function paintProgress(addr) {
+    const pg = state.prog[addr]; if (!pg) return;
+    const w = walletByAddr(addr);
+    progress.hidden = false;
+    if (!pg.info) {   // a tracker.js that only sends words (or a stage with no 202 behind it, like "pricing")
+      progLine.textContent = '⛓️ ' + (pg.msg || 'Reading the chain…');
+      progBar.hidden = true; progNote.hidden = true;
+      speak(String(pg.msg || '').replace(/…\s*\d+%$/, '…'));
+      return;
+    }
+    const info = pg.info;
+    const remain = pg.etaEnd != null ? Math.max(0, pg.etaEnd - Date.now()) : null;
+    progLine.textContent = progressLine(info, remain);
+    const pct = info.total > 0 && !info.queueFull ? Math.min(100, Math.floor(100 * (Number(info.done) || 0) / info.total)) : null;
+    progBar.hidden = pct == null;
+    if (pct != null) { progBar.setAttribute('aria-valuenow', String(pct)); progFill.style.width = pct + '%'; }
+    // the "you can leave" note belongs to a first read (no completed saved history yet); an incremental refresh is short
+    const lr = w && w.lastRead;
+    progNote.hidden = !!info.queueFull || !!(lr && !lr.partial && !state.rebuilding[addr]);
+    speak(progressSpoken(info));
+  }
 
   // display prefs persist exactly like the profile page: POST /api/profile { tracker_prefs } (renderTracker calls this on every toggle)
   window.saveTrackerPrefs = function (prefs) {
@@ -142,9 +273,28 @@
       state.diamondLevel = j.diamondLevel || 0; state.holdsGwc = !!j.holdsGwc;
       state.loaded = true;
       renderWallets();
-      // pick a wallet: the remembered one if still tracked, else the first
-      const want = recallSelected();
-      const pick = (want && walletByAddr(want)) ? want : (state.wallets[0] ? state.wallets[0].address : null);
+      // an address typed while signed out: tracked now (the add selects it); a refusal leaves it in the field with its reason
+      const pending = takePending();
+      if (pending) {
+        if (walletByAddr(pending)) { select(pending, true); return; }
+        addrIn.value = pending;
+        setNote('Tracking the wallet you entered before signing in…');
+        const ok = await addWallet(pending, '', true);
+        setNote(ok ? '' : 'The wallet you entered before signing in could not be added — it is still in the form below.');
+        if (ok) return;
+      }
+      // pick a wallet: the one a notification linked to (?wid= / ?lid=), else the remembered one if still tracked, else the first
+      let pick = null;
+      if (!state.deepLinkDone) {
+        state.deepLinkDone = true;
+        const params = new URLSearchParams(location.search);
+        if (params.has('wid') || params.has('lid')) {
+          const dl = resolveDeepLink(state.wallets, params);
+          if (dl) pick = dl.address;
+          else setNote('That wallet is no longer in your list — it was untracked or unlinked, so its report is gone with it.');
+        }
+      }
+      if (!pick) { const want = recallSelected(); pick = (want && walletByAddr(want)) ? want : (state.wallets[0] ? state.wallets[0].address : null); }
       if (pick) select(pick, false); else showNoSelection();
     } catch (e) {
       if (/sign in/i.test(e.message || '')) { showSignedOut(); return; }
@@ -182,9 +332,31 @@
       return false;
     } finally { updateCap(); }
   }
+  /* Signed out, the address field stays live: the submit opens sign-in and keeps the address (sessionStorage), so it
+     is tracked the moment the account is in. Sign-in comes first because a wallet read spends the site's one chain budget. */
+  function signInToTrack(address) {
+    address = String(address || '').trim();
+    if (address) stashPending(address.toLowerCase());
+    if (window.AUTH && AUTH.open) AUTH.open();
+  }
+  function setSoError(msg) {
+    if (!soErr) return;
+    if (msg) { soErr.textContent = msg; soErr.hidden = false; soAddr.setAttribute('aria-invalid', 'true'); }
+    else { soErr.textContent = ''; soErr.hidden = true; soAddr.removeAttribute('aria-invalid'); }
+  }
+  if (soForm) {
+    soForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const v = soAddr.value.trim();
+      if (v && !ADDR_RE.test(v)) { setSoError('That doesn\'t look like an address — it should start with 0x and be 42 characters long. Leave it empty to just sign in.'); soAddr.focus(); return; }
+      setSoError('');
+      signInToTrack(v);
+    });
+    soAddr.addEventListener('input', () => { if (!soErr.hidden) setSoError(''); });
+  }
   addForm.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
+    if (!(window.AUTH && AUTH.user)) { signInToTrack(ADDR_RE.test(addrIn.value.trim()) ? addrIn.value.trim() : ''); return; }
     addWallet(addrIn.value, labelIn.value, false);
   });
   chipsRow.addEventListener('click', (e) => {
@@ -290,54 +462,84 @@
       '</div>';
   }
   function showNoSelection() {
-    refreshBtn.hidden = true; selectedEl.hidden = true; banner.hidden = true; progress.textContent = '';
+    refreshBtn.hidden = true; rebuildBtn.hidden = true; selectedEl.hidden = true; banner.hidden = true; setProgress('');
     reportEl.innerHTML = '<p class="np-msg">👈 Track a wallet to see its report here.</p>';
+  }
+  /* What the server has saved for this wallet: `lastRead` is {updatedAt, readTo, partial} once a history was stored,
+     null when none is, and absent on a server that predates it (then nothing is claimed). */
+  function lastReadWords(w) {
+    if (!w || !('lastRead' in w)) return '';
+    const lr = w.lastRead;
+    if (!lr || !lr.updatedAt) return 'no saved history yet — the first read is the long one';
+    return 'history read ' + ago(lr.updatedAt) + (lr.readTo != null ? ' · to block ' + Number(lr.readTo).toLocaleString('en-US') : '') + (lr.partial ? ' · partial' : '');
   }
   function updateSelectedLine() {
     const w = state.selected && walletByAddr(state.selected);
     if (!w) { selectedEl.hidden = true; return; }
     selectedEl.hidden = false;
+    const read = lastReadWords(w);
     selectedEl.innerHTML = '<span class="trk-sel-lbl">' + esc(nameOf(w)) + '</span> <code class="trk-sel-addr">' + esc(w.address) + '</code>' +
       '<button class="copy-btn" type="button" data-tip="Copies the full address to your clipboard" data-copy="' + esc(w.address) + '" aria-label="Copy full address">📋</button>' +
-      '<a class="trk-sel-link" href="https://robinhoodchain.blockscout.com/address/' + encodeURIComponent(w.address) + '" target="_blank" rel="noopener">explorer ↗</a>';
+      '<a class="trk-sel-link" href="https://robinhoodchain.blockscout.com/address/' + encodeURIComponent(w.address) + '" target="_blank" rel="noopener">explorer ↗</a>' +
+      ((w.mine || isMine(w.address)) ? '<span class="trk-w-badge">your linked wallet</span>' : '') +
+      (read ? '<span class="trk-sel-read">' + esc(read) + '</span>' : '');
+  }
+  // after a live read the saved-history line may have moved: one cheap list query, merged in place (no repaint of the list)
+  async function refreshWalletMeta() {
+    try {
+      const j = await api('/api/wallets');
+      for (const w of (j.wallets || [])) {
+        const mine = walletByAddr(String(w.address).toLowerCase()); if (!mine) continue;
+        if ('lastRead' in w) mine.lastRead = w.lastRead;
+        if (w.lid != null) mine.lid = w.lid;
+      }
+      updateSelectedLine();
+    } catch {}
   }
   function setBanner(kind, html) {
     if (!html) { banner.hidden = true; banner.innerHTML = ''; banner.className = 'trk-banner'; return; }
     banner.hidden = false; banner.className = 'trk-banner is-' + kind; banner.innerHTML = html;
   }
+  /* An incremental read (a saved history exists and this is not a rebuild) reads only the blocks after the saved
+     read: the banner says so by the block it starts from. The server reads from a little before `readTo` (a reorg
+     overlap) — the figure shown is the saved read's last block, which is what "from" means to the reader. */
+  function incrementalFrom(addr) {
+    const w = walletByAddr(addr), lr = w && w.lastRead;
+    if (!lr || lr.partial || state.rebuilding[addr]) return null;
+    return lr.readTo != null ? Number(lr.readTo) : null;
+  }
   function paintBanner() {
     const addr = state.selected; if (!addr) return setBanner('', '');
     const entry = state.reports[addr];
     const busy = !!state.inflight[addr];
-    if (!entry) return setBanner('', '');
+    const from = busy ? incrementalFrom(addr) : null;
+    if (!entry) {
+      if (busy && from != null) return setBanner('info', '<span class="np-live-dot" aria-hidden="true"></span> Updating from block <b>' + esc(from.toLocaleString('en-US')) + '</b>…');
+      return setBanner('', '');
+    }
     if (entry.failed) return setBanner('warn', entry.failedMsg || ('⚠️ Live refresh failed — showing the report from <b>' + esc(ago(entry.updatedAt)) + '</b>. The chain may be busy; try Refresh in a minute.'));
-    if (busy) return setBanner('info', '<span class="np-live-dot" aria-hidden="true"></span> Last updated <b>' + esc(ago(entry.updatedAt)) + '</b> · refreshing…');
-    return setBanner(entry.source === 'live' ? 'fresh' : 'info', (entry.source === 'live' ? '✅ ' : '🗂️ ') + 'Updated <b>' + esc(ago(entry.updatedAt)) + '</b>' + (entry.source === 'live' ? '' : ' (saved report)'));
-  }
-  /* The live read can land minutes after the saved report went up, while someone is reading it: keep the token
-     sections they opened, and put focus back where it was. */
-  function rerenderKeepingPlace(report) {
-    const tokOf = (el) => { const d = el.closest('details.trk-token'); return d ? d.dataset.tok : ''; };
-    const infoKey = (b) => tokOf(b) + '|' + (b.getAttribute('aria-label') || '');   // ⓘ labels repeat in every token: keyed by token too
-    const open = new Set(Array.from(reportEl.querySelectorAll('details.trk-token[open]'), (d) => d.dataset.tok));
-    const openInfo = new Set(Array.from(reportEl.querySelectorAll('.trk-info[aria-expanded="true"]'), infoKey));
-    const a = document.activeElement, inside = !!(a && a !== reportEl && reportEl.contains(a));
-    const tog = inside && a.dataset ? a.dataset.trkToggle : null;
-    const info = inside && a.classList.contains('trk-info') ? infoKey(a) : null;
-    const tok = inside ? tokOf(a) : '';
-    renderReport(report);
-    reportEl.querySelectorAll('details.trk-token').forEach((d) => { if (open.has(d.dataset.tok)) d.open = true; });
-    reportEl.querySelectorAll('.trk-info').forEach((b) => { if (openInfo.has(infoKey(b))) toggleInfo(b); });
-    let back = null;
-    if (tog) back = reportEl.querySelector('[data-trk-toggle="' + tog + '"]');
-    else if (info) back = Array.from(reportEl.querySelectorAll('.trk-info')).find((b) => infoKey(b) === info);
-    else if (tok) { const d = Array.from(reportEl.querySelectorAll('details.trk-token')).find((x) => x.dataset.tok === tok); back = d && d.querySelector('summary'); }
-    if (back) back.focus();
+    if (busy) return setBanner('info', '<span class="np-live-dot" aria-hidden="true"></span> ' + (from != null ? 'Updating from block <b>' + esc(from.toLocaleString('en-US')) + '</b>… · last updated <b>' + esc(ago(entry.updatedAt)) + '</b>' : 'Last updated <b>' + esc(ago(entry.updatedAt)) + '</b> · ' + (state.rebuilding[addr] ? 'rebuilding from block 0…' : 'refreshing…')));
+    const rep = entry.report || {};
+    // an incremental read with no readFrom is the server's fast path: the node's head was not past the saved read, so nothing was read
+    const inc = !rep.incremental ? '' : rep.readFrom != null ? ' · read from block ' + esc(Number(rep.readFrom).toLocaleString('en-US')) + ' (only what was new)' : ' · nothing new on the chain since the saved read';
+    return setBanner(entry.source === 'live' ? 'fresh' : 'info', (entry.source === 'live' ? '✅ ' : '🗂️ ') + 'Updated <b>' + esc(ago(entry.updatedAt)) + '</b>' + (entry.source === 'live' ? inc : ' (saved report)'));
   }
   function renderReport(report) {
     if (typeof renderTracker !== 'function') { reportEl.innerHTML = '<p class="modal-note">Tracker unavailable on this page.</p>'; return; }
+    // keep-place for the ⓘ explainers: renderTracker restores focus by data-trk-key, but the ⓘ are the page's, not the
+    // renderer's — decorateStats() re-attaches them only after it returns — so their open panels and focus are put back
+    // here (a re-render of the same wallet only: a different wallet starts with every explainer closed)
+    const same = !!(reportEl._trkCtx && reportEl._trkCtx.r && report && reportEl._trkCtx.r.address === report.address);
+    const a = document.activeElement;
+    const hadInfo = same && a && a.closest ? a.closest('.trk-info') : null;
+    const hadKey = hadInfo && reportEl.contains(hadInfo) ? hadInfo.dataset.trkKey : null;
+    const openKeys = same ? Array.from(reportEl.querySelectorAll('.trk-info[aria-expanded="true"]'), (b) => b.dataset.trkKey) : [];
     try { renderTracker(reportEl, report, currentPrefs()); decorateStats(); }
-    catch { reportEl.innerHTML = '<p class="modal-note">⚠️ This saved report couldn\'t be displayed — hit Refresh to rebuild it from the chain.</p>'; }
+    catch { reportEl.innerHTML = '<p class="modal-note">⚠️ This saved report couldn\'t be displayed — hit Refresh to rebuild it from the chain.</p>'; return; }
+    if (!openKeys.length && !hadKey) return;
+    const findInfo = (k) => Array.from(reportEl.querySelectorAll('.trk-info')).find((b) => b.dataset.trkKey === k) || null;
+    openKeys.forEach((k) => { const b = findInfo(k); if (b && b.getAttribute('aria-expanded') !== 'true') toggleInfo(b); });
+    if (hadKey) { const b = findInfo(hadKey); if (b) { try { b.focus({ preventScroll: true }); } catch { b.focus(); } } }
   }
 
   async function select(addr, announceIt) {
@@ -346,8 +548,8 @@
     const w = walletByAddr(addr);
     const changed = state.selected !== addr;
     state.selected = addr; rememberSelected(addr);
-    highlightSelected(); updateSelectedLine();
-    refreshBtn.hidden = false;
+    highlightSelected(); updateSelectedLine(); clearRebuild();
+    refreshBtn.hidden = false; rebuildBtn.hidden = false;
     if (announceIt) say('Showing ' + nameOf(w));
     if (!changed) return; // already showing it (Refresh is the explicit re-read)
     const run = ++state.runId;
@@ -355,13 +557,13 @@
     if (mem && mem.report) {
       renderReport(mem.report);
       // a live report from the last couple of minutes is fresh enough — don't re-read the chain on every click
-      if (mem.source === 'live' && !mem.failed && Date.now() - mem.updatedAt < 120000 && !state.inflight[addr]) { progress.textContent = ''; setBusy(); return; }
+      if (mem.source === 'live' && !mem.failed && Date.now() - mem.updatedAt < 120000 && !state.inflight[addr]) { setProgress(''); setBusy(); return; }
       // a live read that just failed (chain busy / balances unreadable) is not retried on every click either — the
       // saved report stays on screen with its warning; Refresh is the explicit retry
-      if (mem.failed && Date.now() - (mem.failedAt || 0) < 120000 && !state.inflight[addr]) { progress.textContent = ''; setBusy(); return; }
+      if (mem.failed && Date.now() - (mem.failedAt || 0) < 120000 && !state.inflight[addr]) { setProgress(''); setBusy(); return; }
     } else {
       reportEl.innerHTML = skeletonHTML(); setBanner('', '');
-      progress.textContent = 'Checking for a saved report…';
+      setProgress('Checking for a saved report…');
       try {
         const c = await api('/api/tracker/cache?address=' + encodeURIComponent(addr));
         if (run !== state.runId) return;
@@ -379,31 +581,41 @@
   function setBusy() {
     const busy = !!(state.selected && state.inflight[state.selected]);
     state.refreshing = busy ? state.selected : null;
-    refreshBtn.disabled = busy; reportEl.setAttribute('aria-busy', String(busy));
+    refreshBtn.disabled = busy; rebuildBtn.disabled = busy; reportEl.setAttribute('aria-busy', String(busy));
     paintBanner();
   }
   /* Every read's progress goes through one listener per address, so opening a wallet whose read is already running
-     (the combined view started it) shows how far it has got. The line is a live region: it speaks when the stage
-     changes, or every 15 s — not at every percent. */
-  const relay = (addr) => (m) => { const f = state.listen[addr]; if (f) f(m); };
+     (the combined view started it) shows how far it has got. tracker.js reports the words first and, from the 202,
+     the structure {stage, done, total, eta, ahead, stageOf, progressed, resuming, queueFull}; the words alone still
+     paint a line. The live region is keyed on the stage: it speaks on a stage change or every 20 s, never a percent. */
+  const relay = (addr) => (m, info) => { const f = state.listen[addr]; if (f) f(m, info); };
   function listenTo(addr) {
-    let lastMsg = 0, lastStage = '';
-    state.listen[addr] = (m) => {
+    const pg = state.prog[addr] = { stage: '', etaEnd: null, info: null, msg: '' };
+    state.listen[addr] = (m, info) => {
+      pg.msg = String(m || '');
+      if (info && typeof info === 'object' && info.stage !== 'busy') {   // 'busy' has no 202 behind it: the server's sentence (next in line / try again in a minute / slow down) is the line, and the stage's ETA is kept for when polling resumes
+        const stage = String(info.stage || '');
+        if (stage !== pg.stage) { pg.stage = stage; pg.etaEnd = null; }   // a new stage: its own measured ETA, from scratch
+        pg.etaEnd = etaEndAt(pg.etaEnd, Date.now(), info.eta);
+        pg.info = info;
+      } else pg.info = null;
       if (state.selected !== addr) return;
-      const t = Date.now(), stage = m.replace(/…\s*\d+%$/, '…');
-      if (stage !== lastStage || t - lastMsg > 15000) { lastStage = stage; lastMsg = t; progress.textContent = '⛓️ ' + m; }
+      paintProgress(addr);
     };
   }
+  /* fresh: falsy = the server's recent copy is fine; 1 = Refresh (incremental when a history is saved); 2 = Rebuild from
+     scratch (from block 0, rate-limited by the server). */
   async function refresh(addr, run, fresh) {
-    if (typeof trackerReport !== 'function') { progress.textContent = ''; reportEl.innerHTML = '<p class="modal-note">Tracker unavailable on this page.</p>'; return; }
+    if (typeof trackerReport !== 'function') { setProgress(''); reportEl.innerHTML = '<p class="modal-note">Tracker unavailable on this page.</p>'; return; }
     const hadCached = !!(state.reports[addr] && state.reports[addr].report);
     if (!hadCached) reportEl.innerHTML = skeletonHTML();
-    progress.textContent = '⛓️ reading account…';
+    if (fresh === 2) state.rebuilding[addr] = true;
+    setProgress('⛓️ Reading the account…');
     listenTo(addr);
     // one chain read per address at a time: switching back and forth between wallets joins the read already running
     let p = state.inflight[addr];
     if (!p) {
-      p = state.inflight[addr] = trackerReport(addr, relay(addr), { fresh: !!fresh })
+      p = state.inflight[addr] = trackerReport(addr, relay(addr), { fresh: fresh === 2 ? 2 : !!fresh })
         .then(rep => {
           const entry = { report: rep, updatedAt: rep.readAt || Date.now(), source: 'live' };   // when the chain was read, not when it arrived
           // a failed balance read must not overwrite a good saved report (server or memory) — it would show "$0 held"
@@ -412,11 +624,12 @@
           else if (!state.reports[addr]) state.reports[addr] = entry;
           return rep;
         })
-        .finally(() => { delete state.inflight[addr]; });
+        .finally(() => { delete state.inflight[addr]; delete state.rebuilding[addr]; });
     }
     setBusy();
     try {
       const rep = await p;
+      refreshWalletMeta();   // the saved-history line (history read … · to block N) has just moved
       if (run !== state.runId) return; // user moved on — cache is warm, nothing to paint
       const entry = state.reports[addr];
       if (rep.holdingsFailed && hadCached && entry && entry.report) {
@@ -424,21 +637,22 @@
         // flag the entry so switching wallets and back doesn't re-read a busy chain on every click
         entry.failed = true; entry.failedAt = Date.now();
         entry.failedMsg = '⚠️ Token balances could not be read on this refresh — showing the saved report from <b>' + esc(ago(entry.updatedAt)) + '</b>. Try Refresh in a minute.';
-        progress.textContent = 'Balances unreadable — showing the saved report.';
+        setProgress('Balances unreadable — showing the saved report.');
       } else {
-        rerenderKeepingPlace(rep);
-        progress.textContent = rep.holdingsFailed ? 'Report built, but token balances could not be read.' : 'Report updated.';
+        renderReport(rep);   // renderTracker keeps its own place (open rows, filters, focus) across a re-render
+        setProgress(rep.holdingsFailed ? 'Report built, but token balances could not be read.' : (rep.incremental ? (rep.readFrom != null ? 'Report updated — only the blocks after the saved read were read.' : 'Report checked — nothing new on the chain since the saved read.') : 'Report updated.'));
       }
     } catch (e) {
       if (run !== state.runId) return;
       const entry = state.reports[addr];
       const why = (e && e.message) || 'the chain may be busy';   // the server says why: busy, throttled, or a wallet too large to read in full
+      const queueFull = !!(e && (e.queueFull || /long line/i.test(why)));
       if (e && e.permanent) {
-        if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); entry.failedMsg = '⚠️ ' + esc(why) + ' — showing the saved report from <b>' + esc(ago(entry.updatedAt)) + '</b>.'; progress.textContent = why + '.'; }
-        else { progress.textContent = ''; reportEl.innerHTML = '<p class="np-msg">⚠️ ' + esc(why) + '. The explorer link above shows its full history.</p>'; }
-      } else if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); delete entry.failedMsg; progress.textContent = 'Live refresh failed (' + why + ') — showing the saved report.'; }
+        if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); entry.failedMsg = '⚠️ ' + esc(why) + ' — showing the saved report from <b>' + esc(ago(entry.updatedAt)) + '</b>.'; setProgress(why + '.'); }
+        else { setProgress(''); reportEl.innerHTML = '<p class="np-msg">⚠️ ' + esc(why) + '. The explorer link above shows its full history.</p>'; }
+      } else if (entry && entry.report) { entry.failed = true; entry.failedAt = Date.now(); delete entry.failedMsg; setProgress(queueFull ? QUEUE_FULL_COPY + ' Showing the saved report.' : 'Live refresh failed (' + why + ') — showing the saved report.'); }
       else {
-        progress.textContent = '';
+        setProgress(queueFull ? QUEUE_FULL_COPY : '');
         reportEl.innerHTML = '<p class="np-msg">⚠️ Couldn\'t read this wallet right now — ' + esc(why) + '. <button class="btn btn-sm btn-ghost trk-retry" type="button" data-tip="Attempts the chain read for this wallet again" data-retry>Try again</button></p>';
       }
     } finally {
@@ -453,20 +667,49 @@
     let body = rep;
     try {
       if (!fits(body)) body = { ...rep, tokens: rep.tokens.map(t => ({ ...t, trades: (t.trades || []).slice(0, 40) })), trimmedForCache: true };
+      /* The transactions list is the bulk of a busy wallet's report (one row per token transaction): keep the newest
+         500, then 150, and say how many the full list had (activityTrimmed) — the renderer prints that beside the list.
+         The next live read lists them all again. */
+      const trimAct = (n) => (Array.isArray(body.activity) && body.activity.length > n) ? { ...body, activity: n ? body.activity.slice(0, n) : undefined, activityTrimmed: rep.activity.length, trimmedForCache: true } : body;
+      if (!fits(body)) body = trimAct(500);
       if (!fits(body)) body = { ...body, tokens: body.tokens.map(t => ({ ...t, trades: t.trades.slice(0, 10) })) };
+      if (!fits(body)) body = trimAct(150);
       if (!fits(body)) body = { ...body, tokens: body.tokens.filter(t => (t.valueUsd != null && t.valueUsd >= 1) || t.buys + t.sells > 0 || t.balanceUnread) };
       if (!fits(body)) body = { ...body, tokens: body.tokens.map(t => ({ ...t, trades: [] })) };   // counts and PNL stay; only the trade tables go
+      if (!fits(body)) body = trimAct(0);   // the list goes (the renderer says so, with the count); the facts keep txCounts
+      if (!fits(body) && body.series) body = { ...body, series: undefined };   // the chart's held/invested points go (the chart host says "No chart in this saved report")
       if (!fits(body)) body = { ...body, tokens: body.tokens.filter(t => (t.valueUsd != null && t.valueUsd >= 1) || t.balanceUnread || t.unrealizedUsd != null), tokensTrimmed: true };   // last: closed positions' rows (the report's totals are untouched)
       if (!fits(body)) return;
     } catch { return; }
     api('/api/tracker/cache', { method: 'POST', body: { address: addr, report: body } }).catch(() => {});
   }
+  function forgetFailure(addr) { const entry = state.reports[addr]; if (entry) { delete entry.failed; delete entry.failedAt; delete entry.failedMsg; } }
   refreshBtn.addEventListener('click', () => {
     if (!state.selected || state.inflight[state.selected]) return;
-    const entry = state.reports[state.selected];
-    if (entry) { delete entry.failed; delete entry.failedAt; delete entry.failedMsg; }
+    clearRebuild(); forgetFailure(state.selected);
     say('Refreshing report');
-    refresh(state.selected, ++state.runId, true);   // a new read from the chain, not the server's copy of the last one
+    refresh(state.selected, ++state.runId, 1);   // a new read from the chain, not the server's copy of the last one — incremental when a history is saved
+  });
+  /* Rebuild from scratch: two taps within 4 s. The whole history from block 0 is the slow read the saved one exists
+     to avoid, and the server rate-limits it, so a stray tap must not spend it. */
+  function clearRebuild() {
+    if (!state.rebuildT) return;
+    clearTimeout(state.rebuildT); state.rebuildT = null;
+    rebuildBtn.classList.remove('is-armed'); rebuildBtn.textContent = 'Rebuild from scratch';
+    rebuildBtn.removeAttribute('aria-label');
+  }
+  rebuildBtn.addEventListener('click', () => {
+    if (!state.selected || state.inflight[state.selected]) return;
+    if (state.rebuildT) {
+      clearRebuild(); forgetFailure(state.selected);
+      say('Rebuilding the report from block 0');
+      refresh(state.selected, ++state.runId, 2);
+      return;
+    }
+    rebuildBtn.classList.add('is-armed'); rebuildBtn.textContent = 'Sure? Rebuild';
+    rebuildBtn.setAttribute('aria-label', 'Tap again to confirm: read the whole history again from block 0 — an hour or more on the public node');
+    say('Tap again within 4 seconds to read the whole history again from block 0 — on the public node it can take an hour or more; you can leave, it keeps reading, is saved, and you get a notification when it is ready');
+    state.rebuildT = setTimeout(clearRebuild, 4000);
   });
   reportEl.addEventListener('click', (e) => {
     if (e.target.closest('[data-retry]')) { if (state.selected) refresh(state.selected, ++state.runId); return; }
@@ -481,7 +724,7 @@
 
   /* ---------- ⓘ stat explainers (button + aria-expanded panel; no title= tooltips) ---------- */
   const DEFS = {
-    'Portfolio value': 'Everything the wallet holds in USD right now: its ETH plus every token that has a live market.',
+    'Portfolio value': 'Everything the wallet holds right now: its ETH plus every token with a live price (from Dexscreener, or from the token\'s own pool on the chain). USD at today\'s ETH price; a partial total says what it leaves out.',
     'ETH balance': 'The wallet\'s native ETH on Robinhood Chain — what it uses to pay gas and buy tokens.',
     'Unrealized PNL': 'Paper profit or loss on tokens still held: today\'s value minus what the wallet paid for them (average cost).',
     'Realized PNL': 'Profit or loss already locked in by selling: sale proceeds minus the average cost of what was sold.',
@@ -490,22 +733,41 @@
     'Sell proceeds': 'Total ETH the pool paid out for the tokens this wallet sold, however the swap was routed.',
     'Realized': 'Profit or loss locked in on this token by selling: proceeds minus the average cost of what was sold.',
     'Unrealized': 'Paper profit or loss on the amount still held: value today minus its average cost.',
-    'Tokens traded': 'How many different tokens this wallet has bought or sold against a DEX pool (and how many are in profit overall).',
-    'Transactions sent': 'How many transactions this wallet has signed and sent — its nonce, read from the chain. Transfers other people sent to it are not counted here.',
+    'Tokens traded': 'How many different tokens this wallet has bought or sold against a DEX pool, how many of them have a positive total PNL, and how many could not be valued.',
+    'Transactions sent': 'How many transactions this wallet has signed and sent — its nonce, read from the chain. Transfers other people sent to it are not counted here; a contract\'s nonce counts the contracts it created.',
+    'Token transactions': 'Every transaction that moved a token to or from this wallet, whoever sent it — these are the ones listed under Transactions. Plain ETH transfers and contract calls that move no token leave no log on the chain, so they are not counted.',
+    'First activity': 'The earliest token transfer this wallet made or received, dated from the chain.',
+    'Last activity': 'The latest token transfer this wallet made or received, dated from the chain.',
+    'Account': 'What the chain says this address is: a wallet, a wallet that delegated to smart-account code (EIP-7702, still a personal wallet), or a contract.',
+    'Value over time': 'Token holdings valued at each pool\'s own on-chain price, USD at today\'s ETH price; the ETH balance is not included. A rise or fall is a change in value, not a return — buys, sells and transfers move it too.',
   };
-  const HELD_DEF = 'How many of that token the wallet holds right now, read from the chain.';
   let infoSeq = 0;
+  // the words of a label without its unit ("Portfolio value (USD)" → "Portfolio value") or an ⓘ already in it
+  function labelKey(el) {
+    let s = '';
+    el.childNodes.forEach(n => {
+      if (n.nodeType === 3) s += n.textContent;
+      else if (n.nodeType === 1 && !n.classList.contains('unit') && !n.classList.contains('trk-info') && !n.classList.contains('sr-only')) s += n.textContent;
+    });
+    return s.replace(/\s+/g, ' ').trim();
+  }
+  /* ⓘ lives in exactly two places: inside a stat tile's label (.hstat .lbl), and in a section's heading row
+     (.trk-h-row) as a SIBLING of its h3 — never inside a heading, where the definition would become part of the
+     heading text. A row that already carries one (the holdings column panel the renderer draws) is left alone. */
   function decorateStats() {
     reportEl.querySelectorAll('.hstat').forEach(box => {
       if (box.querySelector('.trk-info')) return;
       const lbl = box.querySelector('.lbl'); if (!lbl) return;
-      const key = lbl.textContent.trim();
+      const key = labelKey(lbl);
       const def = DEFS[key]; if (!def) return;
       addInfo(box, lbl, key, def);
     });
-    reportEl.querySelectorAll('.trk-h').forEach(h => {
-      if (h.querySelector('.trk-info')) return;
-      if (/Holdings/.test(h.textContent)) addInfo(h, h, 'Held', HELD_DEF);
+    reportEl.querySelectorAll('.trk-h-row').forEach(row => {
+      if (row.querySelector('.trk-info')) return;
+      const h = row.querySelector('.trk-h'); if (!h) return;
+      const key = labelKey(h);
+      const def = DEFS[key]; if (!def) return;
+      addInfo(row, row, key, def);
     });
   }
   function addInfo(box, labelEl, key, def) {
@@ -515,11 +777,14 @@
     btn.setAttribute('aria-expanded', 'false'); btn.setAttribute('aria-controls', id);
     btn.setAttribute('aria-label', 'What is ' + key + '?');
     btn.setAttribute('data-tip', 'Shows or hides what this figure means');
+    // keep-place key (renderReport re-opens and re-focuses the ⓘ after decorateStats): the per-token stat tiles repeat
+    // the same labels in every token's detail row, so those are scoped by the row's id (uid-tok-address, stable across re-renders)
+    const det = box.closest('.trk-hdetail');
+    btn.setAttribute('data-trk-key', 'info:' + (det ? det.id + ':' : '') + key);
     labelEl.appendChild(btn);
     const panel = document.createElement('p');
     panel.className = 'trk-info-panel'; panel.id = id; panel.hidden = true; panel.textContent = def;
-    // when the label IS the box (an <h4>), the panel goes after it — a <p> inside a heading is invalid and would make
-    // the definition part of the heading text for screen readers
+    // when the label IS the box (a heading row), the panel goes after it — under the heading, outside it
     if (box === labelEl) box.insertAdjacentElement('afterend', panel); else box.appendChild(panel);
   }
   function toggleInfo(btn) {
@@ -527,8 +792,10 @@
     if (open) closeInfo(btn); else { btn.setAttribute('aria-expanded', 'true'); const p = reportEl.querySelector('#' + btn.getAttribute('aria-controls')); if (p) p.hidden = false; }
   }
   function closeInfo(btn) { btn.setAttribute('aria-expanded', 'false'); const p = reportEl.querySelector('#' + btn.getAttribute('aria-controls')); if (p) p.hidden = true; }
-  // renderTracker re-renders itself (innerHTML) when a display toggle is clicked → re-attach the ⓘ buttons
-  new MutationObserver(() => { if (!reportEl.querySelector('.trk-skel')) decorateStats(); }).observe(reportEl, { childList: true });
+  // renderTracker re-renders itself (innerHTML) when a display toggle is clicked, and fills a token's detail panel on its
+  // first open → re-attach the ⓘ buttons (subtree: the panel is filled deep in the table; decorateStats skips boxes that
+  // already carry one, so its own insertions end the loop)
+  new MutationObserver(() => { if (!reportEl.querySelector('.trk-skel')) decorateStats(); }).observe(reportEl, { childList: true, subtree: true });
 
   /* ---------- combined totals across your own wallets ----------------------
      One person with three wallets has one portfolio, so this answers the question
@@ -654,13 +921,13 @@
   function showSignedOut() {
     layout.hidden = true; signedOut.hidden = false;
     state.wallets = []; state.loaded = false; state.selected = null; state.runId++; state.refreshing = null; state.reports = {};
+    setNote('');
   }
   function showSignedIn() {
     signedOut.hidden = true; layout.hidden = false;
     state.prefs = (AUTH.user && AUTH.user.tracker_prefs) || null;
     loadWallets();
   }
-  $('trk-signin').addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
   // auth:change also fires at init and when a wallet gets linked — only reload the list when the signed-in identity
   // actually changes; otherwise just refresh the "your linked wallet" badges + quick-add chips. auth.js dispatches
   // auth:change before AUTH.ready resolves, so the second boot() for the same user must not repaint the (still empty)

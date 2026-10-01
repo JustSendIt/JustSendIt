@@ -347,7 +347,8 @@ html .cmp-step--1 .cmp-ava { --ava: 56px; }
 html .cmp-ava.cmp-ava--sm { --ava: 28px; }   /* the leaderboard's small avatar: its own 28px circle */
 @media (max-width: 420px) { html .cmp-ava.cmp-ava--sm { --ava: 38px; } }   /* compete.css makes every .cmp-ava 38px on a phone */
 html .trk-report .trk-info { --ava: 28px; font-size: calc(var(--ava) * 0.6); }
-@media (max-width: 560px) { html .trk-report .trk-info { --ava: 36px; } }
+/* a 44px disc under a finger (tracker.css sizes the disc from --ava too) — keyed on the pointer, not the width */
+@media (pointer: coarse) { html .trk-report .trk-info { --ava: 44px; } }
 html .trk-report .trk-info { font-family: Rubik, system-ui, sans-serif; }   /* it inherited the heading's Luckiest Guy */
 html .media-preview-rm { --ava: 30px; font-size: calc(var(--ava) * 0.5); }
 html .modal-x { --ava: 34px; font-size: calc(var(--ava) * 0.5); }

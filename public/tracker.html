@@ -35,6 +35,7 @@
 <link rel="stylesheet" href="moderation.css">
 <link rel="stylesheet" href="tokentext.css">
 <link rel="stylesheet" href="tracker.css">
+<link rel="stylesheet" href="trackerdash.css">
 <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
@@ -65,7 +66,8 @@
 
 <header class="np-hero trk-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Wallet Tracker 💼</h1>
-  <p class="section-sub" style="margin-bottom:0.5rem;">Follow any wallet on Robinhood Chain: holdings, trades, cost basis and PNL — read from the chain by this site, so the explorer never learns which wallets you watch. Read-only: nothing is ever signed or moved.</p>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Track any wallet on Robinhood Chain: holdings, every token transaction, a value-over-time chart, cost basis and PNL — read from the chain by this site, so the explorer never learns which wallets you watch. Read-only: nothing is ever signed or moved.</p>
+  <p class="section-sub trk-hero-time" style="margin-bottom:0.5rem;">On the public node a wallet's first read can take an hour or more. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready. Later refreshes read only what is new and take seconds.</p>
   <p class="np-hero-warn">⚠️ Numbers are best-effort from public chain data — not a guarantee, not an audit, not advice. Copying a wallet's trades can lose you money. <b>Do your own research.</b></p>
 </header>
 
@@ -77,13 +79,22 @@
       <h2 class="display trk-h2" id="trk-so-h">What you get 🔍</h2>
       <ul class="trk-so-list" aria-labelledby="trk-so-h">
         <li><span aria-hidden="true">💼</span> <b>Track up to 10 wallets</b> — yours, a friend's, or any address you're curious about. Private to your account.</li>
-        <li><span aria-hidden="true">📊</span> <b>Holdings &amp; portfolio value</b> — every token the wallet holds, priced from live DEX pools.</li>
-        <li><span aria-hidden="true">🧾</span> <b>Trade history &amp; cost basis</b> — buys, sells and transfers reconstructed from the chain, with an average entry price per token.</li>
+        <li><span aria-hidden="true">📊</span> <b>Holdings, portfolio value &amp; a value-over-time chart</b> — every token the wallet holds, priced from live pools on the chain; USD at today's ETH price.</li>
+        <li><span aria-hidden="true">🧾</span> <b>Every token transaction &amp; cost basis</b> — buys, sells and transfers reconstructed from the chain, whoever sent them, with an average entry price per token.</li>
         <li><span aria-hidden="true">📈</span> <b>Realized &amp; unrealized PNL</b> — what's been locked in by selling, and what's still on paper.</li>
-        <li><span aria-hidden="true">⚡</span> <b>Instant reopen</b> — your last report is saved to your account, so it shows immediately and refreshes live in the background.</li>
+        <li><span aria-hidden="true">💾</span> <b>Saved history</b> — on the public node a wallet's first read can take an hour or more; you can leave, it keeps reading and is saved to your account, you get a notification when it is ready, and later refreshes read only what is new and take seconds.</li>
       </ul>
       <p class="modal-note">Read-only, always: the tracker only <i>reads</i> public data. It never asks you to sign a transaction and can never move funds.</p>
-      <button class="btn btn-primary" id="trk-signin" type="button" data-tip="Opens the sign-in panel — tracked wallets save to your account">Sign in to track wallets 🚀</button>
+      <!-- The address field is live signed out: the submit opens sign-in and keeps the address, so it is tracked the
+           moment the account is in (trackerpage.js stashes it as sessionStorage trk:pending). Reading a wallet spends
+           the site's one chain budget, which is why sign-in comes first. -->
+      <form id="trk-so-form" class="trk-add trk-so-form" novalidate>
+        <label class="f-label" for="trk-so-addr">Wallet address</label>
+        <input class="addr-input" id="trk-so-addr" placeholder="0x… (42 characters)" spellcheck="false" autocomplete="off" autocapitalize="off" inputmode="text" aria-describedby="trk-so-help trk-so-err">
+        <p class="trk-err" id="trk-so-err" hidden></p>
+        <button class="btn btn-primary trk-so-btn" type="submit" id="trk-so-btn" data-tip="Opens the sign-in panel and keeps this address, so it is tracked the moment you are in">Sign in to track →</button>
+        <p class="modal-note" id="trk-so-help">Sign in first — reading a wallet spends the site's chain budget. Leave the field empty to just sign in. Tracked wallets are private to your account.</p>
+      </form>
     </div>
 
     <!-- ===== SIGNED-IN LAYOUT ===== -->
@@ -114,15 +125,20 @@
           <label class="f-label" for="trk-label">Label <span class="trk-opt">(optional)</span></label>
           <input class="addr-input" id="trk-label" maxlength="40" placeholder="e.g. Whale I'm watching" autocomplete="off">
           <button class="btn btn-gold btn-sm trk-add-btn" type="submit" id="trk-add-btn" data-tip="Adds the address above to your list and opens its report">Track ➕</button>
-          <p class="modal-note" id="trk-addr-help">Any Robinhood Chain address works — a wallet, a friend's, a whale. Labels are private to you.</p>
+          <p class="modal-note" id="trk-addr-help">Any Robinhood Chain address works — a wallet, a friend's, a whale. Labels are private to you. On the public node a new wallet's first read can take an hour or more — you can leave; it keeps reading, is saved, and you get a notification when it is ready. Later refreshes take seconds.</p>
         </form>
       </aside>
 
       <section class="trk-main" aria-labelledby="trk-main-h">
         <div class="trk-main-head">
           <h2 class="display trk-h2" id="trk-main-h">Report</h2>
-          <button class="btn btn-ghost btn-sm" id="trk-refresh" type="button" hidden data-tip="Reads the selected wallet from the chain again">↻ Refresh</button>
+          <div class="trk-main-actions">
+            <button class="btn btn-ghost btn-sm" id="trk-refresh" type="button" hidden data-tip="Reads what is new on the chain since the saved read (a first read reads everything)">↻ Refresh</button>
+            <!-- two taps: the whole history from block 0 is the slow read the saved one exists to avoid -->
+            <button class="btn btn-ghost btn-sm trk-rebuild" id="trk-rebuild" type="button" hidden data-tip="Reads this wallet's whole history from block 0 again, ignoring the saved read — tap twice to confirm">Rebuild from scratch</button>
+          </div>
         </div>
+        <p class="trk-note modal-note" id="trk-note" role="status" hidden></p>
         <!-- Everything you own, added up. Sits above the single-wallet report because "what am I worth
              across all of it" is the question people open this page with. -->
         <section class="trk-comb" id="trk-comb" hidden aria-labelledby="trk-comb-h">
@@ -138,13 +154,24 @@
 
         <p class="trk-selected" id="trk-selected" hidden></p>
         <div class="trk-banner" id="trk-banner" hidden></div>
-        <p class="trk-progress" id="trk-progress" role="status" aria-live="polite"></p>
+        <!-- The read's progress: a visible line (step, stage, percent, a per-stage ETA that never rises), a bar, and
+             the note that the read goes on without the page. The spoken copy is a separate live region that only
+             carries the step and the stage — a percent read out every two seconds is noise, not progress. -->
+        <div class="trk-progress" id="trk-progress" hidden>
+          <p class="trk-prog-line" id="trk-prog-line"></p>
+          <div class="trk-prog-bar" id="trk-prog-bar" role="progressbar" aria-label="Progress of this step" aria-valuemin="0" aria-valuemax="100" hidden><div class="trk-prog-fill" id="trk-prog-fill"></div></div>
+          <p class="trk-prog-note" id="trk-prog-note" hidden>On the public node a first read can take an hour or more. You can leave this page — the read keeps its place in line, keeps reading, is saved, and you get a notification when it is ready.</p>
+        </div>
+        <p class="sr-only" id="trk-prog-live" role="status" aria-live="polite"></p>
 
         <details class="trk-explain" id="trk-explain">
           <summary>❓ What am I looking at?</summary>
           <div class="trk-explain-body">
             <dl class="trk-defs">
-              <dt>Portfolio value</dt><dd>Everything the wallet holds, in USD right now: its ETH plus every token that has a live market on Robinhood Chain.</dd>
+              <dt>Portfolio value</dt><dd>Everything the wallet holds, in USD right now: its ETH plus every token with a live price on Robinhood Chain (from Dexscreener, or from the token's own pool). USD at today's ETH price.</dd>
+              <dt>Value over time</dt><dd>Token holdings valued at each pool's own on-chain price, USD at today's ETH price; the ETH balance is not included. A rise or fall is a change in value, not a return — buys, sells and transfers move it too.</dd>
+              <dt>Token transactions</dt><dd>Every transaction that moved a token to or from the wallet, whoever sent it. Plain ETH transfers and contract calls that move no token leave no log on the chain and are not listed.</dd>
+              <dt>Account</dt><dd>What the chain says the address is: a wallet, a wallet that delegated to smart-account code (EIP-7702), or a contract.</dd>
               <dt>ETH balance</dt><dd>The wallet's native ETH — what it uses to pay gas and buy tokens.</dd>
               <dt>Unrealized PNL</dt><dd>Paper profit or loss on tokens still held: today's value minus what the wallet paid for them (average cost).</dd>
               <dt>Realized PNL</dt><dd>Profit or loss already locked in by selling: sale proceeds minus the average cost of what was sold.</dd>
@@ -152,7 +179,7 @@
               <dt>Held</dt><dd>How many of that token the wallet holds right now, read from the chain.</dd>
               <dt>Hide dust</dt><dd>Hides positions worth under $1 that were never traded, so the list stays readable.</dd>
             </dl>
-            <p class="modal-note">Trades are reconstructed by matching token transfers against known DEX pools; very deep histories are truncated and some legs can't be valued. USD figures use today's ETH price. This is an estimate for entertainment, not tax or investment advice.</p>
+            <p class="modal-note">Trades are reconstructed by matching token transfers against known DEX pools; very deep histories are truncated and some legs can't be valued. USD figures use today's ETH price. On the public node a wallet's first read can take an hour or more; the result is saved to your account, you get a notification when it is ready, and later refreshes read only the blocks after it and take seconds. This is an estimate for entertainment, not tax or investment advice.</p>
           </div>
         </details>
 
@@ -202,6 +229,7 @@
 <script src="wallet.js"></script>
 <script src="chain.js"></script>
 <script src="tracker.js"></script>
+<script src="walletchart.js"></script>
 <script src="auth.js"></script>
 <script src="moderation.js"></script>
 <script src="search.js"></script>

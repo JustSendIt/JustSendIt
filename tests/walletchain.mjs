@@ -9,6 +9,11 @@
      · every transaction behind those transfers comes with its legs (the ETH it carried, the WETH / token moves);
    and then the browser's own report code (public/tracker.js, run here unchanged) builds a report from it: the full
    history, a buy through a router counted as a buy and valued in ETH, the holding matching the chain.
+   The live whole-wallet read runs only with WALLETCHAIN_LIVE=1: measured 2026-09-30, the public node answers 429 to
+   every batch of log windows during the walk, so a from-scratch read takes about an hour (≈5,100 windows of 30,000
+   blocks at ~1.7 a second) and throttles every other chain read of the site's shared budget meanwhile. Without the
+   flag the suite checks the wiring, finds the buyer, and says the read is not asserted. The buyer search walks the
+   $SEND pool's transfers in windows under the node's one-address cap (10,000,000 blocks; a wider span is refused).
    Read-only on the chain; the throwaway account made here is deleted at the end. */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
@@ -53,14 +58,30 @@ try {
 
   /* ═══ 2. a busy real wallet: the person the $SEND pool paid most often lately ═══ */
   const head = parseInt(await rpc('eth_blockNumber', []), 16);
+  /* The pool's payouts over the last two weeks, then the 46 before them, read one address at a time in windows under
+     the node's cap for a one-address eth_getLogs (10,000,000 blocks — a span over it is refused, and a refusal is
+     said here, never swallowed into "no buyer"). The person paid most often who is not a contract is the wallet. */
+  const WIN1 = 9900000, refused = [];
   let wallet = null;
-  for (const span of [36000 * 24 * 14, 36000 * 24 * 60]) {
-    const logs = await rpc('eth_getLogs', [{ address: SEND, topics: [T, pad(PAIR)], fromBlock: '0x' + Math.max(0, head - span).toString(16), toBlock: 'latest' }]).catch(() => []);
-    const n = {}; for (const l of logs || []) { const a = '0x' + l.topics[2].slice(-40); if (a !== SEND) n[a] = (n[a] || 0) + 1; }
+  const n = {};
+  for (const [lo, hi] of [[Math.max(0, head - 36000 * 24 * 14), head], [Math.max(0, head - 36000 * 24 * 60), Math.max(0, head - 36000 * 24 * 14) - 1]]) {
+    for (let f = lo; f <= hi; f += WIN1) {
+      let logs = [];
+      try { logs = await rpc('eth_getLogs', [{ address: SEND, topics: [T, pad(PAIR)], fromBlock: '0x' + f.toString(16), toBlock: '0x' + Math.min(hi, f + WIN1 - 1).toString(16) }]); }
+      catch (e) { refused.push(f + '…' + Math.min(hi, f + WIN1 - 1) + ': ' + String((e && e.message) || e).slice(0, 80)); }
+      for (const l of logs || []) { const a = '0x' + l.topics[2].slice(-40); if (a !== SEND) n[a] = (n[a] || 0) + 1; }
+      await sleep(500);
+    }
     for (const [a] of Object.entries(n).sort((x, y) => y[1] - x[1]).slice(0, 8)) { await sleep(300); if (await rpc('eth_getCode', [a, 'latest']) === '0x') { wallet = a; break; } }
     if (wallet) break;
   }
-  if (!wallet) { check('a busy $SEND buyer could be found on-chain (none — not asserted)', true); throw new Error('skip'); }
+  check('a busy $SEND buyer was found on-chain (the pool\'s payouts, read in windows under the node\'s one-address cap)', !!wallet, (wallet || 'none') + (refused.length ? ' — refused windows: ' + refused.join(' · ') : ''));
+  if (!wallet) throw new Error('skip');
+
+  if (process.env.WALLETCHAIN_LIVE !== '1') {
+    check('the live whole-wallet read is not asserted (set WALLETCHAIN_LIVE=1 to run it — about an hour on today\'s public node, and it throttles every other chain read meanwhile)', true, wallet);
+    throw new Error('skip');
+  }
 
   // the read runs as a job: 202 with its progress until the history is ready
   const t0 = Date.now();
@@ -68,16 +89,16 @@ try {
   for (;;) {
     r = await fetch(BASE + '/api/chain/wallet?address=' + wallet, { headers: { Origin: BASE, Cookie: cookie } });
     h = await r.json().catch(() => null);
-    if (r.status !== 202 || Date.now() - t0 > 8 * 60 * 1000) break;
+    if (r.status !== 202 || Date.now() - t0 > 70 * 60 * 1000) break;
     if (h && h.pending && h.stage) sawProgress = true;
     polls++; await sleep(2000);
   }
   const took = Date.now() - t0;
-  /* Since 2026-09-28 the public node reads history 100,000 blocks at a time (no contract filter), so a first read is
-     hundreds of windows at the tracker's pace — a minute or two, longer while the node is refusing. A read still
-     moving at the deadline is the node's speed, not a fault: said, not asserted. */
+  /* The public node reads history 30,000 blocks at a time (no contract filter) and refuses every batch of windows
+     once during a walk, so a first read is ≈5,100 windows at ~1.7 a second — about an hour, longer while the node
+     is refusing more. A read still moving at the deadline is the node's speed, not a fault: said, not asserted. */
   if (r.status === 202 && h && h.pending && h.total > 0 && h.done > 0) {
-    check('the whole-wallet read was still progressing at the deadline (the node reads 100,000 blocks at a time) — not asserted this run', true, h.done + '/' + h.total + ' windows in ' + took + 'ms');
+    check('the whole-wallet read was still progressing at the 70-minute deadline (the node reads 30,000 blocks at a time) — not asserted this run', true, h.done + '/' + h.total + ' windows in ' + took + 'ms');
     check('  ...as a job the page watches (202 with its stage until it is ready), so no proxy times the request out', sawProgress, polls);
     throw new Error('skip');
   }
@@ -85,11 +106,12 @@ try {
   check('  ...as a job the page watches (202 with its stage until it is ready), so no proxy times the request out', polls === 0 || sawProgress, polls);
   if (!(h && Array.isArray(h.transfers))) throw new Error('no history');
 
-  /* an independent read of the same thing, straight from the node — which answers 100,000 blocks at a time now, so a
-     sample: the newest 2,000,000 blocks (about four days of this chain) and the 500,000 around the first transfer the
-     job found. Ten windows to a request, with the suite's own backoff; one refused window is asked on its own. */
+  /* an independent read of the same thing, straight from the node — which answers 30,000 blocks at a time with no
+     address filter, so a sample: the newest 2,000,000 blocks (about four days of this chain) and the 500,000 around
+     the first transfer the job found. Ten windows to a request, with the suite's own backoff; one refused window is
+     asked on its own. */
   await sleep(4000);
-  const WIN = 100000;
+  const WIN = 30000, SAMPLE = 2000000, AROUND = 500000;
   async function logsIn(topics, from, to) {
     const out = [];
     for (let f = from; f <= to; f += WIN * 10) {
@@ -107,8 +129,8 @@ try {
     return out;
   }
   const oldest = h.transfers.length ? h.transfers.reduce((m, t) => Math.min(m, t[0]), Infinity) : null;
-  const ranges = [[Math.max(0, h.head - 20 * WIN + 1), h.head]];
-  if (oldest != null && oldest < ranges[0][0]) ranges.push([Math.max(0, oldest - 2 * WIN), Math.min(ranges[0][0] - 1, oldest + 3 * WIN - 1)]);
+  const ranges = [[Math.max(0, h.head - SAMPLE + 1), h.head]];
+  if (oldest != null && oldest < ranges[0][0]) ranges.push([Math.max(0, oldest - Math.round(AROUND * 0.4)), Math.min(ranges[0][0] - 1, oldest + Math.round(AROUND * 0.6) - 1)]);
   const sample = [];
   for (const [lo, hi] of ranges) sample.push(...await logsIn([T, null, pad(wallet)], lo, hi), ...await logsIn([T, pad(wallet)], lo, hi));
   const erc20 = (l) => l.topics.length === 3 && /^0x[0-9a-fA-F]{64}$/.test(l.data || '');
