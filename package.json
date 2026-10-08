@@ -19,6 +19,7 @@
   "type": "commonjs",
   "dependencies": {
     "ethers": "^6.17.0",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "undici": "^7.30.0"
   }
 }

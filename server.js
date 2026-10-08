@@ -10,6 +10,57 @@ const zlib = require('node:zlib');
 const { DatabaseSync, backup: sqliteBackup } = require('node:sqlite'); // backup() = online, consistent, non-blocking snapshot (Node ≥ 23.8)
 const { verifyMessage, getAddress } = require('ethers');   // getAddress: EIP-55 checksum, required by the EIP-4361 parser in wallets
 const QRCode = require('qrcode');
+/* ===== Outbound name lookups: the server's own resolver, never the host's cache ===================================
+   Twice (2026-09-26 and 2026-09-30) every chain read on the live site died for an hour at once: the Mac's system
+   resolver (getaddrinfo, behind mDNSResponder) answered ENOTFOUND for the node's name after a 30 s wait while a
+   direct query to the router answered in 6 ms — a stale negative entry in the host's cache. getaddrinfo also runs
+   on libuv's four-thread pool, so those 30 s waits queued the Dexscreener lookups behind them and the price cards
+   went blank too. So every outbound request this process makes (fetch → undici's global dispatcher) resolves names
+   through c-ares (dns.Resolver, the system's nameservers, no host cache, no thread pool), caches each answer for
+   its TTL, and only falls back to the system lookup when c-ares has nothing. An IP literal is passed straight
+   through. undici is the engine behind Node's own fetch; setGlobalDispatcher is its documented hook. */
+const dns = require('node:dns');
+const { Agent: UndiciAgent, setGlobalDispatcher } = require('undici');
+const OUT_DNS_TTL_MIN_MS = 30 * 1000, OUT_DNS_TTL_MAX_MS = 5 * 60 * 1000, OUT_DNS_MAX = 500;
+const outDnsResolver = new dns.Resolver();
+const outDnsCache = new Map();              // host -> { addrs: [{address, family}], until }
+const outDnsInflight = new Map();           // host -> [cb]
+let outDnsFallbacks = 0;                    // how often the system lookup had to answer (shown at boot and in /api/health)
+function outboundLookup(host, opts, cb) {
+  if (typeof opts === 'function') { cb = opts; opts = {}; }
+  opts = opts || {};
+  const answer = (err, addrs) => {
+    if (err) return cb(err);
+    if (opts.all) return cb(null, addrs.map((a) => ({ address: a.address, family: a.family })));
+    const want = opts.family === 6 ? addrs.find((a) => a.family === 6) : (addrs.find((a) => a.family === 4) || addrs[0]);
+    if (!want) return cb(Object.assign(new Error('no address of that family for ' + host), { code: 'ENOTFOUND' }));
+    cb(null, want.address, want.family);
+  };
+  const v = require('node:net').isIP(host);
+  if (v) return answer(null, [{ address: host, family: v }]);   // an IP literal: nothing to resolve
+  const hit = outDnsCache.get(host);
+  if (hit && hit.until > Date.now()) return answer(null, hit.addrs);
+  const waiting = outDnsInflight.get(host);
+  if (waiting) { waiting.push(answer); return; }
+  outDnsInflight.set(host, [answer]);
+  const done = (err, addrs) => { const cbs = outDnsInflight.get(host) || []; outDnsInflight.delete(host); for (const f of cbs) f(err, addrs); };
+  outDnsResolver.resolve4(host, { ttl: true }, (err, recs) => {
+    if (!err && Array.isArray(recs) && recs.length) {
+      const ttl = Math.min(OUT_DNS_TTL_MAX_MS, Math.max(OUT_DNS_TTL_MIN_MS, Math.min(...recs.map((r) => (r.ttl || 0) * 1000))));
+      const addrs = recs.map((r) => ({ address: r.address, family: 4 }));
+      if (outDnsCache.size >= OUT_DNS_MAX) outDnsCache.delete(outDnsCache.keys().next().value);
+      outDnsCache.set(host, { addrs, until: Date.now() + ttl });
+      return done(null, addrs);
+    }
+    // c-ares had nothing (no nameserver, a name it cannot answer): the system lookup is asked, as before
+    outDnsFallbacks++;
+    dns.lookup(host, { all: true }, (e2, list) => {
+      if (e2 || !Array.isArray(list) || !list.length) return done(e2 || Object.assign(new Error('getaddrinfo ENOTFOUND ' + host), { code: 'ENOTFOUND' }));
+      done(null, list.map((a) => ({ address: a.address, family: a.family })));
+    });
+  });
+}
+setGlobalDispatcher(new UndiciAgent({ connect: { lookup: outboundLookup, timeout: 10000 } }));
 /* Private on disk as well as encrypted in it. Everything this process creates from here on — the database,
    its WAL and SHM, backups, uploads, the generated key — is readable by the account running the site and by
    nobody else on the machine. lockDownDataFiles() below repairs installs that were created before this. */
