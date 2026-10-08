@@ -13,6 +13,7 @@ import zlib from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
 import { DB_PATH, KEY_PATH, ROOT, SERVER_JS } from './_paths.mjs';
+import { rpcDispatcher } from './_rpc.mjs';
 const require = createRequire(ROOT + '/package.json');
 const { Wallet } = require('ethers');
 
@@ -36,7 +37,7 @@ const RPC = 'https://rpc.mainnet.chain.robinhood.com';
 const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
 async function rpc(method, params) {
   for (let i = 0; ; i++) {
-    const r = await fetch(RPC, { method: 'POST', headers: UA, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
     let j = null; try { j = await r.json(); } catch {}
     if ((r.status === 429 || (j && j.error && /too many/i.test(j.error.message || ''))) && i < 6) { await sleep(2500 * (i + 1)); continue; }
     if (!j || j.error) throw new Error((j && j.error && j.error.message) || 'rpc ' + r.status);
@@ -181,9 +182,9 @@ try {
 
   /* ═══ 4. the 202 and 200 fields, the deletion paths, the policy ═══ */
   {
-    check('the 202 carries startedAt, progressed, resuming, stageOf and eta', /return send\(res, 202, \{ pending: true, stage: job\.stage, done: job\.done, total: job\.total, ahead: walletJobsAhead\(job\), startedAt: job\.startedAt, progressed: job\.progressed, resuming: job\.resuming,\s*incremental: job\.incremental, readFrom: job\.readFrom, stageOf: walletStageOf\(job\.stage\), eta: walletJobEta\(job\) \}\)/.test(SRC));
+    check('the 202 carries startedAt, progressed, resuming, stageOf, eta and throttled (how long the read has waited out the node, 0 when it is not)', /return send\(res, 202, \{ pending: true, stage: job\.stage, done: job\.done, total: job\.total, ahead: walletJobsAhead\(job\), startedAt: job\.startedAt, progressed: job\.progressed, resuming: job\.resuming,\s*incremental: job\.incremental, readFrom: job\.readFrom, stageOf: walletStageOf\(job\.stage\), eta: walletJobEta\(job\), throttled: job\.throttledAt \? now\(\) - job\.throttledAt : 0 \}\)/.test(SRC));
     check('a finished read is saved only for a tracked or linked wallet, else saved:false "not tracked" and any stale row goes', /if \(walletHistKeeps\(uid, w\)\) \{ const s = await walletHistSave\(uid, w, v, false\); v\.saved = s\.saved; v\.savedWhy = s\.savedWhy; \}\s*else \{ v\.saved = false; v\.savedWhy = 'not tracked'; db\.prepare\('DELETE FROM wallet_hist WHERE user_id = \? AND addr_idx = \?'\)/.test(SRC));
-    check('the checkpoint after the transfer walk is written with the same blob helpers, partial = 1, and only for a kept wallet', /checkpoint: \(h\) => \(walletHistKeeps\(uid, w\) \? walletHistSave\(uid, w, h, true\) : null\)/.test(SRC) && /opts\.checkpoint\(\{ stage: 'transfers', head, transfers: rows, nftByBlock: merged\.nftByBlock \}\)/.test(SRC) && /WALLET_RESUME_MAX_BLOCKS = 200000/.test(SRC));
+    check('the checkpoint after the transfer walk is written with the same blob helpers, partial = 1, and only for a kept wallet — and the job notes it wrote one (checkpointed)', /checkpoint: async \(h\) => \{ if \(!walletHistKeeps\(uid, w\)\) return null; const s = await walletHistSave\(uid, w, h, true\); if \(s\.saved\) job\.checkpointed = true; return s; \}/.test(SRC) && /opts\.checkpoint\(\{ stage: 'transfers', head, transfers: rows, nftByBlock: merged\.nftByBlock \}\)/.test(SRC) && /WALLET_RESUME_MAX_BLOCKS = 2000000/.test(SRC));
     check('the account-deletion sweep names wallet_hist', /'tracker_cache', 'wallet_hist'\]\)/.test(SRC));
     check('unlinking a wallet and disconnecting them all delete the saved history', /DELETE FROM identities WHERE user_id = \? AND type = 'wallet' AND identifier = \?"\)\.run\(me\.id, bidx\(addr\)\);\s*if \(!db\.prepare\('SELECT 1 FROM tracked_wallets[^\n]*DELETE FROM wallet_hist WHERE user_id = \? AND addr_idx = \?/.test(SRC) && /DELETE FROM wallet_hist WHERE user_id = \? AND addr_idx NOT IN \(SELECT address FROM tracked_wallets WHERE user_id = \?\)/.test(SRC));
     check('the boot sweep removes rows whose wallet is no longer tracked or linked and keeps the total under 64 MB, oldest first', /^sweepWalletHist\(\);/m.test(SRC) && /WALLET_HIST_TOTAL_MAX = 64 \* 1024 \* 1024/.test(SRC) && /ORDER BY updated_at ASC'\)\.all\(\)\) \{\s*if \(total <= WALLET_HIST_TOTAL_MAX\) break;/.test(SRC));
@@ -277,7 +278,19 @@ try {
   const mine2 = (list.j.wallets || []).find((w) => w.address === a2);
   const idRow = db.prepare("SELECT id FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(u.id, bidx(a2));
   check('a linked wallet is listed with lid = its identities row id (so ?lid= resolves without an address)', mine2 && mine2.mine === true && mine2.id === null && idRow && mine2.lid === idRow.id, JSON.stringify(mine2));
-  check('  ...and its lastRead from the planted row', mine2 && mine2.lastRead && mine2.lastRead.readTo === 10, JSON.stringify(mine2 && mine2.lastRead));
+  check('  ...and its lastRead from the planted row', mine2 && mine2.lastRead && mine2.lastRead.readTo === 10 && mine2.lastRead.walking === false, JSON.stringify(mine2 && mine2.lastRead));
+  // a transfer walk stopped part-way is saved as partial = 2: the list says so (walking) and names no block it has read "to"
+  putHist(u.id, a2, { stage: 'walk', head: 10, start: 0, later: true, pass: 0, from: 4, earliest: null, transfers: [], nftByBlock: {} }, true);
+  db.prepare('UPDATE wallet_hist SET partial = 2 WHERE user_id = ? AND addr_idx = ?').run(u.id, bidx(a2));
+  const listW = await api('/api/wallets', { sid: u.sid });
+  const mineW = (listW.j.wallets || []).find((w) => w.address === a2);
+  check('a walk checkpoint (partial 2) is listed as walking, partial, with readTo null — the walk has no block it has read "to"', mineW && mineW.lastRead && mineW.lastRead.walking === true && mineW.lastRead.partial === true && mineW.lastRead.readTo === null, JSON.stringify(mineW && mineW.lastRead));
+  check('  ...and walletHistSave writes partial 2 for a stage "walk" checkpoint, 1 for the transfers one, 0 for a finished history', /partial \? \(hist\.stage === 'walk' \? 2 : 1\) : 0, blob\);/.test(SRC));
+  check('  ...a checkpoint the chain has moved more than WALLET_RESUME_MAX_BLOCKS past (by the head this server last saw) is stale: not resumable, said so in the list, and the 502 says what is on file (resumable: this read checkpointed, or one is on file and this was not a rebuild; saved: complete | checkpoint | null)', /const walletHistStale = \(r\) => !!\(r && r\.partial && _chainHead > 0 && _chainHead - r\.read_to > WALLET_RESUME_MAX_BLOCKS\);/.test(SRC) && /const walletHistResumable = \(uid, w\) => \{ const r = walletHistRow\(uid, w\); return !!\(r && r\.partial && !walletHistStale\(r\)\); \};/.test(SRC) && /walking: r\.partial === 2, stale: walletHistStale\(r\) \}/.test(SRC) && /resumable: !!\(job\.checkpointed \|\| \(job\.fresh !== 2 && walletHistResumable\(me\.id, addr\)\)\), saved: row \? \(row\.partial \? 'checkpoint' : 'complete'\) : null \}\);/.test(SRC) && /if \(head > _chainHead\) _chainHead = head;/.test(SRC) && mineW.lastRead.stale === true, JSON.stringify(mineW && mineW.lastRead));   // planted at block 10: the live read earlier in this suite showed the server a head millions of blocks on, so this one is stale
+    db.prepare('UPDATE wallet_hist SET read_to = ? WHERE user_id = ? AND addr_idx = ?').run(9e9, u.id, bidx(a2));
+    const listN = await api('/api/wallets', { sid: u.sid });
+    const mineN = (listN.j.wallets || []).find((w) => w.address === a2);
+    check('  ...a checkpoint the chain has not moved past is not stale', mineN && mineN.lastRead && mineN.lastRead.stale === false && mineN.lastRead.walking === true, JSON.stringify(mineN && mineN.lastRead));
   const un = await api('/api/wallet/unlink', { method: 'POST', sid: u.sid, body: { address: a2 } });
   check('unlinking a wallet deletes its saved history', un.status === 200 && !histRow(u.id, a2), un.status + ' ' + JSON.stringify(un.j && un.j.error) + ' row:' + JSON.stringify(histRow(u.id, a2)));
 
@@ -286,8 +299,8 @@ try {
     const ctx = vm.createContext({ db, bidx, decField, String, Boolean, now: () => Date.now(), console });
     vm.runInContext(grab(/const NOTIF_KEEP = [^\n]+\n/, 'NOTIF_KEEP') + grab(/const NOTIF_KEEP_SYSTEM = [^\n]+\n/, 'NOTIF_KEEP_SYSTEM') + grab(/const NOTIF_KEEP_ALERT = [^\n]+\n/, 'NOTIF_KEEP_ALERT') +
       grab(/function walletList\(userId\) \{[\s\S]*?\n\}\n/, 'walletList') + grab(/function notifyLink\(href\) \{[\s\S]*?\n\}\n/, 'notifyLink') + grab(/function notify\(userId, icon, text, kind, actorId, href, postId\) \{[\s\S]*?\n\}\n/, 'notify') +
-      grab(/function walletReadNotice\(uid, w\) \{[\s\S]*?\n\}\n/, 'walletReadNotice') + grab(/function walletReadNotify\(uid, w\) \{[\s\S]*?\n\}\n/, 'walletReadNotify') +
-      '\nthis.notice = walletReadNotice; this.ring = walletReadNotify;', ctx);
+      grab(/function walletReadNotice\(uid, w\) \{[\s\S]*?\n\}\n/, 'walletReadNotice') + grab(/function walletReadNotify\(uid, w\) \{[\s\S]*?\n\}\n/, 'walletReadNotify') + grab(/function walletReadStoppedNotify\(uid, w, checkpointed\) \{[\s\S]*?\n\}\n/, 'walletReadStoppedNotify') +
+      '\nthis.notice = walletReadNotice; this.ring = walletReadNotify; this.stopped = walletReadStoppedNotify;', ctx);
     const tracked = ('0x' + hexOf(20)).toLowerCase();
     const ins = db.prepare('INSERT INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(u.id, bidx(tracked), encField(tracked), 'Whale', Date.now());
     const tid = Number(ins.lastInsertRowid);
@@ -308,6 +321,13 @@ try {
     check('  ...with the promised sentence', rows[0] && rows[0].text === 'Your wallet report for one of your wallets is ready.' && rows[1] && rows[1].text === 'Your wallet report for one of your wallets is ready.', JSON.stringify(rows.map((r) => r.text)));
     check('  ...and no 0x hex anywhere in text or href', rows.every((r) => !/0x[0-9a-f]{2,}/i.test(r.text + ' ' + r.href)) && rows[0].href === '/tracker.html?wid=' + tid && rows[1].href === '/tracker.html?lid=' + lid, JSON.stringify(rows.map((r) => r.href)));
     db.prepare('UPDATE tracked_wallets SET label = ? WHERE id = ?').run('Whale', tid);
+    // a read that stopped after its page had gone: the bell says so, and whether it goes on from a checkpoint — never an address
+    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);
+    check('the stopped-read bell rings for a tracked or linked wallet only', ctx.stopped(u.id, tracked, true) === true && ctx.stopped(u.id, a1, false) === true && ctx.stopped(u.id, '0x' + '9'.repeat(40), true) === false);
+    const srows = db.prepare('SELECT kind, icon, text, href FROM notifications WHERE user_id = ? ORDER BY id').all(u.id);
+    check('  ...says the read stopped part-way and why, "goes on from where it stopped" only with a checkpoint, no address anywhere', srows.length === 2 && srows[0].text === 'The read of Whale stopped part-way — the chain node kept refusing it. Open the tracker and it goes on from where it stopped.' && srows[1].text === 'The read of one of your wallets stopped part-way — the chain node kept refusing it. Open the tracker to start it again.' && srows.every((r) => r.kind === 'tracker' && !/0x[0-9a-f]{2,}/i.test(r.text + ' ' + r.href)) && srows[0].href === '/tracker.html?wid=' + tid && srows[1].href === '/tracker.html?lid=' + lid, JSON.stringify(srows));
+    check('  ...and walletJobRun rings it only for a read that had moved, whose page has been gone 30 s, that a throttle or a timeout ended', /if \(job\.progressed && now\(\) - job\.polledAt > WALLET_NOTIFY_QUIET_MS && \(isThrottle\(job\.error\) \|\| \/timed out\|timeout\|aborted\|too long\/i\.test\(job\.error\)\)\) walletReadStoppedNotify\(uid, w, job\.checkpointed\);/.test(SRC));
+    db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);
     db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);
     ctx.ring(u.id, tracked);
     const r4 = db.prepare('SELECT text FROM notifications WHERE user_id = ?').get(u.id);
@@ -343,12 +363,17 @@ try {
     const ctx = vm.createContext({
       BigInt, Number, Set, Map, Array, Object, Math, JSON, Error, parseInt, Infinity, Promise, String, Boolean, console,
       now: () => Date.now(), sleep: async () => {}, TRANSFER_TOPIC: T, TRACKER_HISTORY_MAX: 20000, TRACKER_TX_MAX: 5000, PACE_LOG_WEIGHT: 5, PACE_BATCH: 25, _paceMs: 0,
-      WALLET_REORG_OVERLAP: 5000, WALLET_RESUME_MAX_BLOCKS: 200000, WETH_ADDR: WETH, USDG_ADDR: USDG, usdgDecimals: 6, FACTORY: FACT,
-      _decimalsCache: new Map(), _tokenNameCache: new Map(), _txLegCache: new Map(), chainBlockMs: new Map(), pruneCache: () => {}, abiText: (r) => (r == null ? null : String(r)), ownPoolOf: () => null,
+      WALLET_REORG_OVERLAP: 5000, WALLET_RESUME_MAX_BLOCKS: 2000000, WALLET_WALK_CHECKPOINT_MS: 120000, WETH_ADDR: WETH, USDG_ADDR: USDG, usdgDecimals: 6, FACTORY: FACT,
+      _decimalsCache: new Map(), _tokenNameCache: new Map(), _txLegCache: new Map(), chainBlockMs: new Map(), pruneCache: () => {}, abiText: (r) => (r == null ? null : String(r)), ownPoolOf: () => null, _chainHead: 0,
       ethUsdFresh: async () => 2000, tradeLegs: () => [1, '7', '0', 0, '0', '0', 0, 0], receiptLegs: () => ({ seen: new Set(), legs: [] }), keepTxLegs: () => {},
       pacedCall: async () => { throw new Error('the stubbed walk reads for itself'); },
       pacedBatchAll: async (calls, onStep, guard, onPart) => { if (guard) guard(); for (const c of calls) S.calls.push(c); const out = calls.map(answer); if (onPart) { onPart(out, 0); return null; } if (onStep) onStep(calls.length, calls.length); return out; },
-      transferLogWalk: async (address, sets, start, head, max, read, opts) => { S.walks.push({ start, head, max, later: !!(opts && opts.laterPassesStartAtFirstHit), sets: sets.length }); return [...scratch, ...near(S.head)].filter((l) => parseInt(l.blockNumber, 16) >= start && parseInt(l.blockNumber, 16) <= head); },
+      transferLogWalk: async (address, sets, start, head, max, read, opts) => {
+        S.walks.push({ start, head, max, later: !!(opts && opts.laterPassesStartAtFirstHit), sets: sets.length, resume: opts && opts.resume ? { ...opts.resume } : null });
+        const ws = typeof S.windows === 'function' ? S.windows(start, head) : S.windows;
+        if (opts && opts.onWindow && ws) for (const w of ws) { if (S.tick) S.tick(); await opts.onWindow(w); }   // what a real walk reports after each window (the clock moves between them)
+        return [...scratch, ...near(S.head), ...(S.extra || [])].filter((l) => parseInt(l.blockNumber, 16) >= start && parseInt(l.blockNumber, 16) <= head);
+      },
       jgetCached: async (url) => { const toks = url.split('/').pop().split(','); S.asked.push(toks); return toks.includes(TOK) ? [{ baseToken: { address: TOK }, quoteToken: { address: WETH } }] : []; },
     });
     vm.runInContext(grab(/function mergeWalletHistory\(prior, readFrom, rows, nftNew\) \{[\s\S]*?\n\}\n/, 'mergeWalletHistory') + grab(/const tokensToRecheck = [^\n]+\n/, 'tokensToRecheck') +
@@ -420,13 +445,61 @@ try {
     const E = await run(JSON.parse(JSON.stringify(C)));
     check('a head more than 1,000 blocks behind the saved one is not trusted: a from-scratch read', S.walks.length === 1 && S.walks[0].start === 0 && S.walks[0].later === true && E.incremental === false && E.resumed === false, JSON.stringify(S.walks));
 
-    // F. a checkpoint too old to resume
-    reset(); S.head = 100000 + 200001;
+    // F. a checkpoint too old to resume (2,000,000 blocks — about three days of this chain; the logs it kept are final, so the horizon is wide)
+    reset(); S.head = 100000 + 2000001;
     const F = await run(JSON.parse(JSON.stringify(partial)));
-    check('a checkpoint more than 200,000 blocks old is not resumed: a from-scratch read, checkpointed anew', S.walks.length === 1 && S.walks[0].start === 0 && S.walks[0].later === true && F.resumed === false && S.checkpoints.length === 2 && S.checkpoints[0].head === 300001, JSON.stringify(S.walks));
-    reset(); S.head = 100000 + 200000;
+    check('a checkpoint more than 2,000,000 blocks behind the head is not resumed: a from-scratch read, checkpointed anew', S.walks.length === 1 && S.walks[0].start === 0 && S.walks[0].later === true && F.resumed === false && S.checkpoints.length === 2 && S.checkpoints[0].head === 2100001, JSON.stringify(S.walks));
+    reset(); S.head = 100000 + 2000000;
     const F2 = await run(JSON.parse(JSON.stringify(partial)));
-    check('  ...one exactly 200,000 old still is', S.walks[0].start === 95000 && F2.resumed === true, JSON.stringify(S.walks));
+    check('  ...one exactly 2,000,000 behind still is', S.walks[0].start === 95000 && F2.resumed === true, JSON.stringify(S.walks));
+
+    // F3. a walk that stopped mid-way (a checkpoint of stage "walk"): finished first — its pass from its next block, to the head it read to — then the window since
+    reset(); S.head = 160000;
+    const T9 = '0x' + '99'.repeat(32);   // a row only the checkpoint holds (block 50: the stub walk never answers it) — the finished walk must keep it
+    const walkCk = { stage: 'walk', head: 100000, start: 0, later: true, pass: 0, from: 60000, earliest: 50, transfers: [[100, 1, T1, TOK, POOL, W, '1000', null], [50, 1, T9, TOK, POOL, W, '5', null]], nftByBlock: {} };
+    const W1 = await run(JSON.parse(JSON.stringify(walkCk)));
+    check('a walk checkpoint resumes the walk itself: pass 0 from block 60,000 to the old head 100,000 with the earliest hit carried, then both passes over [95,000, 160,000]', S.walks.length === 2 && S.walks[0].start === 0 && S.walks[0].head === 100000 && S.walks[0].later === true && S.walks[0].resume && S.walks[0].resume.pass === 0 && S.walks[0].resume.from === 60000 && S.walks[0].resume.earliest === 50 && S.walks[0].max === 20000 - 2 && S.walks[1].start === 95000 && S.walks[1].head === 160000 && S.walks[1].later === false && !S.walks[1].resume, JSON.stringify(S.walks));
+    check('  ...one plan: resuming from block 60,000, not incremental', S.plans.length === 1 && S.plans[0].resuming === true && S.plans[0].incremental === false && S.plans[0].readFrom === 60000, JSON.stringify(S.plans));
+    check('  ...a transfers checkpoint at the old head once that walk is whole: the checkpoint\'s own rows kept (the one the walk never answers included, newest first), the walk\'s copy of a row and the checkpoint\'s one, then the usual two at the new head', S.checkpoints.length === 3 && S.checkpoints[0].stage === 'transfers' && S.checkpoints[0].head === 100000 && S.checkpoints[0].transfers.length === 3 && S.checkpoints[0].transfers[2][2] === T9 && S.checkpoints[0].transfers[2][0] === 50 && S.checkpoints[0].nftByBlock[300] === 1 && S.checkpoints[1].head === 160000 && S.checkpoints[2].head === 160000 && S.checkpoints[2].transfers.every((t) => t[7] > 0), JSON.stringify(S.checkpoints.map((c) => [c.stage, c.head, c.transfers.map((t) => t[2].slice(0, 6))])));
+    check('  ...the report has every transfer once (five, the checkpoint-only row among them) and says it resumed', W1.resumed === true && W1.incremental === false && W1.transfers.length === 5 && new Set(W1.transfers.map((t) => t[2])).size === 5 && W1.transfers.some((t) => t[2] === T9), W1.transfers.length);
+    reset(); S.head = 100000 + 2000001;
+    const W2 = await run(JSON.parse(JSON.stringify(walkCk)));
+    check('a walk checkpoint more than 2,000,000 blocks behind is not resumed: a from-scratch read', S.walks.length === 1 && S.walks[0].start === 0 && S.walks[0].later === true && !S.walks[0].resume && W2.resumed === false, JSON.stringify(S.walks));
+    reset(); S.head = 100000 + 2000000;
+    const W3 = await run(JSON.parse(JSON.stringify(walkCk)));
+    check('  ...one exactly 2,000,000 behind still is, its rows kept', S.walks.length === 2 && S.walks[0].resume && S.walks[0].resume.from === 60000 && W3.resumed === true && W3.transfers.some((t) => t[2] === T9), JSON.stringify(S.walks));
+    for (const [what, bad] of [['from: -1', { from: -1 }], ['no start', { start: undefined }], ['no pass', { pass: undefined }], ['from: 1.5', { from: 1.5 }]]) {
+      reset(); S.head = 160000;
+      const W4 = await run(JSON.parse(JSON.stringify({ ...walkCk, ...bad })));
+      check('  ...a walk checkpoint missing its place (' + what + ') is not trusted: a from-scratch read', S.walks.length === 1 && S.walks[0].start === 0 && !S.walks[0].resume && W4.resumed === false, JSON.stringify(S.walks));
+    }
+
+    // F4. the walk checkpoints itself: every WALLET_WALK_CHECKPOINT_MS (by the clock, not every window), the rows so far and where it is — only for a read with no finished history
+    let CLK = 1e12; ctx.now = () => CLK; S.tick = () => { CLK += 60e3; };   // the stubbed walk reports a window a minute
+    reset(); S.head = 100000;
+    S.windows = [1, 2, 3, 4, 5].map((n) => ({ pass: n < 4 ? 0 : 1, from: n * 10000, earliest: n < 4 ? Infinity : 100, logs: n < 2 ? [scratch[0]] : scratch }));
+    await run(null);
+    const wk = S.checkpoints.filter((c) => c.stage === 'walk');
+    check('from scratch, with windows reported a minute apart, only the windows at +2 and +4 minutes are checkpointed (stage "walk": the pass, the next block, the earliest hit — null before one —, the walk\'s start and first-hit rule, the rows so far)', wk.length === 2 && wk.every((c) => c.head === 100000 && c.start === 0 && c.later === true) && wk[0].pass === 0 && wk[0].from === 20000 && wk[0].earliest === null && wk[0].transfers.length === 2 && wk[1].pass === 1 && wk[1].from === 40000 && wk[1].earliest === 100 && wk[1].transfers.length === 2 && wk[1].nftByBlock[300] === 1, JSON.stringify(wk.map((c) => [c.pass, c.from, c.earliest, c.transfers.length])));
+    check('  ...and the finished checkpoints still follow (transfers, then dated)', S.checkpoints.filter((c) => c.stage === 'transfers').length === 2 && S.checkpoints[S.checkpoints.length - 1].transfers.every((t) => t[7] > 0), S.checkpoints.map((c) => c.stage).join(','));
+    // finishing an earlier walk: its checkpoints keep that walk's rows (under it, to its head); the window since then checkpoints on top of the finished walk, from the walk's own start —
+    // so a transfer (and an NFT, which is a bare count) in the 5,000-block overlap the tail reads again is in the checkpoint ONCE
+    const TX = '0x' + '77'.repeat(32), NFTX = { address: NFT, topics: [T, pad(OTHER), pad(W), pad(W)], data: '0x', blockNumber: hx(98000), logIndex: '0x2', transactionHash: '0x' + '88'.repeat(32) };
+    const ercX = erc(98000, 3, TX, TOK, POOL, W, 7);
+    const walkCkO = { ...walkCk, transfers: [[98000, 3, TX, TOK, POOL, W, '7', null], ...walkCk.transfers], nftByBlock: { 98000: 1 } };
+    reset(); S.head = 160000; S.extra = [ercX, NFTX];
+    S.windows = (start, head) => head === 100000 ? [{ pass: 0, from: 70000, earliest: 50, logs: [scratch[0]] }, { pass: 1, from: 80000, earliest: 50, logs: scratch }] : [{ pass: 0, from: 99000, earliest: Infinity, logs: [ercX, NFTX] }, { pass: 1, from: 99000, earliest: 98000, logs: [ercX, NFTX] }];
+    await run(JSON.parse(JSON.stringify(walkCkO)));
+    const wk2 = S.checkpoints.filter((c) => c.stage === 'walk');
+    check('  ...finishing an earlier walk (two windows a minute apart: the second is checkpointed), the checkpoint carries that walk\'s rows too (under it), to its head', wk2.length === 2 && wk2[0].head === 100000 && wk2[0].start === 0 && wk2[0].later === true && wk2[0].pass === 1 && wk2[0].from === 80000 && wk2[0].transfers.map((t) => t[2]).join() === [TX, T2, T1, T9].join() && wk2[0].nftByBlock[98000] === 1 && wk2[0].nftByBlock[300] === 1, JSON.stringify(wk2.map((c) => [c.head, c.start, c.transfers.map((t) => t[2].slice(0, 6)), c.nftByBlock])));
+    check('  ...the window since then checkpoints from the walk\'s own start (95,000): the transfer and the NFT at 98,000 that the tail reads again are there once, everything below the start kept', wk2[1] && wk2[1].head === 160000 && wk2[1].start === 95000 && wk2[1].later === false && wk2[1].transfers.length === 4 && wk2[1].transfers.filter((t) => t[2] === TX).length === 1 && wk2[1].nftByBlock[98000] === 1 && wk2[1].nftByBlock[300] === 1, JSON.stringify(wk2.slice(1).map((c) => [c.head, c.start, c.transfers.map((t) => t[2].slice(0, 6)), c.nftByBlock])));
+    S.windows = null; S.extra = null;
+    reset(); S.head = 150000;
+    S.windows = [{ pass: 0, from: 30000, earliest: Infinity, logs: [] }, { pass: 0, from: 60000, earliest: Infinity, logs: [] }];
+    await run(JSON.parse(JSON.stringify(A)));
+    check('  ...never on an incremental refresh (a finished history is on file)', S.checkpoints.length === 0, S.checkpoints.length);
+    S.windows = null; S.tick = null; ctx.now = () => Date.now();
+    check('  ...WALLET_WALK_CHECKPOINT_MS is two minutes (a checkpoint is a brotli and a row)', /WALLET_WALK_CHECKPOINT_MS = 2 \* 60 \* 1000;/.test(SRC));
 
     // G. a merged history over the budget is refused, as a full read would be
     reset(); S.head = 300000; ctx.TRACKER_HISTORY_MAX = 3;

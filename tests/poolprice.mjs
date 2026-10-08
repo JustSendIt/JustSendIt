@@ -3,6 +3,7 @@
    shows for these two coins is one this suite can reproduce. Read-only: nothing is written anywhere. */
 import { readFileSync } from 'node:fs';
 import { SERVER_JS } from './_paths.mjs';
+import { rpcDispatcher } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -14,7 +15,7 @@ const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Mac
 // the public node rate-limits bursts (and the server under test has just read the same pools), so back off and retry
 async function call(to, data) {
   for (let i = 0; ; i++) {
-    const r = await fetch(RPC, { method: 'POST', headers: UA, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }) });
+    const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }) });
     if (r.status === 429 && i < 6) { await new Promise((ok) => setTimeout(ok, 2000 * (i + 1))); continue; }
     const j = await r.json(); if (j.error) throw new Error(j.error.message); return j.result;
   }

@@ -273,6 +273,70 @@ try {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' '));
   check('the suite ran to the end', false, e.message);
 }
+/* ═══ the chain read's polling loop (trkChainWallet) against a scripted server, on a fake clock: the node's refusals waited out, a throttled
+   failure asked again a minute later — as a Refresh only when the server says a checkpoint is on file ═══ */
+try {
+  let T = 1e12;
+  const script = [];   // what the next fetches answer, in order
+  const urls = [], delays = [];
+  const pctx = vm.createContext({
+    console, Number, Math, JSON, Object, Array, Promise, Error, Set, Map, String, encodeURIComponent,
+    Date: { now: () => T },
+    setTimeout: (fn, ms) => { delays.push(ms); T += ms; fn(); },   // every wait is noted, the clock moves by it, and it is over at once
+    fetch: async (url) => { urls.push(url); const a = script.shift(); if (!a) throw new Error('connection dropped'); return { status: a.status, headers: { get: () => null }, json: async () => a.body }; },
+  });
+  vm.runInContext(SRC, pctx);
+  const W = '0x' + 'ab'.repeat(20);
+  const s202 = (extra) => ({ status: 202, body: { pending: true, stage: 'reading every token transfer', done: 3, total: 5100, stageOf: { n: 1, of: 5 }, ...(extra || {}) } });
+  const s502 = (reason, resumable, saved) => ({ status: 502, body: { error: 'the chain could not be read right now — try again in a minute', reason, resumable, saved: saved === undefined ? (resumable ? 'checkpoint' : null) : saved } });
+  const DONE = { status: 200, body: { transfers: [], tokens: [], txs: {}, head: 1 } };
+  const reset = () => { script.length = 0; urls.length = 0; delays.length = 0; };
+  // a Rebuild that failed with a checkpoint on file is asked again as a Refresh; the words say why and that it goes on
+  let said = []; reset();
+  script.push(s202({ throttled: 90000 }), s502('throttled', true), s202({ done: 400, resuming: true }), DONE);
+  let out = await pctx.trkChainWallet(W, (m, info) => said.push([m, info]), 2, null);
+  check('a throttled 502 is asked again a minute later and the read then answers', out && Array.isArray(out.transfers) && urls.length === 4, JSON.stringify({ urls, delays }));
+  check('  ...asked as a Rebuild first (fresh=2), then — the server saying a checkpoint is on file — as a Refresh (fresh=1), never a Rebuild again', /fresh=2$/.test(urls[0]) && !/fresh=/.test(urls[1]) && /fresh=1$/.test(urls[2]) && !/fresh=/.test(urls[3]), JSON.stringify(urls));
+  check('  ...the wait before asking again is over a minute (the server keeps a failed read\'s answer for one)', delays.some((d) => d === 65000), JSON.stringify(delays));
+  check('  ...while the server waits out refusals the line says so and the info carries how long, why, and whether a checkpoint is there', said[0] && /waiting it out/.test(said[0][0]) && said[0][1].throttled === 90000, JSON.stringify(said[0]));
+  check('  ...the failure is said as a stage of its own ("throttled") with the reason and "goes on from where it stopped"', said[1] && /refused the read for too long — asking again in a minute \(it goes on from where it stopped\)/.test(said[1][0]) && said[1][1].stage === 'throttled' && said[1][1].reason === 'throttled' && said[1][1].resumable === true, JSON.stringify(said[1]));
+  // a Rebuild that left no checkpoint is not asked again by itself (it would start over and spend a second rebuild of the hour): said plainly, the member decides
+  said = []; reset();
+  script.push(s202(), s502('timeout', false, 'complete'));
+  let err0 = null; try { await pctx.trkChainWallet(W, (m, info) => said.push([m, info]), 2, null); } catch (e) { err0 = e; }
+  check('a failed Rebuild with no checkpoint is reported, not retried: it counted, and Rebuild or Refresh is the member\'s call', err0 && /^the chain read timed out before it got anywhere — it counted as one of your two rebuilds this hour\. Try Rebuild again in a minute, or Refresh$/.test(err0.message) && urls.length === 2 && script.length === 0, JSON.stringify({ err: err0 && err0.message, asks: urls.length }));
+  // a Refresh with a complete history on file (no checkpoint) reads on from the saved head: said as that, asked again as a Refresh
+  said = []; reset();
+  script.push(s202(), s502('throttled', false, 'complete'), s202(), DONE);
+  out = await pctx.trkChainWallet(W, (m, info) => said.push([m, info]), 1, null);
+  check('a failed Refresh with a complete saved history is asked again as a Refresh and the words say it reads on from the saved history', out && /fresh=1$/.test(urls[0]) && /fresh=1$/.test(urls[2]) && said[1] && /^the chain node refused the read for too long — asking again in a minute \(it reads on from the saved history — only what is new\)$/.test(said[1][0]) && said[1][1].saved === 'complete', JSON.stringify({ urls, said: said[1] }));
+  // nothing on file at all: the retry starts over, and says so
+  said = []; reset();
+  script.push(s202(), s502('timeout', false, null), s202(), DONE);
+  out = await pctx.trkChainWallet(W, (m, info) => said.push([m, info]), 0, null);
+  check('with nothing on file the retry is said to start over, a timeout named as one', out && said[1] && /^the chain read timed out — asking again in a minute \(it starts over\)$/.test(said[1][0]) && said[1][1].resumable === false && said[1][1].saved === null, JSON.stringify({ said: said[1] }));
+  // a short wait is the pace's routine and is not said; a long one is
+  said = []; reset();
+  script.push(s202({ throttled: 5000 }), s202({ throttled: 20000 }), DONE);
+  await pctx.trkChainWallet(W, (m, info) => said.push([m, info]), 0, null);
+  check('a wait under 20 s is the pace\'s routine refusal: not said, info.throttled 0; one of 20 s is said', !/waiting it out/.test(said[0][0]) && said[0][1].throttled === 0 && /waiting it out/.test(said[1][0]) && said[1][1].throttled === 20000, JSON.stringify(said.map((x) => [x[0], x[1].throttled])));
+  // the stall clock: the server waiting out a refusal is not a stall here (its wait is bounded there) — six minutes of the same stage with throttled > 0 still answers; without it the page gives up at five
+  reset(); for (let i = 0; i < 180; i++) script.push(s202({ throttled: 1 })); script.push(DONE);
+  out = await pctx.trkChainWallet(W, () => {}, 0, null);
+  check('six minutes of identical 202s that say the server is waiting on the node do not trip the page\'s five-minute stall clock', out && Array.isArray(out.transfers) && urls.length === 181, urls.length);
+  reset(); for (let i = 0; i < 180; i++) script.push(s202()); script.push(DONE);
+  let err = null; try { await pctx.trkChainWallet(W, () => {}, 0, null); } catch (e) { err = e; }
+  check('  ...the same stream without the wait is a stall at five minutes', err && /no progress for five minutes/.test(err.message) && urls.length < 181, JSON.stringify({ err: err && err.message, asks: urls.length }));
+  // a fourth throttled failure is the end: the page does not ask for ever
+  reset(); for (let i = 0; i < 4; i++) script.push(s502('throttled', true));
+  err = null; try { await pctx.trkChainWallet(W, () => {}, 1, null); } catch (e) { err = e; }
+  check('after three retries a fourth throttled failure is reported, not retried', err && /could not be read right now/.test(err.message) && urls.length === 4 && script.length === 0, JSON.stringify({ err: err && err.message, asks: urls.length }));
+  // a failure for another reason is reported at once
+  reset(); script.push(s502('unreadable', true));
+  err = null; try { await pctx.trkChainWallet(W, () => {}, 0, null); } catch (e) { err = e; }
+  check('a 502 for any other reason is reported at once', err && urls.length === 1, JSON.stringify({ err: err && err.message, asks: urls.length }));
+} catch (e) { check('the polling-loop section ran to the end', false, e && e.stack); }
+
 let pass = 0;
 for (const [n, ok, extra] of results) { console.log((ok ? 'PASS ' : 'FAIL ') + n + (extra ? '  [' + extra + ']' : '')); if (ok) pass++; }
 console.log(`\n${pass}/${results.length} passed`);

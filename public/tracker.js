@@ -22,23 +22,29 @@ const TRK_DEAD = '0x000000000000000000000000000000000000dead';
 const TRK_EXPLORER = 'https://robinhoodchain.blockscout.com';
 const TRK_PAGE = 50;          // transactions per page
 const TRK_CHART_MAX = 8;      // tokens charted at most (the rest are named as not charted)
+const TRK_THROTTLE_SAID_MS = 20000;   // a wait on the node shorter than this is the pace's routine (the node refuses most batches once); only a longer one is said, so the line does not flicker
 
 /* The server reads the chain as a job (a first read is about an hour on the public node — it reads history 30,000
    blocks at a time, twice, and the node refuses every batch of windows once — and later reads are incremental, in
    seconds): it answers 202 with how far it has got, then 200 with
-   the history. A busy or throttled answer is waited out; the page only gives up when the server reports no progress
-   for five minutes, or says the wallet is too large to read in full.
+   the history. A busy or throttled answer is waited out — the server itself waits out the node's refusals for up to ten
+   minutes a read and says so (throttled: how long), and when it still had to give up (a 502 that names a throttle or a
+   timeout) the page asks again a minute later, up to three times: the read goes on from the checkpoint it wrote. The
+   page only gives up when the server reports no progress for five minutes, says the wallet is too large to read in
+   full, or fails for another reason.
    say(msg, info): the string first (profile.js shows it as is), then the 202's structured progress:
-   { stage, done, total, eta, ahead, stageOf, progressed, resuming, queueFull, startedAt, incremental, readFrom }. */
+   { stage, done, total, eta, ahead, stageOf, progressed, resuming, queueFull, startedAt, incremental, readFrom, throttled }. */
 async function trkChainWallet(addr, say, fresh, isStale) {
   const STALL = 5 * 60 * 1000;
-  let until = Date.now() + STALL, last = '', wait = 0, accepted = false;   // accepted: the server has taken the job (a 202 arrived)
+  let until = Date.now() + STALL, last = '', wait = 0, accepted = false, retried = 0;   // accepted: the server has taken the job (a 202 arrived)
   const infoOf = (j, extra) => Object.assign({
     stage: (j && j.stage) || '', done: (j && j.done) || 0, total: (j && j.total) || 0,
     eta: j && j.eta != null ? j.eta : null, ahead: (j && j.ahead) || 0,
     stageOf: (j && j.stageOf) || null, progressed: !!(j && j.progressed), resuming: !!(j && j.resuming),
     queueFull: false, startedAt: j && j.startedAt != null ? j.startedAt : null,
     incremental: !!(j && j.incremental), readFrom: j && j.readFrom != null ? j.readFrom : null,
+    throttled: j && j.throttled >= TRK_THROTTLE_SAID_MS ? Number(j.throttled) : 0,
+    reason: (j && j.reason) || null, resumable: !!(j && j.resumable), saved: (j && j.saved) || null,
   }, extra || {});
   for (let n = 0; ; n++) {
     if (wait) await new Promise(r => setTimeout(r, wait));
@@ -54,8 +60,9 @@ async function trkChainWallet(addr, say, fresh, isStale) {
       accepted = true;
       const sig = (j.stage || '') + '|' + (j.done || 0);
       if (sig !== last || j.stage === 'waiting for a turn') { last = sig; until = Date.now() + STALL; }   // progress, or a place in the queue (the server bounds it), resets the clock
+      if (j.throttled > 0) until = Date.now() + STALL;   // the server is waiting out the node's refusals and says so — bounded there, so not a stall here
       if (say) say(j.ahead ? 'waiting for ' + j.ahead + ' other read' + (j.ahead === 1 ? '' : 's') + ' to finish first…'
-        : (j.stage || 'reading the chain') + (j.total ? '… ' + Math.floor(100 * (j.done || 0) / j.total) + '%' : '…'), infoOf(j));
+        : (j.stage || 'reading the chain') + (j.total ? '… ' + Math.floor(100 * (j.done || 0) / j.total) + '%' : '…') + (j.throttled >= TRK_THROTTLE_SAID_MS ? ' · the chain node is refusing reads — waiting it out' : ''), infoOf(j));
       wait = j.stage === 'waiting for a turn' ? 4000 : 2000;
     } else if (res && res.status === 429 && j && j.code === 'rebuild_limit') {   // the rebuild was refused: say so and keep the saved report — never answer it from the copy as if it ran
       const e = new Error(j.error || 'a rebuild from scratch is limited to two an hour — Refresh reads only what is new'); e.permanent = true; throw e;
@@ -68,6 +75,19 @@ async function trkChainWallet(addr, say, fresh, isStale) {
       if (say) say(((j && j.error) || 'the chain reader is busy') + ' — waiting…', infoOf(j, { stage: 'busy' }));
       if (j && j.code === 'mine') until = Date.now() + STALL;               // queued behind another of your own reads: that is progress too
       wait = Math.min(30000, Math.max(2000, wait * 2));
+    } else if (res && res.status === 502 && j && (j.reason === 'throttled' || j.reason === 'timeout') && fresh === 2 && !j.resumable) {
+      /* a Rebuild that left no checkpoint is not asked again by itself: it starts over from block 0 and spends one of the two
+         an hour — the member's call, said plainly (the one just made counted) */
+      throw new Error((j.reason === 'timeout' ? 'the chain read timed out' : 'the chain node refused the rebuild') + ' before it got anywhere — it counted as one of your two rebuilds this hour. Try Rebuild again in a minute, or Refresh');
+    } else if (res && res.status === 502 && j && (j.reason === 'throttled' || j.reason === 'timeout') && retried < 3) {
+      /* the node refused the read for longer than the server waits, or it timed out: the server keeps that answer for a
+         minute, then a new ask. The server says what it goes on from — resumable: a checkpoint (a Rebuild is asked again as
+         a Refresh, so it resumes rather than starting over); saved 'complete': the finished history, read on from its head;
+         neither: it starts over — and the words say which. */
+      retried++; accepted = false; if (fresh === 2) fresh = 1;
+      const how = j.resumable ? 'it goes on from where it stopped' : j.saved === 'complete' ? 'it reads on from the saved history — only what is new' : 'it starts over';
+      if (say) say((j.reason === 'timeout' ? 'the chain read timed out' : 'the chain node refused the read for too long') + ' — asking again in a minute (' + how + ')', infoOf(j, { stage: 'throttled', throttled: 1 }));
+      wait = 65000; until = Date.now() + STALL + wait;
     } else {
       throw new Error((j && j.error) || 'the chain could not be read right now — try again in a minute');
     }

@@ -1895,6 +1895,13 @@ function proposalView(p, me, c, cm) {
 const RH_RPC = process.env.RPC_URL || 'https://rpc.mainnet.chain.robinhood.com';
 const RPC_RPM = Number(process.env.OUTBOUND_RPM_RPC) || 0;   // 0 = unmetered (the public node publishes no limit); set it with a paid plan
 const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+/* The node is read as the server itself: a truthful User-Agent, over HTTP/2 when the node offers it, through the same
+   resolver as every other outbound call. Measured 2026-10-08 while the node's edge was refusing this address: the
+   same eth_blockNumber over HTTP/1.1 with fetch's browser-style headers answered a "Just a moment…" challenge (403),
+   and over HTTP/2 — with this plain User-Agent — answered 200 at the same moment; curl answered 200 either way. The
+   browser User-Agent above is kept for the feeds that still want one, not for the chain. */
+const RPC_UA = 'JustSendIt/1.0 (+' + BASE_URL + ')';
+const rpcDispatcher = new UndiciAgent({ allowH2: true, connect: { lookup: outboundLookup, timeout: 10000 } });
 const TOK = { SEND: '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', GWC: '0x61339f11384dde4b2dc3a33e75b4dc23cc620f22' };
 const SWAP_ROUTER = '0x89e5db8b5aa49aa85ac63f691524311aeb649eba';
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'; // keccak256("Transfer(address,address,uint256)")
@@ -1940,8 +1947,8 @@ async function rpc(method, params, paced) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 10000); // fast-fail a stalled RPC so a hung read can't freeze the pairs refresher
   try {
-    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': BROWSER_UA }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctrl.signal });
-    if (!res.ok) { if (!paced && res.status === 429) paceYield(); throw new Error('rpc http ' + res.status); } // an HTTP error (429/500/503) must FAIL, not silently return null (which would read as a 0 balance → false OG revoke / streak reset)
+    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': RPC_UA }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctrl.signal, dispatcher: rpcDispatcher });
+    if (!res.ok) { if (!paced && (res.status === 429 || res.status === 403)) paceYield(); throw new Error('rpc http ' + res.status); } // an HTTP error (429/500/503) must FAIL, not silently return null (which would read as a 0 balance → false OG revoke / streak reset)
     const j = await res.json();
     if (j.error) { if (!paced && (j.error.code === 429 || /too many requests/i.test(String(j.error.message || '')))) paceYield(); throw new Error(j.error.message); }   // the site's own reads were refused: the wallet tracker steps back
     return j.result;
@@ -2240,7 +2247,7 @@ async function chainBlockTime(b) {
 async function rpcRetry(fn) {                     // the public node answers 429 in bursts; a person is waiting, so back off briefly
   for (let i = 0; ; i++) {
     try { return await fn(); }
-    catch (e) { if (i >= 3 || !/429|rate|too many requests/i.test(String((e && e.message) || e))) throw e; await new Promise(r => setTimeout(r, 1200 * (i + 1))); }
+    catch (e) { if (i >= 3 || !/429|403|rate|too many requests/i.test(String((e && e.message) || e))) throw e; await new Promise(r => setTimeout(r, 1200 * (i + 1))); }
   }
 }
 async function rpcTokenTransfers(wallet, token, opts) {
@@ -2285,15 +2292,31 @@ async function rpcTokenTransfers(wallet, token, opts) {
    hours of this chain), so a whole-wallet read is hundreds of windows: once the cap is known they go ten to a
    request through `opts.readMany` (a refused item is read again on its own), and with
    `opts.laterPassesStartAtFirstHit` the "from the wallet" pass starts at the first transfer that ever reached it.
-   `read(q, { window, done, total })` lets the caller price a capped window below a whole-chain one and show progress. */
+   `read(q, { window, done, total })` lets the caller price a capped window below a whole-chain one and show progress.
+   `opts.resume = { pass, from, earliest }` goes on where an earlier walk stopped: that pass from that block (the passes
+   before it are not read again), with the earliest hit it had found. `opts.onWindow({ pass, from, earliest, logs })`
+   hears, after every window or batch of them, where the walk is and what it holds so far — a checkpoint's worth. */
 const LOG_WINDOWS_PER_BATCH = 10;   // measured 2026-09-28: ten 100k-block windows answer in one request in ~0.1 s; twenty-five take 10 s with timeouts, then the node answers 429
 async function transferLogWalk(address, topicSets, start, head, max, read, opts) {
   opts = opts || {};
   const getLogs = read || ((q) => rpcRetry(() => rpc('eth_getLogs', [q])));
   const hx = (n) => '0x' + n.toString(16), logs = [], seen = new Set();   // a transfer to yourself answers both the "from" and the "to" read: kept once
   let earliest = Infinity, cap = Infinity, done = 0, total = 0;          // earliest: the lowest block a kept transfer sits in; cap: the span the node named
+  const rs = opts.resume && Number.isInteger(opts.resume.pass) && opts.resume.pass >= 0 && opts.resume.pass < topicSets.length && Number.isInteger(opts.resume.from) ? opts.resume : null;
+  if (rs && rs.earliest > 0) earliest = rs.earliest;
+  const tell = async (s, from) => { if (opts.onWindow) await opts.onWindow({ pass: s, from, earliest, logs }); };
+  let pass = 0;
   const keep = (out) => {
-    for (const l of out) { if (l.removed) continue; const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue; seen.add(k); logs.push(l); const bn = parseInt(l.blockNumber, 16); if (bn < earliest) earliest = bn; }
+    for (const l of out) {
+      if (l.removed) continue;
+      const k = l.transactionHash + ':' + l.logIndex; if (seen.has(k)) continue;
+      const bn = parseInt(l.blockNumber, 16);
+      /* resumed: a transfer from the wallet TO the wallet answers both passes; the earlier walk's pass 0 kept it — in full
+         when that walk stopped in a later pass, up to the resumed block when it stopped in pass 0 (this walk's own pass 0
+         keeps the rest in `seen`) — so a later pass here must not keep it again (it is in the checkpoint, not in `seen`) */
+      if (rs && pass > 0 && (rs.pass > 0 || bn < rs.from) && l.topics && l.topics.length >= 3 && l.topics[1] === l.topics[2]) continue;
+      seen.add(k); logs.push(l); if (bn < earliest) earliest = bn;
+    }
     if (logs.length > max) throw new Error('history longer than the chain read budget');
   };
   const info = (window) => ({ window, done, total });
@@ -2317,12 +2340,14 @@ async function transferLogWalk(address, topicSets, start, head, max, read, opts)
       keep(out); done++; return;
     }
   }
-  for (let s = 0; s < topicSets.length; s++) {
+  for (let s = rs ? rs.pass : 0; s < topicSets.length; s++) {
     const topics = topicSets[s];
+    pass = s;
     let from = start;
     /* a later pass can begin where the first hit was, when the caller says the passes are "to the wallet" then
        "from the wallet": nothing leaves a wallet that never arrived (a mint arrives as a Transfer from 0x0) */
-    if (s > 0 && opts.laterPassesStartAtFirstHit) { if (earliest === Infinity) continue; from = Math.max(start, earliest); }
+    if (rs && s === rs.pass) from = Math.max(start, rs.from);   // the pass an earlier walk stopped in goes on from its next block
+    else if (s > 0 && opts.laterPassesStartAtFirstHit) { if (earliest === Infinity) continue; from = Math.max(start, earliest); }
     let window = Math.min(cap, Math.max(1, head - from + 1)), ceiling = cap, tries = 0;
     if (cap !== Infinity) total = done + left(from, s);
     while (from <= head) {
@@ -2336,6 +2361,7 @@ async function transferLogWalk(address, topicSets, start, head, max, read, opts)
           else await readOne(parseInt(qs[i].fromBlock, 16), parseInt(qs[i].toBlock, 16), topics);   // the node refused that one window (slow, or dense): on its own
         }
         from = parseInt(qs[qs.length - 1].toBlock, 16) + 1;
+        await tell(s, from);
         continue;
       }
       const to = Math.min(head, from + window - 1);
@@ -2359,6 +2385,7 @@ async function transferLogWalk(address, topicSets, start, head, max, read, opts)
       if (!Array.isArray(out)) throw new Error('the chain did not answer');
       keep(out); done++;
       from = to + 1;
+      await tell(s, from);
       if (out.length < 2500) window = Math.min(window * 2, ceiling, Math.max(1, head - from + 1));
     }
   }
@@ -2374,7 +2401,7 @@ async function rpcBatch(calls) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 20000);
   try {
-    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': BROWSER_UA }, body: JSON.stringify(calls.map((c, i) => ({ jsonrpc: '2.0', id: i, method: c[0], params: c[1] }))), signal: ctrl.signal });
+    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': RPC_UA }, body: JSON.stringify(calls.map((c, i) => ({ jsonrpc: '2.0', id: i, method: c[0], params: c[1] }))), signal: ctrl.signal, dispatcher: rpcDispatcher });
     if (!res.ok) throw new Error('rpc http ' + res.status);
     const j = await res.json();
     if (!Array.isArray(j)) throw new Error((j && j.error && j.error.message) || 'the chain did not answer');   // a throttled batch comes back as ONE error object
@@ -2420,16 +2447,33 @@ const WALLET_JOBS_MAX = 20, WALLET_JOBS_PER_MEMBER = 1, WALLET_JOB_IDLE_MS = 60 
    The line is bounded; a job in it costs the chain nothing. */
 const WALLET_QUEUE_MAX = 6, WALLET_NOTIFY_QUIET_MS = 30 * 1000, WALLET_STAGES = 5;
 /* The saved history: a later read starts WALLET_REORG_OVERLAP blocks before the saved head (a reorg on this chain is
-   shallower than that); a checkpoint older than WALLET_RESUME_MAX_BLOCKS (≈5.5 hours) is not resumed; a history whose
-   JSON is over WALLET_HIST_JSON_MAX is not kept; all members' rows together stay under WALLET_HIST_TOTAL_MAX. */
-const WALLET_REORG_OVERLAP = 5000, WALLET_RESUME_MAX_BLOCKS = 200000, WALLET_HIST_JSON_MAX = 8 * 1024 * 1024, WALLET_HIST_TOTAL_MAX = 64 * 1024 * 1024;
+   shallower than that); a checkpoint more than WALLET_RESUME_MAX_BLOCKS (about three days of this chain) behind the
+   head is not resumed — the logs it kept are final, and finishing it plus the window since costs less than starting
+   over, but a row that old is more likely another chain's or a broken answer's than a read somebody is coming back
+   to; a history whose JSON is over WALLET_HIST_JSON_MAX is not kept; all members' rows together stay under
+   WALLET_HIST_TOTAL_MAX. */
+const WALLET_REORG_OVERLAP = 5000, WALLET_RESUME_MAX_BLOCKS = 2000000, WALLET_HIST_JSON_MAX = 8 * 1024 * 1024, WALLET_HIST_TOTAL_MAX = 64 * 1024 * 1024;
+/* The transfer walk is the long part of a first read (about an hour on the public node), so it checkpoints ITSELF every
+   WALLET_WALK_CHECKPOINT_MS: the transfers walked so far and where it is (the pass, the next block, the earliest hit).
+   A read that dies mid-walk — the node refusing it for longer than the pace waits, a restart — goes on from there. */
+const WALLET_WALK_CHECKPOINT_MS = 2 * 60 * 1000;
 /* The pace. Measured on the public node (2026-09-26): one batch of 50 reads goes through, the next one sent at once
    is refused (429), it forgives within ~2 s, and ~25 reads a second hold — for everything this server reads, from
    one address. So every whole-wallet read shares ONE pace, capped at half that budget (PACE_MS_MIN: 12.5 a second)
    so the holder checks, the ledger and prices keep the other half. It adapts: faster by 10% a batch while the node
    answers, slower by half when the tracker is refused — and when one of the site's own unpaced reads is refused
    (paceYield, from rpc()), because then the tracker is the one that gives way. A log read weighs 5. */
-const PACE_MS_MIN = 80, PACE_MS_START = 100, PACE_MS_MAX = 400, PACE_LOG_WEIGHT = 5, PACE_BATCH = 25, PACE_TRIES = 8;
+const PACE_MS_MIN = 80, PACE_MS_START = 100, PACE_MS_MAX = 400, PACE_LOG_WEIGHT = 5, PACE_BATCH = 25, PACE_TRIES = 40;
+/* A refusal is waited out, not given up on. The wait grows 2.5 s a refusal up to PACE_REFUSED_WAIT_MAX, and one call
+   keeps asking for up to PACE_THROTTLE_MAX_MS before it fails. Seen 2026-10-08 in the live log: the node refused this
+   address for minutes at a stretch — HTTP 403 (its edge's refusal page) and then 429 — and the day's one first read
+   died after the 90 s the old eight retries gave it. The node's 403 is that refusal, not a verdict: the same request
+   answers once the burst has passed. The wait is reported to the read's guard (walletJobRun), which does not count
+   it as a stall — the wait is bounded here. */
+const PACE_REFUSED_WAIT_MAX = 30000, PACE_THROTTLE_MAX_MS = 10 * 60 * 1000;
+// a read a person is waiting on at an open request (prices, the chart) gives a refusal a minute, not the job's ten: its guard throws a throttle of its own
+const REQUEST_THROTTLE_MAX_MS = 60 * 1000;
+const requestThrottleGuard = (st) => { if (st && st.throttled && now() - st.since > REQUEST_THROTTLE_MAX_MS) throw new Error('rpc http 429: the chain refused this read for over a minute'); };
 let _paceAt = 0, _paceMs = PACE_MS_START;
 async function paceTake(weight) {
   const at = Math.max(now(), _paceAt);
@@ -2438,18 +2482,20 @@ async function paceTake(weight) {
   if (wait > 0) await sleep(wait);
 }
 const paceOk = () => { _paceMs = Math.max(PACE_MS_MIN, _paceMs * 0.9); };
-const paceRefused = (attempt) => { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + Math.min(20000, 2500 * (attempt + 1))); };
+const paceRefused = (attempt) => { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + Math.min(PACE_REFUSED_WAIT_MAX, 2500 * (attempt + 1))); };
 function paceYield() { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + 2000); }
-const isThrottle = (e) => { const m = String((e && e.message) || e); return !/revert/i.test(m) && /\b429\b|too many requests|rate.?limit|capacity/i.test(m); };
+const isThrottle = (e) => { const m = String((e && e.message) || e); return !/revert/i.test(m) && /\b429\b|\b403\b|too many requests|rate.?limit|capacity/i.test(m); };
+// one call's refusals: waited out while the budget lasts, then failed with the wait named (the message keeps the node's words, so the failure still reads as a throttle)
+const refusedTooLong = (e, since) => new Error('the chain refused this read for ' + Math.round((now() - since) / 60000) + ' minutes (' + String((e && e.message) || e) + ')');
 // a dropped connection or a load balancer's 5xx is a blip, not an answer: asked again twice before it fails a read
 const isBlip = (e, withTimeouts) => { const m = String((e && e.message) || e); return !/revert/i.test(m) && (/fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|socket|rpc http 5\d\d/i.test(m) || (!!withTimeouts && /aborted|timed out|timeout/i.test(m))); };
 async function pacedCall(method, params, weight, guard) {
-  for (let attempt = 0, blips = 0; ; attempt++) {
-    if (guard) guard();
+  for (let attempt = 0, blips = 0, refusedAt = 0; ; attempt++) {
+    if (guard) guard(refusedAt ? { throttled: true, since: refusedAt } : null);
     await paceTake(weight || 1);
     try { const r = await rpc(method, params, true); paceOk(); return r; }
     catch (e) {
-      if (attempt < PACE_TRIES && isThrottle(e)) { paceRefused(attempt); continue; }
+      if (isThrottle(e)) { if (!refusedAt) refusedAt = now(); if (attempt < PACE_TRIES && now() - refusedAt < PACE_THROTTLE_MAX_MS) { paceRefused(attempt); continue; } throw refusedTooLong(e, refusedAt); }
       if (blips < 2 && isBlip(e, false)) { blips++; await sleep(2000 * blips); continue; }   // a slow log window is transferLogWalk's to handle
       throw e;
     }
@@ -2462,12 +2508,12 @@ async function pacedBatchAll(calls, onStep, guard, onPart) {
   for (let i = 0; i < calls.length; i += PACE_BATCH) {
     const part = calls.slice(i, i + PACE_BATCH);
     let r;
-    for (let attempt = 0, blips = 0; ; attempt++) {
-      if (guard) guard();
+    for (let attempt = 0, blips = 0, refusedAt = 0; ; attempt++) {
+      if (guard) guard(refusedAt ? { throttled: true, since: refusedAt } : null);
       await paceTake(part.length);
       try { r = await rpcBatch(part); paceOk(); break; }
       catch (e) {
-        if (attempt < PACE_TRIES && isThrottle(e)) { paceRefused(attempt); continue; }
+        if (isThrottle(e)) { if (!refusedAt) refusedAt = now(); if (attempt < PACE_TRIES && now() - refusedAt < PACE_THROTTLE_MAX_MS) { paceRefused(attempt); continue; } throw refusedTooLong(e, refusedAt); }
         if (blips < 2 && isBlip(e, true)) { blips++; await sleep(2000 * blips); continue; }
         throw e;
       }
@@ -2658,7 +2704,9 @@ function walletJobEta(job, t) {
   if (job.turn) { if (!_walletReadMs.length) return null; return Math.round(walletJobsAhead(job) * _walletReadMs.reduce((a, b) => a + b, 0) / _walletReadMs.length); }
   const done = job.done || 0, total = job.total || 0;
   if (done < 5 || total <= done || !job.stageAt) return null;
-  return Math.round((total - done) * ((t - job.stageAt) / done));
+  const waited = (job.stageThrottledMs || 0) + (job.throttledAt ? t - job.throttledAt : 0), elapsed = t - job.stageAt - waited;   // the node's refusals are not this stage's pace
+  if (elapsed <= 0) return null;
+  return Math.round((total - done) * (elapsed / done));
 }
 /* The gate on starting a read: a member starts at most 40 in ten minutes, and rebuilds a wallet from block 0 twice
    an hour (a Refresh reads only what is new; a rebuild reads everything again). Charged only when a read starts. */
@@ -2667,6 +2715,14 @@ function walletStartGate(uid, fresh) {
   if (fresh === 2 && !rateLimit('chainw2:' + uid, 2, 3600e3)) return 'rebuild';
   return null;
 }
+/* What is on file for this (member, wallet): the row's partial (0 finished · 1 the transfers walked in full · 2 a walk stopped
+   part-way) and read_to. A checkpoint can be gone on from unless the chain has moved more than WALLET_RESUME_MAX_BLOCKS past
+   it (readWalletHistory drops it then) — judged by the head this server last saw (_chainHead; unknown before any read, so
+   not judged). The 202's `resuming`, the 502's `resumable` and the wallet list's `stale` all say the same thing. */
+let _chainHead = 0;
+const walletHistRow = (uid, w) => { try { return db.prepare('SELECT partial, read_to FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').get(uid, bidx(w)) || null; } catch { return null; } };
+const walletHistStale = (r) => !!(r && r.partial && _chainHead > 0 && _chainHead - r.read_to > WALLET_RESUME_MAX_BLOCKS);
+const walletHistResumable = (uid, w) => { const r = walletHistRow(uid, w); return !!(r && r.partial && !walletHistStale(r)); };
 // fresh: 0 the copy in memory is fine · 1 read what is new (a copy under 30 s old still answers) · 2 rebuild from block 0
 function walletJob(uid, address, fresh, mayStart) {
   const w = String(address || '').toLowerCase(), key = uid + ':' + w;
@@ -2689,10 +2745,10 @@ function walletJob(uid, address, fresh, mayStart) {
   if (_walletWaiters.length >= WALLET_QUEUE_MAX) return { queueFull: true };   // the line is bounded, so a place in it means something
   const why = mayStart ? mayStart() : null;
   if (why) return { slow: true, why };                                  // only a read that really starts is charged
-  job = { uid, address: w, startedAt: now(), polledAt: now(), polls: 0, runAt: 0, movedAt: 0, stageAt: 0, stage: 'waiting for a turn', done: 0, total: 0,
-    progressed: false, resuming: false, incremental: null, readFrom: null, error: null, endedAt: 0, turn: false };
-  // a checkpoint on file (the transfers of a read that stalled) means this one resumes rather than starts over — said while it waits, decided for sure once it reads the head
-  if (fresh !== 2) { try { const r = db.prepare('SELECT partial FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').get(uid, bidx(w)); job.resuming = !!(r && r.partial); } catch {} }
+  job = { uid, address: w, fresh, startedAt: now(), polledAt: now(), polls: 0, runAt: 0, movedAt: 0, stageAt: 0, stage: 'waiting for a turn', done: 0, total: 0,
+    progressed: false, resuming: false, incremental: null, readFrom: null, error: null, endedAt: 0, turn: false, throttledAt: 0, stageThrottledMs: 0, checkpointed: false };
+  // a checkpoint on file (the transfers of a read that stalled, or a walk stopped part-way) means this one resumes rather than starts over — said while it waits, decided for sure once it reads the head
+  if (fresh !== 2) job.resuming = walletHistResumable(uid, w);
   _walletJobs.set(key, job);
   job.promise = walletJobRun(job, key, fresh);
   return job;
@@ -2702,14 +2758,17 @@ async function walletJobRun(job, key, fresh) {
   const go = await walletTurn(job);
   if (!go) { if (_walletJobs.get(key) === job) _walletJobs.delete(key); return; }   // retired in line: nobody ever asked about it
   job.runAt = job.movedAt = now();
-  const guard = () => {
+  const guard = (st) => {
+    // waiting out the node's refusals (the pace tells the guard, with when they began) is not a stall: that wait is bounded by the pace itself — and it is not the stage's pace either (stageThrottledMs, left out of the ETA)
+    if (st && st.throttled) { if (!job.throttledAt) job.throttledAt = st.since || now(); job.movedAt = now(); }
+    else if (job.throttledAt) { job.stageThrottledMs = (job.stageThrottledMs || 0) + (now() - job.throttledAt); job.throttledAt = 0; }
     if (walletJobAbandoned(job)) throw new Error('abandoned: nobody is waiting for this read');
     if (now() - job.movedAt > WALLET_JOB_STALL_MS || now() - job.runAt > WALLET_JOB_DEADLINE_MS) throw new Error('the read took too long');
   };
   const step = (stage, done, total) => {
     done = done || 0; total = total || 0;
     if (stage !== job.stage || done !== job.done) job.movedAt = now();
-    if (stage !== job.stage) { job.stage = stage; job.stageAt = now(); }
+    if (stage !== job.stage) { job.stage = stage; job.stageAt = now(); job.stageThrottledMs = 0; if (job.throttledAt) job.throttledAt = now(); }   // a wait still running counts for the new stage from here
     if (done > 0) job.progressed = true;                       // sticky: a read that has moved is worth finishing without its page
     job.done = done; job.total = total;
   };
@@ -2718,7 +2777,7 @@ async function walletJobRun(job, key, fresh) {
     if (fresh !== 2) { const saved = await walletHistLoad(uid, w); if (saved) prior = saved.hist; }   // decoded here, in the job — never on a request
     const v = await readWalletHistory(w, uid, step, guard, prior, {
       onPlan: (p) => { job.incremental = p.incremental; job.readFrom = p.readFrom; job.resuming = p.resuming; },
-      checkpoint: (h) => (walletHistKeeps(uid, w) ? walletHistSave(uid, w, h, true) : null),
+      checkpoint: async (h) => { if (!walletHistKeeps(uid, w)) return null; const s = await walletHistSave(uid, w, h, true); if (s.saved) job.checkpointed = true; return s; },   // checkpointed: this read left something to go on from
     });
     if (walletHistKeeps(uid, w)) { const s = await walletHistSave(uid, w, v, false); v.saved = s.saved; v.savedWhy = s.savedWhy; }
     else { v.saved = false; v.savedWhy = 'not tracked'; db.prepare('DELETE FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').run(uid, bidx(w)); }
@@ -2731,13 +2790,19 @@ async function walletJobRun(job, key, fresh) {
     job.error = String((e && e.message) || e); job.endedAt = now();
     if (/longer than|too dense/.test(job.error)) { pruneCache(_walletTooBig, 2000); _walletTooBig.set(key, { at: now(), dense: /too dense/.test(job.error) }); }
     if (/^abandoned/.test(job.error)) { if (_walletJobs.get(key) === job) _walletJobs.delete(key); }   // nobody was waiting: nothing failed, the next ask starts afresh (from the checkpoint, if one was written)
-    else console.warn('[tracker] whole-wallet read failed: ' + job.error.slice(0, 200));
+    else {
+      console.warn('[tracker] whole-wallet read failed: ' + job.error.slice(0, 200));
+      // the page has gone and the read had moved: the bell says it stopped (the page's own retry is not there to ask again)
+      if (job.progressed && now() - job.polledAt > WALLET_NOTIFY_QUIET_MS && (isThrottle(job.error) || /timed out|timeout|aborted|too long/i.test(job.error))) walletReadStoppedNotify(uid, w, job.checkpointed);
+    }
   } finally { walletTurnDone(); }
 }
 
 /* ----- The saved history (wallet_hist): encBlob(brotli(JSON)), compressed and decompressed off the event loop -----
    A row is kept only for a wallet the member tracks or linked, at most trackLimit + linked rows per member, and all
-   rows together under WALLET_HIST_TOTAL_MAX (the oldest go first). */
+   rows together under WALLET_HIST_TOTAL_MAX (the oldest go first). `partial`: 0 a finished history · 1 the transfers
+   walked in full to read_to, the later stages still to run · 2 a transfer walk stopped part-way (read_to is the head it
+   was reading TO, not a block it has read to — the member is told the walk is part-way, never "to block N"). */
 const brotliAsync = require('node:util').promisify(zlib.brotliCompress), unbrotliAsync = require('node:util').promisify(zlib.brotliDecompress);
 const walletHistKeeps = (uid, w) => !!db.prepare('SELECT 1 FROM tracked_wallets WHERE user_id = ? AND address = ?').get(uid, bidx(w)) || walletList(uid).some((x) => x.address === w);
 async function walletHistLoad(uid, w) {
@@ -2756,7 +2821,7 @@ async function walletHistSave(uid, w, hist, partial) {
     if (Buffer.byteLength(json) > WALLET_HIST_JSON_MAX) return { saved: false, savedWhy: 'too large' };
     const blob = encBlob(await brotliAsync(Buffer.from(json), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } }));
     db.prepare('INSERT INTO wallet_hist (user_id, addr_idx, read_to, updated_at, partial, hist) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id, addr_idx) DO UPDATE SET read_to = excluded.read_to, updated_at = excluded.updated_at, partial = excluded.partial, hist = excluded.hist')
-      .run(uid, bidx(w), hist.head, now(), partial ? 1 : 0, blob);
+      .run(uid, bidx(w), hist.head, now(), partial ? (hist.stage === 'walk' ? 2 : 1) : 0, blob);
     walletHistBound(uid);
     return { saved: true, savedWhy: null };
   } catch (e) { console.warn('[tracker] a wallet history could not be saved: ' + ((e && e.message) || e)); return { saved: false, savedWhy: 'not saved' }; }
@@ -2804,6 +2869,13 @@ function walletReadNotify(uid, w) {
   const n = walletReadNotice(uid, w);
   if (!n) return false;
   notify(uid, '💼', 'Your wallet report for ' + (n.label || 'one of your wallets') + ' is ready.', 'tracker', null, n.href);
+  return true;
+}
+// a read that stopped (the node refusing it for longer than the pace waits, a timeout) after its page had gone: the bell says so, and whether it goes on from a checkpoint
+function walletReadStoppedNotify(uid, w, checkpointed) {
+  const n = walletReadNotice(uid, w);
+  if (!n) return false;
+  notify(uid, '💼', 'The read of ' + (n.label || 'one of your wallets') + ' stopped part-way — the chain node kept refusing it. ' + (checkpointed ? 'Open the tracker and it goes on from where it stopped.' : 'Open the tracker to start it again.'), 'tracker', null, n.href);
   return true;
 }
 /* A finished history, serialized once and compressed once per encoding — a warm answer costs a write, not a
@@ -2877,6 +2949,7 @@ async function readWalletHistory(w, uid, step, guard, prior, opts) {
   const [headHex, balHex, nonceHex, code] = await pacedBatchAll([['eth_blockNumber', []], ['eth_getBalance', [w, 'latest']], ['eth_getTransactionCount', [w, 'latest']], ['eth_getCode', [w, 'latest']]], null, guard);
   const head = parseInt(headHex, 16);
   if (!(head > 0) || balHex == null || nonceHex == null) throw new Error('the chain did not answer');
+  if (head > _chainHead) _chainHead = head;
   const delegated = !!(code && code.length === 48 && code.toLowerCase().startsWith('0xef0100'));   // EIP-7702: an EOA pointing at code, still a person's wallet
   const account = { isContract: !!(code && code !== '0x' && !delegated), delegated, ethBalance: BigInt(balHex).toString(), txSent: parseInt(nonceHex, 16) };
 
@@ -2885,9 +2958,10 @@ async function readWalletHistory(w, uid, step, guard, prior, opts) {
      by more than a thousand blocks (the chain does not rewind: that is a broken answer, or another chain), nor is a
      checkpoint older than WALLET_RESUME_MAX_BLOCKS. */
   const usable = (p) => !!(p && typeof p === 'object' && p.head > 0 && Array.isArray(p.transfers) && p.nftByBlock && typeof p.nftByBlock === 'object' && head >= p.head - 1000);
-  let partial = prior && prior.stage === 'transfers' ? prior : null;
+  let partial = prior && (prior.stage === 'transfers' || prior.stage === 'walk') ? prior : null;
   if (partial) prior = null;
   if (!(usable(prior) && Array.isArray(prior.tokens) && prior.txs && typeof prior.txs === 'object')) prior = null;
+  if (partial && partial.stage === 'walk' && !(Number.isInteger(partial.pass) && partial.pass >= 0 && Number.isInteger(partial.from) && partial.from >= 0 && Number.isInteger(partial.start) && partial.start >= 0)) partial = null;
   if (!(usable(partial) && head - partial.head <= WALLET_RESUME_MAX_BLOCKS)) partial = null;
 
   // nothing new on the chain since the saved read: only what changes without a log is read again — the account, and the live balances
@@ -2909,26 +2983,68 @@ async function readWalletHistory(w, uid, step, guard, prior, opts) {
     return { ...prior, readAt, ...account, ethUsd: await ethUsdFresh().catch(() => null), tokens, incremental: true, readFrom: null, resumed: false };
   }
 
+  // [block, logIndex, txHash, token, from, to, amount, timeMs] — the time is filled in at step 3
+  const rowOf = (l) => { const b = parseInt(l.blockNumber, 16); return [b, parseInt(l.logIndex, 16), l.transactionHash.toLowerCase(), l.address.toLowerCase(), '0x' + l.topics[1].slice(-40).toLowerCase(), '0x' + l.topics[2].slice(-40).toLowerCase(), BigInt(l.data).toString(), null]; };
+  // what a walk answered: ERC-20 transfers (two indexed addresses and a 32-byte amount) as logs, ERC-721 ones (the token id is a third indexed topic) counted by block
+  const splitLogs = (raw) => {
+    const nftNew = {}, fresh = [];
+    for (const l of raw) {
+      if (l.topics && l.topics.length === 3 && /^0x[0-9a-fA-F]{64}$/.test(l.data || '')) fresh.push(l);
+      else if (l.topics && l.topics.length === 4) { const b = parseInt(l.blockNumber, 16); nftNew[b] = (nftNew[b] || 0) + 1; }
+    }
+    return { fresh, nftNew };
+  };
+  const SETS = [[TRANSFER_TOPIC, null, wt], [TRANSFER_TOPIC, wt]];
+  /* The walk's readers: a capped window (~75 ms) is priced at 1, a whole-chain one at PACE_LOG_WEIGHT. Progress counts on
+     from an earlier walk this read had to finish first (walkBefore), so the bar does not start over. */
+  let walkBefore = 0, walkTotal = 0;
+  const walkSay = (i) => { walkTotal = i.total; say('reading every token transfer', walkBefore + i.done, walkBefore + i.total); };
+  const walkRead = (q, i) => { walkSay(i); return pacedCall('eth_getLogs', [q], i.window <= 200000 ? 1 : PACE_LOG_WEIGHT, guard); };
+  const walkMany = (qs, i) => { walkSay(i); return pacedBatchAll(qs.map((q) => ['eth_getLogs', [q]]), null, guard); };
+  /* The walk's own checkpoint, every WALLET_WALK_CHECKPOINT_MS — for a read with no finished history only (a refresh's
+     window is seconds): the transfers walked so far on top of `under` (the walk this one is finishing, if any) and where
+     the walk is, so a read that dies mid-walk goes on from there instead of from block 0. */
+  const walkCheckpoint = (toHead, from0, later, under) => {
+    let last = now();
+    /* what of `under` a checkpoint keeps: a walk being finished keeps every row it had (its windows are not read again);
+       a finished walk keeps only what lies below this walk's start — the walk reads [from0, toHead] again in both
+       passes, so the overlap comes back from the chain and an NFT there is counted once, not twice */
+    const keepBelow = under ? (under.stage === 'walk' ? under.head + 1 : from0) : 0;
+    return async (st) => {
+      if (prior || !opts.checkpoint || now() - last < WALLET_WALK_CHECKPOINT_MS) return;
+      last = now();
+      const sp = splitLogs(st.logs), m = mergeWalletHistory(under, keepBelow, sp.fresh.map(rowOf), sp.nftNew);
+      await opts.checkpoint({ stage: 'walk', head: toHead, start: from0, later: !!later, pass: st.pass, from: st.from, earliest: st.earliest === Infinity ? null : st.earliest, transfers: m.transfers, nftByBlock: m.nftByBlock });
+    };
+  };
+  let planned = false;
+  if (partial && partial.stage === 'walk') {
+    // a walk that stopped is finished first — its pass from its next block, to the head it was reading to — and then this read goes on from that head like any resumed one
+    planned = true;
+    if (opts.onPlan) opts.onPlan({ incremental: false, readFrom: partial.from, resuming: true });
+    say('reading every token transfer', 0, 0);
+    const rawW = await transferLogWalk(null, SETS, partial.start, partial.head, Math.max(0, TRACKER_HISTORY_MAX - partial.transfers.length), walkRead,
+      { laterPassesStartAtFirstHit: !!partial.later, readMany: walkMany, resume: { pass: partial.pass, from: partial.from, earliest: partial.earliest }, onWindow: walkCheckpoint(partial.head, partial.start, partial.later, partial) });
+    const spW = splitLogs(rawW), mW = mergeWalletHistory(partial, partial.head + 1, spW.fresh.map(rowOf), spW.nftNew);
+    if (mW.transfers.length > TRACKER_HISTORY_MAX) throw new Error('history longer than the chain read budget');
+    partial = { stage: 'transfers', head: partial.head, transfers: mW.transfers, nftByBlock: mW.nftByBlock };
+    if (opts.checkpoint) await opts.checkpoint(partial);   // walked to that head in full: what every later stage resumes from
+    walkBefore = walkTotal;
+  }
+
   const base = prior || partial;
   const readFrom = base ? Math.max(0, base.head - WALLET_REORG_OVERLAP) : 0;
   const resuming = !!partial;
-  if (opts.onPlan) opts.onPlan({ incremental: !!prior, readFrom, resuming });
+  if (opts.onPlan && !planned) opts.onPlan({ incremental: !!prior, readFrom, resuming });
   const kept = base ? base.transfers.filter((t) => t[0] < readFrom).length : 0;
 
   // 1. every Transfer from and to the wallet, in every token — over the chain's whole life, or only the blocks after the saved copy
-  say('reading every token transfer', 0, 0);
+  say('reading every token transfer', walkBefore, walkBefore);
   /* "to the wallet" first, then "from" it from the first arrival on — for a from-scratch read only: a window after a saved copy may
-     hold nothing but departures. A capped window (~75 ms) is priced at 1, a whole-chain one at PACE_LOG_WEIGHT. */
-  const raw = await transferLogWalk(null, [[TRANSFER_TOPIC, null, wt], [TRANSFER_TOPIC, wt]], readFrom, head, Math.max(0, TRACKER_HISTORY_MAX - kept),
-    (q, i) => { say('reading every token transfer', i.done, i.total); return pacedCall('eth_getLogs', [q], i.window <= 200000 ? 1 : PACE_LOG_WEIGHT, guard); },
-    { laterPassesStartAtFirstHit: !base, readMany: (qs, i) => { say('reading every token transfer', i.done, i.total); return pacedBatchAll(qs.map((q) => ['eth_getLogs', [q]]), null, guard); } });
-  const nftNew = {}, fresh = [];
-  for (const l of raw) {
-    if (l.topics && l.topics.length === 3 && /^0x[0-9a-fA-F]{64}$/.test(l.data || '')) fresh.push(l);   // ERC-20: two indexed addresses and a 32-byte amount
-    else if (l.topics && l.topics.length === 4) { const b = parseInt(l.blockNumber, 16); nftNew[b] = (nftNew[b] || 0) + 1; }   // ERC-721: the token id is the third indexed topic
-  }
-  // [block, logIndex, txHash, token, from, to, amount, timeMs] — the time is filled in at step 3
-  const rowOf = (l) => { const b = parseInt(l.blockNumber, 16); return [b, parseInt(l.logIndex, 16), l.transactionHash.toLowerCase(), l.address.toLowerCase(), '0x' + l.topics[1].slice(-40).toLowerCase(), '0x' + l.topics[2].slice(-40).toLowerCase(), BigInt(l.data).toString(), null]; };
+     hold nothing but departures. */
+  const raw = await transferLogWalk(null, SETS, readFrom, head, Math.max(0, TRACKER_HISTORY_MAX - kept), walkRead,
+    { laterPassesStartAtFirstHit: !base, readMany: walkMany, onWindow: walkCheckpoint(head, readFrom, !base, base) });
+  const { fresh, nftNew } = splitLogs(raw);
   const merged = mergeWalletHistory(base, readFrom, fresh.map(rowOf), nftNew);
   const rows = merged.transfers;                            // newest first
   if (rows.length > TRACKER_HISTORY_MAX) throw new Error('history longer than the chain read budget');
@@ -6315,7 +6431,7 @@ function ledgerBalances(tok, wallets) {         // exact balances for a set of w
 async function _rpcPaced(fn, tries = 3) {       // the public node answers a burst with 429: back off and try again, a few times
   let last;
   for (let i = 0; i < tries; i++) {
-    try { return await fn(); } catch (e) { last = e; if (!/429|rate|too many/i.test(String(e && e.message))) throw e; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
+    try { return await fn(); } catch (e) { last = e; if (!(isThrottle(e) || /rate|too many/i.test(String(e && e.message)))) throw e; await new Promise((r) => setTimeout(r, 1500 * (i + 1))); }
   }
   throw last;
 }
@@ -6331,7 +6447,7 @@ const TOO_MANY_RE = /exceeds limit|too many results|query returned more|response
 async function _rpcSlow(fn) {
   if (now() < ledgerCoolUntil) throw new Error('ledger cooling down after a rate limit');
   try { return await fn(); }
-  catch (e) { if (/429|rate|too many requests/i.test(String(e && e.message))) ledgerCoolUntil = now() + LEDGER_COOL_MS; throw e; }
+  catch (e) { if (isThrottle(e) || /rate|too many requests/i.test(String(e && e.message))) ledgerCoolUntil = now() + LEDGER_COOL_MS; throw e; }   // the node's 403 is its edge refusing this address, like a 429
 }
 /* Fold a batch of Transfer logs into the stored balances, and move last_block forward — one transaction per window,
    so a build that the node refuses half-way is complete up to a block and RESUMES there next time. */
@@ -6398,7 +6514,7 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental, r
       // a first summary without the supply would publish holders with no shares — when the read was REFUSED (a rate
       // limit, a timeout), the logs are saved and the summary waits; when there simply is no totalSupply() (a wallet,
       // a contract that is not a token), the empty summary is the truth and is cached like any other
-      const transient = supplyErr && /429|rate|too many|cool|timed out|timeout|abort|fetch failed|unreachable|ECONN|http 5\d\d/i.test(String(supplyErr.message || supplyErr));
+      const transient = supplyErr && (isThrottle(supplyErr) || /rate|too many|cool|timed out|timeout|abort|fetch failed|unreachable|ECONN|http 5\d\d/i.test(String(supplyErr.message || supplyErr)));
       if (supply == null && transient && !(db.prepare('SELECT supply FROM holder_index WHERE token_addr = ?').get(tok) || {}).supply) throw new Error('totalSupply() could not be read yet — the summary waits for it');
       // the summary: who holds, how much of the supply, and whether the ledger adds up
       const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
@@ -7402,7 +7518,7 @@ function sniperBudget() {
         try { return await rpc(m, p); } catch (e) {
           last = e;
           const msg = String((e && e.message) || '');
-          if (!/429|timed out|timeout|abort|http 5|ECONNRESET|fetch failed/i.test(msg)) throw e;   // a real error, not congestion
+          if (!(isThrottle(e) || /timed out|timeout|abort|http 5|ECONNRESET|fetch failed/i.test(msg))) throw e;   // a real error, not congestion (a 403 is the node's edge refusing this address, like a 429)
           await sleep(SNIPE.BACKOFF_MS * (i + 1));
         }
       }
@@ -10679,7 +10795,7 @@ async function phistEnsure(g, from0, head, att) {
     const lack = phistLacks(g, from0, head);
     if (!lack) return;
     const attached = new Set([att]);
-    const guard = () => { for (const a of attached) if (!a.closed) return; throw new Error('abandoned: nobody is waiting for this price history'); };
+    const guard = (st) => { let open = false; for (const a of attached) if (!a.closed) { open = true; break; } if (!open) throw new Error('abandoned: nobody is waiting for this price history'); requestThrottleGuard(st); };
     const job = (async () => {
       guard();
       await phistSlot();
@@ -10798,7 +10914,7 @@ async function priceHistory(uid, pair, token, fromAsked, size, att) {
   // a chain read for a pair the process has not confirmed is a miss, not a hit on the grid: charged like a walk, before
   // the read (idempotent per member and pair within the window, so the walk that follows is free — one charge per pool)
   const charge = () => { if (!phistChargeMiss(uid, pair)) throw new Error('misses'); };
-  const guard = () => { if (att.closed) throw new Error('abandoned: nobody is waiting for this price history'); };
+  const guard = (st) => { if (att.closed) throw new Error('abandoned: nobody is waiting for this price history'); requestThrottleGuard(st); };
   // orientation and quote from the pair's own token0()/token1() — kept for the process life once both have answered
   let pt = _pairTokensCache.get(pair);
   if (!pt) {
@@ -10828,7 +10944,7 @@ async function priceHistory(uid, pair, token, fromAsked, size, att) {
   // the head: the one on file while it is under PHIST_HEAD_TTL old, else read — and then the grid's tail is read up to it
   let head, walked = false, headRead = false;
   if (g.readTo != null && now() - g.headAt < PHIST_HEAD_TTL) head = g.readTo;
-  else { const h = parseInt(await pacedCall('eth_blockNumber', [], 1, guard), 16); if (!(h > 0)) throw new Error('the chain did not answer'); head = Math.max(h, g.readTo || 0); headRead = true; }
+  else { const h = parseInt(await pacedCall('eth_blockNumber', [], 1, guard), 16); if (!(h > 0)) throw new Error('the chain did not answer'); if (h > _chainHead) _chainHead = h; head = Math.max(h, g.readTo || 0); headRead = true; }
   const from = Math.min(Math.max(0, Math.floor(fromAsked) || 0), head), from0 = Math.floor(from / size) * size;
   if (Math.floor((head - from0) / size) + 1 > PHIST_POINTS_MAX) throw phistRefusal({ error: 'too many points for that bucket — ask for a wider one', tooMany: true });   // before any walk or dating
   if (phistLacks(g, from0, head)) {
@@ -15142,7 +15258,7 @@ const server = http.createServer(async (req, res) => {
           for (const a of rest) { if (reservesCached(a) || rateLimit('chaindm:' + me.id, RESERVES_MISSES_MAX, RESERVES_MISS_WINDOW_MS)) ask.push(a); else over.push(a); }
           const att = { closed: false }, gone = () => { if (!res.writableEnded) att.closed = true; };
           req.on('close', gone); res.on('close', gone);
-          const guard = () => { if (att.closed) throw new Error('abandoned: nobody is waiting for these prices'); };
+          const guard = (st) => { if (att.closed) throw new Error('abandoned: nobody is waiting for these prices'); requestThrottleGuard(st); };
           let pooled = [];
           try { if (ask.length) pooled = await reservesPrices(ask, guard); }
           catch (e) {
@@ -15204,11 +15320,16 @@ const server = http.createServer(async (req, res) => {
         if (job.queueFull) return send(res, 503, { error: 'the chain reader has a long line right now — try again in a while', queueFull: true });
         if (job.error) {
           if (/longer than|too dense/.test(job.error)) return tooBig(/too dense/.test(job.error) ? 'dense' : 'big');
-          return send(res, 502, { error: 'the chain could not be read right now — try again in a minute', reason: isThrottle(job.error) ? 'throttled' : /timed out|timeout|aborted|too long/i.test(job.error) ? 'timeout' : 'unreadable' });
+          /* resumable: this read wrote a checkpoint, or (not a rebuild) one is on file — the next ask goes on from it; saved: what the
+             row holds for a Refresh to use ('complete' · 'checkpoint' · null). The page words its retry by these, never by hope. */
+          const row = walletHistRow(me.id, addr);
+          return send(res, 502, { error: 'the chain could not be read right now — try again in a minute', reason: isThrottle(job.error) ? 'throttled' : /timed out|timeout|aborted|too long/i.test(job.error) ? 'timeout' : 'unreadable',
+            resumable: !!(job.checkpointed || (job.fresh !== 2 && walletHistResumable(me.id, addr))), saved: row ? (row.partial ? 'checkpoint' : 'complete') : null });
         }
-        // eta is in milliseconds, measured (null until the stage has shown its pace, or the line its mean first-read length); stageOf.n 0 = still in line
+        // eta is in milliseconds, measured (null until the stage has shown its pace, or the line its mean first-read length); stageOf.n 0 = still in line;
+        // throttled: how long (ms) the read has been waiting out the node's refusals, 0 when it is not
         return send(res, 202, { pending: true, stage: job.stage, done: job.done, total: job.total, ahead: walletJobsAhead(job), startedAt: job.startedAt, progressed: job.progressed, resuming: job.resuming,
-          incremental: job.incremental, readFrom: job.readFrom, stageOf: walletStageOf(job.stage), eta: walletJobEta(job) });
+          incremental: job.incremental, readFrom: job.readFrom, stageOf: walletStageOf(job.stage), eta: walletJobEta(job), throttled: job.throttledAt ? now() - job.throttledAt : 0 });
       }
       if (p === '/api/chain/explorer' && req.method === 'GET') {   // the tracker's explorer reads, by allow-list
         if (!me) return bad(res, 'sign in first', 401);
@@ -16051,7 +16172,9 @@ const server = http.createServer(async (req, res) => {
         // A linked wallet may already have a watch-list row (wallet-first signups get one) — keep that row's
         // id and label so rename/remove still work on it, but list it once, as yours.
         // when each wallet's history was last read from the chain and to which block (one query, never the blob itself); null = never
-        const lastReads = new Map(db.prepare('SELECT addr_idx, updated_at, read_to, partial FROM wallet_hist WHERE user_id = ?').all(me.id).map(r => [r.addr_idx, { updatedAt: r.updated_at, readTo: r.read_to, partial: !!r.partial }]));
+        // a walk stopped part-way (partial 2) has no block it has read "to": the page says the walk is part-way instead
+        // stale: a checkpoint the chain has moved too far past to go on from (the next read starts over) — judged by the head this server last saw
+        const lastReads = new Map(db.prepare('SELECT addr_idx, updated_at, read_to, partial FROM wallet_hist WHERE user_id = ?').all(me.id).map(r => [r.addr_idx, { updatedAt: r.updated_at, readTo: r.partial === 2 ? null : r.read_to, partial: !!r.partial, walking: r.partial === 2, stale: walletHistStale(r) }]));
         const lastRead = (a) => lastReads.get(bidx(a)) || null;
         const mine = linked.map(w => {
           const row = byAddr.get(w.address);

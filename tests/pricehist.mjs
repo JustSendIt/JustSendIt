@@ -9,6 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DB_PATH, SERVER_JS } from './_paths.mjs';
+import { rpcDispatcher } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -30,7 +31,7 @@ const RPC = 'https://rpc.mainnet.chain.robinhood.com';
 const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
 async function rpc(method, params) {
   for (let i = 0; ; i++) {
-    const r = await fetch(RPC, { method: 'POST', headers: UA, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
     let j = null; try { j = await r.json(); } catch {}
     if ((r.status === 429 || (j && j.error && /too many/i.test(j.error.message || ''))) && i < 6) { await sleep(2500 * (i + 1)); continue; }
     if (!j || j.error) throw new Error((j && j.error && j.error.message) || 'rpc ' + r.status);
@@ -92,7 +93,7 @@ try {
 
   /* ═══ 2. the line: one Sync walk at a time, a bounded wait, a bounded line ═══ */
   {
-    const ctx = vm.createContext({ Promise, Error, setTimeout, clearTimeout, PHIST_WALK_WAIT_MS: 60, PHIST_WALK_LINE_MAX: 1 });
+    const ctx = vm.createContext({ Promise, Error, setTimeout, clearTimeout, PHIST_WALK_WAIT_MS: 60, PHIST_WALK_LINE_MAX: 1, requestThrottleGuard: () => {} });
     vm.runInContext('const _phistLine = [];\nlet _phistWalking = false;\n' + grab(/function phistSlot\(\) \{[\s\S]*?\n\}\nfunction phistSlotDone\(\) \{[\s\S]*?\n\}\n/, 'phistSlot') + '\nthis.slot = phistSlot; this.done = phistSlotDone; this.walking = () => _phistWalking; this.line = () => _phistLine.length;', ctx);
     await ctx.slot();
     check('the first walker takes the slot at once', ctx.walking() === true && ctx.line() === 0);
@@ -139,7 +140,7 @@ try {
       if (data === '0x06fdde03') return abiStr(to === TOK ? 'Token One' : 'Thin One');
       return null;
     };
-    ctx = vm.createContext({
+    ctx = vm.createContext({ requestThrottleGuard: () => {}, _chainHead: 0,
       Map, Set, Number, String, BigInt, Math, Promise, Object, Array, Buffer, Error, console,
       FACTORY, WETH_ADDR: WETH, USDG_ADDR: USDG, now: () => Date.now(), pruneCache: () => {},
       _decimalsCache: new Map(), _tokenNameCache: new Map(), _pairTokensCache: new Map(), pairQuoteCache: new Map(),
@@ -204,7 +205,7 @@ try {
       if (m === 'eth_getLogs') { const lo = parseInt(p[0].fromBlock, 16), hi = parseInt(p[0].toBlock, 16); return syncs.filter((l) => { const b = parseInt(l.blockNumber, 16); return b >= lo && b <= hi; }); }
       return null;
     };
-    const ctx = vm.createContext({
+    const ctx = vm.createContext({ requestThrottleGuard: () => {}, _chainHead: 0,
       Map, Set, Number, String, BigInt, Math, Promise, Object, Array, Error, console, parseInt, setTimeout, clearTimeout,
       now: () => Date.now(), pruneCache: () => {}, WETH_ADDR: WETH, USDG_ADDR: USDG, QUOTE_SET: new Set([WETH, USDG]), SYNC_TOPIC: SYNC, TOO_MANY_RE: /exceeds limit|too many results/i,
       PACE_LOG_WEIGHT: 5, PACE_BATCH: 25, _pairTokensCache: new Map(), _decimalsCache: new Map(), chainBlockMs: new Map(), usdgDecimals: 6, ethUsdFresh: async () => 3000,

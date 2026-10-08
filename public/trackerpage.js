@@ -87,11 +87,17 @@
     if (r >= 11 && r <= 13) return n + 'th';
     return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
   }
+  // The page's own retry, worded by what the server said: why the read failed, and whether a checkpoint is there to go on from.
+  function retryCopy(info) {
+    const how = info && info.resumable ? 'it goes on from where it stopped' : info && info.saved === 'complete' ? 'it reads on from the saved history — only what is new' : 'it starts over';
+    return (info && info.reason === 'timeout' ? 'The chain read timed out' : 'The chain node refused the read for too long') + ' — asking again in a minute (' + how + ')';
+  }
   // The one visible line, from the 202's structured fields and the clamped time left in this stage.
   function progressLine(info, remainMs) {
     if (!info || typeof info !== 'object') return '';
     if (info.queueFull) return QUEUE_FULL_COPY;
     const stage = String(info.stage || '');
+    if (stage === 'throttled') return retryCopy(info);
     if (/^waiting for a turn/.test(stage) || (info.ahead > 0 && !info.total)) {
       const ahead = Math.max(0, Math.floor(Number(info.ahead) || 0));
       const eta = etaWords(remainMs);
@@ -102,7 +108,9 @@
     if (so && so.n > 0 && so.of > 0) parts.push('Step ' + so.n + ' of ' + so.of);
     parts.push(stageWords(stage) || 'Reading the chain');
     if (info.total > 0) parts.push(Math.min(100, Math.floor(100 * (Number(info.done) || 0) / info.total)) + '%');
-    const eta = etaWords(remainMs);
+    // waiting out the node's refusals: said, and the step's countdown left out (it would have run down to nothing by now)
+    if (info.throttled > 0) parts.push('the chain node is refusing reads — waiting it out' + (info.throttled >= 60000 ? ' (' + Math.floor(info.throttled / 60000) + ' min so far)' : ''));   // whole minutes passed, never rounded up
+    const eta = info.throttled > 0 ? '' : etaWords(remainMs);
     if (eta) parts.push(eta + ' for this step');
     return parts.join(' · ');
   }
@@ -111,9 +119,10 @@
     if (!info || typeof info !== 'object') return '';
     if (info.queueFull) return QUEUE_FULL_COPY;
     const stage = String(info.stage || '');
+    if (stage === 'throttled') return retryCopy(info);
     if (/^waiting for a turn/.test(stage)) return ordinal((Math.floor(Number(info.ahead) || 0)) + 1) + ' in line';
     const so = info.stageOf;
-    return (so && so.n > 0 && so.of > 0 ? 'Step ' + so.n + ' of ' + so.of + ': ' : '') + (stageWords(stage) || 'Reading the chain');
+    return (so && so.n > 0 && so.of > 0 ? 'Step ' + so.n + ' of ' + so.of + ': ' : '') + (stageWords(stage) || 'Reading the chain') + (info.throttled > 0 ? ' — waiting for the chain node' : '');
   }
   // ?wid=<tracked_wallets.id> / ?lid=<identities.id> → the wallet in the list, or null when it is no longer there.
   function resolveDeepLink(wallets, params) {
@@ -123,7 +132,7 @@
     return null;
   }
   /* ---- end pure helpers ---- */
-  window.TRKPAGE = { stageWords, etaWords, etaEndAt, ordinal, progressLine, progressSpoken, resolveDeepLink };
+  window.TRKPAGE = { stageWords, etaWords, etaEndAt, ordinal, retryCopy, progressLine, progressSpoken, resolveDeepLink };
 
   /* ---------- helpers ---------- */
   function ago(ts) {
@@ -176,7 +185,7 @@
     if (pct != null) { progBar.setAttribute('aria-valuenow', String(pct)); progFill.style.width = pct + '%'; }
     // the "you can leave" note belongs to a first read (no completed saved history yet); an incremental refresh is short
     const lr = w && w.lastRead;
-    progNote.hidden = !!info.queueFull || !!(lr && !lr.partial && !state.rebuilding[addr]);
+    progNote.hidden = !!info.queueFull || info.stage === 'throttled' || !!(lr && !lr.partial && !state.rebuilding[addr]);   // not during the page's own retry wait: there is no read to leave running
     speak(progressSpoken(info));
   }
 
@@ -465,13 +474,15 @@
     refreshBtn.hidden = true; rebuildBtn.hidden = true; selectedEl.hidden = true; banner.hidden = true; setProgress('');
     reportEl.innerHTML = '<p class="np-msg">👈 Track a wallet to see its report here.</p>';
   }
-  /* What the server has saved for this wallet: `lastRead` is {updatedAt, readTo, partial} once a history was stored,
+  /* What the server has saved for this wallet: `lastRead` is {updatedAt, readTo, partial, walking} once a history was stored,
      null when none is, and absent on a server that predates it (then nothing is claimed). */
   function lastReadWords(w) {
     if (!w || !('lastRead' in w)) return '';
     const lr = w.lastRead;
     if (!lr || !lr.updatedAt) return 'no saved history yet — the first read is the long one';
-    return 'history read ' + ago(lr.updatedAt) + (lr.readTo != null ? ' · to block ' + Number(lr.readTo).toLocaleString('en-US') : '') + (lr.partial ? ' · partial' : '');
+    // stale: the chain has moved too far past the checkpoint for the server to go on from it — said, not promised away
+    if (lr.walking) return 'history part-read ' + ago(lr.updatedAt) + (lr.stale ? ' · the transfer walk stopped part-way, too far back to go on from — the next read starts over' : ' · the transfer walk stopped part-way — the next read goes on from there');
+    return 'history read ' + ago(lr.updatedAt) + (lr.readTo != null ? ' · to block ' + Number(lr.readTo).toLocaleString('en-US') : '') + (lr.partial ? (lr.stale ? ' · partial, too far back to go on from — the next read starts over' : ' · partial') : '');
   }
   function updateSelectedLine() {
     const w = state.selected && walletByAddr(state.selected);
@@ -596,6 +607,7 @@
       if (info && typeof info === 'object' && info.stage !== 'busy') {   // 'busy' has no 202 behind it: the server's sentence (next in line / try again in a minute / slow down) is the line, and the stage's ETA is kept for when polling resumes
         const stage = String(info.stage || '');
         if (stage !== pg.stage) { pg.stage = stage; pg.etaEnd = null; }   // a new stage: its own measured ETA, from scratch
+        if (info.throttled > 0) pg.etaEnd = null;   // a wait on the node: the estimate starts afresh once it clears (the one from before would run down to nothing)
         pg.etaEnd = etaEndAt(pg.etaEnd, Date.now(), info.eta);
         pg.info = info;
       } else pg.info = null;
@@ -643,6 +655,7 @@
         setProgress(rep.holdingsFailed ? 'Report built, but token balances could not be read.' : (rep.incremental ? (rep.readFrom != null ? 'Report updated — only the blocks after the saved read were read.' : 'Report checked — nothing new on the chain since the saved read.') : 'Report updated.'));
       }
     } catch (e) {
+      refreshWalletMeta();   // a failed read may still have left a checkpoint (or a walk stopped part-way) behind, whichever wallet is selected now: the saved-history line says what is there
       if (run !== state.runId) return;
       const entry = state.reports[addr];
       const why = (e && e.message) || 'the chain may be busy';   // the server says why: busy, throttled, or a wallet too large to read in full

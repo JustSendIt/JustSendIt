@@ -20,6 +20,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DB_PATH, ROOT } from './_paths.mjs';
+import { rpcDispatcher } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH);
@@ -34,7 +35,7 @@ const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Mac
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function rpc(method, params) {
   for (let i = 0; ; i++) {
-    const r = await fetch(RPC, { method: 'POST', headers: UA, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+    const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
     let j = null; try { j = await r.json(); } catch {}
     if ((r.status === 429 || (j && j.error && /too many/i.test(j.error.message || ''))) && i < 8) { await sleep(2500 * (i + 1)); continue; }
     if (!j || j.error) throw new Error((j && j.error && j.error.message) || 'rpc ' + r.status);
@@ -117,7 +118,7 @@ try {
     for (let f = from; f <= to; f += WIN * 10) {
       const calls = []; for (let g = f; g <= to && calls.length < 10; g += WIN) calls.push({ jsonrpc: '2.0', id: calls.length, method: 'eth_getLogs', params: [{ topics, fromBlock: '0x' + g.toString(16), toBlock: '0x' + Math.min(to, g + WIN - 1).toString(16) }] });
       for (let i = 0; ; i++) {
-        const rr = await fetch(RPC, { method: 'POST', headers: UA, body: JSON.stringify(calls) });
+        const rr = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify(calls) });
         let j = null; try { j = await rr.json(); } catch {}
         if ((rr.status === 429 || !Array.isArray(j)) && i < 8) { await sleep(2500 * (i + 1)); continue; }
         if (!Array.isArray(j)) throw new Error('rpc ' + rr.status);

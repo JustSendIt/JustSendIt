@@ -67,7 +67,7 @@
 <header class="np-hero trk-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Wallet Tracker 💼</h1>
   <p class="section-sub" style="margin-bottom:0.5rem;">Track any wallet on Robinhood Chain: holdings, every token transaction, a value-over-time chart, cost basis and PNL — read from the chain by this site, so the explorer never learns which wallets you watch. Read-only: nothing is ever signed or moved.</p>
-  <p class="section-sub trk-hero-time" style="margin-bottom:0.5rem;">On the public node a wallet's first read can take an hour or more. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready. Later refreshes read only what is new and take seconds.</p>
+  <p class="section-sub trk-hero-time" style="margin-bottom:0.5rem;">On the public node a wallet's first read can take an hour or more. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready — or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back. Later refreshes read only what is new and take seconds.</p>
   <p class="np-hero-warn">⚠️ Numbers are best-effort from public chain data — not a guarantee, not an audit, not advice. Copying a wallet's trades can lose you money. <b>Do your own research.</b></p>
 </header>
 
@@ -160,7 +160,7 @@
         <div class="trk-progress" id="trk-progress" hidden>
           <p class="trk-prog-line" id="trk-prog-line"></p>
           <div class="trk-prog-bar" id="trk-prog-bar" role="progressbar" aria-label="Progress of this step" aria-valuemin="0" aria-valuemax="100" hidden><div class="trk-prog-fill" id="trk-prog-fill"></div></div>
-          <p class="trk-prog-note" id="trk-prog-note" hidden>On the public node a first read can take an hour or more. You can leave this page — the read keeps its place in line, keeps reading, is saved, and you get a notification when it is ready.</p>
+          <p class="trk-prog-note" id="trk-prog-note" hidden>On the public node a first read can take an hour or more. You can leave this page — the read keeps its place in line, keeps reading, is saved, and you get a notification when it is ready, or when the node refuses it for so long that it stops (it goes on from where it stopped when you come back).</p>
         </div>
         <p class="sr-only" id="trk-prog-live" role="status" aria-live="polite"></p>
 
