@@ -8818,15 +8818,19 @@ const SEC_HEADERS = {
 // strict CSP for pages: no inline scripts anywhere on this site
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  /* Scripts: our own, plus Cloudflare's Web Analytics beacon — Cloudflare injects it into every HTML page at the
+     edge, and it reports page loads to cloudflareinsights.com (the hosts are the two Cloudflare's own CSP guidance
+     names: script-src static.cloudflareinsights.com; connect-src cloudflareinsights.com). The privacy page says so.
+     Still no inline script, no nonce, no 'unsafe-inline'. */
+  "script-src 'self' https://static.cloudflareinsights.com",
   /* Fonts are served from this origin (public/fonts) and token artwork through /api/img, so no page load
-     reaches Google or Dexscreener. The one third party left is the chain's own RPC, used only by the swap and
+     reaches Google or Dexscreener. The other third party is the chain's own RPC, used only by the swap and
      wallet flows — the wallet app the visitor connected already talks to that same endpoint. */
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob: data:",
-  "connect-src 'self' https://rpc.mainnet.chain.robinhood.com",
+  "connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://cloudflareinsights.com",
   /* Nothing on this site embeds a frame any more: the last two were the Dexscreener charts on the
      landing page, and they are our own on-chain charts now. 'none' is the honest value, and it closes
      the embedding vector rather than leaving a permission standing for a thing that no longer exists. */

@@ -46,10 +46,10 @@ if (!hz.ok) { print(); process.exit(1); }
 const home = await get('/', { accept: 'text/html' });
 pass('the homepage is served', home.status === 200 && /text\/html/.test(h(home, 'content-type')), home.status + ' ' + h(home, 'content-type'));
 const csp = h(home, 'content-security-policy');
-pass("a strict Content-Security-Policy is on (script-src 'self')", /script-src 'self'/.test(csp), csp.slice(0, 120) || '(none)');
-pass('the policy names no third party for scripts, fonts or images', csp && !/googleapis|gstatic|dexscreener|blockscout|cloudflareinsights/.test(csp), csp.slice(0, 160));
+pass("a strict Content-Security-Policy is on (script-src 'self', plus only Cloudflare's analytics beacon host; no nonce, no 'unsafe-inline')", /script-src 'self'( https:\/\/static\.cloudflareinsights\.com)?(;|$)/.test(csp), csp.slice(0, 120) || '(none)');
+pass('the policy names no third party for scripts, fonts or images beside Cloudflare\'s analytics beacon (static.cloudflareinsights.com for the script, cloudflareinsights.com for its report)', csp && !/googleapis|gstatic|dexscreener|blockscout/.test(csp) && (!/cloudflareinsights/.test(csp) || (/script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/.test(csp) && /connect-src [^;]*https:\/\/cloudflareinsights\.com(;|$)/.test(csp))), csp.slice(0, 200));
 pass('nothing was injected into the page that the policy would block (Rocket Loader off)', !/rocket-loader|rocketloader/i.test(home.text));
-pass('no analytics beacon was injected (Web Analytics automatic setup off)', !/cloudflareinsights\.com|beacon\.min\.js/i.test(home.text));
+pass('if Cloudflare injected its analytics beacon, the policy allows it (Web Analytics automatic setup may be on; the privacy page says so)', !/beacon\.min\.js/i.test(home.text) || /static\.cloudflareinsights\.com/.test(csp));
 pass('the age gate is on the page', /agegate\.js/.test(home.text));
 pass('no X-Powered-By header', !h(home, 'x-powered-by'));
 const cfRay = h(home, 'cf-ray');

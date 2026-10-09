@@ -248,9 +248,10 @@ log after the first visit.
 
 ### D.3 Dashboard settings that matter
 
-The site ships a strict Content-Security-Policy (`script-src 'self'`, no inline script anywhere) and
-promises that a page loads nothing from any other company. Several Cloudflare features work by injecting
-script or rewriting pages, and every one of those either breaks under the policy or breaks the promise.
+The site ships a strict Content-Security-Policy (`script-src 'self' https://static.cloudflareinsights.com`, no
+inline script anywhere) and promises that beside Cloudflare's Web Analytics beacon a page loads nothing from any
+other company. Several Cloudflare features work by injecting script or rewriting pages, and every one of those
+either breaks under the policy or breaks the promise.
 
 | Setting | Set it to | Why |
 |---|---|---|
@@ -258,7 +259,7 @@ script or rewriting pages, and every one of those either breaks under the policy
 | SSL/TLS → Always Use HTTPS | **On** | `BASE_URL` is https; a plain-http visit must redirect, never serve |
 | Speed → Rocket Loader | **Off** | it rewrites every `<script>` into a loader the CSP refuses: the site would load with no JavaScript at all |
 | Scrape Shield → Email Address Obfuscation | **Off** | it replaces the support address with an encoded span plus an inline decoder script; the CSP blocks the script, so visitors see `[email protected]` on the privacy and support pages |
-| Analytics → Web Analytics (automatic setup) | **Off** | it injects a beacon script from `cloudflareinsights.com`; the CSP blocks it, and the privacy page says there is no analytics |
+| Analytics → Web Analytics (automatic setup) | **On** is fine | it injects a beacon script from `static.cloudflareinsights.com` that reports to `cloudflareinsights.com`; the CSP allows exactly those two hosts, and the privacy page (section 7) says so — nothing else may be injected |
 | Security → Bot Fight Mode | **Off for the beta**, or a WAF rule that *skips* `/api/*` | a challenge page cannot be passed by a `fetch()`: a flagged visitor's page loads and then every API call silently fails |
 | Caching → Caching Level | Standard (default) | the origin sends the right headers: versioned assets are immutable for a year, HTML revalidates, `/api/*` is `no-store` and is never cached |
 | Caching → Cache Rule (optional) | cache `/api/img*` and `/uploads/*`, **respect origin TTL** | token pictures and uploads are the bulk of the bytes; `/api/img` has no file extension, so it is not cached by default |

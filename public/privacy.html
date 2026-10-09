@@ -69,11 +69,11 @@
 <main class="t-wrap" id="main">
   <a class="t-back" href="/">← Home 🏠</a>
   <h1 class="t-h1">Privacy Policy</h1>
-  <p class="t-meta">Version 2026-09-28 · $Send / JustSendIt · <a href="mailto:SendRH@Atomicmail.io" style="color:var(--g-green-hi)">SendRH@Atomicmail.io</a></p>
+  <p class="t-meta">Version 2026-10-09 · $Send / JustSendIt · <a href="mailto:SendRH@Atomicmail.io" style="color:var(--g-green-hi)">SendRH@Atomicmail.io</a></p>
 
   <div class="t-lede">
     <p><b>The short version.</b></p>
-    <p>We store what the site needs to run your account and nothing for advertising. There are <b>no ad trackers and no analytics scripts</b> on any page.</p>
+    <p>We store what the site needs to run your account and nothing for advertising. There are <b>no ad trackers</b>. The one analytics script on the site is <b>Cloudflare Web Analytics</b>, which counts page loads and how fast they load (section 7).</p>
     <p>Your email address, linked wallet addresses and two-factor secrets are <b>encrypted at rest</b>. Passwords are hashed. Session cookies are stored hashed. IP addresses are kept only as a keyed hash used to stop abuse.</p>
     <p>Everything you post, react to, or pin is <b>public</b>, and a Send Call is permanent by design.</p>
     <p>You can <b>delete your account</b> yourself from your profile settings, and you can ask us anything about your data at SendRH@Atomicmail.io.</p>
@@ -181,7 +181,7 @@
 
 <section class="t-sec" id="p7">
 <h2>7. Other services your browser talks to</h2>
-<p>Pages load nothing from other companies. The fonts are served from this site. Token pictures, live prices, and the wallet history the tracker and your profile show are fetched by our server and passed on to you, so Google, Dexscreener and Blockscout never see your IP address or the wallets you look at.</p>
+<p>Pages load one thing from another company: Cloudflare's Web Analytics beacon, a small script Cloudflare adds to each page as it serves it. It reports to Cloudflare which page loaded and how fast, with the page you came from. Cloudflare states that it &ldquo;does not use any client-side state, such as cookies or localStorage&rdquo; (so the cookie table above is complete), that it does not fingerprint visitors by IP address or browser, and that it does not record query strings; Cloudflare sees your IP address exactly as it already does for every request it serves. Everything else is served from this site: the fonts are served from this site. Token pictures, live prices, and the wallet history the tracker and your profile show are fetched by our server and passed on to you, so Google, Dexscreener and Blockscout never see your IP address or the wallets you look at.</p>
 <p>The one exception is the swap and wallet-connect flow: while you swap, your browser reads your balance, the swap quote and the transaction status from the Robinhood Chain public RPC (rpc.mainnet.chain.robinhood.com). That service sees your IP address and your wallet address — the same service the wallet app you connected already talks to. Explorer links go to robinhoodchain.blockscout.com; chart and pair links go to Dexscreener. Links to wallets, bridges and exchanges (for example MetaMask, Rabby, Rainbow, Trust Wallet, Coinbase Wallet, Phantom, Relay, MoonPay, OKX) open those services, which have their own policies. Following a link is your choice.</p>
 <p>If the site is served through a content delivery network such as Cloudflare, that network sees your IP address and the pages you request in order to serve them and to block attacks.</p>
 </section>
