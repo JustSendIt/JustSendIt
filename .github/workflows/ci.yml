@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: GitHub moves the ubuntu-latest label to Ubuntu 26 from 2026-10-19 and annotates every run until then
     timeout-minutes: 20
     steps:
       # F199: pinned to the commit each tag pointed at (v7.0.1 / v7.0.0, the SHAs Dependabot proposed on 2026-09-17; the v4
