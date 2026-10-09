@@ -12,7 +12,7 @@ const { Wallet } = createRequire(import.meta.url)(ETHERS);
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
-const db = new DatabaseSync(DB_PATH);
+const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 const grab = (re, label) => { const m = SRC.match(re); if (!m) { check('EXTRACT ' + label, false, 'not found'); return null; } return m[0]; };

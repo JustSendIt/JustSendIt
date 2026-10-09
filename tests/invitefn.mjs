@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DB_PATH, SERVER_JS } from './_paths.mjs';
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
-const db = new DatabaseSync(DB_PATH);
+const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
 const SRC = readFileSync(SERVER_JS, 'utf8');
 const fnSrc = SRC.match(/function communityInvitePost\(cid, kind\) \{[\s\S]*?\n\}/)[0];
 const results = [];

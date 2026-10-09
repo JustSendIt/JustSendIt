@@ -164,7 +164,7 @@ try {
   check('Sendy\'s tracker tips say Track, carry the first-read tip, and reopen from the saved report rather than "instantly"', /'On the public node a first read can take an hour or more — leave the page: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready \(or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back\)\. Later refreshes take seconds\.'/.test(SENDY) && /On the public node a wallet\\'s first read can take an hour or more\. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready \(or when the node refuses it for so long that it stops — it goes on from where it stopped when you come back\)\. Later refreshes read only what is new and take seconds\./.test(SENDY) && /tips: \['Track any wallet:/.test(SENDY) && !/reopens instantly/.test(SENDY) && /tracks any wallet on Robinhood Chain/.test(SENDY));
 
   /* ═══ the list the page reads, against the server ═══ */
-  db = new DatabaseSync(DB_PATH);
+  db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
   const u = mkUser('__tp_user__');
   const watched = '0x' + 'ab'.repeat(20);
   const add = await api('/api/wallets', { method: 'POST', sid: u.sid, body: { address: watched, label: 'Page test' } });

@@ -8,7 +8,7 @@ import { DB_PATH, SERVER_JS } from './_paths.mjs';
 const SRC = readFileSync(SERVER_JS, 'utf8');
 const grab = (re, label) => { const m = SRC.match(re); if (!m) { console.error('could not extract ' + label); process.exit(1); } return m[0]; };
 
-const db = new DatabaseSync(DB_PATH);
+const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 const made = [];

@@ -13,7 +13,7 @@ import { DB_PATH, KEY_PATH, SERVER_JS } from './_paths.mjs';
 import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
-const db = new DatabaseSync(DB_PATH);
+const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
 const SRC = readFileSync(SERVER_JS, 'utf8');
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);

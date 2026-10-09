@@ -25,7 +25,7 @@ const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' 
 const strip = (s) => s.replace(/(^|\s)\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 const VM_C = strip(VM);
 
-const db = new DatabaseSync(DB_PATH);
+const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
 const made = [];
 function mkUser(name) {
   db.prepare('DELETE FROM users WHERE username=?').run(name);
