@@ -12,6 +12,8 @@
  *   npm test                 — every suite
  *   npm test -- gate auth    — only suites whose names contain "gate" or "auth"
  *   npm test -- --keep       — leave the temporary data directory behind, and print where it is
+ *   CHAIN_LIVE=1 npm test    — also the live reads of the public chain node (off by default: from the machine that serves
+ *                              the site they throttle its own chain reads for minutes, and GitHub's runners are refused)
  *
  * Exit code is 0 only if every assertion in every suite passed.
  */
@@ -63,7 +65,11 @@ async function freePort() {
 const PORT = await freePort();
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
               BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1',   // the terms step and voice memos are hidden by default; the suites still cover both
-              LEDGER_COOL_MS: '5000' };   // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out
+              LEDGER_COOL_MS: '5000',    // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out
+              /* The suites spoof visitors with X-Forwarded-For (unlock, sybiltest), and every suite's sign-ups count against one
+                 per-address limit (ten an hour) when the server keys them all on 127.0.0.1. Locally the repo's .env set this; a clean
+                 checkout (CI) has no .env, and the sign-up suites failed there on "slow down" for weeks. */
+              TRUST_PROXY: '1', TRUST_PROXY_FROM: 'loopback' };
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -109,6 +115,7 @@ let pass = 0, total = 0, broken = [], skips = [];
 try {
   await waitForServer();
   console.log('server up on :' + PORT + '  ·  data ' + dataDir + '\n');
+if (process.env.CHAIN_LIVE !== '1') console.log('live chain reads are skipped (CHAIN_LIVE=1 runs them — from the machine that serves the site they throttle its own chain reads for minutes)\n');
   for (const s of suites) {
     const r = await run(s);
     pass += r.pass; total += r.total;

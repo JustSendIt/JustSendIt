@@ -7,3 +7,10 @@ import { ROOT } from './_paths.mjs';
 const require = createRequire(ROOT + '/package.json');
 const { Agent } = require('undici');
 export const rpcDispatcher = new Agent({ allowH2: true });
+
+/* Live reads of the chain — the suites' own probes and the routes that make the server read it — run only with
+   CHAIN_LIVE=1. Measured 2026-10-08/09: from the machine that serves the site they throttle its own pool-price and
+   chart reads for minutes (one address, one node budget), and from GitHub's runners the node refuses them outright,
+   so CI was red for weeks on reads that say nothing about the code. The pure parts of every suite always run. */
+export const LIVE_CHAIN = process.env.CHAIN_LIVE === '1';
+export const liveSkipped = (what) => 'live chain reads skipped — CHAIN_LIVE=1 runs them (' + what + ')';

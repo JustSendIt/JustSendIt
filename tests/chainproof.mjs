@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DB_PATH, KEY_PATH, SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH);
@@ -85,6 +85,8 @@ try {
     && /no market buy behind it\. The bag has to be one you bought/.test(SRC) && /Your wallets have sold back more ' \+ c\.label/.test(SRC));
   check('a check that ended unread is asked again by itself (every 15 minutes, and once after boot)', /setTimeout\(\(\) => requeueUnreadProofs\('boot'\), 20000\)/.test(SRC) && /setInterval\(\(\) => requeueUnreadProofs\(\), PROOF_RETRY_MS\)/.test(SRC));
 
+  if (!LIVE_CHAIN) check(liveSkipped('the burn address, a real buyer and a routed buyer, each read from the chain and judged'), true, 'skipped');
+  else {
   /* ═══ 2. the burn address: holds $SEND, never bought — a definite refusal, read from the chain ═══ */
   const tag = randomBytes(3).toString('hex');
   const D = mkUserWithWallet('__cp_dead_' + tag, DEAD);
@@ -162,6 +164,7 @@ try {
       check('  ...its routed buy is counted as bought, with a first-buy time', rd && rd.SEND && BigInt(rd.SEND.boughtWei) > 0n && rd.SEND.firstBuyMs > 0, info);
     }
     try { db.prepare('DELETE FROM gate_claims WHERE user_id = ?').run(R.id); } catch {}
+  }
   }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);

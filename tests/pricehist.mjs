@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DB_PATH, SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -264,7 +264,8 @@ try {
   check('anything but two addresses is refused (400)', notAddr.status === 400, notAddr.status);
 
   /* ═══ 5. the $SEND pair, live, over the last 2,000,000 blocks at 10,000 a bucket ═══ */
-  {
+  if (!LIVE_CHAIN) check(liveSkipped('the $SEND pair\'s price history over the last 2,000,000 blocks, against an independent read'), true, 'skipped');
+  else {
     const head0 = parseInt(await rpc('eth_blockNumber', []), 16);
     const t0 = Date.now();
     const r = await api('/api/chain/pricehist?pair=' + SEND_PAIR + '&token=' + SEND + '&from=' + (head0 - 2000000) + '&size=10000', me.sid);

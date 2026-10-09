@@ -13,7 +13,7 @@ import zlib from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
 import { DB_PATH, KEY_PATH, ROOT, SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 const require = createRequire(ROOT + '/package.json');
 const { Wallet } = require('ethers');
 
@@ -203,7 +203,8 @@ try {
   const wBefore = (before.j.wallets || []).find((w) => w.address === addr);
   check('/api/wallets carries lastRead: null for a wallet never read', wBefore && 'lastRead' in wBefore && wBefore.lastRead === null, JSON.stringify(wBefore));
   let head = null;
-  try { head = parseInt(await rpc('eth_blockNumber', []), 16); } catch (e) { check('the chain head could be read for the live part (not — the live checks are not asserted this run)', true, e.message); }
+  if (!LIVE_CHAIN) check(liveSkipped('the read itself: a 65,000-block window of a real wallet through the API'), true, 'skipped');
+  else try { head = parseInt(await rpc('eth_blockNumber', []), 16); } catch (e) { check('the chain head could be read for the live part (not — the live checks are not asserted this run)', true, e.message); }
   if (head > 0) {
     const H = head - 60000, B = head - 70000;   // the saved copy is 60,000 blocks (~100 minutes) behind: the window read is 65,000 blocks, a few log reads
     const hash = '0x' + hexOf(32);
@@ -286,7 +287,7 @@ try {
   const mineW = (listW.j.wallets || []).find((w) => w.address === a2);
   check('a walk checkpoint (partial 2) is listed as walking, partial, with readTo null — the walk has no block it has read "to"', mineW && mineW.lastRead && mineW.lastRead.walking === true && mineW.lastRead.partial === true && mineW.lastRead.readTo === null, JSON.stringify(mineW && mineW.lastRead));
   check('  ...and walletHistSave writes partial 2 for a stage "walk" checkpoint, 1 for the transfers one, 0 for a finished history', /partial \? \(hist\.stage === 'walk' \? 2 : 1\) : 0, blob\);/.test(SRC));
-  check('  ...a checkpoint the chain has moved more than WALLET_RESUME_MAX_BLOCKS past (by the head this server last saw) is stale: not resumable, said so in the list, and the 502 says what is on file (resumable: this read checkpointed, or one is on file and this was not a rebuild; saved: complete | checkpoint | null)', /const walletHistStale = \(r\) => !!\(r && r\.partial && _chainHead > 0 && _chainHead - r\.read_to > WALLET_RESUME_MAX_BLOCKS\);/.test(SRC) && /const walletHistResumable = \(uid, w\) => \{ const r = walletHistRow\(uid, w\); return !!\(r && r\.partial && !walletHistStale\(r\)\); \};/.test(SRC) && /walking: r\.partial === 2, stale: walletHistStale\(r\) \}/.test(SRC) && /resumable: !!\(job\.checkpointed \|\| \(job\.fresh !== 2 && walletHistResumable\(me\.id, addr\)\)\), saved: row \? \(row\.partial \? 'checkpoint' : 'complete'\) : null \}\);/.test(SRC) && /if \(head > _chainHead\) _chainHead = head;/.test(SRC) && mineW.lastRead.stale === true, JSON.stringify(mineW && mineW.lastRead));   // planted at block 10: the live read earlier in this suite showed the server a head millions of blocks on, so this one is stale
+  check('  ...a checkpoint the chain has moved more than WALLET_RESUME_MAX_BLOCKS past (by the head this server last saw) is stale: not resumable, said so in the list, and the 502 says what is on file (resumable: this read checkpointed, or one is on file and this was not a rebuild; saved: complete | checkpoint | null)', /const walletHistStale = \(r\) => !!\(r && r\.partial && _chainHead > 0 && _chainHead - r\.read_to > WALLET_RESUME_MAX_BLOCKS\);/.test(SRC) && /const walletHistResumable = \(uid, w\) => \{ const r = walletHistRow\(uid, w\); return !!\(r && r\.partial && !walletHistStale\(r\)\); \};/.test(SRC) && /walking: r\.partial === 2, stale: walletHistStale\(r\) \}/.test(SRC) && /resumable: !!\(job\.checkpointed \|\| \(job\.fresh !== 2 && walletHistResumable\(me\.id, addr\)\)\), saved: row \? \(row\.partial \? 'checkpoint' : 'complete'\) : null \}\);/.test(SRC) && /if \(head > _chainHead\) _chainHead = head;/.test(SRC) && (LIVE_CHAIN ? mineW.lastRead.stale === true : typeof mineW.lastRead.stale === 'boolean'), JSON.stringify(mineW && mineW.lastRead));   // planted at block 10: with live reads on, the read earlier in this suite showed the server a head millions of blocks on, so this one is stale; with them off it depends on whether an earlier suite made the server read a head, so only the field's presence is pinned
     db.prepare('UPDATE wallet_hist SET read_to = ? WHERE user_id = ? AND addr_idx = ?').run(9e9, u.id, bidx(a2));
     const listN = await api('/api/wallets', { sid: u.sid });
     const mineN = (listN.j.wallets || []).find((w) => w.address === a2);

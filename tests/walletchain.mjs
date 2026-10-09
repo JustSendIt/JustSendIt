@@ -20,7 +20,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DB_PATH, ROOT } from './_paths.mjs';
-import { rpcDispatcher } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH);
@@ -57,6 +57,8 @@ try {
   const bad = await fetch(BASE + '/api/chain/wallet?address=nope', { headers: { Origin: BASE, Cookie: cookie } });
   check('  ...and anything but an address is refused', bad.status === 400, bad.status);
 
+  if (!LIVE_CHAIN) check(liveSkipped('a busy real wallet found from the pool\'s own transfers, its history read and judged'), true, 'skipped');
+  else {
   /* ═══ 2. a busy real wallet: the person the $SEND pool paid most often lately ═══ */
   const head = parseInt(await rpc('eth_blockNumber', []), 16);
   /* The pool's payouts over the last two weeks, then the 46 before them, read one address at a time in windows under
@@ -207,6 +209,7 @@ try {
   check('  ...every buy is counted, one per transaction — ' + (buyTxs.size - routed) + ' straight from the pool and ' + routed + ' through a router (the old tracker saw only the first kind)', s && s.buys === buyTxs.size, JSON.stringify(s && { buys: s.buys, sells: s.sells, in: s.xfersIn, out: s.xfersOut }) + ' vs ' + buyTxs.size);
   check('  ...and valued: ETH spent on $SEND buys is known', s && s.buys > 0 && s.ethSpent > 0, s && s.ethSpent);
   check('  ...the report is small enough to save (the tracker keeps a copy)', JSON.stringify(rep).length < 4 * 1024 * 1024, JSON.stringify(rep).length);
+  }
 } catch (e) {
   if (e.message !== 'skip') { console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]); check('the suite ran to the end', false, e.message); }
 } finally {

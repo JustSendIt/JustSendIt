@@ -3,7 +3,7 @@
    shows for these two coins is one this suite can reproduce. Read-only: nothing is written anywhere. */
 import { readFileSync } from 'node:fs';
 import { SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -50,6 +50,8 @@ try {
     && /const px = await guardedPriceUsd\(movedTok\);/.test(SRC));
   check('a failed read is never cached', /\.then\(\(v\) => \{ poolStateCache\.set\(k, v\); return v; \}\)\s+\.catch\(/.test(SRC));
 
+  if (!LIVE_CHAIN) check(liveSkipped('/api/chain/pairs against an independent read of the pools'), true, 'skipped');
+  else {
   /* ═══ 3. the live answer, against an independent read of the chain ═══ */
   /* A pool-priced figure is null, never guessed, when one of its chain reads was refused (the public node throttles
      bursts, and this suite runs after others that read the chain). The pool read is cached 15 s and a failed part is
@@ -86,6 +88,7 @@ try {
     }
     const cp = j.checkPrices && j.checkPrices[sym];
     check('  ...the price the checks use is shown too, and is never above the live price', cp === null || (cp > 0 && cp <= Number(p.priceUsd) * 1.02), cp);
+  }
   }
   const src = readFileSync(new URL('../public/chain.js', import.meta.url), 'utf8');
   check('the home page says when a price came from the pool', /src\.hidden = p\.source !== 'reserves'/.test(src));

@@ -6,6 +6,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, ROOT, SERVER_JS } from './_paths.mjs';
+import { LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH);
@@ -37,6 +38,8 @@ let cid = null;
 const membersBefore = { count: null, qual: null };
 
 try {
+  if (!LIVE_CHAIN) check(liveSkipped('the holder ledger of $SEND and the community supply shares, both read from the chain through the server'), true, 'skipped');
+  else {
   /* ═══ the ledger ═══ */
   /* The public node rate-limits by IP, and this run shares that IP with every other suite (and, on this Mac, with
      the live site). When it refuses, the ledger stands down for LEDGER_COOL_MS (5 s under the runner) and resumes
@@ -133,6 +136,7 @@ try {
     check('a member leaving moves the figure back under the floor (recomputed on demand)', sp && sp.shown === false && sp.members === 2, JSON.stringify(sp));
     check('join, leave, wallet link and unlink all recompute the share', /if \(!c\.demo\) refreshCommunitySupply\(c, \{ waitMs: 0 \}\)/.test(SRC) && (SRC.match(/refreshSupplyForUser\(me\.id\)/g) || []).length >= 2);
     check('an inconsistent ledger falls back to bounded balanceOf reads, and a failed read never counts as zero', /if \(wallets\.length > 60\) return null;/.test(SRC) && /if \(vals\.some\(\(v\) => v == null\)\) return null;/.test(SRC));
+  }
   }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
