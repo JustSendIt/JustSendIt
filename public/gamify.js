@@ -106,7 +106,7 @@
     call_hold: '💎 Diamond hands: a call that STAYS in profit earns more the longer AND higher it holds — the bonus compounds (grows faster than the Xs alone), accruing automatically every few minutes while it’s above your entry price. This is where most of a call’s Send Power lives: at least 60% of everything a call can ever pay is reserved for holding in profit. And it accrues faster when the people who Sent It on your call are in profit too — +10% per Sender in the green with at least $20 of their own in the token, up to 3×.',
     hop_on: 'Send It! (🚀) on someone else’s Send Call from the Send Wall to ride it with them. +30 Send Power, up to 30/day.',
     hop_hold: '💎 If you Send It on someone’s call and stay in profit from your entry price, you earn a compounding diamond-hands bonus on the same curve the caller does — the longer you hold in the green and the higher it runs, the more. One difference: the crew multiplier is the caller’s alone. A Sender’s hold bonus is never boosted by how many other Senders are in profit, and a Sender’s lifetime budget for one call is a quarter of the caller’s.',
-    daily: 'Tap ✅ Check in for today on your own wall. Once per UTC day, multiplied by your boosts.',
+    daily: 'Tap ✅ Check in on your own wall. Once every 24 hours, counted from your last check-in, multiplied by your boosts.',
     customize: 'Style your wall (accent, avatar, banner). Once a day.',
     comment: 'Reply on any post.',
     react_give: 'React 🔥/🚀 to a post.',
@@ -886,7 +886,7 @@
       const mine = (window.AUTH && AUTH.user && AUTH.user.username) || '';
       const done = t.done || (t.wall && !!(window.AUTH && AUTH.user && AUTH.user.checkedInToday));
       const wallHref = mine ? '/u/' + encodeURIComponent(mine) : '/wall.html';
-      if (done) row = '<div class="gearn-row gearn-done">' + inner + '<span class="ge-go" aria-hidden="true">✓ today</span></div>';
+      if (done) row = '<div class="gearn-row gearn-done">' + inner + '<span class="ge-go" aria-hidden="true">✓ checked in</span></div>';   // a check-in holds for 24 hours, not a calendar day: never "today"
       else if (t.wall) row = '<a class="gearn-row" href="' + wallHref + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
       else if (t.href) row = '<a class="gearn-row" href="' + t.href + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
       else if (t.egg) row = '<div class="gearn-row gearn-still">' + inner + '<span class="ge-go" aria-hidden="true">👻</span></div>';   // no arrow, no button: the ghosts are out there, not here

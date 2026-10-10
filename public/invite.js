@@ -359,8 +359,8 @@
       if (!t) { $(p + 'tk-serial').textContent = 'SEND·RH · UNCLAIMED'; continue; }
       $(p + 'tk-name').textContent = '@' + t.username;
       $(p + 'tk-role').textContent = t.invitedBy ? 'Invited by @' + t.invitedBy : 'Founding sender';
-      $(p + 'tk-num').textContent = '#' + Number(t.sendId).toLocaleString('en-US');
-      $(p + 'tk-stub-n').textContent = '#' + t.sendId;
+      $(p + 'tk-num').textContent = t.sendId == null ? '—' : '#' + Number(t.sendId).toLocaleString('en-US');
+      $(p + 'tk-stub-n').textContent = t.sendId == null ? '—' : '#' + t.sendId;
       $(p + 'tk-inv').textContent = t.codesLeft + ' of ' + t.codesTotal;
       $(p + 'tk-serial').textContent = 'SEND·RH · ' + new Date(t.joinedAt).toISOString().slice(0, 10);
       const face = $(p + 'tk-face');

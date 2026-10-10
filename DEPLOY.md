@@ -294,7 +294,7 @@ CF_API_TOKEN=<the token>
 4. From your own machine: `npm run live-check -- https://sendrh.com`. It checks the things above — the
    policy, the redirects, the cookie flag, that Cloudflare is in front, that nothing was injected, that the
    data vendors answer from the origin — and exits non-zero on anything a visitor would hit.
-5. Sign up with the seed code (you are Send ID #2; #1 is the site's own account), put your user id in
+5. Sign up with the seed code (you are Send ID #1 — Send IDs count members in the order they joined and skip the site's own account; your database row id is a different number), put your user id in
    `ADMIN_USER_IDS`, restart. Only then hand out codes.
 6. Point `BACKUP_DIR` off the volume and copy it to R2 or elsewhere on a schedule (below).
 

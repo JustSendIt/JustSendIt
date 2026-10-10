@@ -223,8 +223,8 @@ try {
     db.prepare("DELETE FROM points_events WHERE user_id = ? AND kind = 'daily'").run(u.id);
     const r2 = await api('/api/gamify/me', { sid: u.sid });
     check('REGRESSION: with no ledger row, the day still reads as "checked in"', r2.j.checkedInToday === true, JSON.stringify(r2.j && r2.j.checkedInToday));
-    check('  ...and the decay engine reads the same source', /const showedUp = checkedInToday\(u\.id, u\);/.test(SRC));
-    check('  ...and the sweep selects checkin_at so it can', /restrict_level, checkin_at\n\s+FROM users WHERE decay_at/.test(SRC));
+    check('  ...and the decay engine reads the same source', /const showedUp = showedUpRecently\(u\.id, u\);/.test(SRC));
+    check('  ...and the sweep selects checkin_at so it can', /restrict_level, checkin_at, visit_at\n\s+FROM users WHERE decay_at/.test(SRC));
     check('  ...and drains the most overdue first, not the lowest account id', /ORDER BY decay_at ASC, id ASC LIMIT \?/.test(SRC));
   }
 

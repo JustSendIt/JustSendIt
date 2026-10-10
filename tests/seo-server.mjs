@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, ROOT, SERVER_JS } from './_paths.mjs';
+import { sendNoOf } from './_sendno.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -294,9 +295,10 @@ try {
 
   /* ═══ 7. the ticket page, the 404, the icon, the fonts, the manifest ═══ */
   db.prepare('UPDATE users SET ticket_public = 1 WHERE id = ?').run(uid);
-  const tk = await get('/t/' + uid), TH = headOf(tk.text);
+  const tno = sendNoOf(db, uid);   // the ticket lives at its Send ID
+  const tk = await get('/t/' + tno), TH = headOf(tk.text);
   check('a shared ticket page is noindex, follow', tk.status === 200 && metaN(TH, 'robots') === 'noindex, follow', tk.status + ' ' + metaN(TH, 'robots'));
-  check('  ...and keeps every tag its unfurl needs', new RegExp('property="og:image" content="[^"]*/t/' + uid + '\\.png"').test(TH) && metaN(TH, 'twitter:card') === 'summary_large_image' && !!metaP(TH, 'og:title') && !!metaN(TH, 'twitter:title') && !canonOf(TH));
+  check('  ...and keeps every tag its unfurl needs', new RegExp('property="og:image" content="[^"]*/t/' + tno + '\\.png"').test(TH) && metaN(TH, 'twitter:card') === 'summary_large_image' && !!metaP(TH, 'og:title') && !!metaN(TH, 'twitter:title') && !canonOf(TH));
   const fav = await get('/favicon.ico');
   check('/favicon.ico is the site icon as a PNG, cacheable', fav.status === 200 && fav.h('content-type') === 'image/png' && /max-age=\d+/.test(fav.h('cache-control')) && !/no-cache/.test(fav.h('cache-control')), fav.status + ' ' + fav.h('content-type') + ' ' + fav.h('cache-control'));
   const fontCss = read('fonts/fonts.css');

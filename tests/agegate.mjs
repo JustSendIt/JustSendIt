@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, ROOT, SERVER_JS } from './_paths.mjs';
+import { sendNoOf } from './_sendno.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -157,7 +158,7 @@ try {
   check('the downloaded picture says "Ticket to Send 🚀" under the $Send lockup', /c\.fillText\('Ticket to Send 🚀', 64, 206\)/.test(INVITE) && /c\.fillText\('\$Send', wordX, 86\)/.test(INVITE));
   check('the shared card draws the site mark from the file the nav uses', /assets', 'logo-mark-sm\.png'/.test(SRC) && /function decodePng\(buf\)/.test(SRC));
   const owner = mkUser('__ag_card__', { ticketPublic: true });
-  const card = await fetch(BASE + '/t/' + owner.id + '.png');
+  const card = await fetch(BASE + '/t/' + sendNoOf(db, owner.id) + '.png');
   const buf = Buffer.from(await card.arrayBuffer());
   check('  ...and the card still renders', card.status === 200 && buf.slice(1, 4).toString() === 'PNG' && buf.readUInt32BE(16) === 1200, card.status);
   // the mark sits at (56,46)-(184,174): its green must be there, on a card that is otherwise near-black at that spot

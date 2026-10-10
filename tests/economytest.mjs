@@ -52,7 +52,7 @@ const decayUserSrc = grab(/function decayUser\(u, today\) \{[\s\S]*?\n\}\n/, 'de
 const decayReasonsSrc = grab(/function decayReasons\(u, showedUp, streak\) \{[\s\S]*?\n\}\n/, 'decayReasons');
 // decayUser no longer reads the points ledger to decide whether someone showed up — it asks
 // checkedInToday(), which reads the users.checkin_at stamp the route writes whether or not the award paid.
-const checkedInSrc = grab(/function checkedInToday\(userId, row\) \{[\s\S]*?\n\}/, 'checkedInToday');
+const checkedInSrc = grab(/const CHECKIN_GAP_MS = [^\n]+\n/, 'CHECKIN_GAP_MS') + grab(/function checkedInToday\(userId, row\) \{[\s\S]*?\n\}/, 'checkedInToday') + '\n' + grab(/const SHOWED_UP_SLACK_MS = [^\n]+\n/, 'SHOWED_UP_SLACK_MS') + grab(/function showedUpRecently\(userId, row\) \{[\s\S]*?\n\}/, 'showedUpRecently');
 
 function mkEnv(opts = {}) {
   const state = { users: new Map(), events: [], notes: [] };
@@ -62,7 +62,7 @@ function mkEnv(opts = {}) {
       return {
         get(...a) {
           // the stamp: set when the account checked in today, regardless of what the check-in paid
-          if (/SELECT checkin_at FROM users/.test(sql)) return { checkin_at: opts.checkedIn ? NOW : 0 };
+          if (/SELECT checkin_at(, visit_at)? FROM users/.test(sql)) return { checkin_at: opts.checkedIn ? NOW : 0, visit_at: opts.visitedOnly ? NOW : 0 };
           // the ledger fallback, for accounts that checked in before the stamp column existed
           if (/FROM points_events WHERE ref = \?/.test(sql)) return opts.ledgerOnly ? { 1: 1 } : undefined;
           if (/FROM points_events WHERE user_id = \? AND kind = \?/.test(sql)) return opts.checkedIn ? { 1: 1 } : undefined;

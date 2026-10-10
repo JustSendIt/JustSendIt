@@ -416,7 +416,7 @@
             const msg = ch && ch.message;
             if (!msg) throw new Error('that wallet isn’t linked to this account — connect the one you turned two-factor on with');
             status.textContent = 'Approve the signature… ✍️';
-            const signature = await provider.request({ method: 'personal_sign', params: [msg, address] });
+            const signature = await WALLET.sign(provider, address, msg);
             const r = await api('/api/auth/login/wallet2fa', { method: 'POST', body: { pending: j.pending, address, signature } });
             loginSuccess(r);
           } catch (err) { status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'); }
@@ -523,7 +523,7 @@
             const { provider, address } = await WALLET.connect();
             const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
             setStatus(status, 'Approve the signature… ✍️');
-            const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+            const signature = await WALLET.sign(provider, address, message);
             signed = { address, signature };
             q('cf-wallet').textContent = 'Signed ✅ ' + address.slice(0, 6) + '…' + address.slice(-4);
             setStatus(status, '');
@@ -684,7 +684,7 @@
         const { provider, address } = await WALLET.connect();
         setStatus(status, 'Approve the signature in your wallet… ✍️');
         const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
-        const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+        const signature = await WALLET.sign(provider, address, message);
         const body = Object.assign({ address, signature, intent: wRegMode ? 'signup' : 'signin' }, fields || {});
         const j = await api('/api/auth/wallet/verify', { method: 'POST', body });
         setStatus(status, '');
@@ -766,7 +766,7 @@
     const current = await AUTH.stepUp(note || 'Linking a wallet adds a new way to sign in to this account.');
     const { provider, address } = await WALLET.connect();
     const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
-    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    const signature = await WALLET.sign(provider, address, message);
     const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature, current } });
     if (j.linked) { await refresh(); onAuthChange(); }
     return j;

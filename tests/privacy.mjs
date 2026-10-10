@@ -10,6 +10,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, DATA_DIR, ROOT, SERVER_JS } from './_paths.mjs';
+import { sendNoOf } from './_sendno.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -259,7 +260,7 @@ try {
     check('the Convicted-In hover gives other people bands, not a balance and a date', /coarse: true,[\s\S]{0,120}floor10\(h\.amountTok\)/.test(SRC) && /heldFor/.test(SRC));
     const inviter = mkUser('__pv_inviter__'), invitee = mkUser('__pv_invitee__');
     db.prepare('UPDATE users SET invited_by=?, ticket_public=1 WHERE id=?').run(inviter.id, invitee.id);
-    const page = await api('/t/' + invitee.id);
+    const page = await api('/t/' + sendNoOf(db, invitee.id));
     check('a shared ticket does not name who invited them', page.status === 200 && !page.text.includes('__pv_inviter__'), page.status);
     check('  ...nor does its card, nor the downloaded picture', /'INVITED SENDER'/.test(SRC) && /t\.invitedBy \? 'INVITED SENDER'/.test(readFileSync(path.join(PUB, 'invite.js'), 'utf8')));
     check('sign-up never answers "is this email a member": the invite comes first, and a taken email makes the account without it',

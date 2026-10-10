@@ -190,6 +190,28 @@ try {
   const pic = await api('/api/profile/image', { method: 'POST', sid: B.sid, body: { kind: 'avatar', remove: true } });
   check('  ...and so do profile pictures (uploads, like any other)', pic.status === 403 && pic.j && pic.j.needsProof === true, pic.status);
 
+  /* ═══ 2b. the wallet two-factor sign-in, end to end: the password first, then the linked wallet's signature ═══
+     No suite drove POST /api/auth/login/wallet2fa before 2026-10-09, so a handler that read an undeclared variable after
+     a correct signature passed every test and answered 500 to every such account. */
+  {
+    await api('/api/auth/verify', { method: 'POST', sid: B.sid, body: { password: B.pw } });   // confirm it's you: arming two-factor is a security change
+    const arm = await api('/api/2fa/wallet/enable', { method: 'POST', sid: B.sid, body: await signFor(W1, '2fa-on') });
+    check('wallet two-factor can be armed with the founding wallet', arm.status === 200, arm.status + ' ' + JSON.stringify(arm.j));
+    const first = await api('/api/auth/login', { method: 'POST', body: { identifier: B.name, password: B.pw } });
+    check('a password sign-in on that account asks for the wallet as the second factor, with no session yet', first.status === 200 && first.j && first.j.twofa === 'wallet' && !!first.j.pending && !first.sid, JSON.stringify(first.j));
+    const ch = await api('/api/auth/login/wallet2fa/challenge', { method: 'POST', body: { pending: first.j.pending, address: W1.address.toLowerCase() } });
+    check('  ...and issues a sign-in challenge for the linked wallet', ch.status === 200 && ch.j && /wants you to sign in/.test(ch.j.message || ''), ch.status + ' ' + JSON.stringify(ch.j));
+    const done = await api('/api/auth/login/wallet2fa', { method: 'POST', body: { pending: first.j.pending, address: W1.address.toLowerCase(), signature: await W1.signMessage(ch.j.message) } });
+    check('  ...the signature completes the sign-in with a session', done.status === 200 && done.j && done.j.ok === true && !!done.sid, done.status + ' ' + JSON.stringify(done.j));
+    const stranger = Wallet.createRandom();
+    const again = await api('/api/auth/login', { method: 'POST', body: { identifier: B.name, password: B.pw } });
+    const chX = await api('/api/auth/login/wallet2fa/challenge', { method: 'POST', body: { pending: again.j.pending, address: stranger.address.toLowerCase() } });
+    check('  ...a wallet that is not linked gets no challenge', !(chX.status === 200 && chX.j && chX.j.message), chX.status + ' ' + JSON.stringify(chX.j));
+    const forged = await api('/api/auth/login/wallet2fa', { method: 'POST', body: { pending: again.j.pending, address: W1.address.toLowerCase(), signature: await stranger.signMessage(ch.j.message) } });
+    check('  ...and a stranger\'s signature over the linked wallet\'s message is refused, no session', forged.status === 401 && !forged.sid, forged.status + ' ' + JSON.stringify(forged.j));
+    db.prepare('UPDATE users SET twofa_method = NULL, twofa_enabled_at = NULL WHERE id = ?').run(uB.id);   // back off, for the checks below
+  }
+
   /* ═══ 3. signing in with a wallet the site has never seen, ticket in hand: pick a name, no second signature ═══ */
   const W2 = Wallet.createRandom(); made.addrs.push(W2.address.toLowerCase());
   s = await signFor(W2, 'signin');
@@ -350,7 +372,7 @@ try {
   check('the window lives on the session, NULL unless a sign-in or a proof wrote it', /ALTER TABLE sessions ADD COLUMN sudo_until INTEGER"/.test(SRC) && /INSERT INTO sessions \(token, user_id, created_at, expires_at, hashed, sudo_until\)/.test(SRC));
   check('the proof asks for the password AND the second factor', /if \(e && !\(await checkPassword\(String\(pick\('password'\)/.test(SRC) && /if \(me\.twofa_method && !\(me\.twofa_method === 'password' && e\)\)/.test(SRC));
   check('every change to how the account signs in closes the other sessions’ windows', (SRC.match(/sudoOthersOff\(me\);/g) || []).length >= 6);
-  check('the possession proofs stay: arming a wallet still takes its own 2fa-on signature', /const proof = consumeNonce\(addr, b\.signature, '2fa-on'\)/.test(SRC) && /consumeNonce\(next, b\.newSignature, '2fa-on'\)/.test(SRC));
+  check('the possession proofs stay: arming a wallet still takes its own 2fa-on signature', /const proof = await consumeNonce\(addr, b\.signature, '2fa-on'\)/.test(SRC) && /consumeNonce\(next, b\.newSignature, '2fa-on'\)/.test(SRC));
   check('the page retries a need_verify refusal once, after the step', /j\.code === 'need_verify' && !opts\._verified/.test(AUTHJS) && /_verified: true/.test(AUTHJS));
   check('a sign-in opens no window: only account creation and a social login with no other proof do', !/createSession\(u\.id, ipIdx\(req\), SUDO_MS\)/.test(SRC) && /createSession\(userId, ipIdxVal, !ident \? NEW_ACCOUNT_SUDO_MS : \(onlyProofIsSignIn\(userId, now\(\)\) \? SUDO_MS : 0\)\)/.test(SRC));
   check('every sign-up (email or wallet) hashes first, then gates and writes in one transaction (no race past the ticket or the per-IP cap)', /const pwHash = f\.password \? await hashPassword\(f\.password\) : null;[\s\S]{0,120}db\.exec\('BEGIN IMMEDIATE'\);[\s\S]{0,120}const gate = signupRefusal\(req\);/.test(SRC) && (SRC.match(/await createAccount\(req, /g) || []).length === 1 && (SRC.match(/await createWalletAccount\(req, /g) || []).length === 2);

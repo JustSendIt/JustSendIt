@@ -401,7 +401,7 @@ async function makeTwofaWallet(address) {
     const { provider, address: got } = await WALLET.connect();
     if (got !== address) throw new Error('that is ' + shortAddr(got) + ' — switch to ' + shortAddr(address) + ' in your wallet app, then try again');
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
-    const newSignature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    const newSignature = await WALLET.sign(provider, address, message);
     await api('/api/2fa/wallet/primary', { method: 'POST', body: { address, newSignature, current } });
     sendToast('Two-factor wallet is now ' + shortAddr(address) + ' 🔐');
     await loadMe();
@@ -443,7 +443,7 @@ async function enableWallet2fa() {
     await currentFactorBody('Turning on wallet two-factor changes how you sign in.');
     const { provider, address } = await WALLET.connect();
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
-    const signature = await provider.request({ method: 'personal_sign', params: [message, address] });
+    const signature = await WALLET.sign(provider, address, message);
     await api('/api/2fa/wallet/enable', { method: 'POST', body: { address, signature } });
     sendToast('Wallet 2FA is ON 🔐');
     setupDone();

@@ -1,8 +1,11 @@
 /* The door, the invite tree, and the beta campaign. Throwaway accounts only; deleted in the finally
    block, and the seed code is restored so 12345 still works afterwards. */
 import { DatabaseSync } from 'node:sqlite';
+import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { DB_PATH } from './_paths.mjs';
+import { DB_PATH, SERVER_JS } from './_paths.mjs';
+import { sendNoOf } from './_sendno.mjs';
+const SRC = readFileSync(SERVER_JS, 'utf8');
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -82,12 +85,18 @@ try {
   const wrongAge = await api('/api/gate/state', { cookie: pass + '; jsi_age=1' });
   check('  ...a cookie that does not say 18 does not count', wrongAge.status === 200 && wrongAge.j.ageConfirmed === false, JSON.stringify(wrongAge.j && wrongAge.j.ageConfirmed));
   const passAge = pass + '; jsi_age=18';
+  const maxNoBefore = db.prepare('SELECT COALESCE(MAX(send_no), 0) m FROM users').get().m;
   const joined = await api('/api/auth/register', { method: 'POST', cookie: passAge, body: { username: '__gt_joined__', email: 'gtj@example.com', password: 'password123' } });
   check('  ...and with it the account can now be made', joined.status === 200 && joined.j.ok, joined.status + ' ' + (joined.j && joined.j.error || ''));
   if (joined.j && joined.j.username) {
-    const r = db.prepare('SELECT id, age_at FROM users WHERE username=?').get(joined.j.username);
+    const r = db.prepare('SELECT id, age_at, send_no FROM users WHERE username=?').get(joined.j.username);
     if (r) made.users.push(r.id);
     check('  ...and the account records WHEN it confirmed its age', !!(r && r.age_at && Math.abs(r.age_at - Date.now()) < 60000), r && r.age_at);
+    // the server's own path: the Send ID is set the moment the account is made, the next in line
+    check('  ...and is given the next Send ID the moment it is made (the server\'s own path, not a test helper)', !!(r && r.send_no === maxNoBefore + 1), r && r.send_no + ' vs ' + (maxNoBefore + 1));
+    const sidM = /sid=([^;]+)/.exec(joined.setCookie || '');
+    const tk = sidM ? await api('/api/gate/invites', { cookie: 'sid=' + sidM[1] }) : null;
+    check('  ...and its ticket prints that number', !!(tk && tk.j && tk.j.ticket && tk.j.ticket.sendId === maxNoBefore + 1 && tk.j.ticket.number === maxNoBefore + 1), tk && JSON.stringify(tk.j && tk.j.ticket && [tk.j.ticket.sendId, tk.j.ticket.number]));
   }
   const spent = await api('/api/auth/register', { method: 'POST', cookie: passAge, body: { username: '__gt_twice__', email: 'gt2@example.com', password: 'password123' } });
   check('  ...but that same code cannot make a SECOND account', spent.status === 403 && spent.j.code === 'code_spent', spent.status + ' ' + (spent.j && spent.j.code));
@@ -103,8 +112,24 @@ try {
   for (const c of t.codes) made.codes.push(c.code);
   check('  ...exactly ten of them', t.codes.length === 10, t.codes.length);
   check('  ...all unused', t.codesLeft === 10, t.codesLeft);
-  check('  ...the ticket carries their number in line', t.number === u.id, t.number + ' vs user ' + u.id);
+  const uNo = sendNoOf(db, u.id);
+  check('  ...the ticket carries their number in line: the Send ID, not the row id', t.number === uNo && uNo > 0 && t.number !== undefined, t.number + ' vs Send ID ' + uNo + ' (row ' + u.id + ')');
   check('  ...and their name', t.username === '__gt_holder__');
+  /* Send IDs are a member's place in line — 1, 2, 3 … in the order accounts were made, never the database row id (which
+     counts the site's own account, every row a test or a deleted account took, and the gaps). Assigned when the
+     account is made, backfilled once at boot in order of joining, never reassigned. */
+  const sysNo = db.prepare('SELECT send_no FROM users WHERE system = 1').get();
+  check('the site\'s own account has no Send ID', !sysNo || sysNo.send_no == null, JSON.stringify(sysNo));
+  const sA = mkUser('__gt_seq_a__');
+  const nA = sendNoOf(db, sA.id);
+  const gap = mkUser('__gt_gap__'); db.prepare('DELETE FROM users WHERE id = ?').run(gap.id); made.users.splice(made.users.indexOf(gap.id), 1);   // a row id spent and gone: the row ids now skip one
+  const sB = mkUser('__gt_seq_b__');
+  const nB = sendNoOf(db, sB.id);
+  check('Send IDs are handed out in sequence, one apart, whatever the row ids do', nA > 0 && nB === nA + 1 && sB.id > sA.id + 1, nA + ' then ' + nB + ' (rows ' + sA.id + ', ' + sB.id + ')');
+  const tB = await api('/api/gate/invites', { cookie: sB.sid });
+  check('  ...and the ticket prints that number', tB.status === 200 && tB.j.ticket && tB.j.ticket.sendId === nB && tB.j.ticket.number === nB, JSON.stringify(tB.j && tB.j.ticket && [tB.j.ticket.sendId, tB.j.ticket.number]));
+  check('  ...the code: assigned the moment an account is made, backfilled at boot in order of joining, unique', /const id = Number\(r\.lastInsertRowid\);\s*\n\s*assignSendNo\(id\);/.test(SRC) && /SELECT id FROM users WHERE send_no IS NULL AND system = 0 ORDER BY created_at, id/.test(SRC) && /CREATE UNIQUE INDEX IF NOT EXISTS users_send_no ON users\(send_no\)/.test(SRC) && /assignSendNos\(\);/.test(SRC));
+  check('  ...and the ticket page and card are found by the Send ID, which is what they print', /FROM users WHERE send_no = \? AND system = 0'\)\.get\(Number\(tc\[1\]\)\)/.test(SRC) && /FROM users WHERE send_no = \? AND system = 0'\)\.get\(Number\(tp\[1\]\)\)/.test(SRC) && /sendId: u\.send_no, joinedAt: u\.created_at/.test(SRC) && /const url = SITE_ORIGIN \+ '\/t\/' \+ sendNoOf\(me\);/.test(SRC));
   check('  ...with the Gold OG deadline for the rocket', typeof t.goldEndsAt === 'number' && t.goldEndsAt > Date.now(), t.goldEndsAt && new Date(t.goldEndsAt).toISOString().slice(0, 10));
   const again = await api('/api/gate/invites', { cookie: u.sid });
   check('  ...asking twice does not mint more', again.j.ticket.codes.length === 10, again.j.ticket.codes.length);
@@ -120,7 +145,7 @@ try {
   check('  ...and it shows as used on the inviter\'s ticket', after.j.ticket.codesLeft === 9, after.j.ticket.codesLeft);
   const usedRow = (after.j.ticket.codes || []).find(c => c.used);
   check('  ...a spent code has NO characters to copy', !!usedRow && usedRow.code === undefined && typeof usedRow.hint === 'string', JSON.stringify(usedRow));
-  check('  ...and the ticket carries the Send ID under that name', after.j.ticket.sendId === u.id, after.j.ticket.sendId + ' vs ' + u.id);
+  check('  ...and the ticket carries the Send ID under that name', after.j.ticket.sendId === uNo, after.j.ticket.sendId + ' vs ' + uNo);
 
   // ═══ the beta campaign ═══
   const beta = await api('/api/beta', { cookie: pass });

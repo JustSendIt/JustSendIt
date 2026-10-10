@@ -97,10 +97,15 @@ async function ensureRobinhoodChain(prov, why) {
     await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: RH_CHAIN.hexId }] });
     return true;
   } catch (e) {
-    if (e && (e.code === 4902 || (e.message || '').includes('Unrecognized'))) {
+    /* A sign-in or a link is READ-ONLY and the signature is chain-agnostic: the server reads holdings by address.
+       So a connect never asks the wallet to ADD a network (a prompt many wallets refuse outright — Coinbase Wallet
+       and Phantom among them — and a strange ask beside "sign a free message"), and never toasts: the switch was a
+       courtesy, and its refusal is nobody's error. The swap needs the chain, and says so. */
+    if (why !== 'swap') return false;
+    if (e && (e.code === 4902 || /unrecognized|unknown chain|not (been )?added|unsupported chain/i.test(String((e && e.message) || '')))) {
       return addRobinhoodChain(p);
     }
-    if (e && e.code === 4001) sendToast(why === 'swap' ? 'Switch to Robinhood Chain to swap 🟢' : 'Stay on Robinhood Chain to see your balances 🟢');
+    if (e && e.code === 4001) sendToast('Switch to Robinhood Chain to swap 🟢');
     return false;
   }
 }

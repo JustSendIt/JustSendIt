@@ -118,11 +118,12 @@ try {
     const served = GAMIFY + ABOUT + SENDCALL + COMMUNITY + COMMUNITIES;
     check('$25 community/OG floor is gone from every served page', !/at least \$25|least <b>\$25<\/b>/.test(served), (served.match(/\$25\b/g) || []).length);
     check('$25 is gone from the whitepaper and README too', !/at least \$25/.test(WP + README));
-    /* DAILY_CAP really is a rolling 24h window, so "rolling 24 hours" is correct where it describes THAT.
-       The claim being hunted here is the different one: that a CHECK-IN is judged on a rolling window. It
-       is judged on the UTC calendar day, and a doc that says otherwise costs someone a day of protection. */
-    check('no page still claims the CHECK-IN is judged on a rolling window',
-      !/check.?in[^.]{0,50}(inside|within) the last 24 hours/i.test(served + WP + README));
+    /* The check-in is once every 24 HOURS from the last one (2026-10-09; it used to be once per UTC calendar day,
+       which paid twice two minutes apart across midnight), and decay judges "showed up" on the same 24-hour window.
+       A page that still says "calendar day" or "current UTC day" costs someone a day of protection. */
+    const plain = (served + WP + README).replace(/[*_`]/g, '');   // markdown emphasis must not hide a phrase
+    check('every page describes the check-in as once every 24 hours from the last one, none as a UTC calendar day',
+      !/check.?in[^.]{0,160}(current UTC day|calendar day, not a rolling window|once per UTC day|idempotent per UTC day|compares UTC day numbers)/i.test(plain) && !/protects that day and not the next|Both clocks are the same one|it does not, and it never has/i.test(plain) && /once every 24 hours/.test(ABOUT) && /within the 24 hours before the sweep/.test(WP) && /once every 24 hours counted from your last check-in/.test(WP) && /once every 24 hours counted from your last check.in/.test(README));
     check('no page still claims there is no appeal route',
       !/there(’s| is| was)? no appeal route and/i.test(served + WP + README));
     check('the free appeal address is given where a restricted account will see it', /SendRH@Atomicmail\.io/.test(ABOUT) && /appealEmail/.test(SRC));

@@ -69,13 +69,14 @@ try {
     const chainId = (/const RH_CHAIN = \{[\s\S]*?hexId: '([^']+)'/.exec(CHAIN) || [])[1];
     check('the chain id is Robinhood Chain', chainId === '0x1237', chainId);
 
+    const toasts = [];
     const ens = (/async function ensureRobinhoodChain[\s\S]*?\n\}/.exec(CHAIN) || [''])[0];
     const add = (/async function addRobinhoodChain[\s\S]*?\n\}/.exec(CHAIN) || [''])[0];
     let ensure = null;
     try {
       ensure = new Function('RH_CHAIN', 'sendToast', 'wprov', `${add}\n${ens}\nreturn ensureRobinhoodChain;`)(
         { hexId: chainId, name: 'Robinhood Chain', rpc: 'x', explorer: 'y', currency: {} },
-        () => {}, () => null);
+        (t) => toasts.push(String(t)), () => null);
     } catch (e) { check('ensureRobinhoodChain could be lifted out and run', false, e.message); }
 
     if (typeof ensure === 'function') {
@@ -89,20 +90,29 @@ try {
           return null;
         } } };
       };
-      const run = async (cur, onSwitch, onAdd) => { const m = mk(cur, onSwitch, onAdd); const ok = await ensure(m.provider, 'connect'); return { ok, calls: m.calls }; };
+      const run = async (cur, onSwitch, onAdd, why) => { toasts.length = 0; const m = mk(cur, onSwitch, onAdd); const ok = await ensure(m.provider, why || 'connect'); return { ok, calls: m.calls, toasts: toasts.slice() }; };
 
       const already = await run(chainId);
       check('a wallet already on Robinhood Chain is never interrupted',
         already.ok === true && already.calls.length === 1 && already.calls[0] === 'eth_chainId', already.calls.join('→'));
       const switched = await run('0x1');
       check('a wallet on another chain is switched', switched.ok === true && switched.calls.includes('wallet_switchEthereumChain'));
-      const added = await run('0x1', { code: 4902, msg: 'Unrecognized chain ID' });
-      check('a wallet that has never seen this chain is offered it',
+      const added = await run('0x1', { code: 4902, msg: 'Unrecognized chain ID' }, null, 'swap');
+      check('for the swap, a wallet that has never seen this chain is offered it',
         added.ok === true && added.calls.includes('wallet_addEthereumChain'), added.calls.join('→'));
+      /* A sign-in or a link is read-only and its signature is chain-agnostic: a connect never asks the wallet to ADD a
+         network (Coinbase Wallet and Phantom refuse the ask outright, and it is a strange thing to see beside "sign a
+         free message") — it reports false, quietly, and the sign-in goes on. */
+      const notOffered = await run('0x1', { code: 4902, msg: 'Unrecognized chain ID "0x1237". Try adding the chain using wallet_addEthereumChain first.' });
+      check('for a connect, a wallet that has never seen this chain is NOT asked to add it, and no toast is shown', notOffered.ok === false && !notOffered.calls.includes('wallet_addEthereumChain') && notOffered.toasts.length === 0, notOffered.calls.join('→') + ' toasts=' + JSON.stringify(notOffered.toasts));
+      const unsupported = await run('0x2105', { code: -32603, msg: 'Unsupported chain id' });
+      check('  ...nor is a wallet that says the chain is unsupported in its own words', unsupported.ok === false && !unsupported.calls.includes('wallet_addEthereumChain') && unsupported.toasts.length === 0, unsupported.calls.join('→') + ' toasts=' + JSON.stringify(unsupported.toasts));
       const refusedSwitch = await run('0x1', { code: 4001, msg: 'User rejected' });
-      check('a refused switch reports false rather than pretending', refusedSwitch.ok === false);
-      const refusedAdd = await run('0x1', { code: 4902, msg: 'Unrecognized chain ID' }, { code: 4001, msg: 'rejected' });
-      check('  ...and so does a refused add', refusedAdd.ok === false, refusedAdd.calls.join('→'));
+      check('a refused switch reports false rather than pretending, and a connect says nothing about it', refusedSwitch.ok === false && refusedSwitch.toasts.length === 0, JSON.stringify(refusedSwitch.toasts));
+      const swapRefused = await run('0x1', { code: 4001, msg: 'User rejected' }, null, 'swap');
+      check('  ...the swap, which needs the chain, says so in one toast', swapRefused.ok === false && swapRefused.toasts.length === 1 && /swap/i.test(swapRefused.toasts[0]), JSON.stringify(swapRefused.toasts));
+      const refusedAdd = await run('0x1', { code: 4902, msg: 'Unrecognized chain ID' }, { code: 4001, msg: 'rejected' }, 'swap');
+      check('  ...and so does a refused add (swap)', refusedAdd.ok === false, refusedAdd.calls.join('→'));
       const noChainId = await run('unsupported');
       check('a provider that cannot answer eth_chainId still gets switched',
         noChainId.ok === true && noChainId.calls.includes('wallet_switchEthereumChain'));

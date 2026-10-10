@@ -10,6 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DB_PATH, SERVER_JS } from './_paths.mjs';
+import { sendNoOf } from './_sendno.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -270,32 +271,33 @@ try {
   /* ═══ the ticket share: nothing published until asked ═══ */
   {
     const u = mkUser('__pg_share__', true);
-    const before = await api('/t/' + u.id);
+    const uNo = sendNoOf(db, u.id);   // the ticket lives at its Send ID, not its row id
+    const before = await api('/t/' + uNo);
     check('a ticket page 404s until its owner shares it', before.status === 404, before.status);
     const sh = await api('/api/gate/ticket/share', { method: 'POST', sid: u.sid, body: {} });
     check('sharing publishes it and returns the X composer link', sh.status === 200 && /x\.com\/intent\/post/.test(sh.j.intent || ''), sh.status);
     check('  ...with the tagline filled in', /I%20just%20got%20my%20ticket%20to%20Send/.test(sh.j.intent || ''));
-    const card = await fetch(BASE + '/t/' + u.id + '.png');
+    const card = await fetch(BASE + '/t/' + uNo + '.png');
     const buf = Buffer.from(await card.arrayBuffer());
     check('the card is a real PNG this server drew', card.status === 200 && buf.slice(1, 4).toString() === 'PNG', card.status);
     check('  ...at the size X crops a large card from', buf.readUInt32BE(16) === 1200 && buf.readUInt32BE(20) === 630, buf.readUInt32BE(16) + 'x' + buf.readUInt32BE(20));
     check('  ...and is never a client-uploaded bitmap', /renderTicketCard\(\{ username: u\.username/.test(SRC));
-    const page = await (await fetch(BASE + '/t/' + u.id)).text();
+    const page = await (await fetch(BASE + '/t/' + uNo)).text();
     /* The card must sit OUTSIDE /api/. robots.txt disallows /api/, and a crawler that respects it will
        not fetch an og:image there — the card would render perfectly and never appear in a single post. */
     const robots = readFileSync(new URL('../public/robots.txt', import.meta.url), 'utf8');
     const disallowed = [...robots.matchAll(/^Disallow: (.+)$/gm)].map(m => m[1].trim());
-    check('the card path is not blocked by robots.txt', !disallowed.some(d => ('/t/' + u.id + '.png').startsWith(d)), disallowed.join(' '));
-    check('  ...and the og:image points at that crawlable path', new RegExp('property="og:image" content="[^"]*/t/' + u.id + '\\.png"').test(page));
-    check('the share page carries a per-ticket large-image card', /name="twitter:card" content="summary_large_image"/.test(page) && new RegExp('property="og:image" content="[^"]*/t/' + u.id + '\\.png"').test(page));
+    check('the card path is not blocked by robots.txt', !disallowed.some(d => ('/t/' + uNo + '.png').startsWith(d)), disallowed.join(' '));
+    check('  ...and the og:image points at that crawlable path', new RegExp('property="og:image" content="[^"]*/t/' + uNo + '\\.png"').test(page));
+    check('the share page carries a per-ticket large-image card', /name="twitter:card" content="summary_large_image"/.test(page) && new RegExp('property="og:image" content="[^"]*/t/' + uNo + '\\.png"').test(page));
     check('  ...and nothing private is on it', !/0x[0-9a-f]{40}/i.test(page) && !/@example\.com/.test(page));
     // a handle full of markup must be escaped, not executed
     db.prepare('UPDATE users SET username = ? WHERE id = ?').run('x"><script>a</script>', u.id);
-    const evil = await (await fetch(BASE + '/t/' + u.id)).text();
+    const evil = await (await fetch(BASE + '/t/' + uNo)).text();
     check('a handle full of markup is escaped on the share page', !/<script>a<\/script>/.test(evil) && /&lt;script&gt;/.test(evil));
     db.prepare('UPDATE users SET username = ? WHERE id = ?').run('__pg_share__', u.id);
     const un = await api('/api/gate/ticket/share', { method: 'DELETE', sid: u.sid });
-    const after = await api('/t/' + u.id);
+    const after = await api('/t/' + uNo);
     check('un-sharing takes it down again', un.status === 200 && after.status === 404, after.status);
   }
 

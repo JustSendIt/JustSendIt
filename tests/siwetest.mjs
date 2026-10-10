@@ -72,7 +72,7 @@ check('a signature is not valid for a different nonce', verifyMessage(other, sig
 
 // the 2FA challenge now goes through the same builder
 check('2FA challenge uses signInMessage (one per wallet)', /entry\.messages\[w\] = signInMessage\(/.test(SRC));
-check('2FA verify binds the signature to the claimed address', /if \(recovered !== addr\) return bad\(res, 'signature does not match that wallet'/.test(SRC));
+check('2FA verify binds the signature to the claimed address, through the same check every door uses (a key, or a smart-contract wallet via ERC-1271 / ERC-6492), and goes on with that address', /const v = await signatureIsValid\(addr, message, String\(b\.signature \|\| ''\)\);\s*\n\s*if \(!v\.ok\) return bad\(res, v\.why === 'bad' \? 'bad signature' : v\.why === 'mismatch' \? 'signature does not match that wallet' : signatureRefusal\(v\.why\), 401\);\s*\n\s*if \(!walletAddresses\(u\.id\)\.includes\(addr\)\)/.test(SRC) && /const refusal = walletFactorRefusal\(u, addr\);/.test(SRC) && !/\brecovered\b[^\n]*walletFactorRefusal/.test(SRC));
 
 let pass = 0;
 for (const [n, ok, extra] of results) { console.log((ok ? 'PASS ' : 'FAIL ') + n + (extra ? '  [' + extra + ']' : '')); if (ok) pass++; }

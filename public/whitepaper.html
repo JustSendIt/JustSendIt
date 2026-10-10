@@ -784,7 +784,7 @@ object-src  'none'
               <tr><td class="name">Make a Send Call</td><td class="num">120</td><td class="num">20</td></tr>
               <tr><td class="name">Each X a call reaches (first rung; +17 per rung after)</td><td class="num">170</td><td class="num">none per day</td></tr>
               <tr><td class="name">Post on the wall</td><td class="num">75</td><td class="num">40</td></tr>
-              <tr><td class="name">Daily check-in</td><td class="num">60</td><td class="num">1</td></tr>
+              <tr><td class="name">Check-in (once every 24 hours)</td><td class="num">60</td><td class="num">1</td></tr>
               <tr><td class="name">Track a wallet</td><td class="num">45</td><td class="num">3</td></tr>
               <tr><td class="name">Send It on someone's call (paid on a verified buy)</td><td class="num">30</td><td class="num">30</td></tr>
               <tr><td class="name">Customise your wall</td><td class="num">30</td><td class="num">1</td></tr>
@@ -848,7 +848,7 @@ object-src  'none'
         </div>
         <h3>What stops it</h3>
         <p>The daily check-in, and nothing else. Holding coins does not stop it, and neither does having a high level. <strong>Anyone can check in, including a restricted account</strong> &mdash; read-only pauses what you can make, not your ability to defend what you already earned.</p>
-        <p>It stops two of the three components. A check-in inside the current UTC day sets the absence streak to zero and skips the underwater-call charge entirely, so on a day you show up those cost you nothing. The bad-call rate only ever applies on a day you were already away: a call that went down is a market outcome, not misconduct, and billing someone daily for one while they are actively taking part would be a far harsher rule than the one intended.</p>
+        <p>It stops two of the three components. A check-in within the 24 hours before the sweep sets the absence streak to zero and skips the underwater-call charge entirely, so on a day you show up those cost you nothing. The bad-call rate only ever applies on a day you were already away: a call that went down is a market outcome, not misconduct, and billing someone daily for one while they are actively taking part would be a far harsher rule than the one intended.</p>
         <p><strong>The read-only charge is the exception.</strong> It is the one component a check-in does not cancel &mdash; while restricted you pay its flat one point a day regardless. A penalty that stops costing anything the moment you tap a button is not a penalty. But it is all you pay if you keep showing up: a steady 1% a day, rather than that plus an absence rate climbing toward the ceiling.</p>
         <p>One consequence worth stating: since a Send Call can never be closed or deleted, a call that is still below its entry price a year later still counts as underwater. Old bad calls keep making <em>absence</em> more expensive, permanently. They cost nothing on any day you check in.</p>
         <h3>The floors, so it cannot ruin anyone</h3>
@@ -1099,8 +1099,8 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
         </div>
         <p>Other rules: the explosion point is capped at 50&times;, a round left abandoned expires after 5 minutes and counts as a loss, and the day rolls over at midnight UTC.</p>
         <h3>The daily check-in</h3>
-        <p>Showing up is worth <strong>60</strong> points, once per day, claimed by tapping a button on your own wall. It used to happen silently on page load. Making it a button means it is something you did, not something that happened to you.</p>
-        <p>It is also the switch that stops your Send Power draining (Section 8b), which makes it the single most valuable button on the site &mdash; worth far more than its 60 points to anyone with a large balance. <strong>Both clocks are the same one:</strong> the UTC calendar day. <code>checkedInToday()</code> compares UTC day numbers, exactly as the 60-point award's daily ref does, so a check-in at 23:50 UTC protects that day and not the next. This paragraph used to claim the two clocks differed and that a late check-in carried over; it does not, and anyone who relied on that would have lost a day of protection believing they were covered.</p>
+        <p>Showing up is worth <strong>60</strong> points, once every 24 hours counted from your last check-in, claimed by tapping a button on your own wall. It used to happen silently on page load. Making it a button means it is something you did, not something that happened to you.</p>
+        <p>It is also the switch that stops your Send Power draining (Section 8b), which makes it the single most valuable button on the site &mdash; worth far more than its 60 points to anyone with a large balance. <strong>Two clocks, on purpose.</strong> The button opens once every 24 hours from your last check-in &mdash; a tap inside that window pays nothing and does not move it &mdash; and decay credits any tap, paid or refused, within the 24 hours before its sweep, which runs in the first minutes after 00:00 UTC. The 60-point award is still deduplicated per UTC day, which changes nothing: two check-ins 24 hours apart can never share a UTC day. Until 9 October 2026 the rule was once per UTC calendar day, which paid a check-in at 23:59 and another at 00:01 two minutes apart.</p>
       </section>
 
       <!-- 13 -->

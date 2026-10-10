@@ -719,8 +719,9 @@ async function loadLeaderboard(win) {
 
 /* ===== Daily check-in — own wall only =====
  * Showing up is something you DO: the daily Send Power bonus used to land silently on page load,
- * now it's an explicit tap. Server (POST /api/checkin) is idempotent per UTC day, so a double tap
- * is harmless — { already, awarded, checkedInToday }. Rendered into #checkin by WallCheckin.paint(isMe),
+ * now it's an explicit tap. Server (POST /api/checkin) allows one check-in every 24 hours, counted from the
+ * last one, and a tap inside that window is harmless — { already, awarded, checkedInToday, nextAt }. Rendered
+ * into #checkin by WallCheckin.paint(isMe),
  * which loadPage() calls with the server's own u.isMe. Styles live in /checkin.css. */
 (function wallCheckin() {
   const host = document.getElementById('checkin');
@@ -733,10 +734,10 @@ async function loadLeaderboard(win) {
 
   let timer = null, io = null, onScreen = true, shown = false;
 
-  /* ---------- next UTC midnight ---------- */
+  /* ---------- when the next check-in opens: 24 hours after the last, from the server's own stamp ---------- */
   function nextResetMs() {
-    const d = new Date();
-    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1); // tomorrow 00:00 UTC
+    const t = window.AUTH && AUTH.user && Number(AUTH.user.nextCheckinAt);
+    return t > 0 ? t : Date.now();   // unknown (an older server, a stale copy): offer it now, the server decides
   }
   function clockText(ms) {
     const s = Math.max(0, Math.round(ms / 1000));
@@ -752,8 +753,8 @@ async function loadLeaderboard(win) {
       '<div class="card ci-card">' +
         '<div class="ci-head"><span class="ci-emoji" aria-hidden="true">📅</span>' +
         '<h2 class="ci-title">Daily check-in</h2></div>' +
-        '<button class="btn btn-primary ci-btn" type="button" id="ci-go" data-tip="Claims the daily Send Power bonus — once per day">✅ Check in for today</button>' +
-        '<p class="ci-note">Claims today’s <b>Send Power</b> bonus — multiplied by your boosts. Free, once a day.</p>' +
+        '<button class="btn btn-primary ci-btn" type="button" id="ci-go" data-tip="Claims the check-in Send Power bonus — once every 24 hours">✅ Check in</button>' +
+        '<p class="ci-note">Claims the check-in <b>Send Power</b> bonus — multiplied by your boosts. Free, once every 24 hours.</p>' +
         '<p class="ci-msg" id="ci-msg" role="status"></p>' +
       '</div>';
     host.hidden = false;
@@ -764,9 +765,9 @@ async function loadLeaderboard(win) {
       '<div class="card ci-card ci-card-done">' +
         '<div class="ci-done" id="ci-done" tabindex="-1">' +
           '<div class="ci-head"><span class="ci-emoji" aria-hidden="true">✅</span>' +
-          '<h2 class="ci-title">Checked in today</h2></div>' +
-          '<p class="ci-note">Today’s <b>Send Power</b> bonus is in the bag. Come back tomorrow for the next one. 🚀</p>' +
-          '<p class="ci-next">Next check-in in <span class="ci-clock" id="ci-clock">…</span> <span class="ci-utc">(the day rolls over at midnight UTC)</span></p>' +
+          '<h2 class="ci-title">Checked in</h2></div>' +
+          '<p class="ci-note">The check-in <b>Send Power</b> bonus is in the bag. The next one opens 24 hours after this one. 🚀</p>' +
+          '<p class="ci-next">Next check-in in <span class="ci-clock" id="ci-clock">…</span> <span class="ci-utc">(24 hours after your last check-in)</span></p>' +
         '</div>' +
       '</div>';
     host.hidden = false;
@@ -780,11 +781,11 @@ async function loadLeaderboard(win) {
     const clock = host.querySelector('#ci-clock');
     if (!clock) { stopTick(); return; }
     const ms = nextResetMs() - Date.now();
-    if (ms <= 0) { // a fresh UTC day arrived while the page sat open — offer the check-in again
+    if (ms <= 0) { // the 24 hours passed while the page sat open — offer the check-in again
       stopTick();
-      if (window.AUTH && AUTH.user) AUTH.user.checkedInToday = false;
+      if (window.AUTH && AUTH.user) { AUTH.user.checkedInToday = false; AUTH.user.nextCheckinAt = null; }
       renderReady();
-      say('A new daily check-in is available.');
+      say('A new check-in is available.');
       return;
     }
     clock.textContent = clockText(ms);
@@ -839,7 +840,7 @@ async function loadLeaderboard(win) {
       return;
     }
     const awarded = Math.max(0, Math.round(Number(j && j.awarded) || 0));
-    if (window.AUTH && AUTH.user) AUTH.user.checkedInToday = true;
+    if (window.AUTH && AUTH.user) { AUTH.user.checkedInToday = true; if (j && j.nextAt > 0) AUTH.user.nextCheckinAt = Number(j.nextAt); }
     renderDone();
     if (keepFocus) { const d = host.querySelector('#ci-done'); if (d) d.focus(); } // never drop focus to <body>
     if (awarded > 0) {
@@ -852,13 +853,13 @@ async function loadLeaderboard(win) {
       if (window.sendConfetti) sendConfetti(cx, cy, { count: 52, emojiRatio: 0.5 });
       // #toast-zone is itself role="status" aria-live="polite", so a toast IS the announcement — adding say()
       // here would read the same news to a screen reader twice.
-      toast('✅ Checked in for today! You earned ' + nf(awarded) + ' Send Power 🪙');
+      toast('✅ Checked in! You earned ' + nf(awarded) + ' Send Power 🪙');
     } else if (j && j.already) {
-      toast('✅ You were already checked in today');
+      toast('✅ Already checked in — the next one opens in ' + clockText(Math.max(0, (Number(j.nextAt) || Date.now()) - Date.now())));
     } else {
       // a real first check-in that paid 0: the rolling 24-hour earning ceiling was already spent. The
       // server still stamped it, so "already checked in" would be untrue and the reason would go unsaid.
-      toast('✅ Checked in for today — you had already hit your 24-hour Send Power ceiling, so this one paid nothing. It still counts as checked in.');
+      toast('✅ Checked in — you had already hit your 24-hour Send Power ceiling, so this one paid nothing. It still counts as checked in.');
     }
   }
   host.addEventListener('click', (e) => { const b = e.target.closest('#ci-go'); if (b && !b.disabled) go(b); });

@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { DatabaseSync, backup: sqliteBackup } = require('node:sqlite'); // backup() = online, consistent, non-blocking snapshot (Node ≥ 23.8)
-const { verifyMessage, getAddress } = require('ethers');   // getAddress: EIP-55 checksum, required by the EIP-4361 parser in wallets
+const { verifyMessage, getAddress, hashMessage, AbiCoder } = require('ethers');   // getAddress: EIP-55 checksum, required by the EIP-4361 parser in wallets; hashMessage + AbiCoder: the smart-wallet signature check
 const QRCode = require('qrcode');
 /* ===== Outbound name lookups: the server's own resolver, never the host's cache ===================================
    Twice (2026-09-26 and 2026-09-30) every chain read on the live site died for an hour at once: the Mac's system
@@ -779,6 +779,9 @@ for (const col of [
      read an active user as absent and charged them the escalating away-from-the-site rate. Showing up is
      an act, not a payment: it is now recorded as one. */
   "ALTER TABLE users ADD COLUMN checkin_at INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE users ADD COLUMN send_no INTEGER",                         // the Send ID: place in line among members, 1, 2, 3 … (null for the site's own account)
+  "ALTER TABLE users ADD COLUMN visit_at INTEGER NOT NULL DEFAULT 0",      // the last check-in TAP, refused or not — decay reads it; the award gate reads checkin_at
+  "CREATE UNIQUE INDEX IF NOT EXISTS users_send_no ON users(send_no)",
   /* The base the WEEKLY RACE counts, which is not always the base that was paid. `base` is described as
      "what you did, with every boost taken out" and the Biggest Sender board sums it on exactly that
      promise — but the call bases are pre-multiplied by position size before they ever reach awardPoints
@@ -1336,7 +1339,29 @@ function createUser(username, autoNamed, ipIdxVal) {
   // and it is erased after SIGNUP_IP_KEEP_MS (see the retention sweep). last_ip is no longer written: nothing read it.
   const r = db.prepare('INSERT INTO users (username, auto_named, created_at, signup_ip) VALUES (?,?,?,?)')
     .run(username, autoNamed ? 1 : 0, now(), ipIdxVal || null);
-  return Number(r.lastInsertRowid);
+  const id = Number(r.lastInsertRowid);
+  assignSendNo(id);   // the Send ID is set the moment the account exists
+  return id;
+}
+/* The Send ID: a member's place in line, counted from the first member — 1, 2, 3 … in the order accounts were
+   made, skipping the site's own account. It used to be the database row id, which also counts the system
+   account, every row a test or a deleted account ever took, and the gaps between them — so on the live site the
+   first member was #2 and the fourth #74. It is assigned once, when the account is made (and once at boot for the
+   accounts from before this column), and never reassigned: a deleted account's number stays taken, and nobody
+   moves up. */
+function assignSendNo(userId) {
+  const r = db.prepare('SELECT send_no, system FROM users WHERE id = ?').get(userId);
+  if (!r || r.system) return null;
+  if (r.send_no) return r.send_no;
+  db.prepare('UPDATE users SET send_no = (SELECT COALESCE(MAX(send_no), 0) + 1 FROM users) WHERE id = ? AND send_no IS NULL').run(userId);
+  return db.prepare('SELECT send_no FROM users WHERE id = ?').get(userId).send_no;
+}
+const sendNoOf = (u) => (u && u.send_no) ? u.send_no : (u && !u.system ? assignSendNo(u.id) : null);
+// at boot: every member from before the column, in the order they joined
+function assignSendNos() {
+  const rows = db.prepare('SELECT id FROM users WHERE send_no IS NULL AND system = 0 ORDER BY created_at, id').all();
+  for (const r of rows) assignSendNo(r.id);
+  if (rows.length) console.log('🎟️ Send IDs assigned to ' + rows.length + ' member' + (rows.length === 1 ? '' : 's') + ', in the order they joined');
 }
 /* ===== "Confirm it's you" — one proof, then a window =============================================
    Every security change used to demand the password (or the second factor) again, per change — and
@@ -1562,10 +1587,63 @@ function issueNonce(address, purpose) {
   } catch {}
   return message;
 }
+/* Is this signature that wallet's, over this message? A key's 65-byte signature is recovered here, with no
+   chain read. Anything else is a smart-contract wallet's (Coinbase Smart Wallet, Safe, any ERC-4337 account): the
+   account itself decides, through isValidSignature (ERC-1271), and one that is not deployed yet carries its factory
+   call in an ERC-6492 envelope. Both are asked in ONE eth_call on Robinhood Chain, with no `to`: the data is the
+   compiled DeploylessUniversalSigValidator of @ambire/signature-validator 1.5.0 (contracts/
+   DeploylessUniversalSigValidator.sol, CC0) followed by (address, bytes32 hash, bytes signature) — it deploys the
+   account through the factory if it has to, asks it, and returns 0x01 or 0x00. Measured on the public node
+   2026-10-09: a key's signature answers 0x01, the wrong signer 0x00, an envelope whose factory is not on this chain
+   "execution reverted" — that last one is a wallet that cannot be checked here, and is told so. */
+const SIG_HEX_MAX = 2 + 2 * 8192, SIG_CHAIN_PER_MIN = 120;   // a signature is at most 8 KB (a Coinbase ERC-6492 envelope is ~1.5 KB); validator calls are bounded site-wide
+const _codeCache = new Map();   // address -> { at, has }: whether an address has code on Robinhood Chain (an EOA stays an EOA; a deployed account stays deployed), kept an hour
+async function addrHasCode(address) {
+  const c = _codeCache.get(address);
+  if (c && now() - c.at < 3600e3) return c.has;
+  const code = await rpcRetry(() => rpc('eth_getCode', [address, 'latest']));
+  const has = !!(code && code !== '0x');
+  pruneCache(_codeCache, 5000); _codeCache.set(address, { at: now(), has });
+  return has;
+}
+const UNIVERSAL_SIG_VALIDATOR = '0x608060405234801561000f575f5ffd5b506040516106fb3803806106fb83398101604081905261002e91610559565b5f61003a848484610045565b9050805f526001601ff35b5f5f846001600160a01b0316803b806020016040519081016040528181525f908060200190933c90507f649264926492649264926492649264926492649264926492649264926492649261009884610470565b036101f9575f606080858060200190518101906100b591906105ae565b865192955090935091505f03610174575f836001600160a01b0316836040516100de919061060f565b5f604051808303815f865af19150503d805f8114610117576040519150601f19603f3d011682016040523d82523d5f602084013e61011c565b606091505b50509050806101725760405162461bcd60e51b815260206004820152601e60248201527f5369676e617475726556616c696461746f723a206465706c6f796d656e74000060448201526064015b60405180910390fd5b505b604051630b135d3f60e11b808252906001600160a01b038a1690631626ba7e906101a4908b908690600401610625565b602060405180830381865afa1580156101bf573d5f5f3e3d5ffd5b505050506040513d601f19601f820116820180604052508101906101e39190610661565b6001600160e01b03191614945050505050610469565b8051156102e3575f5f866001600160a01b0316631626ba7e60e01b8787604051602401610227929190610625565b60408051601f198184030181529181526020820180516001600160e01b03166001600160e01b0319909416939093179092529051610265919061060f565b5f60405180830381855afa9150503d805f811461029d576040519150601f19603f3d011682016040523d82523d5f602084013e6102a2565b606091505b50915091508180156102b5575080516020145b156102e057630b135d3f60e11b6102cb82610688565b6001600160e01b031916149350505050610469565b50505b82516041146103475760405162461bcd60e51b815260206004820152603a60248201525f5160206106db5f395f51905f5260448201527f3a20696e76616c6964207369676e6174757265206c656e6774680000000000006064820152608401610169565b61034f610487565b50602083015160408085015185518693925f918591908110610373576103736106c6565b016020015160f81c9050601b811480159061039257508060ff16601c14155b156103f25760405162461bcd60e51b815260206004820152603b60248201525f5160206106db5f395f51905f5260448201527f3a20696e76616c6964207369676e617475726520762076616c756500000000006064820152608401610169565b604080515f8152602081018083528a905260ff83169181019190915260608101849052608081018390526001600160a01b038a169060019060a0016020604051602081039080840390855afa15801561044d573d5f5f3e3d5ffd5b505050602060405103516001600160a01b031614955050505050505b9392505050565b5f60208251101561047f575f5ffd5b508051015190565b60405180606001604052806003906020820280368337509192915050565b6001600160a01b03811681146104b9575f5ffd5b50565b634e487b7160e01b5f52604160045260245ffd5b5f82601f8301126104df575f5ffd5b81516001600160401b038111156104f8576104f86104bc565b604051601f8201601f19908116603f011681016001600160401b0381118282101715610526576105266104bc565b60405281815283820160200185101561053d575f5ffd5b8160208501602083015e5f918101602001919091529392505050565b5f5f5f6060848603121561056b575f5ffd5b8351610576816104a5565b6020850151604086015191945092506001600160401b03811115610598575f5ffd5b6105a4868287016104d0565b9150509250925092565b5f5f5f606084860312156105c0575f5ffd5b83516105cb816104a5565b60208501519093506001600160401b038111156105e6575f5ffd5b6105f2868287016104d0565b604086015190935090506001600160401b03811115610598575f5ffd5b5f82518060208501845e5f920191825250919050565b828152604060208201525f82518060408401528060208501606085015e5f606082850101526060601f19601f8301168401019150509392505050565b5f60208284031215610671575f5ffd5b81516001600160e01b031981168114610469575f5ffd5b805160208201516001600160e01b03198116919060048210156106bf576001600160e01b0319600483900360031b81901b82161692505b5050919050565b634e487b7160e01b5f52603260045260245ffdfe5369676e617475726556616c696461746f72237265636f7665725369676e6572';
+const ERC6492_SUFFIX = '6492'.repeat(16);
+async function signatureIsValid(address, message, signature) {
+  const sig = String(signature || '');
+  if (!/^0x[0-9a-f]{2,}$/i.test(sig) || sig.length > SIG_HEX_MAX) return { ok: false, why: 'bad' };
+  const keySig = sig.length === 132;
+  if (keySig) { try { if (verifyMessage(message, sig).toLowerCase() === address) return { ok: true, kind: 'key' }; } catch {} }
+  /* What is left can only be a smart-contract wallet's (or a key's signature for the wrong key). Whether the address has
+     code on this chain decides what there is to ask — one cached eth_getCode, so a stream of bad signatures costs the
+     chain nothing — and the validator is called only when it can answer: a deployed account (ERC-1271), or an envelope
+     that carries its own factory (ERC-6492). A contract wallet with no code here and no factory in the signature is
+     one deployed on another chain: said so, without a call. */
+  let hasCode;
+  try { hasCode = await addrHasCode(address); } catch { return { ok: false, why: 'chain' }; }
+  const wrapped = sig.toLowerCase().endsWith(ERC6492_SUFFIX);
+  if (!hasCode && keySig) return { ok: false, why: 'mismatch' };
+  if (!hasCode && !wrapped) return { ok: false, why: 'notOnChain' };
+  if (!rateLimit('sigchain', SIG_CHAIN_PER_MIN, 60e3)) return { ok: false, why: 'chain' };   // the validator call is the cost, whoever asks
+  try {
+    const data = UNIVERSAL_SIG_VALIDATOR + AbiCoder.defaultAbiCoder().encode(['address', 'bytes32', 'bytes'], [getAddress(address), hashMessage(message), sig]).slice(2);
+    const r = await rpcRetry(() => rpc('eth_call', [{ data }, 'latest']));
+    if (r === '0x01') return { ok: true, kind: 'contract' };
+    if (r === '0x00') return { ok: false, why: 'mismatch' };
+    return { ok: false, why: 'chain' };
+  } catch (e) {
+    if (/revert/i.test(String((e && e.message) || e))) return { ok: false, why: !hasCode ? 'notOnChain' : 'mismatch' };
+    return { ok: false, why: 'chain' };
+  }
+}
+// the words for a refusal — what happened, and what to do; never the wallet's internals
+const signatureRefusal = (why) =>
+  why === 'notOnChain' ? 'this wallet signs as a smart-contract account that is not deployed on Robinhood Chain (it may live on Base or another chain), so its signature cannot be checked here — sign in with a regular wallet account (MetaMask, Rabby, Trust, or the Coinbase Wallet extension’s standard account)'
+  : why === 'chain' ? 'the chain could not be reached to check that signature — try again in a minute'
+  : 'signature does not match that address — request a new wallet signature and try again';
 // verify a signature against the message we issued for this address; returns the recovered address or an error string
 // `purpose` is REQUIRED to match what the challenge was issued for: a signature collected for one job can
 // never be replayed to do a different, more dangerous one.
-function consumeNonce(address, signature, purpose = 'signin') {
+async function consumeNonce(address, signature, purpose = 'signin') {
   const use = Object.prototype.hasOwnProperty.call(NONCE_PURPOSES, purpose) ? purpose : 'signin';
   const idx = bidx(address);
   const rows = db.prepare('SELECT * FROM wallet_challenges WHERE address = ? AND purpose = ? AND expires_at > ? ORDER BY expires_at DESC')
@@ -1575,15 +1653,15 @@ function consumeNonce(address, signature, purpose = 'signin') {
   // Try every live challenge for this wallet+job. Each one is still single-use and still bound to this
   // address and this purpose; there is simply more than one of them outstanding, so a stranger asking for
   // a challenge cannot invalidate the one somebody is signing right now.
+  let why = 'mismatch';
   for (const n of rows) {
     const message = decField(n.msg); if (!message) continue;
-    let recovered;
-    try { recovered = verifyMessage(message, sig).toLowerCase(); } catch { continue; }
-    if (recovered !== address) continue;
+    const v = await signatureIsValid(address, message, sig);
+    if (!v.ok) { if (v.why === 'notOnChain' || v.why === 'chain') why = v.why; continue; }
     db.prepare('DELETE FROM wallet_challenges WHERE address = ? AND purpose = ? AND nonce = ?').run(idx, use, n.nonce);
-    return { recovered };
+    return { recovered: address, kind: v.kind };
   }
-  return { error: 'signature does not match that address — request a new wallet signature and try again' };
+  return { error: signatureRefusal(why) };
 }
 function mutedNames(userId) { return db.prepare('SELECT u.username FROM mutes m JOIN users u ON u.id = m.muted_id WHERE m.user_id = ? ORDER BY u.username').all(userId).map(r => r.username); }
 
@@ -4874,6 +4952,7 @@ function gamifySummary(u) {
     arcade: arcadeState(u.id),        // today's Rocket Run boost — stacks on Holder × OG × community
     weekBoost: weekBoostState(u.id),  // last week's Biggest Sender prize, if any — stacks the same way
     checkedInToday: checkedInToday(u.id, u),
+    nextCheckinAt: nextCheckinAt(u.id, u),   // when the next check-in opens (24 h after the last), or null
     communities: db.prepare('SELECT c.id, c.name, c.symbol, c.token_addr, c.xp, c.status, c.demo, cm.conviction_xp FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ? AND cm.qualified = 1 ORDER BY cm.conviction_xp DESC').all(u.id).map(c => {
       const cl = commLevelInfo(c.xp), cv = commLevelInfo(c.conviction_xp);
       return { id: c.id, name: c.name, symbol: c.symbol, status: c.status, demo: !!c.demo, commLevel: cl.level, commInto: cl.intoLevel, commSpan: cl.spanLevel, conviction: { level: cv.level, title: convictionTitleFor(cv.level), into: cv.intoLevel, span: cv.spanLevel } };
@@ -4954,13 +5033,31 @@ function gamifySummary(u) {
   };
 }
 function ymd() { const d = new Date(now()); return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate(); }
-/* Did this account show up today? Read from users.checkin_at, which /api/checkin stamps whether or not the
-   award paid — never from points_events, which only records a check-in that was WORTH something. Falls back
-   to the ledger so accounts that checked in before this column existed are not read as absent on day one. */
+/* Did this account show up in the last 24 hours? Read from users.checkin_at, which /api/checkin stamps whether or
+   not the award paid — never from points_events, which only records a check-in that was WORTH something. Falls back
+   to the ledger so accounts that checked in before this column existed are not read as absent on day one. The
+   window is the check-in's own (CHECKIN_GAP_MS): "checked in" and "may check in again" are one question. */
+const CHECKIN_GAP_MS = 24 * 3600 * 1000;
 function checkedInToday(userId, row) {
   const u = row && row.checkin_at !== undefined ? row : db.prepare('SELECT checkin_at FROM users WHERE id = ?').get(userId);
-  if (u && u.checkin_at && dayNo(u.checkin_at) === dayNo()) return true;
+  if (u && u.checkin_at && now() - u.checkin_at < CHECKIN_GAP_MS) return true;
   return !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + userId + ':' + ymd());
+}
+/* Did this account show up, as DECAY asks it: a tap within the last 24 hours — paid or refused (visit_at), with a
+   sweep interval's slack, since the sweep runs at an unpublished tick in the first minutes after 00:00 UTC and a
+   member who taps the moment the window reopens can land a minute past it. The award gate and the button read
+   checkin_at alone (checkedInToday / nextCheckinAt): a refused tap must not push the next check-in out. */
+const SHOWED_UP_SLACK_MS = 15 * 60 * 1000;
+function showedUpRecently(userId, row) {
+  const u = row && row.checkin_at !== undefined && row.visit_at !== undefined ? row : db.prepare('SELECT checkin_at, visit_at FROM users WHERE id = ?').get(userId);
+  const last = Math.max((u && u.checkin_at) || 0, (u && u.visit_at) || 0);
+  if (last && now() - last < CHECKIN_GAP_MS + SHOWED_UP_SLACK_MS) return true;
+  return !!db.prepare('SELECT 1 FROM points_events WHERE ref = ?').get('daily:' + userId + ':' + ymd());
+}
+// when the next check-in opens (ms), or null when one is open now
+function nextCheckinAt(userId, row) {
+  const u = row && row.checkin_at !== undefined ? row : db.prepare('SELECT checkin_at FROM users WHERE id = ?').get(userId);
+  return (u && u.checkin_at && now() - u.checkin_at < CHECKIN_GAP_MS) ? u.checkin_at + CHECKIN_GAP_MS : null;
 }
 // ISO-ish UTC week key ("2026-W36") — the bucket the weekly community competition scores into
 function weekKey(t) {
@@ -11229,7 +11326,7 @@ async function verifyCurrentFactor(me, b) {
     if (refusal) return refusal;
     // this proves the CURRENT factor for a security change (disable 2FA, swap factor, add an email, link a
     // wallet), so a plain sign-in signature must not satisfy it
-    const sig = consumeNonce(address, b.signature, 'manage');
+    const sig = await consumeNonce(address, b.signature, 'manage');
     if (sig.error) return sig.error;
   }
   return null;
@@ -11269,7 +11366,7 @@ async function ownershipRefusal(me, b) {
     if (!/^0x[0-9a-f]{40}$/.test(addr)) return 'sign with the wallet you signed in with to make this change';
     if (!walletAddresses(me.id).includes(addr)) return 'sign with a wallet linked to this account';
     const tooNew = walletTooNew(me, addr); if (tooNew) return tooNew;
-    const sig = consumeNonce(addr, pick('signature'), 'manage');
+    const sig = await consumeNonce(addr, pick('signature'), 'manage');
     if (sig.error) return sig.error;
   }
   grantSudo(me);
@@ -11539,8 +11636,8 @@ function ticketFor(u) {
   const inviter = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
   const camp = (() => { try { return ogCampaign(); } catch { return null; } })();
   return {
-    number: u.id,
-    sendId: u.id,               // the same number, under the name the ticket prints: your Send ID
+    number: sendNoOf(u),
+    sendId: sendNoOf(u),        // the same number, under the name the ticket prints: your Send ID
     username: u.username,
     avatar: u.avatar || '🚀',
     avatarImg: u.avatar_img ? '/uploads/' + u.avatar_img : null,
@@ -12654,7 +12751,7 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('tshare:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
         db.prepare('UPDATE users SET ticket_public = 1, ticket_shared_at = COALESCE(ticket_shared_at, ?) WHERE id = ?').run(now(), me.id);
-        const url = SITE_ORIGIN + '/t/' + me.id;
+        const url = SITE_ORIGIN + '/t/' + sendNoOf(me);
         const text = 'I just got my ticket to Send on SendRH.com! 🎟️🚀';
         return send(res, 200, { ok: true, url, text,
           intent: 'https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url) });
@@ -12973,6 +13070,7 @@ const server = http.createServer(async (req, res) => {
             probation: probationOf(me), // "hold your bought $SEND" window after a redemption (null when none)
             callAllowance: callAllowance(me), // dynamic Send Call allowance (limit/used/remaining/resetAt + diamond boost)
             checkedInToday: checkedInToday(me.id, me),
+            nextCheckinAt: nextCheckinAt(me.id, me),
             arcade: arcadeState(me.id),        // today's Rocket Run boost (nav badge + arcade page)
             boost: effectiveMult(me.id),       // {holder, og, community, arcade, total} — the nav badge shows total
           },
@@ -13107,16 +13205,14 @@ const server = http.createServer(async (req, res) => {
         const addr = String(b.address || '').toLowerCase();
         const message = pend.messages && pend.messages[addr];
         if (!message) return bad(res, 'sign with a wallet linked to this account', 401);
-        let recovered;
-        try { recovered = verifyMessage(message, String(b.signature || '')).toLowerCase(); }
-        catch { return bad(res, 'bad signature'); }
-        if (recovered !== addr) return bad(res, 'signature does not match that wallet', 401);
-        if (!walletAddresses(u.id).includes(recovered)) return bad(res, 'that wallet is not linked to this account', 401);
+        const v = await signatureIsValid(addr, message, String(b.signature || ''));
+        if (!v.ok) return bad(res, v.why === 'bad' ? 'bad signature' : v.why === 'mismatch' ? 'signature does not match that wallet' : signatureRefusal(v.why), 401);
+        if (!walletAddresses(u.id).includes(addr)) return bad(res, 'that wallet is not linked to this account', 401);
         // Same rule the 2FA-management path enforces (verifyCurrentFactor): only a wallet linked BEFORE
         // two-factor was switched on counts as the second factor. Without this, an attacker holding a
         // stolen session cookie can link a fresh wallet of their own and then use it to satisfy 2FA —
         // which makes the factor worth nothing. Pre-migration rows (NULL timestamps) keep legacy behaviour.
-        const refusal = walletFactorRefusal(u, recovered);
+        const refusal = walletFactorRefusal(u, addr);
         if (refusal) return bad(res, refusal, 401);
         pendingLogins.delete(String(b.pending));
         return send(res, 200, { ok: true, username: u.username }, { 'Set-Cookie': sessionCookie(createSession(u.id, ipIdx(req))) });
@@ -13481,7 +13577,7 @@ const server = http.createServer(async (req, res) => {
            from b.signature; when the account already had wallet 2FA, verifyCurrentFactor above consumed its own
            nonce, so this takes a separate one issued for this address. */
         if (!alreadyProved) {
-          const proof = consumeNonce(addr, b.signature, '2fa-on');   // a sign-in signature cannot arm the lock
+          const proof = await consumeNonce(addr, b.signature, '2fa-on');   // a sign-in signature cannot arm the lock
           if (proof.error) return bad(res, proof.error, 401);
         }
         db.prepare("UPDATE users SET twofa_method = 'wallet', twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = ? WHERE id = ?").run(now(), me.id); // wallets linked after this instant can't serve as the factor
@@ -13515,7 +13611,7 @@ const server = http.createServer(async (req, res) => {
         const err2 = await verifyCurrentFactor(me, (b.current && typeof b.current === 'object') ? b.current : b); if (err2) return bad(res, err2, 401);   // nested: `address` here is the NEW wallet
         // Prove the NEW wallet too, exactly as enabling does — otherwise the lock could be pointed at an
         // address whose key is already lost, and the owner would find out at the next sign-in.
-        const proof = consumeNonce(next, b.newSignature, '2fa-on');
+        const proof = await consumeNonce(next, b.newSignature, '2fa-on');
         if (proof.error) return bad(res, proof.error, 401);
         setTwofaWallet(me.id, next);
         sudoOthersOff(me);
@@ -13779,7 +13875,7 @@ const server = http.createServer(async (req, res) => {
           const cur = Object.assign({}, b.current || {}); if (!cur.password && b.password) cur.password = b.password;
           const err = await ownershipRefusal(me, cur); if (err) return bad(res, 'to link a wallet, ' + err, 401);
         }
-        const sig = consumeNonce(address, b.signature, me ? 'link' : 'signin');   // signed in ⇒ this is a link, not a sign-in
+        const sig = await consumeNonce(address, b.signature, me ? 'link' : 'signin');   // signed in ⇒ this is a link, not a sign-in
         if (sig.error) return bad(res, sig.error, 401);
         let ident = findIdentity('wallet', address);
         // a SIGNED-IN user linking a wallet that already belongs to an account must never be silently switched to that
@@ -14697,14 +14793,22 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/checkin' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('checkin:' + me.id, 20, 6e5)) return bad(res, 'slow down', 429);
-        const ref = 'daily:' + me.id + ':' + ymd();
-        const already = checkedInToday(me.id);
-        // Stamp the visit FIRST and unconditionally. The award may legitimately pay 0 (the rolling social
-        // ceiling), and that must never make the day look like an absence to decay.
-        db.prepare('UPDATE users SET checkin_at = ? WHERE id = ?').run(now(), me.id);
-        if (already) return send(res, 200, { already: true, awarded: 0, checkedInToday: true });
-        const awarded = awardPoints(me.id, 'daily', PTS.daily, ref);          // idempotent per UTC day via the ref
-        return send(res, 200, { already: false, awarded, checkedInToday: true });
+        /* Once every 24 HOURS, from the last check-in — not once per UTC day, which let a check-in at 23:59 and
+           another at 00:01 pay twice two minutes apart. A refused tap does not move the stamp (it would push the
+           next one further away), it just says when the next one opens. The award's ref stays per UTC day: two
+           check-ins 24 hours apart can never share one. */
+        const row = db.prepare('SELECT checkin_at FROM users WHERE id = ?').get(me.id);
+        const last = (row && row.checkin_at) || 0;
+        if (last && now() - last < CHECKIN_GAP_MS) {
+          db.prepare('UPDATE users SET visit_at = ? WHERE id = ?').run(now(), me.id);   // showed up, though nothing was paid: decay must not read this day as absent
+          return send(res, 200, { already: true, awarded: 0, checkedInToday: true, checkedIn: true, nextAt: last + CHECKIN_GAP_MS });
+        }
+        // Stamp the visit FIRST. The award may legitimately pay 0 (the rolling social ceiling), and that must
+        // never make the day look like an absence to decay.
+        const at = now();
+        db.prepare('UPDATE users SET checkin_at = ?, visit_at = ? WHERE id = ?').run(at, at, me.id);
+        const awarded = awardPoints(me.id, 'daily', PTS.daily, 'daily:' + me.id + ':' + ymd());          // idempotent per UTC day via the ref
+        return send(res, 200, { already: false, awarded, checkedInToday: true, checkedIn: true, nextAt: at + CHECKIN_GAP_MS });
       }
       if (p === '/api/gamify/refresh' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
@@ -16253,13 +16357,13 @@ const server = http.createServer(async (req, res) => {
     const tc = /^\/t\/(\d+)\.png$/.exec(p);
     if (tc && (req.method === 'GET' || req.method === 'HEAD')) {
       if (!rateLimit('tcard:' + clientIp(req), 120, 6e4) || !rateLimit('tcard-site', 900, 6e4)) return bad(res, 'slow down', 429);   // F019: a site-wide bucket too — the render is the cost, whoever asks
-      const u = db.prepare('SELECT id, username, created_at, invited_by, ticket_public FROM users WHERE id = ? AND system = 0').get(Number(tc[1]));
+      const u = db.prepare('SELECT id, send_no, username, created_at, invited_by, ticket_public FROM users WHERE send_no = ? AND system = 0').get(Number(tc[1]));
       if (!u || !u.ticket_public) { notFoundPage(res); return; }
       const inv = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
       /* F019: the ETag is a hash of what the card is DRAWN FROM, computed before drawing, so a 304 and a
          HEAD cost nothing; and a drawn card is kept for a while, since the same ticket is fetched by every
          crawler and viewer of the share page. */
-      const key = [u.username, u.id, u.created_at, inv ? 1 : 0, 'v3'].join('|');   // v3: the inviter is no longer drawn   // v2: the site's brand, not a coin's
+      const key = [u.username, u.send_no, u.created_at, inv ? 1 : 0, 'v4'].join('|');   // v4: the Send ID, not the row id   // v3: the inviter is no longer drawn   // v2: the site's brand, not a coin's
       const etag = '"' + crypto.createHash('sha1').update(key).digest('base64url').slice(0, 20) + '"';
       const headBase = { 'Content-Type': 'image/png', 'ETag': etag, 'Cache-Control': 'public, max-age=600', ...SEC_HEADERS };
       delete headBase['X-Frame-Options'];   // a social card is fetched by crawlers and shown inside previews
@@ -16267,7 +16371,7 @@ const server = http.createServer(async (req, res) => {
       let hit = ticketCardCache.get(key);
       if (!hit || now() - hit.at > TICKET_CARD_TTL) {
         if (req.method === 'HEAD') { res.writeHead(200, headBase); return res.end(); }   // nothing to draw for a HEAD
-        let png; try { png = renderTicketCard({ username: u.username, sendId: u.id, joinedAt: u.created_at, invitedBy: inv && inv.username }); }
+        let png; try { png = renderTicketCard({ username: u.username, sendId: u.send_no, joinedAt: u.created_at, invitedBy: inv && inv.username }); }
         catch (e) { console.error('ticket card', e && e.message); return bad(res, 'could not draw that ticket', 500); }
         hit = { png, at: now() };
         if (ticketCardCache.size >= TICKET_CARD_MAX) ticketCardCache.delete(ticketCardCache.keys().next().value);   // oldest out
@@ -16279,14 +16383,15 @@ const server = http.createServer(async (req, res) => {
     }
     const tp = /^\/t\/(\d+)$/.exec(p);
     if (tp && (req.method === 'GET' || req.method === 'HEAD')) {
-      const u = db.prepare('SELECT id, username, created_at, invited_by, ticket_public FROM users WHERE id = ? AND system = 0').get(Number(tp[1]));
+      const u = db.prepare('SELECT id, send_no, username, created_at, invited_by, ticket_public FROM users WHERE send_no = ? AND system = 0').get(Number(tp[1]));
       if (!u || !u.ticket_public) { notFoundPage(res); return; }
       const inv = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
       const e = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-      const card = SITE_ORIGIN + '/t/' + u.id + '.png';
-      const title = '@' + u.username + ' has ticket #' + u.id + ' to Send';
+      const no = u.send_no;   // the Send ID: what the page, the card and the link all print
+      const card = SITE_ORIGIN + '/t/' + no + '.png';
+      const title = '@' + u.username + ' has ticket #' + no + ' to Send';
       // who invited them stays off the public page: the inviter never agreed to be named on someone else's share
-      const desc = 'Send ID #' + u.id + ' · joined ' + new Date(u.created_at).toISOString().slice(0, 10) +
+      const desc = 'Send ID #' + no + ' · joined ' + new Date(u.created_at).toISOString().slice(0, 10) +
                    '. JustSendIt is invite-only. Entertainment only — not financial advice.';
       const html = `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16294,21 +16399,21 @@ const server = http.createServer(async (req, res) => {
 <meta name="description" content="${e(desc)}">
 <meta name="robots" content="noindex, follow">
 <meta property="og:type" content="profile"><meta property="og:site_name" content="$Send — Just Send It"><meta property="og:locale" content="en_US">
-<meta property="og:url" content="${e(SITE_ORIGIN + '/t/' + u.id)}">
+<meta property="og:url" content="${e(SITE_ORIGIN + '/t/' + no)}">
 <meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}">
 <meta property="og:image" content="${e(card)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${e('A Just Send It ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
+<meta property="og:image:alt" content="${e('A Just Send It ticket to Send, number ' + no + ', belonging to @' + u.username)}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:site" content="@sendrh_">
 <meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(desc)}">
-<meta name="twitter:image" content="${e(card)}"><meta name="twitter:image:alt" content="${e('A Just Send It ticket to Send, number ' + u.id + ', belonging to @' + u.username)}">
+<meta name="twitter:image" content="${e(card)}"><meta name="twitter:image:alt" content="${e('A Just Send It ticket to Send, number ' + no + ', belonging to @' + u.username)}">
 <link rel="icon" href="/assets/logo-128.png">
 <link rel="stylesheet" href="/gate.css"><link rel="stylesheet" href="/invite.css">
 </head><body class="gate">
 <main class="inv-wrap" style="min-height:100vh;">
   <p class="inv-kicker">Invite only · Live beta</p>
-  <h1 class="inv-title">@${e(u.username)} has <span class="hl">ticket #${u.id}</span></h1>
-  <p class="inv-sub">Send ID <b>#${u.id}</b> — their place in line, set the day they joined.</p>
-  <img src="${e('/t/' + u.id + '.png')}" width="1200" height="630" alt="${e('Ticket #' + u.id + ' belonging to @' + u.username)}" style="max-width:100%;height:auto;border-radius:14px;">
+  <h1 class="inv-title">@${e(u.username)} has <span class="hl">ticket #${no}</span></h1>
+  <p class="inv-sub">Send ID <b>#${no}</b> — their place in line, set the day they joined.</p>
+  <img src="${e('/t/' + no + '.png')}" width="1200" height="630" alt="${e('Ticket #' + no + ' belonging to @' + u.username)}" style="max-width:100%;height:auto;border-radius:14px;">
   <div class="inv-actions"><a class="g-btn g-btn-primary" href="/" style="text-decoration:none;display:inline-flex;align-items:center;">Get your own ticket 🎟️</a></div>
   <p class="inv-note" style="max-width:52ch;text-align:center;">JustSendIt is invite-only — someone already inside has to hand you a code. 🎉 <b>Entertainment purposes only.</b> Memecoins are extremely volatile and most go to zero. Nothing here is financial advice. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.</p>
 </main>
@@ -16952,7 +17057,7 @@ function decayReasons(u, showedUp, streak) {
    what is protected, and what the person can actually do about each part. Nothing here is a prediction
    about the future — it is today's rules applied to today's state. */
 function decayState(u) {
-  const showedUp = checkedInToday(u.id, u);
+  const showedUp = showedUpRecently(u.id, u);
   const streak = showedUp ? 0 : (u.decay_streak || 0) + 1;
   const d = decayReasons(u, showedUp, streak);
   const points = u.points || 0;
@@ -16998,7 +17103,7 @@ function decayUser(u, today) {
   /* Read from the stamp, not the ledger. A check-in whose award the rolling social ceiling reduced to zero
      writes no points_events row, and this used to read that as "never showed up" — so the most active
      accounts on the site were the ones decay charged for being away. */
-  const showedUp = checkedInToday(u.id, u);
+  const showedUp = showedUpRecently(u.id, u);
 
   /* Showing up zeroes the absence streak. It does NOT zero the mute: read-only is a penalty the site
      imposed, and a penalty that stops costing anything the moment you tap one button is not a penalty.
@@ -17066,7 +17171,7 @@ function runDecaySweep() {
        starved however far behind the sweep falls, and the batch is large enough that the ceiling
        (500 × 288 ticks/day = 144,000 accounts/day) sits well above any plausible active roster.
        checkin_at is selected because decayUser needs it to tell showing up from being away. */
-    const rows = db.prepare(`SELECT id, points, decay_streak, restricted_until, restrict_level, checkin_at
+    const rows = db.prepare(`SELECT id, points, decay_streak, restricted_until, restrict_level, checkin_at, visit_at
                              FROM users WHERE decay_at < ? AND system = 0 ORDER BY decay_at ASC, id ASC LIMIT ?`).all(today, DECAY_BATCH);
     for (const u of rows) {
       try { const d = decayUser(u, today); users++; drained += d; } catch {}
@@ -17077,6 +17182,7 @@ function runDecaySweep() {
 }
 
 const decayTimer = setInterval(() => { try { settleBeta(); } catch {} try { runDecaySweep(); } catch {} }, 5 * 60 * 1000);
+assignSendNos();     // Send IDs for members from before the column, in the order they joined (a no-op after the first boot)
 sweepWalletHist();   // saved wallet histories: rows for wallets no longer tracked or linked go, and the total stays under its cap
 const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();

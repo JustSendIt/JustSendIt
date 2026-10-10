@@ -199,7 +199,9 @@
       if (!chosen) throw new Error('cancelled');
     }
     selected = chosen; remember(chosen);
-    const accts = await chosen.provider.request({ method: 'eth_requestAccounts' });
+    let accts;
+    try { accts = await chosen.provider.request({ method: 'eth_requestAccounts' }); }
+    catch (e) { throw explain(e); }
     if (!accts || !accts[0]) throw new Error('No account authorized');
     /* EVERY connect lands on Robinhood Chain — sign-in, linking a wallet, and the swap alike. It used to
        be the swap's job alone, so somebody who connected from anywhere else stayed on whatever network
@@ -213,13 +215,53 @@
     let chainOk = null;
     try { if (typeof window.ensureRobinhoodChain === 'function') chainOk = await window.ensureRobinhoodChain(chosen.provider, 'connect'); }
     catch { chainOk = false; }
+    /* The person who declined the prompt, or whose wallet is locked: say so — connect() is where the account was asked
+       for, so that refusal is a cancelled connect, not a chain problem. (eth_requestAccounts threw above; this is only
+       reached when it answered.) */
     return { provider: chosen.provider, address: accts[0], info: chosen.info, chainOk: chainOk };
   }
 
   function forget() { selected = null; try { localStorage.removeItem(LS_KEY); } catch {} }
 
+  /* ---- signing (read-only): one way, for every wallet ----
+     personal_sign's first parameter is DATA (EIP-191): the message's bytes, as hex. MetaMask and most wallets also
+     accept the plain text, but some refuse anything but hex ("message must be a hex string") — so the message goes
+     as hex everywhere, and a wallet that unexpectedly wants the text gets it on one more try. The wallet shows the
+     decoded text either way, and MetaMask still recognises the EIP-4361 sign-in message in it. The answer is passed
+     back as the wallet gave it: 65 bytes from a key, longer from a smart-contract wallet (ERC-1271 / ERC-6492) — the
+     server checks both. */
+  const utf8Hex = (s) => '0x' + Array.from(new TextEncoder().encode(String(s)), (b) => b.toString(16).padStart(2, '0')).join('');
+  const isHexSig = (s) => typeof s === 'string' && /^0x[0-9a-fA-F]{2,}$/.test(s);
+  const wantsText = (e) => { const m = String((e && e.message) || ''); return (e && (e.code === -32602 || e.code === -32000)) || /invalid param|must be a (utf-?8 )?string|not a hex|expected string/i.test(m); };
+  async function sign(provider, address, message) {
+    const p = provider || get();
+    if (!p) throw new Error('No wallet connected');
+    let sig;
+    try {
+      try { sig = await p.request({ method: 'personal_sign', params: [utf8Hex(message), address] }); }
+      catch (e) { if (!wantsText(e)) throw e; sig = await p.request({ method: 'personal_sign', params: [String(message), address] }); }
+    } catch (e) { throw explain(e); }
+    if (!isHexSig(sig)) throw new Error('the wallet did not return a signature — try again, or try another wallet');
+    return sig;
+  }
+  /* What a wallet's refusal means, in words a person can act on. Codes are EIP-1193 / EIP-1474; the message
+     tests cover wallets that use the code loosely. 'cancelled' is what every caller already treats as "say
+     nothing": the person closed the prompt themselves. Anything unrecognised is passed on as the wallet said it. */
+  function explain(e) {
+    // the words come from strings only: a wallet that rejects with a bare object (a code, a nested data.message) must not become "[object Object]"
+    const code = e && e.code, m = typeof e === 'string' ? e : String((e && (e.message || (e.data && e.data.message))) || '');
+    if (m === 'cancelled') return e;
+    if (code === 4001 || /user (rejected|denied|cancel|declined)|rejected the request|denied (message|transaction|account)/i.test(m)) return new Error('cancelled');
+    if (code === -32002 || /already pending|request already|already (processing|in progress)/i.test(m)) return Object.assign(new Error('Your wallet already has a request open — open the wallet, approve or dismiss it, then try again.'), { code });
+    if (code === 4100 || code === 4200 || /unsupported method|method not (supported|found)|unauthorized/i.test(m)) return Object.assign(new Error('This wallet can’t sign a message here — try another wallet.'), { code });
+    if (code === 4900 || code === 4901 || /disconnected|not connected|no accounts|unlock/i.test(m)) return Object.assign(new Error('Your wallet is locked or disconnected — unlock it, then try again.'), { code });
+    const out = new Error(m.replace(/^(MetaMask|Coinbase Wallet|Phantom|Rabby|Trust Wallet)[^:]*:\s*/i, '').trim() || 'the wallet could not do that');
+    if (code !== undefined) out.code = code;
+    return out;
+  }
+
   /* The curated registry, exposed so other surfaces (the How-to-Buy guide) can render the SAME list the
      picker shows. Copied, not shared, so a caller cannot mutate the registry the picker depends on. */
   function known() { return KNOWN.map(k => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '' })); }
-  window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected, known };
+  window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected, known, sign, explain };
 })();

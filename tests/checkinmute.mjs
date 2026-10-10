@@ -3,7 +3,9 @@
    calls is NOT newly charged. Throwaway accounts only; everything is deleted in the finally block. */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
-import { DB_PATH } from './_paths.mjs';
+import { readFileSync } from 'node:fs';
+import { DB_PATH, SERVER_JS } from './_paths.mjs';
+const SRC = readFileSync(SERVER_JS, 'utf8');
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -62,6 +64,25 @@ try {
   // a second tap the same UTC day pays nothing (idempotent), and still does not 403
   const again = await api('/api/checkin', { method: 'POST', sid: muted.sid });
   check('a second check-in the same day is idempotent, not an error', again.status === 200 && again.j.already === true, again.status);
+  check('  ...and says when the next one opens: 24 hours after the last', again.j.nextAt > Date.now() + 23.9 * 3600e3 && again.j.nextAt <= Date.now() + 24 * 3600e3 + 1000, again.j.nextAt);
+  /* Once every 24 HOURS, counted from the last check-in — not once per UTC day, which let 23:59 and 00:01 pay twice.
+     The stamp is moved back in the database to stand in for time passing. */
+  const stampOf = () => db.prepare('SELECT checkin_at FROM users WHERE id = ?').get(muted.id).checkin_at;
+  const stamp0 = stampOf();
+  db.prepare('UPDATE users SET checkin_at = ? WHERE id = ?').run(Date.now() - 23 * 3600e3 - 50 * 60e3, muted.id);   // 23 h 50 min ago: still inside the window
+  const soon = await api('/api/checkin', { method: 'POST', sid: muted.sid });
+  check('a check-in 23 h 50 min after the last is refused as already checked in — even across a UTC midnight', soon.status === 200 && soon.j.already === true && soon.j.awarded === 0, JSON.stringify(soon.j));
+  check('  ...and a refused tap does not move the stamp (that would push the next one further away)', Math.abs(stampOf() - (Date.now() - 23 * 3600e3 - 50 * 60e3)) < 5000, stampOf());
+  const visit = db.prepare('SELECT visit_at FROM users WHERE id = ?').get(muted.id).visit_at;
+  check('  ...but it does record the visit, which is what decay reads (a member who tapped is not away)', Date.now() - visit < 5000 && /const showedUp = showedUpRecently\(u\.id, u\);/.test(SRC) && /Math\.max\(\(u && u\.checkin_at\) \|\| 0, \(u && u\.visit_at\) \|\| 0\)/.test(SRC), visit);
+  check('  ...with the next one ten minutes away', soon.j.nextAt - Date.now() > 9 * 60e3 && soon.j.nextAt - Date.now() <= 10 * 60e3 + 1000, soon.j.nextAt - Date.now());
+  db.prepare('UPDATE users SET checkin_at = ? WHERE id = ?').run(Date.now() - 24 * 3600e3 - 60e3, muted.id);   // 24 h 1 min ago: the window has passed
+  db.prepare("DELETE FROM points_events WHERE user_id = ? AND kind = 'daily'").run(muted.id);   // the earlier award this run paid, so the next one can be seen to pay
+  const later = await api('/api/checkin', { method: 'POST', sid: muted.sid });
+  check('a check-in 24 h 1 min after the last is a new one, and is paid', later.status === 200 && later.j.already === false && later.j.awarded > 0, JSON.stringify(later.j));
+  check('  ...the stamp moved to now, and the next one is 24 hours out', Date.now() - stampOf() < 5000 && later.j.nextAt - stampOf() === 24 * 3600e3, later.j.nextAt - stampOf());
+  check('  ...the code: one window constant decides both "checked in" and "may check in again", and the dashboard says when (nextCheckinAt)', /const CHECKIN_GAP_MS = 24 \* 3600 \* 1000;/.test(SRC) && /if \(last && now\(\) - last < CHECKIN_GAP_MS\) \{\s*\n\s*db\.prepare\('UPDATE users SET visit_at = \? WHERE id = \?'\)\.run\(now\(\), me\.id\);[^\n]*\n\s*return send\(res, 200, \{ already: true, awarded: 0, checkedInToday: true, checkedIn: true, nextAt: last \+ CHECKIN_GAP_MS \}\);/.test(SRC) && /if \(u && u\.checkin_at && now\(\) - u\.checkin_at < CHECKIN_GAP_MS\) return true;/.test(SRC) && /nextCheckinAt: nextCheckinAt\(u\.id, u\),/.test(SRC));
+  db.prepare('UPDATE users SET checkin_at = ? WHERE id = ?').run(stamp0 || Date.now(), muted.id);   // as it was, for the checks below
 
   // ---- 2. an unmuted account is unaffected ----
   const plain = mkUser('__ci_plain__', 100000);
