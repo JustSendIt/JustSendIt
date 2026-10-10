@@ -6670,12 +6670,14 @@ let pairsCache = { pairs: [], updatedAt: 0, building: false, error: null };
 const namedToken = (sym, name) => !!(sym && sym !== '???' && name && name !== 'Unknown Token');
 const identifiedPair = (p) => !!(p && p.token && namedToken(p.token.symbol, p.token.name));
 let pairsRefreshing = false;
+const _pairsWarn = { at: 0, n: 0 };
 
 async function scanNewPairs() {
-  const latest = parseInt(await rpc('eth_blockNumber', []), 16);
+  // the block number is asked again on a refusal; the log walk below already halves and retries on its own
+  const latest = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16);
   const from = pairsScanBlock ? pairsScanBlock + 1 : Math.max(0, latest - 2500000);
   if (from > latest) return;
-  const logs = await getLogsChunked(FACTORY, PAIRCREATED_TOPIC, from, latest);
+  const logs = await getLogsChunked(FACTORY, PAIRCREATED_TOPIC, from, latest);   // not wrapped in rpcRetry: it halves on any error, and a retry around that multiplies the calls
   for (const l of logs) {
     if (!l.data || !l.topics || l.topics.length < 3) continue;
     pairsRaw.push({
@@ -6763,19 +6765,22 @@ const SPOT_TTL = 900;
 const SPOT_NEG_TTL = 60 * 1000;   // a definite "that is not a pool" is remembered too, so junk lookups cost one chain read, not one per request
 const SPOT_CACHE_MAX = 20000;     // hard cap: the key is caller-supplied, so this map must never be allowed to grow freely
 const SPOT_BATCH_MAX = 40;        // pairs answered in one /api/spot read — more than fit on any screen
-const pairQuoteCache = new Map(); // pair -> quote token address; a pool's two sides never change
+const pairQuoteCache = new Map(); // pair -> the pool's quote token, as the radar found it (a record; pairQuote works the quote out from the layout)
 /* Which side of the pool is the money side. Needed because spotPrice returns a price DENOMINATED IN THE QUOTE
    ASSET, while every price this site stores and compares against — a Send Call's entry, a market cap — is in
    USD. Dividing one by the other silently produces a number thousands of times wrong, which is exactly the
    sort of figure this site must never put in front of anyone. */
+/* The OTHER side of the pool from the token asked about. Worked out on every call from the pool's layout (which is
+   what is cached, and is the same whoever asks) — it used to be cached per pool from whichever token asked FIRST, so
+   one anonymous /api/price?token=WETH on the $SEND pool stored $SEND as that pool's quote, and the $SEND dollar price
+   read null everywhere (the holder gate, the buy-out, the cards) until a restart. A token not in the pool has no quote. */
 async function pairQuote(pairAddr, tokenAddr) {
-  const k = lcAddr(pairAddr);
-  if (pairQuoteCache.has(k)) return pairQuoteCache.get(k);
   const { token0, token1 } = await pairTokens(pairAddr);
   if (!token0 || !token1) return null;
-  const q = lcAddr(token0) === lcAddr(tokenAddr) ? lcAddr(token1) : lcAddr(token0);
-  pairQuoteCache.set(k, q);
-  return q;
+  const t = lcAddr(tokenAddr);
+  if (lcAddr(token0) === t) return lcAddr(token1);
+  if (lcAddr(token1) === t) return lcAddr(token0);
+  return null;
 }
 /* The live spot price in USD, or null. Null when the pool is unreadable OR when its quote asset is one we
    cannot price — an unknown quote is reported as unknown rather than passed off as dollars. */
@@ -6822,20 +6827,36 @@ async function spotPrice(pairAddr, tokenAddr) {
   const flying = spotInflight.get(key);
   if (flying) return flying;
   const pr = (async () => {
-    const [res, t0, decT] = await Promise.all([
-      getReserves(pairAddr),
-      ethCall(pairAddr, '0x0dfe1681'),        // token0()
+    /* A refused read THROWS here, so nothing is cached and the next tick asks again. This used to read the
+       reserves and token0() through the swallowing ethCall: a 429 on getReserves came back as null and was
+       remembered for a minute as a definite "not a pool", and a 429 on token0() made the token look like
+       token1, so the price was drawn upside down. A revert or an empty answer is still a definite no. */
+    const definite = (fn) => rpcRetry(fn).catch((e) => { if (/revert|invalid opcode/i.test(String((e && e.message) || e))) return null; throw e; });
+    const [res, layout, decT] = await Promise.all([
+      definite(() => ethCallStrict(pairAddr, '0x0902f1ac')),    // getReserves()
+      pairLayoutStrict(pairAddr),                               // token0()/token1(): a refusal throws, an empty side is definite
       tokenDecimals(tokenAddr),
     ]);
-    if (!res) return null;
-    const token0 = t0 ? '0x' + String(t0).slice(-40).toLowerCase() : null;
-    const tokenIsZero = token0 === String(tokenAddr).toLowerCase();
-    const tokRes = tokenIsZero ? res.r0 : res.r1;
-    const quoRes = tokenIsZero ? res.r1 : res.r0;
+    if (!res || res === '0x' || res.length < 130) return null;  // the chain answered: not a v2 pool
+    if (!layout.token0 || !layout.token1) return null;          // the chain answered: not a v2 pair (a refusal would have thrown)
+    const tok = String(tokenAddr).toLowerCase();
+    if (layout.token0 !== tok && layout.token1 !== tok) return null;    // a pool, but not this token's
+    if (decT == null) throw new Error('the token decimals could not be read');
+    const tokenIsZero = layout.token0 === tok;
+    const r0 = BigInt('0x' + res.slice(2, 66)), r1 = BigInt('0x' + res.slice(66, 130));
+    const tokRes = tokenIsZero ? r0 : r1;
+    const quoRes = tokenIsZero ? r1 : r0;
     if (tokRes === 0n) return null;
-    const dT = decT != null ? decT : 18;
-    const t = Number(tokRes) / Math.pow(10, dT);
-    const q = Number(quoRes) / Math.pow(10, 18);   // WETH/USDG legs are 18 on this chain's pairs
+    /* The quote leg's decimals, read rather than assumed — the same rule buildCandlesFresh follows. WETH is 18;
+       the Global Dollar stablecoin is not, and assuming 18 there moved a USDG-quoted price by a factor of 10^12. */
+    const quoteAddr = tokenIsZero ? layout.token1 : layout.token0;
+    let decQ = 18;
+    if (quoteAddr === USDG_ADDR) {
+      if (usdgDecimals == null) { const ud = await tokenDecimals(USDG_ADDR); if (ud != null) usdgDecimals = ud; }
+      decQ = usdgDecimals != null ? usdgDecimals : 6;
+    }
+    const t = Number(tokRes) / Math.pow(10, decT);
+    const q = Number(quoRes) / Math.pow(10, decQ);
     if (!(t > 0) || !(q > 0)) return null;
     return q / t;
   })().then((val) => {
@@ -6867,6 +6888,8 @@ function pruneCache(map, max, ttl, stampOf) {
 }
 function sweepOpenCaches() {
   pruneCache(chartCache, 2000, CHART_TTL * 20, v => v.at);
+  pruneCache(chartLastGood, 300, CHART_STALE_MAX_MS, v => v.at);
+  pruneCache(chartFailAt, 2000, CHART_FAIL_PERM_MS, v => v.at);
   pruneCache(_contractCache, 2000, CONTRACT_TTL, v => v.t);
   pruneCache(dextoolsCache, 2000, 60 * 60 * 1000, v => v.at);
   pruneCache(marketCache, 5000, 60 * 60 * 1000, v => v.at);
@@ -7114,57 +7137,121 @@ const candleKey = (pairAddr, tokenAddr, tfKey, hours) => pairAddr + ':' + tokenA
    The per-IP limit stops none of that (they are four hundred different IPs) and `max-age=30` is a hint
    to a browser, not a bound on our RPC bill. Holding the in-flight promise makes the cost flat in
    audience size, which is the only version of this that survives the site being busy. */
+/* One address's logs over any span. The public node allows one eth_getLogs over at most PHIST_WINDOW_MAX
+   blocks (10,000,000, measured) — the 4h and 1d charts ask for 720 hours, about 26,000,000 blocks, and were
+   refused every time — so a wider span is read in pieces, a refused piece is tried again (rpcRetry), and a
+   piece the node calls too big or too slow to answer (TOO_MANY_RE) is halved, down to 100,000 blocks.
+   Pieces are read one after another, in order, so the result is the same list the one call would have been.
+   One chart request may spend at most LOG_SPAN_CALLS calls and LOG_SPAN_MS on this; past either it gives up
+   rather than walking a busy pair in thousands of slices while a visitor waits. */
+const LOG_SPAN_CALLS = 40, LOG_SPAN_MS = 40 * 1000, LOG_SPAN_FLOOR = 100000;
+async function getLogsSpan(address, topics, from, to, budget) {
+  const b = budget || { calls: 0, until: now() + LOG_SPAN_MS };
+  if (to - from + 1 > PHIST_WINDOW_MAX) {
+    const mid = from + PHIST_WINDOW_MAX - 1;
+    return (await getLogsSpan(address, topics, from, mid, b)).concat(await getLogsSpan(address, topics, mid + 1, to, b));
+  }
+  // too many pieces is the window's size — permanent for this request; out of time is the node being slow — a passing failure
+  if (++b.calls > LOG_SPAN_CALLS) throw new Error('log read too large for one request');
+  if (now() > b.until) throw Object.assign(new Error('the chain is answering too slowly for this window just now'), { transient: true });
+  try { return await rpcRetry(() => rpc('eth_getLogs', [{ address, topics, fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16) }])); }
+  catch (e) {
+    if (TOO_MANY_RE.test(String((e && e.message) || e)) && to - from >= 2 * LOG_SPAN_FLOOR) {
+      const mid = Math.floor((from + to) / 2);
+      return (await getLogsSpan(address, topics, from, mid, b)).concat(await getLogsSpan(address, topics, mid + 1, to, b));
+    }
+    throw e;
+  }
+}
+/* A read that failed for a reason that may pass on its own: the node refusing (429/403), a 5xx, a timeout, a
+   dropped connection. A revert, a bad address or a wrong pool is not one of these and is never retried. */
+const chainTransient = (e) => { const m = String((e && e.message) || e); return !!(e && e.transient) || isThrottle(e) || (!/revert/i.test(m) && /rpc http 5\d\d|aborted|timed? ?out|terminated|ECONNRESET|ECONNREFUSED|fetch failed|socket|other side closed/i.test(m)); };
 const chartInflight = new Map();
+/* The last chart drawn for each request, kept apart from chartCache (which the maintenance sweep empties
+   after ten minutes) so a refused read can still fall back to it. Capped at 300 charts and six hours. */
+const chartLastGood = new Map();
+const chartFailAt = new Map();          // key -> { at, soft } — the last read that came back refused
+const CHART_FAIL_COOL_MS = 15 * 1000, CHART_FAIL_PERM_MS = 5 * 60 * 1000;
 async function buildCandles(pairAddr, tokenAddr, tfKey, hours) {
   const key = candleKey(pairAddr, tokenAddr, tfKey, hours);
   const hit = chartCache.get(key);
   if (hit && now() - hit.at < chartTtlFor(CHART_TF[tfKey])) return hit.data;
   const live = chartInflight.get(key);
   if (live) return live;
-  const job = buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours);
+  /* Refused a moment ago: answer from what is known rather than queueing another four reads behind the
+     same refusal — every visitor would otherwise wait out the whole back-off again. */
+  const failed = chartFailAt.get(key);
+  if (failed && now() - failed.at < (failed.transient ? CHART_FAIL_COOL_MS : CHART_FAIL_PERM_MS)) {
+    const st = staleChart(chartLastGood.get(key), hours);
+    if (st) return st;
+    if (failed.transient) throw Object.assign(new Error('the chain did not answer a moment ago'), { transient: true });
+    throw new Error('this chart could not be read a moment ago');   // not passing: remembered for five minutes, not re-read on every ask
+  }
+  const job = buildCandlesPatiently(pairAddr, tokenAddr, tfKey, hours, key);
   chartInflight.set(key, job);
   // attached at creation, not at the first await, so the slot is released no matter who is still waiting
   job.catch(() => {}).finally(() => { chartInflight.delete(key); });
   return job;
 }
-async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
+/* The public node refuses reads in bursts (HTTP 429), and a person is looking at the box this fills. Both
+   charts on the home page answered 502 on the same page load for exactly that reason: one refused read, no
+   second try, no memory of the chart drawn a few minutes earlier. So a read that failed for a passing reason
+   is tried again, briefly, and when it keeps failing, the last chart this server drew is shown with its age
+   said out loud — `stale`, `asOf`, and a `staleNote` the widget prints in its status line — because a chart
+   from four minutes ago is worth more than an error and is never passed off as current. How old a chart may
+   be and still stand in follows its window: ten minutes at least, the window's own length, six hours at most
+   (a three-minute 1s chart from five hours ago would say nothing true). Its own `note` is left as it was. */
+const CHART_RETRIES = 3, CHART_STALE_MAX_MS = 6 * 3600 * 1000;
+function staleChart(last, hours) {
+  if (!last) return null;
+  const maxAge = Math.min(CHART_STALE_MAX_MS, Math.max(10 * 60 * 1000, hours * 3600 * 1000));
+  const age = now() - last.at;
+  if (age >= maxAge) return null;
+  const mins = Math.max(1, Math.round(age / 60000));
+  // ageMs and staleMaxMs are measured here, on the server's clock, so a visitor's wrong clock cannot misstate the age
+  return { ...last.data, stale: true, asOf: last.at, ageMs: age, staleMaxMs: maxAge,
+           staleNote: 'The chain is not answering reads just now, so this is the chart as it stood ' + mins + ' minute' + (mins === 1 ? '' : 's') + ' ago.' };
+}
+async function buildCandlesPatiently(pairAddr, tokenAddr, tfKey, hours, key) {
+  /* One TIME limit for the whole request; the call count starts again with each attempt, so retries cannot add up to
+     "too large" for a window a single pass reads comfortably — "too large" stays a fact about the window. */
+  const until = now() + LOG_SPAN_MS;
+  let err = null;
+  for (let i = 0; i <= CHART_RETRIES; i++) {
+    if (i) await new Promise((r) => setTimeout(r, 1200 * i));
+    try { const d = await buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours, { calls: 0, until }); chartFailAt.delete(key); return d; }
+    catch (e) { err = e; if (!chainTransient(e) || e.noRetry) break; }   // a passing failure is tried again; anything else is not
+  }
+  chartFailAt.set(key, { at: now(), transient: chainTransient(err) });
+  const st = staleChart(chartLastGood.get(key), hours);   // whatever went wrong, a recent chart beats an error
+  if (st) return st;
+  throw err;
+}
+async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours, budget) {
   const tf = CHART_TF[tfKey] || 3600;
   const key = candleKey(pairAddr, tokenAddr, tfKey, hours);
 
-  const headHex = await rpc('eth_blockNumber', []);
+  const headHex = await rpcRetry(() => rpc('eth_blockNumber', []));
   const head = parseInt(headHex, 16);
   if (!head) return null;
   const BLOCKS_PER_SEC = 10;                      // ~0.1s blocks, measured
   const span = Math.min(head, Math.round(hours * 3600 * BLOCKS_PER_SEC));
-  const fromBlock = '0x' + Math.max(0, head - span).toString(16);
 
-  const [logs, t0, t1, decT] = await Promise.all([
-    rpc('eth_getLogs', [{ address: pairAddr, topics: [SWAP_TOPIC], fromBlock, toBlock: 'latest' }]),
-    ethCall(pairAddr, '0x0dfe1681'),              // token0()
-    ethCall(pairAddr, '0xd21220a7'),              // token1()
+  /* The layout FIRST, and read strictly: a refused read throws (a passing failure, retried), a revert or an empty
+     answer is a definite "no such side". A wrong pool is then known before the log read, which is the expensive
+     part — the swallowing reads this used could not tell a refusal from a contract that is not a pair. */
+  const layout = await pairLayoutStrict(pairAddr);
+  const token0 = layout.token0, token1 = layout.token1;
+  const tokLc = String(tokenAddr).toLowerCase();
+  if (token0 !== tokLc && token1 !== tokLc) return null;   // read fine, and this token is not in this pool: the route turns null into a 502
+  const [logs, decT] = await Promise.all([
+    getLogsSpan(pairAddr, [SWAP_TOPIC], Math.max(0, head - span), head, budget),
     tokenDecimals(tokenAddr),
   ]);
   if (!Array.isArray(logs)) return null;
-  const token0 = t0 ? '0x' + String(t0).slice(-40).toLowerCase() : null;
-  const token1 = t1 ? '0x' + String(t1).slice(-40).toLowerCase() : null;
-  const tokLc = String(tokenAddr).toLowerCase();
-  /* Orientation decided by BOTH reads, not by one. token0() alone silently answers "false" when the read
-     fails — and false means "the token is token1", which inverts every buy into a sell and every price
-     into its reciprocal, drawing a confident chart of the wrong thing.
-
-     The two failures are not the same failure, so they do not get the same answer. An UNREADABLE layout
-     (the RPC 429s, which this chain's public endpoint does readily) is transient: say so and try again.
-     A layout that reads fine and does not contain this token is the WRONG POOL, and there is nothing to
-     draw at any point in the future. */
-  if (token0 !== tokLc && token1 !== tokLc) {
-    if (!token0 && !token1) {
-      const qvE = await quoteValue(pairAddr, tokenAddr).catch(() => ({ symbol: null, usd: null }));
-      return { pair: pairAddr, token: tokenAddr, tf: tfKey, tfSec: tf, quote: qvE.symbol, quoteUsd: qvE.usd, ethUsd: null,
-               candles: [], swaps: 0, source: 'on-chain Swap events', trades: [], traders: {},
-               note: 'The chain would not say which way round this pair is just now — that read is rate-limited. Nothing is drawn rather than drawing it backwards. Try again in a moment.' };
-    }
-    return null;   // read fine, and this token is not in this pool: the route turns null into a 502
-  }
+  /* Orientation decided by BOTH reads, not by one: token0() alone answering "false" would mean "the token is token1",
+     which inverts every buy into a sell and every price into its reciprocal. pairLayoutStrict throws when either read
+     is refused, so a layout that reaches here has both sides read. */
   const tokenIsZero = token0 === tokLc;
   const decToken = decT;                          // null means the chain would not say — see the tape guard below
   /* The quote leg's decimals, read rather than assumed. WETH is 18; the Global Dollar stablecoin is NOT
@@ -7228,10 +7315,9 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
   // "now" would silently pile every trade into one candle and render a confident-looking chart that
   // is entirely wrong — worse than no chart. Say so instead.
   if (logs.length && !known.length) {
-    const qv0 = await quoteValue(pairAddr, tokenAddr);
-    return { pair: pairAddr, token: tokenAddr, tf: tfKey, tfSec: tf, quote: qv0.symbol, quoteUsd: qv0.usd, ethUsd: await ethUsd(),
-             candles: [], swaps: logs.length, source: 'on-chain Swap events',
-             note: 'Found ' + logs.length + ' swaps but could not read block times from the chain just now, so they cannot be placed on a timeline. Try again in a moment.' };
+    // a passing failure, not an answer: thrown so the read is tried again and a recent chart can stand in
+    // passing, but not re-run here: the probes already had their own retry, and a whole re-read is up to 400 more calls
+    throw Object.assign(new Error('found ' + logs.length + ' swaps but the chain did not answer the block-time reads'), { transient: true, noRetry: true });
   }
   const tsFor = (b) => {
     if (!known.length) return now();
@@ -7440,6 +7526,7 @@ async function buildCandlesFresh(pairAddr, tokenAddr, tfKey, hours) {
       : 'No swaps on this pair in the window, so there is nothing to chart yet.',
   };
   chartCache.set(key, { at: now(), data });
+  chartLastGood.delete(key); chartLastGood.set(key, { at: now(), data });   // re-inserted, so the 300-chart cap drops the least recently drawn
   return data;
 }
 
@@ -8415,7 +8502,12 @@ async function refreshPairs() {
   if (pairsRefreshing) return;
   pairsRefreshing = true;
   try { await scanNewPairs(); await enrichPairs(); }
-  catch (e) { pairsCache.error = e.message || 'refresh failed'; pairsCache.building = false; }
+  catch (e) {
+    pairsCache.error = e.message || 'refresh failed'; pairsCache.building = false;
+    // said in the log, once per five minutes with a count — it used to fail without a word
+    _pairsWarn.n++;
+    if (now() - _pairsWarn.at >= 5 * 60 * 1000) { console.warn('[pairs] the new-pairs sweep failed: ' + pairsCache.error + (_pairsWarn.n > 1 ? ' (' + _pairsWarn.n + ' failed sweeps since the last note)' : '')); _pairsWarn.at = now(); _pairsWarn.n = 0; }
+  }
   finally { pairsRefreshing = false; }
 }
 
@@ -8529,6 +8621,18 @@ function fetchAndStore(tok, opts = {}) {           // single-flight live lookup 
 }
 /* a pool's token order is fixed at creation; both reads succeeding is remembered for the process life */
 const _pairTokensCache = new Map();
+/* The same two reads, strictly: a refusal THROWS (after rpcRetry), a revert or an empty answer is a definite null side.
+   For callers that must tell "the node said no" from "this is not a pair" — the chart and the live price. */
+async function pairLayoutStrict(pairAddr) {
+  const k = String(pairAddr || '').toLowerCase();
+  const hit = _pairTokensCache.get(k); if (hit) return hit;
+  const definite = (d) => rpcRetry(() => ethCallStrict(pairAddr, d)).catch((e) => { if (/revert|invalid opcode/i.test(String((e && e.message) || e))) return '0x'; throw e; });
+  const dec = (r) => (r && r.length >= 66) ? ('0x' + r.slice(26, 66)).toLowerCase() : null;
+  const [t0, t1] = await Promise.all([definite('0x0dfe1681'), definite('0xd21220a7')]);
+  const v = { token0: dec(t0), token1: dec(t1) };
+  if (v.token0 && v.token1) { pruneCache(_pairTokensCache, 20000); _pairTokensCache.set(k, v); }
+  return v;
+}
 async function pairTokens(pairAddr) {                          // token0() 0x0dfe1681 / token1() 0xd21220a7 → authoritative V2 ordering
   const k = String(pairAddr || '').toLowerCase();
   const hit = _pairTokensCache.get(k); if (hit) return hit;
@@ -8653,7 +8757,7 @@ async function poolVerified(addr, pt, pair) {
 async function scanRead(tok) {
   let r;
   try { r = await lookupTokenPair(tok, { maxAgeMs: SCAN_FRESH_MS, liveMaxAgeMs: SCAN_FRESH_MS, lowPriority: true }); }
-  catch (e) { r = { unavailable: true, reason: (e && e.message) || 'lookup failed', busy: !!(e && e.status === 503) }; }
+  catch (e) { r = { unavailable: true, reason: (e && e.status) ? e.message : chainTransient(e) ? 'the chain is not answering reads just now' : 'lookup failed', busy: !!(e && e.status === 503) }; }   // fixed words, never a raw exception
   const row = tokenCacheGet(tok);
   if (r && r.pair) {
     // when it was actually read: a radar copy says so itself (readAt), a cached row its updated_at (the time the DATA
@@ -8799,6 +8903,9 @@ async function _doLookup(tokenAddr) {
      carry, so it says it could not check, and the callers serve what they last read, labelled. A token the
      feed answered about but does not index (dexr.ok, arr empty) is still profiled — that is a fact, not a gap. */
   if (!dexr.ok && !p.indexed && (!p.market || p.market.priceUsd == null)) return { unavailable: true, reason: dexr.reason || 'price feed unreachable' };
+  /* The same outage for a house coin the feed does not list: it is priced only from its own pool, so when that read
+     failed the pair came back unpriced with dexr.ok — and was cached as a finding, a priceless $GWC with $0 volume. */
+  if (ownPoolOf(tokenAddr) && !p.indexed && (!p.market || p.market.priceUsd == null)) return { unavailable: true, reason: 'the pool could not be read just now' };
   // if this token is only the QUOTE side of its pool, Dexscreener's price/FDV/mcap describe the OTHER token → drop them
   if (!tokenIsBase) { p.market.priceUsd = null; p.market.fdv = null; p.market.marketCap = null; p.brand = brandFromDex(null); p._quoteSide = true; } // enhanced info/branding belongs to the base token, not this quote-side token
   p._lookup = true; // marks a searched token (not necessarily a brand-new pair)
@@ -9859,7 +9966,7 @@ const OPTIONAL_MEDIA = {
 };
 function notFoundPage(res) {
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title><meta name="robots" content="noindex">' +
-    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;font:16px/1.5 Rubik,system-ui,sans-serif;text-align:center;padding:2rem}h1{font-size:2.2rem;margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
+    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;--text-floor:16px;font-family:Rubik,system-ui,sans-serif;font-size:max(var(--text-floor),1rem);line-height:1.5;text-align:center;padding:2rem}h1{font-size:max(var(--text-floor),2.2rem);margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
     '<body><main><h1>🚀 That page didn’t send.</h1><p>We couldn’t find what you were looking for.</p><a href="/">Back to $Send home →</a></main></body></html>';
   res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html) });
   res.end(html);
@@ -10606,10 +10713,10 @@ async function burnedWei(token) {
 /* One pool, read in full: the live reserves, the 24-hour price path, and the day's swaps. Throws on a failed
    read — the callers turn that into null, "could not read", and a failed read is never cached. */
 async function readPoolState(token, pair) {
-  const headHex = await rpc('eth_blockNumber', []);
+  const headHex = await poolCall(() => rpc('eth_blockNumber', []));
   const head = parseInt(headHex, 16);
   if (!(head > 0)) throw new Error('no block number');
-  const [t0, decT, res, headTs] = await Promise.all([ethCallStrict(pair, '0x0dfe1681'), tokenDecimals(token), ethCallStrict(pair, '0x0902f1ac'), blockTime(head)]);
+  const [t0, decT, res, headTs] = await Promise.all([poolCall(() => ethCallStrict(pair, '0x0dfe1681')), tokenDecimals(token), poolCall(() => ethCallStrict(pair, '0x0902f1ac')), poolCall(() => blockTime(head))]);
   const token0 = '0x' + String(t0 || '').slice(-40).toLowerCase();
   const d = String(res || '').replace(/^0x/, '');
   const r0 = hex32(d, 0), r1 = hex32(d, 1);
@@ -10626,14 +10733,14 @@ async function readPoolState(token, pair) {
   if (!(spot > 0)) throw new Error('empty pool');
   // where the window opens: the block rate is ~10/s but not promised, so one probe measures it
   const guess = Math.max(1, head - Math.round(POOL_WINDOW_MS / 1000 * 10));
-  const guessTs = await blockTime(guess);
+  const guessTs = await poolCall(() => blockTime(guess));
   if (!guessTs || guessTs >= headTs) throw new Error('block times unreadable');
   const rate = (head - guess) / (headTs - guessTs);                       // blocks per ms, measured
   const from = Math.max(1, head - Math.round(POOL_WINDOW_MS * rate));
   const tsOf = (n) => headTs - (head - n) / rate;                           // straight-line between two measured points
   const [syncs, swaps] = await Promise.all([
-    rpc('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: headHex }]),
-    rpc('eth_getLogs', [{ address: pair, topics: [SWAP_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: headHex }]),
+    poolCall(() => rpc('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: headHex }])),
+    poolCall(() => rpc('eth_getLogs', [{ address: pair, topics: [SWAP_TOPIC], fromBlock: '0x' + from.toString(16), toBlock: headHex }])),
   ]);
   if (!Array.isArray(syncs) || !Array.isArray(swaps)) throw new Error('logs unreadable');
   const path = syncs.map((l) => { const x = String(l.data || '').replace(/^0x/, ''); return { t: tsOf(parseInt(l.blockNumber, 16)), p: px(hex32(x, 0), hex32(x, 1)) }; }).filter((q) => q.p > 0);
@@ -10643,7 +10750,7 @@ async function readPoolState(token, pair) {
     let span = Math.round(POOL_WINDOW_MS * rate), to = from - 1;
     while (openP == null && span <= POOL_LOOKBACK_MAX_MS * rate && to > 1) {
       const lo = Math.max(1, to - span);
-      const back = await rpc('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: '0x' + lo.toString(16), toBlock: '0x' + to.toString(16) }]);
+      const back = await poolCall(() => rpc('eth_getLogs', [{ address: pair, topics: [SYNC_TOPIC], fromBlock: '0x' + lo.toString(16), toBlock: '0x' + to.toString(16) }]));
       if (!Array.isArray(back)) throw new Error('logs unreadable');
       if (back.length) { const x = String(back[back.length - 1].data || '').replace(/^0x/, ''); openP = px(hex32(x, 0), hex32(x, 1)); break; }
       to = lo - 1; span *= 2;
@@ -10672,6 +10779,25 @@ async function readPoolState(token, pair) {
     circulating: supplyWei != null && burned != null ? Number(supplyWei - burned) / 10 ** decT : null,
   };
 }
+/* The public node refuses reads in bursts (HTTP 429). A pool read is about nine calls, and one refused call
+   failed the whole read, so the home page's pool cards went blank far more often than the node was actually
+   down. Each call in readPoolState is now asked once more after a second when it is refused (poolCall). A read
+   that still fails answers null, exactly as before — a price the chain would not give is never stood in for
+   by an older one: Send Calls, the badges and the gates all read this, and an old price there is a wrong
+   price — and, as before, a failed read is never cached: the next caller reads again. The refusals are said in the log once per five minutes with a count, not once per read: 749
+   identical lines told the owner nothing the first one had not. */
+const POOL_WARN_EVERY_MS = 5 * 60 * 1000;
+const _poolWarn = new Map();                        // sym -> { at, n }
+function poolWarn(sym, e) {
+  const w = _poolWarn.get(sym) || { at: 0, n: 0 };
+  w.n++;
+  if (now() - w.at >= POOL_WARN_EVERY_MS) {
+    console.warn('[pool] ' + sym + ' could not be read: ' + ((e && e.message) || e) + (w.n > 1 ? ' (' + w.n + ' failed reads since the last note)' : ''));
+    w.at = now(); w.n = 0;
+  }
+  _poolWarn.set(sym, w);
+}
+function poolCall(fn) { return fn().catch(async (e) => { if (!isThrottle(e)) throw e; await new Promise((r) => setTimeout(r, 1000)); return fn(); }); }
 async function poolState(token) {
   const own = ownPoolOf(token); if (!own) return null;
   const k = String(token).toLowerCase();
@@ -10680,7 +10806,7 @@ async function poolState(token) {
   if (poolStateInflight.has(k)) return poolStateInflight.get(k);
   const job = readPoolState(k, own.pair)
     .then((v) => { poolStateCache.set(k, v); return v; })
-    .catch((e) => { console.warn('[pool] ' + own.sym + ' could not be read: ' + ((e && e.message) || e)); return null; })
+    .catch((e) => { poolWarn(own.sym, e); return null; })
     .finally(() => poolStateInflight.delete(k));
   poolStateInflight.set(k, job);
   return job;
@@ -11536,13 +11662,14 @@ function settleBeta() {
 }
 
 /* ===== Invite-only gate =============================================================================
-   The site is closed. A visitor needs a code; redeeming one gives them a pass cookie, and accepting the
-   terms on that pass opens the door. When they later make an account the code binds to it, they are
-   given INVITE_GRANT codes of their own, and their user id becomes their place in line.
+   Reading is open to everyone 18+; a code is needed only to make an account. Redeeming one gives the
+   visitor a pass cookie (and, only with TOS_GATE=1, a terms step on that pass). When they make an account
+   the code binds to it, they are given INVITE_GRANT codes of their own, and assignSendNo gives them their
+   Send ID (users.send_no) — their place in line, not their row id.
 
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
-   are for. This decides who may see the site at all. */
-const TOS_VERSION = '2026-09-11';
+   are for. This decides who may make an account. */
+const TOS_VERSION = '2026-10-10';
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
@@ -11614,13 +11741,10 @@ function passRow(req) {
 }
 const passCookie = (tok) => `${PASS_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(PASS_MS / 1000)}${cookieSecure()}`;
 
-/* May this request see the site? A signed-in account always may — it is already inside, and locking out
-   the people who are already here is not a gate, it is an outage. Otherwise: a pass that has accepted
-   the terms. */
-/* The ticket: who they are, what number they were through the door, and how long Gold OG has left.
-   "Number in line" is deliberately the user id — it is already monotonic, already unique, and already
-   means "how early you were", so inventing a second counter would only create a way for the two to
-   disagree. */
+/* May this pass make an account? A signed-in account is already inside. Otherwise: a redeemed pass, and — only
+   with TOS_GATE=1 — one that has accepted the terms. Reading the site needs none of this (it is open to 18+). */
+/* The ticket: who they are, their Send ID (users.send_no — their place in line among members, not the row id,
+   which also counts the site's own account), and how long Gold OG has left. */
 /* The ticket wears the SITE's brand — the green S-rocket mark and the $Send wordmark, drawn from files this
    site ships — not a coin's Dexscreener banner, so nothing about it needs a third party's artwork. */
 function ticketFor(u) {
@@ -12635,8 +12759,7 @@ function healthCheck() {
   const out = { ok: true, db: 'ok', disk: 'ok' };
   try {
     const st = fs.statfsSync(DATA_DIR);
-    const free = st.bavail * st.bsize;
-    out.freeBytes = free;
+    const free = st.bavail * st.bsize;   // checked, not published: the exact free space told anyone how close the disk was to full
     if (free < DISK_SAFETY_MARGIN) { out.ok = false; out.disk = 'low'; }
   } catch { out.disk = 'unknown'; }   // statfs unavailable on this platform is not a failure
   try {
@@ -12849,6 +12972,9 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/config' && req.method === 'GET') {
         return send(res, 200, {
           media: OPTIONAL_MEDIA,   // X04: the theme song and the feature video ship outside git; pages hide what is not here
+          /* the versions of the files auth.js injects at sign-up time: the HTML rewriter versions every file a page names,
+             but these three are added by script, so they went out bare — and Cloudflare kept a bare file for four hours */
+          assets: { 'gate.css': assetVer('gate.css'), 'invite.css': assetVer('invite.css'), 'invite.js': assetVer('invite.js') },
           features: { voiceMemos: VOICE_MEMOS },
           auth: {
             wallet: true, email: true,
@@ -13040,6 +13166,11 @@ const server = http.createServer(async (req, res) => {
         }
       }
       if (p === '/api/me' && req.method === 'GET') {
+        /* A visitor with no session cookie at all is simply signed out: every page asks this on load, and a 401
+           there printed a red "Failed to load resource" in every signed-out visitor's console on every page. A
+           session cookie that no longer names a session still answers 401 — that one means "you were signed
+           in and are not any more", and the page signs itself out on it. */
+        if (!me && !parseCookies(req.headers.cookie).sid) return send(res, 200, { user: null });
         if (!me) return bad(res, 'not signed in', 401);
         return send(res, 200, {
           user: {
@@ -14861,7 +14992,7 @@ const server = http.createServer(async (req, res) => {
         const hash = String(b.txHash || '').toLowerCase();
         if (!/^0x[0-9a-f]{64}$/.test(hash)) return bad(res, 'bad tx hash');
         let rcpt, head;
-        try { rcpt = await rpc('eth_getTransactionReceipt', [hash]); head = BigInt(await rpc('eth_blockNumber', []) || '0x0'); }
+        try { rcpt = await rpcRetry(() => rpc('eth_getTransactionReceipt', [hash])); head = BigInt(await rpcRetry(() => rpc('eth_blockNumber', [])) || '0x0'); }
         catch { return bad(res, 'could not verify the transaction', 502); }
         if (!rcpt || rcpt.status !== '0x1') return bad(res, 'transaction not found or unsuccessful');
         const from = (rcpt.from || '').toLowerCase(), to = (rcpt.to || '').toLowerCase();
@@ -14996,7 +15127,7 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('spot:' + clientIp(req), 240, 6e4)) return bad(res, 'slow down', 429);
         let price = null, why = null;
         try { price = await spotPrice(pair, token); if (price == null) why = 'could not read the pair reserves'; }
-        catch (e) { why = (e && e.message) || 'chain read failed'; }
+        catch (e) { why = chainTransient(e) ? 'the chain is not answering reads just now' : ((e && e.message) || 'chain read failed'); }
         let qv = { symbol: null, usd: null };
         try { qv = await quoteValue(pair, token); } catch {}
         return send(res, 200, { pair, token, price, why, quote: qv.symbol, quoteUsd: qv.usd, ethUsd: await ethUsd(), at: now() }, { 'Cache-Control': 'no-store' });
@@ -15036,11 +15167,18 @@ const server = http.createServer(async (req, res) => {
            need short windows — that is what makes them honest — so fractional hours are allowed, with a
            floor of about seventy seconds so the parameter still cannot be used to ask for nothing. */
         const hours = Math.min(720, Math.max(0.02, Number(url.searchParams.get('hours')) || 168));
-        let data; try { data = await buildCandles(pair, token, tf, hours); } catch (e) { return bad(res, 'could not read the chain', 502); }
+        let data; try { data = await buildCandles(pair, token, tf, hours); }
+        catch (e) {
+          /* A passing failure answers 200 with { retry: true }: Cloudflare swaps an origin 502's JSON for its own
+             "error code: 502", and every 5xx is a red line in the visitor's console. The widget reads retry and asks again. */
+          if (chainTransient(e)) return send(res, 200, { pair, token, tf, error: 'the chain is not answering reads just now', retry: true });
+          return bad(res, 'could not read the chain', 502);
+        }
         if (!data) return bad(res, 'could not read the chain', 502);
         /* The HTTP cache follows the candle for the same reason the server cache does: thirty seconds in
-           front of a one-second chart is thirty stale candles served as live. */
-        const maxAge = CHART_TF[tf] <= 60 ? 2 : 30;
+           front of a one-second chart is thirty stale candles served as live. A stale answer is barely
+           cached at all, so the widget's next ask reaches the server once the node answers again. */
+        const maxAge = data.stale ? 5 : CHART_TF[tf] <= 60 ? 2 : 30;
         return send(res, 200, data, { 'Cache-Control': 'public, max-age=' + maxAge });
       }
       /* ===== Chart markers: what PEOPLE did, on the same time axis as the price =======================
@@ -15144,7 +15282,12 @@ const server = http.createServer(async (req, res) => {
               : 'No indexed trading pair or WETH/USDG pool found for this address.',
           });
           return send(res, 200, { pair: r.pair, risk: Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])), community: communityForToken(token) });
-        } catch (e) { return bad(res, (e && e.message) || 'lookup failed — try again', (e && e.status) || 502); }
+        } catch (e) {
+          // a designed refusal (an HttpError: busy, bad address) says its own words; anything else is logged, not echoed
+          if (e && e.status) return bad(res, e.message, e.status);
+          console.error('[lookup] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | '));
+          return bad(res, 'lookup failed — try again', 502);
+        }
       }
       /* Sendy's chat. Signed out or in, rate-limited per address, per account and site-wide (it is a paid call). */
       if (p === '/api/sendy/ask' && req.method === 'POST') {
@@ -15252,7 +15395,12 @@ const server = http.createServer(async (req, res) => {
             if (r2.unavailable) return send(res, 200, { unavailable: true, reason: r2.reason || null, message: 'That looks like a pool, but the chain could not be read just now — try again in a moment.' });
           }
           return send(res, 200, { notFound: true, reason: r.reason || null, message: 'No token or pool found at this address on Robinhood Chain — the chain itself says so. It may be a wallet, a contract that is not a token, or an address on another chain (other chains are coming soon).' });
-        } catch (e) { return bad(res, (e && e.message) || 'scan failed — try again', (e && e.status) || 502); }
+        } catch (e) {
+          // a designed refusal (an HttpError: busy, bad address) says its own words; anything else is logged, not echoed
+          if (e && e.status) return bad(res, e.message, e.status);
+          console.error('[scan] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | '));
+          return bad(res, 'scan failed — try again', 502);
+        }
       }
       // Public: the last few tokens anyone scanned — the token, when, how many times. Never who.
       if (p === '/api/scan/recent' && req.method === 'GET') {
@@ -15338,8 +15486,11 @@ const server = http.createServer(async (req, res) => {
         // either coin the feed does not price comes from its own pool (source: 'reserves'), so the cards are never blank
         const pairs = await withOwnPools(j && Array.isArray(j.pairs) ? j.pairs : [], [TOK.SEND, TOK.GWC]);
         if (!pairs.length) return bad(res, 'market data could not be read right now', 502);
-        // and the guarded price the $100 check, the OG badge and swap rewards value at right now (null = cannot say)
-        const [cs, cg] = await Promise.all([guardedPriceUsd(TOK.SEND), guardedPriceUsd(TOK.GWC)]);
+        /* and the guarded price the $100 check, the OG badge and swap rewards value at right now (null = cannot say) —
+           from a pool read made in the last POOL_TTL only. This used to START a full pool read for each coin on every
+           home-page poll, for a field no page reads; under a burst of refusals that doubled the node traffic. */
+        const fromRead = (tok) => { const c = poolStateCache.get(tok); return c && now() - c.at < POOL_TTL ? guardedPriceUsd(tok) : null; };
+        const [cs, cg] = await Promise.all([fromRead(TOK.SEND), fromRead(TOK.GWC)]);
         return send(res, 200, { schemaVersion: (j && j.schemaVersion) || '1.0.0', pairs, checkPrices: { SEND: cs, GWC: cg } });
       }
       if (p === '/api/chain/dex-tokens' && req.method === 'GET') {   // the tracker's price batch (≤30 tokens)
@@ -16248,9 +16399,10 @@ const server = http.createServer(async (req, res) => {
         try {
           let sendWei = 0n, gwcWei = 0n, ethWei = 0n;
           for (const a of addrs) {
-            sendWei += await erc20Balance(TOK.SEND, a);
-            gwcWei += await erc20Balance(TOK.GWC, a);
-            ethWei += BigInt(await rpc('eth_getBalance', [a, 'latest']) || '0x0');
+            // each read asked again on a refusal: the public node turns one in three away in a burst
+            sendWei += await rpcRetry(() => erc20Balance(TOK.SEND, a));
+            gwcWei += await rpcRetry(() => erc20Balance(TOK.GWC, a));
+            ethWei += BigInt(await rpcRetry(() => rpc('eth_getBalance', [a, 'latest'])) || '0x0');
           }
           const v = { wallets: addrs.length, send: Number(sendWei) / 1e18, gwc: Number(gwcWei) / 1e18, eth: Number(ethWei) / 1e18 };
           balCache.set(me.id, { t: now(), v });
@@ -16503,7 +16655,25 @@ const server = http.createServer(async (req, res) => {
 // --- crash-resistance under load: a single bad request or stray async error must never take the whole server down ---
 process.on('uncaughtException', (e) => { console.error('uncaughtException (kept alive):', e && e.stack || e); });
 process.on('unhandledRejection', (e) => { console.error('unhandledRejection (kept alive):', e && e.stack || e); });
-server.on('clientError', (err, socket) => { try { if (socket.writable) socket.end('HTTP/1.1 400 Bad Request\r\n\r\n'); } catch {} }); // malformed HTTP → 400, no crash
+/* Node times out a connection that has sent nothing for headersTimeout and reports it here as
+   ERR_HTTP_REQUEST_TIMEOUT. cloudflared keeps such connections on purpose: Go dials one per request in
+   flight and pools the ones that lost the race to an idle socket, unused. Answering one of those with a
+   400 made cloudflared log "Unsolicited response received on idle HTTP channel" at every 30-second check
+   (its log carried hundreds), and a request that happened to pick that socket at that instant got the 400.
+   A socket that never sent a byte is simply closed; a request that stalled mid-headers gets the 408 the
+   RFC names (what Node's own handler writes); malformed HTTP still gets its 400. */
+server.on('clientError', (err, socket) => {
+  try {
+    const code = err && err.code;
+    if (code === 'ECONNRESET' || !socket.writable) { socket.destroy(); return; }
+    if (code === 'ERR_HTTP_REQUEST_TIMEOUT') {
+      if (!(socket.bytesRead > 0)) { socket.destroy(); return; }
+      socket.end('HTTP/1.1 408 Request Timeout\r\nConnection: close\r\n\r\n', () => socket.destroy());   // written, then closed — as Node's own handler does
+      return;
+    }
+    socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n', () => socket.destroy());
+  } catch {}
+});
 server.keepAliveTimeout = 65000;   // keep sockets warm a bit longer than a typical LB (60s) so we don't 502 on reuse
 server.headersTimeout = 66000;     // must exceed keepAliveTimeout (slowloris protection on the header phase)
 server.requestTimeout = 60000;     // hard cap on any single request
@@ -16526,7 +16696,7 @@ const walTimer = setInterval(() => {
 walTimer.unref();
 
 // Daily on-disk snapshot of the DB via node:sqlite's online backup API — consistent, and it yields to the event loop
-// between 256-page steps so requests never stall. One file per UTC day in data/backups (or BACKUP_DIR), last 7 kept,
+// between 256-page steps so requests never stall. One file per UTC day in data/backups (or BACKUP_DIR), the last 3 kept (7 when BACKUP_DIR is outside the data directory),
 // written to .part and renamed so a crash can't leave a half-written snapshot. RESTORE: stop the server, copy the
 // snapshot over data/app.db, delete any app.db-wal / app.db-shm beside it, start. data/uploads still needs its own copy.
 const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
@@ -17188,7 +17358,7 @@ const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();
 
 // Graceful shutdown: stop taking new connections, let in-flight requests finish, then checkpoint + close SQLite
-// cleanly (folds the WAL back in — prevents bloat/corruption across zero-downtime deploys) and exit.
+// cleanly (folds the WAL back in — prevents bloat/corruption across restarts and deploys) and exit.
 // The DB close is idempotent and runs on BOTH the clean-drain path AND the force backstop, so a real deploy
 // (which sends SIGTERM while requests are in-flight and keep-alive sockets linger) still gets a clean DB.
 let shuttingDown = false, dbClosed = false;
@@ -17226,7 +17396,7 @@ function productionChecks() {
     if (!IS_HTTPS && process.env.COOKIE_SECURE !== '1') warn('Serving over http and COOKIE_SECURE!=1 — session cookies will NOT be marked Secure. Set COOKIE_SECURE=1 behind TLS termination.');
     if (!process.env.SEED_INVITE_CODE && !db.prepare('SELECT 1 FROM invite_codes LIMIT 1').get()) warn('SEED_INVITE_CODE unset on a fresh deploy — a random seed code was generated and printed above; set SEED_INVITE_CODE to choose it (F018).');
     if ((process.env.HOST || '127.0.0.1') !== '127.0.0.1' && !TRUST_PROXY_HOPS) warn('HOST=' + process.env.HOST + ' binds beyond loopback while TRUST_PROXY is unset — if anything but your proxy can reach this port, per-IP limits key on whatever the peer says. Set TRUST_PROXY, or keep HOST=127.0.0.1 behind a same-box proxy.');
-    if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin.html). Set it to your user id once you have signed up.');
+    if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin.html). Set it to your database row id (users.id, not your Send ID) once you have signed up.');
     if (SENDY_KEY) console.log('🚀 Sendy answers questions with ' + SENDY_MODEL + ' — a question, its page and that chat go to the model provider (see /privacy.html#p8)');
     else warn('ANTHROPIC_API_KEY is empty — Sendy answers from its built-in notes only. Set it to let Sendy answer any question about the site (SENDY_MODEL picks the model).');
     if (!TRUST_PROXY_HOPS) warn('TRUST_PROXY unset — behind a reverse proxy, rate limits & the community anti-sybil gate will key on the proxy IP, not real clients. Set TRUST_PROXY to your proxy hop count (1 for a single proxy).');

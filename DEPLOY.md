@@ -64,7 +64,7 @@ PORT=8642
 COOKIE_SECURE=1
 TRUST_PROXY=1            # Caddy alone. Cloudflare in front of Caddy = 2 (see .env.example)
 SEED_INVITE_CODE=<pick one, or read the generated code from the first boot's log>
-ADMIN_USER_IDS=<your user id once you have signed up — unlocks /admin.html>
+ADMIN_USER_IDS=<your database row id (users.id, not your Send ID) once you have signed up — unlocks /admin.html>
 RPC_URL=<a keyed chain endpoint — Alchemy serves chain 4663>
 BLOCKSCOUT_URL=<a keyed explorer — free key at dev.blockscout.com>
 ```
@@ -294,16 +294,16 @@ CF_API_TOKEN=<the token>
 4. From your own machine: `npm run live-check -- https://sendrh.com`. It checks the things above — the
    policy, the redirects, the cookie flag, that Cloudflare is in front, that nothing was injected, that the
    data vendors answer from the origin — and exits non-zero on anything a visitor would hit.
-5. Sign up with the seed code (you are Send ID #1 — Send IDs count members in the order they joined and skip the site's own account; your database row id is a different number), put your user id in
-   `ADMIN_USER_IDS`, restart. Only then hand out codes.
+5. Sign up with the seed code (you are Send ID #1 — Send IDs count members in the order they joined and skip the site's own account; your database row id is a different number), put your database row id — not your Send ID — in
+   `ADMIN_USER_IDS` (`sqlite3 -readonly data/app.db "SELECT id FROM users WHERE send_no = 1"`), restart. Only then hand out codes.
 6. Point `BACKUP_DIR` off the volume and copy it to R2 or elsewhere on a schedule (below).
 
 ---
 
 ## Backups that survive losing the box
 
-The app already snapshots SQLite hourly, safely (an online backup between 256-page steps, so requests never
-stall), keeping the last 7 days. By default those land in `data/backups` — **on the same volume as the
+The app already snapshots SQLite once a day (it checks every hour and writes the day's file if it is missing), safely (an online backup between 256-page steps, so requests never
+stall), keeping the last 3 when they sit inside the data directory, or 7 when `BACKUP_DIR` points outside it (put that on another disk: the code only checks the path). By default those land in `data/backups` — **on the same volume as the
 database they protect**. That covers corruption and a bad migration. It does not cover losing the volume,
 which is the failure that actually ends a site.
 
@@ -372,7 +372,7 @@ never written to a log line, and is never sent anywhere but Telegram. If it leak
   requests, checkpoints the WAL, and exits cleanly — no corruption, no WAL bloat.
 - **Backups (built in):** `data/app.db` is your entire user base. The server itself writes one consistent snapshot
   per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite's online backup API via `node:sqlite` — safe while
-  running, never blocks requests; the last 7 are kept; set `BACKUP_DIR` to move them). **Copy that directory
+  running, never blocks requests; one a day, the last 3 kept inside the data directory, 7 when `BACKUP_DIR` points outside it; set `BACKUP_DIR` to move them). **Copy that directory
   off-box** (object storage / rsync) on a schedule, and copy `data/uploads/` alongside it — avatars, headers and
   post media live there and are referenced from the DB.
 - **The data key:** personal data in `app.db` is encrypted under `DATA_KEY`. Keep the key in the environment (not in

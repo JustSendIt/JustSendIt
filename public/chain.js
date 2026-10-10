@@ -190,10 +190,12 @@ function fmtUsd(n, small) {
 
 /* ---- landing page token cards ---- */
 async function initTokenCards() {
+  let missing = Object.keys(TOKENS);
   try {
     const pairs = await fetchPairs();
+    missing = [];
     for (const key of Object.keys(TOKENS)) {
-      const p = pairs[key]; if (!p) continue;
+      const p = pairs[key]; if (!p) { missing.push(key); continue; }
       const price = document.getElementById('price-' + key);
       const chg = document.getElementById('chg-' + key);
       const liq = document.getElementById('liq-' + key);
@@ -204,7 +206,7 @@ async function initTokenCards() {
         const c = p.priceChange && p.priceChange.h24 != null ? Number(p.priceChange.h24) : null;
         if (c != null) {
           chg.textContent = (c >= 0 ? '▲ +' : '▼ ') + c.toFixed(2) + '% (24h)';
-          chg.classList.add(c >= 0 ? 'up' : 'down');
+          chg.classList.remove('up', 'down'); chg.classList.add(c >= 0 ? 'up' : 'down');   // a re-read never leaves both
         } else chg.remove();
       }
       if (liq && p.liquidity) liq.innerHTML = 'Liquidity <b>' + fmtUsd(p.liquidity.usd) + '</b>';
@@ -228,6 +230,15 @@ async function initTokenCards() {
       }
     }
   } catch (e) { console.warn('price load failed', e); }
+  /* A price that could not be read says so instead of shimmering until the page is reloaded, and the cards ask
+     again every 30 seconds while the page is on screen (a hidden tab waits until it is shown). */
+  for (const key of missing) {
+    const price = document.getElementById('price-' + key);
+    if (price && price.classList.contains('skeleton')) { price.classList.remove('skeleton'); price.textContent = '—'; }
+    const chg = document.getElementById('chg-' + key);
+    if (chg && !chg.classList.contains('up') && !chg.classList.contains('down')) chg.textContent = 'Price not read yet — trying again';
+  }
+  if (missing.length) setTimeout(function again() { if (document.hidden) { setTimeout(again, 15000); return; } initTokenCards(); }, 30000);
 }
 // only trust Dexscreener's own CDN (matches the CSP img-src allow-list) and reject any URL that could break out of markup
 // token artwork arrives as our own /api/img path (the server rewrites every CDN URL it sends); a raw CDN URL is

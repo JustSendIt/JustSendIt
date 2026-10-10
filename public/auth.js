@@ -25,7 +25,9 @@
       return api(path, Object.assign({}, opts, { _verified: true }));
     }
     if (!res.ok) {
-      const e = new Error(j.error || ('request failed (' + res.status + ')'));
+      /* no JSON came back: Cloudflare answers an origin 502/504 with its own "error code: 502" page, so the server's
+         words never arrive — say what is known in plain words rather than "request failed (502)" */
+      const e = new Error(j.error || (res.status >= 500 ? 'The site could not finish that just now — try again in a minute.' : 'request failed (' + res.status + ')'));
       e.status = res.status;
       e.code = j.code;      // machine-readable refusals (need_invite, need_tos, code_spent, daily_limit…)
       if (j.verifyNeeds) e.verifyNeeds = j.verifyNeeds;   // a wrong "confirm it's you" answer says what the step needs now
@@ -77,6 +79,7 @@
           <input class="addr-input" id="w-pw2" type="password" autocomplete="new-password" placeholder="••••••••">
         </details>
         <label class="w-opt"><input type="checkbox" id="w-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
+        <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms.html" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy.html" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
       </div>
       <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
@@ -93,6 +96,7 @@
           <label class="f-label" for="f-username">Pick your @username <span class="f-hint">— your public name; sign in with it or your email</span></label>
           <input class="addr-input" id="f-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
           <p class="modal-note" id="uname-status" aria-live="polite"></p>
+          <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms.html" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy.html" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
         </div>
         <label class="f-label" for="f-email" id="f-email-label">Email or username</label>
         <input class="addr-input" id="f-email" type="text" autocomplete="username" placeholder="you@example.com or your @handle">
@@ -158,6 +162,7 @@
         <a class="oauth-btn" id="oauth-instagram" href="/api/auth/instagram" hidden data-tip="Sends you to Instagram to sign in, then back here" aria-label="Continue with Instagram">
           <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><path fill="url(#ig-g)" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 01-1.38-.9 3.7 3.7 0 01-.9-1.38c-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0 1.62c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19a3.6 3.6 0 00-.88-1.35 3.6 3.6 0 00-1.35-.88c-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 2.76a5.46 5.46 0 110 10.92 5.46 5.46 0 010-10.92zm0 9a3.54 3.54 0 100-7.08 3.54 3.54 0 000 7.08zm6.95-9.22a1.28 1.28 0 11-2.55 0 1.28 1.28 0 012.55 0z"/></svg></span><span class="oauth-name">Instagram</span></a>
       </div>
+      <p class="modal-note auth-terms">Making an account this way means you are 18 or over and accept the <a href="/terms.html" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy.html" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
     </div>
     <!-- The way in for somebody who was handed a code. Without it, a person holding an invite has to
          guess that "Sign up" is what opens the ticket — and this line also tells everyone else, in one
@@ -201,12 +206,15 @@
     if (window.INVITE) return Promise.resolve(window.INVITE);
     if (invitePromise) return invitePromise;
     invitePromise = new Promise((resolve, reject) => {
+      // versioned like every file a page names, so a deploy reaches the sign-up the moment it lands (see /api/config)
+      const av = (AUTH.config && AUTH.config.assets) || {};
+      const vd = (f) => '/' + f + (av[f] ? '?v=' + encodeURIComponent(av[f]) : '');
       const link = document.createElement('link');
-      link.rel = 'stylesheet'; link.href = '/gate.css'; document.head.appendChild(link);
+      link.rel = 'stylesheet'; link.href = vd('gate.css'); document.head.appendChild(link);
       const link2 = document.createElement('link');
-      link2.rel = 'stylesheet'; link2.href = '/invite.css'; document.head.appendChild(link2);
+      link2.rel = 'stylesheet'; link2.href = vd('invite.css'); document.head.appendChild(link2);
       const sc = document.createElement('script');
-      sc.src = '/invite.js';
+      sc.src = vd('invite.js');
       sc.onload = () => window.INVITE ? resolve(window.INVITE) : reject(new Error('invite failed to load'));
       sc.onerror = () => reject(new Error('invite failed to load'));
       document.head.appendChild(sc);
@@ -1197,8 +1205,10 @@
 
   let lastMeStatus = 0;   // a definite 401 from /api/me means the session is gone; anything else is weather
   async function refresh() {
-    try { AUTH.user = AUTH._normMe((await api('/api/me')).user); lastMeStatus = 200; }
+    // { user: null } is the server's word for "no session cookie at all": as definite a sign-out as a 401
+    try { AUTH.user = AUTH._normMe((await api('/api/me')).user) || null; lastMeStatus = AUTH.user ? 200 : 401; }
     catch (e) { AUTH.user = null; lastMeStatus = (e && e.status) || 0; }
+    AUTH.signedOut = lastMeStatus === 401;   // definitely signed out — not "the server could not be asked just now"
   }
   // re-read /api/me and repaint the nav badge — for anything that changes points or the boost stack out of band
   // (an arcade boost expiring, a cash-out in another tab). Never throws: a failed refresh just leaves the badge.

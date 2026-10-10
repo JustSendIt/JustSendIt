@@ -71,6 +71,8 @@ try {
       /addEventListener\('focusout',[\s\S]*?\}, true\)/.test(code));
     check('  ...with no delay, so it is in the tree before a screen reader announces the control',
       /focusin'[\s\S]{0,220}?clearTimeout\(showTimer\);\s*show\(el\)/.test(code));
+    check('  ...on every focus (a screen reader moving focus sends no keys), but a description a SCRIPT\'s focus showed lets the same Escape close its dialog',
+      /shownBy = Date\.now\(\) - navKeyAt < 500 \? 'nav' : 'script';/.test(code) && /if \(shownBy === 'script'\) \{ hide\(\); return; \}/.test(code) && /navKeyAt = \/\^\(Tab\|Arrow\|Home\$\|End\$\|Page\)\/\.test\(e\.key\) \? Date\.now\(\) : 0;/.test(code));
   }
 
   /* ═══════════ 4. it describes, it does not re-label ═══════════ */

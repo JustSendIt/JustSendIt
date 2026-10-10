@@ -88,6 +88,13 @@ async function trkChainWallet(addr, say, fresh, isStale) {
       const how = j.resumable ? 'it goes on from where it stopped' : j.saved === 'complete' ? 'it reads on from the saved history — only what is new' : 'it starts over';
       if (say) say((j.reason === 'timeout' ? 'the chain read timed out' : 'the chain node refused the read for too long') + ' — asking again in a minute (' + how + ')', infoOf(j, { stage: 'throttled', throttled: 1 }));
       wait = 65000; until = Date.now() + STALL + wait;
+    } else if (res && res.status === 502 && !(j && j.error) && retried < 3) {
+      /* Cloudflare answers an origin 502 with its own "error code: 502" in place of the server's JSON, so the reason and
+         the checkpoint never arrive. The likeliest cause is the node refusing reads, so it is treated as that: asked again
+         in a minute, as a Refresh (never a second Rebuild), at most three times. */
+      retried++; accepted = false; if (fresh === 2) fresh = 1;
+      if (say) say('the chain could not be read just now — asking again in a minute' + (fresh === 1 && retried === 1 ? ', as a Refresh that reads on from what is saved' : ''), infoOf(j, { stage: 'throttled', throttled: 1 }));
+      wait = 65000; until = Date.now() + STALL + wait;
     } else {
       throw new Error((j && j.error) || 'the chain could not be read right now — try again in a minute');
     }

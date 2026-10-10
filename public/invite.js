@@ -849,7 +849,7 @@
       bindCopy(list);
       host.querySelector('#inv-dash-note').innerHTML =
         'Tap an unused code to copy it. <b>Each code works once</b> — a used one is shown here for the record and can’t be copied, because it will never work again. ' +
-        'Your Send ID is <span class="inv-sendid">#' + Number(t.sendId).toLocaleString('en-US') + ' <small>Send ID</small></span> — your place in line, set when you joined, and it never changes. ' +
+        'Your Send ID is <span class="inv-sendid">#' + Number(t.sendId).toLocaleString('en-US') + '</span> — your place in line, set when you joined, and it never changes. ' +
         '<button class="linklike" type="button" id="inv-dash-dl" data-tip="Draws your ticket as an image and saves it to your device">Download your ticket 📥</button>';
       state.ticket = t;
       const dl = host.querySelector('#inv-dash-dl');

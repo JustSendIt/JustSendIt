@@ -142,6 +142,7 @@
 .arc-tablewrap { overflow-x: auto; margin: 0 0 0.7rem; }
 .arc-table { width: 100%; border-collapse: collapse; font-size: max(var(--text-floor), 0.88rem); }
 .arc-table th, .arc-table td { padding: 0.45rem 0.5rem; text-align: left; border-bottom: 1px solid var(--ink-4); white-space: nowrap; }
+.arc-table thead th { white-space: normal; }   /* the headings wrap ("Boost for 24h" was cut off on a narrow card); the numbers stay whole */
 .arc-table thead th { color: var(--text-dim); font-weight: 800; font-size: max(var(--text-floor), 0.76rem); letter-spacing: 0.06em; text-transform: uppercase; }
 .arc-table tbody th { color: var(--text); font-weight: 800; font-size: max(var(--text-floor), 0.88rem); letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; }
 .arc-table td { color: var(--text); font-variant-numeric: tabular-nums; }

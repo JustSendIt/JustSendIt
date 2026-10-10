@@ -97,6 +97,31 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
   .np-name { white-space: normal; overflow: visible; text-overflow: clip; }
 }
 
+/* A Conviction Play chip carries the symbol, a level, the market cap, the move since it was convicted and a
+   community link on one line, about 480 px, so on a phone it pushed the whole profile page sideways. Below 560 px
+   it wraps inside itself, and its corners relax there so two rows still read as one chip; wider, it stays a pill. */
+@media (max-width: 560px) { .pin-chip { max-width: 100%; flex-wrap: wrap; row-gap: 0.3rem; border-radius: 1.1rem; } }
+
+/* The sandbox label on a community in the competition ("🧪 Sandbox · stock, not a token · no 10×") was
+   nowrap inside a column about 150 px wide on a phone, so it ran out of its row and pushed the arcade page
+   sideways. It wraps now, whole words, and its corners relax for the second line. */
+html .cmp-sandbox { white-space: normal; max-width: calc(100% - 0.4rem); border-radius: 0.6rem; }
+
+/* A leaderboard row's score column kept its level line ("Lv 23 · Rocket Rider 🚀") on one line and refused
+   to shrink, so on a 320 px phone it squeezed the member's name to zero width and ran past the card. The
+   score stays on one line, the level line under it wraps, and the column takes at most a little over half the row. */
+html .cmp-val { flex-shrink: 1; min-width: 0; max-width: 55%; }
+html .cmp-val small { white-space: normal; }
+
+/* On a 320 px phone the how-to-buy steps kept their number beside the text, which left the text a column
+   about 136 px wide; the wallet list in step 1 could not fit it, the grid track grew to 338 px, and the home
+   page scrolled sideways. Below 360 px the number sits above the text and the column can shrink. */
+@media (max-width: 360px) {
+  .step-list { grid-template-columns: minmax(0, 1fr); }
+  .step { flex-direction: column; gap: 0.6rem; padding: 1rem; }
+  .step > * { min-width: 0; max-width: 100%; }
+}
+
 /* stragglers the second sweep turned up.
    NOTE .switch uses ::before, not ::after: its ::after is already the sliding knob
    (styles.css:991), and taking that over would leave the toggle with nothing to slide. */

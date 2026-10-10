@@ -11,7 +11,7 @@ const { Wallet } = require('ethers');
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const DBP = DB_PATH;
-const db = new DatabaseSync(DBP);
+const db = new DatabaseSync(DBP); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 let GATE = '';

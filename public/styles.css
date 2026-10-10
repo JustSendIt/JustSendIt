@@ -2387,7 +2387,7 @@ details[open] .np-chev { transform: rotate(180deg); }
 .security-step .step-num { background: linear-gradient(180deg, var(--diamond), var(--diamond-deep)); }
 
 /* --- Feature pillars --- */
-.pillar-grid { display: grid; grid-template-columns: 1fr; gap: 1.1rem; max-width: 980px; margin: 0 auto; }
+.pillar-grid { display: grid; grid-template-columns: 1fr; gap: 1.1rem; max-width: 980px; margin: 0 auto; align-items: start; }   /* start: a closed card is its own height, not the row's — stretched, the shorter one showed an empty band under its header */
 @media (min-width: 720px) { .pillar-grid { grid-template-columns: repeat(2, 1fr); } }
 .pillar { background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 2px solid var(--g-veil); border-radius: 18px; overflow: hidden; transition: border-color 0.15s ease; }
 .pillar[open] { border-color: color-mix(in srgb, var(--green) 50%, transparent); }

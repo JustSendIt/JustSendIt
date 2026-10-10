@@ -144,7 +144,7 @@
     var el = target(e);
     if (!el || el === current) return;
     clearTimeout(showTimer);
-    showTimer = setTimeout(function () { show(el); }, HOVER_DELAY);
+    showTimer = setTimeout(function () { show(el); shownBy = 'hover'; }, HOVER_DELAY);
   }, true);
 
   document.addEventListener('pointerout', function (e) {
@@ -162,11 +162,18 @@
      stop — any ancestor that calls stopPropagation on it (a modal trap, a menu, a carousel) would take
      the keyboard path out silently while hover kept working, which is the exact failure a sighted
      developer never notices. Capture runs from the document down, before anyone can stop it. */
+  /* Every focus shows the description — a screen reader moving focus sends no key events, and its user needs it most.
+     What differs is Escape (below): a description that appeared because a SCRIPT moved focus (a dialog opening on its
+     first control) must not eat the Escape meant for that dialog, or every such dialog takes two presses to close. A
+     focus is the person's own when it lands during their Tab, arrow, Home/End or Page key. */
+  var navKeyAt = 0, shownBy = '';
+  document.addEventListener('keydown', function (e) { navKeyAt = /^(Tab|Arrow|Home$|End$|Page)/.test(e.key) ? Date.now() : 0; }, true);
   document.addEventListener('focusin', function (e) {
     var el = target(e);
     if (!el) { if (current) hide(); return; }
     clearTimeout(showTimer);
     show(el);
+    shownBy = Date.now() - navKeyAt < 500 ? 'nav' : 'script';
   }, true);
   document.addEventListener('focusout', function (e) {
     var el = target(e);
@@ -181,7 +188,7 @@
     var el = target(e);
     if (!el) return;
     clearTimeout(touchTimer);
-    touchTimer = setTimeout(function () { show(el); }, TOUCH_HOLD);
+    touchTimer = setTimeout(function () { show(el); shownBy = 'touch'; }, TOUCH_HOLD);
   }, { passive: true });
   var endTouch = function () { clearTimeout(touchTimer); if (current) setTimeout(hide, 1200); };
   document.addEventListener('touchend', endTouch, { passive: true });
@@ -191,7 +198,10 @@
      Escape closes the description WITHOUT moving focus, and without closing whatever dialog the
      control happens to sit in — so it stops at the first Escape it uses. */
   document.addEventListener('keydown', function (e) {
-    if ((e.key === 'Escape' || e.key === 'Esc') && current) { e.stopPropagation(); hide(); }
+    if ((e.key === 'Escape' || e.key === 'Esc') && current) {
+      if (shownBy === 'script') { hide(); return; }   // shown by a dialog's own focus: the same Escape closes the dialog
+      e.stopPropagation(); hide();
+    }
   }, true);
 
   // a description pinned to a control that has scrolled away is worse than none

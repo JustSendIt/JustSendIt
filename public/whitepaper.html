@@ -16,7 +16,7 @@
 <meta property="og:title" content="$SEND White Paper 📄 How Just Send It works, rule by rule">
 <meta property="og:description" content="Send Power and its caps, how it decays, Send Calls, communities, Send Squads, Rocket Run, the risk scanner and the site's honest limits. Entertainment only.">
 <meta property="article:published_time" content="2026-09-13T01:45:10-04:00">
-<meta property="article:modified_time" content="2026-09-30">
+<meta property="article:modified_time" content="2026-10-10">
 <meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -38,7 +38,7 @@
       "headline": "$SEND White Paper — How Just Send It Works",
       "description": "The rules behind Just Send It: Send Power and its caps, decay, boosts, Send Calls, communities, Send Squads, Rocket Run and the scanner. Entertainment only.",
       "datePublished": "2026-09-13T01:45:10-04:00",
-      "dateModified": "2026-09-30",
+      "dateModified": "2026-10-10",
       "inLanguage": "en",
       "author": {
         "@type": "Organization",
@@ -522,7 +522,7 @@
 <div class="page">
 
   <header class="masthead">
-    <p class="eyebrow">White paper &middot; Version 1 &middot; Updated <time datetime="2026-09-30">30 September 2026</time></p>
+    <p class="eyebrow">White paper &middot; Version 1 &middot; Updated <time datetime="2026-10-10">10 October 2026</time></p>
     <h1>JustSendIt, explained plainly</h1>
     <p class="standfirst">A community website for two joke coins, with a points game, a risk scanner, and a rocket game whose only prize is a temporary points bonus. This is everything it does, what it does with your data and your wallet, and the exact numbers behind all of it &mdash; written so a twelve&#8209;year&#8209;old can follow every word.</p>
     <p class="byline">
@@ -1204,7 +1204,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
           <li><strong>One server file</strong> holds every rule. Having one source of truth means the number you see and the number you are paid cannot drift apart.</li>
           <li><strong>SQLite</strong> stores everything in a single file on disk.</li>
           <li><strong>No JavaScript is written inline</strong> in any page, which is what allows the strict security policy in section 6.</li>
-          <li><strong>Only two outside code libraries</strong> are used: one for checking wallet signatures, one for drawing QR codes.</li>
+          <li><strong>Only three outside code libraries</strong> are chosen directly (they bring a few dozen small packages of their own): one for checking wallet signatures, one for drawing QR codes, and one HTTP client for reading the chain and the price feeds.</li>
         </ul>
         <p>The advantage of this style is that anyone can read it. There is no compilation between what is written and what runs, so the code in the repository is the code in your browser. For a project asking people to trust it, that is worth more than convenience.</p>
       </section>
@@ -1242,7 +1242,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
   <p class="fine">
     $Send is a vibe, not financial advice. Memecoins are extremely volatile — you can lose everything you put in. Nothing on this site is an offer, solicitation, or recommendation of any kind. Always do your own research.<br>
     This site is an independent community project and is <b>not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.</b> "Robinhood Chain" refers to the public blockchain network of that name.<br>
-    Powered by <a href="http://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+    Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
   </p>
   <div class="nav-foot">
     <a href="about.html">About</a>

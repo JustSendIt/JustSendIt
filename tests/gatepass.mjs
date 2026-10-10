@@ -9,7 +9,7 @@ const DBP = DB_PATH;
 let madeCode = null;
 
 export async function gatePass(base) {
-  const db = new DatabaseSync(DBP);
+  const db = new DatabaseSync(DBP); db.exec('PRAGMA busy_timeout = 5000');
   const code = 'TEST' + Math.random().toString(36).slice(2, 8).toUpperCase();
   db.prepare('INSERT INTO invite_codes (code, owner_id, created_at) VALUES (?,NULL,?)').run(code, Date.now());
   db.close();
@@ -33,7 +33,7 @@ export function cleanupGatePass() {
   cleanupExtraPasses();   // one call tidies every code this module minted
   if (!madeCode) return;
   try {
-    const db = new DatabaseSync(DBP);
+    const db = new DatabaseSync(DBP); db.exec('PRAGMA busy_timeout = 5000');
     db.prepare('DELETE FROM invite_codes WHERE code = ?').run(madeCode);
     db.close();
   } catch {}
@@ -46,7 +46,7 @@ export function cleanupGatePass() {
    is tracked and removed by cleanupGatePass(). */
 const extraCodes = [];
 export async function freshPass(base) {
-  const db = new DatabaseSync(DBP);
+  const db = new DatabaseSync(DBP); db.exec('PRAGMA busy_timeout = 5000');
   const code = 'TEST' + Math.random().toString(36).slice(2, 8).toUpperCase() + Math.floor(Math.random() * 90 + 10);
   db.prepare('INSERT INTO invite_codes (code, owner_id, created_at) VALUES (?,NULL,?)').run(code, Date.now());
   db.close();
@@ -67,7 +67,7 @@ export async function freshPass(base) {
 export function cleanupExtraPasses() {
   if (!extraCodes.length) return;
   try {
-    const db = new DatabaseSync(DBP);
+    const db = new DatabaseSync(DBP); db.exec('PRAGMA busy_timeout = 5000');
     for (const c of extraCodes) { try { db.prepare('DELETE FROM invite_codes WHERE code = ?').run(c); } catch {} }
     db.close();
   } catch {}

@@ -69,7 +69,12 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
               /* The suites spoof visitors with X-Forwarded-For (unlock, sybiltest), and every suite's sign-ups count against one
                  per-address limit (ten an hour) when the server keys them all on 127.0.0.1. Locally the repo's .env set this; a clean
                  checkout (CI) has no .env, and the sign-up suites failed there on "slow down" for weeks. */
-              TRUST_PROXY: '1', TRUST_PROXY_FROM: 'loopback' };
+              TRUST_PROXY: '1', TRUST_PROXY_FROM: 'loopback',
+              /* The throwaway server reads no live chain unless CHAIN_LIVE=1: run from the Mac that serves the site, its reads
+                 spent the live site's own node budget (one address) and threw its pool prices and charts into 429s; run on
+                 GitHub, the node refuses them anyway. An address nothing listens on fails at once, and every suite already
+                 takes its honest "could not be read" branch for that. A real environment variable wins over .env. */
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { RPC_URL: 'http://127.0.0.1:9/' }) };
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -94,20 +99,30 @@ async function waitForServer(ms = 20000) {
   throw new Error('server did not come up in time:\n' + serverLog);
 }
 
+/* A suite that has not finished in ten minutes is stuck (an open handle, a wait that never ends): it is killed and
+   reported, rather than holding the whole run — and CI — until the job's own limit. */
+// the opt-in whole-wallet live read (WALLETCHAIN_LIVE=1) takes about an hour by design; SUITE_TIMEOUT_MIN sets any other limit
+const SUITE_TIMEOUT_MS = (Number(process.env.SUITE_TIMEOUT_MIN) || (process.env.WALLETCHAIN_LIVE === '1' ? 80 : 10)) * 60 * 1000;
 const run = (suite) => new Promise((resolve) => {
   const p = spawn(process.execPath, [path.join(HERE, suite + '.mjs'), String(PORT)],
     { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let out = '';
+  let out = '', timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; try { p.kill('SIGKILL'); } catch {} }, SUITE_TIMEOUT_MS);
   p.stdout.on('data', d => { out += d; });
   p.stderr.on('data', d => { out += d; });
   p.on('close', (code) => {
+    clearTimeout(timer);
     const m = /(\d+)\/(\d+) passed/.exec(out);
     const fails = out.split('\n').filter(l => l.startsWith('FAIL ') || l.startsWith('ERROR '));
     /* A suite may legitimately decide there is nothing to test — sandboxwall needs the demo community,
        which is seeded from the network a couple of seconds after boot and may not exist on a fresh
        database. That is a SKIP, and reporting it as a failure would train people to ignore red. */
     const skipped = !m && code === 0 && /skipping/i.test(out);
-    resolve({ suite, pass: m ? +m[1] : 0, total: m ? +m[2] : 0, ran: !!m, skipped, fails, out });
+    if (timedOut) fails.push('ERROR the suite was still running after ' + SUITE_TIMEOUT_MS / 60000 + ' minutes and was stopped');
+    /* the summary line is the suite's word; the exit code is the process's. A suite that printed "20/20 passed" and then
+       died on a stray rejection exits non-zero — that is a failure too, not a pass with a footnote */
+    else if (code !== 0 && !(m && +m[1] !== +m[2])) fails.push('ERROR the suite exited with code ' + code + (m ? ' after its summary' : ''));
+    resolve({ suite, pass: m ? +m[1] : 0, total: m ? +m[2] : 0, ran: !!m, skipped, fails, out, code });
   });
 });
 

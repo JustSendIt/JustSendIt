@@ -40,7 +40,7 @@
     },
     'community': {
       keywords: ['community', 'communities', 'join'],
-      answer: 'Communities gather around a token — $Send and $GWC have their own from day one. Holding the token opts you in, unlocks the holders-only wall and proposals, and everything you do there earns 10× Send Power. Start on /communities.html.'
+      answer: 'Communities gather around a token — $Send and $GWC have their own from day one. Hold the token and opt in to unlock the holders-only wall and proposals; while you are in a live one, everything you earn anywhere on the site gets a flat 10× boost (boosts add up, they do not multiply). Start on /communities.html.'
     },
     'watchlist': {
       keywords: ['watchlist', 'save token', 'star', 'saved'],
@@ -82,7 +82,7 @@
     '/support.html': { tips: ['Ask in public here; answers that solve it get voted up.', 'Prefer private? Email ' + EMAIL + ' — a person reads it.', 'Answering someone else\'s question counts too.'] },
     '/profile.html': { tips: ['Link a wallet here — it is how the site checks what you hold.', 'Two-factor keeps the account yours; nobody here asks for passwords.', 'Deleting the account is permanent; Send Calls stay under a placeholder.'] },
     '/watchlist.html': { tips: ['Saved tokens land here. Scan one and tap its ☆.', 'Each saved token opens straight back into a full scan.', 'A Send Call can start from here too.'] },
-    '/communities.html': { tips: ['$Send and $GWC have their own communities, run by the site.', 'Hold the token to opt in and earn 10× Send Power there.', 'Send Squads are the private, token-gated version.'] },
+    '/communities.html': { tips: ['$Send and $GWC have their own communities, run by the site.', 'Hold the token and opt in: while you are in a live one, everything you earn gets a flat 10× boost.', 'Send Squads are the private, token-gated version.'] },
     '/community.html': { tips: ['The holders-only wall opens once your linked wallet passes the gate.', 'Proposals let the community decide things together.', 'Tap the founder\'s name to see their Send Wall.'] },
     '/squad.html': { tips: ['Squad calls are private to the squad and score for it.', 'Only verified members count toward the gate.', 'The 🛡️ button on any token scan calls it to this squad.'] },
     '/tracker.html': { tips: ['Track any wallet: holdings, every token transaction, a value chart, cost basis, PNL — read from the chain.', 'On the public node a first read can take an hour or more — leave the page: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back). Later refreshes take seconds.', 'The explorer never learns which wallets you look at; this site reads them.', 'A wallet you track reopens from its saved report; a refresh reads only what is new.'] },
@@ -297,7 +297,9 @@
       if (isMobile()) { widget.classList.remove('is-up', 'is-left'); popup.style.maxHeight = ''; fitPhone(); return; }
       popup.style.bottom = ''; popup.style.left = ''; popup.style.right = ''; popup.style.width = ''; widget.classList.remove('is-side');
       const strip = fabClearPx();
-      const r = rocket.getBoundingClientRect(), above = r.top - 12, below = window.innerHeight - r.bottom - 12 - strip;   // downward stops above the player strip
+      // upward stops under the fixed nav (--nav-h, published by nav.js): on a 768 px laptop it used to open over Sign In
+      const navH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 58;
+      const r = rocket.getBoundingClientRect(), above = r.top - 12 - navH, below = window.innerHeight - r.bottom - 12 - strip;   // downward stops above the player strip
       widget.classList.toggle('is-up', below > above);      // open toward whichever side has more room…
       // …and rightward when hung too near the left edge for the popup (25em of its own text, capped to the screen)
       const fs = parseFloat(getComputedStyle(popup).fontSize), pw = Math.min(fs * 25, window.innerWidth - 32);

@@ -403,6 +403,15 @@
       return '<tr' + (capped ? ' class="is-cap"' : '') + '><th scope="row">' + s + 's</th>' +
         '<td>' + fx(x) + '×</td><td>' + fx(b) + '×</td></tr>';
     }).join('');
+    // the wrapper is a keyboard stop, and says it scrolls, only while it actually does (as the chart's trade tape does)
+    const wrap = curveBody.closest('.arc-tablewrap');
+    const fit = () => {
+      if (!wrap) return;
+      if (wrap.scrollWidth > wrap.clientWidth + 1) { wrap.tabIndex = 0; wrap.setAttribute('role', 'region'); wrap.setAttribute('aria-label', 'The boost curve table, scrollable sideways'); }
+      else { wrap.removeAttribute('tabindex'); wrap.removeAttribute('role'); wrap.removeAttribute('aria-label'); }
+    };
+    requestAnimationFrame(fit);
+    if (wrap && !wrap._fitWired) { wrap._fitWired = true; window.addEventListener('resize', fit); }
     if (curveNote) {
       const capX = 1 + (S.maxBoost - 1) * BOOST_DIV;
       curveNote.innerHTML = 'The boost stops growing at <b>' + fx(S.maxBoost) + '×</b> — you reach it at <b>' +

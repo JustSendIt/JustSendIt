@@ -317,7 +317,8 @@ try {
   }
 
   /* ═══ 6. a contract that is not a pair ═══ */
-  {
+  if (!LIVE_CHAIN) check(liveSkipped('a contract that is not a pair, refused by reading it'), true, 'skipped');
+  else {
     const r = await api('/api/chain/pricehist?pair=' + WETH + '&token=' + SEND + '&from=0&size=10000', me.sid);
     check('WETH as the "pair" is refused as a pool type not supported (no token0()/getReserves()) — or as not holding the token', r.status === 400 && (r.j.unsupported === true || /does not hold/.test(r.j.error)), r.status + ' ' + JSON.stringify(r.j));
     const r2 = await api('/api/chain/pricehist?pair=' + WETH + '&token=' + SEND + '&from=0&size=10000', me.sid);
@@ -325,7 +326,8 @@ try {
   }
 
   /* ═══ 7. /api/chain/dex-tokens: the house coin from its pool, a token found through the factory, a random address ═══ */
-  {
+  if (!LIVE_CHAIN) check(liveSkipped('/api/chain/dex-tokens against independent reads of the house pool, the factory and a random address'), true, 'skipped');
+  else {
     const r = await api('/api/chain/dex-tokens?addrs=' + GWC, me.sid);
     const g = r.status === 200 && Array.isArray(r.j) ? r.j.find((p) => p && p.baseToken && String(p.baseToken.address).toLowerCase() === GWC) : null;
     if (r.status !== 200 || !g) check('$GWC is priced (the node answered nothing — not asserted this run)', true, r.status + ' ' + JSON.stringify(r.j).slice(0, 120));
@@ -392,8 +394,9 @@ try {
     const n2 = await api('/api/chain/dex-tokens?addrs=' + rnd, me.sid);
     const took2 = Date.now() - t0;
     check('a random address with no pool returns no record, and the second ask is a cached miss (answered without the chain, under a second)', n1.status === 200 && Array.isArray(n1.j) && n1.j.length === 0 && n2.status === 200 && n2.j.length === 0 && took2 < 1000, n1.status + '/' + n2.status + ' ' + JSON.stringify(n1.j) + ' ' + took2 + 'ms');
-    check('  ...a "no pool" is remembered ten minutes, a price one minute, in a bounded cache', /RESERVES_PRICE_TTL = 60 \* 1000, RESERVES_NONE_TTL = 10 \* 60 \* 1000, RESERVES_CACHE_MAX = 2000/.test(SRC));
   }
+
+  check('  ...a "no pool" is remembered ten minutes, a price one minute, in a bounded cache', /RESERVES_PRICE_TTL = 60 \* 1000, RESERVES_NONE_TTL = 10 \* 60 \* 1000, RESERVES_CACHE_MAX = 2000/.test(SRC));
 
   /* ═══ 8. the limits, in the source ═══ */
   check('hits are limited at 120 a minute per member, the pools walked at 12 in ten minutes, two walks in flight per member', /rateLimit\('phist:' \+ me\.id, 120, 6e4\)/.test(SRC) && /rateLimit\('phistm:' \+ uid, PHIST_MISSES_MAX, PHIST_MISS_WINDOW_MS\)/.test(SRC) && /PHIST_MISS_WINDOW_MS = 10 \* 60 \* 1000, PHIST_MISSES_MAX = 12/.test(SRC) && /PHIST_MISSES_PER_MEMBER = 2/.test(SRC));

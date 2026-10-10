@@ -283,7 +283,7 @@ try {
     console, Number, Math, JSON, Object, Array, Promise, Error, Set, Map, String, encodeURIComponent,
     Date: { now: () => T },
     setTimeout: (fn, ms) => { delays.push(ms); T += ms; fn(); },   // every wait is noted, the clock moves by it, and it is over at once
-    fetch: async (url) => { urls.push(url); const a = script.shift(); if (!a) throw new Error('connection dropped'); return { status: a.status, headers: { get: () => null }, json: async () => a.body }; },
+    fetch: async (url) => { urls.push(url); const a = script.shift(); if (!a) throw new Error('connection dropped'); return { status: a.status, headers: { get: () => null }, json: async () => { if (a.raw) throw new SyntaxError('Unexpected token e in JSON'); return a.body; } }; },
   });
   vm.runInContext(SRC, pctx);
   const W = '0x' + 'ab'.repeat(20);
@@ -335,6 +335,14 @@ try {
   reset(); script.push(s502('unreadable', true));
   err = null; try { await pctx.trkChainWallet(W, () => {}, 0, null); } catch (e) { err = e; }
   check('a 502 for any other reason is reported at once', err && urls.length === 1, JSON.stringify({ err: err && err.message, asks: urls.length }));
+  // Cloudflare's own "error code: 502" in place of the server's JSON: no reason arrives, so it is waited out like a refusal
+  const EDGE502 = { status: 502, raw: true };
+  reset(); script.push(s202(), EDGE502, s202(), DONE);
+  out = await pctx.trkChainWallet(W, () => {}, 2, null);
+  check('an edge 502 with no JSON body is asked again a minute later, as a Refresh, and the read then answers', out && Array.isArray(out.transfers) && urls.length === 4 && /fresh=2$/.test(urls[0]) && /fresh=1$/.test(urls[2]) && delays.some((d) => d === 65000), JSON.stringify({ urls, delays }));
+  reset(); for (let i = 0; i < 4; i++) script.push(EDGE502);
+  err = null; try { await pctx.trkChainWallet(W, () => {}, 0, null); } catch (e) { err = e; }
+  check('  ...three times at most, then reported', err && /could not be read right now/.test(err.message) && urls.length === 4, JSON.stringify({ err: err && err.message, asks: urls.length }));
 } catch (e) { check('the polling-loop section ran to the end', false, e && e.stack); }
 
 let pass = 0;

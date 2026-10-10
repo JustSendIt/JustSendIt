@@ -697,7 +697,8 @@
 
   function summarise(data) {
     const pts = data.points || [];
-    if (!pts.length) return data.note || 'No trades to chart yet.';
+    // nothing drawn: the status line says what the canvas says ('Reading the chain…', 'Could not read…', the pool's own note)
+    if (!pts.length) return data._msg || data.note || 'No trades to chart yet.';
     const first = pts[0].p, last = pts[pts.length - 1].p;
     const chg = first > 0 ? ((last - first) / first) * 100 : 0;
     return fmtPrice(last, quoteUsd(data), data.quote) + ' — ' + (chg >= 0 ? 'up ' : 'down ') + Math.abs(chg).toFixed(2) +
@@ -819,7 +820,46 @@
   // continuous thing rather than a chart with a separate "live" gadget bolted on.
   function pointsFromCandles(cs) { return (cs || []).map(c => ({ t: c.t, p: c.c, n: c.n, h: c.h, l: c.l })); }
 
-  async function load(host) {
+  /* Ask for the history again later — but only while someone can see the chart. A hidden tab, or a chart
+     scrolled out of view, checks again every 15 s without touching the network until it is shown. */
+  function againLater(host, seq, ms) {
+    clearTimeout(host._againTimer);
+    host._reasking = true;               // what the stale line may promise: it says "asks again" only while this holds
+    const fire = () => {
+      if (seq !== host._seq || !host.isConnected) return;
+      if (document.hidden || host._visible === false) { host._againTimer = setTimeout(fire, 15000); return; }
+      load(host, { again: true });
+    };
+    host._againTimer = setTimeout(fire, ms);
+  }
+  /* How a failed history read is asked for again. The server says when the chain is not answering ({ retry: true },
+     sent as a 200 so nothing in between can swap its words for an error page): that is asked again after 5, 10 and
+     15 seconds, then once a minute while the chart is on screen. An answer with no JSON at all (Cloudflare's own
+     "error code: 502" when the server could not be reached) is asked again three times, then left. This site's own
+     "slow down" (429) waits a minute. Anything else is the server's last word and is shown as it is. */
+  function retryAfterFailure(host, seq, status, kind) {
+    // each kind keeps its own count: three edge failures end the edge retries, not the chain's once-a-minute ones
+    const n = kind === 'edge' ? (host._edgeRetries = (host._edgeRetries || 0) + 1) : (host._retries = (host._retries || 0) + 1);
+    if (kind !== 'edge') host._edgeRetries = 0;
+    const d0 = host._data || {};
+    // a stale chart past the age the server allows is not shown any longer: the failure message takes its place
+    if (d0.stale && d0._staleAt && d0.staleMaxMs && Date.now() - d0._staleAt > d0.staleMaxMs) host._data = { points: [] };
+    const stale = !!(host._data && host._data.stale);
+    let wait = 0;
+    if (kind === 'chain') wait = n <= 3 ? 5000 * n : 60000;
+    else if (kind === 'edge') wait = n <= 3 ? 5000 * n : stale ? 60000 : 0;   // a stale chart on screen keeps its promise to ask again
+    else if (kind === 'slow') wait = 60000;
+    const what = kind === 'slow' ? 'This network is sending too many requests just now'
+      : kind === 'edge' ? 'The site could not be reached just now' : 'The chain is not answering reads just now';
+    status.textContent = '⚠️ ' + what + (wait ? ' — trying again in ' + (wait >= 60000 ? 'a minute' : Math.round(wait / 1000) + ' seconds') + '.' : '. Reload the page to try again.');
+    host._data._msg = what + ' — the explorer link above still works.';
+    if (!wait) host._reasking = false;
+    paint(host, true);
+    if (wait) againLater(host, seq, wait);
+  }
+  async function load(host, opts) {
+    // a re-ask of the same timeframe (a retry, or a stale chart's refresh) keeps the reader's zoom and words
+    const again = !!(opts && opts.again);
     const pair = host.dataset.pair, token = host.dataset.token;
     if (!pair || !token) return;
     const tf = host.dataset.tf || '1h';
@@ -830,55 +870,74 @@
        Reproduced by clicking through 5m → 1h → 15m → 1m → 1s: two of the five drew the previous payload.
        It is the timeframe SWITCH that is racy, so the guard belongs on the switch, not on the poll. */
     const seq = host._seq = (host._seq || 0) + 1;
-    host._view = defaultView();          // a new timeframe is a new window — it starts where it fits
+    clearTimeout(host._againTimer);
     const status = host.querySelector('.oc-status');
-    host._sayNow = true;                 // a fresh load (first paint or a timeframe change) is always announced
+    if (!again) {
+      host._retries = 0;                 // a new timeframe gets its own retries
+      host._view = defaultView();        // a new timeframe is a new window — it starts where it fits
+      host._sayNow = true;               // a fresh load (first paint or a timeframe change) is always announced
+      stopTicking(host);                 // the old timeframe's live tick must not keep drawing under the new button
+      status.textContent = 'Reading the chain…';
+    } else if (host._retries) status.textContent = 'Asking the chain again…';
     const cv = host.querySelector('canvas');
-    status.textContent = 'Reading the chain…';
     // something on the canvas while the chain is being read, rather than an empty box that reads as broken
     host._data = host._data || { points: [] };
-    host._data._msg = 'Reading the chain…';
+    if (!again) host._data._msg = 'Reading the chain…';
     if ((host._data.points || []).length < 2) paint(host, true);
+    let res = null, d = null;
     try {
-      const d = await fetch('/api/chart?pair=' + encodeURIComponent(pair) + '&token=' + encodeURIComponent(token) +
-        '&tf=' + encodeURIComponent(tf) + '&hours=' + (HOURS[tf] || 168), { credentials: 'same-origin' }).then(r => r.json());
-      if (seq !== host._seq) return;      // a newer timeframe was chosen while this was in flight
-      if (d.error) { status.textContent = '⚠️ ' + d.error; host._data._msg = d.error; paint(host, true); return; }
-      d.points = pointsFromCandles(d.candles);
-      d._msg = d.note || 'No swaps on this pool in this window. The pool exists; nobody traded it.';
-      /* How many of those points are HISTORY. The live tick appends behind this line and only ever
-         trims what it appended — see TAIL_MAX. */
-      host._hist = d.points.length;
-      host._data = d;
-      paint(host);
-      const tbl = host.querySelector('.oc-table-wrap');
-      if (tbl) tbl.innerHTML = tableHTML(d);
-      const tape = host.querySelector('.oc-tape-wrap');
-      if (tape) {
-        tape.innerHTML = tapeHTML(d);
-        const det = host.querySelector('.oc-trades');
-        // no swaps in the window → no tape to open, so the disclosure goes away rather than opening on nothing
-        if (det) det.hidden = !(d.trades && d.trades.length);
-        /* A box that scrolls has to be reachable from a keyboard, and named when it is — but a tape that
-           fits must not leave a dead tab stop behind, so this is decided from the rendered width. */
-        const sc = tape.querySelector('.oc-tape-scroll');
-        if (sc) requestAnimationFrame(() => {
-          const over = sc.scrollWidth > sc.clientWidth + 1;
-          if (over) { sc.tabIndex = 0; sc.setAttribute('role', 'region'); sc.setAttribute('aria-label', 'Recent transactions, scrollable'); }
-          else { sc.removeAttribute('tabindex'); sc.removeAttribute('role'); sc.removeAttribute('aria-label'); }
-        });
-      }
-      wirePointer(host);
-      wireScales(host);
-      renderLegend(host);
-      loadMarkers(host);
-      startTicking(host);
-    } catch {
-      if (seq !== host._seq) return;      // a failed OLD request must not overwrite a newer good one
-      status.textContent = '⚠️ Could not read the chain right now.';
-      host._data._msg = 'Could not read the chain right now — the explorer link above still works.';
-      paint(host, true);
+      res = await fetch('/api/chart?pair=' + encodeURIComponent(pair) + '&token=' + encodeURIComponent(token) +
+        '&tf=' + encodeURIComponent(tf) + '&hours=' + (HOURS[tf] || 168), { credentials: 'same-origin' });
+      d = await res.json().catch(() => null);
+    } catch {}
+    if (seq !== host._seq) return;      // a newer timeframe was chosen while this was in flight, or a failed OLD one must not land
+    if (!res) return retryAfterFailure(host, seq, status, 'chain');            // the connection dropped
+    if (!d) return retryAfterFailure(host, seq, status, 'edge');               // no JSON: the edge answered in the server's place
+    if (d.retry) return retryAfterFailure(host, seq, status, 'chain');         // the chain is not answering just now
+    if (res.status === 429) return retryAfterFailure(host, seq, status, 'slow');
+    if (d.error) { host._reasking = false; status.textContent = '⚠️ ' + d.error; host._data._msg = d.error; paint(host, true); return; }
+    d.points = pointsFromCandles(d.candles);
+    if (d.stale) d._staleAt = Date.now() - (Number(d.ageMs) || 0);   // the server measured the age; count on from it here
+    d._msg = d.note || 'No swaps on this pool in this window. The pool exists; nobody traded it.';
+    // coming back from a failure, or a stale chart turning fresh (or the reverse), is said at once
+    if (host._retries || !!d.stale !== !!(host._data && host._data.stale)) host._sayNow = true;
+    host._retries = 0; host._edgeRetries = 0; host._reasking = false;
+    // markers come from this site, not the chain: a re-ask of the same timeframe keeps the ones already drawn
+    if (again && host._data && host._data.markers && host._data.tf === d.tf) { d.markers = host._data.markers; d._devLoaded = host._data._devLoaded; }   // same window only
+    /* A stale chart is the server's last good one, sent because the chain is not answering just now. It is drawn —
+       a chart from a few minutes ago beats an empty box — the status line says how old it is (see paint, which
+       works the age out from the server-measured ageMs every time it draws), and it is asked for again every minute until a fresh
+       one comes back. */
+    if (d.stale) againLater(host, seq, 60000);
+    /* How many of those points are HISTORY. The live tick appends behind this line and only ever
+       trims what it appended — see TAIL_MAX. */
+    host._hist = d.points.length;
+    host._data = d;
+    paint(host);
+    const tbl = host.querySelector('.oc-table-wrap');
+    if (tbl) tbl.innerHTML = tableHTML(d);
+    const tape = host.querySelector('.oc-tape-wrap');
+    if (tape) {
+      tape.innerHTML = tapeHTML(d);
+      const det = host.querySelector('.oc-trades');
+      // no swaps in the window → no tape to open, so the disclosure goes away rather than opening on nothing
+      if (det) det.hidden = !(d.trades && d.trades.length);
+      /* A box that scrolls has to be reachable from a keyboard, and named when it is — but a tape that
+         fits must not leave a dead tab stop behind, so this is decided from the rendered width. */
+      const sc = tape.querySelector('.oc-tape-scroll');
+      if (sc) requestAnimationFrame(() => {
+        const over = sc.scrollWidth > sc.clientWidth + 1;
+        if (over) { sc.tabIndex = 0; sc.setAttribute('role', 'region'); sc.setAttribute('aria-label', 'Recent transactions, scrollable'); }
+        else { sc.removeAttribute('tabindex'); sc.removeAttribute('role'); sc.removeAttribute('aria-label'); }
+      });
     }
+    wirePointer(host);
+    wireScales(host);
+    renderLegend(host);
+    if (!(again && d.markers)) loadMarkers(host);
+    /* No live tick on a stale chart: it would join today's price to a chart from minutes ago with a
+       straight line across a stretch nobody read. The tick starts again with the next fresh chart. */
+    if (d.stale) stopTicking(host); else startTicking(host);
   }
 
   function paint(host, hoverOnly) {
@@ -890,7 +949,12 @@
     const rb = host.querySelector('.oc-reset');
     if (rb) rb.hidden = !isZoomed(host._view);
     if (hoverOnly) return;               // a crosshair repaint must not redo the status line and the table
-    const sum = summarise(d);
+    // an old chart says so before anything else: the server marks it `stale`, with `asOf`, when the chain is not answering
+    // a stale chart's age is worked out here on every draw (from the server's ageMs), so it never freezes at the minute it arrived
+    const ago = d.stale && (d._staleAt || d.asOf) ? Math.max(1, Math.round((Date.now() - (d._staleAt || d.asOf)) / 60000)) : 0;
+    const sum = (ago ? '⚠️ The chain is not answering reads just now, so this is the chart as it stood ' + ago + ' minute' + (ago === 1 ? '' : 's') + ' ago. ' + (host._reasking ? 'This page asks again every minute while you are looking at it. ' : 'Reload the page to try again. ') : '') + summarise(d);
+    const srcChip = host.querySelector('.oc-src');
+    if (srcChip) srcChip.textContent = ago ? '⛓️ on-chain · as of ' + new Date(d._staleAt || d.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '⛓️ on-chain · live';
     /* F004: this is a polite live region, and paint() runs on every 1s poll tick — so a screen reader was
        read the whole summary sentence once a second for as long as the chart was on screen. The canvas
        label follows every repaint silently; the SPOKEN line only changes when the summary text actually

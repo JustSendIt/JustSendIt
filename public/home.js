@@ -128,7 +128,12 @@ async function refreshMcap(opts) {
       // Dexscreener: marketCap = circulating market cap, fdv = fully-diluted. Show the real market cap; only
       // fall back to FDV when it's missing — and relabel the panel so we never call FDV a "market cap".
       const hasMc = !!(p && p.marketCap != null);
-      if (!(hasMc || (p && p.fdv != null))) continue;
+      if (!(hasMc || (p && p.fdv != null))) {
+        // nothing read yet: say so rather than "loading" forever — this runs again every 30 s
+        const sub = document.getElementById('mcap-sub-' + key);
+        if (sub && /^loading/.test(sub.textContent)) sub.textContent = 'not read yet — trying again every 30 seconds';
+        continue;
+      }
       const fdv = Number(hasMc ? p.marketCap : p.fdv);
       setMcap(key, fdv, opts);
       // remember live USD prices so the swap panel can show dollar equivalents (ETH/USD = priceUsd ÷ priceNative)
@@ -156,7 +161,10 @@ async function refreshMcap(opts) {
       a11y.textContent = a11yText;
       mcapAnnounced = true;
     }
-  } catch {}
+  } catch {
+    // nothing could be read at all: say so on both panels rather than "loading" for the whole outage
+    for (const key of ['SEND', 'GWC']) { const sub = document.getElementById('mcap-sub-' + key); if (sub && /^loading/.test(sub.textContent)) sub.textContent = 'not read yet — trying again every 30 seconds'; }
+  }
 }
 refreshMcap();
 // don't hammer Dexscreener for a tab nobody is looking at — poll only while visible, and catch up on return

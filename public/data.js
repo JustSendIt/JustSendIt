@@ -17,9 +17,12 @@
     return r;
   };
 
+  const SIGN_IN_NOTE = '<p class="dk-note">Sign in and link the wallet you burn from, then come back — your burn is read from your linked wallets.</p>';
   async function load(fresh) {
+    // signed out: say so without asking the server a question it can only answer with a 401
+    if (window.AUTH && AUTH.ready) { try { await AUTH.ready; } catch {} if (AUTH.signedOut) { card.innerHTML = SIGN_IN_NOTE; return; } }
     const r = await J('/api/data/eligibility' + (fresh ? '?fresh=1' : ''));
-    if (r.status === 401) { card.innerHTML = '<p class="dk-note">Sign in and link the wallet you burn from, then come back — your burn is read from your linked wallets.</p>'; return; }
+    if (r.status === 401) { card.innerHTML = SIGN_IN_NOTE; return; }
     if (!r.ok || !r.j) { card.innerHTML = '<p class="dk-note">Could not check right now. <button class="btn btn-sm btn-ghost" id="dk-retry" type="button" data-tip="Reads your linked wallets on the chain again">Try again</button></p>'; wire(); return; }
     render(r.j);
   }
