@@ -70,6 +70,9 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
                  per-address limit (ten an hour) when the server keys them all on 127.0.0.1. Locally the repo's .env set this; a clean
                  checkout (CI) has no .env, and the sign-up suites failed there on "slow down" for weeks. */
               TRUST_PROXY: '1', TRUST_PROXY_FROM: 'loopback',
+              // the suites sign up dozens of accounts with the one seed code, which a live site retires once anyone is in;
+              // and tests/adminpage.mjs plays the admin account as user 987654
+              SEED_CODES_OPEN: '1', ADMIN_USER_IDS: '987654',
               /* The throwaway server reads no live chain unless CHAIN_LIVE=1: run from the Mac that serves the site, its reads
                  spent the live site's own node budget (one address) and threw its pool prices and charts into 429s; run on
                  GitHub, the node refuses them anyway. An address nothing listens on fails at once, and every suite already

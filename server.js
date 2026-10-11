@@ -102,11 +102,29 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
    equality lookup (login by email, wallet by address, one-opt-in-per-IP). Session cookies are stored as SHA-256 hashes.
    A stolen app.db without the key is unreadable. Set DATA_KEY (64 hex chars) in production; otherwise a key is generated
    once into data/.data_key (chmod 600) — back it up SEPARATELY from the DB. */
+let DATA_KEY_SOURCE = 'generated';   // where the key came from: 'env', 'file' (DATA_KEY_FILE), 'data-dir' (beside the database) — shown to the admin, never the key
 const DATA_KEY = (() => {
   const hex = String(process.env.DATA_KEY || '').trim();
-  if (/^[0-9a-f]{64}$/i.test(hex)) return Buffer.from(hex, 'hex');
+  if (/^[0-9a-f]{64}$/i.test(hex)) { DATA_KEY_SOURCE = 'env'; return Buffer.from(hex, 'hex'); }
+  /* DATA_KEY_FILE: the key in a file of its own, kept on a different volume from the database and from the backups.
+     Named and unreadable is a refusal, never a fallback: falling back to data/.data_key would put the key back beside
+     the data, and generating one would start an empty database. */
+  if (process.env.DATA_KEY_FILE) {
+    try {
+      const t = fs.readFileSync(process.env.DATA_KEY_FILE, 'utf8').trim();
+      if (/^[0-9a-f]{64}$/i.test(t)) {
+        // 'file' only when the key really is on another volume than the database (APFS volumes have their own st_dev)
+        let same = true; try { same = fs.statSync(fs.realpathSync(process.env.DATA_KEY_FILE)).dev === fs.statSync(DATA_DIR).dev; } catch {}
+        DATA_KEY_SOURCE = same ? 'file-same-volume' : 'file';
+        return Buffer.from(t, 'hex');
+      }
+    } catch {}
+    console.error('\n🔴 REFUSING TO START: DATA_KEY_FILE is set to ' + process.env.DATA_KEY_FILE + ' but no 64-hex-character key could be read from it.\n' +
+      '   Is the volume that holds it mounted? The server will not fall back to another key: the data can only be read with this one.\n');
+    process.exit(1);
+  }
   const kf = path.join(DATA_DIR, '.data_key');
-  try { const t = fs.readFileSync(kf, 'utf8').trim(); if (/^[0-9a-f]{64}$/i.test(t)) return Buffer.from(t, 'hex'); } catch {}
+  try { const t = fs.readFileSync(kf, 'utf8').trim(); if (/^[0-9a-f]{64}$/i.test(t)) { DATA_KEY_SOURCE = 'data-dir'; return Buffer.from(t, 'hex'); } } catch {}
   /* GENERATING A KEY IN PRODUCTION IS A REFUSAL, NOT A WARNING.
      Every path above failed, so this boot is about to invent a key. On a laptop that is convenient. On a
      production host it is one of two things, and both are worse than not starting:
@@ -671,6 +689,19 @@ CREATE TABLE IF NOT EXISTS holder_balances (
 );
 CREATE INDEX IF NOT EXISTS idx_holder_bal_tok ON holder_balances(token_addr, positive);
 `);
+/* THE KEY MUST OPEN WHAT IS ALREADY HERE. A well-formed key from the wrong file (a stale copy, another machine's key)
+   would start the server, show every email and wallet link as unreadable, and write every new row under the wrong
+   key — two keys in one database, from then on. So before anything is written: if encrypted values exist and the key
+   opens none of the first few, refuse to start. A fresh database has none, and passes. */
+(() => {
+  let rows = [];
+  try { rows = db.prepare("SELECT identifier_enc v FROM identities WHERE identifier_enc LIKE 'v1:%' LIMIT 5").all(); } catch {}
+  if (rows.length && !rows.some((r) => decField(r.v) != null)) {
+    console.error('\n🔴 REFUSING TO START: the encryption key (' + (DATA_KEY_SOURCE === 'file' ? 'DATA_KEY_FILE ' + process.env.DATA_KEY_FILE : DATA_KEY_SOURCE) + ') does not open the data already in this database.\n' +
+      '   Starting would write new rows under the wrong key. Point DATA_KEY / DATA_KEY_FILE at the key this database was made with.\n');
+    process.exit(1);
+  }
+})();
 // additive migrations (SQLite has no ADD COLUMN IF NOT EXISTS)
 for (const col of [
   "ALTER TABLE communities ADD COLUMN held_pct REAL",              // share of supply in members' linked wallets (per the on-chain ledger)
@@ -9964,11 +9995,11 @@ const OPTIONAL_MEDIA = {
   poster: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'full-send-poster.jpg')),
   audio: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-audio.m4a')),
 };
-function notFoundPage(res) {
+function notFoundPage(res, extraHeaders) {
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title><meta name="robots" content="noindex">' +
     '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;--text-floor:16px;font-family:Rubik,system-ui,sans-serif;font-size:max(var(--text-floor),1rem);line-height:1.5;text-align:center;padding:2rem}h1{font-size:max(var(--text-floor),2.2rem);margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
     '<body><main><h1>🚀 That page didn’t send.</h1><p>We couldn’t find what you were looking for.</p><a href="/">Back to $Send home →</a></main></body></html>';
-  res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html) });
+  res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html), ...(extraHeaders || {}) });
   res.end(html);
 }
 /* If-None-Match is a list, and the comparison it asks for is the WEAK one (RFC 9110 §13.1.2): W/"x" and "x" are the
@@ -11409,6 +11440,41 @@ function presenceSweep() { // called from the 5-min maintenance tick so the per-
    routes answer 404 to everyone else so their existence is not advertised. */
 const ADMIN_USER_IDS = new Set(String(process.env.ADMIN_USER_IDS || '').split(',').map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0));
 function isAdmin(u) { return !!u && !u.deleted_at && ADMIN_USER_IDS.has(u.id); }
+/* The admin page's overview: counts and names only — no email, wallet, IP or anything the key protects. */
+const BOOT_AT = Date.now();
+let BOOT_COMMIT = null;   // read once the helper below exists: the code this process is running, not whatever the checkout holds now
+function gitCommit() {
+  try {
+    const head = fs.readFileSync(path.join(ROOT, '.git', 'HEAD'), 'utf8').trim();
+    if (!head.startsWith('ref:')) return head.slice(0, 7);
+    const ref = head.slice(5).trim();
+    try { return fs.readFileSync(path.join(ROOT, '.git', ref), 'utf8').trim().slice(0, 7); } catch {}
+    const packed = fs.readFileSync(path.join(ROOT, '.git', 'packed-refs'), 'utf8').split('\n').find((l) => l.endsWith(' ' + ref));
+    return packed ? packed.slice(0, 7) : null;
+  } catch { return null; }
+}
+BOOT_COMMIT = gitCommit();
+function adminOverview() {
+  const one = (sql, ...a) => db.prepare(sql).get(...a);
+  const t = now();
+  const latest = db.prepare('SELECT username, send_no, created_at FROM users WHERE system = 0 AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 10').all()
+    .map((u) => ({ username: u.username, sendId: u.send_no, joinedAt: u.created_at }));
+  const codes = db.prepare("SELECT CASE WHEN owner_id IS NULL THEN 'seed' ELSE 'member' END kind, CASE WHEN user_id IS NOT NULL THEN 'used' WHEN used_at IS NOT NULL THEN 'pending' ELSE 'unused' END state, COUNT(*) n FROM invite_codes GROUP BY 1, 2").all();
+  const count = (kind, state) => (codes.find((c) => c.kind === kind && c.state === state) || { n: 0 }).n;
+  let backups = [];
+  try {
+    backups = fs.readdirSync(BACKUP_DIR).filter((f) => /\.db$/.test(f)).map((f) => { const st = fs.statSync(path.join(BACKUP_DIR, f)); return { file: f, bytes: st.size, at: st.mtimeMs }; })
+      .sort((a, b) => b.at - a.at).slice(0, 10);
+  } catch {}
+  let dbBytes = null; try { dbBytes = fs.statSync(path.join(DATA_DIR, 'app.db')).size; } catch {}
+  return {
+    members: { total: one('SELECT COUNT(*) n FROM users WHERE system = 0 AND deleted_at IS NULL').n, joinedLast7Days: one('SELECT COUNT(*) n FROM users WHERE system = 0 AND deleted_at IS NULL AND created_at > ?', t - 7 * DAY_MS).n, latest },
+    invites: { memberUnused: count('member', 'unused'), memberPending: count('member', 'pending'), memberUsed: count('member', 'used'), seedCodes: count('seed', 'unused') + count('seed', 'pending') + count('seed', 'used'), seedCodesOpen: seedCodesOpen(), perMember: INVITE_GRANT },
+    reports: { open: one('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').n },
+    server: { node: process.version, commit: BOOT_COMMIT, checkoutCommit: gitCommit(), startedAt: BOOT_AT, uptimeSeconds: Math.round((Date.now() - BOOT_AT) / 1000), health: healthCheck() },
+    storage: { dbBytes, keySource: DATA_KEY_SOURCE, keyBesideDatabase: DATA_KEY_SOURCE === 'data-dir' || DATA_KEY_SOURCE === 'file-same-volume', backupDir: BACKUP_DIR, backupsOutsideDataDir: BACKUP_OFF_VOLUME, backupsKept: BACKUP_KEEP, backups },
+  };
+}
 /* Remove a post the way its author could, plus what an author cannot: a Send Call post is permanent, so
    its text and media go and the call row stays under a moderation note. */
 function takeDownPost(row, note) {
@@ -11708,6 +11774,13 @@ function newCode() {
 const normCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 24);
 const passHash = (t) => crypto.createHash('sha256').update(String(t || '')).digest('hex');
 
+/* Seed codes — the ones the site minted for itself (owner_id NULL), such as SEED_INVITE_CODE — open the door only until the
+   first member is in. After that, only a code a member was given can admit anyone (INVITE_GRANT each). SEED_CODES_OPEN=1
+   keeps seed codes working: the test suite signs up dozens of accounts with one. */
+function seedCodesOpen() {
+  if (process.env.SEED_CODES_OPEN === '1') return true;
+  try { return !db.prepare('SELECT 1 FROM users WHERE system = 0 LIMIT 1').get(); } catch { return false; }
+}
 function mintCodes(ownerId, n) {
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -11814,6 +11887,7 @@ function hasAccess(req, user) {
 function signupRefusal(req) {
   const r = passRow(req);
   if (!r) return { error: 'You need an invite code to join. Browsing is open to everyone — joining is by ticket.', code: 'need_invite' };
+  if (r.owner_id == null && !seedCodesOpen()) return { error: 'That invite code is no longer active — ask a member for one of theirs.', code: 'code_retired' };
   if (TOS_GATE && !r.tos_at) return { error: 'Read and accept the terms to finish joining.', code: 'need_tos' };
   if (r.user_id) return { error: 'That invite code has already been used to make an account. Ask whoever sent it for a spare.', code: 'code_spent' };
   // last, so every refusal above keeps its own code: the age box is the one step a visitor has already seen
@@ -12935,6 +13009,7 @@ const server = http.createServer(async (req, res) => {
         if (already) return send(res, 200, { ok: true, already: true, tosAccepted: !TOS_GATE || !!already.tos_at, tosRequired: TOS_GATE });
         const row = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(code);
         if (!row) return bad(res, 'that code is not one of ours — check it and try again');
+        if (row.owner_id == null && !seedCodesOpen()) return bad(res, 'that code is no longer active — invites now come from members, so ask someone on the site for one of theirs');
         if (row.used_at && row.user_id) return bad(res, 'that code has already been used. Every code works once — ask whoever sent it for a spare.');
         if (row.used_at && now() - row.used_at < INVITE_RECLAIM_MS) return bad(res, 'that code was redeemed ' + humanLeft(now() - row.used_at) + ' ago and the sign-up is still in progress. If that was you on another device, finish there — otherwise it frees up again in ' + humanLeft(INVITE_RECLAIM_MS - (now() - row.used_at)) + '.');
         const tok = rand();
@@ -13431,6 +13506,10 @@ const server = http.createServer(async (req, res) => {
         const reason = String(b.reason || '').trim().slice(0, 500);
         const r = db.prepare('INSERT OR IGNORE INTO reports (reporter_id, kind, target_id, reason, created_at) VALUES (?,?,?,?,?)').run(me.id, kind, target, reason, now());
         return send(res, 200, { ok: true, already: r.changes === 0 });
+      }
+      if (p === '/api/admin/overview' && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        return send(res, 200, adminOverview());
       }
       if (p === '/api/admin/reports' && req.method === 'GET') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
@@ -16606,6 +16685,18 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
+    /* The admin page and its script are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
+       page that does not exist — for every method and every spelling that reaches the file (case on a case-insensitive
+       disk, //, /./, %2e), so the test is on the file the path RESOLVES to, before anything else serves it. Neither
+       may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
+       admin out. */
+    {
+      const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase(), base = PUBLIC_DIR.toLowerCase() + path.sep;
+      if (fpLc === base + 'admin.html' || fpLc === base + 'admin.js') {
+        if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
+        return serveFile(req, res, path.join(PUBLIC_DIR, fpLc.slice(base.length)), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
+      }
+    }
     /* ===== addresses that answer for search engines and browsers before the static files =====
        See "Per-entity pages" and "Sitemaps" above for the two built kinds. */
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -16640,6 +16731,8 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/community.html') return serveCommunityPage(req, res, url);
     }
+    // a page or an asset is read, not written to: POST /, OPTIONS /admin.js and the like used to answer 200 with the file
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD', 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS }); return res.end('{"error":"method not allowed"}'); }
     const rel = p === '/' ? '/index.html' : p;
     const filePath = path.normalize(path.join(PUBLIC_DIR, rel));
     if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) return bad(res, 'nope', 400);
@@ -16705,7 +16798,11 @@ const BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');
    is a real backup and keeps seven; on-volume is a rollback convenience and keeps three. Either way the
    snapshot is skipped when the disk is tight — a backup that fills the volume takes the live site down to
    protect a copy of it, which is exactly the wrong trade. */
-const BACKUP_OFF_VOLUME = !!process.env.BACKUP_DIR && !path.resolve(process.env.BACKUP_DIR).startsWith(path.resolve(DATA_DIR) + path.sep);
+// another VOLUME, not just another folder: a folder beside data/ on the same volume dies with it (APFS volumes have their own st_dev)
+const BACKUP_OFF_VOLUME = (() => {
+  if (!process.env.BACKUP_DIR || path.resolve(process.env.BACKUP_DIR).startsWith(path.resolve(DATA_DIR) + path.sep)) return false;
+  try { return fs.statSync(process.env.BACKUP_DIR).dev !== fs.statSync(DATA_DIR).dev; } catch { return false; }
+})();
 const BACKUP_KEEP = BACKUP_OFF_VOLUME ? 7 : 3;
 async function snapshotDb() {
   if (typeof sqliteBackup !== 'function') return;
@@ -17396,6 +17493,9 @@ function productionChecks() {
     if (!IS_HTTPS && process.env.COOKIE_SECURE !== '1') warn('Serving over http and COOKIE_SECURE!=1 — session cookies will NOT be marked Secure. Set COOKIE_SECURE=1 behind TLS termination.');
     if (!process.env.SEED_INVITE_CODE && !db.prepare('SELECT 1 FROM invite_codes LIMIT 1').get()) warn('SEED_INVITE_CODE unset on a fresh deploy — a random seed code was generated and printed above; set SEED_INVITE_CODE to choose it (F018).');
     if ((process.env.HOST || '127.0.0.1') !== '127.0.0.1' && !TRUST_PROXY_HOPS) warn('HOST=' + process.env.HOST + ' binds beyond loopback while TRUST_PROXY is unset — if anything but your proxy can reach this port, per-IP limits key on whatever the peer says. Set TRUST_PROXY, or keep HOST=127.0.0.1 behind a same-box proxy.');
+    if (DATA_KEY_SOURCE === 'file-same-volume') warn('DATA_KEY_FILE is on the same volume as the database. Keep the key on another volume.');
+    if (DATA_KEY_SOURCE === 'data-dir') warn('The encryption key is read from data/.data_key, beside the database it protects. Put it on another volume and set DATA_KEY_FILE (DEPLOY.md).');
+    if (!BACKUP_OFF_VOLUME) warn('Backups are written on the same volume as the database. Set BACKUP_DIR to a folder on another volume (DEPLOY.md).');
     if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin.html). Set it to your database row id (users.id, not your Send ID) once you have signed up.');
     if (SENDY_KEY) console.log('🚀 Sendy answers questions with ' + SENDY_MODEL + ' — a question, its page and that chat go to the model provider (see /privacy.html#p8)');
     else warn('ANTHROPIC_API_KEY is empty — Sendy answers from its built-in notes only. Set it to let Sendy answer any question about the site (SENDY_MODEL picks the model).');
@@ -17403,7 +17503,7 @@ function productionChecks() {
   }
 }
 
-server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}).then(() => seedOfficialSquadLater()); }, 2500).unref(); });
+server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); console.log('🔐 Encryption key: ' + DATA_KEY_SOURCE + ' · backups: ' + BACKUP_DIR + (BACKUP_OFF_VOLUME ? ' (separate volume)' : ' (same volume as the data)') + ' · admins: ' + ADMIN_USER_IDS.size + ' · Node ' + process.version); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}).then(() => seedOfficialSquadLater()); }, 2500).unref(); });
 
 // The New Pairs Radar is a members' tab on the Scanner page (newpairs.html) — no background refresher runs, so
 // the RPC/Blockscout/Dexscreener are not hit every 90s while nobody is looking. The /api/pairs/new endpoint

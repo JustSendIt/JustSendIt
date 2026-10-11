@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Moderation — $Send</title>
-<meta name="description" content="Operator-only moderation queue for $Send (Just Send It): reports from senders, takedowns and account restrictions. Only operators can use it.">
+<title>Admin — $Send</title>
+<meta name="description" content="The admin account's page for $Send (Just Send It): how the site is doing, and the moderation queue. Only operators can use it.">
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#c6f000">
 <link rel="manifest" href="/site.webmanifest">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="$Send — Just Send It">
 <meta property="og:locale" content="en_US">
-<meta property="og:title" content="Moderation — $Send">
-<meta property="og:description" content="Operator-only moderation queue for $Send: reports, takedowns and account restrictions.">
+<meta property="og:title" content="Admin — $Send">
+<meta property="og:description" content="The admin account's page for $Send: how the site is doing, and the moderation queue.">
 <meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -20,8 +20,8 @@
 <meta property="og:image:alt" content="$Send — Just Send It logo">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:site" content="@sendrh_">
-<meta name="twitter:title" content="Moderation — $Send">
-<meta name="twitter:description" content="Operator-only moderation queue for $Send: reports, takedowns and account restrictions.">
+<meta name="twitter:title" content="Admin — $Send">
+<meta name="twitter:description" content="The admin account's page for $Send: how the site is doing, and the moderation queue.">
 <meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
 <meta name="twitter:image:alt" content="$Send — Just Send It logo">
 <link rel="icon" href="assets/logo-128.png">
@@ -32,7 +32,7 @@
 <link rel="stylesheet" href="responsive.css">
 </head>
 <body>
-<a class="skip-link" href="#main">Skip to the queue</a>
+<a class="skip-link" href="#main">Skip to the admin page</a>
 <nav class="nav is-compact" aria-label="Main">
   <a class="nav-logo" href="/"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
@@ -42,7 +42,7 @@
     <a href="wall.html">Send&nbsp;Wall</a>
     <a href="support.html">Support</a>
     <a href="profile.html">My&nbsp;Profile</a>
-    <a class="active" href="admin.html" aria-current="page">Moderation</a>
+    <a class="active" href="admin.html" aria-current="page">Admin</a>
     <span id="nav-search-slot"></span>
   </div>
   <span id="nav-notif"></span>
@@ -51,12 +51,22 @@
 </nav>
 
 <main id="main" class="wrap" style="padding-top:2.2rem; padding-bottom:4rem;">
-  <h1 class="display" style="font-size:max(var(--text-floor), 1.6rem); margin:0 0 0.3rem;">Moderation 🧹</h1>
-  <p class="section-sub" style="margin:0 0 1.2rem;">Reports from senders, newest first. Every action here notifies the person it lands on and is written to the report it resolves.</p>
+  <h1 class="display" style="font-size:max(var(--text-floor), 1.6rem); margin:0 0 0.3rem;">Admin 🛠️</h1>
+  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, then the moderation queue.</p>
 
   <p class="modal-note" id="adm-gate" role="status" aria-live="polite">Checking who you are…</p>
 
+  <section class="card adm-ov" id="adm-overview" hidden aria-labelledby="adm-ov-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-ov-h" class="adm-h2">Overview</h2>
+      <button class="btn btn-sm" id="adm-ov-refresh" type="button" data-tip="Reads the overview again">↻ Refresh</button>
+    </div>
+    <div id="adm-ov-body" aria-live="polite"></div>
+  </section>
+
   <div id="adm-tools" hidden>
+    <h2 class="adm-h2">Moderation 🧹</h2>
+    <p class="modal-note" style="margin:0 0 1rem;">Reports from senders, newest first. Every action here notifies the person it lands on and is written to the report it resolves.</p>
     <div class="feed-controls" style="display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
       <label class="f-label" style="margin:0;"><input type="checkbox" id="adm-all"> Show resolved too</label>
       <button class="btn btn-sm" id="adm-refresh" type="button" data-tip="Reads the report queue again">↻ Refresh</button>

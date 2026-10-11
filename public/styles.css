@@ -4818,6 +4818,15 @@ html.motion-off #matrix-rain { display: none; }
 
 /* moderation queue (admin.html) */
 .adm-report { padding: 0.9rem 1rem; }
+.adm-ov { padding: 1rem 1.1rem; margin-bottom: 1.6rem; }
+.adm-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; flex-wrap: wrap; }
+.adm-h2 { font-size: max(var(--text-floor), 1.2rem); margin: 0 0 0.6rem; }
+.adm-h3 { font-size: max(var(--text-floor), 1rem); margin: 0.9rem 0 0.3rem; }
+.adm-ov-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 0.4rem 1.8rem; }
+.adm-ov-sub { margin: 0.6rem 0 0.2rem; }
+.adm-ov-list { margin: 0; padding-left: 1.3rem; font-size: max(var(--text-floor), 0.9rem); line-height: 1.6; overflow-wrap: anywhere; }
+.adm-ov .dk-stat span { flex: 1 1 auto; }
+.adm-ov .dk-stat b { flex: 0 1 auto; min-width: 0; max-width: 62%; text-align: right; overflow-wrap: break-word; }   /* break-word, not anywhere: a short figure such as 10 never splits */
 .adm-report .post-head { color: var(--muted); font-size: max(var(--text-floor), 0.85rem); margin-bottom: 0.4rem; }
 .adm-reason { font-style: italic; margin: 0.3rem 0; }
 .adm-quote { margin: 0.4rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--green); background: var(--g-wash); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }

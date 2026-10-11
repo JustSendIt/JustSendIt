@@ -327,6 +327,12 @@ Then, whichever of these fits your host:
 not a backup — emails, wallet links, tracked wallets and 2FA secrets are all encrypted at rest with it. If
 the key sits in the same bucket as the dump, one leaked credential loses both halves at once.
 
+On a single machine (the Mac this site runs on today), keep three places apart: the database in `data/`, the
+backups on a volume of their own (`BACKUP_DIR`), and the key in a file on a third volume (`DATA_KEY_FILE`, chmod
+600). On a Mac with one internal disk, APFS volumes added to its container (`diskutil apfs addVolume disk3 APFS
+JustSendItBackups`, and one for the key) are separate filesystems on the same physical disk: that guards against a
+damaged or deleted data folder, not a dead disk or a lost Mac — copy both somewhere off the machine as well.
+
 **Test a restore before you need one.** Copy a snapshot to a scratch host, set the same `DATA_KEY`, boot it,
 and sign in. An untested backup is a hypothesis.
 

@@ -882,6 +882,12 @@
     dat.className = 'npm-item'; dat.setAttribute('role', 'menuitem'); dat.tabIndex = -1; dat.href = '/data.html';
     dat.innerHTML = '<span class="npm-ico" aria-hidden="true">🔑</span> Data API';
     menu.appendChild(wall); menu.appendChild(dash); menu.appendChild(trk); menu.appendChild(dat);
+    if (user.admin) {   // only the admin account is told the page exists; the server 404s it for everyone else
+      const adm = document.createElement('a');
+      adm.className = 'npm-item'; adm.setAttribute('role', 'menuitem'); adm.tabIndex = -1; adm.href = '/admin.html';
+      adm.innerHTML = '<span class="npm-ico" aria-hidden="true">🛠️</span> Admin';
+      menu.appendChild(adm);
+    }
     /* WHAT "DISCONNECT" MEANS DEPENDS ON HOW YOU GOT IN.
        With an email or a social login as well, your wallet is one of several ways in, so disconnecting it
        unlinks the wallet and leaves you signed in — you should never have to sign out to drop a wallet.

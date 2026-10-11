@@ -31,7 +31,7 @@ const PAGES = {
   'profile.html':     ['My Profile — $Send', 'noindex, follow'],
   'watchlist.html':   ['My Watchlist — $Send', 'noindex, follow'],
   'squad.html':       ['Send Squad — $Send', 'noindex, follow'],
-  'admin.html':       ['Moderation — $Send', 'noindex, nofollow'],
+  'admin.html':       ['Admin — $Send', 'noindex, nofollow'],
   'gate.html':        ['Get Your Ticket — Just Send It', 'noindex, follow'],
   'u.html':           ['Sender Profile — $Send', 'noindex, follow'],
   'community.html':   ['Community — $Send', 'noindex, follow'],
