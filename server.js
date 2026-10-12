@@ -6902,12 +6902,16 @@ const dhFollowDrop = (uid, coin, i, uncheckedOnly) => db.prepare('DELETE FROM dh
 /* Coins left a followed wallet. What it can still hold of the member's is at most its balance now (the ledger's, kept up
    to date before the hook runs): a wallet with coins of its own that moves some of them keeps the member's, and stays
    followed; once it holds no more than 2% of what it got, it is let go. */
-function dhFollowUse(uid, coin, i) {
+function dhFollowUse(uid, coin, i, balNow) {   // balNow: its balance at that point (the hook knows it row by row); else the ledger's now
   const x = dhFollowGet(uid, coin, i);
   if (!x || x.via === 'unlink') return;
-  const r = db.prepare('SELECT addr_enc FROM dh_follow WHERE user_id = ? AND token = ? AND addr_idx = ?').get(uid, coin, i);
-  const a = String(decField(r && r.addr_enc) || '').toLowerCase();
-  let bal = 0n; try { bal = BigInt(ledgerBalances(coin === 'GWC' ? TOK.GWC : TOK.SEND, [a]).get(a) || '0'); } catch {}
+  let bal = 0n;
+  if (balNow != null) bal = balNow;
+  else {
+    const r = db.prepare('SELECT addr_enc FROM dh_follow WHERE user_id = ? AND token = ? AND addr_idx = ?').get(uid, coin, i);
+    const a = String(decField(r && r.addr_enc) || '').toLowerCase();
+    try { bal = BigInt(ledgerBalances(coin === 'GWC' ? TOK.GWC : TOK.SEND, [a]).get(a) || '0'); } catch {}
+  }
   const left = x.budget < bal ? x.budget : bal > 0n ? bal : 0n;
   if (left <= x.orig / 50n) dhFollowDrop(uid, coin, i);
   else if (left < x.budget) db.prepare('UPDATE dh_follow SET info_enc = ? WHERE user_id = ? AND token = ? AND addr_idx = ?').run(encField(JSON.stringify({ since: x.since, budget: left.toString(), orig: x.orig.toString() })), uid, coin, i);
@@ -6955,7 +6959,16 @@ function dhLedgerHook(tok, logs, only) {   // only = { uid, idx: Map(addr_idx â†
   const ownerOf = (i) => { const r = db.prepare("SELECT user_id FROM identities WHERE type = 'wallet' AND identifier = ?").get(i); return r ? r.user_id : null; };
   const note = db.prepare('INSERT OR IGNORE INTO dh_moves (user_id, token, src, quick, move_idx, from_idx, from_enc, to_idx, to_enc, tx_enc, info_enc, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
   const madeIn = new Map();   // uid:addr â†’ the tx whose transfer started following it: the rest of that tx is the same action (a router passing the coins on), not that wallet's move
-  for (const r of rows) {
+  /* a wallet's balance just after row k: the ledger has already applied the whole batch, so its balance less what the
+     rest of the batch moved. ($SEND's fee leaves the seller BEFORE its coins reach the pool: the batch's final, empty
+     balance would let go of a followed wallet on its fee row and miss the sale on the next one.) */
+  const balAfter = (x, k) => {
+    let b = 0n; try { b = BigInt(ledgerBalances(tok, [x]).get(x) || '0'); } catch {}
+    for (let j = k + 1; j < rows.length; j++) { if (rows[j].f === x) b += rows[j].v; if (rows[j].t === x) b -= rows[j].v; }
+    return b;
+  };
+  for (let k = 0; k < rows.length; k++) {
+    const r = rows[k];
     if (!r.v || r.f === pool || sink(r.f) || r.f === r.t) continue;
     const fi = bidxOf(r.f), owner = only ? null : ownerOf(fi);
     if (only && !(r.block < (only.idx.get(fi) ?? -1))) continue;
@@ -6968,11 +6981,11 @@ function dhLedgerHook(tok, logs, only) {   // only = { uid, idx: Map(addr_idx â†
       watchers.push({ uid: w.user_id, src: w.via === 'unlink' ? 'unlinked' : 'followed' });   // a wallet they unlinked is still theirs (its moves are judged like a linked wallet's)
     }
     if (!watchers.length) continue;
-    if (sink(r.t)) { for (const w of watchers) if (w.src === 'followed') dhFollowUse(w.uid, coin, fi); continue; }   // a fee or a burn: nobody's sale, but those coins left
+    if (sink(r.t)) { if (!only) for (const w of watchers) if (w.src === 'followed') dhFollowUse(w.uid, coin, fi, balAfter(r.f, k)); continue; }   // a fee or a burn: nobody's sale, but those coins left
     const ti = bidxOf(r.t), toOwner = ownerOf(ti);
     const quick = r.t === pool ? 'pool' : poolIn.has(r.tx) ? 'routed' : 'transfer';
     for (const w of watchers) {
-      if (toOwner === w.uid) { if (w.src === 'followed') dhFollowUse(w.uid, coin, fi); continue; }   // into their own linked wallets: not a move
+      if (toOwner === w.uid) { if (w.src === 'followed' && !only) dhFollowUse(w.uid, coin, fi, balAfter(r.f, k)); continue; }   // into their own linked wallets: not a move (a catch-up leaves the budget to the resolver)
       note.run(w.uid, coin, w.src, quick, bidx(r.tx + ':' + r.li), fi, encField(r.f), ti, encField(r.t), encField(r.tx), encField(JSON.stringify({ block: r.block, li: r.li, amount: r.v.toString() })), now());
       if (w.src !== 'followed' && quick !== 'pool') {   // unchecked until dhResolve reads the receipt
         const had = dhFollowGet(w.uid, coin, ti);
@@ -7105,6 +7118,7 @@ async function dhForwarded(m, rc, ca, to, tx, info, amount) {
   if (!legs.length) return;
   const back = [...new Map(legs.filter(([, ri]) => { const x = dhFollowGet(m.user_id, m.token, ri); return !x || x.since > info.block; }).map(([r, ri]) => [ri, r])).values()];
   await dhCatchUp(ca, back, info.block, tx, (logs) => {
+    if (!db.prepare('SELECT 1 FROM dh_moves WHERE id = ?').get(m.id)) return;   // the account was deleted while the chain was read: nothing is written for it
     db.exec('BEGIN');
     try {
       const bound = new Map();   // not watched from this block: from it up to where they were (fresh: up to now)
@@ -7164,6 +7178,12 @@ async function dhResolveRun() {
         if (passed) await dhForwarded(m, rc, ca, to, tx, info, amount);   // a batch send in the same transaction: its wallets are followed (a router into the pool: nothing)
         settle(m, 'sale', at); sold.add(m.user_id);
         if (linked) { if (stays) keepIdx(m, m.to_idx); else dhLetGo(m.user_id, m.token, m.to_idx, amount, m.id); }
+      } else if (linked && m.quick !== 'pool' && dhPassedOn(rc.raw, to, ca) && (tradeLegs(rc.entry, to, ca) || [])[3] && !(await dhIsPoolish(to))) {
+        /* the wallet the coins went to SOLD in that same transaction (selling a little more than it got keeps it off the
+           member's own path in tradeLegs): a sale by the wallet they sent the coins to â€” the member's sale */
+        const at = await dhSaleTime(m, info);
+        settle(m, 'sale', at); sold.add(m.user_id);
+        dhLetGo(m.user_id, m.token, m.to_idx, amount, m.id);
       } else if (linked && m.quick !== 'pool') {
         if (dhPassedOn(rc.raw, to, ca)) { await dhForwarded(m, rc, ca, to, tx, info, amount); dhLetGo(m.user_id, m.token, m.to_idx, amount, m.id); settle(m, 'ignored'); }
         else if (await dhIsPoolish(to)) { dhLetGo(m.user_id, m.token, m.to_idx, amount, m.id); settle(m, 'ignored'); }   // a pool or a vault took them (adding liquidity, a deposit)

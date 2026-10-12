@@ -150,6 +150,17 @@
   const pausedHold = (h) => !!h && (h.scorePct || 0) <= 0 && !!((h.streakStart && h.streakPaused) || (!h.streakStart && h.gwcStreakStart && h.gwcStreakPaused));
   const pausedDays = (h) => Math.floor((h.streakStart ? h.holdDays : h.gwcDays) || 0);
   const pausedCoin = (h) => (h.streakStart ? '$SEND or $GWC' : '$GWC');
+  /* Calendar days to the next tier from the clocks that run: the tier counts max(combined days, 2 × $GWC days), so a
+     $GWC day is worth two. anyClock: also count a paused clock (what it would take once it picks up again). */
+  function daysToNext(h, d, anyClock) {
+    if (!h || !d || d.nextDays == null) return 0;
+    const comb = h.streakStart && (anyClock || !h.streakPaused) ? Math.max(0, d.nextDays - Math.floor(h.holdDays || 0)) : Infinity;
+    const gwc = h.gwcStreakStart && (anyClock || !h.gwcStreakPaused) ? Math.max(0, Math.ceil((d.nextDays - 2 * (h.gwcDays || 0)) / 2)) : Infinity;
+    const v = Math.min(comb, gwc);
+    return Number.isFinite(v) ? v : Math.max(0, d.nextDays - Math.floor(d.days || 0));
+  }
+  // the $GWC clock paused on its own while the combined one runs: its days wait, and $100 of $GWC picks them up
+  const gwcAlonePaused = (h) => !!h && !!h.streakStart && !h.streakPaused && !!h.gwcStreakStart && !!h.gwcStreakPaused;
   function supplyTermOf(h) { return 10 * (qualPct(h.pctSend, h.sendQualifies) + GWC_W * qualPct(h.pctGwc, h.gwcQualifies)); }
   // does this account hold anything the floor is currently excluding? the strip says so rather than just shrinking
   function dustedCoins(h) {
@@ -326,7 +337,7 @@
     const xpGap = maxed ? 0 : Math.max(0, (g.spanLevel || 0) - (g.intoLevel || 0));
     const d = h && h.diamond;
     const diaProg = (d && d.nextDays != null) ? d.progress * 100 : (d ? 100 : 0);
-    const diaLeft = (d && d.nextDays != null) ? Math.max(0, d.nextDays - d.days) : 0;
+    const diaLeft = (d && d.nextDays != null) ? daysToNext(h, d) : 0;
     const nextLbl = d ? diaNextLabel(d.level) : '';
 
     let primary;
@@ -337,7 +348,9 @@
 
     let secondary;
     if (d && h.streakStart) {
-      secondary = d.nextDays != null
+      secondary = gwcAlonePaused(h)
+        ? '⏸ Your <b>$GWC</b> clock is paused at <b>' + Math.floor(h.gwcDays || 0) + '</b> day' + (Math.floor(h.gwcDays || 0) === 1 ? '' : 's') + ' (its days count double) — $' + (h.minHoldUsd || 100) + ' of $GWC in your linked wallets picks it up again'
+        : d.nextDays != null
         ? '💎 Don\'t break your <b>' + Math.floor(h.holdDays) + '-day</b> diamond streak — ' + diaLeft + ' day' + (diaLeft === 1 ? '' : 's') + ' to ' + esc(nextLbl)
         : '👑 <b>' + esc(d.name) + '</b> — the highest Diamond tier there is. Never sell. 💎';
     } else if (hasWallet) {
@@ -574,7 +587,7 @@
       pips += '<circle cx="' + x + '" cy="' + y + '" r="' + (earned ? 4 : 2.6) + '" class="relic-pip' + (earned ? ' on' : '') + (current ? ' cur' : '') + '"/>';
     }
     // frame the bar as within-tier progress so the visible label AND the aria value both match the rendered fill (diaPct)
-    const daysLeft = maxed ? 0 : Math.max(0, d.nextDays - (d.days != null ? Math.floor(d.days) : days));   // the tier counts its own days ($GWC days weigh double)
+    const daysLeft = maxed ? 0 : daysToNext(h, d, !!h.streakPaused);   // calendar days, from the clocks that run ($GWC days weigh double)
     const barText = maxed ? '👑 ' + esc(d.name) + ' — MAX'
       : h.streakPaused ? '⏸ Paused at ' + days + ' day' + (days === 1 ? '' : 's') + ' held · ' + daysLeft + ' to ' + esc(diaNextLabel(d.level)) + ' once it picks up'
       : days + ' day' + (days === 1 ? '' : 's') + ' held · ' + daysLeft + ' to ' + esc(diaNextLabel(d.level));
@@ -593,6 +606,7 @@
       '</div>' +
       '<div class="relic-name">' + d.emoji + ' ' + esc(d.name) + '</div>' +
       '<div class="relic-meta">Diamond Lv <b>' + d.level + '</b> / ' + d.maxLevel + ' · gives <b>×' + d.factor.toFixed(1) + '</b> hold boost</div>' +
+      (gwcAlonePaused(h) ? '<div class="relic-meta">⏸ $GWC clock paused at ' + Math.floor(h.gwcDays || 0) + ' days — back to $' + (h.minHoldUsd || 100) + ' of $GWC and it counts double again</div>' : '') +
       '<div class="gd-bar relic-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + (maxed ? 100 : diaPct) + '" aria-valuetext="' + barText + '" aria-label="Progress to next Diamond tier">' +
         '<div class="gd-fill" data-fill="' + (maxed ? 100 : diaPct) + '" style="width:0"></div>' +
         '<span class="gd-text">' + barText + '</span>' +
@@ -611,7 +625,9 @@
         '<div class="vault">' +
           '<h3 class="eng-h">🏦 The Vault</h3>' +
           '<p class="modal-note" style="margin:0.3rem 0 0.7rem;">' + (hasWallet
-            ? 'Your linked wallets hold under <b>$' + floor + '</b> of ' + pausedCoin(h) + ' right now, so the Holder Boost pays nothing until they’re back over it.'
+            ? (h.streakStart
+              ? 'Your linked wallets hold under <b>$' + floor + '</b> of $SEND or $GWC right now, so the Holder Boost pays nothing until they’re back over it.'
+              : 'Your linked wallets hold under <b>$' + floor + '</b> of $GWC right now, so your $GWC streak waits. $' + floor + ' of $GWC picks it up again; $' + floor + ' of $SEND starts a new streak and brings the Holder Boost back.')
             : 'No wallet is linked right now, so the Holder Boost pays nothing until one holding <b>$' + floor + '</b> of ' + pausedCoin(h) + ' is.') + '</p>' +
           '<div class="lock-btns">' +
             (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button" data-tip="Jumps to the Security panel to link a wallet">Connect wallet 🔗</button>') +

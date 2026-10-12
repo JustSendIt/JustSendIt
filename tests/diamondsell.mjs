@@ -165,7 +165,7 @@ try {
   const moves = () => db.prepare('SELECT id, user_id, token, src, quick, status, sale_at FROM dh_moves ORDER BY id').all();
   const follow = (uid, w, coin = 'SEND') => { const r = db.prepare('SELECT info_enc, state, via FROM dh_follow WHERE user_id = ? AND token = ? AND addr_idx = ?').get(uid, coin, bidx(w)); if (!r) return null; const x = JSON.parse(dec(r.info_enc)); return { ...x, state: r.state, via: r.via }; };
   const last = () => moves().at(-1);
-  const fee = (f, v) => [SEND, f, SEND, Math.floor(v / 100)];   // $SEND's 1% on every transfer, to the token contract
+  const fee = (f, v) => [SEND, f, SEND, Math.floor(v / 100)];   // $SEND's 1% on every transfer, to the token contract — emitted BEFORE the transfer, as the real token does
 
   ledger(SEND, send(W, [[SEND, W, POOL.SEND, 500], [WETH, POOL.SEND, W, 9]]));
   await ctx.dhResolveRun();
@@ -183,25 +183,41 @@ try {
   await ctx.dhResolveRun();
   check('adding liquidity (coins into the pool, nothing paid out) is NOT a sale', last().status === 'ignored' && last().quick === 'pool', JSON.stringify(last()));
   // a plain transfer with $SEND's fee
-  ledger(SEND, send(W, [[SEND, W, X, 990], fee(W, 1000)]));
+  ledger(SEND, send(W, [fee(W, 1000), [SEND, W, X, 990]]));
   check('a transfer to another wallet starts following it at once, for what it got', follow(1, X) && follow(1, X).state === 0 && follow(1, X).budget === '990' && follow(1, X).since === blk);
   await ctx.dhResolveRun();
   check('  ...it is a TRANSFER, not a sale, and the wallet stays followed', last().status === 'transfer' && follow(1, X).state === 1, JSON.stringify(last()));
-  ledger(SEND, send(W, [[SEND, W, Y, 200], fee(W, 200), [SEND, SEND, POOL.SEND, 40], [WETH, POOL.SEND, SEND, 1]]));
+  ledger(SEND, send(W, [fee(W, 200), [SEND, W, Y, 200], [SEND, SEND, POOL.SEND, 40], [WETH, POOL.SEND, SEND, 1]]));
   await ctx.dhResolveRun();
   check('  ...a transfer during which the token swaps its own collected fee is still a transfer', last().status === 'transfer');
   const n0 = moves().length;
-  ledger(SEND, send(W, [[SEND, W, W2, 100], fee(W, 100)]));
+  ledger(SEND, send(W, [fee(W, 100), [SEND, W, W2, 100]]));
   check('moving coins between the member\'s own linked wallets is not a move at all', moves().length === n0);
-  ledger(SEND, send(X, [[SEND, X, POOL.SEND, 594], fee(X, 600), [WETH, POOL.SEND, X, 11]]));
+  ledger(SEND, send(X, [fee(X, 600), [SEND, X, POOL.SEND, 594], [WETH, POOL.SEND, X, 11]]));
   await ctx.dhResolveRun();
   check('a sale by the wallet they sent the coins to IS a sale for the member', last().status === 'sale' && last().src === 'followed' && last().user_id === 1, JSON.stringify(last()));
   check('  ...and what it can still hold of theirs is at most its balance: 402 (the 990 it got, less the 594 sold and the 6 fee, plus 12 a pool paid it earlier)', follow(1, X).budget === '402', follow(1, X).budget);
-  ledger(SEND, send(X, [[SEND, X, OTHER, 100], fee(X, 100)]));
+  ledger(SEND, send(X, [fee(X, 100), [SEND, X, OTHER, 100]]));
   await ctx.dhResolveRun();
   check('  ...its onward transfer is neither a sale nor a new follow (one hop, as the rule says)', last().status === 'ignored' && !follow(1, OTHER), JSON.stringify(last()));
-  ledger(SEND, send(X, [[SEND, X, W, 287], fee(X, 290)]));
+  ledger(SEND, send(X, [fee(X, 290), [SEND, X, W, 287]]));
   check('  ...and when it has given back what it got (after $SEND\'s fee), it is let go', !follow(1, X), JSON.stringify(follow(1, X)));
+  // the round-6 critical case: a wallet the member sent $SEND to dumps ALL of it — $SEND's fee row comes first, and must not let it go
+  const XD = '0x' + '7'.repeat(39) + '1', XE = '0x' + '7'.repeat(39) + '2';
+  ledger(SEND, send(W, [fee(W, 1000), [SEND, W, XD, 990]]));
+  await ctx.dhResolveRun();
+  ledger(SEND, send(XD, [fee(XD, 990), [SEND, XD, POOL.SEND, 981], [WETH, POOL.SEND, XD, 9]]));
+  await ctx.dhResolveRun();
+  check('a wallet the member sent $SEND to sells ALL of it ($SEND\'s fee leaves it first): the member\'s SALE (the review\'s round-6 critical case)', last().status === 'sale' && last().src === 'followed' && last().user_id === 1 && !follow(1, XD), JSON.stringify(last()));
+  ledger(SEND, [...send(W, [fee(W, 1000), [SEND, W, XE, 990]]), ...send(XE, [fee(XE, 990), [SEND, XE, POOL.SEND, 981], [WETH, POOL.SEND, XE, 9]])]);
+  await ctx.dhResolveRun(); await ctx.dhResolveRun();
+  check('  ...and the same with the send and the dump in one ledger batch', last().status === 'sale' && last().src === 'followed' && last().user_id === 1, JSON.stringify(moves().slice(-2)));
+  // a recipient that sells a little more than it got, in the same transaction (kept off the member's path by tradeLegs)
+  const XS = '0x' + '7'.repeat(39) + '3';
+  CODE.add(XS);
+  ledger(SEND, send(W, [[SEND, W, XS, 1000], [SEND, XS, POOL.SEND, 1001], [WETH, POOL.SEND, XS, 9]]));
+  await ctx.dhResolveRun();
+  check('a wallet the coins went to that sells a little more than it got in the same transaction: the member\'s SALE (the review\'s round-6 case)', last().status === 'sale' && last().src === 'linked', JSON.stringify(last()));
   // a wallet that is a contract (a Safe): followed like any wallet; a router: not
   ledger(SEND, send(W, [[SEND, W, SAFE, 250]]));
   await ctx.dhResolveRun();
@@ -408,7 +424,7 @@ try {
     const gj = (re, name) => { const m = re.exec(GJ); if (!m) throw new Error('could not find ' + name + ' in gamify.js'); return m[0]; };
     const src = gj(/  function esc\(s\) [^\n]+\n/, 'esc') + gj(/  const DIA_TIERS = \[[\s\S]*?\n  \];\n/, 'DIA_TIERS') + gj(/  const diaNext = [^\n]+\n/, 'diaNext') + gj(/  const diaNextLabel = [^\n]+\n/, 'diaNextLabel')
       + gj(/  const nf = [^\n]+\n/, 'nf') + gj(/  const GWC_W = [^\n]+\n/, 'GWC_W') + gj(/  function qualPct\([^\n]+\n/, 'qualPct') + gj(/  function supplyTermOf\([^\n]+\n/, 'supplyTermOf')
-      + gj(/  const pausedHold = [^\n]+\n/, 'pausedHold') + gj(/  const pausedDays = [^\n]+\n/, 'pausedDays') + gj(/  const pausedCoin = [^\n]+\n/, 'pausedCoin') + gj(/  function objectiveBar\(g\) \{[\s\S]*?\n  \}\n/, 'objectiveBar')
+      + gj(/  const pausedHold = [^\n]+\n/, 'pausedHold') + gj(/  const pausedDays = [^\n]+\n/, 'pausedDays') + gj(/  const pausedCoin = [^\n]+\n/, 'pausedCoin') + gj(/  function daysToNext\(h, d, anyClock\) \{[\s\S]*?\n  \}\n/, 'daysToNext') + gj(/  const gwcAlonePaused = [^\n]+\n/, 'gwcAlonePaused') + gj(/  function objectiveBar\(g\) \{[\s\S]*?\n  \}\n/, 'objectiveBar')
       + gj(/  function holdForge\(h\) \{[\s\S]*?\n  \}\n/, 'holdForge') + gj(/  function diamondRelic\(h\) \{[\s\S]*?\n  \}\n/, 'diamondRelic') + gj(/  function boostEngine\(g\) \{[\s\S]*?\n  \}\n/, 'boostEngine');
     const ui = vm.createContext({ AUTH: { user: { wallets: ['0x1'] } }, Math, Date, String, Number });
     vm.runInContext(src + '\nthis.boostEngine = boostEngine; this.objectiveBar = objectiveBar;', ui);
@@ -424,6 +440,11 @@ try {
     const gwcOnly = { streakStart: null, gwcStreakStart: T0, gwcStreakPaused: true, scorePct: 0, holdDays: 0, gwcDays: 60, minHoldUsd: 100, diamond: { level: 6, maxLevel: 10, name: 'Flawless Diamond', emoji: '💎', days: 120, nextDays: 240, progress: 0, factor: 2 } };
     const gh = ui.boostEngine({ holder: gwcOnly, rules: {} });
     check('a $GWC streak paused on its own (a $SEND sale ended the combined one) shows as paused at its 60 days — not as "Holder Boost locked"', /60/.test(gh) && /Moving coins is not selling/.test(gh) && !/Holder Boost locked/.test(gh), gh.slice(0, 300));
+    const both = { streakStart: T0, gwcStreakStart: T0, scorePct: 1, holdDays: 40, gwcDays: 40, fresh: true, diamond: { level: 5, maxLevel: 10, name: 'Diamond Hands', emoji: '💎', days: 80, nextDays: 120, progress: 0.3, factor: 2 } };
+    const ob2 = ui.objectiveBar({ holder: both, level: 3, nextLevelXp: 100, intoLevel: 90, spanLevel: 100 });
+    check('the days to the next tier are calendar days from the clocks that run: day 40 of both clocks, $GWC days counting double, is 20 days from 120 — not 40 (the review\'s round-6 case)', /<b>20<\/b> days of holding to/.test(ob2) || /20 days to/.test(ob2), ob2.slice(0, 300));
+    const ob3 = ui.objectiveBar({ holder: { ...both, gwcStreakPaused: true }, level: 3, nextLevelXp: 100, intoLevel: 90, spanLevel: 100 });
+    check('  ...and a $GWC clock paused while $SEND keeps the other running is shown as paused, with what picks it up again', /\$GWC<\/b> clock is paused at <b>40<\/b> days/.test(ob3) && /of \$GWC in your linked wallets picks it up again/.test(ob3), ob3.slice(0, 400));
     const gob = ui.objectiveBar({ holder: gwcOnly, level: 3, nextLevelXp: 100, intoLevel: 10, spanLevel: 50 });
     check('  ...and says it is $GWC that picks it up again (a $SEND buy starts a new clock — the review\'s round-5 case)', /of \$GWC right now/.test(gh) && /60-day<\/b> Diamond streak is paused/.test(gob) && /of \$GWC right now/.test(gob) && !/\$SEND or \$GWC/.test(gob), gob.slice(0, 300));
   }
