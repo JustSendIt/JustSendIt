@@ -68,6 +68,13 @@ try {
   check('  ...unless the wallet is a smart account whose UserOperation ran in it: then it is the wallet\'s own buy', buy(r) === 100, JSON.stringify(r));
   r = T([[A, w, pool, 1000], [WETH, pool, w, 90], [WETH, w, pool2, 50], [A, pool2, w, 400]]);
   check('a sell then a rebuy in one transaction says the sell came first', r && r[0] === 1 && r[3] === 1 && r[6] === 1 && buy(r) === 50 && sell(r) === 90, JSON.stringify(r));
+  /* ═══ the coin's own auto-liquidity inside a sale ($SEND's _swapAndLiquify runs just before the seller's coins reach the pool) ═══ */
+  const liq = [[A, w, A, 8], [A, A, pool, 4], [WETH, pool, router, 3], [WETH, router, Z, 3], [A, A, pool, 4], [WETH, Z, router, 3], [WETH, router, pool, 3],
+    [pool, Z, other, 1], [pool, Z, DEAD, 9], [A, w, pool, 792], [WETH, pool, bundler, 90], [WETH, bundler, Z, 90]];
+  r = T(liq);
+  check('a sale that also runs the token\'s auto-liquidity (fees swapped, liquidity added, LP minted, then the seller\'s swap) is a SALE for what the pool paid the seller — the LP mint ends the pool\'s liquidity turn', sell(r) === 90 && r[0] === 0, JSON.stringify(r));
+  r = T(liq.filter(([t]) => t !== pool));
+  check('  ...(without the LP mint between them, the liquidity WETH in and the sale\'s WETH out read as one pass-through turn — the miss the mint boundary fixes)', r === null, JSON.stringify(r));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);

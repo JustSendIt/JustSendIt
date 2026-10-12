@@ -586,6 +586,24 @@
   function boostEngine(g) {
     const h = g.holder;
     const hasWallet = AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length;
+    if (h && h.streakStart && h.streakPaused && (h.scorePct || 0) <= 0) {
+      // paused, not lost: the coins left the linked wallets (moving them is not selling) — the boost waits, the days are kept
+      const floor = h.minHoldUsd || (g.rules && g.rules.holdFloorUsd) || 100;
+      return '<div class="engine engine-live engine-paused">' +
+        '<div class="vault">' +
+          '<h3 class="eng-h">🏦 The Vault</h3>' +
+          '<p class="modal-note" style="margin:0.3rem 0 0.7rem;">' + (hasWallet
+            ? 'Your linked wallets hold under <b>$' + floor + '</b> of $SEND / $GWC right now, so the Holder Boost pays nothing until they’re back over it.'
+            : 'No wallet is linked right now, so the Holder Boost pays nothing until one holding <b>$' + floor + '</b> of $SEND / $GWC is.') + '</p>' +
+          '<div class="lock-btns">' +
+            (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button" data-tip="Jumps to the Security panel to link a wallet">Connect wallet 🔗</button>') +
+            '<button class="btn btn-ghost btn-sm js-refresh" type="button" data-tip="Re-reads your linked wallets on-chain and redraws this dashboard">↻ Refresh holdings</button>' +
+          '</div>' +
+          holdForge(h) +
+        '</div>' +
+        diamondRelic(h) +
+      '</div>';
+    }
     if (!h || !h.streakStart || (h.scorePct || 0) <= 0) {
       // locked — collapse Vault + Relic into one invite
       return '<div class="engine engine-locked">' +
@@ -1348,7 +1366,7 @@
           '<li><b>📊 Supply boost — +10× for each 1% of supply you hold, and $GWC counts ×3.</b> Your %SEND and %GWC add together, with <b>$GWC weighted 3×</b> (so 1% of $GWC ≈ +30×, 1% of $SEND ≈ +10×) — $GWC is the Generational Wealth Coin, so holding it moves your Power the most.</li>' +
           '<li><b>💎 Diamond boost — for holding without ever selling, and holding $GWC counts double.</b> The longer you hold, the higher your <b>Diamond Level</b> climbs through 11 tiers (Paper Grip → … → 👑 Immortal Diamond, 0 days up to ~2 years). <b>Every day you hold $GWC counts as two</b> toward your level, so diamond-handing $GWC levels you up twice as fast. Each tier multiplies your supply boost further — <b>up to ×100</b> at Immortal Diamond.</li>' +
           '<li>The two combine as <b>1 + (supply × diamond)</b>, with <b>no cap</b> — big bags held long enough scale your boost without limit.</li>' +
-          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, or from a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets hold under $100. They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
+          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, or from a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets hold under $100 (and ends only if the price would have taken the moved coins under $100 too). They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
         '</ul>' +
         '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes live at <b>10 verified holder slots</b>, each one a wallet that really holds the token). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
         '<ul>' +
@@ -1500,7 +1518,7 @@
         ? comms + (comms === 1 ? ' live community' : ' live communities') + ((g.communityMult || 1) > 1 ? ' · flat ' + g.communityMult + '× live' : ' · not paying yet — refresh your holdings')
         : (allComms ? allComms + ' joined · none live yet' : 'None joined yet'),
       boost: em.holder > 1 ? 'Your Holder Boost pays ' + em.holder.toFixed(2) + '× of a ⚡' + m.toFixed(2) + '× stack'
-        : (h.streakStart ? 'Paused — refresh to re-verify your bags' : 'Locked — no qualifying $SEND or $GWC yet'),
+        : (h.streakStart ? (h.streakPaused ? 'Paused — your coins left the linked wallets; moving is not selling, so your days wait' : 'Paused — refresh to re-verify your bags') : 'Locked — no qualifying $SEND or $GWC yet'),
       eq: 'Every term in your ⚡ boost, and what each one adds',
       calls: a ? (a.readOnly ? 'Paused while your account is read-only' : a.remaining + ' of ' + a.limit + ' Send Calls left in the last 24h') : '',
       loot: lootBlurb(g),
