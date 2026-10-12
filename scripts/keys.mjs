@@ -110,6 +110,11 @@ if (cmd === 'status') {
   if (await serverUp()) die('the server is answering on :' + PORT + ' — stop it first (launchctl bootout gui/$(id -u)/com.justsendit.server), then run init, then start it.');
   const live = dbInfo(path.join(DATA_DIR, 'app.db'));
   if (!live.error && live.census.kids && Object.keys(live.census.kids).some((k) => k !== '1')) die('the database already holds values under rotated keys — this key file is not the one it was rotated with.');
+  // the key in the file must open what is stored (the server could have been running on a different DATA_KEY)
+  { const d = new DatabaseSync(path.join(DATA_DIR, 'app.db'), { readOnly: true }); let tried = 0, opened = 0; const L = K.Keys.legacy(kf.key);
+    try { for (const [t, c] of K.ENC_FIELDS) { if (!K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT ${c} v FROM ${t} WHERE ${c} GLOB 'v1:*' LIMIT 3`).all()) { tried++; if (L.openField(r.v).plain != null) opened++; } } } finally { d.close(); }
+    if (tried && !opened) die('the key in ' + RING + ' opens none of ' + tried + ' stored values — it is not the key this database uses. Nothing was changed.');
+    console.log('  the key opens ' + opened + ' of ' + tried + ' sampled values'); }
   const dbFile = path.join(DATA_DIR, 'app.db');
   if (!fs.existsSync(dbFile)) die('no database at ' + dbFile + ' — run init from the site\'s own folder (it reads the same .env as the server).');
   const d = new DatabaseSync(dbFile); let dbId;

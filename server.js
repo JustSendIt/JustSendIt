@@ -17046,7 +17046,14 @@ function keyFiles() {
       if (n.isDirectory()) {
         if (n.name === 'keyring-escrow' || KEY_SYSTEM_DIRS.has(n.name)) continue;   // sealed rings; the volume's own folders (root's, unreadable)
         if (n.name === '.rekey') { keyCleanWork(p); continue; }                       // work copies: none is in use while this runs (it holds the key lock)
-        if (n.name === '.Trashes') { const mine = path.join(p, String(process.getuid ? process.getuid() : '')); if (fs.existsSync(mine)) walk(mine, true, depth + 1); continue; }
+        if (n.name === '.Trashes') {
+          // the volume's Trash: macOS may refuse to list it to a background process. On APFS an empty folder's size is
+          // 64 bytes (each entry adds 32), so an unlistable but empty one is empty; anything else holds the drops
+          const mine = path.join(p, String(process.getuid ? process.getuid() : ''));
+          let st = null; try { st = fs.statSync(mine); } catch {}
+          if (st) { try { fs.readdirSync(mine); walk(mine, true, depth + 1); } catch (e) { if (st.size > 64) blocked.push({ path: mine, why: 'the volume\'s Trash holds items the server cannot see (' + (e.code || e.message) + ') — empty the Trash' }); } }
+          continue;
+        }
         if (depth < 4) walk(p, false, depth + 1); else blocked.push({ path: p, why: 'nested too deep to check' });
         continue;
       }
@@ -17138,7 +17145,7 @@ function keyDropUnneeded(rep) {
     const fps = Object.fromEntries(dropKids.map((id) => [id, KEYS.fingerprint(id)]));
     keyRingWrite((r) => {
       r.dek.keys = r.dek.keys.filter((k) => !dropKids.includes(k.id));
-      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id], left: Math.max(Number(rep.live.unreadable[id] || 0), ...rep.files.map((f) => Number((f.unreadableKids || {})[id] || 0))) });
+      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id], left: Math.max(Number(rep.live.unreadable[id] || 0), ...rep.files.filter((f) => f.status !== 'foreign').map((f) => Number((f.unreadableKids || {})[id] || 0))) });   // a copy under another keyring says nothing about this one
       r.idx.outer = r.idx.outer.filter((o) => !dropEpochs.includes(o.epoch));
       for (const e of dropEpochs) r.idx.dropped.push({ epoch: e, at: t });
     }, { dropping: true });

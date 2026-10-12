@@ -235,6 +235,10 @@ try {
   const OLD_MTIME = new Date('2026-01-01T12:00:00Z'); fs.utimesSync(path.join(BK, 'app-2026-01-01.db'), OLD_MTIME, OLD_MTIME);
 
   /* ── 2b. the switch-over: init, escrow, an emergency rotation of everything ── */
+  { const wrong = path.join(KV, 'wrong_key'); fs.writeFileSync(wrong, randomBytes(32).toString('hex') + '\n', { mode: 0o600 });
+    let out = ''; try { execFileSync(process.execPath, ['--disable-warning=ExperimentalWarning', path.join(ROOT, 'scripts', 'keys.mjs'), 'init'], { cwd: ROOT, env: { ...ENV, DATA_KEY_FILE: wrong }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }); out = 'CONVERTED'; } catch (e) { out = String(e.stdout || '') + String(e.stderr || ''); }
+    check('init refuses a key file that does not open the stored values, and changes nothing', /opens none of/.test(out) && K.readKeyFile(wrong).kind === 'hex', out.slice(0, 200));
+    fs.unlinkSync(wrong); }
   const init = cli('init');
   check('scripts/keys.mjs init converts the key file to a keyring (server stopped) and prints no key', init.ok && ringNow().kind === 'ring' && !init.out.includes(K1.toString('hex')), init.out.slice(0, 300));
   check('  ...and refuses a second time', !cli('init').ok);
