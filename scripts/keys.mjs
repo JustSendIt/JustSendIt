@@ -10,7 +10,10 @@
  *                                                database (server stopped)
  *   node scripts/keys.mjs claim                  make this site's database the keyring's owner — the only one that rotates it
  *                                                (after moving the site to another folder, or restoring a backup there)
- *   node scripts/keys.mjs escrow-init            make the escrow key pair: public half beside the ring, private half printed once
+ *   node scripts/keys.mjs escrow-init [--replace] [--to FILE]
+ *                                                make the escrow key pair: public half beside the ring, private half printed
+ *                                                once — only to a real terminal. Anywhere else (a chat, a log) it refuses
+ *                                                unless --to FILE names a new file to write the key into instead
  *   node scripts/keys.mjs request [--all] [--compromised]
  *                                                ask the server to rotate: the data key (default), or everything (--all,
  *                                                restarts it); --compromised also drops old keys as soon as nothing needs them.
@@ -21,6 +24,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -143,6 +147,20 @@ if (cmd === 'status') {
   needRing();
   const sib = K.ringSiblings(RING);
   if (fs.existsSync(sib.escrowPub) && !rest.includes('--replace')) die('an escrow key is already set up (' + sib.escrowPub + '). --replace makes a new pair; copies sealed to the old one still need the old recovery key.');
+  /* The recovery key opens every keyring this site will ever have, so it must not land in anything that keeps what it
+     is shown: a chat with an assistant (its `!` commands are saved in the transcript), a log, a CI job. It goes to a real
+     terminal, or into a file named with --to that only the owner opens — never anywhere else. */
+  const ti = rest.indexOf('--to');
+  let toFile = ti >= 0 ? rest[ti + 1] : null;
+  if (ti >= 0 && (!toFile || toFile.startsWith('--'))) die('--to needs a file name, for example --to ~/Desktop/escrow-recovery-key.txt');
+  if (toFile) {
+    if (toFile.startsWith('~/')) toFile = path.join(os.homedir(), toFile.slice(2));
+    toFile = path.resolve(toFile);
+    if (fs.existsSync(toFile)) die(toFile + ' already exists — name a new file');
+    if (!fs.existsSync(path.dirname(toFile))) die('no folder ' + path.dirname(toFile));
+  } else if (!process.stdout.isTTY) {
+    die('NOT RUN: this would print the recovery key into whatever is capturing this output (a chat, a log). Run it in the Terminal app, or add --to FILE (for example --to ~/Desktop/escrow-recovery-key.txt) to write the key only into that file.');
+  }
   const e = K.escrowKeygen();
   /* In this order, so a failure leaves escrow NOT set up rather than set up with no private half: seal the ring as it is
      now with the new public key (and check it opens), print the recovery key, and only then install the public key. */
@@ -152,7 +170,13 @@ if (cmd === 'status') {
     const sealed = K.escrowWrite(path.join(BACKUP_DIR, 'keyring-escrow'), e.pub, json, kf.ring.generation);
     if (K.escrowOpen(e.priv, fs.readFileSync(sealed)).toString('utf8') !== json) die('the sealed copy did not open again — escrow is NOT set up');
   }
-  console.log('\nESCROW RECOVERY KEY — shown once, never stored on this computer:\n\n  ' + e.priv + '\n');
+  if (toFile) {
+    const fd = fs.openSync(toFile, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+    try { fs.writeSync(fd, 'JustSendIt escrow RECOVERY KEY (made ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC):\n\n  ' + e.priv + '\n\nCopy it into a password manager or onto paper, keep it OFF this Mac, then delete this file and empty the Trash.\nWith it, `node scripts/keys.mjs escrow-open FILE OUT` opens any sealed keyring in ' + path.join(BACKUP_DIR, 'keyring-escrow') + '.\n'); fs.fsyncSync(fd); }
+    finally { fs.closeSync(fd); }
+    console.log('\n✓ The escrow RECOVERY KEY was written to ' + toFile + ' — and only there (it was not printed).');
+    console.log('  Open that file, copy the key into a password manager or onto paper, then delete the file and empty the Trash.\n');
+  } else console.log('\nESCROW RECOVERY KEY — shown once, never stored on this computer:\n\n  ' + e.priv + '\n');
   K.writeFileDurable(sib.escrowPub, e.pub + '\n', 0o600);
   console.log('Keep it OFF this Mac: a password manager, or on paper somewhere safe. With it, `escrow-open` opens any sealed');
   console.log('copy of the keyring in ' + path.join(BACKUP_DIR, 'keyring-escrow') + ' — copy those (and the backups) off this Mac too.');

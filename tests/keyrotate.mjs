@@ -242,9 +242,13 @@ try {
   const init = cli('init');
   check('scripts/keys.mjs init converts the key file to a keyring (server stopped) and prints no key', init.ok && ringNow().kind === 'ring' && !init.out.includes(K1.toString('hex')), init.out.slice(0, 300));
   check('  ...and refuses a second time', !cli('init').ok);
-  const esc = cli('escrow-init');
-  ESCROW_PRIV = (/RECOVERY KEY[^\n]*\n\n\s+([0-9a-f]{64})\n/.exec(esc.out) || [])[1] || null;
-  check('escrow-init prints a recovery key once and stores only the public half beside the ring', esc.ok && !!ESCROW_PRIV && fs.existsSync(path.join(KV, 'escrow.pub')) && !fs.readFileSync(path.join(KV, 'escrow.pub'), 'utf8').includes(ESCROW_PRIV), esc.out.slice(0, 200));
+  const noTty = cli('escrow-init');
+  check('escrow-init refuses to print the recovery key into captured output (a chat, a log) and sets nothing up', !noTty.ok && /NOT RUN/.test(noTty.out) && !/[0-9a-f]{64}/.test(noTty.out) && !fs.existsSync(path.join(KV, 'escrow.pub')), noTty.out.slice(0, 200));
+  const recFile = path.join(T, 'escrow-recovery-key.txt');
+  const esc = cli('escrow-init', '--to', recFile);
+  ESCROW_PRIV = (/\n\s+([0-9a-f]{64})\n/.exec(fs.existsSync(recFile) ? fs.readFileSync(recFile, 'utf8') : '') || [])[1] || null;
+  check('escrow-init --to FILE writes the recovery key only into that new file (mode 600), prints only where, and stores just the public half beside the ring', esc.ok && !!ESCROW_PRIV && !/[0-9a-f]{64}/.test(esc.out) && (fs.statSync(recFile).mode & 0o777) === 0o600 && fs.existsSync(path.join(KV, 'escrow.pub')) && !fs.readFileSync(path.join(KV, 'escrow.pub'), 'utf8').includes(ESCROW_PRIV), esc.out.slice(0, 200));
+  check('  ...and never overwrites an existing file', !cli('escrow-init', '--replace', '--to', recFile).ok);
   const st0 = cli('status');
   check('status names keys by id and fingerprint, never by their bytes', st0.ok && /data key 1 \(current\)/.test(st0.out) && !st0.out.includes(K1.toString('hex')), st0.out.slice(0, 300));
   const rq = cli('request', '--all', '--compromised');

@@ -353,7 +353,9 @@ is then deleted from the ring, so a copy stops opening anything soon after it is
   `node scripts/keys.mjs claim` with the server stopped. A backups folder without its marker (the volume not mounted,
   its mount point re-created empty) holds back every key drop and gets no daily snapshot until it is back.
 - **Escrow** (strongly advised): `node scripts/keys.mjs escrow-init`, run in your own terminal. It keeps a public
-  key beside the ring and prints a RECOVERY KEY once — store that off this machine (password manager, paper). From
+  key beside the ring and prints a RECOVERY KEY once — store that off this machine (password manager, paper). It prints
+  only to a real terminal: anywhere else (a chat with an assistant, whose `!` commands are saved in its transcript, or a
+  log) it refuses unless `--to FILE` names a new file to write the key into instead. From
   then on every change to the ring is sealed with the public key into `BACKUP_DIR/keyring-escrow/`; with the recovery
   key, `node scripts/keys.mjs escrow-open FILE OUT` gets any of them back. Without escrow the keyring is the only copy,
   so rotation refuses to run unless `KEY_ROTATE_WITHOUT_ESCROW=1` says you accept that — and then a backup copied off
