@@ -75,6 +75,16 @@ try {
   check('a sale that also runs the token\'s auto-liquidity (fees swapped, liquidity added, LP minted, then the seller\'s swap) is a SALE for what the pool paid the seller — the LP mint ends the pool\'s liquidity turn', sell(r) === 90 && r[0] === 0, JSON.stringify(r));
   r = T(liq.filter(([t]) => t !== pool));
   check('  ...(without the LP mint between them, the liquidity WETH in and the sale\'s WETH out read as one pass-through turn — the miss the mint boundary fixes)', r === null, JSON.stringify(r));
+  // a liquidity REMOVAL keeps its turn through its burn (the pool took in its own LP token): its payouts belong to it, and a trade after it is its own
+  const removal = [[pool, w, pool, 10], [pool, Z, other, 1], [pool, pool, Z, 10], [WETH, pool, w, 50], [A, pool, w, 500]];
+  r = T([...removal, [A, w, pool, 400], [WETH, pool, w, 40]]);
+  check('remove liquidity, then sell in the same transaction: a SALE for the 40 the pool paid for it (the review\'s round-4 case)', sell(r) === 40 && r[0] === 0, JSON.stringify(r));
+  r = T([...removal.filter((x) => !(x[1] === Z)), [A, w, pool, 400], [WETH, pool, w, 40]]);
+  check('  ...the same without the protocol-fee mint', sell(r) === 40, JSON.stringify(r));
+  r = T([...removal, [WETH, w, pool, 10], [A, pool, w, 100]]);
+  check('  ...and remove, then buy: a BUY for 10', buy(r) === 10 && r[3] === 0, JSON.stringify(r));
+  r = T(removal);
+  check('  ...while a removal on its own is neither', r === null, JSON.stringify(r));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);

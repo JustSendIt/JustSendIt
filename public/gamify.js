@@ -145,6 +145,10 @@
      A coin the server has not priced yet (`null`, not `false`) is left counting, because nothing has been
      decided about it — that is the same rule refreshHolder uses. */
   function qualPct(pct, qualifies) { return qualifies === false ? 0 : (pct || 0); }
+  // a streak paused because the coins left the linked wallets (moved, not sold) — the combined one, or the $GWC one alone
+  // (still paused after a $SEND sale ended the combined clock): the days are kept, the boost waits
+  const pausedHold = (h) => !!h && (h.scorePct || 0) <= 0 && !!((h.streakStart && h.streakPaused) || (!h.streakStart && h.gwcStreakStart && h.gwcStreakPaused));
+  const pausedDays = (h) => Math.floor((h.streakStart ? h.holdDays : h.gwcDays) || 0);
   function supplyTermOf(h) { return 10 * (qualPct(h.pctSend, h.sendQualifies) + GWC_W * qualPct(h.pctGwc, h.gwcQualifies)); }
   // does this account hold anything the floor is currently excluding? the strip says so rather than just shrinking
   function dustedCoins(h) {
@@ -301,6 +305,15 @@
   function objectiveBar(g) {
     const h = g.holder;
     const hasWallet = AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length;
+    if (pausedHold(h)) {
+      const floor = h.minHoldUsd || 100;
+      return '<div class="gobj">' +
+        '<div class="gobj-primary">⏸ Your <b>' + pausedDays(h) + '-day</b> Diamond streak is paused — moving coins is not selling. It picks up where it left off once your linked wallets hold <b>$' + floor + '</b> of $SEND or $GWC again.</div>' +
+        '<div class="gobj-secondary">' + (hasWallet
+          ? '💰 <button class="gobj-link js-refresh" type="button" data-tip="Re-checks your linked wallets on-chain and updates this dashboard">Refresh once they hold it</button>'
+          : '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Link a wallet</button> holding $' + floor + ' of $SEND or $GWC to pick it up again') + '</div>' +
+      '</div>';
+    }
     const stale = h && h.streakStart && h.fresh === false;
     if (stale) {
       return '<div class="gobj gobj-alert">' +
@@ -342,14 +355,15 @@
      ========================================================================= */
   function kpiStrip(g) {
     const h = g.holder;
-    const days = h && h.streakStart ? Math.floor(h.holdDays || 0) : 0;
+    const paused = pausedHold(h);
+    const days = paused ? pausedDays(h) : h && h.streakStart ? Math.floor(h.holdDays || 0) : 0;
     const dLv = h && h.diamond ? h.diamond.level : 0;
     const dName = h && h.diamond ? h.diamond.name : 'No holdings';
     const tile = (ico, val, sub, cls) => '<div class="kpi ' + (cls || '') + '"><div class="kpi-ico" aria-hidden="true">' + ico + '</div><div class="kpi-val">' + val + '</div><div class="kpi-sub">' + sub + '</div></div>';
     return '<div class="kpi-strip">' +
       tile('🪙', nf(g.points), 'Send Power' + (g.todayPoints ? ' · <span class="' + (g.todayPoints < 0 ? 'kpi-dn' : 'kpi-up') + '">' + signed(g.todayPoints) + '</span>' : ''), 'kpi-gold') +
       tile('👑', '#' + g.rank, 'All-time rank', 'kpi-green') +
-      tile('🔥', days, 'Day hold streak', 'kpi-flame') +
+      tile(paused ? '⏸' : '🔥', days, paused ? 'Day hold streak · paused' : 'Day hold streak', 'kpi-flame') +
       tile('💎', 'Lv ' + dLv, esc(dName), 'kpi-dia') +
     '</div>';
   }
@@ -535,10 +549,10 @@
       '<div class="forge-flame" aria-hidden="true" style="font-size:' + flame + 'rem">🔥</div>' +
       '<div class="forge-body">' +
         '<div class="forge-days"><span class="cu" data-cu="' + days + '" data-cufmt="int" aria-hidden="true">0</span><span class="sr-only">' + days + '</span> <span class="forge-unit">day' + (days === 1 ? '' : 's') + ' held</span></div>' +
-        '<div class="forge-sub">' + (stale
-          ? '<span class="danger">⏸ Verify to keep your streak alive</span>'
-          : h.streakPaused
-            ? '<span>⏸ Paused — your linked wallets hold under $' + (h.minHoldUsd || 100) + ' now. Moving coins is not selling: the days pick up where they left off once they’re back over it.</span>'
+        '<div class="forge-sub">' + (h.streakPaused
+          ? '<span>⏸ Paused — your linked wallets hold under $' + (h.minHoldUsd || 100) + ' now. Moving coins is not selling: the days pick up where they left off once they’re back over it.</span>'
+          : stale
+            ? '<span class="danger">⏸ Verify to keep your streak alive</span>'
             : (since ? 'Never sold since <b>' + since + '</b> · ' : '') + '<span class="danger">sell = reset to 📄 Paper Grip</span>') +
         '</div>' +
       '</div>' +
@@ -560,7 +574,9 @@
     }
     // frame the bar as within-tier progress so the visible label AND the aria value both match the rendered fill (diaPct)
     const daysLeft = maxed ? 0 : Math.max(0, d.nextDays - days);
-    const barText = maxed ? '👑 ' + esc(d.name) + ' — MAX' : days + ' day' + (days === 1 ? '' : 's') + ' held · ' + daysLeft + ' to ' + esc(diaNextLabel(d.level));
+    const barText = maxed ? '👑 ' + esc(d.name) + ' — MAX'
+      : h.streakPaused ? '⏸ Paused at ' + days + ' day' + (days === 1 ? '' : 's') + ' held · ' + daysLeft + ' to ' + esc(diaNextLabel(d.level)) + ' once it picks up'
+      : days + ' day' + (days === 1 ? '' : 's') + ' held · ' + daysLeft + ' to ' + esc(diaNextLabel(d.level));
     return '<div class="relic' + (maxed ? ' relic-max' : '') + '">' +
       '<h3 class="eng-h">💎 Diamond Relic</h3>' +
       '<div class="relic-medal-wrap">' +
@@ -586,9 +602,10 @@
   function boostEngine(g) {
     const h = g.holder;
     const hasWallet = AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length;
-    if (h && h.streakStart && h.streakPaused && (h.scorePct || 0) <= 0) {
+    if (pausedHold(h)) {
       // paused, not lost: the coins left the linked wallets (moving them is not selling) — the boost waits, the days are kept
       const floor = h.minHoldUsd || (g.rules && g.rules.holdFloorUsd) || 100;
+      const hv = h.streakStart ? h : { ...h, streakStart: h.gwcStreakStart, holdDays: h.gwcDays, streakPaused: true };   // the $GWC clock alone
       return '<div class="engine engine-live engine-paused">' +
         '<div class="vault">' +
           '<h3 class="eng-h">🏦 The Vault</h3>' +
@@ -599,9 +616,9 @@
             (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button" data-tip="Jumps to the Security panel to link a wallet">Connect wallet 🔗</button>') +
             '<button class="btn btn-ghost btn-sm js-refresh" type="button" data-tip="Re-reads your linked wallets on-chain and redraws this dashboard">↻ Refresh holdings</button>' +
           '</div>' +
-          holdForge(h) +
+          holdForge(hv) +
         '</div>' +
-        diamondRelic(h) +
+        diamondRelic(hv) +
       '</div>';
     }
     if (!h || !h.streakStart || (h.scorePct || 0) <= 0) {
@@ -1366,7 +1383,7 @@
           '<li><b>📊 Supply boost — +10× for each 1% of supply you hold, and $GWC counts ×3.</b> Your %SEND and %GWC add together, with <b>$GWC weighted 3×</b> (so 1% of $GWC ≈ +30×, 1% of $SEND ≈ +10×) — $GWC is the Generational Wealth Coin, so holding it moves your Power the most.</li>' +
           '<li><b>💎 Diamond boost — for holding without ever selling, and holding $GWC counts double.</b> The longer you hold, the higher your <b>Diamond Level</b> climbs through 11 tiers (Paper Grip → … → 👑 Immortal Diamond, 0 days up to ~2 years). <b>Every day you hold $GWC counts as two</b> toward your level, so diamond-handing $GWC levels you up twice as fast. Each tier multiplies your supply boost further — <b>up to ×100</b> at Immortal Diamond.</li>' +
           '<li>The two combine as <b>1 + (supply × diamond)</b>, with <b>no cap</b> — big bags held long enough scale your boost without limit.</li>' +
-          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, or from a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets hold under $100 (and ends only if the price would have taken the moved coins under $100 too). They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
+          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, or from a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets hold under $100 (and ends only if the price would have taken what you hold plus what you moved under $100 too). They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
         '</ul>' +
         '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes live at <b>10 verified holder slots</b>, each one a wallet that really holds the token). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
         '<ul>' +
@@ -1518,7 +1535,8 @@
         ? comms + (comms === 1 ? ' live community' : ' live communities') + ((g.communityMult || 1) > 1 ? ' · flat ' + g.communityMult + '× live' : ' · not paying yet — refresh your holdings')
         : (allComms ? allComms + ' joined · none live yet' : 'None joined yet'),
       boost: em.holder > 1 ? 'Your Holder Boost pays ' + em.holder.toFixed(2) + '× of a ⚡' + m.toFixed(2) + '× stack'
-        : (h.streakStart ? (h.streakPaused ? 'Paused — your coins left the linked wallets; moving is not selling, so your days wait' : 'Paused — refresh to re-verify your bags') : 'Locked — no qualifying $SEND or $GWC yet'),
+        : pausedHold(h) ? 'Paused — your coins left the linked wallets; moving is not selling, so your days wait'
+        : (h && h.streakStart ? 'Paused — refresh to re-verify your bags' : 'Locked — no qualifying $SEND or $GWC yet'),
       eq: 'Every term in your ⚡ boost, and what each one adds',
       calls: a ? (a.readOnly ? 'Paused while your account is read-only' : a.remaining + ' of ' + a.limit + ' Send Calls left in the last 24h') : '',
       loot: lootBlurb(g),
