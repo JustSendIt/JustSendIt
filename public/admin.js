@@ -5,6 +5,7 @@
      POST /api/admin/takedown            {kind: post|comment|upload, id|name, note}
      POST /api/admin/restrict            {userId, days, reason} or {userId, lift: true}
      POST /api/admin/resolve             {id, action}
+     POST /api/admin/keys/rotate         {confirm: 'ROTATE', scope: data|all, compromised} (needs "confirm it's you")
    Nothing is computed here; every number and name is the server's. */
 (function () {
   const gate = document.getElementById('adm-gate'), tools = document.getElementById('adm-tools');
@@ -74,10 +75,66 @@
             stat('Database', bytes(st.dbBytes)) + stat('Encryption key', KEY_WORDS[st.keySource] || esc(st.keySource)) +
             stat('Backups folder', esc(st.backupDir)) + stat('Backups on their own volume', st.backupsOutsideDataDir ? '✅ yes' : '⚠️ no — on the database\'s volume') +
             stat('Backups kept', st.backupsKept) + stat('Newest backup', newest ? esc(newest.file) + ' · ' + bytes(newest.bytes) + ' · ' + esc(when(newest.at)) : '⚠️ none found') + '</div>' +
+          keysPanel(st.keys) +
         '</div>';
     } catch (e) { ovBody.innerHTML = '<p class="empty-wall">⚠️ ' + esc(e.message || 'could not load the overview') + '</p>'; }
     finally { ovBody.removeAttribute('aria-busy'); }
   }
+  /* ----- key rotation: ids, ages and counts from the server (never a key), and the two "rotate now" buttons ----- */
+  const ageOf = (t) => { if (!t) return ''; const h = (Date.now() - t) / 3600e3; return h < 1 ? Math.max(1, Math.round(h * 60)) + ' min ago' : h < 48 ? Math.round(h) + ' h ago' : Math.round(h / 24) + ' days ago'; };
+  const until = (t) => { if (!t) return '—'; const h = (t - Date.now()) / 3600e3; return h <= 0 ? 'due now' : h < 1 ? 'in ' + Math.max(1, Math.round(h * 60)) + ' min' : h < 48 ? 'in ' + Math.round(h) + ' h' : 'in ' + Math.round(h / 24) + ' days'; };
+  function keysPanel(k) {
+    if (!k) return '';
+    const cur = (k.keys || []).find((x) => x.current) || {};
+    const old = (k.keys || []).filter((x) => !x.current);
+    const lm = k.lastMaintenance;
+    const files = lm ? lm.files || [] : [];
+    const failed = files.filter((f) => f.status === 'failed'), foreign = files.filter((f) => f.status === 'foreign');
+    const blocked = lm ? lm.blocked || [] : [];
+    const unreadCols = lm ? Object.entries(lm.unreadableLive || {}) : [];
+    const unreadLive = unreadCols.reduce((a, [, n]) => a + n, 0), unreadFiles = lm ? lm.unreadableInBackups || 0 : 0;
+    const unreadSinceBoot = Object.values(k.unreadable || {}).reduce((a, b) => a + b, 0);
+    const ring = k.mode === 'keyring', owner = ring && k.owner;
+    return '<div><h3 class="adm-h3">Key rotation</h3>' +
+      stat('Mode', ring ? (k.paused ? '⚠️ keyring, ' + (owner ? 'paused' : 'read only') + ': ' + esc(k.paused) : '✅ keyring, rotating') : '⚠️ ' + esc(k.paused || 'single fixed key')) +
+      (ring ? stat('Current data key', '#' + esc(k.currentKey) + (cur.addedAt ? ' · made ' + esc(ageOf(cur.addedAt)) : '')) +
+        stat('Next data key', k.schedule.dataEveryHours ? esc(until(k.nextDataAt)) + ' (every ' + esc(k.schedule.dataEveryHours) + ' h)' : 'off') +
+        stat('Index key', 'epoch ' + esc(k.indexEpoch) + (k.indexRotatedAt ? ' · moved ' + esc(ageOf(k.indexRotatedAt)) : ' · never moved')) +
+        stat('Next index key', k.schedule.indexEveryDays ? esc(until(k.nextIndexAfter)) + ', at ' + esc(k.schedule.atHour) + ':00 server time (restarts the site for about 10 s)' : 'off') +
+        stat('Old data keys still held', old.length ? old.map((x) => '#' + esc(x.id)).join(', ') + ' — dropped once nothing needs them' : 'none') +
+        stat('Keys dropped so far', esc(k.droppedKeys) + (k.lastDroppedAt ? ' · last ' + esc(ageOf(k.lastDroppedAt)) : '')) +
+        stat('Escrow copy of the keyring', k.escrow.configured ? '✅ set up' + (k.escrow.lastSealedAt ? ' · last sealed ' + esc(ageOf(k.escrow.lastSealedAt)) : '') : (k.escrow.allowedWithout ? '⚠️ not set up — the key volume is the only copy' : '⚠️ not set up — rotation paused')) +
+        (k.indexFlipFailed ? stat('Last index rotation', '⚠️ did not run, ' + esc(ageOf(k.indexFlipFailed.at)) + ': ' + esc(k.indexFlipFailed.why) + ' — tried again tomorrow') : '') +
+        stat('Backup files on the current key', lm ? (files.length - failed.length - foreign.length) + ' of ' + files.length + (failed.length || blocked.length ? '' : ' ✅') +
+          (failed.length ? ' · ⚠️ could not check: ' + failed.map((f) => esc(f.file) + ' (' + esc(f.why || '') + ')').join('; ') : '') +
+          (foreign.length ? ' · left alone (no key here opens them): ' + foreign.map((f) => esc(f.file)).join(', ') : '') : 'not checked yet') +
+        (blocked.length ? stat('Backup places not reachable', '⚠️ ' + blocked.map((b) => esc(b.path) + ' — ' + esc(b.why)).join('; ') + ' · no old key is dropped until these can be checked') : '') +
+        (lm && lm.waiting && lm.waiting.length ? stat('Waiting', esc(lm.waiting.join(' · '))) : '') +
+        stat('Last check', lm ? esc(ageOf(lm.at)) + (lm.dropped && lm.dropped.length ? ' · dropped ' + esc(lm.dropped.join(', ')) : '') : '—') : '') +
+      stat('Values no key opens', unreadLive || unreadFiles ? '⚠️ ' + unreadLive + ' in the live database' + (unreadCols.length ? ' (' + unreadCols.map(([c, n]) => esc(c) + ': ' + n).join(', ') + ')' : '') + ', ' + unreadFiles + ' in backups — kept as they are; they hold no key back' : lm ? '✅ none' : (unreadSinceBoot ? '⚠️ ' + unreadSinceBoot + ' read since the server started' : 'not checked yet')) +
+      (k.lastError ? '<p class="modal-note">⚠️ ' + esc(k.lastError) + '</p>' : '') +
+      (ring && owner ? '<div class="adm-actions">' +
+        '<button class="btn btn-sm" type="button" data-keyrot="data" data-tip="Makes a new data key, re-encrypts the database and every backup under it, and drops the old key an hour later. The site stays up.">Rotate the data key now</button>' +
+        '<button class="btn btn-sm btn-primary" type="button" data-keyrot="compromised" data-tip="For a key that may have been copied: new data key AND new index key, old keys dropped as soon as nothing needs them. Restarts the site for about 10 seconds.">Key may be stolen: rotate everything</button>' +
+      '</div><p class="modal-note" id="adm-keyrot-status" role="status" aria-live="polite"></p>' : '') +
+      '</div>';
+  }
+  ovBody.addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-keyrot]'); if (!btn) return;
+    const compromised = btn.dataset.keyrot === 'compromised';
+    if (!window.confirm(compromised ? 'Rotate every key now and drop the old ones as soon as nothing needs them? The site restarts for about 10 seconds.' : 'Rotate the data key now? The site stays up.')) return;
+    const say = (m) => { const el = document.getElementById('adm-keyrot-status'); if (el) el.textContent = m; };
+    for (const b of ovBody.querySelectorAll('[data-keyrot]')) b.disabled = true;
+    say('Rotating…');
+    try {
+      const j = await AUTH.api('/api/admin/keys/rotate', { method: 'POST', body: { confirm: 'ROTATE', scope: compromised ? 'all' : 'data', compromised } });
+      if (j.restarting) { say('Done with the data key. The server is restarting for the index key — this panel reads again in 20 seconds.'); setTimeout(loadOverview, 20000); }
+      else { say('Done: data key #' + j.keys.currentKey + ' is current' + (j.report && j.report.error ? ' — ⚠️ ' + j.report.error : '') + '.'); loadOverview(); }
+    } catch (e) {
+      say(e && e.message === 'cancelled' ? 'Not rotated.' : '⚠️ ' + ((e && e.message) || 'could not rotate'));
+      for (const b of ovBody.querySelectorAll('[data-keyrot]')) b.disabled = false;
+    }
+  });
   document.getElementById('adm-ov-refresh').addEventListener('click', loadOverview);
 
   async function load() {

@@ -98,33 +98,46 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 /* ===== Encryption at rest =====
    Personal data — emails, wallet↔account links, OAuth subjects, 2FA secrets, tracked wallets, sign-in nonces, tracker
-   reports, IPs — is stored AES-256-GCM-encrypted under DATA_KEY, with an HMAC "blind index" wherever the server needs an
-   equality lookup (login by email, wallet by address, one-opt-in-per-IP). Session cookies are stored as SHA-256 hashes.
-   A stolen app.db without the key is unreadable. Set DATA_KEY (64 hex chars) in production; otherwise a key is generated
-   once into data/.data_key (chmod 600) — back it up SEPARATELY from the DB. */
+   reports, IPs — is stored AES-256-GCM-encrypted, with an HMAC "blind index" wherever the server needs an equality lookup
+   (login by email, wallet by address, one-opt-in-per-IP). Session cookies are stored as SHA-256 hashes. A stolen app.db
+   without the key is unreadable. The ciphers, the indexes and key rotation live in lib/keys.js.
+   Two ways to hold the key:
+     · one 64-hex key (DATA_KEY, a DATA_KEY_FILE holding only that, or data/.data_key generated in development) — never rotates;
+     · a KEYRING at DATA_KEY_FILE (scripts/keys.mjs init converts the key file in place) — the data key is replaced every
+       KEY_ROTATE_HOURS and the index key every IDX_ROTATE_DAYS, everything is re-encrypted, and old keys are then dropped,
+       so a copy of a key stops opening anything soon after it is taken. See "Key rotation" further down and DEPLOY.md. */
+const KEYLIB = require('./lib/keys.js');
 let DATA_KEY_SOURCE = 'generated';   // where the key came from: 'env', 'file' (DATA_KEY_FILE), 'data-dir' (beside the database) — shown to the admin, never the key
-const DATA_KEY = (() => {
+let KEY_RING_FILE = null;            // set when DATA_KEY_FILE holds a keyring: the file rotation rewrites
+const KEYS = (() => {
   const hex = String(process.env.DATA_KEY || '').trim();
-  if (/^[0-9a-f]{64}$/i.test(hex)) { DATA_KEY_SOURCE = 'env'; return Buffer.from(hex, 'hex'); }
+  const envKey = /^[0-9a-f]{64}$/i.test(hex) ? Buffer.from(hex, 'hex') : null;
   /* DATA_KEY_FILE: the key in a file of its own, kept on a different volume from the database and from the backups.
      Named and unreadable is a refusal, never a fallback: falling back to data/.data_key would put the key back beside
      the data, and generating one would start an empty database. */
   if (process.env.DATA_KEY_FILE) {
-    try {
-      const t = fs.readFileSync(process.env.DATA_KEY_FILE, 'utf8').trim();
-      if (/^[0-9a-f]{64}$/i.test(t)) {
-        // 'file' only when the key really is on another volume than the database (APFS volumes have their own st_dev)
-        let same = true; try { same = fs.statSync(fs.realpathSync(process.env.DATA_KEY_FILE)).dev === fs.statSync(DATA_DIR).dev; } catch {}
-        DATA_KEY_SOURCE = same ? 'file-same-volume' : 'file';
-        return Buffer.from(t, 'hex');
-      }
-    } catch {}
-    console.error('\n🔴 REFUSING TO START: DATA_KEY_FILE is set to ' + process.env.DATA_KEY_FILE + ' but no 64-hex-character key could be read from it.\n' +
+    let kf = null, why = '';
+    try { kf = KEYLIB.readKeyFile(process.env.DATA_KEY_FILE); } catch (e) { why = (e && e.message) || ''; }
+    if (kf && kf.kind === 'ring' && envKey) {
+      console.error('\n🔴 REFUSING TO START: DATA_KEY is set in the environment AND DATA_KEY_FILE holds a keyring. Which one this database\n' +
+        '   is encrypted under cannot be guessed. Remove the DATA_KEY line (the keyring is the key now).\n');
+      process.exit(1);
+    }
+    if (envKey) { DATA_KEY_SOURCE = 'env'; return KEYLIB.Keys.legacy(envKey); }
+    if (kf) {
+      // 'file' only when the key really is on another volume than the database (APFS volumes have their own st_dev)
+      let same = true; try { same = fs.statSync(fs.realpathSync(process.env.DATA_KEY_FILE)).dev === fs.statSync(DATA_DIR).dev; } catch {}
+      DATA_KEY_SOURCE = same ? 'file-same-volume' : 'file';
+      if (kf.kind === 'ring') { KEY_RING_FILE = path.resolve(process.env.DATA_KEY_FILE); return KEYLIB.Keys.fromRing(kf.ring); }
+      return KEYLIB.Keys.legacy(kf.key);
+    }
+    console.error('\n🔴 REFUSING TO START: DATA_KEY_FILE is set to ' + process.env.DATA_KEY_FILE + ' but no key or keyring could be read from it' + (why ? ' (' + why + ')' : '') + '.\n' +
       '   Is the volume that holds it mounted? The server will not fall back to another key: the data can only be read with this one.\n');
     process.exit(1);
   }
+  if (envKey) { DATA_KEY_SOURCE = 'env'; return KEYLIB.Keys.legacy(envKey); }
   const kf = path.join(DATA_DIR, '.data_key');
-  try { const t = fs.readFileSync(kf, 'utf8').trim(); if (/^[0-9a-f]{64}$/i.test(t)) { DATA_KEY_SOURCE = 'data-dir'; return Buffer.from(t, 'hex'); } } catch {}
+  try { const t = fs.readFileSync(kf, 'utf8').trim(); if (/^[0-9a-f]{64}$/i.test(t)) { DATA_KEY_SOURCE = 'data-dir'; return KEYLIB.Keys.legacy(Buffer.from(t, 'hex')); } } catch {}
   /* GENERATING A KEY IN PRODUCTION IS A REFUSAL, NOT A WARNING.
      Every path above failed, so this boot is about to invent a key. On a laptop that is convenient. On a
      production host it is one of two things, and both are worse than not starting:
@@ -149,42 +162,17 @@ const DATA_KEY = (() => {
   const k = crypto.randomBytes(32);
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(kf, k.toString('hex') + '\n', { mode: 0o600 }); } catch (e) { console.error('could not persist the data key:', e.message); }
   console.warn('🔐 Generated a new DATA_KEY at ' + kf + ' — fine for local development. In production set DATA_KEY in the environment instead, and back it up SEPARATELY from data/app.db. Losing it makes every encrypted field unreadable.');
-  return k;
+  return KEYLIB.Keys.legacy(k);
 })();
-const IDX_KEY = crypto.createHmac('sha256', DATA_KEY).update('blind-index').digest();
-function encField(s) {
-  if (s == null) return null;
-  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', DATA_KEY, iv);
-  const ct = Buffer.concat([c.update(String(s), 'utf8'), c.final()]);
-  return 'v1:' + Buffer.concat([iv, c.getAuthTag(), ct]).toString('base64');
-}
-function decField(s) {
-  if (s == null) return null;
-  s = String(s); if (!s.startsWith('v1:')) return s; // pre-migration plaintext (migrated at boot; kept for safety)
-  try {
-    const b = Buffer.from(s.slice(3), 'base64');
-    const d = crypto.createDecipheriv('aes-256-gcm', DATA_KEY, b.subarray(0, 12)); d.setAuthTag(b.subarray(12, 28));
-    return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
-  } catch { return null; }
-}
-/* The same cipher over BYTES, for the one thing too big for a text column: a saved wallet history (brotli'd JSON,
-   megabytes). Layout: 1 version byte, 12-byte iv, 16-byte tag, ciphertext. decBlob answers null for anything it
-   cannot open — a row written under another key is unreadable, never half-read. */
-function encBlob(buf) {
-  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', DATA_KEY, iv);
-  const ct = Buffer.concat([c.update(buf), c.final()]);
-  return Buffer.concat([Buffer.from([1]), iv, c.getAuthTag(), ct]);
-}
-function decBlob(buf) {
-  if (!buf || buf.length < 29) return null;
-  const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);   // node:sqlite hands a BLOB back as a Uint8Array
-  if (b[0] !== 1) return null;
-  try {
-    const d = crypto.createDecipheriv('aes-256-gcm', DATA_KEY, b.subarray(1, 13)); d.setAuthTag(b.subarray(13, 29));
-    return Buffer.concat([d.update(b.subarray(29)), d.final()]);
-  } catch { return null; }
-}
-const bidx = (s) => crypto.createHmac('sha256', IDX_KEY).update(String(s == null ? '' : s)).digest('hex'); // equality lookups only
+/* The four ciphers and the index, as the rest of this file has always called them. A value that no key here opens
+   reads as null (and is counted for the admin page); a string that was never encrypted passes through unchanged
+   (the boot migrations encrypt those). Blobs — a saved wallet history, brotli'd JSON — use the same cipher over bytes. */
+function encField(s) { return KEYS.encField(s); }
+function decField(s) { return KEYS.decField(s); }
+function encBlob(buf) { return KEYS.encBlob(buf); }
+function decBlob(buf) { return KEYS.decBlob(buf); }
+const bidx = (s) => KEYS.bidx(s);   // equality lookups only
+const isCipherSql = (c) => '(' + c + " GLOB 'v1:*' OR " + c + " GLOB 'v2:*')";   // "already encrypted", for the one-time migrations below
 const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');                     // session cookie → stored form
 const safeJson = (s) => { try { const v = JSON.parse(s || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } };
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -225,6 +213,8 @@ PRAGMA cache_size = -16000;        -- ~16 MB page cache in RAM (negative value =
 PRAGMA mmap_size = 268435456;      -- 256 MB memory-mapped reads → hot pages served straight from the page cache
 PRAGMA temp_store = MEMORY;        -- keep temp b-trees / ORDER BY sorts in RAM, not on disk
 PRAGMA wal_autocheckpoint = 1000;  -- fold the WAL back into the DB every ~1000 pages so it can't bloat unbounded
+PRAGMA secure_delete = ON;          -- a deleted or rewritten row is zeroed on disk, not left in a free page (old ciphertext must not outlive its key)
+PRAGMA checkpoint_fullfsync = ON;   -- checkpoints reach the disk itself (F_FULLFSYNC on macOS) before a dropped key can matter
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -691,16 +681,52 @@ CREATE INDEX IF NOT EXISTS idx_holder_bal_tok ON holder_balances(token_addr, pos
 `);
 /* THE KEY MUST OPEN WHAT IS ALREADY HERE. A well-formed key from the wrong file (a stale copy, another machine's key)
    would start the server, show every email and wallet link as unreadable, and write every new row under the wrong
-   key — two keys in one database, from then on. So before anything is written: if encrypted values exist and the key
-   opens none of the first few, refuse to start. A fresh database has none, and passes. */
+   key — two keys in one database, from then on. So before anything is written:
+     · a single legacy key on a database that already uses rotated keys is refused (an old copy of the key file);
+     · every data key the stored values name must be in the keyring, and for each one some of its values must open;
+     · the index key must match this database's index epoch (its canary), and lookups must find what they index.
+   A fresh database has nothing stored, and passes. It runs before the first migration that writes an encrypted value. */
 (() => {
-  let rows = [];
-  try { rows = db.prepare("SELECT identifier_enc v FROM identities WHERE identifier_enc LIKE 'v1:%' LIMIT 5").all(); } catch {}
-  if (rows.length && !rows.some((r) => decField(r.v) != null)) {
-    console.error('\n🔴 REFUSING TO START: the encryption key (' + (DATA_KEY_SOURCE === 'file' ? 'DATA_KEY_FILE ' + process.env.DATA_KEY_FILE : DATA_KEY_SOURCE) + ') does not open the data already in this database.\n' +
-      '   Starting would write new rows under the wrong key. Point DATA_KEY / DATA_KEY_FILE at the key this database was made with.\n');
+  const refuse = (m) => {
+    console.error('\n🔴 REFUSING TO START: ' + m + '\n   Key source: ' + (KEY_RING_FILE ? 'keyring ' + KEY_RING_FILE : DATA_KEY_SOURCE === 'file' || DATA_KEY_SOURCE === 'file-same-volume' ? 'DATA_KEY_FILE ' + process.env.DATA_KEY_FILE : DATA_KEY_SOURCE) + '\n');
     process.exit(1);
+  };
+  KEYLIB.ensureMeta(db);
+  const epoch = KEYLIB.dbEpoch(db), pc = KEYLIB.prefixCensus(db);
+  const kids = Object.keys(pc.kids).map(Number).filter((k) => k > 0);
+  if (KEYS.mode === 'legacy' && (epoch > 0 || kids.some((k) => k !== 1)))
+    refuse('the encryption key does not open the data already in this database: it is a single key, and this database was rotated to a keyring (index epoch ' + epoch + '). It needs the keyring it was rotated with (or that keyring restored from escrow), not an old copy of the key.');
+  if (!KEYS.hasEpoch(epoch)) refuse('the encryption key does not open the data already in this database: it is at index epoch ' + epoch + ' and the keyring has no index key for that epoch. Restore the keyring (scripts/keys.mjs escrow-open), or keyring.prev.json beside it if a rotation was interrupted.');
+  KEYS.setEpoch(epoch);
+  /* A key id the ring has never heard of means the wrong (or a stale) keyring. A key id the ring DROPPED is different:
+     a key is only dropped once nothing it opens is left, so what still carries its id are values no key ever opened
+     (leftovers, counted on the admin page) — they are no reason to keep the site down. */
+  const dropped = new Set(KEYS.ring ? KEYS.ring.dek.dropped.map((d) => d.id) : []);
+  const missing = [], leftovers = [];
+  for (const [col, m] of Object.entries(pc.columns)) for (const [kid, n] of Object.entries(m)) if (Number(kid) > 0 && !KEYS.has(Number(kid))) (dropped.has(Number(kid)) ? leftovers : missing).push(col + ' has ' + n + ' under key ' + kid);
+  if (missing.length) refuse('the encryption key does not open the data already in this database: values are encrypted under keys the keyring does not hold (' + missing.join('; ') + '). Starting would leave them unreadable for good.');
+  if (leftovers.length) console.warn('⚠️  values under keys already dropped, which no key opens: ' + leftovers.join('; '));
+  /* For each key, a few of the oldest and newest values it holds must open. The CURRENT key failing every sample, or no
+     key opening anything at all, is a wrong key: refuse before anything is written under it. An older key failing every
+     sample means its readable values were all moved and only unreadable leftovers remain: warn, and carry on. */
+  let triedAll = 0, openedAll = 0;
+  for (const kid of kids.filter((k) => KEYS.has(k))) {
+    let tried = 0, opened = 0;
+    for (const [t, c] of KEYLIB.ENC_FIELDS) {
+      if (!KEYLIB.hasCol(db, t, c)) continue;
+      const glob = kid === 1 ? 'v1:*' : 'v2:' + kid + ':*';
+      const sample = db.prepare(`SELECT ${c} v FROM ${t} WHERE ${c} GLOB ? ORDER BY rowid LIMIT 3`).all(glob).concat(db.prepare(`SELECT ${c} v FROM ${t} WHERE ${c} GLOB ? ORDER BY rowid DESC LIMIT 3`).all(glob));
+      for (const r of sample) { tried++; if (KEYS.openField(r.v).plain != null) opened++; }
+    }
+    triedAll += tried; openedAll += opened;
+    if (tried && !opened && kid === KEYS.current) refuse('the encryption key does not open the data already in this database: key ' + kid + ' opens none of ' + tried + ' sampled values. Starting would write new rows under the wrong key.');
+    if (opened < tried) console.warn('⚠️  key ' + kid + ' opened ' + opened + ' of ' + tried + ' sampled values — some stored values cannot be read (the admin page counts them).');
   }
+  if (triedAll && !openedAll) refuse('the encryption key does not open the data already in this database: none of ' + triedAll + ' sampled values open. Starting would write new rows under the wrong key.');
+  const canary = KEYLIB.getMeta(db, 'idx_canary');
+  if (canary && KEYS.bidx(KEYLIB.CANARY) !== canary) refuse('the index key does not match this database (epoch ' + epoch + '): sign-in by email or wallet would find nobody. It needs the keyring it was rotated with.');
+  const kat = KEYLIB.idxKat(db, KEYS, epoch, 20);
+  if (kat.length && !kat.some((x) => x.ok)) refuse('the index key does not match this database (epoch ' + epoch + '): none of ' + kat.length + ' sign-in lookups finds its own row.');
 })();
 // additive migrations (SQLite has no ADD COLUMN IF NOT EXISTS)
 for (const col of [
@@ -1097,9 +1123,9 @@ db.exec('PRAGMA optimize;'); // let SQLite build/refresh stat samples for the qu
 try { db.prepare('UPDATE users SET og_tier = 3 WHERE og = 1 AND og_tier = 0').run(); } catch {}
 // Private per-user preference blobs join the encrypted-at-rest set (they were the last private fields
 // stored in the clear). One-shot per row: decField() passes legacy plaintext through, so a row is only
-// rewritten while it still lacks the v1: prefix.
-try { for (const r of db.prepare("SELECT id, tracker_prefs, site_prefs FROM users WHERE tracker_prefs NOT LIKE 'v1:%' OR site_prefs NOT LIKE 'v1:%'").all())
-  db.prepare('UPDATE users SET tracker_prefs = ?, site_prefs = ? WHERE id = ?').run(String(r.tracker_prefs || '').startsWith('v1:') ? r.tracker_prefs : encField(r.tracker_prefs || '{}'), String(r.site_prefs || '').startsWith('v1:') ? r.site_prefs : encField(r.site_prefs || '{}'), r.id); } catch {}
+// rewritten while it is not yet encrypted ('v1:' or, after a key rotation, 'v2:<key>:' — both count as done).
+try { for (const r of db.prepare('SELECT id, tracker_prefs, site_prefs FROM users WHERE NOT ' + isCipherSql('tracker_prefs') + ' OR NOT ' + isCipherSql('site_prefs')).all())
+  db.prepare('UPDATE users SET tracker_prefs = ?, site_prefs = ? WHERE id = ?').run(KEYLIB.isCipher(r.tracker_prefs) ? r.tracker_prefs : encField(r.tracker_prefs || '{}'), KEYLIB.isCipher(r.site_prefs) ? r.site_prefs : encField(r.site_prefs || '{}'), r.id); } catch {}
 // Send Power awards made before comp_amount existed count at face value on the weekly board (no prize
 // existed to take out). Community XP, conviction XP and activity rows share this table but are NOT Send
 // Power — they never touch users.points — so they are excluded here and in the standings query; without
@@ -1209,6 +1235,139 @@ CREATE TABLE IF NOT EXISTS arcade_rounds (
 );
 CREATE INDEX IF NOT EXISTS idx_arcade_user ON arcade_rounds(user_id, id DESC);
 `);
+/* ===== Key rotation, part 1: what happens at boot =====================================================
+   Only with a keyring (DATA_KEY_FILE holding JSON — see lib/keys.js), and only on the database that OWNS it (ring.owner:
+   its key_meta db_id and its folder, set by scripts/keys.mjs init or claim). Any other process reading the same ring —
+   a copy opened for a look, a development server — decrypts with it and changes nothing: a second rotator would count
+   only its own data and could drop a key the site still needs. Everything here runs before the site takes a request,
+   and after every table exists (an older restored file gets its missing tables first):
+     1. a rotate request left by scripts/keys.mjs (rotate-request.json beside the keyring) is taken: a new data key is
+        added and made current; 'all' also asks for an index flip; 'compromised' drops old keys with no grace period;
+     2. an index flip that was asked for (by the request, by the weekly schedule — which stages the new index key and
+        restarts the server for it — or by the admin page) runs: every stored index moves to a new epoch in one
+        transaction, checked row by row against the values it indexes, after a copy of the database is put beside the
+        backups. A restart is the barrier: no request can hold an index computed under the old epoch across it;
+     3. anything in the live database still under an older data key is re-encrypted now, in batches;
+     4. if any of that happened (or the database was never compacted under the current key), it is checkpointed to the
+        disk and compacted — before the first snapshot copies it — so no old ciphertext sits in its free space.
+   The backups and dropping old keys follow once the site is up (part 2, beside the backups). */
+const KEY_BACKUP_DIR = process.env.BACKUP_DIR || path.join(DATA_DIR, 'backups');   // = BACKUP_DIR, which is declared further down
+const KEY_ESCROW_DIR = path.join(KEY_BACKUP_DIR, 'keyring-escrow');
+const KEY_TEST_CRASH = process.env.NODE_ENV === 'test' ? String(process.env.JSI_ROTATE_CRASH_AT || '') : '';   // tests/keyrotate.mjs kills a rotation at each step
+const KEY_ROT = { lastError: null, lastMaintenance: null, boot: [], restarting: false };
+const keyRotWhy = (e) => String((e && e.message) || e).slice(0, 300);
+const KEY_DB_ID = KEY_RING_FILE ? KEYLIB.ensureDbId(db) : null;
+const KEY_OWNER = !!(KEY_RING_FILE && KEYLIB.ringOwnerMatches(KEYS.ring, KEY_DB_ID, DATA_DIR));
+const KEY_NOT_OWNER_WHY = KEY_RING_FILE && !KEY_OWNER ? (KEYS.ring.owner ? 'another database owns this keyring (' + KEYS.ring.owner.dataDir + '): this one only reads with it' : 'no database owns this keyring yet: run scripts/keys.mjs claim with the server stopped') : null;
+const keyEscrowOk = () => !!(KEY_RING_FILE && (KEYLIB.readEscrowPub(KEY_RING_FILE) || process.env.KEY_ROTATE_WITHOUT_ESCROW === '1'));
+const keyIdsOf = (r) => JSON.stringify([r.dek.keys.map((k) => k.id + ':' + k.hex), r.idx.outer.map((o) => o.epoch + ':' + o.hex), r.idx.inner, r.owner || null]);
+/* Every change to the ring goes through here, and only on the owning database. It starts from the ring on disk
+   (scripts/keys.mjs may have re-sealed it) as long as that holds exactly the keys this process holds — anything else
+   means two writers disagree, and nothing is written. */
+function keyRingWrite(mutate, opts = {}) {
+  if (!KEY_OWNER) throw new Error(KEY_NOT_OWNER_WHY || 'this server does not use a keyring');
+  let base = KEYS.ring;
+  try { const disk = KEYLIB.readKeyFile(KEY_RING_FILE); if (disk.kind === 'ring' && disk.ring.sha256 !== base.sha256) { if (keyIdsOf(disk.ring) !== keyIdsOf(base)) throw new Error('the keyring on disk no longer matches the keys this server holds — restart the server before rotating'); base = disk.ring; } } catch (e) { if (/no longer matches/.test(e.message)) throw e; }
+  const next = JSON.parse(JSON.stringify(base));
+  mutate(next);
+  const written = KEYLIB.writeRing(KEY_RING_FILE, next, { escrowDir: KEY_ESCROW_DIR, dropping: !!opts.dropping, crashAt: KEY_TEST_CRASH });
+  KEYS.adopt(written);
+  return written;
+}
+// a new data key, made current; the one it replaces is marked retired (it stays until nothing needs it)
+function keyStageData(t) {
+  keyRingWrite((r) => {
+    const id = r.dek.nextId++;
+    for (const k of r.dek.keys) if (k.id === r.dek.current) k.retiredAt = t;
+    r.dek.keys.push({ id, hex: crypto.randomBytes(32).toString('hex'), added: t, retiredAt: null });
+    r.dek.current = id;
+  });
+  KEYLIB.setMeta(db, 'dek_rotated_at', t);
+  return KEYS.current;
+}
+// the next index key, written to the ring (and escrow) BEFORE any restart that is meant to use it
+function keyStageIndex() {
+  const staged = KEYS.ring.idx.outer.map((o) => o.epoch).filter((e) => e > KEYS.epoch);
+  if (staged.length) return Math.max(...staged);
+  keyRingWrite((r) => { r.idx.outer.push({ epoch: r.idx.nextEpoch, hex: crypto.randomBytes(32).toString('hex'), added: Date.now() }); r.idx.nextEpoch++; });
+  return Math.max(...KEYS.ring.idx.outer.map((o) => o.epoch));
+}
+function keyReadRequest() {
+  if (!KEY_RING_FILE) return null;
+  const f = KEYLIB.ringSiblings(KEY_RING_FILE).request;
+  let req = null;
+  try { req = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return null; req = { scope: 'data', compromised: false, unreadable: true }; }
+  return { file: f, scope: req && req.scope === 'all' ? 'all' : 'data', compromised: !!(req && req.compromised) };
+}
+function keyScrubLive() {
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  db.exec('VACUUM;');
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  KEYLIB.setMeta(db, 'scrubbed_kid', KEYS.current);
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+}
+function keyFlipAtBoot() {
+  const from = KEYS.epoch;
+  try {
+    const to = keyStageIndex();
+    // the database exactly as it was, beside the backups — written to .part and renamed, so a crash never leaves half a copy
+    try {
+      fs.mkdirSync(KEY_BACKUP_DIR, { recursive: true });
+      const name = 'pre-idx-e' + from + '-' + new Date().toISOString().replace(/[:.]/g, '').slice(0, 17) + '-' + crypto.randomBytes(3).toString('hex') + '.db';
+      const part = path.join(KEY_BACKUP_DIR, name + '.part');
+      db.prepare('VACUUM INTO ?').run(part);
+      fs.chmodSync(part, 0o600);
+      fs.renameSync(part, path.join(KEY_BACKUP_DIR, name));
+      const olds = fs.readdirSync(KEY_BACKUP_DIR).filter((n) => /^pre-idx-e\d+-.*\.db$/.test(n)).map((n) => ({ n, t: fs.statSync(path.join(KEY_BACKUP_DIR, n)).mtimeMs })).sort((a, b) => b.t - a.t).slice(2);
+      for (const o of olds) { try { fs.unlinkSync(path.join(KEY_BACKUP_DIR, o.n)); } catch {} }
+    } catch (e) { console.warn('⚠️  index rotation: the copy before it could not be written (' + keyRotWhy(e) + ') — rotating anyway; the rotation itself checks every row and undoes itself on any mismatch'); }
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const r = KEYLIB.flipIndex(db, KEYS, from, to, { crashAt: KEY_TEST_CRASH });
+      KEYLIB.setMeta(db, 'idx_rotated_at', Date.now());
+      KEYLIB.setMeta(db, 'idx_flip_requested', null);
+      KEYLIB.setMeta(db, 'idx_flip_failed', null);
+      db.exec('COMMIT');
+      KEYS.setEpoch(to);
+      KEY_ROT.boot.push('index key: epoch ' + from + ' → ' + to + ' (' + r.rewrapped + ' indexes moved, ' + r.checked + ' sign-in lookups checked)');
+    } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+  } catch (e) {
+    // recorded, so the schedule does not restart the site again and again for a flip that cannot run
+    try { KEYLIB.setMeta(db, 'idx_flip_requested', null); KEYLIB.setMeta(db, 'idx_flip_failed', JSON.stringify({ at: Date.now(), why: keyRotWhy(e) })); } catch {}
+    KEY_ROT.lastError = 'index rotation did not run and nothing changed: ' + keyRotWhy(e);
+    console.error('🔴 ' + KEY_ROT.lastError);
+  }
+}
+if (KEY_RING_FILE && !KEY_OWNER) console.warn('⚠️  key rotation off for this database: ' + KEY_NOT_OWNER_WHY);
+if (KEY_OWNER) {
+  try {
+    // leftovers of a write that crashed: temp copies of the ring (they hold keys), a half-written pre-flip copy
+    try { const dir = path.dirname(KEY_RING_FILE); for (const n of fs.readdirSync(dir)) if (/\.tmp$/.test(n) && n.startsWith('.') && Date.now() - fs.statSync(path.join(dir, n)).mtimeMs > 60e3) fs.unlinkSync(path.join(dir, n)); } catch {}
+    try { for (const n of fs.readdirSync(KEY_BACKUP_DIR)) if (/^pre-idx-.*\.db\.part$/.test(n)) fs.unlinkSync(path.join(KEY_BACKUP_DIR, n)); } catch {}
+    const req = keyReadRequest();
+    if (req && !keyEscrowOk()) {
+      KEY_ROT.lastError = 'a rotation was requested, but no escrow key is set up (scripts/keys.mjs escrow-init), and KEY_ROTATE_WITHOUT_ESCROW is not 1 — nothing was rotated';
+      console.error('🔴 ' + KEY_ROT.lastError);
+    } else if (req) {
+      if (req.scope === 'all') KEYLIB.setMeta(db, 'idx_flip_requested', '1');
+      if (req.compromised) KEYLIB.setMeta(db, 'drop_grace_ms', '0');
+      const kid = keyStageData(Date.now());
+      try { fs.unlinkSync(req.file); } catch {}
+      KEY_ROT.boot.push('data key ' + kid + ' made current (' + (req.compromised ? 'compromised: old keys go as soon as nothing needs them' : 'requested') + ')');
+    }
+    if (KEYLIB.getMeta(db, 'idx_flip_requested')) keyFlipAtBoot();
+    const pc = KEYLIB.prefixCensus(db);
+    if (Object.keys(pc.kids).some((k) => Number(k) > 0 && Number(k) !== KEYS.current && KEYS.has(Number(k)))) {
+      const st = KEYLIB.sweepSync(db, KEYS, { crashAt: KEY_TEST_CRASH });
+      KEY_ROT.boot.push('re-encrypted ' + st.rewritten + ' values under data key ' + KEYS.current + (Object.keys(st.unreadable).length ? ' (' + Object.values(st.unreadable).reduce((a, b) => a + b, 0) + ' could not be opened and were left as they are)' : ''));
+    }
+    if (KEY_ROT.boot.length || KEYLIB.getMeta(db, 'scrubbed_kid') !== String(KEYS.current)) { keyScrubLive(); KEY_ROT.boot.push('database compacted under data key ' + KEYS.current + ' (no old ciphertext left in its free space)'); }
+  } catch (e) {
+    KEY_ROT.lastError = 'key rotation at boot stopped part-way (the site runs on the keys it has; it carries on at the next check): ' + keyRotWhy(e);
+    console.error('🔴 ' + KEY_ROT.lastError);
+  }
+}
+
 // One-time, idempotent: move personal data that is still in the clear under the encryption key (only rows not yet done)
 try {
   db.exec('BEGIN');
@@ -1218,8 +1377,8 @@ try {
     db.prepare('UPDATE tracked_wallets SET address_enc = ?, address = ? WHERE id = ?').run(encField(r.address), bidx(r.address), r.id);
   for (const r of db.prepare('SELECT token FROM sessions WHERE hashed = 0').all())
     db.prepare('UPDATE sessions SET token = ?, hashed = 1 WHERE token = ?').run(hashToken(r.token), r.token);
-  for (const r of db.prepare("SELECT id, twofa_secret, twofa_pending FROM users WHERE (twofa_secret IS NOT NULL AND twofa_secret NOT LIKE 'v1:%') OR (twofa_pending IS NOT NULL AND twofa_pending NOT LIKE 'v1:%')").all())
-    db.prepare('UPDATE users SET twofa_secret = ?, twofa_pending = ? WHERE id = ?').run(r.twofa_secret && !r.twofa_secret.startsWith('v1:') ? encField(r.twofa_secret) : r.twofa_secret, r.twofa_pending && !r.twofa_pending.startsWith('v1:') ? encField(r.twofa_pending) : r.twofa_pending, r.id);
+  for (const r of db.prepare('SELECT id, twofa_secret, twofa_pending FROM users WHERE (twofa_secret IS NOT NULL AND NOT ' + isCipherSql('twofa_secret') + ') OR (twofa_pending IS NOT NULL AND NOT ' + isCipherSql('twofa_pending') + ')').all())
+    db.prepare('UPDATE users SET twofa_secret = ?, twofa_pending = ? WHERE id = ?').run(r.twofa_secret && !KEYLIB.isCipher(r.twofa_secret) ? encField(r.twofa_secret) : r.twofa_secret, r.twofa_pending && !KEYLIB.isCipher(r.twofa_pending) ? encField(r.twofa_pending) : r.twofa_pending, r.id);
   for (const r of db.prepare('SELECT id, creator_ip FROM communities WHERE creator_ip IS NOT NULL AND length(creator_ip) <> 64').all())
     db.prepare('UPDATE communities SET creator_ip = ? WHERE id = ?').run(bidx(r.creator_ip), r.id);
   for (const r of db.prepare('SELECT community_id, user_id, join_ip FROM community_members WHERE join_ip IS NOT NULL AND length(join_ip) <> 64').all())
@@ -1234,7 +1393,7 @@ try {
   try { db.exec('ALTER TABLE community_members ADD COLUMN block_reason TEXT'); } catch {}   // the anti-sybil reason, decided once at join
   db.exec('BEGIN');
   // the first-day watch list of verifying wallets → encrypted
-  for (const r of db.prepare("SELECT id, gate_wallets FROM users WHERE gate_wallets IS NOT NULL AND gate_wallets NOT LIKE 'v1:%'").all())
+  for (const r of db.prepare('SELECT id, gate_wallets FROM users WHERE gate_wallets IS NOT NULL AND NOT ' + isCipherSql('gate_wallets')).all())
     db.prepare('UPDATE users SET gate_wallets = ? WHERE id = ?').run(encField(r.gate_wallets), r.id);
   // ledger refs that carried a wallet address or a tx hash (which resolves to one) → blind indexes
   const legacy = db.prepare("SELECT id, ref FROM points_events WHERE ref GLOB 'swaptx:0x*' OR ref GLOB 'connect:0x*' OR ref GLOB 'track:*:0x*'").all();
@@ -1514,6 +1673,11 @@ function walletFactorRefusal(user, address) {
   if (pick) {
     return pick === address ? null
       : 'that is not your two-factor wallet — sign with the one you chose in Profile → Security (you can change it there).';
+  }
+  /* A wallet WAS chosen but its address cannot be read (a value no key here opens). Falling through to the older rule
+     below would accept any wallet linked before two-factor — failing open. Refuse instead; nothing is changed. */
+  if (db.prepare("SELECT 1 FROM identities WHERE user_id = ? AND type = 'wallet' AND is_2fa = 1").get(user.id)) {
+    return 'your two-factor wallet cannot be read on the server right now, so it cannot be checked — nothing on your account has changed. Contact SendRH@Atomicmail.io.';
   }
   const w = db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(user.id, bidx(address));
   if (w && w.linked_at && user.twofa_enabled_at && w.linked_at > user.twofa_enabled_at) {
@@ -11472,7 +11636,7 @@ function adminOverview() {
     invites: { memberUnused: count('member', 'unused'), memberPending: count('member', 'pending'), memberUsed: count('member', 'used'), seedCodes: count('seed', 'unused') + count('seed', 'pending') + count('seed', 'used'), seedCodesOpen: seedCodesOpen(), perMember: INVITE_GRANT },
     reports: { open: one('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').n },
     server: { node: process.version, commit: BOOT_COMMIT, checkoutCommit: gitCommit(), startedAt: BOOT_AT, uptimeSeconds: Math.round((Date.now() - BOOT_AT) / 1000), health: healthCheck() },
-    storage: { dbBytes, keySource: DATA_KEY_SOURCE, keyBesideDatabase: DATA_KEY_SOURCE === 'data-dir' || DATA_KEY_SOURCE === 'file-same-volume', backupDir: BACKUP_DIR, backupsOutsideDataDir: BACKUP_OFF_VOLUME, backupsKept: BACKUP_KEEP, backups },
+    storage: { dbBytes, keySource: DATA_KEY_SOURCE, keyBesideDatabase: DATA_KEY_SOURCE === 'data-dir' || DATA_KEY_SOURCE === 'file-same-volume', backupDir: BACKUP_DIR, backupsOutsideDataDir: BACKUP_OFF_VOLUME, backupsKept: BACKUP_KEEP, backups, keys: keyStatus() },
   };
 }
 /* Remove a post the way its author could, plus what an author cannot: a Send Call post is permanent, so
@@ -13510,6 +13674,24 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/admin/overview' && req.method === 'GET') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         return send(res, 200, adminOverview());
+      }
+      /* Rotate the keys now. Admin only, and a security change: it needs the "confirm it's you" window like every other.
+         scope 'data' swaps the data key with the site up; 'all' (and 'compromised', which also drops the old keys as soon
+         as nothing needs them) moves the index key too, which restarts the server (about ten seconds). */
+      if (p === '/api/admin/keys/rotate' && req.method === 'POST') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        if (!sudoActive(me)) return bad(res, NEED_VERIFY_MSG + ' — rotating the encryption keys is a security change', 401);
+        const b = await readBody(req);
+        if (b.confirm !== 'ROTATE') return bad(res, 'send confirm: "ROTATE" to rotate the keys');
+        if (!KEY_RING_FILE) return bad(res, 'This server reads a single fixed key, so there is nothing to rotate yet. With the server stopped, run scripts/keys.mjs init (DEPLOY.md).', 409);
+        if (!KEY_OWNER) return bad(res, 'This server only reads with the keyring: ' + KEY_NOT_OWNER_WHY + '.', 409);
+        if (!keyEscrowOk()) return bad(res, 'Rotation is paused until an escrow key is set up: run scripts/keys.mjs escrow-init in a terminal and keep the recovery key it prints somewhere off this computer.', 409);
+        if (KEY_ROT.restarting) return bad(res, 'a key rotation is already restarting the server — give it a minute', 409);
+        const compromised = b.compromised === true, scope = compromised || b.scope === 'all' ? 'all' : 'data';
+        try {
+          const rep = await keyRotateNow(scope, compromised, 'admin @' + me.username);
+          return send(res, 200, { ok: true, scope, restarting: scope === 'all', report: rep && { swept: rep.swept, files: rep.files.length, dropped: rep.dropped, waiting: rep.waiting, error: rep.error || null }, keys: keyStatus() });
+        } catch (e) { return bad(res, keyRotWhy(e), 500); }
       }
       if (p === '/api/admin/reports' && req.method === 'GET') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
@@ -16804,8 +16986,230 @@ const BACKUP_OFF_VOLUME = (() => {
   try { return fs.statSync(process.env.BACKUP_DIR).dev !== fs.statSync(DATA_DIR).dev; } catch { return false; }
 })();
 const BACKUP_KEEP = BACKUP_OFF_VOLUME ? 7 : 3;
-async function snapshotDb() {
+/* ===== Key rotation, part 2: the schedule, the backups, and dropping old keys ==========================
+   With a keyring (part 1, near the top, covers boot):
+     · every KEY_ROTATE_HOURS (24) a new data key becomes current; the live database is re-encrypted in batches between
+       requests, checkpointed to the disk itself and compacted (VACUUM, with secure_delete on), so old ciphertext does
+       not sit in free pages; then every backup file — the dailies, the pre-wipe copies, KEY_ROTATE_EXTRA_DBS — is
+       rewritten under it (lib/keys.js rekeyFile: on a copy, checked value by value, renamed into place);
+     · every IDX_ROTATE_DAYS (7), at KEY_ROTATE_HOUR (4, local time), the index key moves to a new epoch. That needs a
+       restart (part 1), so the server exits and launchd starts it again — about ten seconds. It waits while a wallet
+       read is running, but not past a day;
+     · an old key is dropped from the ring (and its bytes zeroed in memory) only when the live database and every file
+       hold nothing under it and KEY_DROP_GRACE_MIN (60) has passed — at once after a 'compromised' rotation. A file
+       that cannot be checked holds every drop until someone looks at it (the admin page names it).
+   Nothing here prints a key. Rotation refuses to run until an escrow public key is set up (scripts/keys.mjs
+   escrow-init) unless KEY_ROTATE_WITHOUT_ESCROW=1 — without escrow, losing the key volume loses the data for good. */
+const keyNum = (v, d, min) => { const n = Number(v); return v === undefined || v === '' || !Number.isFinite(n) ? d : Math.max(min, n); };
+const KEY_ROTATE_HOURS = KEY_RING_FILE ? keyNum(process.env.KEY_ROTATE_HOURS, 24, 0) : 0;   // 0 = off
+const IDX_ROTATE_DAYS = KEY_RING_FILE ? keyNum(process.env.IDX_ROTATE_DAYS, 7, 0) : 0;      // 0 = off
+const KEY_ROTATE_HOUR = Math.min(23, keyNum(process.env.KEY_ROTATE_HOUR, 4, 0));
+const KEY_DROP_GRACE_MS = keyNum(process.env.KEY_DROP_GRACE_MIN, 60, 0) * 60e3;
+const KEY_TICK_MS = keyNum(process.env.KEY_TICK_SEC, 300, 1) * 1000;
+// one lock for everything that writes database files or the keyring: the daily snapshot, rotation, the backup pass
+let keyChain = Promise.resolve();
+function withKeyLock(fn) { const run = keyChain.then(fn, fn); keyChain = run.catch(() => {}); return run; }
+/* The files a rotation must bring along: every *.db in BACKUP_DIR, in data/backups (copies left there from before
+   BACKUP_DIR moved), and what KEY_ROTATE_EXTRA_DBS names (files or folders, ~ allowed). A place that cannot be listed —
+   the backups volume not mounted, a folder renamed, no permission — is BLOCKED, never "empty": an old key is not dropped
+   while copies that may need it are out of sight. Only an unconfigured data/backups that does not exist yet is empty. */
+function keyFiles() {
+  const out = [], blocked = [];
+  if (process.env.BACKUP_DIR && !KEYLIB.backupMarkerOk(BACKUP_DIR, KEYLIB.getMeta(db, 'backup_marker'))) blocked.push({ path: BACKUP_DIR, why: 'its ' + KEYLIB.BACKUP_MARKER + ' marker is missing — is the backups volume mounted? (scripts/keys.mjs claim writes a new one)' });
+  const addDir = (d, okIfAbsent) => {
+    try { for (const n of fs.readdirSync(d)) if (/\.db$/.test(n)) out.push(path.join(d, n)); }
+    catch (e) { if (!(okIfAbsent && e.code === 'ENOENT')) blocked.push({ path: d, why: e.code === 'ENOENT' ? 'not found (not mounted, moved or renamed?)' : 'cannot be listed (' + (e.code || e.message) + ')' }); }
+  };
+  addDir(BACKUP_DIR, !process.env.BACKUP_DIR);
+  if (path.resolve(BACKUP_DIR) !== path.resolve(DATA_DIR, 'backups')) addDir(path.join(DATA_DIR, 'backups'), true);
+  for (let x of String(process.env.KEY_ROTATE_EXTRA_DBS || '').split(',').map((v) => v.trim()).filter(Boolean)) {
+    if (x.startsWith('~/')) x = path.join(require('node:os').homedir(), x.slice(2));
+    let st = null;
+    try { st = fs.statSync(x); } catch (e) { blocked.push({ path: x, why: e.code === 'ENOENT' ? 'named in KEY_ROTATE_EXTRA_DBS but not found' : 'cannot be read (' + (e.code || e.message) + ')' }); continue; }
+    if (st.isDirectory()) addDir(x, false); else out.push(x);
+  }
+  const live = path.resolve(DATA_DIR, 'app.db');
+  return { files: [...new Set(out.map((f) => path.resolve(f)))].filter((f) => f !== live), blocked };
+}
+const keyFileName = (f) => f.startsWith(path.resolve(BACKUP_DIR) + path.sep) ? path.basename(f) : f.replace(require('node:os').homedir(), '~');
+async function keyMaintenance(why) {
+  if (!KEY_OWNER) return null;
+  return withKeyLock(async () => {
+    const t0 = Date.now(), rep = { at: t0, why, swept: 0, files: [], blocked: [], live: null, dropped: [], waiting: [] };
+    try {
+      // 1. the live database: whatever is still under an older key
+      const sw = await KEYLIB.sweepAsync(db, KEYS, { crashAt: KEY_TEST_CRASH });
+      rep.swept = sw.rewritten;
+      // 2. to the disk itself, and the old bytes out of the free pages
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      if (sw.rewritten || KEYLIB.getMeta(db, 'scrubbed_kid') !== String(KEYS.current)) keyScrubLive();
+      // 3. every copy
+      const { files, blocked } = keyFiles();
+      rep.blocked = blocked.map((b) => ({ path: keyFileName(b.path), why: b.why }));
+      for (const f of files) {
+        const r = KEYLIB.rekeyFile(f, KEYS, { toEpoch: KEYS.epoch, crashAt: KEY_TEST_CRASH });
+        rep.files.push({ file: keyFileName(f), status: r.status, why: r.why, kids: r.kids, unreadable: r.unreadable || 0, epoch: r.epoch });
+        await new Promise((res) => setImmediate(res));
+      }
+      // 4. the live database, by trial decryption (what actually opens, not what the prefix says)
+      const live = KEYLIB.trialCensus(db, KEYS);
+      rep.live = { refs: live.refs, unreadable: live.unreadable, unreadableCols: live.unreadableCols, epoch: live.epoch };
+      // 5. drop what nothing needs any more
+      keyDropUnneeded(rep);
+    } catch (e) { rep.error = keyRotWhy(e); KEY_ROT.lastError = 'key maintenance stopped part-way (nothing was dropped): ' + rep.error; console.error('🔴 ' + KEY_ROT.lastError); }
+    rep.ms = Date.now() - t0;
+    KEY_ROT.lastMaintenance = rep;
+    try { KEYLIB.setMeta(db, 'last_maintenance', JSON.stringify(rep)); } catch {}
+    return rep;
+  });
+}
+/* Drop what nothing needs. A key "is needed" while any value it opens is left — in the live database or in any copy.
+   Values no key opens never hold a key back (keeping a key that does not open them helps nothing). A copy that could
+   not be checked, or a place that could not be listed, holds EVERY drop until someone looks. */
+function keyDropUnneeded(rep) {
+  const t = Date.now();
+  const graceMeta = KEYLIB.getMeta(db, 'drop_grace_ms');
+  const grace = graceMeta != null && graceMeta !== '' ? Number(graceMeta) : KEY_DROP_GRACE_MS;
+  const failed = rep.files.filter((f) => f.status === 'failed');
+  const unseen = failed.length + rep.blocked.length;
+  const unseenWhy = [failed.length ? failed.length + ' backup file' + (failed.length === 1 ? '' : 's') + ' could not be checked' : '', rep.blocked.length ? rep.blocked.length + ' backup location' + (rep.blocked.length === 1 ? '' : 's') + ' could not be listed' : ''].filter(Boolean).join(' and ');
+  const fileRefs = (kid) => rep.files.reduce((n, f) => n + Number((f.kids || {})[kid] || 0), 0);
+  const dropKids = [], dropEpochs = [];
+  for (const k of KEYS.ring.dek.keys) {
+    if (k.id === KEYS.current) continue;
+    const liveN = Number(rep.live.refs[k.id] || 0), filesN = fileRefs(k.id);
+    if (unseen) rep.waiting.push('key ' + k.id + ': ' + unseenWhy);
+    else if (liveN || filesN) rep.waiting.push('key ' + k.id + ': still opens ' + liveN + ' live values and ' + filesN + ' in backups');
+    else if (!k.retiredAt || t - k.retiredAt < grace) rep.waiting.push('key ' + k.id + ': waiting out the ' + Math.round(grace / 60e3) + '-minute grace period');
+    else dropKids.push(k.id);
+  }
+  for (const o of KEYS.ring.idx.outer) {
+    if (o.epoch >= KEYS.epoch) continue;   // the current epoch, and any staged for a flip that has not run
+    if (unseen) rep.waiting.push('index epoch ' + o.epoch + ': ' + unseenWhy);
+    else if (rep.files.some((f) => f.epoch === o.epoch && f.status !== 'foreign') || rep.live.epoch === o.epoch) rep.waiting.push('index epoch ' + o.epoch + ': still in use');
+    else dropEpochs.push(o.epoch);
+  }
+  if (dropKids.length || dropEpochs.length) {
+    // sealed in escrow WITH the keys about to go, then the ring without them (keyring.prev.json replaced too)
+    if (KEYLIB.readEscrowPub(KEY_RING_FILE)) keyRingWrite(() => {});
+    const fps = Object.fromEntries(dropKids.map((id) => [id, KEYS.fingerprint(id)]));
+    keyRingWrite((r) => {
+      r.dek.keys = r.dek.keys.filter((k) => !dropKids.includes(k.id));
+      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id] });
+      r.idx.outer = r.idx.outer.filter((o) => !dropEpochs.includes(o.epoch));
+      for (const e of dropEpochs) r.idx.dropped.push({ epoch: e, at: t });
+    }, { dropping: true });
+    rep.dropped = dropKids.map((id) => 'data key ' + id).concat(dropEpochs.map((e) => 'index epoch ' + e));
+    console.log('🔐 dropped ' + rep.dropped.join(', ') + ' — nothing needed them any more');
+  }
+  if (!KEYS.ring.dek.keys.some((k) => k.id !== KEYS.current)) KEYLIB.setMeta(db, 'drop_grace_ms', null);
+  // a drop interrupted between writing the ring and replacing keyring.prev.json leaves a dropped key in prev: replace it
+  try {
+    const prevF = KEYLIB.ringSiblings(KEY_RING_FILE).prev, prev = KEYLIB.readKeyFile(prevF);
+    const goneK = new Set(KEYS.ring.dek.dropped.map((d) => d.id)), goneE = new Set(KEYS.ring.idx.dropped.map((d) => d.epoch));
+    const stale = prev.kind === 'hex' ? KEYS.ring.dek.dropped.length > 0 : prev.ring.dek.keys.some((k) => goneK.has(k.id)) || prev.ring.idx.outer.some((o) => goneE.has(o.epoch));
+    if (stale) keyRingWrite(() => {}, { dropping: true });
+  } catch {}
+}
+// a rotation asked for now: by the schedule, the admin page, or a request file
+async function keyRotateNow(scope, compromised, why, onStaged) {
+  if (!KEY_RING_FILE) throw new Error('this server reads a single fixed key, not a keyring — run scripts/keys.mjs init with the server stopped (DEPLOY.md)');
+  if (!KEY_OWNER) throw new Error(KEY_NOT_OWNER_WHY);
+  if (!keyEscrowOk()) throw new Error('rotation is paused: no escrow key is set up (scripts/keys.mjs escrow-init), and KEY_ROTATE_WITHOUT_ESCROW is not 1');
+  await withKeyLock(() => {
+    keyStageData(Date.now());
+    if (compromised) KEYLIB.setMeta(db, 'drop_grace_ms', '0');
+    if (scope === 'all') keyStageIndex();   // the next index key is in the ring (and escrow) before the restart that uses it
+    if (onStaged) onStaged();
+  });
+  console.log('🔐 data key ' + KEYS.current + ' is now current (' + why + ')');
+  const rep = await keyMaintenance('rotation');
+  if (scope === 'all') keyRestartForIndex(why);
+  return rep;
+}
+function keyRestartForIndex(why) {
+  KEYLIB.setMeta(db, 'idx_flip_requested', '1');
+  KEYLIB.setMeta(db, 'idx_restart_at', Date.now());
+  KEY_ROT.restarting = true;
+  console.log('🔐 index key rotation (' + why + '): restarting so it runs before any request — launchd starts the server again');
+  setTimeout(() => shutdown('index key rotation'), 1000).unref();
+}
+let keyTickBusy = false;
+async function keyTick() {
+  if (!KEY_OWNER || keyTickBusy || KEY_ROT.restarting) return;
+  keyTickBusy = true;
+  try {
+    const t = Date.now();
+    const req = keyReadRequest();
+    if (req) {
+      if (!keyEscrowOk()) { KEY_ROT.lastError = 'a rotation was requested, but no escrow key is set up — nothing was rotated'; return; }
+      // the request goes only once the new key is in the ring: a rotation that fails before that is tried again next tick
+      await keyRotateNow(req.scope, req.compromised, 'request file', () => { try { fs.unlinkSync(req.file); } catch {} });
+      return;
+    }
+    const cur = KEYS.ring.dek.keys.find((k) => k.id === KEYS.current);
+    const dataAt = Number(KEYLIB.getMeta(db, 'dek_rotated_at')) || (cur && cur.added) || t;
+    if (KEY_ROTATE_HOURS > 0 && t - dataAt >= KEY_ROTATE_HOURS * 3600e3 && keyEscrowOk()) { await keyRotateNow('data', false, 'every ' + KEY_ROTATE_HOURS + ' h'); return; }
+    // old keys waiting to go, or a file not yet brought along: look again hourly
+    const last = KEY_ROT.lastMaintenance;
+    const pending = KEYS.ring.dek.keys.length > 1 || KEYS.ring.idx.outer.some((o) => o.epoch < KEYS.epoch) || !last || (last.blocked || []).length || (last.files || []).some((f) => f.status === 'failed');
+    if (pending && (!last || t - last.at >= 3600e3)) await keyMaintenance('check');
+    // the weekly index epoch, at the quiet hour
+    const idxAt = Number(KEYLIB.getMeta(db, 'idx_rotated_at')) || 0;
+    if (IDX_ROTATE_DAYS > 0 && t - idxAt >= IDX_ROTATE_DAYS * 864e5 && new Date(t).getHours() === KEY_ROTATE_HOUR && keyEscrowOk()) {
+      const overdue = idxAt && t - idxAt >= (IDX_ROTATE_DAYS + 1) * 864e5;
+      if (_walletHistRunning > 0 && !overdue) return;   // a wallet read is running: tomorrow, at the same hour
+      // at most one restart for this a day: a flip that could not run is recorded at boot and shown, not retried every tick
+      const lastTry = Number(KEYLIB.getMeta(db, 'idx_restart_at')) || 0;
+      if (lastTry > idxAt && t - lastTry < 20 * 3600e3) return;
+      await withKeyLock(() => keyStageIndex());   // in the ring before the restart; if that fails, there is no restart
+      keyRestartForIndex('every ' + IDX_ROTATE_DAYS + ' days');
+    }
+  } catch (e) {
+    KEY_ROT.lastError = keyRotWhy(e);
+    console.error('🔴 key rotation: ' + KEY_ROT.lastError);
+  } finally { keyTickBusy = false; }
+}
+// what the admin page shows — ids, times, counts and file names; never a key
+function keyStatus() {
+  const t = Date.now(), ring = KEYS.ring;
+  let last = KEY_ROT.lastMaintenance;
+  if (!last) { try { last = JSON.parse(KEYLIB.getMeta(db, 'last_maintenance') || 'null'); } catch {} }
+  const cur = ring ? ring.dek.keys.find((k) => k.id === KEYS.current) : null;
+  const dataAt = ring ? (Number(KEYLIB.getMeta(db, 'dek_rotated_at')) || (cur && cur.added) || null) : null;
+  const idxAt = Number(KEYLIB.getMeta(db, 'idx_rotated_at')) || null;
+  let pc = { kids: {} }; try { pc = KEYLIB.prefixCensus(db); } catch {}
+  return {
+    mode: KEY_RING_FILE ? 'keyring' : 'single key',
+    currentKey: KEYS.current,
+    keys: ring ? ring.dek.keys.map((k) => ({ id: k.id, current: k.id === KEYS.current, addedAt: k.added, retiredAt: k.retiredAt || null })) : [{ id: 1, current: true, addedAt: null, retiredAt: null }],
+    droppedKeys: ring ? ring.dek.dropped.length : 0,
+    lastDroppedAt: ring && ring.dek.dropped.length ? Math.max(...ring.dek.dropped.map((d) => d.at)) : null,
+    indexEpoch: KEYS.epoch, indexRotatedAt: idxAt,
+    dataRotatedAt: dataAt,
+    nextDataAt: KEY_ROTATE_HOURS > 0 && dataAt ? dataAt + KEY_ROTATE_HOURS * 3600e3 : null,
+    nextIndexAfter: IDX_ROTATE_DAYS > 0 ? (idxAt || t) + (idxAt ? IDX_ROTATE_DAYS * 864e5 : 0) : null,
+    schedule: { dataEveryHours: KEY_ROTATE_HOURS, indexEveryDays: IDX_ROTATE_DAYS, atHour: KEY_ROTATE_HOUR, dropGraceMinutes: Math.round(KEY_DROP_GRACE_MS / 60e3) },
+    escrow: { configured: !!(KEY_RING_FILE && KEYLIB.readEscrowPub(KEY_RING_FILE)), allowedWithout: process.env.KEY_ROTATE_WITHOUT_ESCROW === '1', lastSealedAt: KEYLIB.lastEscrowAt(KEY_ESCROW_DIR) },
+    paused: !KEY_RING_FILE ? 'single key: nothing rotates (scripts/keys.mjs init, DEPLOY.md)' : !KEY_OWNER ? KEY_NOT_OWNER_WHY : !keyEscrowOk() ? 'no escrow key (scripts/keys.mjs escrow-init)' : null,
+    owner: KEY_OWNER,
+    indexFlipFailed: (() => { try { return JSON.parse(KEYLIB.getMeta(db, 'idx_flip_failed') || 'null'); } catch { return null; } })(),
+    liveValuesByKey: pc.kids,
+    unreadable: Object.fromEntries(KEYS.failures),
+    lastMaintenance: last ? { at: last.at, why: last.why, ms: last.ms, swept: last.swept, dropped: last.dropped || [], waiting: last.waiting || [], blocked: last.blocked || [], error: last.error || null,
+      unreadableLive: (last.live && last.live.unreadableCols) || {}, unreadableInBackups: (last.files || []).reduce((n, f) => n + Number(f.unreadable || 0), 0),
+      files: (last.files || []).map((f) => ({ file: f.file, status: f.status, why: f.why || null })) } : null,
+    boot: KEY_ROT.boot,
+    lastError: KEY_ROT.lastError,
+  };
+}
+const keyTimer = setInterval(() => { keyTick().catch(() => {}); }, KEY_TICK_MS);
+keyTimer.unref();
+if (KEY_OWNER) setTimeout(() => { keyMaintenance('boot').catch(() => {}); }, keyNum(process.env.KEY_MAINT_DELAY_MS, 20000, 0)).unref();   // after the first snapshot below
+function snapshotDb() { return withKeyLock(snapshotDbNow); }
+async function snapshotDbNow() {
   if (typeof sqliteBackup !== 'function') return;
+  if (process.env.BACKUP_DIR && !KEYLIB.backupMarkerOk(BACKUP_DIR, KEYLIB.getMeta(db, 'backup_marker'))) { console.warn('db snapshot skipped: ' + BACKUP_DIR + ' has no ' + KEYLIB.BACKUP_MARKER + ' marker — is the backups volume mounted?'); return; }
   try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
   const f = path.join(BACKUP_DIR, 'app-' + new Date().toISOString().slice(0, 10) + '.db');
   const tmp = f + '.part';
@@ -17494,6 +17898,8 @@ function productionChecks() {
     if (!process.env.SEED_INVITE_CODE && !db.prepare('SELECT 1 FROM invite_codes LIMIT 1').get()) warn('SEED_INVITE_CODE unset on a fresh deploy — a random seed code was generated and printed above; set SEED_INVITE_CODE to choose it (F018).');
     if ((process.env.HOST || '127.0.0.1') !== '127.0.0.1' && !TRUST_PROXY_HOPS) warn('HOST=' + process.env.HOST + ' binds beyond loopback while TRUST_PROXY is unset — if anything but your proxy can reach this port, per-IP limits key on whatever the peer says. Set TRUST_PROXY, or keep HOST=127.0.0.1 behind a same-box proxy.');
     if (DATA_KEY_SOURCE === 'file-same-volume') warn('DATA_KEY_FILE is on the same volume as the database. Keep the key on another volume.');
+    if (!KEY_RING_FILE) warn('The encryption key never rotates: it is a single fixed key. To rotate it automatically, stop the server and run scripts/keys.mjs init (DEPLOY.md).');
+    else if (!KEYLIB.readEscrowPub(KEY_RING_FILE)) warn(process.env.KEY_ROTATE_WITHOUT_ESCROW === '1' ? 'Keys rotate, but no escrow key is set up: the keyring on ' + path.dirname(KEY_RING_FILE) + ' is the only copy, and losing it loses the data. Run scripts/keys.mjs escrow-init and keep its recovery key off this machine.' : 'Key rotation is PAUSED: no escrow key is set up. Run scripts/keys.mjs escrow-init (or set KEY_ROTATE_WITHOUT_ESCROW=1 to rotate without one).');
     if (DATA_KEY_SOURCE === 'data-dir') warn('The encryption key is read from data/.data_key, beside the database it protects. Put it on another volume and set DATA_KEY_FILE (DEPLOY.md).');
     if (!BACKUP_OFF_VOLUME) warn('Backups are written on the same volume as the database. Set BACKUP_DIR to a folder on another volume (DEPLOY.md).');
     if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin.html). Set it to your database row id (users.id, not your Send ID) once you have signed up.');
@@ -17503,7 +17909,7 @@ function productionChecks() {
   }
 }
 
-server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); console.log('🔐 Encryption key: ' + DATA_KEY_SOURCE + ' · backups: ' + BACKUP_DIR + (BACKUP_OFF_VOLUME ? ' (separate volume)' : ' (same volume as the data)') + ' · admins: ' + ADMIN_USER_IDS.size + ' · Node ' + process.version); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}).then(() => seedOfficialSquadLater()); }, 2500).unref(); });
+server.listen(PORT, process.env.HOST || '127.0.0.1', () => { console.log(`🚀 JustSendIt running at ${BASE_URL}`); console.log('🔐 Encryption key: ' + DATA_KEY_SOURCE + (KEY_RING_FILE ? ' (keyring: data key ' + KEYS.current + ', index epoch ' + KEYS.epoch + (!KEY_OWNER ? ', READ ONLY: ' + KEY_NOT_OWNER_WHY : (KEY_ROTATE_HOURS ? ', rotates every ' + KEY_ROTATE_HOURS + ' h' : ', data key rotation off') + (IDX_ROTATE_DAYS ? ', index every ' + IDX_ROTATE_DAYS + ' d' : '') + (keyEscrowOk() ? '' : ', PAUSED: no escrow')) + ')' : ' (single key, no rotation)') + ' · backups: ' + BACKUP_DIR + (BACKUP_OFF_VOLUME ? ' (separate volume)' : ' (same volume as the data)') + ' · admins: ' + ADMIN_USER_IDS.size + ' · Node ' + process.version); for (const x of KEY_ROT.boot) console.log('🔐 ' + x); if (KEY_ROT.lastError) console.error('🔴 ' + KEY_ROT.lastError); productionChecks(); tgStart().catch(() => {}); setTimeout(() => { seedOfficialCommunities().then(seedDemoCommunity).catch(() => {}).then(() => seedOfficialSquadLater()); }, 2500).unref(); });
 
 // The New Pairs Radar is a members' tab on the Scanner page (newpairs.html) — no background refresher runs, so
 // the RPC/Blockscout/Dexscreener are not hit every 90s while nobody is looking. The /api/pairs/new endpoint

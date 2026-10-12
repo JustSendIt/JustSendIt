@@ -333,8 +333,55 @@ backups on a volume of their own (`BACKUP_DIR`), and the key in a file on a thir
 JustSendItBackups`, and one for the key) are separate filesystems on the same physical disk: that guards against a
 damaged or deleted data folder, not a dead disk or a lost Mac — copy both somewhere off the machine as well.
 
-**Test a restore before you need one.** Copy a snapshot to a scratch host, set the same `DATA_KEY`, boot it,
-and sign in. An untested backup is a hypothesis.
+**Test a restore before you need one.** Copy a snapshot to a scratch host, give it the same key (or keyring), boot
+it, and sign in. An untested backup is a hypothesis.
+
+### Key rotation (a keyring at `DATA_KEY_FILE`)
+
+A key that has been copied — into a chat, a log, a stolen laptop — keeps opening the data for as long as it is the
+key. A keyring fixes that: the key changes on a schedule, everything is re-encrypted under the new one, and the old one
+is then deleted from the ring, so a copy stops opening anything soon after it is taken. `lib/keys.js` holds the code.
+
+- **Turn it on** (once, with the server stopped): `node scripts/keys.mjs init` converts the hex key in
+  `DATA_KEY_FILE` to a keyring in place (the old key becomes key 1; nothing in the database changes). Delete any
+  `DATA_KEY=` value from `.env` — a key in the environment beside a keyring is refused. Code from before keyrings
+  refuses to start on the converted file, so a rollback fails loudly instead of misreading data.
+- **One database owns the keyring.** `init` records the site's database (its id and folder) in the ring, and marks
+  `BACKUP_DIR` with a `.jsi-backups` file. Only a server on that database rotates, takes requests or drops keys; any
+  other server pointed at the same ring (a copy opened for a look, a development server) only decrypts, and says
+  `READ ONLY` at boot. After moving the site to another folder, or restoring it from a backup into a new one, run
+  `node scripts/keys.mjs claim` with the server stopped. A backups folder without its marker (the volume not mounted,
+  its mount point re-created empty) holds back every key drop and gets no daily snapshot until it is back.
+- **Escrow** (strongly advised): `node scripts/keys.mjs escrow-init`, run in your own terminal. It keeps a public
+  key beside the ring and prints a RECOVERY KEY once — store that off this machine (password manager, paper). From
+  then on every change to the ring is sealed with the public key into `BACKUP_DIR/keyring-escrow/`; with the recovery
+  key, `node scripts/keys.mjs escrow-open FILE OUT` gets any of them back. Without escrow the keyring is the only copy,
+  so rotation refuses to run unless `KEY_ROTATE_WITHOUT_ESCROW=1` says you accept that.
+- **What rotates:**
+  - the **data key** every `KEY_ROTATE_HOURS` (24). The site stays up: the live database is re-encrypted in small
+    batches, checkpointed to the disk and compacted (`secure_delete` is on, so old ciphertext is zeroed), then every
+    backup file — the dailies, the `pre-*` copies, and any file or folder in `KEY_ROTATE_EXTRA_DBS` — is rewritten
+    under the new key on a copy, checked value by value, and renamed into place with its old date;
+  - the **index key** (the lookups by email, wallet and IP) every `IDX_ROTATE_DAYS` (7), at `KEY_ROTATE_HOUR` (4,
+    server time). A stored index is moved without knowing what it indexes, so IP limits and one-claim-per-wallet rules
+    keep counting. It needs a restart: the server exits and launchd (or systemd/Docker with a restart policy) starts it
+    again — about ten seconds, and it waits while a wallet read runs, up to a day. Without a supervisor, set
+    `IDX_ROTATE_DAYS=0`;
+  - an **old key is dropped** only when the live database and every backup file hold nothing it opens, and
+    `KEY_DROP_GRACE_MIN` (60) has passed. A backup file that cannot be checked, or a backup place that cannot be listed,
+    holds every drop until you look at it (the admin page names it). Values that no key opens (a damaged row, a copy
+    made under another keyring) are kept exactly as they are and counted; they never hold a key back.
+  - `KEY_ROTATE_EXTRA_DBS` is for COPIES (an old development database, a folder of exports): never name a database
+    that a running server has open.
+- **Rotate now:** the admin page (Overview → Key rotation) has "Rotate the data key now" and "Key may be stolen:
+  rotate everything" (new data and index keys, old keys dropped as soon as nothing needs them, a ~10 s restart). From a
+  terminal: `node scripts/keys.mjs request [--all] [--compromised]` — taken at the next start, or within five minutes
+  by a running server. `node scripts/keys.mjs status` shows key ids, ages and fingerprints, never the keys.
+- **Restore with a keyring:** a backup is always under the keyring's current keys (every rotation rewrites them all).
+  An older copy from somewhere else needs the keyring of its time: open the escrow file from that day.
+- **What rotation cannot do:** a copy of the database taken *before* a rotation stays readable with the key of its
+  time; a process running as the site's own account can read the current ring; and which rows share an email, wallet
+  or IP stays visible in any copy. Keep copies off shared places, and keep the key volume's account to yourself.
 
 ## Telegram scanner bot (optional)
 
@@ -381,10 +428,9 @@ never written to a log line, and is never sent anywhere but Telegram. If it leak
   running, never blocks requests; one a day, the last 3 kept inside the data directory, 7 when `BACKUP_DIR` points outside it; set `BACKUP_DIR` to move them). **Copy that directory
   off-box** (object storage / rsync) on a schedule, and copy `data/uploads/` alongside it — avatars, headers and
   post media live there and are referenced from the DB.
-- **The data key:** personal data in `app.db` is encrypted under `DATA_KEY`. Keep the key in the environment (not in
-  `data/`), store a copy in your password manager, and never put it next to the backups — a backup plus the key is the
-  whole user base; a backup alone is unreadable. Rotating the key is not supported in place (it would need a re‑encrypt
-  pass), so treat it as permanent.
+- **The data key:** personal data in `app.db` is encrypted under `DATA_KEY`. Keep the key out of `data/` and never
+  next to the backups — a backup plus the key is the whole user base; a backup alone is unreadable. A single key never
+  changes; a **keyring** rotates (next section), which is what you want once anyone might have seen the key.
 - **Restore:** `sudo systemctl stop justsendit` → copy the snapshot over `data/app.db` → **delete** any
   `data/app.db-wal` and `data/app.db-shm` left beside it (a stale WAL from the old file would corrupt the restored
   one) → restore `data/uploads/` → `chown -R www-data data` → `sudo systemctl start justsendit`. Never copy a

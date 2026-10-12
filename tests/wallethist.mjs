@@ -69,14 +69,12 @@ async function link(sid, w, proof) {
 }
 const histRow = (uid, addr) => db.prepare('SELECT read_to, updated_at, partial, length(hist) n FROM wallet_hist WHERE user_id = ? AND addr_idx = ?').get(uid, bidx(addr));
 
-/* ═══ the helpers, lifted as they are ═══ */
-const cryptoCtx = vm.createContext({ Buffer, crypto, DATA_KEY, IDX_KEY, String });
-vm.runInContext(
-  grab(/function encField\(s\) \{[\s\S]*?\n\}\n/, 'encField') + grab(/function decField\(s\) \{[\s\S]*?\n\}\n/, 'decField') +
-  grab(/function encBlob\(buf\) \{[\s\S]*?\n\}\n/, 'encBlob') + grab(/function decBlob\(buf\) \{[\s\S]*?\n\}\n/, 'decBlob') +
-  grab(/const bidx = \(s\) => [^\n]+\n/, 'bidx') +
-  '\nthis.encField = encField; this.decField = decField; this.encBlob = encBlob; this.decBlob = decBlob; this.bidx = bidx;', cryptoCtx);
-const { encField, decField, encBlob, decBlob, bidx } = cryptoCtx;
+/* ═══ the helpers: lib/keys.js in single-key mode, which is what the test server runs (its key is data/.data_key) ═══ */
+const { Keys } = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'keys.js'));
+const KEYS = Keys.legacy(DATA_KEY);
+const encField = (s) => KEYS.encField(s), decField = (s) => KEYS.decField(s), encBlob = (b) => KEYS.encBlob(b), decBlob = (b) => KEYS.decBlob(b), bidx = (s) => KEYS.bidx(s);
+check('the server encrypts through lib/keys.js (the module this suite exercises)', /const KEYLIB = require\('\.\/lib\/keys\.js'\);/.test(SRC) && /function encBlob\(buf\) \{ return KEYS\.encBlob\(buf\); \}/.test(SRC) && /function decBlob\(buf\) \{ return KEYS\.decBlob\(buf\); \}/.test(SRC));
+check('  ...and single-key mode is byte-for-byte the old index (HMAC of HMAC(key, "blind-index"))', bidx('0xabc') === createHmac('sha256', IDX_KEY).update('0xabc').digest('hex'));
 const packHist = (h) => encBlob(zlib.brotliCompressSync(Buffer.from(JSON.stringify(h))));   // the row the server would have written
 const putHist = (uid, addr, h, partial) => db.prepare('INSERT INTO wallet_hist (user_id, addr_idx, read_to, updated_at, partial, hist) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id, addr_idx) DO UPDATE SET read_to = excluded.read_to, updated_at = excluded.updated_at, partial = excluded.partial, hist = excluded.hist')
   .run(uid, bidx(addr), h.head, Date.now(), partial ? 1 : 0, packHist(h));

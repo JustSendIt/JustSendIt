@@ -20,6 +20,8 @@ const note = (file, msg) => problems.push(file + ': ' + msg);
 /* ---- 1. every shipped JavaScript file parses ---- */
 const jsFiles = [path.join(ROOT, 'server.js')]
   .concat(readdirSync(PUBLIC).filter(f => f.endsWith('.js')).map(f => path.join(PUBLIC, f)))
+  .concat(existsSync(path.join(ROOT, 'lib')) ? readdirSync(path.join(ROOT, 'lib')).filter(f => f.endsWith('.js')).map(f => path.join(ROOT, 'lib', f)) : [])
+  .concat(readdirSync(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.mjs')).map(f => path.join(ROOT, 'scripts', f)))
   .concat(existsSync(path.join(ROOT, 'tests'))
     ? readdirSync(path.join(ROOT, 'tests')).filter(f => f.endsWith('.mjs')).map(f => path.join(ROOT, 'tests', f))
     : []);

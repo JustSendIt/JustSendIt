@@ -7,6 +7,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+import { createRequire } from 'node:module';
+const requireCjs = createRequire(import.meta.url);
 import { ROOT, DB_PATH, SERVER_JS } from './_paths.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
@@ -96,8 +98,8 @@ try {
     const errs = [];
     const fsx = otherVolume ? { ...fsReal, statSync: (pth, ...r) => { const st = fsReal.statSync(pth, ...r); return /keyfile/.test(String(pth)) ? { ...st, dev: st.dev + 1 } : st; } } : fsReal;
     try {
-      const [key, src] = new Function('process', 'fs', 'path', 'crypto', 'DATA_DIR', 'BASE_URL', 'console', keySrc + '\nreturn [DATA_KEY, DATA_KEY_SOURCE];')(proc, fsx, path, crypto, dataDir, 'http://localhost', { error: (m) => errs.push(m), warn: () => {} });
-      return { key: key.toString('hex'), src, errs };
+      const [keys, src, ringFile] = new Function('process', 'fs', 'path', 'crypto', 'DATA_DIR', 'BASE_URL', 'console', 'require', "const KEYLIB = require('./lib/keys.js');\n" + keySrc + '\nreturn [KEYS, DATA_KEY_SOURCE, KEY_RING_FILE];')(proc, fsx, path, crypto, dataDir, 'http://localhost', { error: (m) => errs.push(m), warn: () => {} }, (m) => requireCjs(path.join(ROOT, m.replace(/^\.\//, ''))));
+      return { key: keys.byId.get(keys.current).toString('hex'), mode: keys.mode, ringFile, src, errs };
     } catch (e) { return { threw: e.message, errs }; }
   };
   const dir = mkdtempSync(path.join(tmpdir(), 'jsi-key-')), k1 = randomBytes(32).toString('hex'), k2 = randomBytes(32).toString('hex');
@@ -113,15 +115,20 @@ try {
   check('  ...without it, the old place still works and says where it came from (the admin page warns)', c.key === k2 && c.src === 'data-dir');
   const d = run({ DATA_KEY: k1, DATA_KEY_FILE: path.join(dir, 'missing') }, dir);
   check('  ...and DATA_KEY in the environment still comes first', d.key === k1 && d.src === 'env');
+  // a keyring at DATA_KEY_FILE (scripts/keys.mjs init): rotation mode
+  const KL = requireCjs(path.join(ROOT, 'lib', 'keys.js'));
+  writeFileSync(path.join(dir, 'keyfile-ring'), JSON.stringify(KL.newRingFromLegacy(Buffer.from(k1, 'hex'))), { mode: 0o600 });
+  const e = run({ DATA_KEY_FILE: path.join(dir, 'keyfile-ring') }, dir, true);
+  check('a keyring at DATA_KEY_FILE is read as one (the key rotates), from its own volume', e.mode === 'ring' && e.key === k1 && e.src === 'file' && e.ringFile === path.join(dir, 'keyfile-ring'), JSON.stringify({ mode: e.mode, src: e.src }));
+  const f = run({ DATA_KEY: k2, DATA_KEY_FILE: path.join(dir, 'keyfile-ring') }, dir, true);
+  check('  ...and DATA_KEY in the environment beside a keyring is refused, not guessed between', f.threw === 'exit 1' && /AND DATA_KEY_FILE holds a keyring/.test(f.errs.join(' ')), f.threw);
+  writeFileSync(path.join(dir, 'keyfile-ring'), JSON.stringify({ ...KL.newRingFromLegacy(Buffer.from(k1, 'hex')), generation: 9 }), { mode: 0o600 });
+  const g = run({ DATA_KEY_FILE: path.join(dir, 'keyfile-ring') }, dir, true);
+  check('  ...and a keyring whose checksum does not match (edited, truncated) stops the server', g.threw === 'exit 1' && /checksum/.test(g.errs.join(' ')), g.threw);
   rmSync(dir, { recursive: true, force: true });
   check('boot warns when the key or the backups sit on the database\'s volume', /if \(DATA_KEY_SOURCE === 'data-dir'\) warn\(/.test(SRC) && /if \(DATA_KEY_SOURCE === 'file-same-volume'\) warn\(/.test(SRC) && /if \(!BACKUP_OFF_VOLUME\) warn\(/.test(SRC));
-  // the startup key check: a key that opens none of the stored values stops the server before anything is written
-  const kcSrc = grab(/\(\(\) => \{\n  let rows = \[\];\n  try \{ rows = db\.prepare\("SELECT identifier_enc v FROM identities[\s\S]*?\n\}\)\(\);\n/, 'key check');
-  const kc = (rows, opens) => { try { new Function('db', 'decField', 'DATA_KEY_SOURCE', 'process', 'console', kcSrc)({ prepare: () => ({ all: () => rows }) }, (v) => (opens(v) ? 'x' : null), 'file', { env: { DATA_KEY_FILE: '/k' }, exit: (c) => { throw new Error('exit ' + c); } }, { error: () => {} }); return 'started'; } catch (e) { return e.message; } };
-  check('the key check: a key that opens none of the stored values refuses to start', kc([{ v: 'v1:a' }, { v: 'v1:b' }], () => false) === 'exit 1');
-  check('  ...one that opens them starts', kc([{ v: 'v1:a' }, { v: 'v1:b' }], () => true) === 'started');
-  check('  ...a fresh database (nothing stored yet) starts', kc([], () => false) === 'started');
-  check('  ...and it runs before the first migration that writes an encrypted value', SRC.indexOf('REFUSING TO START: the encryption key') < SRC.indexOf("SELECT id, tracker_prefs, site_prefs FROM users WHERE tracker_prefs NOT LIKE 'v1:%'"));
+  // the startup key check: its behaviour (wrong key, missing key id, wrong index epoch) is driven against real servers in tests/keyrotate.mjs
+  check('the startup key check runs before the first migration that writes an encrypted value', SRC.indexOf("refuse('the encryption key does not open the data already in this database") > 0 && SRC.indexOf("refuse('the encryption key does not open the data already in this database") < SRC.indexOf("SELECT id, tracker_prefs, site_prefs FROM users WHERE NOT "));
   const bvSrc = grab(/const BACKUP_OFF_VOLUME = \(\(\) => \{[\s\S]*?\n\}\)\(\);\n/, 'BACKUP_OFF_VOLUME');
   const bv = (env, devs) => new Function('process', 'path', 'fs', 'DATA_DIR', bvSrc + '\nreturn BACKUP_OFF_VOLUME;')({ env }, path, { statSync: (pth) => ({ dev: devs[pth] }) }, '/data');
   check('backups count as separate only on another volume: inside data/ no, a sibling folder on the same volume no, another volume yes',
