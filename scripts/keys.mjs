@@ -84,6 +84,7 @@ async function readSecret(prompt) {
   });
 }
 
+if ((cmd === 'init' || cmd === 'claim') && /^[0-9a-f]{64}$/i.test(String(process.env.DATA_KEY || '').trim())) die('DATA_KEY is set (in .env or the environment): a server with it beside a keyring refuses to start. Remove that line first.');
 if (cmd === 'status') {
   const kf = needRing();
   if (kf.kind === 'hex') console.log('DATA_KEY_FILE holds a single key (fingerprint ' + K.fingerprint(kf.key) + '). Nothing rotates until `init`.');

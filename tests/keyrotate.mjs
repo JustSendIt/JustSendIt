@@ -46,6 +46,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('  ...an unknown key id or a malformed v2 value is unreadable (null), never passed through as text', R.decField('v2:7:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') === null && R.decField('v2:zz') === null);
   check('  ...and the old single-key reader cannot open a new value', L.decField(v) === null);
   const h0 = R.bidxAt('ip:9.9.9.9', 0), h1 = R.bidxAt('ip:9.9.9.9', 1);
+  { const R2 = K.Keys.fromRing(K.validateRing(JSON.parse(JSON.stringify(R.ring)))); R2.setEpoch(1); const before = R2.bidx('x');
+    const noE1 = JSON.parse(JSON.stringify(R.ring)); noE1.idx.outer = []; K.sealRing(noE1);
+    let threw = false; try { R2.adopt(noE1); } catch { threw = true; }
+    check('taking up a ring that lacks the epoch in use fails WITHOUT touching the keys in use (no zeroed index key)', threw && R2.bidx('x') === before && R2.epoch === 1); }
+  { const { DatabaseSync: D } = await import('node:sqlite'); const d = new D(':memory:'); d.exec('CREATE TABLE wallet_hist (hist BLOB)'); const b = Buffer.alloc(30); b[0] = 2; b.writeUInt32BE(3, 1); d.prepare('INSERT INTO wallet_hist VALUES (?)').run(b);
+    check('a short 0x02 blob counts under the same key id in the quick census as in the full one', JSON.stringify(K.prefixCensus(d).kids) === JSON.stringify({ 0: 1 }) && K.blobKid(b) === 0); d.close(); }
   check('the index re-wrap moves a stored index between epochs without its input, and back', h1 !== h0 && R.rewrapIdx(h0, 0, 1) === h1 && R.rewrapIdx(h1, 1, 0) === h0 && /^[0-9a-f]{64}$/.test(h1));
   const spec = K.IDX_COLUMNS.find((s) => s.t === 'points_events');
   check('  ...award markers move by their index part only; a community-XP ref (v<id>:…) is not an index and stays', K.rewrapValue(spec, 'track:5:' + h0, R, 0, 1) === 'track:5:' + h1 && K.rewrapValue(spec, 'v12:3', R, 0, 1) === null && K.rewrapValue(spec, 'swaptx:' + h0, R, 0, 1) === 'swaptx:' + h1);
@@ -448,6 +454,28 @@ try {
       m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
       check('  ...and once it lets go, the next pass compacts and drops', !!m && ringNow().ring.dek.keys.length === 1);
       await stop();
+    }
+    // copies the walk must find or flag: a hidden folder, a folder left at mode 600, a link, an orphan log, a stale work copy
+    {
+      const copy = (to) => { const d = openDb(); d.prepare('VACUUM INTO ?').run(to); d.close(); };
+      fs.mkdirSync(path.join(BK, '.hidden')); copy(path.join(BK, '.hidden', 'old.db'));
+      fs.mkdirSync(path.join(BK, 'sub600')); copy(path.join(BK, 'sub600', 'old.db')); fs.chmodSync(path.join(BK, 'sub600'), 0o600);
+      fs.symlinkSync(path.join(BK, 'app-2026-01-01.db'), path.join(BK, 'link.db'));
+      fs.writeFileSync(path.join(BK, 'ghost.db-wal'), randomBytes(4096));
+      fs.mkdirSync(path.join(BK, '.rekey'), { recursive: true }); fs.writeFileSync(path.join(BK, '.rekey', 'gone.db.work'), randomBytes(64));
+      cli('request'); t1 = Date.now(); await start();
+      m = await maintenanceAfter(t1);
+      const names = m ? m.files.map((f) => f.file + ':' + f.status) : [];
+      check('a copy in a hidden folder, and one in a folder an older version left at mode 600 (repaired to 700), are brought along', names.includes('.hidden/old.db:rekeyed') && names.includes('sub600/old.db:rekeyed') && (fs.statSync(path.join(BK, 'sub600')).mode & 0o777) === 0o700, JSON.stringify(names));
+      check('  ...a symbolic link and a write-ahead log with no database beside it hold back every drop', !!m && m.dropped.length === 0 && m.blocked.some((b) => /link\.db/.test(b.path) && /symbolic link/.test(b.why)) && m.blocked.some((b) => /ghost\.db-wal/.test(b.path)), JSON.stringify(m && m.blocked));
+      check('  ...and a work copy left by an interrupted rewrite is cleared', !fs.existsSync(path.join(BK, '.rekey', 'gone.db.work')));
+      await stop();
+      fs.unlinkSync(path.join(BK, 'link.db')); fs.unlinkSync(path.join(BK, 'ghost.db-wal'));
+      t1 = Date.now(); await start();
+      m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
+      check('  ...once they are gone, the old key goes', !!m && ringNow().ring.dek.keys.length === 1);
+      await stop();
+      fs.rmSync(path.join(BK, '.hidden'), { recursive: true, force: true }); fs.rmSync(path.join(BK, 'sub600'), { recursive: true, force: true });
     }
     // a request the server cannot stage (the key volume read-only) stays, and is taken once it can be
     cli('request');

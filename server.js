@@ -181,7 +181,7 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
 (function lockDownDataFiles() {
   // a folder keeps its search bit (700, not 600): without it nothing inside can be opened — a subfolder of backups would vanish from every check
-  const tighten = (p, mode) => { try { const st = fs.statSync(p); if ((st.mode & 0o077) !== 0) fs.chmodSync(p, st.isDirectory() ? 0o700 : mode); } catch {} };
+  const tighten = (p, mode) => { try { const st = fs.statSync(p); if ((st.mode & 0o077) !== 0 || (st.isDirectory() && !(st.mode & 0o100))) fs.chmodSync(p, st.isDirectory() ? 0o700 : mode); } catch {} };
   tighten(DATA_DIR, 0o700);
   tighten(UPLOAD_DIR, 0o700);
   for (const f of ['app.db', 'app.db-wal', 'app.db-shm', '.data_key']) tighten(path.join(DATA_DIR, f), 0o600);
@@ -17027,6 +17027,9 @@ function withKeyLock(fn) { const run = keyChain.then(fn, fn); keyChain = run.cat
    BLOCKED, never "empty"; so is an archive in a backups folder that may hold a database (.gz, .zip …): an old key is not
    dropped while copies that may need it are out of sight. Only an unconfigured data/backups that does not exist is empty. */
 const SQLITE_MAGIC = Buffer.from('SQLite format 3\0');
+const KEY_SYSTEM_DIRS = new Set(['.Spotlight-V100', '.fseventsd', '.DocumentRevisions-V100', '.TemporaryItems', '.Trashes-unused']);
+// leftover work copies of an interrupted rewrite (a hard kill mid-pass): old ciphertext, never needed again
+function keyCleanWork(dir) { try { for (const n of fs.readdirSync(dir)) if (/\.(work|new)(-journal)?$/.test(n)) { try { fs.unlinkSync(path.join(dir, n)); } catch {} } } catch {} }
 const KEY_ARCHIVE = /\.(gz|tgz|zip|xz|zst|bz2|7z|tar|rar|dmg|sparseimage|sparsebundle)$/i;
 // true / false — or the error code when the file cannot even be opened (that is a place the rotation cannot check, not "no database")
 function keyIsSqlite(f) { try { const fd = fs.openSync(f, 'r'); try { const b = Buffer.alloc(16); return fs.readSync(fd, b, 0, 16, 0) === 16 && b.equals(SQLITE_MAGIC); } finally { fs.closeSync(fd); } } catch (e) { return e.code || 'unreadable'; } }
@@ -17039,9 +17042,17 @@ function keyFiles() {
     catch (e) { if (!(okIfAbsent && e.code === 'ENOENT')) blocked.push({ path: d, why: e.code === 'ENOENT' ? 'not found (not mounted, moved or renamed?)' : 'cannot be listed (' + (e.code || e.message) + ')' }); return; }
     for (const n of names) {
       const p = path.join(d, n.name);
-      // hidden folders are .rekey work files and the volume's own .Spotlight-V100 / .Trashes / .fseventsd (root's, unreadable)
-      if (n.isDirectory()) { if (n.name.startsWith('.') || n.name === 'keyring-escrow') continue; if (depth < 4) walk(p, false, depth + 1); else blocked.push({ path: p, why: 'nested too deep to check' }); continue; }
-      if (!n.isFile() || /-(wal|shm|journal)$|\.part$|\.work$|\.new$/.test(n.name)) continue;
+      if (n.isSymbolicLink()) { blocked.push({ path: p, why: 'a symbolic link — the rotation does not follow links; put the file itself here' }); continue; }
+      if (n.isDirectory()) {
+        if (n.name === 'keyring-escrow' || KEY_SYSTEM_DIRS.has(n.name)) continue;   // sealed rings; the volume's own folders (root's, unreadable)
+        if (n.name === '.rekey') { keyCleanWork(p); continue; }                       // work copies: none is in use while this runs (it holds the key lock)
+        if (n.name === '.Trashes') { const mine = path.join(p, String(process.getuid ? process.getuid() : '')); if (fs.existsSync(mine)) walk(mine, true, depth + 1); continue; }
+        if (depth < 4) walk(p, false, depth + 1); else blocked.push({ path: p, why: 'nested too deep to check' });
+        continue;
+      }
+      if (!n.isFile() || /-(shm|journal)$|\.part$/.test(n.name)) continue;
+      // a -wal beside nothing (its database gone) can still hold pages of an old copy: it holds drops until removed
+      if (/-wal$/.test(n.name)) { try { if (fs.statSync(p).size > 0 && !fs.existsSync(p.slice(0, -4))) blocked.push({ path: p, why: 'a write-ahead log with no database beside it — it may hold pages of an old copy; remove it' }); } catch {} continue; }
       const sq = keyIsSqlite(p);
       if (sq === true) out.push(p);
       else if (sq !== false) blocked.push({ path: p, why: 'cannot be opened (' + sq + ') — check its permissions' });
@@ -17076,7 +17087,7 @@ async function keyMaintenance(why) {
       rep.blocked = blocked.map((b) => ({ path: keyFileName(b.path), why: b.why }));
       for (const f of files) {
         const r = KEYLIB.rekeyFile(f, KEYS, { toEpoch: KEYS.epoch, crashAt: KEY_TEST_CRASH });
-        rep.files.push({ file: keyFileName(f), status: r.status, why: r.why, kids: r.kids, unreadable: r.unreadable || 0, epoch: r.epoch });
+        rep.files.push({ file: keyFileName(f), status: r.status, why: r.why, kids: r.kids, unreadable: r.unreadable || 0, unreadableKids: r.unreadableKids || null, epoch: r.epoch });
         await new Promise((res) => setImmediate(res));
       }
       // 4. the live database, by trial decryption (what actually opens, not what the prefix says)
@@ -17127,7 +17138,7 @@ function keyDropUnneeded(rep) {
     const fps = Object.fromEntries(dropKids.map((id) => [id, KEYS.fingerprint(id)]));
     keyRingWrite((r) => {
       r.dek.keys = r.dek.keys.filter((k) => !dropKids.includes(k.id));
-      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id], left: Number(rep.live.unreadable[id] || 0) });
+      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id], left: Math.max(Number(rep.live.unreadable[id] || 0), ...rep.files.map((f) => Number((f.unreadableKids || {})[id] || 0))) });
       r.idx.outer = r.idx.outer.filter((o) => !dropEpochs.includes(o.epoch));
       for (const e of dropEpochs) r.idx.dropped.push({ epoch: e, at: t });
     }, { dropping: true });
@@ -17171,7 +17182,7 @@ let keyRingSeen = null;
 async function keyTick() {
   if (KEY_RING_FILE && !KEY_OWNER) {
     // read only: take up the owner's new keys, so values written here go under a key the owner keeps
-    try { const kf = KEYLIB.readKeyFile(KEY_RING_FILE); if (kf.kind === 'ring' && kf.ring.sha256 !== (keyRingSeen || KEYS.ring.sha256)) { keyRingSeen = kf.ring.sha256; KEYS.adopt(kf.ring); } }
+    try { const kf = KEYLIB.readKeyFile(KEY_RING_FILE); if (kf.kind === 'ring' && kf.ring.sha256 !== (keyRingSeen || KEYS.ring.sha256)) { KEYS.adopt(kf.ring); keyRingSeen = kf.ring.sha256; KEY_ROT.lastError = null; } }
     catch (e) { KEY_ROT.lastError = 'could not follow the keyring: ' + keyRotWhy(e); }
     return;
   }
