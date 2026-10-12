@@ -1,13 +1,13 @@
 /* 💎 Diamond Hands: a SALE resets the streak, a TRANSFER never does (owner's rule, 2026-10-12: "only sells from that
    wallet or from the wallet that they transferred the token to counts as a sell").
    The real code is lifted out of server.js as it is — the streak rules (dhStreakNext, holdDaysOf), the ledger's eye on
-   the members' wallets (dhLedgerHook) and the receipt check (dhResolveRun with receiptLegs + tradeLegs) — and run on
-   hand-built Transfer logs and receipts in an in-memory database. No server, no chain. */
+   the members' wallets (dhLedgerHook and the follow helpers) and the receipt check (dhResolveRun with receiptLegs +
+   tradeLegs) — and run on hand-built Transfer logs and receipts in an in-memory database. No server, no chain. */
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DatabaseSync } from 'node:sqlite';
-import { SERVER_JS, ROOT } from './_paths.mjs';
 import path from 'node:path';
+import { SERVER_JS, ROOT } from './_paths.mjs';
 
 const SRC = readFileSync(SERVER_JS, 'utf8');
 const results = [];
@@ -21,58 +21,62 @@ const Z = '0x' + '0'.repeat(40), DEAD = '0x000000000000000000000000000000000000d
 const SEND = '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', GWC = '0x61339f11384dde4b2dc3a33e75b4dc23cc620f22';
 const POOL = { SEND: '0xf30bb531d0255969be155533abac34b22bd63414', GWC: '0x22df73eef683a93680dff3b51fdf3ee91e7352d9' };
 const a = (c) => '0x' + c.repeat(40);
-const W = a('1'), W2 = a('9'), X = a('2'), Y = a('5'), ROUTER = a('3'), CONTRACT = a('4'), OTHER = a('6');
+const W = a('1'), W2 = a('9'), X = a('2'), Y = a('5'), ROUTER = a('3'), SAFE = a('4'), OTHER = a('6'), POOL2 = a('7'), Q = a('8'), U = a('c');
 
 try {
   /* ═══ 1. the streak rules (dhStreakNext) ═══ */
   const streakSrc = grab(/function dhStreakNext\(prev, cur, sales, t\) \{[\s\S]*?\n\}\n/, 'dhStreakNext');
   const daysSrc = grab(/function holdDaysOf\(h\) [^\n]+\n/, 'holdDaysOf') + grab(/function gwcDaysOf\(h\) [^\n]+\n/, 'gwcDaysOf');
-  let T0 = 1_800_000_000_000, NOW = T0;
+  const T0 = 1_800_000_000_000; let NOW = T0;
   const S = new Function('now', streakSrc + daysSrc + '\nreturn { dhStreakNext, holdDaysOf, gwcDaysOf };')(() => NOW);
-  const row = (n) => ({ streak_start: n.streakStart, base_bp: n.baseBp, paused_at: n.pausedAt, paused_ms: n.pausedMs, gwc_streak_start: n.gwcStreak, gwc_base_bp: n.gwcBase, gwc_paused_at: n.gwcPausedAt, gwc_paused_ms: n.gwcPausedMs });
-  const held = { scoreBp: 300, qGwcBp: 100, sendTok: 1000, gwcTok: 500 };
-  let st = S.dhStreakNext(null, held, [], T0);
+  const F = 100;   // the floor, in dollars
+  const row = (n, c) => ({ streak_start: n.streakStart, base_bp: n.baseBp, paused_at: n.pausedAt, paused_ms: n.pausedMs, gwc_streak_start: n.gwcStreak, gwc_base_bp: n.gwcBase, gwc_paused_at: n.gwcPausedAt, gwc_paused_ms: n.gwcPausedMs,
+    send_ref: n.sendRef, gwc_ref: n.gwcRef, send_tok: c.sendTok, gwc_tok: c.gwcTok, send_qual: c.sendQual, gwc_qual: c.gwcQual });
+  // a read: tokens held and today's prices → qualifying bp, verdicts (as refreshHolder computes them)
+  const read = (sendTok, gwcTok, sendPx, gwcPx, prevQual) => {
+    const q = (tok, px, before) => px == null ? (before == null ? null : before) : (tok * px >= F ? 1 : 0);
+    const sendQual = q(sendTok, sendPx, prevQual && prevQual.s), gwcQual = q(gwcTok, gwcPx, prevQual && prevQual.g);
+    return { scoreBp: (sendQual === 1 ? sendTok : 0) + (gwcQual === 1 ? gwcTok : 0), qGwcBp: gwcQual === 1 ? gwcTok : 0, sendTok, gwcTok, sendQual, gwcQual, sendPx, gwcPx, floorUsd: F };
+  };
+  let c = read(1000, 500, 0.101, 0.5), st = S.dhStreakNext(null, c, [], T0), prev = row(st, c);
   check('a streak starts when the linked wallets first hold $100 of a coin', st.streakStart === T0 && st.gwcStreak === T0);
-  let prev = { ...row(st), send_tok: 1000, gwc_tok: 500 };
-  // a transfer out that still leaves the floor met: nothing happens
-  st = S.dhStreakNext(prev, { ...held, scoreBp: 150, sendTok: 400 }, [], T0 + 10 * DAY);
-  check('a transfer out that leaves the floor met changes nothing (it is not a sale)', st.streakStart === T0 && !st.pausedAt && !st.resets.length);
-  // the old rule would have reset here (more than 2% below the peak); the new one does not
-  check('  ...where the old "2% below the peak" rule reset the streak, the new one keeps it', /scoreBp < baseBp \* 0\.98/.test(SRC) === false);
-  // a transfer that takes everything out: paused, days frozen
-  prev = { ...row(st), send_tok: 400, gwc_tok: 500 };
-  st = S.dhStreakNext(prev, { scoreBp: 0, qGwcBp: 0, sendTok: 0, gwcTok: 0 }, [], T0 + 20 * DAY);
-  check('moving every coin out of the linked wallets PAUSES both streaks (not a sale)', st.streakStart === T0 && st.pausedAt === T0 + 20 * DAY && st.gwcStreak === T0 && st.gwcPausedAt === T0 + 20 * DAY && !st.resets.length);
+  // the review's case: $101 of $SEND, a 1.5% transfer tips it under $100 — a transfer, so it pauses (the old 2% tolerance ended it)
+  c = read(985, 0, 0.101, 0.5); st = S.dhStreakNext(prev, c, [], T0 + 10 * DAY);
+  check('a small transfer that tips a coin under the floor PAUSES the streak (no 2% slack decides it any more)', st.streakStart === T0 && st.pausedAt === T0 + 10 * DAY && !st.resets.length, JSON.stringify(st));
+  check('  ...the $GWC that moved out pauses the $GWC streak too', st.gwcStreak === T0 && st.gwcPausedAt === T0 + 10 * DAY);
   NOW = T0 + 50 * DAY;
-  let h = { ...row(st), last_check: NOW };
-  check('  ...the days stop at the pause (20, not 50)', Math.floor(S.holdDaysOf(h)) === 20 && Math.floor(S.gwcDaysOf(h)) === 20, S.holdDaysOf(h));
-  prev = { ...row(st), send_tok: 0, gwc_tok: 0 };
-  st = S.dhStreakNext(prev, { scoreBp: 0, qGwcBp: 0, sendTok: 0, gwcTok: 0 }, [], NOW);
-  check('  ...and stay paused while nothing is back', st.pausedAt === T0 + 20 * DAY && st.streakStart === T0);
-  // back over the floor 30 days later: resume, the gap not counted
-  prev = { ...row(st), send_tok: 0, gwc_tok: 0 };
-  st = S.dhStreakNext(prev, held, [], NOW);
-  NOW = T0 + 60 * DAY; h = { ...row(st), last_check: NOW };
-  check('back over the floor: the streak resumes where it left off, the 30 paused days never count (60 − 30 = 30)', st.streakStart === T0 && !st.pausedAt && st.pausedMs === 30 * DAY && Math.floor(S.holdDaysOf(h)) === 30, S.holdDaysOf(h));
-  // a SALE resets to zero
-  prev = { ...row(st), send_tok: 1000, gwc_tok: 500 };
-  st = S.dhStreakNext(prev, held, [{ token: 'SEND', sale_at: T0 + 59 * DAY }], NOW);
-  check('a $SEND SALE restarts the combined streak at the sale (and leaves the $GWC-only streak alone)', st.streakStart === T0 + 59 * DAY && st.pausedMs === 0 && st.gwcStreak === T0 && st.resets.length === 1 && st.resets[0].clock === 'all');
-  st = S.dhStreakNext({ ...row(st), send_tok: 1000, gwc_tok: 500 }, held, [{ token: 'GWC', sale_at: T0 + 59.5 * DAY }], NOW);
-  check('  ...a $GWC sale restarts both clocks', st.streakStart === T0 + 59.5 * DAY && st.gwcStreak === T0 + 59.5 * DAY && st.resets.length === 2);
-  const before = st.streakStart;
-  st = S.dhStreakNext({ ...row(st), send_tok: 1000, gwc_tok: 500 }, held, [{ token: 'SEND', sale_at: before - DAY }], NOW);
-  check('  ...a sale from before the streak began changes nothing', st.streakStart === before && !st.resets.length);
-  st = S.dhStreakNext({ ...row(st), send_tok: 1000, gwc_tok: 500 }, { scoreBp: 0, qGwcBp: 0, sendTok: 0, gwcTok: 0 }, [{ token: 'GWC', sale_at: NOW - 1000 }], NOW);
+  let h = { ...row(st, c), last_check: NOW };
+  check('  ...the days stop at the pause (10, not 50)', Math.floor(S.holdDaysOf(h)) === 10 && Math.floor(S.gwcDaysOf(h)) === 10, S.holdDaysOf(h));
+  prev = row(st, c);
+  c = read(1000, 500, 0.101, 0.5); st = S.dhStreakNext(prev, c, [], NOW);
+  NOW = T0 + 60 * DAY; h = { ...row(st, c), last_check: NOW };
+  check('back over the floor: it resumes where it left off, the 40 paused days never count (60 − 40 = 20)', st.streakStart === T0 && !st.pausedAt && st.pausedMs === 40 * DAY && Math.floor(S.holdDaysOf(h)) === 20, S.holdDaysOf(h));
+  // the price, not a move
+  prev = row(st, c);
+  c = read(1000, 500, 0.09, 0.15); st = S.dhStreakNext(prev, c, [], NOW);
+  check('under the floor because the PRICE fell (the same coins are worth less): the streak ends, as it always has', st.streakStart === null && st.gwcStreak === null);
+  // a read with no price decides nothing and does not move the reference
+  c = read(1000, 500, 0.2, 0.5); st = S.dhStreakNext(null, c, [], T0); prev = row(st, c);
+  c = read(200, 500, null, 0.5, { s: 1, g: 1 }); st = S.dhStreakNext(prev, c, [], T0 + DAY);
+  check('a read with no $SEND price keeps the verdict and leaves the reference where the last priced read put it', st.streakStart === T0 && !st.pausedAt && st.sendRef === 1000, st.sendRef);
+  prev = row(st, c);
+  c = read(200, 0, 0.2, 0.5); st = S.dhStreakNext(prev, c, [], T0 + 2 * DAY);
+  check('  ...so when the price comes back, coins that left during the blind read still read as a move: paused, not ended (the review\'s case B)', st.streakStart === T0 && st.pausedAt === T0 + 2 * DAY, JSON.stringify(st));
+  // sales
+  c = read(1000, 500, 0.2, 0.5); st = S.dhStreakNext(null, c, [], T0); prev = row(st, c);
+  st = S.dhStreakNext(prev, c, [{ token: 'SEND', sale_at: T0 + 5 * DAY }], T0 + 6 * DAY);
+  check('a $SEND SALE restarts the combined streak at the sale and leaves the $GWC-only streak alone', st.streakStart === T0 + 5 * DAY && st.gwcStreak === T0 && st.resets.length === 1 && st.resets[0].clock === 'all');
+  prev = row(st, c);
+  st = S.dhStreakNext(prev, c, [{ token: 'GWC', sale_at: T0 + 5.5 * DAY }], T0 + 6 * DAY);
+  check('  ...a $GWC sale restarts both clocks', st.streakStart === T0 + 5.5 * DAY && st.gwcStreak === T0 + 5.5 * DAY && st.resets.length === 2);
+  prev = row(st, c);
+  st = S.dhStreakNext(prev, c, [{ token: 'SEND', sale_at: T0 }], T0 + 6 * DAY);
+  check('  ...a sale from before the streak began changes nothing', st.streakStart === T0 + 5.5 * DAY && !st.resets.length);
+  st = S.dhStreakNext(prev, read(0, 0, 0.2, 0.5), [{ token: 'GWC', sale_at: T0 + 6 * DAY - 1 }], T0 + 6 * DAY);
   check('  ...and a sale that left nothing that qualifies ends the streak (no pause)', st.streakStart === null && st.gwcStreak === null && st.pausedAt === null);
-  // the price, not a move: ends as before
-  st = S.dhStreakNext(null, held, [], T0);
-  st = S.dhStreakNext({ ...row(st), send_tok: 1000, gwc_tok: 500 }, { scoreBp: 0, qGwcBp: 0, sendTok: 1000, gwcTok: 500 }, [], T0 + DAY);
-  check('below the floor because the PRICE fell (no coins moved): the streak ends, as it always has', st.streakStart === null && st.gwcStreak === null);
-  // a sale while paused
-  st = S.dhStreakNext(null, held, [], T0);
-  st = S.dhStreakNext({ ...row(st), send_tok: 1000, gwc_tok: 500 }, { scoreBp: 0, qGwcBp: 0, sendTok: 0, gwcTok: 0 }, [], T0 + DAY);
-  st = S.dhStreakNext({ ...row(st), send_tok: 0, gwc_tok: 0 }, { scoreBp: 0, qGwcBp: 0, sendTok: 0, gwcTok: 0 }, [{ token: 'SEND', sale_at: T0 + 2 * DAY }], T0 + 3 * DAY);
+  c = read(1000, 0, 0.2, 0.5); st = S.dhStreakNext(null, c, [], T0); prev = row(st, c);
+  st = S.dhStreakNext(prev, read(0, 0, 0.2, 0.5), [], T0 + DAY); prev = row(st, read(0, 0, 0.2, 0.5));
+  st = S.dhStreakNext(prev, read(0, 0, 0.2, 0.5), [{ token: 'SEND', sale_at: T0 + 2 * DAY }], T0 + 3 * DAY);
   check('a sale from where the coins went, while paused, ends the paused streak', st.streakStart === null && st.resets.length === 1);
 
   /* ═══ 2. the ledger's eye (dhLedgerHook) and the receipt check (dhResolveRun) ═══ */
@@ -83,104 +87,137 @@ try {
   const enc = (s) => s == null ? null : 'E:' + s, dec = (s) => s && String(s).startsWith('E:') ? String(s).slice(2) : null, bidx = (s) => 'I:' + s;
   const link = (uid, w) => db.prepare("INSERT INTO identities (user_id, type, identifier, identifier_enc) VALUES (?, 'wallet', ?, ?)").run(uid, bidx(w), enc(w));
   link(1, W); link(1, W2); link(2, OTHER);
+  const helpers = ['dhInfo', 'dhFollowGet', 'dhFollowPut', 'dhFollowDrop', 'dhFollowUse', 'dhFollowAdd', 'dhLetGo'].map((n) => n === 'dhInfo' || n === 'dhFollowDrop'
+    ? grab(new RegExp('const ' + n + ' = [^\\n]+'), n) : grab(new RegExp('function ' + n + '\\([^)]*\\) \\{[\\s\\S]*?\\n\\}\\n'), n)).join('\n');
   const hookSrc = grab(/function dhLedgerHook\(tok, logs\) \{[\s\S]*?\n\}\n/, 'dhLedgerHook');
-  const resolveSrc = grab(/async function dhResolveRun\(\) \{[\s\S]*?\n\}\n/, 'dhResolveRun');
+  const resolveSrc = grab(/async function dhResolveRun\(\) \{[\s\S]*?\n\}\n/, 'dhResolveRun') + grab(/const dhPassedOn = [^\n]+/, 'dhPassedOn');
   const legsSrc = grab(/function receiptLegs\(rc\) \{[\s\S]*?\n\}\n/, 'receiptLegs') + grab(/const sentBy = \(e, w\) => [^\n]+/, 'sentBy') + '\n' + grab(/function tradeLegs\(entry, w, a\) \{[\s\S]*?\n\}\n/, 'tradeLegs');
-  const receipts = new Map(), contracts = new Set([ROUTER, CONTRACT]);
-  const ctx = vm.createContext({ BigInt, Math, Map, Set, Infinity, JSON, String, Number, parseInt, Error, console: { warn() {}, log() {} },
+  const receipts = new Map(); let nodeDown = false;
+  const ctx = vm.createContext({ BigInt, Math, Map, Set, Infinity, JSON, String, Number, parseInt, Error, Object, console: { warn() {}, log() {} },
     db, bidx, encField: enc, decField: dec, now: () => NOW,
     TOK: { SEND, GWC }, OG_PAIR: POOL, ZERO_ADDR: Z, DEAD_ADDR: DEAD, WETH_ADDR: WETH, USDG_ADDR: USDG, TRANSFER_TOPIC: TOPIC, ENTRY_POINTS: new Set(), USEROP_TOPIC: '0x0',
-    DH_COINS: { [SEND]: 'SEND', [GWC]: 'GWC' }, DH_FOLLOW_MAX: 200, DH_TRIES_MAX: 40,
-    chainBlockTime: async (b) => b * 1000, addrHasCode: async (x) => contracts.has(x), isThrottle: () => false,
+    DH_COINS: { [SEND]: 'SEND', [GWC]: 'GWC' }, DH_FOLLOW_MAX: 5, DH_GIVE_UP_MS: 7 * DAY,
+    chainBlockTime: async (b) => b * 1000, chainTransient: (e) => /node down/.test(e.message),
   });
-  vm.runInContext(legsSrc + '\n' + hookSrc + '\n' + resolveSrc + `
-    async function dhTxEntry(h) { const rc = RECEIPTS.get(h); if (!rc) throw new Error('no receipt'); return receiptLegs(rc); }
-    this.dhLedgerHook = dhLedgerHook; this.dhResolveRun = dhResolveRun;`, Object.assign(ctx, { RECEIPTS: receipts }));
+  vm.runInContext(legsSrc + '\n' + helpers + '\n' + hookSrc + '\n' + resolveSrc + `
+    async function dhTxEntry(h) {
+      if (NODE.down) throw new Error('node down');
+      const rc = RECEIPTS.get(h); if (!rc) throw new Error('the receipt is not available yet');
+      const raw = rc.logs.map((l) => [l.address, '0x' + l.topics[1].slice(-40), '0x' + l.topics[2].slice(-40)]);
+      return { entry: receiptLegs(rc), raw };
+    }
+    this.dhLedgerHook = dhLedgerHook; this.dhResolveRun = dhResolveRun; this.dhFollowAdd = dhFollowAdd;`, Object.assign(ctx, { RECEIPTS: receipts, NODE: { get down() { return nodeDown; } } }));
   const pad = (x) => '0x' + '0'.repeat(24) + x.slice(2);
   const hex = (n) => '0x' + BigInt(n).toString(16).padStart(64, '0');
   let blk = 1000, li = 0;
   const tlog = (token, f, t, v, tx, block) => ({ address: token, topics: [TOPIC, pad(f), pad(t)], data: hex(v), transactionHash: tx, blockNumber: '0x' + block.toString(16), logIndex: '0x' + (li++).toString(16) });
-  // a transaction: its Transfer logs (any token), its sender; the ledger sees only the coin's own logs
   const send = (from, legs) => { const tx = '0x' + (++blk).toString(16).padStart(64, '0'); const logs = legs.map(([tok, f, t, v]) => tlog(tok, f, t, v, tx, blk)); receipts.set(tx, { from, logs }); return logs; };
   const ledger = (coinAddr, logs) => ctx.dhLedgerHook(coinAddr, logs.filter((l) => l.address === coinAddr));
-  const moves = () => db.prepare('SELECT id, user_id, token, src, quick, status, sale_at, amount FROM dh_moves ORDER BY id').all();
-  const follow = (uid, w, coin = 'SEND') => db.prepare('SELECT budget, state, since_block FROM dh_follow WHERE user_id = ? AND token = ? AND addr_idx = ?').get(uid, coin, bidx(w));
+  const moves = () => db.prepare('SELECT id, user_id, token, src, quick, status, sale_at FROM dh_moves ORDER BY id').all();
+  const follow = (uid, w, coin = 'SEND') => { const r = db.prepare('SELECT info_enc, state, via FROM dh_follow WHERE user_id = ? AND token = ? AND addr_idx = ?').get(uid, coin, bidx(w)); if (!r) return null; const x = JSON.parse(dec(r.info_enc)); return { ...x, state: r.state, via: r.via }; };
   const last = () => moves().at(-1);
+  const fee = (f, v) => [SEND, f, SEND, Math.floor(v / 100)];   // $SEND's 1% on every transfer, to the token contract
 
-  // a direct sale into the pool
   ledger(SEND, send(W, [[SEND, W, POOL.SEND, 500], [WETH, POOL.SEND, W, 9]]));
   await ctx.dhResolveRun();
   check('a sale straight into the pool from a linked wallet is a SALE', last().status === 'sale' && last().quick === 'pool' && last().src === 'linked' && last().sale_at === blk * 1000, JSON.stringify(last()));
-  // a routed sale (wallet → router → pool, the proceeds back through the router)
   ledger(SEND, send(W, [[SEND, W, ROUTER, 400], [SEND, ROUTER, POOL.SEND, 400], [WETH, POOL.SEND, ROUTER, 8], [WETH, ROUTER, W, 8]]));
   await ctx.dhResolveRun();
-  check('a sale through a router is a SALE (and the router is not followed)', last().status === 'sale' && last().quick === 'routed' && !follow(1, ROUTER), JSON.stringify(last()));
-  // adding liquidity: coins into the pool, no payout
+  check('a sale through a router is a SALE, and the router is not followed', last().status === 'sale' && last().quick === 'routed' && !follow(1, ROUTER), JSON.stringify(last()));
+  // the review's critical case: a sale into a pool the ledger does not know (quick 'transfer') must not jam the queue
+  ledger(SEND, send(W, [[SEND, W, POOL2, 300], [USDG, POOL2, W, 7]]));
+  for (let i = 0; i < 70; i++) ledger(SEND, send(POOL2, [[SEND, POOL2, a(String((i % 6) + 1).replace('1', 'd')), 1]]));   // the unknown pool keeps paying out to buyers in the same batch
+  await ctx.dhResolveRun(); await ctx.dhResolveRun();
+  const pend = moves().filter((m) => m.status === 'pending').length;
+  check('a sale into a pool the ledger does not know is a SALE, the pool is let go, and nothing is left waiting behind it (no stuck queue)', moves().some((m) => m.status === 'sale' && m.quick === 'transfer') && !follow(1, POOL2) && pend === 0, 'pending ' + pend);
   ledger(SEND, send(W, [[SEND, W, POOL.SEND, 300], [WETH, W, POOL.SEND, 6], [POOL.SEND, Z, W, 50]]));
   await ctx.dhResolveRun();
   check('adding liquidity (coins into the pool, nothing paid out) is NOT a sale', last().status === 'ignored' && last().quick === 'pool', JSON.stringify(last()));
-  // a plain transfer to an ordinary wallet
-  ledger(SEND, send(W, [[SEND, W, X, 1000]]));
-  check('a transfer to another wallet starts following it at once', follow(1, X) && follow(1, X).state === 0 && follow(1, X).budget === '1000');
+  // a plain transfer with $SEND's fee
+  ledger(SEND, send(W, [[SEND, W, X, 990], fee(W, 1000)]));
+  check('a transfer to another wallet starts following it at once, for what it got', follow(1, X) && follow(1, X).state === 0 && follow(1, X).budget === '990' && follow(1, X).since === blk);
   await ctx.dhResolveRun();
-  check('  ...it is a TRANSFER, not a sale, and the wallet stays followed (an ordinary wallet)', last().status === 'transfer' && follow(1, X).state === 1, JSON.stringify(last()));
-  const salesBefore = moves().filter((m) => m.status === 'sale').length;
-  // the token's own swap-back of its tax inside someone's plain transfer is nobody's sale
-  ledger(SEND, send(W, [[SEND, W, Y, 200], [SEND, SEND, POOL.SEND, 40], [WETH, POOL.SEND, SEND, 1]]));
+  check('  ...it is a TRANSFER, not a sale, and the wallet stays followed', last().status === 'transfer' && follow(1, X).state === 1, JSON.stringify(last()));
+  ledger(SEND, send(W, [[SEND, W, Y, 200], fee(W, 200), [SEND, SEND, POOL.SEND, 40], [WETH, POOL.SEND, SEND, 1]]));
   await ctx.dhResolveRun();
-  check('  ...a plain transfer during which the token swaps its own collected tax is still a transfer', last().status === 'transfer' && last().quick === 'transfer', JSON.stringify(last()));
-  // into the member's own other wallet: not even a move
+  check('  ...a transfer during which the token swaps its own collected fee is still a transfer', last().status === 'transfer');
   const n0 = moves().length;
-  ledger(SEND, send(W, [[SEND, W, W2, 100]]));
+  ledger(SEND, send(W, [[SEND, W, W2, 100], fee(W, 100)]));
   check('moving coins between the member\'s own linked wallets is not a move at all', moves().length === n0);
-  // the followed wallet sells
-  ledger(SEND, send(X, [[SEND, X, POOL.SEND, 600], [WETH, POOL.SEND, X, 11]]));
+  ledger(SEND, send(X, [[SEND, X, POOL.SEND, 594], fee(X, 600), [WETH, POOL.SEND, X, 11]]));
   await ctx.dhResolveRun();
   check('a sale by the wallet they sent the coins to IS a sale for the member', last().status === 'sale' && last().src === 'followed' && last().user_id === 1, JSON.stringify(last()));
-  check('  ...and it uses up that much of what the wallet got from them (1000 − 600 = 400 left)', follow(1, X).budget === '400');
-  // it passes the rest on: not followed further (one hop), and that is not a sale
-  ledger(SEND, send(X, [[SEND, X, OTHER, 100]]));
+  check('  ...and it uses up what the wallet got from them, fee included (990 − 594 − 6 = 390 left)', follow(1, X).budget === '390', follow(1, X).budget);
+  ledger(SEND, send(X, [[SEND, X, OTHER, 100], fee(X, 100)]));
   await ctx.dhResolveRun();
   check('  ...its onward transfer is neither a sale nor a new follow (one hop, as the rule says)', last().status === 'ignored' && !follow(1, OTHER), JSON.stringify(last()));
-  // it gives the rest back to the member
-  ledger(SEND, send(X, [[SEND, X, W, 400]]));
-  check('  ...and once it has given back what it got, it is let go', !follow(1, X));
-  // a transfer to a contract that takes the coins without a sale (a vault, a bridge): not followed
-  ledger(SEND, send(W, [[SEND, W, CONTRACT, 250]]));
-  ledger(SEND, send(CONTRACT, [[SEND, CONTRACT, POOL.SEND, 250], [WETH, POOL.SEND, OTHER, 5]]));   // someone else's sale through it, before it is checked
+  ledger(SEND, send(X, [[SEND, X, W, 287], fee(X, 290)]));
+  check('  ...and when it has given back what it got (after $SEND\'s fee), it is let go', !follow(1, X), JSON.stringify(follow(1, X)));
+  // a wallet that is a contract (a Safe): followed like any wallet; a router: not
+  ledger(SEND, send(W, [[SEND, W, SAFE, 250]]));
   await ctx.dhResolveRun();
-  const vm2 = moves().slice(-2);
-  check('a contract that took the coins without a sale is not followed, and what passes through it later is not the member\'s sale', !follow(1, CONTRACT) && vm2[0].status === 'transfer' && vm2[1].status === 'ignored', JSON.stringify(vm2));
-  // a wallet that sold BEFORE it got the member's coins: those sales are not counted
-  ledger(SEND, send(Y, [[SEND, Y, POOL.SEND, 10], [WETH, POOL.SEND, Y, 1]]));
+  check('coins sent to a smart-contract wallet (it did nothing else in that transaction) are followed', follow(1, SAFE) && follow(1, SAFE).state === 1);
+  ledger(SEND, send(OTHER, [[SEND, SAFE, POOL.SEND, 250], [WETH, POOL.SEND, SAFE, 5]]));   // an owner of the Safe sends its sale
   await ctx.dhResolveRun();
-  check('  ...and a followed wallet\'s sales count only from when it got the coins (Y got them earlier: this one counts)', last().status === 'sale' && last().src === 'followed');
-  const yb = follow(1, Y);
-  check('  ...a follow starts at the block of the transfer', yb && yb.since_block > 1000);
-  // another member's linked wallet is watched for that member, not this one
+  check('  ...and its sale counts, though its owner (not the Safe) sent the transaction', last().status === 'sale' && last().src === 'followed');
+  ledger(SEND, send(W, [[SEND, W, Q, 50], [SEND, Q, U, 50]]));
+  await ctx.dhResolveRun();
+  check('a contract that passes the coins straight on in the same transaction (a router) is not followed', !follow(1, Q) && last().status === 'ignored');
+  // since: a followed wallet's sales count only from the block it got the coins
+  ctx.dhFollowAdd(1, 'SEND', bidx(U), U, blk + 5, 1000n, 'transfer');
+  db.prepare("UPDATE dh_follow SET state = 1 WHERE addr_idx = ?").run(bidx(U));
+  const nU = moves().length;
+  ledger(SEND, send(U, [[SEND, U, POOL.SEND, 10], [WETH, POOL.SEND, U, 1]]));
+  check('a followed wallet\'s sale from BEFORE it got the coins is not noted', moves().length === nU);
+  blk += 10;
+  ledger(SEND, send(U, [[SEND, U, POOL.SEND, 10], [WETH, POOL.SEND, U, 1]]));
+  check('  ...and one from after is', moves().length === nU + 1);
+  // another member, another coin
   ledger(SEND, send(OTHER, [[SEND, OTHER, POOL.SEND, 70], [WETH, POOL.SEND, OTHER, 2]]));
   await ctx.dhResolveRun();
   check('a sale by another member\'s wallet is that member\'s sale only', last().user_id === 2 && last().status === 'sale');
-  // $GWC is its own coin: a $SEND follow does not watch $GWC
-  ledger(SEND, send(W, [[SEND, W, Y, 5]]));
   const gn = moves().length;
-  ledger(GWC, send(Y, [[GWC, Y, POOL.GWC, 5], [WETH, POOL.GWC, Y, 1]]));
+  ledger(GWC, send(SAFE, [[GWC, SAFE, POOL.GWC, 5], [WETH, POOL.GWC, SAFE, 1]]));
   check('following is per coin: a wallet sent $SEND is not watched for $GWC', moves().length === gn);
-  // a receipt that cannot be read is never a sale
+  // dust cannot fill the slots: past the cap (5 here) the smallest is let go for a real one
+  for (let i = 0; i < 6; i++) ledger(SEND, send(W, [[SEND, W, a('e').slice(0, 41) + String(i), 1]]));
+  ledger(SEND, send(W, [[SEND, W, a('f'), 5000]]));
+  check('followed wallets have a cap, and dust sends cannot fill it: the smallest is let go for a real one', !!follow(1, a('f')) && db.prepare("SELECT COUNT(*) n FROM dh_follow WHERE user_id = 1 AND token = 'SEND'").get().n <= 5);
+  await ctx.dhResolveRun();
+  // a wallet the member unlinked is still theirs: followed for good, and its own transfers are followed on
+  db.prepare("DELETE FROM identities WHERE identifier = ?").run(bidx(W2));
+  ctx.dhFollowAdd(1, 'SEND', bidx(W2), W2, blk + 1, 777n, 'unlink');
+  ledger(SEND, send(W2, [[SEND, W2, a('b'), 700]]));
+  await ctx.dhResolveRun();
+  check('a wallet they unlinked is still theirs: its transfer is followed on like a linked wallet\'s', last().src === 'linked' && last().status === 'transfer' && follow(1, a('b')) && follow(1, a('b')).state === 1, JSON.stringify(last()));
+  // the node down: nothing settled, nothing charged
+  ledger(SEND, send(W, [[SEND, W, POOL.SEND, 1], [WETH, POOL.SEND, W, 1]]));
+  nodeDown = true; await ctx.dhResolveRun(); nodeDown = false;
+  const nd = db.prepare('SELECT status, tries FROM dh_moves ORDER BY id DESC LIMIT 1').get();
+  check('the node refusing settles nothing and charges nothing (the move waits, its tries untouched)', nd.status === 'pending' && nd.tries === 0, JSON.stringify(nd));
+  await ctx.dhResolveRun();
+  check('  ...and the next round settles it', last().status === 'sale');
+  // a receipt that is not there: tried again with a pause, never taken for a sale
   ledger(SEND, (() => { const logs = send(W, [[SEND, W, POOL.SEND, 1], [WETH, POOL.SEND, W, 1]]); receipts.delete(logs[0].transactionHash); return logs; })());
   await ctx.dhResolveRun();
-  check('a move whose receipt cannot be read waits (pending), it is never taken for a sale', last().status === 'pending');
+  const nr = db.prepare('SELECT status, tries, next_try_at FROM dh_moves ORDER BY id DESC LIMIT 1').get();
+  check('a receipt that cannot be found is tried again later — never taken for a sale', nr.status === 'pending' && nr.tries === 1 && nr.next_try_at > NOW, JSON.stringify(nr));
+  // privacy: no plaintext block, position or amount
+  const cols = db.prepare('PRAGMA table_info(dh_moves)').all().map((r) => r.name).concat(db.prepare('PRAGMA table_info(dh_follow)').all().map((r) => r.name));
+  check('the moves and follows keep no block, position or amount in the clear (they would name the transfer)', !cols.some((n) => /^(block|log_index|amount|budget|since_block)$/.test(n)));
 
   /* ═══ 3. wiring ═══ */
-  check('the hook runs inside the ledger, for $SEND and $GWC only, and only once that ledger is built', /if \(watch\) dhLedgerHook\(tok, logs\);/.test(SRC) && /const watch = !!\(row && row\.status === 'ok' && row\.last_block\);/.test(SRC) && /ledgerApply\(tok, out, to, firstBlock, watch\)/.test(SRC) && /const coin = DH_COINS\[tok\]; if \(!coin\) return;/.test(SRC));
-  check('refreshHolder applies confirmed sales and nothing else resets the streak', /const nx = dhStreakNext\(prev, \{ scoreBp, qGwcBp, sendTok, gwcTok \}, sales, now\(\)\);/.test(SRC) && !/streakStart = now\(\); baseBp = scoreBp; \}  \/\/ sold/.test(SRC));
-  check('  ...and tells the member which coin and when, in words that say a transfer never resets it', /reset your Diamond Hands streak to zero/.test(SRC) && /Moving coins never does/.test(SRC));
-  check('unlinking a wallet follows it for what it holds (unlinking is not a way to sell without it counting)', /VALUES \(\?,\?,\?,\?,\?,\?,1,'unlink',\?\)/.test(SRC));
+  check('the hook runs inside the ledger under a savepoint, for $SEND and $GWC only, once that ledger is built', /if \(watch\) \{ db\.exec\('SAVEPOINT dh_hook'\); try \{ dhLedgerHook\(tok, logs\);/.test(SRC) && /const watch = !!\(row && row\.status === 'ok' && row\.last_block\);/.test(SRC) && /ledgerApply\(tok, out, to, firstBlock, watch\)/.test(SRC) && /const coin = DH_COINS\[tok\]; if \(!coin\) return;/.test(SRC));
+  check('refreshHolder reads the row again and decides inside one transaction (two reads at once cannot undo a reset)', /const latest = db\.prepare\('SELECT \* FROM holder_state WHERE user_id = \?'\)\.get\(userId\);\n\s+const sales = /.test(SRC) && /nx = dhStreakNext\(latest, /.test(SRC));
+  check('  ...and tells the member which coin and when, in words that say moving coins never resets it', /reset your Diamond Hands streak to zero/.test(SRC) && /Moving coins never does/.test(SRC));
+  check('unlinking (even the last wallet) and disconnecting pause the streak and follow the wallets — they never wipe it', /dhFollowLeaving\(me\.id, addr\);/.test(SRC) && /for \(const w of wallets\) dhFollowLeaving\(me\.id, w\);/.test(SRC) && (SRC.match(/dhPauseHolder\(me\.id\);/g) || []).length === 2 && !/DELETE FROM holder_state WHERE user_id = \?'\)\.run\(me\.id\)/.test(SRC));
+  check('a paused streak keeps its public Diamond badge', /if \(!h \|\| !h\.streak_start \|\| \(h\.score_bp <= 0 && !h\.paused_at\)\) return null;/.test(SRC));
+  check('deleting an account deletes its follows and moves', /'holder_state', 'dh_follow', 'dh_moves',/.test(SRC));
   check('the dashboard says when a streak is paused', /streakPaused: !!h\.paused_at/.test(SRC) && /h\.streakPaused/.test(readFileSync(path.join(ROOT, 'public', 'gamify.js'), 'utf8')));
   const KEYS = readFileSync(path.join(ROOT, 'lib', 'keys.js'), 'utf8');
-  check('the followed wallets and moves are encrypted + indexed like every wallet link, and key rotation carries them', /\['dh_follow', 'addr_enc'\]/.test(KEYS) && /\{ t: 'dh_follow', c: 'addr_idx' \}/.test(KEYS) && /\{ t: 'dh_moves', c: 'from_idx' \}/.test(KEYS) && /\['dh_moves', 'tx_enc'\]/.test(KEYS));
-  const ABOUT = readFileSync(path.join(ROOT, 'public', 'about.html'), 'utf8'), WP = readFileSync(path.join(ROOT, 'public', 'whitepaper.html'), 'utf8');
-  check('the About page and the White Paper state the rule (a transfer is not a sale) and no longer the 2% one', /Moving coins to another wallet is not a sale/.test(ABOUT) && !/more than 2% below its own peak/.test(ABOUT) && /Moving coins between wallets is not a sale/.test(WP));
+  check('the followed wallets and moves are encrypted + indexed like every wallet link, and key rotation carries them', ['dh_follow\', \'addr_enc', 'dh_follow\', \'info_enc', 'dh_moves\', \'info_enc', 'dh_moves\', \'tx_enc'].every((x) => KEYS.includes(x)) && /\{ t: 'dh_moves', c: 'move_idx' \}/.test(KEYS) && /\{ t: 'dh_follow', c: 'addr_idx' \}/.test(KEYS));
+  const ABOUT = readFileSync(path.join(ROOT, 'public', 'about.html'), 'utf8'), WP = readFileSync(path.join(ROOT, 'public', 'whitepaper.html'), 'utf8'), README = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  check('the About page, White Paper and README state the rule (a transfer is not a sale) and no longer the 2% one', /Moving coins to another wallet is not a sale/.test(ABOUT) && !/2% below/.test(ABOUT) && /Moving coins between wallets is not a sale/.test(WP) && /A transfer is not a sale/.test(README) && !/dropping more than 2% below that peak/.test(README));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);

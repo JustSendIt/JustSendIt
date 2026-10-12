@@ -910,7 +910,7 @@
       disc.innerHTML = '<span class="npm-ico" aria-hidden="true">🔌</span> Disconnect wallet';
       disc.setAttribute('data-tip', walletOnly
         ? 'Signs you out — this wallet is the only way into this account'
-        : 'Unlinks your wallet and keeps you signed in — an OG badge comes off too');
+        : 'Unlinks your wallet and keeps you signed in — an OG badge comes off too; your Diamond streak only pauses (disconnecting is not selling)');
       let armed = false, armT = null;
       const resetArm = () => { armed = false; if (armT) { clearTimeout(armT); armT = null; } disc.classList.remove('armed'); disc.innerHTML = '<span class="npm-ico" aria-hidden="true">🔌</span> Disconnect wallet'; };
       disc._resetArm = resetArm; // let any menu-close path disarm the two-tap confirm (see setProfileOpen)
