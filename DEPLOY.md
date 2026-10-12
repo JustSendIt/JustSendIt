@@ -356,11 +356,14 @@ is then deleted from the ring, so a copy stops opening anything soon after it is
   key beside the ring and prints a RECOVERY KEY once — store that off this machine (password manager, paper). From
   then on every change to the ring is sealed with the public key into `BACKUP_DIR/keyring-escrow/`; with the recovery
   key, `node scripts/keys.mjs escrow-open FILE OUT` gets any of them back. Without escrow the keyring is the only copy,
-  so rotation refuses to run unless `KEY_ROTATE_WITHOUT_ESCROW=1` says you accept that.
+  so rotation refuses to run unless `KEY_ROTATE_WITHOUT_ESCROW=1` says you accept that — and then a backup copied off
+  this machine stops opening after the next rotation (its key is dropped a day later), because no sealed ring travels
+  with it.
 - **What rotates:**
   - the **data key** every `KEY_ROTATE_HOURS` (24). The site stays up: the live database is re-encrypted in small
     batches, checkpointed to the disk and compacted (`secure_delete` is on, so old ciphertext is zeroed), then every
-    backup file — the dailies, the `pre-*` copies, and any file or folder in `KEY_ROTATE_EXTRA_DBS` — is rewritten
+    backup file — every SQLite file anywhere under `BACKUP_DIR` (found by its header, so a copy in a subfolder or
+    named `.sqlite` counts) and any file or folder in `KEY_ROTATE_EXTRA_DBS` — is rewritten
     under the new key on a copy, checked value by value, and renamed into place with its old date;
   - the **index key** (the lookups by email, wallet and IP) every `IDX_ROTATE_DAYS` (7), at `KEY_ROTATE_HOUR` (4,
     server time). A stored index is moved without knowing what it indexes, so IP limits and one-claim-per-wallet rules
@@ -372,7 +375,9 @@ is then deleted from the ring, so a copy stops opening anything soon after it is
     holds every drop until you look at it (the admin page names it). Values that no key opens (a damaged row, a copy
     made under another keyring) are kept exactly as they are and counted; they never hold a key back.
   - `KEY_ROTATE_EXTRA_DBS` is for COPIES (an old development database, a folder of exports): never name a database
-    that a running server has open.
+    that a running server has open. On a Mac, a server started by launchd cannot read `~/Desktop`, `~/Documents` or
+    `~/Downloads` (macOS privacy): put copies under `BACKUP_DIR` instead. An archive (`.gz`, `.zip` …) in the backups
+    holds back every drop, because the rotation cannot open it: unpack it there, or move it out.
 - **Rotate now:** the admin page (Overview → Key rotation) has "Rotate the data key now" and "Key may be stolen:
   rotate everything" (new data and index keys, old keys dropped as soon as nothing needs them, a ~10 s restart). From a
   terminal: `node scripts/keys.mjs request [--all] [--compromised]` — taken at the next start, or within five minutes

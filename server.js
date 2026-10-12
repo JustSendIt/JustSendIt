@@ -180,7 +180,8 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 /* ---------- DB ---------- */
 const db = new DatabaseSync(path.join(DATA_DIR, 'app.db'));
 (function lockDownDataFiles() {
-  const tighten = (p, mode) => { try { const st = fs.statSync(p); if ((st.mode & 0o077) !== 0) fs.chmodSync(p, mode); } catch {} };
+  // a folder keeps its search bit (700, not 600): without it nothing inside can be opened — a subfolder of backups would vanish from every check
+  const tighten = (p, mode) => { try { const st = fs.statSync(p); if ((st.mode & 0o077) !== 0) fs.chmodSync(p, st.isDirectory() ? 0o700 : mode); } catch {} };
   tighten(DATA_DIR, 0o700);
   tighten(UPLOAD_DIR, 0o700);
   for (const f of ['app.db', 'app.db-wal', 'app.db-shm', '.data_key']) tighten(path.join(DATA_DIR, f), 0o600);
@@ -701,10 +702,15 @@ CREATE INDEX IF NOT EXISTS idx_holder_bal_tok ON holder_balances(token_addr, pos
   /* A key id the ring has never heard of means the wrong (or a stale) keyring. A key id the ring DROPPED is different:
      a key is only dropped once nothing it opens is left, so what still carries its id are values no key ever opened
      (leftovers, counted on the admin page) — they are no reason to keep the site down. */
-  const dropped = new Set(KEYS.ring ? KEYS.ring.dek.dropped.map((d) => d.id) : []);
+  const dropped = new Map(KEYS.ring ? KEYS.ring.dek.dropped.map((d) => [d.id, d]) : []);
   const missing = [], leftovers = [];
   for (const [col, m] of Object.entries(pc.columns)) for (const [kid, n] of Object.entries(m)) if (Number(kid) > 0 && !KEYS.has(Number(kid))) (dropped.has(Number(kid)) ? leftovers : missing).push(col + ' has ' + n + ' under key ' + kid);
   if (missing.length) refuse('the encryption key does not open the data already in this database: values are encrypted under keys the keyring does not hold (' + missing.join('; ') + '). Starting would leave them unreadable for good.');
+  // when a key is dropped the ring records how many unreadable values it left behind; more than that is a copy from before the drop
+  for (const [id, d] of dropped) {
+    const n = Number(pc.kids[id] || 0), left = Number(d.left || 0);
+    if (n > left) refuse('the encryption key does not open the data already in this database: it holds ' + n + ' values under data key ' + id + ', which this keyring dropped on ' + new Date(d.at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC (with ' + left + ' unreadable left behind). It is a copy from before that: it needs the keyring of its day (scripts/keys.mjs escrow-open on an escrow file from then).');
+  }
   if (leftovers.length) console.warn('⚠️  values under keys already dropped, which no key opens: ' + leftovers.join('; '));
   /* For each key, a few of the oldest and newest values it holds must open. The CURRENT key failing every sample, or no
      key opening anything at all, is a wrong key: refuse before anything is written under it. An older key failing every
@@ -1299,12 +1305,17 @@ function keyReadRequest() {
   try { req = JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { if (e.code === 'ENOENT') return null; req = { scope: 'data', compromised: false, unreadable: true }; }
   return { file: f, scope: req && req.scope === 'all' ? 'all' : 'data', compromised: !!(req && req.compromised) };
 }
+/* Checkpoint, compact, checkpoint. A checkpoint that another reader holds up (a terminal running keys.mjs status, a
+   sqlite3 .backup) reports busy and leaves the old pages in the WAL: then the database does NOT count as scrubbed, and
+   no old key is dropped until a later pass gets a clean one. */
+function keyCheckpoint() { const r = db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get(); return !(r && Number(r.busy)); }
 function keyScrubLive() {
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  keyCheckpoint();
   db.exec('VACUUM;');
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  KEYLIB.setMeta(db, 'scrubbed_kid', null);
+  if (!keyCheckpoint()) return false;
   KEYLIB.setMeta(db, 'scrubbed_kid', KEYS.current);
-  db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+  return keyCheckpoint() || (KEYLIB.setMeta(db, 'scrubbed_kid', null), false);
 }
 function keyFlipAtBoot() {
   const from = KEYS.epoch;
@@ -1361,7 +1372,7 @@ if (KEY_OWNER) {
       const st = KEYLIB.sweepSync(db, KEYS, { crashAt: KEY_TEST_CRASH });
       KEY_ROT.boot.push('re-encrypted ' + st.rewritten + ' values under data key ' + KEYS.current + (Object.keys(st.unreadable).length ? ' (' + Object.values(st.unreadable).reduce((a, b) => a + b, 0) + ' could not be opened and were left as they are)' : ''));
     }
-    if (KEY_ROT.boot.length || KEYLIB.getMeta(db, 'scrubbed_kid') !== String(KEYS.current)) { keyScrubLive(); KEY_ROT.boot.push('database compacted under data key ' + KEYS.current + ' (no old ciphertext left in its free space)'); }
+    if (KEY_ROT.boot.length || KEYLIB.getMeta(db, 'scrubbed_kid') !== String(KEYS.current)) { if (keyScrubLive()) KEY_ROT.boot.push('database compacted under data key ' + KEYS.current + ' (no old ciphertext left in its free space)'); }
   } catch (e) {
     KEY_ROT.lastError = 'key rotation at boot stopped part-way (the site runs on the keys it has; it carries on at the next check): ' + keyRotWhy(e);
     console.error('🔴 ' + KEY_ROT.lastError);
@@ -17009,29 +17020,46 @@ const KEY_TICK_MS = keyNum(process.env.KEY_TICK_SEC, 300, 1) * 1000;
 // one lock for everything that writes database files or the keyring: the daily snapshot, rotation, the backup pass
 let keyChain = Promise.resolve();
 function withKeyLock(fn) { const run = keyChain.then(fn, fn); keyChain = run.catch(() => {}); return run; }
-/* The files a rotation must bring along: every *.db in BACKUP_DIR, in data/backups (copies left there from before
-   BACKUP_DIR moved), and what KEY_ROTATE_EXTRA_DBS names (files or folders, ~ allowed). A place that cannot be listed —
-   the backups volume not mounted, a folder renamed, no permission — is BLOCKED, never "empty": an old key is not dropped
-   while copies that may need it are out of sight. Only an unconfigured data/backups that does not exist yet is empty. */
+/* The files a rotation must bring along: every SQLite database (found by its header, at any depth below 4 levels) in
+   BACKUP_DIR, in data/backups (copies left there from before BACKUP_DIR moved), and in what KEY_ROTATE_EXTRA_DBS names
+   (files or folders, ~ allowed). A place that cannot be listed — the backups volume not mounted (its marker missing), a
+   folder renamed, no permission (macOS keeps a background server out of ~/Desktop, ~/Documents and ~/Downloads) — is
+   BLOCKED, never "empty"; so is an archive in a backups folder that may hold a database (.gz, .zip …): an old key is not
+   dropped while copies that may need it are out of sight. Only an unconfigured data/backups that does not exist is empty. */
+const SQLITE_MAGIC = Buffer.from('SQLite format 3\0');
+const KEY_ARCHIVE = /\.(gz|tgz|zip|xz|zst|bz2|7z|tar|rar|dmg|sparseimage|sparsebundle)$/i;
+// true / false — or the error code when the file cannot even be opened (that is a place the rotation cannot check, not "no database")
+function keyIsSqlite(f) { try { const fd = fs.openSync(f, 'r'); try { const b = Buffer.alloc(16); return fs.readSync(fd, b, 0, 16, 0) === 16 && b.equals(SQLITE_MAGIC); } finally { fs.closeSync(fd); } } catch (e) { return e.code || 'unreadable'; } }
 function keyFiles() {
   const out = [], blocked = [];
-  if (process.env.BACKUP_DIR && !KEYLIB.backupMarkerOk(BACKUP_DIR, KEYLIB.getMeta(db, 'backup_marker'))) blocked.push({ path: BACKUP_DIR, why: 'its ' + KEYLIB.BACKUP_MARKER + ' marker is missing — is the backups volume mounted? (scripts/keys.mjs claim writes a new one)' });
-  const addDir = (d, okIfAbsent) => {
-    try { for (const n of fs.readdirSync(d)) if (/\.db$/.test(n)) out.push(path.join(d, n)); }
-    catch (e) { if (!(okIfAbsent && e.code === 'ENOENT')) blocked.push({ path: d, why: e.code === 'ENOENT' ? 'not found (not mounted, moved or renamed?)' : 'cannot be listed (' + (e.code || e.message) + ')' }); }
+  if (process.env.BACKUP_DIR && fs.existsSync(BACKUP_DIR) && !KEYLIB.backupMarkerOk(BACKUP_DIR, KEYLIB.getMeta(db, 'backup_marker'), KEY_DB_ID, DATA_DIR)) blocked.push({ path: BACKUP_DIR, why: 'its ' + KEYLIB.BACKUP_MARKER + ' marker is missing or names another database — is the backups volume mounted? (scripts/keys.mjs claim writes a new one)' });
+  const walk = (d, okIfAbsent, depth) => {
+    let names;
+    try { names = fs.readdirSync(d, { withFileTypes: true }); }
+    catch (e) { if (!(okIfAbsent && e.code === 'ENOENT')) blocked.push({ path: d, why: e.code === 'ENOENT' ? 'not found (not mounted, moved or renamed?)' : 'cannot be listed (' + (e.code || e.message) + ')' }); return; }
+    for (const n of names) {
+      const p = path.join(d, n.name);
+      // hidden folders are .rekey work files and the volume's own .Spotlight-V100 / .Trashes / .fseventsd (root's, unreadable)
+      if (n.isDirectory()) { if (n.name.startsWith('.') || n.name === 'keyring-escrow') continue; if (depth < 4) walk(p, false, depth + 1); else blocked.push({ path: p, why: 'nested too deep to check' }); continue; }
+      if (!n.isFile() || /-(wal|shm|journal)$|\.part$|\.work$|\.new$/.test(n.name)) continue;
+      const sq = keyIsSqlite(p);
+      if (sq === true) out.push(p);
+      else if (sq !== false) blocked.push({ path: p, why: 'cannot be opened (' + sq + ') — check its permissions' });
+      else if (KEY_ARCHIVE.test(n.name)) blocked.push({ path: p, why: 'an archive the rotation cannot open — if it holds a database, unpack it here; otherwise move it out of the backups' });
+    }
   };
-  addDir(BACKUP_DIR, !process.env.BACKUP_DIR);
-  if (path.resolve(BACKUP_DIR) !== path.resolve(DATA_DIR, 'backups')) addDir(path.join(DATA_DIR, 'backups'), true);
+  walk(BACKUP_DIR, !process.env.BACKUP_DIR, 0);
+  if (path.resolve(BACKUP_DIR) !== path.resolve(DATA_DIR, 'backups')) walk(path.join(DATA_DIR, 'backups'), true, 0);
   for (let x of String(process.env.KEY_ROTATE_EXTRA_DBS || '').split(',').map((v) => v.trim()).filter(Boolean)) {
     if (x.startsWith('~/')) x = path.join(require('node:os').homedir(), x.slice(2));
     let st = null;
     try { st = fs.statSync(x); } catch (e) { blocked.push({ path: x, why: e.code === 'ENOENT' ? 'named in KEY_ROTATE_EXTRA_DBS but not found' : 'cannot be read (' + (e.code || e.message) + ')' }); continue; }
-    if (st.isDirectory()) addDir(x, false); else out.push(x);
+    if (st.isDirectory()) walk(x, false, 0); else if (keyIsSqlite(x) === true) out.push(x); else blocked.push({ path: x, why: 'named in KEY_ROTATE_EXTRA_DBS but cannot be read as a database' });
   }
   const live = path.resolve(DATA_DIR, 'app.db');
   return { files: [...new Set(out.map((f) => path.resolve(f)))].filter((f) => f !== live), blocked };
 }
-const keyFileName = (f) => f.startsWith(path.resolve(BACKUP_DIR) + path.sep) ? path.basename(f) : f.replace(require('node:os').homedir(), '~');
+const keyFileName = (f) => f.startsWith(path.resolve(BACKUP_DIR) + path.sep) ? path.relative(path.resolve(BACKUP_DIR), f) : f.replace(require('node:os').homedir(), '~');
 async function keyMaintenance(why) {
   if (!KEY_OWNER) return null;
   return withKeyLock(async () => {
@@ -17041,7 +17069,7 @@ async function keyMaintenance(why) {
       const sw = await KEYLIB.sweepAsync(db, KEYS, { crashAt: KEY_TEST_CRASH });
       rep.swept = sw.rewritten;
       // 2. to the disk itself, and the old bytes out of the free pages
-      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+      keyCheckpoint();
       if (sw.rewritten || KEYLIB.getMeta(db, 'scrubbed_kid') !== String(KEYS.current)) keyScrubLive();
       // 3. every copy
       const { files, blocked } = keyFiles();
@@ -17058,6 +17086,9 @@ async function keyMaintenance(why) {
       keyDropUnneeded(rep);
     } catch (e) { rep.error = keyRotWhy(e); KEY_ROT.lastError = 'key maintenance stopped part-way (nothing was dropped): ' + rep.error; console.error('🔴 ' + KEY_ROT.lastError); }
     rep.ms = Date.now() - t0;
+    for (const b of rep.blocked) console.warn('⚠️  key rotation: ' + b.path + ' — ' + b.why);
+    for (const f of rep.files) if (f.status === 'failed') console.warn('⚠️  key rotation: backup ' + f.file + ' could not be brought along — ' + f.why);
+    if (rep.waiting.length) console.log('🔐 old keys kept for now: ' + rep.waiting.join(' · '));
     KEY_ROT.lastMaintenance = rep;
     try { KEYLIB.setMeta(db, 'last_maintenance', JSON.stringify(rep)); } catch {}
     return rep;
@@ -17071,8 +17102,9 @@ function keyDropUnneeded(rep) {
   const graceMeta = KEYLIB.getMeta(db, 'drop_grace_ms');
   const grace = graceMeta != null && graceMeta !== '' ? Number(graceMeta) : KEY_DROP_GRACE_MS;
   const failed = rep.files.filter((f) => f.status === 'failed');
-  const unseen = failed.length + rep.blocked.length;
-  const unseenWhy = [failed.length ? failed.length + ' backup file' + (failed.length === 1 ? '' : 's') + ' could not be checked' : '', rep.blocked.length ? rep.blocked.length + ' backup location' + (rep.blocked.length === 1 ? '' : 's') + ' could not be listed' : ''].filter(Boolean).join(' and ');
+  const notScrubbed = KEYLIB.getMeta(db, 'scrubbed_kid') !== String(KEYS.current) ? 1 : 0;
+  const unseen = failed.length + rep.blocked.length + notScrubbed;
+  const unseenWhy = [failed.length ? failed.length + ' backup file' + (failed.length === 1 ? '' : 's') + ' could not be checked' : '', rep.blocked.length ? rep.blocked.length + ' backup location' + (rep.blocked.length === 1 ? '' : 's') + ' could not be listed' : '', notScrubbed ? 'the live database is not yet compacted under key ' + KEYS.current + ' (a checkpoint was held up)' : ''].filter(Boolean).join(' and ');
   const fileRefs = (kid) => rep.files.reduce((n, f) => n + Number((f.kids || {})[kid] || 0), 0);
   const dropKids = [], dropEpochs = [];
   for (const k of KEYS.ring.dek.keys) {
@@ -17095,7 +17127,7 @@ function keyDropUnneeded(rep) {
     const fps = Object.fromEntries(dropKids.map((id) => [id, KEYS.fingerprint(id)]));
     keyRingWrite((r) => {
       r.dek.keys = r.dek.keys.filter((k) => !dropKids.includes(k.id));
-      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id] });
+      for (const id of dropKids) r.dek.dropped.push({ id, at: t, fp: fps[id], left: Number(rep.live.unreadable[id] || 0) });
       r.idx.outer = r.idx.outer.filter((o) => !dropEpochs.includes(o.epoch));
       for (const e of dropEpochs) r.idx.dropped.push({ epoch: e, at: t });
     }, { dropping: true });
@@ -17135,7 +17167,14 @@ function keyRestartForIndex(why) {
   setTimeout(() => shutdown('index key rotation'), 1000).unref();
 }
 let keyTickBusy = false;
+let keyRingSeen = null;
 async function keyTick() {
+  if (KEY_RING_FILE && !KEY_OWNER) {
+    // read only: take up the owner's new keys, so values written here go under a key the owner keeps
+    try { const kf = KEYLIB.readKeyFile(KEY_RING_FILE); if (kf.kind === 'ring' && kf.ring.sha256 !== (keyRingSeen || KEYS.ring.sha256)) { keyRingSeen = kf.ring.sha256; KEYS.adopt(kf.ring); } }
+    catch (e) { KEY_ROT.lastError = 'could not follow the keyring: ' + keyRotWhy(e); }
+    return;
+  }
   if (!KEY_OWNER || keyTickBusy || KEY_ROT.restarting) return;
   keyTickBusy = true;
   try {
@@ -17209,11 +17248,11 @@ if (KEY_OWNER) setTimeout(() => { keyMaintenance('boot').catch(() => {}); }, key
 function snapshotDb() { return withKeyLock(snapshotDbNow); }
 async function snapshotDbNow() {
   if (typeof sqliteBackup !== 'function') return;
-  if (process.env.BACKUP_DIR && !KEYLIB.backupMarkerOk(BACKUP_DIR, KEYLIB.getMeta(db, 'backup_marker'))) { console.warn('db snapshot skipped: ' + BACKUP_DIR + ' has no ' + KEYLIB.BACKUP_MARKER + ' marker — is the backups volume mounted?'); return; }
+  if (fs.existsSync(BACKUP_DIR) ? !KEYLIB.backupMarkerOk(BACKUP_DIR, KEYLIB.getMeta(db, 'backup_marker'), KEYLIB.getMeta(db, 'db_id'), DATA_DIR) : !!KEYLIB.getMeta(db, 'backup_marker')) { console.warn('db snapshot skipped: ' + BACKUP_DIR + ' is not this database\'s backups folder (its ' + KEYLIB.BACKUP_MARKER + ' marker is missing or names another database — is the backups volume mounted?)'); return; }
   try { fs.mkdirSync(BACKUP_DIR, { recursive: true }); } catch {}
   const f = path.join(BACKUP_DIR, 'app-' + new Date().toISOString().slice(0, 10) + '.db');
   const tmp = f + '.part';
-  try { for (const n of fs.readdirSync(BACKUP_DIR)) if (n.endsWith('.db.part') && path.join(BACKUP_DIR, n) !== tmp) fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} // a .part orphaned by a hard kill on an earlier day
+  try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db\.part$/.test(n) && path.join(BACKUP_DIR, n) !== tmp) fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} // a .part orphaned by a hard kill on an earlier day
   if (fs.existsSync(f)) return; // today's snapshot already exists
   // Need room for a whole extra copy of the DB plus the live site's own headroom, or don't start.
   try {

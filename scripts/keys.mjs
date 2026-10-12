@@ -65,7 +65,7 @@ function dbInfo(file) {
 function markBackups(dbFile, dbId) {
   if (!process.env.BACKUP_DIR) return;
   if (!fs.existsSync(BACKUP_DIR)) die('BACKUP_DIR ' + BACKUP_DIR + ' does not exist — mount the backups volume first.');
-  K.writeBackupMarker(BACKUP_DIR, dbId);
+  K.writeBackupMarker(BACKUP_DIR, dbId, DATA_DIR);
   const d = new DatabaseSync(dbFile); try { K.setMeta(d, 'backup_marker', dbId); } finally { d.close(); }
   console.log('  marked ' + BACKUP_DIR + ' as this site\'s backups folder (' + K.BACKUP_MARKER + ')');
 }

@@ -71,6 +71,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   fs.writeFileSync(path.join(d, 'keyring.lock'), String(process.ppid)); const old = new Date(Date.now() - 120e3); fs.utimesSync(path.join(d, 'keyring.lock'), old, old);
   check('  ...and a lock older than a minute is taken over even when its pid is alive again (a reused pid after a crash and reboot)', (() => { try { return K.writeRing(f, w2, {}).generation === 3; } catch (x) { return x.message; } })() === true);
   check('  ...and no temp copy of the ring is ever left beside it', !fs.readdirSync(d).some((n) => n.endsWith('.tmp')));
+  { const md = path.join(T, 'mark'); fs.mkdirSync(md); K.writeBackupMarker(md, 'A', T);
+    check('a marked backups folder belongs to its database: the owner may use it; another database, or one expecting no marker, may not', K.backupMarkerOk(md, 'A', 'A', T) && !K.backupMarkerOk(md, null, 'B', T) && !K.backupMarkerOk(md, null, null, T) && !K.backupMarkerOk(md, 'B', 'B', T) && !K.backupMarkerOk(md, 'A', 'A', path.join(T, 'elsewhere')) && K.backupMarkerOk(path.join(T, 'nomark'), null, 'X', T) && !K.backupMarkerOk(path.join(T, 'nomark'), 'A', 'A', T)); }
   const prevEnv = process.env.JSI_DATA_DIR; process.env.JSI_DATA_DIR = '/tmp/x';
   check('a test run (JSI_DATA_DIR set) can never write a keyring under /Volumes', (() => { try { K.writeRing('/Volumes/JustSendItKey/data_key', w2, {}); return false; } catch (x) { return /refusing/.test(x.message); } })());
   if (prevEnv === undefined) delete process.env.JSI_DATA_DIR; else process.env.JSI_DATA_DIR = prevEnv;
@@ -265,7 +267,7 @@ try {
   check('  ...a rewritten backup keeps its date (the admin list and pruning go by it)', fs.statSync(path.join(BK, 'app-2026-01-01.db')).mtimeMs === OLD_MTIME.getTime());
   check('  ...and a copy of the database from before the flip sits beside the backups, brought along too', fs.readdirSync(BK).some((n) => /^pre-idx-e0-.*\.db$/.test(n)));
   check('the live database and every copy were compacted under key 2 (no old ciphertext left in their free space)', metaOf('scrubbed_kid') === '2' && [path.join(BK, 'app-2026-01-01.db'), path.join(EXTRA, 'dev.db')].every((f) => { const d = new DatabaseSync(f, { readOnly: true }); try { return K.getMeta(d, 'scrubbed_kid') === '2'; } finally { d.close(); } }));
-  check('init marked the backups folder, and the database knows its marker', fs.readFileSync(path.join(BK, '.jsi-backups'), 'utf8').trim() === metaOf('backup_marker') && metaOf('backup_marker') === metaOf('db_id') && ringNow().ring.owner && ringNow().ring.owner.dbId === metaOf('db_id'));
+  check('init marked the backups folder, and the database knows its marker', JSON.parse(fs.readFileSync(path.join(BK, '.jsi-backups'), 'utf8')).dbId === metaOf('backup_marker') && metaOf('backup_marker') === metaOf('db_id') && ringNow().ring.owner && ringNow().ring.owner.dbId === metaOf('db_id'));
   // the flows a member uses, on the new keys
   const login = await api('/api/auth/login', { method: 'POST', pass: freshPass(), body: { identifier: A.email, password: A.pw } });
   check('sign-in by email and password works after the rotation (the email index moved)', login.status === 200 && login.sid, login.status + ' ' + JSON.stringify(login.j));
@@ -350,17 +352,29 @@ try {
     const D2 = path.join(T, 'data2'), B2 = path.join(T, 'backups2');
     for (const x of [D2, path.join(D2, 'uploads'), B2]) fs.mkdirSync(x, { recursive: true, mode: 0o700 });
     { const d = openDb(); d.prepare('VACUUM INTO ?').run(path.join(D2, 'app.db')); d.close(); }
+    const pass2 = () => { const d = new DatabaseSync(path.join(D2, 'app.db')); d.exec('PRAGMA busy_timeout = 5000'); const code = 'KRTEST' + randomBytes(4).toString('hex').toUpperCase(), tok = randomBytes(24).toString('hex'); d.prepare('INSERT INTO invite_codes (code, owner_id, created_at, used_at, pass, tos_at, tos_version) VALUES (?,NULL,?,?,?,?,?)').run(code, Date.now(), Date.now(), createHash('sha256').update(tok).digest('hex'), Date.now(), TOS_VERSION); d.close(); return 'jsi_pass=' + tok + '; jsi_age=18'; };
     cli('request');
     const ringBefore = fs.readFileSync(KEYFILE, 'utf8');
-    const P2 = await freePort();
-    const p2 = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', SERVER_JS], { cwd: ROOT, env: { ...ENV, PORT: String(P2), JSI_DATA_DIR: D2, DATA_DIR: D2, BASE_URL: 'http://localhost:' + P2, BACKUP_DIR: B2, KEY_ROTATE_EXTRA_DBS: '', ADMIN_USER_IDS: String(uid) }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const P2 = await freePort(), B2URL = 'http://localhost:' + P2;
+    const p2 = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', SERVER_JS], { cwd: ROOT, env: { ...ENV, PORT: String(P2), JSI_DATA_DIR: D2, DATA_DIR: D2, BASE_URL: B2URL, BACKUP_DIR: B2, KEY_ROTATE_EXTRA_DBS: '', ADMIN_USER_IDS: String(uid) }, stdio: ['ignore', 'pipe', 'pipe'] });
     let log2 = ''; p2.stdout.on('data', (x) => { log2 += x; }); p2.stderr.on('data', (x) => { log2 += x; });
-    const up2 = await waitFor(async () => false, 1) || await (async () => { for (let i = 0; i < 100; i++) { try { if ((await fetch('http://localhost:' + P2 + '/healthz')).ok) return true; } catch {} await sleep(100); } return false; })();
+    let up2 = false; for (let i = 0; i < 150 && !up2; i++) { try { up2 = (await fetch(B2URL + '/healthz')).ok; } catch {} if (!up2) await sleep(100); }
     await sleep(2500);   // a few ticks
-    const l2 = await fetch('http://localhost:' + P2 + '/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:' + P2, Cookie: (() => { const d = new DatabaseSync(path.join(D2, 'app.db')); const code = 'KRTEST' + randomBytes(4).toString('hex').toUpperCase(), tok = randomBytes(24).toString('hex'); d.prepare('INSERT INTO invite_codes (code, owner_id, created_at, used_at, pass, tos_at, tos_version) VALUES (?,NULL,?,?,?,?,?)').run(code, Date.now(), Date.now(), createHash('sha256').update(tok).digest('hex'), Date.now(), TOS_VERSION); d.close(); return 'jsi_pass=' + tok + '; jsi_age=18'; })() }, body: JSON.stringify({ identifier: A.email, password: A.pw }) });
-    p2.kill('SIGTERM'); await new Promise((r) => p2.on('exit', r));
+    const post2 = (p, body, pass) => fetch(B2URL + p, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: B2URL, Cookie: pass }, body: JSON.stringify(body) });
+    const l2 = await post2('/api/auth/login', { identifier: A.email, password: A.pw }, pass2());
     check('a second server on a copy of the database reads with the keyring but is READ ONLY: it signs members in, takes no request and writes nothing to the ring', up2 && /READ ONLY: another database owns this keyring/.test(log2) && l2.status === 200 && fs.existsSync(path.join(KV, 'rotate-request.json')) && fs.readFileSync(KEYFILE, 'utf8') === ringBefore, (up2 ? 'up' : 'down') + ' ' + l2.status + ' ' + log2.slice(-300));
-    fs.unlinkSync(path.join(KV, 'rotate-request.json'));
+    // now the owner runs beside it and takes the request: the read-only server follows, so what it writes stays readable
+    const c0 = ringNow().ring.dek.current;
+    await start();
+    const moved = await waitFor(() => ringNow().ring.dek.current === c0 + 1 && !fs.existsSync(path.join(KV, 'rotate-request.json')), 15000);
+    await sleep(2500);
+    const em2 = 'kr2' + randomBytes(3).toString('hex') + '@example.com';
+    const r2 = await post2('/api/auth/register', { username: '__kr_b_' + randomBytes(3).toString('hex'), email: em2, password: 'second-server-' + randomBytes(3).toString('hex') }, pass2());
+    const enc2 = (() => { const d = new DatabaseSync(path.join(D2, 'app.db'), { readOnly: true }); try { return (d.prepare("SELECT identifier_enc v FROM identities ORDER BY id DESC LIMIT 1").get() || {}).v || ''; } finally { d.close(); } })();
+    check('  ...the owner takes the request, and the read-only server writes under the owner\'s NEW key from then on', !!moved && r2.status === 200 && enc2.startsWith('v2:' + (c0 + 1) + ':'), JSON.stringify({ moved: !!moved, reg: r2.status, prefix: enc2.slice(0, 8) }));
+    p2.kill('SIGTERM'); await new Promise((r) => p2.on('exit', r));
+    await maintenanceAfter(Date.now() - 2000);
+    await stop();
     fs.rmSync(D2, { recursive: true, force: true }); fs.rmSync(B2, { recursive: true, force: true });
 
     // the backups volume is not mounted (its mount point re-created as an empty folder): nothing is dropped
@@ -384,7 +398,11 @@ try {
 
     // values no key opens: one under the current key, one under a key already dropped; and a copy from another keyring
     const cur = ringNow().ring.dek.current, junk = randomBytes(40).toString('base64');
-    { const d = openDb(); fill(d, 'tracker_cache', { user_id: uid, addr_idx: 'a'.repeat(64), report: 'v2:' + cur + ':' + junk, updated_at: 1 }); fill(d, 'tracker_cache', { user_id: uid, addr_idx: 'b'.repeat(64), report: 'v1:' + junk, updated_at: 1 }); d.close(); }
+    { const d = openDb(); fill(d, 'tracker_cache', { user_id: uid, addr_idx: 'a'.repeat(64), report: 'v2:' + cur + ':' + junk, updated_at: 1 }); d.close(); }
+    const beforeDrop = path.join(T, 'before-drop.db'); { const d = openDb(); d.prepare('VACUUM INTO ?').run(beforeDrop); d.close(); }
+    // copies in a subfolder and an archive in the backups: the first is brought along, the second holds every drop until it goes
+    fs.mkdirSync(path.join(BK, 'moved-earlier')); fs.copyFileSync(beforeDrop, path.join(BK, 'moved-earlier', 'app-old.sqlite'));
+    fs.writeFileSync(path.join(BK, 'export.db.gz'), randomBytes(64));
     const foreignF = path.join(BK, 'foreign-copy.db');
     { const other = K.Keys.legacy(randomBytes(32)), d = new DatabaseSync(foreignF); d.exec('CREATE TABLE identities (id INTEGER PRIMARY KEY, type TEXT, identifier TEXT, identifier_enc TEXT)'); d.prepare('INSERT INTO identities (type, identifier, identifier_enc) VALUES (?,?,?)').run('email', other.bidx('x@y.z'), other.encField('x@y.z')); d.close(); }
     const foreignSha = createHash('sha256').update(fs.readFileSync(foreignF)).digest('hex');
@@ -392,18 +410,45 @@ try {
     s = await start();
     check('a value no key opens does not stop the site from starting (it is warned about)', s.up && /some stored values cannot be read|values under keys already dropped/.test(s.log), s.up + ' ' + s.log.slice(-300));
     cli('request');
-    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.why === 'rotation' && x.dropped && x.dropped.length ? x : null; }, 30000);
+    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.why === 'rotation' ? x : null; }, 30000);
+    check('a database copy in a subfolder of the backups, named .sqlite, is found by its header and brought along', !!m && m.files.some((f) => /moved-earlier\/app-old\.sqlite$/.test(f.file) && f.status === 'rekeyed'), JSON.stringify(m && m.files.map((f) => f.file + ':' + f.status)) + ' on disk: ' + JSON.stringify(fs.readdirSync(path.join(BK, 'moved-earlier'))));
+    check('  ...an archive in the backups that may hold a database holds back every drop until it is dealt with', !!m && m.dropped.length === 0 && (m.blocked || []).some((b) => /export\.db\.gz/.test(b.path)) && ringNow().ring.dek.keys.length === 2, JSON.stringify(m && { b: m.blocked, d: m.dropped }));
+    fs.unlinkSync(path.join(BK, 'export.db.gz'));
+    await stop(); t1 = Date.now(); await start();
+    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
     ring = ringNow().ring;
     const ff = m && m.files.find((f) => /foreign-copy/.test(f.file));
-    check('  ...unreadable values hold no key back: the rotation drops the old key anyway, and the leftovers are counted', !!m && ring.dek.keys.length === 1 && (m.live.unreadableCols || {})['tracker_cache.report'] === 2, JSON.stringify(m && { w: m.waiting, d: m.dropped, u: m.live && m.live.unreadableCols }));
+    check('  ...unreadable values hold no key back: the rotation drops the old key anyway, the leftover is counted and the ring records it', !!m && ring.dek.keys.length === 1 && (m.live.unreadableCols || {})['tracker_cache.report'] === 1 && ring.dek.dropped.find((x) => x.id === cur).left === 1, JSON.stringify(m && { w: m.waiting, d: m.dropped, u: m.live && m.live.unreadableCols }));
     check('  ...a copy made under another keyring is left byte for byte and holds nothing back', ff && ff.status === 'foreign' && createHash('sha256').update(fs.readFileSync(foreignF)).digest('hex') === foreignSha, JSON.stringify(ff));
     await stop();
     s = await start();
-    check('  ...and the site starts again with leftovers under a dropped key', s.up, s.log.slice(-300));
+    check('  ...and the site starts again with the leftover under the dropped key', s.up, s.log.slice(-300));
     await stop();
-    { const d = openDb(); d.prepare("DELETE FROM tracker_cache WHERE addr_idx IN (?, ?)").run('a'.repeat(64), 'b'.repeat(64)); d.close(); }
+    // a copy from before the drop, restored over the database: refused, with where to find its keyring
+    fs.renameSync(path.join(DATA, 'app.db'), path.join(T, 'current.db'));
+    for (const x of ['-wal', '-shm']) { try { fs.unlinkSync(path.join(DATA, 'app.db' + x)); } catch {} }
+    fs.copyFileSync(beforeDrop, path.join(DATA, 'app.db'));
+    s = await start();
+    if (s.up) await stop();
+    check('a copy from before a key was dropped, restored over the database, is refused rather than served unreadable (it needs the keyring of its day)', !s.up && s.code === 1 && /It is a copy from before that/.test(s.log), (s.up ? 'STARTED' : 'exit ' + s.code) + ' ' + s.log.slice(-300).replace(/\s+/g, ' '));
+    for (const x of ['', '-wal', '-shm']) { try { fs.unlinkSync(path.join(DATA, 'app.db' + x)); } catch {} }
+    fs.renameSync(path.join(T, 'current.db'), path.join(DATA, 'app.db'));
+    fs.rmSync(path.join(BK, 'moved-earlier'), { recursive: true, force: true });
+    { const d = openDb(); d.prepare("DELETE FROM tracker_cache WHERE addr_idx = ?").run('a'.repeat(64)); d.close(); }
     fs.unlinkSync(foreignF);
 
+    // a reader holding the database open (a terminal running sqlite3, say) holds up the checkpoint: no drop until it is clean
+    {
+      const reader = openDb(); reader.exec('BEGIN'); reader.prepare('SELECT COUNT(*) n FROM users').get();
+      cli('request'); t1 = Date.now(); await start();
+      m = await maintenanceAfter(t1);
+      check('while a reader holds up the checkpoint, the database does not count as compacted and no old key is dropped', !!m && m.dropped.length === 0 && m.waiting.some((w) => /not yet compacted/.test(w)) && ringNow().ring.dek.keys.length === 2, JSON.stringify(m && { w: m.waiting, d: m.dropped }));
+      reader.exec('COMMIT'); reader.close();
+      await stop(); t1 = Date.now(); await start();
+      m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
+      check('  ...and once it lets go, the next pass compacts and drops', !!m && ringNow().ring.dek.keys.length === 1);
+      await stop();
+    }
     // a request the server cannot stage (the key volume read-only) stays, and is taken once it can be
     cli('request');
     fs.chmodSync(KV, 0o500);
