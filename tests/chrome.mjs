@@ -87,6 +87,14 @@ try {
   check('  ...a letter-spaced .btn balances the tracking after its last letter with the same indent before its first (child elements reset it)', /html \.btn \{ text-indent: 0\.04em; \}\nhtml \.btn > \* \{ text-indent: 0; \}/.test(RESP2) && /\.btn \{[^}]*letter-spacing: 0\.04em/.test(CSS));
   check('  ...the "Send it" button: the label\'s trailing tracking cancelled and the ✏️ nudged onto the line\'s middle', /html #compose-fab \.fab-label \{ margin-right: -0\.03em; line-height: normal; \}/.test(RESP2) && /html #compose-fab \.fab-ico \{ padding-top: 0\.08em; \}/.test(RESP2) && /#compose-fab \{[^}]*letter-spacing: 0\.03em/.test(CSS));
   check('  ...and the display font\'s capitals sit on the middle of the line (patched ascent 1736 / descent 312 in the served files)', /luckiest-guy-latin-09b57828\.woff2/.test(read('fonts/fonts.css')) && /luckiest-guy-latin-ext-be6f3912\.woff2/.test(read('fonts/fonts.css')));
+  /* ═══ the pop-down: the sender search first, the links flush right (owner's request, 2026-10-12) ═══ */
+  {
+    const withSearch = readdirSync(PUB).filter((f) => f.endsWith('.html') && /id="nav-search-slot"/.test(read(f)));
+    const firstInMenu = withSearch.filter((f) => /<div class="nav-menu" id="nav-menu">\s*<span id="nav-search-slot"><\/span>/.test(read(f)));
+    check('every page puts the sender search first in its menu (top of the pop-down, first in the tab order)', withSearch.length >= 16 && firstInMenu.length === withSearch.length, withSearch.filter((f) => !firstInMenu.includes(f)).join(', '));
+    check('  ...the pop-down links line up on the right edge, under the menu button', /\.nav\.is-compact \.nav-menu a \{[^}]*justify-content: flex-end;[^}]*text-align: right;/.test(CSS));
+    check('  ...and in the wide bar the search keeps its place at the end of the row', /\.nav:not\(\.is-compact\) #nav-search-slot \{ order: 1; \}/.test(CSS));
+  }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);

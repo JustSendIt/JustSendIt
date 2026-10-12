@@ -385,8 +385,12 @@ a { color: var(--gold); }
     max-height: 0; overflow: hidden; opacity: 0; visibility: hidden;
     transition: max-height 0.28s ease, opacity 0.24s ease, visibility 0.28s; }
 .nav.is-compact .nav-menu.open { max-height: min(80vh, 560px); overflow-y: auto; opacity: 1; visibility: visible; }
-.nav.is-compact .nav-menu a { font-size: calc(var(--nav-fs) * 1.06); padding: 0.6rem 1rem; min-height: 44px; border-radius: 12px; white-space: normal; }
-.nav.is-compact #nav-search-slot { width: 100%; margin-top: 0.15rem; }
+/* the pop-down sits under the menu button on the right, so its links line up on the right edge too, and the sender
+   search comes first (it is first in each page's markup, so the tab order agrees) */
+.nav.is-compact .nav-menu a { font-size: calc(var(--nav-fs) * 1.06); padding: 0.6rem 1rem; min-height: 44px; border-radius: 12px; white-space: normal; justify-content: flex-end; text-align: right; }
+.nav.is-compact #nav-search-slot { width: 100%; margin: 0 0 0.35rem; }
+/* in the wide bar the search keeps its place at the end of the row of links */
+.nav:not(.is-compact) #nav-search-slot { order: 1; }
 .nav.is-compact #nav-search-slot.nav-search input, .nav.is-compact .nav-menu .nav-search input:focus { width: 100% !important; }
 .nav.is-compact .nav-bal { display: none !important; }
 .nav.is-compact #nav-auth.nav-persist, .nav.is-compact .nav-profile { min-width: 0; }
