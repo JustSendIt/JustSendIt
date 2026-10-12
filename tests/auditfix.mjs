@@ -105,7 +105,7 @@ try {
     // the streak itself must end when a bag drops below the floor
     const rh = grab(/const qSendBp = [\s\S]*?const scoreBp = qSendBp \+ qGwcBp;/, 'refreshHolder qualifying score');
     check('the no-sell streak is driven by the QUALIFYING score, not the raw balance', !!rh);
-    check('  ...and the $GWC streak runs on the qualifying $GWC score (under $100 it ends when the price did it, pauses when the coins moved — tests/diamondsell.mjs)', /\[s\.gwcStreak, s\.gwcBase, s\.gwcPausedAt, s\.gwcPausedMs\] = step\(s\.gwcStreak, s\.gwcBase, s\.gwcPausedAt, s\.gwcPausedMs, cur\.qGwcBp, soldGwc, \[cg\]\);/.test(SRC));
+    check('  ...and the $GWC streak runs on the qualifying $GWC score (under $100 it pauses; only a $GWC sale resets it — tests/diamondsell.mjs)', /\[s\.gwcStreak, s\.gwcBase, s\.gwcPausedAt, s\.gwcPausedMs\] = step\(s\.gwcStreak, s\.gwcBase, s\.gwcPausedAt, s\.gwcPausedMs, cur\.qGwcBp, soldGwc\);/.test(SRC));
     check('tracker capacity takes the floor too', /h\.gwc_qual !== 0 && h\.streak_start && fresh/.test(SRC));
   }
 
