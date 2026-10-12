@@ -169,7 +169,7 @@ Holder Boost  = 1 + supplyBoost × diamondFactor
 
 **One number, one rule, every token on this site: a holding only counts at $100 or more, priced live.**
 
-Below it you hold dust, and dust earns **no holder status of any kind** — no Diamond level, no Diamond factor, no no‑sell streak, no supply boost, no community verification, no conviction standing, no extra tracker slots.
+Below it you hold dust, and dust earns **nothing new** — no Diamond days, no Diamond factor, no supply boost, no community verification, no conviction standing, no extra tracker slots. (A streak that was already running when a bag fell under the floor pauses and keeps its level and its public badge until a sale resets it — §3.3.)
 
 Why it exists: every holder reward here is **time‑based**, and the balance behind it used to be checked only for "greater than zero". One cent of $GWC held for thirty days reached Diamond Forming and applied a **×6.3** factor to the whole account; at two years it reached **×100**. The cheapest route to the largest multiplier on the platform was dust plus patience, which is not conviction — it is a calendar.
 
@@ -1142,7 +1142,7 @@ unused codes of accounts deleted before this rule.) The [Privacy Policy](public/
 
 1. **Get a ticket.** Someone already inside sends you one of their ten invite codes. You can read the whole site without one — you need it to make an account (§3.16).
 2. **Get a wallet** and add Robinhood Chain (Robinhood Wallet supports it natively; any EVM wallet works).
-3. 3. **Know what the wallet check looks for.** Doing anything here — posting, calling, reacting, voting, joining a community — waits behind a read‑only check that your linked wallets hold **$100 of $SEND** (§3.15b); $GWC is not part of that check any more. Holder status is judged per coin against the same **$100 floor** (§3.2.1): below it, a bag of $SEND or $GWC earns no holder status at all. Whether to hold anything is your decision — this site never tells you to buy. If you do swap, the how‑to‑buy guide covers the mechanics and the in‑page swap prefills the contract address — always verify it yourself first. Remember the **$100 hold floor** (§3.2.1): below it, a bag earns no holder status at all.
+3. 3. **Know what the wallet check looks for.** Doing anything here — posting, calling, reacting, voting, joining a community — waits behind a read‑only check that your linked wallets hold **$100 of $SEND** (§3.15b); $GWC is not part of that check any more. Holder status is judged per coin against the same **$100 floor** (§3.2.1): below it, a bag of $SEND or $GWC earns nothing new (a running streak only pauses). Whether to hold anything is your decision — this site never tells you to buy. If you do swap, the how‑to‑buy guide covers the mechanics and the in‑page swap prefills the contract address — always verify it yourself first. Remember the **$100 hold floor** (§3.2.1): below it, a bag earns nothing new (a running streak only pauses).
 4. **Create your account** (wallet, email, Google, Facebook, X, or Instagram), connect your wallet read‑only, claim your unique @handle — then **send it.** Post on the Send Wall, join or start a **community** for a flat 10×, make and follow Send Calls, react and vote, track wallets, ride the New Pairs Radar, and stack Send Power.
 
 ---

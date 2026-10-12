@@ -2356,7 +2356,7 @@ function effHoldDays(h) { return Math.max(holdDaysOf(h), GWC_TIME_WEIGHT * gwcDa
 function dhResetNotice(userId, resets) {
   const r = resets[resets.length - 1];
   notify(userId, '📄', 'A sale of $' + r.token + ' on ' + new Date(r.at).toISOString().slice(0, 10) + ' reset your Diamond Hands streak to zero' +
-    (resets.some((x) => x.clock === 'gwc') ? ' (and your $GWC streak)' : '') + '. Only a sale resets it — from a linked wallet, or a wallet you sent the coins to. Moving coins never does.', 'holder');
+    (resets.some((x) => x.clock === 'gwc') ? ' (and your $GWC streak)' : '') + '. Only a sale resets it — from a linked wallet, a wallet you unlinked, or a wallet you sent the coins to. Moving coins never does.', 'holder');
 }
 function dhStreakNext(prev, cur, sales, t) {
   const p = prev || {};
@@ -6919,7 +6919,7 @@ function dhFollowUse(uid, coin, i, balNow) {   // balNow: its balance at that po
 function dhFollowAdd(uid, coin, i, addr, block, v, via) {   // follow a wallet the coins went to (or add to what it got)
   const x = dhFollowGet(uid, coin, i);
   if (x) { dhFollowPut(uid, coin, i, addr, { since: Math.min(x.since, block), budget: x.budget + v, orig: x.orig + v }, via === 'unlink' ? 1 : 0, via); return; }
-  if (via !== 'unlink' && db.prepare('SELECT COUNT(*) n FROM dh_follow WHERE user_id = ? AND token = ?').get(uid, coin).n >= DH_FOLLOW_MAX) {   // a wallet they unlinked is always followed
+  if (via !== 'unlink' && db.prepare("SELECT COUNT(*) n FROM dh_follow WHERE user_id = ? AND token = ? AND via <> 'unlink'").get(uid, coin).n >= DH_FOLLOW_MAX) {   // a wallet they unlinked is always followed
     let low = null;   // make room: the follow holding the least of what it got goes (dust sends cannot fill the slots)
     for (const r of db.prepare("SELECT addr_idx, info_enc FROM dh_follow WHERE user_id = ? AND token = ? AND via <> 'unlink'").all(uid, coin)) {
       const y = dhInfo(r.info_enc), b = y ? BigInt(y.budget || '0') : 0n;
@@ -7200,7 +7200,7 @@ async function dhResolveRun() {
 // every minute while moves wait; the members with a newly confirmed sale are read again at once (their streak resets)
 const dhTimer = setInterval(() => {
   try {
-    db.prepare("DELETE FROM dh_moves WHERE status <> 'pending' AND (status <> 'sale' OR applied = 1) AND created_at < ?").run(now() - 30 * 864e5);
+    db.prepare("DELETE FROM dh_moves WHERE status <> 'pending' AND created_at < ?").run(now() - 30 * 864e5);   // settled and 30 days old (a sale never applied by then has no streak left to reset)
     if (dhResolving || !db.prepare("SELECT 1 FROM dh_moves WHERE status = 'pending' LIMIT 1").get()) return;
   } catch { return; }
   dhResolve().catch(() => {});
