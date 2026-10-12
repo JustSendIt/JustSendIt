@@ -412,7 +412,7 @@
         (em.weekly > 1 ? '<span class="eq-op">+</span><span class="eq-chip eq-og">🏆 +' + (Math.round((em.weekly - 1) * 100) / 100) + '<small>prize · ' + em.weekly + '× alone</small></span>' : '') +
         (stacked ? '<span class="eq-op">=</span><span class="eq-chip eq-out">⚡ ' + em.eff.toFixed(2) + '×<small>SEND POWER</small></span>' : '') +
       '</div>' +
-      '<p class="eq-note">' + (stale ? '⏸ Paused until you Refresh — we re-verify your bags on-chain.' : '<b>$GWC counts ×3</b>, and holding $GWC longer levels your Diamond faster — bigger bags held longer scale this up with <b>no cap</b> · every point ×your Power · <b>resets when you sell</b>.') + '</p>' +
+      '<p class="eq-note">' + (stale ? '⏸ Paused until you Refresh — we re-verify your bags on-chain.' : '<b>$GWC counts ×3</b>, and holding $GWC longer levels your Diamond faster — bigger bags held longer scale this up with <b>no cap</b> · every point ×your Power · <b>resets when you sell</b> (moving coins to another wallet doesn’t).') + '</p>' +
       (dust.length ? '<p class="eq-dust">⚠️ Your ' + dust.join(' and ') + ' ' + (dust.length > 1 ? 'are' : 'is') + ' under the $' + ((g.rules && g.rules.holdFloorUsd) || 100) +
         ' floor, so ' + (dust.length > 1 ? 'they count' : 'it counts') + ' for nothing in the supply term above. That is why the number is smaller than your holdings suggest — <a href="#rekt-revoke-h">the floor, and where you stand against it</a>.</p>' : '') +
     '</div>';
@@ -537,7 +537,9 @@
         '<div class="forge-days"><span class="cu" data-cu="' + days + '" data-cufmt="int" aria-hidden="true">0</span><span class="sr-only">' + days + '</span> <span class="forge-unit">day' + (days === 1 ? '' : 's') + ' held</span></div>' +
         '<div class="forge-sub">' + (stale
           ? '<span class="danger">⏸ Verify to keep your streak alive</span>'
-          : (since ? 'Never sold since <b>' + since + '</b> · ' : '') + '<span class="danger">sell = reset to 📄 Paper Grip</span>') +
+          : h.streakPaused
+            ? '<span>⏸ Paused — your linked wallets hold under $' + (h.minHoldUsd || 100) + ' now. Moving coins is not selling: the days pick up where they left off once they’re back over it.</span>'
+            : (since ? 'Never sold since <b>' + since + '</b> · ' : '') + '<span class="danger">sell = reset to 📄 Paper Grip</span>') +
         '</div>' +
       '</div>' +
     '</div>';
@@ -1034,7 +1036,7 @@
       '<div class="rekt-head"><h4 class="rekt-h" id="rekt-revoke-h">💔 Revoked, not drained</h4></div>' +
       '<p class="rekt-lede">Some things are not taken a percent at a time. They are simply gone the moment the thing they were based on stops being true.</p>' +
       '<ul class="rekt-list">' +
-        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell, and your Diamond Level resets to zero.</b> The streak is what the tier measures, so selling ends it — and the factor it was applying to your whole Holder Boost goes with it.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell, and your Diamond Level resets to zero.</b> A sale is a market sell from one of your linked wallets, or from a wallet you sent the coins to. The streak is what the tier measures, so selling ends it — and the factor it was applying to your whole Holder Boost goes with it. Moving coins to another wallet is not a sale and never resets it.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell out of either $SEND or $GWC entirely and the OG badge is revoked for good.</b> It cannot be re-earned. Unlinking the wallet only pauses it; relink and it returns.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell a community’s token and that community’s ' + (rules.communityMult || 10) + '× is revoked,</b> along with your standing in it. Membership is re-checked on-chain, not taken on trust.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Let a holdings check go stale and every holding-based boost pays 1× until it is re-read.</b> Not a punishment — the site will not quote a multiplier it has not verified.</span></li>' +
@@ -1346,7 +1348,7 @@
           '<li><b>📊 Supply boost — +10× for each 1% of supply you hold, and $GWC counts ×3.</b> Your %SEND and %GWC add together, with <b>$GWC weighted 3×</b> (so 1% of $GWC ≈ +30×, 1% of $SEND ≈ +10×) — $GWC is the Generational Wealth Coin, so holding it moves your Power the most.</li>' +
           '<li><b>💎 Diamond boost — for holding without ever selling, and holding $GWC counts double.</b> The longer you hold, the higher your <b>Diamond Level</b> climbs through 11 tiers (Paper Grip → … → 👑 Immortal Diamond, 0 days up to ~2 years). <b>Every day you hold $GWC counts as two</b> toward your level, so diamond-handing $GWC levels you up twice as fast. Each tier multiplies your supply boost further — <b>up to ×100</b> at Immortal Diamond.</li>' +
           '<li>The two combine as <b>1 + (supply × diamond)</b>, with <b>no cap</b> — big bags held long enough scale your boost without limit.</li>' +
-          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — that\'s what makes it a <i>diamond hands</i> reward. They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
+          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, or from a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets hold under $100. They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
         '</ul>' +
         '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes live at <b>10 verified holder slots</b>, each one a wallet that really holds the token). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
         '<ul>' +

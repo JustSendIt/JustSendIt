@@ -373,7 +373,7 @@ function renderWallets(me) {
 }
 
 async function unlinkWallet(address) {
-  if (!confirm('Unlink ' + shortAddr(address) + '?\n\nIt stops counting toward your Holder Boost and Send Call size. Your other wallets are untouched, and you can link it again any time.')) return;
+  if (!confirm('Unlink ' + shortAddr(address) + '?\n\nIt stops counting toward your Holder Boost and Send Call size. Unlinking is not selling: your Diamond streak is not reset (it pauses if your other wallets hold under $100) — but a sale from this wallet still counts. Your other wallets are untouched, and you can link it again any time.')) return;
   const st = document.getElementById('wl-status');
   if (st) st.textContent = '';
   try {

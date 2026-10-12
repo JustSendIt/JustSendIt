@@ -179,7 +179,7 @@ Why it exists: every holder reward here is **time‑based**, and the balance beh
 - It applies to **$Send, $GWC, community tokens, and any token a conviction play is measured on** — there is no token on this site with a different rule.
 - Your dashboard shows the live dollar value of each bag against the floor, so a bag that isn't counting says so rather than quietly paying nothing.
 - **A price we cannot read is not an answer.** If the market is unreadable, your previous verified status stands — an upstream outage can never reset an honest holder's months‑long streak.
-- Dropping **below** $100 of a coin ends that coin's streak, the same as selling would.
+- If the **price** takes a coin below $100, that coin's streak ends. If you **move the coins** out of your linked wallets, the streak pauses instead (the days stop and resume once you're back over $100).
 
 **Worked examples** (fresh, unbroken streak):
 
@@ -212,7 +212,7 @@ The longer you hold **without selling**, the higher your Diamond tier climbs —
 
 **The $100 floor comes first.** A coin worth less than **$100** contributes nothing to a streak and nothing to your Diamond level — the clock does not start, and if a bag falls below the floor its streak ends (§3.2.1).
 
-**What counts as "not selling":** your no‑sell streak tracks the **peak** percentage of supply you reached. **Selling = dropping more than 2% below that peak**, which resets your streak clock and collapses your Diamond factor to 1. A small wobble within 2% doesn't count; buying more only raises the peak. Because the baseline is your all‑time streak peak (not your last reading), you can't slowly bleed tokens out just under the threshold to dodge a reset.
+**What counts as selling:** a **market sell** — the coins go into a pool that pays out for them — from one of your linked wallets, **or from a wallet you sent the coins to**. That resets your streak clock to zero and collapses your Diamond factor to 1. **A transfer is not a sale:** moving coins to another wallet never resets the streak. The site reads every $SEND and $GWC transfer from the chain, confirms each move out of a linked wallet from its transaction receipt, and follows a wallet you sent coins to (an ordinary wallet, one hop, for as many coins as it got) — its sales count as yours; a contract that takes coins without a sale is not followed. If your linked wallets drop under the $100 floor because the coins moved, the streak pauses and resumes when you're back over it; unlinking a wallet works the same way, and its sales still count up to what it held. Buying more never resets anything.
 
 **$GWC climbs twice as fast:** $GWC has its **own independent** no‑sell streak (only reset when you sell $GWC), and each day holding $GWC counts as **2 days** toward your tier — `effHoldDays = max(combined no‑sell days, 2 × $GWC‑only days)`. Since it's a `max`, the $GWC bonus can only ever help.
 
