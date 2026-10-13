@@ -149,7 +149,8 @@ function fill(d, table, vals) {
   const names = Object.keys(row);
   return d.prepare('INSERT INTO ' + table + ' (' + names.join(',') + ') VALUES (' + names.map(() => '?').join(',') + ')').run(...names.map((n) => row[n]));
 }
-async function waitFor(fn, ms = 20000) { const until = Date.now() + ms; while (Date.now() < until) { try { const v = fn(); if (v) return v; } catch {} await sleep(150); } return null; }
+// a GitHub runner is several times slower than this Mac (a 20 s wait for the post-unmount drop timed out there, 2026-10-13)
+async function waitFor(fn, ms = 30000) { const until = Date.now() + ms; while (Date.now() < until) { try { const v = fn(); if (v) return v; } catch {} await sleep(150); } return null; }
 const metaOf = (k) => { const d = openDb(); try { return K.getMeta(d, k); } finally { d.close(); } };
 async function maintenanceAfter(t0) { return waitFor(() => { const m = JSON.parse(metaOf('last_maintenance') || 'null'); return m && m.at >= t0 ? m : null; }, 30000); }
 
@@ -411,7 +412,7 @@ try {
     fs.rmSync(BK, { recursive: true, force: true }); fs.renameSync(BK + '.away', BK);
     t1 = Date.now();
     await start();
-    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; });
+    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 45000);   // re-encrypting the backup copies first
     ring = ringNow().ring;
     check('  ...once it is back, the copies are brought along and the old key goes', !!m && ring.dek.keys.length === 1 && JSON.stringify(Object.keys(kidsInDb(path.join(BK, 'app-2026-01-01.db')))) === JSON.stringify([String(ring.dek.current)]), JSON.stringify(m && { w: m.waiting, d: m.dropped }));
     await stop();
