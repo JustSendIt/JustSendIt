@@ -153,12 +153,49 @@ try {
     const NPJ = readFileSync(path.join(ROOT, 'public', 'newpairs.js'), 'utf8'), PRIV = readFileSync(path.join(ROOT, 'public', 'privacy.html'), 'utf8');
     check('every token chart carries a switch: On-chain (the default, filled) · Dexscreener · CoinGecko, each a described button',
       /'<div class="chart-switch" data-pair="' \+ esc\(p\.pair\.address\) \+ '" data-sym="/.test(NPJ) && /class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="/.test(NPJ)
-      && /data-chartsrc="dexscreener" data-tip="/.test(NPJ) && /data-chartsrc="geckoterminal" data-tip="/.test(NPJ) && /'<div class="chart-embed" hidden><\/div>'/.test(NPJ));
+      && /data-chartsrc="dexscreener" hidden data-tip="/.test(NPJ) && /data-chartsrc="geckoterminal" hidden data-tip="/.test(NPJ) && /'<div class="chart-embed" hidden><\/div>'/.test(NPJ));
     check('  ...a third party\'s chart is an iframe made only when picked, removed on switching back, no referrer, sandboxed — and the pick is remembered on the device',
       /if \(em\) \{ em\.hidden = true; em\.innerHTML = ''; \}/.test(CHART) && /referrerpolicy="no-referrer"/.test(CHART) && /sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"/.test(CHART)
       && /const SRC_KEY = 'chart:src';/.test(CHART) && /'https:\/\/dexscreener\.com\/robinhood\/' \+ pair \+ '\?embed=1/.test(CHART) && /'https:\/\/www\.geckoterminal\.com\/robinhood\/pools\/' \+ pair \+ '\?embed=1/.test(CHART)
       && /if \(!CHART_EMBEDS\[src\] \|\| !\/\^0x\[0-9a-f\]\{40\}\$\/\.test\(pair\)\) src = 'onchain';/.test(CHART));
     check('  ...and the privacy page says what picking one means (that company sees your IP and the pool), and that nothing loads until you pick it', /If you switch a chart to <b>Dexscreener<\/b> or <b>CoinGecko<\/b>/.test(PRIV) && /Nothing is loaded from either until you pick it, the frame is removed when you switch back/.test(PRIV));
+    /* only the charts that exist (owner, 2026-10-13: "If the dexscreener or coingecko chart is not available for a token then just
+       have those two toggle buttons be not visible"): the buttons are drawn hidden, and shown for a yes from our server */
+    check('  ...the switch and its two outside buttons start hidden; a button shows only when our server says that site lists the pool, the switch only when one does',
+      /'<div class="chart-src" role="group" aria-label="Chart source" hidden>'/.test(NPJ)
+      && /b\.hidden = !wrap\._srcs\[k\]; if \(wrap\._srcs\[k\]\) any = true;/.test(CHART) && /if \(grp\) grp\.hidden = !any;/.test(CHART)
+      && /wrap\._srcs = \{ dexscreener: s\.dexscreener === true, geckoterminal: s\.geckoterminal === true \};/.test(CHART));
+    check('  ...a coin the price feed does not list but whose pool the site reads ($GWC) still gets our chart and the switch',
+      /if \(!\(p\.indexed \|\| poolRead\(p\)\) \|\| !p\.pair \|\| !p\.pair\.address\) \{/.test(NPJ) && /const poolRead = \(p\) => !!\(p\.market && p\.market\.source === 'reserves'\);/.test(NPJ));
+    check('  ...a site that does not list the pool can never be shown, not by a remembered pick nor a click; the pick applies once, never swapped in later',
+      /if \(src !== 'onchain' && !\(wrap\._srcs && wrap\._srcs\[src\]\)\) src = 'onchain';/.test(CHART)
+      && /else if \(first && !wrap\._picked\) \{ const pick = chartSrcPref\(\); if \(pick !== 'onchain' && wrap\._srcs\[pick\]\) showChartSrc\(wrap, pick\); \}/.test(CHART)
+      && /\.chart-switch:not\(\[data-ready\]\)'\)\.forEach\(w => \{ w\.setAttribute\('data-ready', '1'\); wantSources\(w\); \}\)/.test(CHART));
+    check('  ...the browser asks our server only — never Dexscreener or GeckoTerminal — and the server asks them, metered, 30 pools a call',
+      /fetch\('\/api\/chart\/sources\?pools=' \+/.test(CHART) && !/api\.dexscreener\.com|api\.geckoterminal\.com/.test(CHART)
+      && /jgetR\('https:\/\/api\.dexscreener\.com\/latest\/dex\/pairs\/robinhood\/' \+ pools\.join\(','\)\)/.test(SRC)
+      && /jgetR\('https:\/\/api\.geckoterminal\.com\/api\/v2\/networks\/robinhood\/pools\/multi\/' \+ pools\.join\(','\)\)/.test(SRC)
+      && /'api\.geckoterminal\.com': 10,/.test(SRC) && /const CHART_SRC_BATCH = 30,/.test(SRC));
+    check('  ...and the privacy page says the buttons show only for a listed pool, asked by our server with the pool address alone',
+      /Each button shows only when that site lists the pool: our server asks them, with the pool&#39;s address alone|Each button shows only when that site lists the pool: our server asks them, with the pool's address alone/.test(PRIV)
+      && /CoinGecko's GeckoTerminal and Dexscreener \(whether they list a pool/.test(PRIV));
+    {
+      const rnd = () => '0x' + [...Array(40)].map(() => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+      const a = rnd(), b = rnd();
+      const bad1 = await fetch(`${BASE}/api/chart/sources?pools=nope`), bad2 = await fetch(`${BASE}/api/chart/sources`);
+      check('/api/chart/sources: no pool address, no answer (400)', bad1.status === 400 && bad2.status === 400, bad1.status + ' ' + bad2.status);
+      const many = [...Array(35)].map(rnd);
+      const [r1, r2, rm] = await Promise.all([fetch(`${BASE}/api/chart/sources?pools=${a},${a.toUpperCase().replace('0X', '0x')}`), fetch(`${BASE}/api/chart/sources?pools=${b}`), fetch(`${BASE}/api/chart/sources?pools=${many.join(',')}`)]);
+      const j1 = await r1.json().catch(() => null), j2 = await r2.json().catch(() => null), jm = await rm.json().catch(() => null);
+      const shape = (j, k) => j && j.pools && j.pools[k] && [true, false, null].includes(j.pools[k].dexscreener) && [true, false, null].includes(j.pools[k].geckoterminal);
+      check('  ...a pool nobody lists is never offered (false, or null when the site could not ask), one entry per pool in any letter case',
+        r1.status === 200 && shape(j1, a) && Object.keys(j1.pools).length === 1 && j1.pools[a].dexscreener !== true && j1.pools[a].geckoterminal !== true && shape(j2, b) && j2.pools[b].dexscreener !== true, JSON.stringify([j1, j2]));
+      check('  ...at most 30 pools a question', rm.status === 200 && jm && Object.keys(jm.pools).length === 30, rm.status + ' ' + (jm && Object.keys(jm.pools || {}).length));
+      if (process.env.CHAIN_LIVE === '1') {
+        const live = await (await fetch(`${BASE}/api/chart/sources?pools=0xf30bb531d0255969be155533abac34b22bd63414`)).json().catch(() => null);
+        check('  ...live: $SEND\'s pool is listed on both', live && live.pools && live.pools['0xf30bb531d0255969be155533abac34b22bd63414'] && live.pools['0xf30bb531d0255969be155533abac34b22bd63414'].dexscreener === true && live.pools['0xf30bb531d0255969be155533abac34b22bd63414'].geckoterminal === true, JSON.stringify(live));
+      }
+    }
     check('csp: frame-src admits exactly Dexscreener and CoinGecko\'s GeckoTerminal (the viewer-picked chart embeds), nothing else', /"frame-src https:\/\/dexscreener\.com https:\/\/www\.geckoterminal\.com",/.test(SRC) && (SRC.match(/frame-src/g) || []).length >= 1);
     check('landing: the charts are ours, and they poll at a rate a read page can afford', /class="onchain-chart"[^>]*data-poll="5000"/.test(INDEX));
     check('landing: no iframe survives on the page', !/<iframe/i.test(INDEX));

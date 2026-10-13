@@ -129,6 +129,10 @@ const look = await get('/api/pairs/lookup?token=' + SEND_TOKEN);
 let lj = null; try { lj = JSON.parse(look.text); } catch {}
 const holders = lj && lj.pair && lj.pair.holders && lj.pair.holders.count;
 warn('holder counts and contract flags are readable (GoPlus / explorer reachable from the origin)', holders != null, holders != null ? holders + ' holders' : look.status + ' — holder data unknown: check BLOCKSCOUT_URL / GOPLUS_KEY and the outbound log');
+const srcs = await get('/api/chart/sources?pools=' + (lj && lj.pair && lj.pair.pair && lj.pair.pair.address || '0xf30bb531d0255969be155533abac34b22bd63414').toLowerCase());
+let sj = null; try { sj = JSON.parse(srcs.text); } catch {}
+const sOne = sj && sj.pools && Object.values(sj.pools)[0];
+warn('the chart switch can tell which sites list $SEND\'s pool (Dexscreener and GeckoTerminal reachable from the origin)', !!sOne && sOne.dexscreener === true && sOne.geckoterminal === true, srcs.status + ' ' + srcs.text.slice(0, 120));
 
 /* ---- 8. uploads and unknown paths are answered by the origin, not a proxy error page ---- */
 const missingUpload = await get('/uploads/000000000000000000000000.jpg');

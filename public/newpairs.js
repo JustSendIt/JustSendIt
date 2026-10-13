@@ -849,12 +849,16 @@
      definition here gives every one of them the time axis, the hover readout and the event markers.
      The switch above it (owner, 2026-10-13: "toggle between the onchain chart and a dexscreener chart ... also a
      coingecko chart") swaps in the third party's own embedded chart of the same pool — loaded only when picked
-     (chart.js, CHART_EMBEDS), so the browser talks to that company only then. The host only exists once a detail body has been inserted
+     (chart.js, CHART_EMBEDS), so the browser talks to that company only then. Its buttons start hidden: chart.js shows
+     each one only once our server has confirmed that site lists this pool (/api/chart/sources), and the switch
+     itself only when at least one does. The host only exists once a detail body has been inserted
      (bodies are built on expand), and chart.js gates polling on an IntersectionObserver, so a body
      scrolled out of view asks the server for nothing. data-poll widens the tick: a list can hold a dozen
      of these, and a dozen charts at one second each is a self-inflicted rate limit. */
   function chartHTML(p) {
-    if (!p.indexed || !p.pair || !p.pair.address) {
+    /* Our chart is drawn from the pool's own swaps, so a coin the price feed does not index still has one when its market
+       was read from that pool (poolRead — $GWC, for one: Dexscreener does not list it, GeckoTerminal does). */
+    if (!(p.indexed || poolRead(p)) || !p.pair || !p.pair.address) {
       // "not indexed" is a fact about the price feed, not about the token: a pool can be trading and still be unlisted
       return '<p class="np-why-clean">📈 No chart — the price feed does not index this pair, so there is no price history to draw. That says nothing about whether it trades.</p>';
     }
@@ -862,15 +866,15 @@
     // minus the tracking surface and the extra hop. Dexscreener's and CoinGecko's are a tap away, never loaded unasked.
     const dex = p.links && p.links.dex;   // a stored snapshot can carry no link (the server drops any that is not plain http/https)
     return '<div class="chart-switch" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol || '') + '">' +
-      '<div class="chart-src" role="group" aria-label="Chart source">' +
+      '<div class="chart-src" role="group" aria-label="Chart source" hidden>' +
         '<button class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="Our own chart, drawn from this pool&#39;s swaps on the chain — nothing loads from another company">⛓️ On-chain</button>' +
-        '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="dexscreener" data-tip="Dexscreener&#39;s chart of this pool — your browser loads it from dexscreener.com once you pick it">Dexscreener</button>' +
-        '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="geckoterminal" data-tip="CoinGecko&#39;s chart of this pool (GeckoTerminal) — your browser loads it from geckoterminal.com once you pick it">CoinGecko</button>' +
+        '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="dexscreener" hidden data-tip="Dexscreener&#39;s chart of this pool — your browser loads it from dexscreener.com once you pick it">Dexscreener</button>' +
+        '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="geckoterminal" hidden data-tip="CoinGecko&#39;s chart of this pool (GeckoTerminal) — your browser loads it from geckoterminal.com once you pick it">CoinGecko</button>' +
       '</div>' +
       '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
       '<div class="chart-embed" hidden></div>' +
       '<p class="np-chart-note">Built live from on-chain swaps.' +
-      (dex ? ' <a href="' + esc(dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a>' : '') + '</p>' +
+      (dex ? ' <a class="np-dex-xcheck" href="' + esc(dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a>' : '') + '</p>' +
       '<p class="chart-src-note" hidden></p>' +
     '</div>';
   }

@@ -1104,7 +1104,12 @@
      device (localStorage chart:src). Ours is the default. Another company's chart is an iframe created only when it is
      picked — that is when the browser first talks to dexscreener.com / geckoterminal.com — and removed again when the
      viewer switches back, so it does not keep running hidden. The CSP's frame-src admits exactly these two. Our chart
-     stays mounted underneath; hidden, its IntersectionObserver stops it polling. */
+     stays mounted underneath; hidden, its IntersectionObserver stops it polling.
+     A site's button shows only when that site lists the pool (owner, 2026-10-13: "If the dexscreener or coingecko chart
+     is not available for a token then just have those two toggle buttons be not visible"). The buttons are drawn
+     hidden; our server says which sites list the pool (/api/chart/sources — it asks them, the browser does not), and a
+     button appears only for a yes. No yes, no switch: our chart alone needs no picker. "Could not ask" (null) keeps the
+     button hidden and is asked once more a minute later. */
   const CHART_EMBEDS = {
     dexscreener: { name: 'Dexscreener', host: 'dexscreener.com',
       url: (pair) => 'https://dexscreener.com/robinhood/' + pair + '?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15' },
@@ -1116,6 +1121,8 @@
   function showChartSrc(wrap, src) {
     const pair = String(wrap.dataset.pair || '').toLowerCase();
     if (!CHART_EMBEDS[src] || !/^0x[0-9a-f]{40}$/.test(pair)) src = 'onchain';
+    if (src !== 'onchain' && !(wrap._srcs && wrap._srcs[src])) src = 'onchain';   // only a site that lists this pool
+    wrap._src = src;
     wrap.querySelectorAll('.chart-src-btn').forEach((b) => { const on = b.dataset.chartsrc === src; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); });
     const oc = wrap.querySelector('.onchain-chart'), em = wrap.querySelector('.chart-embed'), ours = wrap.querySelector('.np-chart-note'), note = wrap.querySelector('.chart-src-note');
     if (src === 'onchain') {
@@ -1133,22 +1140,67 @@
       em.innerHTML = '<iframe class="chart-embed-frame" src="' + esc(E.url(pair)) + '" title="' + esc(E.name + ' chart' + sym) + '" loading="lazy" referrerpolicy="no-referrer"' +
         ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>';
     }
-    if (note) { note.hidden = false; note.textContent = E.name + '\u2019s chart, loaded from ' + E.host + ' — their data and their listing of this pool; a brand-new pool can be missing or late there. Your pick is remembered on this device.'; }
+    if (note) { note.hidden = false; note.textContent = E.name + '\u2019s chart, loaded from ' + E.host + ' — their data, which can trail a brand-new pool. Your pick is remembered on this device.'; }
   }
   document.addEventListener('click', (e) => {
     const b = e.target.closest('.chart-src-btn'); if (!b) return;
     const wrap = b.closest('.chart-switch'); if (!wrap) return;
-    const src = b.dataset.chartsrc;
+    wrap._picked = true;
+    showChartSrc(wrap, b.dataset.chartsrc);
+    const src = wrap._src;
     try { localStorage.setItem(SRC_KEY, src); } catch {}
-    showChartSrc(wrap, src);
     if (window.announce) announce(src === 'onchain' ? 'Showing the on-chain chart.' : 'Showing ' + CHART_EMBEDS[src].name + '\u2019s chart.');
   });
 
-  // auto-mount anything already on the page (and give a chart switch the viewer's remembered pick)
+  // which sites list a pool: one ask for every switch mounted together (up to 30 pools), kept for this page
+  const SRC_NO_MS = 10 * 60e3, SRC_UNSURE_MS = 65000;   // a yes is kept for the page; a no ten minutes (a new pool gets listed); "could not ask" a minute
+  const srcKnown = new Map();   // pool -> { s: { dexscreener, geckoterminal }, at, sure }
+  const srcWait = new Map();    // pool -> [switch…] waiting on the next ask
+  let srcTimer = null;
+  function askSources() {
+    clearTimeout(srcTimer); srcTimer = null;
+    const batch = [...srcWait.entries()].slice(0, 30);
+    for (const [pool] of batch) srcWait.delete(pool);
+    if (srcWait.size) srcTimer = setTimeout(askSources, 0);
+    if (!batch.length) return;
+    fetch('/api/chart/sources?pools=' + batch.map(([pool]) => pool).join(','), { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null).catch(() => null)
+      .then(j => {
+        for (const [pool, wraps] of batch) {
+          const got = j && j.pools && j.pools[pool];
+          const s = { dexscreener: got ? got.dexscreener : null, geckoterminal: got ? got.geckoterminal : null };
+          srcKnown.set(pool, { s, at: Date.now(), sure: s.dexscreener !== null && s.geckoterminal !== null });
+          wraps.forEach(w => applySources(w, s));
+        }
+      });
+  }
+  function wantSources(wrap) {
+    const pool = String(wrap.dataset.pair || '').toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(pool)) return;
+    const k = srcKnown.get(pool);
+    if (k && Date.now() - k.at < (!k.sure ? SRC_UNSURE_MS : k.s.dexscreener && k.s.geckoterminal ? Infinity : SRC_NO_MS)) return applySources(wrap, k.s);
+    if (!srcWait.has(pool)) srcWait.set(pool, []);
+    srcWait.get(pool).push(wrap);
+    if (srcWait.size >= 30) askSources(); else if (!srcTimer) srcTimer = setTimeout(askSources, 60);
+  }
+  function applySources(wrap, s) {
+    if (!wrap.isConnected) return;
+    const first = !wrap._srcs;
+    wrap._srcs = { dexscreener: s.dexscreener === true, geckoterminal: s.geckoterminal === true };
+    let any = false;
+    wrap.querySelectorAll('.chart-src-btn').forEach((b) => { const k = b.dataset.chartsrc; if (k === 'onchain') return; b.hidden = !wrap._srcs[k]; if (wrap._srcs[k]) any = true; });
+    const grp = wrap.querySelector('.chart-src'); if (grp) grp.hidden = !any;
+    const x = wrap.querySelector('.np-dex-xcheck'); if (x) x.hidden = s.dexscreener === false;   // a link to "pair not found" is no cross-check
+    const cur = wrap._src || 'onchain';
+    if (cur !== 'onchain' && !wrap._srcs[cur]) showChartSrc(wrap, 'onchain');
+    else if (first && !wrap._picked) { const pick = chartSrcPref(); if (pick !== 'onchain' && wrap._srcs[pick]) showChartSrc(wrap, pick); }   // the remembered pick, where this pool has it — never swapped in later under the viewer
+    if ((s.dexscreener === null || s.geckoterminal === null) && !wrap._retried) { wrap._retried = true; setTimeout(() => { if (wrap.isConnected) wantSources(wrap); }, SRC_UNSURE_MS); }
+  }
+
+  // auto-mount anything already on the page (and ask which other sites chart each switch's pool)
   function mountAll(root) {
     (root || document).querySelectorAll('.onchain-chart:not([data-mounted])').forEach(h => { h.setAttribute('data-mounted', '1'); window.renderOnChainChart(h); });
-    const pick = chartSrcPref();
-    (root || document).querySelectorAll('.chart-switch:not([data-ready])').forEach(w => { w.setAttribute('data-ready', '1'); if (pick !== 'onchain') showChartSrc(w, pick); });
+    (root || document).querySelectorAll('.chart-switch:not([data-ready])').forEach(w => { w.setAttribute('data-ready', '1'); wantSources(w); });
   }
   window.mountOnChainCharts = mountAll;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountAll()); else mountAll();

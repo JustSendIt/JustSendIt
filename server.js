@@ -5614,6 +5614,8 @@ function jgetCached(url, ttl) {
      · api.coingecko.com — the keyless tier publishes no number and is shared per IP; 20/min is well
        inside what their docs describe as the public band, and one price every 60s is all we ask.
      · blockscout — the keyed tier is 5 requests/second (their rate-limits page); 4/s here.
+     · api.geckoterminal.com — CoinGecko's FAQ prints 30/min for the keyless API, but it answered 429 after
+       about ten quick calls on 2026-10-13, so 10/min here. Only the chart switch asks it (chartSrcOf), 30 pools a call.
      · anything else — 60/min, which nothing on this site approaches.
    The wait is bounded (OUTBOUND_MAX_WAIT_MS) so a stampede degrades into "could not ask" — the same
    honest answer a 429 already produces here — rather than into an unbounded queue. */
@@ -5621,6 +5623,7 @@ const OUTBOUND_RPM = {
   'api.dexscreener.com': 270,
   'api.coingecko.com': 20,
   'api.gopluslabs.io': 28,          // the free tier is 30 calls/min; a paid plan raises it via OUTBOUND_RPM_API_GOPLUSLABS_IO
+  'api.geckoterminal.com': 10,
   'robinhoodchain.blockscout.com': 240,
   'api.blockscout.com': 240,
 };
@@ -7822,6 +7825,64 @@ async function getLogsSpan(address, topics, from, to, budget) {
     }
     throw e;
   }
+}
+/* ===== Which other sites chart a pool ==============================================================
+   The chart switch (chart.js) offers Dexscreener's and CoinGecko's (GeckoTerminal) chart of a pool only when that
+   site lists the pool (owner, 2026-10-13: "If the dexscreener or coingecko chart is not available for a token then
+   just have those two toggle buttons be not visible"). A button that opens a "pool not found" frame is worse than none.
+   Our server asks, never the viewer's browser: a page asking either company would tell it who is looking before
+   anyone picked its chart. The question carries pool addresses only.
+   Both APIs take up to 30 pools a call and leave out the ones they do not list, so pools asked about within a
+   moment of each other (every chart on a page, every viewer) go out together. An answer is kept: "listed" for six
+   hours (a listed pool stays listed), "not listed" for ten minutes (a new pool gets picked up), and "could not ask"
+   (429, timeout, outage) for a minute — that one is null, which the page treats as not offered. */
+const CHART_SRC_BATCH = 30, CHART_SRC_WAIT_MS = 150, CHART_SRC_YES_MS = 6 * 3600e3, CHART_SRC_NO_MS = 10 * 60e3, CHART_SRC_UNK_MS = 60e3;
+const CHART_SRC_ASK = {
+  dexscreener: async (pools) => {
+    const r = await jgetR('https://api.dexscreener.com/latest/dex/pairs/robinhood/' + pools.join(','));
+    if (!r.ok || !r.data || typeof r.data !== 'object' || !('pairs' in r.data)) return null;   // { pairs: null } is a real "none of these"
+    return new Set((Array.isArray(r.data.pairs) ? r.data.pairs : []).filter((x) => x && x.chainId === 'robinhood').map((x) => String(x.pairAddress || '').toLowerCase()));
+  },
+  geckoterminal: async (pools) => {
+    const r = await jgetR('https://api.geckoterminal.com/api/v2/networks/robinhood/pools/multi/' + pools.join(','));
+    if (!r.ok || !r.data || !Array.isArray(r.data.data)) return null;   // { data: [] } is a real "none of these"
+    return new Set(r.data.data.map((x) => String((x && x.attributes && x.attributes.address) || '').toLowerCase()));
+  },
+};
+const chartSrcCache = new Map();      // vendor:pool -> { v: true | false | null, at }
+const chartSrcInflight = new Map();   // vendor:pool -> Promise, so a pool already being asked about is not asked twice
+const chartSrcQueue = { dexscreener: new Map(), geckoterminal: new Map() };   // pool -> resolve, waiting for the next call
+const chartSrcTimer = {};
+function chartSrcFlush(vendor) {
+  clearTimeout(chartSrcTimer[vendor]); chartSrcTimer[vendor] = null;
+  const q = chartSrcQueue[vendor];
+  const batch = [...q.entries()].slice(0, CHART_SRC_BATCH);
+  for (const [pool] of batch) q.delete(pool);
+  if (q.size) chartSrcTimer[vendor] = setTimeout(() => chartSrcFlush(vendor), 0);   // more than one call's worth: the rest go next
+  if (!batch.length) return;
+  CHART_SRC_ASK[vendor](batch.map(([pool]) => pool)).catch(() => null).then((found) => {
+    const at = Date.now();
+    pruneCache(chartSrcCache, 20000);
+    for (const [pool, resolve] of batch) {
+      const v = found ? found.has(pool) : null;
+      chartSrcCache.set(vendor + ':' + pool, { v, at });
+      chartSrcInflight.delete(vendor + ':' + pool);
+      resolve(v);
+    }
+  });
+}
+function chartSrcOf(vendor, pool) {
+  const key = vendor + ':' + pool, c = chartSrcCache.get(key);
+  if (c && Date.now() - c.at < (c.v === true ? CHART_SRC_YES_MS : c.v === false ? CHART_SRC_NO_MS : CHART_SRC_UNK_MS)) return Promise.resolve(c.v);
+  if (chartSrcInflight.has(key)) return chartSrcInflight.get(key);
+  const pr = new Promise((resolve) => {
+    const q = chartSrcQueue[vendor];
+    q.set(pool, resolve);
+    if (q.size >= CHART_SRC_BATCH) chartSrcFlush(vendor);
+    else if (!chartSrcTimer[vendor]) chartSrcTimer[vendor] = setTimeout(() => chartSrcFlush(vendor), CHART_SRC_WAIT_MS);
+  });
+  chartSrcInflight.set(key, pr);
+  return pr;
 }
 /* A read that failed for a reason that may pass on its own: the node refusing (429/403), a 5xx, a timeout, a
    dropped connection. A revert, a bad address or a wrong pool is not one of these and is never retried. */
@@ -15942,6 +16003,19 @@ const server = http.createServer(async (req, res) => {
            cached at all, so the widget's next ask reaches the server once the node answers again. */
         const maxAge = data.stale ? 5 : CHART_TF[tf] <= 60 ? 2 : 30;
         return send(res, 200, data, { 'Cache-Control': 'public, max-age=' + maxAge });
+      }
+      /* ----- which other sites chart these pools: the chart switch shows only the buttons that will draw a chart ----- */
+      if (p === '/api/chart/sources' && req.method === 'GET') {
+        if (!rateLimit('chsrc:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
+        const pools = [...new Set(String(url.searchParams.get('pools') || '').split(',').map((x) => x.trim().toLowerCase()).filter((x) => /^0x[0-9a-f]{40}$/.test(x)))].slice(0, CHART_SRC_BATCH);
+        if (!pools.length) return bad(res, 'bad pool address');
+        const out = {};
+        await Promise.all(pools.map(async (a) => {
+          const [ds, gt] = await Promise.all([chartSrcOf('dexscreener', a), chartSrcOf('geckoterminal', a)]);
+          out[a] = { dexscreener: ds, geckoterminal: gt };   // true = listed there; false = not listed; null = could not ask just now
+        }));
+        const unsure = Object.values(out).some((s) => s.dexscreener === null || s.geckoterminal === null);
+        return send(res, 200, { pools: out }, { 'Cache-Control': unsure ? 'no-store' : 'public, max-age=300' });
       }
       /* ===== Chart markers: what PEOPLE did, on the same time axis as the price =======================
          One request per chart, answered from tables this site already keeps, so a wall of charts costs a
