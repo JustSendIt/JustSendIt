@@ -149,7 +149,17 @@ try {
 
   /* ═══════════ 12. no third-party frame is left anywhere ═══════════ */
   {
-    check('csp: frame-src is none', /"frame-src 'none'"/.test(SRC));
+    /* the chart switch (owner, 2026-10-13): ours by default; Dexscreener's or CoinGecko's frame only once picked */
+    const NPJ = readFileSync(path.join(ROOT, 'public', 'newpairs.js'), 'utf8'), PRIV = readFileSync(path.join(ROOT, 'public', 'privacy.html'), 'utf8');
+    check('every token chart carries a switch: On-chain (the default, filled) · Dexscreener · CoinGecko, each a described button',
+      /'<div class="chart-switch" data-pair="' \+ esc\(p\.pair\.address\) \+ '" data-sym="/.test(NPJ) && /class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="/.test(NPJ)
+      && /data-chartsrc="dexscreener" data-tip="/.test(NPJ) && /data-chartsrc="geckoterminal" data-tip="/.test(NPJ) && /'<div class="chart-embed" hidden><\/div>'/.test(NPJ));
+    check('  ...a third party\'s chart is an iframe made only when picked, removed on switching back, no referrer, sandboxed — and the pick is remembered on the device',
+      /if \(em\) \{ em\.hidden = true; em\.innerHTML = ''; \}/.test(CHART) && /referrerpolicy="no-referrer"/.test(CHART) && /sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"/.test(CHART)
+      && /const SRC_KEY = 'chart:src';/.test(CHART) && /'https:\/\/dexscreener\.com\/robinhood\/' \+ pair \+ '\?embed=1/.test(CHART) && /'https:\/\/www\.geckoterminal\.com\/robinhood\/pools\/' \+ pair \+ '\?embed=1/.test(CHART)
+      && /if \(!CHART_EMBEDS\[src\] \|\| !\/\^0x\[0-9a-f\]\{40\}\$\/\.test\(pair\)\) src = 'onchain';/.test(CHART));
+    check('  ...and the privacy page says what picking one means (that company sees your IP and the pool), and that nothing loads until you pick it', /If you switch a chart to <b>Dexscreener<\/b> or <b>CoinGecko<\/b>/.test(PRIV) && /Nothing is loaded from either until you pick it, the frame is removed when you switch back/.test(PRIV));
+    check('csp: frame-src admits exactly Dexscreener and CoinGecko\'s GeckoTerminal (the viewer-picked chart embeds), nothing else', /"frame-src https:\/\/dexscreener\.com https:\/\/www\.geckoterminal\.com",/.test(SRC) && (SRC.match(/frame-src/g) || []).length >= 1);
     check('landing: the charts are ours, and they poll at a rate a read page can afford', /class="onchain-chart"[^>]*data-poll="5000"/.test(INDEX));
     check('landing: no iframe survives on the page', !/<iframe/i.test(INDEX));
     check('client: data-poll is actually honoured', /Number\(host\.dataset\.poll\) \|\| 1000/.test(CHART));

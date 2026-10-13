@@ -1099,8 +1099,57 @@
     load(host);
   };
 
-  // auto-mount anything already on the page
-  function mountAll(root) { (root || document).querySelectorAll('.onchain-chart:not([data-mounted])').forEach(h => { h.setAttribute('data-mounted', '1'); window.renderOnChainChart(h); }); }
+  /* ===== Which chart: ours (on-chain), Dexscreener's, or CoinGecko's (GeckoTerminal) =====
+     A token's chart can be shown from either of those as well as drawn here — the viewer's pick, remembered on this
+     device (localStorage chart:src). Ours is the default. Another company's chart is an iframe created only when it is
+     picked — that is when the browser first talks to dexscreener.com / geckoterminal.com — and removed again when the
+     viewer switches back, so it does not keep running hidden. The CSP's frame-src admits exactly these two. Our chart
+     stays mounted underneath; hidden, its IntersectionObserver stops it polling. */
+  const CHART_EMBEDS = {
+    dexscreener: { name: 'Dexscreener', host: 'dexscreener.com',
+      url: (pair) => 'https://dexscreener.com/robinhood/' + pair + '?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15' },
+    geckoterminal: { name: 'CoinGecko (GeckoTerminal)', host: 'geckoterminal.com',
+      url: (pair) => 'https://www.geckoterminal.com/robinhood/pools/' + pair + '?embed=1&info=0&swaps=0&grayscale=0&light_chart=0&chart_type=price&resolution=15m' },
+  };
+  const SRC_KEY = 'chart:src';
+  function chartSrcPref() { try { const v = localStorage.getItem(SRC_KEY); return v && CHART_EMBEDS[v] ? v : 'onchain'; } catch { return 'onchain'; } }
+  function showChartSrc(wrap, src) {
+    const pair = String(wrap.dataset.pair || '').toLowerCase();
+    if (!CHART_EMBEDS[src] || !/^0x[0-9a-f]{40}$/.test(pair)) src = 'onchain';
+    wrap.querySelectorAll('.chart-src-btn').forEach((b) => { const on = b.dataset.chartsrc === src; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); });
+    const oc = wrap.querySelector('.onchain-chart'), em = wrap.querySelector('.chart-embed'), ours = wrap.querySelector('.np-chart-note'), note = wrap.querySelector('.chart-src-note');
+    if (src === 'onchain') {
+      if (em) { em.hidden = true; em.innerHTML = ''; }   // the other company's frame goes, not just out of sight
+      if (note) note.hidden = true;
+      if (ours) ours.hidden = false;
+      if (oc) { const was = oc.hidden; oc.hidden = false; if (was && oc._wired) window.renderOnChainChart(oc); }   // drawn again at its real size
+      return;
+    }
+    const E = CHART_EMBEDS[src], sym = wrap.dataset.sym ? ' of $' + wrap.dataset.sym : '';
+    if (oc) oc.hidden = true;
+    if (ours) ours.hidden = true;
+    if (em) {
+      em.hidden = false;
+      em.innerHTML = '<iframe class="chart-embed-frame" src="' + esc(E.url(pair)) + '" title="' + esc(E.name + ' chart' + sym) + '" loading="lazy" referrerpolicy="no-referrer"' +
+        ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>';
+    }
+    if (note) { note.hidden = false; note.textContent = E.name + '\u2019s chart, loaded from ' + E.host + ' — their data and their listing of this pool; a brand-new pool can be missing or late there. Your pick is remembered on this device.'; }
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.chart-src-btn'); if (!b) return;
+    const wrap = b.closest('.chart-switch'); if (!wrap) return;
+    const src = b.dataset.chartsrc;
+    try { localStorage.setItem(SRC_KEY, src); } catch {}
+    showChartSrc(wrap, src);
+    if (window.announce) announce(src === 'onchain' ? 'Showing the on-chain chart.' : 'Showing ' + CHART_EMBEDS[src].name + '\u2019s chart.');
+  });
+
+  // auto-mount anything already on the page (and give a chart switch the viewer's remembered pick)
+  function mountAll(root) {
+    (root || document).querySelectorAll('.onchain-chart:not([data-mounted])').forEach(h => { h.setAttribute('data-mounted', '1'); window.renderOnChainChart(h); });
+    const pick = chartSrcPref();
+    (root || document).querySelectorAll('.chart-switch:not([data-ready])').forEach(w => { w.setAttribute('data-ready', '1'); if (pick !== 'onchain') showChartSrc(w, pick); });
+  }
   window.mountOnChainCharts = mountAll;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountAll()); else mountAll();
 })();

@@ -167,12 +167,15 @@ try {
   {
     const home = await api('/');
     const csp = home.headers.get('content-security-policy') || '';
-    check('the page policy allows no Google Fonts, Dexscreener or Blockscout', !/googleapis|gstatic|dexscreener|blockscout/.test(csp), csp);
+    // Dexscreener and CoinGecko's GeckoTerminal appear in frame-src only: a token chart a viewer switches to (loaded on that tap) — never a script, image or connection
+    const cspNoFrames = csp.split(';').filter((d) => !/^\s*frame-src /.test(d)).join(';');
+    check('the page policy allows no Google Fonts, Dexscreener or Blockscout — Dexscreener and GeckoTerminal only as the frame of a chart a viewer picks', !/googleapis|gstatic|dexscreener|geckoterminal|blockscout/.test(cspNoFrames)
+      && /(^|;)\s*frame-src https:\/\/dexscreener\.com https:\/\/www\.geckoterminal\.com\s*(;|$)/.test(csp), csp);
     check('  ...fonts come from this site', /font-src 'self'/.test(csp) && /img-src 'self' data: blob:(;|$)/.test(csp));
     // the one script from another company is Cloudflare's Web Analytics beacon (the two hosts Cloudflare's own CSP guidance names), and the privacy page says so
     check('  ...the only script host beside this site is Cloudflare\'s analytics beacon, its report endpoint the only other connect host, and no inline script', /script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/.test(csp) && /connect-src 'self' https:\/\/rpc\.mainnet\.chain\.robinhood\.com https:\/\/cloudflareinsights\.com(;|$)/.test(csp) && !/unsafe-inline'[^;]*;?[^;]*script|script-src[^;]*(nonce|unsafe-inline)/.test(csp), csp);
     const privHtml = readFileSync(path.join(PUB, 'privacy.html'), 'utf8');
-    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-10-12/.test(privHtml) && !/no analytics scripts/.test(privHtml));
+    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-10-13/.test(privHtml) && !/no analytics scripts/.test(privHtml));
     const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));
     const google = pages.filter((f) => /fonts\.(googleapis|gstatic)\.com/.test(readFileSync(path.join(PUB, f), 'utf8').replace(/<p>[\s\S]*?<\/p>/g, '')));
     check('no page loads Google Fonts', google.length === 0, google.join(','));

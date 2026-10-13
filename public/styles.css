@@ -2313,6 +2313,18 @@ html .np-meta .tok-comm { border-radius: 0.8rem; }   /* a tag that wraps still r
   #np-list .np-flagstrip { padding: 0 0.7rem 0.6rem; }
 }
 @media (max-width: 400px) { #np-list .np-flag { white-space: normal; max-width: 100%; border-radius: 0.9rem; text-align: center; } }
+/* ═══ Which chart: ours (on-chain), Dexscreener's or CoinGecko's — a row of three, the picked one filled ═══ */
+.chart-switch { display: grid; gap: 0.5rem; min-width: 0; }
+.chart-switch [hidden] { display: none !important; }
+.chart-src { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; width: fit-content; max-width: 100%; background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); border-radius: 14px; }
+.chart-src-btn { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; text-align: center; min-height: 40px; padding: 0.3rem 0.85rem; border: 0; border-radius: 11px; background: none; color: var(--ctl-ink); font: inherit; font-weight: 800; font-size: max(var(--text-floor), 0.82rem); line-height: 1.15; cursor: pointer; }
+.chart-src-btn:hover { background: var(--ctl-fill-hi); }
+.chart-src-btn.is-on { background: var(--green); color: var(--on-green); }
+.chart-src-btn:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 1px; }
+@media (pointer: coarse), (max-width: 560px) { .chart-src-btn { min-height: 44px; } }
+.chart-embed { width: 100%; height: clamp(380px, 62vh, 560px); border-radius: 12px; overflow: hidden; background: var(--ink); border: 1px solid var(--ink-4); }
+.chart-embed-frame { display: block; width: 100%; height: 100%; border: 0; }
+.chart-src-note { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); }
 @media (prefers-reduced-motion: reduce) {
   .np-gauge-arc { transition: none; }
   .np-live-dot { animation: none; }

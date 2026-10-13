@@ -9719,10 +9719,9 @@ const CSP = [
   "img-src 'self' data: blob:",
   "media-src 'self' blob: data:",
   "connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://cloudflareinsights.com",
-  /* Nothing on this site embeds a frame any more: the last two were the Dexscreener charts on the
-     landing page, and they are our own on-chain charts now. 'none' is the honest value, and it closes
-     the embedding vector rather than leaving a permission standing for a thing that no longer exists. */
-  "frame-src 'none'",
+  /* The only frames: Dexscreener's and CoinGecko's (GeckoTerminal) chart of a pool, when a viewer switches a token's
+     chart to one of them (chart.js CHART_EMBEDS — created on that tap, never on load). Exactly those two origins. */
+  "frame-src https://dexscreener.com https://www.geckoterminal.com",
   "base-uri 'self'",
   "form-action 'self'",
   "frame-ancestors 'none'",
