@@ -157,6 +157,8 @@ const A = { name: '__kr_a_' + randomBytes(3).toString('hex'), email: 'kr' + rand
 const W1 = Wallet.createRandom(), W1a = W1.address.toLowerCase();
 const OG = '0x' + randomBytes(20).toString('hex'), GATEW = '0x' + randomBytes(20).toString('hex'), TRACKED = '0x' + randomBytes(20).toString('hex');
 const IPS = { signup: '10.11.12.13', join: '10.20.30.40', alert: '10.9.8.7', miss: '10.5.5.5', call: '10.6.6.6' };
+// a day ago: inside the 30-day window sweepIpIndexes keeps (it runs 5 s after every boot — a 1970 stamp was gone whenever a server lived that long)
+const MISS_AT = Date.now() - 864e5;
 let ESCROW_PRIV = null;
 // what every seeded index must equal, at a given epoch, under the keys of the moment
 function expectIndexes(keys, epoch, uid) {
@@ -172,7 +174,7 @@ function expectIndexes(keys, epoch, uid) {
       ['api_keys.wallets_idx', "SELECT wallets_idx v FROM api_keys WHERE key_hash = 'krkey'", [], JSON.stringify([keys.bidxAt(OG, epoch), keys.bidxAt(GATEW, epoch)])],
       ['points connect', "SELECT ref v FROM points_events WHERE kind = 'kr_connect'", [], 'connect:' + keys.bidxAt(W1a, epoch)],
       ['points track (an unlinked wallet: unrecoverable without the re-wrap)', "SELECT ref v FROM points_events WHERE kind = 'kr_track'", [], 'track:' + uid + ':' + keys.bidxAt('0x00000000000000000000000000000000000000aa', epoch)],
-      ['email_misses ip', "SELECT key v FROM email_misses WHERE key LIKE 'ip:%' AND at = 4242", [], 'ip:' + keys.bidxAt('ip:' + IPS.miss, epoch)],
+      ['email_misses ip', "SELECT key v FROM email_misses WHERE key LIKE 'ip:%' AND at = " + MISS_AT, [], 'ip:' + keys.bidxAt('ip:' + IPS.miss, epoch)],
       ['users.signup_ip', 'SELECT signup_ip v FROM users WHERE id = ?', [uid], keys.bidxAt('ip:' + IPS.signup, epoch)],
       ['community_members.join_ip', 'SELECT join_ip v FROM community_members WHERE user_id = ?', [uid], keys.bidxAt(IPS.join, epoch)],
       ['alerts.ip', 'SELECT ip v FROM alerts WHERE user_id = ?', [uid], keys.bidxAt(IPS.alert, epoch)],
@@ -188,7 +190,10 @@ function expectIndexes(keys, epoch, uid) {
 function plainOf(keys) {
   const d = openDb(); const out = {};
   try {
-    for (const [t, c] of K.ENC_FIELDS) { if (K.FLIP_DELETE.includes(t) || !K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT rowid r, ${c} v FROM ${t} WHERE ${c} IS NOT NULL ORDER BY rowid`).all()) out[t + '.' + c + '#' + r.r] = keys.openField(r.v).plain; }
+    /* the site's own system account is made by a boot timer 2.5 s after a server listens (seedOfficialCommunities), so it
+       appears whenever a test server lives that long: it is not this test's data, and a snapshot that included it only
+       sometimes failed on a slower machine (CI). */
+    for (const [t, c] of K.ENC_FIELDS) { if (K.FLIP_DELETE.includes(t) || !K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT rowid r, ${c} v FROM ${t} WHERE ${c} IS NOT NULL${t === 'users' ? ' AND system = 0' : ''} ORDER BY rowid`).all()) out[t + '.' + c + '#' + r.r] = keys.openField(r.v).plain; }
     for (const [t, c] of K.ENC_BLOBS) for (const r of d.prepare(`SELECT rowid r, ${c} v FROM ${t} ORDER BY rowid`).all()) { const o = keys.openBlob(r.v); out[t + '#' + r.r] = o.plain ? o.plain.toString('base64') : null; }
   } finally { d.close(); }
   return out;
@@ -217,7 +222,7 @@ try {
     fill(d, 'points_events', { user_id: uid, kind: 'kr_connect', amount: 0, base: 0, ref: 'connect:' + L.bidx(W1a), created_at: t });
     fill(d, 'points_events', { user_id: uid, kind: 'kr_track', amount: 0, base: 0, ref: 'track:' + uid + ':' + L.bidx('0x00000000000000000000000000000000000000aa'), created_at: t });
     fill(d, 'points_events', { user_id: uid, kind: 'kr_conv', amount: 0, base: 0, ref: 'v77:1', created_at: t });
-    d.prepare('INSERT INTO email_misses (key, at) VALUES (?, 4242)').run('ip:' + L.bidx('ip:' + IPS.miss));
+    d.prepare('INSERT INTO email_misses (key, at) VALUES (?, ?)').run('ip:' + L.bidx('ip:' + IPS.miss), MISS_AT);
     const cid = Number(fill(d, 'communities', { creator_id: uid, token_addr: '0x' + randomBytes(20).toString('hex'), created_at: t, creator_ip: L.bidx(IPS.join) }).lastInsertRowid);
     fill(d, 'community_members', { community_id: cid, user_id: uid, joined_at: t, join_ip: L.bidx(IPS.join) });
     fill(d, 'alerts', { user_id: uid, target_id: uid, ip: L.bidx(IPS.alert), created_at: t });
@@ -268,7 +273,8 @@ try {
   check('every seeded index now matches under epoch 1 — including the IP indexes and the award marker for a wallet no longer linked', expectIndexes(k2, 1, uid).length === 0, expectIndexes(k2, 1, uid).join(', '));
   const PLAIN1 = plainOf(k2);
   check('every encrypted value still says exactly what it said', JSON.stringify(PLAIN1) === JSON.stringify(PLAIN0), Object.keys(PLAIN0).filter((x) => PLAIN0[x] !== PLAIN1[x]).slice(0, 5).join(','));
-  check('  ...and all of them are under key 2 (none left under the stolen key)', JSON.stringify(kidsInDb()) === JSON.stringify({ 2: Object.keys(PLAIN0).length }), JSON.stringify(kidsInDb()));
+  // (at least every value seeded here — the system account a boot timer makes may have added its own)
+  check('  ...and all of them are under key 2 (none left under the stolen key)', (() => { const k = kidsInDb(); return JSON.stringify(Object.keys(k)) === '["2"]' && k[2] >= Object.keys(PLAIN0).length; })(), JSON.stringify(kidsInDb()));
   { const L = K.Keys.legacy(K1), d = openDb(); let opens = 0; for (const [t, c] of K.ENC_FIELDS) { if (!K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT ${c} v FROM ${t} WHERE ${c} IS NOT NULL`).all()) if (L.openField(r.v).plain != null && K.isCipher(r.v)) opens++; }
     const found = d.prepare('SELECT 1 FROM identities WHERE identifier = ?').get(L.bidx(A.email.toLowerCase())); d.close();
     check('the stolen key opens nothing in the live database and finds nobody by email', opens === 0 && !found, opens); }
