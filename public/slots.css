@@ -1,0 +1,231 @@
+/* ===== slots.css — "Just Spin It", the Arcade's slot machine (slots.js). Owns .slot-* only. =====
+ * A black-lacquer cabinet with brass trim, a marquee of chasing bulbs, a chrome-bezelled window onto three cream
+ * reels, a lever, red LED counters and a coin tray. Bulbs and the payline never change more than three times a
+ * second (WCAG 2.3.1); under reduced motion nothing animates and the lights hold steady. */
+
+.slot-card { margin: 0 auto 1.6rem; max-width: 860px; padding: 1.4rem; }
+.slot-lede {
+  margin: 0 auto 1.1rem; max-width: 40rem; text-align: center; color: var(--text-dim);
+  font-size: max(var(--text-floor), 0.94rem); line-height: 1.55;
+}
+.slot-lede b { color: var(--text); }
+
+/* ---------- the cabinet ---------- */
+.slot-cab {
+  --brass-hi: #ffe7a3; --brass: #d4a645; --brass-lo: #7a5414;
+  --bulb-on: #fff4c8; --bulb-glow: rgba(255, 190, 60, 0.9); --bulb-off: #4d3a1c;
+  --led: #ff4a36; --led-glow: rgba(255, 74, 54, 0.75);
+  position: relative; isolation: isolate;
+  max-width: 540px; margin: 0 auto; padding: 12px 12px 0;
+  display: grid; gap: 12px;
+  border: 4px solid transparent; border-radius: 34px 34px 22px 22px;
+  background:
+    linear-gradient(180deg, #2b251b, #16120c 30%, #0b0907 75%, #1a150f) padding-box,
+    linear-gradient(135deg, var(--brass-hi), var(--brass) 28%, var(--brass-lo) 52%, var(--brass) 74%, var(--brass-hi)) border-box;
+  box-shadow: 0 24px 46px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* ---------- marquee ---------- */
+.slot-marquee {
+  display: grid; justify-items: center; gap: 6px; padding: 8px 10px; text-align: center;
+  border-radius: 26px 26px 12px 12px;
+  background: radial-gradient(120% 150% at 50% 0%, #4a0f0b, #1d0605 58%, #0c0202);
+  box-shadow: inset 0 0 0 2px var(--brass-lo), inset 0 0 26px rgba(0, 0, 0, 0.85);
+}
+.slot-bulbs {
+  position: relative; display: block; width: 100%; height: 14px;
+  background-image:
+    radial-gradient(circle at 11px 7px, var(--bulb-on) 0 3.5px, var(--bulb-glow) 4.2px, transparent 7px),
+    radial-gradient(circle at 33px 7px, var(--bulb-off) 0 3.5px, transparent 4.5px),
+    radial-gradient(circle at 55px 7px, var(--bulb-off) 0 3.5px, transparent 4.5px);
+  background-size: 66px 14px; background-repeat: repeat-x;
+  animation: slot-chase 1.2s steps(3) infinite;
+}
+.slot-bulbs--bottom { animation-direction: reverse; }
+/* every bulb lit at once, shown in blinks on a win */
+.slot-bulbs::after {
+  content: ''; position: absolute; inset: 0; opacity: 0;
+  background-image: radial-gradient(circle at 11px 7px, var(--bulb-on) 0 3.5px, var(--bulb-glow) 4.2px, transparent 7px);
+  background-size: 22px 14px; background-repeat: repeat-x;
+}
+@keyframes slot-chase { to { background-position: 66px 0, 66px 0, 66px 0; } }
+@keyframes slot-blink { 0% { opacity: 1; } 50% { opacity: 0; } }
+.slot-cab.is-spinning .slot-bulbs { animation-duration: 0.66s; }
+.slot-cab.is-win .slot-bulbs::after, .slot-cab.is-bigwin .slot-bulbs::after, .slot-cab.is-jackpot .slot-bulbs::after { animation: slot-blink 0.5s step-end infinite; }
+.slot-cab.is-jackpot { --bulb-on: #f4ffc0; --bulb-glow: rgba(198, 240, 0, 0.9); }
+
+.slot-title {
+  margin: 0; font-family: 'Luckiest Guy', 'Rubik', cursive; line-height: 1; letter-spacing: 0.06em;
+  font-size: max(var(--text-floor), clamp(1.9rem, 8.4vw, 2.9rem)); color: #ffd75e;
+  text-shadow: 0 2px 0 #9a5200, 0 4px 0 #4f2a00, 0 0 18px rgba(255, 186, 60, 0.55);
+}
+.slot-cab.is-jackpot .slot-title { color: var(--green-bright); text-shadow: 0 2px 0 #4c5e00, 0 4px 0 #253000, 0 0 22px rgba(198, 240, 0, 0.6); }
+.slot-jp {
+  margin: 0; color: #ffecc0; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: max(var(--text-floor), 0.86rem); line-height: 1.3;
+}
+.slot-jp b { color: var(--green-bright); font-variant-numeric: tabular-nums; }
+.slot-jp-ico { letter-spacing: 0.08em; text-transform: none; }
+
+/* ---------- the window and the lever ---------- */
+.slot-mid { display: grid; grid-template-columns: minmax(0, 1fr) 46px; align-items: center; gap: 6px; }
+.slot-window {
+  position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #e9ecf0, #8f97a2 38%, #f7f9fb 52%, #6f7782 80%, #b9c0c9);
+  box-shadow: 0 0 0 3px #0a0806, inset 0 1px 2px rgba(255, 255, 255, 0.7), inset 0 -2px 3px rgba(0, 0, 0, 0.45);
+}
+.slot-reel {
+  display: block; width: 100%; height: clamp(170px, 44vw, 248px); border-radius: 8px;
+  background: #f4e9cd; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.slot-window.is-tense .slot-reel:nth-of-type(3) { box-shadow: 0 0 0 3px #ffd23f, 0 0 18px rgba(255, 179, 64, 0.9); animation: slot-tense 0.9s ease-in-out infinite alternate; }
+@keyframes slot-tense { to { box-shadow: 0 0 0 3px #ffe98a, 0 0 30px rgba(255, 210, 63, 1); } }
+
+/* the payline: only the middle row counts */
+.slot-payline {
+  position: absolute; left: 3px; right: 3px; top: 50%; height: 4px; margin-top: -2px; border-radius: 2px;
+  background: rgba(228, 22, 18, 0.82); box-shadow: 0 0 6px rgba(255, 40, 30, 0.8); pointer-events: none;
+}
+.slot-payline::before, .slot-payline::after {
+  content: ''; position: absolute; top: 50%; width: 0; height: 0; border: 9px solid transparent; transform: translateY(-50%);
+}
+.slot-payline::before { left: -10px; border-left-color: #e8170f; }
+.slot-payline::after { right: -10px; border-right-color: #e8170f; }
+@keyframes slot-pay { 50% { background: #ffd23f; box-shadow: 0 0 14px rgba(255, 210, 63, 0.95); } }
+.slot-cab.is-win .slot-payline, .slot-cab.is-bigwin .slot-payline, .slot-cab.is-jackpot .slot-payline { animation: slot-pay 0.5s step-end infinite; }
+
+/* over the top row, on one line, so the winning line on the payline stays in view */
+.slot-banner {
+  position: absolute; inset: 0; z-index: 2; margin: 0; padding: 7px 6px 0; display: grid; place-items: start center; text-align: center; pointer-events: none;
+  font-family: 'Luckiest Guy', 'Rubik', cursive; line-height: 1; letter-spacing: 0.04em;
+  font-size: max(var(--text-floor), clamp(1.5rem, 7vw, 2.4rem)); color: #ffd75e;
+  text-shadow: 0 3px 0 #9a5200, 0 4px 0 #4f2a00, 0 0 16px rgba(0, 0, 0, 0.9);
+}
+.slot-banner > span {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 0 0.35em; max-width: 100%;
+  padding: 0.2em 0.5em 0.18em; border-radius: 14px; background: rgba(12, 7, 2, 0.84); box-shadow: 0 0 0 2px var(--brass), 0 8px 20px rgba(0, 0, 0, 0.6);
+}
+.slot-banner small { font-size: max(var(--text-floor), 0.62em); color: var(--green-bright); text-shadow: 0 2px 0 #3c4a00; }
+.slot-banner:not([hidden]) { animation: slot-pop 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) both; }
+@keyframes slot-pop { from { transform: scale(0.35); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+.slot-lever {
+  position: relative; display: block; width: 46px; height: clamp(160px, 42vw, 230px); padding: 0; border: 0; border-radius: 12px;
+  background: none; cursor: grab; touch-action: none; perspective: 420px; -webkit-tap-highlight-color: transparent;
+}
+.slot-lever:active { cursor: grabbing; }
+.slot-lever-hub {
+  position: absolute; left: 50%; bottom: 14%; z-index: 2; width: 32px; height: 32px; margin-left: -16px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #c9ced6 30%, #59606b 70%, #24282d);
+  box-shadow: 0 0 0 3px #0a0806, 0 3px 6px rgba(0, 0, 0, 0.6);
+}
+.slot-lever-arm {
+  position: absolute; left: 50%; bottom: calc(14% + 16px); z-index: 1; width: 10px; height: 64%; margin-left: -5px; border-radius: 5px;
+  transform-origin: 50% 100%; transform: rotateX(var(--pull, 0deg));
+  background: linear-gradient(90deg, #5d646e, #f6f8fb 42%, #a6adb7 62%, #434950);
+}
+.slot-lever-ball {
+  position: absolute; left: 50%; top: -24px; width: 36px; height: 36px; margin-left: -18px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #ffc2bb, #ea2a1f 38%, #960d07 74%, #4b0300);
+  box-shadow: 0 3px 7px rgba(0, 0, 0, 0.55);
+}
+.slot-lever:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
+
+/* ---------- LED counters ---------- */
+.slot-leds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.slot-led {
+  container-type: inline-size;
+  display: grid; justify-items: center; align-content: center; gap: 3px; min-width: 0; padding: 6px 6px 8px; border-radius: 10px;
+  background: #080303; box-shadow: inset 0 0 0 2px #2c2416, inset 0 0 14px rgba(0, 0, 0, 0.9);
+}
+.slot-led-lbl {
+  color: #ffcf6e; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; text-align: center;
+  font-size: max(var(--text-floor), 0.72rem); line-height: 1.1;
+}
+.slot-led-num {
+  display: inline-grid; max-width: 100%; overflow: hidden;
+  font-family: 'Rubik', ui-monospace, monospace; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 0.05em;
+  font-size: max(var(--text-floor), clamp(1.05rem, 4.4vw, 1.7rem)); line-height: 1.15;
+  font-size: max(var(--text-floor), min(1.7rem, 15cqi));   /* the digits fit their own display, however many there are */
+}
+.slot-led-ghost, .slot-led-val { grid-area: 1 / 1; text-align: right; white-space: nowrap; }
+.slot-led-ghost { color: rgba(255, 74, 54, 0.1); }
+.slot-led-val { color: var(--led); text-shadow: 0 0 7px var(--led-glow); }
+
+/* ---------- the deck: sound switch and the big SPIN button ---------- */
+.slot-deck { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 16px; padding: 4px 0 6px; }
+.slot-spin {
+  min-width: 9.5rem; min-height: 64px; padding: 0.5rem 1.7rem 0.4rem; border: 0; border-radius: 999px; cursor: pointer; text-align: center;
+  font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: max(var(--text-floor), 1.7rem); letter-spacing: 0.1em; line-height: 1; color: #172000;
+  background: radial-gradient(120% 120% at 50% 18%, #f4ff94, var(--green-bright) 42%, #7e9a00 88%);
+  box-shadow: 0 6px 0 #3e4c00, 0 0 0 4px #0b0906, 0 0 0 7px var(--brass), 0 12px 22px rgba(0, 0, 0, 0.55), 0 0 26px rgba(198, 240, 0, 0.32);
+  transition: transform 70ms ease-out, box-shadow 70ms ease-out, filter 120ms;
+}
+.slot-spin:hover { filter: brightness(1.06); }
+.slot-spin:active, .slot-spin.is-pressed {
+  transform: translateY(5px);
+  box-shadow: 0 1px 0 #3e4c00, 0 0 0 4px #0b0906, 0 0 0 7px var(--brass), 0 4px 10px rgba(0, 0, 0, 0.5), 0 0 14px rgba(198, 240, 0, 0.25);
+}
+.slot-spin[aria-disabled="true"] { filter: saturate(0.45) brightness(0.72); cursor: progress; }
+.slot-spin:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 9px; }
+.slot-sound {
+  min-height: 44px; padding: 0.35rem 0.95rem; border-radius: 999px; cursor: pointer; text-align: center;
+  border: 2px solid var(--brass-lo); background: #1c1710; color: #ffe8ad; font-weight: 800; line-height: 1.2;
+  font-size: max(var(--text-floor), 0.86rem);
+}
+.slot-sound:hover { border-color: var(--brass); }
+.slot-sound[aria-pressed="false"] { color: #b9a77d; }
+.slot-sound:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
+
+/* ---------- the coin tray, and the coins that fall into it ---------- */
+.slot-tray {
+  height: 36px; margin: 0 -12px; border-radius: 0 0 18px 18px;
+  background: linear-gradient(180deg, #050403, #221b13 62%, #3b3022);
+  box-shadow: inset 0 12px 14px rgba(0, 0, 0, 0.9), inset 0 -2px 0 var(--brass-lo);
+}
+.slot-coins { position: absolute; inset: 0; z-index: 5; width: 100%; height: 100%; pointer-events: none; border-radius: inherit; }
+
+/* ---------- paytable and how it plays ---------- */
+.slot-info { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.2rem; margin-top: 1.4rem; }
+.slot-info > .card { min-width: 0; padding: 1.2rem; }
+.slot-table tbody th, .slot-table td:last-child { white-space: normal; }
+.slot-pt-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.slot-pt-sym { display: flex; gap: 3px; }
+.slot-pt-cell {
+  display: inline-grid; place-items: center; width: 1.7em; height: 1.55em; border-radius: 6px; line-height: 1; text-align: center;
+  background: #f4e9cd; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  font-size: max(var(--text-floor), 1.05rem);
+}
+.slot-pt-cell.is-any { background: var(--ink-2); color: var(--text-dim); box-shadow: inset 0 0 0 1px var(--ink-4); }
+.slot-pt-what { font-weight: 700; color: var(--text); }
+.slot-table tr.is-jp th .slot-pt-what { color: var(--green-bright); }
+.slot-strip { white-space: normal; }
+.slot-card :focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
+
+/* ---------- small screens ---------- */
+@media (max-width: 620px) {
+  .slot-card { padding: 1rem; }
+  .slot-cab { padding: 10px 10px 0; gap: 10px; border-radius: 28px 28px 20px 20px; }
+  .slot-tray { margin: 0 -10px; }
+  .slot-mid { grid-template-columns: minmax(0, 1fr) 40px; gap: 4px; }
+  .slot-lever { width: 40px; }
+  .slot-window { gap: 4px; padding: 6px; }
+  .slot-spin { min-height: 58px; }
+}
+@media (max-width: 360px) {
+  .slot-card { padding: 0.8rem; }
+  .slot-info > .card { padding: 0.9rem; }
+  .slot-table th, .slot-table td { padding-left: 0.3rem; padding-right: 0.3rem; }
+  .slot-pt-cell { width: 1.45em; }
+  .slot-leds { gap: 5px; }
+  .slot-led { padding: 5px 3px 6px; }
+}
+
+/* ---------- reduced motion: nothing moves, the lights hold steady ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .slot-bulbs, .slot-bulbs::after, .slot-payline, .slot-banner, .slot-reel, .slot-spin { animation: none !important; transition: none !important; }
+  .slot-cab.is-win .slot-bulbs::after, .slot-cab.is-bigwin .slot-bulbs::after, .slot-cab.is-jackpot .slot-bulbs::after { opacity: 1; }
+  .slot-cab.is-win .slot-payline, .slot-cab.is-bigwin .slot-payline, .slot-cab.is-jackpot .slot-payline { background: #ffd23f; }
+  .slot-spin:active, .slot-spin.is-pressed { transform: none; }
+}

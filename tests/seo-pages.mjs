@@ -22,7 +22,7 @@ const PAGES = {
   'wall.html':        ['The Send Wall — $SEND Meme Community Feed', 'index'],
   'newpairs.html':    ['Robinhood Chain Token Scanner & New Pairs — $Send', 'index'],
   'tracker.html':     ['Robinhood Chain Wallet Tracker: Holdings & PNL — $Send', 'index'],
-  'arcade.html':      ['Arcade: Rocket Run & Competitions — $Send', 'index'],
+  'arcade.html':      ['Arcade: Rocket Run, Slots & Competitions — $Send', 'index'],
   'communities.html': ['Token Communities on Robinhood Chain — $Send', 'index'],
   'support.html':     ['Support Board: Ask & Answer Questions — $Send', 'index'],
   'privacy.html':     ['Privacy Policy — $Send', 'index'],
