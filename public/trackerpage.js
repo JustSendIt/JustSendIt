@@ -21,6 +21,9 @@
   const progLine = $('trk-prog-line'), progBar = $('trk-prog-bar'), progFill = $('trk-prog-fill'), progNote = $('trk-prog-note'), progLive = $('trk-prog-live');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortAddr = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
+  // an address on ONE line, shortened only as much as its box needs: …, then always its last 4 (.addr-fit in styles.css)
+  const fitInner = (a) => '<span class="addr-head">' + esc(String(a).slice(0, -4)) + '</span><span class="addr-tail">' + esc(String(a).slice(-4)) + '</span>';
+  const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '">' + fitInner(a) + '</code>';
   const toast = (m) => { if (window.sendToast) sendToast(m); };
   const say = (m) => { if (window.announce) announce(m); else if (srEl) srEl.textContent = m; };
   const ADDR_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -131,8 +134,13 @@
     if (lid) { const w = wallets.find(x => x.lid != null && String(x.lid) === String(lid)); if (w) return w; }
     return null;
   }
+  // #track=0x… (the menu search's "Track it as a wallet"): the address to fill in, lowercase — or null. A #fragment, so the
+  // address never reaches a server log; it is only ever filled in, never tracked without a tap.
+  function trackFromHash(h) { const m = /^#track=(0x[0-9a-fA-F]{40})$/.exec(String(h || '')); return m ? m[1].toLowerCase() : null; }
   /* ---- end pure helpers ---- */
-  window.TRKPAGE = { stageWords, etaWords, etaEndAt, ordinal, retryCopy, progressLine, progressSpoken, resolveDeepLink };
+  window.TRKPAGE = { stageWords, etaWords, etaEndAt, ordinal, retryCopy, progressLine, progressSpoken, resolveDeepLink, trackFromHash };
+  let hashTrack = trackFromHash(location.hash);
+  if (hashTrack) { try { history.replaceState(null, '', location.pathname + location.search); } catch {} }
 
   /* ---------- helpers ---------- */
   function ago(ts) {
@@ -225,9 +233,13 @@
     return '<li class="trk-w' + (sel ? ' is-selected' : '') + '" data-wid="' + esc(w.id) + '" data-addr="' + esc(w.address) + '">' +
       '<button class="trk-w-main" type="button" data-tip="Shows the holdings and trade report for this wallet" data-select="' + esc(w.address) + '"' + (sel ? ' aria-current="true"' : '') + '>' +
         '<span class="trk-w-ico" aria-hidden="true">' + (mine ? '🔗' : '💼') + '</span>' +
-        '<span class="trk-w-txt"><span class="trk-w-label">' + esc(nameOf(w)) + '</span>' +
-        '<span class="trk-w-addr"><code>' + esc(shortAddr(w.address)) + '</code>' + (mine ? ' <span class="trk-w-badge">your linked wallet</span>' : '') + '</span></span>' +
-        '<span class="sr-only">' + (sel ? 'Selected. ' : '') + 'Show report for ' + esc(nameOf(w)) + ' ' + esc(w.address) + '</span>' +
+        // the visible lines: the label (if any) with a one-word "linked" pill, then the address on one line, shortened to
+        // fit; a reader hears the sr-only sentence instead (the label, "your linked wallet", the whole address)
+        '<span class="trk-w-txt" aria-hidden="true">' +
+          ((w.label || mine) ? '<span class="trk-w-top">' + (w.label ? '<span class="trk-w-label">' + esc(w.label) + '</span>' : '') + (mine ? '<span class="trk-w-badge">linked</span>' : '') + '</span>' : '') +
+          '<span class="trk-w-addr">' + addrFit(w.address) + '</span>' +
+        '</span>' +
+        '<span class="sr-only">' + (sel ? 'Selected. ' : '') + 'Show report for ' + esc(nameOf(w)) + (mine ? ', your linked wallet, ' : ' ') + esc(w.address) + '</span>' +
       '</button>' +
       '<span class="trk-w-actions">' +
         '<button class="copy-btn trk-w-btn" type="button" data-tip="Copies this wallet address to your clipboard" data-copy="' + esc(w.address) + '" aria-label="Copy address of ' + esc(nameOf(w)) + '">📋</button>' +
@@ -259,7 +271,7 @@
     const full = state.wallets.length >= (state.limit || 10);
     if (!mine.length || full) { chips.hidden = true; chipsRow.innerHTML = ''; return; }
     chips.hidden = false;
-    chipsRow.innerHTML = mine.map(a => '<button class="react-btn trk-chip" type="button" data-tip="Adds your connected wallet to the list and opens its report" data-quick="' + esc(a) + '">🔗 Track my connected wallet <code>' + esc(shortAddr(a)) + '</code></button>').join('');
+    chipsRow.innerHTML = mine.map(a => '<button class="react-btn trk-chip" type="button" data-tip="Adds your connected wallet to the list and opens its report" data-quick="' + esc(a) + '"><span aria-hidden="true">🔗</span> <span>Track my connected wallet</span> ' + addrFit(a) + '</button>').join('');
   }
   function highlightSelected() {
     wlist.querySelectorAll('.trk-w').forEach(li => {
@@ -302,6 +314,12 @@
           if (dl) pick = dl.address;
           else setNote('That wallet is no longer in your list — it was untracked or unlinked, so its report is gone with it.');
         }
+      }
+      // an address from the menu search: its report if it is already in the list, else filled in for a tap on Track ➕
+      if (hashTrack) {
+        const h = hashTrack; hashTrack = null;
+        if (walletByAddr(h)) { if (!pick) pick = h; }
+        else { addrIn.value = h; setNote('The address from your search is filled in below — tap Track ➕ to add it to your list.'); try { addBtn.focus({ preventScroll: false }); } catch {} }
       }
       if (!pick) { const want = recallSelected(); pick = (want && walletByAddr(want)) ? want : (state.wallets[0] ? state.wallets[0].address : null); }
       if (pick) select(pick, false); else showNoSelection();
@@ -489,7 +507,7 @@
     if (!w) { selectedEl.hidden = true; return; }
     selectedEl.hidden = false;
     const read = lastReadWords(w);
-    selectedEl.innerHTML = '<span class="trk-sel-lbl">' + esc(nameOf(w)) + '</span> <code class="trk-sel-addr">' + esc(w.address) + '</code>' +
+    selectedEl.innerHTML = '<span class="trk-sel-lbl">' + esc(nameOf(w)) + '</span> <code class="trk-sel-addr" title="' + esc(w.address) + '">' + fitInner(w.address) + '</code>' +
       '<button class="copy-btn" type="button" data-tip="Copies the full address to your clipboard" data-copy="' + esc(w.address) + '" aria-label="Copy full address">📋</button>' +
       '<a class="trk-sel-link" href="https://robinhoodchain.blockscout.com/address/' + encodeURIComponent(w.address) + '" target="_blank" rel="noopener">explorer ↗</a>' +
       ((w.mine || isMine(w.address)) ? '<span class="trk-w-badge">your linked wallet</span>' : '') +
@@ -851,7 +869,7 @@
       const rnet = (r.realized == null && r.unrealized == null) ? null : (r.realized || 0) + (r.unrealized || 0);
       return '<li class="cmb-row' + (r.pending ? ' is-pending' : '') + '">' +
         '<button class="cmb-pick" type="button" data-tip="Opens the full report for this wallet below" data-select="' + esc(r.address) + '">' +
-          '<code class="cmb-addr">' + esc(shortAddr(r.address)) + '</code>' +
+          '<code class="cmb-addr" title="' + esc(r.address) + '">' + esc(shortAddr(r.address)) + '</code>' +
           '<span class="cmb-name">' + esc(r.label || '') + '</span>' +
         '</button>' +
         '<span class="cmb-cell">' + (r.pending ? '<span class="cmb-wait">reading…</span>' : (r.failed ? '<span class="cmb-wait">unreadable</span>' : usd(r.portfolio))) + '</span>' +
@@ -935,6 +953,7 @@
     layout.hidden = true; signedOut.hidden = false;
     state.wallets = []; state.loaded = false; state.selected = null; state.runId++; state.refreshing = null; state.reports = {};
     setNote('');
+    if (hashTrack && soAddr && !soAddr.value) soAddr.value = hashTrack;   // from the menu search: filled in, kept for after sign-in
   }
   function showSignedIn() {
     signedOut.hidden = true; layout.hidden = false;

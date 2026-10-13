@@ -9406,6 +9406,30 @@ function scanRecent() {                            // what everyone sees: the to
   _scanRecentMemo = { at: now(), v };
   return v;
 }
+/* The menu search, for an address (a whole one, or the start of one): the tokens the site already knows — its
+   communities, the Scanner's record, the radar's cache — and a pool the Scanner has resolved. Its own tables only: no
+   chain read on a keystroke, and never a wallet table (who linked or tracks a wallet is nobody's search result), so a
+   wallet's answer is the same as any unknown address's. Named tokens only (the radar's rule for "identified"). */
+const SEARCH_ADDR_MAX = 6;
+const SEARCH_NAMED = "symbol IS NOT NULL AND symbol NOT IN ('', '???') AND name IS NOT NULL AND name NOT IN ('', 'Unknown Token')";
+function searchAddr(a, full) {
+  const span = full ? 'token_addr = ?' : 'token_addr >= ? AND token_addr < ?', args = full ? [a] : [a, a + 'g'];   // hex sorts before 'g': a range is "starts with" and uses the key
+  const toks = new Map();
+  const add = (r, via) => { if (r && !toks.has(r.token_addr) && toks.size < SEARCH_ADDR_MAX) toks.set(r.token_addr, { token: r.token_addr, symbol: r.symbol, name: r.name, via }); };
+  try {
+    db.prepare(`SELECT token_addr, symbol, name FROM communities WHERE demo = 0 AND ${span} ORDER BY official DESC, member_count DESC LIMIT ?`).all(...args, SEARCH_ADDR_MAX).forEach((r) => add(r, 'token'));
+    db.prepare(`SELECT token_addr, symbol, name FROM scans WHERE ${SEARCH_NAMED} AND ${span} ORDER BY count DESC LIMIT ?`).all(...args, SEARCH_ADDR_MAX).forEach((r) => add(r, 'token'));
+    db.prepare(`SELECT token_addr, symbol, name FROM token_cache WHERE found = 1 AND ${SEARCH_NAMED} AND ${span} ORDER BY reads DESC LIMIT ?`).all(...args, SEARCH_ADDR_MAX).forEach((r) => add(r, 'token'));
+    if (full && !toks.size) {   // the address of a pool: its token
+      add(db.prepare(`SELECT token_addr, symbol, name FROM scans WHERE pool_addr = ? AND ${SEARCH_NAMED} ORDER BY last_at DESC LIMIT 1`).get(a)
+        || db.prepare('SELECT token_addr, symbol, name FROM communities WHERE demo = 0 AND pair_addr = ? COLLATE NOCASE LIMIT 1').get(a), 'pool');
+    }
+  } catch {}
+  return { full, tokens: [...toks.values()].map((t) => {
+    const c = communityForToken(t.token);
+    return { ...t, community: c ? { id: c.id, status: c.status, official: c.official } : null };
+  }) };
+}
 /* An address that answers token0()/token1() is CLAIMING to be a pool of those tokens; any contract can claim that.
    It is a pool of the token when it is the profile's own pool (the price feed's most-liquid one) or when the
    chain's main factory returns it for the two tokens. true / false / null (could not check right now). */
@@ -15355,22 +15379,30 @@ const server = http.createServer(async (req, res) => {
 
       /* ----- sender search (public fields only) ----- */
       if (p === '/api/search' && req.method === 'GET') {
-        const q = String(url.searchParams.get('q') || '').trim().slice(0, 40);
-        if (q.length < 1) return send(res, 200, { users: [] });
+        const raw = String(url.searchParams.get('q') || '').trim();
+        if (!raw) return send(res, 200, { users: [] });
         if (!rateLimit('search:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
-        const like = '%' + q.replace(/[%_]/g, '') + '%';
-        const rows = db.prepare(`
+        const people = (where, args, order, orderArgs, n) => db.prepare(`
           SELECT u.*, (SELECT COUNT(*) FROM posts po WHERE po.user_id = u.id AND po.private = 0 AND po.squad_id IS NULL) posts,
                  (SELECT COUNT(*) FROM follows f WHERE f.followee_id = u.id) followers
           FROM users u
-          WHERE (u.username LIKE ? OR u.bio LIKE ?) AND u.system = 0
-          ORDER BY (u.username LIKE ?) DESC, followers DESC, posts DESC
-          LIMIT 12`).all(like, like, q.replace(/[%_]/g, '') + '%');
-        return send(res, 200, { users: rows.map(u => ({
+          WHERE (${where}) AND u.system = 0
+          ORDER BY ${order}followers DESC, posts DESC
+          LIMIT ${n}`).all(...args, ...orderArgs).map(u => ({
           username: u.username, avatar: u.avatar, bio: u.bio,
           avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null,
           accent: u.accent || '', posts: u.posts, followers: u.followers, og: u.og_tier || 0,
-        })) });
+        }));
+        /* an address (a whole one, or 0x and at least 4 more): tokens and pools (searchAddr) — and, for the start of
+           one, a username that begins with it; never a bio (that is where people paste their own wallet) */
+        const am = /^(?:0x)?([0-9a-f]{40})$/i.exec(raw) || /^0x([0-9a-f]{4,39})$/i.exec(raw);
+        if (am) {
+          const full = am[1].length === 40;
+          return send(res, 200, { users: full ? [] : people('u.username LIKE ?', [raw.replace(/[%_]/g, '') + '%'], '', [], 6), addr: searchAddr('0x' + am[1].toLowerCase(), full) });
+        }
+        const q = raw.slice(0, 40);
+        const like = '%' + q.replace(/[%_]/g, '') + '%';
+        return send(res, 200, { users: people('u.username LIKE ? OR u.bio LIKE ?', [like, like], '(u.username LIKE ?) DESC, ', [q.replace(/[%_]/g, '') + '%'], 12) });
       }
 
       /* ----- Send Calls ----- */

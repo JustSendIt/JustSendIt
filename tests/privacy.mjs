@@ -137,7 +137,7 @@ try {
     const aSessionHash = createHash('sha256').update(a.sid).digest('hex');
     const secrets = { email, wallet: wallet.slice(2), tracked: tracked.slice(2), label: 'pv-secret-stash', signupIp: sigIdx, emailIdx, walletIdx, trackedIdx, session: a.sid, sessionHash: aSessionHash };
     const routes = ['/api/users/__pv_alice__', '/api/users/' + a.id, '/u/__pv_alice__', '/api/posts', '/api/posts?sort=new', '/api/calls', '/api/calls/live', '/api/leaderboard',
-      '/api/calls/leaderboard', '/api/search?q=__pv', '/api/presence', '/api/gate/state', '/api/communities', '/api/pins?user=__pv_alice__', '/api/competition', '/api/beta',
+      '/api/calls/leaderboard', '/api/search?q=__pv', '/api/search?q=' + wallet, '/api/search?q=' + wallet.slice(0, 12), '/api/search?q=' + tracked, '/api/presence', '/api/gate/state', '/api/communities', '/api/pins?user=__pv_alice__', '/api/competition', '/api/beta',
       '/api/me', '/api/wallets', '/api/notifications', '/api/auth/sessions', '/api/alerts', '/api/tracker/cache', '/api/gamify/me', '/api/mutes', '/api/admin/reports', '/api/admin/outbound'];
     const leaks = [];
     for (const [who, sid] of [['anonymous', null], ['another member', b.sid]]) {

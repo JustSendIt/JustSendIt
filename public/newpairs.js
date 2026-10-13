@@ -126,6 +126,8 @@
     return '<span class="price-chip ' + (up ? 'up' : 'down') + ' np-chg">' + (up ? '▲' : '▼') + ' ' + (Math.round(a * 10) / 10) + '%<span class="sr-only"> in the last hour</span></span>';
   }
   function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : ''; }
+  // an address on ONE line, shortened only as much as its box needs: …, then always its last 4 (.addr-fit in styles.css)
+  const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '"><span class="addr-head">' + esc(String(a).slice(0, -4)) + '</span><span class="addr-tail">' + esc(String(a).slice(-4)) + '</span></code>';
   // A pair whose name or symbol never resolved renders as "Unknown Token $???" — an unidentifiable row nobody can
   // act on. The server already withholds these from /api/pairs/new; this is the client's own guard so one can't
   // reach the radar through any other path (a pasted-address lookup included).
@@ -722,12 +724,17 @@
       '</span>' +
       '<span class="np-verdict ' + T.cls + '"' + verdictTitle(T) + '><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
       // a carried price must never draw identically to a live one — the label says which it is
-      '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">' + (p.priceStale ? '⏳ last read' : 'MC') + '</i></span>' +
-      '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
+      // the numbers and the buttons travel as two groups: on a phone they share one line rather than scattering (np-nums/np-acts are display: contents in the wide row)
+      '<span class="np-nums">' +
+        '<span class="np-stat np-mc"><b class="np-stat-val">' + mc + '</b><i class="np-stat-lbl">' + (p.priceStale ? '⏳ last read' : 'MC') + '</i></span>' +
+        '<span class="np-stat np-liq"><b class="np-stat-val np-liq-val">' + liq + '</b><i class="np-stat-lbl np-liq-lbl">liq</i></span>' +
+      '</span>' +
       '<span class="np-chg-slot">' + chgChipHTML(p.priceChange.h1) + '</span>' +
-      callBtnHTML(p) +
-      rowPinHTML(p) +
-      (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
+      '<span class="np-acts">' +
+        callBtnHTML(p) +
+        rowPinHTML(p) +
+        (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
+      '</span>' +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
       '<span class="sr-only" id="' + srId + '">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (dash ? '. Opens the full dashboard.' : '. Expand for full detail.') + '</span>' +
     '</div>' + flagstripHTML(p) + '</summary>';
@@ -1054,8 +1061,8 @@
   const verifiedLineHTML = (p) => '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' : '📄 Verification unknown') + '</p>';
   function addrRowsHTML(p) {
     const r = p.risk || {};
-    return '<div class="np-addr-row"><span class="np-addr-lbl">Token</span><code>' + esc(p.token.address) + '</code>' + copyBtn(p.token.address, 'token contract address') + '</div>' +
-      '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span><code>' + esc(p.pair.address) + '</code>' + copyBtn(p.pair.address, 'pair address') + '</div>' +
+    return '<div class="np-addr-row"><span class="np-addr-lbl">Token</span>' + addrFit(p.token.address) + copyBtn(p.token.address, 'token contract address') + '</div>' +
+      '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span>' + addrFit(p.pair.address) + copyBtn(p.pair.address, 'pair address') + '</div>' +
       (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + npNum(r.deployerLaunches) + ' launched' + (r.deployerDied ? ' · ' + npNum(r.deployerDied) + ' dead' : '') + '</span>' : '') + '</div>' : '');
   }
   const HONEST = '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>';
@@ -1418,7 +1425,7 @@
   }
   function renderEmpty() {
     listEl.removeAttribute('aria-busy');
-    if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches “' + esc(state.q) + '”. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>'; return; }
+    if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches ' + (/^\S{17,}$/.test(state.q) ? addrFit(state.q) : '“' + esc(state.q) + '”') + '. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>'; return; }
     if (state.safety === 'safer' && state.all.length) { listEl.innerHTML = '<li class="np-msg np-allclear">🛡️ All clear in Safer view — every new pair matching your filters tripped our checks, so none are shown by default.<div style="margin-top:0.7rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;"><button class="btn btn-sm btn-ghost" id="np-showrisky" type="button" data-tip="Switches to the Risky tab, which shows the hidden pairs">Show risky ☠️</button><button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></div></li>'; return; }
     listEl.innerHTML = '<li class="np-msg">Nothing matches these filters. <button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></li>';
   }
