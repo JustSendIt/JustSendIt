@@ -3405,7 +3405,7 @@ a.conv-badge:focus-visible { outline: none; box-shadow: 0 0 0 2px #c07bff; }
 .nav:not(.is-compact) .nav-search { position: relative; width: var(--nav-ctl); height: var(--nav-ctl); flex: 0 0 var(--nav-ctl); }
 .nav:not(.is-compact) .nav-search input { width: var(--nav-ctl); padding-right: 0.2rem; }
 .nav:not(.is-compact) .nav-search input::placeholder { color: transparent; }
-.nav:not(.is-compact) .nav-search input:focus { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: 240px; padding-right: 1rem; z-index: 5; }
+.nav:not(.is-compact) .nav-search input:focus { position: absolute; right: 0; top: 50%; transform: translateY(-50%); width: max(240px, 19em); padding-right: 1rem; z-index: 5; }   /* wide enough for the whole "find Senders or Scan Tokens" */
 .nav:not(.is-compact) .nav-search input:focus::placeholder { color: var(--text-dim); }
 .nav:not(.is-compact) .nav-search .s-icon { z-index: 6; }
 

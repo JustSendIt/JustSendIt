@@ -36,7 +36,7 @@
     slot.className = 'nav-search';
     slot.innerHTML =
       '<span class="s-icon" aria-hidden="true">🔎</span>' +
-      '<input type="search" id="sender-search" placeholder="senders or 0x…" autocomplete="off" spellcheck="false" ' +
+      '<input type="search" id="sender-search" placeholder="find Senders or Scan Tokens" autocomplete="off" spellcheck="false" ' +
       'aria-controls="sender-search-results" aria-describedby="sender-search-help" aria-label="Search for senders, or paste a token, pool or wallet address">' +
       '<span class="sr-only" id="sender-search-help">Matching senders and tokens are listed below the box as you type; press Down arrow to move into the list.</span>';
     const input = slot.querySelector('input');
