@@ -334,6 +334,7 @@
         : 'Send Call posted on $' + callTok.symbol + '!';
       modal.querySelector('#compose-again').textContent = 'Call another 📣';
       showPanel('compose-done');
+      if (window.SFX) SFX.play('launch');   // the call is on the record: a rocket goes
       setTimeout(() => { const v = modal.querySelector('#compose-view'); if (v) v.focus(); }, 30);
       if (window.sendToast) {
         // the squad's points come back as squadPoints; only a number the server sent is ever shown
@@ -364,6 +365,7 @@
       callTok = null;
     } catch (err) {
       setStatus('⚠️ ' + ((err && err.message) || 'could not make that call'));
+      if (window.SFX) SFX.play('error');    // shown inline, not as a toast, so nothing else buzzes for it
       gate(btn, false);
     }
   }
@@ -381,6 +383,7 @@
       modal.querySelector('#compose-done-msg').textContent = 'Posted on the Wall!';
       modal.querySelector('#compose-again').textContent = 'Post another ✏️';
       showPanel('compose-done');
+      if (window.SFX) SFX.play('send');     // the post went out
       setTimeout(() => { const v = modal.querySelector('#compose-view'); if (v) v.focus(); }, 30);
       if (window.sendToast) sendToast('SENT! 🚀');
       const r = fab.getBoundingClientRect();
@@ -396,6 +399,7 @@
       }
     } catch (err) {
       setStatus('⚠️ ' + (err.message || 'could not post'));
+      if (window.SFX) SFX.play('error');
       gate(btn, false);
     }
   }
@@ -440,6 +444,7 @@
         nudge.innerHTML = '<span>📣 That’s a token address.</span> <button class="btn btn-ghost btn-sm" type="button" id="compose-nudge-go" data-tip="Moves that pasted address into a Send Call">Make it a Send Call →</button>';
         nudge.hidden = false;
         modal.querySelector('#compose-nudge-go').addEventListener('click', () => {
+          if (window.SFX) SFX.play('scan');   // the address goes to the Send Call box and is read on-chain
           const addr = nudge.dataset.addr;
           setMode('call');
           const inp = modal.querySelector('#compose-call-addr');
@@ -472,6 +477,7 @@
     // "see the full on-chain detail" — opens the same popup as everywhere else and clears the no-DYOR flag
     modal.querySelector('#compose-call-preview').addEventListener('click', e => {
       if (!e.target.closest('#compose-call-detail') || !callTok) return;
+      if (window.SFX) SFX.play(window.TokenModal && window.NPCard ? 'open' : 'nav');   // the popup opens, or the Scanner in a new tab
       /* only a popup that really opened with the full detail clears the flag. A page without one opens the Scanner in a
          new tab — the draft stays put, and the call stays flagged, since this page cannot see what was read there */
       if (window.TokenModal && window.NPCard) { viewedDetail = true; TokenModal.open(callTok.addr, { symbol: callTok.symbol, name: callTok.name }); }
@@ -499,6 +505,7 @@
       setStatus('');
       if (!r) { clearComposeMedia(); return; }
       pendingImg = r.url; gate(sendBtn, false);
+      if (window.SFX) SFX.play('success');   // uploaded and attached, ready to send
     });
 
     // signed-out gate → close composer, open sign-in, reopen composer once signed in

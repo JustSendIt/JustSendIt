@@ -639,6 +639,7 @@
       lastXStr = ''; lastBtnStr = ''; lastBtnPaint = 0;
       resetMilestones();
       setMode('flying');
+      if (window.SFX) SFX.play('launch');   // the server confirmed the round: the rocket goes
       say(j.resumed ? 'Rejoined your flight, already at ' + fx(curX()) + ' times. Cash out any time.' : 'Lift off. The multiplier is climbing — cash out any time.');
       if (j.resumed && window.sendToast) sendToast('🛰️ Rejoined your flight');
     } catch (e) {
@@ -647,6 +648,7 @@
       // the participation gate: auth.js has already opened the wallet check; the page must not also say "error"
       if (e && e.needsProof) { S.proof = e; setMode('needsproof', { focusOutcome: hadFocus }); say('A wallet check comes first. ' + msg); return; }
       if (/sign in/i.test(msg)) { setMode('signedout'); if (window.AUTH && AUTH.open) AUTH.open(); return; }
+      if (window.SFX) SFX.play('error');   // refused or unreachable, shown on the stage (no toast says it)
       if (/expired/i.test(msg)) { S.err = msg; S.playedToday = true; setMode('expired', { focusOutcome: hadFocus }); say('That flight expired. Come back tomorrow.'); return; }
       if (/already flown|one run per day/i.test(msg)) { S.playedToday = true; await loadState(); say('You have already flown today. Come back tomorrow.'); return; }
       S.err = msg; setMode('error', { focusOutcome: hadFocus }); say('Could not launch. ' + msg);
@@ -672,6 +674,7 @@
         }
         setMode('busted', { focusOutcome: hadFocus });
         say('Busted. The rocket blew at ' + fx(crashX) + ' times — no boost today, and nothing was at stake.');
+        if (window.SFX) SFX.play('crash');
         if (window.sendToast) sendToast('💥 Blew at ' + fx(crashX) + '× — no boost today');
       } else {
         const cashedX = Number(j.cashedX) || 1, crashX = Number(j.crashX) || null, boost = Number(j.boost) || 1;
@@ -688,6 +691,7 @@
         setMode('cashed', { focusOutcome: hadFocus });
         say('Cashed out at ' + fx(cashedX) + ' times, for a ' + fx(boost) + ' times Send Power boost lasting ' +
           (S.until ? durWords(S.until - Date.now()) : '24 hours') + '.');
+        if (window.SFX) SFX.play('cashout');
         if (window.sendToast) sendToast('💰 ' + fx(boost) + '× Send Power for 24h!');
         if (window.sendConfetti) {
           const r = btn.getBoundingClientRect();

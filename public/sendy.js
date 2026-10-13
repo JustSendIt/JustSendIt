@@ -347,6 +347,7 @@
     });
     $('sendy-support').addEventListener('click', () => { location.href = '/support.html'; });
     $('sendy-close').addEventListener('click', closePopup);
+    $('sendy-close').addEventListener('click', () => { if (window.SFX) SFX.play('close'); });   // the ✕ shuts the popup (a plain button to the generic layer)
 
     /* ---------- chat ---------- */
     function linkify(text, into) {
@@ -381,6 +382,7 @@
         b.setAttribute('aria-label', tip); b.setAttribute('data-tip', tip);
         b.addEventListener('click', async () => {
           bar.textContent = v > 0 ? 'Thanks — noted 👍' : 'Thanks — I\'ll do better 👎';
+          if (window.SFX) SFX.play('vote');   // a 👍 or 👎 cast on the answer
           chatInput.focus();   // the button just replaced itself with the thanks
           try { await fetch('/api/sendy/rate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, vote: v }) }); } catch {}
         });
@@ -400,6 +402,7 @@
     }
     async function ask(q) {
       addMessage(q, 'user'); remember('user', q);
+      if (window.SFX) SFX.play('send');   // the question goes up to Sendy
       const typing = addMessage('· · ·', 'sendy'); typing.classList.add('sendy-typing');
       chatSend.disabled = true;
       let answer = null, note = null, offline = false, qaId = 0;
@@ -412,6 +415,7 @@
         else if (r.status === 429) note = String(j.error || 'Sendy needs a breather — try again in a few minutes.');
       } catch {}
       typing.remove(); chatSend.disabled = false;
+      if (window.SFX) { if (note) SFX.play('error'); else SFX.play('toast'); }   // Sendy answers (or says he needs a breather)
       if (answer) { const row = addMessage(answer, 'sendy'); remember('assistant', answer); if (qaId) rateBar(row, qaId); }
       else {
         const local = findAnswer(q);
@@ -429,6 +433,8 @@
     }
     $('sendy-chat').addEventListener('click', showChat);
     $('sendy-back').addEventListener('click', showTips);
+    $('sendy-chat').addEventListener('click', () => { if (window.SFX) SFX.play('open'); });   // into the chat
+    $('sendy-back').addEventListener('click', () => { if (window.SFX) SFX.play('close'); });   // back out to the tips
     chatForm.addEventListener('submit', (e) => { e.preventDefault(); const q = chatInput.value.trim(); if (!q || chatSend.disabled) return; chatInput.value = ''; grow(); ask(q); });
     // the question box grows with what is typed (up to its max-height, then it scrolls): natively where the browser
     // sizes a field to its content, by hand elsewhere. Enter sends; Shift+Enter starts a new line.
@@ -515,6 +521,7 @@
 
     /* ---------- outside click / escape ---------- */
     document.addEventListener('click', (e) => { if (isOpen() && !widget.contains(e.target)) closePopup(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen() && window.SFX) SFX.play('close'); });   // before the close below, while the popup is still open
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) closePopup(); });   // closePopup returns focus to the rocket only if it was inside
     document.addEventListener('auth:change', () => { const g = $('sendy-greeting'); if (g) g.textContent = greeting(); });
 

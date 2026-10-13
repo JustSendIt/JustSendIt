@@ -119,16 +119,16 @@ async function executeSwap(tokenKey, ethAmountStr, slippagePct) {
   // every message goes to the toast AND the swap panel's inline status line, so a failure reason doesn't vanish in 2.6s
   const say = (m, kind) => { sendToast(m); if (typeof window.swapStatus === 'function') window.swapStatus(m, kind || 'error'); };
   const weiIn = parseEth(ethAmountStr);
-  if (!weiIn || weiIn <= 0n) { say('Enter an ETH amount first ✍️'); return; }
+  if (!weiIn || weiIn <= 0n) { if (typeof window !== 'undefined' && window.SFX) window.SFX.play('error'); say('Enter an ETH amount first ✍️'); return; }
   let address, provider;
   try { const c = await walletConnect(); address = c.address; provider = c.provider; }
-  catch (e) { if (e && e.message !== 'cancelled') say('Connect your wallet to swap 🔌'); return; }
-  if (!address) { say('Connect your wallet to swap 🔌'); return; }
+  catch (e) { if (e && e.message !== 'cancelled' && typeof window !== 'undefined' && window.SFX) window.SFX.play('error'); if (e && e.message !== 'cancelled') say('Connect your wallet to swap 🔌'); return; }
+  if (!address) { if (typeof window !== 'undefined' && window.SFX) window.SFX.play('error'); say('Connect your wallet to swap 🔌'); return; }
   if (!(await ensureRobinhoodChain(null, 'swap'))) { if (typeof window.swapStatus === 'function') window.swapStatus('Switch your wallet to Robinhood Chain to swap ⛓️', 'error'); return; } // ensureRobinhoodChain already toasted — inline line only, no double announcement
   // balance pre-check: no ETH on this chain is the #1 first-timer failure — name it instead of a generic "rejected"
   const ethIn = toNum(weiIn, 18);
   let bal = null; try { bal = await ethBalance(address); } catch {}
-  if (bal != null && bal < ethIn + 0.0003) { say('Not enough ETH on Robinhood Chain — this wallet has ' + bal.toFixed(4) + ' ETH and the swap needs ' + ethIn + ' plus a little gas. Bridge some over first 🌉'); return; }
+  if (bal != null && bal < ethIn + 0.0003) { if (typeof window !== 'undefined' && window.SFX) window.SFX.play('error'); say('Not enough ETH on Robinhood Chain — this wallet has ' + bal.toFixed(4) + ' ETH and the swap needs ' + ethIn + ' plus a little gas. Bridge some over first 🌉'); return; }
   let quoted;
   try { quoted = await quoteEthToToken(tokenKey, weiIn); }
   catch (e) { say('Could not fetch a quote — try again 📡'); return; }
@@ -140,10 +140,12 @@ async function executeSwap(tokenKey, ethAmountStr, slippagePct) {
       method: 'eth_sendTransaction',
       params: [{ from: address, to: ROUTER, value: '0x' + weiIn.toString(16), data }],
     });
+    if (typeof window !== 'undefined' && window.SFX) window.SFX.play('swap');   // the wallet signed it and it went out
     say('Swap sent! 🚀 Watch it on the explorer', 'ok');
     sendConfetti(innerWidth / 2, innerHeight / 2, { count: 70, emojiRatio: 0.4 });
     return hash;
   } catch (e) {
+    if (!(e && e.code === 4001) && typeof window !== 'undefined' && window.SFX) window.SFX.play('error');   // the wallet refused it (a cancel is the visitor's own choice, and says so plainly)
     if (e && e.code === 4001) say('Swap cancelled — nothing was sent', 'info');
     else say('Your wallet rejected the transaction 😬 — nothing left your wallet. Usual causes: not enough ETH for gas, or the price moved past the slippage guard. Try again.');
   }
@@ -270,9 +272,11 @@ async function addRobinhoodChain(prov) {
         nativeCurrency: RH_CHAIN.currency,
       }],
     });
+    if (typeof window !== 'undefined' && window.SFX) window.SFX.play('success');
     sendToast('Robinhood Chain added! 🟢');
     return true;
   } catch (e) {
+    if (!(e && e.code === 4001) && typeof window !== 'undefined' && window.SFX) window.SFX.play('error');   // the wallet refused (a cancel is the visitor's own)
     if (e && e.code === 4001) sendToast('Request cancelled in wallet');
     else sendToast('Wallet said no 😅 — add it manually below');
     return false;
@@ -287,6 +291,7 @@ async function watchToken(tokenKey) {
       method: 'wallet_watchAsset',
       params: { type: 'ERC20', options: { address: t.address, symbol: t.symbol, decimals: t.decimals } },
     });
+    if (typeof window !== 'undefined' && window.SFX) window.SFX.play('success');
     sendToast('$' + t.symbol + ' added to your wallet 👀');
   } catch { /* user closed */ }
 }

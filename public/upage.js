@@ -133,14 +133,16 @@ function livePins(box) {
     const msg = box.querySelector('.pin-add-msg'), inp = form.querySelector('.pin-add-input'), go = form.querySelector('.pin-add-go');
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
     const token = (inp.value || '').trim();
+    if (window.SFX) SFX.play(/^0x[0-9a-fA-F]{40}$/.test(token) ? 'scan' : 'error');   // reading it on-chain — or the inline "paste a valid address"
     if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { msg.textContent = '⚠️ Paste a valid 0x token contract address.'; return; }
     go.disabled = true; msg.textContent = '🔎 Reading the token on-chain…';
     try {
       const r = await fetch('/api/pins', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
       const j = await r.json().catch(() => ({}));
+      if (window.SFX) SFX.play(r.ok ? 'success' : 'error');   // pinned to the wall, or the inline refusal below
       if (r.ok) { inp.value = ''; msg.textContent = ''; if (window.sendToast) sendToast('📌 ' + (j.symbol ? '$' + j.symbol : 'That token') + ' is pinned to your wall!'); if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 40, emojiRatio: 0.5 }); document.dispatchEvent(new CustomEvent('pins:changed')); }
       else { go.disabled = false; msg.textContent = '⚠️ ' + (j.error || 'Could not pin that token.'); }
-    } catch { go.disabled = false; msg.textContent = '⚠️ Could not pin that token — try again.'; }
+    } catch { go.disabled = false; msg.textContent = '⚠️ Could not pin that token — try again.'; if (window.SFX) SFX.play('error'); }
   });
   box.addEventListener('click', async (e) => {
     // remove ✕ (own wall) — destructive, stays its own action
@@ -149,6 +151,7 @@ function livePins(box) {
       rm.disabled = true;
       try {
         await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: rm.dataset.pinRm }) });
+        if (window.SFX) SFX.play('remove');   // unpinned from the wall
         if (window.sendToast) sendToast('Unpinned ' + (rm.dataset.sym ? '$' + rm.dataset.sym : 'token') + ' 📌');
         renderPins({ username: box._uname, isMe: box._isMe });
       } catch { rm.disabled = false; }
@@ -164,6 +167,7 @@ function livePins(box) {
       if (sel && !sel.isCollapsed && chip.contains(sel.anchorNode)) return;
       const btn = chip.querySelector('[data-pin-view]');
       if (btn) btn.focus(); // opened from a dead region → focus the chip's button so the modal restores focus here (not <body>) on close
+      if (window.SFX) SFX.play('open');
       TokenModal.open(chip.dataset.token, { symbol: chip.dataset.sym || (btn && btn.dataset.sym) || '', name: (btn && btn.dataset.name) || '' });
     }
   });
@@ -276,10 +280,10 @@ function postEl(p) {
         '<svg class="vote-ico vote-static" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15L4 7h12z"/></svg>' +
       '</div>'
     : '<div class="vote" role="group" aria-label="Score ' + sTxt + '. Upvote or downvote.">' +
-        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-vote="up" aria-pressed="' + up + '" aria-label="Upvote" data-tip="Votes this post up — press again to clear it">' +
+        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-vote="up" data-sfx="tap" aria-pressed="' + up + '" aria-label="Upvote" data-tip="Votes this post up — press again to clear it">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5l6 8H4z"/></svg></button>' +
         '<span class="vote-score' + (p.score < 0 ? ' neg' : '') + '" aria-hidden="true">' + sTxt + '</span>' +
-        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-vote="down" aria-pressed="' + down + '" aria-label="Downvote" data-tip="Votes this post down — press again to clear it">' +
+        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-vote="down" data-sfx="tap" aria-pressed="' + down + '" aria-label="Downvote" data-tip="Votes this post down — press again to clear it">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 15L4 7h12z"/></svg></button>' +
         '<span class="sr-only" role="status" data-vote-status></span>' +
       '</div>';
@@ -325,6 +329,7 @@ document.getElementById('feed').addEventListener('click', async (e) => {
     try {
       const j = await api('/api/posts/' + id + '/vote', { method: 'POST', body: { dir: vBtn.dataset.vote } });
       setVote(post, j.score, j.myVote);
+      if (window.SFX) SFX.play(j.myVote ? 'vote' : 'off');   // the server counted it (or cleared it)
       vBtn.classList.remove('pop'); void vBtn.offsetWidth; vBtn.classList.add('pop');
       if (j.pointsEarned && window.showPoints) { const r = vBtn.getBoundingClientRect(); showPoints(j.pointsEarned, r.left, r.top); }
     } catch (err) { sendToast(err.message); }
@@ -343,9 +348,11 @@ document.getElementById('feed').addEventListener('click', async (e) => {
         const landing = next && (next.querySelector('button, a[href]') || next);
         if (landing) { if (landing === next) next.tabIndex = -1; landing.focus(); }
         else { const f = document.getElementById('feed'); if (f) { f.tabIndex = -1; f.focus(); } }
+        if (window.SFX) SFX.play('remove');
         sendToast('Unsent 🫥');
       } catch (err) { sendToast(err.message); }
     } else {
+      if (window.SFX) SFX.play('warn');   // tap again to confirm
       const oldLbl = dBtn.getAttribute('aria-label');
       dBtn.dataset.armed = '1'; dBtn.textContent = 'Sure? 🗑';   // armed look: styles.css `.react-btn.post-del[data-armed]` — no inline colour
       dBtn.setAttribute('aria-label', 'Confirm delete — tap again within 4 seconds'); // the arm state must be perceivable without sight
@@ -362,6 +369,7 @@ document.getElementById('feed').addEventListener('click', async (e) => {
       const j = await api('/api/posts/' + id + '/react', { method: 'POST', body: { kind: rBtn.dataset.react } });
       rBtn.classList.toggle('lit', j.on);
       rBtn.querySelector('span').textContent = j.count;
+      if (window.SFX) SFX.play(j.on ? 'like' : 'unlike');
       if (j.on) { const r = rBtn.getBoundingClientRect(); sendConfetti(r.left + r.width / 2, r.top, { count: 10, emojiRatio: 1 }); if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned, r.left, r.top); }
     } catch (err) { sendToast(err.message); }
     return;
@@ -401,6 +409,7 @@ async function renderComments(post, id) {
         try {
           const cj = await api('/api/posts/' + id + '/comments', { method: 'POST', body: { text: input.value } });
           input.value = '';
+          if (window.SFX) SFX.play('send');   // the comment went out
           await renderComments(post, id);
           const n = post.querySelector('[data-comments] span');
           n.textContent = Number(n.textContent) + 1;
@@ -420,11 +429,15 @@ function setFollowUI(on, followers) {
   btn.setAttribute('aria-pressed', String(on));
   if (followers != null) document.getElementById('st-followers').textContent = followers;
 }
+// the press itself only taps: its aria-pressed still holds the OLD state while the request is out, so the
+// generic on/off would sound backwards — the follow / unfollow sound comes once the server has answered
+document.getElementById('follow-btn').dataset.sfx = 'tap';
 document.getElementById('follow-btn').addEventListener('click', async () => {
   if (!AUTH.user) { AUTH.open(); return; }
   try {
     const j = await api('/api/users/' + encodeURIComponent(uname) + '/follow', { method: 'POST' });
     setFollowUI(j.following, j.followers);
+    if (window.SFX) SFX.play(j.following ? 'follow' : 'unfollow');
     if (j.following) {
       const r = document.getElementById('follow-btn').getBoundingClientRect();
       sendConfetti(r.left + r.width / 2, r.top, { count: 22, emojiRatio: 0.5 });
@@ -499,6 +512,7 @@ document.addEventListener('mutes:change', () => {
   if (btn && !btn.hidden) setAlertUI(alertedNames().has(String(uname).toLowerCase()));
 });
 const alertBtn = document.getElementById('alert-btn');
+if (alertBtn) alertBtn.dataset.sfx = 'tap';   // as Follow: the on / off sounds once the server has answered, not from the stale aria-pressed
 if (alertBtn) alertBtn.addEventListener('click', async () => {
   if (!AUTH.user) { AUTH.open(); return; }
   const on = alertBtn.getAttribute('aria-pressed') === 'true';
@@ -507,6 +521,7 @@ if (alertBtn) alertBtn.addEventListener('click', async () => {
     const j = await api('/api/alerts/' + encodeURIComponent(uname), { method: on ? 'DELETE' : 'POST' });
     if (AUTH.user) AUTH.user.alerts = Array.isArray(j.alerts) ? j.alerts : [];
     setAlertUI(j.alerted);
+    if (window.SFX) SFX.play(j.alerted ? 'on' : 'off');
     sendToast(j.alerted
       ? '🔔 Alerts on for @' + uname + ' — they are not told'
       : '🔕 Alerts off for @' + uname);
@@ -629,6 +644,7 @@ async function loadPage() {
     if (r && r.skip) return;
     if (!r) { clearPcMedia(); return; }
     pcImg = r.url;
+    if (window.SFX) SFX.play('success');   // uploaded and attached, ready to send
   });
   document.getElementById('pc-publish').addEventListener('click', async () => {
     const text = ta.value.trim();
@@ -643,6 +659,7 @@ async function loadPage() {
       document.getElementById('feed').prepend(postEl(j.post));
       document.getElementById('empty').style.display = 'none';
       const st = document.getElementById('st-posts'); if (st) st.textContent = Number(st.textContent) + 1;
+      if (window.SFX) SFX.play('send');   // the post went out
       sendConfetti(innerWidth / 2, 240, { count: 46, emojiRatio: 0.4 });
       sendToast('SENT! 🚀');
       if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned);
@@ -701,7 +718,7 @@ async function loadCalls(u) {
 async function loadLeaderboard(win) {
   win = win || 'all';
   const winEl = document.getElementById('lb-windows'), listEl = document.getElementById('lb-list');
-  winEl.innerHTML = _lbWindows.map(w => '<button class="lb-win' + (w[0] === win ? ' active' : '') + '" type="button" data-tip="Ranks Send Callers over this time window" data-win="' + w[0] + '" aria-pressed="' + (w[0] === win) + '">' + w[1] + '</button>').join('');
+  winEl.innerHTML = _lbWindows.map(w => '<button class="lb-win' + (w[0] === win ? ' active' : '') + '" type="button" data-sfx="select" data-tip="Ranks Send Callers over this time window" data-win="' + w[0] + '" aria-pressed="' + (w[0] === win) + '">' + w[1] + '</button>').join('');
   winEl.querySelectorAll('.lb-win').forEach(b => b.addEventListener('click', () => loadLeaderboard(b.dataset.win)));
   listEl.innerHTML = '<li class="lb-load">Loading…</li>';
   try {
@@ -835,6 +852,7 @@ async function loadLeaderboard(win) {
       // detaches the nodes we captured. Re-query: a 403 explaining a read-only account must never vanish.
       const live = host.querySelector('#ci-go'), msg = host.querySelector('#ci-msg');
       if (live) { live.disabled = false; live.innerHTML = label; }
+      if (msg && window.SFX) SFX.play('error');   // the inline message; the toast below buzzes by itself
       if (msg) msg.textContent = '⚠️ ' + why;
       else toast('⚠️ ' + why);
       return;
@@ -844,6 +862,7 @@ async function loadLeaderboard(win) {
     renderDone();
     if (keepFocus) { const d = host.querySelector('#ci-done'); if (d) d.focus(); } // never drop focus to <body>
     if (awarded > 0) {
+      if (window.SFX) SFX.play('coin');   // the daily check-in paid out
       // showPoints() adds to AUTH.user.points AND fires 'points:changed' for the nav badge
       if (window.showPoints) showPoints(awarded, cx, cy);
       else {
@@ -859,6 +878,7 @@ async function loadLeaderboard(win) {
     } else {
       // a real first check-in that paid 0: the rolling 24-hour earning ceiling was already spent. The
       // server still stamped it, so "already checked in" would be untrue and the reason would go unsaid.
+      if (window.SFX) SFX.play('success');   // checked in, nothing to pay
       toast('✅ Checked in — you had already hit your 24-hour Send Power ceiling, so this one paid nothing. It still counts as checked in.');
     }
   }

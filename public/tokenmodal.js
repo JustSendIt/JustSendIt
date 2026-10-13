@@ -31,12 +31,12 @@
     titleEl = modal.querySelector('#tm-title');
     fullLink = modal.querySelector('.tm-full');
     modal.addEventListener('click', function (e) {
-      if (e.target.closest('[data-tm-close]')) { close(); return; }
+      if (e.target.closest('[data-tm-close]')) { if (window.SFX) SFX.play('close'); close(); return; }   // the ✕ or the backdrop
       // the ☆ on the dashboard: saves the pair this popup shows (the watchlist script is not on every page)
       var w = e.target.closest('.np-watch[data-wpair]');
       if (w && shown && shown.pair && window.Watchlist && String(w.dataset.wpair).toLowerCase() === String(shown.pair.address).toLowerCase()) { e.preventDefault(); window.Watchlist.toggle(shown); }
     });
-    modal.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Esc') { e.stopPropagation(); close(); } });
+    modal.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Esc') { e.stopPropagation(); if (window.SFX) SFX.play('close'); close(); } });
   }
 
   function close() {
@@ -68,6 +68,7 @@
   async function open(token, meta) {
     if (!modal) build();
     meta = meta || {};
+    if (modal.hasAttribute('hidden') && window.SFX) SFX.play('open');   // every opener is a tap on a token; a re-open in place stays quiet
     if (!modal.hasAttribute('hidden')) { if (releaseTrap) { releaseTrap(); releaseTrap = null; } } // re-open without close: release the old trap first
     else { lastFocus = document.activeElement; }                                                    // capture the external trigger only when opening from closed
     titleEl.textContent = (meta.name ? meta.name + ' ' : '') + (meta.symbol ? '$' + meta.symbol : '') || 'Token dashboard';

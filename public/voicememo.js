@@ -168,6 +168,9 @@
     toIdle();
 
     btn.addEventListener('click', function () {
+      // the press that starts it sounds 'on' by itself (aria-pressed turns true below); the stop has to say 'off',
+      // since its aria-pressed is still true until the recorder has finished
+      if (rec && window.SFX) SFX.play('off');
       if (rec) { rec.stop(); return; }            // second press = stop. The whole interaction.
       btn.classList.add('is-recording');
       btn.setAttribute('aria-pressed', 'true');
@@ -185,7 +188,8 @@
         },
         // say('') first: at every call site onStatus writes to the SAME node as `live`, so clearing it
         // after announce() left the live region empty by the time a screen reader looked at it
-        onError: function (msg) { toIdle(); say(''); announce(msg); if (window.sendToast) sendToast('⚠️ ' + msg); },
+        // the toast buzzes by itself unless the stop press just sounded; 'error' here covers that case (never twice)
+        onError: function (msg) { toIdle(); say(''); announce(msg); if (window.sendToast) sendToast('⚠️ ' + msg); if (window.SFX) SFX.play('error'); },
         onDone: function (blob, mime, ms) {
           toIdle();
           announce('Recording stopped, ' + fmt(ms) + '. Attaching.');
@@ -193,6 +197,8 @@
              box gets a player to listen back on, and uploadMedia streams it. A voice memo is not a
              special kind of attachment, it is an attachment. */
           Promise.resolve(window.attachMedia(blob, opts.previewEl, opts.onClear, say)).then(function (r) {
+            // attached and ready to send — sounded for a memo the visitor stopped, not one the two-minute cap ended
+            if (r && r.url && ms < MAX_MS && window.SFX) SFX.play('success');
             if (r && r.url) { announce('Voice memo attached — ' + fmt(ms) + '. Ready to send.'); if (typeof opts.onAttached === 'function') opts.onAttached(r.url); }
             else announce('That memo could not be attached');
           });

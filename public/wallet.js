@@ -166,6 +166,7 @@
     let ticks = 0; const iv = setInterval(() => { if (overlay.hidden || ++ticks > 8) { clearInterval(iv); return; } renderList(); }, 350);
     lastFocus = document.activeElement;
     overlay.hidden = false;
+    if (window.SFX) SFX.play('open');
     prevOverflow = document.body.style.overflow;   // the sign-in modal or the ticket beneath may hold the scroll lock — hand it back, not ''
     document.body.style.overflow = 'hidden';
     const first = overlay.querySelector('.wc-item, .wc-deep, .wc-x'); if (first) first.focus();
@@ -176,6 +177,7 @@
   function close(v) {
     if (!overlay) return;
     overlay.hidden = true;
+    if (!v && window.SFX) SFX.play('close');
     document.body.style.overflow = prevOverflow;
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }

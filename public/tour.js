@@ -147,6 +147,7 @@
   }
 
   function startSteps() {
+    if (window.SFX) SFX.play('open');
     idx = 0;
     stepped = true;
     buildSpotEls();
@@ -158,6 +159,7 @@
 
   function finish(completed) {
     active = false;
+    if (!completed && window.SFX) SFX.play('close');
     document.removeEventListener('keydown', onKey);
     removeEventListener('scroll', onReflow);
     removeEventListener('resize', onReflow);
@@ -170,6 +172,7 @@
     closeWelcome();
     if (window.unlockScroll) unlockScroll(); else document.body.style.overflow = '';
     if (completed) {
+      if (window.SFX) SFX.play('success');
       if (window.sendToast) sendToast("You're all set — Just $Send It! 🚀");
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 2.4, { count: 70, emojiRatio: 0.5 });
     }
@@ -204,6 +207,7 @@
   // relaunchable from a "Take the tour again" control anywhere — ignores the saved flag
   window.startTour = function () {
     if (active || armed || welcome) return;
+    if (!anyModalOpen() && window.SFX) SFX.play('open');
     if (!anyModalOpen()) showWelcome();
   };
 

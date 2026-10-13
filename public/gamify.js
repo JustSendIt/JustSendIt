@@ -695,6 +695,7 @@
       if (b._lw) return; b._lw = true;
       b.addEventListener('click', () => {
         if (_lootMode === b.dataset.lootmode) return;
+        if (window.SFX) SFX.play('select');   // one of two windows picked (the toggle repaints itself, so its stale aria-pressed would say the opposite)
         _lootMode = b.dataset.lootmode;
         const loot = dash.querySelector('.loot');
         if (loot && _lg) {
@@ -1598,6 +1599,7 @@
     dash.querySelectorAll('.js-refresh').forEach(b => b.addEventListener('click', doRefresh));
     dash.querySelectorAll('.js-connect').forEach(b => b.addEventListener('click', () => {
       const sec = document.getElementById('sec-security'); if (sec) { sec.open = true; sec.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth' }); }
+      if (window.SFX) SFX.play('open');   // the Security panel opens
       if (window.sendToast) sendToast('Link a wallet in Settings → Security, then hit Refresh 🔗');
     }));
 
@@ -1617,6 +1619,7 @@
         if (t.open) {
           const el = document.getElementById(t.open);
           if (el) { openSectionFor(el); el.open = true; el.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' }); }
+          if (el && window.SFX) SFX.play('open');   // the quest's settings panel opens
         } else if (t.scroll) {
           const el = document.getElementById(t.scroll);
           if (el) {
@@ -1689,6 +1692,7 @@
   function wireQuests() {
     dash.querySelectorAll('[data-qfilter]').forEach((c) => c.addEventListener('click', () => {
       const key = c.dataset.qfilter;
+      if (window.SFX) SFX.play('select');   // a filter picked (the chip row repaints, so its stale aria-pressed would say the opposite)
       _questFilter = (_questFilter === key && key !== 'all') ? 'all' : key;
       const panel = dash.querySelector('#play-panel');
       if (!panel) return;
@@ -1713,6 +1717,8 @@
       try { const r = await fetch('/api/leaderboard', { credentials: 'same-origin' }); if (r.ok) lb = await r.json(); } catch {}
       leaderboard = lb;
       try { competition = await (await fetch('/api/competition', { credentials: 'same-origin' })).json(); } catch {}
+      // the refresh's sound says what it found: a level, a Diamond tier or a Holder Boost switched on is the big one, anything else is "verified"
+      if (window.SFX) { const dl = (x) => (x && x.holder && x.holder.diamond && x.holder.diamond.level) || 0; SFX.play(_lg && ((g.level || 0) > (_lg.level || 0) || dl(g) > dl(_lg) || ((g.multiplier || 1) > 1 && (_lg.multiplier || 1) <= 1)) ? 'powerup' : 'success'); }
       render(g, lb); // render() runs celebrate() → confetti only on a real level/tier increase
       /* render() replaced dash.innerHTML under the Refresh button, so focus fell to <body> at the top of a
          card three screens tall. Put it back on the new Refresh button, and say what happened. */

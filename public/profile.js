@@ -138,6 +138,7 @@ function renderImgSlot(kind, url) {
         await api('/api/profile/image', { method: 'POST', body: { kind, remove: true } });
         myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = null;
         renderImgSlot(kind, null);
+        if (window.SFX) SFX.play('remove');
         sendToast('Removed');
       } catch (err) { sendToast(err.message); }
     });
@@ -152,7 +153,7 @@ async function uploadThemeImage(kind, input) {
     // stream through the same validated upload path the Send Wall uses — magic-byte checked, size
     // capped per type, and compressed identically. One pipeline, one set of limits.
     const cap = f.type === 'image/gif' ? 25 : 64;
-    if (f.size > cap * 1024 * 1024) { sendToast('Too big — keep it under ' + cap + 'MB'); return; }
+    if (f.size > cap * 1024 * 1024) { if (window.SFX) SFX.play('error'); sendToast('Too big — keep it under ' + cap + 'MB'); return; }
     sendToast('Uploading…');
     try {
       const r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin',
@@ -162,11 +163,12 @@ async function uploadThemeImage(kind, input) {
       const j = await api('/api/profile/image', { method: 'POST', body: { kind, image: u.url } });
       myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = j.url;
       renderImgSlot(kind, j.url);
+      if (window.SFX) SFX.play('success');
       sendToast('Looking good 😎');
     } catch (err) { sendToast('⚠️ ' + (err.message || 'upload failed')); }
     return;
   }
-  if (f.size > 8 * 1024 * 1024) { sendToast('Too big — keep it under 8MB 🐘'); return; }
+  if (f.size > 8 * 1024 * 1024) { if (window.SFX) SFX.play('error'); sendToast('Too big — keep it under 8MB 🐘'); return; }
   const rd = new FileReader();
   rd.onload = () => {
     const img = new Image();
@@ -180,6 +182,7 @@ async function uploadThemeImage(kind, input) {
         const j = await api('/api/profile/image', { method: 'POST', body: { kind, image: c.toDataURL('image/jpeg', 0.85) } });
         myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = j.url;
         renderImgSlot(kind, j.url);
+        if (window.SFX) SFX.play('success');
         sendToast('Looking good 😎');
         sendConfetti(innerWidth / 2, innerHeight / 2, { count: 24, emojiRatio: 0.4 });
       } catch (err) { sendToast('⚠️ ' + err.message); }
@@ -218,6 +221,7 @@ async function saveProfile() {
     document.getElementById('pf-username-show').textContent = j.user.username;
     setWallLinks(j.user.username);
     document.getElementById('claim-banner').hidden = true;
+    if (window.SFX) SFX.play('success');
     sendToast('Saved, @' + j.user.username + '! ✅');
     // first-time claim that started on another page (auth.js stashed the origin) → take them back there
     let back = null; try { back = sessionStorage.getItem('jsi:after-claim'); sessionStorage.removeItem('jsi:after-claim'); } catch {}
@@ -379,6 +383,7 @@ async function unlinkWallet(address) {
   try {
     const current = await currentFactorBody('Unlinking a wallet changes how you sign in.');   // two-factor on or off: removing a way in is a security change
     const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, current } });
+    if (window.SFX) SFX.play('remove');
     sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: that wallet had sold out' : ''));
     await loadMe();
     refocus('wl-status');   // the button that had focus was just re-rendered away
@@ -403,6 +408,7 @@ async function makeTwofaWallet(address) {
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const newSignature = await WALLET.sign(provider, address, message);
     await api('/api/2fa/wallet/primary', { method: 'POST', body: { address, newSignature, current } });
+    if (window.SFX) SFX.play('success');
     sendToast('Two-factor wallet is now ' + shortAddr(address) + ' 🔐');
     await loadMe();
     refocus('wl-status');   // the button that had focus was just re-rendered away
@@ -418,6 +424,7 @@ async function startTotp() {
     await currentFactorBody('Setting up an authenticator app changes how you sign in.');
     const j = await api('/api/2fa/totp/setup', { method: 'POST', body: {} });
     document.getElementById('totp-setup').hidden = false;
+    if (window.SFX) SFX.play('open');
     document.getElementById('totp-qr').src = j.qr;
     document.getElementById('totp-secret').textContent = j.secret;
     document.getElementById('totp-confirm').focus();
@@ -426,6 +433,7 @@ async function startTotp() {
 async function confirmTotp() {
   try {
     await api('/api/2fa/totp/enable', { method: 'POST', body: { code: document.getElementById('totp-confirm').value.trim() } });
+    if (window.SFX) SFX.play('success');
     sendToast('2FA is ON 🔐');
     sendConfetti(innerWidth / 2, innerHeight / 2, { count: 40, emojiRatio: 0.3 });
     setupDone();
@@ -445,6 +453,7 @@ async function enableWallet2fa() {
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const signature = await WALLET.sign(provider, address, message);
     await api('/api/2fa/wallet/enable', { method: 'POST', body: { address, signature } });
+    if (window.SFX) SFX.play('success');
     sendToast('Wallet 2FA is ON 🔐');
     setupDone();
     loadMe();
@@ -455,15 +464,16 @@ async function addEmail(e) {
   e.preventDefault();
   const st = document.getElementById('ae-status');
   const email = document.getElementById('ae-email').value.trim(), pw = document.getElementById('ae-pw').value, pw2 = document.getElementById('ae-pw2').value;
-  if (pw.length < 8) { st.textContent = '⚠️ Password needs at least 8 characters.'; return; }
-  if (pw !== pw2) { st.textContent = '⚠️ Passwords don’t match.'; return; }
+  if (pw.length < 8) { st.textContent = '⚠️ Password needs at least 8 characters.'; if (window.SFX) SFX.play('error'); return; }
+  if (pw !== pw2) { st.textContent = '⚠️ Passwords don’t match.'; if (window.SFX) SFX.play('error'); return; }
   st.textContent = '…';
   try {
     await currentFactorBody('Adding an email and password adds a way to sign in.');
     await api('/api/account/email', { method: 'POST', body: { email, password: pw } });
+    if (window.SFX) SFX.play('success');
     st.textContent = ''; document.getElementById('ae-pw').value = ''; document.getElementById('ae-pw2').value = '';
     sendToast('Email + password added ✅'); loadMe();
-  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
+  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; if (window.SFX && err.message !== 'cancelled') SFX.play('error'); }
 }
 async function confirmPassword2fa() {
   try {
@@ -472,6 +482,7 @@ async function confirmPassword2fa() {
        no longer remember would lock every way in. The masked pane — never the browser's clear-text dialog. */
     const typed = await AUTH._confirmFactor('password', 'Type your account password — it becomes the second step at wallet sign-in.');
     await api('/api/2fa/password/enable', { method: 'POST', body: { password: typed.password } });
+    if (window.SFX) SFX.play('success');
     sendToast('Password 2FA is ON 🔐'); setupDone(); loadMe();
   } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + e.message); }
 }
@@ -480,6 +491,7 @@ async function disable2fa() {
     if (!confirm('Turn two-factor off?\n\nSigning in will need only your password or wallet again.')) return;
     await currentFactorBody('Turning two-factor off changes how you sign in.');
     await api('/api/2fa/disable', { method: 'POST', body: {} });
+    if (window.SFX) SFX.play('off');
     sendToast('2FA turned off');
     loadMe();
   } catch (e) { if (e.message !== 'cancelled') sendToast('⚠️ ' + (e.message || 'cancelled')); }
@@ -489,32 +501,34 @@ async function changePassword(e) {
   e.preventDefault();
   const st = document.getElementById('chpw-status');
   const pw = document.getElementById('chpw-new').value, pw2 = document.getElementById('chpw-new2').value;
-  if (pw.length < 8) { st.textContent = '⚠️ Password needs at least 8 characters.'; return; }
-  if (pw !== pw2) { st.textContent = '⚠️ Passwords don’t match.'; return; }
+  if (pw.length < 8) { st.textContent = '⚠️ Password needs at least 8 characters.'; if (window.SFX) SFX.play('error'); return; }
+  if (pw !== pw2) { st.textContent = '⚠️ Passwords don’t match.'; if (window.SFX) SFX.play('error'); return; }
   st.textContent = '…';
   try {
     await currentFactorBody('Changing your password.');
     const j = await api('/api/account/password', { method: 'POST', body: { password: pw } });
+    if (window.SFX) SFX.play('success');
     document.getElementById('chpw-new').value = ''; document.getElementById('chpw-new2').value = '';
     st.textContent = '';
     sendToast('Password changed 🔑' + (j.endedOthers ? ' — ' + j.endedOthers + ' other ' + (j.endedOthers === 1 ? 'device was' : 'devices were') + ' signed out' : ''));
-  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
+  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; if (window.SFX && err.message !== 'cancelled') SFX.play('error'); }
 }
 async function changeEmail(e) {
   e.preventDefault();
   const st = document.getElementById('chem-status');
   const email = document.getElementById('chem-new').value.trim();
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { st.textContent = '⚠️ Enter a valid email.'; return; }
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { st.textContent = '⚠️ Enter a valid email.'; if (window.SFX) SFX.play('error'); return; }
   st.textContent = '…';
   try {
     await currentFactorBody('Changing the email you sign in with.');
     const had = AUTH.user && (AUTH.user.methods || []).includes('email');
     await api('/api/account/email/change', { method: 'POST', body: { email } });
+    if (window.SFX) SFX.play('success');
     document.getElementById('chem-new').value = '';
     st.textContent = '';
     sendToast(had ? 'Email changed ✉️' : 'Email added ✉️ — you can sign in with it now');
     loadMe();
-  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; }
+  } catch (err) { st.textContent = err.message === 'cancelled' ? '' : '⚠️ ' + err.message; if (window.SFX && err.message !== 'cancelled') SFX.play('error'); }
 }
 /* A new account that ticked "set up two-factor right after" lands here with a note and a way back.
    Finishing (or skipping) sends them back to where they signed up. */
@@ -600,6 +614,7 @@ function initThemeEditor() {
         // a rejected value used to vanish silently: the field kept the typing, nothing changed, nothing said why
         note.textContent = 'Use a 6-digit hex code starting with #, like #c6f000.';
         hex.setAttribute('aria-invalid', 'true');
+        if (window.SFX) SFX.play('error');
         return;
       }
       hex.removeAttribute('aria-invalid');
@@ -624,6 +639,7 @@ function initThemeEditor() {
       // colors: null is the replace-with-empty signal — a plain merge of {} would change nothing.
       applySitePrefs({ colors: null, siteAccent: '' }, true);
       initThemeEditor();
+      if (window.SFX) SFX.play('remove');
       sendToast('Colours reset 🎨');
     });
   }
@@ -635,6 +651,7 @@ function initSitePrefs() {
   renderSwatches('site-accent-swatches', SITE_ACCENTS, (p.colors && p.colors.accent) || p.siteAccent || '', c => {
     applySitePrefs({ siteAccent: c, colors: { accent: c || undefined } }, true);
     initThemeEditor();
+    if (window.SFX) SFX.play('select');
     sendToast(c ? 'Site re-themed for you 🖌️' : 'Back to classic green 💚');
   });
   initThemeEditor();
@@ -650,6 +667,8 @@ function initSitePrefs() {
       const cur = el.getAttribute('aria-checked') === 'true';
       el.setAttribute('aria-checked', String(!cur));
       applySitePrefs({ [key]: !cur }, true);
+      if (!cur && window.SFX) SFX.play('on');
+      if (cur && window.SFX) SFX.play('off');
       sendToast(!cur ? 'On ✅' : 'Off — noted');
     });
   }
@@ -705,6 +724,7 @@ function loadConnectedWallet() {
     sel.querySelectorAll('.cw-pick').forEach(b => b.addEventListener('click', () => {
       sel.querySelectorAll('.cw-pick').forEach(x => x.classList.remove('lit'));
       b.classList.add('lit');
+      if (window.SFX) SFX.play('scan');
       runTracker(body, b.dataset.addr);
     }));
     const first = sel.querySelector('.cw-pick'); if (first) first.classList.add('lit');
@@ -730,6 +750,7 @@ document.getElementById('link-wallet-btn').addEventListener('click', linkWallet)
       const proof = await (AUTH.ownershipProof ? AUTH.ownershipProof('Deleting your account is permanent.') : AUTH.currentFactor('Deleting your account is permanent.'));
       btn.disabled = true; st.textContent = 'Deleting…';
       await api('/api/account/delete', { method: 'POST', body: Object.assign({ confirm: 'DELETE', current: proof }, proof && proof.password ? { password: proof.password } : {}) });
+      if (window.SFX) SFX.play('remove');
       st.textContent = 'Your account is gone. Thanks for sending it with us.';
       try { localStorage.removeItem('send.eggs.pending'); localStorage.removeItem('send.eggs.seen'); localStorage.removeItem('send.eggs.unpaid'); localStorage.removeItem('send.eggs.mine'); localStorage.removeItem('send.eggs.retry'); } catch {}
       AUTH.user = null; if (AUTH.redraw) AUTH.redraw();
@@ -737,6 +758,7 @@ document.getElementById('link-wallet-btn').addEventListener('click', linkWallet)
     } catch (e) {
       btn.disabled = false;
       st.textContent = e.message === 'cancelled' ? '' : '⚠️ ' + (e.message || 'could not delete the account');
+      if (window.SFX && e.message !== 'cancelled') SFX.play('error');
     }
   });
 })();
@@ -749,7 +771,7 @@ document.getElementById('pw-2fa-btn').addEventListener('click', confirmPassword2
 document.getElementById('chpw-form').addEventListener('submit', changePassword);
 document.getElementById('chem-form').addEventListener('submit', changeEmail);
 document.getElementById('sudo-btn').addEventListener('click', toggleSudo);
-document.getElementById('setup-2fa-skip').addEventListener('click', () => { sendToast('Skipped — two-factor is always here in Settings → Security'); setupDone(); });
+document.getElementById('setup-2fa-skip').addEventListener('click', () => { if (window.SFX) SFX.play('close'); sendToast('Skipped — two-factor is always here in Settings → Security'); setupDone(); });
 /* Arriving from a sign-up that ticked "set up two-factor right after": open the card on it, with the note. */
 try {
   if (sessionStorage.getItem('jsi:setup-2fa') === '1') {
@@ -861,6 +883,7 @@ async function loadAlertList() {
       AUTH.user.alerts = Array.isArray(j.alerts) ? j.alerts : [];
       loadAlertList();
       refocus('alert-list-note');   // the Turn-off button that had focus no longer exists
+      if (window.SFX) SFX.play('remove');
       if (window.sendToast) sendToast('🔕 Alerts off for @' + name);
       if (window.announce) announce('Alerts off for ' + name);
     } catch (err) { b.disabled = false; if (window.sendToast) sendToast(err.message); }

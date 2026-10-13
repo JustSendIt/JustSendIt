@@ -458,15 +458,16 @@
   async function redeem() {
     const err = $('inv-err'), go = $('inv-go');
     const code = $('inv-in').value.trim();
-    if (!code) { err.className = 'inv-err'; err.textContent = 'Enter the code you were given.'; return; }
+    if (!code) { err.className = 'inv-err'; err.textContent = 'Enter the code you were given.'; if (window.SFX) SFX.play('error'); return; }
     go.disabled = true; err.className = 'inv-err'; err.textContent = 'Checking…';
     try {
       const j = await api('/api/gate/redeem', { method: 'POST', body: { code } });
       err.className = 'inv-err is-ok';
       err.textContent = j.already ? 'You already have a ticket.' : '🎟️ Ticket accepted.';
+      if (!j.already && window.SFX) SFX.play('success');
       state.redeemed = true; state.tosAccepted = !!j.tosAccepted;
       setTimeout(() => show(state.tosAccepted ? 'step-join' : 'step-tos'), 500);
-    } catch (e) { err.className = 'inv-err'; err.textContent = '⚠️ ' + e.message; }
+    } catch (e) { err.className = 'inv-err'; err.textContent = '⚠️ ' + e.message; if (window.SFX) SFX.play('error'); }
     finally { go.disabled = false; }
   }
 
@@ -551,6 +552,7 @@
       const err = $('inv-proof-err'), again = $('inv-proof-again'), go = $('inv-proof-go');
       paintTests(v);
       if (v.verified) {
+        if (window.SFX && root && root.hasAttribute('data-open') && $('step-proof') && $('step-proof').hasAttribute('data-active')) SFX.play('powerup');   // the check the visitor is watching passed
         clearInterval(proofPoll); proofPoll = 0;
         if (err) { err.className = 'inv-err is-ok'; err.textContent = '✅ Verified. The whole site is open to you now.'; }
         if (go) go.hidden = true;
@@ -570,6 +572,7 @@
         if (go) go.disabled = true;
         if (!proofPoll) proofPoll = setInterval(() => { refreshProof().catch(() => {}); }, 4000);
       } else {
+        if (proofPoll && v.proof && v.proof.reason && window.SFX && root && root.hasAttribute('data-open')) SFX.play('error');   // a check that was running came back short
         clearInterval(proofPoll); proofPoll = 0;
         if (go) { go.disabled = false; go.textContent = (v.proof && v.proof.wallets) ? 'Link another wallet 🔗' : 'Connect wallet — read-only 🔗'; }
         if (again && v.proof && v.proof.wallets) again.hidden = false;
@@ -582,6 +585,7 @@
     const err = $('inv-proof-err'), go = $('inv-proof-go');
     if (err) { err.className = 'inv-err'; err.textContent = ''; }
     if (go) go.disabled = true;
+    if (!link && window.SFX) SFX.play('scan');
     try {
       if (link) {
         if (err) err.textContent = 'Choose your wallet and approve the signature… ✍️';
@@ -594,6 +598,7 @@
     } catch (e) {
       if (go) go.disabled = false;
       if (err) { err.className = 'inv-err'; err.textContent = (e && e.message === 'cancelled') ? '' : '⚠️ ' + ((e && e.message) || 'could not run the check'); }
+      if (window.SFX && !(e && e.message === 'cancelled')) SFX.play('error');
     }
   }
 
@@ -633,7 +638,7 @@
   function bindCopy(scope) {
     scope.querySelectorAll('.inv-code[data-c]').forEach(b => b.addEventListener('click', async () => {
       const tag = b.querySelector('.inv-tag');
-      try { await navigator.clipboard.writeText(b.dataset.c); tag.textContent = 'copied ✓'; }
+      try { await navigator.clipboard.writeText(b.dataset.c); tag.textContent = 'copied ✓'; if (window.SFX) SFX.play('copy'); }
       catch {
         // clipboard refused (http, or permission) — select it instead so a long-press/⌘C still works
         const r = document.createRange(); r.selectNodeContents(b);
@@ -750,6 +755,7 @@
       const a = document.createElement('a');
       a.href = url; a.download = 'send-ticket-' + t.sendId + '.png';
       document.body.appendChild(a); a.click(); a.remove();
+      if (window.SFX) SFX.play('success');
       setTimeout(() => URL.revokeObjectURL(url), 4000);
     }, 'image/png');
   }
@@ -766,6 +772,7 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Publishing your ticket…'; }
     try {
       const j = await api('/api/gate/ticket/share', { method: 'POST', body: {} });
+      if (window.SFX) SFX.play('send');
       // opened in a new tab from inside the click, so the popup blocker treats it as user-initiated
       window.open(j.intent, '_blank', 'noopener,noreferrer');
       const note = $('inv-copy-note');
@@ -773,6 +780,7 @@
     } catch (e) {
       const err = $('inv-codes-sub');
       if (err) err.textContent = '⚠️ ' + ((e && e.message) || 'could not publish your ticket');
+      if (window.SFX) SFX.play('error');
     } finally { if (btn) { btn.disabled = false; btn.textContent = 'Share on 𝕏 🎟️'; } }
   }
 
@@ -809,10 +817,10 @@
     });
     on('inv-tos-go', async () => {
       const err = $('inv-tos-err'), go = $('inv-tos-go');
-      if (!$('inv-agree').checked) { err.textContent = 'Tick the box to confirm you have read the terms.'; return; }
+      if (!$('inv-agree').checked) { err.textContent = 'Tick the box to confirm you have read the terms.'; if (window.SFX) SFX.play('error'); return; }
       go.disabled = true; err.textContent = '';
-      try { await api('/api/gate/accept', { method: 'POST', body: { version: state.tosVersion } }); state.access = true; show('step-join'); }
-      catch (e) { err.textContent = '⚠️ ' + e.message; go.disabled = false; }
+      try { await api('/api/gate/accept', { method: 'POST', body: { version: state.tosVersion } }); state.access = true; show('step-join'); if (window.SFX) SFX.play('success'); }
+      catch (e) { err.textContent = '⚠️ ' + e.message; go.disabled = false; if (window.SFX) SFX.play('error'); }
     });
     const input = $('inv-in');
     if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') redeem(); });

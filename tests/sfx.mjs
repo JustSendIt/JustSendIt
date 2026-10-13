@@ -20,11 +20,13 @@ try {
   const asked = [];
   for (const f of readdirSync(PUB).filter((x) => /\.(js|html)$/.test(x))) {
     const s = f.endsWith('.js') ? read(f).replace(/\/\*[\s\S]*?\*\//g, '') : read(f);   // a comment's example is not a use
-    for (const m of s.matchAll(/SFX\.play\(\s*'([a-z]+)'\s*\)/g)) asked.push([f, m[1]]);
+    for (const m of s.matchAll(/SFX\.play\(([^;]*?)\)(?=\s*[;}),]|\s*$|\s*\/\/)/gm)) for (const q of m[1].matchAll(/'([a-z]+)'/g)) asked.push([f, q[1]]);   // a literal, or each side of a choice: play(on ? 'follow' : 'unfollow')
+    for (const m of s.matchAll(/\.sfx = '([a-z]+)'/g)) if (m[1] !== 'none') asked.push([f, m[1]]);
     for (const m of s.matchAll(/data-sfx="([a-z]+)"/g)) if (m[1] !== 'none') asked.push([f, m[1]]);
   }
   const unknown = asked.filter(([, n]) => !names.includes(n));
   check('every SFX.play(…) and data-sfx="…" on the site names a sound the chip has', !unknown.length, unknown.map((x) => x.join(':')).join(' | ') || asked.length + ' uses');
+  check('  ...and the features do ask for them: posts, likes, follows, check-ins, Rocket Run, swaps, scans and the rest (300+ places)', asked.length >= 250 && ['send', 'like', 'follow', 'coin', 'powerup', 'launch', 'cashout', 'crash', 'secret', 'vote', 'connect', 'swap', 'scan', 'remove', 'notify'].every((n) => asked.some(([, x]) => x === n)), asked.length + ' uses');
 
   // loaded right after app.js on every page that has the nav, so sendToast exists to wrap and the ⏸ exists to pause it
   const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));

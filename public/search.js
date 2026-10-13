@@ -105,7 +105,7 @@
       const links = [...drop.querySelectorAll('.search-hit')];
       if (e.key === 'ArrowDown' && links.length) { e.preventDefault(); e.stopPropagation(); links[0].focus(); }
       else if (e.key === 'Escape') { close(); input.blur(); }
-      else if (e.key === 'Enter' && links.length) { e.preventDefault(); links[0].click(); }
+      else if (e.key === 'Enter' && links.length) { e.preventDefault(); if (window.SFX) SFX.play('nav'); links[0].click(); }   // the scripted click is not a real one, so the generic layer would stay quiet
     });
     // keys while a result is focused: move between results, open the focused one
     slot.addEventListener('keydown', e => {
@@ -114,7 +114,7 @@
       if (idx < 0) return; // input-focused keys are handled above
       if (e.key === 'ArrowDown') { e.preventDefault(); (links[idx + 1] || links[0]).focus(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); (links[idx - 1] || input).focus(); }
-      else if (e.key === 'Enter') { e.preventDefault(); links[idx].click(); }
+      else if (e.key === 'Enter') { e.preventDefault(); if (window.SFX) SFX.play('nav'); links[idx].click(); }
       else if (e.key === 'Escape') { close(); input.focus(); }
     });
     document.addEventListener('click', e => { if (!slot.contains(e.target)) close(); });

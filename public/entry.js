@@ -90,6 +90,7 @@
       // theme must not start under it: the gesture is passed on from the answer instead, which is a click too.
       const gesture = () => document.dispatchEvent(new CustomEvent('jsi:firstgesture'));
       if (fromGesture && !asking) gesture();
+      if (fromGesture && window.SFX) SFX.play('launch');
       // the loading screen is over: the age question opens NOW, over the fading intro, so the homepage is
       // never uncovered between the two
       if (asking) AGE.open();

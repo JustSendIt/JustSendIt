@@ -93,7 +93,7 @@
         '<span class="modal-note sqd-owner-note">The owner cannot leave — a squad always has the person who started it.</span>';
     } else if (isVerified()) {
       badge = '<span class="comm-2x-badge" title="Your membership is verified' + (gated() ? ' — your linked wallets hold what the gate takes' : '') + '">✅ Verified member</span>';
-      actions = '<button class="btn btn-ghost comm-join-btn" id="sqd-join" type="button" aria-pressed="true" data-tip="A second tap within four seconds leaves the squad">✓ You’re in</button>';
+      actions = '<button class="btn btn-ghost comm-join-btn" id="sqd-join" type="button" aria-pressed="true" data-sfx="tap" data-tip="A second tap within four seconds leaves the squad">✓ You’re in</button>';
     } else {
       badge = '<span class="comm-2x-badge comm-2x-off" title="You are a member, but your holding could not be verified at the last on-chain check">⏸ Not verified</span>';
       actions = '<button class="btn btn-primary comm-join-btn" id="sqd-reverify" type="button" data-tip="Re-reads your linked wallets on-chain and tries to verify your spot again">↻ Re-verify my holding</button> ' +
@@ -215,8 +215,8 @@
       (p.image ? window.mediaTag(esc(p.image), esc(p.username)) : '') +
       (p.call && window.SendCall ? SendCall.widgetHTML(Object.assign(p.call, { mineOwn: p.mine })) : '') + // a squad call's widget post lands on this wall too
       '<div class="post-actions">' +
-        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('fire') + '" data-react="fire" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
-        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('rocket') + '" data-react="rocket" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('fire') + '" data-react="fire" data-sfx="none" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('rocket') + '" data-react="rocket" data-sfx="none" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
         '<button class="react-btn comm-cmt-toggle" type="button" data-comments data-tip="Shows or hides the comments members left on this post" aria-label="Show comments" aria-expanded="false">💬 <span>' + (p.comments || 0) + '</span></button>' +
         (!p.mine ? '<button class="react-btn post-report" type="button" data-report="post" data-report-id="' + Number(p.id) + '" aria-label="Report this post" data-tip="Reports this post to the moderators">⚑</button>' : '') +
       '</div>' +
@@ -413,10 +413,12 @@
         if (gate && r.status === 403 && j.code === 'gate') { gate.hidden = false; gate.innerHTML = gateRefusal(j); if (window.announce) announce(gate.textContent); }
         else if (gate && r.status === 503) { gate.hidden = false; gate.textContent = '⏳ ' + (j.error || 'The chain could not be read just now — nothing was decided. Try again in a moment.'); }
         else if (j.needsProof && window.AUTH && AUTH.needsProof) { try { AUTH.needsProof(Object.assign(new Error(j.error || ''), { needsProof: true, proof: j.proof || null })); } catch {} }
+        if (window.SFX && !j.needsProof) SFX.play('error');   // refused — the server's own words may not sound like it
         if (window.sendToast) sendToast(j.error || 'Could not update');
         btn.disabled = false; return;
       }
       if (gate) { gate.hidden = true; gate.innerHTML = ''; }
+      if (window.SFX) { if (leaving) SFX.play('remove'); else if (j.verified) SFX.play('success'); }   // left · in and verified (in-but-unverified is left to its toast)
       if (leaving) { if (window.sendToast) sendToast('Left the squad'); S = null; lastKey = null; feedEl.innerHTML = ''; callsEl.innerHTML = ''; await load(); }
       else {
         if (window.sendToast) sendToast(j.verified ? '🛡️ You’re in — verified' + (gated() ? ' on-chain' : '') + '!' : '🛡️ You’re in — but not verified yet');
@@ -431,6 +433,7 @@
     btn._armed = true; btn.dataset.label = btn.textContent; btn.textContent = '⚠️ Tap again to leave';
     btn.setAttribute('aria-label', 'Tap again to confirm leaving this squad');
     if (window.announce) announce('Tap again to confirm leaving. Expires in 4 seconds.');
+    if (window.SFX) SFX.play('warn');
     clearTimeout(btn._armT); btn._armT = setTimeout(() => { if (btn.isConnected) { btn._armed = false; btn.textContent = btn.dataset.label || '✓ You’re in'; btn.removeAttribute('aria-label'); } }, 4000);
     return false;
   }
@@ -457,15 +460,16 @@
   function readImage(input, kind) {
     const f = input.files && input.files[0]; if (!f) return;
     const st = document.getElementById('sqd-edit-status');
-    if (IMG_TYPES.indexOf((f.type || '').toLowerCase()) < 0) { st.textContent = '⚠️ Use a JPG, PNG or WebP.'; input.value = ''; return; }
-    if (f.size > IMG_MAX) { st.textContent = '⚠️ That file is over 3.5 MB — pick a smaller one.'; input.value = ''; return; }
+    if (IMG_TYPES.indexOf((f.type || '').toLowerCase()) < 0) { st.textContent = '⚠️ Use a JPG, PNG or WebP.'; input.value = ''; if (window.SFX) SFX.play('error'); return; }
+    if (f.size > IMG_MAX) { st.textContent = '⚠️ That file is over 3.5 MB — pick a smaller one.'; input.value = ''; if (window.SFX) SFX.play('error'); return; }
     const rd = new FileReader();
     rd.onload = () => {
       if (kind === 'ava') { pendAva = rd.result; document.getElementById('sqd-edit-ava-rm').checked = false; }
       else { pendBan = rd.result; document.getElementById('sqd-edit-ban-rm').checked = false; }
       paintEditPreview(kind, rd.result); st.textContent = '';
+      if (window.SFX) SFX.play('select');   // a picture picked
     };
-    rd.onerror = () => { st.textContent = '⚠️ Could not read that file.'; input.value = ''; };
+    rd.onerror = () => { st.textContent = '⚠️ Could not read that file.'; input.value = ''; if (window.SFX) SFX.play('error'); };
     rd.readAsDataURL(f);
   }
   async function saveEdit(e) {
@@ -474,20 +478,21 @@
     const st = document.getElementById('sqd-edit-status'), save = document.getElementById('sqd-edit-save');
     const name = document.getElementById('sqd-edit-name').value.trim(), bio = document.getElementById('sqd-edit-bio').value.trim();
     const body = {};
-    if (name !== (S.name || '')) { if (!SQUAD_NAME_RE.test(name)) { st.textContent = '⚠️ A name is 3–40 characters: letters, numbers, spaces and . - \' $ & ! ?'; document.getElementById('sqd-edit-name').focus(); return; } body.name = name; }
-    if (bio !== (S.bio || '')) { if (bio.length > 280) { st.textContent = '⚠️ The bio is at most 280 characters.'; return; } body.bio = bio; }
+    if (name !== (S.name || '')) { if (!SQUAD_NAME_RE.test(name)) { st.textContent = '⚠️ A name is 3–40 characters: letters, numbers, spaces and . - \' $ & ! ?'; document.getElementById('sqd-edit-name').focus(); if (window.SFX) SFX.play('error'); return; } body.name = name; }
+    if (bio !== (S.bio || '')) { if (bio.length > 280) { st.textContent = '⚠️ The bio is at most 280 characters.'; if (window.SFX) SFX.play('error'); return; } body.bio = bio; }
     if (document.getElementById('sqd-edit-ava-rm').checked) body.removeAvatar = true; else if (pendAva) body.avatar = pendAva;
     if (document.getElementById('sqd-edit-ban-rm').checked) body.removeBanner = true; else if (pendBan) body.banner = pendBan;
-    if (!Object.keys(body).length) { st.textContent = 'Nothing changed.'; return; }
+    if (!Object.keys(body).length) { st.textContent = 'Nothing changed.'; if (window.SFX) SFX.play('warn'); return; }
     save.disabled = true; st.textContent = 'Saving… ⏳';
     try {
       const j = await window.api('/api/squads/' + id + '/settings', { method: 'POST', body });
       st.textContent = '';
+      if (window.SFX) SFX.play('success');   // saved
       if (window.sendToast) sendToast('Squad updated ✨');
       editEl.hidden = true;
       if (j.squad) renderHero(j.squad); else await load();
       const ob = document.getElementById('sqd-edit-open'); if (ob) ob.focus();
-    } catch (err) { st.textContent = '⚠️ ' + ((err && err.message) || 'could not save'); }
+    } catch (err) { st.textContent = '⚠️ ' + ((err && err.message) || 'could not save'); if (window.SFX && !(err && err.needsProof)) SFX.play('error'); }
     save.disabled = false;
   }
 
@@ -506,8 +511,10 @@
       const rv = e.target.closest('#sqd-reverify');
       if (rv) { membership(rv, false); return; }
       const eo = e.target.closest('#sqd-edit-open');
+      if (eo && window.SFX) SFX.play('open');   // the editor opens
       if (eo) { fillEdit(); editEl.hidden = false; editEl.scrollIntoView({ behavior: (window.prefersReduced && prefersReduced()) ? 'auto' : 'smooth', block: 'start' }); setTimeout(() => { try { document.getElementById('sqd-edit-name').focus(); } catch {} }, 250); return; }
       const vt = e.target.closest('.sqd-viewtoken');
+      if (vt && S && S.gate && S.gate.token && window.TokenModal && window.SFX) SFX.play('open');   // the token panel opens
       if (vt && S && S.gate && S.gate.token && window.TokenModal) { TokenModal.open(S.gate.token, { symbol: S.gate.symbol, name: S.gate.name }); return; }
     });
     // feed: reactions + comments
@@ -516,8 +523,8 @@
       if (rb) {
         if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
         const post = rb.closest('.post'), pid = post.dataset.id;
-        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); }
-        catch (err) { const m = (err && err.message) || 'could not react'; if (window.sendToast) sendToast(m); if (window.announce) announce(m); }
+        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.SFX) { if (j.on) SFX.play('like'); else SFX.play('unlike'); } if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); }
+        catch (err) { const m = (err && err.message) || 'could not react'; if (window.SFX && !(err && err.needsProof)) SFX.play('error'); if (window.sendToast) sendToast(m); if (window.announce) announce(m); }
         return;
       }
       const ct = e.target.closest('[data-comments]');
@@ -540,16 +547,17 @@
     });
     send.addEventListener('click', async () => {
       const text = ta.value.trim(), st = document.getElementById('sqd-c-status');
-      if (imgEl._busy) { st.textContent = 'Hang on — still uploading… ⏳'; return; }
-      if (!text && !img) { st.textContent = 'Say something first 🤌'; return; }
+      if (imgEl._busy) { st.textContent = 'Hang on — still uploading… ⏳'; if (window.SFX) SFX.play('warn'); return; }
+      if (!text && !img) { st.textContent = 'Say something first 🤌'; if (window.SFX) SFX.play('error'); return; }
       send.disabled = true;
       try {
         const j = await window.api('/api/squads/' + id + '/posts', { method: 'POST', body: { text, image: img } });
         ta.value = ''; img = null; setCount(500); window.setMediaPreview(document.getElementById('sqd-c-preview'), null); imgEl.value = ''; st.textContent = '';
         feedEl.insertAdjacentHTML('afterbegin', postCard(j.post)); emptyEl.style.display = 'none';
+        if (window.SFX) SFX.play('send');   // the post went out
         if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
         if (window.sendToast) sendToast('Posted to the squad 🔒');
-      } catch (err) { st.textContent = '⚠️ ' + ((err && err.message) || 'could not post'); }
+      } catch (err) { st.textContent = '⚠️ ' + ((err && err.message) || 'could not post'); if (window.SFX && !(err && err.needsProof)) SFX.play('error'); }
       send.disabled = false;
     });
     document.getElementById('sqd-more').addEventListener('click', () => loadWall(false));
@@ -561,6 +569,7 @@
         const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
         if (!d) return;
         e.preventDefault();
+        if (window.SFX) SFX.play('select');   // the arrow keys switch tabs too (a click gets the generic tab sound)
         pick(tabBtns[(i + d + tabBtns.length) % tabBtns.length].dataset.stab, true);
       });
     });
@@ -570,6 +579,7 @@
     const callBtn = document.getElementById('sqd-call-btn');
     if (callBtn) callBtn.addEventListener('click', () => {
       if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
+      if (!isVerified() && window.SFX) SFX.play('error');   // refused
       if (!isVerified()) { if (window.sendToast) sendToast('Only verified members can call a token to this squad'); return; }
       if (window.COMPOSE && typeof COMPOSE.openCall === 'function') { COMPOSE.openCall({ squadId: id, squadName: S ? S.name : '' }); return; }
       const fab = document.getElementById('compose-fab');
@@ -578,7 +588,7 @@
 
     // owner editor
     document.getElementById('sqd-edit-form').addEventListener('submit', saveEdit);
-    document.getElementById('sqd-edit-cancel').addEventListener('click', () => { editEl.hidden = true; pendAva = null; pendBan = null; const ob = document.getElementById('sqd-edit-open'); if (ob) ob.focus(); });
+    document.getElementById('sqd-edit-cancel').addEventListener('click', () => { editEl.hidden = true; pendAva = null; pendBan = null; if (window.SFX) SFX.play('close'); const ob = document.getElementById('sqd-edit-open'); if (ob) ob.focus(); });
     document.getElementById('sqd-edit-ava').addEventListener('change', (e) => readImage(e.target, 'ava'));
     document.getElementById('sqd-edit-ban').addEventListener('change', (e) => readImage(e.target, 'ban'));
     document.getElementById('sqd-edit-ava-rm').addEventListener('change', (e) => { if (e.target.checked) { pendAva = null; document.getElementById('sqd-edit-ava').value = ''; paintEditPreview('ava', null); } else paintEditPreview('ava', S && S.avatar); });
@@ -597,8 +607,8 @@
       const list = (j.comments || []).map(c => '<div class="comm-cmt"><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '">@' + esc(c.username) + '</a>' + ogB(c.og) + ' <span class="c-text">' + rich(c.text, c.tokens) + '</span></div>').join('') || '<p class="modal-note">no comments yet — start it off 👇</p>';
       zone.innerHTML = list + (window.AUTH && AUTH.user ? '<form class="comm-cmt-form"><input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Adds what you typed as a comment on this post">Reply</button></form>' : '<p class="modal-note"><button class="linklike" type="button" data-signin data-tip="Opens the sign-in box so you can join in">Sign in</button> to comment.</p>');
       const form = zone.querySelector('.comm-cmt-form');
-      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); }
-        catch (err) { const m = (err && err.message) || 'could not send'; if (window.sendToast) sendToast(m); if (window.announce) announce(m); } });
+      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; if (window.SFX) SFX.play('send'); await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); }
+        catch (err) { const m = (err && err.message) || 'could not send'; if (window.SFX && !(err && err.needsProof)) SFX.play('error'); if (window.sendToast) sendToast(m); if (window.announce) announce(m); } });
       const si = zone.querySelector('[data-signin]'); if (si) si.addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
     } catch { zone.innerHTML = '<p class="modal-note">could not load comments</p>'; }
   }

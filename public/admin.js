@@ -128,10 +128,12 @@
     say('Rotating…');
     try {
       const j = await AUTH.api('/api/admin/keys/rotate', { method: 'POST', body: { confirm: 'ROTATE', scope: compromised ? 'all' : 'data', compromised } });
+      if (window.SFX) SFX.play('success');
       if (j.restarting) { say('Done with the data key. The server is restarting for the index key — this panel reads again in 20 seconds.'); setTimeout(loadOverview, 20000); }
       else { say('Done: data key #' + j.keys.currentKey + ' is current' + (j.report && j.report.error ? ' — ⚠️ ' + j.report.error : '') + '.'); loadOverview(); }
     } catch (e) {
       say(e && e.message === 'cancelled' ? 'Not rotated.' : '⚠️ ' + ((e && e.message) || 'could not rotate'));
+      if (window.SFX && !(e && e.message === 'cancelled')) SFX.play('error');
       for (const b of ovBody.querySelectorAll('[data-keyrot]')) b.disabled = false;
     }
   });
@@ -159,29 +161,32 @@
         const note = window.prompt('Note for the author (optional, shown in their notification):') ;
         if (note === null) { b.disabled = false; st.textContent = ''; return; }
         await post('/api/admin/takedown', { kind: b.dataset.kind, id: Number(b.dataset.id), note });
+        if (window.SFX) SFX.play('remove');
       } else if (b.dataset.act === 'restrict') {
         const reason = window.prompt('Reason (the person sees it):', 'breaking the community rules');
         if (reason === null) { b.disabled = false; st.textContent = ''; return; }
         await post('/api/admin/restrict', { userId: Number(b.dataset.uid), days: 7, reason });
+        if (window.SFX) SFX.play('off');
       } else if (b.dataset.act === 'dismiss') {
         await post('/api/admin/resolve', { id: Number(b.dataset.rid), action: 'dismissed' });
+        if (window.SFX) SFX.play('close');
       }
       st.textContent = 'Done.';
       load();
-    } catch (err) { b.disabled = false; st.textContent = '⚠️ ' + err.message; }
+    } catch (err) { b.disabled = false; st.textContent = '⚠️ ' + err.message; if (window.SFX) SFX.play('error'); }
   });
 
   document.getElementById('adm-refresh').addEventListener('click', load);
   allBox.addEventListener('change', load);
   document.getElementById('adm-restrict').addEventListener('click', async () => {
     const st = document.getElementById('adm-restrict-status');
-    try { await post('/api/admin/restrict', { userId: Number(document.getElementById('adm-uid').value), days: Number(document.getElementById('adm-days').value), reason: document.getElementById('adm-reason').value }); st.textContent = 'Restricted.'; load(); }
-    catch (e) { st.textContent = '⚠️ ' + e.message; }
+    try { await post('/api/admin/restrict', { userId: Number(document.getElementById('adm-uid').value), days: Number(document.getElementById('adm-days').value), reason: document.getElementById('adm-reason').value }); st.textContent = 'Restricted.'; load(); if (window.SFX) SFX.play('off'); }
+    catch (e) { st.textContent = '⚠️ ' + e.message; if (window.SFX) SFX.play('error'); }
   });
   document.getElementById('adm-lift').addEventListener('click', async () => {
     const st = document.getElementById('adm-restrict-status');
-    try { await post('/api/admin/restrict', { userId: Number(document.getElementById('adm-uid').value), lift: true }); st.textContent = 'Lifted.'; load(); }
-    catch (e) { st.textContent = '⚠️ ' + e.message; }
+    try { await post('/api/admin/restrict', { userId: Number(document.getElementById('adm-uid').value), lift: true }); st.textContent = 'Lifted.'; load(); if (window.SFX) SFX.play('on'); }
+    catch (e) { st.textContent = '⚠️ ' + e.message; if (window.SFX) SFX.play('error'); }
   });
 
   function boot() {

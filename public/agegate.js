@@ -91,14 +91,17 @@
         // aria-disabled rather than disabled: a disabled button takes no pointer or focus, so it could
         // neither show its description nor say why nothing happened
         err.textContent = 'Tick the box to confirm you are 18 or older.';
+        if (window.SFX) SFX.play('error');
         box.focus();
         return;
       }
+      if (window.SFX) SFX.play('launch');
       finish();
     });
     el.querySelector('#age-leave').addEventListener('click', function () {
       if (!isOpen) return;   // the gate is already on its way out
       try { sessionStorage.setItem(SS_NO, '1'); } catch (e) {}
+      if (window.SFX) SFX.play('close');
       showNo();
     });
     sync();

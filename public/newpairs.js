@@ -48,21 +48,24 @@
     const token = String(btn.dataset.pin || '').toLowerCase();
     const wasOn = isPinned(token);
     btn.disabled = true;
+    if (window.SFX) SFX.play('tap');   // the press itself: the button's aria-pressed still holds the old state, so the generic switch sound would be the wrong way round
     try {
       if (wasOn) {
         // fetch() resolves on a 401/5xx too — without this check an expired session still toasted "Unpinned"
         // and repainted the button while the pin stayed on the wall
         const r = await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
-        if (!r.ok) { const j = await r.json().catch(() => ({})); if (window.sendToast) sendToast(j.error || 'Could not unpin'); btn.disabled = false; return; }
+        if (!r.ok) { const j = await r.json().catch(() => ({})); if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast(j.error || 'Could not unpin'); btn.disabled = false; return; }
         pinnedTokens.delete(token);
+        if (window.SFX) SFX.play('remove');   // off the wall
         if (window.sendToast) sendToast('Unpinned $' + (btn.dataset.sym || '') + ' 📌');
       } else {
         const body = { token, pair: btn.dataset.pair, symbol: btn.dataset.sym, name: btn.dataset.name };
         if (btn.dataset.logo) body.brand = { imageUrl: btn.dataset.logo };
         const r = await fetch('/api/pins', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const j = await r.json().catch(() => ({}));
-        if (!r.ok) { if (window.sendToast) sendToast(j.error || 'Could not pin'); btn.disabled = false; return; }
+        if (!r.ok) { if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast(j.error || 'Could not pin'); btn.disabled = false; return; }
         pinnedTokens.add(token);
+        if (window.SFX) SFX.play('success');   // a Conviction Play, on the wall
         if (window.sendToast) sendToast('📌 Pinned $' + (btn.dataset.sym || '') + ' to your wall!');
       }
       const sel = '.np-pin[data-pin="' + (window.CSS && CSS.escape ? CSS.escape(btn.dataset.pin) : btn.dataset.pin) + '"]';
@@ -82,7 +85,7 @@
         b.disabled = false;
       });
       document.dispatchEvent(new CustomEvent('pins:changed', { detail: { token } })); // let the public wall's "Conviction Plays" re-render live
-    } catch { if (window.sendToast) sendToast('Could not update pin'); btn.disabled = false; }
+    } catch { if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast('Could not update pin'); btn.disabled = false; }
   });
 
   /* ---------- formatting ---------- */
@@ -394,10 +397,12 @@
       if (!r.ok) {
         // if the rejection carries a fresh read-only restriction (already muted), pop the banner immediately
         if (j.restriction && window.AUTH) { AUTH.user.restriction = j.restriction; AUTH.user.probation = null; if (AUTH.renderRestrictBanner) AUTH.renderRestrictBanner(); if (AUTH.renderProbationBanner) AUTH.renderProbationBanner(); }
+        if (window.SFX) SFX.play('error');   // the server's own words may not read as a failure to the toast's ear
         if (window.sendToast) sendToast(j.error || 'Could not make that call');
         btn.disabled = false; btn.textContent = old; return;
       }
       btn.textContent = '✓ Called — on your wall';
+      if (window.SFX) SFX.play('launch');   // the call is up: a rocket goes
       if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
       if (window.sendToast) sendToast('📣 Send Call posted on $' + sym + '! Your Xs track live on the Send Wall.');
       // this call may have completed a sub-hour spam burst → the server muted us; show the read-only banner now
@@ -791,6 +796,7 @@
     btn.textContent = (btn.dataset.callIco || '📣') + ' Sure?';
     btn.setAttribute('aria-label', 'Confirm the Send Call on ' + (btn.dataset.callSym || '') + '. It is permanent and can never be deleted.');
     if (window.announce) announce('Press again to post a permanent Send Call on ' + (btn.dataset.callSym || '') + '.');
+    if (window.SFX) SFX.play('warn');   // armed: tap again to confirm
     callArmTimer = setTimeout(disarmCall, 5000);
   }
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && callArmed) disarmCall(); });
@@ -1500,6 +1506,7 @@
     const seq = ++lookupSeq;
     state.lookup = { addr, status: 'loading', p: null };
     announce('Looking up token ' + shortAddr(addr));
+    if (window.SFX) SFX.play('scan');   // a whole address in the box: the chain read starts
     fetchLookup(addr, seq);
   }
   async function fetchLookup(addr, seq) {
@@ -1518,6 +1525,7 @@
     else if (lk.status === 'unnamed') announce('That token’s name and symbol do not resolve on-chain, so it is not shown here.');
     else if (lk.status === 'notfound') announce(lk.msg || ('No trading pair found for ' + shortAddr(addr)));
     else announce('Lookup failed — try again.');
+    if (window.SFX) { if (lk.status === 'done') SFX.play('success'); else if (lk.status === 'unnamed') SFX.play('warn'); else SFX.play('error'); }   // the answer to the lookup the visitor started
     if (state.mode === 'list') render();
   }
   function renderLookup() {
@@ -1655,6 +1663,7 @@
       if (manual && window.sendToast) sendToast('Radar updated 📡');
       updateStatus();
     } catch (e) {
+      if (manual && window.SFX) SFX.play('error');
       npData.error = 'fetch failed';
       if (!state.all.length) { state.started = true; render(); } else updateStatus();
     }
@@ -1964,6 +1973,7 @@
         if (name) {
           state.saved.unshift({ name: name.slice(0, 24), sort: state.sort, filters: JSON.parse(JSON.stringify(state.filters)) });
           state.saved = state.saved.slice(0, 6); persist(); renderSaved();
+          if (window.SFX) SFX.play('success');
           if (window.sendToast) sendToast('View saved 📁');
         }
       }
@@ -2031,6 +2041,7 @@
         const h = $('np-fhead-title');
         if (h) { h.setAttribute('tabindex', '-1'); h.focus({ preventScroll: true }); }
       } else if (refocus) { try { more.focus(); } catch {} }
+      if (!open && refocus && window.SFX) SFX.play('close');   // the ✕, a tap outside, Esc or the Filters button again
     }
     window.npSetFiltersOpen = setFiltersOpen;   // applyStrategy opens it after writing the settings
     more.addEventListener('click', () => setFiltersOpen(filters.hidden, true));
@@ -2086,14 +2097,15 @@
     if ($('np-savenow-top')) $('np-savenow-top').addEventListener('click', () => saveCurrentView(document.querySelector('.np-fhead')));
     const savedWrap = $('np-saved');
     if (savedWrap) savedWrap.addEventListener('click', e => {
-      const del = e.target.closest('[data-svdel]'); if (del) { e.stopPropagation(); deleteSaved(Number(del.dataset.svdel)); return; }
+      const del = e.target.closest('[data-svdel]'); if (del) { e.stopPropagation(); deleteSaved(Number(del.dataset.svdel)); if (window.SFX) SFX.play('remove'); return; }
       const sv = e.target.closest('[data-sv]'); if (sv) applySaved(Number(sv.dataset.sv));
+      if (sv && window.SFX) SFX.play('select');   // one of your saved views, picked
     });
     // reset
     if ($('np-reset')) $('np-reset').addEventListener('click', () => resetFilters());
     if ($('np-reset-top')) $('np-reset-top').addEventListener('click', () => resetFilters());
     // refresh
-    $('np-refresh').addEventListener('click', () => { const btn = $('np-refresh'); if (!reduced()) btn.classList.add('spin'); fetchPairs(true).then(() => setTimeout(() => btn.classList.remove('spin'), 500)); });
+    $('np-refresh').addEventListener('click', () => { if (window.SFX) SFX.play('scan'); const btn = $('np-refresh'); if (!reduced()) btn.classList.add('spin'); fetchPairs(true).then(() => setTimeout(() => btn.classList.remove('spin'), 500)); });
     // staged new-pairs bar
     newbar.addEventListener('click', showStaged);
     // track open <details> (row cards AND inner detail groups) for persistence
@@ -2125,9 +2137,9 @@
       }
       const t = e.target.closest('button'); if (!t) return;
       if (t.id === 'np-lookup-open') { if (state.lookup && state.lookup.p) openDash(state.lookup.p); return; }
-      if (t.id === 'np-retry') fetchPairs(true);
+      if (t.id === 'np-retry') { if (window.SFX) SFX.play('scan'); fetchPairs(true); }
       else if (t.id === 'np-clearq') { $('np-q').value = ''; state.q = ''; const cb = $('np-q-clear'); if (cb) cb.hidden = true; clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); }
-      else if (t.id === 'np-lookup-retry') { const addr = state.q.toLowerCase(); if (LOOKUP_RE.test(addr)) { const seq = ++lookupSeq; state.lookup = { addr, status: 'loading', p: null }; render(); fetchLookup(addr, seq); } }
+      else if (t.id === 'np-lookup-retry') { const addr = state.q.toLowerCase(); if (LOOKUP_RE.test(addr)) { if (window.SFX) SFX.play('scan'); const seq = ++lookupSeq; state.lookup = { addr, status: 'loading', p: null }; render(); fetchLookup(addr, seq); } }
       else if (t.id === 'np-showrisky') selectSafety('risky');
       else if (t.id === 'np-reset2') resetFilters();
     });
@@ -2158,6 +2170,7 @@
         c.textContent = 'you \u00d7' + n;                              // never a bare integer — see rocketCount
         try { localStorage.setItem('np:rocket:' + react.dataset.addr, String(n)); } catch {}
         if (!reduced()) { react.classList.remove('pop'); void react.offsetWidth; react.classList.add('pop'); }
+        if (window.SFX) SFX.play('launch');   // 🚀 hyped: a rocket goes
         if (window.sendToast) sendToast('Hyped \ud83d\ude80 — a private tap only you see. Still DYOR, not advice.'); return;
       }
       // ℹ️ and "Full dashboard" open the token's dashboard in the popup (the inline detail only where there is no popup)

@@ -75,11 +75,13 @@
     pop.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-pop-act]'); if (!b) return;
       const name = pop.dataset.name || '';
+      if (b.dataset.popAct === 'keep' && window.SFX) SFX.play('close');   // the popdown shuts, the mute stays
       if (b.dataset.popAct === 'keep') { closePop(true); say('Kept @' + name + ' muted.'); return; }
       b.disabled = true;
       const link = popFor && popFor.previousElementSibling; // the @name link the flag sits next to — usually survives the re-paint
       try {
         await MUTES.unmute(name); // → mutes:change → redecorate() (closes the popdown, strips flags, repaints)
+        if (window.SFX) SFX.play('on');   // their sound is back on
         closePop(false); // the flag we'd restore focus to is gone by now
         // restore focus to that link — or, if its row was re-rendered meanwhile (live call widget), to the fresh link for the same @name
         const again = (link && link.isConnected) ? link
@@ -294,6 +296,7 @@
     btn.disabled = true;
     try {
       if (on) await MUTES.mute(name); else await MUTES.unmute(name);
+      if (window.SFX) SFX.play(on ? 'off' : 'on');   // muted: down; unmuted: up
       setOpen(false); trg.focus();
       toast(on ? '🔇 Muted @' + name : '🔊 Unmuted @' + name);
       say(on ? 'Muted @' + name + '. Their posts are hidden everywhere else.' : 'Unmuted @' + name + '.');
@@ -302,6 +305,7 @@
   function wireMenu() {
     if (!wrap || !menu || !trg) return;
     trg.addEventListener('click', () => {
+      if (!signedIn() && window.SFX) SFX.play('open');   // the sign-in box opens: one sound for it, not a toast chime as well
       if (!signedIn()) { toast('Sign in to mute senders 🛡️'); if (window.AUTH && AUTH.open) AUTH.open(); return; }
       const open = !wrap.classList.contains('open');
       setOpen(open);

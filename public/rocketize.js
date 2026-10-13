@@ -115,7 +115,7 @@
     out.classList.toggle('is-ok', kind === 'ok');
   }
   function setStatus(text, kind) { say(els.status, text, kind); }
-  function setError(text) { setStatus('⚠️ ' + text, 'err'); }
+  function setError(text) { setStatus('⚠️ ' + text, 'err'); if (window.SFX) SFX.play('error'); }   // every caller answers something the visitor just did (the timer's message below uses setStatus)
   let dropStatus = null; // status line inside the drop zone, for an upload that completes while the editor is hidden (after a sign-in redirect)
   function statusOut() {
     if (base) return els.status;
@@ -163,12 +163,14 @@
     const st = { id: nextId++, x: clamp(x, 0, base.width), y: clamp(y, 0, base.height), size: lastSize, rot: 0 };
     selectedId = st.id;
     commit(stickers.concat([st]));
+    if (window.SFX) SFX.play('launch');   // a rocket goes on the picture
     announce('Rocket added — ' + countText());
   }
   function removeSelected() {
     const st = selected(); if (!st) return;
     selectedId = null;
     commit(stickers.filter((s) => s.id !== st.id));
+    if (window.SFX) SFX.play('remove');
     announce('Rocket removed — ' + countText());
     (stickers.length ? els.next : els.canvas).focus({ preventScroll: true });
   }
@@ -178,11 +180,13 @@
     const copy = { ...st, id: nextId++, x: clamp(st.x + off, 0, base.width), y: clamp(st.y + off, 0, base.height) };
     selectedId = copy.id;
     commit(stickers.concat([copy]));
+    if (window.SFX) SFX.play('launch');   // one more rocket
     announce('Rocket duplicated — ' + countText());
   }
   function selectNext() {
     if (!stickers.length) return;
     const i = stickers.findIndex((s) => s.id === selectedId);
+    if (window.SFX) SFX.play('select');
     select(stickers[(i + 1) % stickers.length].id);
   }
   function nudge(dx, dy) {
@@ -252,6 +256,7 @@
     const p = toCanvas(e), hit = hitAt(p.x, p.y, p.k);
     drag = { id: hit ? hit.id : null, ox: hit ? p.x - hit.x : 0, oy: hit ? p.y - hit.y : 0, sx: p.x, sy: p.y, k: p.k, moved: false, pid: e.pointerId };
     try { els.canvas.setPointerCapture(e.pointerId); } catch {}
+    if (hit && window.SFX) SFX.play('select');   // picked up a rocket
     if (hit) { select(hit.id); els.canvas.focus({ preventScroll: true }); }
   });
   els.canvas.addEventListener('touchstart', (e) => {
@@ -277,6 +282,7 @@
       if (!d.moved && !cancelled) { addAt(d.sx, d.sy); els.canvas.focus({ preventScroll: true }); }
       return;
     }
+    if (d.moved && window.SFX) SFX.play('tap');   // set down where it was dragged
     if (d.moved) { commit(stickers); announce('Rocket moved'); }
     else { stickers = history[hi]; draw(); }
   }
@@ -363,6 +369,7 @@
     els.drop.hidden = true; els.editor.hidden = false;
     loading = false; setStatus(''); syncAuthNote(); syncUI(); draw();
     els.canvas.focus({ preventScroll: true });
+    if (window.SFX) SFX.play('open');   // the editor opens on the picture
     announce('Picture loaded. Tap or click the picture to add rockets.');
   }
   els.pick.addEventListener('click', () => { els.file.value = ''; els.file.click(); });
@@ -385,6 +392,7 @@
     els.editor.hidden = true; els.drop.hidden = false;
     setStatus('');
     els.pick.focus({ preventScroll: true });
+    if (window.SFX) SFX.play('remove');   // the picture and its rockets are thrown away
     announce('Cleared. Choose another picture.');
   });
 
@@ -401,6 +409,7 @@
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(u), 15000);
       setStatus('Saved as rocketized.png ⬇ (check your downloads)', 'ok');
+      if (window.SFX) SFX.play('success');
       announce('Downloading rocketized.png');
     }, 'image/png');
   });
@@ -435,6 +444,7 @@
         if (window.AUTH.user.theme && typeof window.AUTH.user.theme === 'object') window.AUTH.user.theme.avatar_img = j.url;
         document.dispatchEvent(new CustomEvent('auth:change', { detail: window.AUTH.user }));
       }
+      if (window.SFX) SFX.play('success');   // saved as the profile pic
       toast('That’s your new profile pic 🚀');
       out.textContent = 'That’s your new profile pic 🚀 ';
       const a = document.createElement('a'); a.href = '/profile.html'; a.textContent = 'See it on your profile →';
@@ -444,6 +454,7 @@
       if (window.sendConfetti && !reduced()) { try { window.sendConfetti(innerWidth / 2, innerHeight / 2, { count: 30, emojiRatio: 0.5 }); } catch {} }
     } catch (err) {
       say(out, '⚠️ ' + ((err && err.message) || 'Upload failed — try again.'), 'err');
+      if (window.SFX) SFX.play('error');
     } finally { setBusy(false); }
   }
 
@@ -488,7 +499,7 @@
     pendingTimer = setTimeout(() => {
       if (!pendingAvatar) return;
       clearPending();
-      setError('Sign-in timed out — hit “Make it my profile pic” again when you’re ready.');
+      setStatus('⚠️ Sign-in timed out — hit “Make it my profile pic” again when you’re ready.', 'err');   // setError's look without its buzz: a timer, not a tap
     }, PENDING_MS);
     setStatus(stashed
       ? 'Sign in to finish. If sign-in takes you to your profile page, come back here and we’ll set it.'

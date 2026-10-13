@@ -932,6 +932,8 @@ function trkWire(zone) {
     if (tog && zone.contains(tog)) {
       const k = tog.dataset.trkToggle;
       c.P[k] = !c.P[k];
+      // the zone is redrawn below, so the generic switch sound would read the old button's state: say the new one here
+      if (typeof window !== 'undefined' && window.SFX) { if (c.P[k]) window.SFX.play('on'); else window.SFX.play('off'); }
       rerender('toggle:' + k);
       if (typeof window !== 'undefined' && window.saveTrackerPrefs) window.saveTrackerPrefs(c.P);
       return;
@@ -1000,6 +1002,7 @@ function trkDownloadCsv(r) {
   const a = document.createElement('a');
   a.href = url; a.download = 'wallet-' + String(r.address || '').slice(0, 10) + '-transactions.csv';
   document.body.appendChild(a); a.click(); a.remove();
+  if (typeof window !== 'undefined' && window.SFX) window.SFX.play('success');   // the file is saved
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 

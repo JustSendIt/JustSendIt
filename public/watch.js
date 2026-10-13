@@ -34,12 +34,13 @@
           snapshot: p,
         }),
       });
-      if (!r.ok) { ids.delete(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (r.status === 401 && window.AUTH) AUTH.open(); return false; }
+      if (!r.ok) { ids.delete(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.SFX) SFX.play('error'); return false; }   // refused: the star goes hollow again, with no toast to say so
       const j = await r.json().catch(() => ({}));
+      if (window.SFX) SFX.play('success');   // the server kept it
       if (window.sendToast) sendToast('⭐ Saved to your watchlist');
       if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);  // +N pop, nav badge, notif refresh
       return true;
-    } catch { ids.delete(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); return false; }
+    } catch { ids.delete(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (window.SFX) SFX.play('error'); return false; }
   }
   async function remove(pair) {
     pair = String(pair || ''); if (!pair) return false;
@@ -51,6 +52,7 @@
     try {
       const r = await fetch('/api/watchlist', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pair }) });
       if (!r.ok) { revert(); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.sendToast) sendToast('Could not remove — try again'); return false; }
+      if (window.SFX) SFX.play('remove');   // the server let it go
       if (window.sendToast) sendToast('Removed from watchlist');
       return true;
     } catch { revert(); if (window.sendToast) sendToast('Could not remove — try again'); return false; }

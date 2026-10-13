@@ -354,9 +354,9 @@
   addrIn.addEventListener('input', () => { if (!addrErr.hidden) setAddrError(''); });
   async function addWallet(address, label, focusAfter) {
     address = String(address || '').trim();
-    if (!ADDR_RE.test(address)) { setAddrError('That doesn\'t look like an address — it should start with 0x and be 42 characters long.'); addrIn.focus(); return false; }
+    if (!ADDR_RE.test(address)) { setAddrError('That doesn\'t look like an address — it should start with 0x and be 42 characters long.'); addrIn.focus(); if (window.SFX) SFX.play('error'); return false; }
     address = address.toLowerCase();
-    if (walletByAddr(address)) { setAddrError('You\'re already tracking that wallet — it\'s in your list.'); select(address, true); return false; }
+    if (walletByAddr(address)) { setAddrError('You\'re already tracking that wallet — it\'s in your list.'); select(address, true); if (window.SFX) SFX.play('warn'); return false; }
     addBtn.disabled = true;
     try {
       const j = await api('/api/wallets', { method: 'POST', body: { address, label: String(label || '').slice(0, 40) } });
@@ -364,6 +364,7 @@
       state.wallets.push(w);
       addrIn.value = ''; labelIn.value = ''; setAddrError('');
       renderWallets();
+      if (window.SFX) SFX.play('success');   // the server has it: tracked
       toast('💼 Now tracking ' + nameOf(w));
       if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
       say('Now tracking ' + nameOf(w) + ' — ' + state.wallets.length + ' of ' + state.limit + ' wallets');
@@ -392,7 +393,7 @@
     soForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const v = soAddr.value.trim();
-      if (v && !ADDR_RE.test(v)) { setSoError('That doesn\'t look like an address — it should start with 0x and be 42 characters long. Leave it empty to just sign in.'); soAddr.focus(); return; }
+      if (v && !ADDR_RE.test(v)) { setSoError('That doesn\'t look like an address — it should start with 0x and be 42 characters long. Leave it empty to just sign in.'); soAddr.focus(); if (window.SFX) SFX.play('error'); return; }
       setSoError('');
       signInToTrack(v);
     });
@@ -425,6 +426,7 @@
     const input = form.querySelector('input');
     input.value = w.label || '';
     input.focus(); input.select();
+    if (window.SFX) SFX.play('open');   // the rename box
     let done = false;
     const finish = (focusBtn) => {
       if (done) return; done = true;
@@ -440,7 +442,7 @@
       const old = w.label;
       w.label = label; // optimistic: the list re-renders (dropping this form) and focus lands on the new ✏️ button
       renderWallets(); updateSelectedLine(); focusRename();
-      try { await api('/api/wallets/' + encodeURIComponent(w.id), { method: 'PATCH', body: { label } }); say('Renamed to ' + nameOf(w)); }
+      try { await api('/api/wallets/' + encodeURIComponent(w.id), { method: 'PATCH', body: { label } }); say('Renamed to ' + nameOf(w)); if (window.SFX) SFX.play('success'); }
       catch { w.label = old; renderWallets(); updateSelectedLine(); focusRename(); toast('⚠️ Could not rename — try again.'); }
     };
     form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
@@ -470,7 +472,7 @@
     // Enter must not arm a removal the user never meant); after the last wallet, the add-address field
     const li = wlist.querySelectorAll('.trk-w')[Math.min(idx, state.wallets.length - 1)];
     const nb = li ? li.querySelector('.trk-w-main') : addrIn; if (nb) nb.focus();
-    try { await api('/api/wallets/' + encodeURIComponent(id), { method: 'DELETE' }); }
+    try { await api('/api/wallets/' + encodeURIComponent(id), { method: 'DELETE' }); if (window.SFX) SFX.play('remove'); }
     catch {
       // the server still holds the row → restore it so the meter never advertises a slot that isn't free
       if (!state.wallets.some(w => String(w.id) === String(id))) { state.wallets.splice(Math.min(idx, state.wallets.length), 0, removed); renderWallets(); }
@@ -491,6 +493,7 @@
       rm.classList.add('is-armed'); rm.textContent = 'Sure?';
       rm.setAttribute('aria-label', 'Tap again to confirm: stop tracking ' + (w ? nameOf(w) : 'this wallet'));
       say('Tap again within 4 seconds to stop tracking ' + (w ? nameOf(w) : 'this wallet'));
+      if (window.SFX) SFX.play('warn');   // armed: tap again to confirm
       state.confirmT = { id, name: w ? nameOf(w) : '', timer: setTimeout(clearConfirm, 4000) };
     }
   });
@@ -736,6 +739,7 @@
     if (!state.selected || state.inflight[state.selected]) return;
     clearRebuild(); forgetFailure(state.selected);
     say('Refreshing report');
+    if (window.SFX) SFX.play('scan');   // a new read of the chain starts
     refresh(state.selected, ++state.runId, 1);   // a new read from the chain, not the server's copy of the last one — incremental when a history is saved
   });
   /* Rebuild from scratch: two taps within 4 s. The whole history from block 0 is the slow read the saved one exists
@@ -751,6 +755,7 @@
     if (state.rebuildT) {
       clearRebuild(); forgetFailure(state.selected);
       say('Rebuilding the report from block 0');
+      if (window.SFX) SFX.play('scan');
       refresh(state.selected, ++state.runId, 2);
       return;
     }
@@ -758,6 +763,7 @@
     rebuildBtn.setAttribute('aria-label', 'Tap again to confirm: read the whole history again from block 0 — an hour or more on the public node');
     say('Tap again within 4 seconds to read the whole history again from block 0 — on the public node it can take an hour or more; you can leave, it keeps reading, is saved, and you get a notification when it is ready');
     state.rebuildT = setTimeout(clearRebuild, 4000);
+    if (window.SFX) SFX.play('warn');   // armed: tap again to confirm
   });
   reportEl.addEventListener('click', (e) => {
     if (e.target.closest('[data-retry]')) { if (state.selected) refresh(state.selected, ++state.runId); return; }
@@ -922,6 +928,7 @@
     if (!mine.length) return;
     state.combRunning = true;
     combRun.disabled = true;
+    if (window.SFX) SFX.play('scan');   // a read of each of your wallets starts
     state.comb = { portfolio: null, realized: null, unrealized: null, partial: false, rows: mine.map(w => ({ address: w.address, label: w.label, pending: true })) };
     renderCombined();
     let done = 0, failed = 0;

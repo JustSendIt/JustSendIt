@@ -94,7 +94,7 @@
     const requalify = joined && !qualified; // de-qualified (sold / disconnected / moved bags) → the primary action is to re-verify, never a dead end
     const optBtn = requalify
       ? '<button class="btn btn-primary comm-join-btn" id="comm-join" type="button" data-tip="Re-checks your holdings on-chain and tries to get your spot back">' + (c.mine && c.mine.blockReason ? '↻ Re-check my slot' : '↻ Re-verify holdings &amp; opt back in') + '</button> <button class="btn btn-ghost btn-sm" id="comm-leave" type="button" data-tip="Leaves after a second press — your member level is wiped for good">Leave</button>'
-      : '<button class="btn ' + (joined ? 'btn-ghost' : 'btn-primary') + ' comm-join-btn" id="comm-join" type="button" data-tip="Opts you in, or a second tap leaves and wipes your level" aria-pressed="' + (!!joined) + '">' + (joined ? '✓ You’re in' + (c.mine && c.mine.isCreator ? ' (starter 👑)' : '') : '➕ Opt in' + (live ? ' & get 10×' : '')) + '</button>';
+      : '<button class="btn ' + (joined ? 'btn-ghost' : 'btn-primary') + ' comm-join-btn" id="comm-join" type="button" data-sfx="tap" data-tip="Opts you in, or a second tap leaves and wipes your level" aria-pressed="' + (!!joined) + '">' + (joined ? '✓ You’re in' + (c.mine && c.mine.isCreator ? ' (starter 👑)' : '') : '➕ Opt in' + (live ? ' & get 10×' : '')) + '</button>';
     const conv = (joined && c.mine) ? xpBar('💎 Your conviction · ' + esc(c.mine.convictionTitle), c.mine.convictionLevel, c.mine.convictionInto, c.mine.convictionSpan, 'comm-xp-conv') : '';
     const blockReason = (c.mine && c.mine.blockReason) || null; // anti-sybil block (IP cap / starter network) — NOT a holdings problem, so say so
     const twoX = c.demo ? '<span class="comm-2x-badge comm-2x-off" title="The sandbox is for trying things out, so it grants no Send Power multiplier">🧪 Sandbox — no 10×</span>'
@@ -217,8 +217,8 @@
       (p.text ? '<p class="post-body">' + (window.richText ? richText(p.text, p.tokens) : esc(p.text)) + '</p>' : '') + // $TICKERs → token chips (tokentext.js)
       (p.image ? window.mediaTag(esc(p.image), esc(p.username)) : '') +
       '<div class="post-actions">' +
-        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('fire') + '" data-react="fire" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
-        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('rocket') + '" data-react="rocket" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('fire') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('fire') + '" data-react="fire" data-sfx="none" data-tip="Adds your fire reaction to this post, or takes it back" aria-label="React with fire">🔥 <span>' + fire + '</span></button>' +
+        '<button class="react-btn' + (myR.includes('rocket') ? ' lit' : '') + '" type="button" aria-pressed="' + myR.includes('rocket') + '" data-react="rocket" data-sfx="none" data-tip="Adds your rocket reaction to this post, or takes it back" aria-label="React with rocket">🚀 <span>' + rocket + '</span></button>' +
         '<button class="react-btn comm-cmt-toggle" type="button" data-comments data-tip="Shows or hides the comments people left on this post" aria-label="Show comments" aria-expanded="false">💬 <span>' + (p.comments || 0) + '</span></button>' +
         (!p.mine ? '<button class="react-btn post-report" type="button" data-report="post" data-report-id="' + p.id + '" aria-label="Report this post" data-tip="Reports this post to the moderators">⚑</button>' : '') +
       '</div>' +
@@ -326,6 +326,7 @@
           join._armed = true; join.dataset.label = join.textContent; join.textContent = '⚠️ Tap again to leave';
           join.setAttribute('aria-label', 'Tap again to confirm leaving this community');
           clearTimeout(join._armT); join._armT = setTimeout(() => { if (join.isConnected) { join._armed = false; join.textContent = join.dataset.label || '✓ You’re in'; join.removeAttribute('aria-label'); } }, 4000);
+          if (window.SFX) SFX.play('warn');   // "tap again to leave"
           return;
         }
         clearTimeout(join._armT); join._armed = false;
@@ -334,6 +335,7 @@
           const r = await fetch('/api/communities/' + id + '/join', { method: leaving ? 'DELETE' : 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
           const j = await r.json();
           if (!r.ok) {
+            if (window.SFX) SFX.play('error');   // refused — the server's own words may not sound like it
             if (window.sendToast) sendToast(j.error || 'Could not update');
             const gate = document.getElementById('comm-gate'); // holder-gate (403) → persistent notice + buy/recheck actions
             if (gate && r.status === 403 && C && !C.demo) { // the sandbox has no holder gate: a 403 there is the read-only restriction, already toasted
@@ -346,6 +348,8 @@
             join.disabled = false; return;
           }
           const gclr = document.getElementById('comm-gate'); if (gclr) { gclr.hidden = true; gclr.innerHTML = ''; }
+          // left (remove) · it went LIVE, or the 10× switched on (powerup) · in (success); a slot the caps blocked is left to its toast
+          if (window.SFX) { if (leaving) SFX.play('remove'); else if (j.wentLive || (j.status === 'live' && j.qualified !== false && !(C && C.demo))) SFX.play('powerup'); else if (j.qualified !== false) SFX.play('success'); }
           if (j.wentLive) { if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 80, emojiRatio: 0.4 }); if (window.sendToast) sendToast('🎉 Community is LIVE!'); }
           else if (window.sendToast) {
             if (leaving) sendToast('Left the community');
@@ -361,6 +365,7 @@
         return;
       }
       const vt = e.target.closest('.comm-viewtoken');
+      if (vt && C && window.TokenModal && window.SFX) SFX.play('open');   // the token panel opens
       if (vt && C && window.TokenModal) { TokenModal.open(C.token, { symbol: C.symbol, name: C.name }); return; }
     });
     // feed: reactions + comments
@@ -369,8 +374,8 @@
       if (rb) {
         if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
         const post = rb.closest('.post'), pid = post.dataset.id;
-        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); }
-        catch (err) { const m = (err && err.message) || 'could not react'; if (window.sendToast) sendToast(m); if (window.announce) announce(m); } // a refusal must be seen and heard, as on the Send Wall (the proof check itself is raised by auth.js)
+        try { const j = await window.api('/api/posts/' + pid + '/react', { method: 'POST', body: { kind: rb.dataset.react } }); rb.classList.toggle('lit', j.on); rb.setAttribute('aria-pressed', String(!!j.on)); rb.querySelector('span').textContent = j.count; if (window.SFX) { if (j.on) SFX.play('like'); else SFX.play('unlike'); } if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned); }
+        catch (err) { const m = (err && err.message) || 'could not react'; if (window.SFX && !(err && err.needsProof)) SFX.play('error'); if (window.sendToast) sendToast(m); if (window.announce) announce(m); } // a refusal must be seen and heard, as on the Send Wall (the proof check itself is raised by auth.js)
         return;
       }
       const ct = e.target.closest('[data-comments]');
@@ -394,16 +399,17 @@
     });
     send.addEventListener('click', async () => {
       const text = ta.value.trim();
-      if (commImgEl._busy) { document.getElementById('comm-c-status').textContent = 'Hang on — still uploading… ⏳'; return; }
-      if (!text && !img) { document.getElementById('comm-c-status').textContent = 'Say something first 🤌'; return; }
+      if (commImgEl._busy) { document.getElementById('comm-c-status').textContent = 'Hang on — still uploading… ⏳'; if (window.SFX) SFX.play('warn'); return; }
+      if (!text && !img) { document.getElementById('comm-c-status').textContent = 'Say something first 🤌'; if (window.SFX) SFX.play('error'); return; }
       send.disabled = true;
       try {
         const j = await window.api('/api/communities/' + id + '/posts', { method: 'POST', body: { text, image: img, private: wall === 'holders' } });
         ta.value = ''; img = null; setCommCount(500); window.setMediaPreview(document.getElementById('comm-c-preview'), null); document.getElementById('comm-c-img').value = ''; document.getElementById('comm-c-status').textContent = '';
         feedEl.insertAdjacentHTML('afterbegin', postCard(j.post)); emptyEl.style.display = 'none';
+        if (window.SFX) SFX.play('send');   // the post went out
         if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
         if (window.sendToast) sendToast(wall === 'holders' ? 'Posted to the holders-only wall 🔒' : 'Posted to the community 🚀');
-      } catch (err) { document.getElementById('comm-c-status').textContent = '⚠️ ' + ((err && err.message) || 'could not post'); }
+      } catch (err) { document.getElementById('comm-c-status').textContent = '⚠️ ' + ((err && err.message) || 'could not post'); if (window.SFX && !(err && err.needsProof)) SFX.play('error'); }
       send.disabled = false;
     });
     document.getElementById('comm-more').addEventListener('click', () => loadWall());
@@ -418,6 +424,7 @@
       const ta = document.getElementById('comm-c-text');
       if (ta && (ta.value.trim() || img)) {
         ta.value = ''; clearCommMedia(); setCommCount(500);
+        if (window.SFX) SFX.play('warn');   // a caution: the draft is gone
         if (window.sendToast) sendToast('Draft cleared — it was written for the other wall');
       }
       wall = which;
@@ -436,6 +443,7 @@
         const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
         if (!d) return;
         e.preventDefault();
+        if (window.SFX) SFX.play('select');   // the arrow keys switch walls too (a click gets the generic tab sound)
         pick(tabs[(i + d + tabs.length) % tabs.length].dataset.wall, true);
       });
     });
@@ -453,8 +461,8 @@
       const list = (j.comments || []).map(c => '<div class="comm-cmt"><a class="c-who" href="/u/' + encodeURIComponent(c.username) + '">@' + esc(c.username) + '</a>' + ogB(c.og) + ' <span class="c-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span></div>').join('') || '<p class="modal-note">no comments yet — start it off 👇</p>';
       zone.innerHTML = list + (window.AUTH && AUTH.user ? '<form class="comm-cmt-form"><input class="addr-input" maxlength="300" placeholder="add a comment…" aria-label="Write a comment"><button class="btn btn-primary btn-sm" type="submit" data-tip="Adds what you typed as a comment on this post">Reply</button></form>' : '<p class="modal-note"><button class="linklike" type="button" data-signin data-tip="Opens the sign-in box so you can join in">Sign in</button> to comment.</p>');
       const form = zone.querySelector('.comm-cmt-form');
-      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); }
-        catch (err) { const m = (err && err.message) || 'could not send'; if (window.sendToast) sendToast(m); if (window.announce) announce(m); } }); // the draft stays in the input; the refusal is toasted and announced, as on the Send Wall
+      if (form) form.addEventListener('submit', async (ev) => { ev.preventDefault(); const inp = form.querySelector('input'); const txt = inp.value.trim(); if (!txt) return; try { const cj = await window.api('/api/posts/' + pid + '/comments', { method: 'POST', body: { text: txt } }); inp.value = ''; if (window.SFX) SFX.play('send'); await toggleComments(post, true); const back = zone.querySelector('.comm-cmt-form input'); if (back) { try { back.focus(); } catch {} } if (window.announce) announce('Comment posted'); if (window.showPoints && cj.pointsEarned > 0) showPoints(cj.pointsEarned); }
+        catch (err) { const m = (err && err.message) || 'could not send'; if (window.SFX && !(err && err.needsProof)) SFX.play('error'); if (window.sendToast) sendToast(m); if (window.announce) announce(m); } }); // the draft stays in the input; the refusal is toasted and announced, as on the Send Wall
       const si = zone.querySelector('[data-signin]'); if (si) si.addEventListener('click', () => { if (window.AUTH) AUTH.open(); });
     } catch { zone.innerHTML = '<p class="modal-note">could not load comments</p>'; }
   }

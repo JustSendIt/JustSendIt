@@ -103,10 +103,11 @@
     status.textContent = text || '';
     status.className = 'sc-status' + (kind ? ' is-' + kind : '');
   }
-  async function scan(raw) {
+  async function scan(raw, heard) {   // heard: the visitor asked for this scan in this tab (a deep link on load scans quietly)
     const addr = String(raw || '').trim();
-    if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long.', 'err'); if (input) input.focus(); return; }
+    if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long.', 'err'); if (input) input.focus(); if (window.SFX) SFX.play('error'); return; }
     const my = ++seq;
+    if (heard && window.SFX) SFX.play('scan');   // the radar ping: a read of the chain has started
     lastPair = null;                                                   // the ☆ saves only the pair on screen, never the one before
     if (input) { input.value = addr; input.dispatchEvent(new Event('input')); }   // shows the ✕ for a chip or deep-link scan too
     if (go) { go.disabled = true; go.setAttribute('aria-disabled', 'true'); }
@@ -145,6 +146,7 @@
         result.innerHTML = (window.NPCard && NPCard.dashboardHTML) ? NPCard.dashboardHTML(p, { kicker, meta }) : '<p class="tm-msg">Full detail isn’t available here.</p>';
         if (window.NPCard && NPCard.mountDashboard) NPCard.mountDashboard(result);   // ring, chart, community slot, the contract read, the ☆ state
         setStatus(sc.stale ? 'Showing the last snapshot of ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + ', not live.' : 'Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + '.', sc.stale ? 'busy' : 'ok');
+        if (heard && window.SFX) { if (sc.stale) SFX.play('warn'); else SFX.play('success'); }   // the profile landed (a last snapshot is a caution, not a live read)
         remember(tok, sym);
         paintCommunity();
         const h = result.querySelector('.tkd-h'); if (h) { try { h.focus({ preventScroll: false }); } catch {} }
@@ -152,22 +154,26 @@
         // "we could not check" is never dressed up as a fact about the address
         result.innerHTML = '';
         setStatus('⏳ ' + ((j && (j.message || j.error)) || 'We couldn’t check this address just now — nothing here is a judgement about it. Try again in a moment.'), 'err');
+        if (heard && window.SFX) SFX.play('error');
       } else if (j && j.notFound) {
         result.innerHTML = '';
         setStatus('🤷 ' + (j.message || 'No token or pool found at this address on Robinhood Chain.'), 'err');
+        if (heard && window.SFX) SFX.play('error');
       } else {
         result.innerHTML = '';
         setStatus('⏳ We couldn’t read this address just now. Try again in a moment.', 'err');
+        if (heard && window.SFX) SFX.play('error');
       }
     } catch {
       if (my !== seq) return;
       result.innerHTML = '';
       setStatus('⏳ Couldn’t reach the site just now — check your connection and try again.', 'err');
+      if (heard && window.SFX) SFX.play('error');
     } finally {
       if (my === seq && go) { go.disabled = false; go.removeAttribute('aria-disabled'); }
     }
   }
-  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value); });
+  if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value, true); });
   // the ☆ on the dashboard: saves this pair to the watchlist (or takes it off)
   result.addEventListener('click', (e) => {
     const w = e.target.closest('.np-watch[data-wpair]');
@@ -197,10 +203,10 @@
     const b = e.target.closest && e.target.closest('[data-scan]');
     if (!b || !panScan.contains(b)) return;
     show('scan', { quiet: true });
-    scan(b.getAttribute('data-scan'));
+    scan(b.getAttribute('data-scan'), true);
   });
   // a pasted address scans straight away — nobody pastes one to look at it
-  if (input) input.addEventListener('paste', () => { setTimeout(() => { if (ADDR.test(input.value.trim())) scan(input.value); }, 0); });
+  if (input) input.addEventListener('paste', () => { setTimeout(() => { if (ADDR.test(input.value.trim())) scan(input.value, true); }, 0); });
 
   /* ---------- deep links ---------- */
   const q = new URLSearchParams(location.search);

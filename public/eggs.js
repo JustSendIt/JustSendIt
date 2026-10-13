@@ -75,6 +75,7 @@
     const pts = awarded > 0 ? ' +' + awarded + ' Send Power' : (capped ? ' · today\'s allowance is full — it still counts, and pays on a later visit' : '');
     const line = HINTS.get(id) ? ' — ' + HINTS.get(id) : '';
     const o = origin();
+    if (window.SFX) SFX.play('secret');   // a hidden find: its own jingle, in place of the toast's blip
     if (window.sendToast) sendToast('👻 Ghost #' + id + line + pts + count);
     if (awarded > 0 && window.showPoints) { try { showPoints(awarded, o.x, o.y); } catch {} }   // the nav badge and points feedback the rest of the site uses
     spook(30, o);
@@ -100,6 +101,7 @@
       if (!pend.includes(id)) { pend.push(id); save(KEY, pend); }
       if (!load(SEEN).includes(id)) {
         save(SEEN, load(SEEN).concat(id));
+        if (window.SFX) SFX.play('secret');
         if (window.sendToast) sendToast('👻 You found hidden ghost #' + id + ' — sign in to bank it');
         spook(18);
       }
@@ -118,6 +120,7 @@
       const gated = !!(res && res.j && res.j.needsProof);
       const why = gated ? 'it banks once your wallet check has passed' : (res && res.j && res.j.error) ? res.j.error : 'the server did not answer';
       lastRefusal = why;
+      if (!acc && window.SFX && !load(SEEN).includes(id)) SFX.play('secret');   // still a find, and the ghosts still pop out: kept, not lost
       if (!acc && window.sendToast && !load(SEEN).includes(id)) { save(SEEN, load(SEEN).concat(id)); sendToast('👻 Ghost #' + id + ' found — kept for later: ' + why); spook(18); }
       if (gated && !proofAsked && !acc && window.AUTH && AUTH.needsProof) { proofAsked = true; try { AUTH.needsProof(res.j); } catch {} }
       return 'refused';

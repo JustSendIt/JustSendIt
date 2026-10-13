@@ -1080,6 +1080,8 @@
         const anyOn = MARKER_ORDER.some(x => host._toggles[x]);
         MARKER_ORDER.forEach(x => { host._toggles[x] = !anyOn; });
       } else host._toggles[k] = !host._toggles[k];
+      // the legend is redrawn below, so the generic switch sound would read the old button's state: say the new one here
+      if (window.SFX) { if (k === '__clean' ? MARKER_ORDER.some(x => host._toggles[x]) : host._toggles[k]) SFX.play('on'); else SFX.play('off'); }
       saveToggles(host._toggles);
       renderLegend(host);
       paint(host, true);

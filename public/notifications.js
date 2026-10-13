@@ -9,6 +9,7 @@
   const signedIn = () => !!(window.AUTH && AUTH.user);
   let items = [], open = false, poll = null, loaded = false;
   let pending = null;   // rows a poll fetched while the reader was inside the panel — applied once they leave it
+  let heardTop = -1;    // the highest notification id this page has seen (-1: no list read yet): only a higher one is a new arrival worth a chime
   const bellLabel = (n) => 'Notifications' + (n ? ', ' + n + ' in your list' : '');
   const badgeHTML = (n) => n ? '<span class="notif-badge" aria-hidden="true"><span class="notif-badge-n">' + (n > 9 ? '9+' : n) + '</span></span>' : '';
 
@@ -66,6 +67,7 @@
         pending = next; loaded = true;
         const bell = document.getElementById('notif-bell');
         if (bell) { bell.setAttribute('aria-label', bellLabel(next.length)); bell.innerHTML = '🔔' + badgeHTML(next.length); }
+        chime(next);
         return;
       }
       applyItems(next);
@@ -82,6 +84,16 @@
     /* Say it once, politely, and only for rows that actually arrived while the page was open — not for
        the first load, which would read the whole backlog at somebody the moment they signed in. */
     if (fresh && !first && window.announce) announce(fresh === 1 ? 'One new notification.' : fresh + ' new notifications.');
+    chime(next);
+  }
+  /* One chime per batch that brought something genuinely new, when it arrives. The first list read is only the
+     baseline (the backlog is not news). Ids only grow, so a list re-read after a sign-in change (which empties `items`
+     and makes the whole backlog look "fresh") stays quiet, and rows held back while the reader is in the panel chime
+     once, on arrival, not again when they land. */
+  function chime(next) {
+    const top = next.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0);
+    if (heardTop >= 0 && top > heardTop && window.SFX) SFX.play('notify');
+    if (top > heardTop) heardTop = top;
   }
   // the held rows land once the reader is out of the panel; deferred a tick so the click or focus change
   // that got them out is fully over before the rows it was on are rebuilt
@@ -100,11 +112,13 @@
   async function clearAll() {
     const keep = items; items = []; pending = null; setTimeout(render, 0);
     let ok = false; try { ok = (await fetch('/api/notifications', { method: 'DELETE', credentials: 'same-origin' })).ok; } catch {}
+    if (ok && window.SFX) SFX.play('remove');
     if (!ok) { items = keep; setTimeout(render, 0); if (window.sendToast) sendToast('Could not clear notifications — try again'); }
   }
   async function clearOne(id) {
     const keep = items; items = items.filter(x => String(x.id) !== String(id)); pending = null; setTimeout(render, 0);
     let ok = false; try { ok = (await fetch('/api/notifications/' + encodeURIComponent(id), { method: 'DELETE', credentials: 'same-origin' })).ok; } catch {}
+    if (ok && window.SFX) SFX.play('remove');
     if (!ok) { items = keep; setTimeout(render, 0); if (window.sendToast) sendToast('Could not clear that notification — try again'); }
   }
 
@@ -129,6 +143,7 @@
     // closing must put focus somewhere deliberate; leaving it on a detached row drops it to <body>
     const inside = mount.contains(document.activeElement);
     toggle(false);
+    if (window.SFX) SFX.play('close');   // Esc shuts the panel, as the bell does
     if (inside) { const b = document.getElementById('notif-bell'); if (b) b.focus(); }
   });
   /* No hover-away close. The panel opens on the left of the screen, so from a bell on the right the pointer crosses the

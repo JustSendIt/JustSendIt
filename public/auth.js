@@ -304,7 +304,7 @@
       e.preventDefault(); other.click(); other.focus();
     });
     // one writer for the status lines, so a failure's red is dropped again by the next progress message
-    const setStatus = (el, text, bad) => { el.textContent = text; el.classList.toggle('is-err', !!bad); };
+    const setStatus = (el, text, bad) => { el.textContent = text; el.classList.toggle('is-err', !!bad); if (bad && window.SFX) SFX.play('error'); };
 
     // email log-in / sign-up: an explicit segmented choice, DEFAULTING TO LOG IN (never sign-up-first)
     let regMode = false;
@@ -356,6 +356,7 @@
        with a ticket who is a member): the password is kept, the email is not. Say so plainly, and long enough to read. */
     const emailNotAddedMsg = (u) => 'That email is already on another account, so it wasn’t added. You sign in with @' + u + ' and your password — set a different email any time in Settings → Security.';
     function loginSuccess(j, opts) {
+      if (window.SFX) SFX.play('success');
       if (j.emailNotAdded) sendToast('Welcome, @' + j.username + '! 🚀 ' + emailNotAddedMsg(j.username), 9000);
       else sendToast('Welcome, @' + j.username + '! 🚀');
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 3, { count: 50, emojiRatio: 0.4 });
@@ -427,7 +428,7 @@
             const signature = await WALLET.sign(provider, address, msg);
             const r = await api('/api/auth/login/wallet2fa', { method: 'POST', body: { pending: j.pending, address, signature } });
             loginSuccess(r);
-          } catch (err) { status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'); }
+          } catch (err) { status.textContent = (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'); if (window.SFX && err.message !== 'cancelled') SFX.play('error'); }
         };
       }
     }
@@ -533,6 +534,7 @@
             setStatus(status, 'Approve the signature… ✍️');
             const signature = await WALLET.sign(provider, address, message);
             signed = { address, signature };
+            if (window.SFX) SFX.play('connect');
             q('cf-wallet').textContent = 'Signed ✅ ' + address.slice(0, 6) + '…' + address.slice(-4);
             setStatus(status, '');
             if (!need.password && !need.code) q('cf-go').click();   // nothing else to fill in
@@ -548,6 +550,7 @@
             const j = await api('/api/auth/verify', { method: 'POST', body, _verified: true });
             if (AUTH.user) AUTH.user.sudoUntil = Date.now() + (j.sudoLeftMs || 0) - 1500;
             q('cf-pw').value = ''; q('cf-code').value = '';
+            if (window.SFX) SFX.play('success');
             confirmReject = null;
             closeModal();
             document.dispatchEvent(new CustomEvent('auth:sudo', { detail: { until: j.sudoUntil } }));
@@ -654,6 +657,8 @@
 
     function walletDone(j, setup2fa) {
       closeModal();
+      if (j.linked && window.SFX) SFX.play('connect');
+      if (!j.linked && window.SFX) SFX.play('success');
       if (j.alreadyLinked) { refresh().then(onAuthChange); sendToast('That wallet is already linked to @' + j.username + ' ✅'); return; }
       if (j.linked) { refresh().then(onAuthChange); sendToast('Wallet linked to @' + j.username + ' 🔗'); return; }
       if (j.newAccount && setup2fa) { sendToast('Welcome, @' + j.username + '! Now the optional extra lock 🔐'); goSetup2fa(); return; }
@@ -700,6 +705,7 @@
         if (j.needUsername) {
           // a wallet with no account yet, and a ticket in hand: this is a sign-up — ask for the name
           pendingSignup = j.signup;
+          if (window.SFX) SFX.play('connect');
           setWalletMode(true, { keepStatus: true });
           setStatus(status, 'No account for ' + address.slice(0, 6) + '…' + address.slice(-4) + ' yet — pick your @username to create one.');
           modal.querySelector('#w-username').focus();
@@ -753,6 +759,7 @@
   AUTH.lockSecurity = async function () {
     const j = await api('/api/auth/verify', { method: 'DELETE' });
     if (AUTH.user) AUTH.user.sudoUntil = null;
+    if (window.SFX) SFX.play('off');
     document.dispatchEvent(new CustomEvent('auth:sudo', { detail: { until: null } }));
     return j;
   };
@@ -777,6 +784,7 @@
     const signature = await WALLET.sign(provider, address, message);
     const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature, current } });
     if (j.linked) { await refresh(); onAuthChange(); }
+    if (j.linked && window.SFX) SFX.play('connect');
     return j;
   };
 
@@ -813,6 +821,7 @@
     try { sessionStorage.removeItem('jsi:after-claim'); } catch {} // a claim stash must not survive into someone else's session
     try { if (window.WALLET) WALLET.forget(); } catch {} // also drop the client's remembered wallet connection on sign-out
     if (window.applySitePrefs) applySitePrefs({ siteAccent: '', confetti: true, ticker: true, musicResume: true }, false);
+    if (window.SFX) SFX.play('off');
     sendToast('Signed out 👋');
     onAuthChange();
     const t = document.querySelector('#nav-auth .profile-link'); if (t && document.activeElement === document.body) t.focus(); // move focus to the rebuilt "Sign In" (the hidden Sign-out button dropped it to <body>)
@@ -823,6 +832,7 @@
     try { if (window.WALLET) WALLET.forget(); } catch {}               // also forget the client-side connection
     await refresh(); onAuthChange();                                    // nav re-renders: balances pill + Disconnect item drop
     const t = document.getElementById('nav-profile-caret'); if (t && document.activeElement === document.body) t.focus(); // keep keyboard focus on the rebuilt trigger (the disabled button dropped it to <body>)
+    if (window.SFX) SFX.play('remove');
     return j;
   };
 
@@ -917,6 +927,7 @@
       disc.addEventListener('click', async () => {
         if (!armed) {
           armed = true; disc.classList.add('armed');
+          if (window.SFX) SFX.play('warn');
           disc.innerHTML = '<span class="npm-ico" aria-hidden="true">⚠️</span> ' + (walletOnly
             ? 'Tap again — this signs you out'
             : (AUTH.user && AUTH.user.og ? 'Tap again — OG badge comes off until you relink' : 'Tap again to confirm'));
@@ -1021,14 +1032,17 @@
   function roDur(ms) { const h = Math.round(ms / 3600000); if (h < 48) return h + ' hours'; const d = Math.round(ms / 86400000); if (d < 14) return d + ' days'; return Math.round(d / 7) + ' weeks'; }
   async function doRedeem(btn) {
     btn.disabled = true; const old = btn.textContent; btn.textContent = '⛓️ Reading your wallet…';
+    if (window.SFX) SFX.play('scan');
     try {
       const r = await fetch('/api/restriction/redeem', { method: 'POST', credentials: 'same-origin' });
       const j = await r.json();
       if (r.ok && j.lifted) {
+        if (window.SFX) SFX.play('success');
         if (window.sendToast) sendToast('🔓 Read-only lifted — now hold your $SEND to clear it for good!');
         await refresh(); onAuthChange(); // restriction cleared → banner drops, probation banner appears
         return;
       }
+      if (window.SFX) SFX.play('error');
       if (window.sendToast) sendToast(j.error || 'Could not verify your $SEND buy — try again.');
       btn.disabled = false; btn.textContent = old;
     } catch { if (window.sendToast) sendToast('Could not reach the chain — try again.'); btn.disabled = false; btn.textContent = old; }

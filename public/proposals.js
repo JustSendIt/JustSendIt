@@ -167,8 +167,8 @@
   }
 
   /* ---------- compose ---------- */
-  newBtn.addEventListener('click', () => { form.hidden = false; newBtn.hidden = true; titleEl.focus(); });
-  document.getElementById('prop-cancel').addEventListener('click', () => { form.hidden = true; newBtn.hidden = false; statusEl.textContent = ''; newBtn.focus(); });
+  newBtn.addEventListener('click', () => { form.hidden = false; newBtn.hidden = true; titleEl.focus(); if (window.SFX) SFX.play('open'); });
+  document.getElementById('prop-cancel').addEventListener('click', () => { form.hidden = true; newBtn.hidden = false; statusEl.textContent = ''; newBtn.focus(); if (window.SFX) SFX.play('close'); });
   const setPropCount = (n) => { countEl.textContent = String(n); countEl.setAttribute('aria-hidden', n > 20 ? 'true' : 'false'); }; // announce to SRs only when low
   bodyEl.addEventListener('input', () => setPropCount(2000 - bodyEl.value.length));
   form.addEventListener('submit', async (e) => {
@@ -179,10 +179,12 @@
       titleEl.value = ''; bodyEl.value = ''; setPropCount(2000); form.hidden = true;
       statusEl.textContent = 'Draft saved. Open it when you are ready — that starts the clock.';
       say('Proposal draft saved.');
+      if (window.SFX) SFX.play('success');   // the draft is saved
       load();
     } catch (err) {
       statusEl.textContent = '⚠️ ' + (err.message || 'Could not save');
       say('Proposal not saved. ' + (err.message || ''));
+      if (window.SFX && !err.needsProof) SFX.play('error');   // said inline, not toasted
     }
   });
 
@@ -218,6 +220,7 @@
         cast.textContent = '⚠️ Tap again — votes are final';
         cast.setAttribute('aria-label', 'Confirm your ' + pick + ' vote. Votes are final and cannot be changed.');
         say('Press again to confirm your ' + pick + ' vote. This cannot be undone.');
+        if (window.SFX) SFX.play('warn');   // "tap again — votes are final"
         clearTimeout(cast._t);
         cast._t = setTimeout(() => { cast._armed = false; cast.textContent = 'Cast my vote'; cast.removeAttribute('aria-label'); }, 6000);
         return;
@@ -227,6 +230,7 @@
       try {
         await window.api('/api/communities/' + cid() + '/proposals/' + pid + '/vote', { method: 'POST', body: { choice: pick } });
         say('Your ' + pick + ' vote is recorded.');
+        if (window.SFX) SFX.play('vote');   // the ballot is in
         if (window.sendToast) sendToast('🗳️ Vote recorded — ' + pick);
         load();
       } catch (err) {
@@ -235,6 +239,7 @@
         const gate = wrap.querySelector('.prop-gate');
         if (gate) { gate.hidden = false; gate.textContent = '⚠️ ' + (err.message || 'Vote not recorded'); }
         say('Vote not recorded. ' + (err.message || ''));
+        if (window.SFX && !err.needsProof) SFX.play('error');   // said inline, not toasted
         cast.disabled = false; cast.textContent = 'Cast my vote'; cast._armed = false;
       }
       return;
@@ -244,14 +249,14 @@
     if (open) {
       open.disabled = true;
       try { await window.api('/api/communities/' + cid() + '/proposals/' + open.dataset.pid + '/open', { method: 'POST' });
-            say('Voting is open.'); if (window.sendToast) sendToast('🗳️ Voting is open'); load(); }
+            say('Voting is open.'); if (window.SFX) SFX.play('success'); if (window.sendToast) sendToast('🗳️ Voting is open'); load(); }
       catch (err) { open.disabled = false; say('Could not open. ' + (err.message || '')); if (window.sendToast) sendToast('⚠️ ' + err.message); }
       return;
     }
     const del = e.target.closest('.prop-del');
     if (del) {
-      if (!del._armed) { del._armed = true; del.textContent = 'Tap again to delete'; setTimeout(() => { del._armed = false; del.textContent = 'Delete'; }, 5000); return; }
-      try { await window.api('/api/communities/' + cid() + '/proposals/' + del.dataset.pid, { method: 'DELETE' }); load(); }
+      if (!del._armed) { del._armed = true; del.textContent = 'Tap again to delete'; setTimeout(() => { del._armed = false; del.textContent = 'Delete'; }, 5000); if (window.SFX) SFX.play('warn'); return; }
+      try { await window.api('/api/communities/' + cid() + '/proposals/' + del.dataset.pid, { method: 'DELETE' }); if (window.SFX) SFX.play('remove'); load(); }
       catch (err) { del._armed = false; del.textContent = 'Delete'; say('Could not delete. ' + (err.message || '')); if (window.sendToast) sendToast('⚠️ ' + (err.message || 'Could not delete')); } // a silent refusal left "Tap again" on screen with nothing said
     }
   });

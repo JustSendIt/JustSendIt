@@ -133,12 +133,14 @@
     say('Taking a snapshot of the holder list.');
     try {
       await window.api('/api/communities/' + cid() + '/snapshots', { method: 'POST' });
+      if (window.SFX) SFX.play('scan');   // the walk over the chain has started
       statusEl.textContent = 'Snapshot started — it will appear here when the walk finishes.';
       active = null;
       refresh();
     } catch (err) {
       statusEl.textContent = '⚠️ ' + (err.message || 'Could not start a snapshot');
       say('Snapshot not started. ' + (err.message || ''));
+      if (window.SFX && !err.needsProof) SFX.play('error');   // said inline, not toasted
     } finally { takeBtn.disabled = false; }
   });
 

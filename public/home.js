@@ -239,12 +239,15 @@ async function watchSwapTx(hash) {
       if (rcpt) {
         if (inflight) inflight.hidden = true;
         if (rcpt.status === '0x1') {
+          if (window.SFX) SFX.play('launch');   // the chain confirmed the buy: the rocket storm's own sound
           rocketStorm();
           setTimeout(() => refreshMcap({ pump: true }), 1200);
           // credit Send Points for the verified on-chain swap (server re-verifies the receipt; no-op if signed out)
           fetch('/api/gamify/swap', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ txHash: hash }) })
-            .then(r => r.json()).then(j => { if (j && j.awarded > 0) { sendToast('+' + j.awarded + ' Send Points for that swap! 🎮'); if (window.showPoints) showPoints(j.awarded); } }).catch(() => {});
+            .then(r => r.json()).then(j => { if (j && j.awarded > 0 && window.SFX) SFX.play('coin'); return j; })   // Send Power banked for the swap
+            .then(j => { if (j && j.awarded > 0) { sendToast('+' + j.awarded + ' Send Points for that swap! 🎮'); if (window.showPoints) showPoints(j.awarded); } }).catch(() => {});
         } else {
+          if (window.SFX) SFX.play('error');   // reverted on-chain (the toast's words do not buzz on their own)
           sendToast('Transaction reverted 😬 — nothing was taken except gas');
         }
         return;
@@ -278,6 +281,7 @@ function pickSwap(key) {
     el.classList.toggle('selected', key === k);
     el.setAttribute('aria-pressed', String(key === k)); // reflect selection to assistive tech, not just visually
   }
+  if (window.SFX) SFX.play('select');   // one of the two coins picked (by tap or by key) — one sound, not a switch's and the toast's
   sendToast(key === 'SEND' ? '$SEND selected 🚀' : '$GWC selected 💰');
   refreshQuote();
 }
@@ -336,6 +340,7 @@ document.getElementById('swap-amt').addEventListener('input', refreshQuote);
 document.querySelectorAll('[data-amt]').forEach(b => b.addEventListener('click', () => {
   document.getElementById('swap-amt').value = b.dataset.amt;
   refreshQuote();
+  if (window.SFX) SFX.play('select');   // a preset amount picked
 }));
 const swapGo = document.getElementById('swap-go');
 let swapBusy = false;
@@ -345,6 +350,7 @@ swapGo.addEventListener('click', async () => {
   // F079: past the impact threshold the button asks first — a fat-fingered 10 instead of 1.0 would otherwise
   // fill far under the going rate and still pass the slippage guard
   if (lastImpact != null && lastImpact >= IMPACT_WARN) {
+    if (window.SFX) SFX.play('warn');   // a caution before the wallet opens
     const ok = confirm('Price impact is about ' + lastImpact.toFixed(1) + '% — this order is big for the pool, so you would get that much less than the going rate, and the ' + SLIPPAGE + '% slippage guard does not protect against it. Swap anyway?');
     if (!ok) { window.swapStatus('Swap not sent — a smaller amount means less price impact', 'info'); return; }
   }
@@ -352,6 +358,7 @@ swapGo.addEventListener('click', async () => {
   window.swapStatus(SWAP_WORKING, 'info');
   try {
     const hash = await executeSwap(swapPick, document.getElementById('swap-amt').value, SLIPPAGE);
+    if (hash && window.SFX) SFX.play('swap');   // the wallet signed and sent it
     if (hash) watchSwapTx(hash);
   } finally {
     swapBusy = false; swapGo.disabled = false;
@@ -410,10 +417,12 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     hint.textContent = 'Choose your wallet…';
     try {
       const j = await AUTH.connectWallet({ note: 'Linking a wallet adds it to the account you are signed in to.' });
+      if (window.SFX) SFX.play(j.alreadyLinked ? 'success' : 'connect');   // a new wallet linked, or confirmed as already linked
       if (j.alreadyLinked) { hint.textContent = '✅ Already linked to your account.'; sendToast('That wallet is already linked ✅'); }
       else { hint.textContent = '✅ Linked — it now counts toward your Send Power.'; sendToast('Wallet linked 🔗'); }
     } catch (e) {
       hint.textContent = (e.message === 'cancelled') ? '' : '⚠️ ' + (e.message || 'could not link that wallet');
+      if (e.message !== 'cancelled' && window.SFX) SFX.play('error');   // the refusal is the inline hint, not a toast
     } finally { btn.disabled = false; }
   }
 

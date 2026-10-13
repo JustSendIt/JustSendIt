@@ -42,10 +42,10 @@ function postEl(p) {
         '<svg class="vote-ico vote-static" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 15L4 7h12z"/></svg>' +
       '</div>'
     : '<div class="vote" role="group" aria-label="Score ' + sTxt + '. Upvote or downvote.">' +
-        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-tip="Pushes this post higher in the Top ranking; tap again to undo" data-vote="up" aria-pressed="' + up + '" aria-label="Upvote">' +
+        '<button class="vote-btn vote-up' + (up ? ' on' : '') + '" data-tip="Pushes this post higher in the Top ranking; tap again to undo" data-vote="up" data-sfx="tap" aria-pressed="' + up + '" aria-label="Upvote">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 5l6 8H4z"/></svg></button>' +
         '<span class="vote-score' + (p.score < 0 ? ' neg' : '') + '" aria-hidden="true">' + sTxt + '</span>' +
-        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-tip="Pushes this post lower in the Top ranking; tap again to undo" data-vote="down" aria-pressed="' + down + '" aria-label="Downvote">' +
+        '<button class="vote-btn vote-down' + (down ? ' on' : '') + '" data-tip="Pushes this post lower in the Top ranking; tap again to undo" data-vote="down" data-sfx="tap" aria-pressed="' + down + '" aria-label="Downvote">' +
           '<svg class="vote-ico" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 15L4 7h12z"/></svg></button>' +
         '<span class="sr-only" role="status" data-vote-status></span>' +
       '</div>';
@@ -190,6 +190,7 @@ document.querySelectorAll('.feed-tab').forEach(tab => {
 
 /* sort (ORDER): Top = most-upvoted first (default, matches server), New = newest first */
 document.querySelectorAll('.sort-btn').forEach(b => b.addEventListener('click', () => {
+  if (window.SFX) SFX.play('select');   // one of a pair: a pick, not the on/off its aria-pressed would sound like
   if (b.dataset.sort === currentSort) return;
   currentSort = b.dataset.sort;
   document.querySelectorAll('.sort-btn').forEach(x => { const on = x === b; x.classList.toggle('is-on', on); x.setAttribute('aria-pressed', String(on)); });
@@ -221,6 +222,7 @@ feedEl.addEventListener('click', async (e) => {
     try {
       const j = await api('/api/posts/' + id + '/vote', { method: 'POST', body: { dir: vBtn.dataset.vote } });
       setVote(post, j.score, j.myVote);
+      if (window.SFX) SFX.play(j.myVote ? 'vote' : 'off');   // the server counted it (or cleared it)
       vBtn.classList.remove('pop'); void vBtn.offsetWidth; vBtn.classList.add('pop');
       if (j.pointsEarned && window.showPoints) { const r = vBtn.getBoundingClientRect(); showPoints(j.pointsEarned, r.left, r.top); }
       maybeResortNudge();
@@ -235,6 +237,7 @@ feedEl.addEventListener('click', async (e) => {
       const j = await api('/api/posts/' + id + '/react', { method: 'POST', body: { kind: rBtn.dataset.react } });
       rBtn.classList.toggle('lit', j.on);
       rBtn.querySelector('span').textContent = j.count;
+      if (window.SFX) SFX.play(j.on ? 'like' : 'unlike');
       if (j.on) { const r = rBtn.getBoundingClientRect(); sendConfetti(r.left + r.width / 2, r.top, { count: 10, emojiRatio: rBtn.dataset.react === 'rocket' ? 1 : 0.6 }); if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned, r.left, r.top); }
     } catch (err) { sendToast(err.message); }
     return;
@@ -252,9 +255,11 @@ feedEl.addEventListener('click', async (e) => {
         const landing = next && (next.querySelector('button, a[href]') || next);
         if (landing) { if (landing === next) next.tabIndex = -1; landing.focus(); }
         else { feedEl.tabIndex = -1; feedEl.focus(); }
+        if (window.SFX) SFX.play('remove');
         sendToast('Unsent 🫥');
       } catch (err) { sendToast(err.message); }
     } else {
+      if (window.SFX) SFX.play('warn');   // tap again to confirm
       dBtn.dataset.armed = '1';
       const oldLbl = dBtn.getAttribute('aria-label');
       dBtn.textContent = 'Sure? 🗑';   // the armed look is styles.css `.react-btn.post-del[data-armed]` — no inline colour, so the type stays dark on the red fill
@@ -300,6 +305,7 @@ async function renderComments(post, id) {
         try {
           const cj = await api('/api/posts/' + id + '/comments', { method: 'POST', body: { text: input.value } });
           input.value = '';
+          if (window.SFX) SFX.play('send');   // the reply went out
           await renderComments(post, id);
           const n = post.querySelector('[data-comments] span');
           n.textContent = Number(n.textContent) + 1;
@@ -354,6 +360,7 @@ postImgEl.addEventListener('change', async (e) => {
   if (r && r.skip) return;                 // a flow was already running, or it was cleared/replaced — leave state as-is
   if (!r) { clearWallMedia(); return; }    // prep/upload failed
   pendingImg = r.url;
+  if (window.SFX) SFX.play('success');     // uploaded and attached, ready to send
 });
 
 async function publishPost() {
@@ -373,6 +380,7 @@ async function publishPost() {
     document.getElementById('empty').style.display = 'none';
     if (j.post && j.post.id) history.replaceState(null, '', '#p' + j.post.id);
     flashPost(node);
+    if (window.SFX) SFX.play('send');   // the post (or the question) went out
     if (BOARD === 'support') sendToast('Question posted — others can answer and vote on it 🙌');
     else { sendConfetti(innerWidth / 2, 240, { count: 46, emojiRatio: 0.4 }); sendToast('SENT! 🚀'); }
     if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned);

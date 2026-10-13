@@ -204,6 +204,7 @@
     e._tokChip = true; // marker for any row handler that wants to ignore chip clicks explicitly
     var addr = normAddr(chip.getAttribute('data-addr')); if (!addr) return;
     try { chip.focus(); } catch (_) {} // Safari/iOS don't focus a button element on click — focus it so the popup restores focus HERE, not <body>
+    if (window.SFX) SFX.play(window.TokenModal && window.TokenModal.open ? 'open' : 'nav');   // the token popup opens (or its dashboard page, in a new tab)
     if (window.TokenModal && window.TokenModal.open) TokenModal.open(addr, { symbol: chip.getAttribute('data-symbol') || '', name: chip.getAttribute('data-name') || '' });
     else window.open('/newpairs.html?scan=' + encodeURIComponent(addr), '_blank', 'noopener');   // no popup on this page: the token's dashboard, as its own page
   }, true);

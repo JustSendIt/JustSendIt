@@ -88,6 +88,7 @@
     text += ' on $Send';
     window.open('https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(link), '_blank', 'noopener');
     btn.disabled = false; btn.innerHTML = orig;
+    if (dataUrl && window.SFX) SFX.play('success');   // the call card image is saved
     if (window.sendToast) sendToast(dataUrl ? '🖼️ Call card saved — attach it to your tweet on X!' : 'Opening X…');
   }
 
@@ -212,6 +213,7 @@
     if (!w) return;
     // the token's dashboard, in the token popup: the live read first, the call-time snapshot if the token no longer prices
     if (dashPopup()) {
+      if (window.SFX) SFX.play('open');   // the token's dashboard pops up (the toggle carries no aria-expanded to say so)
       const id = w.dataset.call;
       window.TokenModal.open(w.dataset.token, { symbol: w.dataset.sym, name: w.dataset.name, fallback: async (ans) => {
         const snap = await callSnapshot(id);
@@ -224,6 +226,7 @@
     }
     const detail = w.querySelector('.sc-detail'), tog = w.querySelector('[data-sctoggle]');
     const opening = !w.classList.contains('sc-expanded');
+    if (window.SFX) SFX.play(opening ? 'open' : 'close');   // a tap on the card itself toggles it too, which no generic click sound covers
     w.classList.toggle('sc-expanded', opening);
     if (detail) detail.hidden = !opening;
     if (tog) { tog.setAttribute('aria-expanded', String(opening)); const lbl = tog.querySelector('.sc-toggle-lbl'); if (lbl) lbl.textContent = opening ? 'Hide on-chain detail' : 'Full on-chain detail'; }
@@ -266,6 +269,7 @@
           return;
         }
         if (stog.dataset.loading) return; stog.dataset.loading = '1';
+        if (window.SFX) SFX.play('open');   // expanding: aria-expanded only flips after the fetch, so the generic sound would say "close"
         const label = stog.innerHTML; stog.innerHTML = 'Loading…';
         try {
           const r = await fetch('/api/calls/' + encodeURIComponent(stog.dataset.sendersToggle) + '/senders', { credentials: 'same-origin' });
@@ -288,6 +292,7 @@
           const j = await r.json();
           if (!r.ok) { if (window.sendToast) sendToast(j.error || 'Could not Send It'); hop.disabled = false; return; }
           hop.classList.add('hopped'); hop.innerHTML = '🚀 Sent it! <span class="sc-hopn">' + j.hops + '</span>';
+          if (window.SFX) SFX.play('launch');   // Sent It on the call, confirmed by the server
           if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
           const w = hop.closest('.sc-widget');
           const toSquad = !!(w && w.querySelector('.sc-squad-chip'));   // on a squad call the points are the squad's, not yours
@@ -307,6 +312,7 @@
           const j = await r.json();
           if (!r.ok) { if (window.sendToast) sendToast(j.error || 'Could not track that wallet'); track.disabled = false; return; }
           track.textContent = '✓ Tracking caller';
+          if (window.SFX) SFX.play('success');   // saved to the tracker
           if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);
           if (window.sendToast) sendToast('💼 Added the caller’s wallet to your tracker');
         } catch { if (window.sendToast) sendToast('Could not track that wallet'); track.disabled = false; }

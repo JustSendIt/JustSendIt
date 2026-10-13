@@ -30,7 +30,7 @@
     b.addEventListener('click', function (e) {
       if (e) e.preventDefault();
       if (window.AUTH && typeof window.AUTH.connectWallet === 'function') {
-        window.AUTH.connectWallet().catch(function (err) {
+        window.AUTH.connectWallet().then(function (j) { if (j && j.linked && window.SFX) SFX.play('connect'); }).catch(function (err) {
           if (err && err.message && err.message !== 'cancelled' && window.sendToast) sendToast('⚠️ ' + err.message);
         });
       } else location.href = 'profile.html';
@@ -57,6 +57,7 @@
       if (bar) bar.setAttribute('aria-valuenow', String(n));
       if (done) done.hidden = n < total;
       if (celebrate && n >= total) {
+        if (window.SFX) SFX.play('powerup');   // all four steps ticked off: the goal reached
         if (window.sendConfetti) window.sendConfetti(innerWidth / 2, innerHeight / 2, { count: 60, emojiRatio: 0.4 });
         if (window.sendToast) window.sendToast('All 4 steps — send it! 🚀');
       }
@@ -174,7 +175,7 @@
           : ('Level ' + lvl + ' · ' + title + ' · ' + xp + ' Power to reach');
       }
     }
-    chips.forEach(function (c) { c.addEventListener('click', function () { select(c); }); });
+    chips.forEach(function (c) { c.addEventListener('click', function () { select(c); if (window.SFX) SFX.play('select'); }); });
     var on = document.querySelector('.ab-chip.is-on') || chips[0];
     select(on);
   })();

@@ -255,17 +255,20 @@
     e.preventDefault();
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
     const token = addr.value.trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { msg.textContent = '⚠️ Paste a valid 0x token contract address.'; addr.setAttribute('aria-invalid', 'true'); addr.focus(); return; }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { msg.textContent = '⚠️ Paste a valid 0x token contract address.'; addr.setAttribute('aria-invalid', 'true'); addr.focus(); if (window.SFX) SFX.play('error'); return; }
     addr.removeAttribute('aria-invalid');
     goBtn.disabled = true; msg.textContent = '🔎 Reading the token on-chain…';
+    if (window.SFX) SFX.play('scan');   // the token is being read on-chain
     try {
       const r = await fetch('/api/communities', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
       const j = await r.json().catch(() => ({}));
+      if (r.ok && window.SFX) SFX.play('success');   // the community was created
       if (r.ok) { if (window.sendToast) sendToast('🏛️ Community started! Get 10 verified holders to go live 🚀'); location.href = 'community.html?id=' + j.id; return; }
       goBtn.disabled = false;
+      if (window.SFX) { if (j.existingId) SFX.play('warn'); else SFX.play('error'); }   // one exists already (look there) / refused
       if (j.existingId) msg.innerHTML = 'A community already exists for that token — <a href="community.html?id=' + j.existingId + '">open it →</a>';
       else msg.textContent = '⚠️ ' + (j.error || 'Could not start that community.');
-    } catch (err) { goBtn.disabled = false; msg.textContent = '⚠️ Could not start that community — try again.'; }
+    } catch (err) { goBtn.disabled = false; msg.textContent = '⚠️ Could not start that community — try again.'; if (window.SFX) SFX.play('error'); }
   });
 
   /* ===== 🛡️ Send Squads — private groups behind the sign-in gate =====
@@ -488,6 +491,7 @@
       const btns = [...sqPanel.querySelectorAll('[data-' + attr + ']')];
       btns.forEach(b => b.addEventListener('click', () => {
         btns.forEach(x => { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+        if (window.SFX) SFX.play('select');   // one of a set picked (its aria-pressed alone would sound like a switch)
         sqState[key] = b.dataset[attr]; loadSquads(true);
       }));
     }
@@ -517,14 +521,14 @@
       const clear = () => { media[kind] = null; input.value = ''; prev.hidden = true; prev.removeAttribute('src'); rm.hidden = true; if (none) none.hidden = false; };
       input.addEventListener('change', () => {
         const f = input.files && input.files[0]; if (!f) return;
-        if (!SQ_IMG_TYPES.test(f.type)) { sfMsg.textContent = '⚠️ The ' + kind + ' must be a jpeg, png or webp image.'; clear(); return; }
-        if (f.size > SQ_IMG_MAX) { sfMsg.textContent = '⚠️ That ' + kind + ' is over 3.5 MB — pick a smaller file.'; clear(); return; }
+        if (!SQ_IMG_TYPES.test(f.type)) { sfMsg.textContent = '⚠️ The ' + kind + ' must be a jpeg, png or webp image.'; clear(); if (window.SFX) SFX.play('error'); return; }
+        if (f.size > SQ_IMG_MAX) { sfMsg.textContent = '⚠️ That ' + kind + ' is over 3.5 MB — pick a smaller file.'; clear(); if (window.SFX) SFX.play('error'); return; }
         const rd = new FileReader();
-        rd.onload = () => { media[kind] = String(rd.result || ''); prev.src = media[kind]; prev.hidden = false; rm.hidden = false; if (none) none.hidden = true; sfMsg.textContent = ''; };
-        rd.onerror = () => { sfMsg.textContent = '⚠️ Could not read that file — try another.'; clear(); };
+        rd.onload = () => { media[kind] = String(rd.result || ''); prev.src = media[kind]; prev.hidden = false; rm.hidden = false; if (none) none.hidden = true; sfMsg.textContent = ''; if (window.SFX) SFX.play('select'); };
+        rd.onerror = () => { sfMsg.textContent = '⚠️ Could not read that file — try another.'; clear(); if (window.SFX) SFX.play('error'); };
         rd.readAsDataURL(f);
       });
-      rm.addEventListener('click', () => { clear(); try { input.focus(); } catch {} });
+      rm.addEventListener('click', () => { clear(); if (window.SFX) SFX.play('remove'); try { input.focus(); } catch {} });
     }
     wireMedia('avatar'); wireMedia('banner');
 
@@ -533,19 +537,19 @@
       e.preventDefault();
       if (!signedIn()) { if (window.AUTH) AUTH.open(); return; }
       const name = sfName.value.trim();
-      if (!SQ_NAME_RE.test(name)) { sfMsg.textContent = '⚠️ The name needs 3–40 characters: letters, numbers, spaces and . - \' $ & ! ?'; sfName.setAttribute('aria-invalid', 'true'); sfName.focus(); disarm(); return; }
+      if (!SQ_NAME_RE.test(name)) { sfMsg.textContent = '⚠️ The name needs 3–40 characters: letters, numbers, spaces and . - \' $ & ! ?'; sfName.setAttribute('aria-invalid', 'true'); sfName.focus(); disarm(); if (window.SFX) SFX.play('error'); return; }
       sfName.removeAttribute('aria-invalid');
       const bio = sfBio.value.trim();
-      if (bio.length > 280) { sfMsg.textContent = '⚠️ The bio is over 280 characters.'; sfBio.focus(); disarm(); return; }
+      if (bio.length > 280) { sfMsg.textContent = '⚠️ The bio is over 280 characters.'; sfBio.focus(); disarm(); if (window.SFX) SFX.play('error'); return; }
       const kind = gateKind(), body = { name, gateKind: kind };
       if (bio) body.bio = bio;
       if (kind !== 'none') {
         const token = sfToken.value.trim();
-        if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { sfMsg.textContent = '⚠️ Paste a valid 0x token contract address for the gate.'; sfToken.setAttribute('aria-invalid', 'true'); sfToken.focus(); disarm(); return; }
+        if (!/^0x[0-9a-fA-F]{40}$/.test(token)) { sfMsg.textContent = '⚠️ Paste a valid 0x token contract address for the gate.'; sfToken.setAttribute('aria-invalid', 'true'); sfToken.focus(); disarm(); if (window.SFX) SFX.play('error'); return; }
         sfToken.removeAttribute('aria-invalid');
         const amt = Number(sfAmount.value);
-        if (!(amt > 0)) { sfMsg.textContent = '⚠️ The amount to hold must be more than zero.'; sfAmount.setAttribute('aria-invalid', 'true'); sfAmount.focus(); disarm(); return; }
-        if (kind === 'pct' && (amt < 0.01 || amt > 100)) { sfMsg.textContent = '⚠️ The share must be between 0.01% and 100% of the supply.'; sfAmount.setAttribute('aria-invalid', 'true'); sfAmount.focus(); disarm(); return; }
+        if (!(amt > 0)) { sfMsg.textContent = '⚠️ The amount to hold must be more than zero.'; sfAmount.setAttribute('aria-invalid', 'true'); sfAmount.focus(); disarm(); if (window.SFX) SFX.play('error'); return; }
+        if (kind === 'pct' && (amt < 0.01 || amt > 100)) { sfMsg.textContent = '⚠️ The share must be between 0.01% and 100% of the supply.'; sfAmount.setAttribute('aria-invalid', 'true'); sfAmount.focus(); disarm(); if (window.SFX) SFX.play('error'); return; }
         sfAmount.removeAttribute('aria-invalid');
         body.gateToken = token.toLowerCase(); body.gateAmount = amt;
       }
@@ -556,6 +560,7 @@
         sfGo._armed = true; sfGo.dataset.label = sfGo.textContent; sfGo.textContent = '⚠️ Tap again to create — the gate is final';
         sfGo.setAttribute('aria-label', 'Tap again to confirm creating this squad; its gate can never be changed');
         if (window.announce) announce('Tap the button again to create the squad. Its gate can never be changed.');
+        if (window.SFX) SFX.play('warn');   // "tap again to create — the gate is final"
         sfGo._armT = setTimeout(() => { if (sfGo.isConnected) disarm(); }, 4000);
         return;
       }
@@ -563,12 +568,14 @@
       sfGo.disabled = true; sfMsg.textContent = '🛡️ Creating your squad…';
       try {
         const j = await window.api('/api/squads', { method: 'POST', body });
+        if (window.SFX) SFX.play('success');   // the squad was created
         if (window.sendToast) sendToast('🛡️ Squad started — welcome in!');
         location.href = 'squad.html?id=' + encodeURIComponent(j.id);
         return;
       } catch (err) {
         sfGo.disabled = false;
         if (err && (err.status === 401 || err.code === 'need_signin')) { sfMsg.textContent = '🔒 Sign in first — squads are for members with an account.'; lockSquads(true); if (window.AUTH) AUTH.open(); return; }
+        if (window.SFX && !(err && err.needsProof)) SFX.play('error');   // refused, said inline below (the proof step opens its own panel)
         if (err && err.status === 409) { sfMsg.textContent = '⚠️ ' + ((err && err.message) || 'You already own a squad with that name — pick another.'); sfName.setAttribute('aria-invalid', 'true'); sfName.focus(); return; }
         if (err && err.needsProof) { sfMsg.textContent = '🪪 ' + ((err && err.message) || 'Finish the participation check, then try again.'); return; }   // auth.js already opened the proof step
         sfMsg.textContent = '⚠️ ' + ((err && err.message) || 'Could not start that squad — try again.');   // a 403 gate refusal lands here with what you hold vs what it takes
@@ -603,10 +610,11 @@
     };
     const heroSquad = document.getElementById('comm-squad-go');
     if (heroSquad) heroSquad.addEventListener('click', () => {
+      if (window.SFX) SFX.play('open');   // the start-a-squad form opens (or the sign-in panel does)
       const a = (addr && addr.value || '').trim();
       openSquadStart(/^0x[0-9a-fA-F]{40}$/.test(a) ? { token: a } : {});
     });
-    sqPanel.addEventListener('click', (e) => { if (e.target.closest('[data-sq-open-start]')) { e.preventDefault(); openSquadStart({}); } });
+    sqPanel.addEventListener('click', (e) => { if (e.target.closest('[data-sq-open-start]')) { e.preventDefault(); if (window.SFX) SFX.play('open'); openSquadStart({}); } });
     if (sqAuthKnown && signedIn() && (pendingStart || storedStart())) openSquadStart(pendingStart || storedStart());
 
     // coming back to a backgrounded tab: refresh if it's gone stale, otherwise just re-tick the countdown
@@ -625,9 +633,10 @@
     if (isSq) return;                       // the community grid keeps its last state until the reader comes back
     state.status = t.dataset.cstatus; load();
   }
-  document.querySelectorAll('.comm-tab').forEach(t => t.addEventListener('click', () => pickTab(t)));
+  document.querySelectorAll('.comm-tab').forEach(t => t.addEventListener('click', () => { pickTab(t); if (window.SFX) SFX.play('select'); }));   // a pick of one (aria-pressed alone would sound like a switch)
   document.querySelectorAll('[data-csort]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-csort]').forEach(x => { x.classList.toggle('is-on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+    if (window.SFX) SFX.play('select');
     state.sort = b.dataset.csort; load();
   }));
 
