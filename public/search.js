@@ -10,7 +10,7 @@
   // attribute-safe HTML escape (also encodes quotes so it's safe inside src="…"/style="…")
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   // an address on one line: as much as fits, then …, then its last 4 (.addr-fit in styles.css)
-  const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '"><span class="addr-head">' + esc(a.slice(0, -4)) + '</span><span class="addr-tail">' + esc(a.slice(-4)) + '</span></code>';
+  const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '"><span class="sr-only">' + esc(a) + '</span><span class="addr-head" aria-hidden="true">' + esc(a.slice(0, -4)) + '</span><span class="addr-tail" aria-hidden="true">' + esc(a.slice(-4)) + '</span></code>';
   const ADDR = /^(?:0x)?([0-9a-f]{40})$/i, ADDR_START = /^0x([0-9a-f]{4,39})$/i;
   // the rows an address answer gives: a token's dashboard (and its community), a pool's token, or — a whole address the
   // site has no record of — a scan of it and the Wallet Tracker with it filled in
@@ -66,7 +66,7 @@
       }
       if (!users.length && !rows.length) {
         const msg = am ? (ADDR.test(q) ? 'Nothing found at that address' : 'No token on record starts with ' + q + ' — paste the whole address to scan it') : 'No senders match "' + q + '"';
-        drop.innerHTML = '<div class="search-empty">' + esc(msg) + ' 👻</div>';
+        drop.innerHTML = '<div class="search-empty">' + (am && !ADDR.test(q) ? 'No token on record starts with ' + addrFit(q) + ' — paste the whole address to scan it' : esc(msg)) + ' 👻</div>';   // a partial address stays on one line
         say(msg);
       } else if (!users.length) {
         say(rows.length + (rows.length === 1 ? ' result' : ' results') + ' for this address — press Down arrow to browse');

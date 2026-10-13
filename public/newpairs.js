@@ -127,7 +127,7 @@
   }
   function shortAddr(a) { return a ? a.slice(0, 6) + '…' + a.slice(-4) : ''; }
   // an address on ONE line, shortened only as much as its box needs: …, then always its last 4 (.addr-fit in styles.css)
-  const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '"><span class="addr-head">' + esc(String(a).slice(0, -4)) + '</span><span class="addr-tail">' + esc(String(a).slice(-4)) + '</span></code>';
+  const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '"><span class="sr-only">' + esc(a) + '</span><span class="addr-head" aria-hidden="true">' + esc(String(a).slice(0, -4)) + '</span><span class="addr-tail" aria-hidden="true">' + esc(String(a).slice(-4)) + '</span></code>';
   // A pair whose name or symbol never resolved renders as "Unknown Token $???" — an unidentifiable row nobody can
   // act on. The server already withholds these from /api/pairs/new; this is the client's own guard so one can't
   // reach the radar through any other path (a pasted-address lookup included).
@@ -1425,7 +1425,7 @@
   }
   function renderEmpty() {
     listEl.removeAttribute('aria-busy');
-    if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches ' + (/^\S{17,}$/.test(state.q) ? addrFit(state.q) : '“' + esc(state.q) + '”') + '. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>'; return; }
+    if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches ' + (/^0x[0-9a-f]{12,40}$/i.test(state.q) ? addrFit(state.q) : '“' + esc(state.q) + '”') + '. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>'; return; }
     if (state.safety === 'safer' && state.all.length) { listEl.innerHTML = '<li class="np-msg np-allclear">🛡️ All clear in Safer view — every new pair matching your filters tripped our checks, so none are shown by default.<div style="margin-top:0.7rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;"><button class="btn btn-sm btn-ghost" id="np-showrisky" type="button" data-tip="Switches to the Risky tab, which shows the hidden pairs">Show risky ☠️</button><button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></div></li>'; return; }
     listEl.innerHTML = '<li class="np-msg">Nothing matches these filters. <button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></li>';
   }

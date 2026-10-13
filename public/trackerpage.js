@@ -22,7 +22,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortAddr = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : '';
   // an address on ONE line, shortened only as much as its box needs: …, then always its last 4 (.addr-fit in styles.css)
-  const fitInner = (a) => '<span class="addr-head">' + esc(String(a).slice(0, -4)) + '</span><span class="addr-tail">' + esc(String(a).slice(-4)) + '</span>';
+  const fitInner = (a) => '<span class="sr-only">' + esc(a) + '</span><span class="addr-head" aria-hidden="true">' + esc(String(a).slice(0, -4)) + '</span><span class="addr-tail" aria-hidden="true">' + esc(String(a).slice(-4)) + '</span>';
   const addrFit = (a) => '<code class="addr-fit" title="' + esc(a) + '">' + fitInner(a) + '</code>';
   const toast = (m) => { if (window.sendToast) sendToast(m); };
   const say = (m) => { if (window.announce) announce(m); else if (srEl) srEl.textContent = m; };
@@ -141,6 +141,23 @@
   window.TRKPAGE = { stageWords, etaWords, etaEndAt, ordinal, retryCopy, progressLine, progressSpoken, resolveDeepLink, trackFromHash };
   let hashTrack = trackFromHash(location.hash);
   if (hashTrack) { try { history.replaceState(null, '', location.pathname + location.search); } catch {} }
+  /* the address goes in the "Track a wallet" box (above the report on a phone, in the list's column on a wide screen) —
+     and the note says what a tap does, or why it can't yet (the list is full: Track ➕ is off) */
+  function fillTrack(h) {
+    addrIn.value = h;
+    setNote(addBtn.disabled
+      ? 'The address from your search is in the Track a wallet box, but your list is full — remove a wallet to track it.'
+      : 'The address from your search is in the Track a wallet box — tap Track ➕ to add it to your list.');
+    try { addrIn.focus({ preventScroll: false }); } catch {}
+  }
+  // the menu search used on this very page: only the #fragment changes, so the page does not load again — act on it here
+  window.addEventListener('hashchange', () => {
+    const h = trackFromHash(location.hash); if (!h) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch {}
+    if (!layout.hidden && state.loaded) { if (walletByAddr(h)) select(h, true); else fillTrack(h); }
+    else if (!signedOut.hidden && soAddr) { soAddr.value = h; try { soAddr.focus(); } catch {} }
+    else hashTrack = h;   // the list is still loading: it is used when it lands
+  });
 
   /* ---------- helpers ---------- */
   function ago(ts) {
@@ -271,7 +288,7 @@
     const full = state.wallets.length >= (state.limit || 10);
     if (!mine.length || full) { chips.hidden = true; chipsRow.innerHTML = ''; return; }
     chips.hidden = false;
-    chipsRow.innerHTML = mine.map(a => '<button class="react-btn trk-chip" type="button" data-tip="Adds your connected wallet to the list and opens its report" data-quick="' + esc(a) + '"><span aria-hidden="true">🔗</span> <span>Track my connected wallet</span> ' + addrFit(a) + '</button>').join('');
+    chipsRow.innerHTML = mine.map(a => '<button class="react-btn trk-chip" type="button" data-tip="Adds your connected wallet to the list and opens its report" data-quick="' + esc(a) + '"><span><span aria-hidden="true">🔗</span> Track my connected wallet</span> ' + addrFit(a) + '</button>').join('');
   }
   function highlightSelected() {
     wlist.querySelectorAll('.trk-w').forEach(li => {
@@ -319,7 +336,7 @@
       if (hashTrack) {
         const h = hashTrack; hashTrack = null;
         if (walletByAddr(h)) { if (!pick) pick = h; }
-        else { addrIn.value = h; setNote('The address from your search is filled in below — tap Track ➕ to add it to your list.'); try { addBtn.focus({ preventScroll: false }); } catch {} }
+        else fillTrack(h);
       }
       if (!pick) { const want = recallSelected(); pick = (want && walletByAddr(want)) ? want : (state.wallets[0] ? state.wallets[0].address : null); }
       if (pick) select(pick, false); else showNoSelection();
@@ -869,7 +886,7 @@
       const rnet = (r.realized == null && r.unrealized == null) ? null : (r.realized || 0) + (r.unrealized || 0);
       return '<li class="cmb-row' + (r.pending ? ' is-pending' : '') + '">' +
         '<button class="cmb-pick" type="button" data-tip="Opens the full report for this wallet below" data-select="' + esc(r.address) + '">' +
-          '<code class="cmb-addr" title="' + esc(r.address) + '">' + esc(shortAddr(r.address)) + '</code>' +
+          '<code class="cmb-addr addr-fit" title="' + esc(r.address) + '">' + fitInner(r.address) + '</code>' +
           '<span class="cmb-name">' + esc(r.label || '') + '</span>' +
         '</button>' +
         '<span class="cmb-cell">' + (r.pending ? '<span class="cmb-wait">reading…</span>' : (r.failed ? '<span class="cmb-wait">unreadable</span>' : usd(r.portfolio))) + '</span>' +

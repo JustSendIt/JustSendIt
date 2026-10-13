@@ -80,7 +80,7 @@ try {
   check('the menu box says it takes addresses, and draws an address on one line (head …, last 4)', /placeholder="find Senders or Scan Tokens"/.test(SJ) && /aria-label="Search for senders, or paste a token, pool or wallet address"/.test(SJ) && /const addrFit = \(a\) => '<code class="addr-fit"/.test(SJ));
   check('  ...a token row opens its dashboard (a pool row the pool\'s), a community row its page; an address with no record offers a scan and the Wallet Tracker', /'\/newpairs\.html\?scan=' \+ encodeURIComponent\(pool \? a : t\.token\)/.test(SJ) && /'\/community\.html\?id=' \+ encodeURIComponent\(t\.community\.id\)/.test(SJ)
     && /name: 'Scan this address'/.test(SJ) && /'\/tracker\.html#track=' \+ encodeURIComponent\(a\)/.test(SJ));
-  check('  ...and the Wallet Tracker only fills a #track= address in (never tracks it without a tap), keeping it out of server logs', /function trackFromHash\(h\) \{ const m = \/\^#track=\(0x\[0-9a-fA-F\]\{40\}\)\$\/\.exec/.test(TP) && /history\.replaceState\(null, '', location\.pathname \+ location\.search\)/.test(TP) && /else \{ addrIn\.value = h; setNote\(/.test(TP) && !/addWallet\(h/.test(TP));
+  check('  ...and the Wallet Tracker only fills a #track= address in (never tracks it without a tap), keeping it out of server logs', /function trackFromHash\(h\) \{ const m = \/\^#track=\(0x\[0-9a-fA-F\]\{40\}\)\$\/\.exec/.test(TP) && /history\.replaceState\(null, '', location\.pathname \+ location\.search\)/.test(TP) && /function fillTrack\(h\) \{\n    addrIn\.value = h;/.test(TP) && /window\.addEventListener\('hashchange'/.test(TP) && !/addWallet\(h/.test(TP));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);

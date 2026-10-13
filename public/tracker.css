@@ -29,7 +29,7 @@
 /* the wallet list lays itself out by its own width (a phone, or the desktop column), not the window's */
 .trk-side { container: trkside / inline-size; }
 @media (min-width: 900px) {
-  .trk-layout { grid-template-columns: minmax(280px, clamp(360px, 36%, 460px)) minmax(0, 1fr); align-items: start; }
+  .trk-layout { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); align-items: start; }   /* 360px at most: the report's tables are sized for a 732px column */
   .trk-side { position: sticky; top: calc(var(--nav-h, 58px) + 0.6rem); max-height: calc(100vh - var(--nav-h, 58px) - 1.2rem); overflow-y: auto; }
 }
 
@@ -174,11 +174,19 @@ html.motion-off .trk-prog-fill { transition: none; }
   .trk-main-head .btn { min-height: 44px; }
 }
 /* a narrow list (a phone, or the desktop column at large text): the buttons take their own line under the wallet,
-   so the label and the address get the whole width */
+   so the label and the address get the whole width; a wrapped quick-add chip becomes a rounded card. (The media query
+   is for a phone whose browser predates container queries — Safari 15 on the 320px iPhone SE.) */
+@media (max-width: 400px) {
+  .trk-w { flex-wrap: wrap; }
+  .trk-w-main { flex-basis: 100%; }
+  .trk-w-actions { width: 100%; justify-content: flex-end; }
+  .trk-chip { border-radius: 14px; }
+}
 @container trkside (max-width: 26em) {
   .trk-w { flex-wrap: wrap; }
   .trk-w-main { flex-basis: 100%; }
   .trk-w-actions { width: 100%; justify-content: flex-end; }
+  .trk-chip { border-radius: 14px; }
 }
 
 /* ---- watchlist.html hand-off card ---- */
@@ -215,7 +223,8 @@ html.motion-off .trk-prog-fill { transition: none; }
 .cmb-pick { background: var(--ctl-fill-lo); border: 0; padding: 0.35rem 0.85rem; border-radius: var(--r-pill); text-align: left; cursor: pointer; color: var(--ctl-ink);
   display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; min-width: 0; font: inherit; }
 .cmb-pick:hover, .cmb-pick:focus-visible { background: var(--ctl-fill-hi); }
-.cmb-addr { font-size: max(var(--text-floor), 0.82rem); color: inherit; white-space: nowrap; overflow-wrap: normal; }
+.cmb-addr { font-size: max(var(--text-floor), 0.82rem); color: inherit; }
+.cmb-addr.addr-fit .addr-head { min-width: 3ch; }   /* a narrow pill: as short as 0x…bbcc, never out of it */
 .cmb-name { font-size: max(var(--text-floor), 0.78rem); color: inherit; overflow-wrap: anywhere; }
 .cmb-cell { font-size: max(var(--text-floor), 0.85rem); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cmb-wait { color: var(--text-mute); font-weight: 600; font-size: max(var(--text-floor), 0.8rem); }

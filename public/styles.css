@@ -227,7 +227,8 @@ html { scroll-behavior: smooth; font-size: var(--text-base); }
 code, .mono, .addr { overflow-wrap: anywhere; }
 /* ...except where an address is drawn to fit its box on ONE line: as much of it as fits, then …, then always its last
    4 characters (0x1234…abcd at the narrowest). Markup: <code class="addr-fit"><span class="addr-head">all but the
-   last 4</span><span class="addr-tail">last 4</span></code> — a reader still hears the whole address. */
+   last 4</span><span class="addr-tail">last 4</span></code>, the two halves aria-hidden beside an sr-only copy of the
+   whole address — a reader hears it once, in one piece. */
 .addr-fit { display: inline-flex; max-width: 100%; min-width: 0; white-space: nowrap; overflow-wrap: normal; word-break: normal; vertical-align: bottom; }
 .addr-fit .addr-head { min-width: 7ch; overflow: hidden; text-overflow: ellipsis; }
 .addr-fit .addr-tail { flex: none; }
@@ -1199,6 +1200,7 @@ body { padding-bottom: 5.5rem; }
 .nav .nav-menu .search-drop a.search-hit { display: flex; justify-content: flex-start; text-align: left; white-space: normal; min-height: 44px; padding: 0.55rem 0.7rem; border-radius: 12px; color: var(--text); }
 .nav .nav-menu .search-drop a.search-hit::after { content: none; }
 .search-hit > div { flex: 1 1 auto; min-width: 0; }
+.search-hit .h-name { overflow-wrap: anywhere; }   /* a name with no spaces (a memecoin's, a long @handle) wraps inside the row */
 .search-hit .h-addr { display: flex; min-width: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.75rem); }
 .search-hit .h-addr code { font-variant-numeric: tabular-nums; }
 /* in the phone pop-down the results flow under the box, full width, instead of floating over the links */
@@ -2272,11 +2274,19 @@ details[open] .np-chev { transform: rotate(180deg); }
   .np-refresh { display: inline-flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; padding: 0; font-size: max(var(--text-floor), 1.15rem); }
   .np-search { flex-basis: 100%; order: -1; }
 }
-/* ═══ The DEX List on a phone: nothing runs past its box, and each row reads as three tidy lines ═══
-   Line 1 the health ring and the name; line 2 the verdict … the hour's change; line 3 MC and liquidity … 📣 📌 ☆.
-   (.np-nums and .np-acts only group them: in the wide one-line row they are display: contents, so nothing moves.)
-   A short address never breaks across lines; a long one shows as much as fits (.addr-fit). */
-.np-nums, .np-acts { display: contents; }
+/* ═══ The DEX List: nothing runs past its box ═══
+   The numbers (MC, liquidity) and the buttons (📣 📌 ☆) travel as two groups, so a row that runs out of width moves
+   them to the next line together instead of starving the name. On a phone each row reads as three tidy lines: the
+   health ring and the name; the verdict … the hour's change; MC and liquidity … the buttons. On a wide screen the
+   name keeps a real width and whatever does not fit beside it moves under it. A short address never breaks across
+   lines; a long one shows as much as fits (.addr-fit). */
+.np-nums, .np-acts { display: flex; align-items: center; flex: 0 0 auto; }
+.np-nums { gap: 0.7rem; }
+.np-acts { gap: 0.4rem; }
+@media (min-width: 900px) {
+  #np-list .np-head { flex-wrap: wrap; }
+  #np-list .np-id { flex: 1 1 14rem; min-width: min(14rem, 100%); }
+}
 .np-msg code, .np-lookup-loading code, .np-addr-row code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
 .np-msg { overflow-wrap: anywhere; }
 .np-badges, .np-badge { max-width: 100%; }
