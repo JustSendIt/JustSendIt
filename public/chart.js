@@ -1169,8 +1169,9 @@
       .then(r => r.ok ? r.json() : null).catch(() => null)
       .then(j => {
         for (const [pool, wraps] of batch) {
-          const got = j && j.pools && j.pools[pool];
-          const s = { dexscreener: got ? got.dexscreener : null, geckoterminal: got ? got.geckoterminal : null };
+          const got = j && j.pools && j.pools[pool], was = (srcKnown.get(pool) || {}).s || {};
+          const pickOf = (k) => (got && got[k] != null ? got[k] : was[k] === true ? true : null);   // null never undoes a yes
+          const s = { dexscreener: pickOf('dexscreener'), geckoterminal: pickOf('geckoterminal') };
           srcKnown.set(pool, { s, at: Date.now(), sure: s.dexscreener !== null && s.geckoterminal !== null });
           wraps.forEach(w => applySources(w, s));
         }
@@ -1187,22 +1188,30 @@
   }
   function applySources(wrap, s) {
     if (!wrap.isConnected) return;
-    const first = !wrap._srcs;
-    wrap._srcs = { dexscreener: s.dexscreener === true, geckoterminal: s.geckoterminal === true };
+    const first = !wrap._srcs, prev = wrap._srcs || {};
+    // a "could not ask" (null) on the retry keeps a yes already given: it never hides a chart the viewer may be looking at
+    const keep = (k) => s[k] === true || (s[k] === null && !!prev[k]);
+    wrap._srcs = { dexscreener: keep('dexscreener'), geckoterminal: keep('geckoterminal') };
     let any = false;
     wrap.querySelectorAll('.chart-src-btn').forEach((b) => { const k = b.dataset.chartsrc; if (k === 'onchain') return; b.hidden = !wrap._srcs[k]; if (wrap._srcs[k]) any = true; });
     const grp = wrap.querySelector('.chart-src'); if (grp) grp.hidden = !any;
     const x = wrap.querySelector('.np-dex-xcheck'); if (x) x.hidden = s.dexscreener === false;   // a link to "pair not found" is no cross-check
     const cur = wrap._src || 'onchain';
     if (cur !== 'onchain' && !wrap._srcs[cur]) showChartSrc(wrap, 'onchain');
-    else if (first && !wrap._picked) { const pick = chartSrcPref(); if (pick !== 'onchain' && wrap._srcs[pick]) showChartSrc(wrap, pick); }   // the remembered pick, where this pool has it — never swapped in later under the viewer
+    // the remembered pick, where this pool has it — only while the chart is fresh and untouched: an answer that took a while
+    // (the GeckoTerminal meter can hold one for seconds) must not swap the chart out from under someone already using it
+    else if (first && !wrap._picked && !wrap._touched && Date.now() - (wrap._askAt || 0) < 2500) { const pick = chartSrcPref(); if (pick !== 'onchain' && wrap._srcs[pick]) showChartSrc(wrap, pick); }
     if ((s.dexscreener === null || s.geckoterminal === null) && !wrap._retried) { wrap._retried = true; setTimeout(() => { if (wrap.isConnected) wantSources(wrap); }, SRC_UNSURE_MS); }
   }
 
   // auto-mount anything already on the page (and ask which other sites chart each switch's pool)
   function mountAll(root) {
     (root || document).querySelectorAll('.onchain-chart:not([data-mounted])').forEach(h => { h.setAttribute('data-mounted', '1'); window.renderOnChainChart(h); });
-    (root || document).querySelectorAll('.chart-switch:not([data-ready])').forEach(w => { w.setAttribute('data-ready', '1'); wantSources(w); });
+    (root || document).querySelectorAll('.chart-switch:not([data-ready])').forEach(w => {
+      w.setAttribute('data-ready', '1'); w._askAt = Date.now();
+      for (const ev of ['pointerdown', 'wheel', 'keydown']) w.addEventListener(ev, () => { w._touched = true; }, { once: true, passive: true });
+      wantSources(w);
+    });
   }
   window.mountOnChainCharts = mountAll;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => mountAll()); else mountAll();

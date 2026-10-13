@@ -80,7 +80,9 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
                  spent the live site's own node budget (one address) and threw its pool prices and charts into 429s; run on
                  GitHub, the node refuses them anyway. An address nothing listens on fails at once, and every suite already
                  takes its honest "could not be read" branch for that. A real environment variable wins over .env. */
-              ...(process.env.CHAIN_LIVE === '1' ? {} : { RPC_URL: 'http://127.0.0.1:9/' }) };
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { RPC_URL: 'http://127.0.0.1:9/' }),
+              // the chart switch's listing checks (Dexscreener, GeckoTerminal) likewise: a dead address answers "could not ask" at once
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { CHART_SRC_DS_URL: 'http://127.0.0.1:9/', CHART_SRC_GT_URL: 'http://127.0.0.1:9/' }) };
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });

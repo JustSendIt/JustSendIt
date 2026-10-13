@@ -40,7 +40,7 @@ try {
     /b\.setAttribute\('aria-label', 'Pause motion and sound effects'\);/.test(APP) && /data-tip', 'Pauses or resumes the site\\'s sound effects, the ticker/.test(APP)
     && /document\.dispatchEvent\(new CustomEvent\('jsi:sfx', \{ detail: \{ on: !off \} \}\)\);/.test(APP) && /'Motion and sounds paused ⏸'/.test(APP));
   check('  ...and the slot machine obeys it too: no sound while paused, the reels\' whirr stopped on the press, the bulbs held still',
-    /const paused = \(\) => !!\(window\.SFX && SFX\.muted\(\)\);/.test(SLOTS) && /if \(!A\.on \|\| paused\(\)\) return null;/.test(SLOTS) && /document\.addEventListener\('jsi:sfx'/.test(SLOTS)
+    /const paused = \(\) => !!\(window\.SFX && SFX\.muted\(\)\);/.test(SLOTS) && /if \(!A\.on \|\| paused\(\) \|\| document\.hidden\) return null;/.test(SLOTS) && /function cutBus\(\) \{/.test(SLOTS) && /document\.addEventListener\('jsi:sfx'/.test(SLOTS)
     && /html\.motion-off \.slot-bulbs, html\.motion-off \.slot-bulbs::after/.test(SLOTCSS));
 
   // a sound only ever answers the visitor

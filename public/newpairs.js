@@ -1111,7 +1111,7 @@
          a hazard on an action that can never be undone. The links stay: they belong with the contract. */
       '<div class="np-actions">' +
         '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' +
-        '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' +
+        (p.indexed && p.links.dex ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">📈 Chart ↗</a>' : '') +   // only a pair Dexscreener lists: a link to "not found" is no chart
       '</div>';
 
     return '<div class="np-body">' + brandHeadHTML(p) + auditHTML(p) + whyHTML(p) +
@@ -1262,7 +1262,7 @@
           (window.Watchlist ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
           pinBtnHTML(p) +
           (lk.explorer ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(lk.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' : '') +
-          (lk.dex ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab to cross-check the figures" href="' + esc(lk.dex) + '" target="_blank" rel="noopener nofollow">📈 Dexscreener ↗</a>' : '') +
+          (lk.dex && p.indexed ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab to cross-check the figures" href="' + esc(lk.dex) + '" target="_blank" rel="noopener nofollow">📈 Dexscreener ↗</a>' : '') +
         '</div>' +
       '</div>';
 

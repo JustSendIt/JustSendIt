@@ -598,9 +598,13 @@
       widget.removeAttribute('hidden');
       if (!store.get('greeted')) {
         store.set('greeted', true);
-        $('sendy-greeting').textContent = greeting();
-        openPopup();
-        autoHide = setTimeout(() => { if (isOpen() && chatMode.hasAttribute('hidden') && !popup.contains(document.activeElement) && !popup.matches(':hover')) closePopup(); }, 9000);   // only the tips view hides itself — never a chat someone started, never under a pointer or a focus
+        // a page whose game sits where the popup opens (the slot machine's lever) gets the small bubble, so the first pull is not blocked
+        if (document.querySelector('#slot-cab')) say('entered', null, true);   // querySelector: the page's element, not one of Sendy's own ids
+        else {
+          $('sendy-greeting').textContent = greeting();
+          openPopup();
+          autoHide = setTimeout(() => { if (isOpen() && chatMode.hasAttribute('hidden') && !popup.contains(document.activeElement) && !popup.matches(':hover')) closePopup(); }, 9000);   // only the tips view hides itself — never a chat someone started, never under a pointer or a focus
+        }
       }
       if (!isMobile()) scheduleFlight();
       shownUp = true;

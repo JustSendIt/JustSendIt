@@ -7837,14 +7837,17 @@ async function getLogsSpan(address, topics, from, to, budget) {
    hours (a listed pool stays listed), "not listed" for ten minutes (a new pool gets picked up), and "could not ask"
    (429, timeout, outage) for a minute — that one is null, which the page treats as not offered. */
 const CHART_SRC_BATCH = 30, CHART_SRC_WAIT_MS = 150, CHART_SRC_YES_MS = 6 * 3600e3, CHART_SRC_NO_MS = 10 * 60e3, CHART_SRC_UNK_MS = 60e3;
+// the two listings asked; the test runner points both at a dead address unless CHAIN_LIVE=1, like the RPC (tests/run.mjs)
+const CHART_SRC_DS_URL = process.env.CHART_SRC_DS_URL || 'https://api.dexscreener.com/latest/dex/pairs/robinhood/';
+const CHART_SRC_GT_URL = process.env.CHART_SRC_GT_URL || 'https://api.geckoterminal.com/api/v2/networks/robinhood/pools/multi/';
 const CHART_SRC_ASK = {
   dexscreener: async (pools) => {
-    const r = await jgetR('https://api.dexscreener.com/latest/dex/pairs/robinhood/' + pools.join(','));
+    const r = await jgetR(CHART_SRC_DS_URL + pools.join(','));
     if (!r.ok || !r.data || typeof r.data !== 'object' || !('pairs' in r.data)) return null;   // { pairs: null } is a real "none of these"
     return new Set((Array.isArray(r.data.pairs) ? r.data.pairs : []).filter((x) => x && x.chainId === 'robinhood').map((x) => String(x.pairAddress || '').toLowerCase()));
   },
   geckoterminal: async (pools) => {
-    const r = await jgetR('https://api.geckoterminal.com/api/v2/networks/robinhood/pools/multi/' + pools.join(','));
+    const r = await jgetR(CHART_SRC_GT_URL + pools.join(','));
     if (!r.ok || !r.data || !Array.isArray(r.data.data)) return null;   // { data: [] } is a real "none of these"
     return new Set(r.data.data.map((x) => String((x && x.attributes && x.attributes.address) || '').toLowerCase()));
   },
@@ -10824,6 +10827,7 @@ function serveFile(req, res, filePath, extraHeaders = {}, patch = null) {
     if (ext === '.html') {
       const e = staticEntry(filePath, ext, st);
       if (!e) { notFoundPage(res); return; }
+      countVisit(req);   // a page opened: the admin page's daily visitors (no IP or browser string is kept — see countVisit)
       let str = rewriteHtml(e.buf);
       if (patch) str = applySeoPatch(str, patch);   // after the rewrite: member text never meets swapOrigin or ASSET_REF
       const html = Buffer.from(str, 'utf8');
@@ -12167,6 +12171,114 @@ function gitCommit() {
   } catch { return null; }
 }
 BOOT_COMMIT = gitCommit();
+/* ===== Daily visitors, and the activity the site already keeps (the admin page's "Daily active users") =============
+   Owner, 2026-10-13: "on the admin page keep a daily active users chart that shows the amount of users that have come
+   to the platform each day, make sure that is tracked and shown there, and show any data that has been tracked about
+   people who have come to the live site since it has been live".
+
+   VISITORS are counted from 2026-10-13 on, when a page is served (an HTML GET: not the API, not assets, not a prefetch),
+   so a visitor is someone who opened a page. No IP address or browser string is stored. Each UTC day gets a fresh random
+   key; a visitor is HMAC(key, IP + browser string), and once the day is over its key and every fingerprint made with it
+   are deleted, so nobody can be followed from one day to the next. What stays is the day's totals: visitors (distinct
+   fingerprints — a phone that changes network counts twice), signed-in members among them (distinct accounts, kept the
+   same way), page views, and the automated requests left out (crawlers, link previews, scripts, headless browsers).
+   Before that day the site counted no visits at all: the report says so instead of guessing.
+
+   ACTIVE MEMBERS come from records the site has always kept, so they reach back to the first member: a member counts
+   on a day they joined, signed in (sessions still on record), posted, commented, called, flew Rocket Run, or did
+   something that earns Send Power by their own hand (ACTIVE_KINDS — not the points the server works out by itself,
+   such as holding a call, decay, or a reaction someone else gave). */
+db.exec(`CREATE TABLE IF NOT EXISTS visits_daily (day TEXT PRIMARY KEY, visitors INTEGER NOT NULL DEFAULT 0, members INTEGER NOT NULL DEFAULT 0, views INTEGER NOT NULL DEFAULT 0, bots INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS visit_keys (day TEXT PRIMARY KEY, k TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS visit_seen (day TEXT NOT NULL, v TEXT NOT NULL, PRIMARY KEY (day, v)) WITHOUT ROWID;`);
+const VISIT_BOT = /bot\b|bot\/|crawl|spider|slurp|preview|facebookexternalhit|embedly|whatsapp|curl|wget|python|node-fetch|undici|axios|go-http|java\/|okhttp|headless|lighthouse|pagespeed|uptime|pingdom|monitor|http-client|libwww/i;
+const utcDay = (t) => new Date(t == null ? Date.now() : t).toISOString().slice(0, 10);
+const visit = { day: '', key: '' };
+function visitSweep(today) {   // yesterday's key and fingerprints go; only the totals stay
+  try { db.prepare('DELETE FROM visit_seen WHERE day < ?').run(today); db.prepare('DELETE FROM visit_keys WHERE day < ?').run(today); } catch {}
+}
+function visitKeyFor(day) {
+  if (visit.day === day) return visit.key;
+  db.prepare('INSERT OR IGNORE INTO visit_keys (day, k) VALUES (?,?)').run(day, crypto.randomBytes(32).toString('hex'));
+  visit.day = day; visit.key = db.prepare('SELECT k FROM visit_keys WHERE day = ?').get(day).k;
+  visitSweep(day);
+  return visit.key;
+}
+function countVisit(req) {
+  try {
+    if (req.method !== 'GET') return;
+    if (/prefetch|prerender/i.test(String(req.headers['sec-purpose'] || req.headers['purpose'] || req.headers['x-moz'] || ''))) return;   // the browser guessing, not a person opening a page
+    const day = utcDay(), key = visitKeyFor(day);
+    db.prepare('INSERT OR IGNORE INTO visits_daily (day) VALUES (?)').run(day);
+    const ua = String(req.headers['user-agent'] || '');
+    if (!/Mozilla\//.test(ua) || VISIT_BOT.test(ua)) { db.prepare('UPDATE visits_daily SET bots = bots + 1 WHERE day = ?').run(day); return; }
+    const fp = (s) => crypto.createHmac('sha256', key).update(s).digest('base64url').slice(0, 22);
+    const nv = db.prepare('INSERT OR IGNORE INTO visit_seen (day, v) VALUES (?,?)').run(day, 'v:' + fp((clientIp(req) || '') + '\n' + ua)).changes;
+    const me = getUser(req);
+    const nm = me && !me.system ? db.prepare('INSERT OR IGNORE INTO visit_seen (day, v) VALUES (?,?)').run(day, 'm:' + fp('u' + me.id)).changes : 0;
+    db.prepare('UPDATE visits_daily SET views = views + 1, visitors = visitors + ?, members = members + ? WHERE day = ?').run(nv, nm, day);
+  } catch {}
+}
+setInterval(() => visitSweep(utcDay()), 3600e3).unref();
+visitSweep(utcDay());
+const ACTIVE_KINDS = ['post', 'first_post', 'comment', 'react_give', 'vote_give', 'follow', 'daily', 'egg', 'customize', 'connect_wallet', 'watch_token', 'track_wallet', 'swap', 'send_call', 'hop_on', 'community_founder'];
+const ADMIN_ACTIVITY_MAX_DAYS = 400;
+function adminActivity() {
+  const D = (col) => `strftime('%Y-%m-%d', ${col} / 1000, 'unixepoch')`;
+  const by = (sql, ...a) => { const o = {}; for (const r of db.prepare(sql).all(...a)) o[r.day] = r.n; return o; };
+  const real = 'user_id IN (SELECT id FROM users WHERE system = 0)';
+  const kinds = ACTIVE_KINDS.map(() => '?').join(',');
+  const active = by(`SELECT day, COUNT(DISTINCT uid) n FROM (
+      SELECT id uid, ${D('created_at')} day FROM users WHERE system = 0
+      UNION ALL SELECT user_id, ${D('created_at')} FROM sessions WHERE ${real}
+      UNION ALL SELECT user_id, ${D('created_at')} FROM posts WHERE ${real}
+      UNION ALL SELECT user_id, ${D('created_at')} FROM comments WHERE ${real}
+      UNION ALL SELECT user_id, ${D('created_at')} FROM calls WHERE ${real}
+      UNION ALL SELECT user_id, ${D('started_at')} FROM arcade_rounds WHERE ${real}
+      UNION ALL SELECT user_id, ${D('created_at')} FROM points_events WHERE ${real} AND kind IN (${kinds})
+    ) GROUP BY day`, ...ACTIVE_KINDS);
+  const series = {
+    joined: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM users WHERE system = 0 GROUP BY day`),
+    entered: by(`SELECT ${D('used_at')} day, COUNT(*) n FROM invite_codes WHERE used_at IS NOT NULL GROUP BY day`),
+    signins: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM sessions WHERE ${real} GROUP BY day`),
+    posts: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM posts WHERE ${real} GROUP BY day`),
+    comments: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM comments WHERE ${real} GROUP BY day`),
+    reactions: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM points_events WHERE ${real} AND kind = 'react_give' GROUP BY day`),
+    checkins: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM points_events WHERE ${real} AND kind = 'daily' GROUP BY day`),
+    calls: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM calls WHERE ${real} GROUP BY day`),
+    flights: by(`SELECT ${D('started_at')} day, COUNT(*) n FROM arcade_rounds WHERE ${real} GROUP BY day`),
+    ghosts: by(`SELECT ${D('created_at')} day, COUNT(*) n FROM points_events WHERE ${real} AND kind = 'egg' GROUP BY day`),
+  };
+  const visits = {}; for (const r of db.prepare('SELECT day, visitors, members, views, bots FROM visits_daily').all()) visits[r.day] = r;
+  const today = utcDay();
+  const firstRecord = [active, visits, ...Object.values(series)].flatMap((o) => Object.keys(o)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today).sort()[0] || today;
+  const trackingSince = Object.keys(visits).sort()[0] || null;
+  const days = [];
+  for (let t = Date.parse(today + 'T00:00:00Z'), stop = Math.max(Date.parse(firstRecord + 'T00:00:00Z'), Date.parse(today + 'T00:00:00Z') - (ADMIN_ACTIVITY_MAX_DAYS - 1) * 864e5); t >= stop; t -= 864e5) {
+    const d = utcDay(t), v = visits[d];
+    const row = { day: d, visitors: v ? v.visitors : null, membersVisiting: v ? v.members : null, views: v ? v.views : null, bots: v ? v.bots : null, activeMembers: active[d] || 0 };
+    for (const k of Object.keys(series)) row[k] = series[k][d] || 0;
+    days.push(row);
+  }
+  days.reverse();
+  const one = (sql, ...a) => db.prepare(sql).get(...a);
+  return {
+    today, firstRecord, trackingSince, days,
+    totals: {
+      members: one('SELECT COUNT(*) n FROM users WHERE system = 0 AND deleted_at IS NULL').n,
+      membersEver: one('SELECT COUNT(*) n FROM users WHERE system = 0').n,
+      entered: one('SELECT COUNT(*) n FROM invite_codes WHERE used_at IS NOT NULL').n,
+      posts: one(`SELECT COUNT(*) n FROM posts WHERE ${real}`).n,
+      comments: one(`SELECT COUNT(*) n FROM comments WHERE ${real}`).n,
+      calls: one(`SELECT COUNT(*) n FROM calls WHERE ${real}`).n,
+      flights: one(`SELECT COUNT(*) n FROM arcade_rounds WHERE ${real}`).n,
+      visitorDays: one('SELECT COALESCE(SUM(visitors), 0) n FROM visits_daily').n,
+      views: one('SELECT COALESCE(SUM(views), 0) n FROM visits_daily').n,
+      bots: one('SELECT COALESCE(SUM(bots), 0) n FROM visits_daily').n,
+    },
+    activeKinds: ACTIVE_KINDS,
+  };
+}
 function adminOverview() {
   const one = (sql, ...a) => db.prepare(sql).get(...a);
   const t = now();
@@ -14223,6 +14335,10 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/admin/overview' && req.method === 'GET') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         return send(res, 200, adminOverview());
+      }
+      if (p === '/api/admin/activity' && req.method === 'GET') {   // daily visitors and active members, for the chart
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        return send(res, 200, adminActivity(), { 'Cache-Control': 'no-store' });
       }
       /* Rotate the keys now. Admin only, and a security change: it needs the "confirm it's you" window like every other.
          scope 'data' swaps the data key with the site up; 'all' (and 'compromised', which also drops the old keys as soon

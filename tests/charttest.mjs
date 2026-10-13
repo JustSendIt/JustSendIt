@@ -164,17 +164,17 @@ try {
     check('  ...the switch and its two outside buttons start hidden; a button shows only when our server says that site lists the pool, the switch only when one does',
       /'<div class="chart-src" role="group" aria-label="Chart source" hidden>'/.test(NPJ)
       && /b\.hidden = !wrap\._srcs\[k\]; if \(wrap\._srcs\[k\]\) any = true;/.test(CHART) && /if \(grp\) grp\.hidden = !any;/.test(CHART)
-      && /wrap\._srcs = \{ dexscreener: s\.dexscreener === true, geckoterminal: s\.geckoterminal === true \};/.test(CHART));
+      && /const keep = \(k\) => s\[k\] === true \|\| \(s\[k\] === null && !!prev\[k\]\);/.test(CHART) && /wrap\._srcs = \{ dexscreener: keep\('dexscreener'\), geckoterminal: keep\('geckoterminal'\) \};/.test(CHART));
     check('  ...a coin the price feed does not list but whose pool the site reads ($GWC) still gets our chart and the switch',
       /if \(!\(p\.indexed \|\| poolRead\(p\)\) \|\| !p\.pair \|\| !p\.pair\.address\) \{/.test(NPJ) && /const poolRead = \(p\) => !!\(p\.market && p\.market\.source === 'reserves'\);/.test(NPJ));
     check('  ...a site that does not list the pool can never be shown, not by a remembered pick nor a click; the pick applies once, never swapped in later',
       /if \(src !== 'onchain' && !\(wrap\._srcs && wrap\._srcs\[src\]\)\) src = 'onchain';/.test(CHART)
-      && /else if \(first && !wrap\._picked\) \{ const pick = chartSrcPref\(\); if \(pick !== 'onchain' && wrap\._srcs\[pick\]\) showChartSrc\(wrap, pick\); \}/.test(CHART)
-      && /\.chart-switch:not\(\[data-ready\]\)'\)\.forEach\(w => \{ w\.setAttribute\('data-ready', '1'\); wantSources\(w\); \}\)/.test(CHART));
+      && /else if \(first && !wrap\._picked && !wrap\._touched && Date\.now\(\) - \(wrap\._askAt \|\| 0\) < 2500\) \{ const pick = chartSrcPref\(\); if \(pick !== 'onchain' && wrap\._srcs\[pick\]\) showChartSrc\(wrap, pick\); \}/.test(CHART)
+      && /w\.setAttribute\('data-ready', '1'\); w\._askAt = Date\.now\(\);/.test(CHART) && /wantSources\(w\);/.test(CHART));
     check('  ...the browser asks our server only — never Dexscreener or GeckoTerminal — and the server asks them, metered, 30 pools a call',
       /fetch\('\/api\/chart\/sources\?pools=' \+/.test(CHART) && !/api\.dexscreener\.com|api\.geckoterminal\.com/.test(CHART)
-      && /jgetR\('https:\/\/api\.dexscreener\.com\/latest\/dex\/pairs\/robinhood\/' \+ pools\.join\(','\)\)/.test(SRC)
-      && /jgetR\('https:\/\/api\.geckoterminal\.com\/api\/v2\/networks\/robinhood\/pools\/multi\/' \+ pools\.join\(','\)\)/.test(SRC)
+      && /const CHART_SRC_DS_URL = process\.env\.CHART_SRC_DS_URL \|\| 'https:\/\/api\.dexscreener\.com\/latest\/dex\/pairs\/robinhood\/';/.test(SRC) && /jgetR\(CHART_SRC_DS_URL \+ pools\.join\(','\)\)/.test(SRC)
+      && /const CHART_SRC_GT_URL = process\.env\.CHART_SRC_GT_URL \|\| 'https:\/\/api\.geckoterminal\.com\/api\/v2\/networks\/robinhood\/pools\/multi\/';/.test(SRC) && /jgetR\(CHART_SRC_GT_URL \+ pools\.join\(','\)\)/.test(SRC)
       && /'api\.geckoterminal\.com': 10,/.test(SRC) && /const CHART_SRC_BATCH = 30,/.test(SRC));
     check('  ...and the privacy page says the buttons show only for a listed pool, asked by our server with the pool address alone',
       /Each button shows only when that site lists the pool: our server asks them, with the pool&#39;s address alone|Each button shows only when that site lists the pool: our server asks them, with the pool's address alone/.test(PRIV)

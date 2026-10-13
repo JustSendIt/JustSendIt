@@ -57,7 +57,7 @@
       const out = ctx.createGain(); out.gain.value = 0.5;
       const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 9000;   // the TV speaker's roll-off
       out.connect(crush); crush.connect(lp); lp.connect(ctx.destination);
-      C.ctx = ctx; C.out = out;
+      C.ctx = ctx; C.out = out; C.crush = crush;
       C.waves = { p12: pulseWave(ctx, 0.125), p25: pulseWave(ctx, 0.25), sq: pulseWave(ctx, 0.5) };
       C.noise = lfsrBuffer(ctx, false, 2); C.tick = lfsrBuffer(ctx, true, 6);
       return ctx;
@@ -218,7 +218,9 @@
   const wake = () => { if (!muted() && C.ctx && C.ctx.state === 'suspended') C.ctx.resume().catch(() => {}); };
   document.addEventListener('pointerdown', wake, true);
   document.addEventListener('keydown', wake, true);
-  document.addEventListener('visibilitychange', () => { if (C.ctx) { if (document.hidden) C.ctx.suspend().catch(() => {}); else if (!muted()) C.ctx.resume().catch(() => {}); } });
+  // silence NOW: what is already queued stays on the old bus, which is cut loose (a suspended clock would play it on resume)
+  function cut() { if (!C.ctx) return; try { C.out.disconnect(); } catch {} const o = C.ctx.createGain(); o.gain.value = 0.5; o.connect(C.crush); C.out = o; C.ctx.suspend().catch(() => {}); }
+  document.addEventListener('visibilitychange', () => { if (C.ctx) { if (document.hidden) cut(); else if (!muted()) C.ctx.resume().catch(() => {}); } });
   // paused from the nav: stop whatever is sounding now, not just what comes next
-  document.addEventListener('jsi:sfx', (e) => { if (C.ctx && e.detail && e.detail.on === false) C.ctx.suspend().catch(() => {}); });
+  document.addEventListener('jsi:sfx', (e) => { if (e.detail && e.detail.on === false) cut(); });
 })();

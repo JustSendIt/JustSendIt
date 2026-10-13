@@ -6,6 +6,7 @@
      POST /api/admin/restrict            {userId, days, reason} or {userId, lift: true}
      POST /api/admin/resolve             {id, action}
      POST /api/admin/keys/rotate         {confirm: 'ROTATE', scope: data|all, compromised} (needs "confirm it's you")
+     GET  /api/admin/activity            daily visitors (counted from 2026-10-13) and daily active members (from the records)
    Nothing is computed here; every number and name is the server's. */
 (function () {
   const gate = document.getElementById('adm-gate'), tools = document.getElementById('adm-tools');
@@ -189,12 +190,79 @@
     catch (e) { st.textContent = '⚠️ ' + e.message; if (window.SFX) SFX.play('error'); }
   });
 
+  /* ----- daily active users: two bar charts and the table under them, every figure from GET /api/admin/activity ----- */
+  const dau = document.getElementById('adm-activity'), dauBody = document.getElementById('adm-dau-body');
+  let dauData = null, dauRange = '30';
+  const num = (n) => n == null ? '—' : Number(n).toLocaleString('en-US');
+  const short = (d) => { try { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }); } catch { return d; } };
+  function niceMax(m) { if (m <= 4) return 4; const p = Math.pow(10, Math.floor(Math.log10(m))); const f = m / p; return (f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+  function chart(rows, key, cls, title, sub, word, today) {
+    const counted = rows.filter((r) => r[key] != null);
+    const top = niceMax(Math.max(1, ...counted.map((r) => r[key])));
+    const best = counted.reduce((a, r) => (r[key] > (a ? a[key] : -1) ? r : a), null);
+    const last = rows[rows.length - 1];
+    const bars = rows.map((r) => {
+      const v = r[key];
+      if (v == null) return '<span class="adm-bar is-none" title="' + esc(r.day) + ': not counted — the site did not count visits before ' + esc(dauData.trackingSince || dauData.today) + '"></span>';
+      return '<span class="adm-bar' + (v === 0 ? ' is-zero' : '') + (r.day === today ? ' is-today' : '') + '" style="--h:' + (v / top * 100).toFixed(2) + '%" title="' + esc(r.day) + (r.day === today ? ' (today, so far)' : '') + ': ' + num(v) + ' ' + esc(word) + '"></span>';
+    }).join('');
+    const label = title + ', ' + short(rows[0].day) + ' to ' + short(last.day) + ': ' + (counted.length ? 'highest ' + num(best[key]) + ' on ' + short(best.day) + '; today so far ' + num(last[key] == null ? 0 : last[key]) : 'nothing counted in these days') + '. Every day’s number is in the table below.';
+    const mid = rows[Math.floor((rows.length - 1) / 2)];
+    return '<figure class="adm-chart ' + cls + '"><figcaption>' + esc(title) + ' <small>' + esc(sub) + '</small></figcaption>' +
+      '<div class="adm-chart-plot"><div class="adm-chart-y" aria-hidden="true"><span>' + num(top) + '</span><span>' + num(top / 2) + '</span><span>0</span></div>' +
+      '<div class="adm-chart-bars" role="img" aria-label="' + esc(label) + '">' + bars + '</div></div>' +
+      '<div class="adm-chart-x" aria-hidden="true"><span>' + esc(short(rows[0].day)) + '</span>' + (rows.length > 2 ? '<span>' + esc(short(mid.day)) + '</span>' : '') + '<span>' + esc(short(last.day)) + (last.day === today ? ' (today)' : '') + '</span></div></figure>';
+  }
+  function renderDau() {
+    const d = dauData; if (!d) return;
+    const rows = dauRange === 'all' ? d.days : d.days.slice(-Number(dauRange));
+    const t = d.days[d.days.length - 1], wk = d.days.slice(-7);
+    const avg = (k) => (wk.reduce((a, r) => a + (r[k] || 0), 0) / wk.length).toFixed(1);
+    const visitWk = wk.filter((r) => r.visitors != null);
+    const tt = d.totals;
+    const COLS = [['visitors', 'Visitors'], ['membersVisiting', 'Members among them'], ['views', 'Page views'], ['bots', 'Bots left out'], ['activeMembers', 'Active members'], ['joined', 'Joined'], ['entered', 'Codes used at the gate'], ['signins', 'Sign-ins on record'], ['posts', 'Posts'], ['comments', 'Comments'], ['reactions', 'Reactions'], ['checkins', 'Check-ins'], ['calls', 'Send Calls'], ['flights', 'Rocket Run flights'], ['ghosts', 'Ghosts found']];
+    dauBody.innerHTML =
+      '<div class="adm-dau-today">' +
+        '<div>' + stat('Visitors today (so far)', t.visitors == null ? 'not counted yet' : num(t.visitors)) + stat('Members among them', t.membersVisiting == null ? '—' : num(t.membersVisiting)) + stat('Page views today', t.views == null ? '—' : num(t.views)) + '</div>' +
+        '<div>' + stat('Active members today', num(t.activeMembers)) + stat('Active members, 7-day average', avg('activeMembers')) + (visitWk.length ? stat(visitWk.length < 7 ? 'Visitors, average of the ' + visitWk.length + ' counted ' + (visitWk.length === 1 ? 'day' : 'days') : 'Visitors, 7-day average', (visitWk.reduce((a, r) => a + r.visitors, 0) / visitWk.length).toFixed(1)) : stat('Visitors, 7-day average', 'not counted yet')) + '</div>' +
+        '<div>' + stat('Members', num(tt.members) + (tt.membersEver !== tt.members ? ' (' + num(tt.membersEver - tt.members) + ' deleted)' : '')) + stat('Codes used at the gate, ever', num(tt.entered)) + stat('First record', esc(d.firstRecord)) + stat('Visitors counted since', d.trackingSince ? esc(d.trackingSince) : 'the next page anyone opens') + '</div>' +
+      '</div>' +
+      chart(rows, 'visitors', 'adm-chart--visitors', 'Visitors per day', '— people who opened a page, one per device and day; bots left out', 'visitors', d.today) +
+      chart(rows, 'activeMembers', 'adm-chart--members', 'Active members per day', '— members who joined, signed in, posted, commented, reacted, voted, followed, checked in, called, flew or found a ghost', 'active members', d.today) +
+      '<ul class="adm-dau-notes">' +
+        '<li><b>Visitors</b> are counted from ' + esc(d.trackingSince || 'today') + ', when a page is opened. No IP address or browser is stored: each UTC day gets a fresh key, a visitor is a one-way fingerprint made with it, and the key and the fingerprints are deleted when the day ends, so only the totals stay and nobody can be followed from one day to the next. A phone that changes network counts twice. <b>Before ' + esc(d.trackingSince || 'today') + ' the site counted no visits at all</b> (the striped days), and nothing can recover them.</li>' +
+        '<li><b>Active members</b> come from the records the site has always kept, so they reach back to the first member on ' + esc(d.firstRecord) + '. Points the server works out by itself (holding a call, decay, a reaction someone else gave) do not make anyone active. Sign-ins only count while the session is still on record.</li>' +
+        '<li>Totals since the first record: ' + num(tt.posts) + ' posts, ' + num(tt.comments) + ' comments, ' + num(tt.calls) + ' Send Calls, ' + num(tt.flights) + ' Rocket Run flights; ' + num(tt.views) + ' page views and ' + num(tt.bots) + ' bot requests since visits were first counted.</li>' +
+      '</ul>' +
+      '<details class="setting-card adm-dau-more"><summary>Every day’s numbers (' + rows.length + ' days)</summary><div class="adm-dau-table"><table><caption class="sr-only">Daily visitors and activity, newest first</caption><thead><tr><th scope="col">Day (UTC)</th>' +
+        COLS.map(([, h]) => '<th scope="col">' + esc(h) + '</th>').join('') + '</tr></thead><tbody>' +
+        rows.slice().reverse().map((r) => '<tr><th scope="row">' + esc(r.day) + (r.day === d.today ? ' (today)' : '') + '</th>' + COLS.map(([k]) => '<td>' + num(r[k]) + '</td>').join('') + '</tr>').join('') +
+      '</tbody></table></div></details>';
+  }
+  async function loadActivity() {
+    dauBody.setAttribute('aria-busy', 'true');
+    try {
+      const r = await fetch('/api/admin/activity', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('could not load the day counts (' + r.status + ')');
+      dauData = await r.json();
+      renderDau();
+    } catch (e) { dauBody.innerHTML = '<p class="empty-wall">⚠️ ' + esc(e.message || 'could not load the day counts') + '</p>'; }
+    finally { dauBody.removeAttribute('aria-busy'); }
+  }
+  dau.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-dau-range]'); if (!b) return;
+    dauRange = b.dataset.dauRange;
+    for (const x of dau.querySelectorAll('[data-dau-range]')) x.setAttribute('aria-pressed', String(x === b));
+    renderDau();
+  });
+  document.getElementById('adm-dau-refresh').addEventListener('click', loadActivity);
+
   function boot() {
-    if (!(window.AUTH && AUTH.user)) { gate.textContent = 'Sign in first.'; tools.hidden = true; ov.hidden = true; return; }
-    if (!AUTH.user.admin) { gate.textContent = 'This page is for the site operators. If that is you, your user id has to be in ADMIN_USER_IDS on the server.'; tools.hidden = true; ov.hidden = true; return; }
+    if (!(window.AUTH && AUTH.user)) { gate.textContent = 'Sign in first.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; return; }
+    if (!AUTH.user.admin) { gate.textContent = 'This page is for the site operators. If that is you, your user id has to be in ADMIN_USER_IDS on the server.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; return; }
     gate.textContent = 'Signed in as @' + AUTH.user.username + ' (admin).';
-    tools.hidden = false; ov.hidden = false;
-    loadOverview(); load();
+    tools.hidden = false; ov.hidden = false; dau.hidden = false;
+    loadOverview(); loadActivity(); load();
   }
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(boot, boot); else boot();
   document.addEventListener('auth:change', boot);

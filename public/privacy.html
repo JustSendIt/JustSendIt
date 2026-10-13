@@ -73,7 +73,7 @@
 
   <div class="t-lede">
     <p><b>The short version.</b></p>
-    <p>We store what the site needs to run your account and nothing for advertising. There are <b>no ad trackers</b>. The one analytics script on the site is <b>Cloudflare Web Analytics</b>, which counts page loads and how fast they load (section 7).</p>
+    <p>We store what the site needs to run your account and nothing for advertising. There are <b>no ad trackers</b>. The one analytics script on the site is <b>Cloudflare Web Analytics</b>, which counts page loads and how fast they load (section 7). The server also keeps a <b>daily count of visitors</b> for the operator, made without storing anyone's IP address or browser (the last row of the table below).</p>
     <p>Your email address, linked wallet addresses and two-factor secrets are <b>encrypted at rest</b>. Passwords are hashed. Session cookies are stored hashed. IP addresses are kept only as a keyed hash used to stop abuse.</p>
     <p>Everything you post, react to, or pin is <b>public</b>, and a Send Call is permanent by design.</p>
     <p>You can <b>delete your account</b> yourself from your profile settings, and you can ask us anything about your data at SendRH@Atomicmail.io.</p>
@@ -135,6 +135,7 @@
 <tr><td>Restrictions and their reasons</td><td>Read-only mode after abuse or a first-day sell</td><td>Plain text</td></tr>
 <tr><td>Data API key (if you have one)</td><td>The Data API</td><td>Hashed</td></tr>
 <tr><td>Telegram chat id and username (only if the operator runs the bot and you use it)</td><td>Answering you in Telegram</td><td>Plain text</td></tr>
+<tr><td>A daily count of visitors: when you open a page, a one-way fingerprint of your IP address and browser, made with a random key that exists for that UTC day only (and, if you are signed in, the same kind of fingerprint of your account)</td><td>Counting how many people use the site each day, shown only to the operator</td><td>No IP address or browser string is stored. The day's key and every fingerprint made with it are deleted once the day is over, so a visit cannot be linked to you or to your visits on other days. Only the day's totals stay: visitors, signed-in members among them, page views, and automated requests left out.</td></tr>
 </tbody>
 </table>
 </div>

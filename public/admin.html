@@ -64,6 +64,22 @@
     <div id="adm-ov-body" aria-live="polite"></div>
   </section>
 
+  <!-- daily active users: visitors counted from 2026-10-13, active members from the records the site has always kept (admin.js, GET /api/admin/activity) -->
+  <section class="card adm-ov adm-dau" id="adm-activity" hidden aria-labelledby="adm-dau-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-dau-h" class="adm-h2">Daily active users 📈</h2>
+      <div class="adm-dau-ctl">
+        <div class="adm-dau-range" role="group" aria-label="How many days to show">
+          <button class="btn btn-sm" type="button" data-dau-range="30" aria-pressed="true" data-tip="Charts the last 30 days, today on the right">30 days</button>
+          <button class="btn btn-sm" type="button" data-dau-range="90" aria-pressed="false" data-tip="Charts the last 90 days, today on the right">90 days</button>
+          <button class="btn btn-sm" type="button" data-dau-range="all" aria-pressed="false" data-tip="Charts every day from the first record the site holds to today">All</button>
+        </div>
+        <button class="btn btn-sm" id="adm-dau-refresh" type="button" data-tip="Reads the day counts again">↻ Refresh</button>
+      </div>
+    </div>
+    <div id="adm-dau-body" aria-live="polite"></div>
+  </section>
+
   <div id="adm-tools" hidden>
     <h2 class="adm-h2">Moderation 🧹</h2>
     <p class="modal-note" style="margin:0 0 1rem;">Reports from senders, newest first. Every action here notifies the person it lands on and is written to the report it resolves.</p>

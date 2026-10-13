@@ -101,18 +101,18 @@
     if (oddsNote) {
       const counts = Object.keys(SYM).map((k) => SYM[k].e + '×' + STRIP.filter((x) => x === k).length).join(' · ');
       oddsNote.innerHTML = 'Each reel has the same ' + N + ' stops (<span class="slot-strip">' + esc(counts) + '</span>), and every spin picks a stop on each reel at random, all ' + N + ' equally likely, before the reels move. ' +
-        'Only the middle row counts. The odds above are counted from those reels, all ' + fmt(ALL) + ' outcomes. About <b>' + esc(oneIn(WINS)) + '</b> spins scores something.';
+        'Only the middle row counts, and a spin pays only its best line (three cherries pay 25, not 25 plus the cherry lines). The odds above are how often each line is the one that pays, counted from those reels over all ' + fmt(ALL) + ' outcomes. About <b>' + esc(oneIn(WINS)) + '</b> spins scores something.';
     }
   }
 
   /* ---------- this device's scoreboard ---------- */
   const KEY = 'slots:v1', SKEY = 'slots:sound';
   const clampN = (v) => Math.max(0, Math.min(1e12, Math.floor(Number(v) || 0)));
-  const st = (() => {
-    try { const j = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; return { spins: clampN(j.spins), score: clampN(j.score), jackpots: clampN(j.jackpots), best: clampN(j.best) }; }
-    catch { return { spins: 0, score: 0, jackpots: 0, best: 0 }; }
-  })();
+  const st = { spins: 0, score: 0, jackpots: 0, best: 0 };
+  // read again before every change, so two open tabs add to one scoreboard instead of overwriting each other's
+  const load = () => { try { const j = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; Object.assign(st, { spins: clampN(j.spins), score: clampN(j.score), jackpots: clampN(j.jackpots), best: clampN(j.best) }); } catch {} };
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {} };
+  load();
 
   // an LED counter: the lit digits over a row of unlit 8s, the way a seven-segment display shows its dark segments
   function led(el, n, digits) {
@@ -134,7 +134,9 @@
   const A = { ctx: null, out: null, noise: null, whir: null, tense: null, on: (() => { try { return localStorage.getItem(SKEY) !== '0'; } catch { return true; } })() };
   const paused = () => !!(window.SFX && SFX.muted());   // the nav's ⏸ pauses every sound on the site, this machine's too
   function audio() {
-    if (!A.on || paused()) return null;
+    if (!A.on || paused() || document.hidden) return null;
+    // before the first tap or key the browser keeps audio asleep: a sound queued then would burst out later, out of place
+    if (!A.ctx && navigator.userActivation && !navigator.userActivation.hasBeenActive) return null;
     try {
       if (!A.ctx) {
         const C = window.AudioContext || window.webkitAudioContext;
@@ -146,7 +148,7 @@
         out.connect(comp); comp.connect(ctx.destination);
         const buf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), d = buf.getChannelData(0);
         for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-        A.ctx = ctx; A.out = out; A.noise = buf;
+        A.ctx = ctx; A.out = out; A.comp = comp; A.noise = buf;
       }
       if (A.ctx.state === 'suspended') A.ctx.resume();
       return A.ctx;
@@ -298,25 +300,32 @@
     n.g.gain.cancelScheduledValues(t); n.g.gain.setTargetAtTime(0.0001, t, 0.03);
     setTimeout(() => n.nodes.forEach((x) => { try { x.stop(); } catch {} }), 300);
   }
-  function paintSound() {
+  // silence NOW: everything already queued (a payout's bells, its coins) is on the old bus, which is cut loose; new sounds get a fresh one
+  function cutBus() {
+    whirKill();
+    if (!A.ctx || !A.out) return;
+    try { A.out.disconnect(); } catch {}
+    const o = A.ctx.createGain(); o.gain.value = 1.15; o.connect(A.comp); A.out = o;
+  }
+  function paintSound() {   // one name, "Sound"; aria-pressed says whether it is on (a name that flipped would announce a double negative)
     if (!soundBtn) return;
     soundBtn.setAttribute('aria-pressed', String(A.on));
-    soundBtn.innerHTML = A.on ? '<span aria-hidden="true">🔊</span> Sound on' : '<span aria-hidden="true">🔇</span> Sound off';
+    soundBtn.innerHTML = '<span aria-hidden="true">' + (A.on ? '🔊' : '🔇') + '</span> Sound';
   }
   function setSound(on) {   // only ever from a press, so the audio context is never made before a gesture
     A.on = on;
     try { localStorage.setItem(SKEY, on ? '1' : '0'); } catch {}
     paintSound();
-    if (!on) { whirKill(); if (A.ctx && A.ctx.state === 'running') A.ctx.suspend().catch(() => {}); }
+    if (!on) { cutBus(); if (A.ctx && A.ctx.state === 'running') A.ctx.suspend().catch(() => {}); }
     else if (audio()) SND.press();
   }
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', () => {   // a hidden tab is silent, and a payout left half-rung does not replay on return
     if (!A.ctx) return;
-    if (document.hidden) A.ctx.suspend().catch(() => {});
+    if (document.hidden) { cutBus(); A.ctx.suspend().catch(() => {}); }
     else if (A.on && !paused()) A.ctx.resume().catch(() => {});
   });
   document.addEventListener('jsi:sfx', (e) => {   // paused from the nav: silence what is sounding now
-    if (e.detail && e.detail.on === false) { whirKill(); if (A.ctx && A.ctx.state === 'running') A.ctx.suspend().catch(() => {}); }
+    if (e.detail && e.detail.on === false) { cutBus(); if (A.ctx && A.ctx.state === 'running') A.ctx.suspend().catch(() => {}); }
   });
 
   /* ======================================================================================================
@@ -463,6 +472,7 @@
   function setBusy(on) {
     S.busy = on;
     spinBtn.setAttribute('aria-disabled', String(on));
+    if (lever) lever.setAttribute('aria-disabled', String(on));
     cab.classList.toggle('is-spinning', on);
   }
   function clearCelebration() {
@@ -480,7 +490,7 @@
     const line = stops.map((k, i) => REELS[i][k]);
     const pay = payFor(line);
     const tense = line[0] === 'rocket' && line[1] === 'rocket';
-    st.spins++; save(); renderStats();
+    load(); st.spins++; save(); renderStats();
     led(winEl, 0, 4);
     if (!byLever) SND.press();
     setBusy(true);
@@ -504,6 +514,7 @@
   }
 
   function kick() { if (!S.raf) S.raf = requestAnimationFrame(frame); }
+  const still = () => reduced() || document.documentElement.classList.contains('motion-off');   // lights hold steady
   function frame(now) {
     S.raf = 0;
     let moving = false;
@@ -524,12 +535,12 @@
       if (!moving) { S.pos = run.motions.map((m) => m.final); S.vel = [0, 0, 0]; run.motions = null; settle(); }
     }
     draw(now);
-    if (moving || now < S.glowUntil || coins.live) S.raf = requestAnimationFrame(frame);
+    if (moving || (now < S.glowUntil && !still()) || coins.live) kick();   // kick(): never a second loop beside the one settle() started
   }
   function draw(now) {
     const glowing = now < S.glowUntil;
     // a slow swell, never a flash
-    const g = glowing ? 0.55 + 0.45 * Math.sin(((now - S.glowFrom) / 1000) * Math.PI * 1.6) : 0;
+    const g = glowing ? (still() ? 1 : 0.55 + 0.45 * Math.sin(((now - S.glowFrom) / 1000) * Math.PI * 1.6)) : 0;
     for (let i = 0; i < 3; i++) drawReel(i, S.pos[i], S.vel[i], S.lit[i] ? Math.max(0.15, g) : 0);
     if (coins.live) drawCoins(now);
   }
@@ -544,6 +555,7 @@
     if (lineEl) lineEl.textContent = 'On the payline: ' + words.join(', ') + '.';
     const said = words.join(', ');
     if (!pay) { say(said.charAt(0).toUpperCase() + said.slice(1) + '. No win this time.'); draw(performance.now()); return; }
+    load();
     const before = st.score;
     st.score = clampN(st.score + pay.pts); st.best = Math.max(st.best, pay.pts);
     if (pay.id === 'jackpot') st.jackpots++;
@@ -562,6 +574,7 @@
     else if (pay.id === 'rocket2') SND.nearly();
     else SND.ding(pay.pts >= 5 ? 2 : 1, 987.77);
     countUp(before, pay.pts, tier);
+    if (still()) setTimeout(() => draw(performance.now()), S.glowUntil - performance.now() + 30);   // the steady glow goes when its time is up
     say(said.charAt(0).toUpperCase() + said.slice(1) + ' — ' + (tier === 'jackpot' ? 'JACKPOT! ' : '') + pay.what.replace(/: the jackpot$/, '') + ', ' + fmt(pay.pts) + (pay.pts === 1 ? ' point.' : ' points.'));
     kick();
   }
@@ -589,7 +602,7 @@
   }
 
   /* ---------- the lever: tap it, press Enter on it, or drag the ball down ---------- */
-  const LV = { a: 0, max: 158, anim: 0, drag: null, noClick: false, teeth: 0 };
+  const LV = { a: 0, max: 100, anim: 0, drag: null, noClick: false, teeth: 0 };   // 100°: pulled toward you and down a little, never swung over the counters
   function setLever(a) {
     LV.a = a;
     lever.style.setProperty('--pull', (-a).toFixed(1) + 'deg');
@@ -602,6 +615,7 @@
     const t0 = performance.now();
     const step = (now) => {
       const u = Math.min(1, (now - t0) / ms);
+      if (to > from && S.busy) { LV.anim = 0; leverReturn(); return; }   // the reels started meanwhile: the lever is locked
       setLever(from + (to - from) * ease(u));
       if (u < 1) LV.anim = requestAnimationFrame(step); else { LV.anim = 0; if (done) done(); }
     };
@@ -620,7 +634,10 @@
     };
     LV.anim = requestAnimationFrame(step);
   }
-  function leverTrip() { SND.leverDown(); spin(true); setTimeout(leverReturn, 90); }
+  function leverTrip() {
+    if (S.busy) { SND.ratchet(); leverReturn(); return; }   // locked while the reels turn: one tooth, and back
+    SND.leverDown(); spin(true); setTimeout(leverReturn, 90);
+  }
   function pullLever() {
     if (S.busy) { SND.ratchet(); return; }      // the lever is locked while the reels turn: one tooth and no further
     if (reduced()) { SND.ratchet(); SND.leverDown(); spin(true); return; }
@@ -639,14 +656,17 @@
     });
     lever.addEventListener('pointermove', (e) => {
       const d = LV.drag; if (!d || d.tripped) return;
+      if (S.busy) { d.tripped = true; leverReturn(); return; }
       const dy = e.clientY - d.y;
       if (Math.abs(dy) > 6) d.moved = true;
-      const a = Math.max(0, Math.min(LV.max, (dy / d.len) * 120));
+      // the ball under the finger: an arm of length L tipped by a shows its ball L(1 - cos a) lower
+      const a = Math.max(0, Math.min(LV.max, Math.acos(Math.max(-1, Math.min(1, 1 - dy / d.len))) * 180 / Math.PI));
       setLever(a);
       if (a >= LV.max * 0.94) { d.tripped = true; leverTrip(); }
     });
     const end = (e) => {
       const d = LV.drag; if (!d) return;
+      audio();   // pointerup is the browser's activation moment: wake the sound here, so the pull's ka-chunk is heard
       LV.drag = null; LV.noClick = true; setTimeout(() => { LV.noClick = false; }, 400);
       try { lever.releasePointerCapture(e.pointerId); } catch {}
       if (d.tripped) return;
@@ -667,16 +687,19 @@
   if (resetBtn) {
     let armed = 0;
     resetBtn.addEventListener('click', () => {
+      if (S.busy) { say('Wait for the reels to stop, then reset.'); return; }
       if (!armed) {
         armed = setTimeout(() => { armed = 0; resetBtn.textContent = 'Reset my score'; }, 4000);
         resetBtn.textContent = 'Tap again to reset';
+        say('Press Reset again within 4 seconds to set this device\u2019s score to zero.');
         return;
       }
       clearTimeout(armed); armed = 0;
-      finishCount();
+      finishCount(); clearCelebration();
+      if (coins.live) { coins.live = false; if (coins.ctx) coins.ctx.clearRect(0, 0, coinCv.width, coinCv.height); }
       st.spins = 0; st.score = 0; st.jackpots = 0; st.best = 0; save();
       resetBtn.textContent = 'Reset my score';
-      led(winEl, 0, 4); led(scoreEl, 0, 6); renderStats();
+      led(winEl, 0, 4); led(scoreEl, 0, 6); renderStats(); draw(performance.now());
       say('Score reset to zero on this device.');
     });
   }
@@ -702,7 +725,7 @@
     const due = Math.min(coins.spawn, Math.ceil(((now - coins.from) / coins.spawnMs) * coins.spawn));
     while (coins.list.length < due) {
       const r = 7 + Math.random() * 5;
-      coins.list.push({ x: mouthX + (Math.random() - 0.5) * wb.width * 0.5, y: mouthY - 10, vx: (Math.random() - 0.5) * 260, vy: -120 - Math.random() * 260, r, ph: Math.random() * 6, spin: 8 + Math.random() * 10, rest: false });
+      coins.list.push({ x: mouthX + (Math.random() - 0.5) * wb.width * 0.5, y: mouthY - 10, vx: (Math.random() - 0.5) * 260, vy: -120 - Math.random() * 260, r, ph: Math.random() * 6, spin: 3 + Math.random() * 6, rest: false });
     }
     c.setTransform(coins.dpr, 0, 0, coins.dpr, 0, 0);
     c.clearRect(0, 0, W, H);
@@ -728,6 +751,8 @@
     c.globalAlpha = 1;
     if (now >= coins.until) { coins.live = false; c.clearRect(0, 0, W, H); }
   }
+
+  window.addEventListener('storage', (e) => { if (e.key === KEY && !S.count) { load(); renderStats(); led(scoreEl, st.score, 6); } });
 
   /* ---------- start ---------- */
   renderPays();
