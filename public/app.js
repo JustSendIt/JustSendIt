@@ -627,7 +627,9 @@
    in the content; the signed-in "effects" pref only reaches people with an account. This is the switch
    for everyone: a ⏸ in the nav that toggles html.motion-off (styles.css pauses every ambient animation
    under it) and remembers the choice in this browser. State animations — toasts, meter fills, focus —
-   are deliberately not on that list. */
+   are deliberately not on that list. The same switch pauses the site's 8-bit sound effects (sfx.js — owner, 2026-10-13:
+   "users can pause those sounds also through the pause button in the nav bar that also pauses animations"): one ⏸,
+   motion and sound together. The theme tune keeps its own button. */
 (function () {
   const KEY = 'send.motion';
   const root = document.documentElement;
@@ -638,8 +640,8 @@
     const b = document.createElement('button');
     b.type = 'button'; b.id = 'motion-btn'; b.className = 'motion-btn';
     b.setAttribute('aria-pressed', String(off));
-    b.setAttribute('aria-label', 'Pause moving decorations');   // one name; aria-pressed carries the state — a label that flips would announce the opposite of the state
-    b.setAttribute('data-tip', 'Pauses or resumes the ticker, floating emoji and other decorative motion — remembered on this device');
+    b.setAttribute('aria-label', 'Pause motion and sound effects');   // one name; aria-pressed carries the state — a label that flips would announce the opposite of the state
+    b.setAttribute('data-tip', 'Pauses or resumes the site\'s sound effects, the ticker, floating emoji and other decorative motion — remembered on this device');
     b.innerHTML = '<span aria-hidden="true">' + (off ? '▶' : '⏸') + '</span>';
     b.addEventListener('click', () => {
       off = !off;
@@ -647,7 +649,9 @@
       try { localStorage.setItem(KEY, off ? 'off' : 'on'); } catch {}
       b.setAttribute('aria-pressed', String(off));
       b.innerHTML = '<span aria-hidden="true">' + (off ? '▶' : '⏸') + '</span>';
-      if (window.sendToast) sendToast(off ? 'Motion paused ⏸' : 'Motion back on ▶');
+      document.dispatchEvent(new CustomEvent('jsi:sfx', { detail: { on: !off } }));   // sfx.js and the slot machine stop what is sounding now
+      if (!off && window.SFX) SFX.play('on');
+      if (window.sendToast) sendToast(off ? 'Motion and sounds paused ⏸' : 'Motion and sounds back on ▶');
     });
     const before = nav.querySelector('#nav-notif') || nav.querySelector('#nav-auth') || nav.lastElementChild;
     nav.insertBefore(b, before);

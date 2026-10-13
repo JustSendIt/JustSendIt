@@ -132,8 +132,9 @@
      SOUND — every noise is made here, from oscillators and one buffer of white noise.
      ====================================================================================================== */
   const A = { ctx: null, out: null, noise: null, whir: null, tense: null, on: (() => { try { return localStorage.getItem(SKEY) !== '0'; } catch { return true; } })() };
+  const paused = () => !!(window.SFX && SFX.muted());   // the nav's ⏸ pauses every sound on the site, this machine's too
   function audio() {
-    if (!A.on) return null;
+    if (!A.on || paused()) return null;
     try {
       if (!A.ctx) {
         const C = window.AudioContext || window.webkitAudioContext;
@@ -312,7 +313,10 @@
   document.addEventListener('visibilitychange', () => {
     if (!A.ctx) return;
     if (document.hidden) A.ctx.suspend().catch(() => {});
-    else if (A.on) A.ctx.resume().catch(() => {});
+    else if (A.on && !paused()) A.ctx.resume().catch(() => {});
+  });
+  document.addEventListener('jsi:sfx', (e) => {   // paused from the nav: silence what is sounding now
+    if (e.detail && e.detail.on === false) { whirKill(); if (A.ctx && A.ctx.state === 'running') A.ctx.suspend().catch(() => {}); }
   });
 
   /* ======================================================================================================
@@ -680,7 +684,7 @@
   /* ---------- the coin shower: a jackpot pays out into the tray ---------- */
   const coins = { live: false, list: [], ctx: coinCv ? coinCv.getContext('2d') : null, w: 0, h: 0, dpr: 1, last: 0, until: 0, spawn: 0, from: 0, spawnMs: 0 };
   function shower(n, ms) {
-    if (!coins.ctx || reduced() || window.__confettiEnabled === false) return;
+    if (!coins.ctx || reduced() || window.__confettiEnabled === false || document.documentElement.classList.contains('motion-off')) return;
     const b = cab.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
     coins.w = b.width; coins.h = b.height; coins.dpr = dpr;
     coinCv.width = Math.round(b.width * dpr); coinCv.height = Math.round(b.height * dpr);

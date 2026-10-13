@@ -222,6 +222,10 @@
   .slot-led { padding: 5px 3px 6px; }
 }
 
+/* ---------- the nav's ⏸ (html.motion-off): the bulbs stop and hold steady; the reels still turn, they are the game ---------- */
+html.motion-off .slot-bulbs, html.motion-off .slot-bulbs::after, html.motion-off .slot-window.is-tense .slot-reel { animation: none !important; }
+html.motion-off .slot-cab.is-win .slot-bulbs::after, html.motion-off .slot-cab.is-bigwin .slot-bulbs::after, html.motion-off .slot-cab.is-jackpot .slot-bulbs::after { opacity: 1; }
+
 /* ---------- reduced motion: nothing moves, the lights hold steady ---------- */
 @media (prefers-reduced-motion: reduce) {
   .slot-bulbs, .slot-bulbs::after, .slot-payline, .slot-banner, .slot-reel, .slot-spin { animation: none !important; transition: none !important; }
