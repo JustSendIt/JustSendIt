@@ -255,7 +255,7 @@ a { color: var(--gold); }
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--hair);
 }
-.nav-logo { display: flex; align-items: center; gap: 0.55rem; text-decoration: none; }
+.nav-logo { display: flex; align-items: center; justify-content: center; gap: 0.55rem; min-width: var(--nav-ctl); min-height: var(--nav-ctl); text-decoration: none; }   /* a control like the rest of the bar: the 42px mark was 2px short of the 44px a finger gets */
 .nav-logo img { width: 42px; height: 42px; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--green) 50%, transparent)); }
 .nav-logo span { font-family: 'Luckiest Guy', cursive; font-size: calc(var(--nav-fs) * 1.35); color: var(--green-bright); }
 .nav-menu { display: flex; align-items: center; gap: 0.1rem; margin-left: auto; flex-wrap: wrap; min-width: 0; }   /* wraps only while nav.js measures; a row that would wrap becomes the pop-down */
@@ -270,16 +270,18 @@ a { color: var(--gold); }
 .nav.is-measuring .nav-menu, .nav.is-measuring .nav-menu * { transition: none !important; }
 /* nothing in the row is ever squashed — a pill, the bell or the logo mark at the wrong width is a broken graphic. When
    the row cannot fit, nav.js steps down through measured tiers instead: .is-tight drops the live count and the
-   Send Power figures; .is-tighter the wordmark and the @name (the avatar stays); .is-tightest the level pill. */
+   Send Power figures; .is-tighter the wordmark and the @name (the avatar stays); .is-tightest the level pill; .is-bare,
+   the last, the OG badge in the name pill (an OG member's bar was still 29px past a 320px phone without it). */
 .nav > *:not(.nav-menu), #nav-auth.nav-persist > *, .nav-profile > * { flex-shrink: 0; }
 .nav-logo img { flex: 0 0 auto; }
 .profile-link .pl-name { display: inline-block; white-space: nowrap; vertical-align: bottom; }   /* shown whole or not at all: nav.js hides it (.is-tighter) when the bar has no room */
 .nav.is-tight .nav-live, .nav.is-tight .nav-xp-sep, .nav.is-tight .nav-xp-pts, .nav.is-tight .nav-xp-boost { display: none; }
 .nav.is-tighter .nav-logo span, .nav.is-tighter .profile-link .pl-name { display: none; }
 .nav.is-tighter .profile-link .pl-ava { margin-right: 0; }   /* with the name hidden, the gap it kept sat on one side and pushed the avatar 3px off the pill's middle */
-.nav.is-tighter { gap: 0.5rem; }
+.nav.is-tighter { gap: 0.45rem; }   /* the 3px this saves keeps a one-digit level pill on a 360px phone now that the logo and the pill are a full --nav-ctl */
 .nav.is-tightest .nav-xp { display: none; }
 .nav.is-tightest { gap: 0.35rem; padding-left: 0.6rem; padding-right: 0.6rem; }
+.nav.is-bare .profile-link .og-badge { display: none; }
 .nav-menu a:hover { color: var(--green-bright); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .nav-menu a.active { color: var(--on-green); background: var(--green); }
 
@@ -1501,9 +1503,9 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 
 /* nav level/points badge */
 .nav-xp {
-  display: inline-flex; align-items: center; gap: 0.35rem; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; text-decoration: none;
   background: var(--ink-3); border: 1.5px solid color-mix(in srgb, var(--green) 40%, transparent); border-radius: 999px;
-  min-height: var(--nav-ctl); padding: 0 0.7rem; margin-right: 0; vertical-align: middle; font-size: var(--nav-fs-s);
+  min-height: var(--nav-ctl); min-width: var(--nav-ctl); padding: 0 0.7rem; margin-right: 0; vertical-align: middle; font-size: var(--nav-fs-s);
 }
 /* live "who's active — people Sending it right now" counter next to the 🔔 */
 .nav-live { display: inline-flex; align-items: center; gap: 0.35rem; min-height: var(--nav-ctl); font-size: var(--nav-fs-s); text-decoration: none; color: var(--text); background: color-mix(in srgb, var(--green) 10%, transparent); border: 1.5px solid color-mix(in srgb, var(--green) 40%, transparent); border-radius: 999px; padding: 0 0.7rem; margin: 0 0.4rem 0 0.15rem; vertical-align: middle; font-weight: 800; font-size: max(var(--text-floor), 0.82rem); white-space: nowrap; }

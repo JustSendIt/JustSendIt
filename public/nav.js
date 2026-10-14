@@ -52,19 +52,23 @@
        sign-in (bell, level, live count, balances, name), so it is measured again whenever it does. The pages ship
        the bar compact, so nothing flashes; only a bar that fits opens up. */
     var fitTimer = null;
-    var TIERS = ['is-tight', 'is-tighter', 'is-tightest'];
-    function overflowing() { return nav.scrollWidth > nav.clientWidth + 1; }
+    /* .is-bare is the last resort: the OG badge leaves the name pill (it stays on the member's wall and profile) — with
+       it, an OG member's bar was 349px wide on a 320px phone with every other tier already on */
+    var TIERS = ['is-tight', 'is-tighter', 'is-tightest', 'is-bare'];
+    function overflowing() { return nav.scrollWidth > nav.clientWidth; }   // no pixel of slack: one pixel over is a one-pixel sideways scroll (the signed-in bar sat at 361 on a 360px phone)
+    function rowFits() {   // every link on one line (the search box counts too) and nothing past the edge
+      var links = menu.querySelectorAll('a');
+      var first = links[0], last = links[links.length - 1];
+      var wrapped = first && last && (Math.abs(last.getBoundingClientRect().top - first.getBoundingClientRect().top) > 4 || menu.getBoundingClientRect().height > first.getBoundingClientRect().height * 1.5);
+      return !wrapped && !overflowing();
+    }
+    // the bar as it stands still holds: the pop-down form has only to stay inside the screen, the open row on one line too
+    function stillFits() { return nav.classList.contains('is-compact') ? !overflowing() : rowFits(); }
     function fit() {
       var wasCompact = nav.classList.contains('is-compact');
       nav.classList.add('is-measuring');   // no transitions while the classes flip, or the closed menu flashes
       nav.classList.remove('is-compact');
       TIERS.forEach(function (t) { nav.classList.remove(t); });
-      var links = menu.querySelectorAll('a');
-      var first = links[0], last = links[links.length - 1];
-      function rowFits() {   // every link on one line (the search box counts too) and nothing past the edge
-        var wrapped = first && last && (Math.abs(last.getBoundingClientRect().top - first.getBoundingClientRect().top) > 4 || menu.getBoundingClientRect().height > first.getBoundingClientRect().height * 1.5);
-        return !wrapped && !overflowing();
-      }
       /* The links are the bar's main job, so on a wide screen the row is tried twice before it collapses: as it is,
          then without the live count and the Send Power figures (.is-tight). Below 900px it never fits. */
       var compact = true;
@@ -93,6 +97,16 @@
     }
     syncNavHeight();
     fit();
+    /* The timers and the ResizeObserver above wait at least a frame — in a tab that is not in front, a second or more —
+       so the signed-in bar was laid out 449px wide on a 375px phone (a sideways scroll) until they fired. When the row
+       changes under the bar (the account cluster on sign-in, the bell mounting, the ⏸, the live count) or the screen
+       turns, a bar that no longer holds is fitted at once: a MutationObserver runs as a microtask, before the next
+       paint, and a resize event before the frame it resizes. Only a bar that no longer holds is measured again, so the
+       bell's poll never closes or scrolls an open menu; the menu's own changes (search results) are not the row's. */
+    if (window.MutationObserver) new MutationObserver(function (recs) {
+      for (var i = 0; i < recs.length; i++) if (!menu.contains(recs[i].target)) { if (!stillFits()) fit(); return; }
+    }).observe(nav, { childList: true, subtree: true, characterData: true });
+    window.addEventListener('resize', function () { if (!stillFits()) fit(); });
     addEventListener('resize', syncNavHeight, { passive: true });
     addEventListener('load', syncNavHeight);
     // the bar's height can change without a resize (balances pill arriving, search expanding, a wrap) — track it directly
