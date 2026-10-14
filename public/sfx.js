@@ -24,6 +24,11 @@
   'use strict';
   const root = document.documentElement;
   const muted = () => root.classList.contains('motion-off');
+  /* SITE SWITCH — owner, 2026-10-14: "pause 8 bit sounds across the site". Off for everyone until this is true again.
+     Every hook stays wired (SFX.play calls, the generic click and toast layer); while it is false nothing sounds and no
+     audio context is made. The slot machine's sounds are not 8-bit: they keep their own switch, and the nav's ⏸ still
+     pauses them along with motion (SFX.muted() answers that pause alone). */
+  const SITE_ON = false;
 
   /* ---------- the chip ---------- */
   const FR = 1 / 60;                                  // one frame: the step every pitch and volume change moves in
@@ -139,7 +144,7 @@
   const last = {};
   let lastExplicit = -Infinity, pending = null;   // -Infinity, not 0: performance.now() starts at the page's load, and 0 would hush the first 700 ms of toasts
   function sound(name) {
-    if (muted() || document.hidden) return false;
+    if (!SITE_ON || muted() || document.hidden) return false;
     // before the visitor's first tap or key the browser keeps audio asleep; a sound queued then would play late, out of place
     if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return false;
     const make = SOUNDS[name]; if (!make) return false;
@@ -155,6 +160,7 @@
   const SFX = {
     play(name) { if (pending) { clearTimeout(pending); pending = null; } lastExplicit = performance.now(); return sound(name); },
     muted,
+    on: SITE_ON,
     names: Object.keys(SOUNDS),
   };
   window.SFX = SFX;
@@ -164,7 +170,7 @@
 
   const SKIP = '#slots, #mp-toggle, #motion-btn, [data-sfx="none"], [disabled], [aria-disabled="true"]';
   document.addEventListener('click', (e) => {
-    if (!e.isTrusted || muted()) return;
+    if (!SITE_ON || !e.isTrusted || muted()) return;
     const el = e.target.closest('[data-sfx], summary, a[href], button, [role="button"], [role="tab"], [role="radio"], [role="option"], [role="menuitem"], [role="menuitemradio"], [role="switch"], input[type="checkbox"], input[type="radio"]');
     if (!el || el.closest(SKIP)) return;
     const named = el.getAttribute('data-sfx');
@@ -185,7 +191,7 @@
     });
   }, true);
   document.addEventListener('change', (e) => {   // a <select>, which a click alone does not settle
-    if (!e.isTrusted || muted() || e.target.tagName !== 'SELECT' || e.target.closest(SKIP)) return;
+    if (!SITE_ON || !e.isTrusted || muted() || e.target.tagName !== 'SELECT' || e.target.closest(SKIP)) return;
     later(() => sound('select'));
   }, true);
 

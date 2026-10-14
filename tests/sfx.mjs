@@ -35,7 +35,7 @@ try {
   check('every page that loads app.js loads sfx.js straight after it', withApp.length >= 15 && !bad.length, bad.join(',') || withApp.length + ' pages');
 
   // one pause for motion and sound
-  check('the sounds are paused exactly when motion is: html.motion-off, set by the nav ⏸', /const muted = \(\) => root\.classList\.contains\('motion-off'\);/.test(SFX) && /if \(muted\(\) \|\| document\.hidden\) return false;/.test(SFX));
+  check('the sounds are paused exactly when motion is: html.motion-off, set by the nav ⏸', /const muted = \(\) => root\.classList\.contains\('motion-off'\);/.test(SFX) && /if \(!SITE_ON \|\| muted\(\) \|\| document\.hidden\) return false;/.test(SFX));
   check('  ...the ⏸ says so (one name, the state in aria-pressed) and tells the sounds playing now to stop',
     /b\.setAttribute\('aria-label', 'Pause motion and sound effects'\);/.test(APP) && /data-tip', 'Pauses or resumes the site\\'s sound effects, the ticker/.test(APP)
     && /document\.dispatchEvent\(new CustomEvent\('jsi:sfx', \{ detail: \{ on: !off \} \}\)\);/.test(APP) && /'Motion and sounds paused ⏸'/.test(APP));
@@ -43,9 +43,13 @@ try {
     /const paused = \(\) => !!\(window\.SFX && SFX\.muted\(\)\);/.test(SLOTS) && /if \(!A\.on \|\| paused\(\) \|\| document\.hidden\) return null;/.test(SLOTS) && /function cutBus\(\) \{/.test(SLOTS) && /document\.addEventListener\('jsi:sfx'/.test(SLOTS)
     && /html\.motion-off \.slot-bulbs, html\.motion-off \.slot-bulbs::after/.test(SLOTCSS));
 
+  // owner, 2026-10-14: "pause 8 bit sounds across the site" — off for everyone, every hook still wired; flip SITE_ON (and this check) to bring them back
+  check('the 8-bit sounds are paused across the site: nothing sounds and no audio context is made, the hooks stay in place',
+    /const SITE_ON = false;/.test(SFX) && /if \(!SITE_ON \|\| !e\.isTrusted \|\| muted\(\)\) return;/.test(SFX) && /if \(!SITE_ON \|\| !e\.isTrusted \|\| muted\(\) \|\| e\.target\.tagName !== 'SELECT'/.test(SFX));
+
   // a sound only ever answers the visitor
   check('nothing sounds before the visitor\'s first gesture, and generic click sounds answer only real clicks',
-    /if \(navigator\.userActivation && !navigator\.userActivation\.hasBeenActive\) return false;/.test(SFX) && /if \(!e\.isTrusted \|\| muted\(\)\) return;/.test(SFX));
+    /if \(navigator\.userActivation && !navigator\.userActivation\.hasBeenActive\) return false;/.test(SFX) && /if \(!SITE_ON \|\| !e\.isTrusted \|\| muted\(\)\) return;/.test(SFX));
   check('  ...a feature\'s own sound replaces the click\'s generic one, and a toast right after an explicit sound stays quiet',
     /pending = setTimeout\(\(\) => \{ pending = null; if \(lastExplicit < t\) fn\(\); \}, 0\);/.test(SFX) && /if \(performance\.now\(\) - lastExplicit > 700\) sound\(/.test(SFX));
   check('the sounds are made in the page: no audio file, no fetch, no network', !/fetch\(|XMLHttpRequest|new Audio\(|['"][^'"]*\.(mp3|wav|ogg|m4a)['"]|https?:\/\//.test(SFX.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')));
