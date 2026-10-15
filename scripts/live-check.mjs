@@ -13,6 +13,10 @@
  * gate a deploy. Also runs against a local server (tests/livecheck.mjs does), where the https-only and
  * Cloudflare-only checks are skipped or warned rather than failed.
  */
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const PUB = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), 'public');
 const ORIGIN = String(process.argv[2] || '').replace(/\/+$/, '');
 if (!/^https?:\/\/[^/]+$/.test(ORIGIN)) { console.error('usage: npm run live-check -- https://your.domain'); process.exit(2); }
 const HTTPS = ORIGIN.startsWith('https://');
@@ -89,6 +93,15 @@ const evil = await get('/api/age', { method: 'POST', headers: { 'Content-Type': 
 pass('a POST from another origin is refused', evil.status === 403, evil.status);
 const robots = await get('/robots.txt');
 pass('robots.txt carries this origin (BASE_URL is set to it)', robots.status === 200 && robots.text.includes(HOST), robots.text.split('\n').find((l) => /sitemap/i.test(l)) || robots.status);
+// the file the repo serves, byte for byte: Cloudflare's managed robots.txt or AI-crawler rules would show up here as a difference
+let robotsWant = null;
+try { robotsWant = readFileSync(path.join(PUB, 'robots.txt'), 'utf8').split('https://sendrh.com').join(ORIGIN); } catch {}
+if (robotsWant == null) say('SKIP', 'robots.txt compared with the repo (no checkout beside this script)', '');
+else pass('robots.txt is exactly this checkout\'s public/robots.txt (nothing at the edge adds rules for search or AI crawlers; run it from the deployed commit)', robots.status === 200 && robots.text === robotsWant, robots.text.slice(0, 80));
+const llms = await get('/llms.txt');
+pass('llms.txt is served as UTF-8 text and names the site', llms.status === 200 && /^# Just Send It\n/.test(llms.text) && /text\/plain; charset=utf-8/i.test(h(llms, 'content-type')), llms.status + ' ' + h(llms, 'content-type'));
+let ixKey = null; try { ixKey = readdirSync(PUB).find((f) => /^[0-9a-f]{32}\.txt$/.test(f)); } catch {}
+if (ixKey) { const ix = await get('/' + ixKey); pass('the IndexNow key file answers with its key', ix.status === 200 && ix.text.trim() === ixKey.slice(0, -4), ix.status); }
 const sitemap = await get('/sitemap.xml');
 pass('sitemap.xml carries this origin', sitemap.status === 200 && sitemap.text.includes(HOST), sitemap.status);
 

@@ -68,7 +68,7 @@ try {
   check('  ...and tracker.js, then walletchart.js (the chart), before trackerpage.js', order(HTML, 'src="tracker.js"', 'src="walletchart.js"', 'src="trackerpage.js"'));
   check('profile.html loads trackerdash.css before responsive.css', order(PROFILE, 'href="trackerdash.css"', 'href="responsive.css"'));
   check('  ...and tracker.js, then walletchart.js, before profile.js', order(PROFILE, 'src="tracker.js"', 'src="walletchart.js"', 'src="profile.js"'));
-  check('the head is unchanged: the SEO title, one canonical, the breadcrumb', /<title>Robinhood Chain Wallet Tracker: Holdings &amp; PNL — \$Send<\/title>/.test(HTML) && (HTML.match(/<link rel="canonical"/g) || []).length === 1 && /BreadcrumbList/.test(HTML));
+  check('the head is unchanged: the SEO title, one canonical, the breadcrumb', /<title>Robinhood Chain Wallet Tracker: Holdings, PNL — Just Send It<\/title>/.test(HTML) && (HTML.match(/<link rel="canonical"/g) || []).length === 1 && /BreadcrumbList/.test(HTML));
 
   /* ═══ the words ═══ */
   check('the hero says Track, not Follow', /Track any wallet on Robinhood Chain/.test(HTML) && !/Follow any wallet/.test(HTML + PROFILE + SENDY));

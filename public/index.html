@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>$SEND (SEND IT) Memecoin on Robinhood Chain — Just Send It</title>
-<meta name="description" content="$SEND (SEND IT) is a community memecoin on Robinhood Chain: live $SEND and $GWC charts, a how-to-buy guide and a one-click swap. Entertainment only.">
+<meta name="description" content="Just Send It is a $SEND (SEND IT) memecoin community site on Robinhood Chain: live $SEND and $GWC charts, a how-to-buy guide and a swap. Entertainment only.">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="theme-color" content="#c6f000">
 <link rel="canonical" href="https://sendrh.com/">
 <link rel="manifest" href="/site.webmanifest">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="$Send — Just Send It">
+<meta property="og:site_name" content="Just Send It">
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="https://sendrh.com/">
 <meta property="og:title" content="$SEND (SEND IT) — a community memecoin on Robinhood Chain 🚀">
@@ -34,7 +34,7 @@
       "@type": "WebSite",
       "@id": "https://sendrh.com/#website",
       "name": "Just Send It",
-      "alternateName": ["$Send", "JustSendIt"],
+      "alternateName": ["JustSendIt", "$Send", "sendrh.com"],
       "url": "https://sendrh.com/",
       "description": "Community site for the $SEND (SEND IT) and $GWC memecoins on Robinhood Chain. Entertainment only, not financial advice.",
       "inLanguage": "en",
@@ -44,7 +44,7 @@
       "@type": "Organization",
       "@id": "https://sendrh.com/#organization",
       "name": "Just Send It",
-      "alternateName": "$Send",
+      "alternateName": ["JustSendIt", "sendrh.com"],
       "url": "https://sendrh.com/",
       "logo": { "@type": "ImageObject", "url": "https://sendrh.com/assets/logo.png", "width": 1000, "height": 1000 },
       "sameAs": ["https://x.com/sendrh_"]
@@ -54,9 +54,9 @@
       "@id": "https://sendrh.com/#webpage",
       "url": "https://sendrh.com/",
       "name": "$SEND (SEND IT) Memecoin on Robinhood Chain — Just Send It",
-      "description": "$SEND (SEND IT) is a community memecoin on Robinhood Chain: live $SEND and $GWC charts, a how-to-buy guide and a one-click swap. Entertainment only.",
+      "description": "Just Send It is a $SEND (SEND IT) memecoin community site on Robinhood Chain: live $SEND and $GWC charts, a how-to-buy guide and a swap. Entertainment only.",
       "isPartOf": { "@id": "https://sendrh.com/#website" },
-      "about": { "@id": "https://sendrh.com/#organization" },
+      "about": [{ "@id": "https://sendrh.com/#organization" }, { "@id": "https://sendrh.com/#send" }, { "@id": "https://sendrh.com/#gwc" }],
       "inLanguage": "en"
     },
     {
@@ -67,6 +67,26 @@
       "operatingSystem": "Any (runs in a web browser)",
       "browserRequirements": "Requires JavaScript. An EVM wallet is optional: it is only needed to link a wallet with a read-only signature and to sign a swap yourself.",
       "description": "Community site for the $SEND (SEND IT) and $GWC memecoins on Robinhood Chain: live on-chain price charts, a step-by-step guide to wallets and Robinhood Chain, a swap you review and sign in your own wallet, the Send Wall feed and a Rocketize-your-pic editor. Entertainment only, not financial advice. Not affiliated with Robinhood Markets, Inc."
+    },
+    {
+      "@type": "Thing",
+      "@id": "https://sendrh.com/#send",
+      "name": "SEND IT",
+      "alternateName": ["$SEND", "SEND"],
+      "description": "$SEND (ticker SEND, token name SEND IT), a memecoin on Robinhood Chain, an Ethereum Layer-2 (chain ID 4663). Entertainment only, not financial advice.",
+      "identifier": { "@type": "PropertyValue", "propertyID": "Robinhood Chain (chain ID 4663) token contract", "value": "0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105" },
+      "url": "https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105",
+      "sameAs": ["https://robinhoodchain.blockscout.com/token/0xa40a9C0e2E9bf7a3b9deb9ebed2b59E77d01e105", "https://JustSendItCoin.com"]
+    },
+    {
+      "@type": "Thing",
+      "@id": "https://sendrh.com/#gwc",
+      "name": "Generational Wealth Coin",
+      "alternateName": ["$GWC", "GWC"],
+      "description": "$GWC (Generational Wealth Coin), a memecoin on Robinhood Chain (chain ID 4663) and $SEND's sibling coin. Entertainment only, not financial advice.",
+      "identifier": { "@type": "PropertyValue", "propertyID": "Robinhood Chain (chain ID 4663) token contract", "value": "0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22" },
+      "url": "https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22",
+      "sameAs": ["https://robinhoodchain.blockscout.com/token/0x61339F11384dDe4B2dc3a33E75B4dc23Cc620F22", "https://GenerationalWealthCoin.com"]
     }
   ]
 }
@@ -178,6 +198,7 @@
     <button type="button" class="hero-logo-btn" aria-label="Fire confetti" data-tip="Fires a burst of confetti — just for fun"><img class="hero-logo" src="assets/logo-mark.png" alt="$Send — Just Send It logo" width="900" height="900" fetchpriority="high"></button>
     <h1 class="display">Just $Send It! <span class="rocket">🚀</span></h1>
     <p class="tag">Socially <strong>Send It</strong> on Crypto</p>
+    <p class="hero-lede">Just Send It (sendrh.com) is an independent community site for $SEND, the SEND IT memecoin, and $GWC on Robinhood Chain. Entertainment only, not affiliated with Robinhood.</p>
     <div class="rh-badge"><span class="dot"></span> LIVE ON ROBINHOOD CHAIN · ID 4663</div>
     <a class="risk-chip" href="/guide">🎢 High-risk fun · Not financial advice</a>
     <div class="mcap-panels">
@@ -624,7 +645,7 @@
     <div class="community-links">
       <a class="btn btn-gold" href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener" data-tip="Opens the $GWC project website in a new tab">Generational<wbr>Wealth<wbr>Coin.com 💸</a>
       <a class="btn btn-ghost" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow" data-tip="Opens the $GWC Telegram community in a new tab">Telegram 💬</a>
-      <a class="btn btn-ghost" href="https://x.com/sendrh_" target="_blank" rel="noopener nofollow" data-tip="Opens the community X account in a new tab">X / Twitter 🐦</a>
+      <a class="btn btn-ghost" href="https://x.com/sendrh_" target="_blank" rel="me noopener" data-tip="Opens the community X account in a new tab">X / Twitter 🐦</a>
     </div>
   </div>
   <!-- The copy is taken from JustSendItCoin.com itself (read 2026-09-28): its tagline, what the page holds, and the
@@ -658,7 +679,7 @@
   <p class="fine">
     $Send is a vibe, not financial advice. Memecoins are extremely volatile — you can lose everything you put in. Nothing on this site is an offer, solicitation, or recommendation of any kind. Always do your own research.<br>
     This site is an independent community project and is <b>not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.</b> "Robinhood Chain" refers to the public blockchain network of that name.<br>
-    Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
+    Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="me noopener">X 🐦</a> 💸
   </p>
   <div class="nav-foot">
     <a href="/about">About</a>

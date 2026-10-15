@@ -55,7 +55,7 @@ try {
     ['GET', '/admin'], ['POST', '/admin'], ['PUT', '/admin'], ['HEAD', '/admin'], ['GET', '/Admin'], ['GET', '/ADMIN'], ['GET', '/admin/'], ['GET', '/.//admin'],
     ['GET', '/x/..//admin'], ['GET', '/%2e//admin'], ['GET', '/admin?x=1'], ['GET', '/admin.html?x=1']];
   const leaks = [];
-  for (const [m, pth] of variants) for (const sid of [null, member.sid]) { const r = await raw(m, pth, sid); if (/loadOverview|adm-ov|Admin — \$Send/.test(r.text)) leaks.push(m + ' ' + pth + (sid ? ' (member)' : '') + ' → ' + r.status); }
+  for (const [m, pth] of variants) for (const sid of [null, member.sid]) { const r = await raw(m, pth, sid); if (/loadOverview|adm-ov|<title>Admin — /.test(r.text)) leaks.push(m + ' ' + pth + (sid ? ' (member)' : '') + ' → ' + r.status); }
   // ('//admin.js' parses as the host admin.js and serves the home page — what matters is that no admin content comes back)
   check('no method, spelling or path trick reaches the admin page or script for anyone but the admin (' + variants.length * 2 + ' tries)', leaks.length === 0, leaks.join(' | '));
   // not even a redirect: a 301 from /admin.html to /admin would tell anyone the page exists
@@ -70,7 +70,7 @@ try {
   const p405 = await raw('POST', '/'), o405 = await raw('OPTIONS', '/wall.html');
   check('a page or asset answers 405 to anything but GET and HEAD (it used to answer 200 with the file)', p405.status === 405 && o405.status === 405, p405.status + ' ' + o405.status);
   const page = await get('/admin', admin.sid), js = await get('/admin.js', admin.sid);
-  check('the admin account gets the page, titled Admin', page.status === 200 && /<title>Admin — \$Send<\/title>/.test(page.text), page.status);
+  check('the admin account gets the page, titled Admin', page.status === 200 && /<title>Admin — Just Send It<\/title>/.test(page.text), page.status);
   check('  ...never cached anywhere (private, no-store)', /private/.test(page.cc) && /no-store/.test(page.cc), page.cc);
   check('  ...and its script, the same way', js.status === 200 && /loadOverview/.test(js.text) && /no-store/.test(js.cc), js.status + ' ' + js.cc);
   const ov = await get('/api/admin/overview', admin.sid);

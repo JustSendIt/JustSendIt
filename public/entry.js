@@ -42,6 +42,7 @@
   function buildOverlay() {
     const el = document.createElement('div');
     el.id = 'intro';
+    el.setAttribute('data-nosnippet', '');   // nor the intro's "Skip intro"
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'Welcome to Just Send It');

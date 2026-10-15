@@ -461,6 +461,9 @@ a { color: var(--gold); }
   75% { transform: translate(-2px,2px) rotate(-6deg); }
 }
 .hero .tag { margin-top: 1rem; font-size: max(var(--text-floor), clamp(1rem, 2.4vw, 1.3rem)); font-weight: 600; color: var(--text-dim); max-width: 40ch; }
+/* what the site is, in one plain sentence: for a first-time visitor, and for the search engines and AI crawlers that read the
+   HTML without running scripts (the H1 is a slogan) */
+.hero .hero-lede { margin: 0.6rem auto 0; max-width: 52ch; font-size: max(var(--text-floor), 0.95rem); line-height: 1.55; color: var(--text-dim); text-align: center; text-wrap: balance; }
 .hero .tag strong { color: var(--gold); }
 
 .rh-badge {

@@ -470,7 +470,7 @@
   // The hero carries the page's only <h1> and its <title>, so a failure has to paint both too — a stale shared link
   // must not land a screen-reader user on an unheaded document still titled "Community".
   function renderFailure(msg, notFound) {
-    if (notFound) document.title = 'Community Not Found — $Send';   // a failed read keeps the server's <title>: the community may well exist
+    if (notFound) document.title = 'Community Not Found — Just Send It';   // a failed read keeps the server's <title>: the community may well exist
     heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:max(var(--text-floor), 1.4rem);">' + esc(msg) + '</h1>' +
       '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="/communities">Browse all communities →</a></p></div>';
   }

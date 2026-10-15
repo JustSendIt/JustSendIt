@@ -6,7 +6,7 @@
    only: every user, post, follow and community made here is deleted in the finally block. */
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, ROOT, SERVER_JS } from './_paths.mjs';
 import { sendNoOf } from './_sendno.mjs';
@@ -80,6 +80,14 @@ try {
   /* ═══ 1. robots.txt: open the JSON pages render from, nothing personal, and no Disallow over a noindex ═══ */
   const robots = await get('/robots.txt');
   const R = robots.text;
+  {   // the machine-facing text files: UTF-8 text, and never a search result of their own (robots.txt stays indexable-neutral)
+    const ll = await get('/llms.txt');
+    const key = readdirSync(path.join(ROOT, 'public')).find((f) => /^[0-9a-f]{32}\.txt$/.test(f));
+    const kf = key ? await get('/' + key) : { status: 0, h: () => '' };
+    check('llms.txt and the IndexNow key file are served as UTF-8 text with X-Robots-Tag: noindex', ll.status === 200 && /^text\/plain; charset=utf-8$/i.test(ll.h('content-type')) && ll.h('x-robots-tag') === 'noindex'
+      && kf.status === 200 && kf.h('x-robots-tag') === 'noindex' && kf.text.trim() === key.slice(0, -4), ll.status + ' ' + ll.h('content-type') + ' ' + ll.h('x-robots-tag') + ' / ' + kf.status + ' ' + kf.h('x-robots-tag'));
+    check('  ...while robots.txt itself carries no noindex (it is fetched, not listed, and must stay as it is)', robots.h('x-robots-tag') === '' && /^text\/plain; charset=utf-8$/i.test(robots.h('content-type')), robots.h('x-robots-tag') + ' ' + robots.h('content-type'));
+  }
   check('robots.txt is served, with one group for every crawler', robots.status === 200 && (R.match(/^User-agent:/gim) || []).length === 1 && /^User-agent: \*$/m.test(R), robots.status);
   check('  ...and names the sitemap at this origin', new RegExp('^Sitemap: ' + reEsc(BASE) + '/sitemap\\.xml$', 'm').test(R), (R.match(/^Sitemap:.*$/m) || [])[0]);
   const noindexPages = ['/profile', '/watchlist', '/gate', '/terms', '/admin', '/data', '/squad'];
@@ -155,12 +163,13 @@ try {
   const H = headOf(wall.text);
   const url = BASE + '/u/' + name;
   check('a wall with a public post is served 200', wall.status === 200, wall.status);
-  check('  ...titled "@name — Send Wall Profile on $Send"', titleOf(H) === '@' + name + ' — Send Wall Profile on $Send', titleOf(H));
+  check('  ...titled "@name — Sender Profile on Just Send It"', titleOf(H) === '@' + name + ' — Sender Profile on Just Send It', titleOf(H));
+  check('  ...and the site is named as everywhere else: og:site_name "Just Send It"', metaP(H, 'og:site_name') === 'Just Send It', metaP(H, 'og:site_name'));
   check('  ...indexable', metaN(H, 'robots') === INDEX, metaN(H, 'robots'));
   check('  ...with its own canonical and og:url, in the stored capitals', canonOf(H) === url && metaP(H, 'og:url') === url, canonOf(H) + ' ' + metaP(H, 'og:url'));
   const desc = metaN(H, 'description');
   check('  ...a description with the wall\'s own figures: the public Posts count (holders-only and squad posts left out) and "sending since"',
-    desc && desc.includes('2 posts') && desc.includes('sending since ' + sinceOf(joined)) && desc.startsWith('@' + name + ' on $Send: ') && desc.endsWith('Entertainment only.'), desc);
+    desc && desc.includes('2 posts') && desc.includes('sending since ' + sinceOf(joined)) && desc.startsWith('@' + name + ' on Just Send It: ') && desc.endsWith('Entertainment only.'), desc);
   check('  ...at most 160 characters, no longer than the title limit either', cp(desc) <= 160 && cp(titleOf(H)) <= 60, cp(desc) + ' / ' + cp(titleOf(H)));
   check('  ...og:type profile, the site card, and twitter tags that mirror og', metaP(H, 'og:type') === 'profile' && /\/assets\/logo-og\.png$/.test(metaP(H, 'og:image') || '')
     && metaN(H, 'twitter:title') === metaP(H, 'og:title') && metaN(H, 'twitter:description') === metaP(H, 'og:description') && metaP(H, 'og:image:width') === '1200' && metaP(H, 'og:image:height') === '630');
@@ -231,7 +240,8 @@ try {
   check('  ...and the template with no id is a 301 to the list', cBare.status === 301 && cBare.location === '/communities', cBare.status + ' ' + cBare.location);
   const live = await get('/community?id=' + cs + '&utm_source=x');
   const LH = headOf(live.text), curl = BASE + '/community?id=' + cs;
-  check('a live community is served 200, indexable, titled "{name} ($SYM) Community — $Send"', live.status === 200 && metaN(LH, 'robots') === INDEX && titleOf(LH) === 'Seo Test Token ($SEOT) Community — $Send', live.status + ' ' + titleOf(LH) + ' ' + metaN(LH, 'robots'));
+  check('a live community is served 200, indexable, titled "{name} ($SYM) Community — Just Send It"', live.status === 200 && metaN(LH, 'robots') === INDEX && titleOf(LH) === 'Seo Test Token ($SEOT) Community — Just Send It', live.status + ' ' + titleOf(LH) + ' ' + metaN(LH, 'robots'));
+  check('  ...and its og:site_name is "Just Send It"', metaP(LH, 'og:site_name') === 'Just Send It', metaP(LH, 'og:site_name'));
   check('  ...with the id-only canonical (tracking parameters fold into it) and og:url', canonOf(LH) === curl && metaP(LH, 'og:url') === curl, canonOf(LH));
   const cdesc = metaN(LH, 'description');
   check('  ...a description with no market figure and no member count', cdesc && cp(cdesc) <= 160 && !/\d/.test(cdesc.replace(/SEOT/g, '')) && /Entertainment only\.$/.test(cdesc), cdesc);
@@ -243,20 +253,20 @@ try {
 
   const pend = mkComm(uid, { symbol: 'SEOP', name: 'Seo Pending', status: 'pending' });
   const pr = await get('/community?id=' + pend), PH = headOf(pr.text);
-  check('a community that is not live yet keeps its title but is noindex, with no canonical or JSON-LD', pr.status === 200 && titleOf(PH) === 'Seo Pending ($SEOP) Community — $Send' && metaN(PH, 'robots') === 'noindex, follow' && !canonOf(PH) && ldOf(PH).length === 0, titleOf(PH) + ' ' + metaN(PH, 'robots'));
+  check('a community that is not live yet keeps its title but is noindex, with no canonical or JSON-LD', pr.status === 200 && titleOf(PH) === 'Seo Pending ($SEOP) Community — Just Send It' && metaN(PH, 'robots') === 'noindex, follow' && !canonOf(PH) && ldOf(PH).length === 0, titleOf(PH) + ' ' + metaN(PH, 'robots'));
   check('  ...and says it goes live at ' + LIVE_THRESHOLD + ' verified holder slots, the server\'s own number', (metaN(PH, 'description') || '').includes(LIVE_THRESHOLD + ' verified holder slots'), metaN(PH, 'description'));
 
   const longName = 'An Extremely Long Token Name <b>"Bold"</b> ‮ That Goes On And On';
   const longC = mkComm(uid, { symbol: 'LONGSYMBOL123456', name: longName, status: 'live', went_live_at: Date.now() });
   const lr = await get('/community?id=' + longC), LRH = headOf(lr.text);
-  check('a long community name is cut so the title stays within 60 characters, markup escaped', cp(titleOf(LRH)) <= 60 && /…/.test(titleOf(LRH)) && /\(\$LONGSYMBOL123456\) Community — \$Send$/.test(titleOf(LRH)) && !/<b>/.test(LRH) && !LRH.includes('‮'), titleOf(LRH) + ' (' + cp(titleOf(LRH)) + ')');
+  check('a long community name is cut so the title stays within 60 characters, markup escaped', cp(titleOf(LRH)) <= 60 && /…/.test(titleOf(LRH)) && /\(\$LONGSYMBOL123456\) Community — Just Send It$/.test(titleOf(LRH)) && !/<b>/.test(LRH) && !LRH.includes('‮'), titleOf(LRH) + ' (' + cp(titleOf(LRH)) + ')');
 
   if (!demo) {   // the network did not let the boot seeder make the sandbox: stand one in
     const id = mkComm(uid, { symbol: 'DEMO', name: 'Seo Sandbox Co', status: 'live', demo: true });
     demo = { id, name: 'Seo Sandbox Co', symbol: 'DEMO' };
   }
   const sb = await get('/community?id=' + demo.id), SH = headOf(sb.text);
-  check('the open sandbox is "Open Sandbox Community — $Send", noindex, with no canonical and no JSON-LD', sb.status === 200 && titleOf(SH) === 'Open Sandbox Community — $Send' && metaN(SH, 'robots') === 'noindex, follow' && !canonOf(SH) && ldOf(SH).length === 0, titleOf(SH) + ' ' + metaN(SH, 'robots'));
+  check('the open sandbox is "Open Sandbox Community — Just Send It", noindex, with no canonical and no JSON-LD', sb.status === 200 && titleOf(SH) === 'Open Sandbox Community — Just Send It' && metaN(SH, 'robots') === 'noindex, follow' && !canonOf(SH) && ldOf(SH).length === 0, titleOf(SH) + ' ' + metaN(SH, 'robots'));
   check('  ...and its head never carries the company name or ticker it is branded with', !SH.includes(demo.name) && !SH.includes('$' + demo.symbol), demo.name);
 
   /* ═══ 5. sitemaps ═══ */
@@ -299,6 +309,7 @@ try {
   const tk = await get('/t/' + tno), TH = headOf(tk.text);
   check('a shared ticket page is noindex, follow', tk.status === 200 && metaN(TH, 'robots') === 'noindex, follow', tk.status + ' ' + metaN(TH, 'robots'));
   check('  ...and keeps every tag its unfurl needs', new RegExp('property="og:image" content="[^"]*/t/' + tno + '\\.png"').test(TH) && metaN(TH, 'twitter:card') === 'summary_large_image' && !!metaP(TH, 'og:title') && !!metaN(TH, 'twitter:title') && !canonOf(TH));
+  check('  ...naming the site "Just Send It", as every page does', /<meta property="og:site_name" content="Just Send It">/.test(TH));
   const fav = await get('/favicon.ico');
   check('/favicon.ico is the site icon as a PNG, cacheable', fav.status === 200 && fav.h('content-type') === 'image/png' && /max-age=\d+/.test(fav.h('cache-control')) && !/no-cache/.test(fav.h('cache-control')), fav.status + ' ' + fav.h('content-type') + ' ' + fav.h('cache-control'));
   const fontCss = read('fonts/fonts.css');
@@ -322,7 +333,7 @@ try {
   check('  ...and the page policy lets it load (manifest-src falls back to default-src \'self\')', /default-src 'self'/.test(csp) && (!/manifest-src/.test(csp) || /manifest-src 'self'/.test(csp)), csp);
 
   /* ═══ 8. the fallbacks on disk fail closed ═══ */
-  for (const [f, title] of [['u.html', 'Sender Profile — $Send'], ['community.html', 'Community — $Send']]) {
+  for (const [f, title] of [['u.html', 'Sender Profile — Just Send It'], ['community.html', 'Community — Just Send It']]) {
     const s = read(f), i = s.indexOf('<!--seo-->'), j = s.indexOf('<!--/seo-->'), blk = i >= 0 && j > i ? s.slice(i, j) : '';
     check(f + ' has the <!--seo--> block the server swaps, and what is in it is a noindex fallback titled "' + title + '"', !!blk && titleOf(blk) === title && metaN(blk, 'robots') === 'noindex, follow' && !canonOf(blk) && !/og:url/.test(blk) && ldOf(blk).length === 0 && !/name="keywords"/.test(s), f);
     check('  ...' + f + ' links the manifest, in the brand colour', /<link rel="manifest" href="\/site\.webmanifest">/.test(s) && metaN(blk, 'theme-color') === BRAND && cp(metaN(blk, 'description')) >= 120 && cp(metaN(blk, 'description')) <= 160, cp(metaN(blk, 'description')));

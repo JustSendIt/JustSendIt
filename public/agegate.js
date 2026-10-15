@@ -54,6 +54,7 @@
   function build() {
     el = document.createElement('div');
     el.id = 'age-gate';
+    el.setAttribute('data-nosnippet', '');   // a search result's summary is never the age question
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-labelledby', 'age-title');

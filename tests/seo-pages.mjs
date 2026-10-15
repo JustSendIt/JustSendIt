@@ -17,24 +17,24 @@ const INDEXABLE_ROBOTS = 'index, follow, max-image-preview:large, max-snippet:-1
    first check, so a new page cannot ship without a decided head. */
 const PAGES = {
   'index.html':       ['$SEND (SEND IT) Memecoin on Robinhood Chain — Just Send It', 'index'],
-  'about.html':       ['What Is $SEND? The SEND IT Community Guide — $Send', 'index'],
+  'about.html':       ['What Is $SEND? The SEND IT Community Guide — Just Send It', 'index'],
   'whitepaper.html':  ['$SEND White Paper — How Just Send It Works', 'index'],
-  'wall.html':        ['The Send Wall — $SEND Meme Community Feed', 'index'],
-  'newpairs.html':    ['Robinhood Chain Token Scanner & New Pairs — $Send', 'index'],
-  'tracker.html':     ['Robinhood Chain Wallet Tracker: Holdings & PNL — $Send', 'index'],
-  'arcade.html':      ['Arcade: Rocket Run, Slots & Competitions — $Send', 'index'],
-  'communities.html': ['Token Communities on Robinhood Chain — $Send', 'index'],
-  'support.html':     ['Support Board: Ask & Answer Questions — $Send', 'index'],
-  'privacy.html':     ['Privacy Policy — $Send', 'index'],
-  'terms.html':       ['Terms of Service — $Send', 'noindex, follow'],
-  'data.html':        ['Data API — $Send', 'noindex, follow'],
-  'profile.html':     ['My Profile — $Send', 'noindex, follow'],
-  'watchlist.html':   ['My Watchlist — $Send', 'noindex, follow'],
-  'squad.html':       ['Send Squad — $Send', 'noindex, follow'],
-  'admin.html':       ['Admin — $Send', 'noindex, nofollow'],
+  'wall.html':        ['The Send Wall: $SEND Meme Community Feed — Just Send It', 'index'],
+  'newpairs.html':    ['Robinhood Chain Token Scanner & New Pairs — Just Send It', 'index'],
+  'tracker.html':     ['Robinhood Chain Wallet Tracker: Holdings, PNL — Just Send It', 'index'],
+  'arcade.html':      ['Arcade: Rocket Run, Slots & Competitions — Just Send It', 'index'],
+  'communities.html': ['Token Communities on Robinhood Chain — Just Send It', 'index'],
+  'support.html':     ['Support Board: Ask & Answer Questions — Just Send It', 'index'],
+  'privacy.html':     ['Privacy Policy — Just Send It', 'index'],
+  'terms.html':       ['Terms of Service — Just Send It', 'noindex, follow'],
+  'data.html':        ['Data API — Just Send It', 'noindex, follow'],
+  'profile.html':     ['My Profile — Just Send It', 'noindex, follow'],
+  'watchlist.html':   ['My Watchlist — Just Send It', 'noindex, follow'],
+  'squad.html':       ['Send Squad — Just Send It', 'noindex, follow'],
+  'admin.html':       ['Admin — Just Send It', 'noindex, nofollow'],
   'gate.html':        ['Get Your Ticket — Just Send It', 'noindex, follow'],
-  'u.html':           ['Sender Profile — $Send', 'noindex, follow'],
-  'community.html':   ['Community — $Send', 'noindex, follow'],
+  'u.html':           ['Sender Profile — Just Send It', 'noindex, follow'],
+  'community.html':   ['Community — Just Send It', 'noindex, follow'],
 };
 const PAGE_TYPE = { 'about.html': 'AboutPage', 'communities.html': 'CollectionPage', 'wall.html': 'CollectionPage', 'whitepaper.html': 'TechArticle' };
 const isIndexable = (f) => PAGES[f] && PAGES[f][1] === 'index';
@@ -131,7 +131,7 @@ try {
   const withOg = files.filter((f) => heads[f].metas.some((a) => (a.property || '').startsWith('og:')));
   check('every page has Open Graph tags', withOg.length === files.length, files.filter((f) => !withOg.includes(f)).join(','));
   const IMG = ORIGIN + '/assets/logo-og.png';
-  b = withOg.filter((f) => { const h = heads[f]; return !(one(h, 'og:site_name', '$Send — Just Send It') && one(h, 'og:locale', 'en_US') && one(h, 'og:title') && one(h, 'og:description')
+  b = withOg.filter((f) => { const h = heads[f]; return !(one(h, 'og:site_name', 'Just Send It') && one(h, 'og:locale', 'en_US') && one(h, 'og:title') && one(h, 'og:description')
     && one(h, 'og:image', IMG) && one(h, 'og:image:type', 'image/png') && one(h, 'og:image:width', '1200') && one(h, 'og:image:height', '630') && one(h, 'og:image:alt')); });
   check('og:site_name, og:locale, og:title, og:description, og:image and its type, width, height and alt are each present once', !b.length, b.join(','));
   b = withOg.filter((f) => { const h = heads[f]; return !(one(h, 'twitter:card', 'summary_large_image') && one(h, 'twitter:site', '@sendrh_') && one(h, 'twitter:title') && one(h, 'twitter:description')
@@ -234,6 +234,38 @@ try {
       && h.indexOf('name="robots"') > a && h.indexOf('name="robots"') < z);
   });
   check('u.html and community.html carry one <!--seo--> … <!--/seo--> block holding their title and robots', !b.length, b.join(','));
+
+  /* ═══ the brand, for people and for AI search (owner, 2026-10-15: "showing up when anyone types in Send or Just Send It or
+     Sender or Send It on all search engines and ... AI search"). One site name everywhere (Google builds the name it shows
+     from WebSite.name, og:site_name and the titles, and wants them to agree), plain definitions in the HTML a crawler reads
+     without running scripts, and the coins as entities with their contract addresses. No keyword lists: stuffing is penalised. ═══ */
+  b = files.filter(isIndexable).filter((f) => !/Just Send It/.test(heads[f].titles[0]));
+  check('every indexable title names the site, "Just Send It"', !b.length, b.join(','));
+  const site = home.find((n) => n['@type'] === 'WebSite');
+  check('the WebSite is "Just Send It", its other names in order of preference, the domain last (Google\'s site-name fallback)', !!site && site.name === 'Just Send It' && JSON.stringify(site.alternateName) === JSON.stringify(['JustSendIt', '$Send', 'sendrh.com']), site && JSON.stringify(site.alternateName));
+  check('  ...and the Organization the same, less "$Send" (the ticker is the coin\'s name: the #send entity carries it)', !!org && org.name === 'Just Send It' && JSON.stringify(org.alternateName) === JSON.stringify(['JustSendIt', 'sendrh.com']));
+  const I = heads['index.html'].s, body = I.slice(I.indexOf('<body'));
+  const coin = (id) => home.find((n) => n['@id'] === ORIGIN + '/#' + id);
+  const addr = (id) => coin(id) && coin(id).identifier && coin(id).identifier.value;
+  check('$SEND (SEND IT) and $GWC are entities on the home page, each with its contract address — the same address the page shows', ['send', 'gwc'].every((id) => coin(id) && coin(id)['@type'] === 'Thing' && /^0x[0-9a-fA-F]{40}$/.test(addr(id)) && body.includes(addr(id)))
+    && coin('send').name === 'SEND IT' && coin('send').alternateName.includes('$SEND') && coin('gwc').alternateName.includes('$GWC'), ['send', 'gwc'].map(addr).join(' '));
+  check('  ...the home page is about the site and both coins, and no coin carries a price or an offer', JSON.stringify((home.find((n) => n['@id'] === ORIGIN + '/#webpage') || {}).about) === JSON.stringify([{ '@id': ORIGIN + '/#organization' }, { '@id': ORIGIN + '/#send' }, { '@id': ORIGIN + '/#gwc' }])
+    && ['send', 'gwc'].every((id) => !/offers|price|marketCap/i.test(JSON.stringify(coin(id)))));
+  check('the home page says plainly, in its HTML, what Just Send It is (and its description names it)', /<p class="hero-lede">Just Send It \(sendrh\.com\) is an independent community site for \$SEND, the SEND IT memecoin, and \$GWC on Robinhood Chain\. Entertainment only, not affiliated with Robinhood\.<\/p>/.test(I)
+    && /^Just Send It is /.test(heads['index.html'].meta('description')[0]));
+  check('  ...and so does the About page, first thing', /<p class="one-line"><b>Just Send It<\/b> \(sendrh\.com\) is a /.test(A));
+  check('the About FAQ answers the brand questions first: what Just Send It, $SEND (SEND IT), a Sender and "Send It" are', JSON.stringify(visible.slice(0, 4).map((x) => x.q)) === JSON.stringify(['What is Just Send It?', 'What is $SEND (SEND IT)?', 'What is a Sender?', 'What does “Send It” mean here?']),
+    visible.slice(0, 4).map((x) => x.q).join(' | '));
+  check('  ...the $SEND answer gives the contract the home page shows, and says the name is shared by other tokens', visible[1] && visible[1].a.includes(addr('send')) && /Other tokens on other chains also use the name SEND/.test(visible[1].a) && /checked 2026-10-15 — CoinMarketCap and Dexscreener list a SEND/.test(A));
+  const L = read('llms.txt');
+  const llmsLinks = [...L.matchAll(/\]\((https:\/\/sendrh\.com[^)]*)\)/g)].map((m) => m[1]);
+  check('llms.txt: the llmstxt.org shape (an H1, a one-paragraph summary, link lists), both contract addresses as the page shows them', /^# Just Send It\n\n> Just Send It \(sendrh\.com\) is /.test(L) && /\n## Pages\n/.test(L) && /\n## Optional\n/.test(L) && L.includes(addr('send')) && L.includes(addr('gwc')));
+  check('  ...every link to the site is an indexable page', llmsLinks.length >= 8 && llmsLinks.every((u) => files.filter(isIndexable).map(urlOf).includes(u)), llmsLinks.filter((u) => !files.filter(isIndexable).map(urlOf).includes(u)).join(','));
+  check('  ...and it keeps the site\'s rules: entertainment only, not affiliated with Robinhood, the maintainers\' holdings disclosed, no promise it cannot keep', /Entertainment only, not financial advice\. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\./.test(L) && /The people who run it hold \$SEND and \$GWC\./.test(L)
+    && !/unhackable|guarantee|locked liquidity|LP (is )?(locked|burned)|safe investment|\bbuy now\b|to the moon/i.test(L));
+  const keyFiles = readdirSync(PUB).filter((f) => /^[0-9a-f]{32}\.txt$/.test(f));
+  check('one IndexNow key file in public/, holding exactly its own name (the engines fetch it to check a submission)', keyFiles.length === 1 && read(keyFiles[0]).trim() === keyFiles[0].slice(0, -4), keyFiles.join(','));
+  check('the site\'s own X account is linked as the site\'s (rel="me"), never nofollow', files.every((f) => !/href="https:\/\/x\.com\/sendrh_"[^>]*nofollow/.test(heads[f].s)) && /href="https:\/\/x\.com\/sendrh_" target="_blank" rel="me noopener"/.test(I));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);

@@ -11024,7 +11024,7 @@ const MIME = {
      every response carries X-Content-Type-Options: nosniff the browser refuses to play it rather than
      guessing — the memo would upload fine and be silent forever. */
   '.weba': 'audio/webm', '.ogg': 'audio/ogg',
-  '.txt': 'text/plain', '.xml': 'application/xml', '.ico': 'image/x-icon', '.json': 'application/json',
+  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml', '.ico': 'image/x-icon', '.json': 'application/json',
   '.mjs': 'text/javascript', '.webmanifest': 'application/manifest+json',
   '.woff2': 'font/woff2',   // the site's own fonts (public/fonts) — self-hosted so no page load reaches Google // in COMPRESSIBLE/ASSET_REF → must have a real type (nosniff would block octet-stream)
 };
@@ -11097,7 +11097,7 @@ const OPTIONAL_MEDIA = {
   audio: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-audio.m4a')),
 };
 function notFoundPage(res, extraHeaders) {
-  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title><meta name="robots" content="noindex">' +
+  const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — Just Send It</title><meta name="robots" content="noindex">' +
     '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;--text-floor:16px;font-family:Rubik,system-ui,sans-serif;font-size:max(var(--text-floor),1rem);line-height:1.5;text-align:center;padding:2rem}h1{font-size:max(var(--text-floor),2.2rem);margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style><link rel="stylesheet" href="/cursor.css"><script src="/cursor.js"></script></head>' +
     '<body><main><h1>🚀 That page didn’t send.</h1><p>We couldn’t find what you were looking for.</p><a href="/">Back to $Send home →</a></main></body></html>';
   res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html), ...(extraHeaders || {}) });
@@ -11246,6 +11246,8 @@ function serveFile(req, res, filePath, extraHeaders = {}, patch = null) {
     const etag = 'W/"' + st.size.toString(16) + '-' + Math.round(st.mtimeMs).toString(16) + (swapped ? '-' + crypto.createHash('sha1').update(SITE_ORIGIN).digest('hex').slice(0, 8) : '') + '"';
     const head = { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache', 'Last-Modified': st.mtime.toUTCString(), 'ETag': etag, ...SEC_HEADERS, ...extraHeaders };
     delete head['X-Frame-Options']; // allow same-origin embedding of media in our own pages
+    // llms.txt (a summary for AI tools) and the IndexNow key are for machines: never a search result of their own
+    if (ext === '.txt' && /^(llms|[0-9a-f]{32})\.txt$/.test(path.basename(filePath))) head['X-Robots-Tag'] = 'noindex';
     if (COMPRESSIBLE.has(ext)) head['Vary'] = 'Accept-Encoding'; // set BEFORE the 304 so 200 and 304 advertise the same metadata
     const inm = req.headers['if-none-match'];
     const ims = req.headers['if-modified-since'];
@@ -11312,7 +11314,7 @@ function serveFile(req, res, filePath, extraHeaders = {}, patch = null) {
 const SEO_THEME = '#c6f000';                              // --green-bright in styles.css; tests/seo-server.mjs holds the two together
 const SEO_PAGE_RATE = 600;                                // per IP per minute — ten a second, far above any crawler's normal pace
 const SEO_OG_ALT = '$Send — Just Send It logo';
-const SEO_SANDBOX_TITLE = 'Open Sandbox Community — $Send';
+const SEO_SANDBOX_TITLE = 'Open Sandbox Community — Just Send It';
 const SEO_SANDBOX_DESC = 'The $Send sandbox: try posting, proposals and voting with no token of its own to hold. The $100 $SEND wallet check still applies. Entertainment only.';
 const SEO_ROBOTS_INDEX = 'index, follow, max-image-preview:large, max-snippet:-1';
 const SEO_ROBOTS_NOINDEX = 'noindex, follow';
@@ -11345,7 +11347,7 @@ function seoHeadHtml({ title, desc, robots, canonical, ogType = 'website', ogTit
   L.push('<link rel="manifest" href="/site.webmanifest">',
     '<meta property="og:type" content="' + escHtml(ogType) + '">',
     ...extraOg,
-    '<meta property="og:site_name" content="$Send — Just Send It">',
+    '<meta property="og:site_name" content="Just Send It">',
     '<meta property="og:locale" content="en_US">');
   if (canonical) L.push('<meta property="og:url" content="' + escHtml(canonical) + '">');
   L.push('<meta property="og:title" content="' + escHtml(ogTitle || title) + '">',
@@ -11377,7 +11379,7 @@ function profileFacts(u) {
 }
 // The first candidate of 160 characters or less. The facts are never cut; a bio is, by code points, at a word.
 function profileDesc(at, bio, posts, since) {
-  const lead = at + ' on $Send: ';
+  const lead = at + ' on Just Send It: ';
   const core = String(posts) + (posts === 1 ? ' post' : ' posts') + ', sending since ' + since + '.';
   const end = ' Entertainment only.';
   const tails = [' Their public Send Wall in the $SEND and $GWC meme community on Robinhood Chain.', ' Their public Send Wall on Robinhood Chain.', ''];
@@ -11390,7 +11392,7 @@ function profileDesc(at, bio, posts, since) {
 function profilePatch(u, f) {
   const shown = cleanText(u.username, 40, { emoji: true }) || String(u.username);
   const url = SITE_ORIGIN + '/u/' + encodeURIComponent(u.username);   // always the stored capitals
-  const title = '@' + shown + ' — Send Wall Profile on $Send';
+  const title = '@' + shown + ' — Sender Profile on Just Send It';   // a member is a Sender; at most 24 + 34 = 58 characters
   const bio = cleanText(u.bio, 200);                                  // for the description: no emoji, no controls
   const desc = profileDesc('@' + shown, bio, f.posts, seoSince(u.created_at));
   const indexable = profileIndexable(u, f.wallPosts);
@@ -11420,20 +11422,20 @@ function communityPatch(c) {
   if (c.demo) return seoHeadHtml({ title: SEO_SANDBOX_TITLE, desc: SEO_SANDBOX_DESC, robots: SEO_ROBOTS_NOINDEX });   // never the company's name
   const sym = cleanText(c.symbol, 16).replace(/\s+/g, '');
   const tick = sym ? ' ($' + sym + ')' : '';
-  const fixed = tick + ' Community — $Send';
+  const fixed = tick + ' Community — Just Send It';
   const name = cleanText(c.name, Math.max(8, 60 - cpLen(fixed))) || sym || 'Token';
   const title = name + fixed;
   const dollar = sym ? '$' + sym : 'token';
   if (!communityIndexable(c)) {   // pending: the page is real, but thin until it goes live
-    const cands = [name + tick + ' on $Send is not live yet: it goes live when it reaches ' + LIVE_THRESHOLD + ' verified holder slots, wallets that really hold the token. Entertainment only.',
-      'This ' + dollar + ' community on $Send is not live yet: it goes live at ' + LIVE_THRESHOLD + ' verified holder slots. Entertainment only.'];
+    const cands = [name + tick + ' on Just Send It is not live yet: it goes live when it reaches ' + LIVE_THRESHOLD + ' verified holder slots, wallets that really hold the token. Entertainment only.',
+      'This ' + dollar + ' community on Just Send It is not live yet: it goes live at ' + LIVE_THRESHOLD + ' verified holder slots. Entertainment only.'];
     return seoHeadHtml({ title, desc: cands.find((s) => cpLen(s) <= 160) || cands[cands.length - 1], robots: SEO_ROBOTS_NOINDEX });
   }
   const url = SITE_ORIGIN + '/community?id=' + Number(c.id);
   const cands = [
-    name + tick + ' fan community on $Send: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
-    'The ' + dollar + ' fan community on $Send: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
-    'The ' + dollar + ' fan community on $Send: verified holders post on its public wall, with member levels and proposals. Entertainment only.',
+    name + tick + ' fan community on Just Send It: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
+    'The ' + dollar + ' fan community on Just Send It: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
+    'The ' + dollar + ' fan community on Just Send It: verified holders post on its public wall, with member levels and proposals. Entertainment only.',
   ];
   const desc = cands.find((s) => cpLen(s) <= 160) || cands[cands.length - 1];
   const jsonLd = { '@context': 'https://schema.org', '@graph': [
@@ -18219,7 +18221,7 @@ const server = http.createServer(async (req, res) => {
 <title>${e(title)} 🎟️</title>
 <meta name="description" content="${e(desc)}">
 <meta name="robots" content="noindex, follow">
-<meta property="og:type" content="profile"><meta property="og:site_name" content="$Send — Just Send It"><meta property="og:locale" content="en_US">
+<meta property="og:type" content="profile"><meta property="og:site_name" content="Just Send It"><meta property="og:locale" content="en_US">
 <meta property="og:url" content="${e(SITE_ORIGIN + '/t/' + no)}">
 <meta property="og:title" content="${e(title)}"><meta property="og:description" content="${e(desc)}">
 <meta property="og:image" content="${e(card)}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">

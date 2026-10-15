@@ -266,6 +266,9 @@ either breaks under the policy or breaks the promise.
 | Rules → Redirect Rule (optional) | `www.sendrh.com/*` → `https://sendrh.com/$1`, 301 | belt and braces: the app already answers www with a 308 to the apex |
 | Network → WebSockets | either | the site uses none |
 | Speed → Brotli, Early Hints, HTTP/3 | On | harmless, and free speed |
+| Security → AI bot policies (AI Crawl Control) | **Search: Allow, Agent: Allow, Training: Allow** | the AI search crawlers (OAI-SearchBot for ChatGPT, Claude-SearchBot, PerplexityBot) are how the site shows up in AI answers. Since September 2026 Cloudflare counts Googlebot, Bingbot and Applebot as mixed-use: Training on **Block** (or "Block on pages with ads") stops all three, search included, and the site drops out of Google, Bing (so ChatGPT search, Copilot, DuckDuckGo) and Apple. "Disallow AI Training" writes rules into robots.txt (including one that also ends Gemini grounding), which live-check rejects |
+| Security → Bot Preference Sync (formerly Managed robots.txt) | **Off** | it prepends its own rules to `public/robots.txt`; `npm run live-check` fails if the served robots.txt is not the repo's file byte for byte |
+| Caching → Crawler Hints (optional) | On | sends IndexNow pings for changed pages on its own; `scripts/indexnow.mjs` does it by hand |
 
 Two limits of the free and pro plans to know about: request bodies are capped at 100 MB (the app's own
 upload caps are lower, so nothing changes), and Cloudflare gives the origin **100 seconds** to start
@@ -297,6 +300,20 @@ CF_API_TOKEN=<the token>
 5. Sign up with the seed code (you are Send ID #1 — Send IDs count members in the order they joined and skip the site's own account; your database row id is a different number), put your database row id — not your Send ID — in
    `ADMIN_USER_IDS` (`sqlite3 -readonly data/app.db "SELECT id FROM users WHERE send_no = 1"`), restart. Only then hand out codes.
 6. Point `BACKUP_DIR` off the volume and copy it to R2 or elsewhere on a schedule (below).
+7. **Search engines and AI search.** There is no AI-only switch: AI answers come from the ordinary indexes
+   (Google for AI Overviews, AI Mode and Gemini; Bing for ChatGPT search, Copilot and DuckDuckGo; Brave for Claude;
+   Perplexity and OpenAI also crawl for themselves). So:
+   - Google Search Console: add a **Domain** property for `sendrh.com` (a DNS TXT record in Cloudflare), submit
+     `https://sendrh.com/sitemap.xml`, and leave the generative-AI setting on Include.
+   - Bing Webmaster Tools: **Import from Google Search Console** (it verifies and brings the sitemap along).
+   - IndexNow (Bing, Yandex, Seznam, Naver, Yep) wants changed pages only, never the same unchanged ones again:
+     `node scripts/indexnow.mjs https://sendrh.com --all` once, for the first submission; after that
+     `--since <date of the last run>` (walls and communities whose sitemap lastmod is newer) plus the URLs of any
+     static page a deploy changed. The key is the 32-hex-digit `.txt` file in `public/`; it is public on purpose.
+     `--dry-run` lists what it would send. With Crawler Hints on, Cloudflare sends changed pages it sees by itself.
+   - Off the site, the things that move a brand search: the `@sendrh_` X bio linking sendrh.com, and the "website"
+     field of the $SEND listing on Dexscreener and GeckoTerminal pointing here.
+   - `public/llms.txt` is a plain summary for AI tools. Google ignores it; it is cheap and does no harm.
 
 ---
 
