@@ -1,282 +1,37 @@
 /* ===== Profile page: tracker (main), collapsible settings, prefs ===== */
-const AVATARS = ['🚀','🦍','🐸','💎','🤝','🧨','🥷','👑','🦖','🌕','💸','🔥'];
-const ACCENTS = ['', '#c6f000', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2', '#ffffff'];
-const BGS = ['', '#0a0e14', '#101a10', '#1a1210', '#10121a', '#1a101a', '#000000'];
 // '#a8ce00' is deliberately absent: it looks identical to Default but derives a different
 // bright/dark pair, so the two swatches would look the same and behave differently.
 const SITE_ACCENTS = ['', '#00C805', '#ffb340', '#ff5d5d', '#5dc9ff', '#c85dff', '#ff5dd2'];
-let chosenAvatar = '🚀', chosenAccent = '', chosenBg = '';
+let chosenAvatar = '🚀';
 let myTheme = {};
 
 // attribute-safe HTML escape (also encodes quotes so it's safe inside src="…"/style="…")
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
-/* ---------- pickers ---------- */
-/* Roving tabindex for a radiogroup (the WAI-ARIA radio pattern): one Tab stop per group, arrows move AND
-   choose, Home/End jump to the ends. Without it each of the twelve avatars and every swatch was its own
-   Tab stop while announcing itself as a radio, which promises arrow keys that did nothing. Choosing
-   re-renders the group, so focus is put on the NEW node at the same index, not the one just discarded. */
-function roveRadios(zone) {
-  const radios = Array.from(zone.querySelectorAll('[role="radio"]'));
-  const on = Math.max(0, radios.findIndex(r => r.getAttribute('aria-checked') === 'true')); // nothing checked → first is the stop
-  radios.forEach((r, i) => {
-    r.tabIndex = i === on ? 0 : -1;
-    r.addEventListener('keydown', (e) => {
-      const k = e.key;
-      const fwd = k === 'ArrowRight' || k === 'ArrowDown', back = k === 'ArrowLeft' || k === 'ArrowUp';
-      if (!fwd && !back && k !== 'Home' && k !== 'End') return;
-      e.preventDefault();
-      const j = k === 'Home' ? 0 : k === 'End' ? radios.length - 1 : (i + (fwd ? 1 : radios.length - 1)) % radios.length;
-      /* move focus, not the selection: each of these radios saves to the account when it is picked, so an
-         arrow that clicked would post a change per keystroke. Enter, Space or a click picks the focused one. */
-      radios.forEach((x, k) => { x.tabIndex = k === j ? 0 : -1; });
-      radios[j].focus();
-    });
-  });
-}
+/* ---------- pickers ----------
+   The wall's look — its colours, pictures and the avatar emoji — is edited with wallstyle.js, the same editor the pop-up on
+   your own wall uses (owner, 2026-10-15), so the colour rules and the uploads are written once. What stays here is what is
+   only on this page: the Account card's emoji (picked here, saved with Save Changes) and the site colour. */
+const wallState = { accent: '', bg: '' };   // the wall's two colours as saved; WallStyle.wallPickers keeps them current
+const IMG_KEY = { avatar: 'avatar_img', header: 'header_img', background: 'bg_img' };
 function renderAvatarPicker() {
-  const zone = document.getElementById('pf-avatar-pick');
-  zone.innerHTML = '';
-  for (const a of AVATARS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'react-btn' + (a === chosenAvatar ? ' lit' : '');
-    b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', String(a === chosenAvatar));
-    b.setAttribute('aria-label', 'avatar ' + a);
-    b.setAttribute('data-tip', 'Uses ' + a + ' as your avatar once you save changes');
-    b.textContent = a;
-    b.addEventListener('click', () => {
-      chosenAvatar = a; document.getElementById('pf-avatar').textContent = a;
-      // the re-render discards this button, and with it the focus: put focus on the new node at the same index
-      const i = Array.prototype.indexOf.call(zone.children, b);
-      renderAvatarPicker();
-      const nb = zone.children[i]; if (nb) nb.focus();
-    });
-    zone.appendChild(b);
-  }
-  roveRadios(zone);
+  const pick = (a) => { chosenAvatar = a; document.getElementById('pf-avatar').textContent = a; };
+  pick.tip = (a) => 'Uses ' + a + ' as your avatar once you save changes';
+  WallStyle.emojiPicker(document.getElementById('pf-avatar-pick'), () => chosenAvatar, pick);
 }
-function renderSwatches(zoneId, colors, current, onPick, mine) {
-  const zone = document.getElementById(zoneId);
-  zone.innerHTML = '';
-  for (const c of colors) {
-    const own = !!(mine && c && mine.includes(c));
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'swatch' + (own ? ' is-mine' : '');
-    b.style.background = c || 'linear-gradient(135deg, #a8ce00, #ffb340)';
-    b.setAttribute('role', 'radio');
-    b.setAttribute('aria-checked', String(c === current));
-    b.setAttribute('aria-label', c ? (own ? 'your colour ' : 'color ') + c : 'default');
-    b.title = c || 'default';
-    /* The colour is the swatch — a description that reads it back as "#c6f000" prints a system value at
-       somebody looking straight at the thing it names. "this colour" is what a person would say. */
-    b.setAttribute('data-tip', zoneId === 'bg-swatches'
-      ? (c ? 'Paints your public wall background in this colour' : 'Puts your wall background back to the default')
-      : zoneId === 'site-accent-swatches'
-        ? (c ? 'Re-themes the whole site in this colour, just for you' : 'Puts the site colours back to classic green')
-        : (c ? 'Uses this colour as the accent on your public wall' : 'Puts your wall accent back to the default'));
-    b.addEventListener('click', () => {
-      const i = Array.prototype.indexOf.call(zone.children, b);   // same as the avatar picker: refocus the rebuilt node
-      if (onPick(c) !== true) renderSwatches(zoneId, colors, c, onPick, mine);   // true: the picker redrew itself
-      const nb = zone.children[i]; if (nb) nb.focus();
-    });
-    zone.appendChild(b);
-  }
-  roveRadios(zone);
-}
-
-/* ---------- your own colours (owner, 2026-10-14: "For my wall style accent color and background tint, allow users to enter in
-   a hex code in addition from picking from preset colors, when a user puts in a hex code add that color to the list of colors
-   to pick from in the future to all places where users can pick from pre-picked colors") ----------
-   Each of the three pickers (wall accent, wall background tint, site colour) gets a hex box under its swatches. A colour typed
-   there is used, and kept in "your colours" — site_prefs.customColors on the account, so every device sees it — which every
-   picker shows after its presets (newest first, the last twelve). The wall's two colours are held to the readability rule the
-   server enforces too: an accent is text (your name on your wall, your @handle on every card), so it must reach 4.5:1 against
-   your wall's background and the site's card colours; a background sits behind the wall's light text, so it must keep that text
-   at 7:1 and the dimmer text at 4.5:1. A colour that misses is nudged to the nearest one that passes, and the box says so. */
-const MY_COLORS_MAX = 12;
-const WALL_TEXT = '#f2f6ec', WALL_TEXT_DIM = '#b6beac', WALL_SURFACES = ['#050604', '#0c0e09', '#14170f'];
-function normHex(v) {   // "#7ee8fa", "7EE8FA", "#7ef" → "#7ee8fa"; anything else → null
-  let x = String(v || '').trim().toLowerCase().replace(/^#/, '');
-  if (/^[0-9a-f]{3}$/.test(x)) x = x.split('').map((ch) => ch + ch).join('');
-  return /^[0-9a-f]{6}$/.test(x) ? '#' + x : null;
-}
-function myColors() { const l = (window.SITE_PREFS || {}).customColors; return (Array.isArray(l) ? l : []).filter((x) => /^#[0-9a-f]{6}$/.test(x)).slice(0, MY_COLORS_MAX); }
-function keepColor(c) { window.applySitePrefs({ customColors: [c].concat(myColors().filter((x) => x !== c)).slice(0, MY_COLORS_MAX) }, true); }
-function readableAccent(c) { const CM = window.ColorMath; return CM && c ? CM.fixFg(c, [chosenBg || WALL_SURFACES[0], WALL_SURFACES[1], WALL_SURFACES[2]], 4.5) : c; }
-function readableBg(c) {
-  const CM = window.ColorMath; if (!CM || !c) return c;
-  const ok = (x) => CM.ratio(WALL_TEXT, x) >= 7 && CM.ratio(WALL_TEXT_DIM, x) >= 4.5;
-  let x = c;
-  for (let i = 0; i < 80 && !ok(x); i++) { const n = parseInt(x.slice(1), 16); x = '#' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * 0.94).toString(16).padStart(2, '0')).join(''); }
-  return x;
-}
-const PICKERS = {
-  'accent-swatches': { presets: () => ACCENTS, current: () => chosenAccent, label: 'wall accent', fit: readableAccent,
-    pick: (c) => { chosenAccent = c; saveWallColor({ accent: c }); } },
-  'bg-swatches': { presets: () => BGS, current: () => chosenBg, label: 'wall background tint', fit: readableBg,
-    pick: (c) => { chosenBg = c; saveWallColor({ wall_bg: c }); } },
-  'site-accent-swatches': { presets: () => SITE_ACCENTS, label: 'site colour', fit: (c) => c,   // the site theme fits every colour for readability itself (themeFrom)
+function drawSitePicker() {
+  WallStyle.picker(document.getElementById('site-accent-swatches'), { presets: () => SITE_ACCENTS, label: 'site colour', fit: (c) => c,   // the site theme fits every colour for readability itself (themeFrom)
     current: () => { const p = window.SITE_PREFS || {}; return (p.colors && p.colors.accent) || p.siteAccent || ''; },
     pick: (c) => {
       window.applySitePrefs({ siteAccent: c, colors: { accent: c || undefined } }, true);
       initThemeEditor();
       if (window.SFX) SFX.play('select');
       sendToast(c ? 'Site re-themed for you 🖌️' : 'Back to classic green 💚');
-    } },
-};
-function pickerNote(id, text, err) { const m = document.getElementById('hex-' + id + '-msg'); if (m) { m.textContent = text || ''; m.classList.toggle('is-err', !!err); } }
-function drawPicker(id) {
-  const P = PICKERS[id]; if (!P || !document.getElementById(id)) return;
-  const presets = P.presets(), cur = P.current();
-  const mine = myColors().filter((x) => !presets.includes(x));
-  const list = presets.concat(mine);
-  if (cur && !list.includes(cur)) { list.push(cur); mine.push(cur); }   // a colour in use always shows, checked
-  renderSwatches(id, list, cur, (c) => {
-    const used = P.fit(c);
-    P.pick(used);
-    drawPicker(id);
-    pickerNote(id, used !== c ? 'Adjusted to ' + used + ' so the text on your wall stays readable.' : '');
-    if (id === 'bg-swatches' && chosenAccent && readableAccent(chosenAccent) !== chosenAccent) pickerNote(id, 'Your accent is hard to read on this background — pick a lighter accent, or type one in.', true);
-    return true;
-  }, mine);
-  hexRow(id);
-}
-function drawPickers() { Object.keys(PICKERS).forEach(drawPicker); }
-function hexRow(id) {
-  const zone = document.getElementById(id), P = PICKERS[id];
-  if (!zone || (zone.nextElementSibling && zone.nextElementSibling.classList.contains('hex-row'))) return;
-  const inId = 'hex-' + id;
-  const row = document.createElement('div');
-  row.className = 'hex-row';
-  row.innerHTML = '<label class="hex-label" for="' + inId + '">Or type a hex code</label>' +
-    '<span class="hex-field"><span class="hex-chip is-empty" aria-hidden="true"></span>' +
-    '<input class="hex-input" id="' + inId + '" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="#7ee8fa" aria-describedby="' + inId + '-msg" data-tip="Type a colour as # and six characters (0–9, a–f), then Use or Enter">' +
-    '<button class="btn btn-sm hex-use" type="button" data-tip="Uses this colour for your ' + esc(P.label) + ' and keeps it in your colours, in every colour picker here">Use</button></span>' +
-    '<p class="hex-msg" id="' + inId + '-msg" role="status" aria-live="polite"></p>';
-  zone.after(row);
-  const input = row.querySelector('input'), chip = row.querySelector('.hex-chip');
-  input.addEventListener('input', () => { const c = normHex(input.value); chip.style.background = c || ''; chip.classList.toggle('is-empty', !c); });
-  const use = () => {
-    const c = normHex(input.value);
-    if (!c) { pickerNote(id, 'That is not a hex colour: type # and six characters 0–9 or a–f, like #7ee8fa.', true); if (window.SFX) SFX.play('error'); input.focus(); return; }
-    const used = P.fit(c);
-    keepColor(used);
-    P.pick(used);
-    drawPickers();
-    input.value = ''; chip.style.background = ''; chip.classList.add('is-empty');
-    pickerNote(id, (used !== c ? 'Adjusted to ' + used + ' so the text on your wall stays readable. ' : '') + used + ' is now in your colours, in every colour picker here.');
-    if (window.SFX) SFX.play('success');
-  };
-  row.querySelector('.hex-use').addEventListener('click', use);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); use(); } });
-}
-
-/* ---------- wall style ---------- */
-async function saveWallColor(body) {
-  try { await api('/api/profile', { method: 'POST', body }); sendToast('Wall updated 🎨'); }
-  catch (e) { sendToast('⚠️ ' + e.message); }
+    },
+    tip: (c) => (c ? 'Re-themes the whole site in this colour, just for you' : 'Puts the site colours back to classic green') });
 }
 function renderImgSlot(kind, url) {
-  /* the nav pill shows this picture, so a change here must reach it without a reload — but only when it
-     actually changed, or the first render on every visit would cost a needless /api/me round trip */
-  if (kind === 'avatar' && window.AUTH && AUTH.user && (AUTH.user.avatarImg || null) !== (url || null) && AUTH.refresh) {
-    AUTH.refresh().then(() => { if (AUTH.redraw) AUTH.redraw(); }).catch(() => {});
-  }
-  const zone = document.getElementById('slot-' + kind);
-  zone.innerHTML = '';
-  if (url) {
-    if (/\.(mp4|webm)$/i.test(url)) {
-      // muted + loop + playsinline + preload=metadata: a profile video must never demand attention,
-      // never play sound, and never block first paint.
-      const v = document.createElement('video');
-      v.src = url; v.muted = true; v.loop = true; v.autoplay = true;
-      v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
-      v.setAttribute('aria-label', 'current ' + kind + ' video');
-      zone.appendChild(v);
-    } else {
-      const img = document.createElement('img');
-      img.src = url; img.alt = 'current ' + kind + ' image';
-      zone.appendChild(img);
-    }
-  } else {
-    const d = document.createElement('div');
-    d.className = 'none'; d.textContent = 'none';
-    zone.appendChild(d);
-  }
-  const up = document.createElement('label');
-  up.className = 'file-label';
-  /* sr-only, not hidden: [hidden] is display:none and an unfocusable input means Tab skips 'Upload'
-     entirely — the only keyboard dead-end on the page. Every other uploader on the site uses this shape. */
-  // the name starts with the visible word (Replace / Upload) so "click Replace" works for voice control (WCAG 2.5.3)
-  up.innerHTML = '📷 ' + (url ? 'Replace' : 'Upload') + '<input type="file" class="sr-only" aria-label="' + (url ? 'Replace' : 'Upload') + ' the ' + kind + ' image or video" accept="image/*,video/mp4,video/webm">';
-  up.querySelector('input').addEventListener('change', e => uploadThemeImage(kind, e.target));
-  zone.appendChild(up);
-  if (url) {
-    const rm = document.createElement('button');
-    rm.className = 'react-btn';
-    rm.textContent = '🗑';
-    rm.setAttribute('aria-label', 'remove ' + kind + ' image');
-    rm.setAttribute('data-tip', 'Removes the ' + kind + ' image from your wall — you can upload another');
-    rm.addEventListener('click', async () => {
-      try {
-        await api('/api/profile/image', { method: 'POST', body: { kind, remove: true } });
-        myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = null;
-        renderImgSlot(kind, null);
-        if (window.SFX) SFX.play('remove');
-        sendToast('Removed');
-      } catch (err) { sendToast(err.message); }
-    });
-    zone.appendChild(rm);
-  }
-}
-async function uploadThemeImage(kind, input) {
-  const f = input.files[0]; if (!f) return;
-  const animated = /^video\//.test(f.type) || f.type === 'image/gif';
-  if (animated) {
-    // A canvas re-encode would flatten a GIF to one frame and cannot handle video at all, so these
-    // stream through the same validated upload path the Send Wall uses — magic-byte checked, size
-    // capped per type, and compressed identically. One pipeline, one set of limits.
-    const cap = f.type === 'image/gif' ? 25 : 64;
-    if (f.size > cap * 1024 * 1024) { if (window.SFX) SFX.play('error'); sendToast('Too big — keep it under ' + cap + 'MB'); return; }
-    sendToast('Uploading…');
-    try {
-      const r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': f.type, 'X-Filename': encodeURIComponent(f.name || 'media') }, body: f });
-      const u = await r.json();
-      if (!r.ok || !u.url) throw new Error(u.error || 'upload failed');
-      const j = await api('/api/profile/image', { method: 'POST', body: { kind, image: u.url } });
-      myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = j.url;
-      renderImgSlot(kind, j.url);
-      if (window.SFX) SFX.play('success');
-      sendToast('Looking good 😎');
-    } catch (err) { sendToast('⚠️ ' + (err.message || 'upload failed')); }
-    return;
-  }
-  if (f.size > 8 * 1024 * 1024) { if (window.SFX) SFX.play('error'); sendToast('Too big — keep it under 8MB 🐘'); return; }
-  const rd = new FileReader();
-  rd.onload = () => {
-    const img = new Image();
-    img.onload = async () => {
-      const maxW = kind === 'avatar' ? 400 : 1400;
-      const scale = Math.min(1, maxW / img.width);
-      const c = document.createElement('canvas');
-      c.width = img.width * scale; c.height = img.height * scale;
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      try {
-        const j = await api('/api/profile/image', { method: 'POST', body: { kind, image: c.toDataURL('image/jpeg', 0.85) } });
-        myTheme[kind === 'avatar' ? 'avatar_img' : kind === 'header' ? 'header_img' : 'bg_img'] = j.url;
-        renderImgSlot(kind, j.url);
-        if (window.SFX) SFX.play('success');
-        sendToast('Looking good 😎');
-        sendConfetti(innerWidth / 2, innerHeight / 2, { count: 24, emojiRatio: 0.4 });
-      } catch (err) { sendToast('⚠️ ' + err.message); }
-    };
-    img.src = rd.result;
-  };
-  rd.readAsDataURL(f);
+  WallStyle.imageSlot(document.getElementById('slot-' + kind), kind, url, (k, u) => { myTheme[IMG_KEY[k]] = u; });
 }
 
 /* ---------- account ---------- */
@@ -774,7 +529,7 @@ function initThemeEditor() {
 
 /* ---------- site prefs ---------- */
 function initSitePrefs() {
-  drawPicker('site-accent-swatches');
+  drawSitePicker();
   initThemeEditor();
   const switches = [
     ['pref-confetti', 'confetti'],
@@ -935,8 +690,8 @@ window.onAuthReady = function (user) {
   if (!user) return;
   if (avatarFilled === null || chosenAvatar === avatarFilled) chosenAvatar = user.avatar || '🚀';   // an avatar picked but not yet saved stays picked
   avatarFilled = user.avatar || '🚀';
-  chosenAccent = (user.theme && user.theme.accent) || '';
-  chosenBg = (user.theme && user.theme.wall_bg) || '';
+  wallState.accent = (user.theme && user.theme.accent) || '';
+  wallState.bg = (user.theme && user.theme.wall_bg) || '';
   myTheme = user.theme || {};
   document.getElementById('pf-avatar').textContent = chosenAvatar;
   const pfShow = document.getElementById('pf-username-show');
@@ -954,8 +709,7 @@ window.onAuthReady = function (user) {
   if (claiming) document.getElementById('sec-account').open = true;
   if (!accountOpened) openAccountFromLink(true);   // arrived from "Edit profile" on the wall: once, not on every re-render after a save
   renderAvatarPicker();
-  drawPicker('accent-swatches');
-  drawPicker('bg-swatches');
+  WallStyle.wallPickers(document.getElementById('accent-swatches'), document.getElementById('bg-swatches'), wallState);
   renderImgSlot('avatar', myTheme.avatar_img);
   renderImgSlot('header', myTheme.header_img);
   renderImgSlot('background', myTheme.bg_img);

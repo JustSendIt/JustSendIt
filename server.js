@@ -14617,7 +14617,10 @@ const server = http.createServer(async (req, res) => {
           const row = db.prepare('SELECT name, user_id FROM uploads WHERE name = ?').get(name);
           if (!row) return bad(res, 'upload not found', 404);
           db.prepare('UPDATE posts SET image = NULL WHERE image = ?').run(name);
-          db.prepare('UPDATE users SET avatar_img = NULL WHERE avatar_img = ?').run('/uploads/' + name);
+          /* the profile and squad pictures store the bare file name: clear every column that held this one, or the wall keeps
+             pointing at a deleted file (a broken picture where the emoji should stand in). The column names are fixed here. */
+          for (const c of ['avatar_img', 'header_img', 'bg_img']) db.prepare('UPDATE users SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
+          for (const c of ['avatar_img', 'banner_img']) db.prepare('UPDATE squads SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           deleteUpload(name, row.user_id);
         } else return bad(res, 'kind must be post, comment or upload');
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?").run(now(), me.id, b.kind === 'upload' ? 'post' : b.kind, id);
@@ -15335,32 +15338,46 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (blockSanctioned(res, me)) return;   // your own profile is yours to set up before the $SEND check — a read-only sanction still pauses it
         const b = await readBody(req);
+        /* Every field is checked BEFORE anything is written, so a refusal means nothing changed. (A bad X handle used to be
+           refused after the username, avatar and bio were already saved: the page said "failed" while half of it had not.) */
+        let uname = null;
         if (b.username !== undefined) {
-          const u = String(b.username).trim();
-          if (!USERNAME_RE.test(u)) return bad(res, 'username must be 3–24 chars: letters, numbers, _ . -');
-          if (isReservedName(u) && !me.system) return bad(res, nameRefusal(u));   // not even by changing the capitals of a name one already has
-          if (u.toLowerCase() !== me.username.toLowerCase() && usernameTaken(u)) return bad(res, 'that username is taken');
-          try { db.prepare('UPDATE users SET username = ?, auto_named = 0 WHERE id = ?').run(u, me.id); }
+          uname = String(b.username).trim();
+          if (!USERNAME_RE.test(uname)) return bad(res, 'username must be 3–24 chars: letters, numbers, _ . -');
+          if (isReservedName(uname) && !me.system) return bad(res, nameRefusal(uname));   // not even by changing the capitals of a name one already has
+          if (uname.toLowerCase() !== me.username.toLowerCase() && usernameTaken(uname)) return bad(res, 'that username is taken');
+        }
+        /* A handle, from whatever was pasted: "@name", "name", or a profile link with or without https://, www., m. or a
+           ?query ("instagram.com/name", "https://x.com/name?s=21"). The site's own path words are not handles. */
+        const cleanHandle = (v) => {
+          const h = String(v || '').trim().replace(/^@+/, '').replace(/^(https?:\/\/)?((www|m|mobile)\.)?(twitter|x|instagram)\.com\/+/i, '').replace(/[/?#].*$/, '').replace(/^@+/, '');
+          return h === '' ? '' : (/^[A-Za-z0-9_.]{1,30}$/.test(h) ? h : null);
+        };
+        const tw = b.twitter !== undefined ? cleanHandle(b.twitter) : undefined;
+        if (tw === null) return bad(res, 'that X/Twitter handle isn’t valid');
+        const ig = b.instagram !== undefined ? cleanHandle(b.instagram) : undefined;
+        if (ig === null) return bad(res, 'that Instagram handle isn’t valid');
+        const bgNew = b.wall_bg !== undefined ? String(b.wall_bg).toLowerCase() : undefined;
+        if (bgNew !== undefined) {   // before the accent: an accent is judged against the background it will sit on
+          if (bgNew !== '' && !HEX_COLOR_RE.test(bgNew)) return bad(res, 'background must be a hex color');
+          if (!wallBgReadable(bgNew)) return bad(res, 'that background is too light for the text on your wall — pick a darker one');
+        }
+        const accNew = b.accent !== undefined ? String(b.accent).toLowerCase() : undefined;
+        if (accNew !== undefined) {
+          if (accNew !== '' && !HEX_COLOR_RE.test(accNew)) return bad(res, 'accent must be a hex color like #c6f000');
+          const bgNow = bgNew !== undefined ? bgNew : (db.prepare('SELECT wall_bg FROM users WHERE id = ?').get(me.id) || {}).wall_bg;
+          if (!wallAccentReadable(accNew, bgNow)) return bad(res, 'that accent is too dark to read on your wall — pick a lighter one');
+        }
+        if (uname !== null) {
+          try { db.prepare('UPDATE users SET username = ?, auto_named = 0 WHERE id = ?').run(uname, me.id); }
           catch (e) { if (/UNIQUE/.test(String(e && e.message))) return bad(res, 'that username is taken', 409); throw e; }   // taken in between, in some casing
         }
         if (b.avatar !== undefined) db.prepare('UPDATE users SET avatar = ? WHERE id = ?').run(String(b.avatar).slice(0, 8), me.id);
         if (b.bio !== undefined) db.prepare('UPDATE users SET bio = ? WHERE id = ?').run(String(b.bio).slice(0, 200), me.id);
-        const cleanHandle = (v) => { const h = String(v || '').trim().replace(/^@+/, '').replace(/^https?:\/\/(www\.)?(twitter|x|instagram)\.com\//i, '').replace(/\/.*$/, ''); return h === '' ? '' : (/^[A-Za-z0-9_.]{1,30}$/.test(h) ? h : null); };
-        if (b.twitter !== undefined) { const h = cleanHandle(b.twitter); if (h === null) return bad(res, 'that X/Twitter handle isn’t valid'); db.prepare('UPDATE users SET twitter_handle = ? WHERE id = ?').run(h || null, me.id); }
-        if (b.instagram !== undefined) { const h = cleanHandle(b.instagram); if (h === null) return bad(res, 'that Instagram handle isn’t valid'); db.prepare('UPDATE users SET ig_handle = ? WHERE id = ?').run(h || null, me.id); }
-        if (b.wall_bg !== undefined) {   // before the accent: an accent is judged against the background it will sit on
-          const a = String(b.wall_bg).toLowerCase();
-          if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'background must be a hex color');
-          if (!wallBgReadable(a)) return bad(res, 'that background is too light for the text on your wall — pick a darker one');
-          db.prepare('UPDATE users SET wall_bg = ? WHERE id = ?').run(a, me.id);
-        }
-        if (b.accent !== undefined) {
-          const a = String(b.accent).toLowerCase();
-          if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'accent must be a hex color like #c6f000');
-          const bgNow = b.wall_bg !== undefined ? String(b.wall_bg).toLowerCase() : (db.prepare('SELECT wall_bg FROM users WHERE id = ?').get(me.id) || {}).wall_bg;
-          if (!wallAccentReadable(a, bgNow)) return bad(res, 'that accent is too dark to read on your wall — pick a lighter one');
-          db.prepare('UPDATE users SET accent = ? WHERE id = ?').run(a, me.id);
-        }
+        if (tw !== undefined) db.prepare('UPDATE users SET twitter_handle = ? WHERE id = ?').run(tw || null, me.id);
+        if (ig !== undefined) db.prepare('UPDATE users SET ig_handle = ? WHERE id = ?').run(ig || null, me.id);
+        if (bgNew !== undefined) db.prepare('UPDATE users SET wall_bg = ? WHERE id = ?').run(bgNew, me.id);
+        if (accNew !== undefined) db.prepare('UPDATE users SET accent = ? WHERE id = ?').run(accNew, me.id);
         if (b.tracker_prefs !== undefined) {
           const j = JSON.stringify(b.tracker_prefs || {});
           if (j.length > 4000) return bad(res, 'prefs too large');
@@ -15395,7 +15412,7 @@ const server = http.createServer(async (req, res) => {
         }
         const czEarned = needsHolderProof(me) ? 0 : awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd()); // once/day for tuning your profile — points start once the participation check passes
         const u2 = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
-        return send(res, 200, { ok: true, user: { username: u2.username, avatar: u2.avatar, bio: u2.bio, theme: themeOf(u2) }, pointsEarned: czEarned });
+        return send(res, 200, { ok: true, user: { username: u2.username, avatar: u2.avatar, bio: u2.bio, twitter: u2.twitter_handle || '', instagram: u2.ig_handle || '', theme: themeOf(u2) }, pointsEarned: czEarned });
       }
       if (p === '/api/profile/image' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);

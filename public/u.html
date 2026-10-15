@@ -66,12 +66,15 @@
 <header class="wall-hero" id="who-hero">
   <div class="wall-banner">
     <img class="wall-banner-img" id="header-img" alt="" hidden>
+    <!-- the banner and the picture open full screen (upage.js wallMedia); on your own wall, with your Wall Style beside them -->
+    <button class="wall-view wall-view--banner" id="banner-view" type="button" hidden aria-haspopup="dialog" aria-label="View the banner full screen" data-tip="Shows this banner full screen"></button>
   </div>
   <div class="wall-id">
     <div class="wall-id-top">
       <div class="wall-avatar" id="avatar-wrap">
         <img class="wall-avatar-img" id="pub-avatar-img" alt="" hidden>
         <span class="wall-avatar-emoji" id="pub-avatar" aria-hidden="true">🚀</span>
+        <button class="wall-view wall-view--avatar" id="avatar-view" type="button" hidden aria-haspopup="dialog" aria-label="View the profile picture full screen" data-tip="Shows this profile picture full screen"></button>
       </div>
       <div class="wall-id-actions">
         <button class="btn-follow" id="follow-btn" hidden data-tip="Adds their posts to your Following feed — they are told">＋ Follow</button>
@@ -203,6 +206,7 @@
 <script src="/block0.js"></script>
 <script src="/chart.js"></script>
 <script src="/voicememo.js"></script>
+<script src="/wallstyle.js"></script>
 <script src="/upage.js"></script>
 <script src="/notifications.js"></script>
 <script src="/compose.js"></script>

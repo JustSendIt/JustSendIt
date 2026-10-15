@@ -12,7 +12,7 @@
   const flagged = () => { try { return !!localStorage.getItem(KEY); } catch { return false; } };
   const setFlag = (v) => { try { localStorage.setItem(KEY, v); } catch {} };
   const anyModalOpen = () => {
-    for (const id of ['auth-modal', 'compose-modal', 'chart-full']) {   // chart-full: a chart open full screen (app.js)
+    for (const id of ['auth-modal', 'compose-modal', 'full-view']) {   // full-view: a chart, a picture or the wall style open full screen (app.js)
       const m = document.getElementById(id);
       if (m && !m.hasAttribute('hidden')) return true;
     }

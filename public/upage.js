@@ -180,82 +180,134 @@ function livePins(box) {
 function keepVideoHonest(v) {
   const rm = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
   const wanted = () => !document.hidden && !rm() && !document.documentElement.classList.contains('motion-off');
-  const sync = () => { try { wanted() ? v.play() : v.pause(); } catch {} };
+  let mo = null;
+  const sync = () => {
+    // a video taken off the wall (your wall style replaced or removed it) lets go of the page, and never plays again
+    if (!v.isConnected) { document.removeEventListener('visibilitychange', sync); if (mo) mo.disconnect(); try { v.pause(); } catch {} return; }
+    try { wanted() ? v.play() : v.pause(); } catch {}
+  };
   document.addEventListener('visibilitychange', sync);
-  try { new MutationObserver(sync).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] }); } catch {}
+  try { mo = new MutationObserver(sync); mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] }); } catch {}
   if (!wanted()) sync();   // motion already off when the video is built: never let the first frames roll
 }
 
-function applyTheme(t) {
-  if (!t) return;
-  if (t.accent) {
-    document.documentElement.style.setProperty('--accent', t.accent);
-    const nameLine = document.getElementById('pub-name-line');
-    nameLine.style.color = t.accent;
-    nameLine.style.textShadow = '0 0 30px ' + t.accent + '66';
-  }
-  if (t.wall_bg) { document.body.style.background = t.wall_bg; document.body.classList.add('themed-page'); }
-  if (t.bg_img) {
-    document.body.classList.add('themed-page');
-    if (/\.(mp4|webm)$/i.test(t.bg_img)) {
+/* The wall's look, painted from its theme. Each part is painted only when it changed, so the Wall Style pop-up can repaint the
+   wall after every pick without restarting a video banner or background that stayed the same; what was removed goes. */
+const isVideoSrc = (s) => /\.(mp4|webm)(\?.*)?$/i.test(s || '');
+function paintAccent(a) {
+  const nameLine = document.getElementById('pub-name-line');
+  if (a) {
+    document.documentElement.style.setProperty('--accent', a);
+    nameLine.style.color = a;
+    nameLine.style.textShadow = '0 0 30px ' + a + '66';
+  } else { document.documentElement.style.removeProperty('--accent'); nameLine.style.color = ''; nameLine.style.textShadow = ''; }
+}
+function paintBackground(bg, img) {
+  const body = document.body;
+  body.style.background = bg || '';
+  body.classList.toggle('themed-page', !!(bg || img));
+  let v = document.getElementById('wall-bg-video');
+  if (img && isVideoSrc(img)) {
+    body.style.backgroundImage = '';
+    if (v && v.getAttribute('src') === img) return;   // the same video: it keeps playing where it is
+    if (!v) {
       // A video background is a fixed layer BEHIND everything, never a CSS background-image (CSS
       // cannot play video). The scrim above it is what keeps wall text readable over arbitrary
       // footage — without it, contrast depends on whatever the user uploaded.
-      let v = document.getElementById('wall-bg-video');
-      if (!v) {
-        v = document.createElement('video');
-        v.id = 'wall-bg-video'; v.className = 'wall-bg-video';
-        v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
-        v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true'); v.preload = 'metadata';
-        document.body.appendChild(v);
-        const scrim = document.createElement('div');
-        scrim.className = 'wall-bg-scrim'; scrim.setAttribute('aria-hidden', 'true');
-        document.body.appendChild(scrim);
-        // Motion sensitivity is a real accessibility need, not a preference: hold the first frame.
-        try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
-        keepVideoHonest(v);
-      }
-      v.src = t.bg_img;
-    } else {
-      document.body.style.backgroundImage = 'linear-gradient(rgba(6,8,12,0.82), rgba(6,8,12,0.9)), url(' + t.bg_img + ')';
-    }
-  }
-  if (t.header_img) {
-    const h = document.getElementById('header-img');
-    if (/\.(mp4|webm)$/i.test(t.header_img)) {
-      // Swap the <img> for a muted looping <video> in place. Muted + playsinline is what lets it
-      // autoplay at all on mobile; pausing when the tab is hidden keeps a background video from
-      // burning battery behind another tab.
-      const v = document.createElement('video');
-      v.id = h.id; v.className = h.className;
-      v.src = t.header_img; v.muted = true; v.loop = true; v.autoplay = true;
-      v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
-      v.setAttribute('aria-hidden', 'true');
-      // Same reduced-motion hold as the background video above: an autoplaying header is motion too.
+      v = document.createElement('video');
+      v.id = 'wall-bg-video'; v.className = 'wall-bg-video';
+      v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+      v.setAttribute('playsinline', ''); v.setAttribute('aria-hidden', 'true'); v.preload = 'metadata';
+      document.body.appendChild(v);
+      const scrim = document.createElement('div');
+      scrim.className = 'wall-bg-scrim'; scrim.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(scrim);
+      // Motion sensitivity is a real accessibility need, not a preference: hold the first frame.
       try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
-      h.replaceWith(v);
       keepVideoHonest(v);
-    } else { h.src = t.header_img; h.hidden = false; }
+    }
+    v.src = img;
+    return;
   }
-  // avatar: the wrap owns the circle; toggle the permanent img/emoji children (show the image only once it proves it loaded)
-  const aimg = document.getElementById('pub-avatar-img'), aemo = document.getElementById('pub-avatar');
-  if (t.avatar_img && /\.(mp4|webm)(\?.*)?$/i.test(t.avatar_img) && window.avatarNode) {
-    // A video avatar: an <img> can't load it, so this used to fall straight through to the emoji. Swap
-    // in the shared <video> (muted, looped, inline, no autoplay under reduced motion) and reveal it
-    // only once it has a frame to show, exactly as the image path reveals on load.
-    const v = window.avatarNode(t.avatar_img, 'wall-avatar-img');
-    v.id = aimg.id; v.hidden = true;
-    v.addEventListener('loadeddata', () => { v.hidden = false; aemo.hidden = true; }, { once: true });
-    v.addEventListener('error', () => { v.hidden = true; aemo.hidden = false; }, { once: true });
-    aimg.replaceWith(v);
-  } else if (t.avatar_img) {
-    aimg.addEventListener('load', () => { aimg.hidden = false; aemo.hidden = true; }, { once: true });
-    aimg.addEventListener('error', () => { aimg.hidden = true; aemo.hidden = false; }, { once: true });
-    aimg.src = t.avatar_img;
-    // a cached image can be complete before the listener above is attached, and then 'load' never fires
-    if (aimg.complete && aimg.naturalWidth > 0) { aimg.hidden = false; aemo.hidden = true; }
-  } else { aimg.hidden = true; aemo.hidden = false; }
+  if (v) { try { v.pause(); } catch {} v.remove(); document.querySelectorAll('.wall-bg-scrim').forEach((x) => x.remove()); }
+  body.style.backgroundImage = img ? 'linear-gradient(rgba(6,8,12,0.82), rgba(6,8,12,0.9)), url(' + img + ')' : '';
 }
+function paintHeader(src) {
+  const h = document.getElementById('header-img');
+  if ((h.dataset.painted || '') === (src || '')) return;
+  if (h.tagName === 'VIDEO') { try { h.pause(); } catch {} }
+  if (src && isVideoSrc(src)) {
+    // Swap the <img> for a muted looping <video> in place. Muted + playsinline is what lets it
+    // autoplay at all on mobile; pausing when the tab is hidden keeps a background video from
+    // burning battery behind another tab.
+    const v = document.createElement('video');
+    v.id = 'header-img'; v.className = 'wall-banner-img';
+    v.src = src; v.muted = true; v.loop = true; v.autoplay = true;
+    v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
+    v.setAttribute('aria-hidden', 'true'); v.dataset.painted = src;
+    // Same reduced-motion hold as the background video above: an autoplaying header is motion too.
+    try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { v.autoplay = false; v.removeAttribute('autoplay'); } } catch {}
+    v.addEventListener('error', () => { v.hidden = true; v.dataset.broken = '1'; if (window.WallMedia) WallMedia.refresh(); }, { once: true });
+    h.replaceWith(v);
+    keepVideoHonest(v);
+    return;
+  }
+  const img = document.createElement('img');
+  img.id = 'header-img'; img.className = 'wall-banner-img'; img.alt = ''; img.dataset.painted = src || '';
+  img.hidden = !src;
+  if (src) {
+    // a picture that cannot be loaded (taken down, say) leaves the branded banner showing, and nothing to open full screen
+    img.addEventListener('error', () => { img.hidden = true; img.dataset.broken = '1'; if (window.WallMedia) WallMedia.refresh(); }, { once: true });
+    img.src = src;
+  }
+  h.replaceWith(img);
+}
+// avatar: the wrap owns the circle; the picture shows only once it proves it loaded, the emoji otherwise
+function paintAvatar(src) {
+  const a = document.getElementById('pub-avatar-img'), emo = document.getElementById('pub-avatar');
+  if ((a.dataset.painted || '') === (src || '')) return;
+  if (a.tagName === 'VIDEO') { try { a.pause(); } catch {} }
+  emo.hidden = false;
+  if (src && isVideoSrc(src) && window.avatarNode) {
+    // A video avatar: an <img> can't load it. The shared <video> (muted, looped, inline, no autoplay under reduced motion),
+    // revealed only once it has a frame to show, exactly as the image path reveals on load.
+    const v = window.avatarNode(src, 'wall-avatar-img');
+    v.id = 'pub-avatar-img'; v.hidden = true; v.dataset.painted = src;
+    v.addEventListener('loadeddata', () => { v.hidden = false; emo.hidden = true; }, { once: true });
+    v.addEventListener('error', () => { v.hidden = true; emo.hidden = false; v.dataset.broken = '1'; }, { once: true });
+    a.replaceWith(v);
+    return;
+  }
+  const img = document.createElement('img');
+  img.id = 'pub-avatar-img'; img.className = 'wall-avatar-img'; img.alt = ''; img.hidden = true; img.dataset.painted = src || '';
+  if (src) {
+    img.addEventListener('load', () => { img.hidden = false; emo.hidden = true; }, { once: true });
+    img.addEventListener('error', () => { img.hidden = true; emo.hidden = false; img.dataset.broken = '1'; }, { once: true });
+    img.src = src;
+  }
+  a.replaceWith(img);
+  // a cached image can be complete before it is in the page, and then 'load' never fires
+  if (src && img.complete && img.naturalWidth > 0) { img.hidden = false; emo.hidden = true; }
+}
+function applyTheme(t) {
+  if (!t) return;
+  paintAccent(t.accent);
+  paintBackground(t.wall_bg, t.bg_img);
+  paintHeader(t.header_img);
+  paintAvatar(t.avatar_img);
+}
+
+function paintSocials(u) {
+  const soc = document.getElementById('pub-socials');
+  if (!soc) return;
+  // handles are server-validated to [A-Za-z0-9_.]; escaped all the same, since the Wall Style pop-up paints what was just typed
+  let sh = '';
+  if (u.twitter) sh += '<a class="wall-soc wall-soc-x" href="https://x.com/' + esc(u.twitter) + '" target="_blank" rel="noopener nofollow">🐦 @' + esc(u.twitter) + '</a>';
+  if (u.instagram) sh += '<a class="wall-soc wall-soc-ig" href="https://instagram.com/' + esc(u.instagram) + '" target="_blank" rel="noopener nofollow">📸 @' + esc(u.instagram) + '</a>';
+  soc.innerHTML = sh; soc.hidden = !sh;
+}
+// after a change in your Wall Style pop-up: the same painters, which touch only what changed (and clear what was removed)
+function repaintWall(t) { applyTheme(t); }
 
 // real U+2212 minus for negatives; positives stay neutral (no + / $ — voting is a signal, not money)
 function fmtScore(n) { n = n | 0; return n < 0 ? '−' + Math.abs(n) : String(n); }
@@ -556,13 +608,7 @@ async function loadPage() {
     const nl = document.getElementById('pub-name-line'); // permanent OG badge in the header, next to the @name
     if (nl) { const old = nl.querySelector('.og-badge'); if (old) old.remove(); if (u.og && window.ogBadge) nl.insertAdjacentHTML('beforeend', ' ' + ogBadge(u.og)); }
     document.getElementById('pub-bio').textContent = u.bio || 'here to send it 🚀';
-    const soc = document.getElementById('pub-socials');
-    if (soc) { // handles are server-validated to [A-Za-z0-9_.] so they're safe to interpolate
-      let sh = '';
-      if (u.twitter) sh += '<a class="wall-soc wall-soc-x" href="https://x.com/' + u.twitter + '" target="_blank" rel="noopener nofollow">🐦 @' + u.twitter + '</a>';
-      if (u.instagram) sh += '<a class="wall-soc wall-soc-ig" href="https://instagram.com/' + u.instagram + '" target="_blank" rel="noopener nofollow">📸 @' + u.instagram + '</a>';
-      soc.innerHTML = sh; soc.hidden = !sh;
-    }
+    paintSocials(u);
     if (window.WallCheckin) WallCheckin.paint(!!u.isMe); // daily check-in card (own wall only)
     renderPins(u); // "Conviction Plays" pinned tokens
     document.getElementById('st-posts').textContent = u.posts;
@@ -581,6 +627,7 @@ async function loadPage() {
       dia.hidden = false;
     }
     applyTheme(u.theme);
+    if (window.WallMedia) WallMedia.set(u);   // the picture and the banner open full screen; on your own wall, with your Wall Style
     if (u.isMe) {
       document.getElementById('edit-btn').hidden = false;
       // post like X, right from your own wall
@@ -678,7 +725,15 @@ document.addEventListener('post:created', (e) => {
   }
 });
 
-window.onAuthReady = function () { loadPage(); };
+/* The wall loads once per account: sign in or out, or switch, and it loads again. The same account refreshed (the nav's own
+   picture after a new emoji in your Wall Style) must not run the whole wall load a second time. */
+let wallLoadedFor = null;
+window.onAuthReady = function (user) {
+  const who = user ? String(user.username || '') : '';
+  if (who === wallLoadedFor) return;
+  wallLoadedFor = who;
+  loadPage();
+};
 
 /* ===== Send Calls tab + leaderboard on the public wall ===== */
 const _lbWindows = [['24h', '24h'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year'], ['all', 'All time']];
@@ -897,3 +952,111 @@ async function loadLeaderboard(win) {
   document.addEventListener('auth:change', () => { if (!signedIn()) paint(false); }); // clear it the instant you sign out
   window.WallCheckin = { paint };
 })();
+
+/* ===== The profile picture and the banner, full screen — and on your own wall, your Wall Style =====
+   Owner, 2026-10-15: "Allow a user to pull up a full screen size view of a profile picture and banner by clicking on it, if it's
+   someone's own profile, allow them to edit it directly from the full view, take the user to a pop up menu that is the wall
+   style settings that a user can edit all of his send wall profile setting at once."
+   - Anyone: a press on the picture (a photo, a video, or the emoji) or on the banner (when there is one) opens it full screen
+     in FullView (app.js), at its own shape, never cropped.
+   - Your own wall: the full view has "🎨 Edit wall style", which turns the same pop-up into your Wall Style (wallstyle.js):
+     picture, emoji, banner, colours, background, bio and links, all in one place. Each change is saved as it is made and
+     painted on the wall behind at once (beside the sheet on a wide screen). With no banner yet, a press on the empty banner
+     goes straight to that part of the editor.
+   Only the wall's owner ever sees the editor: u.isMe comes from the server, and the server checks every save anyway. */
+window.WallMedia = (function () {
+  let wall = null, theme = {};   // the wall as loaded, kept current by the editor
+  const avBtn = document.getElementById('avatar-view'), bnBtn = document.getElementById('banner-view');
+  const isVideo = (src) => /\.(mp4|webm)(\?.*)?$/i.test(src || '');
+  const reduced = () => (window.prefersReduced && prefersReduced()) || document.documentElement.classList.contains('motion-off');
+  // a banner that could not be loaded (taken down, say) counts as none: nothing to open full screen
+  const hasHeader = () => { const h = document.getElementById('header-img'); return !!theme.header_img && !(h && h.dataset.broken); };
+  function paintButtons() {
+    if (!wall) return;
+    const who = '@' + wall.username;
+    avBtn.hidden = false;
+    avBtn.setAttribute('aria-label', 'View ' + who + '’s profile picture full screen');
+    avBtn.setAttribute('data-tip', wall.isMe ? 'Shows your profile picture full screen, with your wall style a press away' : 'Shows this profile picture full screen');
+    if (hasHeader()) {
+      bnBtn.hidden = false; bnBtn.classList.remove('wall-view--add');
+      bnBtn.setAttribute('aria-label', 'View ' + who + '’s banner full screen');
+      bnBtn.setAttribute('data-tip', 'Shows this banner full screen');
+    } else if (wall.isMe) {
+      bnBtn.hidden = false; bnBtn.classList.add('wall-view--add');
+      bnBtn.setAttribute('aria-label', 'Add a banner — opens your wall style');
+      bnBtn.setAttribute('data-tip', 'Opens your wall style at the banner, to add one');
+    } else bnBtn.hidden = true;   // nobody's banner to look at
+  }
+  function media(src, alt) {
+    if (isVideo(src)) {
+      // muted and inline like everywhere else on the wall; still under reduced motion or the ⏸, with controls to play it
+      const v = document.createElement('video');
+      v.className = 'mv-media'; v.src = src; v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute('playsinline', '');
+      v.controls = true; v.preload = 'metadata'; v.setAttribute('aria-label', alt);
+      if (!reduced()) { v.autoplay = true; v.play().catch(() => {}); }
+      return v;
+    }
+    const img = document.createElement('img');
+    img.className = 'mv-media'; img.src = src; img.alt = alt; img.decoding = 'async';
+    return img;
+  }
+  function view(which) {
+    if (!wall || FullView.isOpen()) return;
+    if (which === 'header' && !hasHeader()) { if (wall.isMe) editor('header'); return; }
+    const who = '@' + wall.username, opener = which === 'avatar' ? avBtn : bnBtn;
+    const label = which === 'avatar' ? who + '’s profile picture' : who + '’s banner';
+    FullView.open({ title: wall.isMe ? (which === 'avatar' ? 'Your profile picture' : 'Your banner') : label, turnHint: which === 'header', opener,
+      closeLabel: 'Close the ' + (which === 'avatar' ? 'profile picture' : 'banner'), fill: (stage) => {
+        const fig = document.createElement('figure');
+        fig.className = 'mv mv--' + which;
+        const src = which === 'avatar' ? theme.avatar_img : theme.header_img;
+        const emoji = () => { const e = document.createElement('span'); e.className = 'mv-emoji'; e.setAttribute('role', 'img'); e.setAttribute('aria-label', label + ': ' + (wall.avatar || '🚀')); e.textContent = wall.avatar || '🚀'; return e; };
+        if (src) {
+          const m = media(src, label);
+          // a picture that cannot be loaded: the emoji stands in, as on the wall (a banner says so plainly)
+          m.addEventListener('error', () => {
+            if (which === 'avatar') m.replaceWith(emoji());
+            else { const p = document.createElement('p'); p.className = 'mv-cap'; p.textContent = 'This banner could not be loaded.'; m.replaceWith(p); }
+          }, { once: true });
+          fig.appendChild(m);
+        } else fig.appendChild(emoji());
+        if (wall.isMe) {
+          const bar = document.createElement('div');
+          bar.className = 'mv-actions';
+          bar.innerHTML = '<button class="btn btn-primary" type="button" data-tip="Opens your wall style: picture, emoji, banner, colours, background, bio and links in one place">🎨 Edit wall style</button>';
+          bar.querySelector('button').addEventListener('click', () => editor(which));
+          fig.appendChild(bar);
+          if (!src && which === 'avatar') { const cap = document.createElement('p'); cap.className = 'mv-cap'; cap.textContent = 'No photo yet — your emoji stands in. Add a photo or video in your wall style.'; fig.insertBefore(cap, bar); }
+        }
+        stage.appendChild(fig);
+        return () => { const v = fig.querySelector('video'); if (v) v.pause(); };
+      } });
+  }
+  function editor(focus) {
+    if (!wall || !wall.isMe || !window.WallStyle) return;
+    const o = { title: '🎨 Your wall style', size: 'panel', closeLabel: 'Close your wall style', fill: (stage) => {
+      // the editor's own cleanup runs when the pop-up closes (it saves a bio or links still typed)
+      return WallStyle.editor(stage, {
+        user: { username: wall.username, avatar: wall.avatar, bio: wall.bio, twitter: wall.twitter, instagram: wall.instagram },
+        theme, focus,
+        onTheme: (patch) => { Object.assign(theme, patch); repaintWall(theme); paintButtons(); },
+        onUser: (patch) => {
+          Object.assign(wall, patch);
+          if (patch.avatar !== undefined) {
+            document.getElementById('pub-avatar').textContent = patch.avatar;
+            const pc = document.getElementById('pc-avatar'); if (pc) pc.textContent = patch.avatar;   // the composer on your own wall
+            if (window.AUTH && AUTH.refresh) AUTH.refresh().then(() => { if (AUTH.redraw) AUTH.redraw(); }).catch(() => {});   // the nav pill
+          }
+          if (patch.bio !== undefined) document.getElementById('pub-bio').textContent = patch.bio || 'here to send it 🚀';
+          if (patch.twitter !== undefined || patch.instagram !== undefined) paintSocials(wall);
+        },
+      });
+    } };
+    // from the full view: the same pop-up turns into the editor; from the empty banner: it opens as the editor
+    if (FullView.isOpen()) FullView.swap(o); else FullView.open(Object.assign({ opener: focus === 'header' ? bnBtn : avBtn }, o));
+  }
+  avBtn.addEventListener('click', () => view('avatar'));
+  bnBtn.addEventListener('click', () => view('header'));
+  return { set(u) { wall = Object.assign({}, u); theme = Object.assign({}, u.theme || {}); paintButtons(); }, refresh: paintButtons, view, editor };
+})();
+

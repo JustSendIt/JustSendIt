@@ -5552,7 +5552,7 @@ html.motion-off .tkd-more-caret { transition: none; }
 .cf-x:hover { background: var(--red); border-color: var(--red); color: var(--on-red); }
 .cf-x:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .cf-turn { display: none; margin: 0; padding: 0.35rem 1rem; border-bottom: 1px solid var(--hair); color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.4; }
-@media (orientation: portrait) and (max-width: 640px) and (pointer: coarse) { .cf-turn { display: block; } }   /* a phone, not a narrow desktop window */
+@media (orientation: portrait) and (max-width: 640px) and (pointer: coarse) { .cf.has-turn .cf-turn { display: block; } }   /* a phone, not a narrow desktop window, and only for something wide (a chart, a banner) */
 .cf-stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0.8rem 1rem 1rem; }
 .cf .cf-ctx { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; }   /* .cf .cf-ctx: above .trk-dash's own display */
 .cf .cf-ctx > [data-cf-unit] { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; margin: 0; }
@@ -5597,3 +5597,58 @@ html.motion-off .cf .cf-dialog { animation: none; }
   .cf .adm-chart-plot { min-height: 140px; min-height: max(140px, calc(100vh - 150px)); min-height: max(140px, calc(100dvh - 150px)); }
   .cf .np-vol { min-height: 130px; min-height: max(130px, calc(100vh - 170px)); min-height: max(130px, calc(100dvh - 170px)); }
 }
+
+/* ===== The pop-up as a sheet (size 'panel': the Wall Style editor) =====
+   Centred and sized to its content on a middling screen, the whole screen on a phone, and at the side of a wide one — with a
+   lighter veil, so your wall stays in view beside it and shows each change as you make it. */
+.cf.is-panel { align-items: center; }
+.cf.is-panel .cf-dialog { max-width: 640px; height: auto; max-height: 100%; }
+@media (min-width: 1100px) {
+  .cf.is-panel { justify-content: flex-end; align-items: stretch; padding: 0; }
+  .cf.is-panel .cf-dialog { max-width: 520px; height: 100%; max-height: none; border-width: 0 0 0 1.5px; border-radius: 0; }
+  .cf.is-panel .cf-backdrop { background: rgba(4, 7, 4, 0.35); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (max-width: 640px) { .cf.is-panel .cf-dialog { height: 100%; } }
+
+/* ===== A wall's profile picture and banner, full screen (upage.js — owner, 2026-10-15: "Allow a user to pull up a full screen
+   size view of a profile picture and banner by clicking on it") =====
+   A see-through button over each: the picture keeps its look, the button takes the press and the keyboard. The banner's sits
+   under the avatar (z 1 against the avatar's 2) and under the row of actions beside it, so neither loses a press to it. */
+.wall-id-top { position: relative; z-index: 2; }
+/* ...and the row's empty strip over the banner's foot lets presses through to the banner; the avatar and the buttons keep theirs */
+.wall-id-top, .wall-id-actions { pointer-events: none; }
+.wall-avatar, .wall-id-actions > * { pointer-events: auto; }
+.wall-view { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; color: #fff; cursor: zoom-in; display: grid; place-items: center; }
+.wall-view--banner { z-index: 1; }
+.wall-view--avatar { z-index: 3; border-radius: 50%; }
+.wall-view::after { content: ''; width: 30px; height: 30px; opacity: 0; transition: opacity 0.15s; background: currentColor; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.8));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M1 1h7v2.5H3.5V8H1zM12 1h7v7h-2.5V3.5H12zM1 12h2.5v4.5H8V19H1zM16.5 12H19v7h-7v-2.5h4.5z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M1 1h7v2.5H3.5V8H1zM12 1h7v7h-2.5V3.5H12zM1 12h2.5v4.5H8V19H1zM16.5 12H19v7h-7v-2.5h4.5z'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+.wall-view:hover, .wall-view:focus-visible { background: rgba(0, 0, 0, 0.28); }
+.wall-view:hover::after, .wall-view:focus-visible::after { opacity: 1; }
+.wall-view:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.wall-view--add::after { content: '＋'; width: auto; height: auto; -webkit-mask: none; mask: none; background: none; font-size: max(var(--text-floor), 1.6rem); font-weight: 800; }   /* your own wall with no banner yet: add one */
+@media (prefers-reduced-motion: reduce) { .wall-view::after { transition: none; } }
+@media (forced-colors: active) { .wall-view::after { background: ButtonText; } }
+/* the full view itself: the picture as large as the screen allows, never cropped */
+.mv { flex: 1 0 auto; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; min-width: 0; }
+.mv-media { display: block; max-width: 100%; max-height: calc(100vh - 12rem); max-height: calc(100dvh - 12rem); width: auto; height: auto; object-fit: contain; border-radius: 12px; }
+.mv-emoji { display: grid; place-items: center; width: min(70vmin, 22rem); aspect-ratio: 1; border-radius: 50%; line-height: 1; font-size: max(var(--text-floor), min(38vmin, 12rem)); background: radial-gradient(circle at 30% 28%, var(--ink-4), var(--ink)); border: 4px solid var(--accent, var(--green)); }
+.mv-cap { margin: 0; text-align: center; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); }
+.mv-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
+
+/* ===== The Wall Style editor (wallstyle.js) in the pop-up ===== */
+.ws { display: grid; gap: 0.9rem; min-width: 0; }
+.ws-lead { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); line-height: 1.45; }
+.ws-sec { min-width: 0; padding: 0.8rem 0.9rem 0.9rem; border: 1.5px solid var(--ink-4); border-radius: 14px; background: var(--ink-2); scroll-margin-top: 0.5rem; }
+.ws-sec:focus { outline: none; }
+.ws-sec:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.ws-h { margin: 0 0 0.2rem; font-size: max(var(--text-floor), 1.05rem); font-weight: 800; color: var(--text); }
+.ws .f-label span { font-weight: 400; }
+.ws .f-label { margin-top: 0.6rem; }
+.ws-emoji { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.ws .addr-input { width: 100%; }
+.ws-save-row { display: flex; align-items: center; gap: 0.4rem 0.8rem; flex-wrap: wrap; margin-top: 0.8rem; }
+.ws-save-row .modal-note { margin: 0; }
+.ws-more { margin: 0; }
+

@@ -53,10 +53,12 @@ try {
   const bad1 = await post(u, '/api/profile', { site_prefs: { customColors: ['red; background:url(x)'] } });
   const bad2 = await post(u, '/api/profile', { site_prefs: { customColors: Array.from({ length: 13 }, (_, i) => '#00000' + (i % 10)) } });
   check('  ...strict hex only (they are painted into style attributes), and no more than twelve', bad1.status === 400 && bad2.status === 400, bad1.status + ' ' + bad2.status);
-  const PJ = read('profile.js'), PR = read('prefs.js');
+  // the pickers live in wallstyle.js since 2026-10-15 (the same editor as the Wall Style pop-up on your own wall); profile.js mounts them
+  const PJ = read('profile.js'), PR = read('prefs.js'), WS = read('wallstyle.js');
   check('the page: a hex box under every picker (wall accent, wall background, site colour), and a typed colour joins every picker',
-    /'accent-swatches': \{/.test(PJ) && /'bg-swatches': \{/.test(PJ) && /'site-accent-swatches': \{/.test(PJ) && /function hexRow\(id\)/.test(PJ) && /keepColor\(used\);\n    P\.pick\(used\);\n    drawPickers\(\);/.test(PJ) && /const mine = myColors\(\)\.filter/.test(PJ));
-  check('  ...the same readability rule as the server, nudging a colour that misses and saying so', /function readableAccent\(c\)/.test(PJ) && /function readableBg\(c\)/.test(PJ) && /'Adjusted to ' \+ used \+ ' so the text on your wall stays readable/.test(PJ) && /window\.ColorMath = \{ ratio, fixFg, lum, isHex \};/.test(PR));
+    /WallStyle\.wallPickers\(document\.getElementById\('accent-swatches'\), document\.getElementById\('bg-swatches'\), wallState\);/.test(PJ) && /WallStyle\.picker\(document\.getElementById\('site-accent-swatches'\)/.test(PJ)
+    && /function hexRow\(zone\)/.test(WS) && /keepColor\(used\);\n      P\.pick\(used\);\n      drawPickers\(\);/.test(WS) && /const mine = myColors\(\)\.filter/.test(WS) && /function drawPickers\(\) \{ for \(const z of pickers\)/.test(WS));
+  check('  ...the same readability rule as the server, nudging a colour that misses and saying so', /function readableAccent\(c, bg\)/.test(WS) && /function readableBg\(c\)/.test(WS) && /fit: \(c\) => readableAccent\(c, state\.bg\)/.test(WS) && /'Adjusted to ' \+ used \+ ' so the text on your wall stays readable/.test(WS) && /window\.ColorMath = \{ ratio, fixFg, lum, isHex \};/.test(PR));
 
   /* ═══ 2. no time-out, no jump ═══ */
   const s = mkUser();

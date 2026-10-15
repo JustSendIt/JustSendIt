@@ -280,7 +280,7 @@
 
   // trap Tab focus inside a container; returns a release() to remove the trap
   window.trapFocus = function (container) {
-    const SEL = 'a[href],button:not([disabled]),textarea,input:not([disabled]),select,details > summary,iframe,[tabindex]:not([tabindex="-1"])';   // a pop-down's <summary> is a stop too (the token dashboard can end on one); so is an outside chart's frame
+    const SEL = 'a[href],button:not([disabled]),textarea,input:not([disabled]),select,details > summary,iframe,video[controls],audio[controls],[tabindex]:not([tabindex="-1"])';   // a pop-down's <summary> is a stop too (the token dashboard can end on one); so are an outside chart's frame and a video with controls
     function onKey(e) {
       if (e.key !== 'Tab') return;
       const items = [...container.querySelectorAll(SEL)].filter(el => el.offsetParent !== null || el === document.activeElement);
@@ -674,24 +674,135 @@
   window.addEventListener('pageshow', (e) => { if (e.persisted) sync(); });
 })();
 
+/* ===== The full-screen pop-up (FullView) =========================================================================
+   One pop-up for everything that opens over a page full screen: a chart (ChartFull, below — owner, 2026-10-14: "Allow a user
+   to expand any chart to full screen pop up and easily be able to close it"), a wall's profile picture or banner, and your
+   Wall Style editor (upage.js — owner, 2026-10-15). What it is showing fills the stage; the shell is the same for all:
+   - Closing: ✕ Close, Esc, a press on the dimmed edge, or the browser's Back — opening adds one step to the history, so Back
+     on a phone closes it instead of leaving the page. Focus goes back to what opened it.
+   - swap() changes what it shows without closing (your picture's full view → your Wall Style editor): one history step, one
+     place focus returns to.
+   - size 'panel' is a smaller sheet (the editor): at the side on a wide screen, so the wall shows its changes beside it.
+   A plain fixed layer above the page's own pop-ups (z 460: over the token dashboard, under the toasts, the tips, the wallet
+   picker and the age question), not <dialog>.showModal() — the top layer would hide the toasts and the tips under it. */
+(function () {
+  let root = null, dialog = null, stage = null, titleEl = null, xBtn = null, view = null, release = null, backing = false;
+  function build() {
+    root = document.createElement('div');
+    root.id = 'full-view'; root.className = 'cf'; root.hidden = true;
+    root.innerHTML = '<div class="cf-backdrop" data-cf-close></div>' +
+      '<div class="cf-dialog" role="dialog" aria-modal="true" aria-labelledby="cf-title" tabindex="-1">' +
+        '<div class="cf-head"><h2 class="cf-title" id="cf-title"></h2>' +
+          '<button class="cf-x" type="button" data-cf-close aria-label="Close full screen" data-tip="Closes this and takes you back to the page — Esc or your browser&#39;s Back does the same">✕ Close</button></div>' +
+        '<p class="cf-turn">Turn your phone sideways for a wider view.</p>' +
+        '<div class="cf-stage"></div>' +
+      '</div>';
+    document.body.appendChild(root);
+    dialog = root.querySelector('.cf-dialog'); stage = root.querySelector('.cf-stage'); titleEl = root.querySelector('.cf-title'); xBtn = root.querySelector('.cf-x');
+    root.addEventListener('click', (e) => { if (e.target.closest('[data-cf-close]')) close(e.detail > 0 ? 'pointer' : 'key'); });   // Enter or Space on ✕ is a click with no detail
+    root.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' && e.key !== 'Esc') return;   // other keys travel on: the arrow keys of a chart's own tabs are handled at the page level
+      e.stopPropagation();   // this Esc is the content's or the pop-up's, never the page's underneath (a menu, an armed Send Call)
+      // the content's own Esc goes first (a chart clears a crosshair or a zoom and says so with preventDefault); the next one closes
+      if (!e.defaultPrevented) { e.preventDefault(); close('key'); }
+    });
+  }
+  /* o = { title, size: 'full' | 'panel', turnHint (a wide thing: "turn your phone sideways"), closeLabel,
+           fill(stage) → cleanup(how) | undefined, where cleanup may return the element focus should go back to } */
+  function fill(o) {
+    titleEl.textContent = o.title || '';
+    root.classList.toggle('is-panel', o.size === 'panel');
+    root.classList.toggle('has-turn', !!o.turnHint);
+    xBtn.setAttribute('aria-label', o.closeLabel || 'Close full screen');
+    stage.textContent = '';
+    stage.scrollTop = 0;
+    const c = o.fill ? o.fill(stage) : null;
+    view.cleanup = typeof c === 'function' ? c : null;
+  }
+  function open(o) {
+    if (view) return false;
+    if (!root) build();
+    view = { opener: o.opener || document.activeElement, cleanup: null, pushed: false };
+    fill(o);
+    root.hidden = false;
+    if (window.lockScroll) lockScroll();
+    release = window.trapFocus ? trapFocus(dialog) : null;
+    // focus on the pop-up itself (a screen reader reads its title); not on ✕, whose tip would pop up over the content's corner.
+    // ✕ is the first Tab stop
+    try { dialog.focus({ preventScroll: true }); } catch {}
+    try { history.pushState({ cf: 1 }, ''); view.pushed = true; } catch {}
+    if (window.SFX) SFX.play('open');
+    return true;
+  }
+  function swap(o) {
+    if (!view) return open(o);
+    const c = view.cleanup; view.cleanup = null;
+    if (c) { try { c('swap'); } catch {} }
+    fill(o);
+    try { dialog.focus({ preventScroll: true }); } catch {}
+    if (window.SFX) SFX.play('select');
+    return true;
+  }
+  // how: 'key' (Esc, or Enter on ✕), 'pointer' (a press on ✕ or the dimmed edge), 'history' (Back)
+  function close(how) {
+    if (!view) return;
+    const v = view; view = null;
+    let back = null;
+    if (v.cleanup) { try { back = v.cleanup(how); } catch {} }
+    stage.textContent = '';
+    root.hidden = true;
+    if (release) { release(); release = null; }
+    if (window.unlockScroll) unlockScroll();
+    // closed by ✕ or Esc: take back the history step the pop-up added (unless something else has replaced it since)
+    if (v.pushed && how !== 'history') { try { if (history.state && history.state.cf) { backing = true; history.back(); } } catch {} }
+    // focus back to what opened it — or where the content says, when that is no longer drawn
+    const drawn = (el) => el && el.isConnected && el.getClientRects().length > 0;
+    const to = drawn(back) ? back : drawn(v.opener) ? v.opener : null;
+    if (to) {
+      try { to.focus({ preventScroll: true }); } catch {}
+      // its tip is for the keyboard: after a press or Back it would sit over the page (on a phone, over the next thing tapped)
+      if (how !== 'key' && window.sendTips) sendTips.hide();
+    }
+    if (window.SFX) SFX.play('close');
+  }
+  /* A layer the site opens above the pop-up on purpose — the $SEND check, the wallet picker, a sign-in check, the age question
+     — answers Esc and Back itself; the pop-up underneath stays put (and so does its scroll lock) until it is the top layer. */
+  const above = () => document.documentElement.classList.contains('age-open') || !!document.querySelector('#invite-overlay[data-open], .wc-overlay:not([hidden]), #auth-modal:not([hidden])');
+  // Back closes it; the step we took back ourselves is just let go; a Back meant for a layer above leaves it open (step put back)
+  window.addEventListener('popstate', () => {
+    if (backing) { backing = false; return; }
+    if (!view || !view.pushed) return;
+    if (above()) { try { history.pushState({ cf: 1 }, ''); } catch {} return; }
+    close('history');
+  });
+  // focus somewhere outside it (a press on a part of the page that takes none): Esc still closes it — unless it is a layer's above
+  document.addEventListener('keydown', (e) => { if (view && e.key === 'Escape' && !e.defaultPrevented && root && !root.contains(e.target) && !above()) close('key'); });
+  /* Focus that wanders out while it is open (Tab out of an outside chart's frame, whose keys the trap never hears) is brought
+     back — unless it went to a layer that sits above the pop-up on purpose (the wallet picker, a sign-in check, the age
+     question, a toast, a tip). */
+  document.addEventListener('focusin', (e) => {
+    if (!view || !root || root.contains(e.target)) return;
+    if (e.target.closest && e.target.closest('#age-gate, .wc-overlay, #auth-modal, #invite-overlay, #toast-zone, .tip-bubble')) return;
+    try { dialog.focus({ preventScroll: true }); } catch {}
+  });
+  window.FullView = { open, swap, close: (how) => close(how || 'key'), isOpen: () => !!view, contains: (el) => !!(root && root.contains(el)) };
+})();
+
 /* ===== Full-screen charts (owner, 2026-10-14: "Allow a user to expand any chart to full screen pop up and easily be able to
    close it") =====================================================================================================
    Every chart carries a ⤢ (button[data-cf-open]) inside its unit ([data-cf-unit]): the on-chain price chart, or the whole
    chart switch with its Dexscreener / CoinGecko views (chart.js, newpairs.js); the wallet's value chart (walletchart.js);
-   the admin day charts (admin.js); the volume bars (newpairs.js); the Loot Log (gamify.js). Pressing it opens this pop-up
-   over the page with that chart filling it.
+   the admin day charts (admin.js); the volume bars (newpairs.js); the Loot Log (gamify.js). Pressing it opens FullView with
+   that chart filling it.
    - A live chart is MOVED in, not copied: the same chart, still updating, with its timeframe, zoom and source as they were.
      A placeholder of its height holds its place, so the page under it does not jump, and it goes back there on close.
      (moveBefore, where the browser has it, also keeps an outside chart's frame from reloading on the way.) A unit with a
      data-cf-key that the page draws again while it is open (the wallet chart, whose old copy stops answering) is followed:
      the new one takes its place in the view.
    - A chart drawn once from its numbers (data-cf-unit="clone") is shown as a copy, without its buttons.
-   - Closing: ✕ Close, Esc, a press on the dimmed edge, or the browser's Back — the pop-up adds one step to the history, so
-     Back on a phone closes it instead of leaving the page. Focus goes back to the ⤢ that opened it.
-   A plain fixed layer above the page's own pop-ups (z 460: over the token dashboard, under the toasts, the tips, the wallet
-   picker and the age question), not <dialog>.showModal() — the top layer would hide the toasts and the tips under it. */
+   - Focus goes back to the ⤢ that opened it. */
 (function () {
-  let root = null, dialog = null, stage = null, titleEl = null, cur = null, release = null, watch = null, backing = false;
+  let cur = null, watch = null;
   /* keep a frame's state across the move where the browser can (moveBefore); otherwise an ordinary move. After a moveBefore,
      Chrome can keep the styles of where the node WAS (the wallet chart came back with the pop-up's layout, its ⤢ still
      hidden so focus could not return to it): one forced restyle of the moved box settles it */
@@ -713,128 +824,72 @@
     unit.parentNode.insertBefore(ph, unit);
     return ph;
   }
-  function build() {
-    root = document.createElement('div');
-    root.id = 'chart-full'; root.className = 'cf'; root.hidden = true;
-    root.innerHTML = '<div class="cf-backdrop" data-cf-close></div>' +
-      '<div class="cf-dialog" role="dialog" aria-modal="true" aria-labelledby="cf-title" tabindex="-1">' +
-        '<div class="cf-head"><h2 class="cf-title" id="cf-title"></h2>' +
-          '<button class="cf-x" type="button" data-cf-close aria-label="Close full screen" data-tip="Puts the chart back on the page — Esc or your browser&#39;s Back does the same">✕ Close</button></div>' +
-        '<p class="cf-turn">Turn your phone sideways for a wider chart.</p>' +
-        '<div class="cf-stage"></div>' +
-      '</div>';
-    document.body.appendChild(root);
-    dialog = root.querySelector('.cf-dialog'); stage = root.querySelector('.cf-stage'); titleEl = root.querySelector('.cf-title');
-    root.addEventListener('click', (e) => { if (e.target.closest('[data-cf-close]')) close(e.detail > 0 ? 'pointer' : 'key'); });   // Enter or Space on ✕ is a click with no detail
-    root.addEventListener('keydown', (e) => {
-      if (e.key !== 'Escape' && e.key !== 'Esc') return;   // other keys travel on: the arrow keys of the chart's own tabs are handled at the page level
-      e.stopPropagation();   // this Esc is the chart's or the pop-up's, never the page's underneath (a menu, an armed Send Call)
-      // the chart's own Esc goes first (it clears a crosshair or a zoom and says so with preventDefault); the next one closes
-      if (!e.defaultPrevented) { e.preventDefault(); close('key'); }
-    });
-  }
   // the page drew a followed unit again while it was open: show the new one (the old one may no longer answer)
   function follow() {
     if (typeof MutationObserver !== 'function') return;
     watch = new MutationObserver(() => {
       if (!cur || !cur.ph || cur.ph.isConnected) return;
       const sel = '[data-cf-key="' + (window.CSS && CSS.escape ? CSS.escape(cur.key) : cur.key) + '"]';
-      const next = [...document.querySelectorAll(sel)].find((x) => !root.contains(x));
+      const next = [...document.querySelectorAll(sel)].find((x) => !FullView.contains(x));
       if (!next) return;   // nothing drawn in its place yet: keep showing this one
       const had = cur.shown.contains(document.activeElement), ctx = cur.shown.parentNode;
       cur.shown.classList.remove('is-cf'); cur.shown.remove();
       cur.ph = holder(next);
       move(ctx, next); next.classList.add('is-cf');
       cur.shown = next; cur.btn = next.querySelector('[data-cf-open]') || cur.btn;
-      if (had) { try { dialog.focus({ preventScroll: true }); } catch {} }
+      if (had) { const d = ctx.closest('.cf-dialog'); if (d) { try { d.focus({ preventScroll: true }); } catch {} } }
     });
     watch.observe(document.body, { childList: true, subtree: true });
   }
   function open(btn) {
     const unit = btn.closest('[data-cf-unit]');
-    if (!unit || cur) return;
-    if (!root) build();
+    if (!unit || cur || FullView.isOpen()) return;
     const clone = unit.getAttribute('data-cf-unit') === 'clone';
-    cur = { btn, clone, key: unit.getAttribute('data-cf-key') || '', ph: null, shown: null, pushed: false };
-    titleEl.textContent = unit.getAttribute('data-cf-title') || 'Chart';
-    const ctx = document.createElement('div');
-    ctx.className = ('cf-ctx ' + (unit.getAttribute('data-cf-ctx') || '')).trim();   // a class the chart's own styles hang off (the wallet chart's .trk-dash)
-    stage.textContent = '';
-    stage.appendChild(ctx);
-    if (clone) {
-      const c = unit.cloneNode(true);
-      // the copy is for looking at: its buttons answer only on the page, and an id must not appear twice
-      c.querySelectorAll('button, [data-cf-drop]').forEach((x) => x.remove());
-      [c, ...c.querySelectorAll('[id], [aria-labelledby], [aria-describedby], [aria-controls]')].forEach((x) => { for (const a of ['id', 'aria-labelledby', 'aria-describedby', 'aria-controls']) x.removeAttribute(a); });
-      c.querySelectorAll('[data-fill]').forEach((x) => { x.style.width = x.getAttribute('data-fill') + '%'; });   // bars the page grows in as they scroll into view, at their full length
-      ctx.appendChild(c);
-      cur.shown = c;
-    } else {
-      cur.ph = holder(unit);
-      move(ctx, unit);
-      unit.classList.add('is-cf');
-      cur.shown = unit;
-      if (cur.key) follow();
-    }
-    root.hidden = false;
-    if (window.lockScroll) lockScroll();
-    release = window.trapFocus ? trapFocus(dialog) : null;
-    // focus on the pop-up itself (a screen reader reads its title); not on ✕, whose tip would pop up over the chart's corner.
-    // ✕ is the first Tab stop
-    try { dialog.focus({ preventScroll: true }); } catch {}
-    try { history.pushState({ cf: 1 }, ''); cur.pushed = true; } catch {}
-    if (window.SFX) SFX.play('open');
+    FullView.open({ title: unit.getAttribute('data-cf-title') || 'Chart', turnHint: true, opener: btn, fill: (stage) => {
+      cur = { btn, clone, key: unit.getAttribute('data-cf-key') || '', ph: null, shown: null };
+      const ctx = document.createElement('div');
+      ctx.className = ('cf-ctx ' + (unit.getAttribute('data-cf-ctx') || '')).trim();   // a class the chart's own styles hang off (the wallet chart's .trk-dash)
+      stage.appendChild(ctx);
+      if (clone) {
+        const c = unit.cloneNode(true);
+        // the copy is for looking at: its buttons answer only on the page, and an id must not appear twice
+        c.querySelectorAll('button, [data-cf-drop]').forEach((x) => x.remove());
+        [c, ...c.querySelectorAll('[id], [aria-labelledby], [aria-describedby], [aria-controls]')].forEach((x) => { for (const a of ['id', 'aria-labelledby', 'aria-describedby', 'aria-controls']) x.removeAttribute(a); });
+        c.querySelectorAll('[data-fill]').forEach((x) => { x.style.width = x.getAttribute('data-fill') + '%'; });   // bars the page grows in as they scroll into view, at their full length
+        ctx.appendChild(c);
+        cur.shown = c;
+      } else {
+        cur.ph = holder(unit);
+        move(ctx, unit);
+        unit.classList.add('is-cf');
+        cur.shown = unit;
+        if (cur.key) follow();
+      }
+      return putBack;
+    } });
   }
-  // how: 'key' (Esc, or Enter on ✕), 'pointer' (a press on ✕ or the dimmed edge), 'history' (Back)
-  function close(how) {
-    if (!cur) return;
-    const fromHistory = how === 'history';
+  // closing: the chart goes back to its place, and focus to its ⤢ — or, if that one is no longer drawn (the switch swapped its
+  // ⤢ for the one beside its source buttons while it was open), to the ⤢ of the same chart that is
+  function putBack() {
     const c = cur; cur = null;
+    if (!c) return null;
     if (watch) { watch.disconnect(); watch = null; }
     if (!c.clone) {
-      c.shown.classList.remove('is-cf');
       if (c.ph && c.ph.isConnected) move(c.ph.parentNode, c.shown, c.ph);
       else c.shown.remove();   // the page drew that spot again while this was open, with a chart of its own: this one is not needed
+      c.shown.classList.remove('is-cf');
       if (c.ph) c.ph.remove();
     }
-    stage.textContent = '';
-    root.hidden = true;
-    if (release) { release(); release = null; }
-    if (window.unlockScroll) unlockScroll();
-    // closed by ✕ or Esc: take back the history step the pop-up added (unless something else has replaced it since)
-    if (c.pushed && !fromHistory) { try { if (history.state && history.state.cf) { backing = true; history.back(); } } catch {} }
-    // focus back to the ⤢ that opened it — or, if that one is no longer drawn (the switch swapped its ⤢ for the one beside its
-    // source buttons while it was open), to the ⤢ of the same chart that is
     const drawn = (el) => el && el.isConnected && el.getClientRects().length > 0;
-    let to = c.btn;
-    if (!drawn(to)) {
-      const u = c.clone ? (c.btn && c.btn.closest('[data-cf-unit]')) : (c.shown && c.shown.isConnected ? c.shown : null);
-      to = (u && [...u.querySelectorAll('[data-cf-open]')].find(drawn)) || null;
-    }
-    if (to) {
-      try { to.focus({ preventScroll: true }); } catch {}
-      // its tip is for the keyboard: after a press or Back it would sit over the page (on a phone, over the next thing tapped)
-      if (how !== 'key' && window.sendTips) sendTips.hide();
-    }
-    if (window.SFX) SFX.play('close');
+    if (drawn(c.btn)) return c.btn;
+    const u = c.clone ? (c.btn && c.btn.closest('[data-cf-unit]')) : (c.shown && c.shown.isConnected ? c.shown : null);
+    return (u && [...u.querySelectorAll('[data-cf-open]')].find(drawn)) || null;
   }
   document.addEventListener('click', (e) => {
     const b = e.target.closest('[data-cf-open]');
-    if (!b || (root && root.contains(b))) return;
+    if (!b || FullView.contains(b)) return;
     e.preventDefault();
     open(b);
   });
-  // Back closes it; the step we took back ourselves is just let go
-  window.addEventListener('popstate', () => { if (backing) { backing = false; return; } if (cur && cur.pushed) close('history'); });
-  // focus somewhere outside it (a press on a part of the page that takes none): Esc still closes it
-  document.addEventListener('keydown', (e) => { if (cur && e.key === 'Escape' && !e.defaultPrevented && root && !root.contains(e.target)) close('key'); });
-  /* Focus that wanders out while it is open (Tab out of an outside chart's frame, whose keys the trap never hears) is brought
-     back — unless it went to a layer that sits above the pop-up on purpose (the wallet picker, a sign-in check, the age
-     question, a toast, a tip). */
-  document.addEventListener('focusin', (e) => {
-    if (!cur || !root || root.contains(e.target)) return;
-    if (e.target.closest && e.target.closest('#age-gate, .wc-overlay, #auth-modal, #invite-overlay, #toast-zone, .tip-bubble')) return;
-    try { dialog.focus({ preventScroll: true }); } catch {}
-  });
-  window.ChartFull = { open, close: () => close('key'), isOpen: () => !!cur };
+  window.ChartFull = { open, close: () => FullView.close('key'), isOpen: () => FullView.isOpen() };
 })();

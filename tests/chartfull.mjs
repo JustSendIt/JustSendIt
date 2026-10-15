@@ -43,26 +43,28 @@ try {
 
   /* ═══ 2. the viewer ═══ */
   check('the pop-up is a labelled modal dialog, built once on first use, with a "✕ Close" button that says Esc and Back work too',
-    /root\.id = 'chart-full'; root\.className = 'cf'; root\.hidden = true;/.test(APP) && /'<div class="cf-dialog" role="dialog" aria-modal="true" aria-labelledby="cf-title" tabindex="-1">'/.test(APP)
-    && /<button class="cf-x" type="button" data-cf-close aria-label="Close full screen" data-tip="Puts the chart back on the page — Esc or your browser&#39;s Back does the same">✕ Close<\/button>/.test(APP));
+    /root\.id = 'full-view'; root\.className = 'cf'; root\.hidden = true;/.test(APP) && /'<div class="cf-dialog" role="dialog" aria-modal="true" aria-labelledby="cf-title" tabindex="-1">'/.test(APP)
+    && /<button class="cf-x" type="button" data-cf-close aria-label="Close full screen" data-tip="Closes this and takes you back to the page — Esc or your browser&#39;s Back does the same">✕ Close<\/button>/.test(APP)
+    && /FullView\.open\(\{ title: unit\.getAttribute\('data-cf-title'\) \|\| 'Chart', turnHint: true, opener: btn, fill: \(stage\) => \{/.test(APP));
   check('  ...it closes on ✕, on the dimmed edge, on Esc (after the chart\'s own Esc, which clears a crosshair or zoom first), and on Back',
     /root\.addEventListener\('click', \(e\) => \{ if \(e\.target\.closest\('\[data-cf-close\]'\)\) close\(e\.detail > 0 \? 'pointer' : 'key'\); \}\);/.test(APP) && /'<div class="cf-backdrop" data-cf-close><\/div>'/.test(APP)
     && /if \(!e\.defaultPrevented\) \{ e\.preventDefault\(\); close\('key'\); \}/.test(APP) && /history\.pushState\(\{ cf: 1 \}, ''\)/.test(APP)
-    && /window\.addEventListener\('popstate', \(\) => \{ if \(backing\) \{ backing = false; return; \} if \(cur && cur\.pushed\) close\('history'\); \}\);/.test(APP)
-    && /if \(c\.pushed && !fromHistory\) \{ try \{ if \(history\.state && history\.state\.cf\) \{ backing = true; history\.back\(\); \} \} catch \{\} \}/.test(APP));
+    && /if \(backing\) \{ backing = false; return; \}\n    if \(!view \|\| !view\.pushed\) return;/.test(APP) && /    close\('history'\);\n  \}\);/.test(APP)
+    && /if \(v\.pushed && how !== 'history'\) \{ try \{ if \(history\.state && history\.state\.cf\) \{ backing = true; history\.back\(\); \} \} catch \{\} \}/.test(APP));
   check('  ...only Esc is kept from the page underneath (the chart\'s tab and radio arrows still reach the shared handler); the Hot Feed steps aside while it is open',
     /if \(e\.key !== 'Escape' && e\.key !== 'Esc'\) return;/.test(APP) && /if \(window\.ChartFull && ChartFull\.isOpen\(\)\) return;/.test(NP));
   check('  ...a live chart is moved in (the same chart, still updating) with a placeholder of its size left behind, and moved back on close',
-    /cur\.ph = holder\(unit\);\n      move\(ctx, unit\);/.test(APP) && /if \(c\.ph && c\.ph\.isConnected\) move\(c\.ph\.parentNode, c\.shown, c\.ph\);/.test(APP)
+    /cur\.ph = holder\(unit\);\n        move\(ctx, unit\);/.test(APP) && /if \(c\.ph && c\.ph\.isConnected\) move\(c\.ph\.parentNode, c\.shown, c\.ph\);/.test(APP) && /return putBack;/.test(APP)
     && /ph\.style\.height = Math\.round\(unit\.getBoundingClientRect\(\)\.height\) \+ 'px';/.test(APP) && /typeof parent\.moveBefore === 'function'/.test(APP));
   check('  ...a copy loses its buttons, its ids and anything marked to drop, and shows its bars at full length',
     /c\.querySelectorAll\('button, \[data-cf-drop\]'\)\.forEach\(\(x\) => x\.remove\(\)\);/.test(APP) && /for \(const a of \['id', 'aria-labelledby', 'aria-describedby', 'aria-controls'\]\) x\.removeAttribute\(a\);/.test(APP)
     && /c\.querySelectorAll\('\[data-fill\]'\)\.forEach/.test(APP));
   check('  ...the page under it does not scroll, focus stays inside (the pop-up takes it, ✕ is the first stop) and returns to the ⤢ on close; it sounds open and close',
     /if \(window\.lockScroll\) lockScroll\(\);/.test(APP) && /release = window\.trapFocus \? trapFocus\(dialog\) : null;/.test(APP) && /try \{ dialog\.focus\(\{ preventScroll: true \}\); \} catch \{\}/.test(APP)
-    && /to = \(u && \[\.\.\.u\.querySelectorAll\('\[data-cf-open\]'\)\]\.find\(drawn\)\) \|\| null;/.test(APP) && /if \(how !== 'key' && window\.sendTips\) sendTips\.hide\(\);/.test(APP) && /if \(window\.SFX\) SFX\.play\('open'\);/.test(APP)
+    && /return \(u && \[\.\.\.u\.querySelectorAll\('\[data-cf-open\]'\)\]\.find\(drawn\)\) \|\| null;/.test(APP) && /const to = drawn\(back\) \? back : drawn\(v\.opener\) \? v\.opener : null;/.test(APP)
+    && /if \(how !== 'key' && window\.sendTips\) sendTips\.hide\(\);/.test(APP) && /if \(window\.SFX\) SFX\.play\('open'\);/.test(APP)
     && /if \(e\.shiftKey && \(document\.activeElement === first \|\| document\.activeElement === container\)\) \{ e\.preventDefault\(\); last\.focus\(\); \}/.test(APP));
-  check('  ...the tour waits while a chart is open full screen', /for \(const id of \['auth-modal', 'compose-modal', 'chart-full'\]\)/.test(TOUR));
+  check('  ...the tour waits while a chart is open full screen', /for \(const id of \['auth-modal', 'compose-modal', 'full-view'\]\)/.test(TOUR));
 
   /* ═══ 3. where it sits, and how the chart fills it ═══ */
   const z = (sel) => { const m = CSS.match(new RegExp(sel.replace(/[.#[\]]/g, (c) => '\\' + c) + ' \\{[^}]*?z-index: (\\d+)')); return m ? +m[1] : null; };
@@ -75,7 +77,7 @@ try {
     && /\.cf \.chart-embed \{ position: relative; height: auto;/.test(CSS) && /\.cf \.trk-dash \.wc-plot \{ flex: 1 1 auto; aspect-ratio: auto;/.test(CSS)
     && /\.cf \.adm-chart-plot \{ flex: 1 1 auto; height: auto;/.test(CSS) && /\.cf \.np-vol \{ flex: 1 1 auto; height: auto;/.test(CSS) && /\.cf \.cf-open \{ display: none; \}/.test(CSS));
   check('  ...edge to edge on a phone, with a hint to turn it sideways (on a phone only, not a narrow desktop window); a fade in that the ⏸ and reduced motion switch off',
-    /@media \(max-width: 640px\) \{\n  \.cf \{ padding: 0; \}/.test(CSS) && /@media \(orientation: portrait\) and \(max-width: 640px\) and \(pointer: coarse\) \{ \.cf-turn \{ display: block; \} \}/.test(CSS)
+    /@media \(max-width: 640px\) \{\n  \.cf \{ padding: 0; \}/.test(CSS) && /@media \(orientation: portrait\) and \(max-width: 640px\) and \(pointer: coarse\) \{ \.cf\.has-turn \.cf-turn \{ display: block; \} \}/.test(CSS) && /root\.classList\.toggle\('has-turn', !!o\.turnHint\);/.test(APP)
     && /@media \(prefers-reduced-motion: no-preference\) \{\n  \.cf:not\(\[hidden\]\) \.cf-dialog \{ animation: cf-in/.test(CSS) && /html\.motion-off \.cf \.cf-dialog \{ animation: none; \}/.test(CSS)
     && /@keyframes cf-in \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/.test(CSS));
   check('  ...the ⤢ is a 34px square (44px for a finger), drawn as an icon, never colour alone', /\.cf-open \{ flex: 0 0 auto; display: inline-flex;[^}]*width: 34px; height: 34px;/.test(CSS) && /@media \(pointer: coarse\) \{ \.cf-open \{ width: 44px; height: 44px; \} \}/.test(CSS) && /\.cf-ico \{ display: block; width: 1em; height: 1em; background: currentColor;/.test(CSS));
@@ -87,7 +89,7 @@ try {
   check('  ...a chart moved with moveBefore is restyled where it lands (Chrome kept the pop-up\'s layout on the wallet chart, and its ⤢ hidden)',
     /parent\.moveBefore\(node, before \|\| null\);\n        const d = node\.style\.display; node\.style\.display = 'none'; void node\.offsetWidth; node\.style\.display = d;/.test(APP));
   check('  ...an outside chart\'s frame is a Tab stop, and focus that wanders out of the pop-up is brought back (not from the layers above it)',
-    /details > summary,iframe,\[tabindex\]/.test(APP) && /document\.addEventListener\('focusin', \(e\) => \{\n    if \(!cur \|\| !root \|\| root\.contains\(e\.target\)\) return;/.test(APP)
+    /details > summary,iframe,video\[controls\],audio\[controls\],\[tabindex\]/.test(APP) && /document\.addEventListener\('focusin', \(e\) => \{\n    if \(!view \|\| !root \|\| root\.contains\(e\.target\)\) return;/.test(APP)
     && /e\.target\.closest\('#age-gate, \.wc-overlay, #auth-modal, #invite-overlay, #toast-zone, \.tip-bubble'\)/.test(APP));
   check('  ...on a short screen (a phone held sideways) every chart is sized to the room under it, its time axis on screen',
     /@media \(max-height: 520px\) \{\n  \.cf \{ padding: 0; \}/.test(CSS) && /  \.cf \.oc-plot \{ min-height: 150px; min-height: max\(150px, calc\(100vh - 205px\)\); min-height: max\(150px, calc\(100dvh - 205px\)\); \}/.test(CSS)
