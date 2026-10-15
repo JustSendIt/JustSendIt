@@ -382,7 +382,7 @@
         b.setAttribute('aria-label', tip); b.setAttribute('data-tip', tip);
         b.addEventListener('click', async () => {
           bar.textContent = v > 0 ? 'Thanks — noted 👍' : 'Thanks — I\'ll do better 👎';
-          if (window.SFX) SFX.play('vote');   // a 👍 or 👎 cast on the answer
+          if (window.SFX) SFX.play(v > 0 ? 'vote' : 'downvote');   // a 👍 rises, a 👎 steps down
           chatInput.focus();   // the button just replaced itself with the thanks
           try { await fetch('/api/sendy/rate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, vote: v }) }); } catch {}
         });

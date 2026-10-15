@@ -88,7 +88,7 @@
   // same 📈 chart the New Pairs detail shows — the watchlist renders its own (lighter) body, so it needs its own copy
   function chartHTML(p) {
     if (!p.indexed || !p.pair || !p.pair.address) return '<p class="np-why-clean">📈 No chart — the price feed does not index this pair, so there is no price history to draw. That says nothing about whether it trades.</p>';
-    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
+    return '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000" data-cf-title="' + esc(p.token.symbol ? '$' + p.token.symbol + ' price chart' : 'Price chart') + '"></div>' +
       '<p class="np-chart-note">Built live from on-chain swaps. <a href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a></p>';
   }
   function detailHTML(p) {

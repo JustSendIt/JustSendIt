@@ -206,11 +206,17 @@
       if (v == null) return '<span class="adm-bar is-none" title="' + esc(r.day) + ': not counted — the site did not count visits before ' + esc(dauData.trackingSince || dauData.today) + '"></span>';
       return '<span class="adm-bar' + (v === 0 ? ' is-zero' : '') + (r.day === today ? ' is-today' : '') + '" style="--h:' + (v / top * 100).toFixed(2) + '%" title="' + esc(r.day) + (r.day === today ? ' (today, so far)' : '') + ': ' + num(v) + ' ' + esc(word) + '"></span>';
     }).join('');
-    const label = title + ', ' + short(rows[0].day) + ' to ' + short(last.day) + ': ' + (counted.length ? 'highest ' + num(best[key]) + ' on ' + short(best.day) + '; today so far ' + num(last[key] == null ? 0 : last[key]) : 'nothing counted in these days') + '. Every day’s number is in the table below.';
+    const label = title + ', ' + short(rows[0].day) + ' to ' + short(last.day) + ': ' + (counted.length ? 'highest ' + num(best[key]) + ' on ' + short(best.day) + '; today so far ' + num(last[key] == null ? 0 : last[key]) : 'nothing counted in these days') + '.';
     const mid = rows[Math.floor((rows.length - 1) / 2)];
-    return '<figure class="adm-chart ' + cls + '"><figcaption>' + esc(title) + ' <small>' + esc(sub) + '</small></figcaption>' +
+    // drawn once from the numbers, so the full-screen view (ChartFull, app.js) shows a copy of it, bars and day tips included
+    // the ⤢ sits beside the caption, not in it (a caption names the figure; the button's words are not part of that name). The
+    // pointer to the table is said only on the page: the full-screen copy has no table under it, so it leaves the note out
+    const note = 'adm-tblnote-' + key;
+    return '<figure class="adm-chart ' + cls + '" data-cf-unit="clone" data-cf-title="' + esc(title) + '"><figcaption>' + esc(title) + ' <small>' + esc(sub) + '</small></figcaption>' +
+      '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc(title.toLowerCase()) + ' chart full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
+      '<span class="sr-only" id="' + note + '" data-cf-drop>Every day’s number is in the table below.</span>' +
       '<div class="adm-chart-plot"><div class="adm-chart-y" aria-hidden="true"><span>' + num(top) + '</span><span>' + num(top / 2) + '</span><span>0</span></div>' +
-      '<div class="adm-chart-bars" role="img" aria-label="' + esc(label) + '">' + bars + '</div></div>' +
+      '<div class="adm-chart-bars" role="img" aria-label="' + esc(label) + '" aria-describedby="' + note + '">' + bars + '</div></div>' +
       '<div class="adm-chart-x" aria-hidden="true"><span>' + esc(short(rows[0].day)) + '</span>' + (rows.length > 2 ? '<span>' + esc(short(mid.day)) + '</span>' : '') + '<span>' + esc(short(last.day)) + (last.day === today ? ' (today)' : '') + '</span></div></figure>';
   }
   function renderDau() {

@@ -222,7 +222,7 @@ feedEl.addEventListener('click', async (e) => {
     try {
       const j = await api('/api/posts/' + id + '/vote', { method: 'POST', body: { dir: vBtn.dataset.vote } });
       setVote(post, j.score, j.myVote);
-      if (window.SFX) SFX.play(j.myVote ? 'vote' : 'off');   // the server counted it (or cleared it)
+      if (window.SFX) SFX.play(j.myVote === 1 ? 'vote' : j.myVote === -1 ? 'downvote' : 'off');   // the server counted it, up or down (or cleared it)
       vBtn.classList.remove('pop'); void vBtn.offsetWidth; vBtn.classList.add('pop');
       if (j.pointsEarned && window.showPoints) { const r = vBtn.getBoundingClientRect(); showPoints(j.pointsEarned, r.left, r.top); }
       maybeResortNudge();

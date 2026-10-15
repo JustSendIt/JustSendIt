@@ -113,7 +113,7 @@ try {
     check('client: there is a view, and it starts fitted', /const defaultView = \(\) => \(\{ x: 1, y: 1, tEnd: null \}\)/.test(CHART));
     check('client: zoom is clamped at both ends', /const ZOOM_MIN = 1, ZOOM_MAX = 60/.test(CHART) && /clamp\(v\.x, ZOOM_MIN, ZOOM_MAX\)/.test(CHART));
     check('client: dragging a scale is exponential, so a drag means the same thing at every span', /Math\.exp\(\(d \/ reach\) \* ZOOM_RATE\)/.test(CHART));
-    check('client: the scales answer the keyboard too', /g\.addEventListener\('keydown'/.test(CHART) && /k === 'Home' \|\| k === 'Escape'/.test(CHART));
+    check('client: the scales answer the keyboard too', /g\.addEventListener\('keydown'/.test(CHART) && /k === 'Home' \|\| \(k === 'Escape' && isZoomed\(host\._view\)\)/.test(CHART));
     check('client: panning exists only once the window no longer fits', /if \(!g \|\| view\(\)\.x <= 1\) return;/.test(CHART));
     check('client: letting go at the live edge re-pins the view to it', /view\(\)\.tEnd = \(t1 >= g\.fullT1 - 1\) \? null : t1;/.test(CHART));
     check('client: a timeframe change starts fitted again', /host\._view = defaultView\(\);\s+\/\/ a new timeframe/.test(CHART));

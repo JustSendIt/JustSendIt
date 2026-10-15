@@ -164,7 +164,7 @@
     const pts = data.points || [];
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const r = cv.getBoundingClientRect();
-    const W = Math.max(240, Math.round(r.width)), H = Math.max(160, Math.round(r.height));
+    const W = r.width >= 1 ? Math.round(r.width) : 240, H = r.height >= 1 ? Math.round(r.height) : 160;   // the box's own size: a bigger bitmap is squeezed into it
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
@@ -497,6 +497,15 @@
     tip.style.top = Math.round(top) + 'px';
   }
   function hideTip(host) { const t = host.querySelector('.oc-tip'); if (t) t.hidden = true; }
+  /* A box that scrolls has to be reachable from a keyboard, and named when it is — but a tape that fits must not leave a dead
+     tab stop behind. Decided from the rendered width: after each load, and again whenever the chart changes size (opened full
+     screen and put back, a window resized). */
+  function fitTape(host) {
+    const sc = host.querySelector('.oc-tape-scroll'); if (!sc) return;
+    const over = sc.scrollWidth > sc.clientWidth + 1;
+    if (over) { sc.tabIndex = 0; sc.setAttribute('role', 'region'); sc.setAttribute('aria-label', 'Recent transactions, scrollable'); }
+    else { sc.removeAttribute('tabindex'); sc.removeAttribute('role'); sc.removeAttribute('aria-label'); }
+  }
 
   /* Pointer handling. Markers win over the price readout when the pointer is on one, because a marker is
      the more specific thing the person is pointing at. */
@@ -601,7 +610,8 @@
         else if (axis === 'x' && (k === 'ArrowLeft' || k === 'ArrowDown')) step(false);
         else if (axis === 'y' && (k === 'ArrowUp' || k === 'ArrowRight')) step(true);
         else if (axis === 'y' && (k === 'ArrowDown' || k === 'ArrowLeft')) step(false);
-        else if (k === 'Home' || k === 'Escape') { host._view = defaultView(); redraw(); }
+        // Esc clears a zoom; with nothing to clear it is not the scale's, and travels on (closing the full-screen view, say)
+        else if (k === 'Home' || (k === 'Escape' && isZoomed(host._view))) { host._view = defaultView(); redraw(); }
         else return;
         e.preventDefault();
       });
@@ -924,12 +934,7 @@
       if (det) det.hidden = !(d.trades && d.trades.length);
       /* A box that scrolls has to be reachable from a keyboard, and named when it is — but a tape that
          fits must not leave a dead tab stop behind, so this is decided from the rendered width. */
-      const sc = tape.querySelector('.oc-tape-scroll');
-      if (sc) requestAnimationFrame(() => {
-        const over = sc.scrollWidth > sc.clientWidth + 1;
-        if (over) { sc.tabIndex = 0; sc.setAttribute('role', 'region'); sc.setAttribute('aria-label', 'Recent transactions, scrollable'); }
-        else { sc.removeAttribute('tabindex'); sc.removeAttribute('role'); sc.removeAttribute('aria-label'); }
-      });
+      requestAnimationFrame(() => fitTape(host));
     }
     wirePointer(host);
     wireScales(host);
@@ -1035,6 +1040,9 @@
   window.renderOnChainChart = function (host) {
     if (!host || host._wired) { if (host && host._wired) load(host); return; }
     host._wired = true;
+    // the ⤢ in the head opens the full-screen view (app.js, ChartFull). Inside a .chart-switch the whole switch goes, so its
+    // source buttons and Dexscreener / CoinGecko views go too; a chart on its own is its own unit
+    if (!host.closest('[data-cf-unit]')) { host.setAttribute('data-cf-unit', ''); if (!host.hasAttribute('data-cf-title')) host.setAttribute('data-cf-title', 'Price chart'); }
     host.innerHTML =
       '<div class="oc-head">' +
         '<div class="oc-tfs" role="tablist" aria-label="Chart timeframe">' +
@@ -1044,6 +1052,7 @@
         '<span class="oc-live" aria-live="off"></span>' +
         '<span class="oc-src" title="History from this pair contract&#39;s own Swap events; the live price from its reserves, every ' +
           Math.round(Math.max(1000, Number(host.dataset.poll) || 1000) / 1000) + 's">⛓️ on-chain · live</span>' +
+        '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc(host.closest('[data-cf-unit]').getAttribute('data-cf-title') || 'price chart') + ' full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
       '</div>' +
       '<div class="oc-plot">' +
         '<canvas class="oc-canvas" role="img" aria-label="Price chart"></canvas>' +
@@ -1089,7 +1098,21 @@
       if (host._toggles.dev && !host._devLoaded) loadMarkers(host);
     });
     let rt;
-    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (host._data) paint(host); }, 150); });
+    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (host._data) paint(host); fitTape(host); }, 150); });
+    // ...and whenever its own box changes size with the window standing still (opened full screen, put back, a column
+    // reflowing): redrawn sharp at the new size, not the old picture stretched
+    if (typeof ResizeObserver === 'function') {
+      let seen = '';
+      new ResizeObserver(() => {
+        const r = host.querySelector('.oc-canvas').getBoundingClientRect(), k = Math.round(r.width) + 'x' + Math.round(r.height);
+        if (!r.width || !r.height || k === seen) return;
+        seen = k;
+        // a crosshair and its card belong to a pointer position at the old size
+        const cv = host.querySelector('.oc-canvas'); cv._hover = null; cv.style.cursor = ''; hideTip(host);
+        if (host._data) paint(host, true);   // the picture only: the status line and the table do not change with the size
+        fitTape(host);
+      }).observe(host.querySelector('.oc-canvas'));
+    }
     // Only a chart actually on screen polls. Without this, every collapsed detail body on a long
     // list would hammer the endpoint once a second each.
     host._visible = true;
@@ -1195,6 +1218,7 @@
     let any = false;
     wrap.querySelectorAll('.chart-src-btn').forEach((b) => { const k = b.dataset.chartsrc; if (k === 'onchain') return; b.hidden = !wrap._srcs[k]; if (wrap._srcs[k]) any = true; });
     const grp = wrap.querySelector('.chart-src'); if (grp) grp.hidden = !any;
+    wrap.classList.toggle('has-src', any);   // the switch's own ⤢ (beside the source buttons) stands in for the chart head's
     const x = wrap.querySelector('.np-dex-xcheck'); if (x) x.hidden = s.dexscreener === false;   // a link to "pair not found" is no cross-check
     const cur = wrap._src || 'onchain';
     if (cur !== 'onchain' && !wrap._srcs[cur]) showChartSrc(wrap, 'onchain');

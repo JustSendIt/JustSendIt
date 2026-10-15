@@ -163,7 +163,7 @@
     const st = { id: nextId++, x: clamp(x, 0, base.width), y: clamp(y, 0, base.height), size: lastSize, rot: 0 };
     selectedId = st.id;
     commit(stickers.concat([st]));
-    if (window.SFX) SFX.play('launch');   // a rocket goes on the picture
+    if (window.SFX) SFX.play('zip');   // a rocket goes on the picture
     announce('Rocket added — ' + countText());
   }
   function removeSelected() {
@@ -180,7 +180,7 @@
     const copy = { ...st, id: nextId++, x: clamp(st.x + off, 0, base.width), y: clamp(st.y + off, 0, base.height) };
     selectedId = copy.id;
     commit(stickers.concat([copy]));
-    if (window.SFX) SFX.play('launch');   // one more rocket
+    if (window.SFX) SFX.play('zip');   // one more rocket
     announce('Rocket duplicated — ' + countText());
   }
   function selectNext() {

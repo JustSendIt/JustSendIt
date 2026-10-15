@@ -5510,3 +5510,89 @@ html.motion-off .tkd-more-caret { transition: none; }
 /* On the Scanner page the result breaks out of the 900px column so three columns have room; the other
    controls keep their width. Same centre as the column, never wider than the window less 1rem a side. */
 .sc-result:has(> .tkd) { width: min(1680px, calc(100vw - 2rem)); margin-left: calc(50% - min(840px, 50vw - 1rem)); }
+
+/* ===== Full-screen charts (app.js, ChartFull — owner, 2026-10-14: "Allow a user to expand any chart to full screen pop up and
+   easily be able to close it") =====
+   The ⤢ on every chart, and the pop-up it opens. In the pop-up the chart takes the room there is: its plot grows to fill what
+   the head and the controls leave, and never shrinks under a readable height (with a table opened below it, the view
+   scrolls instead). */
+.cf-open { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; padding: 0; border: 1.5px solid var(--ctl-fill-lo); border-radius: 10px; background: var(--ctl-fill-lo); color: var(--ctl-ink); font-size: max(var(--text-floor), 1rem); line-height: 1; cursor: pointer; }
+.cf-open:hover { background: var(--ctl-fill-hi); border-color: var(--ctl-fill-hi); }
+.cf-open:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+@media (pointer: coarse) { .cf-open { width: 44px; height: 44px; } }
+/* four corners pointing out: drawn, so it is centred and the same on every device (no font has to carry it) */
+.cf-ico { display: block; width: 1em; height: 1em; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M1 1h7v2.5H3.5V8H1zM12 1h7v7h-2.5V3.5H12zM1 12h2.5v4.5H8V19H1zM16.5 12H19v7h-7v-2.5h4.5z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M1 1h7v2.5H3.5V8H1zM12 1h7v7h-2.5V3.5H12zM1 12h2.5v4.5H8V19H1zM16.5 12H19v7h-7v-2.5h4.5z'/%3E%3C/svg%3E") center / 100% 100% no-repeat; }
+@media (forced-colors: active) { .cf-ico { background: ButtonText; } }
+/* where the ⤢ sits: the price chart's head (last, after the live price); beside the source buttons when the switch has them */
+.chart-src-row { display: none; }
+.chart-switch.has-src > .chart-src-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; min-width: 0; }   /* the ⤢ stays top right; the source buttons wrap beside it */
+.chart-src-row > .chart-src { flex: 0 1 auto; min-width: 0; }
+.chart-switch.has-src .oc-head .cf-open { display: none; }
+.np-vol-lbl { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+/* the admin day chart: the ⤢ beside its caption, everything else full width under them */
+.adm-chart { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 1rem; align-items: start; }
+.adm-chart > * { grid-column: 1 / -1; }
+.adm-chart > figcaption { grid-column: 1; grid-row: 1; }
+.adm-chart > .cf-open { grid-column: 2; grid-row: 1; }
+.ll-head-r { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.wc-head-r { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+/* the pop-up */
+.cf { position: fixed; inset: 0; z-index: 460; display: flex; justify-content: center; padding: clamp(0px, 1.6vw, 1.25rem); }
+.cf[hidden] { display: none; }   /* closed means no box at all: agegate.js and arcade.js look for an open dialog by its box */
+.cf-backdrop { position: absolute; inset: 0; background: rgba(4, 7, 4, 0.82); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+.cf-dialog { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 1920px; min-width: 0; min-height: 0; background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 16px; overflow: hidden; box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55); }
+.cf-dialog:focus { outline: none; }   /* it takes focus only so a press on the chart keeps Esc inside it; the ✕ shows the ring */
+.cf-head { flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem 1rem; padding: 0.55rem 0.7rem 0.55rem 1.1rem; border-bottom: 1.5px solid var(--ink-4); }
+.cf-title { flex: 1 1 auto; min-width: 0; margin: 0; font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; color: var(--green-bright); font-size: max(var(--text-floor), 1.3rem); line-height: 1.2; overflow-wrap: anywhere; }
+.cf-x { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0.35rem 1.05rem; border: 1.5px solid var(--edge-ctl); border-radius: 999px; background: var(--ctl-fill-lo); color: var(--ctl-ink); font-weight: 800; font-size: max(var(--text-floor), 0.95rem); line-height: 1.1; white-space: nowrap; cursor: pointer; }
+.cf-x:hover { background: var(--red); border-color: var(--red); color: var(--on-red); }
+.cf-x:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.cf-turn { display: none; margin: 0; padding: 0.35rem 1rem; border-bottom: 1px solid var(--hair); color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.4; }
+@media (orientation: portrait) and (max-width: 640px) and (pointer: coarse) { .cf-turn { display: block; } }   /* a phone, not a narrow desktop window */
+.cf-stage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0.8rem 1rem 1rem; }
+.cf .cf-ctx { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; }   /* .cf .cf-ctx: above .trk-dash's own display */
+.cf .cf-ctx > [data-cf-unit] { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; margin: 0; }
+.cf .cf-open { display: none; }   /* already full screen */
+.cf-ph { display: block; min-width: 0; }
+@media (max-width: 640px) {
+  .cf { padding: 0; }
+  .cf-dialog { border: 0; border-radius: 0; }
+  .cf-head { padding-left: 0.8rem; }
+  .cf-stage { padding: 0.5rem 0.5rem 0.75rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cf:not([hidden]) .cf-dialog { animation: cf-in 0.16s ease-out; }   /* a fade only: a scale would hand the chart a shrunken box to measure */
+}
+html.motion-off .cf .cf-dialog { animation: none; }
+@keyframes cf-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* each chart in the pop-up: the plot takes the room; at least 55% of the screen even with a table open under it */
+.cf .chart-switch > .onchain-chart, .cf .chart-switch > .chart-embed { flex: 1 0 auto; }
+.cf .onchain-chart { display: flex; flex-direction: column; }
+.cf .oc-plot { flex: 1 1 auto; min-height: 240px; min-height: max(240px, 55vh); min-height: max(240px, 55dvh); }
+.cf .oc-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.cf .chart-embed { position: relative; height: auto; min-height: 380px; min-height: max(380px, 60vh); min-height: max(380px, 60dvh); }
+.cf .chart-embed-frame { position: absolute; inset: 0; }
+.cf .cf-ctx > .wc { display: flex; flex-direction: column; }
+.cf .trk-dash .wc-plot { flex: 1 1 auto; aspect-ratio: auto; min-height: 240px; min-height: max(240px, 55vh); min-height: max(240px, 55dvh); }
+.cf .trk-dash .wc-canvas { position: absolute; inset: 0; }
+.cf .adm-chart-plot { flex: 1 1 auto; height: auto; min-height: 220px; min-height: max(220px, 55vh); min-height: max(220px, 55dvh); }
+.cf .np-vol { flex: 1 1 auto; height: auto; min-height: 200px; min-height: max(200px, 50vh); min-height: max(200px, 50dvh); }
+.cf .cf-ctx > .loot { width: 100%; max-width: 1100px; margin: 0 auto; }   /* a ranked list reads best at a line length, not the full width of a big screen */
+/* a short screen (a phone held sideways): edge to edge, a slimmer head, and each chart sized to the room left under it, so
+   its time axis is on screen without scrolling — the floors above are for screens with height to spare */
+@media (max-height: 520px) {
+  .cf { padding: 0; }
+  .cf-dialog { border: 0; border-radius: 0; }
+  .cf-head { padding-block: 0.2rem; }
+  .cf-stage { padding: 0.4rem 0.6rem 0.6rem; }
+  .cf .oc-src { display: none; }
+  .cf .oc-plot { min-height: 150px; min-height: max(150px, calc(100vh - 205px)); min-height: max(150px, calc(100dvh - 205px)); }
+  .cf .chart-embed { min-height: 180px; min-height: max(180px, calc(100vh - 130px)); min-height: max(180px, calc(100dvh - 130px)); }
+  .cf .trk-dash .wc-plot { min-height: 150px; min-height: max(150px, calc(100vh - 190px)); min-height: max(150px, calc(100dvh - 190px)); }
+  .cf .adm-chart-plot { min-height: 140px; min-height: max(140px, calc(100vh - 150px)); min-height: max(140px, calc(100dvh - 150px)); }
+  .cf .np-vol { min-height: 130px; min-height: max(130px, calc(100vh - 170px)); min-height: max(130px, calc(100dvh - 170px)); }
+}

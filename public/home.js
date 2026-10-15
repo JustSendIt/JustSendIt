@@ -239,12 +239,12 @@ async function watchSwapTx(hash) {
       if (rcpt) {
         if (inflight) inflight.hidden = true;
         if (rcpt.status === '0x1') {
-          if (window.SFX) SFX.play('launch');   // the chain confirmed the buy: the rocket storm's own sound
+          // no sound of its own: the calm 'swap' answered the signature, and a buy is never given a reward fanfare (the toasts get the plain bell)
           rocketStorm();
           setTimeout(() => refreshMcap({ pump: true }), 1200);
           // credit Send Points for the verified on-chain swap (server re-verifies the receipt; no-op if signed out)
           fetch('/api/gamify/swap', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ txHash: hash }) })
-            .then(r => r.json()).then(j => { if (j && j.awarded > 0 && window.SFX) SFX.play('coin'); return j; })   // Send Power banked for the swap
+            .then(r => r.json())
             .then(j => { if (j && j.awarded > 0) { sendToast('+' + j.awarded + ' Send Points for that swap! 🎮'); if (window.showPoints) showPoints(j.awarded); } }).catch(() => {});
         } else {
           if (window.SFX) SFX.play('error');   // reverted on-chain (the toast's words do not buzz on their own)

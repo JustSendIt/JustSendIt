@@ -871,11 +871,17 @@
     // Our own chart, drawn from this pair's Swap events, is the default: same underlying data every aggregator uses,
     // minus the tracking surface and the extra hop. Dexscreener's and CoinGecko's are a tap away, never loaded unasked.
     const dex = p.links && p.links.dex;   // a stored snapshot can carry no link (the server drops any that is not plain http/https)
-    return '<div class="chart-switch" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol || '') + '">' +
+    // the whole switch is what opens full screen (ChartFull, app.js): ours, or the outside chart picked, with the buttons to swap
+    return '<div class="chart-switch" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol || '') + '" data-cf-unit data-cf-title="' + esc(p.token.symbol ? '$' + p.token.symbol + ' price chart' : 'Price chart') + '">' +
+      // the source row shows only where another site lists the pool (chart.js applySources sets .has-src); its ⤢ then stands in
+      // for the one in our chart's head, so a Dexscreener or CoinGecko view can go full screen too
+      '<div class="chart-src-row">' +
       '<div class="chart-src" role="group" aria-label="Chart source" hidden>' +
         '<button class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="Our own chart, drawn from this pool&#39;s swaps on the chain — nothing loads from another company">⛓️ On-chain</button>' +
         '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="dexscreener" hidden data-tip="Dexscreener&#39;s chart of this pool — your browser loads it from dexscreener.com once you pick it">Dexscreener</button>' +
         '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="geckoterminal" hidden data-tip="CoinGecko&#39;s chart of this pool (GeckoTerminal) — your browser loads it from geckoterminal.com once you pick it">CoinGecko</button>' +
+      '</div>' +
+      '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc(p.token.symbol ? '$' + p.token.symbol + ' price chart' : 'price chart') + ' full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
       '</div>' +
       '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
       '<div class="chart-embed" hidden></div>' +
@@ -1019,6 +1025,12 @@
     return '<div class="np-vol" role="img" aria-label="Volume: 5m ' + npFmtUsd(v.m5) + ', 1h ' + npFmtUsd(v.h1) + ', 6h ' + npFmtUsd(v.h6) + ', 24h ' + npFmtUsd(v.h24) + '">' +
       vbar(v.m5, '5m') + vbar(v.h1, '1h') + vbar(v.h6, '6h') + vbar(v.h24, '24h') + '</div>';
   }
+  // the bars with their label and a ⤢: drawn once, so the full-screen view shows a copy (data-cf-unit="clone")
+  function volWrapHTML(p, lbl) {
+    return '<div class="np-vol-wrap" data-cf-unit="clone" data-cf-title="' + esc((p.token.symbol ? '$' + p.token.symbol + ' — ' : '') + 'volume by window') + '">' +
+      '<div class="lbl np-vol-lbl"><span>' + lbl + '</span><button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc((p.token.symbol ? '$' + p.token.symbol + ' ' : '') + 'volume chart') + ' full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button></div>' +
+      volBarsHTML(p) + '</div>';
+  }
   function marketKvHTML(p) {
     const m = p.market || {}, r = p.risk || {}, supply = supplyOf(p);
     return '<div class="np-kv">' +
@@ -1093,7 +1105,7 @@
 
     // A. Market
     const marketInner = marketKvHTML(p) + reservesHTML(p) + capTrail(p) +
-      '<div class="np-vol-wrap"><div class="lbl">Volume</div>' + volBarsHTML(p) + '</div>' +
+      volWrapHTML(p, 'Volume') +
       '<div class="np-moves">' + moveChip('1h', p.priceChange.h1) + moveChip('6h', p.priceChange.h6) + moveChip('24h', p.priceChange.h24) + '</div>';
 
     // B. Activity — flow bar + full txn table
@@ -1282,7 +1294,7 @@
     const cChart = dashCard(u, 'chart', hc, '📈 Price chart', chartHTML(p));
     const flow = flowHTML(p);
     const cActivity = dashCard(u, 'activity', hc, '🔁 Trading activity',
-      (flow || noTradesHTML(p)) + (p.indexed ? '<div class="np-vol-wrap"><div class="lbl">Volume by window</div>' + volBarsHTML(p) + '</div>' : ''),
+      (flow || noTradesHTML(p)) + (p.indexed ? volWrapHTML(p, 'Volume by window') : ''),
       p.indexed ? txTableHTML(p) : '', 'Buys and sells by window');
     const cBlock0 = dashCard(u, 'block0', hc, '🎯 Block 0 — the first buyers', block0SummaryHTML(p),
       '<div class="np-b0" data-token="' + esc(t.address) + '"></div>', 'Every first buyer, wallet by wallet');
@@ -2198,7 +2210,7 @@
         c.textContent = 'you \u00d7' + n;                              // never a bare integer — see rocketCount
         try { localStorage.setItem('np:rocket:' + react.dataset.addr, String(n)); } catch {}
         if (!reduced()) { react.classList.remove('pop'); void react.offsetWidth; react.classList.add('pop'); }
-        if (window.SFX) SFX.play('launch');   // 🚀 hyped: a rocket goes
+        if (window.SFX) SFX.play('zip');   // 🚀 hyped: a small rocket (a fidget, so a short sound, not the launch)
         if (window.sendToast) sendToast('Hyped \ud83d\ude80 — a private tap only you see. Still DYOR, not advice.'); return;
       }
       // ℹ️ and "Full dashboard" open the token's dashboard in the popup (the inline detail only where there is no popup)
@@ -2515,6 +2527,7 @@
   function feedKeydown(e) {
     if (state.mode !== 'feed') return;
     const tm = document.getElementById('token-modal'); if (tm && !tm.hidden) return;   // the dashboard popup is open over the feed: its keys are its own
+    if (window.ChartFull && ChartFull.isOpen()) return;   // a chart is open full screen over the feed (app.js): its keys are its own
     /* Only take the keyboard when nothing interactive owns it. The old guard skipped form fields and
        nothing else, so a keyboard user who tabbed onto a button, link or summary inside the feed and
        pressed Enter got the card's details toggled instead of the control they were on — every control in

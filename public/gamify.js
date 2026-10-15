@@ -706,7 +706,7 @@
     });
   }
   function lootToggle() {
-    return '<div class="ll-toggle" role="group" aria-label="Achievement log window">' +
+    return '<div class="ll-toggle" role="group" aria-label="Achievement log window" data-cf-drop>' +   // data-cf-drop: left out of the full-screen copy
       '<button type="button" data-tip="Narrows the log to earnings from the past day" data-lootmode="today" class="' + (_lootMode === 'today' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'today') + '">Today</button>' +
       '<button type="button" data-tip="Shows your whole earning history instead of just today" data-lootmode="all" class="' + (_lootMode === 'all' ? 'active' : '') + '" aria-pressed="' + (_lootMode === 'all') + '">All&nbsp;time</button>' +
     '</div>';
@@ -721,7 +721,9 @@
     const all = ((_lootMode === 'today' ? g.todayBreakdown : g.breakdown) || []).filter(x => x.total !== 0);
     const bd = all.filter(x => x.total > 0);
     const losses = all.filter(x => x.total < 0);
-    const head = '<div class="ll-head"><h3 class="gsub">🎒 Loot Log</h3>' + lootToggle() + '</div>';
+    // with something to chart, a ⤢ opens it full screen (ChartFull, app.js) as a copy — the window toggle and the ⓘ buttons stay here
+    const full = bd.length ? '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the Loot Log full screen" data-tip="Opens the Loot Log full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' : '';
+    const head = '<div class="ll-head"><h3 class="gsub">🎒 Loot Log</h3><span class="ll-head-r">' + lootToggle() + full + '</span></div>';
     if (!bd.length && !losses.length) {
       return '<div class="loot">' + head +
         '<p class="modal-note">' + (_lootMode === 'today' ? 'No loot today yet — the log resets every 24h. Complete a quest below! 🗺️' : 'No loot yet — complete a quest below to start your log. 🗺️') + '</p></div>';
@@ -750,7 +752,7 @@
     });
     // nudge an untried high-value action
     if (!bd.find(x => x.kind === 'swap')) {
-      rows += '<li class="ll-nudge"><span class="ll-ico" aria-hidden="true">🚀</span>' +
+      rows += '<li class="ll-nudge" data-cf-drop><span class="ll-ico" aria-hidden="true">🚀</span>' +
         '<a class="ll-label" href="/#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
     }
     /* What was taken, listed under what was given rather than left out of the ledger entirely. It is kept
@@ -768,10 +770,10 @@
           '<span class="ll-pts ll-pts-loss">−' + nf(Math.abs(x.total)) + '</span>' +
         '</li>';
       }).join('') + '</ul>' +
-      '<p class="loot-foot loot-foot-loss">Taken back ' + (_lootMode === 'today' ? 'today' : 'all time') + ': <b>−' + nf(lost) + '</b> · ' +
-      '<a href="#rekt-h">why, and what it costs you next →</a></p>';
+      '<p class="loot-foot loot-foot-loss">Taken back ' + (_lootMode === 'today' ? 'today' : 'all time') + ': <b>−' + nf(lost) + '</b>' +
+      '<span data-cf-drop> · <a href="#rekt-h">why, and what it costs you next →</a></span></p>';   // an in-page link, so not in the full-screen copy
     }
-    return '<div class="loot">' + head +
+    return '<div class="loot"' + (bd.length ? ' data-cf-unit="clone" data-cf-title="' + (_lootMode === 'today' ? 'Loot Log — Send Power earned today, by source' : 'Loot Log — Send Power earned, by source') + '"' : '') + '>' + head +
       (bd.length ? '<div class="loot-bar" role="img" aria-label="Points by source: ' + esc(legend) + '">' + segs + '</div>' +
         '<ul class="loot-list">' + rows + '</ul>' +
         '<p class="loot-foot">' + (_lootMode === 'today' ? 'Earned today' : 'Total earned') + ': <b>' + nf(sum) + '</b> across ' + bd.length + ' feature' + (bd.length === 1 ? '' : 's') + (_lootMode === 'today' ? ' · resets every 24h' : '') + '</p>'

@@ -415,9 +415,12 @@
       '<div class="wc-ranges" role="radiogroup" aria-label="Time range">' +
         RANGE_ORDER.map(k => { const on = st.wcRange === k; return '<button class="wc-range" data-tip="' + esc(RANGES[k].tip) + '" type="button" role="radio" aria-checked="' + on + '" tabindex="' + (on ? 0 : -1) + '" data-wc-range="' + k + '" data-trk-key="wc:' + k + '">' + (on ? '✓ ' : '') + esc(RANGES[k].label) + '</button>'; }).join('') +
       '</div>' +
+      '<div class="wc-head-r">' +   // the series switches and the ⤢, together at the right
       '<div class="wc-series" role="group" aria-label="Series">' +
         '<button class="wc-sw" data-tip="Shows or hides the holdings value line" type="button" aria-pressed="' + (st.wcSeries.value !== false) + '" data-wc-series="value" data-trk-key="wc:s:value"><span class="wc-swatch wc-swatch-value" aria-hidden="true"></span>Holdings value</button>' +
         '<button class="wc-sw" data-tip="Shows or hides the dashed net-invested line" type="button" aria-pressed="' + (st.wcSeries.invested !== false) + '" data-wc-series="invested" data-trk-key="wc:s:invested"><span class="wc-swatch wc-swatch-invested" aria-hidden="true"></span>Net invested</button>' +
+      '</div>' +
+      '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the value over time chart full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
       '</div></div>' +
       '<div class="wc-plot"><canvas class="wc-canvas" role="img" aria-label="Holdings value over time"></canvas><div class="wc-tip" role="tooltip" aria-hidden="true" hidden></div></div>' +
       '<div class="wc-slider" role="slider" tabindex="0" aria-label="Point in time" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="No points yet" data-tip="Moves the crosshair along the chart — arrow keys step one point, Page Up and Down ten, Home and End jump, Escape clears" data-trk-key="wc:slider"><span class="wc-slider-k" aria-hidden="true"></span></div>' +
@@ -478,7 +481,7 @@
       else if (e.key === 'PageDown') next = cur - 10;
       else if (e.key === 'Home') next = 0;
       else if (e.key === 'End') next = n - 1;
-      else if (e.key === 'Escape') { setHover(C, null); e.preventDefault(); return; }
+      else if (e.key === 'Escape') { if (C.hover == null) return; setHover(C, null); e.preventDefault(); return; }   // with no crosshair to clear, Esc is not the slider's (it closes a full-screen view)
       else return;
       e.preventDefault();
       setHover(C, clamp(next, 0, n - 1));
@@ -591,6 +594,10 @@
     if (!st.wcSeries) st.wcSeries = { value: true, invested: true };
     const C = { host, report, usd: !(prefs && prefs.usd === false), ethUsd: report && report.ethUsd != null ? report.ethUsd : null, ctrl: current, state: st, tokens: [], results: {}, points: [], hover: null, forced: false, notCharted: [], tokenNotes: [], charted: [], msg: '' };
     host._wc = C;
+    /* the ⤢ opens it full screen (ChartFull, app.js): the live chart itself is moved in, inside a .trk-dash (its styles live
+       there). A report drawn again while it is open mounts a new chart and stops this one, so the view swaps to the new one
+       by its key rather than show a chart that no longer answers */
+    host.setAttribute('data-cf-unit', ''); host.setAttribute('data-cf-key', 'wallet-chart'); host.setAttribute('data-cf-ctx', 'trk-dash'); host.setAttribute('data-cf-title', 'Value over time');
     host.innerHTML = shell(C);
     C.canvas = host.querySelector('canvas');
     wire(C);
