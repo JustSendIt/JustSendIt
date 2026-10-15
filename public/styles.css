@@ -1260,6 +1260,7 @@ a.wall-stat:hover .l { color: var(--text); }
    aria-selected styling, not a hover one, so it reads the same on touch. --nav-h is published by nav.js. */
 .dtabs { position: sticky; top: calc(var(--nav-h, 58px) + 0.35rem); z-index: 15; display: flex; gap: 0.35rem; margin: 0 0 1.2rem; padding: 0.35rem; overflow-x: auto; scrollbar-width: none; background: var(--ctl-fill-lo); border: 1px solid var(--hair); border-radius: 999px; backdrop-filter: blur(var(--blur)); -webkit-backdrop-filter: blur(var(--blur)); }
 .dtabs::-webkit-scrollbar { display: none; }
+.dpanel [id] { scroll-margin-top: calc(var(--nav-h, 58px) + var(--dtabs-h, 64px) + 0.9rem); }   /* lands below the nav and the sticky tab bar (dashtabs.js publishes its height) */
 .dtab { flex: 0 0 auto; min-height: 44px; padding: 0.55rem 1rem; border: 0; border-radius: 999px; background: transparent; color: var(--ctl-ink); font: inherit; font-weight: 800; font-size: max(var(--text-floor), 0.92rem); white-space: nowrap; cursor: pointer; transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
 .dtab:hover { color: var(--ctl-ink); background: var(--ctl-fill-hi); }
 .dtab[aria-selected="true"] { color: var(--on-green); background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); box-shadow: 0 4px 0 var(--green-dark), 0 8px 22px var(--glow-g); }

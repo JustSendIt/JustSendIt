@@ -80,6 +80,21 @@ try {
   check('a section the dashboard draws open (it redraws after a save) no longer pulls the reader to the Overview', /const at = drawnAt\.get\(d\); if \(at !== undefined && performance\.now\(\) - at < 250\) return;/.test(DT) && /new MutationObserver\(/.test(DT));
   check('  ...and while the reader works in a panel, nothing else switches it unless they just pressed something', /const mayMove = \(\) => !working\(\) \|\| performance\.now\(\) - pressedAt < 1500;/.test(DT)
     && /if \(t && t !== current && mayMove\(\)\) show\(t\);/.test(DT) && /if \(t && t !== current\) \{ if \(!mayMove\(\)\) return; show\(t\); \}/.test(DT));
+
+  /* ═══ 3. "Edit profile" on your wall goes to the settings that edit it ═══
+     Owner, 2026-10-15: "Edit profile button on profile page should take the user to the settings on the dashboard and settings
+     page so they can edit their profile". */
+  const UH = read('u.html'), CSS = read('styles.css');
+  check('"Edit profile ✏️" on your own wall links to the dashboard\'s Settings at the Account card (avatar, username, bio, links), and says so',
+    /<a class="btn btn-ghost btn-sm" id="edit-btn" href="\/profile\.html#sec-account" hidden data-tip="Opens Settings on your dashboard with your avatar, username, bio and links ready to change">Edit profile ✏️<\/a>/.test(UH)
+    && /<details class="setting-card" id="sec-account">/.test(read('profile.html')) && /if \(\/\^#\(sec-\|claim\$/.test(DT));
+  check('  ...the dashboard opens on the Settings tab whatever tab was last used, opens the Account card once the account has loaded, and puts focus on its heading',
+    /const fromHash = tabForHash\(location\.hash\);/.test(DT) && /show\(fromHash \|\| /.test(DT)
+    && /if \(location\.hash !== '#sec-account' \|\| !\(signedIn === true \|\| \(window\.AUTH && AUTH\.user\)\)\) return;/.test(PJ) && /setTimeout\(\(\) => openCard\('sec-account', true\), 60\);/.test(PJ)
+    && /if \(!accountOpened\) openAccountFromLink\(true\);/.test(PJ) && /addEventListener\('hashchange', openAccountFromLink\);/.test(PJ)
+    && /sum\.setAttribute\('tabindex', '-1'\); sum\.focus\(\{ preventScroll: true \}\);/.test(PJ));
+  check('  ...and lands below the nav and the sticky tab bar, not under them (the bar publishes its height)',
+    /\.dpanel \[id\] \{ scroll-margin-top: calc\(var\(--nav-h, 58px\) \+ var\(--dtabs-h, 64px\) \+ 0\.9rem\); \}/.test(CSS) && /document\.documentElement\.style\.setProperty\('--dtabs-h', /.test(DT));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);

@@ -13,6 +13,11 @@
   if (!list) return;
   const tabs = [...list.querySelectorAll('[role="tab"]')];
   const panelOf = (t) => document.getElementById(t.getAttribute('aria-controls'));
+  /* The tab bar is sticky under the nav, so anything scrolled to inside a panel (Edit profile's #sec-account, #sec-security)
+     has to land below both, not under them: its height is published as --dtabs-h for styles.css (.dpanel [id]). */
+  const fitBar = () => { try { document.documentElement.style.setProperty('--dtabs-h', Math.round(list.getBoundingClientRect().height) + 'px'); } catch {} };
+  fitBar();
+  if (typeof ResizeObserver === 'function') new ResizeObserver(fitBar).observe(list); else addEventListener('resize', fitBar);
   const NAMES = tabs.map((t) => t.dataset.tab);
 
   /* Where an existing deep-link lands. These hashes were all in use before the tabs existed and keep

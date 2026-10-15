@@ -414,14 +414,27 @@ function refocus(id) {
   if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
   try { el.focus({ preventScroll: true }); } catch {}
 }
-function openSecurity(scroll) {
-  const d = document.getElementById('sec-security');
+// open a Settings card, bring it into view and put focus on its heading (dashtabs.js shows the Settings tab for it first)
+function openCard(id, scroll) {
+  const d = document.getElementById(id);
   if (!d) return;
   d.open = true;
   const sum = d.querySelector('summary');
   if (scroll) { try { d.scrollIntoView({ behavior: window.prefersReduced && prefersReduced() ? 'auto' : 'smooth', block: 'start' }); } catch { d.scrollIntoView(); } }
   if (sum) { try { sum.setAttribute('tabindex', '-1'); sum.focus({ preventScroll: true }); } catch {} }
 }
+function openSecurity(scroll) { openCard('sec-security', scroll); }
+/* "Edit profile ✏️" on your own wall (u.html) links to /profile.html#sec-account (owner, 2026-10-15: "Edit profile button on
+   profile page should take the user to the settings on the dashboard and settings page so they can edit their profile"):
+   the Settings tab, with the Account card — avatar, username, bio, X and Instagram — open and in view. Once the account has
+   loaded (the card sits in the signed-in part of the page), and again if the link is followed while already here. */
+let accountOpened = false;
+function openAccountFromLink(signedIn) {
+  if (location.hash !== '#sec-account' || !(signedIn === true || (window.AUTH && AUTH.user))) return;
+  accountOpened = true;
+  setTimeout(() => openCard('sec-account', true), 60);   // after the signed-in page has painted
+}
+addEventListener('hashchange', openAccountFromLink);
 document.addEventListener('DOMContentLoaded', () => {
   const jump = document.getElementById('sec-jump-link');
   if (jump) jump.addEventListener('click', (e) => { e.preventDefault(); history.replaceState(null, '', '#sec-security'); openSecurity(true); });
@@ -939,6 +952,7 @@ window.onAuthReady = function (user) {
   const claiming = user.auto_named || location.hash === '#claim';
   document.getElementById('claim-banner').hidden = !claiming;
   if (claiming) document.getElementById('sec-account').open = true;
+  if (!accountOpened) openAccountFromLink(true);   // arrived from "Edit profile" on the wall: once, not on every re-render after a save
   renderAvatarPicker();
   drawPicker('accent-swatches');
   drawPicker('bg-swatches');
