@@ -20,31 +20,31 @@
   const knowledgeBase = {
     'send power': {
       keywords: ['send power', 'power', 'points', 'leaderboard', 'level'],
-      answer: 'Send Power is your score on $Send. You earn it by making Send Calls on the Wall, taking part in communities and being active; it decays if you go quiet. The About page (/about.html) has every rule, and your dashboard shows where yours comes from.'
+      answer: 'Send Power is your score on $Send. You earn it by making Send Calls on the Wall, taking part in communities and being active; it decays if you go quiet. The About page (/about) has every rule, and your dashboard shows where yours comes from.'
     },
     'send call': {
       keywords: ['send call', 'call', 'how to call', 'make a call'],
-      answer: 'A Send Call is a public, permanent scorecard on a token you picked. Scan a token in the Scanner (/newpairs.html), then tap "Send Call to the Wall". If you are in a Send Squad you can make the call private to the squad instead. Calls stay on record even if the account is deleted.'
+      answer: 'A Send Call is a public, permanent scorecard on a token you picked. Scan a token in the Scanner (/newpairs), then tap "Send Call to the Wall". If you are in a Send Squad you can make the call private to the squad instead. Calls stay on record even if the account is deleted.'
     },
     'scanner': {
       keywords: ['scanner', 'scan', 'token address', 'on-chain', 'new pairs', 'radar'],
-      answer: 'The Scanner (/newpairs.html) reads any token or pool address on Robinhood Chain: holders, market, price history, the contract. Paste the address and tap Scan. It is a reading of public chain data, not an audit — nothing on it is a promise.'
+      answer: 'The Scanner (/newpairs) reads any token or pool address on Robinhood Chain: holders, market, price history, the contract. Paste the address and tap Scan. It is a reading of public chain data, not an audit — nothing on it is a promise.'
     },
     'wallet': {
       keywords: ['wallet', 'link wallet', 'track', 'holdings', 'pnl', 'tracker', 'cost basis'],
-      answer: 'The wallet tracker (/tracker.html) tracks any wallet on Robinhood Chain — holdings, every token transaction, a value-over-time chart, cost basis and PNL, read from the chain by this site. On the public node a wallet\'s first read can take an hour or more. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops — it goes on from where it stopped when you come back). Later refreshes read only what is new and take seconds. Linking a wallet to your account happens on your profile (/profile.html) and is how the site checks what you hold.'
+      answer: 'The wallet tracker (/tracker) tracks any wallet on Robinhood Chain — holdings, every token transaction, a value-over-time chart, cost basis and PNL, read from the chain by this site. On the public node a wallet\'s first read can take an hour or more. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops — it goes on from where it stopped when you come back). Later refreshes read only what is new and take seconds. Linking a wallet to your account happens on your profile (/profile) and is how the site checks what you hold.'
     },
     'squad': {
       keywords: ['squad', 'send squad', 'private group'],
-      answer: 'A Send Squad is a private, token-gated group. Members can make Send Calls that only the squad sees, and the squad earns points together. Start one or find yours under Communities (/communities.html); only verified members count toward a squad\'s gate.'
+      answer: 'A Send Squad is a private, token-gated group. Members can make Send Calls that only the squad sees, and the squad earns points together. Start one or find yours under Communities (/communities); only verified members count toward a squad\'s gate.'
     },
     'community': {
       keywords: ['community', 'communities', 'join'],
-      answer: 'Communities gather around a token — $Send and $GWC have their own from day one. Hold the token and opt in to unlock the holders-only wall and proposals; while you are in a live one, everything you earn anywhere on the site gets a flat 10× boost (boosts add up, they do not multiply). Start on /communities.html.'
+      answer: 'Communities gather around a token — $Send and $GWC have their own from day one. Hold the token and opt in to unlock the holders-only wall and proposals; while you are in a live one, everything you earn anywhere on the site gets a flat 10× boost (boosts add up, they do not multiply). Start on /communities.'
     },
     'watchlist': {
       keywords: ['watchlist', 'save token', 'star', 'saved'],
-      answer: 'Your Watchlist (/watchlist.html) holds the tokens you saved. Scan a token and tap its ☆ to keep it; from the list you can jump back to a full scan or make a Send Call.'
+      answer: 'Your Watchlist (/watchlist) holds the tokens you saved. Scan a token and tap its ☆ to keep it; from the list you can jump back to a full scan or make a Send Call.'
     },
     'report': {
       keywords: ['report', 'spam', 'inappropriate', 'moderator', 'remove'],
@@ -52,7 +52,7 @@
     },
     'safety': {
       keywords: ['safe', 'security', 'risk', 'dyor', 'research', 'rug', 'scam', 'should i buy', 'buy'],
-      answer: 'Nothing here will ever tell you to buy — that is not what the site does. Read the token in the Scanner (/newpairs.html), look at the liquidity, the holders and the contract, and decide for yourself. Everything on this site is entertainment, not financial advice, and it is not affiliated with Robinhood.'
+      answer: 'Nothing here will ever tell you to buy — that is not what the site does. Read the token in the Scanner (/newpairs), look at the liquidity, the holders and the contract, and decide for yourself. Everything on this site is entertainment, not financial advice, and it is not affiliated with Robinhood.'
     },
     'appeal': {
       keywords: ['appeal', 'restricted', 'strike', 'suspended', 'read-only', 'muted', 'banned'],
@@ -60,11 +60,11 @@
     },
     'account': {
       keywords: ['sign in', 'login', 'log in', 'password', 'two-factor', '2fa', 'delete my account', 'username', 'invite'],
-      answer: 'Your account lives on /profile.html: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Joining is by invite code, and nobody here will ever ask for your password, a seed phrase or a private key.'
+      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Joining is by invite code, and nobody here will ever ask for your password, a seed phrase or a private key.'
     },
     'support': {
       keywords: ['support', 'help', 'question', 'contact', 'email'],
-      answer: 'Two ways to reach a person: ask on the Support board (/support.html), where the community and the team answer in public, or email ' + EMAIL + ' for anything private. Both are free.'
+      answer: 'Two ways to reach a person: ask on the Support board (/support), where the community and the team answer in public, or email ' + EMAIL + ' for anything private. Both are free.'
     }
   };
   function findAnswer(question) {
@@ -76,20 +76,21 @@
   /* ---------- tips per page ---------- */
   const pageTips = {
     '/': { tips: ['New here? The How to Buy guide is on this page, under the hero.', 'Drag me anywhere on a desktop — I stay where you put me.', 'Anything you cannot find: ask me, or the Support board.'] },
-    '/about.html': { tips: ['Everything about Send Power and the leaderboard is on this page.', 'Send Calls are permanent — they outlive the account that made them.', 'Strikes never expire on their own, but an appeal by email is free.'] },
-    '/newpairs.html': { tips: ['Paste any token or pool address to read its market, holders, contract and first buyers.', 'Tap the ☆ on a scan to save the token to your Watchlist.', 'The buttons under a scan open a Send Call — to the Wall, or to your Squad.', 'A scan is public chain data, not an audit. Nothing here is a promise.'] },
-    '/wall.html': { tips: ['The Send Wall is every Send Call, live, as a permanent scorecard.', 'Tap a name to open that person\'s own Send Wall.', 'Deep liquidity and steady price make a call easier to read — never a guarantee.'] },
-    '/support.html': { tips: ['Ask in public here; answers that solve it get voted up.', 'Prefer private? Email ' + EMAIL + ' — a person reads it.', 'Answering someone else\'s question counts too.'] },
-    '/profile.html': { tips: ['Link a wallet here — it is how the site checks what you hold.', 'Two-factor keeps the account yours; nobody here asks for passwords.', 'Deleting the account is permanent; Send Calls stay under a placeholder.'] },
-    '/watchlist.html': { tips: ['Saved tokens land here. Scan one and tap its ☆.', 'Each saved token opens straight back into a full scan.', 'A Send Call can start from here too.'] },
-    '/communities.html': { tips: ['$Send and $GWC have their own communities, run by the site.', 'Hold the token and opt in: while you are in a live one, everything you earn gets a flat 10× boost.', 'Send Squads are the private, token-gated version.'] },
-    '/community.html': { tips: ['The holders-only wall opens once your linked wallet passes the gate.', 'Proposals let the community decide things together.', 'Tap the founder\'s name to see their Send Wall.'] },
-    '/squad.html': { tips: ['Squad calls are private to the squad and score for it.', 'Only verified members count toward the gate.', 'The 🛡️ button on any token scan calls it to this squad.'] },
-    '/tracker.html': { tips: ['Track any wallet: holdings, every token transaction, a value chart, cost basis, PNL — read from the chain.', 'On the public node a first read can take an hour or more — leave the page: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back). Later refreshes take seconds.', 'The explorer never learns which wallets you look at; this site reads them.', 'A wallet you track reopens from its saved report; a refresh reads only what is new.'] },
-    '/arcade.html': { tips: ['The weekly competitions live here, with their boards.', 'Biggest Sender resets every week.', 'Tap any name on a board to open their Send Wall.'] },
-    '/data.html': { tips: ['The Data API is read-only public data behind a key.', 'Keys are the burn kind — the docs on this page say how.', 'Limits are per key; the page lists them.'] }
+    '/about': { tips: ['Everything about Send Power and the leaderboard is on this page.', 'Send Calls are permanent — they outlive the account that made them.', 'Strikes never expire on their own, but an appeal by email is free.'] },
+    '/newpairs': { tips: ['Paste any token or pool address to read its market, holders, contract and first buyers.', 'Tap the ☆ on a scan to save the token to your Watchlist.', 'The buttons under a scan open a Send Call — to the Wall, or to your Squad.', 'A scan is public chain data, not an audit. Nothing here is a promise.'] },
+    '/wall': { tips: ['The Send Wall is every Send Call, live, as a permanent scorecard.', 'Tap a name to open that person\'s own Send Wall.', 'Deep liquidity and steady price make a call easier to read — never a guarantee.'] },
+    '/support': { tips: ['Ask in public here; answers that solve it get voted up.', 'Prefer private? Email ' + EMAIL + ' — a person reads it.', 'Answering someone else\'s question counts too.'] },
+    '/profile': { tips: ['Link a wallet here — it is how the site checks what you hold.', 'Two-factor keeps the account yours; nobody here asks for passwords.', 'Deleting the account is permanent; Send Calls stay under a placeholder.'] },
+    '/watchlist': { tips: ['Saved tokens land here. Scan one and tap its ☆.', 'Each saved token opens straight back into a full scan.', 'A Send Call can start from here too.'] },
+    '/communities': { tips: ['$Send and $GWC have their own communities, run by the site.', 'Hold the token and opt in: while you are in a live one, everything you earn gets a flat 10× boost.', 'Send Squads are the private, token-gated version.'] },
+    '/community': { tips: ['The holders-only wall opens once your linked wallet passes the gate.', 'Proposals let the community decide things together.', 'Tap the founder\'s name to see their Send Wall.'] },
+    '/squad': { tips: ['Squad calls are private to the squad and score for it.', 'Only verified members count toward the gate.', 'The 🛡️ button on any token scan calls it to this squad.'] },
+    '/tracker': { tips: ['Track any wallet: holdings, every token transaction, a value chart, cost basis, PNL — read from the chain.', 'On the public node a first read can take an hour or more — leave the page: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back). Later refreshes take seconds.', 'The explorer never learns which wallets you look at; this site reads them.', 'A wallet you track reopens from its saved report; a refresh reads only what is new.'] },
+    '/arcade': { tips: ['The weekly competitions live here, with their boards.', 'Biggest Sender resets every week.', 'Tap any name on a board to open their Send Wall.'] },
+    '/data': { tips: ['The Data API is read-only public data behind a key.', 'Keys are the burn kind — the docs on this page say how.', 'Limits are per key; the page lists them.'] }
   };
-  const path = () => location.pathname.replace(/\/$/, '') || '/';
+  // the page, by its name: /about (an old /about.html or a trailing / reads the same); the home page's sections are the home page
+  const path = () => { const p = location.pathname.replace(/\/+$/, '').replace(/\.html$/, '').toLowerCase() || '/'; return /^\/(index|guide|swap|tokens|beta)$/.test(p) ? '/' : p; };
   const tipsFor = () => (pageTips[path()] || pageTips['/']).tips;
   const greeting = () => {
     const u = window.AUTH && AUTH.user && AUTH.user.username;
@@ -345,14 +346,15 @@
       const next = tips.filter((t) => t !== cur); const t = (next.length ? next : tips)[Math.floor(Math.random() * (next.length ? next : tips).length)];
       $('sendy-tip').textContent = '💡 ' + t;
     });
-    $('sendy-support').addEventListener('click', () => { location.href = '/support.html'; });
+    $('sendy-support').addEventListener('click', () => { location.href = '/support'; });
     $('sendy-close').addEventListener('click', closePopup);
     $('sendy-close').addEventListener('click', () => { if (window.SFX) SFX.play('close'); });   // the ✕ shuts the popup (a plain button to the generic layer)
 
     /* ---------- chat ---------- */
     function linkify(text, into) {
       // site paths and the email become links; everything else stays text (an answer is never markup)
-      const re = /(\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]*\.html(?:#[\w-]+)?|\/u\/[A-Za-z0-9._-]+|\/#[\w-]+|SendRH@Atomicmail\.io)/g;
+      // a page by its name (/about, /newpairs?scan=…, /terms#s12), an old .html path, a wall, a home section, the email
+      const re = /((?<![\w/.])\/(?:about|arcade|communities|community|data|newpairs|privacy|profile|squad|support|terms|tracker|wall|watchlist|whitepaper|guide|swap|tokens|beta)(?:\?[\w=&%-]+(?:\.[\w=&%-]+)*)?(?:#[\w-]+)?(?![\w/])|\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]*\.html(?:#[\w-]+)?|\/u\/[A-Za-z0-9._-]+|\/#[\w-]+|SendRH@Atomicmail\.io)/g;
       let last = 0, m;
       while ((m = re.exec(text))) {
         if (m.index > last) into.appendChild(document.createTextNode(text.slice(last, m.index)));
@@ -392,7 +394,7 @@
       bar.appendChild(mk(-1, '👎', 'Marks this answer unhelpful — it will not be reused'));
       row.querySelector('.sendy-msg-bubble').appendChild(bar);
     }
-    const ROUTES = [{ text: 'Support board', href: '/support.html' }, { text: 'Email ' + EMAIL, href: MAILTO }];
+    const ROUTES = [{ text: 'Support board', href: '/support' }, { text: 'Email ' + EMAIL, href: MAILTO }];
     const NO_ANSWER = "I don't have an answer for that yet. Ask it on the Support board, where the community and the team answer in public — or email if it's private.";
     function remember(role, text) { history.push({ role, text }); history = history.slice(-12); store.set('chat', history); }
     function paintHistory() {

@@ -11,11 +11,15 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = path.join(ROOT, 'public');
 const problems = [];
 const note = (file, msg) => problems.push(file + ': ' + msg);
+// the page routes the server answers (/about, /community?id=, /swap…): one table for both, so a link passes here only if it works there
+const ROUTES = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'routes.js'));
+const PAGES = ROUTES.pageNames(PUBLIC);
 
 /* ---- 1. every shipped JavaScript file parses ---- */
 const jsFiles = [path.join(ROOT, 'server.js')]
@@ -52,7 +56,14 @@ for (const f of htmlFiles) {
     const ref = m[1];
     if (/^(https?:)?\/\/|^data:|^mailto:|^#|^\?/.test(ref)) continue;
     const rel = ref.split(/[?#]/)[0];
-    if (!rel || rel.endsWith('/')) continue;
+    if (!rel || rel === '/') continue;
+    // a page link is a page's name (/about); the server's own routes answer /u/<name>, /p/<id>, /t/<n>, /admin
+    if (rel.startsWith('/') && !path.extname(rel)) {
+      const r = ROUTES.resolve(PAGES, rel);
+      if ((r && (r.page || r.section)) || /^\/(u|p|t)\/[^/]+$/.test(rel) || rel === '/admin') continue;
+      note('public/' + f, 'links to a page the server does not answer: ' + ref + (r && r.redirect ? ' (it redirects to ' + r.redirect + ' — link that)' : ''));
+      continue;
+    }
     const target = rel.startsWith('/') ? path.join(PUBLIC, rel.slice(1)) : path.join(PUBLIC, rel);
     if (!existsSync(target)) {
       /* X04: the feature video and its poster are kept out of git for rights reasons. Their <video> carries
@@ -62,6 +73,42 @@ for (const f of htmlFiles) {
       const tag = s.slice(tagStart, s.indexOf('>', m.index) + 1);
       if (/data-optional-media/.test(tag)) console.log('  · public/' + f + ': optional media not present here (hidden at runtime): ' + ref);
       else note('public/' + f, 'references a file that is not there: ' + ref);
+    }
+  }
+}
+
+/* ---- 3a. pages are linked by their names (owner, 2026-10-15: "sendrh.com/about not sendrh.com/about.html") ----
+   No page link by file name anywhere a link is written — the pages, the page scripts, the server — and no relative page
+   link in a script: on /u/<name> a relative "newpairs?scan=" would resolve to /u/newpairs, somebody's wall. The old .html
+   addresses still work (the server redirects them); this keeps new links from using them. Comments are not links. */
+{
+  /* comments out, strings kept: a '/*' or '//' inside quotes ('image/*', 'https://…') is text, not the start of a comment
+     (a plain regex took 'image/*' as one and hid the next ~280 lines from this rule). Quotes end at a line's end except
+     back-ticks, so a quote inside a regex literal costs at most the rest of its line. Lines are kept in place. */
+  const decomment = (t, html) => {
+    if (html) return t.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, ''));
+    let out = '', i = 0, q = null;
+    while (i < t.length) {
+      const c = t[i], n = t[i + 1];
+      if (q) { out += c; if (c === '\\') { out += n || ''; i += 2; continue; } if (c === q || (c === '\n' && q !== '`')) q = null; i++; continue; }
+      if (c === '/' && n === '*') { const e = t.indexOf('*/', i + 2), end = e < 0 ? t.length : e + 2; out += t.slice(i, end).replace(/[^\n]/g, ''); i = end; continue; }
+      if (c === '/' && n === '/' && t[i - 1] !== ':' && t[i - 1] !== '\\') { const e = t.indexOf('\n', i); i = e < 0 ? t.length : e; continue; }
+      if (c === '"' || c === "'" || c === '`') q = c;
+      out += c; i++;
+    }
+    return out;
+  };
+  const NAMES = [...PAGES, 'admin'].join('|');   // admin is gated, not a public page, but its old address is still not a link
+  const byFile = new RegExp('(?<![\\w/.-])/?(' + NAMES + ')\\.html(?=[?#"\'`\\s)<,;:]|$)', 'm');
+  // a link written relatively: href="newpairs…", .href = 'wall…', location = 'about…', window.open('newpairs?…')
+  const relLink = new RegExp('(?:href\\s*=\\s*\\\\?["\']|location(?:\\.href)?\\s*=\\s*["\'`]|\\.(?:assign|replace)\\(\\s*["\'`]|open\\(\\s*["\'`])(' + NAMES + ')(?=[?#"\'`])');
+  const files = readdirSync(PUBLIC).filter((x) => /\.(html|js)$/.test(x)).map((x) => ['public/' + x, path.join(PUBLIC, x)]).concat([['server.js', path.join(ROOT, 'server.js')]]);
+  for (const [name, fp] of files) {
+    if (name === 'public/eggs.js') continue;   // its catalogue is keyed by page file names: keys, not links
+    const t = decomment(readFileSync(fp, 'utf8'), name.endsWith('.html'));
+    for (const line of t.split('\n')) {
+      if (byFile.test(line) && !/PUBLIC_DIR|readFileSync|fpLc|\.html\$|'u\.html'|"u\.html"/.test(line)) note(name, 'links a page by its file name (link /' + line.match(byFile)[1] + ' instead): ' + line.trim().slice(0, 120));
+      if (name.endsWith('.js') && relLink.test(line)) note(name, 'links a page relatively (make it absolute, /' + line.match(relLink)[1] + '…): ' + line.trim().slice(0, 120));
     }
   }
 }

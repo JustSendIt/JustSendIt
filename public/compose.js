@@ -85,7 +85,7 @@
           '<div style="font-size:max(var(--text-floor), 2.6rem);" aria-hidden="true" id="compose-done-ico">🚀</div>' +
           '<p style="font-weight:800; color:var(--green-bright); font-size:max(var(--text-floor), 1.1rem);" id="compose-done-msg">Posted on the Wall!</p>' +
           '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:0.9rem;">' +
-            '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall.html" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
+            '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
             '<button class="btn btn-ghost btn-sm" id="compose-again" type="button" data-tip="Returns to the empty composer to send another">Post another ✏️</button>' +
           '</div>' +
         '</div>' +
@@ -347,17 +347,17 @@
       if (window.sendConfetti) sendConfetti(r.left + r.width / 2, r.top, { count: 50, emojiRatio: 0.5 });
       if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned, r.left, r.top);
       /* A squad call's post is private to the squad: post:created would prepend it into the public wall /
-         profile feed on this screen, so it gets its own event instead (squad.html can refresh its Calls tab). */
+         profile feed on this screen, so it gets its own event instead (/squad can refresh its Calls tab). */
       if (j.post && !squadId) document.dispatchEvent(new CustomEvent('post:created', { detail: j.post }));
       if (squadId) document.dispatchEvent(new CustomEvent('squad:call', { detail: { squadId, post: j.post || null, squadPoints: j.squadPoints == null ? null : j.squadPoints } }));
       const view = modal.querySelector('#compose-view');
       if (view) {
         if (squadId) {
-          view.href = '/squad.html?id=' + squadId + '#calls';
+          view.href = '/squad?id=' + squadId + '#calls';
           view.textContent = 'View in the squad →';
           view.setAttribute('data-tip', 'Closes this and opens the Calls tab of that squad');
         } else {
-          view.href = (j.post && j.post.id) ? '/wall.html#p' + j.post.id : '/wall.html';
+          view.href = (j.post && j.post.id) ? '/wall#p' + j.post.id : '/wall';
           view.textContent = 'View on the Wall →';
           view.setAttribute('data-tip', 'Closes this and shows your new post on the wall');
         }
@@ -393,7 +393,7 @@
       // point "View on the Wall" at the new post — never yank the user off the page they chose to post from
       const view = modal.querySelector('#compose-view');
       if (view) {
-        view.href = (j.post && j.post.id) ? '/wall.html#p' + j.post.id : '/wall.html';
+        view.href = (j.post && j.post.id) ? '/wall#p' + j.post.id : '/wall';
         view.textContent = 'View on the Wall →';   // a squad call before this may have pointed it at the squad
         view.setAttribute('data-tip', 'Closes this and shows your new post on the wall');
       }
@@ -425,7 +425,7 @@
     });
 
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) close(); });
-    modal.querySelector('#compose-view').addEventListener('click', () => close()); // on wall.html the link is a same-document #p<id> hash change — the dialog must not stay open over it
+    modal.querySelector('#compose-view').addEventListener('click', () => close()); // on /wall the link is a same-document #p<id> hash change — the dialog must not stay open over it
     modal.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
     const textEl = modal.querySelector('#compose-text');
@@ -481,7 +481,7 @@
       /* only a popup that really opened with the full detail clears the flag. A page without one opens the Scanner in a
          new tab — the draft stays put, and the call stays flagged, since this page cannot see what was read there */
       if (window.TokenModal && window.NPCard) { viewedDetail = true; TokenModal.open(callTok.addr, { symbol: callTok.symbol, name: callTok.name }); }
-      else window.open('newpairs.html?scan=' + encodeURIComponent(callTok.addr), '_blank', 'noopener');
+      else window.open('/newpairs?scan=' + encodeURIComponent(callTok.addr), '_blank', 'noopener');
     });
 
     const clearComposeMedia = () => { pendingImg = null; const ci = modal.querySelector('#compose-img'); ci._attachGen = (ci._attachGen || 0) + 1; ci.value = ''; window.setMediaPreview(modal.querySelector('#compose-preview'), null); gate(sendBtn, !modal.querySelector('#compose-text').value.trim()); };

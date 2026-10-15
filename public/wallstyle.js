@@ -345,7 +345,7 @@
           '<div class="ws-save-row"><button class="btn btn-primary btn-sm" id="ws-save" type="button" data-tip="Saves your bio and links now — they also save when you leave a box">Save bio and links 💾</button>' +
           '<p class="modal-note" id="ws-about-msg" role="status" aria-live="polite"></p></div>' +
         '</section>' +
-        '<p class="modal-note ws-more">Your @handle, sign-in and everything else: <a href="/profile.html#sec-account">Settings on your dashboard →</a></p>' +
+        '<p class="modal-note ws-more">Your @handle, sign-in and everything else: <a href="/profile#sec-account">Settings on your dashboard →</a></p>' +
       '</div>';
     const $ = (id) => container.querySelector('#' + id);
     const onTheme = (patch) => { if (ctx.onTheme) ctx.onTheme(patch); };

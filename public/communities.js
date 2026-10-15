@@ -47,7 +47,7 @@
     const goLiveBar = c.status === 'live' ? '' :
       '<span class="comm-golive" aria-hidden="true"><span class="comm-golive-fill" style="width:' + Math.min(100, Math.round(c.qualCount / c.need * 100)) + '%"></span></span>';
     return '<li class="comm-card ' + tierClass + (c.official ? ' comm-card-official' : '') + '">' +
-      '<a class="comm-card-link" href="community.html?id=' + c.id + '" aria-label="' + esc(c.name) + ' $' + esc(c.symbol) + (c.demo
+      '<a class="comm-card-link" href="/community?id=' + c.id + '" aria-label="' + esc(c.name) + ' $' + esc(c.symbol) + (c.demo
         ? ' sandbox community, ' + c.memberCount + ' members, stock ' + (hasQ ? '$' + Number(st.price).toFixed(2) + (st.changePct != null ? ', ' + (st.changePct >= 0 ? 'up ' : 'down ') + Math.abs(st.changePct).toFixed(2) + '% today' : '') : 'quote unavailable') + ', '
         : ' community, ' + c.memberCount + ' members, ' + fmtNum(c.holders) + ' holders, ' + fmtUsd(c.mcap) + ' market cap, ' + (c.priceChange != null ? (c.priceChange >= 0 ? 'up ' : 'down ') + Math.abs(c.priceChange).toFixed(1) + '% 24h, ' : '')) + (c.status === 'live' ? 'live level ' + c.level : c.qualCount + ' of ' + c.need + ' to go live') + '">' +
         banner +
@@ -157,7 +157,7 @@
     const label = '#' + rank + ' ' + c.name + ' $' + c.symbol + (c.demo ? ' (sandbox — a listed stock, not a token; no multiplier)' : '') + ' — ' + fmtNum(xp) + ' points this week, community level '
       + c.level + ', activity ' + c.activityTier + (c.joined ? ', you’re a member' : '');
     return '<li class="wk-item' + (top ? ' wk-top wk-r' + rank : '') + '">' +
-      '<a class="wk-link" href="community.html?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +
+      '<a class="wk-link" href="/community?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +
         '<span class="wk-rank">' + medal + '<span class="wk-rank-n">#' + rank + '</span></span>' +
         logo +
         '<span class="wk-id"' + (c.demo ? ' data-nosnippet' : '') + '>' +
@@ -263,10 +263,10 @@
       const r = await fetch('/api/communities', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
       const j = await r.json().catch(() => ({}));
       if (r.ok && window.SFX) SFX.play('success');   // the community was created
-      if (r.ok) { if (window.sendToast) sendToast('🏛️ Community started! Get 10 verified holders to go live 🚀'); location.href = 'community.html?id=' + j.id; return; }
+      if (r.ok) { if (window.sendToast) sendToast('🏛️ Community started! Get 10 verified holders to go live 🚀'); location.href = '/community?id=' + j.id; return; }
       goBtn.disabled = false;
       if (window.SFX) { if (j.existingId) SFX.play('warn'); else SFX.play('error'); }   // one exists already (look there) / refused
-      if (j.existingId) msg.innerHTML = 'A community already exists for that token — <a href="community.html?id=' + j.existingId + '">open it →</a>';
+      if (j.existingId) msg.innerHTML = 'A community already exists for that token — <a href="/community?id=' + j.existingId + '">open it →</a>';
       else msg.textContent = '⚠️ ' + (j.error || 'Could not start that community.');
     } catch (err) { goBtn.disabled = false; msg.textContent = '⚠️ Could not start that community — try again.'; if (window.SFX) SFX.play('error'); }
   });
@@ -318,7 +318,7 @@
     const label = c.name + ' squad, ' + fmtNum(c.memberCount) + ' members, ' + (lvl == null ? 'level unknown' : 'level ' + lvl) + ', ' + sqPts(c.xpWeek) + ' points this week, '
       + (open ? 'open to anyone with an account' : (g.text || 'token-gated')) + (mine ? (mine.verified ? (mine.role === 'owner' ? ', you started it' : ', you’re in') : ', you’re a member awaiting verification') : '');
     return '<li class="comm-card sq-card' + (c.official ? ' comm-card-official' : '') + '">' +
-      '<a class="comm-card-link" href="squad.html?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +
+      '<a class="comm-card-link" href="/squad?id=' + encodeURIComponent(c.id) + '" aria-label="' + esc(label) + '">' +
         banner +
         '<span class="comm-card-body">' +
           '<span class="comm-card-head">' + logo + '<span class="comm-card-id"><b class="comm-card-sym sq-card-name">' + esc(c.name) + '</b><span class="comm-card-name">' + (c.bio ? esc(c.bio) : 'No bio yet') + '</span></span></span>' +
@@ -344,7 +344,7 @@
     const medal = WK_MEDAL[rank] ? '<span class="wk-medal" aria-hidden="true">' + WK_MEDAL[rank] + '</span>' : '';
     const label = '#' + rank + ' ' + r.name + ' — ' + sqPts(pts) + ' points ' + (last ? 'last week' : 'this week') + (r.level != null ? ', squad level ' + r.level : '') + (r.memberCount != null ? ', ' + fmtNum(r.memberCount) + ' members' : '') + (r.official ? ', official' : '');
     return '<li class="wk-item' + (top ? ' wk-top wk-r' + rank : '') + '">' +
-      '<a class="wk-link" href="squad.html?id=' + encodeURIComponent(r.id) + '" aria-label="' + esc(label) + '">' +
+      '<a class="wk-link" href="/squad?id=' + encodeURIComponent(r.id) + '" aria-label="' + esc(label) + '">' +
         '<span class="wk-rank">' + medal + '<span class="wk-rank-n">#' + rank + '</span></span>' +
         logo +
         '<span class="wk-id"><b class="wk-sym">' + esc(r.name) + '</b><span class="wk-name">👥 ' + fmtNum(r.memberCount) + ' members' + (r.official ? ' · 🏠 Official' : '') + '</span></span>' +
@@ -570,7 +570,7 @@
         const j = await window.api('/api/squads', { method: 'POST', body });
         if (window.SFX) SFX.play('success');   // the squad was created
         if (window.sendToast) sendToast('🛡️ Squad started — welcome in!');
-        location.href = 'squad.html?id=' + encodeURIComponent(j.id);
+        location.href = '/squad?id=' + encodeURIComponent(j.id);
         return;
       } catch (err) {
         sfGo.disabled = false;

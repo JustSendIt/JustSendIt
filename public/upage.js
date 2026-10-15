@@ -29,7 +29,7 @@ function pinChip(p, mine, owner) {
   const sym = p.symbol ? '$' + esc(p.symbol) : 'Token';
   const tipId = 'pintip-' + esc(p.token);
   const conv = (p.conviction && p.conviction.live)
-    ? '<a class="conv-badge" href="/community.html?id=' + encodeURIComponent(p.conviction.communityId) + '" title="' + esc(p.conviction.title) + ' — member level in the ' + sym + ' community" aria-label="Conviction ' + esc(p.conviction.title) + ', level ' + p.conviction.level + ' in the ' + sym + ' community">💎 Lv ' + p.conviction.level + '</a>'
+    ? '<a class="conv-badge" href="/community?id=' + encodeURIComponent(p.conviction.communityId) + '" title="' + esc(p.conviction.title) + ' — member level in the ' + sym + ' community" aria-label="Conviction ' + esc(p.conviction.title) + ', level ' + p.conviction.level + ' in the ' + sym + ' community">💎 Lv ' + p.conviction.level + '</a>'
     : '';
   const stats = '<span class="pin-chip-stats">' + (p.curMc != null ? '<span class="pin-chip-mc" role="img" aria-label="Market cap ' + pinUsd(p.curMc) + '" title="Current market cap">💰 ' + pinUsd(p.curMc) + '</span>' : '') + pinXsChip(p.xs) + '</span>';
   const comm = window.tokenCommunitySlot ? tokenCommunitySlot(p.token, p.symbol || '') : ''; // 🏘️ Community / ＋ Start community (filled by tokentext.js)
@@ -765,7 +765,7 @@ async function loadCalls(u) {
         '<div class="sc-stat"><b>' + _xf(s.totalX, 1) + '</b><i>Total Xs</i></div>' +
         '<div class="sc-stat"><b>' + s.hits + '</b><i>2x+ hits</i></div>'
       : '';
-    if (!s.count) { listEl.innerHTML = '<div class="empty-wall"><div style="font-size:max(var(--text-floor), 2.5rem);" aria-hidden="true">📣</div><p>' + (u.isMe ? 'No Send Calls yet — head to <a href="/newpairs.html">New Pairs</a> and call a token! 🚀' : '@' + esc(u.username) + ' hasn’t made any Send Calls yet.') + '</p></div>'; return; }
+    if (!s.count) { listEl.innerHTML = '<div class="empty-wall"><div style="font-size:max(var(--text-floor), 2.5rem);" aria-hidden="true">📣</div><p>' + (u.isMe ? 'No Send Calls yet — head to <a href="/newpairs">New Pairs</a> and call a token! 🚀' : '@' + esc(u.username) + ' hasn’t made any Send Calls yet.') + '</p></div>'; return; }
     listEl.innerHTML = s.calls.map(c => SendCall.widgetHTML(Object.assign(c, { mineOwn: u.isMe }))).join('');
     if (window.SendCall) { SendCall.wire(listEl); SendCall.live(listEl); SendCall.observe(listEl); }
   } catch { statsEl.innerHTML = ''; listEl.innerHTML = '<div class="empty-wall"><p>Couldn’t load Send Calls.</p></div>'; }

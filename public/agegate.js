@@ -70,7 +70,7 @@
           '<button class="btn btn-primary age-enter" id="age-enter" type="button" aria-disabled="true" data-tip="Remembers your answer on this device for a year, then opens the site">Enter the site 🚀</button>' +
           '<button class="btn btn-ghost btn-sm age-leave" id="age-leave" type="button" data-tip="Tells us you are under 18 — the site stays closed to you">I\'m under 18</button>' +
         '</div>' +
-        '<p class="age-fine">We remember your answer on this device for a year. <a href="/privacy.html">Privacy</a></p>' +
+        '<p class="age-fine">We remember your answer on this device for a year. <a href="/privacy">Privacy</a></p>' +
       '</div>' +
       '<div class="age-card" id="age-no" hidden>' +
         LOGO +

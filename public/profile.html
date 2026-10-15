@@ -41,18 +41,18 @@
   <a class="nav-logo" href="/"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
   <div class="nav-menu" id="nav-menu">
     <span id="nav-search-slot"></span>
-    <a href="about.html">About</a>
-    <a href="arcade.html">Arcade</a>
-    <a href="communities.html">Communities</a>
-    <a href="/#guide">How&nbsp;to&nbsp;Buy</a>
-    <a href="newpairs.html">Scanner</a>
-    <a href="wall.html">Send&nbsp;Wall</a>
-    <a href="support.html">Support</a>
-    <a href="/#swap">Swap</a>
-    <a href="/#tokens">Tokens</a>
-    <a href="watchlist.html">Watchlist</a>
+    <a href="/about">About</a>
+    <a href="/arcade">Arcade</a>
+    <a href="/communities">Communities</a>
+    <a href="/guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="/newpairs">Scanner</a>
+    <a href="/wall">Send&nbsp;Wall</a>
+    <a href="/support">Support</a>
+    <a href="/swap">Swap</a>
+    <a href="/tokens">Tokens</a>
+    <a href="/watchlist">Watchlist</a>
 
-    <a href="whitepaper.html">White&nbsp;Paper</a>
+    <a href="/whitepaper">White&nbsp;Paper</a>
 
     </div>
   <span id="nav-notif"></span>
@@ -102,8 +102,8 @@
            targets #gamify-dash, #connected-wallet, #invites-card or a Settings <details> by id has to change.
            What DID have to change is reachability: a hash like #sec-security, a details being opened by
            script, or a scrollIntoView into a hidden panel would all have landed on nothing — dashtabs.js
-           routes each of those to its tab first. The URL carries the tab as #tab-<name> so a refresh keeps
-           it, and deep-link hashes that already existed keep their meaning. -->
+           routes each of those to its tab first. The address stays /profile (no #tab-…): a refresh comes back to
+           the tab remembered on this device, and deep-link hashes that already existed keep their meaning. -->
       <div class="dtabs" role="tablist" aria-label="Dashboard sections" id="dtabs">
         <button class="dtab" role="tab" id="dtab-overview" aria-controls="dpanel-overview" aria-selected="true" tabindex="0" data-tab="overview" data-tip="Your Send Power, level, quests, arena and record">🏠 Overview</button>
         <button class="dtab" role="tab" id="dtab-wallet" aria-controls="dpanel-wallet" aria-selected="false" tabindex="-1" data-tab="wallet" data-tip="Live holdings and PNL for the wallets you have linked">👛 Wallet</button>
@@ -155,7 +155,7 @@
         <h2 class="display" style="color:var(--gold); font-size:max(var(--text-floor), 1.7rem); margin-bottom:0.4rem;">Wallet Tracker 💼</h2>
         <p class="privacy-chip" style="margin-bottom:0.8rem;">🔒 Private — only you can see it</p>
         <p class="modal-note" style="margin:0 0 0.9rem;">Track any wallet on Robinhood Chain — holdings, every token transaction, a value-over-time chart, cost basis and PNL, read from the chain by this site, so the explorer never learns which wallets you watch. On the public node a wallet's first read can take an hour or more — you can leave; it keeps reading, is saved to your account, and you get a notification when it is ready. Later refreshes read only what is new and take seconds. It has its own page now (also in your account menu ▾).</p>
-        <a class="btn btn-gold" href="/tracker.html" data-tip="Goes to the wallet tracker page">Open the Wallet Tracker 💼 →</a>
+        <a class="btn btn-gold" href="/tracker" data-tip="Goes to the wallet tracker page">Open the Wallet Tracker 💼 →</a>
       </div>
       </div>
 
@@ -182,7 +182,7 @@
 
             <div class="danger-zone" id="acct-delete">
               <div class="f-label" style="margin-top:1.4rem;">Delete this account</div>
-              <p class="modal-note">Removes your sign-in methods, sessions, profile, posts, comments, uploads, tracked wallets, points and notifications, and signs you out everywhere. Invite codes you haven’t given out stop working — including one a friend has redeemed but not yet used to finish signing up. Send Calls are permanent and stay under a placeholder name. What stays and why is in the <a href="privacy.html#p10">Privacy Policy</a>. This cannot be undone.</p>
+              <p class="modal-note">Removes your sign-in methods, sessions, profile, posts, comments, uploads, tracked wallets, points and notifications, and signs you out everywhere. Invite codes you haven’t given out stop working — including one a friend has redeemed but not yet used to finish signing up. Send Calls are permanent and stay under a placeholder name. What stays and why is in the <a href="/privacy#p10">Privacy Policy</a>. This cannot be undone.</p>
               <label class="f-label" for="acct-delete-confirm">Type <b>DELETE</b> to confirm</label>
               <input class="addr-input" id="acct-delete-confirm" maxlength="12" autocomplete="off" spellcheck="false" placeholder="DELETE">
               <button class="btn btn-sm btn-danger" id="acct-delete-btn" type="button" disabled title="Type DELETE above first" data-tip="Deletes your account for good after you prove it is you">Delete my account 🗑</button>
@@ -344,21 +344,21 @@
     Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="noopener nofollow">X 🐦</a> 💸
   </p>
    <div class="nav-foot">
-     <a href="about.html">About</a>
-     <a href="arcade.html">Arcade</a>
-     <a href="communities.html">Communities</a>
+     <a href="/about">About</a>
+     <a href="/arcade">Arcade</a>
+     <a href="/communities">Communities</a>
      <a href="/">Home</a>
-     <a href="/#guide">How to Buy</a>
-     <a href="profile.html">My Profile</a>
-     <a href="newpairs.html">Scanner</a>
-     <a href="wall.html">Send Wall</a>
-     <a href="support.html">Support</a>
-     <a href="privacy.html">Privacy</a>
-     <a href="tracker.html">Wallet Tracker</a>
-     <a href="/#swap">Swap</a>
-     <a href="/#tokens">Tokens</a>
-     <a href="watchlist.html">Watchlist</a>
-     <a href="whitepaper.html">White Paper</a>
+     <a href="/guide">How to Buy</a>
+     <a href="/profile">My Profile</a>
+     <a href="/newpairs">Scanner</a>
+     <a href="/wall">Send Wall</a>
+     <a href="/support">Support</a>
+     <a href="/privacy">Privacy</a>
+     <a href="/tracker">Wallet Tracker</a>
+     <a href="/swap">Swap</a>
+     <a href="/tokens">Tokens</a>
+     <a href="/watchlist">Watchlist</a>
+     <a href="/whitepaper">White Paper</a>
    </div>
 </footer>
 

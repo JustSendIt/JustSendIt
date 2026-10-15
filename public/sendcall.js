@@ -82,7 +82,7 @@
     try { dataUrl = await shareCard(call); } catch {}
     if (dataUrl) { try { const a = document.createElement('a'); a.href = dataUrl; a.download = 'justsendit-' + (call.symbol || 'call') + '.png'; document.body.appendChild(a); a.click(); a.remove(); } catch {} }
     // a squad call's post is private to the squad, so the link goes to the squad's Calls tab rather than to a wall post nobody else can open
-    const link = location.origin + (squadOf(call) ? '/squad.html?id=' + call.squad.id + '#calls' : (call.postId ? '/wall.html#p' + call.postId : '/wall.html'));
+    const link = location.origin + (squadOf(call) ? '/squad?id=' + call.squad.id + '#calls' : (call.postId ? '/wall#p' + call.postId : '/wall'));
     let text = 'Just Send It! 🚀';
     if (call.symbol) text += ' I called $' + call.symbol + (call.entryMc != null ? ' at ' + fmtUsd(call.entryMc) + ' MC' : '');
     text += ' on $Send';

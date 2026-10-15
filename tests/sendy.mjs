@@ -42,7 +42,7 @@ try {
     && /footer\{padding-bottom:calc\(var\(--fab-clear,5\.5rem\) \+ var\(--sendy-size\) \+ 8px\)\}/.test(SRC) && /function coversControl\(a\)/.test(SRC) && /classList\.contains\('motion-off'\)/.test(SRC));
 
   /* ═══ what Sendy says ═══ */
-  check('a question with no answer says so and hands over both routes to a person — as links', /I don.t have an answer for that yet/.test(SRC) && /href: '\/support\.html'/.test(SRC) && /'mailto:' \+ EMAIL/.test(SRC) && /const EMAIL = 'SendRH@Atomicmail\.io';/.test(SRC));
+  check('a question with no answer says so and hands over both routes to a person — as links', /I don.t have an answer for that yet/.test(SRC) && /href: '\/support'/.test(SRC) && /'mailto:' \+ EMAIL/.test(SRC) && /const EMAIL = 'SendRH@Atomicmail\.io';/.test(SRC));
   check('the tips view offers the private email as well as the Support board', /class="sendy-fine">Prefer email\? <a class="sendy-link" href="' \+ MAILTO/.test(SRC) && /id="sendy-support"/.test(SRC));
   check('an answer is built from text nodes and site links only — never innerHTML of what a model or a person wrote', /bubble\.textContent = text;/.test(SRC) && !/bubble\.innerHTML/.test(SRC) && /appendChild\(document\.createTextNode/.test(SRC) && /a\.setAttribute\('href', l\.href\)/.test(SRC));
   check('the chat says its answers can be wrong, entertainment only, not financial advice, not affiliated', /answers are generated and can be wrong/.test(SRC) && /Entertainment only, not financial advice, not affiliated with Robinhood/.test(SRC));
@@ -57,7 +57,7 @@ try {
   check('  ...the question is never logged (only the status of a failure is)', !/console\.(log|error|warn)\([^)]*\b(q|msgs|history|answer)\b/.test(route));
   check('  ...the key comes from the environment, never from the page', /process\.env\.ANTHROPIC_API_KEY/.test(SERVER) && !/ANTHROPIC|api-key|x-api-key/i.test(SRC));
   /* ═══ what it is fed ═══ */
-  check('the white paper is in the cached corpus in full, and the Terms as a section index', /'privacy', 'whitepaper'\]/.test(SERVER) && /the white paper, in full/.test(SERVER) && /the Terms of Service \(\/terms\.html\), by section/.test(SERVER));
+  check('the white paper is in the cached corpus in full, and the Terms as a section index', /'privacy', 'whitepaper'\]/.test(SERVER) && /the white paper, in full/.test(SERVER) && /the Terms of Service \(\/terms\), by section/.test(SERVER));
   const live = SERVER.slice(SERVER.indexOf('function sendyLive()'), SERVER.indexOf('const sendyVoted = new Map()'));
   check('a live block of the site\'s public figures follows the cached prefix (market, communities, leaderboard, counts, scans, the Support board, rated answers)', /\{ type: 'text', text: sendyLive\(\) \}\]/.test(route) && ['market', 'communities', 'leaderboard', 'counts', 'scans', 'support board', 'rated answers'].every((k) => live.includes("part('" + k + "'")));
   check('  ...built from public columns only — never an email, a wallet, an address or a session', !/\b(email|wallets?|tracked_wallets|sessions|identities|ip)\b/.test(live) && /squad_id IS NULL/.test(live) && /private IS NULL OR private = 0/.test(live));
@@ -72,7 +72,7 @@ try {
   check('the chat shows a thumb under each model answer and sends it to the rate route', /function rateBar\(row, id\)/.test(SRC) && /'\/api\/sendy\/rate'/.test(SRC) && /if \(qaId\) rateBar\(row, qaId\)/.test(SRC));
   const empty = await api('/api/sendy/ask', { method: 'POST', body: { q: '   ' } });
   check('an empty question is refused', empty.status === 400, empty.status);
-  const asked = await api('/api/sendy/ask', { method: 'POST', body: { q: 'What is a Send Call?', page: '/about.html', history: [] } });
+  const asked = await api('/api/sendy/ask', { method: 'POST', body: { q: 'What is a Send Call?', page: '/about', history: [] } });
   const keyed = !!process.env.ANTHROPIC_API_KEY;
   check(keyed ? 'with a key the route answers (or says honestly that it could not)' : 'with no model key the route says so, so the page falls back to its own notes — never a 500',
     keyed ? ((asked.status === 200 && typeof asked.j.answer === 'string' && asked.j.answer.length > 0) || asked.status === 502) : (asked.status === 200 && asked.j && asked.j.unavailable === true), asked.status + ' ' + JSON.stringify(asked.j).slice(0, 120));

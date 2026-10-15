@@ -412,7 +412,7 @@
         if (AUTH.renderProbationBanner) AUTH.renderProbationBanner();
         if (window.sendToast) setTimeout(function () { sendToast('🔇 That was a full day of Send Calls in under an hour — you’re now in read-only mode. See the banner up top.'); }, 500);
       } else if (j.post && j.post.id) {
-        setTimeout(function () { location.href = '/wall.html#p' + j.post.id; }, 900); // take the caller to their Send Call on the wall
+        setTimeout(function () { location.href = '/wall#p' + j.post.id; }, 900); // take the caller to their Send Call on the wall
       }
     } catch { if (window.sendToast) sendToast('Could not make that call'); btn.disabled = false; btn.textContent = old; }
   }
@@ -1153,7 +1153,7 @@
 
   /* ═══ THE TOKEN DASHBOARD ═════════════════════════════════════════════════════════════════════════
      The default view of a token everywhere the site lets someone read more about one: the Scanner's
-     result (newpairs.html?scan=…, the page a link can share), the token popup that every $TICKER chip,
+     result (/newpairs?scan=…, the page a link can share), the token popup that every $TICKER chip,
      runner row, community and squad button opens, a radar row, a Hot Feed slide, a call's "full
      on-chain detail" and a saved watchlist row.
 

@@ -402,8 +402,8 @@
 
   // which catalogue page is this?
   function pageKey() {
-    const p = location.pathname;
-    if (p === '/' || /\/index\.html$/.test(p)) return 'index.html';
+    const p = location.pathname.replace(/\/+$/, '') || '/';   // pages are /about now (2026-10-15); an old /about.html reads the same
+    if (p === '/' || /^\/(index(\.html)?|guide|swap|tokens|beta)$/.test(p)) return 'index.html';   // the home page's sections are the home page
     if (/^\/u\//.test(p)) return 'u.html';
     const m = /\/([a-z-]+\.html)$/.exec(p);
     return m ? m[1] : p.replace(/^\//, '') + '.html';

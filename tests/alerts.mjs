@@ -86,7 +86,7 @@ try {
     check('deleting the post removes the alert from every bell it reached', left.length === 0, left.length);
     const gone = await api('/p/' + id, { sid: watcher.sid });
     check('  ...and the dead link says so instead of landing nowhere',
-      gone.status === 302 && /\/wall\.html\?gone=/.test(gone.location || ''), gone.location);
+      gone.status === 302 && /\/wall\?gone=/.test(gone.location || ''), gone.location);
   }
 
   /* ═══════════ 2. what the fan-out refuses to send ═══════════ */

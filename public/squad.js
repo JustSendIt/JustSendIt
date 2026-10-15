@@ -175,7 +175,10 @@
     tab = which;
     paintTabs();
     loadTab(true);
-    try { history.replaceState(null, '', location.pathname + location.search + '#' + which); } catch {}
+    /* the tab stays out of the address (owner, 2026-10-15: "every page is just their name and not ... a # in front of it"):
+       this browser tab remembers it, so a refresh comes back to it; a #calls link that brought someone here is tidied away */
+    try { sessionStorage.setItem('sqd:tab:' + id, which); } catch {}
+    if (TABS.indexOf((location.hash || '').slice(1)) >= 0) { try { history.replaceState(history.state, '', location.pathname + location.search); } catch {} }
     if (focus) { const b = tabBtns.find(t => t.dataset.stab === which); if (b) b.focus(); }
   }
   function loadTab(force) {
@@ -399,7 +402,7 @@
     const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
     return '🪙 ' + esc(j.error || 'Your linked wallets do not hold what this squad takes.') +
       ' <b>It takes ' + takes + '</b>; your linked wallets hold <b>' + holds + '</b> (summed, read on-chain).' +
-      (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile.html#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction).' : '');
+      (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction).' : '');
   }
   async function membership(btn, leaving) {
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
@@ -624,7 +627,7 @@
     showLocked(false);
     heroEl.hidden = false;
     heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:max(var(--text-floor), 1.4rem);">' + esc(msg) + '</h1>' +
-      '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="communities.html?tab=squads">Browse all Send Squads →</a></p></div>';
+      '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="/communities?tab=squads">Browse all Send Squads →</a></p></div>';
   }
   async function load() {
     if (!id) { renderFailure('No squad specified'); return; }
@@ -642,7 +645,9 @@
   // deep links: #wall / #calls / #conviction / #members open a tab; #p<id> is a post on the wall
   (function () {
     const h = (location.hash || '').slice(1);
-    if (TABS.indexOf(h) >= 0) tab = h;
+    if (TABS.indexOf(h) >= 0) { tab = h; try { history.replaceState(history.state, '', location.pathname + location.search); } catch {} return; }
+    let saved = null; try { saved = sessionStorage.getItem('sqd:tab:' + id); } catch {}
+    if (saved && TABS.indexOf(saved) >= 0 && !/^p\d+$/.test(h)) tab = saved;   // a post link (#p<id>) is on the wall
   })();
   paintTabs();
   window.addEventListener('hashchange', () => {

@@ -88,11 +88,11 @@ try {
      page so they can edit their profile". */
   const UH = read('u.html'), CSS = read('styles.css');
   check('"Edit profile ✏️" on your own wall links to the dashboard\'s Settings at the Account card (avatar, username, bio, links), and says so',
-    /<a class="btn btn-ghost btn-sm" id="edit-btn" href="\/profile\.html#sec-account" hidden data-tip="Opens Settings on your dashboard with your avatar, username, bio and links ready to change">Edit profile ✏️<\/a>/.test(UH)
+    /<a class="btn btn-ghost btn-sm" id="edit-btn" href="\/profile#sec-account" hidden data-tip="Opens Settings on your dashboard with your avatar, username, bio and links ready to change">Edit profile ✏️<\/a>/.test(UH)
     && /<details class="setting-card" id="sec-account">/.test(read('profile.html')) && /if \(\/\^#\(sec-\|claim\$/.test(DT));
   check('  ...the dashboard opens on the Settings tab whatever tab was last used, opens the Account card once the account has loaded, and puts focus on its heading',
     /const fromHash = tabForHash\(location\.hash\);/.test(DT) && /show\(fromHash \|\| /.test(DT)
-    && /if \(location\.hash !== '#sec-account' \|\| !\(signedIn === true \|\| \(window\.AUTH && AUTH\.user\)\)\) return;/.test(PJ) && /setTimeout\(\(\) => openCard\('sec-account', true\), 60\);/.test(PJ)
+    && /if \(location\.hash !== '#sec-account' \|\| !\(signedIn === true \|\| \(window\.AUTH && AUTH\.user\)\)\) return;/.test(PJ) && /setTimeout\(\(\) => \{ openCard\('sec-account', true\); dropHash\(\); \}, 60\);/.test(PJ)
     && /if \(!accountOpened\) openAccountFromLink\(true\);/.test(PJ) && /addEventListener\('hashchange', openAccountFromLink\);/.test(PJ)
     && /sum\.setAttribute\('tabindex', '-1'\); sum\.focus\(\{ preventScroll: true \}\);/.test(PJ));
   check('  ...and lands below the nav and the sticky tab bar, not under them (the bar publishes its height)',

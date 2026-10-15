@@ -17,7 +17,7 @@
   function openAuth(e) {
     if (e) e.preventDefault();
     if (window.AUTH && typeof window.AUTH.open === 'function') window.AUTH.open();
-    else location.href = 'profile.html';
+    else location.href = '/profile';
   }
   /* The two JOIN buttons open the sign-in panel, which is what they say. The two CONNECT buttons connect
      a wallet, which is what THEY say — they used to open the same panel and leave the reader to find the
@@ -33,7 +33,7 @@
         window.AUTH.connectWallet().then(function (j) { if (j && j.linked && window.SFX) SFX.play('connect'); }).catch(function (err) {
           if (err && err.message && err.message !== 'cancelled' && window.sendToast) sendToast('⚠️ ' + err.message);
         });
-      } else location.href = 'profile.html';
+      } else location.href = '/profile';
     });
   });
 

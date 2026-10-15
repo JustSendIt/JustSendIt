@@ -64,7 +64,7 @@ PORT=8642
 COOKIE_SECURE=1
 TRUST_PROXY=1            # Caddy alone. Cloudflare in front of Caddy = 2 (see .env.example)
 SEED_INVITE_CODE=<pick one, or read the generated code from the first boot's log>
-ADMIN_USER_IDS=<your database row id (users.id, not your Send ID) once you have signed up — unlocks /admin.html>
+ADMIN_USER_IDS=<your database row id (users.id, not your Send ID) once you have signed up — unlocks /admin>
 RPC_URL=<a keyed chain endpoint — Alchemy serves chain 4663>
 BLOCKSCOUT_URL=<a keyed explorer — free key at dev.blockscout.com>
 ```

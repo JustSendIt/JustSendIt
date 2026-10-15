@@ -649,7 +649,7 @@ function renderTracker(zone, r, prefs) {
   // the chart
   if (P.showChart) {
     html += '<section class="trk-chart" aria-labelledby="' + S.uid + '-chart-h"><div class="trk-h-row"><h3 id="' + S.uid + '-chart-h" class="trk-h">Value over time</h3></div>' +
-      (chartable ? '<div class="wc" data-wc-host></div>' : '<p class="modal-note"><a href="/tracker.html">Chart available on the Wallet Tracker page →</a></p>') +
+      (chartable ? '<div class="wc" data-wc-host></div>' : '<p class="modal-note"><a href="/tracker">Chart available on the Wallet Tracker page →</a></p>') +
       '</section>';
   }
 
@@ -810,7 +810,7 @@ function trkTokenDetail(r, t, P, money, exp, priceHtml, shareTxt) {
     (t.fromOthers ? '<p class="modal-note">' + trkPlural(t.fromOthers, 'transfer') + ' in came from a swap in someone else\'s transaction (a reward, a gift, or a bridge or solver fill) — counted at zero cost, like any transfer in.</p>' : '') +
     (t.legsUnread ? '<p class="modal-note">' + trkPlural(t.legsUnread, 'transaction') + ' of this token could not be read (or lie beyond the newest ' + trkN(r.legsRead) + ' read) — listed as transfers, not valued.</p>' : '') +
     (t.trades && t.trades.length ? trkTradeTable(t, exp) : '') +
-    '<p class="modal-note"><a href="/newpairs.html?scan=' + trkSeg(t.address) + '">📊 token dashboard</a> · <a href="' + exp + '/token/' + trkSeg(t.address) + '" target="_blank" rel="noopener">token on explorer ↗</a>' +
+    '<p class="modal-note"><a href="/newpairs?scan=' + trkSeg(t.address) + '">📊 token dashboard</a> · <a href="' + exp + '/token/' + trkSeg(t.address) + '" target="_blank" rel="noopener">token on explorer ↗</a>' +
     (t.pair ? ' · <a href="https://dexscreener.com/robinhood/' + trkSeg(t.pair) + '" target="_blank" rel="noopener">chart ↗</a>' : '') + '</p>';
 }
 function trkTradeTable(t, exp) {

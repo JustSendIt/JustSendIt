@@ -66,7 +66,7 @@
           rulesHtml() +
           '<div class="inv-actions">' +
             '<button class="g-btn g-btn-primary" id="inv-have" type="button" data-tip="Opens the box where you type your invite code">I have a code 🎟️</button>' +
-            '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the full terms of service in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
+            '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the full terms of service in a new tab" href="/terms" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Read the terms</a>' +
           '</div>' +
           '<button class="inv-browse" id="inv-browse" type="button" data-tip="Closes this; you can keep reading without an account">No code? Keep browsing read-only →</button>' +
         '</div>' +
@@ -98,7 +98,7 @@
             '<p class="inv-err" id="inv-tos-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;margin-top:0.6rem;">' +
               '<button class="g-btn g-btn-primary" id="inv-tos-go" type="button" disabled data-tip="Records your agreement to the terms, then opens the last step">Accept &amp; continue 🚀</button>' +
-              '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the same terms as a full page in a new tab" href="/terms.html" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
+              '<a class="g-btn g-btn-ghost inv-terms-link" hidden data-tip="Opens the same terms as a full page in a new tab" href="/terms" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;">Open in a new tab ↗</a>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -483,11 +483,11 @@
     if (!tosLoaded) {
       box.innerHTML = '<p>Loading the terms…</p>';
       try {
-        const html = await (await fetch('/terms.html', { credentials: 'same-origin' })).text();
+        const html = await (await fetch('/terms', { credentials: 'same-origin' })).text();
         const body = new DOMParser().parseFromString(html, 'text/html').getElementById('terms-body');
-        box.innerHTML = body ? body.innerHTML : '<p>Could not load the terms. <a href="/terms.html" target="_blank" rel="noopener">Open them here</a>.</p>';
+        box.innerHTML = body ? body.innerHTML : '<p>Could not load the terms. <a href="/terms" target="_blank" rel="noopener">Open them here</a>.</p>';
         tosLoaded = true;
-      } catch { box.innerHTML = '<p>Could not load the terms. <a href="/terms.html" target="_blank" rel="noopener">Open them in a new tab</a> and come back.</p>'; }
+      } catch { box.innerHTML = '<p>Could not load the terms. <a href="/terms" target="_blank" rel="noopener">Open them in a new tab</a> and come back.</p>'; }
     }
     checkRead();
     clearInterval(tosTimer);
@@ -798,12 +798,12 @@
     on('inv-proof-go', () => runProof(true));
     on('inv-browse5', () => { close(); location.reload(); });
     // a placeholder name still needs claiming; a name picked at sign-up goes straight to the security settings
-    on('inv-setup-go', () => { close(); location.href = (window.AUTH && AUTH.user && !AUTH.user.auto_named) ? '/profile.html#sec-security' : '/profile.html#claim'; });
+    on('inv-setup-go', () => { close(); location.href = (window.AUTH && AUTH.user && !AUTH.user.auto_named) ? '/profile#sec-security' : '/profile#claim'; });
     on('inv-setup-ticket', () => show('step-codes'));
     on('inv-proof-again', () => runProof(false));
     on('inv-dl', downloadTicket);
     on('inv-share', shareOnX);
-    on('inv-dash', () => { close(); location.href = '/profile.html#invites'; });
+    on('inv-dash', () => { close(); location.href = '/profile#invites'; });
     on('inv-join', async () => {
       close();
       // auth.js caches "does this visitor hold a ticket" for the page's life, and it was answered before

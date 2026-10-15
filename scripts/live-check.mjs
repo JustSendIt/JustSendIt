@@ -71,9 +71,9 @@ if (HTTPS) {
   say('SKIP', 'HSTS and the http→https redirect (this origin is http)', '');
 }
 if (!/^www\./.test(HOST) && !/^(localhost|127\.0\.0\.1)(:|$)/.test(HOST)) {
-  const www = await get(ORIGIN.replace('://', '://www.') + '/about.html', { timeout: 10000 });
+  const www = await get(ORIGIN.replace('://', '://www.') + '/about', { timeout: 10000 });
   if (!www.ok) say('WARN', 'www.' + HOST + ' redirects to the apex (www does not resolve or connect — fine if you never created the record)', www.err);
-  else pass('www.' + HOST + ' redirects to the apex, keeping the path', www.status >= 301 && www.status <= 308 && new RegExp('^' + ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/about\\.html').test(h(www, 'location')), www.status + ' → ' + (h(www, 'location') || '(served the page on www: every POST there would fail the Origin check)'));
+  else pass('www.' + HOST + ' redirects to the apex, keeping the path', www.status >= 301 && www.status <= 308 && new RegExp('^' + ORIGIN.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/about(?:[?#]|$)').test(h(www, 'location')), www.status + ' → ' + (h(www, 'location') || '(served the page on www: every POST there would fail the Origin check)'));
 } else {
   say('SKIP', 'the www redirect (no apex domain here)', '');
 }
@@ -104,7 +104,7 @@ pass('/api/config is served', cfg.status === 200 && cfgj && cfgj.features, cfg.s
 if (cfgj && cfgj.media) warn('the theme song and the feature video are on the box (they ship outside git)', cfgj.media.audio !== false && cfgj.media.video !== false, JSON.stringify(cfgj.media));
 
 /* ---- 6. the pages reach nothing but this site ---- */
-const priv = await get('/privacy.html', { accept: 'text/html' });
+const priv = await get('/privacy', { accept: 'text/html' });
 pass('the privacy page is served', priv.status === 200, priv.status);
 pass('the support email is readable (Email Address Obfuscation off)', /href="mailto:[^"]+"/.test(priv.text) && !/__cf_email__|data-cfemail/.test(priv.text), /data-cfemail/.test(priv.text) ? 'Cloudflare rewrote the address; its decoder script is blocked by the CSP, so visitors see [email protected]' : 'mailto link intact');
 const fontsCss = await get('/fonts/fonts.css');

@@ -1,6 +1,6 @@
 /* The pages' search heads, read straight from the files: every static page's <title>, description, robots, canonical,
    Open Graph and Twitter tags and JSON-LD against the SEO standard, plus robots.txt and the static sitemap. The per-entity
-   heads the server builds (/u/<name>, community.html?id=N, the dynamic sitemaps) are covered by seo-server.mjs; this suite
+   heads the server builds (/u/<name>, /community?id=N, the dynamic sitemaps) are covered by seo-server.mjs; this suite
    needs no server and ignores the port it is handed. */
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
@@ -38,7 +38,7 @@ const PAGES = {
 };
 const PAGE_TYPE = { 'about.html': 'AboutPage', 'communities.html': 'CollectionPage', 'wall.html': 'CollectionPage', 'whitepaper.html': 'TechArticle' };
 const isIndexable = (f) => PAGES[f] && PAGES[f][1] === 'index';
-const urlOf = (f) => ORIGIN + '/' + (f === 'index.html' ? '' : f);
+const urlOf = (f) => ORIGIN + (f === 'index.html' ? '/' : '/' + f.replace(/\.html$/, ''));   // pages are served by name: /about (2026-10-15)
 
 const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', mdash: '—', ndash: '–', hellip: '…', times: '×', middot: '·', rarr: '→', larr: '←', copy: '©' };
 const decode = (s) => s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) =>
@@ -218,12 +218,12 @@ try {
     'extra: ' + locs.filter((u) => !want.includes(u)).join(',') + ' missing: ' + want.filter((u) => !locs.includes(u)).join(','));
   check('  ...and it is a sitemaps.org urlset', /^<\?xml version="1\.0" encoding="UTF-8"\?>\s*<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/.test(SM) && /<\/urlset>\s*$/.test(SM));
   const RB = read('robots.txt');
-  const pagePath = (f) => f === 'index.html' ? '/' : '/' + f;
+  const pagePath = (f) => f === 'index.html' ? '/' : '/' + f.replace(/\.html$/, '');
   b = files.filter(isIndexable).filter((f) => !robotsAllows(RB, pagePath(f)));
   check('robots.txt disallows none of the indexable pages', !b.length, b.join(','));
   b = files.filter((f) => !isIndexable(f)).filter((f) => !robotsAllows(RB, pagePath(f)));
   check('robots.txt disallows none of the noindex pages (a blocked page\'s noindex is never read)', !b.length, b.join(','));
-  check('  ...nor a wall, a community, or the sitemaps', ['/u/someone', '/community.html?id=1', '/sitemap.xml', '/sitemap-pages.xml'].every((p) => robotsAllows(RB, p)));
+  check('  ...nor a wall, a community, or the sitemaps', ['/u/someone', '/community?id=1', '/sitemap.xml', '/sitemap-pages.xml'].every((p) => robotsAllows(RB, p)));
   check('  ...but it still keeps crawlers out of /api/ reads for an address the caller picks', !robotsAllows(RB, '/api/scan?address=0x1') && !robotsAllows(RB, '/api/me') && !robotsAllows(RB, '/api/chain/wallet'));
   check('robots.txt points at the sitemap index on the placeholder origin', /^Sitemap: https:\/\/sendrh\.com\/sitemap\.xml$/m.test(RB));
 

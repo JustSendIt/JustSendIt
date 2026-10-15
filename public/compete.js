@@ -118,7 +118,7 @@
       prize: 'Top <b>' + n + '</b> win a Send Power boost for the next ' + bs.prize.lastsDays + ' days — <b>#1 gets ' + ladder[0] + '×</b>' + (ladder.length > 1 ? ', down to ' + ladder[ladder.length - 1] + '× for #' + ladder.length : '') + '.',
       body: rows.length ? podium(rows, ctx.prev.bs, u => u.points, pts) + list(rows, ctx.prev.bs, pts) : '<p class="cmp-empty">Nobody has scored this week yet. The first post takes the lead. 🚀</p>',
       me: me + last,
-      cta: '<a class="btn btn-sm btn-primary" href="wall.html" data-tip="Opens the Send Wall feed, where you post">Post on the Send Wall</a>',
+      cta: '<a class="btn btn-sm btn-primary" href="/wall" data-tip="Opens the Send Wall feed, where you post">Post on the Send Wall</a>',
       how: '<b>A fresh race every week, ranked on base points.</b> Every Monday at 00:00 UTC the board resets to zero: only what you did inside the week counts — every boost (Holder, OG, community, Rocket Run) and any prize taken out — so a whale, an OG and a newcomer race on the same footing. When the week ends the game master pays exactly ' + n + ' prizes by finishing place — ' + ladder.map(b => b + '×').join(' · ') + ' — for the whole of the next week; a tie at the edge goes to whoever joined first. Boosts add on top of your other boosts, they don\'t multiply.',
     });
   }
@@ -134,7 +134,7 @@
       prize: 'Ranked by <b>total peak gain</b> across every call made in the last 7 days (each call counted up to ' + sc.cap + 'x) — a rolling window, so a call drops off the board a week after it was made. A call pays Send Power as it climbs, and most of it for <b>holding in profit</b>.',
       body: rows.length ? podium(rows, ctx.prev.calls, u => Math.max(0, u.totalX), val) + list(rows, ctx.prev.calls, val) : '<p class="cmp-empty">No call on the board in the last 7 days. The first good call leads. 📣</p>',
       me,
-      cta: '<a class="btn btn-sm btn-primary" href="wall.html" data-tip="Opens the Send Wall, where calls are posted">Make a Send Call</a>',
+      cta: '<a class="btn btn-sm btn-primary" href="/wall" data-tip="Opens the Send Wall, where calls are posted">Make a Send Call</a>',
       how: '<b>A Send Call is a public call on a token.</b> Its gain is tracked from your entry price to its peak, and it is graded: 💪 Solid from +2x, 🔥 Big from +5x, 🚀 Massive from +10x, 🏆 Legendary from +20x. The board adds up every call you made in the last 7 days, each counted up to +' + sc.cap + 'x, so one lucky call cannot carry the week alone. Tokens need at least $' + nf(sc.minLiq) + ' of pooled liquidity to be callable. Calls pay an opening award, a milestone for each whole X, and a hold bonus that grows the longer they stay in profit — bigger still when the people who Sent It on your call are in profit too.',
     });
   }
@@ -143,7 +143,7 @@
     const body = board.length ? '<ol class="cmp-comms" aria-label="Top communities this week">' + board.map(c =>
       '<li' + (c.joined ? ' class="is-me"' : '') + '><span class="cmp-rank">' + (medal[c.rank - 1] || '#' + c.rank) + '</span>' +
         (c.image ? '<img class="cmp-cava" src="' + esc(c.image) + '" alt="" loading="lazy">' : '<span class="cmp-cava cmp-cava--txt" aria-hidden="true">' + (c.demo ? '📈' : esc(String(c.symbol || '?').slice(0, 3))) + '</span>') +
-        '<span class="cmp-comm-main"><a class="cmp-name" href="community.html?id=' + encodeURIComponent(c.id) + '">$' + esc(c.symbol) + '</a>' +
+        '<span class="cmp-comm-main"><a class="cmp-name" href="/community?id=' + encodeURIComponent(c.id) + '">$' + esc(c.symbol) + '</a>' +
           (c.demo ? '<span class="cmp-sandbox" title="Open to every member: no token of its own to hold (the $100 $SEND wallet check still applies), no multiplier">🧪 Sandbox · stock, not a token · no 10×</span>' : '') +
           '<small>' + esc(c.name) + ' · ' + nf(c.memberCount) + ' member' + (c.memberCount === 1 ? '' : 's') + ' · Lv ' + c.level + (c.joined ? ' · <b>joined ✓</b>' : '') + '</small>' +
         '<span class="cmp-xpbar" aria-hidden="true"><span style="width:' + Math.max(4, Math.round(c.xpWeek / max * 100)) + '%"></span></span></span>' +
@@ -161,7 +161,7 @@
           : joinedDemo ? 'You are in the sandbox — it races here but grants no boost. A live <b>token</b> community is what pays the 10×.'
           : 'Join a live token community and post there — every member action adds to its week.')
         : 'Rally around a token: join its community and post there. ' + signInBtn('Sign in to join'),
-      cta: '<a class="btn btn-sm btn-primary" href="communities.html" data-tip="Opens the directory of token communities">Browse communities</a>',
+      cta: '<a class="btn btn-sm btn-primary" href="/communities" data-tip="Opens the directory of token communities">Browse communities</a>',
       how: '<b>Communities level up as their members show up.</b> Posting, reacting and commenting on a community wall earns it community XP, capped per member per day so one person cannot carry it. The weekly bucket resets on its own every Monday at 00:00 UTC; the all-time XP — and the level it buys — stays. Being in at least one live <i>token</i> community adds a 10× community boost to your own Send Power stack; the sandbox grants none.',
     });
   }
@@ -183,7 +183,7 @@
       prize: 'A permanent badge and a Send Power multiplier for being early in <b>both $SEND and $GWC</b> — <b>20×</b> Diamond (the first month of $GWC, net buyers of both — already closed), <b>10×</b> Gold, 5× Silver, 3× Bronze. One standard; only <i>when</i> you got in changes the size.',
       body: (o.diamond ? '<ol class="cmp-og" aria-label="OG Diamond"><li class="cmp-og-row is-closed"><span class="cmp-og-medal" aria-hidden="true">💎</span><b>OG Diamond</b><span class="cmp-og-mult">' + o.diamond.mult + '×</span><span class="cmp-og-state">first month of $GWC · closed ' + esc(dateShort(o.diamond.until)) + '</span></li></ol>' : '') + rowsHtml,
       me,
-      cta: '<a class="btn btn-sm btn-primary" href="about.html#og-rules" data-tip="Opens the OG badge rules on the About page">The OG rules</a>' + (ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="profile.html" data-tip="Opens your profile, where wallets are linked">Link a wallet</a>' : ''),
+      cta: '<a class="btn btn-sm btn-primary" href="/about#og-rules" data-tip="Opens the OG badge rules on the About page">The OG rules</a>' + (ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="/profile" data-tip="Opens your profile, where wallets are linked">Link a wallet</a>' : ''),
       how: '<b>Four tiers, one rule.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold closes with the beta, Silver 90 days after that, Bronze when $GWC turns one year old — the same dates for both coins — and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ' + (o.closes ? 'Gold closes ' + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '') + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. Sell out of either coin entirely, ever, and the badge is revoked. Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
     });
   }
@@ -222,7 +222,7 @@
       prize: 'Every Send Power point ever earned, with every boost applied. <b>Level 100</b> is the Biggest Sender crown 👑.',
       body: rows.length ? podium(rows, ctx.prev.all, u => u.points, val) + list(rows, ctx.prev.all, val) : '<p class="cmp-empty">Nobody has scored yet.</p>',
       me,
-      cta: ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="profile.html" data-tip="Opens your profile with your Send Power total">My Send Power</a>' : '',
+      cta: ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="/profile" data-tip="Opens your profile with your Send Power total">My Send Power</a>' : '',
       how: '<b>The long game.</b> Levels climb an exponential curve with no cap — each level costs about 10% more than the last. Your Holder, OG, community, Rocket Run and Biggest Sender boosts all add together and every point you earn is paid at that total.',
     });
   }

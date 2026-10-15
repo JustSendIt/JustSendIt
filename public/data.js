@@ -34,7 +34,7 @@
     else if (e.discountPct) h += '<p class="dk-note">🏅 <b>OG ' + esc(e.tierName) + ': ' + e.discountPct + '% off</b> — a year costs a <b>' + usd(e.threshold) + '</b> burn instead of ' + usd(e.baseThreshold) + '.</p>';
     else h += '<p class="dk-note">A year costs a <b>' + usd(e.threshold) + '</b> burn of $SEND; renewing takes another ' + usd(e.threshold) + ' and adds a year to your current expiry.</p>';
     if (e.error) h += '<p class="dk-note">⚠️ ' + esc(e.error) + '</p>';
-    if (b && !b.wallets) h += '<p class="dk-note">No wallet is linked to this account yet. Link the wallet you burn from on your <a href="profile.html">dashboard</a>.</p>'; // only when the chain was actually read and found none — a failed read says so above instead
+    if (b && !b.wallets) h += '<p class="dk-note">No wallet is linked to this account yet. Link the wallet you burn from on your <a href="/profile">dashboard</a>.</p>'; // only when the chain was actually read and found none — a failed read says so above instead
     if (b) {
       h += '<div class="dk-stat"><span>Linked wallets read</span><b>' + b.wallets + '</b></div>' +
         '<div class="dk-stat"><span>$SEND sent to the burn address</span><b>' + tok(b.tokens) + ' SEND</b></div>' +

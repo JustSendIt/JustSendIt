@@ -63,24 +63,24 @@
   // where clicking a "how to earn" row takes you to actually do it
   const EARN_ACTION = {
     egg: { egg: true },   // there is nowhere to send them — the point is to look; rendered as a plain row, not a button
-    swap: { href: '/#swap' },
+    swap: { href: '/swap' },
     connect_wallet: { open: 'sec-security' },
-    first_post: { href: '/wall.html' },
-    post: { href: '/wall.html' },
-    track_wallet: { href: '/tracker.html' },   // the tracker is its own page now; #add-wallet-form no longer exists here
-    watch_token: { href: '/newpairs.html' },
-    send_call: { href: '/newpairs.html' },
-    call_x: { href: '/wall.html' },
-    call_hold: { href: '/wall.html' },
-    hop_on: { href: '/wall.html' },
-    hop_hold: { href: '/wall.html' },
+    first_post: { href: '/wall' },
+    post: { href: '/wall' },
+    track_wallet: { href: '/tracker' },   // the tracker is its own page now; #add-wallet-form no longer exists here
+    watch_token: { href: '/newpairs' },
+    send_call: { href: '/newpairs' },
+    call_x: { href: '/wall' },
+    call_hold: { href: '/wall' },
+    hop_on: { href: '/wall' },
+    hop_hold: { href: '/wall' },
     daily: { wall: true },   // resolved per-render: "✓ today" only once you've ACTUALLY checked in
     customize: { open: 'sec-wall' },
-    comment: { href: '/wall.html' },
-    react_give: { href: '/wall.html' },
-    vote_give: { href: '/wall.html' },
-    follow: { href: '/wall.html' },
-    be_followed: { href: '/wall.html' },
+    comment: { href: '/wall' },
+    react_give: { href: '/wall' },
+    vote_give: { href: '/wall' },
+    follow: { href: '/wall' },
+    be_followed: { href: '/wall' },
   };
   /* Hover/tap detail for each way to earn.
      THE DAILY CAPS ARE NOT WRITTEN HERE ANY MORE. They used to be, "mirroring server.js DAILY_CAP" — and
@@ -343,8 +343,8 @@
     let primary;
     if (maxed && (!d || d.nextDays == null)) primary = '👑 You\'ve maxed everything — you are the <b>Biggest Sender</b>. Flex it. 🚀';
     else if (d && d.nextDays != null && diaProg >= xpPct) primary = '💎 <b>' + diaLeft + '</b> day' + (diaLeft === 1 ? '' : 's') + ' of holding to <b>' + esc(nextLbl) + '</b> — just don\'t sell →';
-    else if (!maxed) primary = '🔥 <b>' + nf(xpGap) + '</b> XP from <b>Level ' + (g.level + 1) + '</b> — <a href="/#swap">one boosted swap can do it →</a>';
-    else primary = '🚀 <a href="/wall.html">Keep posting on the Wall to climb →</a>';
+    else if (!maxed) primary = '🔥 <b>' + nf(xpGap) + '</b> XP from <b>Level ' + (g.level + 1) + '</b> — <a href="/swap">one boosted swap can do it →</a>';
+    else primary = '🚀 <a href="/wall">Keep posting on the Wall to climb →</a>';
 
     let secondary;
     if (d && h.streakStart) {
@@ -505,11 +505,11 @@
   function communityBlock(g) {
     const all = g.communities || [], live = all.filter(c => c.status === 'live' && !c.demo), sandbox = all.find(c => c.demo);
     // the sandbox is a membership, not a multiplier: it is named, and never counted toward "10× active"
-    const sandboxLine = sandbox ? '<p class="comm-sandbox-line">🧪 You are also in the <a href="community.html?id=' + sandbox.id + '">sandbox</a> ($' + esc(sandbox.symbol) + ' — a listed stock, not a token) — it grants no multiplier.</p>' : '';
+    const sandboxLine = sandbox ? '<p class="comm-sandbox-line">🧪 You are also in the <a href="/community?id=' + sandbox.id + '">sandbox</a> ($' + esc(sandbox.symbol) + ' — a listed stock, not a token) — it grants no multiplier.</p>' : '';
     if (!live.length) {
       return '<div class="og-block comm-invite"><span class="og-block-badge">🏘️</span>' +
         '<div class="og-block-body"><b>Join a community for a flat 10× Send Power.</b> Rally around any token — a community goes <b>live at 10 verified holder slots</b>, and while you’re in <b>≥1 live</b> one, <b>a flat 10× boost (+9×) is added to every point you earn</b>, on top of your Holder Boost &amp; OG — boosts add, they don’t multiply. Post, react &amp; comment on its wall to raise your <b>community member level</b> and help the community level up. ' +
-        '<a class="gobj-link" href="communities.html">Browse communities →</a>' + sandboxLine + '</div></div>';
+        '<a class="gobj-link" href="/communities">Browse communities →</a>' + sandboxLine + '</div></div>';
     }
     const bar = (label, lvl, into, span, cls) => {
       const pct = span ? Math.min(100, Math.round(into / span * 100)) : 100;
@@ -517,7 +517,7 @@
         '<div class="gxp" role="progressbar" aria-valuenow="' + into + '" aria-valuemin="0" aria-valuemax="' + (span || into) + '" aria-label="' + label + ' level ' + lvl + '"><span class="gxp-fill" style="width:' + pct + '%"></span></div></div>';
     };
     const rows = live.map(c =>
-      '<a class="comm-mini" href="community.html?id=' + c.id + '">' +
+      '<a class="comm-mini" href="/community?id=' + c.id + '">' +
         '<div class="comm-mini-head"><b>$' + esc(c.symbol) + '</b> <span class="comm-mini-name">' + esc(c.name) + '</span></div>' +
         bar('🏆 Community', c.commLevel, c.commInto, c.commSpan, 'comm-xp-community') +
         bar('💎 ' + esc(c.conviction.title), c.conviction.level, c.conviction.into, c.conviction.span, 'comm-xp-conv') +
@@ -753,7 +753,7 @@
     // nudge an untried high-value action
     if (!bd.find(x => x.kind === 'swap')) {
       rows += '<li class="ll-nudge" data-cf-drop><span class="ll-ico" aria-hidden="true">🚀</span>' +
-        '<a class="ll-label" href="/#swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
+        '<a class="ll-label" href="/swap">Swap for $Send — you haven\'t tried this <span class="ll-n">+450 each →</span></a></li>';
     }
     /* What was taken, listed under what was given rather than left out of the ledger entirely. It is kept
        visually separate because it is not loot — it is the counterweight, and mixing a loss into the same
@@ -944,7 +944,7 @@
       // row may only claim "✓ today" when the server says you actually checked in; otherwise it's a quest to go do.
       const mine = (window.AUTH && AUTH.user && AUTH.user.username) || '';
       const done = t.done || (t.wall && !!(window.AUTH && AUTH.user && AUTH.user.checkedInToday));
-      const wallHref = mine ? '/u/' + encodeURIComponent(mine) : '/wall.html';
+      const wallHref = mine ? '/u/' + encodeURIComponent(mine) : '/wall';
       if (done) row = '<div class="gearn-row gearn-done">' + inner + '<span class="ge-go" aria-hidden="true">✓ checked in</span></div>';   // a check-in holds for 24 hours, not a calendar day: never "today"
       else if (t.wall) row = '<a class="gearn-row" href="' + wallHref + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';
       else if (t.href) row = '<a class="gearn-row" href="' + t.href + '" aria-label="' + aria + '">' + inner + '<span class="ge-go" aria-hidden="true">→</span></a>';

@@ -19,8 +19,8 @@
       '<div class="tm-dialog" role="dialog" aria-modal="true" aria-labelledby="tm-title">' +
         '<div class="tm-head">' +
           '<h2 id="tm-title" class="tm-title">Token dashboard</h2>' +
-          // the same dashboard as its own page: a link somebody can keep or share (newpairs.html?scan=…)
-          '<a class="btn btn-sm btn-ghost tm-full" href="/newpairs.html" data-tip="Opens this dashboard on its own page, with a link you can share" hidden>↗ Full page</a>' +
+          // the same dashboard as its own page: a link somebody can keep or share (/newpairs?scan=…)
+          '<a class="btn btn-sm btn-ghost tm-full" href="/newpairs" data-tip="Opens this dashboard on its own page, with a link you can share" hidden>↗ Full page</a>' +
           '<button class="tm-x" type="button" data-tm-close data-tip="Closes this popup and returns you to the page" aria-label="Close token dashboard">✕</button>' +
         '</div>' +
         '<div class="tm-body" id="tm-body"></div>' +
@@ -72,7 +72,7 @@
     if (!modal.hasAttribute('hidden')) { if (releaseTrap) { releaseTrap(); releaseTrap = null; } } // re-open without close: release the old trap first
     else { lastFocus = document.activeElement; }                                                    // capture the external trigger only when opening from closed
     titleEl.textContent = (meta.name ? meta.name + ' ' : '') + (meta.symbol ? '$' + meta.symbol : '') || 'Token dashboard';
-    if (token) { fullLink.href = '/newpairs.html?scan=' + encodeURIComponent(String(token).toLowerCase()); fullLink.hidden = false; } else fullLink.hidden = true;
+    if (token) { fullLink.href = '/newpairs?scan=' + encodeURIComponent(String(token).toLowerCase()); fullLink.hidden = false; } else fullLink.hidden = true;
     body.innerHTML = '<p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading the chain for the latest on-chain detail…</p>';
     modal.removeAttribute('hidden');
     if (window.lockScroll) lockScroll(); else document.body.style.overflow = 'hidden';

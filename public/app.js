@@ -94,7 +94,7 @@
   // kept for anything still reading the old global; gold is the tier it always described
   window.OG_TIP = window.ogTip(3);
   // Every OG badge opens the About page's OG section, where the tiers, dates and rules are written out.
-  window.OG_RULES_HREF = '/about.html#og-rules';
+  window.OG_RULES_HREF = '/about#og-rules';
   window.ogBadge = function (og, where) {
     // native title = hover explanation (browser-positioned, never clips); aria-label = screen readers.
     var tier = Number(og) || 0;

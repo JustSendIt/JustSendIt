@@ -39,23 +39,23 @@ function mkUser(name, id) {
 try {
   // a page opened by a new device counts once; the same device again is a view, not a visitor
   const me = ip();
-  let a = row(); await open('/arcade.html', { ip: me }); let b = row();
+  let a = row(); await open('/arcade', { ip: me }); let b = row();
   check('a page opened by a new device counts one visitor and one view', same(diff(a, b), { visitors: 1, views: 1, bots: 0 }), JSON.stringify(diff(a, b)));
-  a = row(); await open('/wall.html', { ip: me }); b = row();
+  a = row(); await open('/wall', { ip: me }); b = row();
   check('  ...the same device again is one more view, not another visitor', same(diff(a, b), { visitors: 0, views: 1 }), JSON.stringify(diff(a, b)));
-  a = row(); await open('/wall.html', { ip: ip() === me ? '198.51.100.7' : ip() }); b = row();
+  a = row(); await open('/wall', { ip: ip() === me ? '198.51.100.7' : ip() }); b = row();
   check('  ...another device is another visitor', diff(a, b).visitors === 1, JSON.stringify(diff(a, b)));
 
   // what is not a person opening a page
-  a = row(); await open('/arcade.html', { ua: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }); await open('/arcade.html', { ua: 'node' }); await open('/arcade.html', { ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/129.0 Safari/537.36' }); b = row();
+  a = row(); await open('/arcade', { ua: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }); await open('/arcade', { ua: 'node' }); await open('/arcade', { ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/129.0 Safari/537.36' }); b = row();
   check('a crawler, a script and a headless browser are left out (counted as bots, not visitors or views)', same(diff(a, b), { visitors: 0, views: 0, bots: 3 }), JSON.stringify(diff(a, b)));
-  a = row(); await open('/arcade.html', { method: 'HEAD' }); await open('/arcade.html', { headers: { 'Sec-Purpose': 'prefetch' } }); await open('/api/config'); await open('/styles.css'); b = row();
+  a = row(); await open('/arcade', { method: 'HEAD' }); await open('/arcade', { headers: { 'Sec-Purpose': 'prefetch' } }); await open('/api/config'); await open('/styles.css'); b = row();
   check('  ...and a HEAD, a browser prefetch, an API call or a stylesheet counts nothing at all', same(diff(a, b), { visitors: 0, views: 0, bots: 0 }), JSON.stringify(diff(a, b)));
 
   // a signed-in member is a visitor and a member, once a day
   const m = mkUser('__vis_' + randomBytes(3).toString('hex'));
   const mip = ip();
-  a = row(); await open('/wall.html', { ip: mip, headers: { Cookie: 'sid=' + m.sid } }); await open('/arcade.html', { ip: mip, headers: { Cookie: 'sid=' + m.sid } }); b = row();
+  a = row(); await open('/wall', { ip: mip, headers: { Cookie: 'sid=' + m.sid } }); await open('/arcade', { ip: mip, headers: { Cookie: 'sid=' + m.sid } }); b = row();
   check('a signed-in member counts among the visitors, and as a member once a day', diff(a, b).members === 1 && diff(a, b).views === 2, JSON.stringify(diff(a, b)));
 
   // nothing stored names an IP address, a browser or an account

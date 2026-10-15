@@ -44,7 +44,7 @@ try {
      The gate used to redirect every signed-out visitor — and every crawler — to gate.html, which closed
      the landing page and made every canonical, sitemap entry and og: tag unreachable. Reading is now
      open to everyone; the invite is enforced at the three doors that create an account. */
-  for (const open of ['/', '/about.html', '/wall.html', '/newpairs.html', '/arcade.html', '/tracker.html', '/terms.html', '/robots.txt', '/sitemap.xml', '/healthz']) {
+  for (const open of ['/', '/about', '/wall', '/newpairs', '/arcade', '/tracker', '/terms', '/robots.txt', '/sitemap.xml', '/healthz']) {
     const r = await fetch(BASE + open, { redirect: 'manual' });
     check('open to anyone: ' + open, r.status === 200, r.status + (r.headers.get('location') ? ' -> ' + r.headers.get('location') : ''));
   }
@@ -53,7 +53,7 @@ try {
   check('  ...and the landing page still carries its SEO', /rel="canonical"/.test(homeHtml) && /og:title/.test(homeHtml) && /application\/ld\+json/.test(homeHtml));
   const apiOpen = await api('/api/posts');
   check('reading the API needs no invite either', apiOpen.status === 200, apiOpen.status);
-  const gateOld = await fetch(BASE + '/gate.html', { redirect: 'manual' });
+  const gateOld = await fetch(BASE + '/gate', { redirect: 'manual' });
   const gateHtml = await gateOld.text();
   check('the old gate page is now a noindex pointer at the real site', /noindex/.test(gateHtml) && /invite=1/.test(gateHtml), gateOld.status);
 

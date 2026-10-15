@@ -1,5 +1,5 @@
 /* ===== The Send Wall: shared feed, tabs, votes, reactions, comments =====
-   Also drives the Support board (support.html), which is the same feed under its own namespace: same post
+   Also drives the Support board (/support), which is the same feed under its own namespace: same post
    card, same voting, same comment thread, same moderation. The page declares which room it is with
    <body data-board="support">; everything below reads that one value. Building a second copy of this file
    for questions would have meant two implementations of voting and comments drifting apart from day one. */
@@ -59,7 +59,7 @@ function postEl(p) {
      badge instead tells them whether it is live yet. Neither claims a logo the site does not have: a
      community with no branding image falls back to 🏘️. */
   const comm = p.community
-    ? '<a class="post-comm' + (p.community.demo ? ' post-comm-sandbox' : '') + '" href="/community.html?id=' + encodeURIComponent(p.community.id) + '"' +
+    ? '<a class="post-comm' + (p.community.demo ? ' post-comm-sandbox' : '') + '" href="/community?id=' + encodeURIComponent(p.community.id) + '"' +
         ' title="Go to the ' + esc('$' + p.community.symbol) + ' community">' +
         (p.community.image ? '<img class="post-comm-logo" src="' + esc(p.community.image) + '" alt="" loading="lazy" decoding="async">' : '<span class="post-comm-logo-none" aria-hidden="true">' + (p.community.demo ? '🧪' : '🏘️') + '</span>') +
         '<span class="post-comm-name">' + esc('$' + p.community.symbol) + '</span>' +
@@ -321,7 +321,7 @@ async function renderComments(post, id) {
 const ta = document.getElementById('post-text');
 const charCount = document.getElementById('char-count');
 /* The visible counter stays aria-hidden for good: flipping aria-hidden never announced anything, it only
-   let a bare number into the tree. The limit is described up front (support.html shares this file and has
+   let a bare number into the tree. The limit is described up front (/support shares this file and has
    no static hint, so build one when it is missing), and the shared polite region says "20 left" and
    "limit reached" once per crossing — not on every keystroke, which would talk over the typing. */
 if (!document.getElementById('char-hint')) {

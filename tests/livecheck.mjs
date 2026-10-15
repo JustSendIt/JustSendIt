@@ -35,11 +35,11 @@ try {
   // the www → apex redirect the app performs itself, so a stray www record can never serve pages whose POSTs would 403
   // fetch() silently drops a Host header (it is a forbidden header name), so this goes through node:http
   const www = await new Promise((resolve) => {
-    const rq = http.request({ host: '127.0.0.1', port: Number(PORT), path: '/about.html?x=1', method: 'GET', headers: { Host: 'www.localhost' } }, (rs) => { rs.resume(); resolve({ status: rs.statusCode, location: rs.headers.location }); });
+    const rq = http.request({ host: '127.0.0.1', port: Number(PORT), path: '/about?x=1', method: 'GET', headers: { Host: 'www.localhost' } }, (rs) => { rs.resume(); resolve({ status: rs.statusCode, location: rs.headers.location }); });
     rq.on('error', () => resolve({ status: 0 })); rq.end();
   });
-  check('a request on www.<host> is sent to the apex with a 308, path and query kept', www.status === 308 && www.location === BASE + '/about.html?x=1', www.status + ' ' + www.location);
-  const apex = await fetch(BASE + '/about.html', { redirect: 'manual' });
+  check('a request on www.<host> is sent to the apex with a 308, path and query kept', www.status === 308 && www.location === BASE + '/about?x=1', www.status + ' ' + www.location);
+  const apex = await fetch(BASE + '/about', { redirect: 'manual' });
   check('  ...and the apex itself is served', apex.status === 200);
   check('the Cloudflare mismatch is said once, in the log, whichever way it is wrong', /Cloudflare is in front of this site, but TRUST_CF is not 1/.test(SRC) && /TRUST_CF=1 but this proxied request carries no CF-Connecting-IP/.test(SRC) && /cfWarned = true/.test(SRC));
   check('the tracker proxies give one member a slice of the shared budget, not all of it', /rateLimit\('chainx:' \+ me\.id, 90, 6e4\)/.test(SRC) && /rateLimit\('chaind:' \+ me\.id, 60, 6e4\)/.test(SRC));

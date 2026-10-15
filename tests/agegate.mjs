@@ -137,7 +137,7 @@ try {
   check('every site page loads the age gate in <head>, after the stylesheet', withStyles.length >= 15 && !missing.length, missing.join(', ') || withStyles.length + ' pages');
   const home = await (await fetch(BASE + '/')).text();
   check('  ...and the served homepage carries it, versioned', /<script src="agegate\.js\?v=[^"]+"><\/script>/.test(home));
-  for (const open of ['/privacy.html', '/terms.html']) {
+  for (const open of ['/privacy', '/terms']) {
     const h = await (await fetch(BASE + open)).text();
     check('  ...but ' + open + ' stays readable without answering', !/agegate\.js/.test(h));
   }

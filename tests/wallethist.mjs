@@ -186,7 +186,7 @@ try {
     check('the account-deletion sweep names wallet_hist', /'tracker_cache', 'wallet_hist'\]\)/.test(SRC));
     check('unlinking a wallet and disconnecting them all delete the saved history', /DELETE FROM identities WHERE user_id = \? AND type = 'wallet' AND identifier = \?"\)\.run\(me\.id, bidx\(addr\)\);\s*if \(!db\.prepare\('SELECT 1 FROM tracked_wallets[^\n]*DELETE FROM wallet_hist WHERE user_id = \? AND addr_idx = \?/.test(SRC) && /DELETE FROM wallet_hist WHERE user_id = \? AND addr_idx NOT IN \(SELECT address FROM tracked_wallets WHERE user_id = \?\)/.test(SRC));
     check('the boot sweep removes rows whose wallet is no longer tracked or linked and keeps the total under 64 MB, oldest first', /^sweepWalletHist\(\);/m.test(SRC) && /WALLET_HIST_TOTAL_MAX = 64 \* 1024 \* 1024/.test(SRC) && /ORDER BY updated_at ASC'\)\.all\(\)\) \{\s*if \(total <= WALLET_HIST_TOTAL_MAX\) break;/.test(SRC));
-    check('the bell for a finished read rings only when nobody polled for 30 s, and names the wallet by id, never by address', /if \(now\(\) - job\.polledAt > WALLET_NOTIFY_QUIET_MS\) walletReadNotify\(uid, w\)/.test(SRC) && /WALLET_NOTIFY_QUIET_MS = 30 \* 1000/.test(SRC) && /'\/tracker\.html\?wid=' \+ row\.id : '\/tracker\.html\?lid=' \+ linked\.id/.test(SRC));
+    check('the bell for a finished read rings only when nobody polled for 30 s, and names the wallet by id, never by address', /if \(now\(\) - job\.polledAt > WALLET_NOTIFY_QUIET_MS\) walletReadNotify\(uid, w\)/.test(SRC) && /WALLET_NOTIFY_QUIET_MS = 30 \* 1000/.test(SRC) && /'\/tracker\?wid=' \+ row\.id : '\/tracker\?lid=' \+ linked\.id/.test(SRC));
     check('the privacy policy lists the saved histories, scrambled, deleted on untrack or account deletion', /Saved wallet histories — the token transfers and trade details of wallets you track, read from the chain<\/td>[\s\S]*?deleted when you untrack them or delete your account<\/td>/.test(PRIV));
     check('  ...and the policy\'s visible Version line is the current one (tests/sendy.mjs pins it)', /Version 2026-10-13 · \$Send \/ JustSendIt/.test(PRIV));
   }
@@ -304,27 +304,27 @@ try {
     const ins = db.prepare('INSERT INTO tracked_wallets (user_id, address, address_enc, label, created_at) VALUES (?,?,?,?,?)').run(u.id, bidx(tracked), encField(tracked), 'Whale', Date.now());
     const tid = Number(ins.lastInsertRowid);
     const n1 = ctx.notice(u.id, tracked);
-    check('a tracked wallet is named by its label and linked by its tracker id', n1 && n1.label === 'Whale' && n1.href === '/tracker.html?wid=' + tid, JSON.stringify(n1));
+    check('a tracked wallet is named by its label and linked by its tracker id', n1 && n1.label === 'Whale' && n1.href === '/tracker?wid=' + tid, JSON.stringify(n1));
     const a1 = w1.address.toLowerCase();
     const n2 = ctx.notice(u.id, a1);
     const lid = db.prepare("SELECT id FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").get(u.id, bidx(a1)).id;
-    check('a linked wallet with no watch-list row is linked by its link id', n2 && n2.href === '/tracker.html?lid=' + lid && n2.label === '', JSON.stringify(n2));
+    check('a linked wallet with no watch-list row is linked by its link id', n2 && n2.href === '/tracker?lid=' + lid && n2.label === '', JSON.stringify(n2));
     check('a wallet neither tracked nor linked gets no bell', ctx.notice(u.id, '0x' + '9'.repeat(40)) === null);
     db.prepare('UPDATE tracked_wallets SET label = ? WHERE id = ?').run('mine 0x' + tracked.slice(2, 14), tid);
     const n3 = ctx.notice(u.id, tracked);
-    check('a label that quotes part of an address is not said', n3 && n3.label === '' && n3.href === '/tracker.html?wid=' + tid, JSON.stringify(n3));
+    check('a label that quotes part of an address is not said', n3 && n3.label === '' && n3.href === '/tracker?wid=' + tid, JSON.stringify(n3));
     db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);
     check('the bell rings through notify()', ctx.ring(u.id, tracked) === true && ctx.ring(u.id, a1) === true && ctx.ring(u.id, '0x' + '9'.repeat(40)) === false);
     const rows = db.prepare('SELECT kind, icon, text, href FROM notifications WHERE user_id = ? ORDER BY id').all(u.id);
     check('  ...two rows, kind tracker, 💼', rows.length === 2 && rows.every((r) => r.kind === 'tracker' && r.icon === '💼'), JSON.stringify(rows));
     check('  ...with the promised sentence', rows[0] && rows[0].text === 'Your wallet report for one of your wallets is ready.' && rows[1] && rows[1].text === 'Your wallet report for one of your wallets is ready.', JSON.stringify(rows.map((r) => r.text)));
-    check('  ...and no 0x hex anywhere in text or href', rows.every((r) => !/0x[0-9a-f]{2,}/i.test(r.text + ' ' + r.href)) && rows[0].href === '/tracker.html?wid=' + tid && rows[1].href === '/tracker.html?lid=' + lid, JSON.stringify(rows.map((r) => r.href)));
+    check('  ...and no 0x hex anywhere in text or href', rows.every((r) => !/0x[0-9a-f]{2,}/i.test(r.text + ' ' + r.href)) && rows[0].href === '/tracker?wid=' + tid && rows[1].href === '/tracker?lid=' + lid, JSON.stringify(rows.map((r) => r.href)));
     db.prepare('UPDATE tracked_wallets SET label = ? WHERE id = ?').run('Whale', tid);
     // a read that stopped after its page had gone: the bell says so, and whether it goes on from a checkpoint — never an address
     db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);
     check('the stopped-read bell rings for a tracked or linked wallet only', ctx.stopped(u.id, tracked, true) === true && ctx.stopped(u.id, a1, false) === true && ctx.stopped(u.id, '0x' + '9'.repeat(40), true) === false);
     const srows = db.prepare('SELECT kind, icon, text, href FROM notifications WHERE user_id = ? ORDER BY id').all(u.id);
-    check('  ...says the read stopped part-way and why, "goes on from where it stopped" only with a checkpoint, no address anywhere', srows.length === 2 && srows[0].text === 'The read of Whale stopped part-way — the chain node kept refusing it. Open the tracker and it goes on from where it stopped.' && srows[1].text === 'The read of one of your wallets stopped part-way — the chain node kept refusing it. Open the tracker to start it again.' && srows.every((r) => r.kind === 'tracker' && !/0x[0-9a-f]{2,}/i.test(r.text + ' ' + r.href)) && srows[0].href === '/tracker.html?wid=' + tid && srows[1].href === '/tracker.html?lid=' + lid, JSON.stringify(srows));
+    check('  ...says the read stopped part-way and why, "goes on from where it stopped" only with a checkpoint, no address anywhere', srows.length === 2 && srows[0].text === 'The read of Whale stopped part-way — the chain node kept refusing it. Open the tracker and it goes on from where it stopped.' && srows[1].text === 'The read of one of your wallets stopped part-way — the chain node kept refusing it. Open the tracker to start it again.' && srows.every((r) => r.kind === 'tracker' && !/0x[0-9a-f]{2,}/i.test(r.text + ' ' + r.href)) && srows[0].href === '/tracker?wid=' + tid && srows[1].href === '/tracker?lid=' + lid, JSON.stringify(srows));
     check('  ...and walletJobRun rings it only for a read that had moved, whose page has been gone 30 s, that a throttle or a timeout ended', /if \(job\.progressed && now\(\) - job\.polledAt > WALLET_NOTIFY_QUIET_MS && \(isThrottle\(job\.error\) \|\| \/timed out\|timeout\|aborted\|too long\/i\.test\(job\.error\)\)\) walletReadStoppedNotify\(uid, w, job\.checkpointed\);/.test(SRC));
     db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);
     db.prepare('DELETE FROM notifications WHERE user_id = ?').run(u.id);

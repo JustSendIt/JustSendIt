@@ -67,7 +67,7 @@
       const lines = (f.partialLine ? '<p class="np-named-none is-warn">⚠️ ' + esc(f.partialLine) + '</p>' : '') + (f.moreLine ? '<p class="np-named-none">' + esc(f.moreLine) + '</p>' : '');
       if (!f.items.length) return head + '<p class="np-named-none">' + esc(f.empty) + '</p>';
       return head + lines + '<ul class="np-named-list">' + f.items.map((t) =>
-        '<li><a class="np-named-row" data-token="' + esc(t.token) + '" href="/newpairs.html?scan=' + encodeURIComponent(t.token) + '" data-tip="Opens this token&#39;s dashboard: its chart, holders and risk checks">' +
+        '<li><a class="np-named-row" data-token="' + esc(t.token) + '" href="/newpairs?scan=' + encodeURIComponent(t.token) + '" data-tip="Opens this token&#39;s dashboard: its chart, holders and risk checks">' +
           (t.logo ? '<img class="np-named-logo" src="' + esc(t.logo) + '" alt="" width="36" height="36" loading="lazy" decoding="async">' : '<span class="np-named-logo" aria-hidden="true">🪙</span>') +
           '<span class="np-named-main"><b class="np-named-name">' + esc(tokTitle(t)) + '</b>' +
           '<span class="np-named-stats">' + esc(tokStats(t, ans.pending)) + '</span>' + addrFit(t.token) + '</span></a></li>').join('') + '</ul>' +
@@ -103,7 +103,7 @@
   function tokRow(t, pending) {
     const a = document.createElement('a');
     a.className = 'search-hit search-tok';
-    a.href = '/newpairs.html?scan=' + encodeURIComponent(t.token);
+    a.href = '/newpairs?scan=' + encodeURIComponent(t.token);
     a.dataset.token = t.token;
     const ico = t.logo ? '<img class="h-ava h-logo" src="' + esc(t.logo) + '" alt="" width="34" height="34" loading="lazy" decoding="async">' : '<span class="h-ava" aria-hidden="true">🪙</span>';
     a.innerHTML = ico + '<div><div class="h-name">' + esc(tokTitle(t)) + '</div><div class="h-sub h-stats">' + esc(tokStats(t, pending)) + '</div><div class="h-addr">' + addrFit(t.token) + '</div></div>';
@@ -115,14 +115,14 @@
     const rows = [];
     for (const t of (r && r.tokens) || []) {
       const pool = t.via === 'pool';
-      rows.push({ href: '/newpairs.html?scan=' + encodeURIComponent(pool ? a : t.token), ico: '🪙', name: '$' + t.symbol + ' · ' + t.name,
+      rows.push({ href: '/newpairs?scan=' + encodeURIComponent(pool ? a : t.token), ico: '🪙', name: '$' + t.symbol + ' · ' + t.name,
         sub: pool ? 'The pool of $' + t.symbol + ' — its token dashboard' : 'Token dashboard', addr: pool ? a : t.token });
-      if (t.community) rows.push({ href: '/community.html?id=' + encodeURIComponent(t.community.id), ico: '🏘️', name: '$' + t.symbol + ' community',
+      if (t.community) rows.push({ href: '/community?id=' + encodeURIComponent(t.community.id), ico: '🏘️', name: '$' + t.symbol + ' community',
         sub: t.community.status === 'live' ? 'Live community' : 'Community, still forming' });
     }
     if (r && r.full && !rows.length) {
-      rows.push({ href: '/newpairs.html?scan=' + encodeURIComponent(a), ico: '🔎', name: 'Scan this address', sub: 'Reads the chain for a token or pool at it', addr: a });
-      rows.push({ href: '/tracker.html#track=' + encodeURIComponent(a), ico: '👛', name: 'Track it as a wallet', sub: 'Opens the Wallet Tracker with it filled in', addr: a });
+      rows.push({ href: '/newpairs?scan=' + encodeURIComponent(a), ico: '🔎', name: 'Scan this address', sub: 'Reads the chain for a token or pool at it', addr: a });
+      rows.push({ href: '/tracker#track=' + encodeURIComponent(a), ico: '👛', name: 'Track it as a wallet', sub: 'Opens the Wallet Tracker with it filled in', addr: a });
     }
     return rows;
   }

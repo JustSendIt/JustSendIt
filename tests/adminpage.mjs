@@ -33,7 +33,7 @@ function mkUser(name, id) {
 }
 // a raw request: the path goes out exactly as written (fetch would tidy '/x/..//admin.html' first)
 const raw = (method, p, sid) => new Promise((resolve) => {
-  const r = http.request({ host: 'localhost', port: PORT, method, path: p, headers: sid ? { Cookie: 'sid=' + sid } : {} }, (res) => { let b = ''; res.on('data', (d) => { b += d; }); res.on('end', () => resolve({ status: res.statusCode, text: b, cc: res.headers['cache-control'] || '' })); });
+  const r = http.request({ host: 'localhost', port: PORT, method, path: p, headers: sid ? { Cookie: 'sid=' + sid } : {} }, (res) => { let b = ''; res.on('data', (d) => { b += d; }); res.on('end', () => resolve({ status: res.statusCode, text: b, cc: res.headers['cache-control'] || '', location: res.headers.location || '' })); });
   r.on('error', () => resolve({ status: 0, text: '', cc: '' })); r.end();
 });
 const get = async (p, sid) => { const r = await fetch(BASE + p, { headers: sid ? { Cookie: 'sid=' + sid } : {}, redirect: 'manual' }); const text = await r.text(); let j = null; try { j = JSON.parse(text); } catch {} return { status: r.status, text, j, cc: r.headers.get('cache-control') || '' }; };
@@ -43,25 +43,33 @@ try {
   check('the throwaway server names the admin in ADMIN_USER_IDS (run.mjs)', /ADMIN_USER_IDS: '987654'/.test(readFileSync(path.join(ROOT, 'tests', 'run.mjs'), 'utf8')));
   const admin = mkUser('__adm_send__', ADMIN_ID), member = mkUser('__adm_member__');
   for (const [who, sid] of [['a signed-out visitor', null], ['a signed-in member who is not the admin', member.sid]]) {
-    const page = await get('/admin.html', sid), js = await get('/admin.js', sid), ov = await get('/api/admin/overview', sid);
+    const page = await get('/admin', sid), js = await get('/admin.js', sid), ov = await get('/api/admin/overview', sid);
     check(who + ' gets 404 for the admin page, its script and the overview', page.status === 404 && js.status === 404 && ov.status === 404, [page.status, js.status, ov.status].join(' '));
     check('  ...the page 404 is the ordinary "not found" page, kept by nobody (private, no-store)', /That page didn/.test(page.text) && /private/.test(page.cc) && /no-store/.test(page.cc), page.cc);
     check('  ...and says nothing about an admin page', !/Admin|Moderation/.test(page.text));
   }
   // every way the review found to reach the files: other methods, letter case (the Mac's disk ignores it), //, /./, %2e, ..
   const variants = [['POST', '/admin.html'], ['PUT', '/admin.html'], ['OPTIONS', '/admin.js'], ['POST', '/admin.js'], ['GET', '/Admin.js'], ['GET', '/ADMIN.HTML'],
-    ['GET', '/Admin.html'], ['GET', '/.//admin.js'], ['GET', '/x/..//admin.html'], ['GET', '/%2e//admin.html'], ['GET', '//admin.js'], ['HEAD', '/admin.html'], ['GET', '/admin.js?v=1']];
+    ['GET', '/Admin.html'], ['GET', '/.//admin.js'], ['GET', '/x/..//admin.html'], ['GET', '/%2e//admin.html'], ['GET', '//admin.js'], ['HEAD', '/admin.html'], ['GET', '/admin.js?v=1'],
+    // its clean address since 2026-10-15, and every spelling of that
+    ['GET', '/admin'], ['POST', '/admin'], ['PUT', '/admin'], ['HEAD', '/admin'], ['GET', '/Admin'], ['GET', '/ADMIN'], ['GET', '/admin/'], ['GET', '/.//admin'],
+    ['GET', '/x/..//admin'], ['GET', '/%2e//admin'], ['GET', '/admin?x=1'], ['GET', '/admin.html?x=1']];
   const leaks = [];
   for (const [m, pth] of variants) for (const sid of [null, member.sid]) { const r = await raw(m, pth, sid); if (/loadOverview|adm-ov|Admin — \$Send/.test(r.text)) leaks.push(m + ' ' + pth + (sid ? ' (member)' : '') + ' → ' + r.status); }
   // ('//admin.js' parses as the host admin.js and serves the home page — what matters is that no admin content comes back)
   check('no method, spelling or path trick reaches the admin page or script for anyone but the admin (' + variants.length * 2 + ' tries)', leaks.length === 0, leaks.join(' | '));
-  const viaVariant = await raw('GET', '/Admin.html', admin.sid);
-  check('  ...while the admin reaches it even by another spelling, still private', viaVariant.status === 200 && /no-store/.test(viaVariant.cc), viaVariant.status);
+  // not even a redirect: a 301 from /admin.html to /admin would tell anyone the page exists
+  const told = [];
+  for (const pth of ['/admin', '/admin.html', '/Admin', '/admin/', '/ADMIN.HTML']) for (const sid of [null, member.sid]) { const r = await raw('GET', pth, sid); if (r.status !== 404) told.push(pth + (sid ? ' (member)' : '') + ' → ' + r.status); }
+  check('  ...every spelling of the admin page is the same plain 404 for them, never a redirect', told.length === 0, told.join(' | '));
+  const viaVariant = await raw('GET', '/Admin.html', admin.sid), viaOld = await raw('GET', '/admin.html?x=1', admin.sid);
+  check('  ...while the admin reaches it by any other spelling: a redirect to /admin, the query kept, still private', viaVariant.status === 301 && viaVariant.location === '/admin' && /no-store/.test(viaVariant.cc)
+    && viaOld.status === 301 && viaOld.location === '/admin?x=1' && /no-store/.test(viaOld.cc), viaVariant.status + ' ' + viaVariant.location + ' / ' + viaOld.status + ' ' + viaOld.location);
   const postAdmin = await raw('POST', '/admin.html', admin.sid);
   check('  ...and only to read it: the admin\'s POST is a 404 too', postAdmin.status === 404);
   const p405 = await raw('POST', '/'), o405 = await raw('OPTIONS', '/wall.html');
   check('a page or asset answers 405 to anything but GET and HEAD (it used to answer 200 with the file)', p405.status === 405 && o405.status === 405, p405.status + ' ' + o405.status);
-  const page = await get('/admin.html', admin.sid), js = await get('/admin.js', admin.sid);
+  const page = await get('/admin', admin.sid), js = await get('/admin.js', admin.sid);
   check('the admin account gets the page, titled Admin', page.status === 200 && /<title>Admin — \$Send<\/title>/.test(page.text), page.status);
   check('  ...never cached anywhere (private, no-store)', /private/.test(page.cc) && /no-store/.test(page.cc), page.cc);
   check('  ...and its script, the same way', js.status === 200 && /loadOverview/.test(js.text) && /no-store/.test(js.cc), js.status + ' ' + js.cc);
@@ -77,7 +85,7 @@ try {
   check('/api/me tells the admin account it is the admin (the menu shows the link)', me.j && me.j.user && me.j.user.admin === true);
   const meM = await get('/api/me', member.sid);
   check('  ...and tells a member nothing about it', meM.j && meM.j.user && meM.j.user.admin === undefined);
-  check('auth.js adds the Admin link only for the admin account', /if \(user\.admin\) \{[\s\S]{0,500}?adm\.href = '\/admin\.html';/.test(AUTHJS));
+  check('auth.js adds the Admin link only for the admin account', /if \(user\.admin\) \{[\s\S]{0,500}?adm\.href = '\/admin';/.test(AUTHJS));
 
   /* ═══ 2. seed codes stop working once anyone is in ═══ */
   const seedSrc = grab(/function seedCodesOpen\(\) \{[\s\S]*?\n\}\n/, 'seedCodesOpen');

@@ -1,7 +1,7 @@
 /* ===== watchlist.js — the Watchlist page: saved tokens as expandable rows with full on-chain detail =====
  * Reuses the New Pairs visual language (.np-* classes). CSP-safe (addEventListener only). Read-only,
  * honest: no buy CTA; explorer/chart links + one-tap copy only.
- * Wallet tracking lives on its own page now (tracker.html / trackerpage.js) — this file is tokens only. */
+ * Wallet tracking lives on its own page now (/tracker / trackerpage.js) — this file is tokens only. */
 (function () {
   'use strict';
   const listEl = document.getElementById('wl-list'); if (!listEl) return;
@@ -131,7 +131,7 @@
          not in this lighter card), or call it — the same Send Call pair every view of a token ends in. A call from
          here is not marked "detail viewed": the composer offers the full detail first. */
       '<div class="np-body-actions wl-actions">' +
-        '<a class="btn btn-sm btn-ghost" href="newpairs.html?scan=' + encodeURIComponent(p.token.address) + '" data-tip="Opens this token’s full dashboard on the Scanner page — score breakdown, market, holders, contract">📊 Full dashboard</a>' +
+        '<a class="btn btn-sm btn-ghost" href="/newpairs?scan=' + encodeURIComponent(p.token.address) + '" data-tip="Opens this token’s full dashboard on the Scanner page — score breakdown, market, holders, contract">📊 Full dashboard</a>' +
         (window.COMPOSE && COMPOSE.callRowHTML ? COMPOSE.callRowHTML(p.token.address, { cls: 'np-call-row' }) : '') +
       '</div></div>';
   }
@@ -144,7 +144,7 @@
   function setStatus(html) { if (statusEl) statusEl.innerHTML = html; }
   function signedOut(el, what) { el.innerHTML = '<li class="np-msg">Sign in to keep a ' + what + '. <button class="btn btn-sm btn-primary" data-tip="Opens the sign-in panel so saved tokens stick to your account" data-wl-signin type="button">Sign In 🚀</button></li>'; }
   function render() {
-    if (!state.items.length) { listEl.innerHTML = '<li class="np-msg">⭐ No saved tokens yet. Open the <a class="np-msg-link" href="newpairs.html">Scanner</a>, scan any token, tap its ☆, and it lands here.</li>'; setStatus(''); return; }
+    if (!state.items.length) { listEl.innerHTML = '<li class="np-msg">⭐ No saved tokens yet. Open the <a class="np-msg-link" href="/newpairs">Scanner</a>, scan any token, tap its ☆, and it lands here.</li>'; setStatus(''); return; }
     listEl.innerHTML = state.items.map(rowHTML).join('');
     setStatus('<span class="np-live-dot" aria-hidden="true"></span> ' + state.items.length + ' saved token' + (state.items.length === 1 ? '' : 's'));
     if (window.Watchlist) Watchlist.syncButtons(listEl);

@@ -9,7 +9,7 @@
 # properly: it drops the sidebar and the site nav/ticker/footer, forces the light palette
 # so the PDF is printable, and keeps tables and callouts from splitting across pages.
 #
-# The page is served at /whitepaper.html, so it lives in public/ alongside the assets it
+# The page is served at /whitepaper (public/whitepaper.html on disk), so it lives in public/ alongside the assets it
 # names. Every one of those references is relative for exactly this reason: rendered from
 # a file:// URL here, a leading slash would resolve to the filesystem root and 404.
 set -euo pipefail

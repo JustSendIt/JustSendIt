@@ -112,7 +112,7 @@
         '</div>' +
         metrics + panel + conv +
         '<div class="comm-hero-actions">' + optBtn +
-          (c.demo ? '' : '<a class="btn btn-ghost comm-squad-btn" href="communities.html?tab=squads&amp;new=squad&amp;gate=' + encodeURIComponent(c.token || '') + '" data-tip="Opens the start-a-squad form with $' + esc(c.symbol) + ' already set as the gate — a private group for its holders">🛡️ Start a $' + esc(c.symbol) + ' Send Squad</a>') +
+          (c.demo ? '' : '<a class="btn btn-ghost comm-squad-btn" href="/communities?tab=squads&amp;new=squad&amp;gate=' + encodeURIComponent(c.token || '') + '" data-tip="Opens the start-a-squad form with $' + esc(c.symbol) + ' already set as the gate — a private group for its holders">🛡️ Start a $' + esc(c.symbol) + ' Send Squad</a>') +
         '</div>' +
         '<p class="comm-gate-msg" id="comm-gate" role="status" aria-live="polite" hidden></p>' +
         '<details class="grules comm-rules"><summary>📖 How points, levels &amp; the 10× work</summary><div class="grules-body"><ul class="comm-rules-list">' +
@@ -129,7 +129,7 @@
     // a persistent, honest explanation for a member blocked by the anti-sybil caps (the toast alone vanished in 2.6 s)
     if (blockReason) { const g = document.getElementById('comm-gate'); if (g) { g.hidden = false; g.textContent = '🛡️ ' + blockReason; } }
     // The sandbox verifies nobody's holdings (its Join is a plain opt-in), so the governance block must not claim
-    // "verified holders" there. community.html ships the token wording; the flag is set once so a re-render of the
+    // "verified holders" there. /community ships the token wording; the flag is set once so a re-render of the
     // hero never wipes an armed ballot, and proposals.js re-reads it when it paints.
     const propsEl = document.getElementById('comm-props');
     if (c.demo && propsEl && !propsEl.dataset.demo) {
@@ -342,7 +342,7 @@
               const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
               gate.hidden = false;
               gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'You must hold this token to join.') +
-                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile.html#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
+                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
                 ' <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">Get $' + esc(C.symbol) + ' ↗</button>';
             }
             join.disabled = false; return;
@@ -472,7 +472,7 @@
   function renderFailure(msg, notFound) {
     if (notFound) document.title = 'Community Not Found — $Send';   // a failed read keeps the server's <title>: the community may well exist
     heroEl.innerHTML = '<div style="text-align:center; padding:1.5rem;"><h1 class="comm-hero-name" style="font-size:max(var(--text-floor), 1.4rem);">' + esc(msg) + '</h1>' +
-      '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="communities.html">Browse all communities →</a></p></div>';
+      '<p class="modal-note" style="margin:0.5rem 0 0;"><a href="/communities">Browse all communities →</a></p></div>';
   }
   async function load() {
     if (!id) { renderFailure('No community specified', true); return; }

@@ -36,8 +36,8 @@
   let loading = false, busy = false;
   /* "Make it my profile pic" while signed out: pendingAvatar is only a FLAG — the 512×512 snapshot is built at upload
    * time so edits made while the sign-in modal is open are kept. A copy also goes to sessionStorage (PENDING_KEY)
-   * because most sign-in routes leave the page (OAuth callbacks land on /profile.html; a brand-new wallet account goes
-   * to /profile.html#claim and is bounced back here by profile.js via 'jsi:after-claim'). On the next load, or the next
+   * because most sign-in routes leave the page (OAuth callbacks land on /profile; a brand-new wallet account goes
+   * to /profile#claim and is bounced back here by profile.js via 'jsi:after-claim'). On the next load, or the next
    * in-page sign-in, a still-fresh stash is uploaded and cleared. */
   let pendingAvatar = false, pendingTimer = null;
   const PENDING_KEY = 'rz:pending';
@@ -447,7 +447,7 @@
       if (window.SFX) SFX.play('success');   // saved as the profile pic
       toast('That’s your new profile pic 🚀');
       out.textContent = 'That’s your new profile pic 🚀 ';
-      const a = document.createElement('a'); a.href = '/profile.html'; a.textContent = 'See it on your profile →';
+      const a = document.createElement('a'); a.href = '/profile'; a.textContent = 'See it on your profile →';
       out.appendChild(a);
       out.classList.remove('is-err'); out.classList.add('is-ok');
       announce('Profile picture updated');

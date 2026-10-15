@@ -75,7 +75,7 @@ async function saveProfile() {
     // first-time claim that started on another page (auth.js stashed the origin) → take them back there
     let back = null; try { back = sessionStorage.getItem('jsi:after-claim'); sessionStorage.removeItem('jsi:after-claim'); } catch {}
     // same-origin, single-leading-slash paths only (a '//evil.com/' pathname would be an open redirect)
-    if (wasClaim && back && /^\/(?![\/\\])/.test(back) && !/\/profile\.html/.test(back)) { sendToast('Taking you back to where you were… ↩'); setTimeout(() => { location.href = back; }, 1400); }
+    if (wasClaim && back && /^\/(?![\/\\])/.test(back) && !/^\/profile(\.html)?\/?([?#]|$)/.test(back)) { sendToast('Taking you back to where you were… ↩'); setTimeout(() => { location.href = back; }, 1400); }
     sendConfetti(innerWidth / 2, 200, { count: 30, emojiRatio: 0.4 });
     if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned);
     // keep the nav account control in sync after a rename/claim: the name is a LINK to the public wall
@@ -179,7 +179,7 @@ function openCard(id, scroll) {
   if (sum) { try { sum.setAttribute('tabindex', '-1'); sum.focus({ preventScroll: true }); } catch {} }
 }
 function openSecurity(scroll) { openCard('sec-security', scroll); }
-/* "Edit profile ✏️" on your own wall (u.html) links to /profile.html#sec-account (owner, 2026-10-15: "Edit profile button on
+/* "Edit profile ✏️" on your own wall (u.html) links to /profile#sec-account (owner, 2026-10-15: "Edit profile button on
    profile page should take the user to the settings on the dashboard and settings page so they can edit their profile"):
    the Settings tab, with the Account card — avatar, username, bio, X and Instagram — open and in view. Once the account has
    loaded (the card sits in the signed-in part of the page), and again if the link is followed while already here. */
@@ -187,13 +187,15 @@ let accountOpened = false;
 function openAccountFromLink(signedIn) {
   if (location.hash !== '#sec-account' || !(signedIn === true || (window.AUTH && AUTH.user))) return;
   accountOpened = true;
-  setTimeout(() => openCard('sec-account', true), 60);   // after the signed-in page has painted
+  setTimeout(() => { openCard('sec-account', true); dropHash(); }, 60);   // after the signed-in page has painted
 }
+// a link's #… has done its job once the card is open: the address goes back to the page's name (/profile)
+function dropHash() { try { if (location.hash) history.replaceState(history.state, '', location.pathname + location.search); } catch {} }
 addEventListener('hashchange', openAccountFromLink);
 document.addEventListener('DOMContentLoaded', () => {
   const jump = document.getElementById('sec-jump-link');
-  if (jump) jump.addEventListener('click', (e) => { e.preventDefault(); history.replaceState(null, '', '#sec-security'); openSecurity(true); });
-  if (location.hash === '#sec-security') setTimeout(() => openSecurity(true), 60);   // after the page has painted
+  if (jump) jump.addEventListener('click', (e) => { e.preventDefault(); openSecurity(true); });
+  if (location.hash === '#sec-security') setTimeout(() => { openSecurity(true); dropHash(); }, 60);   // after the page has painted
 });
 
 function securitySummary(me) {
@@ -590,7 +592,7 @@ function loadConnectedWallet() {
       '<p class="modal-note" style="margin-top:0.2rem;">Connect a wallet to see your <b>$SEND &amp; $GWC holdings, trade history and PNL</b> here — pulled live from the chain. It\'s a <b>free signature, never a transaction</b>, and it unlocks your Holder Boost too.</p>' +
       '<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.5rem;">' +
         '<button class="btn btn-primary btn-sm" id="cw-connect" data-tip="Links a wallet by signature so this panel can read it">Connect wallet 🔗</button>' +
-        '<a class="btn btn-ghost btn-sm" href="/tracker.html" data-tip="Opens the tracker to follow any address read-only">Or track any wallet 💼</a>' +
+        '<a class="btn btn-ghost btn-sm" href="/tracker" data-tip="Opens the tracker to follow any address read-only">Or track any wallet 💼</a>' +
       '</div>';
     const c = document.getElementById('cw-connect');
     if (c) c.addEventListener('click', linkWallet);

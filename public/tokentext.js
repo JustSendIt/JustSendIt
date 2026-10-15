@@ -107,11 +107,11 @@
     if (info && info.id) {
       var live = info.status === 'live';
       var label = symTxt + ' community — ' + (live ? 'live' : 'forming') + ' · ' + memberTxt(info) + (info.official ? ' · official' : '');
-      return '<a class="tok-comm has' + (live ? '' : ' forming') + (info.official ? ' official' : '') + '" href="/community.html?id=' + encodeURIComponent(info.id) + '" aria-label="' + esc(label) + '" title="' + esc(label) + '">🏘️ Community' + (live ? '' : ' · forming') + (info.official ? ' · official' : '') + '</a>';
+      return '<a class="tok-comm has' + (live ? '' : ' forming') + (info.official ? ' official' : '') + '" href="/community?id=' + encodeURIComponent(info.id) + '" aria-label="' + esc(label) + '" title="' + esc(label) + '">🏘️ Community' + (live ? '' : ' · forming') + (info.official ? ' · official' : '') + '</a>';
     }
     if (!addr) return '';
     // accessible name starts with the visible text ("Start community") so voice control / label-in-name (WCAG 2.5.3) match
-    return '<a class="tok-comm none" href="/communities.html?start=' + esc(addr) + '" aria-label="Start community — ' + esc(symTxt) + '" title="No ' + esc(symTxt) + ' community yet — start one">＋ Start community</a>';
+    return '<a class="tok-comm none" href="/communities?start=' + esc(addr) + '" aria-label="Start community — ' + esc(symTxt) + '" title="No ' + esc(symTxt) + ' community yet — start one">＋ Start community</a>';
   }
   function panelHTML(addr, info, sym, hl) {
     addr = normAddr(addr); var symTxt = sym ? '$' + esc(sym) : 'This token';
@@ -120,10 +120,10 @@
       var live = info.status === 'live', q = Number(info.qualCount) || 0;
       inner = '<p class="tok-comm-txt"><b>' + symTxt + ' has a community</b> — ' + (live ? '<span class="tok-comm-live">🟢 LIVE</span>' : '<span class="tok-comm-forming">⏳ forming</span>') +
         ' · ' + memberTxt(info) + (q ? ' (' + q + ' verified holder' + (q === 1 ? '' : 's') + ')' : '') + (info.official ? ' · <span class="tok-comm-offtxt">official</span>' : '') + '</p>' +
-        '<div class="tok-comm-acts"><a class="btn btn-sm btn-primary" data-tip="Opens the page for this token community" href="/community.html?id=' + encodeURIComponent(info.id) + '">🏘️ Open community →</a></div>';
+        '<div class="tok-comm-acts"><a class="btn btn-sm btn-primary" data-tip="Opens the page for this token community" href="/community?id=' + encodeURIComponent(info.id) + '">🏘️ Open community →</a></div>';
     } else if (addr) {
       inner = '<p class="tok-comm-txt">No ' + symTxt + ' community yet.</p>' +
-        '<div class="tok-comm-acts"><a class="btn btn-sm btn-ghost" data-tip="Opens the start-a-community form with this address filled in" href="/communities.html?start=' + esc(addr) + '">＋ Start a community</a></div>';
+        '<div class="tok-comm-acts"><a class="btn btn-sm btn-ghost" data-tip="Opens the start-a-community form with this address filled in" href="/communities?start=' + esc(addr) + '">＋ Start a community</a></div>';
     } else inner = '<p class="tok-comm-txt">Community info isn’t available for this token.</p>';
     return panelOpen(hl) + inner +
       '<p class="tok-comm-note">Communities are holder-run hangouts on $Send — not an endorsement of the token.</p></section>';
@@ -206,7 +206,7 @@
     try { chip.focus(); } catch (_) {} // Safari/iOS don't focus a button element on click — focus it so the popup restores focus HERE, not <body>
     if (window.SFX) SFX.play(window.TokenModal && window.TokenModal.open ? 'open' : 'nav');   // the token popup opens (or its dashboard page, in a new tab)
     if (window.TokenModal && window.TokenModal.open) TokenModal.open(addr, { symbol: chip.getAttribute('data-symbol') || '', name: chip.getAttribute('data-name') || '' });
-    else window.open('/newpairs.html?scan=' + encodeURIComponent(addr), '_blank', 'noopener');   // no popup on this page: the token's dashboard, as its own page
+    else window.open('/newpairs?scan=' + encodeURIComponent(addr), '_blank', 'noopener');   // no popup on this page: the token's dashboard, as its own page
   }, true);
   window.tokenCommunitySlot = slotHTML;
   window.decorateTokenCommunities = decorate;

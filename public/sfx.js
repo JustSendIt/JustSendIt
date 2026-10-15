@@ -250,6 +250,7 @@
       if (el.tagName === 'A') {
         const href = el.getAttribute('href') || '';
         if (href.startsWith('#')) return sound('select');
+        if (/^\/(guide|swap|tokens|beta)$/.test(href) && document.getElementById(href.slice(1))) return sound('select');   // a home section, on the home page: a jump, not a page change
         if (/^(mailto|tel):/i.test(href)) return sound('tap');
         return sound('nav');
       }

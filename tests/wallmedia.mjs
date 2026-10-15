@@ -72,7 +72,7 @@ try {
     /if \(which === 'header' && !hasHeader\(\)\) \{ if \(wall\.isMe\) editor\('header'\); return; \}/.test(UP) && /bnBtn\.setAttribute\('aria-label', 'Add a banner — opens your wall style'\);/.test(UP));
   check('the Wall Style pop-up holds everything on the wall in one place: picture, emoji, banner, colours, background, bio and links',
     ['ws-slot-avatar', 'ws-emoji', 'ws-slot-header', 'ws-accent', 'ws-bg', 'ws-slot-background', 'ws-bio', 'ws-twitter', 'ws-instagram', 'ws-save'].every((id) => WS.includes('id="' + id + '"'))
-    && /<a href="\/profile\.html#sec-account">Settings on your dashboard →<\/a>/.test(WS) && !/id="ws-username"/.test(WS));
+    && /<a href="\/profile#sec-account">Settings on your dashboard →<\/a>/.test(WS) && !/id="ws-username"/.test(WS));
   check('  ...each change is painted on the wall behind at once, what was removed included — and only what changed (a video banner or background that stayed keeps playing)',
     /onTheme: \(patch\) => \{ Object\.assign\(theme, patch\); repaintWall\(theme\); paintButtons\(\); \},/.test(UP) && /function repaintWall\(t\) \{ applyTheme\(t\); \}/.test(UP)
     && /\} else \{ document\.documentElement\.style\.removeProperty\('--accent'\);/.test(UP) && /if \(v && v\.getAttribute\('src'\) === img\) return;   \/\/ the same video/.test(UP)

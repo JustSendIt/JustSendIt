@@ -73,9 +73,9 @@ initTokenCards();
     const base = banner.dataset.ariaBase || '';
     let text, href, tail;
     const tier = u ? (Number(u.og) || 0) : 0;   // /api/me reports `og` as the tier (4 diamond · 3 gold · 2 silver · 1 bronze · 0 none)
-    if (u && TIER[tier]) { text = 'You are OG ' + TIER[tier][0] + ' · ' + TIER[tier][1] + '×'; href = 'profile.html'; tail = 'You hold OG ' + TIER[tier][0] + '. Tap to open your profile.'; }
-    else if (u) { text = 'Check my wallet for OG'; href = 'profile.html#connected-wallet'; tail = 'Tap to link a wallet and have it checked on-chain. Not a recommendation to buy.'; }
-    else { text = 'How OG works'; href = 'about.html#og-rules'; tail = 'Tap to read how it works. Not a recommendation to buy.'; }
+    if (u && TIER[tier]) { text = 'You are OG ' + TIER[tier][0] + ' · ' + TIER[tier][1] + '×'; href = '/profile'; tail = 'You hold OG ' + TIER[tier][0] + '. Tap to open your profile.'; }
+    else if (u) { text = 'Check my wallet for OG'; href = '/profile#connected-wallet'; tail = 'Tap to link a wallet and have it checked on-chain. Not a recommendation to buy.'; }
+    else { text = 'How OG works'; href = '/about#og-rules'; tail = 'Tap to read how it works. Not a recommendation to buy.'; }
     cta.innerHTML = text + ' <span class="og-cta-arrow">→</span>';
     cta.setAttribute('href', href);
     cta.setAttribute('aria-label', text + '. ' + tail);
@@ -488,4 +488,58 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   }
   load();
   setInterval(tick, 30000);
+})();
+
+/* ===== The home page's sections have addresses of their own: /guide, /swap, /tokens, /beta =====
+   Owner, 2026-10-15: "make sure every page is just their name and not the . file name or a # [symbol] in front of it". How
+   to Buy, Swap, Tokens and the Beta board were /#guide, /#swap…; they are /guide, /swap, /tokens, /beta now. The server
+   serves this page at each (lib/routes.js); here:
+   - arriving at /swap scrolls to the Swap section (again once the token panels above it have filled in and moved it,
+     unless the visitor has started scrolling themselves);
+   - on this page, a link to a section scrolls there and the address follows, with no reload; Back and Forward go along;
+   - an old /#swap link still lands (the browser scrolls) and its address becomes /swap. */
+(function homeSections() {
+  const SECTIONS = ['guide', 'swap', 'tokens', 'beta'];
+  const at = () => { const m = /^\/(guide|swap|tokens|beta)\/?$/.exec(location.pathname); return m ? m[1] : null; };
+  const smooth = () => !(window.prefersReduced && prefersReduced()) && !document.documentElement.classList.contains('motion-off');
+  function go(name, glide, focus) {
+    const el = document.getElementById(name); if (!el) return;
+    el.scrollIntoView({ behavior: glide && smooth() ? 'smooth' : 'auto', block: 'start' });
+    // where a keyboard or screen reader goes next, as a jump to an anchor would: the section, not the link pressed
+    if (focus) { if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1'); try { el.focus({ preventScroll: true }); } catch {} }
+  }
+  if (location.pathname === '/' && /^#(guide|swap|tokens|beta)$/.test(location.hash)) {
+    try { history.replaceState(history.state, '', '/' + location.hash.slice(1) + location.search); } catch {}
+  }
+  // the address last shown: Back within the same address (a chart or picture closed full screen) is not a section change
+  let shownPath = location.pathname;
+  const first = at();
+  if (first) {
+    let moved = false;
+    const mine = () => { moved = true; };
+    ['wheel', 'touchmove', 'keydown', 'pointerdown'].forEach((t) => addEventListener(t, mine, { once: true, passive: true }));
+    go(first, false, false);
+    const hold = () => { if (!moved && at() === first) go(first, false, false); };
+    // the token panels above fill in after load and move the section: it is held in place while the page settles (4 s),
+    // unless the visitor has started scrolling themselves
+    if (typeof ResizeObserver === 'function') { const ro = new ResizeObserver(hold); ro.observe(document.body); setTimeout(() => ro.disconnect(), 4000); }
+    addEventListener('load', hold, { once: true });
+    setTimeout(hold, 1200);
+  }
+  document.addEventListener('click', (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = e.target.closest && e.target.closest('a[href]'); if (!a || (a.target && a.target !== '_self')) return;
+    const m = /^\/(guide|swap|tokens|beta)$/.exec(a.getAttribute('href') || ''); if (!m || !SECTIONS.includes(m[1])) return;
+    e.preventDefault();
+    if (location.pathname !== '/' + m[1]) { try { history.pushState(history.state, '', '/' + m[1]); } catch {} }
+    shownPath = location.pathname;
+    go(m[1], true, true);
+  });
+  addEventListener('popstate', () => {
+    if (location.pathname === shownPath) return;
+    shownPath = location.pathname;
+    // after the browser's own scroll restore for this step, which would otherwise win
+    const n = at(); const land = () => { if (n) go(n, false, false); else if (location.pathname === '/' && !location.hash) window.scrollTo(0, 0); };
+    land(); setTimeout(land, 0); setTimeout(land, 80);
+  });
 })();

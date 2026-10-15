@@ -79,7 +79,7 @@
           <input class="addr-input" id="w-pw2" type="password" autocomplete="new-password" placeholder="••••••••">
         </details>
         <label class="w-opt"><input type="checkbox" id="w-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
-        <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms.html" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy.html" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
+        <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
       </div>
       <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
@@ -96,7 +96,7 @@
           <label class="f-label" for="f-username">Pick your @username <span class="f-hint">— your public name; sign in with it or your email</span></label>
           <input class="addr-input" id="f-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
           <p class="modal-note" id="uname-status" aria-live="polite"></p>
-          <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms.html" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy.html" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
+          <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
         </div>
         <label class="f-label" for="f-email" id="f-email-label">Email or username</label>
         <input class="addr-input" id="f-email" type="text" autocomplete="username" placeholder="you@example.com or your @handle">
@@ -162,7 +162,7 @@
         <a class="oauth-btn" id="oauth-instagram" href="/api/auth/instagram" hidden data-tip="Sends you to Instagram to sign in, then back here" aria-label="Continue with Instagram">
           <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><path fill="url(#ig-g)" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 01-1.38-.9 3.7 3.7 0 01-.9-1.38c-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0 1.62c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19a3.6 3.6 0 00-.88-1.35 3.6 3.6 0 00-1.35-.88c-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 2.76a5.46 5.46 0 110 10.92 5.46 5.46 0 010-10.92zm0 9a3.54 3.54 0 100-7.08 3.54 3.54 0 000 7.08zm6.95-9.22a1.28 1.28 0 11-2.55 0 1.28 1.28 0 012.55 0z"/></svg></span><span class="oauth-name">Instagram</span></a>
       </div>
-      <p class="modal-note auth-terms">Making an account this way means you are 18 or over and accept the <a href="/terms.html" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy.html" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
+      <p class="modal-note auth-terms">Making an account this way means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
     </div>
     <!-- The way in for somebody who was handed a code. Without it, a person holding an invite has to
          guess that "Sign up" is what opens the ticket — and this line also tells everyone else, in one
@@ -368,13 +368,13 @@
        session is unlocked for its setup, so nothing there asks for the password it just chose. Remember
        where they were so the card can offer the way back. */
     function goSetup2fa() {
-      const onProfile = /\/profile\.html$/.test(location.pathname);
+      const onProfile = /^\/profile(\.html)?\/?$/.test(location.pathname);   // /profile (or an old /profile.html on its way there)
       try {
         sessionStorage.setItem('jsi:setup-2fa', '1');
         if (!onProfile && /^\/(?![\/\\])/.test(location.pathname)) sessionStorage.setItem('jsi:after-2fa', location.pathname + location.search + location.hash);
       } catch {}
       if (onProfile) { location.hash = '#sec-security'; location.reload(); return; }   // same document: a hash change alone would not sign the page in
-      location.href = '/profile.html#sec-security';
+      location.href = '/profile#sec-security';
     }
 
     function show2fa(j) {
@@ -664,8 +664,8 @@
       if (j.newAccount && setup2fa) { sendToast('Welcome, @' + j.username + '! Now the optional extra lock 🔐'); goSetup2fa(); return; }
       if (j.newAccount && !j.named) {
         // the old one-step path (a caller that sent no name): the account has a placeholder name to change
-        try { if (/^\/(?![\/\\])/.test(location.pathname) && !/\/profile\.html/.test(location.pathname)) sessionStorage.setItem('jsi:after-claim', location.pathname + location.search + location.hash); } catch {}
-        sendToast('Welcome! Pick your unique handle 👇'); location.href = '/profile.html#claim'; return;
+        try { if (/^\/(?![\/\\])/.test(location.pathname) && !/^\/profile(\.html)?\/?$/.test(location.pathname)) sessionStorage.setItem('jsi:after-claim', location.pathname + location.search + location.hash); } catch {}
+        sendToast('Welcome! Pick your unique handle 👇'); location.href = '/profile#claim'; return;
       }
       if (j.newAccount && j.emailNotAdded) sendToast('Welcome, @' + j.username + '! 🚀 ' + emailNotAddedMsg(j.username), 9000);
       else sendToast(j.newAccount ? 'Welcome, @' + j.username + '! 🚀' : 'Welcome back, @' + j.username + '! 🚀');
@@ -791,7 +791,7 @@
   /* ═══ ONE WAY TO CONNECT A WALLET, FROM ANYWHERE ═══════════════════════════════════════════════
      Every control on this site that says "Connect a wallet" now calls this and connects a wallet.
 
-     They did not before, and they disagreed with each other about what the words meant. about.html's two
+     They did not before, and they disagreed with each other about what the words meant. /about's two
      buttons opened the sign-in panel and left the reader to find the wallet tab themselves. index.html's
      button branched on sign-in state. Only the profile page actually connected anything. A button whose
      label is a verb has to do the verb.
@@ -883,18 +883,18 @@
     wall.className = 'npm-item'; wall.setAttribute('role', 'menuitem'); wall.tabIndex = -1; wall.href = '/u/' + encodeURIComponent(user.username);
     wall.innerHTML = '<span class="npm-ico" aria-hidden="true">🏠</span> My Send Wall';
     const dash = document.createElement('a');
-    dash.className = 'npm-item'; dash.setAttribute('role', 'menuitem'); dash.tabIndex = -1; dash.href = '/profile.html';
+    dash.className = 'npm-item'; dash.setAttribute('role', 'menuitem'); dash.tabIndex = -1; dash.href = '/profile';
     dash.innerHTML = '<span class="npm-ico" aria-hidden="true">📊</span> Dashboard &amp; settings';
     const trk = document.createElement('a');
-    trk.className = 'npm-item'; trk.setAttribute('role', 'menuitem'); trk.tabIndex = -1; trk.href = '/tracker.html';
+    trk.className = 'npm-item'; trk.setAttribute('role', 'menuitem'); trk.tabIndex = -1; trk.href = '/tracker';
     trk.innerHTML = '<span class="npm-ico" aria-hidden="true">💼</span> Wallet Tracker';
     const dat = document.createElement('a');
-    dat.className = 'npm-item'; dat.setAttribute('role', 'menuitem'); dat.tabIndex = -1; dat.href = '/data.html';
+    dat.className = 'npm-item'; dat.setAttribute('role', 'menuitem'); dat.tabIndex = -1; dat.href = '/data';
     dat.innerHTML = '<span class="npm-ico" aria-hidden="true">🔑</span> Data API';
     menu.appendChild(wall); menu.appendChild(dash); menu.appendChild(trk); menu.appendChild(dat);
     if (user.admin) {   // only the admin account is told the page exists; the server 404s it for everyone else
       const adm = document.createElement('a');
-      adm.className = 'npm-item'; adm.setAttribute('role', 'menuitem'); adm.tabIndex = -1; adm.href = '/admin.html';
+      adm.className = 'npm-item'; adm.setAttribute('role', 'menuitem'); adm.tabIndex = -1; adm.href = '/admin';
       adm.innerHTML = '<span class="npm-ico" aria-hidden="true">🛠️</span> Admin';
       menu.appendChild(adm);
     }
@@ -1183,7 +1183,7 @@
       if (!b.wallets) { if (el) el.remove(); return; }
       if (!el) {
         el = document.createElement('a');
-        el.className = 'nav-bal'; el.href = '/profile.html';
+        el.className = 'nav-bal'; el.href = '/profile';
         el.setAttribute('aria-label', 'Your connected wallet balances, read only');
         slot.insertBefore(el, slot.firstChild);
       }
@@ -1205,7 +1205,7 @@
       const lvl = AUTH.user.level != null ? AUTH.user.level : (window.levelForXp ? window.levelForXp(AUTH.user.points || 0) : 1);
       const pts = AUTH.user.points || 0;
       const badge = document.createElement('a');
-      badge.className = 'nav-xp'; badge.id = 'nav-xp-badge'; badge.href = '/profile.html';
+      badge.className = 'nav-xp'; badge.id = 'nav-xp-badge'; badge.href = '/profile';
       badge.setAttribute('aria-label', navBadgeLabel(lvl, pts));
       badge.innerHTML = '<span class="nav-xp-lv">Lv ' + lvl + '</span><span class="nav-xp-sep" aria-hidden="true">·</span><span class="nav-xp-pts">' + pts.toLocaleString('en-US') + '</span>' + navBoostHTML();
       slot.appendChild(badge);

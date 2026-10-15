@@ -1,4 +1,4 @@
-/* ===== The Scanner page: two tabs over newpairs.html =========================================
+/* ===== The Scanner page: two tabs over /newpairs =========================================
  *   🔎 Scan an address — paste any token or pool on Robinhood Chain and read its full on-chain profile as a
  *                        dashboard, the same view the site opens for every coin (NPCard.dashboardHTML: the
  *                        chart, the contract read, the community slot). Open to everyone.

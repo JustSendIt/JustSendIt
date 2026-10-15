@@ -1010,6 +1010,14 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
 .wall-id { --ava: 96px; padding: 0 1.1rem; }
 .wall-id-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 0.7rem; margin-top: calc(var(--ava) / -2); }
 .wall-id-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; padding-bottom: 0.35rem; }
+/* The wall's buttons (Edit profile and Share on your own; Follow, Alerts, Share, Moderation on someone else's) sit clear of
+   the banner with room around them (owner, 2026-10-15: "add some padding around the edit profile and share button"): beside
+   the picture, just under the banner's edge, on a wide screen; on a row of their own under the picture on a phone. */
+.wall-id-actions { align-self: flex-start; margin-top: calc(var(--ava) / 2 + 0.85rem); gap: 0.65rem; padding: 0 0.15rem 0.5rem; }
+@media (max-width: 440px) {
+  .wall-id-top { flex-wrap: wrap; }
+  .wall-id-actions { flex: 1 1 100%; justify-content: flex-start; margin-top: 0.9rem; padding: 0 0 0.25rem; }
+}
 /* THE AVATAR — the wrap is the SOLE size/ring/clip authority; img + emoji stack in one grid cell */
 .wall-avatar {
   width: var(--ava); height: var(--ava); flex: 0 0 auto; position: relative; z-index: 2;

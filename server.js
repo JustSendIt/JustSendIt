@@ -107,6 +107,8 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
        KEY_ROTATE_HOURS and the index key every IDX_ROTATE_DAYS, everything is re-encrypted, and old keys are then dropped,
        so a copy of a key stops opening anything soon after it is taken. See "Key rotation" further down and DEPLOY.md. */
 const KEYLIB = require('./lib/keys.js');
+const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
+const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
 let DATA_KEY_SOURCE = 'generated';   // where the key came from: 'env', 'file' (DATA_KEY_FILE), 'data-dir' (beside the database) — shown to the admin, never the key
 let KEY_RING_FILE = null;            // set when DATA_KEY_FILE holds a keyring: the file rotation rewrites
 const KEYS = (() => {
@@ -3303,7 +3305,7 @@ function walletReadNotice(uid, w) {
   const linked = walletList(uid).find((x) => x.address === w);
   if (!row && !linked) return null;
   const clean = (s) => { s = String(s || '').trim(); return s && !/0x[0-9a-f]{4,}/i.test(s) ? s : ''; };
-  return { label: clean(row && row.label) || clean(linked && linked.label), href: row ? '/tracker.html?wid=' + row.id : '/tracker.html?lid=' + linked.id };
+  return { label: clean(row && row.label) || clean(linked && linked.label), href: row ? '/tracker?wid=' + row.id : '/tracker?lid=' + linked.id };
 }
 function walletReadNotify(uid, w) {
   const n = walletReadNotice(uid, w);
@@ -4024,7 +4026,7 @@ const NOTIF_KEEP_SYSTEM = 200; // level-ups / OG / calls / wallet events are bou
    '//evil.example', a quote or an angle bracket would be an open redirect and an injection in one row.
    A site-relative path with a conservative character set is the whole of what a notification may link to. */
 // a token's dashboard (the Scanner page, newpairs.html?scan=…) — the link a notification about a token carries
-const tokenDashLink = (addr) => /^0x[0-9a-fA-F]{40}$/.test(String(addr || '')) ? '/newpairs.html?scan=' + String(addr).toLowerCase() : null;
+const tokenDashLink = (addr) => /^0x[0-9a-fA-F]{40}$/.test(String(addr || '')) ? '/newpairs?scan=' + String(addr).toLowerCase() : null;
 function notifyLink(href) {
   const h = String(href == null ? '' : href);
   if (!h) return null;
@@ -4857,7 +4859,7 @@ function awardSquadXp(sid, uid, amount, ref) {
   if (lvl > levelForXp(before.xp)) {
     const sq = db.prepare('SELECT name FROM squads WHERE id = ?').get(sid);
     for (const m of db.prepare('SELECT user_id FROM squad_members WHERE squad_id = ? AND verified = 1 LIMIT 200').all(sid))
-      notify(m.user_id, '🛡️', 'Your Send Squad ' + (sq ? sq.name : '') + ' reached Level ' + lvl + '!', 'points', null, '/squad.html?id=' + sid);
+      notify(m.user_id, '🛡️', 'Your Send Squad ' + (sq ? sq.name : '') + ' reached Level ' + lvl + '!', 'points', null, '/squad?id=' + sid);
   }
   return amount;
 }
@@ -4881,7 +4883,7 @@ async function sweepSquadGates() {
       db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(r.squad_id, r.squad_id);
       db.exec('COMMIT');
     } catch { try { db.exec('ROLLBACK'); } catch {} continue; }
-    notify(r.user_id, '🛡️', 'Your place in ' + sq.name + ' is paused — your linked wallets hold less than its gate (' + squadGateView(sq).text + '). Re-join once you hold it again.', 'alert', null, '/squad.html?id=' + sq.id);
+    notify(r.user_id, '🛡️', 'Your place in ' + sq.name + ' is paused — your linked wallets hold less than its gate (' + squadGateView(sq).text + '). Re-join once you hold it again.', 'alert', null, '/squad?id=' + sq.id);
   }
   } finally { squadGateSweeping = false; }
 }
@@ -10072,25 +10074,25 @@ const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').repl
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
   .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 const SENDY_SITE_MAP = `PAGES — point people to these by path:
-/ — home: what $Send is, the How to Buy guide (/#guide), the swap (/#swap), the tokens (/#tokens)
-/about.html — how everything works: Send Power, Send Calls, the holder boost, the rules
-/newpairs.html — the Scanner: paste any token or pool address for its on-chain profile; the New Pairs radar is a tab of it
-/wall.html — the Send Wall: every Send Call, live
-/watchlist.html — the tokens you saved with the ☆
-/tracker.html — the wallet tracker: holdings, trades, cost basis and PNL read from the chain
-/communities.html — communities (holders-only walls, proposals) and Send Squads
-/arcade.html — the Arcade: the weekly competitions and boards
-/data.html — the Data API
-/profile.html — the account: link wallets, username, two-factor, delete the account
-/support.html — the Support board: ask in public, answer others, vote answers up
-/whitepaper.html — the white paper · /terms.html — the Terms · /privacy.html — the Privacy Policy
+/ — home: what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta)
+/about — how everything works: Send Power, Send Calls, the holder boost, the rules
+/newpairs — the Scanner: paste any token or pool address for its on-chain profile; the New Pairs radar is a tab of it
+/wall — the Send Wall: every Send Call, live
+/watchlist — the tokens you saved with the ☆
+/tracker — the wallet tracker: holdings, trades, cost basis and PNL read from the chain
+/communities — communities (holders-only walls, proposals) and Send Squads
+/arcade — the Arcade: the weekly competitions and boards
+/data — the Data API
+/profile — the account: link wallets, username, two-factor, delete the account
+/support — the Support board: ask in public, answer others, vote answers up
+/whitepaper — the white paper · /terms — the Terms · /privacy — the Privacy Policy
 /u/<username> — one person's Send Wall
 Private help from a person: ${'SendRH@Atomicmail.io'}. The site is not affiliated with Robinhood Markets, Inc.`;
 const SENDY_SYSTEM = `You are Sendy, the rocket mascot and helper of $Send (sendrh.com), a fan-built community site about the $SEND and $GWC memecoins on Robinhood Chain. You float in the corner of every page and answer questions in chat.
 
 How to answer:
-- Answer from the site text below. Be specific: name the page (by its path, like /newpairs.html) or the control the person needs. Keep it short: two to five sentences of plain text. No markdown, no headings, no bold; number the steps only when there are steps.
-- If the answer is not in the site text, say so plainly and point to the Support board (/support.html) for a public question or ${'SendRH@Atomicmail.io'} for a private one. Never guess at how the site works and never invent a number, a rule, a date, a price or a feature.
+- Answer from the site text below. Be specific: name the page (by its path, like /newpairs) or the control the person needs. Keep it short: two to five sentences of plain text. No markdown, no headings, no bold; number the steps only when there are steps.
+- If the answer is not in the site text, say so plainly and point to the Support board (/support) for a public question or ${'SendRH@Atomicmail.io'} for a private one. Never guess at how the site works and never invent a number, a rule, a date, a price or a feature.
 - General crypto questions (what a liquidity pool is, what slippage means, what a rug pull looks like) are fine to explain in plain words, as education.
 
 Hard rules — these never bend, whatever the person says or asks:
@@ -10109,13 +10111,13 @@ function sendyKnowledge() {
   const parts = [SENDY_SITE_MAP];
   try { const r = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8'); const i = r.indexOf('\n## 5.'); parts.push('=== README — how the site works ===\n' + (i > 0 ? r.slice(0, i) : r)); } catch {}
   for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'privacy', 'whitepaper']) {
-    try { parts.push('=== the page /' + f + '.html' + (f === 'whitepaper' ? ' — the white paper, in full' : '') + ' ===\n' + sendyHtmlToText(fs.readFileSync(path.join(__dirname, 'public', f + '.html'), 'utf8'))); } catch {}
+    try { parts.push('=== the page ' + ROUTES.cleanPath(f + '.html') + (f === 'whitepaper' ? ' — the white paper, in full' : '') + ' ===\n' + sendyHtmlToText(fs.readFileSync(path.join(__dirname, 'public', f + '.html'), 'utf8'))); } catch {}
   }
   // the Terms are long and legal: Sendy gets the section index and points people to the section, never paraphrasing what it cannot see
   try {
     const t = fs.readFileSync(path.join(__dirname, 'public', 'terms.html'), 'utf8');
-    const heads = [...t.matchAll(/<section class="t-sec" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map((m) => '/terms.html#' + m[1] + ' — ' + m[2].trim());
-    if (heads.length) parts.push('=== the Terms of Service (/terms.html), by section — point people to the section; do not state what a section says beyond its title ===\n' + heads.join('\n'));
+    const heads = [...t.matchAll(/<section class="t-sec" id="([^"]+)">\s*<h3>([^<]+)<\/h3>/g)].map((m) => '/terms#' + m[1] + ' — ' + m[2].trim());
+    if (heads.length) parts.push('=== the Terms of Service (/terms), by section — point people to the section; do not state what a section says beyond its title ===\n' + heads.join('\n'));
   } catch {}
   sendyKnowledgeCache = parts.join('\n\n');
   return sendyKnowledgeCache;
@@ -10150,7 +10152,7 @@ function sendyLive() {
     const qs = db.prepare("SELECT id, text FROM posts WHERE board = 'support' AND (private IS NULL OR private = 0) AND squad_id IS NULL ORDER BY COALESCE(score, 0) DESC, created_at DESC LIMIT 15").all();
     const qa = [];
     for (const q of qs) { const a = db.prepare('SELECT text FROM comments WHERE post_id = ? ORDER BY created_at ASC LIMIT 2').all(q.id).map((r) => r.text.replace(/\s+/g, ' ').trim().slice(0, 400)); if (a.length) qa.push('Q: ' + q.text.replace(/\s+/g, ' ').trim().slice(0, 300) + '\nA: ' + a.join(' / ')); }
-    return qa.length ? '=== the Support board (/support.html): questions people asked, with the community\'s answers ===\n' + qa.join('\n') : '';
+    return qa.length ? '=== the Support board (/support): questions people asked, with the community\'s answers ===\n' + qa.join('\n') : '';
   });
   part('rated answers', () => {
     const rated = db.prepare("SELECT q, a FROM sendy_qa WHERE up - down >= 2 AND a != '' ORDER BY (up - down) DESC, at DESC LIMIT 30").all();
@@ -10847,7 +10849,7 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
      exceptions: a brand-new account's own setup, and an account whose ONLY possible proof is this sign-in (a
      social login with no password, no two-factor and no wallet old enough to vouch). */
   const token = createSession(userId, ipIdxVal, !ident ? NEW_ACCOUNT_SUDO_MS : (onlyProofIsSignIn(userId, now()) ? SUDO_MS : 0));
-  res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile.html' });
+  res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile' });
   res.end();
 }
 
@@ -11135,7 +11137,7 @@ function serveFile(req, res, filePath, extraHeaders = {}, patch = null) {
   });
 }
 
-/* ===== Per-entity pages: /u/<name> and /community.html?id=N ====================================================
+/* ===== Per-entity pages: /u/<name> and /community?id=N ====================================================
    Two pages on this site are one file serving many things: every Send Wall is u.html and every community is
    community.html. Served as they are, each one is the same head for every entity — and every unknown name or id is
    a 200 "not found" shell a search engine keeps as a page of its own. So these two are resolved here first:
@@ -11265,7 +11267,7 @@ function communityPatch(c) {
       'This ' + dollar + ' community on $Send is not live yet: it goes live at ' + LIVE_THRESHOLD + ' verified holder slots. Entertainment only.'];
     return seoHeadHtml({ title, desc: cands.find((s) => cpLen(s) <= 160) || cands[cands.length - 1], robots: SEO_ROBOTS_NOINDEX });
   }
-  const url = SITE_ORIGIN + '/community.html?id=' + Number(c.id);
+  const url = SITE_ORIGIN + '/community?id=' + Number(c.id);
   const cands = [
     name + tick + ' fan community on $Send: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
     'The ' + dollar + ' fan community on $Send: verified ' + dollar + ' holders post on its public wall, with member levels, proposals and holder snapshots. Entertainment only.',
@@ -11276,7 +11278,7 @@ function communityPatch(c) {
     { '@type': 'CollectionPage', '@id': url + '#webpage', url, name: title, description: desc, inLanguage: 'en', isPartOf: seoWebsite(), breadcrumb: { '@id': url + '#breadcrumb' } },
     { '@type': 'BreadcrumbList', '@id': url + '#breadcrumb', itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Home', item: SITE_ORIGIN + '/' },
-      { '@type': 'ListItem', position: 2, name: 'Communities', item: SITE_ORIGIN + '/communities.html' },
+      { '@type': 'ListItem', position: 2, name: 'Communities', item: SITE_ORIGIN + '/communities' },
       { '@type': 'ListItem', position: 3, name: name + tick, item: url },
     ] },
   ] };
@@ -11308,7 +11310,7 @@ function serveCommunityPage(req, res, url) {
   if (!seoRateOk(req, res)) return;
   const idRaw = url.searchParams.get('id');
   if (idRaw == null || idRaw === '') {   // the template with no community in it is the list's job
-    res.writeHead(301, { Location: '/communities.html', 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
+    res.writeHead(301, { Location: '/communities', 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
     return res.end();
   }
   if (!/^[1-9]\d{0,8}$/.test(idRaw)) return notFoundPage(res);
@@ -11337,7 +11339,7 @@ function sitemapEntries(p) {
         (SELECT MAX(po.created_at) FROM posts po WHERE po.community_id = c.id AND po.private = 0) AS last_post
       FROM communities c WHERE c.status = 'live' AND c.demo = 0 ORDER BY c.official DESC, c.id LIMIT ?`).all(SITEMAP_MAX_URLS)
       .filter(communityIndexable)
-      .map((c) => ({ loc: SITE_ORIGIN + '/community.html?id=' + Number(c.id), lastmod: Math.max(Number(c.created_at) || 0, Number(c.went_live_at) || 0, Number(c.last_post) || 0) || null }));
+      .map((c) => ({ loc: SITE_ORIGIN + '/community?id=' + Number(c.id), lastmod: Math.max(Number(c.created_at) || 0, Number(c.went_live_at) || 0, Number(c.last_post) || 0) || null }));
   }
   return db.prepare(`SELECT u.id, u.username, u.system, u.deleted_at, u.auto_named, COUNT(po.id) AS wall_posts, MAX(po.created_at) AS last_post
       FROM users u JOIN posts po ON po.user_id = u.id AND ${wallPostWhere('po.')}
@@ -13805,7 +13807,7 @@ async function refreshCalls() {
             paidPts += got; xRoom -= got;
           }
           db.prepare('UPDATE calls SET awarded_x=?, points_paid=? WHERE id=?').run(newMax, paidPts, r.id);
-          notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + (r.squad_id ? ' squad call hit ' + newMax + 'x! Send Power for your squad.' : ' Send Call hit ' + newMax + 'x! Send Power for the call.'), 'points', null, r.squad_id ? '/squad.html?id=' + r.squad_id + '#calls' : tokenDashLink(r.token_addr));
+          notify(r.user_id, '🚀', 'Your $' + (r.symbol || '') + (r.squad_id ? ' squad call hit ' + newMax + 'x! Send Power for your squad.' : ' Send Call hit ' + newMax + 'x! Send Power for the call.'), 'points', null, r.squad_id ? '/squad?id=' + r.squad_id + '#calls' : tokenDashLink(r.token_addr));
         }
         // reward hoppers who are ALSO in positive Xs (from their own hop-in price), same diamond-hands mechanic + same Finding-1-safe advance
         for (const hop of hops) {
@@ -15971,7 +15973,7 @@ const server = http.createServer(async (req, res) => {
           awardConviction(callComm.id, me.id, 'send_call', CONV_XP.send_call, 'v' + callComm.id + ':send_call:' + callId);
         }
         scanWriteAction(me.id, 'post', text);
-        if (squadId) notify(me.id, '🛡️', 'Squad call posted on $' + sym + ' in ' + squadRow.name + ' — its Xs and points go to the squad.', 'points', null, '/squad.html?id=' + squadId + '#calls');
+        if (squadId) notify(me.id, '🛡️', 'Squad call posted on $' + sym + ' in ' + squadRow.name + ' — its Xs and points go to the squad.', 'points', null, '/squad?id=' + squadId + '#calls');
         else notify(me.id, '📣', 'Send Call posted on $' + sym + ' — your Xs track live on your wall.', 'points');
         /* Same-IP ring on the same coin. Checked AFTER the row is committed so this call counts toward its
            own ring, and only on a token the ring actually shares. Sharing a connection is not the offence
@@ -17088,7 +17090,7 @@ const server = http.createServer(async (req, res) => {
             db.exec('COMMIT');
           } catch (e) { try { db.exec('ROLLBACK'); } catch {} squadImage.undo(av); squadImage.undo(bn); return bad(res, 'could not start the squad just now — try again', 500); }
           scanWriteAction(me.id, 'post', name + ' ' + bio);
-          notify(me.id, '🛡️', 'Your Send Squad ' + name + ' is live. Calls sent to it earn points for the squad; its level and weekly points are public.', 'points', null, '/squad.html?id=' + sid);
+          notify(me.id, '🛡️', 'Your Send Squad ' + name + ' is live. Calls sent to it earn points for the squad; its level and weekly points are public.', 'points', null, '/squad?id=' + sid);
           return send(res, 200, { id: sid, squad: squadDetailView(db.prepare('SELECT * FROM squads WHERE id = ?').get(sid), me) });
         }
         const sqm = /^\/api\/squads\/(\d+)(?:\/(join|posts|calls|members|conviction|settings))?$/.exec(p);
@@ -17115,7 +17117,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sid, sid);
             db.exec('COMMIT');
           } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not join just now — try again', 500); }
-          if (!ex && sq.creator_id !== me.id) notify(sq.creator_id, '🛡️', '@' + me.username + ' joined your Send Squad ' + sq.name + '.', 'points', me.id, '/squad.html?id=' + sid);
+          if (!ex && sq.creator_id !== me.id) notify(sq.creator_id, '🛡️', '@' + me.username + ' joined your Send Squad ' + sq.name + '.', 'points', me.id, '/squad?id=' + sid);
           return send(res, 200, { joined: true, verified: true, requalified: !!ex, squad: squadDetailView(db.prepare('SELECT * FROM squads WHERE id = ?').get(sid), me) });
         }
         if (sub === 'join' && req.method === 'DELETE') {
@@ -17838,9 +17840,9 @@ const server = http.createServer(async (req, res) => {
          leaves a real click (one per notification) untouched and makes enumeration pointless. */
       if (!rateLimit('perma:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
       const row = db.prepare('SELECT id, user_id, community_id, board, private, squad_id FROM posts WHERE id = ?').get(Number(mperma[1]));
-      const to = (!row || !postVisible(row, me)) ? '/wall.html?gone=' + Number(mperma[1])
-        : row.community_id ? '/community.html?id=' + row.community_id + '#p' + row.id
-        : row.board ? '/support.html#p' + row.id
+      const to = (!row || !postVisible(row, me)) ? '/wall?gone=' + Number(mperma[1])
+        : row.community_id ? '/community?id=' + row.community_id + '#p' + row.id
+        : row.board ? '/support#p' + row.id
         : '/u/' + encodeURIComponent((db.prepare('SELECT username FROM users WHERE id = ?').get(row.user_id) || {}).username || '') + '#p' + row.id;
       res.writeHead(302, { Location: to, 'Cache-Control': 'no-store', ...SEC_HEADERS });
       return res.end();
@@ -17852,10 +17854,13 @@ const server = http.createServer(async (req, res) => {
        may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
        admin out. */
     {
-      const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase(), base = PUBLIC_DIR.toLowerCase() + path.sep;
-      if (fpLc === base + 'admin.html' || fpLc === base + 'admin.js') {
+      // its address is /admin now (2026-10-15); /admin.html, /Admin, /admin/ and the rest are the same page to this gate
+      const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase().replace(/[\\/]+$/, ''), base = PUBLIC_DIR.toLowerCase() + path.sep;
+      const isPage = fpLc === base + 'admin' || fpLc === base + 'admin.html';
+      if (isPage || fpLc === base + 'admin.js') {
         if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
-        return serveFile(req, res, path.join(PUBLIC_DIR, fpLc.slice(base.length)), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
+        if (isPage && p !== '/admin') { res.writeHead(301, { Location: '/admin' + url.search, 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', ...SEC_HEADERS }); return res.end(); }
+        return serveFile(req, res, path.join(PUBLIC_DIR, isPage ? 'admin.html' : 'admin.js'), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
       }
     }
     /* ===== addresses that answer for search engines and browsers before the static files =====
@@ -17864,21 +17869,23 @@ const server = http.createServer(async (req, res) => {
       // browsers and crawlers ask for /favicon.ico whatever the page says; answer with the site's icon, not a 404
       if (p === '/favicon.ico') return serveFile(req, res, path.join(PUBLIC_DIR, 'assets', 'logo-128.png'), { 'Cache-Control': 'public, max-age=604800' });
       if (p === '/sitemap.xml' || SITEMAP_CHILDREN.includes(p)) return serveSitemap(req, res, p);
-      // one address for the home page: /index.html was a byte-identical duplicate of /
-      if (p === '/index.html') { res.writeHead(301, { Location: '/' + url.search, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS }); return res.end(); }
-      /* /About.html and /WALL.HTML were 200 duplicates wherever the disk is case-insensitive (the live Mac's is). Pages
-         only: asset names such as assets/SendLogo.png really are mixed-case. */
-      if (/\.html$/i.test(p) && p !== p.toLowerCase()) {
-        const lower = p.toLowerCase(), fp = path.normalize(path.join(PUBLIC_DIR, lower));
-        let isFile = false; try { isFile = fp.startsWith(PUBLIC_DIR + path.sep) && fs.statSync(fp).isFile(); } catch {}
-        // the Location is rebuilt from the normalised file path, so a raw target such as /.//host/X.html can never
-        // become a protocol-relative //host/… redirect off the site
-        const to = '/' + path.relative(PUBLIC_DIR, fp).split(path.sep).join('/');
-        if (isFile) { res.writeHead(301, { Location: (to === '/index.html' ? '/' : to) + url.search, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS }); return res.end(); }
+      /* Pages by their names (lib/routes.js — owner, 2026-10-15): /about, /newpairs, /community?id=5; the home page's sections
+         /guide, /swap, /tokens, /beta serve the home page. Every other spelling — /about.html, /About, /about/, /index.html —
+         is a 301 to the clean one in a single hop, the query kept (the # part is the browser's and survives). The Location
+         is built from the page's name alone, never from the raw path, so a target such as /.//host/X can never become a
+         protocol-relative //host/… redirect off the site. An hour, not a day, in caches: a redirect is easy to change. */
+      const route = ROUTES.resolve(PAGE_NAMES, p);
+      if (route && route.redirect) {
+        // the community page with no id is the list: straight there, not via /community (one hop, as promised above)
+        const to = route.redirect === '/community' && !url.searchParams.get('id') ? '/communities' : route.redirect + url.search;
+        res.writeHead(301, { Location: to, 'Cache-Control': 'public, max-age=3600', ...SEC_HEADERS }); return res.end();
       }
+      if (route && route.section) return serveFile(req, res, path.join(PUBLIC_DIR, 'index.html'));
+      if (route && route.page === 'community') return serveCommunityPage(req, res, url);
+      if (route && route.page) return serveFile(req, res, path.join(PUBLIC_DIR, route.page + '.html'));
       const um = /^\/u\/([^/]+)$/.exec(p);
       if (um) return serveProfilePage(req, res, um[1], url.search);
-      if (p === '/u.html') {
+      if (/^\/u(\.html)?\/?$/i.test(p)) {
         /* The wall template is never a page of its own. The old ?u= form still reaches the wall it named (the rest of
            the query goes along); with no name it is a 404, not an indexable "no sender" shell. */
         const q = url.searchParams.get('u');
@@ -17890,13 +17897,13 @@ const server = http.createServer(async (req, res) => {
         }
         return notFoundPage(res);
       }
-      if (p === '/community.html') return serveCommunityPage(req, res, url);
     }
     // a page or an asset is read, not written to: POST /, OPTIONS /admin.js and the like used to answer 200 with the file
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { Allow: 'GET, HEAD', 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS }); return res.end('{"error":"method not allowed"}'); }
-    const rel = p === '/' ? '/index.html' : p;
-    const filePath = path.normalize(path.join(PUBLIC_DIR, rel));
+    const filePath = path.normalize(path.join(PUBLIC_DIR, p));
     if (filePath !== PUBLIC_DIR && !filePath.startsWith(PUBLIC_DIR + path.sep)) return bad(res, 'nope', 400);
+    // a page is served only by its name (above): never at its file name, and never a hidden file (.DS_Store and the like)
+    if (/\.html$/i.test(filePath) || path.basename(filePath).startsWith('.')) return notFoundPage(res);
     return serveFile(req, res, filePath);
   } catch (e) {
     if (res.headersSent) { try { res.destroy(); } catch {} return; } // response already streaming → can't send an error body
@@ -18557,7 +18564,7 @@ function tgScanMessage(p) {
   L.push('');
   L.push('<code>' + tgEsc(p.token.address) + '</code>');
   const site = BASE_URL.replace(/\/+$/, '');
-  L.push('🔎 <a href="' + tgEsc(site + '/newpairs.html') + '">Full scan on the radar</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
+  L.push('🔎 <a href="' + tgEsc(site + '/newpairs') + '">Full scan on the radar</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
   L.push('');
   L.push('<i>🎉 Entertainment only — not financial advice, and never a signal to buy. Most new tokens go to zero. Do your own research.</i>');
   return L.join('\n');
@@ -18927,8 +18934,8 @@ function productionChecks() {
     else if (!KEYLIB.readEscrowPub(KEY_RING_FILE)) warn(process.env.KEY_ROTATE_WITHOUT_ESCROW === '1' ? 'Keys rotate, but no escrow key is set up: the keyring on ' + path.dirname(KEY_RING_FILE) + ' is the only copy, and losing it loses the data. Run scripts/keys.mjs escrow-init and keep its recovery key off this machine.' : 'Key rotation is PAUSED: no escrow key is set up. Run scripts/keys.mjs escrow-init (or set KEY_ROTATE_WITHOUT_ESCROW=1 to rotate without one).');
     if (DATA_KEY_SOURCE === 'data-dir') warn('The encryption key is read from data/.data_key, beside the database it protects. Put it on another volume and set DATA_KEY_FILE (DEPLOY.md).');
     if (!BACKUP_OFF_VOLUME) warn('Backups are written on the same volume as the database. Set BACKUP_DIR to a folder on another volume (DEPLOY.md).');
-    if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin.html). Set it to your database row id (users.id, not your Send ID) once you have signed up.');
-    if (SENDY_KEY) console.log('🚀 Sendy answers questions with ' + SENDY_MODEL + ' — a question, its page and that chat go to the model provider (see /privacy.html#p8)');
+    if (!ADMIN_USER_IDS.size) warn('ADMIN_USER_IDS is empty — nobody can act on reports or take content down (/admin). Set it to your database row id (users.id, not your Send ID) once you have signed up.');
+    if (SENDY_KEY) console.log('🚀 Sendy answers questions with ' + SENDY_MODEL + ' — a question, its page and that chat go to the model provider (see /privacy#p8)');
     else warn('ANTHROPIC_API_KEY is empty — Sendy answers from its built-in notes only. Set it to let Sendy answer any question about the site (SENDY_MODEL picks the model).');
     if (!TRUST_PROXY_HOPS) warn('TRUST_PROXY unset — behind a reverse proxy, rate limits & the community anti-sybil gate will key on the proxy IP, not real clients. Set TRUST_PROXY to your proxy hop count (1 for a single proxy).');
   }

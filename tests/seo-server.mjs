@@ -82,7 +82,7 @@ try {
   const R = robots.text;
   check('robots.txt is served, with one group for every crawler', robots.status === 200 && (R.match(/^User-agent:/gim) || []).length === 1 && /^User-agent: \*$/m.test(R), robots.status);
   check('  ...and names the sitemap at this origin', new RegExp('^Sitemap: ' + reEsc(BASE) + '/sitemap\\.xml$', 'm').test(R), (R.match(/^Sitemap:.*$/m) || [])[0]);
-  const noindexPages = ['/profile.html', '/watchlist.html', '/gate.html', '/terms.html', '/admin.html', '/data.html', '/squad.html'];
+  const noindexPages = ['/profile', '/watchlist', '/gate', '/terms', '/admin', '/data', '/squad'];
   const blocked = noindexPages.filter((u) => !robotsAllows(R, u));
   check('no page that carries its own noindex is disallowed (a blocked crawler never reads the noindex)', blocked.length === 0, blocked.join(' '));
   const pageCalls = ['/api/config', '/api/og/campaign', '/api/beta', '/api/chain/pairs', '/api/posts', '/api/posts?sort=new', '/api/posts?board=support',
@@ -98,7 +98,7 @@ try {
     '/api/search?q=x', '/api/data/eligibility', '/api/sendy/ask', '/api/auth/google', '/api/competition'];
   const open = privateOrCostly.filter((u) => robotsAllows(R, u));
   check('  ...while personal, write-only and caller-chosen chain reads stay disallowed', open.length === 0, open.join(' '));
-  check('  ...and the ticket card and the pages themselves are not blocked', robotsAllows(R, '/t/12.png') && robotsAllows(R, '/t/12') && robotsAllows(R, '/') && robotsAllows(R, '/u/someone') && robotsAllows(R, '/community.html?id=1'));
+  check('  ...and the ticket card and the pages themselves are not blocked', robotsAllows(R, '/t/12.png') && robotsAllows(R, '/t/12') && robotsAllows(R, '/') && robotsAllows(R, '/u/someone') && robotsAllows(R, '/community?id=1'));
 
   // the JSON behind those Allow lines really is public (read before this suite makes a community, so no refresh is spent on a fake token)
   const anonOk = [];
@@ -226,11 +226,11 @@ try {
   check('a video avatar is left out of Person.image, a still avatar is kept', pv && !('image' in pv) && pp && /\/uploads\/[0-9a-f]{24}\.png$/.test(pp.image || ''), JSON.stringify([pv && pv.image, pp && pp.image]));
 
   /* ═══ 4. a community ═══ */
-  const cNone = await get('/community.html?id=987654321'), cBad = await get('/community.html?id=abc'), cBare = await get('/community.html');
+  const cNone = await get('/community?id=987654321'), cBad = await get('/community?id=abc'), cBare = await get('/community');
   check('an unknown community id is a 404, and so is a malformed one', cNone.status === 404 && cBad.status === 404, cNone.status + ' ' + cBad.status);
-  check('  ...and the template with no id is a 301 to the list', cBare.status === 301 && cBare.location === '/communities.html', cBare.status + ' ' + cBare.location);
-  const live = await get('/community.html?id=' + cs + '&utm_source=x');
-  const LH = headOf(live.text), curl = BASE + '/community.html?id=' + cs;
+  check('  ...and the template with no id is a 301 to the list', cBare.status === 301 && cBare.location === '/communities', cBare.status + ' ' + cBare.location);
+  const live = await get('/community?id=' + cs + '&utm_source=x');
+  const LH = headOf(live.text), curl = BASE + '/community?id=' + cs;
   check('a live community is served 200, indexable, titled "{name} ($SYM) Community — $Send"', live.status === 200 && metaN(LH, 'robots') === INDEX && titleOf(LH) === 'Seo Test Token ($SEOT) Community — $Send', live.status + ' ' + titleOf(LH) + ' ' + metaN(LH, 'robots'));
   check('  ...with the id-only canonical (tracking parameters fold into it) and og:url', canonOf(LH) === curl && metaP(LH, 'og:url') === curl, canonOf(LH));
   const cdesc = metaN(LH, 'description');
@@ -239,23 +239,23 @@ try {
   const graph = (cld && cld['@graph']) || [];
   const page = graph.find((n) => n['@type'] === 'CollectionPage'), crumbs = graph.find((n) => n['@type'] === 'BreadcrumbList');
   check('  ...and CollectionPage + BreadcrumbList JSON-LD (Home › Communities › the community)', page && page.url === curl && crumbs && crumbs.itemListElement.map((i) => i.name).join(' > ') === 'Home > Communities > Seo Test Token ($SEOT)'
-    && crumbs.itemListElement[1].item === BASE + '/communities.html' && crumbs.itemListElement[2].item === curl, JSON.stringify(crumbs));
+    && crumbs.itemListElement[1].item === BASE + '/communities' && crumbs.itemListElement[2].item === curl, JSON.stringify(crumbs));
 
   const pend = mkComm(uid, { symbol: 'SEOP', name: 'Seo Pending', status: 'pending' });
-  const pr = await get('/community.html?id=' + pend), PH = headOf(pr.text);
+  const pr = await get('/community?id=' + pend), PH = headOf(pr.text);
   check('a community that is not live yet keeps its title but is noindex, with no canonical or JSON-LD', pr.status === 200 && titleOf(PH) === 'Seo Pending ($SEOP) Community — $Send' && metaN(PH, 'robots') === 'noindex, follow' && !canonOf(PH) && ldOf(PH).length === 0, titleOf(PH) + ' ' + metaN(PH, 'robots'));
   check('  ...and says it goes live at ' + LIVE_THRESHOLD + ' verified holder slots, the server\'s own number', (metaN(PH, 'description') || '').includes(LIVE_THRESHOLD + ' verified holder slots'), metaN(PH, 'description'));
 
   const longName = 'An Extremely Long Token Name <b>"Bold"</b> ‮ That Goes On And On';
   const longC = mkComm(uid, { symbol: 'LONGSYMBOL123456', name: longName, status: 'live', went_live_at: Date.now() });
-  const lr = await get('/community.html?id=' + longC), LRH = headOf(lr.text);
+  const lr = await get('/community?id=' + longC), LRH = headOf(lr.text);
   check('a long community name is cut so the title stays within 60 characters, markup escaped', cp(titleOf(LRH)) <= 60 && /…/.test(titleOf(LRH)) && /\(\$LONGSYMBOL123456\) Community — \$Send$/.test(titleOf(LRH)) && !/<b>/.test(LRH) && !LRH.includes('‮'), titleOf(LRH) + ' (' + cp(titleOf(LRH)) + ')');
 
   if (!demo) {   // the network did not let the boot seeder make the sandbox: stand one in
     const id = mkComm(uid, { symbol: 'DEMO', name: 'Seo Sandbox Co', status: 'live', demo: true });
     demo = { id, name: 'Seo Sandbox Co', symbol: 'DEMO' };
   }
-  const sb = await get('/community.html?id=' + demo.id), SH = headOf(sb.text);
+  const sb = await get('/community?id=' + demo.id), SH = headOf(sb.text);
   check('the open sandbox is "Open Sandbox Community — $Send", noindex, with no canonical and no JSON-LD', sb.status === 200 && titleOf(SH) === 'Open Sandbox Community — $Send' && metaN(SH, 'robots') === 'noindex, follow' && !canonOf(SH) && ldOf(SH).length === 0, titleOf(SH) + ' ' + metaN(SH, 'robots'));
   check('  ...and its head never carries the company name or ticker it is branded with', !SH.includes(demo.name) && !SH.includes('$' + demo.symbol), demo.name);
 
@@ -268,7 +268,7 @@ try {
   check('  ...and answers a repeat with a 304', !!idx.h('etag') && again304.status === 304, idx.h('etag') + ' ' + again304.status);
 
   const pagesMap = await get('/sitemap-pages.xml');
-  const want = ['/', '/about.html', '/wall.html', '/communities.html', '/newpairs.html', '/support.html', '/tracker.html', '/arcade.html', '/whitepaper.html', '/privacy.html'].map((p) => BASE + p);
+  const want = ['/', '/about', '/wall', '/communities', '/newpairs', '/support', '/tracker', '/arcade', '/whitepaper', '/privacy'].map((p) => BASE + p);
   check('the static pages sitemap lists exactly the ten indexable pages, with no invented lastmod or priority', pagesMap.status === 200 && JSON.stringify(locs(pagesMap.text).sort()) === JSON.stringify(want.slice().sort()) && !/<lastmod>|<priority>|<changefreq>/.test(pagesMap.text), locs(pagesMap.text).join(' '));
   check('  ...and public/sitemap.xml is gone (the index is built by the server)', !existsSync(path.join(PUB, 'sitemap.xml')));
 
@@ -284,14 +284,14 @@ try {
   check('  ...every wall it lists qualifies (same predicate as the robots meta)', wrongP.length === 0, wrongP.join(' '));
   const comm = await get('/sitemap-communities.xml'), cl = locs(comm.text);
   check('the communities sitemap lists the live community', comm.status === 200 && cl.includes(curl), comm.status);
-  const liveIds = db.prepare("SELECT id FROM communities WHERE status = 'live' AND demo = 0").all().map((r) => BASE + '/community.html?id=' + r.id).sort();
-  check('  ...and exactly the live, non-sandbox ones: no pending community, no sandbox', JSON.stringify(cl.slice().sort()) === JSON.stringify(liveIds) && !cl.includes(BASE + '/community.html?id=' + pend) && !cl.includes(BASE + '/community.html?id=' + demo.id), cl.join(' '));
+  const liveIds = db.prepare("SELECT id FROM communities WHERE status = 'live' AND demo = 0").all().map((r) => BASE + '/community?id=' + r.id).sort();
+  check('  ...and exactly the live, non-sandbox ones: no pending community, no sandbox', JSON.stringify(cl.slice().sort()) === JSON.stringify(liveIds) && !cl.includes(BASE + '/community?id=' + pend) && !cl.includes(BASE + '/community?id=' + demo.id), cl.join(' '));
   check('  ...no squad, ticket, scanner or fragment URL anywhere in them', ![...pl, ...cl, ...locs(pagesMap.text)].some((l) => /squad|\/t\/|scan=|#/.test(l)));
 
   /* ═══ 6. one address per page ═══ */
   const ih = await get('/index.html'), iq = await get('/index.html?ref=abc'), cap = await get('/About.html?x=1');
   check('/index.html is a 301 to /, query kept', ih.status === 301 && ih.location === '/' && iq.status === 301 && iq.location === '/?ref=abc', ih.status + ' ' + ih.location + ' / ' + iq.location);
-  check('a page asked for in capitals is a 301 to its lowercase name', cap.status === 301 && cap.location === '/about.html?x=1', cap.status + ' ' + cap.location);
+  check('a page asked for in capitals is a 301 to its lowercase name, in one hop to the clean address', cap.status === 301 && cap.location === '/about?x=1', cap.status + ' ' + cap.location);
 
   /* ═══ 7. the ticket page, the 404, the icon, the fonts, the manifest ═══ */
   db.prepare('UPDATE users SET ticket_public = 1 WHERE id = ?').run(uid);

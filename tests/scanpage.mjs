@@ -46,7 +46,7 @@ try {
   const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));
   const stale = pages.filter((f) => /New&nbsp;Pairs<\/a>|>New Pairs<\/a>/.test(read(f)));
   check('the nav tab and the footer link say Scanner on every page', stale.length === 0, stale.join(','));
-  check('  ...and the Scanner page marks itself current', /<a class="active" href="newpairs\.html" aria-current="page">Scanner<\/a>/.test(HTML));
+  check('  ...and the Scanner page marks itself current', /<a class="active" href=\"\/newpairs" aria-current="page">Scanner<\/a>/.test(HTML));
   check('the page is titled as the Scanner', /<title>Robinhood Chain Token Scanner &amp; New Pairs — \$Send<\/title>/.test(HTML) && /<h1 class="section-title display green"[^>]*>Scanner 🔎<\/h1>/.test(HTML));
 
   /* ═══ two tabs ═══ */
@@ -178,7 +178,7 @@ try {
   check('  ...and a call button inside the token popup closes the popup before the composer opens', /row\.closest\('#token-modal, \.token-modal'\) && window\.TokenModal && TokenModal\.close/.test(CMP));
   const WL = read('watchlist.js'), WLH = read('watchlist.html');
   check('  ...the composer\'s "see the full detail" clears the flag only where the popup can really show it; elsewhere it opens the Scanner in a new tab and the call stays flagged',
-    /if \(window\.TokenModal && window\.NPCard\) \{ viewedDetail = true; TokenModal\.open\(/.test(CMP) && /else window\.open\('newpairs\.html\?scan=' \+ encodeURIComponent\(callTok\.addr\), '_blank', 'noopener'\);/.test(CMP)
+    /if \(window\.TokenModal && window\.NPCard\) \{ viewedDetail = true; TokenModal\.open\(/.test(CMP) && /else window\.open\('\/newpairs\?scan=' \+ encodeURIComponent\(callTok\.addr\), '_blank', 'noopener'\);/.test(CMP)
     && !/Open this token from New Pairs to see its full detail/.test(CMP) && /one made from the Scanner is not/.test(CMP));
   check('  ...a Wall button always lands on the public Wall, even with the composer left on a squad', /setCallTarget\(pendingSquad \? pendingSquad\.id : null\);/.test(CMP));
   check('  ...on a squad\'s own page the squad button calls to that squad when the reader is verified there', /const q = \(ctx && list\.find\(\(s\) => s\.id === ctx\)\) \|\| list\[0\]/.test(CMP) && /old\.dataset\.one === String\(one\)/.test(CMP));
@@ -186,8 +186,8 @@ try {
   check('the ☆ at the foot of a scan and of the token popup saves that pair (the watchlist copy tells people to tap it)',
     /lastPair = p;/.test(SC) && /Watchlist\.toggle\(lastPair\)/.test(SC) && /shown = j\.pair;/.test(TMJ) && /window\.Watchlist\.toggle\(shown\)/.test(TMJ));
   check('  ...a long squad name wraps inside its Send Call button wherever the pair sits', /\.call-row \.btn \{ max-width: 100%; min-width: 0; overflow-wrap: anywhere; \}/.test(CSS));
-  check('the watchlist sends people to the token Scanner, not the New Pairs radar', /href="newpairs\.html" data-tip="Opens the token Scanner/.test(WLH) && !/newpairs\.html\?tab=new/.test(WLH) && /Open the <a class="np-msg-link" href="newpairs\.html">Scanner<\/a>/.test(WL));
-  check('  ...each saved token opens in the Scanner and carries the Send Call pair (not marked "detail viewed": the card is lighter)', /href="newpairs\.html\?scan=' \+ encodeURIComponent\(p\.token\.address\)/.test(WL) && /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row' \}\)/.test(WL));
+  check('the watchlist sends people to the token Scanner, not the New Pairs radar', /href=\"\/newpairs" data-tip="Opens the token Scanner/.test(WLH) && !/newpairs\.html\?tab=new/.test(WLH) && /Open the <a class="np-msg-link" href=\"\/newpairs">Scanner<\/a>/.test(WL));
+  check('  ...each saved token opens in the Scanner and carries the Send Call pair (not marked "detail viewed": the card is lighter)', /href=\"\/newpairs\?scan=' \+ encodeURIComponent\(p\.token\.address\)/.test(WL) && /COMPOSE\.callRowHTML\(p\.token\.address, \{ cls: 'np-call-row' \}\)/.test(WL));
   /* ═══ the token dashboard is the default view wherever someone reads more about a token ═══ */
   const SCJ = read('sendcall.js'), TT = read('tokentext.js');
   const dashIdx = NP.indexOf('function dashboardHTML(');
@@ -205,13 +205,13 @@ try {
     && /details > summary/.test(read('app.js')) && /aria-haspopup="dialog"/.test(NP));
   check('  ...the token popup draws it (from a pair the caller already holds, or a live read, or a caller\'s own snapshot)',
     /window\.NPCard\.dashboardHTML\(pair, \{ level: 3 \}\)/.test(TMJ) && /shown = meta\.pair; paint\(meta\.pair\);/.test(TMJ) && /typeof meta\.fallback === 'function'/.test(TMJ)
-    && /fullLink\.href = '\/newpairs\.html\?scan=' \+ encodeURIComponent/.test(TMJ));
+    && /fullLink\.href = '\/newpairs\?scan=' \+ encodeURIComponent/.test(TMJ));
   check('  ...a radar row, the Hot Feed\'s ℹ️ and "Full dashboard", a call\'s detail and a watchlist row all open it',
     /function openDash\(p\)/.test(NP) && /if \(li && openDash\(pairFor\(li\.dataset\.addr\)\)\)/.test(NP) && /openDash\(slide && state\.byAddr\.get\(slide\.dataset\.addr\)\)/.test(NP)
     && /window\.TokenModal\.open\(w\.dataset\.token, \{ symbol: w\.dataset\.sym, name: w\.dataset\.name, fallback:/.test(SCJ)
     && /function openDash\(p\)/.test(WL) && WLH.indexOf('<script src="newpairs.js">') > 0 && WLH.indexOf('<script src="tokenmodal.js">') > WLH.indexOf('<script src="newpairs.js">'));
   check('  ...a $TICKER chip on a page with no popup opens the dashboard page, and token notifications link to it',
-    /else window\.open\('\/newpairs\.html\?scan=' \+ encodeURIComponent\(addr\), '_blank', 'noopener'\);/.test(TT) && !/Token detail isn’t available on this page/.test(TT)
+    /else window\.open\('\/newpairs\?scan=' \+ encodeURIComponent\(addr\), '_blank', 'noopener'\);/.test(TT) && !/Token detail isn’t available on this page/.test(TT)
     && (SRC.match(/tokenDashLink\(r\.token_addr\)/g) || []).length === 2 && /'watchlist', null, tokenDashLink\(token\)\);/.test(SRC));
   const popupPages = readdirSync(PUB).filter((f) => f.endsWith('.html') && /<script src="\/?tokenmodal\.js">/.test(read(f)));
   check('  ...and every page with the popup loads the watchlist script, so ☆ Save to watchlist is on the dashboard everywhere',

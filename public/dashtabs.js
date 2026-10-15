@@ -55,15 +55,15 @@
     });
     if (lostFocus) tab.focus({ preventScroll: true });   // the control that asked for the switch just vanished under the reader; land them on the tab
     try { localStorage.setItem(KEY, name); } catch {}
-    if (o.hash !== false && !tabForHashIsSpecific(location.hash)) {
-      try { history.replaceState(null, '', '#tab-' + name); } catch {}
-    }
+    /* The address stays the page's name (owner, 2026-10-15: "every page is just their name and not ... a # in front of it"):
+       a tab is not written into it. A refresh comes back to the same tab from what is remembered on this device; a #tab-…
+       link someone followed is honoured, then tidied away. A hash that points INSIDE a panel (#sec-account) is left for
+       the code that answers it. */
+    if (/^#tab-/.test(location.hash)) { try { history.replaceState(history.state, '', location.pathname + location.search); } catch {} }
     if (o.focus === 'tab') tab.focus();
     document.dispatchEvent(new CustomEvent('dash:tab', { detail: { tab: name } }));
     return true;
   }
-  // a hash that points at something INSIDE a panel is more specific than the tab — leave it alone
-  const tabForHashIsSpecific = (h) => !!h && !/^#tab-/.test(h) && tabForHash(h) !== null;
 
   /* ---------- 4. the user ---------- */
   list.addEventListener('click', (e) => { const t = e.target.closest('[role="tab"]'); if (t) show(t.dataset.tab); });
