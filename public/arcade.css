@@ -125,6 +125,57 @@
 .arc-count { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--text); white-space: nowrap; }
 .arc-big { font-variant-numeric: tabular-nums; color: var(--gold); font-weight: 800; }
 
+/* ---------- a guest's name for the board, and the prompt after it (arcade.js guestBoardHTML) ---------- */
+.arc-name { margin: 0.7rem 0 0.5rem; display: grid; gap: 0.45rem; }
+.arc-name-lbl { font-weight: 800; color: var(--text); font-size: max(var(--text-floor), 0.96rem); }
+.arc-name-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
+.arc-name-in { flex: 1 1 12rem; min-width: 0; min-height: 2.6em; padding: 0.45rem 0.7rem; border-radius: 10px; border: 1.5px solid var(--edge-ctl);
+  background: var(--ink); color: var(--text); font: inherit; font-size: max(var(--text-floor), 1rem); }
+.arc-name-in:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.arc-name-in[aria-invalid="true"] { border-color: var(--red); border-width: 2px; }
+.arc-name-row .btn { flex: 0 1 auto; }
+.arc-name-err { margin: 0; color: var(--red); font-weight: 700; font-size: max(var(--text-floor), 0.9rem); }
+.arc-name-err::before { content: '⚠️ '; }
+.arc-msg .arc-name .arc-note { margin: 0; }
+.arc-prompt { margin-top: 0.7rem; border: 1.5px dashed var(--edge-ctl); border-radius: 12px; padding: 0.8rem 0.9rem; background: var(--ink); }
+.arc-prompt:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 3px; }
+.arc-guest-name { color: var(--text-dim); font-weight: 400; }
+
+/* ---------- today's Rocket Riders board (arcade.js renderBoard) ----------
+   members in colour (their accent, avatar and badge), guests grey and plain — and "guest" written beside each guest's name,
+   so the difference never rests on colour alone */
+.arc-riders { margin-top: 1.2rem; border-top: 1px solid var(--ink-4); padding-top: 1rem; container: arc-riders / inline-size; }
+.arc-riders-h { margin: 0 0 0.35rem; }
+.arc-riders-list { list-style: none; margin: 0.6rem 0 0.5rem; padding: 0; display: grid; gap: 0.3rem; }
+.arc-rider { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto auto; align-items: center; gap: 0.55rem; padding: 0.45rem 0.65rem;
+  border-radius: 10px; background: var(--ink); border: 1.5px solid transparent; font-size: max(var(--text-floor), 0.94rem); }
+.arc-rider.is-you { border-color: var(--green); }
+.arc-rider-rank { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--text); text-align: center; }
+.arc-rider-who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.45rem; min-width: 0; }
+/* the avatar and the name stay side by side (the name wraps beside it); a badge after them goes to the next line instead */
+.arc-rider-id { display: flex; align-items: center; gap: 0.45rem; min-width: 0; flex: 0 1 auto; }
+.arc-rider-name { font-weight: 800; color: var(--green-bright); text-decoration: none; overflow-wrap: anywhere; min-width: 0; }
+a.arc-rider-name:hover, a.arc-rider-name:focus-visible { text-decoration: underline; }
+.arc-rider-x { font-variant-numeric: tabular-nums; font-weight: 800; color: var(--gold); white-space: nowrap; text-align: right; }
+.arc-rider-tag, .arc-rider-you { font-size: max(var(--text-floor), 0.78rem); line-height: 1.3; padding: 0.05em 0.45em; border-radius: 999px; border: 1px solid var(--edge-ctl); color: var(--text-dim); white-space: nowrap; }
+.arc-rider-you { border-color: var(--green); color: var(--green-bright); font-weight: 700; }
+/* a guest: grey and boring — no avatar, no colour, no weight, a plain number */
+.arc-rider--guest { background: transparent; border-color: var(--ink-4); }
+.arc-rider--guest .arc-rider-rank, .arc-rider--guest .arc-rider-name, .arc-rider--guest .arc-rider-x { color: var(--text-dim); font-weight: 400; }
+.arc-rider--guest.is-you { border-color: var(--edge-ctl); }
+.arc-rider-none { color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); padding: 0.4rem 0; }
+.arc-rider-rm { min-width: 2.2em; min-height: 2.2em; border-radius: 8px; border: 1px solid var(--edge-ctl); background: transparent; color: var(--text-dim); font: inherit; font-size: max(var(--text-floor), 0.85rem); cursor: pointer; }
+.arc-rider-rm:hover, .arc-rider-rm:focus-visible { color: var(--red); border-color: var(--red); }
+@media (pointer: coarse) { .arc-rider-rm { min-width: 44px; min-height: 44px; } }
+/* a narrow board (a phone): the name gets the whole line, and the cash-out sits under it rather than squeezing it */
+@container arc-riders (max-width: 26em) {
+  .arc-rider { grid-template-columns: 2.2em minmax(0, 1fr) auto; row-gap: 0.15rem; }
+  .arc-rider-rank { grid-row: span 2; }
+  .arc-rider-x { grid-column: 2; grid-row: 2; text-align: left; }
+  .arc-rider-rm { grid-column: 3; grid-row: 1 / span 2; }
+}
+@media (forced-colors: active) { .arc-rider.is-you { border-color: Highlight; } }
+
 /* ---------- how it works / payout curve ---------- */
 .arc-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1.2rem; align-items: start; }
 .arc-how, .arc-curve-card { padding: 1.2rem; }

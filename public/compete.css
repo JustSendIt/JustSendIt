@@ -180,3 +180,9 @@
   .cmp-chip, .cmp-info, .cmp-tip, .cmp-prog > span { transition: none; }
   .cmp-chip:hover { transform: none; }
 }
+/* Rocket Run card: the top of today's Rocket Riders board — a guest grey and plain, with "guest" written beside the name */
+.cmp-riders { margin-top: 0.7rem; }
+.cmp-riders li.is-guest { background: transparent; border: 1px solid var(--ink-4); }
+.cmp-name--guest, .cmp-riders li.is-guest .cmp-rank, .cmp-riders li.is-guest .cmp-val { color: var(--text-dim); font-weight: 400; }
+.cmp-guest-tag { font-size: max(var(--text-floor), 0.75rem); line-height: 1.3; padding: 0.05em 0.45em; border-radius: 999px; border: 1px solid var(--edge-ctl); color: var(--text-dim); white-space: nowrap; }
+.cmp-riders-none { margin: 0.6rem 0 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); }

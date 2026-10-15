@@ -72,7 +72,7 @@ try {
 
   // 4. the page
   check('the page watches every flight from takeoff (a rejoined one too), and the first answer — the watch or a cash-out — wins',
-    /setMode\('flying'\);\n      watchFlight\(\);/.test(AJ) && /fetch\('\/api\/arcade\/watch\?roundId=' \+ encodeURIComponent\(id\)/.test(AJ) && /if \(S\.mode !== 'flying'\) \{ S\.busy = false; return; \}/.test(AJ) && /if \(j\.busted\) bust\(Number\(j\.crashX\) \|\| 1, elapsedSec\(\), curX\(\), document\.activeElement === btn, true\);/.test(AJ));
+    /setMode\('flying'\);\n      watchFlight\(\);/.test(AJ) && /fetch\(API\('watch'\) \+ '\?roundId=' \+ encodeURIComponent\(id\)/.test(AJ) && /const API = \(k\) => \(S\.guest \? '\/api\/arcade\/guest\/' : '\/api\/arcade\/'\) \+ k;/.test(AJ) && /if \(S\.mode !== 'flying'\) \{ S\.busy = false; return; \}/.test(AJ) && /if \(j\.busted\) bust\(Number\(j\.crashX\) \|\| 1, elapsedSec\(\), curX\(\), document\.activeElement === btn, true\);/.test(AJ));
   // the terms (owner, 2026-10-14: "add the slot machine to the terms and service")
   const TERMS = readFileSync(path.join(ROOT, 'public', 'terms.html'), 'utf8');
   check('the terms cover the slot machine beside Rocket Run: in scope, nothing at stake and not gambling, no legal claim — and the version moved',

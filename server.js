@@ -769,6 +769,7 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN arcade_boost REAL NOT NULL DEFAULT 0",      // Rocket Run cash-out multiplier (0 = none)
   "ALTER TABLE users ADD COLUMN arcade_boost_until INTEGER NOT NULL DEFAULT 0", // when that boost expires (24h after the run)
   "ALTER TABLE users ADD COLUMN arcade_day TEXT",                           // UTC day of the last run — one run per day
+  "ALTER TABLE users ADD COLUMN arcade_board_off TEXT",                     // UTC day a moderator took @name off the Rocket Riders board (it stays off that day)
   "ALTER TABLE users ADD COLUMN tracker_prefs TEXT NOT NULL DEFAULT '{}'",
   "ALTER TABLE users ADD COLUMN site_prefs TEXT NOT NULL DEFAULT '{}'",
   "ALTER TABLE users ADD COLUMN points INTEGER NOT NULL DEFAULT 0",
@@ -1244,7 +1245,8 @@ CREATE TABLE IF NOT EXISTS arcade_rounds (
   crash_x    REAL NOT NULL,
   cashed_x   REAL,                              -- NULL until they cash out (or bust)
   boost      REAL,
-  ended_at   INTEGER
+  ended_at   INTEGER,
+  on_board   INTEGER NOT NULL DEFAULT 0          -- 1 = the member put @name on that day's Rocket Riders board
 );
 CREATE INDEX IF NOT EXISTS idx_arcade_user ON arcade_rounds(user_id, id DESC);
 /* ===== Reactions and comments on one sender's Sent It =========================================
@@ -1275,7 +1277,35 @@ CREATE TABLE IF NOT EXISTS hop_comments (
 CREATE INDEX IF NOT EXISTS idx_hopcmt_hop ON hop_comments(call_id, hopper_id, id);
 CREATE INDEX IF NOT EXISTS idx_hopcmt_user ON hop_comments(user_id);       -- account deletion and the data export
 CREATE INDEX IF NOT EXISTS idx_hopreact_user ON hop_reactions(user_id);
+/* ===== Rocket Run for guests (see GUEST_COOKIE): the same flight, flown without an account ====================
+   guest is the hash of the browser's jsi_guest cookie (like a session token, never the cookie itself); ip is the
+   keyed IP index for the per-network daily cap, cleared after two days. An unclaimed row is deleted after
+   GUEST_KEEP_MS; a claimed one (user_id) is that member's, and goes with the account. */
+CREATE TABLE IF NOT EXISTS arcade_guest_rounds (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  guest       TEXT NOT NULL,
+  ip          TEXT,                              -- the address (IPv4) or its /64 (IPv6), as a keyed index
+  net         TEXT,                              -- the IPv6 /48 it sits in (the IPv4 address again), as a keyed index
+  day         TEXT NOT NULL,
+  started_at  INTEGER NOT NULL,
+  crash_x     REAL NOT NULL,                     -- rolled at start, kept here until the flight ends (as arcade_rounds)
+  cashed_x    REAL,
+  ended_at    INTEGER,
+  name        TEXT,                              -- the name the guest put on the day's board; NULL = none
+  name_at     INTEGER,
+  name_off    INTEGER NOT NULL DEFAULT 0,        -- 1 = taken down (by the guest or a moderator), and it stays down
+  claim_until INTEGER,                           -- "join" / "sign in" from the prompt: the account that signs in by then takes it
+  user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_garc_guest ON arcade_guest_rounds(guest, day);
+CREATE INDEX IF NOT EXISTS idx_garc_day ON arcade_guest_rounds(day);
+CREATE INDEX IF NOT EXISTS idx_garc_ip ON arcade_guest_rounds(ip, day);
+CREATE INDEX IF NOT EXISTS idx_garc_user ON arcade_guest_rounds(user_id);
 `);
+// a database made before the board: the column the CREATE above now carries (the ALTER list runs before that CREATE)
+try { db.exec('ALTER TABLE arcade_rounds ADD COLUMN on_board INTEGER NOT NULL DEFAULT 0'); } catch {}
+try { db.exec('ALTER TABLE arcade_guest_rounds ADD COLUMN net TEXT'); } catch {}   // (a table made before the /48 cap)
+db.exec('CREATE INDEX IF NOT EXISTS idx_garc_net ON arcade_guest_rounds(net, day)');
 /* ===== Diamond Hands: sales, not transfers =====================================================
    The no-sell streak resets on a SALE — a market sell of $SEND or $GWC from one of the member's linked wallets, or
    from a wallet they sent the tokens to — never on a transfer. The holder ledger already reads every Transfer of both
@@ -2128,6 +2158,109 @@ function arcadeState(userId) {
     playedToday: u.arcade_day === ymd(),
     maxBoost: ARCADE_BOOST_MAX,
   };
+}
+/* ===== Rocket Run for guests, and today's Rocket Riders board ======================================================
+   Owner, 2026-10-15: "Allow anyone not signed in to do one free rocket ride per day that allows them to put their name on
+   the leader board of rocket riders and prompts them to create an account or stay as guest and if they choose to stay as
+   guest keep their names on the leader board grey and boring."
+   A guest flight is the same flight as a member's: the crash point rolled here and kept here, the multiplier read off the
+   server's clock. It pays nothing (no Send Power, no points); it can put a name on the day's board, and that is all.
+   One a day per browser (the jsi_guest cookie), and at most GUEST_IP_DAY a day per network, so clearing cookies is not
+   another roll. A guest's name follows the username rules and may not be a member's name or the site's (lookalikes too);
+   the board shows it grey and plain, with "guest" beside it. The board is opt-in for everyone: a guest types a name, a
+   member taps to put @name up. Nobody is listed just for flying (the arcade's day totals never say who flew). */
+const GUEST_COOKIE = 'jsi_guest';
+const GUEST_COOKIE_MS = 365 * 864e5;           // (DAY_MS is defined far below this line: a const read before it would crash the boot)
+const GUEST_IP_DAY = 5;              // guest flights a day from one address (a household, an office; an IPv6 /64)
+const GUEST_NET_DAY = 20;            // ...and from one IPv6 /48 (a single holder can rotate through a /64's neighbours)
+const GUEST_DAY_CAP = 5000;          // guest flights a day across the site: a flood is turned away; members fly regardless
+const GUEST_KEEP_MS = 30 * 864e5;   // an unclaimed guest flight is deleted after this (its IP index after two days)
+const GUEST_CLAIM_MS = 30 * 60e3;    // "join" / "sign in" from the prompt: the account signed in within this takes the flight
+const BOARD_MAX = 20;
+const guestCookie = (tok) => `${GUEST_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(GUEST_COOKIE_MS / 1000)}${cookieSecure()}`;
+const guestKeyOf = (req) => { const t = parseCookies(req.headers.cookie)[GUEST_COOKIE]; return t && /^[0-9a-f]{64}$/.test(t) ? hashToken(t) : null; };
+function guestSettleIfCrashed(round) {   // as arcadeSettleIfCrashed: an open flight past its crash point is a bust, written once
+  if (round && !round.ended_at && now() >= arcadeCrashAt(round)) {
+    db.prepare('UPDATE arcade_guest_rounds SET ended_at = ?, cashed_x = NULL WHERE id = ? AND ended_at IS NULL').run(Math.round(arcadeCrashAt(round)), round.id);
+    return db.prepare('SELECT * FROM arcade_guest_rounds WHERE id = ?').get(round.id);
+  }
+  return round;
+}
+// what a guest's own page is told about their flight (the crash point only once the flight is over)
+function guestRoundView(r) {
+  if (!r) return null;
+  const over = !!r.ended_at, x2 = (v) => Math.round(v * 100) / 100;
+  return { id: r.id, open: !over, crashX: over ? x2(r.crash_x) : null, cashedX: r.cashed_x == null ? null : x2(r.cashed_x), busted: over && r.cashed_x == null,
+           name: r.name_off ? null : (r.name || null), nameOff: !!r.name_off, claimed: !!r.user_id };
+}
+// the guest's network for the daily caps: the address (IPv6: its /64, as clientIp gives it), and the IPv6 /48 around it
+function guestNets(req) {
+  let ip = ''; try { ip = clientIp(req); } catch {}
+  if (!ip || ip === 'unknown') return { ip: null, net: null };
+  const net = ip.includes(':') ? ip.split(':').slice(0, 3).join(':') + '::/48' : ip;
+  return { ip: bidx('ip:' + ip), net: bidx('net:' + net) };
+}
+function guestNetFull(nets, day) {
+  return (!!nets.ip && db.prepare('SELECT COUNT(*) n FROM arcade_guest_rounds WHERE ip = ? AND day = ?').get(nets.ip, day).n >= GUEST_IP_DAY)
+    || (!!nets.net && db.prepare('SELECT COUNT(*) n FROM arcade_guest_rounds WHERE net = ? AND day = ?').get(nets.net, day).n >= GUEST_NET_DAY);
+}
+// May a guest go on the board under this name? null = yes, else the reason they read. No dots (so no web addresses), and
+// nothing that reads as the site, its staff or a member, however it is spelled
+const GUEST_NAME_RE = /^[a-zA-Z0-9_-]{3,24}$/;
+const STAFF_KEYS = ['admin', 'moderator', 'official', 'support', 'staff'].map(nameKey);
+function guestNameRefusal(name) {
+  if (!GUEST_NAME_RE.test(name)) return 'a name is 3 to 24 letters, numbers, dashes or underscores';
+  const key = nameKey(name);
+  if (DELETED_NAME_RE.test(name) || isReservedName(name) || [...RESERVED_KEYS, ...STAFF_KEYS].some((k) => key.includes(k))) return 'that name is unavailable — try another';
+  if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(name) || db.prepare('SELECT username FROM users').all().some((u) => nameKey(u.username) === key))
+    return 'that name belongs to a member — pick another';
+  return null;
+}
+/* A guest who chose "create an account" or "sign in" from the prompt, on this browser, then signed in within GUEST_CLAIM_MS:
+   their flight becomes the account's and shows as @name. Only a cashed flight with a name on the board (that is when the prompt
+   asks), and one line a day for a person: not for an account that already flew that day or already kept a guest flight that
+   day, nor for a read-only one. A refused keep leaves the guest's grey name exactly as it was. */
+function claimGuestRides(req, u) {
+  const g = guestKeyOf(req);
+  if (!g || !u) return 0;
+  const r = db.prepare('SELECT id, day FROM arcade_guest_rounds WHERE guest = ? AND user_id IS NULL AND claim_until > ? AND cashed_x IS NOT NULL AND name IS NOT NULL AND name_off = 0 ORDER BY id DESC LIMIT 1').get(g, now());
+  if (!r) return 0;
+  const busy = restrictionOf(u) || db.prepare('SELECT 1 FROM arcade_rounds WHERE user_id = ? AND day = ?').get(u.id, r.day) || db.prepare('SELECT 1 FROM arcade_guest_rounds WHERE user_id = ? AND day = ?').get(u.id, r.day);
+  if (busy) { db.prepare('UPDATE arcade_guest_rounds SET claim_until = NULL WHERE id = ?').run(r.id); return 0; }
+  const n = db.prepare('UPDATE arcade_guest_rounds SET user_id = ?, claim_until = NULL WHERE id = ? AND user_id IS NULL').run(u.id, r.id).changes;
+  if (n) boardCache.at = 0;
+  return n;
+}
+// a member's one line on today's board: the guest flight they kept (if they kept one), or else their own cash-out
+function memberBoardState(u) {
+  const day = ymd();
+  const kept = db.prepare('SELECT id, name_off FROM arcade_guest_rounds WHERE user_id = ? AND day = ? AND cashed_x IS NOT NULL ORDER BY id DESC LIMIT 1').get(u.id, day);
+  const own = kept ? null : db.prepare('SELECT id, on_board FROM arcade_rounds WHERE user_id = ? AND day = ? AND cashed_x IS NOT NULL ORDER BY id DESC LIMIT 1').get(u.id, day);
+  const row = db.prepare('SELECT arcade_board_off FROM users WHERE id = ?').get(u.id) || {};
+  return { kept, own, cashedToday: !!(kept || own), onBoard: kept ? !kept.name_off : !!(own && own.on_board), modOff: row.arcade_board_off === day };
+}
+/* Today's board: the best cash-outs of the day from everyone who put a name up, best first (a tie to the earlier cash-out).
+   One line a member (their best: their own flight, or a guest flight they made theirs); a guest's line is their flight. */
+let boardCache = { at: 0, day: '', val: null };
+function ridersBoard() {
+  const day = ymd(), t = now();
+  if (boardCache.val && boardCache.day === day && t - boardCache.at < 5000) return boardCache.val;
+  const cols = 'u.id uid, u.username, u.avatar, u.avatar_img, u.accent, u.og_tier';
+  const live = 'u.deleted_at IS NULL AND (u.arcade_board_off IS NULL OR u.arcade_board_off <> ?)';   // a moderator's takedown holds all day
+  const kept = db.prepare(`SELECT ${cols}, g.cashed_x x, g.ended_at at, g.name_off off FROM arcade_guest_rounds g JOIN users u ON u.id = g.user_id WHERE g.day = ? AND g.cashed_x IS NOT NULL AND g.name IS NOT NULL AND ${live}`).all(day, day);
+  const keptBy = new Set(kept.map((r) => r.uid));   // a member who kept a guest flight: that flight is their line (memberBoardState)
+  const mine = kept.filter((r) => !r.off)
+    .concat(db.prepare(`SELECT ${cols}, r.cashed_x x, r.ended_at at FROM arcade_rounds r JOIN users u ON u.id = r.user_id WHERE r.day = ? AND r.on_board = 1 AND r.cashed_x IS NOT NULL AND ${live}`).all(day, day).filter((r) => !keptBy.has(r.uid)));
+  const best = new Map();
+  for (const r of mine) { const b = best.get(r.uid); if (!b || r.x > b.x || (r.x === b.x && r.at < b.at)) best.set(r.uid, r); }
+  const x2 = (v) => Math.round(v * 100) / 100;
+  const rows = [...best.values()].map((r) => ({ guest: false, username: r.username, avatar: r.avatar, avatar_img: r.avatar_img ? '/uploads/' + r.avatar_img : null, accent: r.accent || '', og: r.og_tier || 0, x: x2(r.x), at: r.at }))
+    .concat(db.prepare('SELECT id, name, cashed_x x, ended_at at FROM arcade_guest_rounds WHERE day = ? AND user_id IS NULL AND cashed_x IS NOT NULL AND name IS NOT NULL AND name_off = 0').all(day)
+      .map((r) => ({ guest: true, id: r.id, name: r.name, x: x2(r.x), at: r.at })))
+    .sort((a, b) => (b.x - a.x) || (a.at - b.at));
+  const val = { day, resetsAt: nextUtcMidnight(t), entrants: rows.length, top: rows.slice(0, BOARD_MAX).map((r, i) => ({ rank: i + 1, ...r })) };
+  boardCache = { at: t, day, val };
+  return val;
 }
 const LIVE_THRESHOLD = 10;      // distinct qualified opt-ins to go live
 const FOUNDER_BONUS = 15000;    // one-time base, flows through awardPoints (multiplied + PTS_EVENT_CAP-clamped). 3x with every other base
@@ -11533,8 +11666,11 @@ function competitionsPublic() {
   const w = weekWindow();
   const comms = db.prepare("SELECT * FROM communities WHERE status='live' AND week_key = ? AND xp_week > 0 ORDER BY xp_week DESC, member_count DESC, id ASC LIMIT 5").all(w.key);
   const day = ymd(), t = now();
-  // today's Rocket Run, in aggregate only: counts and the best cash-out, never who flew
+  // today's Rocket Run: members' flights in aggregate (counts and the best cash-out, never who flew), the guests' count, and
+  // the top of today's Rocket Riders board — only the names their pilots chose to put up
   const rr = db.prepare('SELECT COUNT(*) flights, SUM(CASE WHEN cashed_x IS NOT NULL THEN 1 ELSE 0 END) cashed, MAX(cashed_x) bestX, MAX(boost) bestBoost FROM arcade_rounds WHERE day = ?').get(day) || {};
+  const guestFlights = db.prepare('SELECT COUNT(*) n FROM arcade_guest_rounds WHERE day = ?').get(day).n;
+  const board = ridersBoard();
   const boosted = db.prepare('SELECT COUNT(*) n FROM users WHERE arcade_boost > 1 AND arcade_boost_until > ?').get(t).n;
   const og = ogCampaign();
   return {
@@ -11544,7 +11680,8 @@ function competitionsPublic() {
     communities: { week: w, board: comms.map((c, i) => { return { id: c.id, symbol: c.symbol, name: c.name, image: communityLogo(c), rank: i + 1, xpWeek: c.xp_week, memberCount: c.member_count, level: levelForXp(c.xp), official: !!c.official, demo: !!c.demo }; }) },
     og: { ...og, tierNowName: OG_TIER_NAME[og.tierNow] || '' },
     rocketRun: { day, resetsAt: nextUtcMidnight(t), flightsToday: rr.flights || 0, cashedToday: rr.cashed || 0, bestXToday: rr.bestX == null ? null : Math.round(rr.bestX * 100) / 100, bestBoostToday: rr.bestBoost == null ? null : Math.round(rr.bestBoost * 100) / 100,
-      boostedNow: boosted, growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, maxBoost: ARCADE_BOOST_MAX },
+      boostedNow: boosted, growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, maxBoost: ARCADE_BOOST_MAX,
+      guestFlightsToday: guestFlights, riders: board.top.slice(0, 3), ridersEntrants: board.entrants },
     allTime: { top: allTimeTop().slice(0, 10) },
   };
 }
@@ -12342,6 +12479,7 @@ function ownDataView(u) {
       restriction: restrictionOf(u), probation: probationOf(u), callAllowance: callAllowance(u),
       holderVerified: !needsHolderProof(u), holderProof: holderProofState(u) },
     pointsEvents: db.prepare('SELECT id, kind, amount, base, mult, comp_amount, ref, created_at FROM points_events WHERE user_id = ? ORDER BY id DESC LIMIT 1000').all(u.id),
+    guestFlights: db.prepare('SELECT day, started_at, cashed_x, CASE WHEN ended_at IS NOT NULL THEN crash_x END crash_x, ended_at, name, name_off FROM arcade_guest_rounds WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id),   // Rocket Run flights flown as a guest, then kept
     posts: db.prepare('SELECT * FROM posts WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(p => postView(p, null)),
     comments: db.prepare('SELECT id, post_id, text, tokens, created_at FROM comments WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(c => ({ ...c, tokens: parseTokens(c.tokens) })),
     calls: db.prepare('SELECT * FROM calls WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(u.id).map(r => callView(r, u)),   // their own calls: exact figures
@@ -13484,6 +13622,8 @@ function sweepIpIndexes(t) {
     db.prepare('UPDATE users SET last_ip = NULL WHERE last_ip IS NOT NULL').run();
     db.prepare('UPDATE proposal_votes SET vote_ip = NULL WHERE vote_ip IS NOT NULL').run();
     db.prepare('UPDATE proposals SET author_ip = NULL WHERE author_ip IS NOT NULL').run();
+    db.prepare('UPDATE arcade_guest_rounds SET ip = NULL, net = NULL WHERE (ip IS NOT NULL OR net IS NOT NULL) AND started_at < ?').run(t - 2 * DAY_MS);   // the per-network caps only ever read today
+    db.prepare('DELETE FROM arcade_guest_rounds WHERE user_id IS NULL AND started_at < ?').run(t - GUEST_KEEP_MS);
   } catch (e) { console.error('ip index sweep', e && e.message); }
 }
 const sweeper = setInterval(() => {
@@ -14343,6 +14483,7 @@ const server = http.createServer(async (req, res) => {
            in and are not any more", and the page signs itself out on it. */
         if (!me && !parseCookies(req.headers.cookie).sid) return send(res, 200, { user: null });
         if (!me) return bad(res, 'not signed in', 401);
+        claimGuestRides(req, me);   // a guest flight whose pilot chose "create an account" or "sign in" from its prompt becomes this account's
         return send(res, 200, {
           user: {
             username: me.username, avatar: me.avatar, bio: me.bio, auto_named: !!me.auto_named,
@@ -14696,6 +14837,24 @@ const server = http.createServer(async (req, res) => {
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?").run(now(), me.id, b.kind === 'upload' ? 'post' : b.kind, id);
         return send(res, 200, { ok: true });
       }
+      // a name on today's Rocket Riders board taken down: a guest's stays down for the day; a member's @name comes off the board
+      if (p === '/api/admin/arcade/rider' && req.method === 'POST') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        const b = await readBody(req);
+        let n = 0;
+        if (Number(b.guestId) > 0) n = db.prepare('UPDATE arcade_guest_rounds SET name_off = 1 WHERE id = ? AND user_id IS NULL').run(Number(b.guestId)).changes;
+        else if (b.username) {
+          const u = db.prepare('SELECT id FROM users WHERE username = ?').get(String(b.username));
+          if (u) {
+            n = db.prepare('UPDATE arcade_rounds SET on_board = 0 WHERE user_id = ? AND day = ? AND on_board = 1').run(u.id, ymd()).changes
+              + db.prepare('UPDATE arcade_guest_rounds SET name_off = 1 WHERE user_id = ? AND day = ? AND name_off = 0').run(u.id, ymd()).changes;
+            if (n) db.prepare('UPDATE users SET arcade_board_off = ? WHERE id = ?').run(ymd(), u.id);   // and the member cannot put it straight back today
+          }
+        }
+        if (!n) return bad(res, 'that name is not on today’s board', 404);
+        boardCache.at = 0;
+        return send(res, 200, { ok: true });
+      }
       if (p === '/api/admin/restrict' && req.method === 'POST') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         const b = await readBody(req);
@@ -14760,7 +14919,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist'])
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -17391,7 +17550,8 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         for (const o of db.prepare('SELECT * FROM arcade_rounds WHERE user_id = ? AND ended_at IS NULL').all(me.id)) arcadeSettleIfCrashed(o);   // crashed while nobody was watching
         const last = db.prepare('SELECT crash_x, cashed_x, boost, ended_at FROM arcade_rounds WHERE user_id=? AND ended_at IS NOT NULL ORDER BY id DESC LIMIT 1').get(me.id);
-        return send(res, 200, { ...arcadeState(me.id), growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, last: last || null });
+        const bs = memberBoardState(me);
+        return send(res, 200, { ...arcadeState(me.id), growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, last: last || null, cashedToday: bs.cashedToday, onBoard: bs.onBoard, boardOff: bs.modOff, keptGuest: !!bs.kept });
       }
       if (p === '/api/arcade/start' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in to play', 401);
@@ -17458,6 +17618,135 @@ const server = http.createServer(async (req, res) => {
         notify(me.id, '🚀', 'Rocket Run: cashed out at ' + at.toFixed(2) + '× — a ' + boost.toFixed(2) + '× Send Power boost for the next 24h.', 'points');
         // mult is the WHOLE multiplier stack after this cash-out, so the nav badge can repaint without a reload
         return send(res, 200, { busted: false, cashedX: Math.round(at * 100) / 100, crashX: Math.round(round.crash_x * 100) / 100, boost, until, mult: effectiveMult(me.id) });
+      }
+      /* ----- today's Rocket Riders board (see ridersBoard): public; a member puts @name up, or takes it down ----- */
+      if (p === '/api/arcade/board' && req.method === 'GET') {
+        if (!rateLimit('arcboard:' + (ipIdx(req) || 'none'), 600, 6e5)) return bad(res, 'slow down', 429);   // one public read, cached: generous, so a shared phone network still sees it
+        return send(res, 200, { ...ridersBoard(), serverNow: now() }, { 'Cache-Control': 'no-store' });
+      }
+      if (p === '/api/arcade/board' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (blockReadOnly(res, me)) return;
+        if (!rateLimit('arcboardset:' + me.id, 20, 6e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        const bs = memberBoardState(me);
+        if (!bs.cashedToday) return bad(res, 'only a flight cashed out today goes on today’s board', 404);
+        const on = b.on !== false;
+        if (on && bs.modOff) return bad(res, 'a moderator took @' + me.username + ' off today’s board — it can go back up tomorrow', 403);
+        if (bs.kept) db.prepare('UPDATE arcade_guest_rounds SET name_off = ? WHERE id = ?').run(on ? 0 : 1, bs.kept.id);
+        else db.prepare('UPDATE arcade_rounds SET on_board = ? WHERE id = ?').run(on ? 1 : 0, bs.own.id);
+        boardCache.at = 0;
+        const row = on ? ridersBoard().top.find((x) => !x.guest && x.username === me.username) : null;
+        return send(res, 200, { ok: true, onBoard: on, rank: row ? row.rank : null });
+      }
+      /* ----- Rocket Run for guests (see GUEST_COOKIE): one free flight a day without an account, for a name on the board ----- */
+      if (p === '/api/arcade/guest' && req.method === 'GET') {
+        if (me) return bad(res, 'you are signed in — fly as yourself', 409);
+        const g = guestKeyOf(req), day = ymd();
+        const r = g ? guestSettleIfCrashed(db.prepare('SELECT * FROM arcade_guest_rounds WHERE guest = ? AND day = ? ORDER BY id DESC LIMIT 1').get(g, day)) : null;
+        const nets = guestNets(req);
+        const netFull = !r && guestNetFull(nets, day);
+        const siteFull = !r && !netFull && db.prepare('SELECT COUNT(*) n FROM arcade_guest_rounds WHERE day = ?').get(day).n >= GUEST_DAY_CAP;
+        return send(res, 200, { flownToday: !!r, round: guestRoundView(r), netFull, siteFull, perNetwork: GUEST_IP_DAY, growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, resetsAt: nextUtcMidnight(), serverNow: now() }, { 'Cache-Control': 'no-store' });
+      }
+      if (p === '/api/arcade/guest/start' && req.method === 'POST') {
+        if (me) return bad(res, 'you are signed in — fly as yourself', 409);
+        if (!ageOk(req)) return bad(res, 'confirm you are ' + AGE_MIN + ' or older first', 403);
+        const nets = guestNets(req);
+        if (!rateLimit('garc:' + (nets.ip || 'none'), 10, 6e5)) return bad(res, 'slow down', 429);
+        let g = guestKeyOf(req), setCookie = null;
+        if (!g) { const tok = rand(); g = hashToken(tok); setCookie = guestCookie(tok); }
+        const day = ymd();
+        const open = db.prepare('SELECT * FROM arcade_guest_rounds WHERE guest = ? AND day = ? AND ended_at IS NULL ORDER BY id DESC LIMIT 1').get(g, day);
+        if (open) {   // a reload mid-flight: pick it back up, unless it is over
+          const settled = guestSettleIfCrashed(open);
+          if (settled.ended_at) return bad(res, 'that flight expired — it blew at ' + (Math.round(settled.crash_x * 100) / 100).toFixed(2) + '× while you were away. Come back tomorrow.', 409);
+          if (now() - open.started_at > ARCADE_ROUND_TTL) {
+            db.prepare('UPDATE arcade_guest_rounds SET ended_at = ?, cashed_x = NULL WHERE id = ?').run(now(), open.id);
+            return bad(res, 'that flight expired — the rocket flew off without you. Come back tomorrow.', 409);
+          }
+          return send(res, 200, { roundId: open.id, startedAt: open.started_at, serverNow: now(), growth: ARCADE_GROWTH, resumed: true });
+        }
+        if (db.prepare('SELECT 1 FROM arcade_guest_rounds WHERE guest = ? AND day = ?').get(g, day)) return send(res, 429, { error: 'you have had today’s free guest flight — come back tomorrow 🚀', code: 'guest_flown' });
+        if (guestNetFull(nets, day)) return send(res, 429, { error: 'today’s free guest flights from this network are used up — the next ones unlock at 00:00 UTC', code: 'guest_net_full' });
+        if (db.prepare('SELECT COUNT(*) n FROM arcade_guest_rounds WHERE day = ?').get(day).n >= GUEST_DAY_CAP) return send(res, 429, { error: 'guest flights are full for today — the next ones unlock at 00:00 UTC', code: 'guest_site_full' });
+        const r = crypto.randomInt(0, 1e9) / 1e9;   // the same crash point as a member's flight: the 1/(1-r) tail, capped
+        const crash = Math.min(ARCADE_MAX_X, Math.max(1, 1 / Math.max(1e-9, 1 - r)));
+        const info = db.prepare('INSERT INTO arcade_guest_rounds (guest, ip, net, day, started_at, crash_x) VALUES (?,?,?,?,?,?)').run(g, nets.ip, nets.net, day, now(), crash);
+        return send(res, 200, { roundId: Number(info.lastInsertRowid), startedAt: now(), serverNow: now(), growth: ARCADE_GROWTH, resumed: false }, setCookie ? { 'Set-Cookie': setCookie } : undefined);
+      }
+      if (p === '/api/arcade/guest/watch' && req.method === 'GET') {   // as /api/arcade/watch, for a guest's flight
+        const g = guestKeyOf(req);
+        if (me || !g) return bad(res, 'no such run', 404);
+        if (!rateLimit('garcwatch:' + g, 120, 6e5)) return bad(res, 'slow down', 429);
+        const id = Number(url.searchParams.get('roundId')) || 0;
+        const first = db.prepare('SELECT * FROM arcade_guest_rounds WHERE id = ? AND guest = ?').get(id, g);
+        if (!first) return bad(res, 'no such run', 404);
+        const crashAt = arcadeCrashAt(first);
+        const answer = () => {
+          const r = guestSettleIfCrashed(db.prepare('SELECT * FROM arcade_guest_rounds WHERE id = ?').get(id));
+          if (r.ended_at) return send(res, 200, { over: true, busted: r.cashed_x == null, crashX: Math.round(r.crash_x * 100) / 100, cashedX: r.cashed_x == null ? null : Math.round(r.cashed_x * 100) / 100, serverNow: now() }, { 'Cache-Control': 'no-store' });
+          return send(res, 200, { over: false, serverNow: now() }, { 'Cache-Control': 'no-store' });
+        };
+        const wait = first.ended_at ? 0 : Math.min(Math.max(0, crashAt - now()), ARCADE_WATCH_MS);
+        if (wait <= 0) return answer();
+        let done = false;
+        const timer = setTimeout(() => { if (!done) { done = true; answer(); } }, wait + 20);
+        res.on('close', () => { if (!done) { done = true; clearTimeout(timer); } });
+        return;
+      }
+      if (p === '/api/arcade/guest/cashout' && req.method === 'POST') {
+        const g = guestKeyOf(req);
+        if (me || !g) return bad(res, 'no such run', 404);
+        const b = await readBody(req);
+        const round = db.prepare('SELECT * FROM arcade_guest_rounds WHERE id = ? AND guest = ?').get(Number(b.roundId) || 0, g);
+        if (!round) return bad(res, 'no such run', 404);
+        if (round.ended_at) return bad(res, 'that run is already over', 409);
+        const at = arcadeX(now() - round.started_at);   // the server's clock decides, never the page's number
+        if (at >= round.crash_x) {
+          db.prepare('UPDATE arcade_guest_rounds SET ended_at = ? WHERE id = ?').run(now(), round.id);
+          return send(res, 200, { busted: true, crashX: Math.round(round.crash_x * 100) / 100 });
+        }
+        db.prepare('UPDATE arcade_guest_rounds SET ended_at = ?, cashed_x = ? WHERE id = ?').run(now(), at, round.id);
+        return send(res, 200, { busted: false, cashedX: Math.round(at * 100) / 100, crashX: Math.round(round.crash_x * 100) / 100 });
+      }
+      if (p === '/api/arcade/guest/name' && req.method === 'POST') {   // put a name on today's board, or take it down
+        if (me) return bad(res, 'you are signed in — put @' + me.username + ' up from your own flight', 409);
+        const g = guestKeyOf(req);
+        if (!g) return bad(res, 'only a flight cashed out today goes on today’s board', 404);
+        if (!rateLimit('garcname:' + (ipIdx(req) || g), 30, 6e5)) return bad(res, 'slow down', 429);   // room for a few refused names
+        const b = await readBody(req);
+        const r = db.prepare('SELECT * FROM arcade_guest_rounds WHERE guest = ? AND cashed_x IS NOT NULL ORDER BY id DESC LIMIT 1').get(g);
+        if (!r || (r.day !== ymd() && !b.remove)) return bad(res, r && r.ended_at >= nextUtcMidnight() - 864e5 ? 'that flight took off before 00:00 UTC, so it belonged to yesterday’s board, which has closed — today’s free flight is waiting' : 'only a flight cashed out today goes on today’s board', 404);
+        if (b.remove) {
+          db.prepare('UPDATE arcade_guest_rounds SET name_off = 1 WHERE id = ?').run(r.id);
+          boardCache.at = 0;
+          return send(res, 200, { ok: true, removed: true });
+        }
+        if (r.name_off) return bad(res, 'that name was taken down — it can’t go back up today', 409);
+        if (r.name) return bad(res, 'your name is already on today’s board', 409);
+        const name = String(b.name || '').trim();
+        const why = guestNameRefusal(name);
+        if (why) return bad(res, why);
+        db.prepare('UPDATE arcade_guest_rounds SET name = ?, name_at = ? WHERE id = ? AND name IS NULL').run(name, now(), r.id);
+        boardCache.at = 0;
+        const row = ridersBoard().top.find((x) => x.guest && x.id === r.id);
+        return send(res, 200, { ok: true, name, rank: row ? row.rank : null });
+      }
+      if (p === '/api/arcade/guest/claim' && req.method === 'POST') {   // "create an account" / "sign in" from the prompt — or "stay as guest"
+        const g = guestKeyOf(req);
+        if (!g) return bad(res, 'there is no guest flight on this browser to keep', 404);
+        if (!rateLimit('garcclaim:' + (ipIdx(req) || g), 20, 6e5)) return bad(res, 'slow down', 429);
+        // signed in: only a flight its guest already asked to keep (signed out, from the prompt) — never one this account picks
+        if (me) return send(res, 200, { ok: true, claimed: claimGuestRides(req, me) });
+        const b = await readBody(req);
+        if (b.cancel) {   // "stay as guest": nobody who signs in on this browser takes it
+          db.prepare('UPDATE arcade_guest_rounds SET claim_until = NULL WHERE guest = ? AND user_id IS NULL').run(g);
+          return send(res, 200, { ok: true, cancelled: true });
+        }
+        const n = db.prepare('UPDATE arcade_guest_rounds SET claim_until = ? WHERE guest = ? AND day = ? AND user_id IS NULL AND cashed_x IS NOT NULL AND name IS NOT NULL AND name_off = 0').run(now() + GUEST_CLAIM_MS, g, ymd()).changes;
+        if (!n) return bad(res, 'there is no flight with a name on today’s board on this browser to keep', 404);
+        return send(res, 200, { ok: true, claimed: 0, minutes: Math.round(GUEST_CLAIM_MS / 60e3) });
       }
       /* ----- weekly community competition: who gained the most community XP this week ----- */
       if (p === '/api/communities/weekly' && req.method === 'GET') {

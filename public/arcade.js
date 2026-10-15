@@ -1,5 +1,10 @@
 /* ===== arcade.js — the Arcade page: "Rocket Run", one free flight per UTC day for a Send Power boost =====
  *
+ * GUESTS FLY TOO (owner, 2026-10-15). Signed out, the same flight runs against /api/arcade/guest/*: one a day, no
+ * boost, and a cash-out can put a name on today's Rocket Riders board. Then a prompt: create an account or sign in
+ * (the flight becomes that account's @name, in its colours) or stay as a guest (the name stays grey and plain,
+ * with "guest" beside it). The board itself is drawn at the foot of the game card for everyone.
+ *
  * HONEST BY CONSTRUCTION. This is a free daily bonus game: nothing is at stake, nothing is purchasable and no
  * money is involved. The only thing a flight can produce is a temporary Send Power boost.
  *
@@ -50,7 +55,21 @@
     outcome: null,
     busy: false, netErr: '', err: '',
     proof: null,            // the needsProof refusal from /start, kept so the button can re-open the wallet check
+    guest: false,           // flying signed out: /api/arcade/guest/*, no boost, a name on the board
+    guestRound: null,       // the guest's flight today, as /api/arcade/guest describes it ({ id, cashedX, crashX, name, nameOff, … })
+    netFull: false,         // today's guest flights from this network are used up
+    siteFull: false,        // ...or across the whole site
+    perNetwork: 5,          // guest flights a day per network (the server says)
+    boardOff: false,        // a moderator took this member's @name off today's board
+    nameErr: '', nameBusy: false,
+    cashedToday: false, onBoard: false, boardRank: null,   // a member's cash-out today, and whether @name is on the board
+    board: null,            // /api/arcade/board
   };
+  const API = (k) => (S.guest ? '/api/arcade/guest/' : '/api/arcade/') + k;   // the same flight, for an account or a guest
+  // "stay as guest" is remembered per flight on this device, so a reload does not ask again
+  const STAY_KEY = 'send.rrStay';
+  let stayedId = null;   // the same answer in memory, for a browser that blocks storage
+  const stayed = () => { if (!S.guestRound) return false; if (stayedId === S.guestRound.id) return true; try { return localStorage.getItem(STAY_KEY) === String(S.guestRound.id); } catch (e) { return false; } };
 
   const mulAt   = (sec) => Math.exp(S.growth * Math.max(0, sec));
   const secFor  = (x)   => Math.log(Math.max(1, x)) / S.growth;
@@ -96,7 +115,7 @@
     const t = Date.now();
     if (t - zeroRefresh < 30000) return;
     zeroRefresh = t;
-    if (window.AUTH && AUTH.user) loadState();
+    loadState();
   }
   setInterval(paintCounts, 1000);
 
@@ -122,7 +141,7 @@
     const t = Date.now();
     if (t - lastAnnounce < 1100) return;                      // never chatter, even when whole numbers arrive fast
     lastAnnounce = t;
-    say(hit + ' times. Cash out now for a ' + fx(boostFor(hit)) + ' times Send Power boost.');
+    say(S.guest ? hit + ' times. Cash out any time.' : hit + ' times. Cash out now for a ' + fx(boostFor(hit)) + ' times Send Power boost.');
   }
 
   /* ================= canvas ================= */
@@ -427,7 +446,7 @@
       out.push('<span class="arc-badge arc-badge--boost"><span aria-hidden="true">⚡</span> <b>' + fx(S.boost) +
         '×</b> Send Power for <span class="arc-count" data-arc-until="' + Math.round(S.until) + '" data-arc-zero="less than a minute"></span></span>');
     }
-    if (S.mode === 'ready') out.push('<span class="arc-badge arc-badge--free"><span aria-hidden="true">🎟️</span> Today’s free flight is waiting</span>');
+    if (S.mode === 'ready') out.push('<span class="arc-badge arc-badge--free"><span aria-hidden="true">🎟️</span> Today’s free ' + (S.guest ? 'guest ' : '') + 'flight is waiting</span>');
     else if (S.mode === 'resume') out.push('<span class="arc-badge arc-badge--free"><span aria-hidden="true">🛰️</span> Your rocket is still up there</span>');
     else if (S.playedToday && S.mode !== 'flying' && S.mode !== 'loading') out.push('<span class="arc-badge arc-badge--done"><span aria-hidden="true">✅</span> You’ve flown today</span>');
     badges.innerHTML = out.join('');
@@ -439,7 +458,7 @@
     let x = '1.00×', sub = 'Ready for takeoff', subCls = '', ico = '🚀', xcls = '';
     switch (S.mode) {
       case 'loading':   x = '—'; sub = 'Warming up the engines…'; break;
-      case 'signedout': sub = 'Sign in to fly'; break;
+      case 'signedout': sub = S.netFull ? 'Guest flights from here are used up today' : 'Sign in to fly'; break;
       case 'ready':     sub = 'Ready for takeoff'; break;
       case 'resume':    x = '—'; sub = 'Rejoin to see where you are'; break;
       case 'flying':    x = lastXStr || '1.00×'; sub = 'Climbing — cash out whenever you like'; break;
@@ -464,7 +483,8 @@
       case 'signedout':
         label = 'Sign in to play 🚀'; hint = 'Joining takes an invite, and flying takes the same check as posting — at least $100 of $SEND held in a linked wallet. Nothing is for sale here.'; break;
       case 'ready':
-        label = '🚀 Launch'; hint = 'Tap the button — or Tab to it and press <kbd>Space</kbd> / <kbd>Enter</kbd> — to launch.'; break;
+        label = S.guest ? '🚀 Fly free as a guest' : '🚀 Launch';
+        hint = 'Tap the button — or Tab to it and press <kbd>Space</kbd> / <kbd>Enter</kbd> — to launch.' + (S.guest ? ' No account needed: one free flight a day, for a name on today’s board (no Send Power boost).' : ''); break;
       case 'resume':
         label = '🚀 Rejoin your flight'; hint = 'You left mid-flight — pick it back up where it is now.'; break;
       case 'flying':
@@ -491,7 +511,7 @@
        static description was only ever true in two of them. The description follows the state with it. */
     btn.setAttribute('data-tip',
       S.mode === 'signedout' ? 'Opens sign-in so you can play'
-      : S.mode === 'ready'   ? 'Starts your one flight for today'
+      : S.mode === 'ready'   ? (S.guest ? 'Starts your one free guest flight for today — no account needed' : 'Starts your one flight for today')
       : S.mode === 'resume'  ? 'Picks your flight back up where it is now'
       : S.mode === 'flying'  ? 'Sends your cash-out — it settles at the multiplier the server sees when the tap lands, a moment after the one showing'
       : S.mode === 'error'   ? 'Asks the arcade for its state again'
@@ -519,12 +539,72 @@
     return 'your rocket blew at <b>' + fx(l.crash_x) + '×</b> before you tapped — no boost that day, and nothing lost.';
   }
 
+  /* ---------- a guest's name on today's board, and the prompt after it ---------- */
+  const joinBtns = (stay) =>
+    '<div class="arc-msg-actions">' +
+      '<button class="btn btn-sm btn-primary" type="button" data-arc="join" data-tip="Opens the invite ticket to make an account; a flight you put on today’s board becomes your @name">🎟️ Create an account</button>' +
+      '<button class="btn btn-sm btn-ghost" type="button" data-arc="signin" data-tip="Opens sign-in; a flight you put on today’s board becomes your account’s">Sign in</button>' +
+      (stay ? '<button class="btn btn-sm btn-ghost" type="button" data-arc="stay" data-tip="Keeps your name on today’s board as a guest: grey and plain">Stay as guest</button>' : '') +
+    '</div>';
+  function guestBoardHTML() {
+    const r = S.guestRound;
+    if (!r || r.cashedX == null) return '';
+    if (r.nameOff) return '<p>Your name is off today’s board. Tomorrow’s flight can put one up again.</p>';
+    if (!r.name) {
+      return '<form class="arc-name" data-arc-name novalidate>' +
+        '<label class="arc-name-lbl" for="arc-name-in">🏁 Put a name on today’s Rocket Riders board</label>' +
+        '<div class="arc-name-row">' +
+          '<input class="arc-name-in" id="arc-name-in" name="name" type="text" maxlength="24" autocomplete="nickname" autocapitalize="off" spellcheck="false" placeholder="Your name" aria-describedby="arc-name-help' + (S.nameErr ? ' arc-name-err' : '') + '"' + (S.nameErr ? ' aria-invalid="true"' : '') + (S.nameBusy ? ' disabled' : '') + ' data-tip="The name to show beside your cash-out on today’s board">' +
+          '<button class="btn btn-sm btn-primary" type="submit" data-tip="Puts this name on today’s board beside your ' + fx(r.cashedX) + '× cash-out"' + (S.nameBusy ? ' disabled' : '') + '>Put it on the board</button>' +
+        '</div>' +
+        '<p class="arc-note" id="arc-name-help">3 to 24 letters, numbers, dashes or underscores, and not a member’s name. A guest’s name shows grey and plain, with “guest” beside it, for today.</p>' +
+        (S.nameErr ? '<p class="arc-name-err" id="arc-name-err" role="alert">' + esc(S.nameErr) + '</p>' : '') +
+      '</form>';
+    }
+    const rank = S.board && S.board.top.find((x) => x.guest && x.id === r.id);
+    const where = rank ? ' — <b>#' + rank.rank + '</b> right now' : (S.board ? ' — below the top ' + S.board.top.length + ' right now' : '');
+    if (!stayed()) {
+      return '<div class="arc-prompt" id="arc-prompt" tabindex="-1" role="group" aria-labelledby="arc-prompt-h">' +
+        '<p class="arc-msg-h" id="arc-prompt-h">🏁 You’re on today’s board as ' + esc(r.name) + where + '</p>' +
+        '<p>As a guest your name stays grey and plain. Create an account or sign in on this browser in the next 30 minutes, and this flight goes up as your <b>@name</b>, in your colours. Signed in, the daily flight takes $100 of $SEND held in a linked wallet, and it pays a Send Power boost. Joining takes an invite code from someone already inside.</p>' +
+        joinBtns(true) + '</div>';
+    }
+    return '<p>You’re on today’s board as <span class="arc-guest-name">' + esc(r.name) + '</span> <span class="arc-rider-tag">guest</span>' + where + '.</p>' +
+      '<div class="arc-msg-actions">' +
+        '<button class="btn btn-sm btn-ghost" type="button" data-arc="join" data-tip="Opens the invite ticket to make an account; this flight becomes your @name">🎟️ Make it my @name</button>' +
+        '<button class="btn btn-sm btn-ghost" type="button" data-arc="unname" data-tip="Takes your name off today’s board (it can’t go back up today)">Take my name off</button>' +
+      '</div>';
+  }
+  // a member's cash-out today: put @name on the board, or take it off
+  function memberBoardHTML() {
+    if (S.guest || !S.cashedToday || !(window.AUTH && AUTH.user)) return '';
+    const u = esc(AUTH.user.username);
+    if (S.boardOff) return '<p>A moderator took <b>@' + u + '</b> off today’s Rocket Riders board. It can go back up tomorrow.</p>';
+    if (S.onBoard) {
+      return '<p>🏁 You’re on today’s Rocket Riders board as <b>@' + u + '</b>' + (S.boardRank ? ' — <b>#' + S.boardRank + '</b> right now' : '') + '.</p>' +
+        '<div class="arc-msg-actions"><button class="btn btn-sm btn-ghost" type="button" data-arc="boardoff" data-tip="Takes @' + u + ' off today’s board">Take me off the board</button></div>';
+    }
+    return '<p>🏁 Put <b>@' + u + '</b> on today’s Rocket Riders board? Nobody is listed just for flying — only the names their pilots put up.</p>' +
+      '<div class="arc-msg-actions"><button class="btn btn-sm btn-primary" type="button" data-arc="boardon" data-tip="Lists your best cash-out today on the board under @' + u + '">Put me on the board</button></div>';
+  }
+
   function renderPanel() {
     let html = '';
-    if (S.mode === 'signedout') {
+    if (S.mode === 'signedout' && S.guest && (S.netFull || S.siteFull)) {
+      html = '<div class="arc-msg"><p class="arc-msg-h">🎟️ ' + (S.netFull ? 'Today’s guest flights from here are used up' : 'Today’s guest flights are full') + '</p>' +
+        '<p>' + (S.netFull
+          ? 'One network (a home, an office) gets ' + S.perNetwork + ' free guest flights a day, so clearing cookies is not another go, and today’s have flown.'
+          : 'The site takes a set number of guest flights a day, and today’s have flown.') +
+        ' The next ones unlock at 00:00 UTC. Signed in, a member’s daily flight takes $100 of $SEND held in a linked wallet.</p>' +
+        nextFlightLine() + joinBtns(false) + '</div>';
+    } else if (S.mode === 'signedout') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🔒 Sign in to fly</p>' +
         '<p>Rocket Run is a once-a-day flight for signed-in senders — the boost has to attach to an account. Joining takes an invite, and flying takes the same wallet check as posting: at least $100 of $SEND held in a linked wallet, read on-chain. Nothing is for sale here, nothing is put in, and the only outcome is a temporary Send Power boost.</p>' +
         '<div class="arc-msg-actions"><button class="btn btn-sm btn-primary" type="button" data-tip="Opens the sign-in box so you can play" data-arc="signin">Sign In 🚀</button></div></div>';
+    } else if (S.mode === 'ready' && S.guest) {
+      html = '<div class="arc-msg"><p class="arc-msg-h">🎟️ One free flight — no account needed</p>' +
+        '<p>Take off, watch the multiplier climb, and cash out before the hidden crash point. Cash out and you can put a name on <a href="#arc-riders">today’s Rocket Riders board</a>; leave it too long and the flight just ends. A guest flight is only for fun: it pays no Send Power boost — members fly for that.</p>' +
+        '<div class="arc-msg-actions"><button class="btn btn-sm btn-ghost" type="button" data-tip="Opens the sign-in box to fly as a member" data-arc="signin">Sign in instead</button></div></div>';
     } else if (S.mode === 'ready') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🎟️ One flight, whenever you’re ready</p>' +
         '<p>Take off, watch the multiplier climb, and cash out before the hidden crash point. Cash out and it becomes a Send Power boost for 24 hours; leave it too long and today’s flight simply ends with no boost.</p>' +
@@ -537,6 +617,12 @@
         html = '<div class="arc-msg arc-msg--warn"><p class="arc-msg-h">⚠️ That cash-out didn’t go through</p>' +
           '<p>' + esc(S.netErr) + '. Your flight is <b>still live</b> and nothing has been lost — press the button again to try the cash-out once more.</p></div>';
       }
+    } else if (S.mode === 'cashed' && S.outcome && S.guest) {
+      const o = S.outcome;
+      html = '<div class="arc-msg arc-msg--win" id="arc-outcome" tabindex="-1">' +
+        '<p class="arc-msg-h">💰 Cashed out at ' + fx(o.cashedX) + '×</p>' +
+        (o.crashX != null ? '<p>Nerve check: the rocket would have blown at <b>' + fx(o.crashX) + '×</b>.</p>' : '') +
+        guestBoardHTML() + nextFlightLine() + '</div>';
     } else if (S.mode === 'cashed' && S.outcome) {
       const o = S.outcome;
       html = '<div class="arc-msg arc-msg--win" id="arc-outcome" tabindex="-1">' +
@@ -545,15 +631,23 @@
         (o.until ? ' (expires in <span class="arc-count" data-arc-until="' + Math.round(o.until) + '" data-arc-zero="less than a minute"></span>)' : '') +
         '. It is added on top of the Send Power boost you already have from holding, OG and communities — boosts add, they don\'t multiply.</p>' +
         (o.crashX != null ? '<p>Nerve check: the rocket would have blown at <b>' + fx(o.crashX) + '×</b>.</p>' : '') +
-        nextFlightLine() + '</div>';
+        memberBoardHTML() + nextFlightLine() + '</div>';
     } else if (S.mode === 'busted' && S.outcome) {
       html = '<div class="arc-msg arc-msg--bust" id="arc-outcome" tabindex="-1">' +
         '<p class="arc-msg-h">💥 It blew at ' + fx(S.outcome.crashX) + '×</p>' +
-        '<p>A moment too late. No boost today — and nothing lost, because nothing was ever at stake. That’s the whole game.</p>' +
-        nextFlightLine() + '</div>';
+        (S.guest
+          ? '<p>A moment too late. A bust has no score, so there is no name to put on today’s board — and nothing lost, because nothing was ever at stake. Another free flight tomorrow. Members who hold $100 of $SEND in a linked wallet fly for a Send Power boost.</p>' + nextFlightLine() + joinBtns(false)
+          : '<p>A moment too late. No boost today — and nothing lost, because nothing was ever at stake. That’s the whole game.</p>' + nextFlightLine()) + '</div>';
+    } else if (S.mode === 'done' && S.guest) {
+      const r = S.guestRound;
+      html = '<div class="arc-msg" id="arc-outcome" tabindex="-1"><p class="arc-msg-h">✅ You’ve had today’s free guest flight</p>' +
+        (r && r.cashedX != null
+          ? '<p>Today you cashed out at <b>' + fx(r.cashedX) + '×</b>' + (r.crashX != null ? ' — the rocket would have blown at <b>' + fx(r.crashX) + '×</b>' : '') + '.</p>' + guestBoardHTML() + nextFlightLine()
+          : '<p>Today your rocket blew at <b>' + fx(r && r.crashX) + '×</b> before you tapped, so there is no name for the board — and nothing lost.</p>' + nextFlightLine() + joinBtns(false)) +
+        '</div>';
     } else if (S.mode === 'done') {
       html = '<div class="arc-msg" id="arc-outcome" tabindex="-1"><p class="arc-msg-h">✅ You’ve already flown today</p>' +
-        '<p>Today, ' + lastRunLine(S.last) + '</p>' + nextFlightLine() + '</div>';
+        '<p>Today, ' + lastRunLine(S.last) + '</p>' + memberBoardHTML() + nextFlightLine() + '</div>';
     } else if (S.mode === 'expired') {
       html = '<div class="arc-msg arc-msg--warn" id="arc-outcome" tabindex="-1"><p class="arc-msg-h">🕒 That flight expired</p>' +
         '<p>' + esc(S.err || 'The rocket flew off without you') + '. Nothing was at stake, so nothing was lost.</p>' + nextFlightLine() + '</div>';
@@ -604,10 +698,12 @@
   function hasOpenRound() { return !(S.last && S.last.ended_at && Number(S.last.ended_at) >= todayStart()); }
 
   async function loadState() {
-    if (!(window.AUTH && AUTH.user)) { setMode('signedout'); return; }
+    if (!(window.AUTH && AUTH.user)) { await loadGuest(); return; }
+    S.guest = false; S.guestRound = null; S.netFull = false;
     try {
       const j = await window.api('/api/arcade/state');
       applyState(j);
+      S.cashedToday = !!j.cashedToday; S.onBoard = !!j.onBoard; S.boardOff = !!j.boardOff;
       if (S.mode === 'flying') return;                       // a live flight always wins over a stale refresh
       if (!S.playedToday) setMode('ready');
       else if (hasOpenRound()) setMode('resume');
@@ -618,15 +714,37 @@
       S.err = msg; setMode('error');
     }
   }
+  // signed out: today's guest flight (/api/arcade/guest says whether it has flown, and how it went)
+  async function loadGuest() {
+    S.guest = true; S.boost = 1; S.until = null; S.cashedToday = false; S.onBoard = false;
+    try {
+      const j = await window.api('/api/arcade/guest');
+      if (Number(j.growth) > 0) S.growth = Number(j.growth);
+      if (Number(j.maxX) > 1) S.maxX = Number(j.maxX);
+      renderCurve();
+      const r = j.round || null;
+      S.guestRound = r; S.netFull = !!j.netFull; S.siteFull = !!j.siteFull; S.playedToday = !!j.flownToday;
+      if (Number(j.perNetwork) > 0) S.perNetwork = Number(j.perNetwork);
+      S.last = r && !r.open ? { crash_x: r.crashX, cashed_x: r.cashedX, boost: null, ended_at: Date.now() } : null;
+      if (S.mode === 'flying') return;                       // a live flight always wins over a stale refresh
+      if (!j.flownToday) setMode(j.netFull || j.siteFull ? 'signedout' : 'ready');
+      else if (r && r.open) setMode('resume');
+      else setMode('done');
+    } catch (e) {
+      const msg = String((e && e.message) || 'request failed');
+      if (/signed in/i.test(msg) && window.AUTH && AUTH.refresh) { AUTH.refresh(); return; }   // signed in after all (another tab): auth:change re-boots
+      S.err = msg; setMode('error');
+    }
+  }
 
   async function start() {
     if (S.busy) return;
-    if (!(window.AUTH && AUTH.user)) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
+    if (!S.guest && !(window.AUTH && AUTH.user)) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
     const hadFocus = document.activeElement === btn;   // must be read BEFORE the disable throws focus to <body>
     S.busy = true; btn.disabled = true;
     hintEl.textContent = 'Talking to mission control…';
     try {
-      const j = await window.api('/api/arcade/start', { method: 'POST', body: {} });
+      const j = await window.api(API('start'), { method: 'POST', body: {} });
       const localNow = Date.now();
       S.round = {
         id: j.roundId,
@@ -635,7 +753,8 @@
       };
       if (Number(j.growth) > 0) { S.growth = Number(j.growth); renderCurve(); }
       S.outcome = null; S.err = ''; S.netErr = ''; S.freeze = null; boom = null;
-      S.playedToday = true; S.busy = false;
+      S.playedToday = true; S.busy = false; S.nameErr = '';
+      if (S.guest) S.guestRound = { id: j.roundId, open: true, cashedX: null, crashX: null, name: null, nameOff: false };
       lastXStr = ''; lastBtnStr = ''; lastBtnPaint = 0;
       resetMilestones();
       setMode('flying');
@@ -648,10 +767,17 @@
       const msg = String((e && e.message) || 'request failed');
       // the participation gate: auth.js has already opened the wallet check; the page must not also say "error"
       if (e && e.needsProof) { S.proof = e; setMode('needsproof', { focusOutcome: hadFocus }); say('A wallet check comes first. ' + msg); return; }
+      if (S.guest && e && /^guest_/.test(e.code || '')) {   // a guest turned away: today's flight is used, or the network's or site's are full
+        if (window.SFX) SFX.play('error');
+        say(msg); await loadState();
+        const o = document.getElementById('arc-outcome') || panel.querySelector('.arc-msg');
+        if (hadFocus && o && document.activeElement === document.body) { o.tabIndex = -1; o.focus(); }
+        return;
+      }
       if (/sign in/i.test(msg)) { setMode('signedout'); if (window.AUTH && AUTH.open) AUTH.open(); return; }
       if (window.SFX) SFX.play('error');   // refused or unreachable, shown on the stage (no toast says it)
       if (/expired/i.test(msg)) { S.err = msg; S.playedToday = true; setMode('expired', { focusOutcome: hadFocus }); say('That flight expired. Come back tomorrow.'); return; }
-      if (/already flown|one run per day/i.test(msg)) { S.playedToday = true; await loadState(); say('You have already flown today. Come back tomorrow.'); return; }
+      if (/already flown|one run per day|today’s free guest flight|guest flights/i.test(msg)) { S.playedToday = true; await loadState(); say(msg); return; }
       S.err = msg; setMode('error', { focusOutcome: hadFocus }); say('Could not launch. ' + msg);
     }
   }
@@ -672,7 +798,7 @@
     while (live()) {
       let j = null;
       try {
-        const r = await fetch('/api/arcade/watch?roundId=' + encodeURIComponent(id), { credentials: 'same-origin', signal: ctl.signal });
+        const r = await fetch(API('watch') + '?roundId=' + encodeURIComponent(id), { credentials: 'same-origin', signal: ctl.signal });
         j = await r.json().catch(() => null);
         if (!r.ok || !j) throw new Error((j && j.error) || 'watch failed');
         fails = 0;
@@ -699,14 +825,15 @@
     S.outcome = { kind: 'busted', crashX: crashX };
     S.freeze = { kind: 'busted', endSec: crashSec, crashSec: crashSec, viewSec: Math.max(crashSec, tapSec), viewX: Math.max(crashX, tapX) };
     S.last = { crash_x: crashX, cashed_x: null, boost: null, ended_at: Date.now() };
+    if (S.guest && S.guestRound) Object.assign(S.guestRound, { open: false, crashX: crashX, cashedX: null });
     if (!reduced() && ctx && !canvas.hidden) {
       const a = axesFor(S.freeze.viewSec, S.freeze.viewX), m = mapFor(a);
       spawnBoom(m.px(crashSec), m.py(mulAt(crashSec)));
     }
     setMode('busted', { focusOutcome: hadFocus });
-    say((auto ? 'The rocket blew at ' + fx(crashX) + ' times before you cashed out' : 'Busted. The rocket blew at ' + fx(crashX) + ' times') + ' — no boost today, and nothing was at stake.');
+    say((auto ? 'The rocket blew at ' + fx(crashX) + ' times before you cashed out' : 'Busted. The rocket blew at ' + fx(crashX) + ' times') + (S.guest ? ' — no score today, and nothing was at stake.' : ' — no boost today, and nothing was at stake.'));
     if (window.SFX) SFX.play('crash');
-    if (window.sendToast) sendToast('💥 Blew at ' + fx(crashX) + '× — no boost today');
+    if (window.sendToast) sendToast('💥 Blew at ' + fx(crashX) + '×' + (S.guest ? '' : ' — no boost today'));
   }
 
   async function cashout() {
@@ -715,16 +842,29 @@
     S.busy = true; btn.disabled = true;
     const tapSec = elapsedSec(), tapX = curX();
     try {
-      const j = await window.api('/api/arcade/cashout', { method: 'POST', body: { roundId: S.round.id } });
+      const j = await window.api(API('cashout'), { method: 'POST', body: { roundId: S.round.id } });
       if (S.mode !== 'flying') { S.busy = false; return; }   // the watch already ended it (the rocket blew first)
       S.busy = false; S.netErr = ''; S.playedToday = true;
       if (j.busted) {
         bust(Number(j.crashX) || 1, tapSec, tapX, hadFocus, false);
+      } else if (S.guest) {
+        // a guest's cash-out pays nothing: what it can do is put a name on today's board (the form is in the panel)
+        stopWatch();
+        const cashedX = Number(j.cashedX) || 1, crashX = Number(j.crashX) || null;
+        S.outcome = { kind: 'cashed', cashedX: cashedX, crashX: crashX, boost: null, until: null };
+        S.last = { crash_x: crashX, cashed_x: cashedX, boost: null, ended_at: Date.now() };
+        if (S.guestRound) Object.assign(S.guestRound, { open: false, cashedX: cashedX, crashX: crashX });
+        S.freeze = { kind: 'cashed', endSec: secFor(cashedX), crashSec: crashX ? secFor(crashX) : secFor(cashedX), viewSec: secFor(crashX || cashedX), viewX: crashX || cashedX };
+        setMode('cashed', { focusOutcome: hadFocus });
+        say('Cashed out at ' + fx(cashedX) + ' times. Put a name on today’s board, just below.');
+        if (window.SFX) SFX.play('cashout');
+        if (window.sendToast) sendToast('💰 Cashed out at ' + fx(cashedX) + '× — put a name on the board');
       } else {
         stopWatch();
         const cashedX = Number(j.cashedX) || 1, crashX = Number(j.crashX) || null, boost = Number(j.boost) || 1;
         S.outcome = { kind: 'cashed', cashedX: cashedX, crashX: crashX, boost: boost, until: Number(j.until) || null };
         S.boost = boost; S.until = Number(j.until) || null;
+        S.cashedToday = true; S.onBoard = false; S.boardRank = null;
         S.last = { crash_x: crashX, cashed_x: cashedX, boost: boost, ended_at: Date.now() };
         S.freeze = { kind: 'cashed', endSec: secFor(cashedX), crashSec: crashX ? secFor(crashX) : secFor(cashedX), viewSec: secFor(crashX || cashedX), viewX: crashX || cashedX };
         // repaint the nav badge immediately — the boost belongs next to the level, and a reload should not be the
@@ -775,11 +915,141 @@
     if (S.mode === 'needsproof') { if (S.proof && window.AUTH && AUTH.needsProof) AUTH.needsProof(S.proof); else { setMode('loading'); loadState(); } return; }
   });
 
+  /* ---------- today's Rocket Riders board ---------- */
+  const ridersList = document.getElementById('arc-riders-list');
+  const ridersMore = document.getElementById('arc-riders-more');
+  function riderAva(u) {
+    return u.avatar_img && window.avatarHTML ? window.avatarHTML(u.avatar_img, 'cmp-ava cmp-ava--sm', 'loading="lazy"')
+      : '<span class="cmp-ava cmp-ava--sm cmp-ava--emoji" aria-hidden="true">' + esc(u.avatar || '🚀') + '</span>';
+  }
+  function renderBoard() {
+    if (!ridersList) return;
+    const b = S.board;
+    if (!b) { ridersList.innerHTML = '<li class="arc-rider-none">Loading today’s board…</li>'; return; }
+    const meU = (window.AUTH && AUTH.user && AUTH.user.username) ? String(AUTH.user.username).toLowerCase() : null;
+    const myG = S.guest && S.guestRound ? S.guestRound.id : null;
+    const admin = !!(window.AUTH && AUTH.user && AUTH.user.admin);
+    if (!b.top.length) ridersList.innerHTML = '<li class="arc-rider-none">No names up yet today. Cash out, and yours can be the first.</li>';
+    else ridersList.innerHTML = b.top.map(function (r) {
+      const you = r.guest ? (myG != null && r.id === myG) : !!(meU && String(r.username).toLowerCase() === meU);
+      const who = r.guest
+        ? '<span class="arc-rider-name">' + esc(r.name) + '</span><span class="arc-rider-tag">guest</span>'
+        : '<span class="arc-rider-id">' + riderAva(r) + '<a class="arc-rider-name" href="/u/' + encodeURIComponent(r.username) + '"' + (r.accent ? ' style="color:' + esc(r.accent) + '"' : '') + '>@' + esc(r.username) + '</a></span>' + (window.ogBadge ? window.ogBadge(r.og) : '');
+      const label = r.guest ? r.name + ' (guest)' : '@' + r.username;
+      return '<li class="arc-rider' + (r.guest ? ' arc-rider--guest' : '') + (you ? ' is-you' : '') + '">' +
+        '<span class="arc-rider-rank"><span class="sr-only">Place </span>' + r.rank + '</span>' +
+        '<span class="arc-rider-who">' + who + (you ? '<span class="arc-rider-you">you</span>' : '') + '</span>' +
+        '<span class="arc-rider-x">' + fx(r.x) + '×</span>' +
+        (admin ? '<button class="arc-rider-rm" type="button" data-arc-rm="' + (r.guest ? 'g:' + r.id : 'u:' + esc(r.username)) + '" data-tip="Takes this name off today’s board (moderation)" aria-label="Take ' + esc(label) + ' off today’s board">✕</button>' : '') +
+      '</li>';
+    }).join('');
+    if (ridersMore) ridersMore.textContent = b.entrants > b.top.length ? (b.entrants - b.top.length) + ' more ' + (b.entrants - b.top.length === 1 ? 'name is' : 'names are') + ' on today’s board below these.' : '';
+    // the panel's "#N right now" reads the board too
+    if (!S.guest && meU) { const row = b.top.find((x) => !x.guest && String(x.username).toLowerCase() === meU); S.boardRank = row ? row.rank : null; }
+  }
+  let boardAt = 0;
+  async function loadBoard(repaintPanel) {
+    try {
+      S.board = await window.api('/api/arcade/board');
+      boardAt = Date.now();
+      renderBoard();
+      if (repaintPanel && S.mode !== 'flying') renderPanel();
+    } catch (e) { if (!S.board && ridersList) ridersList.innerHTML = '<li class="arc-rider-none">Couldn’t load today’s board — it tries again in a minute.</li>'; }
+  }
+  // a minute between reads while the page is in view (a flight in the air never waits on it)
+  setInterval(function () { if (!document.hidden && Date.now() - boardAt > 55e3) loadBoard(false); }, 15e3);
+  if (ridersList) ridersList.addEventListener('click', async function (e) {
+    const el = e.target.closest('[data-arc-rm]');
+    if (!el) return;
+    const v = el.getAttribute('data-arc-rm');
+    if (!confirm('Take this name off today’s Rocket Riders board?')) return;
+    try {
+      await window.api('/api/admin/arcade/rider', { method: 'POST', body: v.slice(0, 2) === 'g:' ? { guestId: Number(v.slice(2)) } : { username: v.slice(2) } });
+      if (window.sendToast) sendToast('Taken off today’s board');
+      loadBoard(true);
+    } catch (err) { if (window.sendToast) sendToast('⚠️ ' + ((err && err.message) || 'That did not go through')); }
+  });
+
+  /* ---------- the guest's name, the prompt, and a member's board choice ---------- */
+  const CLAIM_KEY = 'send.rrClaim';   // this tab asked to keep its guest flight: claim it as soon as the account is signed in
+  async function askToKeep(then) {
+    try { await window.api('/api/arcade/guest/claim', { method: 'POST', body: {} }); try { sessionStorage.setItem(CLAIM_KEY, '1'); } catch (e) {} } catch (e) { /* nothing to keep: still let them in */ }
+    then();
+  }
+  async function submitName(form) {
+    if (S.nameBusy) return;
+    const input = form.querySelector('input[name="name"]');
+    const name = String((input && input.value) || '').trim();
+    if (!/^[a-zA-Z0-9_-]{3,24}$/.test(name)) { S.nameErr = 'A name is 3 to 24 letters, numbers, dashes or underscores.'; renderPanel(); focusName(name); return; }
+    S.nameBusy = true; S.nameErr = ''; renderPanel();
+    try {
+      const j = await window.api('/api/arcade/guest/name', { method: 'POST', body: { name: name } });
+      S.nameBusy = false;
+      if (S.guestRound) S.guestRound.name = j.name || name;
+      if (window.SFX) SFX.play('success');
+      await loadBoard(false);
+      renderPanel();
+      const pr = document.getElementById('arc-prompt');
+      if (pr) pr.focus();
+      say('You are on today’s board as ' + name + '. Create an account to make it yours, or stay as a guest.');
+    } catch (e) {
+      S.nameBusy = false; S.nameErr = String((e && e.message) || 'That did not go through — try again');
+      if (/already on today/i.test(S.nameErr)) { S.nameErr = ''; loadState(); return; }
+      renderPanel(); focusName(name);
+    }
+  }
+  function focusName(keep) {
+    const i = document.getElementById('arc-name-in');
+    if (!i) return;
+    if (keep != null) i.value = keep;
+    i.focus();
+  }
+  async function setOnBoard(on) {
+    try {
+      const j = await window.api('/api/arcade/board', { method: 'POST', body: { on: on } });
+      S.onBoard = !!j.onBoard; S.boardRank = j.rank || null;
+      if (window.SFX) SFX.play(on ? 'success' : 'off');
+      say(on ? 'You are on today’s board.' : 'You are off today’s board.');
+      await loadBoard(false);
+      renderPanel();
+    } catch (e) { if (window.sendToast) sendToast('⚠️ ' + ((e && e.message) || 'That did not go through')); }
+  }
+  async function unname() {
+    if (!confirm('Take your name off today’s board? It can’t go back up today.')) return;
+    try {
+      await window.api('/api/arcade/guest/name', { method: 'POST', body: { remove: true } });
+      if (S.guestRound) { S.guestRound.nameOff = true; S.guestRound.name = null; }
+      say('Your name is off today’s board.');
+      await loadBoard(false);
+      renderPanel();
+    } catch (e) { if (window.sendToast) sendToast('⚠️ ' + ((e && e.message) || 'That did not go through')); }
+  }
+
+  panel.addEventListener('submit', function (e) {
+    const form = e.target.closest('[data-arc-name]');
+    if (!form) return;
+    e.preventDefault();
+    submitName(form);
+  });
   panel.addEventListener('click', function (e) {
     const el = e.target.closest('[data-arc]');
     if (!el) return;
     const what = el.getAttribute('data-arc');
-    if (what === 'signin' && window.AUTH && AUTH.open) AUTH.open();
+    const keep = S.guest && S.guestRound && S.guestRound.name && !S.guestRound.nameOff;   // a name on the board goes with them
+    if (what === 'signin' && window.AUTH && AUTH.open) { if (keep) askToKeep(function () { AUTH.open(); }); else AUTH.open(); }
+    else if (what === 'join' && window.AUTH) { const go = function () { if (AUTH.startJoin) AUTH.startJoin(); else if (AUTH.open) AUTH.open(); }; if (keep) askToKeep(go); else go(); }
+    else if (what === 'stay') {
+      if (S.guestRound) stayedId = S.guestRound.id;
+      try { if (S.guestRound) localStorage.setItem(STAY_KEY, String(S.guestRound.id)); } catch (err) {}
+      try { sessionStorage.removeItem(CLAIM_KEY); } catch (err) {}
+      window.api('/api/arcade/guest/claim', { method: 'POST', body: { cancel: true } }).catch(function () {});   // nobody who signs in here takes it
+      renderPanel();
+      const o = document.getElementById('arc-outcome'); if (o) o.focus();
+      say('You are staying as a guest. Your name stays on today’s board.');
+    }
+    else if (what === 'unname') unname();
+    else if (what === 'boardon') setOnBoard(true);
+    else if (what === 'boardoff') setOnBoard(false);
     else if (what === 'retry') { S.err = ''; setMode('loading'); loadState(); }
   });
 
@@ -842,9 +1112,14 @@
     stopLoop(); boom = null;
     S.round = null; S.outcome = null; S.freeze = null; S.netErr = ''; S.err = '';
     lastXStr = ''; lastBtnStr = '';
-    if (!u) { setMode('signedout'); return; }
+    S.guestRound = null; S.netFull = false; S.nameErr = ''; S.nameBusy = false;
     setMode('loading');
+    let claim = false;
+    try { claim = !!u && sessionStorage.getItem(CLAIM_KEY) === '1'; if (u) sessionStorage.removeItem(CLAIM_KEY); } catch (e) {}
+    // just signed in from the prompt: the guest flight becomes this account's (the server also does this on /api/me)
+    if (claim) window.api('/api/arcade/guest/claim', { method: 'POST', body: {} }).catch(function () {}).then(function () { loadBoard(false); });
     loadState();
+    loadBoard(true);   // the panel's "#N right now" waits on it
   }
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(boot, boot);
   else boot();

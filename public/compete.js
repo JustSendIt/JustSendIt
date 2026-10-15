@@ -187,17 +187,27 @@
       how: '<b>Four tiers, one rule.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold closes with the beta, Silver 90 days after that, Bronze when $GWC turns one year old — the same dates for both coins — and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ' + (o.closes ? 'Gold closes ' + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '') + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. Sell out of either coin entirely, ever, and the badge is revoked. Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
     });
   }
+  /* the top of today's Rocket Riders board (arcade.js draws the whole of it under the game): members in colour, guests grey
+     and plain with "guest" written beside them — the word says it, not only the colour */
+  function ridersTop(rr) {
+    const top = rr.riders || [];
+    if (!top.length) return '<p class="cmp-riders-none">Nobody has put a name on today’s Rocket Riders board yet.</p>';
+    return '<ol class="cmp-list cmp-riders" aria-label="Today’s Rocket Riders, top ' + top.length + '">' + top.map((u) =>
+      '<li' + (u.guest ? ' class="is-guest"' : '') + '><span class="cmp-rank">#' + u.rank + '</span>' +
+      (u.guest ? '<span class="cmp-name cmp-name--guest">' + esc(u.name) + '</span><span class="cmp-guest-tag">guest</span>' : ava(u, 'cmp-ava cmp-ava--sm') + nameLink(u) + ogb(u)) +
+      '<span class="cmp-val">' + Number(u.x).toFixed(2) + '×</span></li>').join('') + '</ol>';
+  }
   function rocketCard(d, ctx) {
     const rr = d.rocketRun, m = rr.me;
     const tile = (v, l) => '<div class="cmp-tile"><b>' + v + '</b><span>' + l + '</span></div>';
     const body = '<div class="cmp-tiles">' +
       tile(nf(rr.flightsToday), 'flight' + (rr.flightsToday === 1 ? '' : 's') + ' today') +
       tile(nf(rr.cashedToday), 'cashed out') +
-      tile(rr.bestXToday != null ? rr.bestXToday.toFixed(2) + '×' : '—', 'best cash-out today' + (rr.bestBoostToday != null ? ' → ' + rr.bestBoostToday.toFixed(2) + '× boost' : '')) +
+      tile(rr.bestXToday != null ? rr.bestXToday.toFixed(2) + '×' : '—', 'best member cash-out today' + (rr.bestBoostToday != null ? ' → ' + rr.bestBoostToday.toFixed(2) + '× boost' : '')) +
       tile(nf(rr.boostedNow), 'pilot' + (rr.boostedNow === 1 ? '' : 's') + ' boosted right now') +
-    '</div>';
+    '</div>' + ridersTop(rr);
     let me = '';
-    if (!ctx.signedIn) me = 'One free flight a day, nothing at stake. ' + signInBtn('Sign in to fly');
+    if (!ctx.signedIn) me = 'One free flight a day, nothing at stake — as a guest too, for a name on the board. ' + signInBtn('Sign in to fly for a boost');
     else if (m && m.boost > 1) me = 'Your boost: <b>' + m.boost.toFixed(2) + '×</b> until ' + esc(new Date(m.until).toUTCString().slice(0, 22)) + ' UTC.' + (m.playedToday ? '' : ' Your flight for today is still waiting. 🚀');
     else if (m && m.playedToday) me = 'You have flown today — the next flight unlocks at 00:00 UTC.';
     else me = 'Your free flight is waiting. 🚀';
@@ -208,7 +218,7 @@
       body,
       me,
       cta: '<button class="btn btn-sm btn-primary" type="button" data-tip="Scrolls down to the Rocket Run game on this page" data-cmp-launch>Go to the rocket</button>',
-      how: '<b>Ride the multiplier, tap before it blows.</b> The multiplier is e<sup>' + rr.growth + ' × seconds</sup>, capped at ' + rr.maxX + '×; your boost is 1 + (multiplier − 1) ÷ 4, capped at ' + rr.maxBoost + '×, for 24 hours. The crash point is rolled on the server the moment you launch and revealed only when your flight ends. The numbers on this card are today\'s totals across every pilot — never who flew.',
+      how: '<b>Ride the multiplier, tap before it blows.</b> The multiplier is e<sup>' + rr.growth + ' × seconds</sup>, capped at ' + rr.maxX + '×; your boost is 1 + (multiplier − 1) ÷ 4, capped at ' + rr.maxBoost + '×, for 24 hours. The crash point is rolled on the server the moment you launch and revealed only when your flight ends. The four tiles count signed-in pilots only (today\'s flights, cash-outs and best, and who is boosted right now), never who flew; guests fly free too (' + nf(rr.guestFlightsToday || 0) + ' today), for a name on the board and no boost. The board lists only the names their pilots chose to put up.',
     });
   }
   function hallCard(d, ctx) {
