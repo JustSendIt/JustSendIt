@@ -149,10 +149,12 @@ function fill(d, table, vals) {
   const names = Object.keys(row);
   return d.prepare('INSERT INTO ' + table + ' (' + names.join(',') + ') VALUES (' + names.map(() => '?').join(',') + ')').run(...names.map((n) => row[n]));
 }
-// a GitHub runner is several times slower than this Mac (a 20 s wait for the post-unmount drop timed out there, 2026-10-13)
-async function waitFor(fn, ms = 30000) { const until = Date.now() + ms; while (Date.now() < until) { try { const v = fn(); if (v) return v; } catch {} await sleep(150); } return null; }
+// a GitHub runner is several times slower than this Mac: maintenance waits there have timed out at 20 s (2026-10-13) and at
+// 30 s (the index-epoch drop, 2026-10-15). Every maintenance wait gets a minute; a pass that finishes sooner returns at once.
+const MAINT_WAIT = 60000;
+async function waitFor(fn, ms = MAINT_WAIT) { const until = Date.now() + ms; while (Date.now() < until) { try { const v = fn(); if (v) return v; } catch {} await sleep(150); } return null; }
 const metaOf = (k) => { const d = openDb(); try { return K.getMeta(d, k); } finally { d.close(); } };
-async function maintenanceAfter(t0) { return waitFor(() => { const m = JSON.parse(metaOf('last_maintenance') || 'null'); return m && m.at >= t0 ? m : null; }, 30000); }
+async function maintenanceAfter(t0) { return waitFor(() => { const m = JSON.parse(metaOf('last_maintenance') || 'null'); return m && m.at >= t0 ? m : null; }, MAINT_WAIT); }
 
 const A = { name: '__kr_a_' + randomBytes(3).toString('hex'), email: 'kr' + randomBytes(3).toString('hex') + '@example.com', pw: 'key-rotation-' + randomBytes(4).toString('hex') };
 const W1 = Wallet.createRandom(), W1a = W1.address.toLowerCase();
@@ -412,7 +414,7 @@ try {
     fs.rmSync(BK, { recursive: true, force: true }); fs.renameSync(BK + '.away', BK);
     t1 = Date.now();
     await start();
-    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 45000);   // re-encrypting the backup copies first
+    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, MAINT_WAIT);   // re-encrypting the backup copies first
     ring = ringNow().ring;
     check('  ...once it is back, the copies are brought along and the old key goes', !!m && ring.dek.keys.length === 1 && JSON.stringify(Object.keys(kidsInDb(path.join(BK, 'app-2026-01-01.db')))) === JSON.stringify([String(ring.dek.current)]), JSON.stringify(m && { w: m.waiting, d: m.dropped }));
     await stop();
@@ -431,12 +433,12 @@ try {
     s = await start();
     check('a value no key opens does not stop the site from starting (it is warned about)', s.up && /some stored values cannot be read|values under keys already dropped/.test(s.log), s.up + ' ' + s.log.slice(-300));
     cli('request');
-    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.why === 'rotation' ? x : null; }, 30000);
+    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.why === 'rotation' ? x : null; }, MAINT_WAIT);
     check('a database copy in a subfolder of the backups, named .sqlite, is found by its header and brought along', !!m && m.files.some((f) => /moved-earlier\/app-old\.sqlite$/.test(f.file) && f.status === 'rekeyed'), JSON.stringify(m && m.files.map((f) => f.file + ':' + f.status)) + ' on disk: ' + JSON.stringify(fs.readdirSync(path.join(BK, 'moved-earlier'))));
     check('  ...an archive in the backups that may hold a database holds back every drop until it is dealt with', !!m && m.dropped.length === 0 && (m.blocked || []).some((b) => /export\.db\.gz/.test(b.path)) && ringNow().ring.dek.keys.length === 2, JSON.stringify(m && { b: m.blocked, d: m.dropped }));
     fs.unlinkSync(path.join(BK, 'export.db.gz'));
     await stop(); t1 = Date.now(); await start();
-    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
+    m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, MAINT_WAIT);
     ring = ringNow().ring;
     const ff = m && m.files.find((f) => /foreign-copy/.test(f.file));
     check('  ...unreadable values hold no key back: the rotation drops the old key anyway, the leftover is counted and the ring records it', !!m && ring.dek.keys.length === 1 && (m.live.unreadableCols || {})['tracker_cache.report'] === 1 && ring.dek.dropped.find((x) => x.id === cur).left === 1, JSON.stringify(m && { w: m.waiting, d: m.dropped, u: m.live && m.live.unreadableCols }));
@@ -466,7 +468,7 @@ try {
       check('while a reader holds up the checkpoint, the database does not count as compacted and no old key is dropped', !!m && m.dropped.length === 0 && m.waiting.some((w) => /not yet compacted/.test(w)) && ringNow().ring.dek.keys.length === 2, JSON.stringify(m && { w: m.waiting, d: m.dropped }));
       reader.exec('COMMIT'); reader.close();
       await stop(); t1 = Date.now(); await start();
-      m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
+      m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, MAINT_WAIT);
       check('  ...and once it lets go, the next pass compacts and drops', !!m && ringNow().ring.dek.keys.length === 1);
       await stop();
     }
@@ -487,7 +489,7 @@ try {
       await stop();
       fs.unlinkSync(path.join(BK, 'link.db')); fs.unlinkSync(path.join(BK, 'ghost.db-wal'));
       t1 = Date.now(); await start();
-      m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, 30000);
+      m = await waitFor(() => { const x = JSON.parse(metaOf('last_maintenance') || 'null'); return x && x.at >= t1 && x.dropped && x.dropped.length ? x : null; }, MAINT_WAIT);
       check('  ...once they are gone, the old key goes', !!m && ringNow().ring.dek.keys.length === 1);
       await stop();
       fs.rmSync(path.join(BK, '.hidden'), { recursive: true, force: true }); fs.rmSync(path.join(BK, 'sub600'), { recursive: true, force: true });
