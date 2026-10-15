@@ -354,7 +354,7 @@ html :is(.post-avatar, .search-hit .h-ava, .sc-sender-ava-emoji, .cmp-cava--txt,
   .cmp-ava, .trk-report .trk-info, .media-preview-rm, .modal-x, .mute-flag, .cm-ava, .ge-info) { line-height: 1; place-content: center; }
 html .post-avatar { --ava: 38px; font-size: calc(var(--ava) * 0.6); }
 html .search-hit .h-ava { --ava: 36px; font-size: calc(var(--ava) * 0.6); }
-html .sc-sender-ava-emoji { --ava: 20px; font-size: calc(var(--ava) * 0.62); }
+html .sc-sender-ava-emoji { --ava: var(--sc-ava, 20px); font-size: calc(var(--ava) * 0.62); }   /* --sc-ava: the sender row's disc, which grows with its text (styles.css) */
 html .cmp-cava--txt { --ava: 32px; font-size: calc(var(--ava) * 0.36); }   /* up to three capitals of a ticker */
 html .gb-ava { --ava: 26px; font-size: calc(var(--ava) * 0.6); }
 html .post-comm-logo-none { --ava: 22px; font-size: calc(var(--ava) * 0.62); }

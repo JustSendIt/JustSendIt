@@ -3222,30 +3222,84 @@ body.np-mode-runners .np-controls, body.np-mode-runners .np-chips, body.np-mode-
 .sc-size-total b { color: var(--green-bright); }
 .sc-size-mult { color: #ffcf3f; font-style: normal; font-weight: 800; }
 
-/* Send Call "who else Sent It" — ranked senders, one line each (avatar · entry MC · amount sent) */
-.sc-senders { margin: 0.5rem 0; padding: 0.55rem 0.7rem; background: var(--g-wash); border: 1px solid var(--hair); border-radius: 10px; }
-.sc-senders-head { font-size: max(var(--text-floor), 0.85rem); font-weight: 700; color: var(--text-dim); margin-bottom: 0.45rem; }
+/* Send Call "who else Sent It": one block per sender.
+   Line one is who (avatar, 💎 level, @name, OG). It never shrinks below its own width, so the name is never squeezed
+   into a column one letter wide; only a name longer than the whole row wraps. Line two is what they did; each figure
+   stays whole and the set wraps as a group. Line three is what others said (🔥 🚀 💬), with the thread under it.
+   The box is a size container, so the layout follows the room the card has rather than the window: a card in a 640px
+   feed at the text floor's largest size holds only a phone's worth of characters. */
+/* The avatar grows with the text (a 20px disc beside a 25px name read as a dot). Registered as a length so the em is
+   resolved once, on the row, and every child (the disc, its glyph, the indents) gets the same pixels. */
+@property --sc-ava { syntax: '<length>'; inherits: true; initial-value: 20px; }
+.sc-senders { margin: 0.5rem 0; padding: 0.55rem 0.7rem; background: var(--g-wash); border: 1px solid var(--hair); border-radius: 10px; container: sc-senders / inline-size; }
+.sc-senders-head { font-size: max(var(--text-floor), 0.85rem); font-weight: 700; color: var(--text-dim); margin-bottom: 0.2rem; }
 .sc-senders-head b { color: var(--green-bright); }
 .sc-senders-sub { font-weight: 400; }
-.sc-senders-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
-.sc-sender { display: flex; align-items: center; gap: 0.45rem; font-size: max(var(--text-floor), 0.82rem); min-width: 0; }
-.sc-sender-out { opacity: 0.72; }
+.sc-senders-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.sc-sender { display: grid; gap: 0.3rem; font-size: max(var(--text-floor), 0.82rem); min-width: 0; padding: 0.45rem 0; --sc-ava: max(20px, 1.2em); }
+.sc-sender + .sc-sender { border-top: 1px solid var(--hair); }
+.sc-sender-out .sc-sender-main { opacity: 0.72; }
+.sc-sender-main { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; min-width: 0; }
 .sc-sender-diamond { flex: 0 0 auto; font-size: max(var(--text-floor), 0.74rem); font-weight: 800; color: #7fd3ff; background: rgba(93,201,255,0.14); border-radius: 999px; padding: 0.02rem 0.32rem; white-space: nowrap; }
-.sc-sender-stats { display: flex; align-items: center; gap: 0.55rem; flex: 0 0 auto; white-space: nowrap; }
+.sc-sender-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; margin-left: auto; min-width: 0; max-width: 100%; }
+.sc-sender-stats > * { flex: 0 0 auto; white-space: nowrap; }
 .sc-sender-pnl { font-weight: 800; }
 .sc-sender-pnl.sc-up { color: var(--green-bright); } .sc-sender-pnl.sc-down { color: var(--red); } .sc-sender-pnl.sc-flat { color: var(--text-dim); }
 .sc-sender-hold { font-weight: 700; }
 .sc-sender-hold.sc-holding { color: #7fd3ff; } .sc-sender-hold.sc-soldout { color: var(--red); } .sc-sender-hold.sc-nobuy { color: var(--text-dim); }
-@media (max-width: 540px) { .sc-sender { flex-wrap: wrap; row-gap: 0.15rem; } .sc-sender-who { flex: 1 0 100%; } .sc-sender-stats { gap: 0.5rem; font-size: max(var(--text-floor), 0.95em); } }
-.sc-sender-who { display: flex; align-items: center; gap: 0.35rem; text-decoration: none; color: var(--text); min-width: 0; flex: 1 1 auto; }
+.sc-sender-when { color: var(--text-dim); }
+.sc-sender-who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.35rem; text-decoration: none; color: var(--text); flex: 1 0 auto; min-width: 0; max-width: 100%; }
 .sc-sender-who:hover .sc-sender-name, .sc-sender-who:focus-visible .sc-sender-name { text-decoration: underline; }
-.sc-sender-ava { width: 20px; height: 20px; border-radius: 50%; flex: 0 0 auto; object-fit: cover; }
+.sc-sender-ava { width: var(--sc-ava); height: var(--sc-ava); border-radius: 50%; flex: 0 0 auto; object-fit: cover; }
 .sc-sender-ava-emoji { display: inline-flex; align-items: center; justify-content: center; font-size: max(var(--text-floor), 0.95rem); background: var(--g-wash); line-height: 1; }
-.sc-sender-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sc-sender-mc { color: var(--text-dim); white-space: nowrap; flex: 0 0 auto; }
+/* at most the row less the avatar, so a long name keeps its place beside the avatar and the badges after it wrap */
+.sc-sender-name { font-weight: 700; flex: 0 1 auto; min-width: 0; max-width: calc(100% - var(--sc-ava) - 0.35rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-sender-mc { color: var(--text-dim); }
 .sc-sender-mc b { color: var(--text); }
-.sc-sender-sent { white-space: nowrap; flex: 0 0 auto; color: var(--text-dim); }
+.sc-sender-sent { color: var(--text-dim); }
 .sc-sender-sent b { color: var(--green-bright); }
+/* the reactions and the comment toggle, lined up under the name */
+.sc-sender-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; padding-left: calc(var(--sc-ava) + 0.35rem); }
+.sc-sbtn { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 32px; padding: 0.1rem 0.65rem; border: 1px solid var(--edge-ctl); border-radius: var(--r-pill); background: transparent; color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.8rem); font-weight: 700; line-height: 1.2; cursor: pointer; }
+.sc-sbtn:hover { border-color: var(--green); }
+.sc-sbtn:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 2px; }
+.sc-sbtn.on, .sc-sbtn[aria-expanded="true"] { border-color: var(--green); background: var(--g-tint); }
+/* yours, said in shape as well as colour: a border twice as thick (the padding gives the pixel back, so nothing moves) */
+.sc-sbtn.on { border-width: 2px; padding: calc(0.1rem - 1px) calc(0.65rem - 1px); }
+.sc-sbtn[disabled] { opacity: 0.6; cursor: default; }
+.sc-sbtn-n { font-variant-numeric: tabular-nums; }
+/* the thread under one sender */
+.sc-thread { display: grid; gap: 0.45rem; margin-left: calc(var(--sc-ava) + 0.35rem); padding: 0.4rem 0 0.15rem 0.6rem; border-left: 2px solid var(--hair); min-width: 0; }
+.sc-thread[hidden], .sc-thread-list[hidden] { display: none; }
+.sc-thread-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.sc-cmt { display: flex; align-items: flex-start; gap: 0.4rem; min-width: 0; --sc-ava: max(20px, 1.1em); }
+.sc-cmt-body { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.sc-cmt-who { font-weight: 700; color: var(--text); text-decoration: none; }
+.sc-cmt-who:hover, .sc-cmt-who:focus-visible { text-decoration: underline; }
+.sc-cmt-when { color: var(--text-dim); font-size: max(var(--text-floor), 0.72rem); white-space: nowrap; }
+.sc-cmt-report { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: flex-start; min-width: 24px; min-height: 24px; padding: 0 0.3rem; border: none; border-radius: 4px; background: none; color: var(--text-dim); font-size: max(var(--text-floor), 0.75rem); cursor: pointer; }
+.sc-cmt-report:hover { color: var(--red); }
+.sc-cmt-report:focus-visible { outline: 2px solid var(--green-bright); }
+.sc-cmt-report[aria-pressed="true"] { opacity: 0.55; }
+.sc-thread-msg { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); }
+.sc-thread-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.sc-thread-lbl { display: flex; flex: 1 1 12em; min-width: 0; }
+.sc-thread-input { flex: 1 1 auto; width: 100%; min-width: 0; min-height: 32px; padding: 0.3rem 0.6rem; border: 1px solid var(--edge-ctl); border-radius: var(--r-2); background: var(--ink-1); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.85rem); }
+.sc-thread-input:focus { border-color: var(--green); }
+.sc-thread-input:focus-visible { outline: 2px solid var(--green-bright); outline-offset: 1px; }
+@media (pointer: coarse) {
+  .sc-sbtn, .sc-thread-input { min-height: 44px; }
+  .sc-cmt-report { min-width: 44px; min-height: 44px; }   /* a thumb-sized flag in its own column, clear of the comment's text */
+  .sc-thread-input { font-size: max(var(--text-floor), max(16px, 1em)); }   /* under 16px, iOS Safari zooms the page into the field */
+}
+/* forced colours repaint every border and fill alike: the pressed and open states keep the system's highlight */
+@media (forced-colors: active) {
+  .sc-sbtn.on, .sc-sbtn[aria-expanded="true"] { background: Highlight; color: HighlightText; border-color: Highlight; }   /* system colours survive forcing, the focus ring included */
+}
+/* a narrow card: the figures take their own line, under the name */
+@container sc-senders (max-width: 34em) { .sc-sender-stats { flex-basis: 100%; margin-left: 0; padding-left: calc(var(--sc-ava) + 0.35rem); } }
+/* narrower still: no indent, every line gets the full width */
+@container sc-senders (max-width: 20em) { .sc-sender-stats, .sc-sender-acts { padding-left: 0; } .sc-thread { margin-left: 0; } }
 .sc-senders-toggle { margin-top: 0.45rem; background: var(--green); border: none; color: var(--on-green); font-weight: 700; font-size: max(var(--text-floor), 0.82rem); cursor: pointer; padding: 0.2rem 0.7rem; border-radius: var(--r-pill); }
 .sc-senders-toggle:hover { background: var(--green-bright); }
 .sc-senders-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--green-bright); border-radius: 4px; }

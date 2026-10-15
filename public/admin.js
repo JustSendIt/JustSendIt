@@ -31,12 +31,13 @@
       (t.text ? '<blockquote class="adm-quote">' + esc(t.text) + '</blockquote>' : '') +
       (t.image ? '<p><a href="' + esc(t.image) + '" target="_blank" rel="noopener">attached media ↗</a></p>' : '');
     else if (r.kind === 'comment') what = '<p><b>Comment #' + t.id + '</b> by @' + esc(t.username) + ' on post #' + t.postId + '</p>' + (t.text ? '<blockquote class="adm-quote">' + esc(t.text) + '</blockquote>' : '');
+    else if (r.kind === 'hopcomment') what = '<p><b>Comment #' + t.id + '</b> by @' + esc(t.username) + ' under @' + esc(t.sender) + '’s Sent It on Send Call #' + t.callId + '</p>' + (t.text ? '<blockquote class="adm-quote">' + esc(t.text) + '</blockquote>' : '');
     else what = '<p><b>@' + esc(t.username) + '</b> (user #' + t.id + ')' + (t.deleted ? ' — account deleted' : t.restrictLevel ? ' — currently restricted' + (t.restrictedUntil ? ' until ' + when(t.restrictedUntil) : '') : '') + '</p>';
     const open = !r.resolved_at;
     const actions = !open ? '<p class="modal-note">Resolved ' + when(r.resolved_at) + ' — ' + esc(r.action || '') + '</p>' :
       '<div class="adm-actions">' +
         (t && r.kind === 'post' ? '<button class="btn btn-sm btn-primary" data-act="takedown" data-kind="post" data-id="' + t.id + '" data-tip="Removes the post (or its text and media, for a Send Call) and tells the author">Take down post</button>' : '') +
-        (t && r.kind === 'comment' ? '<button class="btn btn-sm btn-primary" data-act="takedown" data-kind="comment" data-id="' + t.id + '" data-tip="Removes the comment and tells the author">Take down comment</button>' : '') +
+        (t && (r.kind === 'comment' || r.kind === 'hopcomment') ? '<button class="btn btn-sm btn-primary" data-act="takedown" data-kind="' + r.kind + '" data-id="' + t.id + '" data-tip="Removes the comment and tells the author">Take down comment</button>' : '') +
         (t && t.userId ? '<button class="btn btn-sm" data-act="restrict" data-uid="' + t.userId + '" data-tip="Puts the author in read-only mode for 7 days">Restrict author 7d</button>' : '') +
         '<button class="btn btn-sm btn-ghost" data-act="dismiss" data-rid="' + r.id + '" data-tip="Closes the report with no action">Dismiss</button>' +
       '</div>';

@@ -1247,6 +1247,34 @@ CREATE TABLE IF NOT EXISTS arcade_rounds (
   ended_at   INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_arcade_user ON arcade_rounds(user_id, id DESC);
+/* ===== Reactions and comments on one sender's Sent It =========================================
+   Owner, 2026-10-15: "allow other users to react to other senders on a send call, and also allow users to add a
+   comment to someone else sending it". Their own tables rather than a target column on reactions / comments: those
+   key on a post, and filing a sender's 🔥 under the call's post would quietly add it to the call post's own counts
+   on every read path that counts them. A Sent It is the call_hops row (call_id, user_id), so these hang off that key
+   and go with it (a squad deleted → its calls → their hops → these). user_id is the reactor / the commenter. */
+CREATE TABLE IF NOT EXISTS hop_reactions (
+  call_id    INTEGER NOT NULL,
+  hopper_id  INTEGER NOT NULL,                   -- whose Sent It it is
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,                      -- fire | rocket
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (call_id, hopper_id, user_id, kind),
+  FOREIGN KEY (call_id, hopper_id) REFERENCES call_hops(call_id, user_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS hop_comments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  call_id    INTEGER NOT NULL,
+  hopper_id  INTEGER NOT NULL,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  text       TEXT NOT NULL,
+  tokens     TEXT,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY (call_id, hopper_id) REFERENCES call_hops(call_id, user_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_hopcmt_hop ON hop_comments(call_id, hopper_id, id);
+CREATE INDEX IF NOT EXISTS idx_hopcmt_user ON hop_comments(user_id);       -- account deletion and the data export
+CREATE INDEX IF NOT EXISTS idx_hopreact_user ON hop_reactions(user_id);
 `);
 /* ===== Diamond Hands: sales, not transfers =====================================================
    The no-sell streak resets on a SALE — a market sell of $SEND or $GWC from one of the member's linked wallets, or
@@ -4054,14 +4082,15 @@ function notify(userId, icon, text, kind, actorId, href, postId) {
 // social notifications (follow / react / upvote / comment) — throttled per identical message so a toggle war can't spam
 // the bell, AND capped per actor (3 per window) so distinct-text comments can't flood a victim either
 const SOCIAL_PER_ACTOR = 3;
-function notifyOnce(userId, icon, text, kind, actorId, windowMs = 10 * 60 * 1000) {
+function notifyOnce(userId, icon, text, kind, actorId, opts = {}) {
   if (!userId || !text) return;
+  const windowMs = opts.windowMs || 10 * 60 * 1000;   // opts.href / opts.postId: where the row links (notify() re-validates the path)
   const t = String(text).slice(0, 240);
   try {
     if (db.prepare('SELECT 1 FROM notifications WHERE user_id = ? AND text = ? AND created_at > ?').get(userId, t, now() - windowMs)) return;
     if (actorId && db.prepare('SELECT COUNT(*) n FROM notifications WHERE user_id = ? AND actor_id = ? AND created_at > ?').get(userId, actorId, now() - windowMs).n >= SOCIAL_PER_ACTOR) return;
   } catch {}
-  notify(userId, icon, t, kind, actorId);
+  notify(userId, icon, t, kind, actorId, opts.href, opts.postId);
 }
 
 /* ═══ Wall alerts: the fan-out ══════════════════════════════════════════════════════════════════════
@@ -12317,6 +12346,9 @@ function ownDataView(u) {
     comments: db.prepare('SELECT id, post_id, text, tokens, created_at FROM comments WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id).map(c => ({ ...c, tokens: parseTokens(c.tokens) })),
     calls: db.prepare('SELECT * FROM calls WHERE user_id = ? ORDER BY id DESC LIMIT 200').all(u.id).map(r => callView(r, u)),   // their own calls: exact figures
     sends: db.prepare('SELECT call_id, created_at, entry_price, spend_usd, bought_usd, held_usd, hold_paid, points_paid FROM call_hops WHERE user_id = ? ORDER BY created_at DESC LIMIT 500').all(u.id),
+    // what they said and reacted under other people's Sent Its (the sender by name, as the site shows it)
+    sendComments: db.prepare('SELECT h.id, h.call_id, s.username sender, h.text, h.tokens, h.created_at FROM hop_comments h JOIN users s ON s.id = h.hopper_id WHERE h.user_id = ? ORDER BY h.id DESC LIMIT 500').all(u.id).map(c => ({ ...c, tokens: parseTokens(c.tokens) })),
+    sendReactions: db.prepare('SELECT r.call_id, s.username sender, r.kind, r.created_at FROM hop_reactions r JOIN users s ON s.id = r.hopper_id WHERE r.user_id = ? ORDER BY r.created_at DESC LIMIT 1000').all(u.id),
     watchlist: db.prepare('SELECT pair_addr, token_addr, token0, token1, quote_symbol, added_at FROM watchlist WHERE user_id = ? ORDER BY added_at DESC').all(u.id),
     trackedWallets: db.prepare('SELECT id, address_enc, label, created_at FROM tracked_wallets WHERE user_id = ? ORDER BY id').all(u.id).map(t => ({ id: t.id, address: decField(t.address_enc), label: t.label, created_at: t.created_at })),
     pinnedTokens: db.prepare('SELECT token_addr, pair_addr, symbol, name, added_at, pin_price, pin_mc FROM pinned_tokens WHERE user_id = ? ORDER BY added_at').all(u.id),
@@ -13597,6 +13629,7 @@ const senderUsdPublic = (v) => {
   const mag = Math.pow(10, Math.floor(Math.log10(n)) - 1);
   return Math.max(mag, Math.round(n / mag) * mag);   // 2 significant figures
 };
+const HOP_THREAD_MAX = 100;   // comments one read of a sender's thread returns (the newest)
 function callSenders(row, limit, me) {
   const price = row.cur_price > 0 ? row.cur_price : row.entry_price;
   const rows = db.prepare(
@@ -13625,7 +13658,22 @@ function callSenders(row, limit, me) {
   // holderScore() never reads .diamond, so resolve the badge only for the senders we actually return — this used to be
   // one holder_state query PER HOP (hundreds per /api/posts) to fill a field all but ~3 rows then threw away.
   const out = limit ? list.slice(0, limit) : list;
+  /* What others said to each sender: 🔥/🚀 counts, which of them are the viewer's, and how many comments (less the
+     authors the viewer muted, so the count matches the thread they would open). Two reads per call, keyed by sender,
+     whatever the list's length — /api/calls/live asks for up to 40 calls at a time. */
+  const rx = {}, cx = {};
+  if (out.length) {
+    for (const r of db.prepare('SELECT hopper_id, kind, COUNT(*) n, SUM(user_id = ?) mine FROM hop_reactions WHERE call_id = ? GROUP BY hopper_id, kind').all(me ? me.id : 0, row.id))
+      (rx[r.hopper_id] || (rx[r.hopper_id] = [])).push(r);
+    const cq = me
+      ? db.prepare('SELECT hopper_id, COUNT(*) n FROM hop_comments WHERE call_id = ? AND user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?) GROUP BY hopper_id').all(row.id, me.id)
+      : db.prepare('SELECT hopper_id, COUNT(*) n FROM hop_comments WHERE call_id = ? GROUP BY hopper_id').all(row.id);
+    for (const r of cq) cx[r.hopper_id] = r.n;
+  }
   for (const x of out) {
+    x.reactions = { fire: 0, rocket: 0 }; x.myReactions = [];
+    for (const r of rx[x._uid] || []) { if (r.kind in x.reactions) { x.reactions[r.kind] = r.n; if (r.mine) x.myReactions.push(r.kind); } }
+    x.comments = cx[x._uid] || 0;
     const d = publicDiamond(x._uid); x.diamond = d ? d.level : 0;
     const isSelf = !!(me && me.id === x._uid);
     if (!isSelf) { x.sentUsd = senderUsdPublic(x.sentUsd); x.heldUsd = senderUsdPublic(x.heldUsd); x.rounded = true; }
@@ -14551,12 +14599,14 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('report:' + me.id, 10, 6e5)) return bad(res, 'slow down', 429);
         const b = await readBody(req);
-        const kind = ['post', 'comment', 'user'].includes(b.kind) ? b.kind : null;
+        const kind = ['post', 'comment', 'hopcomment', 'user'].includes(b.kind) ? b.kind : null;
         const target = Number(b.id);
         if (!kind || !Number.isInteger(target) || target < 1) return bad(res, 'what are you reporting?');
         // a post the reporter cannot read does not exist for them (404, as on every other verb) — otherwise this was an existence oracle for holders-only and squad posts
         const exists = kind === 'post' ? (() => { const pr = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(target); return pr && postVisible(pr, me) ? pr : null; })()
           : kind === 'comment' ? (() => { const cr = db.prepare('SELECT c.id, p.user_id, p.community_id, p.private, p.squad_id FROM comments c JOIN posts p ON p.id = c.post_id WHERE c.id = ?').get(target); return cr && postVisible(cr, me) ? cr : null; })()
+          // a comment under someone's Sent It is as visible as its call: a squad call's, to its members only
+          : kind === 'hopcomment' ? (() => { const hr = db.prepare('SELECT h.id, c.squad_id FROM hop_comments h JOIN calls c ON c.id = h.call_id WHERE h.id = ?').get(target); return hr && (!hr.squad_id || canReadSquad(me.id, hr.squad_id)) ? hr : null; })()
           : db.prepare('SELECT 1 FROM users WHERE id = ? AND system = 0').get(target);
         if (!exists) return bad(res, 'not found', 404);
         const reason = String(b.reason || '').trim().slice(0, 500);
@@ -14596,6 +14646,7 @@ const server = http.createServer(async (req, res) => {
         for (const r of rows) {
           if (r.kind === 'post') { const p2 = db.prepare('SELECT p.id, p.text, p.image, p.call_id, p.user_id, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?').get(r.target_id); r.target = p2 ? { id: p2.id, text: String(p2.text || '').slice(0, 280), image: p2.image ? '/uploads/' + p2.image : null, call: !!p2.call_id, userId: p2.user_id, username: p2.username } : null; }
           else if (r.kind === 'comment') { const c2 = db.prepare('SELECT c.id, c.text, c.user_id, c.post_id, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?').get(r.target_id); r.target = c2 ? { id: c2.id, text: String(c2.text || '').slice(0, 280), userId: c2.user_id, username: c2.username, postId: c2.post_id } : null; }
+          else if (r.kind === 'hopcomment') { const h2 = db.prepare('SELECT h.id, h.text, h.user_id, h.call_id, u.username, s.username sender FROM hop_comments h JOIN users u ON u.id = h.user_id JOIN users s ON s.id = h.hopper_id WHERE h.id = ?').get(r.target_id); r.target = h2 ? { id: h2.id, text: String(h2.text || '').slice(0, 280), userId: h2.user_id, username: h2.username, callId: h2.call_id, sender: h2.sender } : null; }
           else { const u2 = db.prepare('SELECT id, username, restricted_until, restrict_level, deleted_at FROM users WHERE id = ?').get(r.target_id); r.target = u2 ? { id: u2.id, username: u2.username, userId: u2.id, restrictedUntil: u2.restricted_until || 0, restrictLevel: u2.restrict_level || 0, deleted: !!u2.deleted_at } : null; }
         }
         return send(res, 200, { reports: rows, open: db.prepare('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').get().n });
@@ -14614,6 +14665,23 @@ const server = http.createServer(async (req, res) => {
           if (!row) return bad(res, 'comment not found', 404);
           db.prepare('DELETE FROM comments WHERE id = ?').run(id);
           notify(row.user_id, '🧹', 'A comment of yours was removed by a moderator' + (note ? ': ' + note : '.'), 'alert');
+        } else if (b.kind === 'hopcomment') {
+          const row = db.prepare('SELECT * FROM hop_comments WHERE id = ?').get(id);
+          if (!row) return bad(res, 'comment not found', 404);
+          db.prepare('DELETE FROM hop_comments WHERE id = ?').run(id);
+          /* The sender's bell quoted the comment's opening words; a removed comment must not live on there. The row is the
+             one notifyOnce wrote for it: from this author, to this sender, within seconds of the comment, ENDING in exactly
+             what the post route wrote after the name (the call's symbol, the quote, its closing mark), so another comment
+             that merely starts the same way, or one on a post, is left alone. The author's name is not matched: it may have
+             changed since. */
+          try {
+            const hcs = db.prepare('SELECT symbol FROM calls WHERE id = ?').get(row.call_id);
+            const cp = Array.from(String(row.text));
+            const tail = ' commented on your Sent It on $' + alertSymbol(hcs && hcs.symbol) + ': “' + cp.slice(0, 60).join('') + (cp.length > 60 ? '…' : '') + '”';
+            db.prepare("DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND kind = 'social' AND icon = '💬' AND created_at BETWEEN ? AND ? AND substr(text, -?) = ?")
+              .run(row.hopper_id, row.user_id, row.created_at - 5000, row.created_at + 5000, Array.from(tail).length, tail);
+          } catch {}
+          notify(row.user_id, '🧹', 'A comment of yours was removed by a moderator' + (note ? ': ' + note : '.'), 'alert');
         } else if (b.kind === 'upload') {
           const name = String(b.name || '');
           const row = db.prepare('SELECT name, user_id FROM uploads WHERE name = ?').get(name);
@@ -14624,7 +14692,7 @@ const server = http.createServer(async (req, res) => {
           for (const c of ['avatar_img', 'header_img', 'bg_img']) db.prepare('UPDATE users SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           for (const c of ['avatar_img', 'banner_img']) db.prepare('UPDATE squads SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           deleteUpload(name, row.user_id);
-        } else return bad(res, 'kind must be post, comment or upload');
+        } else return bad(res, 'kind must be post, comment, hopcomment or upload');
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?").run(now(), me.id, b.kind === 'upload' ? 'post' : b.kind, id);
         return send(res, 200, { ok: true });
       }
@@ -14692,7 +14760,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist'])
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -16032,6 +16100,76 @@ const server = http.createServer(async (req, res) => {
         if (!c || (c.squad_id && !canReadSquad(me && me.id, c.squad_id))) return bad(res, 'call not found', 404);
         refreshSenderSpends(c).catch(() => {}); // fire-and-forget: keeps the amounts current without blocking the expand
         return send(res, 200, { senders: callSenders(c, null, me) });
+      }
+      /* One sender's Sent It: 🔥/🚀 on it, and a comment thread under it. The sender is named, never numbered —
+         callSenders lets no user id leave the server — and must have Sent It on this call. The gates are the post
+         ones: sign-in and the read-only / holder-proof gate on every write, the same react and comment rate buckets
+         (so this is not a second budget), and a squad call's senders are its verified members' business only: 404
+         to anyone else, on every verb, as for the call itself. */
+      cm = /^\/api\/calls\/(\d+)\/senders\/([^/]+)\/(react|comments)$/.exec(p);
+      if (cm && (req.method === 'POST' || (cm[3] === 'comments' && req.method === 'GET'))) {
+        let hname; try { hname = decodeURIComponent(cm[2]); } catch { return bad(res, 'bad username', 400); }
+        const isReact = cm[3] === 'react', write = req.method === 'POST';
+        if (write) {
+          if (!me) return bad(res, isReact ? 'sign in to react' : 'sign in to comment', 401);
+          if (blockReadOnly(res, me)) return;
+          if (isReact ? !rateLimit('react:' + me.id, 60, 6e5) : !rateLimit('cmt:' + me.id, 25, 6e5)) return bad(res, isReact ? 'reacting too fast 😅' : 'commenting too fast', 429);
+        }
+        const hc = db.prepare('SELECT id, user_id, post_id, symbol, squad_id FROM calls WHERE id = ?').get(Number(cm[1]));
+        if (!hc || (hc.squad_id && !canReadSquad(me && me.id, hc.squad_id))) return bad(res, 'call not found', 404);
+        const hopper = USERNAME_RE.test(hname) ? db.prepare('SELECT id, username, deleted_at FROM users WHERE username = ?').get(hname) : null;
+        if (!hopper || !db.prepare('SELECT 1 FROM call_hops WHERE call_id = ? AND user_id = ?').get(hc.id, hopper.id)) return bad(res, 'that sender is not on this call', 404);
+        /* A squad call's sender may since have left the squad, or been paused by its gate: their Sent It stays on the
+           call, but the squad is closed to them now, so nothing said about it may reach them — not the words, not who
+           said them, and no points from inside a squad they can no longer read. */
+        const hopperInside = !hc.squad_id || canReadSquad(hopper.id, hc.squad_id);
+        // the sender hears about it unless it is their own tap, the account is gone, they are outside the squad, or they muted the person doing it
+        const tellHopper = !!me && hopper.id !== me.id && !hopper.deleted_at && hopperInside && !db.prepare('SELECT 1 FROM mutes WHERE user_id = ? AND muted_id = ?').get(hopper.id, me.id);
+        // a squad call's post is private to the squad, so the row links to the squad's Calls tab, not a permalink nobody else can open
+        const hopLink = { href: hc.squad_id ? '/squad?id=' + hc.squad_id + '#calls' : (hc.post_id ? '/p/' + hc.post_id : null), postId: hc.post_id || null };
+        const onSym = ' on $' + alertSymbol(hc.symbol);
+        const commentCount = () => (me
+          ? db.prepare('SELECT COUNT(*) n FROM hop_comments WHERE call_id = ? AND hopper_id = ? AND user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?)').get(hc.id, hopper.id, me.id)
+          : db.prepare('SELECT COUNT(*) n FROM hop_comments WHERE call_id = ? AND hopper_id = ?').get(hc.id, hopper.id)).n;
+        // the newest HOP_THREAD_MAX, shown oldest first (a thread past the cap shows its latest, never stops at its first hundred)
+        const commentRows = (where, args) => db.prepare('SELECT c.id, c.user_id, c.text, c.tokens, c.created_at, u.username, u.avatar, u.avatar_img, u.og_tier FROM hop_comments c JOIN users u ON u.id = c.user_id WHERE ' + where + ' ORDER BY c.id DESC LIMIT ' + HOP_THREAD_MAX).all(...args).reverse()
+          .map(c => ({ id: c.id, text: c.text, tokens: parseTokens(c.tokens), created_at: c.created_at, username: c.username, avatar: c.avatar, avatar_img: c.avatar_img ? '/uploads/' + c.avatar_img : null, og: c.og_tier || 0, mine: !!(me && me.id === c.user_id) }));
+        if (isReact) {
+          const b = await readBody(req);
+          const kind = b.kind === 'rocket' ? 'rocket' : 'fire';
+          const had = db.prepare('SELECT 1 FROM hop_reactions WHERE call_id = ? AND hopper_id = ? AND user_id = ? AND kind = ?').get(hc.id, hopper.id, me.id, kind);
+          let earned = 0;
+          if (had) db.prepare('DELETE FROM hop_reactions WHERE call_id = ? AND hopper_id = ? AND user_id = ? AND kind = ?').run(hc.id, hopper.id, me.id, kind);
+          else {
+            db.prepare('INSERT INTO hop_reactions (call_id, hopper_id, user_id, kind, created_at) VALUES (?,?,?,?,?)').run(hc.id, hopper.id, me.id, kind, now());
+            if (hopper.id !== me.id) {   // none for reacting to your own Sent It
+              // the post rules: the giver once per (sender, kind), the sender once per reactor, so a toggle war pays nothing more
+              earned = awardPoints(me.id, 'react_give', PTS.react_give, 'hopreact:' + hc.id + ':' + hopper.id + ':' + me.id + ':' + kind);
+              if (!hopper.deleted_at && hopperInside) awardPoints(hopper.id, 'react_get', PTS.react_get, 'hopreactget:' + hc.id + ':' + hopper.id + ':' + me.id);
+            }
+            if (tellHopper) notifyOnce(hopper.id, kind === 'rocket' ? '🚀' : '🔥', '@' + me.username + ' reacted ' + (kind === 'rocket' ? '🚀' : '🔥') + ' to your Sent It' + onSym + '.', 'social', me.id, hopLink);
+            scanWriteAction(me.id, 'react');
+          }
+          const n = db.prepare('SELECT COUNT(*) n FROM hop_reactions WHERE call_id = ? AND hopper_id = ? AND kind = ?').get(hc.id, hopper.id, kind).n;
+          return send(res, 200, { kind, count: n, on: !had, pointsEarned: earned });
+        }
+        if (!write) {   // the thread, oldest first, less the authors the viewer muted
+          const rows = me
+            ? commentRows('c.call_id = ? AND c.hopper_id = ? AND c.user_id NOT IN (SELECT muted_id FROM mutes WHERE user_id = ?)', [hc.id, hopper.id, me.id])
+            : commentRows('c.call_id = ? AND c.hopper_id = ?', [hc.id, hopper.id]);
+          const count = commentCount();
+          return send(res, 200, { comments: rows, count, more: count > rows.length });   // more: older comments exist beyond the newest shown
+        }
+        const b = await readBody(req);
+        const rt = await resolveTokensInText(Array.from(String(b.text || '').trim()).slice(0, 300).join(''));   // 300 code points: never half an emoji
+        const text = rt.text;
+        if (!text) return bad(res, 'empty comment');
+        const ins = db.prepare('INSERT INTO hop_comments (call_id, hopper_id, user_id, text, tokens, created_at) VALUES (?,?,?,?,?,?)').run(hc.id, hopper.id, me.id, text, rt.tokens, now());
+        const cid = Number(ins.lastInsertRowid);
+        const cEarned = awardPoints(me.id, 'comment', PTS.comment, 'hopcomment:' + cid);   // the post rule: the comment kind, its daily cap and the shared social budget
+        if (tellHopper) { const cp = Array.from(text); notifyOnce(hopper.id, '💬', '@' + me.username + ' commented on your Sent It' + onSym + ': “' + cp.slice(0, 60).join('') + (cp.length > 60 ? '…' : '') + '”', 'social', me.id, hopLink); }
+        scanWriteAction(me.id, 'comment');
+        return send(res, 200, { ok: true, pointsEarned: cEarned, comment: commentRows('c.id = ?', [cid])[0] || null, count: commentCount() });
       }
       cm = /^\/api\/calls\/(\d+)\/hop$/.exec(p);
       if (cm && req.method === 'POST') {

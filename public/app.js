@@ -208,7 +208,8 @@
     e.preventDefault();
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
     const kind = b.dataset.report, id = Number(b.dataset.reportId);
-    const reason = window.prompt('Why are you reporting this ' + kind + '? (optional — a sentence helps the moderators)');
+    const what = b.dataset.reportWhat || kind;   // the reader's word for it ('hopcomment' is a comment under someone's Sent It)
+    const reason = window.prompt('Why are you reporting this ' + what + '? (optional — a sentence helps the moderators)');
     if (reason === null) return;
     b.disabled = true;
     try {

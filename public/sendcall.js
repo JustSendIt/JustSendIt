@@ -15,30 +15,79 @@
     const img = call.brand && call.brand.imageUrl;
     return img ? '<span class="sc-logo"><img class="np-logo-img" src="' + esc(img) + '" alt="" loading="lazy" decoding="async" width="40" height="40"></span>' : '<span class="sc-logo sc-logo-none" aria-hidden="true">📣</span>';
   }
-  // one line per sender: avatar + 💎level + @name · entry MC · $ put in · PNL in Xs · holding-for / sold
+  /* One block per sender. Line one is who they are (avatar · @name · 💎level · OG), given the whole width when it needs
+     it, so a name is never squeezed into a column a letter wide. Line two is what they did: the market cap they got
+     in at, what they put in, how far they are up or down, holding or sold, and when they Sent It — each figure kept
+     whole and the set wrapping as a group. Line three is what everyone else says about it: 🔥 and 🚀, and a comment
+     thread that opens under the row. */
   function senderAva(s) {
     return s.avatarImg
       ? window.avatarHTML(s.avatarImg, 'sc-sender-ava', 'width="20" height="20" loading="lazy"')
       : '<span class="sc-sender-ava sc-sender-ava-emoji" aria-hidden="true">' + esc(s.avatar || '🚀') + '</span>';
   }
   function shortDur(ms) { const s = Math.max(0, ms / 1000); if (s < 3600) return Math.max(1, Math.round(s / 60)) + 'm'; if (s < 86400) return Math.round(s / 3600) + 'h'; return Math.round(s / 86400) + 'd'; }
+  // a 🔥 or 🚀 on one sender's Sent It: the generic click sound is silenced, the server's answer plays its own
+  function senderReactHTML(s, kind) {
+    const on = (s.myReactions || []).indexOf(kind) >= 0, n = (s.reactions && s.reactions[kind]) || 0;
+    const emo = kind === 'rocket' ? '🚀' : '🔥';
+    return '<button class="sc-sbtn sc-sreact' + (on ? ' on' : '') + '" type="button" data-sreact="' + kind + '" data-sfx="none" aria-pressed="' + on + '"' +
+      ' data-tip="Reacts ' + emo + ' to @' + esc(s.username) + '’s Sent It; tap again to take it back">' +
+      '<span aria-hidden="true">' + emo + '</span> <span class="sc-sbtn-n">' + n + '</span><span class="sr-only"> ' + (kind === 'rocket' ? 'rocket' : 'fire') + ' reactions</span></button>';
+  }
   function sendersRowsHTML(list) {
     return (list || []).map(s => {
       // title= only ever reaches a mouse; the sr-only copy carries the same words to everyone else
       const dia = s.diamond >= 1 ? '<span class="sc-sender-diamond" title="Diamond Hand Lv ' + s.diamond + '">💎<span class="sr-only">Diamond Hand Lv </span>' + s.diamond + '</span>' : '';
-      const pnl = s.senderX != null ? '<span class="sc-sender-pnl ' + xClass(s.senderX) + '"><span class="sr-only">up </span>' + xFmt(s.senderX) + '</span>' : '';
+      const pnl = s.senderX != null ? '<span class="sc-sender-pnl ' + xClass(s.senderX) + '" title="How far the price has moved since they Sent It"><span class="sr-only">since they Sent It </span>' + xFmt(s.senderX) + '</span>' : '';
       const hold = s.holding
         ? '<span class="sc-sender-hold sc-holding" title="Still holding for ' + shortDur(s.holdMs) + '">💎 <span class="sr-only">still holding for </span>' + shortDur(s.holdMs) + '</span>'
         : (s.sold ? '<span class="sc-sender-hold sc-soldout" title="Sold out">💀 sold<span class="sr-only"> out</span></span>' : '<span class="sc-sender-hold sc-nobuy" title="Sent It — no on-chain buy found"><span aria-hidden="true">—</span><span class="sr-only">Sent It — no on-chain buy found</span></span>');
-      return '<li class="sc-sender' + (s.holding ? '' : ' sc-sender-out') + '">' +
-        '<a class="sc-sender-who" href="/u/' + encodeURIComponent(s.username) + '">' + senderAva(s) + dia + '<span class="sc-sender-name">@' + esc(s.username) + '</span>' + (window.ogBadge ? ogBadge(s.og, 'in-link') : '') + '</a>' +
+      // other people's amounts arrive rounded to two figures (the server's rule); the ≈ says so
+      const approx = s.rounded && s.sentUsd > 0;
+      const when = s.sentAt ? '<span class="sc-sender-when" title="Sent It ' + esc(new Date(s.sentAt).toLocaleString()) + '"><span class="sr-only">Sent It </span><span aria-hidden="true">🕒</span> ' + timeAgo(s.sentAt) + '</span>' : '';
+      return '<li class="sc-sender' + (s.holding ? '' : ' sc-sender-out') + '" data-sender="' + esc(s.username) + '">' +
+        '<div class="sc-sender-main">' +
+        '<a class="sc-sender-who" href="/u/' + encodeURIComponent(s.username) + '">' + senderAva(s) + '<span class="sc-sender-name">@' + esc(s.username) + '</span>' + dia + (window.ogBadge ? ogBadge(s.og, 'in-link') : '') + '</a>' +
         '<span class="sc-sender-stats">' +
-          '<span class="sc-sender-mc"><span class="sr-only">got in at </span>@ <b>' + (s.entryMc != null ? fmtUsd(s.entryMc) : '—') + '</b></span>' +
-          '<span class="sc-sender-sent"><span class="sr-only">put in </span>💸 <b>' + fmtUsd(s.sentUsd || 0) + '</b></span>' +
-          pnl + hold +
+          '<span class="sc-sender-mc" title="The market cap when they Sent It"><span class="sr-only">got in at </span>@ <b>' + (s.entryMc != null ? fmtUsd(s.entryMc) : '—') + '</b> MC</span>' +
+          '<span class="sc-sender-sent" title="' + (approx ? 'What they put in, rounded to two figures — only they see the exact amount' : 'What they put in') + '"><span class="sr-only">put in ' + (approx ? 'about ' : '') + '</span>💸 <b>' + (approx ? '<span aria-hidden="true">≈</span>' : '') + fmtUsd(s.sentUsd || 0) + '</b></span>' +
+          pnl + hold + when +
         '</span>' +
+        '</div>' +
+        '<div class="sc-sender-acts">' +
+          senderReactHTML(s, 'fire') + senderReactHTML(s, 'rocket') +
+          '<button class="sc-sbtn sc-scmt" type="button" data-scmt aria-expanded="false" data-tip="Opens the comments on @' + esc(s.username) + '’s Sent It, where you can add one">' +
+            '<span aria-hidden="true">💬</span> <span class="sc-sbtn-n">' + (s.comments || 0) + '</span><span class="sr-only"> comments</span></button>' +
+        '</div>' +
+        '<div class="sc-thread" hidden></div>' +
       '</li>';
     }).join('');
+  }
+  // one comment under a sender's Sent It (its author's OG badge sits outside the name link: never a link in a link)
+  function hopCommentHTML(c) {
+    const ava = c.avatar_img ? window.avatarHTML(c.avatar_img, 'sc-sender-ava', 'width="20" height="20" loading="lazy"') : '<span class="sc-sender-ava sc-sender-ava-emoji" aria-hidden="true">' + esc(c.avatar || '🚀') + '</span>';
+    // the ⚑ is a column of its own at the row's end: inside the text, a thumb-sized box would cover the line above it
+    return '<li class="sc-cmt" data-cid="' + Number(c.id) + '">' + ava + '<div class="sc-cmt-body">' +
+      '<a class="sc-cmt-who" href="/u/' + encodeURIComponent(c.username) + '">@' + esc(c.username) + '</a>' + (window.ogBadge ? ogBadge(c.og) : '') +
+      ' <span class="sc-cmt-text">' + (window.richText ? richText(c.text, c.tokens) : esc(c.text)) + '</span>' +
+      ' <span class="sc-cmt-when">' + timeAgo(c.created_at) + '</span>' +
+    '</div>' +
+    (c.mine ? '' : '<button class="sc-cmt-report" type="button" data-report="hopcomment" data-report-what="comment" data-report-id="' + Number(c.id) + '" aria-label="Report this comment" data-tip="Reports this comment to the moderators">⚑</button>') +
+    '</li>';
+  }
+  function threadHTML(name, comments, total) {
+    const signedIn = !!(window.AUTH && AUTH.user);
+    // the server sends the newest comments of a long thread; the note says the rest exist rather than letting the count disagree
+    return (total > comments.length ? '<p class="sc-thread-msg sc-thread-more">The newest ' + comments.length + ' of ' + total + ' comments.</p>' : '') +
+      '<ol class="sc-thread-list" aria-label="Comments on @' + esc(name) + '’s Sent It"' + (comments.length ? '' : ' hidden') + '>' + comments.map(hopCommentHTML).join('') + '</ol>' +
+      (comments.length ? '' : '<p class="sc-thread-msg">No comments yet.</p>') +
+      (signedIn
+        ? '<form class="sc-thread-form" data-scmt-form>' +
+            '<label class="sc-thread-lbl"><span class="sr-only">Comment on @' + esc(name) + '’s Sent It</span>' +
+            '<input class="sc-thread-input" name="text" maxlength="300" autocomplete="off" placeholder="Add a comment…"></label>' +
+            '<button class="sc-sbtn sc-thread-post" type="submit" data-tip="Posts your comment under @' + esc(name) + '’s Sent It, for everyone who can see this call">Post</button>' +
+          '</form>'
+        : '<button class="sc-sbtn" type="button" data-scmt-signin data-tip="Opens sign-in, so you can comment and react">Sign in to comment</button>');
   }
   // ---- Share on X: build a "Just Send It!" card image (token logo backdrop → Send-logo fallback) ----
   function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
@@ -128,8 +177,8 @@
         '<span class="sc-size-item sc-size-total">💰 Into $' + esc(call.symbol || '?') + ' <b class="sc-totalspend">' + fmtUsd(call.totalSpend || 0) + '</b></span>' +
       '</div>' +
       '<div class="sc-senders"' + (call.hops > 0 ? '' : ' hidden') + '>' +
-        '<div class="sc-senders-head">🚀 <b class="sc-senders-n">' + (call.hops || 0) + '</b> also Sent It <span class="sc-senders-sub">— top senders</span></div>' +
-        '<ol class="sc-senders-list" aria-label="Others who Sent It, ranked by how much they put in">' + sendersRowsHTML((call.senders || []).slice(0, 3)) + '</ol>' +
+        '<div class="sc-senders-head">🚀 <b class="sc-senders-n">' + (call.hops || 0) + '</b> also Sent It <span class="sc-senders-sub">— still holding first</span></div>' +
+        '<ol class="sc-senders-list" aria-label="Others who Sent It: those still holding first, then by what they put in, how long they have held and how far they are up">' + sendersRowsHTML((call.senders || []).slice(0, 3)) + '</ol>' +
         (call.hops > 3 ? '<button class="sc-senders-toggle" type="button" data-tip="Lists everyone who Sent It on this call" data-senders-toggle="' + call.id + '" aria-expanded="false">▾ Show all ' + call.hops + '</button>' : '') +
       '</div>' +
       '<div class="sc-hold"' + (call.holdEarned > 0 ? '' : ' hidden') + '>💎 <b class="sc-holdn">' + (call.holdEarned || 0).toLocaleString('en-US') + '</b> diamond-hands bonus' + (sq ? ' · paid to the squad' : '') + (call.stale ? '' : ' · grows while it stays in profit') + '</div>' +
@@ -167,7 +216,32 @@
     '</div>';
   }
   // update a live widget's numbers in place (no re-render, so an open explainer / focus stays put)
-  function updateWidget(el, call) {
+  // an open thread's "The newest N of M" note, kept true as comments arrive (and gone once everything is shown)
+  function syncMoreNote(row, total) {
+    const note = row.querySelector('.sc-thread-more'); if (!note || total == null) return;
+    const shown = row.querySelectorAll('.sc-thread .sc-cmt').length;
+    if (total > shown) note.textContent = 'The newest ' + shown + ' of ' + total + ' comments.'; else note.remove();
+  }
+  /* A sender row brought up to date in place: the figures, the counts and which reactions are yours. Nothing focusable is
+     replaced, so a focused control, an open thread and a half-typed comment all stay where they are. */
+  function patchSenderRow(li, s) {
+    const tpl = document.createElement('template'); tpl.innerHTML = sendersRowsHTML([s]);
+    const fresh = tpl.content.firstElementChild; if (!fresh) return;
+    li.classList.toggle('sc-sender-out', !s.holding);
+    for (const sel of ['.sc-sender-who', '.sc-sender-stats']) {
+      const a = li.querySelector(sel), b = fresh.querySelector(sel);
+      if (a && b && a.innerHTML !== b.innerHTML && !a.contains(document.activeElement)) a.innerHTML = b.innerHTML;
+    }
+    li.querySelectorAll('[data-sreact]').forEach((b) => {
+      if (b.dataset.busy) return;   // a tap on its way: its own answer sets it
+      const k = b.dataset.sreact, on = (s.myReactions || []).indexOf(k) >= 0;
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+      const n = b.querySelector('.sc-sbtn-n'); if (n) n.textContent = (s.reactions && s.reactions[k]) || 0;
+    });
+    const cn = li.querySelector('[data-scmt] .sc-sbtn-n'); if (cn) cn.textContent = s.comments || 0;
+    syncMoreNote(li, s.comments || 0);
+  }
+  function updateWidget(el, call, askedAt) {
     const g = call.grade || {};
     el.className = 'sc-widget sc-g' + (g.g || 'E') + (el.classList.contains('sc-expanded') ? ' sc-expanded' : '') + (call.rugged ? ' sc-is-rugged' : ''); // preserve the open/closed toggle state through a live refresh
     if (call.rugged && !el.querySelector('.sc-rugged')) el.insertAdjacentHTML('afterbegin', '<div class="sc-rugged" role="alert">💀 RUGGED! <span>Liquidity was pulled — DO NOT BUY.</span></div>'); // a call that just rugged mid-refresh
@@ -199,7 +273,17 @@
       sw.hidden = !(call.hops > 0);
       const sn = sw.querySelector('.sc-senders-n'); if (sn) sn.textContent = call.hops || 0;
       const stog = sw.querySelector('[data-senders-toggle]'), slist = sw.querySelector('.sc-senders-list');
-      if (slist && (!stog || stog.getAttribute('aria-expanded') !== 'true')) slist.innerHTML = sendersRowsHTML((call.senders || []).slice(0, 3));
+      /* A payload asked for before this reader's last reaction or comment was built without it: drawing it would put the
+         old state back. The same senders in the same order are brought up to date in place; a new order redraws the rows,
+         but not under an open thread, a tap on its way or a focused control (that would close the thread, drop a
+         half-typed comment, lose the focus) — the next tick catches up. */
+      const stale = askedAt && Number(sw.dataset.localAt || 0) > askedAt;
+      if (slist && !stale && (!stog || stog.getAttribute('aria-expanded') !== 'true')) {
+        const top = (call.senders || []).slice(0, 3), rows = [...slist.querySelectorAll('.sc-sender')];
+        if (rows.length === top.length && top.every((s, i) => rows[i].dataset.sender === s.username)) top.forEach((s, i) => patchSenderRow(rows[i], s));
+        else if (!slist.querySelector('.sc-thread:not([hidden]), [data-busy]') && !slist.contains(document.activeElement)) slist.innerHTML = sendersRowsHTML(top);
+        else top.forEach((s) => { const li = rows.find((r) => r.dataset.sender === s.username); if (li) patchSenderRow(li, s); });   // the order waits; the numbers do not
+      }
     }
   }
 
@@ -249,9 +333,143 @@
     } catch { detail.innerHTML = '<p class="sc-detail-msg">Couldn’t load the full detail — collapse and open it again to retry.</p>'; }
     finally { delete detail.dataset.loading; }
   }
+  /* ---- reactions and comments on one sender's Sent It ---- */
+  const senderPath = (w, row) => '/api/calls/' + encodeURIComponent(w.dataset.call) + '/senders/' + encodeURIComponent(row.dataset.sender);
+  // the row for a sender in this card now: the live refresh and Show all redraw rows, so a tap's answer may land after its row was replaced
+  const rowIn = (w, name) => [...w.querySelectorAll('.sc-sender')].find((li) => li.dataset.sender === name) || null;
+  // a reaction or comment of this reader's stamps the box; a live payload asked for before the stamp is not drawn (updateWidget)
+  const stampLocal = (w) => { const sw = w.querySelector('.sc-senders'); if (sw) sw.dataset.localAt = String(Date.now()); };
+  // the expanded list keeps the rows it fetched (collapsing re-draws the top 3 from them), so a change is written there too
+  function rememberSender(w, name, fn) {
+    const wrap = w.querySelector('.sc-senders'), s = wrap && (wrap._all || []).find((x) => x.username === name);
+    if (s) fn(s);
+  }
+  function setCommentCount(w, name, n) {
+    const row = rowIn(w, name), c = row && row.querySelector('.sc-scmt .sc-sbtn-n');
+    if (c && n != null) c.textContent = n;
+    if (row) syncMoreNote(row, n);
+    rememberSender(w, name, (s) => { s.comments = n; });
+  }
+  /* A write goes through the site's shared api() (auth.js) where the page has it: a refusal at the holder-proof gate
+     then opens the wallet check, the way every other write does, instead of a toast nobody can act on. */
+  async function senderWrite(path, body) {
+    if (window.api) return window.api(path, { method: 'POST', body });
+    const r = await fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error || 'request failed (' + r.status + ')'); e.needsProof = !!j.needsProof; throw e; }
+    return j;
+  }
+  function writeRefused(err, fallback) {
+    if (err && err.needsProof) return;   // api() has opened the holder check
+    if (window.sendToast) sendToast('⚠️ ' + ((err && err.message) || fallback));
+  }
+  async function senderReact(btn) {
+    if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
+    const row = btn.closest('.sc-sender'), w = btn.closest('.sc-widget');
+    if (!row || !w || btn.dataset.busy) return;
+    const kind = btn.dataset.sreact, name = row.dataset.sender;
+    btn.dataset.busy = '1';
+    try {
+      const j = await senderWrite(senderPath(w, row) + '/react', { kind });
+      stampLocal(w);
+      const live = rowIn(w, name), b = (live && live.querySelector('[data-sreact="' + kind + '"]')) || btn;
+      b.classList.toggle('on', !!j.on); b.setAttribute('aria-pressed', String(!!j.on));
+      const n = b.querySelector('.sc-sbtn-n'); if (n) n.textContent = j.count;
+      rememberSender(w, name, (s) => {
+        s.reactions = Object.assign({ fire: 0, rocket: 0 }, s.reactions, { [kind]: j.count });
+        s.myReactions = (s.myReactions || []).filter((k) => k !== kind).concat(j.on ? [kind] : []);
+      });
+      if (window.SFX) SFX.play(j.on ? 'like' : 'unlike');   // the server counted it (or took it back)
+      if (j.on && j.pointsEarned && window.showPoints) { const rc = b.getBoundingClientRect(); showPoints(j.pointsEarned, rc.left, rc.top); }
+    } catch (err) { writeRefused(err, 'Could not react — try again'); }
+    finally { delete btn.dataset.busy; }
+  }
+  async function loadThread(w, row, th) {
+    if (th.dataset.loading) return;
+    th.dataset.loading = '1';
+    th.innerHTML = '<p class="sc-thread-msg">Loading the comments…</p>';
+    try {
+      const r = await fetch(senderPath(w, row) + '/comments', { credentials: 'same-origin' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'http ' + r.status);
+      th.innerHTML = threadHTML(row.dataset.sender, j.comments || [], j.count);
+      setCommentCount(w, row.dataset.sender, j.count);
+    } catch { th.innerHTML = '<p class="sc-thread-msg">Couldn’t load the comments — close them and open them again to retry.</p>'; }
+    finally { delete th.dataset.loading; }
+  }
+  function openThread(w, row, btn, th) {
+    btn.setAttribute('aria-expanded', 'true');
+    th.hidden = false;
+    return loadThread(w, row, th);
+  }
+  function toggleThread(btn) {
+    const row = btn.closest('.sc-sender'), w = btn.closest('.sc-widget'), th = row && row.querySelector('.sc-thread');
+    if (!th || !w) return;
+    // aria-expanded flips before the read, so the generic click sound says open or close
+    if (btn.getAttribute('aria-expanded') === 'true') { btn.setAttribute('aria-expanded', 'false'); th.hidden = true; }
+    else openThread(w, row, btn, th);
+  }
+  /* Show all / Show top 3 draws the rows again. An open thread is opened again on the new row and a half-typed comment
+     put back, so switching the list never throws away what someone was writing. */
+  function redrawRows(list, senders) {
+    const w = list.closest('.sc-widget');
+    /* A thread whose comment is still posting is not reopened here: the post reopens it when the server has answered
+       (postHopComment), so the reopened thread reads the comment, and the words are never put back to be posted twice. */
+    const keep = [...list.querySelectorAll('.sc-sender')].filter((li) => { const th = li.querySelector('.sc-thread'); return th && !th.hidden && !th.querySelector('[data-scmt-form][data-busy]'); })
+      .map((li) => ({ name: li.dataset.sender, draft: (li.querySelector('.sc-thread-input') || {}).value || '' }));
+    list.innerHTML = sendersRowsHTML(senders);
+    for (const k of keep) {
+      const li = rowIn(w, k.name); if (!li) continue;   // not in the shorter list
+      const btn = li.querySelector('[data-scmt]'), th = li.querySelector('.sc-thread');
+      if (btn && th) openThread(w, li, btn, th).then(() => { const inp = th.querySelector('.sc-thread-input'); if (inp && k.draft && !inp.value) inp.value = k.draft; });
+    }
+  }
+  async function postHopComment(form) {
+    if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
+    const row = form.closest('.sc-sender'), w = form.closest('.sc-widget'), th = form.closest('.sc-thread');
+    const input = form.querySelector('.sc-thread-input'), btn = form.querySelector('button[type="submit"]');
+    if (!row || !w || !th || !input || form.dataset.busy) return;
+    const text = input.value.trim(), name = row.dataset.sender;
+    if (!text) { input.focus(); return; }
+    form.dataset.busy = '1'; if (btn) btn.disabled = true;
+    let j = null;
+    try { j = await senderWrite(senderPath(w, row) + '/comments', { text }); }
+    catch (err) { writeRefused(err, 'Could not post the comment — try again'); }
+    finally { delete form.dataset.busy; if (btn) btn.disabled = false; }
+    /* The thread now: this one, or — when Show all / Show top 3 redrew the rows while the post was on its way — the same
+       sender's new row, opened here once the server has answered, so its read includes the new comment. A post that
+       failed gives its words back to the new box rather than losing them. */
+    let liveTh = th;
+    if (!th.isConnected) {
+      const live = rowIn(w, name), btn2 = live && live.querySelector('[data-scmt]');
+      liveTh = live && live.querySelector('.sc-thread');
+      if (liveTh && btn2 && liveTh.hidden) await openThread(w, live, btn2, liveTh);
+      const inp2 = liveTh && liveTh.querySelector('.sc-thread-input');
+      if (inp2 && !j && !inp2.value) inp2.value = text;
+    }
+    if (!j) return;
+    stampLocal(w);
+    input.value = '';
+    if (liveTh && liveTh.isConnected) {
+      const list = liveTh.querySelector('.sc-thread-list'), empty = liveTh.querySelector('.sc-thread-list[hidden] ~ .sc-thread-msg');
+      if (list && j.comment && !list.querySelector('[data-cid="' + Number(j.comment.id) + '"]')) list.insertAdjacentHTML('beforeend', hopCommentHTML(j.comment));
+      if (list && list.children.length) list.hidden = false;
+      if (empty && list && list.children.length) empty.remove();
+    }
+    setCommentCount(w, name, j.count);
+    if (window.SFX) SFX.play('send');   // the comment went out
+    if (window.announce) announce('Comment posted');
+    if (j.pointsEarned && window.showPoints) showPoints(j.pointsEarned);
+  }
   // delegated actions inside a root (expand/collapse, hop, track caller wallet, toggle explainer). Call once per container.
   function wire(root) {
     if (!root || root._scWired) return; root._scWired = true;
+    root.addEventListener('submit', (e) => {
+      const form = e.target.closest && e.target.closest('[data-scmt-form]');
+      if (!form || !root.contains(form)) return;
+      e.preventDefault();
+      postHopComment(form);
+    });
     root.addEventListener('click', async (e) => {
       const tog = e.target.closest('[data-sctoggle]');
       if (tog) { e.preventDefault(); toggleDetail(tog.closest('.sc-widget')); return; }
@@ -259,12 +477,17 @@
       if (info) { const w = info.closest('.sc-widget'); const ex = w.querySelector('.sc-explain'); const open = ex.hidden; ex.hidden = !open; info.setAttribute('aria-expanded', String(open)); return; }
       const share = e.target.closest('[data-share]');
       if (share) { e.preventDefault(); shareCall(share); return; }
+      const sreact = e.target.closest('[data-sreact]');
+      if (sreact) { e.preventDefault(); senderReact(sreact); return; }
+      const scmt = e.target.closest('[data-scmt]');
+      if (scmt) { e.preventDefault(); toggleThread(scmt); return; }
+      if (e.target.closest('[data-scmt-signin]')) { e.preventDefault(); if (window.AUTH) AUTH.open(); return; }
       const stog = e.target.closest('[data-senders-toggle]');
       if (stog) {
         e.preventDefault();
         const wrap = stog.closest('.sc-senders'), list = wrap.querySelector('.sc-senders-list');
         if (stog.getAttribute('aria-expanded') === 'true') { // collapse → back to top 3
-          list.innerHTML = sendersRowsHTML((wrap._all || []).slice(0, 3));
+          redrawRows(list, (wrap._all || []).slice(0, 3));
           stog.setAttribute('aria-expanded', 'false'); stog.innerHTML = '▾ Show all ' + ((wrap._all || []).length || stog.dataset.n || '');
           return;
         }
@@ -275,7 +498,7 @@
           const r = await fetch('/api/calls/' + encodeURIComponent(stog.dataset.sendersToggle) + '/senders', { credentials: 'same-origin' });
           const j = await r.json();
           wrap._all = (j && j.senders) || [];
-          list.innerHTML = sendersRowsHTML(wrap._all);
+          redrawRows(list, wrap._all);
           stog.setAttribute('aria-expanded', 'true'); stog.innerHTML = '▴ Show top 3';
         } catch { stog.innerHTML = label; }
         finally { delete stog.dataset.loading; }
@@ -318,9 +541,10 @@
         } catch { if (window.sendToast) sendToast('Could not track that wallet'); track.disabled = false; }
         return;
       }
-      // click anywhere on the card CHROME (not a control, not inside the open detail) toggles the detail
+      // click anywhere on the card CHROME (not a control, not inside the open detail) toggles the detail; the senders box
+      // is its own conversation (rows, reactions, comment threads), so a tap in it never opens the token
       const card = e.target.closest('.sc-widget');
-      if (card && !e.target.closest('.sc-actions, .sc-detail, .sc-explain, a, button')) toggleDetail(card);
+      if (card && !e.target.closest('.sc-actions, .sc-detail, .sc-explain, .sc-senders, a, button, input, label, form')) toggleDetail(card);
     });
   }
 
@@ -340,13 +564,16 @@
         return ids.length ? ids : null;
       },
       async fetch(ids) {
+        const askedAt = Date.now();   // a reaction made after this moment is newer than anything in the answer
         const r = await fetch('/api/calls/live?ids=' + encodeURIComponent(ids.join(',')), { credentials: 'same-origin', headers: { Accept: 'application/json' } });
         if (!r.ok) throw new Error('calls live http ' + r.status);
-        return r.json();
+        const j = await r.json();
+        if (j && typeof j === 'object') j._askedAt = askedAt;
+        return j;
       },
       apply(j) {
         (j.calls || []).forEach(call => {
-          document.querySelectorAll('.sc-widget[data-call="' + call.id + '"]').forEach(w => updateWidget(w, call));
+          document.querySelectorAll('.sc-widget[data-call="' + call.id + '"]').forEach(w => updateWidget(w, call, j._askedAt));
         });
       },
     });
