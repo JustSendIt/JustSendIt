@@ -73,6 +73,13 @@ try {
   // 4. the page
   check('the page watches every flight from takeoff (a rejoined one too), and the first answer — the watch or a cash-out — wins',
     /setMode\('flying'\);\n      watchFlight\(\);/.test(AJ) && /fetch\('\/api\/arcade\/watch\?roundId=' \+ encodeURIComponent\(id\)/.test(AJ) && /if \(S\.mode !== 'flying'\) \{ S\.busy = false; return; \}/.test(AJ) && /if \(j\.busted\) bust\(Number\(j\.crashX\) \|\| 1, elapsedSec\(\), curX\(\), document\.activeElement === btn, true\);/.test(AJ));
+  // the terms (owner, 2026-10-14: "add the slot machine to the terms and service")
+  const TERMS = readFileSync(path.join(ROOT, 'public', 'terms.html'), 'utf8');
+  check('the terms cover the slot machine beside Rocket Run: in scope, nothing at stake and not gambling, no legal claim — and the version moved',
+    /Rocket Run, Just Spin It \(the Arcade's slot machine\), New Pairs Radar/.test(TERMS) && /<h3>31\. Rocket Run and Just Spin It have nothing at stake and are not gambling<\/h3>/.test(TERMS)
+    && /<h3>45\. Send Power, Rocket Run and Just Spin It create no legal claim<\/h3>/.test(TERMS) && /Version 2026-10-14 ·/.test(TERMS) && /const TOS_VERSION = '2026-10-14';/.test(SRC));
+  check('  ...and say only what the machine does: free for anyone, nothing staked, nothing of value paid, a score kept in the browser, every stop equally likely',
+    /Anyone can play it, signed in or not, as often as they like\./.test(TERMS) && /It pays nothing of value — no Send Power, no boost, no prize, no tokens, no money\./.test(TERMS) && /is never sent to us/.test(TERMS) && /every stop equally likely/.test(TERMS));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);
