@@ -57,17 +57,18 @@ function renderAvatarPicker() {
   }
   roveRadios(zone);
 }
-function renderSwatches(zoneId, colors, current, onPick) {
+function renderSwatches(zoneId, colors, current, onPick, mine) {
   const zone = document.getElementById(zoneId);
   zone.innerHTML = '';
   for (const c of colors) {
+    const own = !!(mine && c && mine.includes(c));
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'swatch';
+    b.className = 'swatch' + (own ? ' is-mine' : '');
     b.style.background = c || 'linear-gradient(135deg, #a8ce00, #ffb340)';
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(c === current));
-    b.setAttribute('aria-label', c ? 'color ' + c : 'default');
+    b.setAttribute('aria-label', c ? (own ? 'your colour ' : 'color ') + c : 'default');
     b.title = c || 'default';
     /* The colour is the swatch — a description that reads it back as "#c6f000" prints a system value at
        somebody looking straight at the thing it names. "this colour" is what a person would say. */
@@ -77,14 +78,100 @@ function renderSwatches(zoneId, colors, current, onPick) {
         ? (c ? 'Re-themes the whole site in this colour, just for you' : 'Puts the site colours back to classic green')
         : (c ? 'Uses this colour as the accent on your public wall' : 'Puts your wall accent back to the default'));
     b.addEventListener('click', () => {
-      onPick(c);
       const i = Array.prototype.indexOf.call(zone.children, b);   // same as the avatar picker: refocus the rebuilt node
-      renderSwatches(zoneId, colors, c, onPick);
+      if (onPick(c) !== true) renderSwatches(zoneId, colors, c, onPick, mine);   // true: the picker redrew itself
       const nb = zone.children[i]; if (nb) nb.focus();
     });
     zone.appendChild(b);
   }
   roveRadios(zone);
+}
+
+/* ---------- your own colours (owner, 2026-10-14: "For my wall style accent color and background tint, allow users to enter in
+   a hex code in addition from picking from preset colors, when a user puts in a hex code add that color to the list of colors
+   to pick from in the future to all places where users can pick from pre-picked colors") ----------
+   Each of the three pickers (wall accent, wall background tint, site colour) gets a hex box under its swatches. A colour typed
+   there is used, and kept in "your colours" — site_prefs.customColors on the account, so every device sees it — which every
+   picker shows after its presets (newest first, the last twelve). The wall's two colours are held to the readability rule the
+   server enforces too: an accent is text (your name on your wall, your @handle on every card), so it must reach 4.5:1 against
+   your wall's background and the site's card colours; a background sits behind the wall's light text, so it must keep that text
+   at 7:1 and the dimmer text at 4.5:1. A colour that misses is nudged to the nearest one that passes, and the box says so. */
+const MY_COLORS_MAX = 12;
+const WALL_TEXT = '#f2f6ec', WALL_TEXT_DIM = '#b6beac', WALL_SURFACES = ['#050604', '#0c0e09', '#14170f'];
+function normHex(v) {   // "#7ee8fa", "7EE8FA", "#7ef" → "#7ee8fa"; anything else → null
+  let x = String(v || '').trim().toLowerCase().replace(/^#/, '');
+  if (/^[0-9a-f]{3}$/.test(x)) x = x.split('').map((ch) => ch + ch).join('');
+  return /^[0-9a-f]{6}$/.test(x) ? '#' + x : null;
+}
+function myColors() { const l = (window.SITE_PREFS || {}).customColors; return (Array.isArray(l) ? l : []).filter((x) => /^#[0-9a-f]{6}$/.test(x)).slice(0, MY_COLORS_MAX); }
+function keepColor(c) { window.applySitePrefs({ customColors: [c].concat(myColors().filter((x) => x !== c)).slice(0, MY_COLORS_MAX) }, true); }
+function readableAccent(c) { const CM = window.ColorMath; return CM && c ? CM.fixFg(c, [chosenBg || WALL_SURFACES[0], WALL_SURFACES[1], WALL_SURFACES[2]], 4.5) : c; }
+function readableBg(c) {
+  const CM = window.ColorMath; if (!CM || !c) return c;
+  const ok = (x) => CM.ratio(WALL_TEXT, x) >= 7 && CM.ratio(WALL_TEXT_DIM, x) >= 4.5;
+  let x = c;
+  for (let i = 0; i < 80 && !ok(x); i++) { const n = parseInt(x.slice(1), 16); x = '#' + [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(v * 0.94).toString(16).padStart(2, '0')).join(''); }
+  return x;
+}
+const PICKERS = {
+  'accent-swatches': { presets: () => ACCENTS, current: () => chosenAccent, label: 'wall accent', fit: readableAccent,
+    pick: (c) => { chosenAccent = c; saveWallColor({ accent: c }); } },
+  'bg-swatches': { presets: () => BGS, current: () => chosenBg, label: 'wall background tint', fit: readableBg,
+    pick: (c) => { chosenBg = c; saveWallColor({ wall_bg: c }); } },
+  'site-accent-swatches': { presets: () => SITE_ACCENTS, label: 'site colour', fit: (c) => c,   // the site theme fits every colour for readability itself (themeFrom)
+    current: () => { const p = window.SITE_PREFS || {}; return (p.colors && p.colors.accent) || p.siteAccent || ''; },
+    pick: (c) => {
+      window.applySitePrefs({ siteAccent: c, colors: { accent: c || undefined } }, true);
+      initThemeEditor();
+      if (window.SFX) SFX.play('select');
+      sendToast(c ? 'Site re-themed for you 🖌️' : 'Back to classic green 💚');
+    } },
+};
+function pickerNote(id, text, err) { const m = document.getElementById('hex-' + id + '-msg'); if (m) { m.textContent = text || ''; m.classList.toggle('is-err', !!err); } }
+function drawPicker(id) {
+  const P = PICKERS[id]; if (!P || !document.getElementById(id)) return;
+  const presets = P.presets(), cur = P.current();
+  const mine = myColors().filter((x) => !presets.includes(x));
+  const list = presets.concat(mine);
+  if (cur && !list.includes(cur)) { list.push(cur); mine.push(cur); }   // a colour in use always shows, checked
+  renderSwatches(id, list, cur, (c) => {
+    const used = P.fit(c);
+    P.pick(used);
+    drawPicker(id);
+    pickerNote(id, used !== c ? 'Adjusted to ' + used + ' so the text on your wall stays readable.' : '');
+    if (id === 'bg-swatches' && chosenAccent && readableAccent(chosenAccent) !== chosenAccent) pickerNote(id, 'Your accent is hard to read on this background — pick a lighter accent, or type one in.', true);
+    return true;
+  }, mine);
+  hexRow(id);
+}
+function drawPickers() { Object.keys(PICKERS).forEach(drawPicker); }
+function hexRow(id) {
+  const zone = document.getElementById(id), P = PICKERS[id];
+  if (!zone || (zone.nextElementSibling && zone.nextElementSibling.classList.contains('hex-row'))) return;
+  const inId = 'hex-' + id;
+  const row = document.createElement('div');
+  row.className = 'hex-row';
+  row.innerHTML = '<label class="hex-label" for="' + inId + '">Or type a hex code</label>' +
+    '<span class="hex-field"><span class="hex-chip is-empty" aria-hidden="true"></span>' +
+    '<input class="hex-input" id="' + inId + '" type="text" maxlength="7" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="#7ee8fa" aria-describedby="' + inId + '-msg" data-tip="Type a colour as # and six characters (0–9, a–f), then Use or Enter">' +
+    '<button class="btn btn-sm hex-use" type="button" data-tip="Uses this colour for your ' + esc(P.label) + ' and keeps it in your colours, in every colour picker here">Use</button></span>' +
+    '<p class="hex-msg" id="' + inId + '-msg" role="status" aria-live="polite"></p>';
+  zone.after(row);
+  const input = row.querySelector('input'), chip = row.querySelector('.hex-chip');
+  input.addEventListener('input', () => { const c = normHex(input.value); chip.style.background = c || ''; chip.classList.toggle('is-empty', !c); });
+  const use = () => {
+    const c = normHex(input.value);
+    if (!c) { pickerNote(id, 'That is not a hex colour: type # and six characters 0–9 or a–f, like #7ee8fa.', true); if (window.SFX) SFX.play('error'); input.focus(); return; }
+    const used = P.fit(c);
+    keepColor(used);
+    P.pick(used);
+    drawPickers();
+    input.value = ''; chip.style.background = ''; chip.classList.add('is-empty');
+    pickerNote(id, (used !== c ? 'Adjusted to ' + used + ' so the text on your wall stays readable. ' : '') + used + ' is now in your colours, in every colour picker here.');
+    if (window.SFX) SFX.play('success');
+  };
+  row.querySelector('.hex-use').addEventListener('click', use);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); use(); } });
 }
 
 /* ---------- wall style ---------- */
@@ -218,6 +305,13 @@ async function saveProfile() {
       instagram: document.getElementById('pf-instagram').value.trim(),
     }});
     AUTH.user = { ...AUTH.user, ...j.user, auto_named: false };
+    // what was just saved is what "untouched" means now (the answer may leave a field out: then it is what was sent)
+    for (const [id, k] of [['pf-username', 'username'], ['pf-bio', 'bio'], ['pf-twitter', 'twitter'], ['pf-instagram', 'instagram']]) {
+      const el = document.getElementById(id); if (!el) continue;
+      const v = j.user[k] != null ? String(j.user[k]) : el.value;
+      el.value = v; el.dataset.filled = v;
+    }
+    avatarFilled = j.user.avatar || chosenAvatar;
     document.getElementById('pf-username-show').textContent = j.user.username;
     setWallLinks(j.user.username);
     document.getElementById('claim-banner').hidden = true;
@@ -284,6 +378,25 @@ async function toggleSudo() {
   renderSudo();
 }
 document.addEventListener('auth:sudo', renderSudo);
+/* Owner, 2026-10-14: "When users are changing their info in settings do not time them out." While the unlock is open and the
+   member is working in Settings (typing or clicking there), ask the server to keep it open — at most every four minutes. The
+   server moves the end to 30 minutes from now, never more than four hours after the proof that opened it (keepSudo), and a
+   closed unlock stays closed. Idle for 30 minutes, it ends as before. */
+let sudoKeptAt = 0;
+function keepSudoOpen() {
+  const until = AUTH.user && AUTH.user.sudoUntil;
+  if (!until || until <= Date.now() || Date.now() - sudoKeptAt < 4 * 60e3) return;
+  sudoKeptAt = Date.now();
+  api('/api/auth/verify/keep', { method: 'POST' }).then((j) => {
+    if (!AUTH.user || !j || !j.ok) return;
+    AUTH.user.sudoUntil = Date.now() + (j.sudoLeftMs || 0) - 1500;
+    renderSudo();
+  }).catch(() => {});
+}
+['input', 'keydown', 'pointerdown'].forEach((ev) => document.addEventListener(ev, (e) => {
+  const p = document.getElementById('dpanel-settings');
+  if (e.isTrusted && p && !p.hidden && p.contains(e.target)) keepSudoOpen();
+}, true));
 
 /* Everything about how you get into this account lives in one place — wallets, sign-in methods and the
    second factor — and that place is a <details> that opens shut. A closed panel labelled only "Security"
@@ -557,7 +670,8 @@ async function loadMe() {
     securitySummary(me);
     document.getElementById('twofa-off').hidden = on;
     document.getElementById('twofa-on').hidden = !on;
-    document.getElementById('totp-setup').hidden = true;
+    if (on || !loadMe.ran) document.getElementById('totp-setup').hidden = true;   // a refresh mid-setup leaves the QR code and the code box where they are
+    loadMe.ran = true;
     if (on) document.getElementById('twofa-kind').textContent = ({ totp: 'authenticator app', wallet: 'wallet signature', password: 'account password' })[me.twofa] || me.twofa;
     document.getElementById('wallet-2fa-btn').disabled = !me.wallets.length;
     if (!me.wallets.length) document.getElementById('wallet-2fa-btn').title = 'Link a wallet first';
@@ -647,13 +761,7 @@ function initThemeEditor() {
 
 /* ---------- site prefs ---------- */
 function initSitePrefs() {
-  const p = window.SITE_PREFS || {};
-  renderSwatches('site-accent-swatches', SITE_ACCENTS, (p.colors && p.colors.accent) || p.siteAccent || '', c => {
-    applySitePrefs({ siteAccent: c, colors: { accent: c || undefined } }, true);
-    initThemeEditor();
-    if (window.SFX) SFX.play('select');
-    sendToast(c ? 'Site re-themed for you 🖌️' : 'Back to classic green 💚');
-  });
+  drawPicker('site-accent-swatches');
   initThemeEditor();
   const switches = [
     ['pref-confetti', 'confetti'],
@@ -663,6 +771,8 @@ function initSitePrefs() {
   for (const [id, key] of switches) {
     const el = document.getElementById(id);
     el.setAttribute('aria-checked', String((window.SITE_PREFS || {})[key] !== false));
+    if (el.dataset.wired) continue;   // this runs on every account refresh: a second listener would flip the switch back
+    el.dataset.wired = '1';
     el.addEventListener('click', () => {
       const cur = el.getAttribute('aria-checked') === 'true';
       el.setAttribute('aria-checked', String(!cur));
@@ -795,11 +905,23 @@ try {
 })();
 
 /* ---------- boot ---------- */
+/* This runs on EVERY account refresh, not only the first (a picture saved, a wallet linked, the unlock ending), so it must never
+   undo what the member is in the middle of (owner, 2026-10-14: "do not time them out and do not take them to any other page ...
+   mid them changing their info"). A field is filled from the account only while it still holds what was filled last time; one
+   the member has typed into keeps their typing until they save it. */
+let avatarFilled = null;
+function fillKeep(id, v) {
+  const el = document.getElementById(id); if (!el) return;
+  const typed = el.dataset.filled !== undefined && el.value !== el.dataset.filled;
+  if (!typed) el.value = v;
+  el.dataset.filled = v;
+}
 window.onAuthReady = function (user) {
   document.getElementById('signedout').hidden = !!user;
   document.getElementById('signedin').hidden = !user;
   if (!user) return;
-  chosenAvatar = user.avatar || '🚀';
+  if (avatarFilled === null || chosenAvatar === avatarFilled) chosenAvatar = user.avatar || '🚀';   // an avatar picked but not yet saved stays picked
+  avatarFilled = user.avatar || '🚀';
   chosenAccent = (user.theme && user.theme.accent) || '';
   chosenBg = (user.theme && user.theme.wall_bg) || '';
   myTheme = user.theme || {};
@@ -808,18 +930,18 @@ window.onAuthReady = function (user) {
   pfShow.textContent = user.username;
   const oldOg = pfShow.parentElement.querySelector('.og-badge'); if (oldOg) oldOg.remove();
   if (user.og && window.ogBadge) pfShow.insertAdjacentHTML('afterend', ogBadge(user.og)); // your OG badge on your own dashboard header
-  document.getElementById('pf-username').value = user.username;
-  document.getElementById('pf-bio').value = user.bio || '';
-  document.getElementById('pf-twitter').value = user.twitter || '';
-  document.getElementById('pf-instagram').value = user.instagram || '';
+  fillKeep('pf-username', user.username);
+  fillKeep('pf-bio', user.bio || '');
+  fillKeep('pf-twitter', user.twitter || '');
+  fillKeep('pf-instagram', user.instagram || '');
   setWallLinks(user.username);
   if (!user.auto_named) { try { sessionStorage.removeItem('jsi:after-claim'); } catch {} } // a stale stash must never bounce a later, unrelated save
   const claiming = user.auto_named || location.hash === '#claim';
   document.getElementById('claim-banner').hidden = !claiming;
   if (claiming) document.getElementById('sec-account').open = true;
   renderAvatarPicker();
-  renderSwatches('accent-swatches', ACCENTS, chosenAccent, c => { chosenAccent = c; saveWallColor({ accent: c }); });
-  renderSwatches('bg-swatches', BGS, chosenBg, c => { chosenBg = c; saveWallColor({ wall_bg: c }); });
+  drawPicker('accent-swatches');
+  drawPicker('bg-swatches');
   renderImgSlot('avatar', myTheme.avatar_img);
   renderImgSlot('header', myTheme.header_img);
   renderImgSlot('background', myTheme.bg_img);

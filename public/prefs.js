@@ -132,6 +132,7 @@
     return out;
   }
   window.themeFrom = themeFrom;
+  window.ColorMath = { ratio, fixFg, lum, isHex };   // the profile's own-colour pickers check readability with the same arithmetic
   window.themeContrast = { lum, ratio, BG_MAX_LUM };
 
   function apply(p) {

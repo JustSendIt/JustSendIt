@@ -77,10 +77,45 @@
   function route() { const t = tabForHash(location.hash); if (t) show(t, { hash: false }); }
   addEventListener('hashchange', route);
 
+  /* ---------- the reader keeps their place ----------
+     Owner, 2026-10-14: "When users are changing their info in settings do not time them out and do not take them to any
+     other page like the dashboard overview mid them changing their info." Only the reader — a tab, a link or quest they
+     follow — or the URL moves the panel. Two things used to move it under them:
+       · a re-render elsewhere that draws its sections open: the dashboard redraws after a save refreshes the account, and the
+         browser fires "toggle" for every <details open> it draws, which read as "show the Overview". A <details> drawn open is
+         drawn, not opened: its toggle is ignored.
+       · script reaching into another panel while they work. While the reader is working in the panel on screen — focus in one
+         of its fields, or typing or clicking there in the last 90 s — nothing else switches it unless they just pressed
+         something (the last 1.5 s: their own click on a quest or a link). */
+  const drawnAt = new WeakMap();
+  new MutationObserver((ms) => {
+    const t = performance.now();
+    for (const m of ms) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1) continue;
+      if (n.tagName === 'DETAILS') drawnAt.set(n, t);
+      if (n.querySelectorAll) n.querySelectorAll('details').forEach((d) => drawnAt.set(d, t));
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  let workedAt = -Infinity, pressedAt = -Infinity;
+  const panelNow = () => { const t = tabs.find((x) => x.dataset.tab === current); return t ? panelOf(t) : null; };
+  document.addEventListener('input', (e) => { const p = panelNow(); if (e.isTrusted && p && p.contains(e.target)) workedAt = performance.now(); }, true);
+  ['pointerdown', 'keydown'].forEach((ev) => document.addEventListener(ev, (e) => {
+    if (!e.isTrusted) return;
+    pressedAt = performance.now();
+    const p = panelNow(); if (p && p.contains(e.target)) workedAt = pressedAt;
+  }, true));
+  function working() {
+    const p = panelNow(); if (!p) return false;
+    const a = document.activeElement;
+    return !!(a && p.contains(a) && a.matches('input, textarea, select, [contenteditable="true"]')) || performance.now() - workedAt < 90e3;
+  }
+  const mayMove = () => !working() || performance.now() - pressedAt < 1500;
+
   /* ---------- 2. a <details> opening inside a hidden panel ---------- */
   document.addEventListener('toggle', (e) => {
     const d = e.target; if (!d || d.tagName !== 'DETAILS' || !d.open) return;
-    const t = ownerOf(d); if (t && t !== current) show(t);
+    const at = drawnAt.get(d); if (at !== undefined && performance.now() - at < 250) return;   // drawn open by a render, not opened
+    const t = ownerOf(d); if (t && t !== current && mayMove()) show(t);
   }, true);   // toggle does not bubble
 
   /* ---------- 3. scrollIntoView / focus into a hidden panel ----------
@@ -88,8 +123,9 @@
      behave: reveal the panel, then do what was asked. Scoped to elements inside a panel; everything else
      goes straight to the native method. */
   const nativeSIV = Element.prototype.scrollIntoView, nativeFocus = HTMLElement.prototype.focus;
-  Element.prototype.scrollIntoView = function () { const t = ownerOf(this); if (t && t !== current) show(t); return nativeSIV.apply(this, arguments); };
-  HTMLElement.prototype.focus = function () { const t = ownerOf(this); if (t && t !== current) show(t); return nativeFocus.apply(this, arguments); };
+  // an element in another panel: reveal that panel if the reader may be moved; if not, leave them where they are and do nothing
+  Element.prototype.scrollIntoView = function () { const t = ownerOf(this); if (t && t !== current) { if (!mayMove()) return; show(t); } return nativeSIV.apply(this, arguments); };
+  HTMLElement.prototype.focus = function () { const t = ownerOf(this); if (t && t !== current) { if (!mayMove()) return; show(t); } return nativeFocus.apply(this, arguments); };
 
   /* initial: the hash wins, then the remembered tab, then Overview */
   const fromHash = tabForHash(location.hash);

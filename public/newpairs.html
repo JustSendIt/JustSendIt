@@ -78,14 +78,14 @@
 
     <section class="sc-panel" id="sc-scan" role="tabpanel" aria-labelledby="sc-tab-scan">
       <form class="sc-form" id="sc-form" autocomplete="off">
-        <label class="sr-only" for="sc-addr">Token or pool address</label>
+        <label class="sr-only" for="sc-addr">Token or pool address, or a token's name</label>
         <div class="sc-field">
-          <input class="sc-addr" id="sc-addr" type="text" inputmode="text" spellcheck="false" autocapitalize="off" maxlength="42" placeholder="0x… paste a token or pool address" aria-describedby="sc-help">
-          <button class="sc-clear" id="sc-clear" type="button" aria-label="Clear the address" data-tip="Clears the address box (Esc does too)" hidden>✕</button>
+          <input class="sc-addr" id="sc-addr" type="text" inputmode="text" spellcheck="false" autocapitalize="off" maxlength="42" placeholder="0x… paste an address, or type a name" aria-describedby="sc-help">
+          <button class="sc-clear" id="sc-clear" type="button" aria-label="Clear the box" data-tip="Clears the box (Esc does too)" hidden>✕</button>
         </div>
-        <button class="btn btn-primary btn-sm sc-go" id="sc-go" type="submit" data-tip="Looks the address up and shows its profile">Scan 🔎</button>
+        <button class="btn btn-primary btn-sm sc-go" id="sc-go" type="submit" data-tip="Looks the address up and shows its profile, or lists every token with that name">Scan 🔎</button>
       </form>
-      <p class="sc-help" id="sc-help">Any token, or any pool, on Robinhood Chain — a pool address resolves to the token it prices. Copy the address from the token’s own page or the explorer, never from a chat.</p>
+      <p class="sc-help" id="sc-help">Any token, or any pool, on Robinhood Chain — a pool address resolves to the token it prices. Or type a name to list the tokens called that — traded or not — with their market cap, volume and holders. Copy an address from the token’s own page or the explorer, never from a chat.</p>
       <div class="sc-chains" role="group" aria-label="Chains">
         <span class="sc-chain is-on">🏹 Robinhood Chain</span>
         <span class="sc-chain is-soon" title="Other chains are coming soon">🌐 Other chains · coming soon</span>

@@ -103,9 +103,31 @@
     status.textContent = text || '';
     status.className = 'sc-status' + (kind ? ' is-' + kind : '');
   }
+  /* A NAME instead of an address (owner, 2026-10-14: "search a token by it's name also and pull up all tokens with that name
+     even if there is no volume, show the market cap, the volume, and the holder count"): every token on the chain whose name
+     or symbol holds the words, traded or not, each with its market cap, 24-hour volume and holders — and a scan away. */
+  async function names(q, heard) {
+    const my = ++seq;
+    if (heard && window.SFX) SFX.play('scan');
+    lastPair = null;
+    if (input && input.value !== q) { input.value = q; input.dispatchEvent(new Event('input')); }
+    try { const u = new URL(location.href); u.searchParams.set('scan', q); u.searchParams.delete('tab'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {}   // shareable, like an address scan
+    setStatus('Looking for tokens named “' + q + '”…', 'busy');
+    result.innerHTML = '<section class="np-named" aria-label="Tokens by name"><h3 class="np-named-h">Tokens named “' + esc(q) + '” on Robinhood Chain</h3><p class="np-named-none">Searching…</p></section>';
+    const j = await TokenNames.ask(q);
+    if (my !== seq) return;
+    const box = result.querySelector('.np-named'); if (!box) return;
+    box.innerHTML = TokenNames.blockHTML(j, q);
+    const f = TokenNames.facts(j, q), n = f.items.length;
+    setStatus(n ? (f.count.startsWith('first') ? 'The first ' + n : String(n)) + (n === 1 ? ' token' : ' tokens') + ' named “' + q + '” — pick one to scan it.' + (f.partialLine ? ' ' + f.partialLine : '') : f.empty, n ? (f.partialLine ? 'err' : 'ok') : 'err');
+    if (j.retryAfter) setTimeout(() => { if (my === seq) names(q, false); }, j.retryAfter * 1000);   // too many searches: once more, after the wait
+    else if (j.pending) TokenNames.follow(q, () => my === seq, (k) => TokenNames.refill(box, k));   // holders, in place
+  }
   async function scan(raw, heard) {   // heard: the visitor asked for this scan in this tab (a deep link on load scans quietly)
     const addr = String(raw || '').trim();
-    if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long.', 'err'); if (input) input.focus(); if (window.SFX) SFX.play('error'); return; }
+    if (/^[0-9a-f]{40}$/i.test(addr)) return scan('0x' + addr, heard);   // an address pasted without its 0x
+    if (!ADDR.test(addr) && window.TokenNames && TokenNames.isNameQuery(addr)) { names(TokenNames.normQ(addr), heard); return; }   // a name: list the tokens called that
+    if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long — or type a token\u2019s name to list every token called that.', 'err'); if (input) input.focus(); if (window.SFX) SFX.play('error'); return; }
     const my = ++seq;
     if (heard && window.SFX) SFX.play('scan');   // the radar ping: a read of the chain has started
     lastPair = null;                                                   // the ☆ saves only the pair on screen, never the one before
@@ -176,6 +198,8 @@
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value, true); });
   // the ☆ on the dashboard: saves this pair to the watchlist (or takes it off)
   result.addEventListener('click', (e) => {
+    const nr = e.target.closest('.np-named-row[data-token]');   // a token from a name search: scan it here (a new-tab click keeps its new tab)
+    if (nr && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) { e.preventDefault(); scan(nr.dataset.token, true); return; }
     const w = e.target.closest('.np-watch[data-wpair]');
     if (!w || !lastPair || !lastPair.pair || !window.Watchlist) return;
     if (String(w.dataset.wpair).toLowerCase() !== String(lastPair.pair.address).toLowerCase()) return;
@@ -213,7 +237,7 @@
   const fromHash = /^#0x[0-9a-fA-F]{40}$/.test(location.hash) ? location.hash.slice(1) : '';
   const want = q.get('scan') || fromHash;
   if (q.get('tab') === 'new') show('new', { quiet: true }); else show('scan', { quiet: true });
-  if (want && ADDR.test(want)) scan(want);
+  if (want && want.trim().length >= 2) scan(want);   // an address scans; a name lists the tokens called that
   // the sign-in state arrives after the page (AUTH.ready): re-run the gate once it is known
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(() => { if (lock) lock.hidden = signedIn(); if (current === 'new') gateRadar(); }).catch(() => {});
 })();

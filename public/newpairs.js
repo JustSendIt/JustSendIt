@@ -1490,6 +1490,7 @@
     if (LOOKUP_RE.test(addr)) {                       // a full contract address = "show me this token"
       if (state.mode === 'feed') setMode('list');     // surface it in the DEX list even from the Hot Feed
       newbar.hidden = true; state.staged = [];        // a lookup replaces the list — drop any staged "🆕 new pairs" bar
+      clearNamed();                                   // an address is not a name: no "Tokens named …" block, and none arriving late
       resolveLookup(addr);
       render();
       return;
@@ -1497,6 +1498,33 @@
     clearLookup();
     applyView(); render();
     announce(state.view.length + ' pairs shown');
+    namedTokens(state.q);
+  }
+  /* ----- every token by that name on the chain, traded or not (owner, 2026-10-14: "search a token by it's name ... pull up
+     all tokens with that name even if there is no volume, show the market cap, the volume, and the holder count") -----
+     The list below holds the radar's new, live pairs only; this block above it asks /api/search/tokens (GeckoTerminal,
+     Dexscreener and the site's own records) for every token whose name or symbol holds the words, and shows each one's
+     market cap, 24-hour volume and holders. Holders still being read are filled in, in place, by one more ask. */
+  let namedSeq = 0, namedTimer = null;
+  function clearNamed() { namedSeq++; clearTimeout(namedTimer); const b = document.getElementById('np-named'); if (b) b.remove(); }
+  function namedTokens(q) {
+    clearTimeout(namedTimer);
+    if (!window.TokenNames || !TokenNames.isNameQuery(q)) { clearNamed(); return; }   // too short, or an address (0x…, or 40 hex): the lookup's, above — BEEF or CAFE is a name
+    q = TokenNames.normQ(q);
+    const seq = ++namedSeq;
+    namedTimer = setTimeout(async () => {
+      let b = document.getElementById('np-named');
+      if (!b && listEl && listEl.parentNode) { b = document.createElement('section'); b.id = 'np-named'; b.className = 'np-named'; b.setAttribute('aria-label', 'Tokens by name'); listEl.parentNode.insertBefore(b, listEl); }
+      if (!b) return;
+      b.innerHTML = '<h3 class="np-named-h">Tokens named “' + esc(q) + '” on Robinhood Chain</h3><p class="np-named-none">Searching…</p>';
+      const j = await TokenNames.ask(q);
+      if (seq !== namedSeq) return;
+      b.innerHTML = TokenNames.blockHTML(j, q);
+      const f = TokenNames.facts(j, q), n = f.items.length;
+      announce(n ? (f.count.startsWith('first') ? 'The first ' + n : String(n)) + (n === 1 ? ' token named ' : ' tokens named ') + q + ' on the chain, above the list.' + (f.partialLine ? ' ' + f.partialLine : '') : f.empty);
+      if (j.retryAfter) setTimeout(() => { if (seq === namedSeq) namedTokens(q); }, j.retryAfter * 1000);   // too many searches: once more, after the wait
+      else if (j.pending) TokenNames.follow(q, () => seq === namedSeq, (k) => TokenNames.refill(b, k));   // holders, in place
+    }, 400);
   }
   function resolveLookup(addr) {
     if (state.lookup && state.lookup.p && state.lookup.addr !== addr) state.open.delete(state.lookup.p.pair.address); // drop the previous lookup's open flag
@@ -2023,7 +2051,7 @@
     const q = $('np-q'), qClear = $('np-q-clear');
     const syncClearBtn = () => { if (qClear) qClear.hidden = !q.value; };
     q.addEventListener('input', () => { syncClearBtn(); clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = q.value.trim(); onSearch(); }, 120); });
-    if (qClear) qClear.addEventListener('click', () => { clearTimeout(qTimer); q.value = ''; state.q = ''; syncClearBtn(); clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); q.focus(); });
+    if (qClear) qClear.addEventListener('click', () => { clearTimeout(qTimer); q.value = ''; state.q = ''; clearNamed(); syncClearBtn(); clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); q.focus(); });
     q.addEventListener('keydown', e => { if (e.key === 'Escape' && q.value) { e.preventDefault(); qClear && qClear.click(); } }); // Esc also clears
     syncClearBtn();
     // filters panel toggle
@@ -2138,7 +2166,7 @@
       const t = e.target.closest('button'); if (!t) return;
       if (t.id === 'np-lookup-open') { if (state.lookup && state.lookup.p) openDash(state.lookup.p); return; }
       if (t.id === 'np-retry') { if (window.SFX) SFX.play('scan'); fetchPairs(true); }
-      else if (t.id === 'np-clearq') { $('np-q').value = ''; state.q = ''; const cb = $('np-q-clear'); if (cb) cb.hidden = true; clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); }
+      else if (t.id === 'np-clearq') { $('np-q').value = ''; state.q = ''; clearNamed(); const cb = $('np-q-clear'); if (cb) cb.hidden = true; clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); }
       else if (t.id === 'np-lookup-retry') { const addr = state.q.toLowerCase(); if (LOOKUP_RE.test(addr)) { if (window.SFX) SFX.play('scan'); const seq = ++lookupSeq; state.lookup = { addr, status: 'loading', p: null }; render(); fetchLookup(addr, seq); } }
       else if (t.id === 'np-showrisky') selectSafety('risky');
       else if (t.id === 'np-reset2') resetFilters();
@@ -2196,7 +2224,7 @@
   }
   function selectSafety(val) { const seg = document.querySelector('.np-seg[data-safety="' + val + '"]'); if (seg) seg.click(); }
   function resetFilters() {
-    state.filters = defaultFilters(); state.q = '';
+    state.filters = defaultFilters(); state.q = ''; clearNamed();
     const q = document.getElementById('np-q'); if (q) q.value = '';
     syncControls(); persist(); updateChips(); updateFcount();
     selectSafety('safer');   // triggers applyView + render

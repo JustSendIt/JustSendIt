@@ -369,7 +369,7 @@ try {
   check('  ...a spent connection’s sign-up with a FREE email is paused too, and the ticket is not spent', regG.status === 429 && /paused until/.test((regG.j && regG.j.error) || '') && /join with a wallet/.test(regG.j.error || '') && !uG && !db.prepare('SELECT user_id FROM invite_codes WHERE code = ?').get(passCodes[passCodes.length - 1]).user_id, regG.status + ' ' + JSON.stringify(regG.j));
 
   /* ═══ 6. the shape of it, in the source ═══ */
-  check('the window lives on the session, NULL unless a sign-in or a proof wrote it', /ALTER TABLE sessions ADD COLUMN sudo_until INTEGER"/.test(SRC) && /INSERT INTO sessions \(token, user_id, created_at, expires_at, hashed, sudo_until\)/.test(SRC));
+  check('the window lives on the session, NULL unless a sign-in or a proof wrote it', /ALTER TABLE sessions ADD COLUMN sudo_until INTEGER"/.test(SRC) && /INSERT INTO sessions \(token, user_id, created_at, expires_at, hashed, sudo_until, sudo_since\)/.test(SRC) && /ALTER TABLE sessions ADD COLUMN sudo_since INTEGER"/.test(SRC));
   check('the proof asks for the password AND the second factor', /if \(e && !\(await checkPassword\(String\(pick\('password'\)/.test(SRC) && /if \(me\.twofa_method && !\(me\.twofa_method === 'password' && e\)\)/.test(SRC));
   check('every change to how the account signs in closes the other sessions’ windows', (SRC.match(/sudoOthersOff\(me\);/g) || []).length >= 6);
   check('the possession proofs stay: arming a wallet still takes its own 2fa-on signature', /const proof = await consumeNonce\(addr, b\.signature, '2fa-on'\)/.test(SRC) && /consumeNonce\(next, b\.newSignature, '2fa-on'\)/.test(SRC));

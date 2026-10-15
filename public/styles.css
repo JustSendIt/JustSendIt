@@ -1035,6 +1035,20 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
 }
 .swatch:hover { transform: scale(1.15); }
 .swatch[aria-checked="true"] { border-color: var(--green-bright); box-shadow: 0 0 0 2px var(--ink), 0 0 14px var(--glow-g); }
+/* your own colours (profile.js hexRow): a dashed ring marks a colour you typed, and every picker has a hex box under it */
+.swatch.is-mine:not([aria-checked="true"]) { border-color: var(--ink-4); border-style: dashed; }
+.hex-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; margin: 0.55rem 0 0.9rem; }
+.hex-label { color: var(--text-dim); font-weight: 700; font-size: max(var(--text-floor), 0.88rem); }
+.hex-field { display: inline-flex; align-items: center; gap: 0.45rem; flex-wrap: nowrap; min-width: 0; }
+.hex-chip { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--edge-ctl); background: var(--ink-1); }
+.hex-chip.is-empty { background: repeating-linear-gradient(135deg, var(--ink-1) 0 4px, var(--ink-3) 4px 8px); }
+.hex-input { width: 9.5ch; min-width: 0; min-height: 44px; padding: 0.4rem 0.6rem; border-radius: var(--r-2); border: 1px solid var(--edge-ctl); background: var(--ink-1); color: var(--green-bright);
+  font-family: ui-monospace, Menlo, monospace; font-size: max(var(--text-floor), 1rem); letter-spacing: 0.03em; }
+.hex-input:focus { border-color: var(--green); outline: 3px solid var(--focus, var(--green-bright)); outline-offset: 1px; }
+.hex-use { flex: 0 0 auto; }
+.hex-msg { flex: 1 1 100%; margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.45; }
+.hex-msg:empty { display: none; }
+.hex-msg.is-err { color: var(--red-soft, var(--red)); }
 .img-slot { display: flex; align-items: center; gap: 0.7rem; margin: 0.5rem 0; flex-wrap: wrap; }
 .img-slot img { width: 72px; height: 44px; object-fit: cover; border-radius: 8px; border: 1.5px solid var(--ink-4); }
 .img-slot .none { width: 72px; height: 44px; border-radius: 8px; border: 1.5px dashed var(--ink-4); display: grid; place-items: center; color: var(--text-dim); font-size: max(var(--text-floor), 0.7rem); }
@@ -1205,6 +1219,14 @@ body { padding-bottom: 5.5rem; }
 .search-hit .h-name { overflow-wrap: anywhere; }   /* a name with no spaces (a memecoin's, a long @handle) wraps inside the row */
 .search-hit .h-addr { display: flex; min-width: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.75rem); }
 .search-hit .h-addr code { font-variant-numeric: tabular-nums; }
+/* tokens by name, under the senders: a heading, rows whose figures wrap rather than being cut, and a line on where they come from */
+.search-sec { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; margin: 0.5rem 0.7rem 0.2rem; padding-top: 0.45rem; border-top: 1px solid var(--ink-4); color: var(--text-dim); font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; font-size: max(var(--text-floor), 0.72rem); }
+.search-drop > .search-toks:first-child .search-sec { border-top: 0; margin-top: 0.2rem; }
+.search-sec-n { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+.search-hit .h-stats { white-space: normal; overflow: visible; text-overflow: clip; font-variant-numeric: tabular-nums; }
+.search-hit img.h-logo { object-fit: cover; padding: 0; }
+.search-wait { font-style: italic; }
+.search-note { margin: 0.3rem 0.7rem 0.4rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.72rem); line-height: 1.45; }
 /* in the phone pop-down the results flow under the box, full width, instead of floating over the links */
 .nav.is-compact .search-drop { position: static; width: auto; max-height: none; margin-top: 0.4rem; box-shadow: none; }
 
@@ -2291,6 +2313,21 @@ details[open] .np-chev { transform: rotate(180deg); }
 }
 .np-msg code, .np-lookup-loading code, .np-addr-row code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
 .np-msg { overflow-wrap: anywhere; }
+/* the Scanner's "All tokens named …" block (newpairs.js namedTokens): every token by that name, traded or not, above the radar's list */
+.np-named { margin: 0 0 1rem; padding: 0.9rem 1rem; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; }
+.np-named-h { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; flex-wrap: wrap; margin: 0 0 0.5rem; font-size: max(var(--text-floor), 1rem); overflow-wrap: anywhere; }
+.np-named-n { color: var(--text-dim); font-weight: 700; font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 0.85rem); }
+.np-named-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; }
+.np-named-row { display: flex; align-items: center; gap: 0.7rem; min-height: 44px; padding: 0.5rem 0.6rem; border-radius: 12px; color: var(--text); text-decoration: none; }
+.np-named-row:hover, .np-named-row:focus-visible { background: color-mix(in srgb, var(--green) 10%, transparent); }
+.np-named-row:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+.np-named-logo { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; object-fit: cover; background: var(--ink-3); border: 1.5px solid var(--ink-4); font-size: max(var(--text-floor), 1.1rem); }
+.np-named-main { display: grid; gap: 0.1rem; min-width: 0; flex: 1 1 auto; }
+.np-named-name { font-weight: 800; overflow-wrap: anywhere; font-size: max(var(--text-floor), 0.95rem); }
+.np-named-stats { color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 0.85rem); }
+.np-named-main .addr-fit { color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); }
+.np-named-none, .np-named-note { margin: 0.3rem 0 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.5; }
+.np-named-none.is-warn, .search-note.is-warn { color: var(--gold); }   /* a source could not be asked: the list may be short, and it says so in words */
 .np-badges, .np-badge { max-width: 100%; }
 .np-badge { white-space: normal; }
 html body .np-viewswitch .np-vs-txt { overflow-wrap: normal; line-height: 1.1; text-align: center; }   /* "Best Runners" breaks between its words, never inside one */

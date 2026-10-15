@@ -21,6 +21,7 @@ import { spawn } from 'node:child_process';
 import { readdirSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
+import http from 'node:http';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { ROOT } from './_paths.mjs';
@@ -63,6 +64,34 @@ async function freePort() {
   throw new Error('no free port');
 }
 const PORT = await freePort();
+/* Canned GeckoTerminal and Dexscreener search answers for the token-by-name search (tests/toksearch.mjs), so the suite
+   parses real response shapes without calling either: "zqfixture" gets a v4 pool (32-byte id), an HTML-escaped name, an FDV
+   of "0.0", USDG as a result, and a 300-character name; "zqhalf" gets a GeckoTerminal 500 (one source down); anything else
+   is an empty, healthy answer. Not used with CHAIN_LIVE=1, which asks the real ones. */
+const fixture = http.createServer((req, res) => {
+  const u = new URL(req.url, 'http://x'), q = (u.searchParams.get('query') || u.searchParams.get('q') || '').toLowerCase(), gt = u.pathname.startsWith('/gt');
+  const send = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+  const T = (n) => '0x' + String(n).repeat(40).slice(0, 40);
+  if (q === 'zqhalf' && gt) return send(500, { errors: [{ status: '500' }] });
+  if (q === 'zqfixture' && gt) return send(200, {
+    data: [
+      { attributes: { address: '0x' + 'a'.repeat(64), fdv_usd: '12000', market_cap_usd: null, volume_usd: { h24: '5000' }, reserve_in_usd: '9000' }, relationships: { base_token: { data: { id: 'robinhood_' + T(1) } } } },
+      { attributes: { address: '0x' + 'b'.repeat(40), fdv_usd: '0.0', market_cap_usd: null, volume_usd: { h24: '700' }, reserve_in_usd: '4000' }, relationships: { base_token: { data: { id: 'robinhood_' + T(2) } } } },
+      { attributes: { address: '0x' + 'c'.repeat(40), fdv_usd: '100', volume_usd: { h24: '1' }, reserve_in_usd: '50' }, relationships: { base_token: { data: { id: 'robinhood_usdg' } } } },
+      { attributes: { address: '0x' + 'd'.repeat(40), fdv_usd: '300', volume_usd: { h24: '0' }, reserve_in_usd: '60' }, relationships: { base_token: { data: { id: 'robinhood_' + T(3) } } } },
+    ],
+    included: [
+      { id: 'robinhood_' + T(1), attributes: { address: T(1), name: 'Zqfixture V4', symbol: 'ZQV4' } },
+      { id: 'robinhood_' + T(2), attributes: { address: T(2), name: 'S&amp;P Zqfixture', symbol: 'ZQSP' } },
+      { id: 'robinhood_usdg', attributes: { address: '0x5fc5360d0400a0fd4f2af552add042d716f1d168', name: 'Zqfixture USDG', symbol: 'USDG' } },
+      { id: 'robinhood_' + T(3), attributes: { address: T(3), name: 'Zqfixture ' + 'Long'.repeat(75), symbol: 'ZQLONG' } },
+    ] });
+  if (q === 'zqfixture') return send(200, { pairs: [{ chainId: 'robinhood', pairAddress: '0x' + 'b'.repeat(40), baseToken: { address: T(2), name: 'S&P Zqfixture', symbol: 'ZQSP' }, marketCap: 8000, fdv: 9000, volume: { h24: 650 }, liquidity: { usd: 4100 } }] });
+  return send(200, gt ? { data: [] } : { pairs: null });
+});
+await new Promise((ok) => fixture.listen(0, '127.0.0.1', ok));
+fixture.unref();
+const FIXTURE = 'http://127.0.0.1:' + fixture.address().port;
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
               BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1',   // the terms step and voice memos are hidden by default; the suites still cover both
               LEDGER_COOL_MS: '5000',    // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out
@@ -82,7 +111,9 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
                  takes its honest "could not be read" branch for that. A real environment variable wins over .env. */
               ...(process.env.CHAIN_LIVE === '1' ? {} : { RPC_URL: 'http://127.0.0.1:9/' }),
               // the chart switch's listing checks (Dexscreener, GeckoTerminal) likewise: a dead address answers "could not ask" at once
-              ...(process.env.CHAIN_LIVE === '1' ? {} : { CHART_SRC_DS_URL: 'http://127.0.0.1:9/', CHART_SRC_GT_URL: 'http://127.0.0.1:9/' }) };
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { CHART_SRC_DS_URL: 'http://127.0.0.1:9/', CHART_SRC_GT_URL: 'http://127.0.0.1:9/' }),
+              // and the token-by-name search's two (GeckoTerminal, Dexscreener): the suites read the site's own records only
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { TOKSEARCH_GT_URL: FIXTURE + '/gt', TOKSEARCH_DS_URL: FIXTURE + '/ds', OUTBOUND_RPM_SEARCH_GECKOTERMINAL: '600' }) };   // the suite asks more than the live 4/min share
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });

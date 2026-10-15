@@ -639,6 +639,7 @@
       lastXStr = ''; lastBtnStr = ''; lastBtnPaint = 0;
       resetMilestones();
       setMode('flying');
+      watchFlight();
       if (window.SFX) SFX.play('launch');   // the server confirmed the round: the rocket goes
       say(j.resumed ? 'Rejoined your flight, already at ' + fx(curX()) + ' times. Cash out any time.' : 'Lift off. The multiplier is climbing — cash out any time.');
       if (j.resumed && window.sendToast) sendToast('🛰️ Rejoined your flight');
@@ -655,6 +656,59 @@
     }
   }
 
+  /* The flight ends by itself at its crash point (owner, 2026-10-14: "fix the rocket run so the game ends when the random set
+     bust number is hit so the user doesn't keep playing the game after the bust number has been reached"). This page still
+     never knows the crash point: it holds /api/arcade/watch open, and the server answers it the moment the rocket blows, or after
+     25 s with "still flying" so it asks again. Whichever comes first — that answer or a cash-out — ends the flight; the other is
+     ignored. */
+  let watchCtl = null;
+  function stopWatch() { if (watchCtl) { watchCtl.abort(); watchCtl = null; } }
+  async function watchFlight() {
+    const id = S.round && S.round.id; if (!id) return;
+    stopWatch();
+    const ctl = new AbortController(); watchCtl = ctl;
+    const live = () => !ctl.signal.aborted && S.mode === 'flying' && S.round && S.round.id === id;
+    let fails = 0;
+    while (live()) {
+      let j = null;
+      try {
+        const r = await fetch('/api/arcade/watch?roundId=' + encodeURIComponent(id), { credentials: 'same-origin', signal: ctl.signal });
+        j = await r.json().catch(() => null);
+        if (!r.ok || !j) throw new Error((j && j.error) || 'watch failed');
+        fails = 0;
+      } catch (e) {
+        if (ctl.signal.aborted) return;
+        fails++;   // a dropped connection: ask again, gently — a cash-out tap still works meanwhile
+        await new Promise((ok) => setTimeout(ok, Math.min(5000, 400 * fails)));
+        continue;
+      }
+      if (!live()) return;
+      if (j.over) {
+        watchCtl = null;
+        if (j.busted) bust(Number(j.crashX) || 1, elapsedSec(), curX(), document.activeElement === btn, true);
+        else { stopLoop(); S.round = null; S.freeze = null; boom = null; await loadState(); say('That flight is already over.'); }   // cashed out elsewhere
+        return;
+      }
+    }
+  }
+  // the rocket blew at crashX: freeze the picture there, say so (auto: it reached its crash point with nobody tapping)
+  function bust(crashX, tapSec, tapX, hadFocus, auto) {
+    stopWatch();
+    const crashSec = secFor(crashX);
+    S.busy = false; S.netErr = ''; S.playedToday = true;
+    S.outcome = { kind: 'busted', crashX: crashX };
+    S.freeze = { kind: 'busted', endSec: crashSec, crashSec: crashSec, viewSec: Math.max(crashSec, tapSec), viewX: Math.max(crashX, tapX) };
+    S.last = { crash_x: crashX, cashed_x: null, boost: null, ended_at: Date.now() };
+    if (!reduced() && ctx && !canvas.hidden) {
+      const a = axesFor(S.freeze.viewSec, S.freeze.viewX), m = mapFor(a);
+      spawnBoom(m.px(crashSec), m.py(mulAt(crashSec)));
+    }
+    setMode('busted', { focusOutcome: hadFocus });
+    say((auto ? 'The rocket blew at ' + fx(crashX) + ' times before you cashed out' : 'Busted. The rocket blew at ' + fx(crashX) + ' times') + ' — no boost today, and nothing was at stake.');
+    if (window.SFX) SFX.play('crash');
+    if (window.sendToast) sendToast('💥 Blew at ' + fx(crashX) + '× — no boost today');
+  }
+
   async function cashout() {
     if (S.busy || !S.round) return;
     const hadFocus = document.activeElement === btn;   // must be read BEFORE the disable throws focus to <body>
@@ -662,21 +716,12 @@
     const tapSec = elapsedSec(), tapX = curX();
     try {
       const j = await window.api('/api/arcade/cashout', { method: 'POST', body: { roundId: S.round.id } });
+      if (S.mode !== 'flying') { S.busy = false; return; }   // the watch already ended it (the rocket blew first)
       S.busy = false; S.netErr = ''; S.playedToday = true;
       if (j.busted) {
-        const crashX = Number(j.crashX) || 1, crashSec = secFor(crashX);
-        S.outcome = { kind: 'busted', crashX: crashX };
-        S.freeze = { kind: 'busted', endSec: crashSec, crashSec: crashSec, viewSec: Math.max(crashSec, tapSec), viewX: Math.max(crashX, tapX) };
-        S.last = { crash_x: crashX, cashed_x: null, boost: null, ended_at: Date.now() };
-        if (!reduced() && ctx && !canvas.hidden) {
-          const a = axesFor(S.freeze.viewSec, S.freeze.viewX), m = mapFor(a);
-          spawnBoom(m.px(crashSec), m.py(mulAt(crashSec)));
-        }
-        setMode('busted', { focusOutcome: hadFocus });
-        say('Busted. The rocket blew at ' + fx(crashX) + ' times — no boost today, and nothing was at stake.');
-        if (window.SFX) SFX.play('crash');
-        if (window.sendToast) sendToast('💥 Blew at ' + fx(crashX) + '× — no boost today');
+        bust(Number(j.crashX) || 1, tapSec, tapX, hadFocus, false);
       } else {
+        stopWatch();
         const cashedX = Number(j.cashedX) || 1, crashX = Number(j.crashX) || null, boost = Number(j.boost) || 1;
         S.outcome = { kind: 'cashed', cashedX: cashedX, crashX: crashX, boost: boost, until: Number(j.until) || null };
         S.boost = boost; S.until = Number(j.until) || null;
@@ -701,6 +746,7 @@
     } catch (e) {
       S.busy = false;
       const msg = String((e && e.message) || 'request failed');
+      if (S.mode !== 'flying') return;                       // the watch already ended it (the rocket blew first)
       if (/already over|no such run/i.test(msg)) {          // resolved elsewhere (another tab, or a double tap)
         S.round = null; S.playedToday = true; S.freeze = null; boom = null;
         stopLoop(); await loadState();

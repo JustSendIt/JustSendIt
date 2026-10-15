@@ -989,6 +989,7 @@ for (const col of [
      column did, so nobody is unlocked by a migration. Written only by createSession (a fresh sign-in) and by a
      successful proof (grantSudo). */
   "ALTER TABLE sessions ADD COLUMN sudo_until INTEGER",
+  "ALTER TABLE sessions ADD COLUMN sudo_since INTEGER",   // when this "confirm it's you" window began: a window kept open by work in Settings never outlives SUDO_MAX_MS from here
   "ALTER TABLE users ADD COLUMN og_diamond_at INTEGER",   // when the Diamond OG question got a definitive answer (NULL = not yet asked, or the read was incomplete)
   "ALTER TABLE posts ADD COLUMN squad_id INTEGER",         // a Send Squad's private wall (always with private = 1, so every public feed already skips it)
 ]) { try { db.exec(col); } catch {} }
@@ -1564,6 +1565,16 @@ function totpConsume(userId, secretB32, code) {
 
 const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+/* Readable walls (owner, 2026-10-14: members may type any hex code for their wall's accent and background tint). The same rule
+   the profile page applies before it saves (profile.js readableAccent / readableBg): an accent is text — a name on the wall, an
+   @handle on every card — so it must reach 4.5:1 against the wall's background and the site's card colours; a background sits
+   behind the wall's light text, which must stay at 7:1 (and the dimmer text at 4.5:1). WCAG 2.x arithmetic. */
+const hexLum = (hex) => { const n = parseInt(String(hex).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0); };
+const hexRatio = (a, b) => { const x = hexLum(a), y = hexLum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const WALL_SURFACES = ['#050604', '#0c0e09', '#14170f'], WALL_TEXT = '#f2f6ec', WALL_TEXT_DIM = '#b6beac';
+const wallBgReadable = (bg) => !bg || (hexRatio(WALL_TEXT, bg) >= 7 && hexRatio(WALL_TEXT_DIM, bg) >= 4.5);
+// 0.01 under the line: the page nudges in whole RGB steps, so its last step can land a hair below 4.5 in this arithmetic
+const wallAccentReadable = (accent, bg) => !accent || [bg || WALL_SURFACES[0], WALL_SURFACES[1], WALL_SURFACES[2]].every((s) => hexRatio(accent, s) >= 4.49);
 /* One name, one account, whatever its capitals: the column is UNIQUE COLLATE NOCASE, so "send", "Send" and "SeNd"
    are the same name to every lookup and to the database itself. And 'deleted-<id>' is what erasing an account
    renames it to — so nobody may hold it, in any casing, or they could stop account <id> from ever being erased. */
@@ -1658,16 +1669,29 @@ function verifyNeedsOf(me) {
 }
 function grantSudo(me, ms) {
   const until = now() + (ms || SUDO_MS);
-  try { db.prepare('UPDATE sessions SET sudo_until = ? WHERE token = ?').run(until, hashToken(me.sid)); } catch {}
-  me.sudo_until = until;
+  const since = sudoActive(me) && me.sudo_since ? me.sudo_since : now();   // a fresh proof starts a fresh window
+  try { db.prepare('UPDATE sessions SET sudo_until = ?, sudo_since = ? WHERE token = ?').run(until, since, hashToken(me.sid)); } catch {}
+  me.sudo_until = until; me.sudo_since = since;
   return until;
 }
-function endSudo(me) { try { db.prepare('UPDATE sessions SET sudo_until = NULL WHERE token = ?').run(hashToken(me.sid)); } catch {} me.sudo_until = 0; }
+function endSudo(me) { try { db.prepare('UPDATE sessions SET sudo_until = NULL, sudo_since = NULL WHERE token = ?').run(hashToken(me.sid)); } catch {} me.sudo_until = 0; me.sudo_since = 0; }
+/* Owner, 2026-10-14: "When users are changing their info in settings do not time them out". The window is SUDO_MS long, and
+   it slides while the member is working in Settings (the page asks for this at most every few minutes, only while they type or
+   click there): each ask moves the end to SUDO_MS from now — never past SUDO_MAX_MS after the proof that opened it, so an
+   unattended or stolen session still loses it. Idle for SUDO_MS, it closes as before. */
+const SUDO_MAX_MS = (Number(process.env.SUDO_MAX_MINUTES) > 0 ? Number(process.env.SUDO_MAX_MINUTES) : 240) * 60e3;
+function keepSudo(me) {
+  if (!sudoActive(me)) return 0;
+  const since = me.sudo_since || (me.sudo_until - SUDO_MS);   // a window opened before sudo_since existed: count it from its start
+  const until = Math.max(me.sudo_until, Math.min(now() + SUDO_MS, since + SUDO_MAX_MS));
+  if (until !== me.sudo_until) { try { db.prepare('UPDATE sessions SET sudo_until = ?, sudo_since = ? WHERE token = ?').run(until, since, hashToken(me.sid)); } catch {} me.sudo_until = until; me.sudo_since = since; }
+  return until;
+}
 // a change to how the account signs in: what other sessions proved no longer describes it
 function sudoOthersOff(me) { try { db.prepare('UPDATE sessions SET sudo_until = NULL WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)); } catch {} }
 function createSession(userId, ipIdxVal, sudoMs) {
   const token = rand();
-  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed, sudo_until) VALUES (?,?,?,?,1,?)').run(hashToken(token), userId, now(), now() + 30 * 864e5, sudoMs ? now() + sudoMs : null); // a DB leak never yields a usable cookie
+  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed, sudo_until, sudo_since) VALUES (?,?,?,?,1,?,?)').run(hashToken(token), userId, now(), now() + 30 * 864e5, sudoMs ? now() + sudoMs : null, sudoMs ? now() : null); // a DB leak never yields a usable cookie
   // (A last-sign-in IP index used to be written here. Nothing ever read it, so it is no longer kept at all.)
   return token;
 }
@@ -1695,7 +1719,7 @@ function getUser(req) {
   // forgotten one, without a DB write on literally every request.
   if (!s.last_seen || now() - s.last_seen > 3e5) { try { db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), s.token); } catch {} }
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(s.user_id);
-  return u && !u.deleted_at ? { ...u, sid: cookies.sid, sid_at: s.created_at, sudo_until: s.sudo_until || 0 } : null;   // sid_at: credential changes check what predates this session; sudo_until: its unlocked window; a deleted account is nobody
+  return u && !u.deleted_at ? { ...u, sid: cookies.sid, sid_at: s.created_at, sudo_until: s.sudo_until || 0, sudo_since: s.sudo_since || 0 } : null;   // sid_at: credential changes check what predates this session; sudo_until: its unlocked window; a deleted account is nobody
 }
 function themeOf(u) {
   return {
@@ -2004,6 +2028,19 @@ const ARCADE_MAX_X = 50;             // hard ceiling on the crash point (bounds 
 const ARCADE_BOOST_MAX = 5;          // a cash-out can never buy more than a 5× day
 const ARCADE_ROUND_TTL = 5 * 60e3;   // an abandoned round expires (and counts as a bust) after 5 minutes
 const arcadeX = (ms) => Math.exp(ARCADE_GROWTH * (Math.max(0, ms) / 1000));
+/* The moment a flight reaches its crash point, on the server's clock (the inverse of arcadeX). Owner, 2026-10-14: "fix the
+   rocket run so the game ends when the random set bust number is hit so the user doesn't keep playing the game after the bust
+   number has been reached." A flight is over at this moment whether or not anyone taps: /api/arcade/watch answers the page then,
+   and every other route treats an open round past it as the bust it already is. */
+const arcadeCrashAt = (round) => round.started_at + (Math.log(Math.max(1, round.crash_x)) / ARCADE_GROWTH) * 1000;
+const ARCADE_WATCH_MS = 25e3;   // the longest the page's watch is held before it is told "still flying" and asks again
+function arcadeSettleIfCrashed(round) {   // an open round past its crash point is a bust: write it so, once
+  if (round && !round.ended_at && now() >= arcadeCrashAt(round)) {
+    db.prepare('UPDATE arcade_rounds SET ended_at = ?, cashed_x = NULL, boost = NULL WHERE id = ? AND ended_at IS NULL').run(Math.round(arcadeCrashAt(round)), round.id);
+    return db.prepare('SELECT * FROM arcade_rounds WHERE id = ?').get(round.id);
+  }
+  return round;
+}
 // the boost a cash-out at Mx is worth for the next 24h — deliberately gentle: 2× → 1.25×, 9× → 3×, 17×+ → the 5× cap
 const arcadeBoostFor = (x) => Math.min(ARCADE_BOOST_MAX, Math.max(1, 1 + (x - 1) / 4));
 // Is one of this user's signature-verified wallets the token's deployer or current owner? Both values come from the
@@ -5624,6 +5661,8 @@ const OUTBOUND_RPM = {
   'api.coingecko.com': 20,
   'api.gopluslabs.io': 28,          // the free tier is 30 calls/min; a paid plan raises it via OUTBOUND_RPM_API_GOPLUSLABS_IO
   'api.geckoterminal.com': 10,
+  'search:geckoterminal': 4,        // the share of it the menu's name search may use (searchTokensByName); the rest is the chart switch's
+  'search:goplus': 8,               // the share of GoPlus's 28 the name search's holder reads may use; the rest is the dashboards'
   'robinhoodchain.blockscout.com': 240,
   'api.blockscout.com': 240,
 };
@@ -5639,7 +5678,7 @@ function outboundRpm(host) {
   return 60;
 }
 /* resolves when a token is available for this host; rejects if the wait would exceed the bound */
-function outboundTake(host) {
+function outboundTake(host, maxWait = OUTBOUND_MAX_WAIT_MS) {
   const rpm = outboundRpm(host);
   let b = outBuckets.get(host);
   if (!b) { b = { tokens: rpm, at: Date.now(), rpm, waiting: 0, spent: 0, refused: 0, min: [], peak: 0 }; outBuckets.set(host, b); }
@@ -5648,16 +5687,14 @@ function outboundTake(host) {
   b.at = t; b.rpm = rpm;
   /* Cumulative and rolling usage, so an operator can see what the site ACTUALLY spends against each
      vendor's ceiling — the number that decides whether a paid tier is worth buying. `min` holds the
-     timestamps of the last minute's calls; `peak` is the highest any minute has reached since boot. */
-  b.spent++;
-  b.min.push(t);
-  while (b.min.length && t - b.min[0] > 60000) b.min.shift();
-  if (b.min.length > b.peak) b.peak = b.min.length;
-  if (b.tokens >= 1) { b.tokens -= 1; return Promise.resolve(); }
+     timestamps of the last minute's calls; `peak` is the highest any minute has reached since boot. A call
+     counts as spent when it is RELEASED (at once, or after its wait) — a refused one only as refused. */
+  const grant = () => { const g = Date.now(); b.spent++; b.min.push(g); while (b.min.length && g - b.min[0] > 60000) b.min.shift(); if (b.min.length > b.peak) b.peak = b.min.length; };
+  if (b.tokens >= 1) { b.tokens -= 1; grant(); return Promise.resolve(); }
   const wait = (1 - b.tokens) * (60000 / rpm) + b.waiting * (60000 / rpm);
-  if (wait > OUTBOUND_MAX_WAIT_MS) { b.refused++; return Promise.reject(new Error('outbound budget for ' + host + ' is spent — try again shortly')); }
+  if (wait > maxWait) { b.refused++; return Promise.reject(new Error('outbound budget for ' + host + ' is spent — try again shortly')); }
   b.waiting++;
-  return new Promise((ok) => setTimeout(() => { b.waiting--; b.tokens -= 1; ok(); }, wait));
+  return new Promise((ok) => setTimeout(() => { b.waiting--; b.tokens -= 1; grant(); ok(); }, wait));
 }
 function outboundStats() {
   const o = {}, t = Date.now();
@@ -5676,11 +5713,11 @@ function outboundStats() {
   }
   return o;
 }
-async function jgetR(url) {
+async function jgetR(url, maxWait) {   // maxWait: how long our own meter may hold the call (default OUTBOUND_MAX_WAIT_MS)
   try {
     let host = '';
     try { host = new URL(url).host; } catch {}
-    if (host) { try { await outboundTake(host); } catch (e) { return { ok: false, data: null, reason: 'rate-limited' }; } }   // our own meter, before theirs
+    if (host) { try { await outboundTake(host, maxWait == null ? OUTBOUND_MAX_WAIT_MS : maxWait); } catch (e) { return { ok: false, data: null, reason: 'rate-limited' }; } }   // our own meter, before theirs
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json' }, signal: ctrl.signal });
@@ -5694,10 +5731,10 @@ async function jgetR(url) {
 async function jget(url) { return (await jgetR(url)).data; }
 /* jgetR with headers — for a vendor that authenticates a paid tier (GoPlus, Dextools). Same meter, same
    ok/reason contract, so a caller can still tell "the vendor said no" from "we could not ask". */
-async function jgetHR(url, headers) {
+async function jgetHR(url, headers, maxWait) {
   try {
     let host = ''; try { host = new URL(url).host; } catch {}
-    if (host) { try { await outboundTake(host); } catch { return { ok: false, data: null, reason: 'rate-limited' }; } }
+    if (host) { try { await outboundTake(host, maxWait == null ? OUTBOUND_MAX_WAIT_MS : maxWait); } catch { return { ok: false, data: null, reason: 'rate-limited' }; } }
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
     const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json', ...(headers || {}) }, signal: ctrl.signal });
@@ -5964,20 +6001,21 @@ const _goplusCache = new Map();
 const _goplusInflight = new Map();
 const gpFlag = (v) => (v === '1' ? true : v === '0' ? false : null);   // GoPlus answers "1"/"0"; anything else is genuinely unknown
 const gpNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : null; };
-async function goplusToken(tokenAddr) {
+async function goplusToken(tokenAddr, opts) {   // opts.maxWait: our meter's wait cap; opts.absent: answer { raw: null, absent: true } when GoPlus has nothing for it
   const tok = String(tokenAddr || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(tok)) return null;
   const c = _goplusCache.get(tok);
   if (c && now() - c.at < GOPLUS_TTL) return c.v;
-  const flying = _goplusInflight.get(tok); if (flying) return flying;
+  const flying = _goplusInflight.get(tok); if (flying) return flying.then((v) => (v && v.absent && !(opts && opts.absent)) ? null : v);
   const job = (async () => {
     const url = 'https://api.gopluslabs.io/api/v1/token_security/' + GOPLUS_CHAIN + '?contract_addresses=' + tok;
-    const r = GOPLUS_KEY ? await jgetHR(url, { Authorization: GOPLUS_KEY }) : await jgetR(url);
+    const mw = opts && opts.maxWait != null ? opts.maxWait : undefined;
+    const r = GOPLUS_KEY ? await jgetHR(url, { Authorization: GOPLUS_KEY }, mw) : await jgetR(url, mw);
     // a failed read is NOT cached as "no flags" — that would turn an outage into a clean bill of health
     if (!r.ok || !r.data || Number(r.data.code) !== 1) return null;
     const res = r.data.result || {};
     const d = res[tok] || res[Object.keys(res)[0]];
-    if (!d) return null;
+    if (!d) return { raw: null, absent: true, at: now() };   // GoPlus answered, and has nothing for this token
     const v = { raw: d, at: now() };
     pruneCache(_goplusCache, 5000);
     _goplusCache.set(tok, { at: now(), v });
@@ -5985,7 +6023,7 @@ async function goplusToken(tokenAddr) {
   })();
   _goplusInflight.set(tok, job);
   job.catch(() => {}).finally(() => _goplusInflight.delete(tok));
-  return job;
+  return job.then((v) => (v && v.absent && !(opts && opts.absent)) ? null : v);   // the existing callers see null for "nothing", as before
 }
 /* The site's own vocabulary for owner powers, mapped from GoPlus's flags. Same keys, severities and
    sentences the verified-source scanner already produces, so the UI needs no new cases. */
@@ -9493,6 +9531,189 @@ function searchAddr(a, full) {
     const c = communityForToken(t.token);
     return { ...t, community: c ? { id: c.id, status: c.status, official: c.official } : null };
   }) };
+}
+/* ===== Tokens by name, for the menu search (owner, 2026-10-14: "Allow users to search a token by it's name also and pull up
+   all tokens with that name even if there is no volume, show the market cap, the volume, and the holder count. in the preview")
+   A name or symbol of 2–40 characters is matched in three places, all at once:
+     · GeckoTerminal's pool search, narrowed to Robinhood Chain: every pool it indexes, traded today or not;
+     · Dexscreener's search, kept to Robinhood Chain pairs;
+     · the site's own records: the radar, the Scanner, the token cache.
+   Our server asks, with only the words typed; an answer is kept three minutes. A token is listed when its name or symbol
+   contains the words. Each one carries: market cap (Dexscreener's; else GeckoTerminal's; else its fully diluted value, marked
+   as such), the 24-hour volume summed over its pools (0 when they report no trades, null when nobody reports), liquidity, and
+   holders — the site's own chain ledger, a recent read, or GoPlus (one token a call on its free tier, so a few per search,
+   kept an hour). Holders not read in time come back null with `pending`, and the page asks once more.
+   A token with no pool anywhere has no price and is in neither index; the public explorer (Blockscout) lists those, but it
+   refuses servers without an API key — set BLOCKSCOUT_URL to a keyed host to add it. */
+// the two searches asked; the test runner points both at a dead address unless CHAIN_LIVE=1, like the RPC (tests/run.mjs)
+const TOKSEARCH_GT_URL = process.env.TOKSEARCH_GT_URL || 'https://api.geckoterminal.com/api/v2/search/pools';
+const TOKSEARCH_DS_URL = process.env.TOKSEARCH_DS_URL || 'https://api.dexscreener.com/latest/dex/search';
+const TOKSEARCH_MAX = 25, TOKSEARCH_TTL = 180e3, TOKSEARCH_HOLDER_BUDGET_MS = 2500, TOKSEARCH_HOLDER_FETCH = 4;
+const TOKSEARCH_SITE_FRESH_MS = 3600e3;   // a figure from the site's own records counts as current for an hour; older, it is left out
+const tokSearchCache = new Map(), tokSearchInflight = new Map();
+const tokHolderCache = new Map();   // token -> { n, src, at } (n null: GoPlus answered and has no count — known, not pending), kept an hour
+const TOK_HOLDER_TTL = 3600e3;
+// NFC, cut by characters (never mid-emoji), whitespace folded, a leading $ dropped
+const normTokQuery = (raw) => Array.from(String(raw || '').normalize('NFC').replace(/^\s*\$/, '').replace(/\s+/g, ' ').trim()).slice(0, 40).join('').trim();
+// GeckoTerminal sends names HTML-escaped ("S&amp;P"): decoded once here, escaped once by the page
+const unEntity = (v) => String(v || '').replace(/&(?:#(\d+)|#x([0-9a-f]+)|(amp|lt|gt|quot|apos|#39));/gi, (m, d, h, n) => d ? String.fromCodePoint(Math.min(0x10ffff, +d)) : h ? String.fromCodePoint(Math.min(0x10ffff, parseInt(h, 16))) : ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" })[n.toLowerCase()]);
+const TOKNAME_MAX = 120, TOKSYM_MAX = 24;   // a name can be thousands of characters long; the list shows this much, says so, and the dashboard shows it whole
+const exactOf = (t, q) => { const ql = String(q).toLowerCase(); return ((t.symbol || '').toLowerCase() === ql || (t.name || '').toLowerCase() === ql) ? 1 : 0; };
+const posNum = (v) => { const n = Number(v); return v != null && v !== '' && Number.isFinite(n) && n > 0 ? n : null; };   // a cap or FDV of 0 is unknown, not $0
+const anyNum = (v) => { const n = Number(v); return v != null && v !== '' && Number.isFinite(n) && n >= 0 ? n : null; };     // volume: 0 truly means no trades
+function tokHolders(tok) {   // what is already known, without asking anyone; null = nothing known yet
+  const lg = holderLedger(tok);
+  if (lg && lg.count != null) return { n: lg.count, src: 'chain' };
+  const c = tokHolderCache.get(tok);
+  if (c && Date.now() - c.at < (c.n == null ? 10 * 60e3 : TOK_HOLDER_TTL)) return { n: c.n, src: c.src };
+  return null;
+}
+// the one order, used before the list is cut and again once holders are in: an exact name, then anything that really trades
+// (a dollar or more a day), then volume, then holders, then pool depth
+function tokSearchOrder(q) {
+  const hn = (t) => { const h = tokHolders(t.token); return h && h.n != null ? h.n : -1; };
+  return (a, b) => (exactOf(b, q) - exactOf(a, q)) || (((b.vol || 0) >= 1) - ((a.vol || 0) >= 1)) || ((b.vol || 0) - (a.vol || 0)) || (hn(b) - hn(a)) || ((b.liq || 0) - (a.liq || 0));
+}
+async function tokSearchAsk(meter, url) {   // the name search's own share of a vendor's budget, then the vendor's meter, a short wait each
+  try { await outboundTake(meter, 0); } catch { return { ok: false, data: null, reason: 'rate-limited' }; }
+  return jgetR(url, 1500);
+}
+async function tokSearchSources(q) {
+  const ql = q.toLowerCase();
+  const [gt, ds] = await Promise.all([
+    tokSearchAsk('search:geckoterminal', TOKSEARCH_GT_URL + '?query=' + encodeURIComponent(q) + '&network=robinhood&include=base_token&page=1'),
+    jgetR(TOKSEARCH_DS_URL + '?q=' + encodeURIComponent(q), 1500),   // Dexscreener's 270/min is plenty: no share needed
+  ]);
+  const ADDR = /^0x[0-9a-f]{40}$/, POOL = /^0x[0-9a-f]{40}(?:[0-9a-f]{24})?$/;   // a v4 pool id is 32 bytes
+  const NATIVE = new Set(['0x0000000000000000000000000000000000000000', '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee']);
+  const pools = new Map();   // pool -> { token, name, symbol, mcap, mcapKind, vol, liq, logo, srcs }
+  const add = (pool, rec) => {   // one record per pool; a second source fills what the first left empty, field by field
+    if (!POOL.test(pool) || !ADDR.test(rec.token) || NATIVE.has(rec.token)) return;
+    const old = pools.get(pool);
+    if (!old) { pools.set(pool, Object.assign({}, rec, { srcs: new Set([rec.src]) })); return; }
+    old.srcs.add(rec.src);
+    for (const k of ['name', 'symbol', 'vol', 'liq', 'logo']) if (old[k] == null || old[k] === '') old[k] = rec[k];
+    if (old.mcap == null || (old.mcapKind === 'fdv' && rec.mcapKind === 'mcap')) { if (rec.mcap != null) { old.mcap = rec.mcap; old.mcapKind = rec.mcapKind; } }
+  };
+  const capOf = (mc, fdv) => (posNum(mc) != null ? { mcap: posNum(mc), mcapKind: 'mcap' } : posNum(fdv) != null ? { mcap: posNum(fdv), mcapKind: 'fdv' } : { mcap: null, mcapKind: null });
+  let dsN = 0, gtN = 0;
+  if (ds.ok && ds.data && 'pairs' in ds.data) {   // { pairs: null } is an answer: none
+    const list = Array.isArray(ds.data.pairs) ? ds.data.pairs : [];
+    dsN = list.length;
+    for (const p of list) {
+      if (!p || p.chainId !== 'robinhood' || !p.baseToken) continue;
+      add(String(p.pairAddress || '').toLowerCase(), Object.assign({ token: String(p.baseToken.address || '').toLowerCase(), name: String(p.baseToken.name || ''), symbol: String(p.baseToken.symbol || ''),
+        vol: anyNum(p.volume && p.volume.h24), liq: posNum(p.liquidity && p.liquidity.usd), src: 'dexscreener', logo: p.info && p.info.imageUrl ? dexCdnImg(p.info.imageUrl) : null }, capOf(p.marketCap, p.fdv)));
+    }
+  }
+  const gtPages = [];
+  if (gt.ok && gt.data && Array.isArray(gt.data.data)) {
+    gtPages.push(gt.data);
+    if (gt.data.data.length >= 20) {   // full: one more page if the search's own share has a call left now
+      const g2 = await tokSearchAsk('search:geckoterminal', TOKSEARCH_GT_URL + '?query=' + encodeURIComponent(q) + '&network=robinhood&include=base_token&page=2');
+      if (g2.ok && g2.data && Array.isArray(g2.data.data)) gtPages.push(g2.data);
+    }
+  }
+  for (const page of gtPages) {
+    gtN = page.data.length;   // the last page read: full means there may be more
+    const inc = {}; for (const t of page.included || []) if (t && t.id) inc[t.id] = t.attributes || {};
+    for (const p of page.data) {
+      const a = (p && p.attributes) || {}, bt = inc[p && p.relationships && p.relationships.base_token && p.relationships.base_token.data && p.relationships.base_token.data.id] || {};
+      add(String(a.address || '').toLowerCase(), Object.assign({ token: String(bt.address || '').toLowerCase(), name: unEntity(bt.name), symbol: unEntity(bt.symbol),
+        vol: anyNum(a.volume_usd && a.volume_usd.h24), liq: posNum(a.reserve_in_usd), src: 'geckoterminal', logo: null }, capOf(a.market_cap_usd, a.fdv_usd)));
+    }
+  }
+  /* the site's own records: tokens the radar or the Scanner has seen, by name or symbol. A figure older than an hour is not
+     shown as today's (left out); a holder count only from a read stamped within the hour. SQLite's lower() folds ASCII only, so
+     a name with other letters is matched in JS instead. */
+  const own = new Map();
+  const ascii = !/[^\x00-\x7f]/.test(ql);
+  const like = '%' + ql.replace(/[%_\\]/g, (c) => '\\' + c) + '%';
+  const matches = (r) => ascii || String(r.name || '').normalize('NFC').toLowerCase().includes(ql) || String(r.symbol || '').normalize('NFC').toLowerCase().includes(ql);
+  const fresh = (at) => at && Date.now() - at < TOKSEARCH_SITE_FRESH_MS;
+  try {
+    const runQ = ascii ? db.prepare("SELECT token_addr t, pair_addr p, symbol, name, cur_mc mc, cur_liq liq, last_seen_at at FROM runner_tokens WHERE (lower(name) LIKE ? ESCAPE '\\' OR lower(symbol) LIKE ? ESCAPE '\\') LIMIT 40").all(like, like)
+      : db.prepare('SELECT token_addr t, pair_addr p, symbol, name, cur_mc mc, cur_liq liq, last_seen_at at FROM runner_tokens').all().filter(matches).slice(0, 40);
+    for (const r of runQ) own.set(r.t, { token: r.t, pool: r.p, name: r.name, symbol: r.symbol, mcap: fresh(r.at) ? posNum(r.mc) : null, mcapKind: fresh(r.at) && posNum(r.mc) != null ? 'either' : null, liq: fresh(r.at) ? posNum(r.liq) : null });   // the radar stores a market cap, or the FDV when that is all it had
+    const cacheQ = ascii ? db.prepare("SELECT token_addr t, symbol, name, pair_json j, updated_at at FROM token_cache WHERE found = 1 AND (lower(name) LIKE ? ESCAPE '\\' OR lower(symbol) LIKE ? ESCAPE '\\') LIMIT 40").all(like, like)
+      : db.prepare('SELECT token_addr t, symbol, name, pair_json j, updated_at at FROM token_cache WHERE found = 1').all().filter(matches).slice(0, 40);
+    for (const r of cacheQ) {
+      let pj = null; try { pj = JSON.parse(r.j || 'null'); } catch {}
+      const m = (pj && pj.market) || {}, o = own.get(r.t) || {};
+      const cap = fresh(r.at) ? capOf(m.marketCap, m.fdv) : { mcap: null, mcapKind: null };
+      own.set(r.t, Object.assign(o, { token: r.t, pool: pj && pj.pair && pj.pair.address ? String(pj.pair.address).toLowerCase() : o.pool, name: r.name || o.name, symbol: r.symbol || o.symbol,
+        mcap: cap.mcap != null ? cap.mcap : o.mcap, mcapKind: cap.mcap != null ? cap.mcapKind : o.mcapKind,
+        vol: fresh(r.at) && pj && pj.volume ? anyNum(pj.volume.h24) : null, liq: fresh(r.at) ? posNum(m.liquidityUsd) : o.liq }));
+      const hr = pj && pj.holders;
+      if (hr && hr.count != null && hr.readAt && fresh(hr.readAt) && !tokHolderCache.has(r.t)) tokHolderCache.set(r.t, { n: hr.count, src: 'scan', at: hr.readAt });
+    }
+  } catch {}
+  // one row per token: volume and liquidity summed over its pools; the deepest pool names it; a true market cap from any pool
+  // beats an FDV from the deepest
+  const toks = new Map();
+  for (const [pool, r] of pools) {
+    let t = toks.get(r.token);
+    if (!t) { t = { token: r.token, name: r.name, symbol: r.symbol, pools: 0, vol: null, liq: null, mcap: null, mcapKind: null, best: -1, pool: null, logo: null, sources: new Set() }; toks.set(r.token, t); }
+    t.pools++; for (const x of r.srcs) t.sources.add(x);
+    if (r.vol != null) t.vol = (t.vol || 0) + r.vol;
+    if (r.liq != null) t.liq = (t.liq || 0) + r.liq;
+    const depth = r.liq == null ? 0 : r.liq;
+    if (depth > t.best) { t.best = depth; t.pool = pool; if (r.name) t.name = r.name; if (r.symbol) t.symbol = r.symbol; }
+    if (r.mcap != null && (t.mcap == null || (t.mcapKind === 'fdv' && r.mcapKind === 'mcap') || (t.mcapKind === r.mcapKind && depth >= t.best))) { t.mcap = r.mcap; t.mcapKind = r.mcapKind; }
+    if (r.logo && !t.logo) t.logo = r.logo;
+  }
+  for (const [tok, o] of own) {
+    let t = toks.get(tok);
+    if (!t) { t = { token: tok, name: o.name, symbol: o.symbol, pools: o.pool ? 1 : 0, vol: o.vol == null ? null : o.vol, liq: o.liq != null ? o.liq : null, mcap: o.mcap != null ? o.mcap : null, mcapKind: o.mcapKind || null, pool: o.pool || null, logo: null, sources: new Set() }; toks.set(tok, t); }
+    t.sources.add('site');
+    if (t.mcap == null && o.mcap != null) { t.mcap = o.mcap; t.mcapKind = o.mcapKind; }
+  }
+  const hit = (t) => (t.name || '').normalize('NFC').toLowerCase().includes(ql) || (t.symbol || '').normalize('NFC').toLowerCase().includes(ql);
+  const list = [...toks.values()].filter((t) => hit(t) && !QUOTE_SET.has(t.token)).sort(tokSearchOrder(q));   // WETH and USDG are what tokens trade against, not results
+  const failed = [gt.ok ? null : 'GeckoTerminal', ds.ok ? null : 'Dexscreener'].filter(Boolean);
+  // a full first page from either index means there may be more than it showed: the page says "first matches", not "all"
+  const more = gtN >= 20 || dsN >= 30 || list.length > TOKSEARCH_MAX;
+  return { list, failed, more };
+}
+async function searchTokensByName(q) {
+  const key = q.toLowerCase();
+  const c = tokSearchCache.get(key);
+  let base;
+  if (c && Date.now() - c.at < TOKSEARCH_TTL) base = c.v;
+  else {
+    if (!tokSearchInflight.has(key)) tokSearchInflight.set(key, tokSearchSources(q).finally(() => tokSearchInflight.delete(key)));
+    base = await tokSearchInflight.get(key);
+    pruneCache(tokSearchCache, 500);
+    // an answer missing a source is kept only 20 s, so the next ask can try again
+    tokSearchCache.set(key, { at: Date.now() - (base.failed.length ? TOKSEARCH_TTL - 20e3 : 0), v: base });
+  }
+  let items = base.list.slice(0, TOKSEARCH_MAX);
+  // holders: what is known now; a few of the rest from GoPlus inside a short budget and the search's own share, the others next time
+  const need = items.filter((t) => !tokHolders(t.token)).slice(0, TOKSEARCH_HOLDER_FETCH);
+  if (need.length) {
+    const reads = need.map(async (t) => {
+      try { await outboundTake('search:goplus', 0); } catch { return; }
+      const g = await goplusToken(t.token, { maxWait: 500, absent: true }).catch(() => null);
+      if (!g) return;   // could not ask: nothing is remembered, it is asked again next time
+      const n = g.raw ? gpNum(g.raw.holder_count) : null;
+      tokHolderCache.set(t.token, { n: n != null && n > 0 ? n : null, src: 'goplus', at: Date.now() });   // a count, or "GoPlus has none" (not pending)
+    });
+    await Promise.race([Promise.all(reads), new Promise((r) => setTimeout(r, TOKSEARCH_HOLDER_BUDGET_MS))]);
+    pruneCache(tokHolderCache, 5000);
+    items = items.slice().sort(tokSearchOrder(q));
+  }
+  let pending = false;
+  const out = items.map((t) => {
+    const h = tokHolders(t.token);
+    if (!h) pending = true;
+    const nm = Array.from(t.name || ''), sy = Array.from(t.symbol || '');
+    return { token: t.token, name: nm.length ? nm.slice(0, TOKNAME_MAX).join('') : null, symbol: sy.length ? sy.slice(0, TOKSYM_MAX).join('') : null, nameCut: nm.length > TOKNAME_MAX || sy.length > TOKSYM_MAX, pool: t.pool, pools: t.pools,
+      marketCap: t.mcap != null ? Math.round(t.mcap) : null, marketCapKind: t.mcapKind, volume24h: t.vol, liquidityUsd: t.liq != null ? Math.round(t.liq) : null,
+      holders: h ? h.n : null, holdersKnown: !!h, holdersSource: h ? h.src : null, logo: t.logo || null, sources: [...t.sources] };   // send() turns a Dexscreener CDN logo into our image proxy
+  });
+  const both = base.failed.length === 2;
+  return { q, total: base.list.length, items: out, pending, more: base.more, partial: base.failed, sources: { geckoterminal: !base.failed.includes('GeckoTerminal'), dexscreener: !base.failed.includes('Dexscreener') },
+    error: both && !out.length ? 'Could not ask GeckoTerminal or Dexscreener just now — try again in a moment' : null };
 }
 /* An address that answers token0()/token1() is CLAIMING to be a pool of those tokens; any contract can claim that.
    It is a pool of the token when it is the profile's own pool (the price feed's most-liquid one) or when the
@@ -14287,6 +14508,14 @@ const server = http.createServer(async (req, res) => {
         }
         return send(res, 200, { ok: true, sudoUntil: me.sudo_until, sudoLeftMs: me.sudo_until - now() });
       }
+      /* keep it open while the member is working in Settings (keepSudo): only an open window, only up to SUDO_MAX_MS from the
+         proof that opened it; a closed one stays closed — this never opens anything */
+      if (p === '/api/auth/verify/keep' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('sudokeep:' + me.id, 30, 36e5)) return bad(res, 'slow down', 429);
+        const until = keepSudo(me);
+        return send(res, 200, until ? { ok: true, sudoUntil: until, sudoLeftMs: until - now() } : { ok: false, sudoUntil: null, sudoLeftMs: 0 });
+      }
       // lock it again now — for a shared computer, or simply when finished
       if (p === '/api/auth/verify' && req.method === 'DELETE') {
         if (!me) return bad(res, 'sign in first', 401);
@@ -15119,15 +15348,18 @@ const server = http.createServer(async (req, res) => {
         const cleanHandle = (v) => { const h = String(v || '').trim().replace(/^@+/, '').replace(/^https?:\/\/(www\.)?(twitter|x|instagram)\.com\//i, '').replace(/\/.*$/, ''); return h === '' ? '' : (/^[A-Za-z0-9_.]{1,30}$/.test(h) ? h : null); };
         if (b.twitter !== undefined) { const h = cleanHandle(b.twitter); if (h === null) return bad(res, 'that X/Twitter handle isn’t valid'); db.prepare('UPDATE users SET twitter_handle = ? WHERE id = ?').run(h || null, me.id); }
         if (b.instagram !== undefined) { const h = cleanHandle(b.instagram); if (h === null) return bad(res, 'that Instagram handle isn’t valid'); db.prepare('UPDATE users SET ig_handle = ? WHERE id = ?').run(h || null, me.id); }
-        if (b.accent !== undefined) {
-          const a = String(b.accent);
-          if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'accent must be a hex color like #c6f000');
-          db.prepare('UPDATE users SET accent = ? WHERE id = ?').run(a, me.id);
-        }
-        if (b.wall_bg !== undefined) {
-          const a = String(b.wall_bg);
+        if (b.wall_bg !== undefined) {   // before the accent: an accent is judged against the background it will sit on
+          const a = String(b.wall_bg).toLowerCase();
           if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'background must be a hex color');
+          if (!wallBgReadable(a)) return bad(res, 'that background is too light for the text on your wall — pick a darker one');
           db.prepare('UPDATE users SET wall_bg = ? WHERE id = ?').run(a, me.id);
+        }
+        if (b.accent !== undefined) {
+          const a = String(b.accent).toLowerCase();
+          if (a !== '' && !HEX_COLOR_RE.test(a)) return bad(res, 'accent must be a hex color like #c6f000');
+          const bgNow = b.wall_bg !== undefined ? String(b.wall_bg).toLowerCase() : (db.prepare('SELECT wall_bg FROM users WHERE id = ?').get(me.id) || {}).wall_bg;
+          if (!wallAccentReadable(a, bgNow)) return bad(res, 'that accent is too dark to read on your wall — pick a lighter one');
+          db.prepare('UPDATE users SET accent = ? WHERE id = ?').run(a, me.id);
         }
         if (b.tracker_prefs !== undefined) {
           const j = JSON.stringify(b.tracker_prefs || {});
@@ -15151,6 +15383,11 @@ const server = http.createServer(async (req, res) => {
               clean[k] = String(v).toLowerCase();
             }
             sp.colors = clean;
+          }
+          // your own colours, offered in every colour picker: strict hex only (they are painted into style attributes), the last twelve
+          if (sp.customColors !== undefined) {
+            if (!Array.isArray(sp.customColors) || sp.customColors.length > 12 || !sp.customColors.every((c) => typeof c === 'string' && HEX_COLOR_RE.test(c))) return bad(res, 'your colours must be up to 12 hex colours like #7ee8fa');
+            sp.customColors = [...new Set(sp.customColors.map((c) => c.toLowerCase()))];
           }
           const j = JSON.stringify(sp);
           if (j.length > 4000) return bad(res, 'prefs too large');
@@ -15554,6 +15791,15 @@ const server = http.createServer(async (req, res) => {
       }
 
       /* ----- sender search (public fields only) ----- */
+      /* tokens by name for the menu search's preview: market cap, 24h volume, holders (searchTokensByName) */
+      if (p === '/api/search/tokens' && req.method === 'GET') {
+        const q = normTokQuery(url.searchParams.get('q'));
+        if (Array.from(q).length < 2) return send(res, 200, { q, total: 0, items: [], pending: false, tooShort: true });
+        if (/^0x[0-9a-f]*$/i.test(q) || /^[0-9a-f]{40}$/i.test(q)) return send(res, 200, { q, total: 0, items: [], pending: false, address: true });   // an address (or the start of one) goes through /api/search
+        if (!rateLimit('toksearch:' + clientIp(req), 30, 6e4)) return send(res, 429, { error: 'too many token searches in the last minute — trying again shortly', retryAfter: 15 }, { 'Retry-After': '15' });
+        let r; try { r = await searchTokensByName(q); } catch { return send(res, 200, { q, total: 0, items: [], pending: false, error: 'could not search tokens just now' }); }
+        return send(res, 200, r, { 'Cache-Control': 'no-store' });
+      }
       if (p === '/api/search' && req.method === 'GET') {
         const raw = String(url.searchParams.get('q') || '').trim();
         if (!raw) return send(res, 200, { users: [] });
@@ -16986,6 +17232,7 @@ const server = http.createServer(async (req, res) => {
       /* ----- Arcade · Rocket Run: one crash run per UTC day, cashed out for a 24h Send Power boost ----- */
       if (p === '/api/arcade/state' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
+        for (const o of db.prepare('SELECT * FROM arcade_rounds WHERE user_id = ? AND ended_at IS NULL').all(me.id)) arcadeSettleIfCrashed(o);   // crashed while nobody was watching
         const last = db.prepare('SELECT crash_x, cashed_x, boost, ended_at FROM arcade_rounds WHERE user_id=? AND ended_at IS NOT NULL ORDER BY id DESC LIMIT 1').get(me.id);
         return send(res, 200, { ...arcadeState(me.id), growth: ARCADE_GROWTH, maxX: ARCADE_MAX_X, last: last || null });
       }
@@ -16997,6 +17244,8 @@ const server = http.createServer(async (req, res) => {
         // resume an unresolved round instead of burning the day twice (a reload mid-flight lands here)
         const open = db.prepare('SELECT * FROM arcade_rounds WHERE user_id=? AND day=? AND ended_at IS NULL ORDER BY id DESC LIMIT 1').get(me.id, day);
         if (open) {
+          const settled = arcadeSettleIfCrashed(open);
+          if (settled.ended_at) return bad(res, 'that run expired — it blew at ' + (Math.round(settled.crash_x * 100) / 100).toFixed(2) + '× while you were away. Come back tomorrow.', 409);
           if (now() - open.started_at > ARCADE_ROUND_TTL) { // walked away → it crashed without them
             db.prepare('UPDATE arcade_rounds SET ended_at=?, cashed_x=NULL, boost=NULL WHERE id=?').run(now(), open.id);
             return bad(res, 'that run expired — the rocket flew off without you. Come back tomorrow.', 409);
@@ -17010,6 +17259,28 @@ const server = http.createServer(async (req, res) => {
         const info = db.prepare('INSERT INTO arcade_rounds (user_id, day, started_at, crash_x) VALUES (?,?,?,?)').run(me.id, day, now(), crash);
         db.prepare('UPDATE users SET arcade_day = ? WHERE id = ?').run(day, me.id); // the daily go is spent at takeoff
         return send(res, 200, { roundId: Number(info.lastInsertRowid), startedAt: now(), serverNow: now(), growth: ARCADE_GROWTH, resumed: false });
+      }
+      /* The page holds this open while the rocket flies; it is answered the moment the flight reaches its crash point (the
+         round is settled as a bust then), or after ARCADE_WATCH_MS with "still flying" so the page asks again — or straight
+         away if the run is already over (a cash-out in another tab). The crash point is still never told before it happens. */
+      if (p === '/api/arcade/watch' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('arcwatch:' + me.id, 120, 6e5)) return bad(res, 'slow down', 429);
+        const id = Number(url.searchParams.get('roundId')) || 0;
+        const first = db.prepare('SELECT * FROM arcade_rounds WHERE id = ? AND user_id = ?').get(id, me.id);
+        if (!first) return bad(res, 'no such run', 404);
+        const crashAt = arcadeCrashAt(first);
+        const answer = () => {
+          const r = arcadeSettleIfCrashed(db.prepare('SELECT * FROM arcade_rounds WHERE id = ?').get(id));
+          if (r.ended_at) return send(res, 200, { over: true, busted: r.cashed_x == null, crashX: Math.round(r.crash_x * 100) / 100, cashedX: r.cashed_x == null ? null : Math.round(r.cashed_x * 100) / 100, boost: r.boost || 1, serverNow: now() }, { 'Cache-Control': 'no-store' });
+          return send(res, 200, { over: false, serverNow: now() }, { 'Cache-Control': 'no-store' });
+        };
+        const wait = first.ended_at ? 0 : Math.min(Math.max(0, crashAt - now()), ARCADE_WATCH_MS);
+        if (wait <= 0) return answer();
+        let done = false;
+        const timer = setTimeout(() => { if (!done) { done = true; answer(); } }, wait + 20);
+        res.on('close', () => { if (!done) { done = true; clearTimeout(timer); } });   // the page went away (or cashed out and let go)
+        return;
       }
       if (p === '/api/arcade/cashout' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in first', 401);
