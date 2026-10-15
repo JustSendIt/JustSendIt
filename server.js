@@ -10965,7 +10965,7 @@ const OPTIONAL_MEDIA = {
 };
 function notFoundPage(res, extraHeaders) {
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — $Send</title><meta name="robots" content="noindex">' +
-    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;--text-floor:16px;font-family:Rubik,system-ui,sans-serif;font-size:max(var(--text-floor),1rem);line-height:1.5;text-align:center;padding:2rem}h1{font-size:max(var(--text-floor),2.2rem);margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style></head>' +
+    '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0d08;color:#f2f6ec;--text-floor:16px;font-family:Rubik,system-ui,sans-serif;font-size:max(var(--text-floor),1rem);line-height:1.5;text-align:center;padding:2rem}h1{font-size:max(var(--text-floor),2.2rem);margin:0 0 .4rem;color:#c6f000}p{color:#b6beac;margin:0 0 1.2rem}a{display:inline-block;padding:.8rem 1.6rem;border-radius:999px;background:linear-gradient(180deg,#c6f000,#7e9a00);color:#12200a;font-weight:800;text-decoration:none}</style><link rel="stylesheet" href="/cursor.css"><script src="/cursor.js"></script></head>' +
     '<body><main><h1>🚀 That page didn’t send.</h1><p>We couldn’t find what you were looking for.</p><a href="/">Back to $Send home →</a></main></body></html>';
   res.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC_HEADERS, 'Content-Security-Policy': CSP, 'Content-Length': Buffer.byteLength(html), ...(extraHeaders || {}) });
   res.end(html);
@@ -17939,7 +17939,7 @@ const server = http.createServer(async (req, res) => {
 <meta name="twitter:title" content="${e(title)}"><meta name="twitter:description" content="${e(desc)}">
 <meta name="twitter:image" content="${e(card)}"><meta name="twitter:image:alt" content="${e('A Just Send It ticket to Send, number ' + no + ', belonging to @' + u.username)}">
 <link rel="icon" href="/assets/logo-128.png">
-<link rel="stylesheet" href="/gate.css"><link rel="stylesheet" href="/invite.css">
+<link rel="stylesheet" href="/gate.css"><link rel="stylesheet" href="/invite.css"><link rel="stylesheet" href="/cursor.css"><script src="/cursor.js"></script>
 </head><body class="gate">
 <main class="inv-wrap" style="min-height:100vh;">
   <p class="inv-kicker">Invite only · Live beta</p>

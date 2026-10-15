@@ -1,0 +1,30 @@
+/* ===== Rocket cursor 🚀 (cursor.js) — the site's one pointer on a mouse or trackpad =====
+   cursor.js puts .rk-on on <html> the moment it runs, so the browser's own arrow, hand and text beam are gone from the
+   first frame, over the strip under a short page too. Every page that loads cursor.js loads this file first: the
+   script checks for it and, without it, leaves the browser's pointer alone (an unstyled rocket would be an emoji at
+   the foot of the page, and the visitor would have no pointer at all).
+   Reduced motion keeps the browser's pointer, and every cursor the site sets, exactly as it was. */
+@media (prefers-reduced-motion: no-preference) {
+  .rk-on, .rk-on * { cursor: none !important; }
+  /* parts the browser draws inside its own form fields name their own cursor, so the rule above never reaches them;
+     one rule each, because a name one browser does not know throws out every selector listed with it */
+  .rk-on ::-webkit-inner-spin-button { cursor: none !important; }
+  .rk-on ::-webkit-search-cancel-button { cursor: none !important; }
+  .rk-on ::-webkit-calendar-picker-indicator { cursor: none !important; }
+  .rk-on ::file-selector-button { cursor: none !important; }
+  /* a video or voice memo's own player: its buttons and timeline are drawn by the browser, with cursors no page rule can
+     reach, so the browser's pointer shows over the whole player and the rocket steps aside there (cursor.js) */
+  .rk-on video[controls], .rk-on audio[controls] { cursor: auto !important; }
+}
+.rk-layer { position: fixed; inset: 0; z-index: 9998; pointer-events: none; overflow: hidden; }
+/* A square box with the glyph centred in it, so the box's centre IS the rocket's centre: cursor.js puts that
+   centre on the pointer (translate -50%) and rotates about it (transform-origin defaults to the centre). */
+.rk-cursor { position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none; font-size: max(var(--text-floor), 22px); line-height: 1;
+  width: 1.3em; height: 1.3em; display: grid; place-items: center; margin: 0;
+  will-change: transform; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition: opacity 0.15s ease; }
+.rk-p { position: fixed; pointer-events: none; line-height: 1; transform: translate(-50%, -50%); }
+.rk-trail { font-size: max(var(--text-floor), 12px); animation: rk-fade 0.2s ease-out forwards; }
+@keyframes rk-fade { from { opacity: 0.85; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, -50%) scale(0.4); } }
+.rk-burst { font-size: max(var(--text-floor), 16px); animation: rk-burst 0.45s ease-out forwards; }
+@keyframes rk-burst { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.5); } }
+@media (prefers-reduced-motion: reduce) { .rk-layer, .rk-cursor { display: none !important; } }

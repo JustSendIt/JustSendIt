@@ -2431,20 +2431,7 @@ html .np-meta .tok-comm { border-radius: 0.8rem; }   /* a tag that wraps still r
 .gearn-passive b { color: var(--green-bright); }
 @media (prefers-reduced-motion: reduce) { .ge-tip { transition: none; } }
 
-/* ===== Rocket cursor 🚀 ===== */
-.rk-on, .rk-on * { cursor: none !important; }
-.rk-layer { position: fixed; inset: 0; z-index: 9998; pointer-events: none; overflow: hidden; }
-/* A square box with the glyph centred in it, so the box's centre IS the rocket's centre: cursor.js puts that
-   centre on the pointer (translate -50%) and rotates about it (transform-origin defaults to the centre). */
-.rk-cursor { position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none; font-size: max(var(--text-floor), 22px); line-height: 1;
-  width: 1.3em; height: 1.3em; display: grid; place-items: center; margin: 0;
-  will-change: transform; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); transition: opacity 0.15s ease; }
-.rk-p { position: fixed; pointer-events: none; line-height: 1; transform: translate(-50%, -50%); }
-.rk-trail { font-size: max(var(--text-floor), 12px); animation: rk-fade 0.2s ease-out forwards; }
-@keyframes rk-fade { from { opacity: 0.85; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(-50%, -50%) scale(0.4); } }
-.rk-burst { font-size: max(var(--text-floor), 16px); animation: rk-burst 0.45s ease-out forwards; }
-@keyframes rk-burst { from { opacity: 1; transform: translate(-50%, -50%) scale(1); } to { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.5); } }
-@media (prefers-reduced-motion: reduce) { .rk-on, .rk-on * { cursor: auto !important; } .rk-layer, .rk-cursor { display: none !important; } }
+/* ===== Rocket cursor 🚀: its rules live in cursor.css, loaded by every page that loads cursor.js (privacy and terms too, which do not load this file) ===== */
 
 /* ===================================================================
    ABOUT PAGE (about.html) — namespaced .ab-* / section-scoped
