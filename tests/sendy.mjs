@@ -104,6 +104,60 @@ try {
   check('  ...a bubble shows for a few seconds, never while the popup is open or mid-flight, at most one every 8 s (a ghost find jumps the queue)', /const SAY_COOLDOWN = 8000/.test(SRC) && /sayTimer = setTimeout\(hideSay, 4500\)/.test(SRC) && /if \(isOpen\(\) \|\| flying\) return false;/.test(SRC) && /say\('egg', \{ found: d\.found, total: d\.total \}, true\)/.test(SRC));
   check('  ...the hop honours reduced motion and the words are text, never markup', /if \(!reduced\(\)\) \{ widget\.classList\.remove\('is-hyped'\)/.test(SRC) && /sayEl\.textContent = lines\[i\]/.test(SRC) && !/sayEl\.innerHTML/.test(SRC));
   check('  ...and a page can ask for one of its own (window.SENDY.say)', /window\.SENDY = \{ say \};/.test(SRC));
+  /* moods (owner, 2026-10-15: "react differently each time you scroll over him … a random emotion but never negative") —
+     the mood code itself is run here against stand-ins (a clock the test turns, a widget, a rocket), not read with patterns */
+  const moodSrc = SRC.slice(SRC.indexOf('const MOODS = ['), SRC.indexOf("{ passive: true });   // a finger landing on him") + "{ passive: true });".length);
+  const T = { now: 0 }, handlers = {}, faceEl = { textContent: '' };
+  const attrs = {}, kids = [];
+  const widget = { hasAttribute: (k) => k in attrs, getAttribute: (k) => attrs[k], setAttribute: (k, v) => { attrs[k] = String(v); }, removeAttribute: (k) => { delete attrs[k]; }, offsetWidth: 1, appendChild: (b) => { kids.push(b); return b; } };
+  const rocketStub = { addEventListener: (t, f) => { (handlers[t] = handlers[t] || []).push(f); } };
+  const doc = { createElement: () => ({ className: '', textContent: '', style: { setProperty() {} }, setAttribute() {}, remove() {} }) };
+  let motion = true;
+  const M = new Function('Math', '$', 'widget', 'rocket', 'document', 'Date', 'setTimeout', 'clearTimeout', 'flying', 'reduced',
+    moodSrc + '\nreturn { MOODS, nextMood, react };')(Math, () => faceEl, widget, rocketStub, doc, { now: () => T.now }, () => 0, () => {}, false, () => !motion);
+  const HAPPY = ['😄', '🥰', '🤩', '😎', '🥳', '😆', '😉', '👋', '💪', '🚀', '😊', '🙌', '😁', '😃', '😀', '🤗', '✌️', '👍', '🫶'];
+  const OKBITS = ['💚', '💖', '✨', '⭐', '🎉', '🎊', '⚡', '🌸', '🌟', '🎈'];
+  check('Sendy has a dozen moods, every one happy: each face from a list of happy ones, each floating bit from a list of happy ones (nothing sad, angry, scared, sick or smoky)',
+    M.MOODS.length >= 10 && M.MOODS.every((m) => HAPPY.includes(m.face) && (m.bits || []).every((b) => OKBITS.includes(b))), M.MOODS.map((m) => m.face + (m.bits || []).join('')).join(' '));
+  const moves = M.MOODS.map((m) => m.move);
+  const guard = SRC.slice(SRC.indexOf("'@media (prefers-reduced-motion:no-preference){' +"), SRC.indexOf("}}' +", SRC.indexOf("'@media (prefers-reduced-motion:no-preference){' +")) + 2);
+  check('  ...each with its own move, every move inside the reduced-motion guard (and none outside it), each with its keyframes',
+    new Set(moves).size === moves.length && moves.every((mv) => guard.includes('#sendy-widget[data-mood="' + mv + '"] .sendy-emo{animation:sendy-m-' + mv + ' ') && SRC.includes("'@keyframes sendy-m-" + mv + '{'))
+    && (SRC.match(/\] \.sendy-emo\{animation:sendy-m-/g) || []).length === moves.length, moves.join(','));
+  // the deck: every mood once a round, never the same twice running, and a different order each round (a fixed order fails)
+  const draws = Array.from({ length: M.MOODS.length * 60 }, () => M.nextMood());
+  const twice = draws.some((m, i) => i && m === draws[i - 1]);
+  const rounds = Array.from({ length: 60 }, (_, r) => draws.slice(r * M.MOODS.length, (r + 1) * M.MOODS.length));
+  const full = rounds.every((r) => new Set(r).size === M.MOODS.length);
+  const orders = new Set(rounds.map((r) => r.map((m) => M.MOODS.indexOf(m)).join(','))).size;
+  check('  ...drawn from a shuffled deck: in 60 rounds every mood once a round, never twice in a row, and the order different round to round', !twice && full && orders >= 50, (twice ? 'a repeat · ' : '') + (full ? '' : 'short rounds · ') + orders + ' distinct orders');
+  // the triggers, on a clock the test turns
+  const fire = (t, e) => (handlers[t] || []).forEach((f) => f(Object.assign({ pointerType: 'mouse' }, e || {})));
+  const moodNow = () => attrs['data-mood'];
+  const seq = [];
+  T.now = 10000; fire('pointerenter'); seq.push(['hover', moodNow(), faceEl.textContent]);
+  const first = faceEl.textContent;
+  T.now = 10300; fire('pointerenter'); const wobble = faceEl.textContent === first;
+  T.now = 10400; M.react('tap'); const clickRight = faceEl.textContent === first;
+  T.now = 10800; M.react('tap'); const clickLater = faceEl.textContent !== first;
+  const second = faceEl.textContent;
+  T.now = 11000; M.react('tap'); T.now = 11100; M.react('tap'); const rapid = faceEl.textContent === second;
+  T.now = 13000; fire('pointerenter', { pointerType: 'touch' }); const touchEnter = faceEl.textContent === second;
+  fire('pointerdown', { pointerType: 'touch' }); const finger = faceEl.textContent !== second;
+  const third = faceEl.textContent; T.now = 13200; M.react('tap'); const fingerClick = faceEl.textContent === third;
+  T.now = 16000; fire('pointerenter'); const later = faceEl.textContent !== third;
+  check('  ...the pointer arriving sets one off; wavering on his edge mid-mood does not; the click right after it is the same reaction, a click later is a new one; rapid clicks change the face at most every 600 ms',
+    !!first && wobble && clickRight && clickLater && rapid && later, JSON.stringify({ first, wobble, clickRight, clickLater, rapid, later }));
+  check('  ...a finger has no hover: a finger landing on him (a tap, or the start of a scroll over him) sets one off, and its click does not set off a second',
+    touchEnter && finger && fingerClick, JSON.stringify({ touchEnter, finger, fingerClick }));
+  motion = false; kids.length = 0; T.now = 20000; fire('pointerenter');
+  check('  ...with reduced motion (or the ⏸) the face still shows, no bits float, and nothing moves', !!faceEl.textContent && kids.length === 0
+    && /@media \(prefers-reduced-motion:reduce\)\{#sendy-widget\[data-mood\] \.sendy-face\{animation:none\}\}/.test(SRC) && /html\.motion-off #sendy-widget\[data-mood\] \.sendy-emo,html\.motion-off #sendy-widget\[data-mood\] \.sendy-face\{animation:none\}/.test(SRC));
+  check('  ...the move is on .sendy-emo inside the button, so the part that takes the pointer never moves; the spin turns about his middle, all the way round, inside his box',
+    /<span class="sendy-emo" aria-hidden="true"><span class="sendy-sprite" aria-hidden="true"><\/span><\/span>/.test(SRC) && /\.sendy-emo\{display:block;width:var\(--sendy-size\);height:var\(--sendy-size\);transform-origin:50% 85%;pointer-events:none\}/.test(SRC)
+    && /#sendy-widget\[data-mood="spin"\] \.sendy-emo\{transform-origin:50% 50%\}/.test(SRC) && /@keyframes sendy-m-spin\{0%\{transform:translateY\(0\) rotate\(0deg\) scale\(1\)\}50%\{transform:translateY\(-8%\) rotate\(180deg\) scale\(\.9\)\}100%\{transform:translateY\(0\) rotate\(360deg\) scale\(1\)\}\}/.test(SRC));
+  check('  ...the face and the bits are decoration: hidden from screen readers, never in the pointer\'s way, no high-contrast backplate',
+    /<span class="sendy-face" id="sendy-face" aria-hidden="true"><\/span>/.test(SRC) && /\.sendy-face,\.sendy-bit\{position:absolute;pointer-events:none;line-height:1;user-select:none;forced-color-adjust:none\}/.test(SRC) && /b\.setAttribute\('aria-hidden', 'true'\)/.test(SRC));
   /* readable and usable at every screen size */
   check('the popup grows with its own text: 25em wide (capped to the screen), sizes in em, so about 45 characters a line from a phone to a 19pt desktop', /\.sendy-popup\{position:absolute;bottom:calc\(var\(--sendy-size\) \+ 10px\);right:0;font-size:max\(var\(--text-floor\), \.92rem\);width:min\(25em,calc\(100vw - 2rem\)\)/.test(SRC) && !/width:360px/.test(SRC));
   check('  ...in the chat the conversation takes the room: a steady 40em-tall popup (capped to the space there is), the log filling it, no 300px cap', /\.sendy-popup\.is-chat\{height:40em\}/.test(SRC) && /\.sendy-chat-messages\{[^}]*flex:1 1 auto;min-height:4\.5em;overflow-y:auto/.test(SRC) && !/max-height:300px/.test(SRC) && /popup\.classList\.add\('is-chat'\)/.test(SRC));

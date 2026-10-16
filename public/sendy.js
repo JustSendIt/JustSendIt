@@ -108,8 +108,9 @@
     // data-nosnippet: the greeting and the tips are the helper talking, never a search result's description of the page
     return '<div id="sendy-widget" class="sendy-widget" data-nosnippet hidden>' +
       '<button class="sendy-rocket" id="sendy-rocket" type="button" aria-label="Sendy, your $Send guide" aria-expanded="false" data-tip="Opens Sendy — ask a question, or get a tip about this page. Drag to move (desktop)">' +
-        '<span class="sendy-sprite" aria-hidden="true"></span>' +
+        '<span class="sendy-emo" aria-hidden="true"><span class="sendy-sprite" aria-hidden="true"></span></span>' +
       '</button>' +
+      '<span class="sendy-face" id="sendy-face" aria-hidden="true"></span>' +
       '<div class="sendy-say" id="sendy-say" role="status" hidden></div>' +
       '<div class="sendy-popup" id="sendy-popup" role="dialog" aria-label="Sendy" hidden>' +
         '<div class="sendy-head">' +
@@ -176,6 +177,43 @@
       'html.motion-off .sendy-sprite,html.motion-off .sendy-msg,html.motion-off .sendy-say{animation:none}html.motion-off .sendy-widget.is-hyped .sendy-rocket{animation:none}' +
       '@media (prefers-reduced-motion:reduce){.sendy-say{animation:none}}' +
       '.sendy-widget.is-flying .sendy-sprite{animation-duration:.6s}' +
+      /* moods: a happy face and a move each time the pointer comes over Sendy, and on a tap. The move is on .sendy-emo, inside the
+         button, so the part that takes the pointer (the button's ::before) never moves and a bounce cannot set off another one */
+      '.sendy-emo{display:block;width:var(--sendy-size);height:var(--sendy-size);transform-origin:50% 85%;pointer-events:none}' +
+      '.sendy-face,.sendy-bit{position:absolute;pointer-events:none;line-height:1;user-select:none;forced-color-adjust:none}' +   /* emoji: no high-contrast backplate square stamped over Sendy */
+      '.sendy-face{top:-.2em;left:-.15em;font-size:max(var(--text-floor),calc(var(--sendy-size) * .34));opacity:0;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}' +
+      '#sendy-widget[data-mood] .sendy-face{opacity:1;animation:sendy-face 1.2s ease both}' +
+      '@keyframes sendy-face{0%{opacity:0;transform:translateY(25%) scale(.4)}22%{opacity:1;transform:translateY(-5%) scale(1.15)}38%{transform:translateY(-5%) scale(1)}82%{opacity:1;transform:translateY(-12%) scale(1)}100%{opacity:0;transform:translateY(-22%) scale(.9)}}' +
+      '.sendy-bit{left:50%;top:8%;font-size:max(var(--text-floor),calc(var(--sendy-size) * .19));animation:sendy-bit 1.1s ease-out both}' +
+      '@keyframes sendy-bit{0%{opacity:0;transform:translate(-50%,0) scale(.5)}20%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(var(--sendy-size) * -.75)) rotate(var(--rot)) scale(1.05)}}' +
+      '@media (prefers-reduced-motion:no-preference){' +
+        '#sendy-widget[data-mood="hop"] .sendy-emo{animation:sendy-m-hop .8s ease}' +
+        '#sendy-widget[data-mood="pulse"] .sendy-emo{animation:sendy-m-pulse .9s ease}' +
+        '#sendy-widget[data-mood="wiggle"] .sendy-emo{animation:sendy-m-wiggle .9s ease}' +
+        '#sendy-widget[data-mood="lean"] .sendy-emo{animation:sendy-m-lean 1s ease}' +
+        '#sendy-widget[data-mood="spin"] .sendy-emo{animation:sendy-m-spin .9s ease}' +
+        '#sendy-widget[data-mood="giggle"] .sendy-emo{animation:sendy-m-giggle .8s ease}' +
+        '#sendy-widget[data-mood="nod"] .sendy-emo{animation:sendy-m-nod .9s ease}' +
+        '#sendy-widget[data-mood="sway"] .sendy-emo{animation:sendy-m-sway 1s ease}' +
+        '#sendy-widget[data-mood="puff"] .sendy-emo{animation:sendy-m-puff .9s ease}' +
+        '#sendy-widget[data-mood="dash"] .sendy-emo{animation:sendy-m-dash .9s ease}' +
+        '#sendy-widget[data-mood="squish"] .sendy-emo{animation:sendy-m-squish .8s ease}' +
+        '#sendy-widget[data-mood="bounce"] .sendy-emo{animation:sendy-m-bounce .9s ease}}' +
+      '@keyframes sendy-m-hop{0%,100%{transform:none}35%{transform:translateY(-14%) rotate(-4deg)}60%{transform:translateY(-3%) rotate(2deg)}}' +
+      '@keyframes sendy-m-pulse{0%,100%{transform:none}20%{transform:scale(1.12)}40%{transform:scale(.97)}60%{transform:scale(1.08)}}' +
+      '@keyframes sendy-m-wiggle{0%,100%{transform:none}20%{transform:rotate(9deg)}40%{transform:rotate(-9deg)}60%{transform:rotate(6deg)}80%{transform:rotate(-3deg)}}' +
+      '@keyframes sendy-m-lean{0%,100%{transform:none}30%,70%{transform:translateX(-6%) rotate(-11deg)}}' +
+      '#sendy-widget[data-mood="spin"] .sendy-emo{transform-origin:50% 50%}' +   /* a whole turn about his middle: about his fins he swung upside down, out of his box and behind the SEND IT button */
+      '@keyframes sendy-m-spin{0%{transform:translateY(0) rotate(0deg) scale(1)}50%{transform:translateY(-8%) rotate(180deg) scale(.9)}100%{transform:translateY(0) rotate(360deg) scale(1)}}' +   /* the same functions in every step, so it turns all the way round instead of back */
+      '@keyframes sendy-m-giggle{0%,100%{transform:none}17%{transform:rotate(4deg)}33%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}67%{transform:rotate(-3deg)}83%{transform:rotate(2deg)}}' +
+      '@keyframes sendy-m-nod{0%,100%{transform:none}30%{transform:rotate(10deg)}55%{transform:rotate(-2deg)}78%{transform:rotate(6deg)}}' +
+      '@keyframes sendy-m-sway{0%,100%{transform:none}25%{transform:rotate(-8deg)}55%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}' +
+      '@keyframes sendy-m-puff{0%,100%{transform:none}35%,60%{transform:scale(1.17)}}' +
+      '@keyframes sendy-m-dash{0%,100%{transform:none}30%{transform:translateY(-24%) scaleY(1.06)}55%{transform:translateY(-24%)}}' +
+      '@keyframes sendy-m-squish{0%,100%{transform:none}25%{transform:scale(1.13,.87)}55%{transform:scale(.94,1.08)}80%{transform:scale(1.03,.97)}}' +
+      '@keyframes sendy-m-bounce{0%,50%,100%{transform:none}22%{transform:translateY(-12%)}72%{transform:translateY(-8%)}}' +
+      '@media (prefers-reduced-motion:reduce){#sendy-widget[data-mood] .sendy-face{animation:none}}' +
+      'html.motion-off #sendy-widget[data-mood] .sendy-emo,html.motion-off #sendy-widget[data-mood] .sendy-face{animation:none}' +
       /* a reaction: a speech bubble by the rocket, and a hop — as wide as its words allow, never wider than the screen */
       '.sendy-say{position:absolute;bottom:calc(var(--sendy-size) + 8px);right:0;width:max-content;max-width:min(16em,calc(100vw - 1.5rem));padding:.5em .75em;border-radius:.8em;border-bottom-right-radius:4px;background:var(--green);color:var(--ink-1);font-weight:600;font-size:max(var(--text-floor), .86rem);line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.35);animation:sendy-in .25s ease;z-index:1}' +
       '.sendy-say[hidden]{display:none}' +
@@ -447,10 +485,64 @@
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); if (chatForm.requestSubmit) chatForm.requestSubmit(); else chatForm.dispatchEvent(new Event('submit', { cancelable: true })); }
     });
 
+    /* ---------- moods (owner, 2026-10-15: "make sendy react differently each time you scroll over him … a random emotion
+       but never negative"): each time the pointer comes over Sendy, and on every tap, a happy face pops up beside him and
+       he moves to match. Only happy ones. Drawn from a shuffled deck, so every mood comes round before any repeats and
+       the same one never plays twice in a row. With reduced motion (or the ⏸) the face still shows, but nothing moves. ---------- */
+    const MOODS = [
+      { face: '😄', move: 'hop' },
+      { face: '🥰', move: 'pulse', bits: ['💚', '💖', '💚'] },
+      { face: '🤩', move: 'wiggle', bits: ['✨', '⭐', '✨'] },
+      { face: '😎', move: 'lean' },
+      { face: '🥳', move: 'spin', bits: ['🎉', '🎊', '✨'] },
+      { face: '😆', move: 'giggle' },
+      { face: '😉', move: 'nod' },
+      { face: '👋', move: 'sway' },
+      { face: '💪', move: 'puff' },
+      { face: '🚀', move: 'dash', bits: ['⚡', '✨'] },
+      { face: '😊', move: 'squish', bits: ['🌸'] },
+      { face: '🙌', move: 'bounce', bits: ['✨', '✨'] },
+    ];
+    const MOOD_MS = 1200, TAP_GAP = 600, faceEl = $('sendy-face');   // a tap never cuts a mood under 600 ms old: one reaction per click, and never more than two face changes a second
+    let moodBag = [], lastMood = null, moodTimer = null, moodUntil = 0, moodAt = 0;
+    function nextMood() {
+      if (!moodBag.length) {
+        moodBag = MOODS.slice();
+        for (let i = moodBag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = moodBag[i]; moodBag[i] = moodBag[j]; moodBag[j] = t; }
+        if (moodBag[moodBag.length - 1] === lastMood) moodBag.unshift(moodBag.pop());   // a fresh deck never opens with the last one
+      }
+      lastMood = moodBag.pop();
+      return lastMood;
+    }
+    function react(how) {
+      if (widget.hasAttribute('hidden') || flying) return;
+      const t = Date.now();
+      if (how === 'hover' && t < moodUntil) return;   // still mid-mood: a pointer wavering on his edge must not set off a flurry
+      if (how === 'tap' && t - moodAt < TAP_GAP) return;   // the click right after the pointer arrived: the mood it set off is this click's reaction
+      const m = nextMood();
+      moodUntil = t + MOOD_MS; moodAt = t;
+      faceEl.textContent = m.face;
+      widget.removeAttribute('data-mood'); void widget.offsetWidth; widget.setAttribute('data-mood', m.move);   // restart, even for the same move
+      if (!reduced()) for (let i = 0; i < (m.bits || []).length; i++) {
+        const b = document.createElement('span');
+        b.className = 'sendy-bit'; b.setAttribute('aria-hidden', 'true'); b.textContent = m.bits[i];
+        b.style.setProperty('--dx', Math.round((Math.random() - 0.5) * 70) + 'px');
+        b.style.setProperty('--rot', Math.round((Math.random() - 0.5) * 50) + 'deg');
+        b.style.animationDelay = (i * 0.12) + 's';
+        widget.appendChild(b);
+        setTimeout(() => b.remove(), 1100 + i * 120 + 100);
+      }
+      clearTimeout(moodTimer);
+      moodTimer = setTimeout(() => { widget.removeAttribute('data-mood'); faceEl.textContent = ''; }, MOOD_MS);
+    }
+    rocket.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch') react('hover'); });
+    rocket.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') react('tap'); }, { passive: true });   // a finger landing on him, a tap or the start of a scroll (a finger has no hover); its click then falls inside TAP_GAP
+
     /* ---------- the rocket: tap opens, drag moves (desktop) ---------- */
     let drag = null;
     rocket.addEventListener('click', (e) => {
       if (drag && drag.moved) { drag = null; return; } drag = null; e.stopPropagation();
+      react('tap');
       if (isOpen()) closePopup();
       else { openPopup(); if (e.detail === 0) { const first = chatMode.hasAttribute('hidden') ? $('sendy-chat') : chatInput; if (first) first.focus(); } }   // opened from the keyboard: focus goes in with it
     });
