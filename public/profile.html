@@ -106,7 +106,7 @@
            script, or a scrollIntoView into a hidden panel would all have landed on nothing — dashtabs.js
            routes each of those to its tab first. The address stays /profile (no #tab-…): a refresh comes back to
            the tab remembered on this device, and deep-link hashes that already existed keep their meaning. -->
-      <div class="dtabs" role="tablist" aria-label="Dashboard sections" id="dtabs">
+      <div class="dtabs" role="tablist" aria-label="Dashboard sections" id="dtabs" data-scroll-cue>
         <button class="dtab" role="tab" id="dtab-overview" aria-controls="dpanel-overview" aria-selected="true" tabindex="0" data-tab="overview" data-tip="Your Send Power, level, quests, arena and record">🏠 Overview</button>
         <button class="dtab" role="tab" id="dtab-wallet" aria-controls="dpanel-wallet" aria-selected="false" tabindex="-1" data-tab="wallet" data-tip="Live holdings and PNL for the wallets you have linked">👛 Wallet</button>
         <button class="dtab" role="tab" id="dtab-invites" aria-controls="dpanel-invites" aria-selected="false" tabindex="-1" data-tab="invites" data-tip="Your ticket and the invite codes you can hand out">🎟️ Invites</button>

@@ -16,14 +16,77 @@
       menu.classList.add('open');
       toggle.setAttribute('aria-expanded', 'true');
       toggle.setAttribute('aria-label', 'Close menu');
+      fitMenu();
     }
     function close() {
       if (!menu.classList.contains('open')) return;
-      menu.classList.remove('open');
+      menu.classList.remove('open', 'has-more', 'is-scrolled');
+      menu.scrollTop = 0;   // back to the top while it closes: the next open starts there, with no scroll event mid-opening
       toggle.setAttribute('aria-expanded', 'false');
       toggle.setAttribute('aria-label', 'Open menu');
     }
     var isOpen = function () { return menu.classList.contains('open'); };
+
+    /* The pop-down never scrolls when the screen has room for it (owner, 2026-10-15: "make sure there is no scroll if there
+       doesn't have to be on the page menu if you have to have a scroll on smaller screens make sure users know they need to
+       scroll"). It used to be capped at 560px, under the ~580px its links take, so it scrolled on every screen. Now:
+         · it is given the room under the bar (the visual viewport: a phone's address bar and keyboard take room), and only
+           as much of it as its links need, so the open/close animation runs over its real height;
+         · when one column of links would not fit there, they go into columns as wide as the widest link needs (measured, so
+           a larger text size makes fewer, wider columns rather than a scroll);
+         · only when even that is too tall does it scroll, and then a "Scroll for more ↓" button sits at the bottom until the
+           end is reached (a real button: a tap on it scrolls the menu, never falls through to a link hidden under it), with
+           a shade along the top once the menu has moved.
+       The cue is judged against the height the menu is given, never the box mid-animation. */
+    var compact = function () { return nav.classList.contains('is-compact'); };
+    var reducedMotion = function () { try { return matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('motion-off'); } catch (e) { return false; } };
+    var more = document.createElement('button');
+    more.type = 'button'; more.className = 'nav-more'; more.tabIndex = -1; more.setAttribute('aria-hidden', 'true');   // a keyboard moves through the links, which scroll into view on their own
+    more.setAttribute('data-tip', 'Scrolls the menu to show the rest of its links');
+    more.textContent = 'Scroll for more ↓';
+    more.addEventListener('click', function () { menu.scrollBy({ top: Math.max(60, menu.clientHeight - 90), behavior: reducedMotion() ? 'auto' : 'smooth' }); });
+    menu.appendChild(more);
+    var given = 0;   // the menu's height while open (its border box): what the cue is judged against
+    function menuRoom() {
+      var vv = window.visualViewport, h = vv ? vv.height : window.innerHeight;
+      return Math.max(120, Math.floor(h - nav.getBoundingClientRect().bottom));
+    }
+    function borderY() { var cs = getComputedStyle(menu); return (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0); }
+    function widestLink() {   // the widest link's words, plus the half-rem each side a link has in a column, plus a hair
+      var w = 0, links = menu.querySelectorAll(':scope > a'), r = document.createRange();
+      for (var i = 0; i < links.length; i++) { r.selectNodeContents(links[i]); w = Math.max(w, r.getBoundingClientRect().width); }
+      return Math.ceil(w + parseFloat(getComputedStyle(document.documentElement).fontSize) + 4);
+    }
+    function setHeight(room) {
+      menu.classList.remove('has-more');   // (the cue button takes room: measure without it)
+      given = Math.min(room, menu.scrollHeight + borderY());
+      menu.style.setProperty('--menu-room', given + 'px');
+    }
+    function menuCue() {
+      var on = isOpen() && compact();
+      var h = (given || menu.offsetHeight) - borderY();
+      menu.classList.toggle('has-more', on && menu.scrollHeight - h - menu.scrollTop > 2);
+      menu.classList.toggle('is-scrolled', on && menu.scrollTop > 2);
+    }
+    function fitMenu() {
+      menu.classList.remove('has-more');
+      if (!isOpen() || !compact()) { menu.classList.remove('is-cols', 'is-scrolled'); menu.style.removeProperty('--menu-room'); menu.style.removeProperty('--menu-col'); given = 0; return; }
+      var room = menuRoom();
+      menu.classList.remove('is-cols');
+      menu.style.removeProperty('--menu-col');
+      if (menu.scrollHeight + borderY() > room) {   // one column would not fit under the bar: columns
+        menu.style.setProperty('--menu-col', widestLink() + 'px');
+        menu.classList.add('is-cols');
+      }
+      setHeight(room);
+      menuCue();
+    }
+    menu.addEventListener('scroll', function () { menuCue(); }, { passive: true });
+    menu.addEventListener('transitionend', function (e) { if (e.propertyName === 'max-height' && isOpen()) menuCue(); });
+    window.addEventListener('resize', function () { if (isOpen()) fitMenu(); }, { passive: true });
+    if (window.visualViewport) visualViewport.addEventListener('resize', function () { if (isOpen()) fitMenu(); });   // a phone's address bar and keyboard change the room
+    // search results growing (or shrinking) inside the open menu: it grows into the room it has, then says if it runs past (no switch to columns mid-typing)
+    if (window.MutationObserver) new MutationObserver(function () { if (isOpen() && compact()) { setHeight(menuRoom()); menuCue(); } }).observe(menu, { childList: true, subtree: true });
 
     toggle.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -82,6 +145,7 @@
       void menu.offsetHeight;   // settle the final state with transitions still off…
       nav.classList.remove('is-measuring');   // …so switching them back on animates nothing
       if (compact !== wasCompact) syncNavHeight();
+      if (isOpen()) fitMenu();   // the bar changed under an open menu: its room and its columns with it
     }
     function fitSoon() { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 60); }
     window.addEventListener('resize', fitSoon);

@@ -279,6 +279,39 @@
     try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; }
   };
 
+  /* A strip that scrolls sideways (the profile's tabs, the Scanner's quick filters, a community's snapshots) says that it
+     does: .cue-end while there is more to the right, .cue-start once it has moved (styles.css draws a fade and a ›/‹ there).
+     Their scroll bars are hidden or thin, and a phone shows none at all, so without this a tab past the edge just looked
+     missing (owner, 2026-10-15: "if you have to have a scroll on smaller screens make sure users know"). Content arrives
+     later (the snapshots, the chips) and the strip resizes, so both are watched. */
+  window.scrollCue = function (el) {
+    if (!el || el._scrollCue) return;
+    el._scrollCue = true;
+    const update = () => {
+      const left = el.scrollLeft, max = el.scrollWidth - el.clientWidth;
+      el.classList.toggle('cue-start', left > 2);
+      el.classList.toggle('cue-end', max - left > 2);
+    };
+    el.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update, { passive: true });
+    // a tab or chip reached with the keyboard comes into view clear of the cue (scroll-padding-inline in styles.css)
+    el.addEventListener('focusin', (e) => { const t = e.target; if (t !== el && t.scrollIntoView) t.scrollIntoView({ block: 'nearest', inline: 'nearest' }); });
+    // a tap on the ›/‹ itself (it is the strip's own ::after/::before, so the strip is the target) scrolls the strip that way
+    el.addEventListener('click', (e) => {
+      if (e.target !== el) return;
+      const r = el.getBoundingClientRect(), edge = Math.min(64, r.width / 3);
+      const dir = e.clientX >= r.right - edge && el.classList.contains('cue-end') ? 1 : e.clientX <= r.left + edge && el.classList.contains('cue-start') ? -1 : 0;
+      if (!dir) return;
+      let still = false; try { still = matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('motion-off'); } catch {}
+      el.scrollBy({ left: dir * Math.max(80, el.clientWidth * 0.75), behavior: still ? 'auto' : 'smooth' });
+    });
+    try { if (window.ResizeObserver) new ResizeObserver(update).observe(el); } catch {}
+    try { new MutationObserver(update).observe(el, { childList: true, subtree: true, characterData: true }); } catch {}
+    update();
+  };
+  const cueAll = () => document.querySelectorAll('[data-scroll-cue]').forEach(window.scrollCue);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', cueAll); else cueAll();
+
   // trap Tab focus inside a container; returns a release() to remove the trap
   window.trapFocus = function (container) {
     const SEL = 'a[href],button:not([disabled]),textarea,input:not([disabled]),select,details > summary,iframe,video[controls],audio[controls],[tabindex]:not([tabindex="-1"])';   // a pop-down's <summary> is a stop too (the token dashboard can end on one); so are an outside chart's frame and a video with controls
