@@ -119,7 +119,7 @@ try {
       body: JSON.stringify({ username: '__pv_late_' + hex(2), email: 'pv.late.' + hex(3) + '@example.com', password: 'late-pass-' + hex(3) }) });
     const lateJ = await lateJoin.json().catch(() => null);
     check('  ...and the redeemed one no longer makes an account', lateJoin.status === 403 && lateJ && lateJ.code === 'need_invite', lateJoin.status + ' ' + JSON.stringify(lateJ));
-    check('  ...accounts deleted before this rule get the same at boot', /DELETE FROM invite_codes WHERE user_id IS NULL AND owner_id IN \(SELECT id FROM users WHERE deleted_at IS NOT NULL\)/.test(SRC)
+    check('  ...accounts deleted before this rule get the same at boot', /DELETE FROM invite_codes WHERE user_id IS NULL AND (?:admin = 0 AND )?owner_id IN \(SELECT id FROM users WHERE deleted_at IS NOT NULL\)/.test(SRC)
       && /DELETE FROM invite_codes WHERE owner_id = \? AND user_id IS NULL/.test(SRC));
     const pub = await api('/api/users/deleted-' + u.id);
     check('  ...and the public profile carries nothing that identifies them', pub.status !== 200 || (!/leaver_x|leaver_ig/.test(pub.text) && !files.some((f) => pub.text.includes(f))), pub.status);

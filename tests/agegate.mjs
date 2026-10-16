@@ -72,7 +72,7 @@ try {
   // (with no code and no answer the invite is asked for first — gatetest's first sign-up covers that live,
   // and a sign-up here would spend one of the ten an hour the whole run shares)
   check('the age check is the LAST refusal, after the invite, the terms and a spent code', /code: 'code_spent' \};\n[\s\S]{0,160}if \(!ageOk\(req\)\) return \{[^}]*code: 'need_age' \}/.test(SRC));
-  check('every door that makes an account records the answer', /function claimInvite[\s\S]{0,700}if \(ageOk\(req\)\) db\.prepare\('UPDATE users SET age_at = \? WHERE id = \? AND age_at IS NULL'\)/.test(SRC));
+  check('every door that makes an account records the answer', /function claimInvite[\s\S]{0,1800}if \(ageOk\(req\)\) db\.prepare\('UPDATE users SET age_at = \? WHERE id = \? AND age_at IS NULL'\)/.test(SRC));
   check('an OAuth sign-up refused for age comes back to the age question, not the ticket', /e\.code === 'need_age' \? '&needage=1' : '&needinvite=1'/.test(SRC) && /q\.get\('needage'\) === '1'[\s\S]{0,80}AGE\.reopen\(\)/.test(AUTH));
   check('a need_age refusal on the page reopens the question', /code === 'need_age' && window\.AGE\) \{ AGE\.reopen\(\)/.test(AUTH));
 

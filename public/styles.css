@@ -5058,6 +5058,34 @@ html.motion-off #matrix-rain { display: none; }
 .adm-dau-table th, .adm-dau-table td { padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--hair); text-align: right; }
 .adm-dau-table th:first-child, .adm-dau-table td:first-child { text-align: left; position: sticky; left: 0; background: var(--ink-2); }
 .adm-dau-table thead th { color: var(--text-dim); font-weight: 800; white-space: normal; vertical-align: bottom; }
+/* admin invite codes (admincodes.js): a grid like a member's ticket, then who signed up with them */
+.adm-codes-lede { margin: 0 0 0.7rem; }
+.adm-codes-show { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0 0 0.4rem; }
+.adm-codes-show .btn[aria-pressed="false"] { background: transparent; color: var(--text); border: 1px solid var(--edge-ctl); box-shadow: none; }   /* which list is showing reads by shape, not colour alone: outlined, or filled */
+.adm-codes-show .btn[aria-pressed="true"] { background: var(--green); color: var(--on-green); border-color: var(--green); }
+.adm-code-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.45rem; grid-template-columns: repeat(auto-fill, minmax(min(190px, 100%), 1fr)); }
+.adm-code-list li { margin: 0; min-width: 0; }
+.adm-code { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; padding: 0.5rem 0.7rem;
+  border: 1px solid var(--edge-ctl); border-radius: 10px; background: var(--ink-3); color: var(--text); font-family: inherit; text-align: left; overflow-wrap: anywhere; }
+button.adm-code { cursor: pointer; }
+button.adm-code:hover { border-color: var(--green); }
+button.adm-code:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.adm-code-chars { font-family: var(--mono); font-weight: 800; letter-spacing: 0.08em; font-size: max(var(--text-floor), 1rem); }
+.adm-code-tag { color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); line-height: 1.35; }
+.adm-code-tag a, .adm-codes-table a { color: var(--green-bright); font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+.adm-code-tag small, .adm-codes-table small { font-size: max(var(--text-floor), 0.78rem); color: var(--text-dim); }
+.adm-code.is-used .adm-code-chars { text-decoration: line-through; color: var(--text-dim); }
+.adm-code.is-pending { border-style: dashed; border-color: var(--gold); }
+.adm-codes-gone { font-style: italic; }
+.adm-codes-table { overflow-x: auto; }
+.adm-codes-table table { border-collapse: collapse; width: 100%; font-size: max(var(--text-floor), 0.88rem); }
+.adm-codes-table th, .adm-codes-table td { padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: top; }
+.adm-codes-table thead th { color: var(--text-dim); font-weight: 800; white-space: nowrap; }
+.adm-codes-table td { white-space: nowrap; }   /* a name, a code and a date stay whole: the table scrolls in its own box on a phone */
+.adm-codes-table td small { display: block; white-space: normal; min-width: 9em; }
+.adm-codes-mono { font-family: var(--mono); letter-spacing: 0.06em; white-space: nowrap; }
+.adm-codes-more { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+@media (pointer: coarse) { .adm-code-tag a, .adm-codes-table a { display: inline-flex; align-items: center; min-height: 44px; } }   /* a profile link is a finger's target too */
 
 
 

@@ -54,7 +54,7 @@
 
 <main id="main" class="wrap" style="padding-top:2.2rem; padding-bottom:4rem;">
   <h1 class="display" style="font-size:max(var(--text-floor), 1.6rem); margin:0 0 0.3rem;">Admin 🛠️</h1>
-  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, then the moderation queue.</p>
+  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, then the moderation queue.</p>
 
   <p class="modal-note" id="adm-gate" role="status" aria-live="polite">Checking who you are…</p>
 
@@ -80,6 +80,29 @@
       </div>
     </div>
     <div id="adm-dau-body" aria-live="polite"></div>
+  </section>
+
+  <!-- admin invite codes: for the admin to hand out, each tracked to the account that signed up with it (admincodes.js, /api/admin/codes) -->
+  <section class="card adm-ov adm-codes" id="adm-codes" hidden aria-labelledby="adm-codes-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-codes-h" class="adm-h2">Admin invite codes 🎟️</h2>
+      <button class="btn btn-sm" id="adm-codes-refresh" type="button" data-tip="Reads the codes and who used them again">↻ Refresh</button>
+    </div>
+    <p class="modal-note adm-codes-lede">Yours to hand out. Each code lets one person in, once — like a member's invite, but these show on nobody's ticket. Tap an unused code to copy it.</p>
+    <div class="adm-codes-show" role="group" aria-label="Which codes to show">
+      <button class="btn btn-sm" type="button" data-codes-show="unused" aria-pressed="true" data-tip="Shows the codes nobody has used yet">Unused <span data-codes-n="unused"></span></button>
+      <button class="btn btn-sm" type="button" data-codes-show="used" aria-pressed="false" data-tip="Shows the codes someone signed up with, and who">Signed up <span data-codes-n="used"></span></button>
+      <button class="btn btn-sm" type="button" data-codes-show="pending" aria-pressed="false" data-tip="Shows codes that were entered but whose sign-up is not finished yet">In progress <span data-codes-n="pending"></span></button>
+      <button class="btn btn-sm" type="button" data-codes-show="all" aria-pressed="false" data-tip="Shows every admin code">All <span data-codes-n="total"></span></button>
+    </div>
+    <p class="modal-note adm-codes-sum" id="adm-codes-sum" role="status" aria-live="polite"></p>
+    <div id="adm-codes-body"></div>
+    <h3 class="adm-h3">Who signed up with them</h3>
+    <div id="adm-codes-people"></div>
+    <div class="adm-codes-more">
+      <button class="btn btn-sm" id="adm-codes-mint" type="button" data-tip="Makes 100 more admin codes: tap twice to be sure (and confirm it's you, if you have not lately)">Make 100 more</button>
+      <span class="modal-note" id="adm-codes-status" role="status" aria-live="polite"></span>
+    </div>
   </section>
 
   <div id="adm-tools" hidden>
@@ -121,5 +144,6 @@
 <script src="auth.js"></script>
 <script src="notifications.js"></script>
 <script src="admin.js"></script>
+<script src="admincodes.js"></script>
 </body>
 </html>

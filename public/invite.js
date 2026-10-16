@@ -626,10 +626,11 @@
     // aria-label on a plain span is not reliably read, and a title is not reachable by touch at all.
     return (t.codes || []).map(c => {
       if (c.used) {
-        const who = c.usedBy ? 'used · @' + c.usedBy : 'used';
+        // the person it let in: a link to their profile once they have set it up (owner, 2026-10-16), their name until then
+        const name = c.usedBy ? (c.usedByLink ? '<a href="' + esc(c.usedByLink) + '">@' + esc(c.usedBy) + '</a>' : '@' + esc(c.usedBy)) : c.usedByGone ? 'an account since deleted' : '';
         return '<li><span class="inv-code is-used">' +
           '<span class="inv-chars">' + esc(c.hint || '••••••••') + '</span>' +
-          '<span class="inv-tag">' + esc(who) + '</span></span></li>';
+          '<span class="inv-tag">' + (name ? 'used · ' + name : 'used') + '</span></span></li>';
       }
       return '<li><button class="inv-code" type="button" data-tip="Copies this unused code so you can pass it to someone" data-c="' + esc(c.code) + '" title="Copy ' + esc(c.code) + '">' +
         '<span class="inv-chars">' + esc(c.code) + '</span><span class="inv-tag">copy</span></button></li>';

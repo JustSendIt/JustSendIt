@@ -100,6 +100,8 @@
 }
 /* struck through on the CHARACTERS only — a line through the "used · @who" label made it unreadable */
 .inv-code.is-used .inv-chars { text-decoration: line-through; }
+.inv-code.is-used .inv-tag a { color: inherit; font-weight: 800; text-decoration: underline; text-underline-offset: 2px; }   /* the person a code let in, linked to their profile */
+@media (pointer: coarse) { .inv-code.is-used .inv-tag a { display: inline-flex; align-items: center; min-height: 44px; } }
 .inv-tag {
   flex: 0 1 auto; min-width: 0;
   white-space: normal; overflow-wrap: anywhere;   /* the whole 'used · @handle' is the accessible name now — nothing else to fall back on */

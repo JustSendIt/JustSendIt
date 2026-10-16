@@ -949,6 +949,11 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN tos_at INTEGER",            // when this account accepted the terms
   "ALTER TABLE users ADD COLUMN tos_version TEXT",
   "ALTER TABLE users ADD COLUMN age_at INTEGER",            // when this account confirmed it is 18 or older (the age gate)
+  /* Admin codes (owner, 2026-10-16: "100 active admin codes that are shown on the admin page … only for the admin to give
+     out"): minted for the admin account that asked for them, so they let people in like any member's code, but flagged
+     so they never show on that account's own ticket. The index comes after the column it is on. */
+  "ALTER TABLE invite_codes ADD COLUMN admin INTEGER NOT NULL DEFAULT 0",
+  "CREATE INDEX IF NOT EXISTS idx_invite_admin ON invite_codes(admin)",
 
   /* ── The 90-day beta campaign ───────────────────────────────────────────────────────────────────────
      The beta runs from launch to the moment Silver OG closes — 90 days to the minute — and ends with
@@ -12674,12 +12679,26 @@ function adminActivity() {
     activeKinds: ACTIVE_KINDS,
   };
 }
+/* The admin's codes, with what became of each: unused (or freed again — redeemed but never turned into an account within
+   INVITE_RECLAIM_MS, so it works again), in progress (redeemed, the sign-up not finished), or used — and by whom. */
+function adminCodes() {
+  const t = now();
+  const names = {};
+  const nameOf = (id) => (id in names ? names[id] : (names[id] = (db.prepare('SELECT username FROM users WHERE id = ?').get(id) || {}).username || null));
+  const codes = db.prepare('SELECT code, owner_id, created_at, used_at, user_id FROM invite_codes WHERE admin = 1 ORDER BY rowid').all().map((r) => {
+    const state = r.user_id ? 'used' : (r.used_at && t - r.used_at < INVITE_RECLAIM_MS ? 'pending' : 'unused');
+    return { code: r.code, createdAt: r.created_at, madeBy: r.owner_id ? nameOf(r.owner_id) : null, state, usedAt: state === 'unused' ? null : r.used_at,
+      freed: state === 'unused' && !!r.used_at, by: r.user_id ? codeSignup(r.user_id) : null };
+  });
+  const n = (st) => codes.filter((c) => c.state === st).length;
+  return { codes, counts: { total: codes.length, unused: n('unused'), pending: n('pending'), used: n('used') }, batch: ADMIN_CODE_BATCH, max: ADMIN_CODE_MAX, reclaimMinutes: Math.round(INVITE_RECLAIM_MS / 6e4) };
+}
 function adminOverview() {
   const one = (sql, ...a) => db.prepare(sql).get(...a);
   const t = now();
   const latest = db.prepare('SELECT username, send_no, created_at FROM users WHERE system = 0 AND deleted_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 10').all()
     .map((u) => ({ username: u.username, sendId: u.send_no, joinedAt: u.created_at }));
-  const codes = db.prepare("SELECT CASE WHEN owner_id IS NULL THEN 'seed' ELSE 'member' END kind, CASE WHEN user_id IS NOT NULL THEN 'used' WHEN used_at IS NOT NULL THEN 'pending' ELSE 'unused' END state, COUNT(*) n FROM invite_codes GROUP BY 1, 2").all();
+  const codes = db.prepare("SELECT CASE WHEN admin = 1 THEN 'admin' WHEN owner_id IS NULL THEN 'seed' ELSE 'member' END kind, CASE WHEN user_id IS NOT NULL THEN 'used' WHEN used_at IS NOT NULL AND used_at > ? THEN 'pending' ELSE 'unused' END state, COUNT(*) n FROM invite_codes GROUP BY 1, 2").all(t - INVITE_RECLAIM_MS);   // a code entered over an hour ago with no account made works again: unused, as the redeem route and the codes list have it
   const count = (kind, state) => (codes.find((c) => c.kind === kind && c.state === state) || { n: 0 }).n;
   let backups = [];
   try {
@@ -12689,7 +12708,7 @@ function adminOverview() {
   let dbBytes = null; try { dbBytes = fs.statSync(path.join(DATA_DIR, 'app.db')).size; } catch {}
   return {
     members: { total: one('SELECT COUNT(*) n FROM users WHERE system = 0 AND deleted_at IS NULL').n, joinedLast7Days: one('SELECT COUNT(*) n FROM users WHERE system = 0 AND deleted_at IS NULL AND created_at > ?', t - 7 * DAY_MS).n, latest },
-    invites: { memberUnused: count('member', 'unused'), memberPending: count('member', 'pending'), memberUsed: count('member', 'used'), seedCodes: count('seed', 'unused') + count('seed', 'pending') + count('seed', 'used'), seedCodesOpen: seedCodesOpen(), perMember: INVITE_GRANT },
+    invites: { memberUnused: count('member', 'unused'), memberPending: count('member', 'pending'), memberUsed: count('member', 'used'), seedCodes: count('seed', 'unused') + count('seed', 'pending') + count('seed', 'used'), seedCodesOpen: seedCodesOpen(), perMember: INVITE_GRANT, adminUnused: count('admin', 'unused'), adminPending: count('admin', 'pending'), adminUsed: count('admin', 'used') },
     reports: { open: one('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').n },
     server: { node: process.version, commit: BOOT_COMMIT, checkoutCommit: gitCommit(), startedAt: BOOT_AT, uptimeSeconds: Math.round((Date.now() - BOOT_AT) / 1000), health: healthCheck() },
     storage: { dbBytes, keySource: DATA_KEY_SOURCE, keyBesideDatabase: DATA_KEY_SOURCE === 'data-dir' || DATA_KEY_SOURCE === 'file-same-volume', backupDir: BACKUP_DIR, backupsOutsideDataDir: BACKUP_OFF_VOLUME, backupsKept: BACKUP_KEEP, backups, keys: keyStatus() },
@@ -12960,6 +12979,8 @@ const TOS_VERSION = '2026-10-14';   // 2026-10-14: the Arcade's slot machine (Ju
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
 const INVITE_GRANT = 10;                 // codes each admitted person gets to hand out
+const ADMIN_CODE_BATCH = 100;            // admin codes made the first time an admin opens them, and again on each "make more"
+const ADMIN_CODE_MAX = 1000;             // and never more than this many in all
 /* The seed code is the only key to the only door on a fresh deploy, and signupRefusal makes it an
    account-minting credential. It used to default to '12345' (F018). Unset, a random code is generated
    and printed once at boot; tests set it explicitly. */
@@ -13001,12 +13022,12 @@ function seedCodesOpen() {
   if (process.env.SEED_CODES_OPEN === '1') return true;
   try { return !db.prepare('SELECT 1 FROM users WHERE system = 0 LIMIT 1').get(); } catch { return false; }
 }
-function mintCodes(ownerId, n) {
+function mintCodes(ownerId, n, admin) {
   const out = [];
   for (let i = 0; i < n; i++) {
     for (let tries = 0; tries < 6; tries++) {
       const c = newCode();
-      try { db.prepare('INSERT INTO invite_codes (code, owner_id, created_at) VALUES (?,?,?)').run(c, ownerId, now()); out.push(c); break; }
+      try { db.prepare('INSERT INTO invite_codes (code, owner_id, created_at, admin) VALUES (?,?,?,?)').run(c, ownerId, now(), admin ? 1 : 0); out.push(c); break; }
       catch { /* astronomically unlikely collision — draw again */ }
     }
   }
@@ -13023,7 +13044,7 @@ try {
 } catch {}
 // One-time, idempotent: accounts deleted before deletion voided their unused codes (see /api/account/delete)
 try {
-  const voided = db.prepare('DELETE FROM invite_codes WHERE user_id IS NULL AND owner_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run().changes;
+  const voided = db.prepare('DELETE FROM invite_codes WHERE user_id IS NULL AND admin = 0 AND owner_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run().changes;   // never admin codes (the site's pool)
   if (voided) console.log('[gate] voided ' + voided + ' unused invite code' + (voided === 1 ? '' : 's') + ' left by deleted accounts');
 } catch {}
 
@@ -13040,16 +13061,23 @@ const passCookie = (tok) => `${PASS_COOKIE}=${tok}; Path=/; HttpOnly; SameSite=L
    which also counts the site's own account), and how long Gold OG has left. */
 /* The ticket wears the SITE's brand — the green S-rocket mark and the $Send wordmark, drawn from files this
    site ships — not a coin's Dexscreener banner, so nothing about it needs a third party's artwork. */
+/* Who a spent code let in, for every list that shows it (a member's ticket, the admin's codes): the account's name, and a
+   link to its profile once that profile is set up (owner, 2026-10-16: "if a user signs up under a code and sets up a
+   profile make that user name … a hyperlink"). Set up means the account picked a name of its own — a wallet or social
+   sign-up starts as an automatic sender_… name (auto_named) — and still exists; an erased account is said to be gone. */
+function codeSignup(userId) {
+  const u = userId ? db.prepare('SELECT username, auto_named, deleted_at, created_at FROM users WHERE id = ?').get(userId) : null;
+  if (!u) return null;
+  if (u.deleted_at) return { username: null, link: null, profile: false, deleted: true, joinedAt: u.created_at };
+  const profile = !u.auto_named;
+  return { username: u.username, link: profile ? '/u/' + encodeURIComponent(u.username) : null, profile, deleted: false, joinedAt: u.created_at };
+}
 function ticketFor(u) {
   if (!u) return null;
-  const codes = db.prepare('SELECT code, used_at, user_id FROM invite_codes WHERE owner_id = ? ORDER BY rowid').all(u.id);
+  const codes = db.prepare('SELECT code, used_at, user_id FROM invite_codes WHERE owner_id = ? AND admin = 0 ORDER BY rowid').all(u.id);   // never an admin's codes for handing out
   // who each spent code actually let in, so the list reads as a record of people rather than dead strings
   const takenBy = {};
-  for (const c of codes) {
-    if (!c.user_id) continue;
-    const who = db.prepare('SELECT username FROM users WHERE id = ?').get(c.user_id);
-    if (who) takenBy[c.code] = who.username;
-  }
+  for (const c of codes) if (c.user_id) takenBy[c.code] = codeSignup(c.user_id);
   const inviter = u.invited_by ? db.prepare('SELECT username FROM users WHERE id = ?').get(u.invited_by) : null;
   const camp = (() => { try { return ogCampaign(); } catch { return null; } })();
   return {
@@ -13064,7 +13092,7 @@ function ticketFor(u) {
        will never work again — and leaving it copyable is how someone ends up sending a friend a code
        that bounces. */
     codes: codes.map(c => c.used_at
-      ? { used: true, usedAt: c.used_at, usedBy: takenBy[c.code] || null, hint: c.code.slice(0, 2) + '••••••' }
+      ? { used: true, usedAt: c.used_at, usedBy: (takenBy[c.code] && takenBy[c.code].username) || null, usedByLink: (takenBy[c.code] && takenBy[c.code].link) || null, usedByGone: !!(takenBy[c.code] && takenBy[c.code].deleted), hint: c.code.slice(0, 2) + '••••••' }
       : { used: false, code: c.code }),
     codesLeft: codes.filter(c => !c.used_at).length,
     codesTotal: codes.length,
@@ -13081,14 +13109,20 @@ function ticketFor(u) {
 function claimInvite(req, userId) {
   try {
     const r = passRow(req);
-    if (r && !r.user_id) {
+    /* Only the sign-up the pass was redeemed for: an account made after the code was entered, and not already in on
+       another one. Someone who already had an account and enters a code on a signed-out browser, then signs in instead
+       (the dashboard's /api/gate/invites calls this too), would otherwise spend the code, be listed as having signed up
+       with it, and have their "invited by" changed. */
+    const acct = r && !r.user_id ? db.prepare('SELECT created_at FROM users WHERE id = ?').get(userId) : null;
+    const theirs = !!(acct && r.used_at && acct.created_at >= r.used_at && !db.prepare('SELECT 1 FROM invite_codes WHERE user_id = ? LIMIT 1').get(userId));
+    if (theirs) {
       db.prepare('UPDATE invite_codes SET user_id = ? WHERE code = ? AND user_id IS NULL').run(userId, r.code);
-      if (r.owner_id) db.prepare('UPDATE users SET invited_by = ? WHERE id = ?').run(r.owner_id, userId);
+      if (r.owner_id) db.prepare('UPDATE users SET invited_by = ? WHERE id = ? AND invited_by IS NULL').run(r.owner_id, userId);
       if (r.tos_at) db.prepare('UPDATE users SET tos_at = ?, tos_version = ? WHERE id = ?').run(r.tos_at, r.tos_version || TOS_VERSION, userId);
     }
     // the age confirmation the door checked, recorded on the account it let in (first time only)
     if (ageOk(req)) db.prepare('UPDATE users SET age_at = ? WHERE id = ? AND age_at IS NULL').run(now(), userId);
-    const have = db.prepare('SELECT COUNT(*) n FROM invite_codes WHERE owner_id = ?').get(userId).n;
+    const have = db.prepare('SELECT COUNT(*) n FROM invite_codes WHERE owner_id = ? AND admin = 0').get(userId).n;
     if (have === 0) mintCodes(userId, INVITE_GRANT);
   } catch (e) { console.error('claimInvite', e.message); }
 }
@@ -14760,6 +14794,22 @@ const server = http.createServer(async (req, res) => {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         return send(res, 200, adminOverview());
       }
+      /* Admin codes (owner, 2026-10-16). The first time an admin opens them, ADMIN_CODE_BATCH are made for that admin; "make
+         more" adds another batch (up to ADMIN_CODE_MAX in all) and, as it lets more people in, needs "confirm it's you". */
+      if (p === '/api/admin/codes' && (req.method === 'GET' || req.method === 'POST')) {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        if (req.method === 'POST') {
+          if (!sudoActive(me)) return bad(res, NEED_VERIFY_MSG + ' — making invite codes lets more people in', 401);
+          const b = await readBody(req);
+          if (b.confirm !== 'MINT') return bad(res, 'send confirm: "MINT" to make more codes');
+          const have = db.prepare('SELECT COUNT(*) n FROM invite_codes WHERE admin = 1').get().n;
+          const n = Math.min(ADMIN_CODE_BATCH, ADMIN_CODE_MAX - have);
+          if (n <= 0) return bad(res, 'there are already ' + have + ' admin codes, the most there can be', 409);
+          if (!rateLimit('admcodes:' + me.id, 5, 36e5)) return bad(res, 'that is a lot of codes for one hour — try again later', 429);
+          mintCodes(me.id, n, true);
+        } else if (!db.prepare('SELECT 1 FROM invite_codes WHERE admin = 1 LIMIT 1').get()) mintCodes(me.id, ADMIN_CODE_BATCH, true);   // synchronous: two first visits cannot both make a batch
+        return send(res, 200, adminCodes(), { 'Cache-Control': 'no-store' });
+      }
       if (p === '/api/admin/activity' && req.method === 'GET') {   // daily visitors and active members, for the chart
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         return send(res, 200, adminActivity(), { 'Cache-Control': 'no-store' });
@@ -14928,7 +14978,7 @@ const server = http.createServer(async (req, res) => {
              and the ten codes it was handed would otherwise live on. That includes a code a friend has redeemed but
              not yet finished signing up with: the pass WAS the invite. Codes already used to make an account stay,
              as the record of who came in on them. */
-          db.prepare('DELETE FROM invite_codes WHERE owner_id = ? AND user_id IS NULL').run(uid);
+          db.prepare('DELETE FROM invite_codes WHERE owner_id = ? AND user_id IS NULL AND admin = 0').run(uid);   // admin codes are the site's: an admin leaving does not take the pool already handed out
           for (const sqid of memberOf) { try { db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sqid, sqid); } catch {} }
           try { db.prepare('DELETE FROM mutes WHERE user_id = ? OR muted_id = ?').run(uid, uid); } catch {}
           try { db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(uid, uid); } catch {}
@@ -18277,7 +18327,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    /* The admin page and its script are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
+    /* The admin page and its scripts (admin.js, admincodes.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
        page that does not exist — for every method and every spelling that reaches the file (case on a case-insensitive
        disk, //, /./, %2e), so the test is on the file the path RESOLVES to, before anything else serves it. Neither
        may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
@@ -18286,10 +18336,10 @@ const server = http.createServer(async (req, res) => {
       // its address is /admin now (2026-10-15); /admin.html, /Admin, /admin/ and the rest are the same page to this gate
       const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase().replace(/[\\/]+$/, ''), base = PUBLIC_DIR.toLowerCase() + path.sep;
       const isPage = fpLc === base + 'admin' || fpLc === base + 'admin.html';
-      if (isPage || fpLc === base + 'admin.js') {
+      if (isPage || fpLc === base + 'admin.js' || fpLc === base + 'admincodes.js') {
         if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
         if (isPage && p !== '/admin') { res.writeHead(301, { Location: '/admin' + url.search, 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', ...SEC_HEADERS }); return res.end(); }
-        return serveFile(req, res, path.join(PUBLIC_DIR, isPage ? 'admin.html' : 'admin.js'), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
+        return serveFile(req, res, path.join(PUBLIC_DIR, isPage ? 'admin.html' : path.basename(fpLc) === 'admincodes.js' ? 'admincodes.js' : 'admin.js'), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
       }
     }
     /* ===== addresses that answer for search engines and browsers before the static files =====
