@@ -1,6 +1,8 @@
 /* Sendy — the $Send rocket in the corner: greets, tips, and answers questions in chat.
-   The look is the 3D Sendy from the marketing video — its idle loop as a sprite sheet (/assets/sendy-idle.png,
-   30 frames) and a still for the chat header (/assets/sendy.png).
+   The look is the 3D Sendy of the marketing videos, rendered from their model, camera and lights by scripts/sendy-3d.py:
+   the idle loop as a sprite sheet (/assets/sendy-idle.png, 30 frames), a still for the chat header (/assets/sendy.png),
+   and the faces he pulls in the videos as short clips he plays when someone reaches for him (/assets/sendy-act-*.webp,
+   listed in /assets/sendy-acts.json).
    Phone: pinned above the bottom controls, never dragged, never in the way of anything.
    Desktop: floats, takes a short flight along the edges now and then, and can be dragged anywhere — once
    dragged, it stays where it was put.
@@ -108,10 +110,9 @@
     // data-nosnippet: the greeting and the tips are the helper talking, never a search result's description of the page
     return '<div id="sendy-widget" class="sendy-widget" data-nosnippet hidden>' +
       '<button class="sendy-rocket" id="sendy-rocket" type="button" aria-label="Sendy, your $Send guide" aria-expanded="false" data-tip="Opens Sendy — ask a question, or get a tip about this page. Drag to move (desktop)">' +
-        '<span class="sendy-emo" aria-hidden="true"><span class="sendy-sprite" aria-hidden="true"></span></span>' +
+        '<span class="sendy-emo" aria-hidden="true"><span class="sendy-sprite" aria-hidden="true"></span><span class="sendy-act" aria-hidden="true"></span></span>' +
       '</button>' +
-      '<span class="sendy-face" id="sendy-face" aria-hidden="true"></span>' +
-      '<div class="sendy-say" id="sendy-say" role="status" hidden></div>' +
+      '<div class="sendy-say" id="sendy-say" aria-hidden="true" hidden></div><span class="sendy-live" id="sendy-live" role="status"></span>' +
       '<div class="sendy-popup" id="sendy-popup" role="dialog" aria-label="Sendy" hidden>' +
         '<div class="sendy-head">' +
           '<button class="sendy-hbtn sendy-back-btn" id="sendy-back" type="button" data-tip="Leaves the chat and shows the tips again" hidden>← Tips</button>' +
@@ -177,46 +178,32 @@
       'html.motion-off .sendy-sprite,html.motion-off .sendy-msg,html.motion-off .sendy-say{animation:none}html.motion-off .sendy-widget.is-hyped .sendy-rocket{animation:none}' +
       '@media (prefers-reduced-motion:reduce){.sendy-say{animation:none}}' +
       '.sendy-widget.is-flying .sendy-sprite{animation-duration:.6s}' +
-      /* moods: a happy face and a move each time the pointer comes over Sendy, and on a tap. The move is on .sendy-emo, inside the
-         button, so the part that takes the pointer (the button's ::before) never moves and a bounce cannot set off another one */
-      '.sendy-emo{display:block;width:var(--sendy-size);height:var(--sendy-size);transform-origin:50% 85%;pointer-events:none}' +
-      '.sendy-face,.sendy-bit{position:absolute;pointer-events:none;line-height:1;user-select:none;forced-color-adjust:none}' +   /* emoji: no high-contrast backplate square stamped over Sendy */
-      '.sendy-face{top:-.2em;left:-.15em;font-size:max(var(--text-floor),calc(var(--sendy-size) * .34));opacity:0;filter:drop-shadow(0 2px 3px rgba(0,0,0,.45))}' +
-      '#sendy-widget[data-mood] .sendy-face{opacity:1;animation:sendy-face 1.2s ease both}' +
-      '@keyframes sendy-face{0%{opacity:0;transform:translateY(25%) scale(.4)}22%{opacity:1;transform:translateY(-5%) scale(1.15)}38%{transform:translateY(-5%) scale(1)}82%{opacity:1;transform:translateY(-12%) scale(1)}100%{opacity:0;transform:translateY(-22%) scale(.9)}}' +
-      '.sendy-bit{left:50%;top:8%;font-size:max(var(--text-floor),calc(var(--sendy-size) * .19));animation:sendy-bit 1.1s ease-out both}' +
-      '@keyframes sendy-bit{0%{opacity:0;transform:translate(-50%,0) scale(.5)}20%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--dx)),calc(var(--sendy-size) * -.75)) rotate(var(--rot)) scale(1.05)}}' +
+      /* reactions: each time the pointer comes over Sendy, and on a tap, he pulls one of the faces from the marketing videos —
+         a short 3D clip (scripts/sendy-3d.py renders it from the videos' model, camera and lights, the same as the idle loop),
+         drawn on .sendy-act over the idle sprite. Its box is the idle box widened by that clip's --act-k about the same centre, so a
+         raised arm has room and his body sits exactly where the idle frame has it. The frames, timings and box come from
+         /assets/sendy-acts.json (actCss() below). Some add a small move of the whole rocket, on .sendy-emo inside the
+         button, so the part that takes the pointer (the button's ::before) never moves and a bounce cannot set off another. */
+      '.sendy-emo{position:relative;display:block;width:var(--sendy-size);height:var(--sendy-size);transform-origin:50% 85%;pointer-events:none}' +
+      '.sendy-act{position:absolute;display:none;pointer-events:none;left:calc(var(--sendy-size) * (1 - var(--act-k,1)) / 2);top:calc(var(--sendy-size) * (1 - var(--act-k,1)) / 2);' +
+        'width:calc(var(--sendy-size) * var(--act-k,1));height:calc(var(--sendy-size) * var(--act-k,1));background:no-repeat 0 0;' +
+        'filter:drop-shadow(0 0 calc(var(--sendy-size) * .12) color-mix(in srgb,var(--green) 55%,transparent))}' +   /* the idle sprite's glow */
+      '#sendy-widget[data-act] .sendy-act{display:block}#sendy-widget[data-act] .sendy-sprite{visibility:hidden;animation:none}' +   /* the loop stops under a clip and starts again at frame 0, the pose every clip ends on */
       '@media (prefers-reduced-motion:no-preference){' +
-        '#sendy-widget[data-mood="hop"] .sendy-emo{animation:sendy-m-hop .8s ease}' +
-        '#sendy-widget[data-mood="pulse"] .sendy-emo{animation:sendy-m-pulse .9s ease}' +
-        '#sendy-widget[data-mood="wiggle"] .sendy-emo{animation:sendy-m-wiggle .9s ease}' +
-        '#sendy-widget[data-mood="lean"] .sendy-emo{animation:sendy-m-lean 1s ease}' +
-        '#sendy-widget[data-mood="spin"] .sendy-emo{animation:sendy-m-spin .9s ease}' +
-        '#sendy-widget[data-mood="giggle"] .sendy-emo{animation:sendy-m-giggle .8s ease}' +
-        '#sendy-widget[data-mood="nod"] .sendy-emo{animation:sendy-m-nod .9s ease}' +
-        '#sendy-widget[data-mood="sway"] .sendy-emo{animation:sendy-m-sway 1s ease}' +
-        '#sendy-widget[data-mood="puff"] .sendy-emo{animation:sendy-m-puff .9s ease}' +
-        '#sendy-widget[data-mood="dash"] .sendy-emo{animation:sendy-m-dash .9s ease}' +
-        '#sendy-widget[data-mood="squish"] .sendy-emo{animation:sendy-m-squish .8s ease}' +
-        '#sendy-widget[data-mood="bounce"] .sendy-emo{animation:sendy-m-bounce .9s ease}}' +
+        '#sendy-widget[data-move="hop"] .sendy-emo{animation:sendy-m-hop .8s ease}' +
+        '#sendy-widget[data-move="dash"] .sendy-emo{animation:sendy-m-dash .9s ease}' +
+        '#sendy-widget[data-move="bounce"] .sendy-emo{animation:sendy-m-bounce .9s ease}}' +
       '@keyframes sendy-m-hop{0%,100%{transform:none}35%{transform:translateY(-14%) rotate(-4deg)}60%{transform:translateY(-3%) rotate(2deg)}}' +
-      '@keyframes sendy-m-pulse{0%,100%{transform:none}20%{transform:scale(1.12)}40%{transform:scale(.97)}60%{transform:scale(1.08)}}' +
-      '@keyframes sendy-m-wiggle{0%,100%{transform:none}20%{transform:rotate(9deg)}40%{transform:rotate(-9deg)}60%{transform:rotate(6deg)}80%{transform:rotate(-3deg)}}' +
-      '@keyframes sendy-m-lean{0%,100%{transform:none}30%,70%{transform:translateX(-6%) rotate(-11deg)}}' +
-      '#sendy-widget[data-mood="spin"] .sendy-emo{transform-origin:50% 50%}' +   /* a whole turn about his middle: about his fins he swung upside down, out of his box and behind the SEND IT button */
-      '@keyframes sendy-m-spin{0%{transform:translateY(0) rotate(0deg) scale(1)}50%{transform:translateY(-8%) rotate(180deg) scale(.9)}100%{transform:translateY(0) rotate(360deg) scale(1)}}' +   /* the same functions in every step, so it turns all the way round instead of back */
-      '@keyframes sendy-m-giggle{0%,100%{transform:none}17%{transform:rotate(4deg)}33%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}67%{transform:rotate(-3deg)}83%{transform:rotate(2deg)}}' +
-      '@keyframes sendy-m-nod{0%,100%{transform:none}30%{transform:rotate(10deg)}55%{transform:rotate(-2deg)}78%{transform:rotate(6deg)}}' +
-      '@keyframes sendy-m-sway{0%,100%{transform:none}25%{transform:rotate(-8deg)}55%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}' +
-      '@keyframes sendy-m-puff{0%,100%{transform:none}35%,60%{transform:scale(1.17)}}' +
       '@keyframes sendy-m-dash{0%,100%{transform:none}30%{transform:translateY(-24%) scaleY(1.06)}55%{transform:translateY(-24%)}}' +
-      '@keyframes sendy-m-squish{0%,100%{transform:none}25%{transform:scale(1.13,.87)}55%{transform:scale(.94,1.08)}80%{transform:scale(1.03,.97)}}' +
       '@keyframes sendy-m-bounce{0%,50%,100%{transform:none}22%{transform:translateY(-12%)}72%{transform:translateY(-8%)}}' +
-      '@media (prefers-reduced-motion:reduce){#sendy-widget[data-mood] .sendy-face{animation:none}}' +
-      'html.motion-off #sendy-widget[data-mood] .sendy-emo,html.motion-off #sendy-widget[data-mood] .sendy-face{animation:none}' +
+      'html.motion-off #sendy-widget[data-move] .sendy-emo{animation:none}' +
       /* a reaction: a speech bubble by the rocket, and a hop — as wide as its words allow, never wider than the screen */
       '.sendy-say{position:absolute;bottom:calc(var(--sendy-size) + 8px);right:0;width:max-content;max-width:min(16em,calc(100vw - 1.5rem));padding:.5em .75em;border-radius:.8em;border-bottom-right-radius:4px;background:var(--green);color:var(--ink-1);font-weight:600;font-size:max(var(--text-floor), .86rem);line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.35);animation:sendy-in .25s ease;z-index:1}' +
       '.sendy-say[hidden]{display:none}' +
+      '.sendy-live{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}' +
+      '@media (forced-colors:active){.sendy-say{border:2px solid CanvasText}}' +   /* the system colours drop its fill: an outline keeps it a bubble */
+      '.sendy-widget.say-greet .sendy-say{cursor:pointer}' +   /* the hello says "Tap me": a tap on it opens Sendy */
+      '.sendy-widget.say-greet .sendy-rocket:hover~.sendy-say{visibility:hidden}' +   /* under the pointer his tip says it instead; the greeting is back when the pointer leaves */
       '.sendy-widget.say-up .sendy-say{bottom:auto;top:calc(var(--sendy-size) + 8px);border-radius:.8em;border-top-right-radius:4px}' +
       '.sendy-widget.say-left .sendy-say{right:auto;left:0;border-radius:.8em;border-bottom-left-radius:4px}' +
       '.sendy-widget.say-side .sendy-say{bottom:auto;top:0;right:calc(var(--sendy-size) + 8px);left:auto;border-radius:.8em;border-top-right-radius:4px}' +
@@ -320,7 +307,7 @@
     const tipsMode = $('sendy-tips-mode'), chatMode = $('sendy-chat-mode'), chatForm = $('sendy-chat-form');
     const chatInput = $('sendy-chat-input'), chatSend = $('sendy-chat-send'), chatLog = $('sendy-chat-messages');
     let history = Array.isArray(store.get('chat')) ? store.get('chat').slice(-12) : [];
-    let userPlaced = false, flying = false, hovering = false, autoHide = null;
+    let userPlaced = false, flying = false, hovering = false;
 
     /* ---------- open / close ---------- */
     const size = () => rocket.getBoundingClientRect().width || 228;
@@ -373,7 +360,7 @@
     function openPopup() { popup.removeAttribute('hidden'); placePopup(); rocket.setAttribute('aria-expanded', 'true'); }
     function closePopup() {
       const hadFocus = popup.contains(document.activeElement);
-      popup.setAttribute('hidden', ''); rocket.setAttribute('aria-expanded', 'false'); clearTimeout(autoHide);
+      popup.setAttribute('hidden', ''); rocket.setAttribute('aria-expanded', 'false');
       if (hadFocus) rocket.focus();   // focus was in the box that just closed: back to the rocket, not to <body>
     }
     const isOpen = () => !popup.hasAttribute('hidden');
@@ -485,55 +472,83 @@
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); if (chatForm.requestSubmit) chatForm.requestSubmit(); else chatForm.dispatchEvent(new Event('submit', { cancelable: true })); }
     });
 
-    /* ---------- moods (owner, 2026-10-15: "make sendy react differently each time you scroll over him … a random emotion
-       but never negative"): each time the pointer comes over Sendy, and on every tap, a happy face pops up beside him and
-       he moves to match. Only happy ones. Drawn from a shuffled deck, so every mood comes round before any repeats and
-       the same one never plays twice in a row. With reduced motion (or the ⏸) the face still shows, but nothing moves. ---------- */
-    const MOODS = [
-      { face: '😄', move: 'hop' },
-      { face: '🥰', move: 'pulse', bits: ['💚', '💖', '💚'] },
-      { face: '🤩', move: 'wiggle', bits: ['✨', '⭐', '✨'] },
-      { face: '😎', move: 'lean' },
-      { face: '🥳', move: 'spin', bits: ['🎉', '🎊', '✨'] },
-      { face: '😆', move: 'giggle' },
-      { face: '😉', move: 'nod' },
-      { face: '👋', move: 'sway' },
-      { face: '💪', move: 'puff' },
-      { face: '🚀', move: 'dash', bits: ['⚡', '✨'] },
-      { face: '😊', move: 'squish', bits: ['🌸'] },
-      { face: '🙌', move: 'bounce', bits: ['✨', '✨'] },
-    ];
-    const MOOD_MS = 1200, TAP_GAP = 600, faceEl = $('sendy-face');   // a tap never cuts a mood under 600 ms old: one reaction per click, and never more than two face changes a second
-    let moodBag = [], lastMood = null, moodTimer = null, moodUntil = 0, moodAt = 0;
-    function nextMood() {
-      if (!moodBag.length) {
-        moodBag = MOODS.slice();
-        for (let i = moodBag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = moodBag[i]; moodBag[i] = moodBag[j]; moodBag[j] = t; }
-        if (moodBag[moodBag.length - 1] === lastMood) moodBag.unshift(moodBag.pop());   // a fresh deck never opens with the last one
+    /* ---------- reactions (owner, 2026-10-15: "make sendy react differently each time you scroll over him … a random
+       emotion but never negative"; 2026-10-16: "use the different facial expressions from videos we have made with sendy …
+       instead of the emoji's … in random … when users hover over and when they click on him"): each time the pointer comes
+       over Sendy, and on every tap, he plays one of the faces from the videos, rendered in 3D — only happy ones. Drawn from
+       a shuffled deck, so every reaction comes round before any repeats and the same one never plays twice in a row.
+       With reduced motion (or the ⏸) the face still shows — the clip's fullest frame, held — but nothing moves.
+       Loading, as they are wanted: the list and two clips once he shows up (none on a Save-Data connection), then two more
+       each time someone reaches for him — all twelve are about a megabyte, and most visitors never touch him. A reaction
+       plays only once its clip has decoded, so he never blinks out; until one has, he just hops. ---------- */
+    const TAP_GAP = 600;   // a tap never cuts a reaction under 600 ms old: one reaction per click, and never more than two face changes a second
+    const MOVES = { cheer: 'hop', sendit: 'dash', vee: 'bounce' };   // the jumpy ones lift the whole rocket as well
+    let acts = null, order = [], owed = 0, bag = [], last = null, moodTimer = null, moodUntil = 0, moodAt = 0, MOOD_MS = 1200;
+    const strips = {}, ready = new Set();
+    const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = arr[i]; arr[i] = arr[j]; arr[j] = t; } return arr; };
+    function strip(a) {
+      if (strips[a.id]) return;
+      const im = strips[a.id] = new Image();
+      const done = () => ready.add(a.id);
+      im.decoding = 'async'; im.src = '/assets/sendy-act-' + a.id + '.webp';
+      if (im.decode) im.decode().then(done, () => {}); else im.onload = done;
+    }
+    function moreActs(n) {   // n more clips, in a random order fixed when the list arrives
+      if (!acts) { owed += n; return; }
+      for (const a of order) { if (n <= 0) break; if (!strips[a.id]) { strip(a); n--; } }
+    }
+    // the clips' frames as CSS: a strip of square cells, shown one at a time (step-end holds each until the next)
+    function actCss(m) {
+      const pct = (i, n) => (n > 1 ? +(i / (n - 1) * 100).toFixed(4) : 0) + '%';
+      let out = '';
+      for (const a of m.acts) {
+        const steps = [];
+        a.seq.forEach((c, j) => { if (!j || c !== a.seq[j - 1]) steps.push(+(j / a.fps / m.dur * 100).toFixed(3) + '%{background-position:' + pct(c, a.cells) + ' 0}'); });
+        out += '#sendy-widget[data-act="' + a.id + '"] .sendy-act{--act-k:' + a.k + ';background-image:url(/assets/sendy-act-' + a.id + '.webp);background-size:' + (a.cells * 100) + '% 100%;' +
+          '--peak:' + pct(a.peak, a.cells) + ';animation:sendy-a-' + a.id + ' ' + m.dur + 's step-end both}' +
+          '@keyframes sendy-a-' + a.id + '{' + steps.join('') + '}';
       }
-      lastMood = moodBag.pop();
-      return lastMood;
+      // after the clips, so it wins on order: without motion, the fullest frame, held
+      out += '@media (prefers-reduced-motion:reduce){#sendy-widget[data-act] .sendy-act{animation:none;background-position:var(--peak) 0}}' +
+        'html.motion-off #sendy-widget[data-act] .sendy-act{animation:none;background-position:var(--peak) 0}';
+      const st = document.createElement('style'); st.textContent = out; document.head.appendChild(st);
+    }
+    function startActs(n) {
+      fetch('/assets/sendy-acts.json').then((r) => (r.ok ? r.json() : null)).then((m) => {
+        const ok = m && Array.isArray(m.acts) && m.acts.length && m.acts.every((a) => /^[a-z]+$/.test(a.id) && a.cells > 0 && a.fps > 0 && Array.isArray(a.seq) && a.seq.length && a.seq.every((c) => Number.isInteger(c) && c >= 0 && c < a.cells) && Number.isInteger(a.peak) && a.peak >= 0 && a.peak < a.cells && a.k >= 1 && a.k < 3)
+          && m.dur > 0 && m.dur <= 3;
+        if (!ok) return;
+        acts = m; MOOD_MS = Math.round(m.dur * 1000); actCss(m); order = shuffle(m.acts.slice());
+        moreActs(n + owed); owed = 0;
+      }).catch(() => {});
+    }
+    function nextAct() {
+      if (!acts) return null;
+      for (let round = 0; round < 2; round++) {
+        if (!bag.length) { bag = shuffle(acts.acts.slice()); if (bag[bag.length - 1] === last) bag.unshift(bag.pop()); }   // a fresh deck never opens with the last one
+        for (let i = bag.length - 1; i >= 0; i--) if (bag[i] !== last && ready.has(bag[i].id)) { last = bag.splice(i, 1)[0]; return last; }
+        bag = [];   // none left in this deck has loaded yet: deal again
+      }
+      return last && ready.has(last.id) ? last : null;   // only one has loaded so far
     }
     function react(how) {
       if (widget.hasAttribute('hidden') || flying) return;
       const t = Date.now();
-      if (how === 'hover' && t < moodUntil) return;   // still mid-mood: a pointer wavering on his edge must not set off a flurry
-      if (how === 'tap' && t - moodAt < TAP_GAP) return;   // the click right after the pointer arrived: the mood it set off is this click's reaction
-      const m = nextMood();
+      if (how === 'hover' && t < moodUntil) return;   // still mid-reaction: a pointer wavering on his edge must not set off a flurry
+      if (how === 'tap' && t - moodAt < TAP_GAP) return;   // the click right after the pointer arrived: the reaction it set off is this click's
+      const a = nextAct(), move = a ? MOVES[a.id] : 'hop';   // nothing loaded yet: a hop on its own
+      moreActs(2);   // and two more on their way for next time
       moodUntil = t + MOOD_MS; moodAt = t;
-      faceEl.textContent = m.face;
-      widget.removeAttribute('data-mood'); void widget.offsetWidth; widget.setAttribute('data-mood', m.move);   // restart, even for the same move
-      if (!reduced()) for (let i = 0; i < (m.bits || []).length; i++) {
-        const b = document.createElement('span');
-        b.className = 'sendy-bit'; b.setAttribute('aria-hidden', 'true'); b.textContent = m.bits[i];
-        b.style.setProperty('--dx', Math.round((Math.random() - 0.5) * 70) + 'px');
-        b.style.setProperty('--rot', Math.round((Math.random() - 0.5) * 50) + 'deg');
-        b.style.animationDelay = (i * 0.12) + 's';
-        widget.appendChild(b);
-        setTimeout(() => b.remove(), 1100 + i * 120 + 100);
-      }
-      clearTimeout(moodTimer);
-      moodTimer = setTimeout(() => { widget.removeAttribute('data-mood'); faceEl.textContent = ''; }, MOOD_MS);
+      const play = (withFace) => {
+        widget.removeAttribute('data-act'); widget.removeAttribute('data-move'); void widget.offsetWidth;   // restart, even for the same one
+        if (withFace) widget.setAttribute('data-act', a.id);
+        if (move) widget.setAttribute('data-move', move);
+        clearTimeout(moodTimer);
+        moodTimer = setTimeout(() => { widget.removeAttribute('data-act'); widget.removeAttribute('data-move'); }, MOOD_MS);
+      };
+      const im = a && strips[a.id];
+      if (im && im.decode) im.decode().then(() => play(true), () => { ready.delete(a.id); play(false); });
+      else play(!!a);
     }
     rocket.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch') react('hover'); });
     rocket.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') react('tap'); }, { passive: true });   // a finger landing on him, a tap or the start of a scroll (a finger has no hover); its click then falls inside TAP_GAP
@@ -542,6 +557,7 @@
     let drag = null;
     rocket.addEventListener('click', (e) => {
       if (drag && drag.moved) { drag = null; return; } drag = null; e.stopPropagation();
+      store.set('greeted', true);   // found him without the hello: no need for it this visit
       react('tap');
       if (isOpen()) closePopup();
       else { openPopup(); if (e.detail === 0) { const first = chatMode.hasAttribute('hidden') ? $('sendy-chat') : chatInput; if (first) first.focus(); } }   // opened from the keyboard: focus goes in with it
@@ -592,7 +608,7 @@
     }
     function typing() { const a = document.activeElement; return !!a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable); }
     function fly() {
-      if (isMobile() || reduced() || userPlaced || flying || hovering || isOpen() || document.visibilityState !== 'visible' || typing()) return;
+      if (isMobile() || reduced() || userPlaced || flying || hovering || isOpen() || Date.now() < moodUntil || !sayEl.hasAttribute('hidden') || document.visibilityState !== 'visible' || typing()) return;
       const r = widget.getBoundingClientRect(), from = { x: r.left, y: r.top };
       const opts = anchors().filter((a) => Math.hypot(a.x - from.x, a.y - from.y) > 120 && !coversControl(a));
       if (!opts.length) return;
@@ -638,18 +654,48 @@
       boost: ['Holder boost updated. Diamond hands, meet rocket fins.', 'Boost check done. The chain has spoken; I merely relay.'],
       entered: ['You\'re in! Please keep arms and fins inside the rocket at all times.', 'Ticket accepted. Welcome aboard — the seatbelt is decorative.'],
       firstvisit: ['First time here? I\'m Sendy. Tap me whenever you\'re lost. Or bored. Or both.'],
+      hello: ['Hey, I\'m Sendy! 👋 Stuck, or just curious? Tap me — I\'m here to help.', 'Hi! I\'m Sendy, this site\'s helper. Got a question? Tap me any time.', 'Psst — I\'m Sendy. Lost? Curious? Tap me and I\'ll help you find your way.'],
+      hellouser: ['Hey @{name}! 👋 Need a hand? Tap me — I\'m here to help.', 'Welcome back, @{name}! Tap me if you need anything.'],
       oops: ['The chain hiccupped. Happens to the best of us. Give it a minute.', 'That didn\'t go through. Not you — the tubes. Try again shortly.', 'Turbulence. Nothing decided, nothing lost. Retry in a bit.']
     };
-    const SAY_COOLDOWN = 8000, sayEl = $('sendy-say');
-    let sayTimer = null, lastSayAt = 0; const lastLine = {};
-    function hideSay() { sayEl.setAttribute('hidden', ''); widget.classList.remove('is-hyped'); }
-    function say(kind, vars, urgent) {
+    const SAY_COOLDOWN = 8000, sayEl = $('sendy-say'), liveEl = $('sendy-live');
+    let sayTimer = null, hypeTimer = null, liveTimer = null, lastSayAt = 0; const lastLine = {};
+    function hideSay() { sayEl.setAttribute('hidden', ''); widget.classList.remove('is-hyped'); endGreet(); }
+    /* the hello (owner, 2026-10-16: closed on arrival, "just a fun little speech bubble that greets the user and lets the
+       user know that he is here to help", gone "after the user start interacting with the site"): a bubble that stays
+       until the visitor starts using the site — a click or tap anywhere (in an embedded chart too: focus leaves for its
+       frame), a key that acts on the page (not a bare Shift/Ctrl/⌘, nor a shortcut such as ⌘-Tab on the way out), or the
+       wheel. A scroll on its own does not end it: pages scroll themselves (a section link, panels filling in above), and
+       dragging the scrollbar is a pointerdown anyway. A tap on the bubble opens Sendy, as it says. While it is up nothing
+       else he would say takes its place, and he stays where he is (no flights). */
+    const GREET_ON = ['pointerdown', 'keydown', 'wheel', 'touchstart', 'touchmove', 'pointercancel'];   // a pan cancels the pointer: a swipe that starts on the bubble ends it too
+    const BARE_KEY = /^(Shift|Control|Alt|AltGraph|Meta|OS|CapsLock|Fn|FnLock|Hyper|Super)$/;
+    const asIs = (e) => e && e.type === 'keydown' && (e.metaKey || e.ctrlKey || e.altKey || BARE_KEY.test(e.key));   // not someone using the page
+    function greetDone(e) {
+      if (!widget.classList.contains('say-greet') || asIs(e)) return;
+      if (e && (e.type === 'pointerdown' || e.type === 'touchstart') && e.target && sayEl.contains(e.target)) return;   // the bubble's own tap opens Sendy (below)
+      if (covered()) { unGreet(); return; }   // a click in a dialog that came up over it (the tour's welcome) is not using the site
+      hideSay();
+    }
+    function greetFrame() { setTimeout(() => { const f = document.activeElement; if (f && f.tagName === 'IFRAME') greetDone(); }, 0); }
+    function endGreet() {
+      if (!widget.classList.contains('say-greet')) return;
+      widget.classList.remove('say-greet'); sayEl.removeAttribute('data-tip'); sayEl.removeAttribute('role');
+      GREET_ON.forEach((t) => document.removeEventListener(t, greetDone, true));
+      window.removeEventListener('blur', greetFrame);
+    }
+    sayEl.addEventListener('click', (e) => { if (!widget.classList.contains('say-greet')) return; e.stopPropagation(); hideSay(); openPopup(); });
+    function say(kind, vars, urgent, stay) {
       const lines = LINES[kind]; if (!lines || widget.hasAttribute('hidden')) return false;
       if (isOpen() || flying) return false;
+      if (widget.classList.contains('say-greet')) return false;   // the hello stays until the visitor starts using the site: nothing replaces it
       const t = Date.now(); if (!urgent && t - lastSayAt < SAY_COOLDOWN) return false;
       let i = Math.floor(Math.random() * lines.length); if (lines.length > 1 && i === lastLine[kind]) i = (i + 1) % lines.length;
       lastLine[kind] = i; lastSayAt = t;
-      sayEl.textContent = lines[i].replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null) ? String(vars[k]) : m);
+      const text = lines[i].replace(/\{(\w+)\}/g, (m, k) => (vars && vars[k] != null) ? String(vars[k]) : m);
+      sayEl.textContent = text;
+      // screen readers hear it from a live region that is always there: one filled as it appears is often not announced
+      clearTimeout(liveTimer); liveEl.textContent = ''; liveTimer = setTimeout(() => { liveEl.textContent = text; }, 150);
       if (!isMobile()) {
         // measured, not guessed: above the rocket if it fits there, below it if it fits there (never into the SEND IT
         // strip), otherwise beside it — a fixed 140px rule of thumb only suited the first 76px rocket
@@ -662,10 +708,51 @@
         sayEl.style.visibility = '';
       }
       sayEl.removeAttribute('hidden');
-      if (!reduced()) { widget.classList.remove('is-hyped'); void widget.offsetWidth; widget.classList.add('is-hyped'); }
-      clearTimeout(sayTimer); sayTimer = setTimeout(hideSay, 4500);
+      clearTimeout(hypeTimer);
+      if (!reduced()) {
+        widget.classList.remove('is-hyped'); void widget.offsetWidth; widget.classList.add('is-hyped');
+        if (stay) hypeTimer = setTimeout(() => widget.classList.remove('is-hyped'), 700);   // one hop: a hello that stays must not keep him racing
+      }
+      clearTimeout(sayTimer); endGreet();
+      if (stay) {
+        widget.classList.add('say-greet'); sayEl.setAttribute('data-tip', 'Opens Sendy — ask a question, or get a tip about this page');
+        sayEl.setAttribute('role', 'button');   // what the site's tips answer to (tips.js); the bubble stays aria-hidden, the live region speaks
+        GREET_ON.forEach((t) => document.addEventListener(t, greetDone, { capture: true, passive: true }));
+        window.addEventListener('blur', greetFrame);
+      } else sayTimer = setTimeout(hideSay, 4500);
       return true;
     }
+    /* the hello waits until it can be seen: the 18+ question answered and gone, the homepage's intro over, no dialog up,
+       Sendy himself on screen (the Hot Feed, an arcade flight and a phone's Scanner filters hide him), the tab in front —
+       and all of that for a moment (1.2 s), not just the gap between two dialogs (the 18+ answer, then the tour's welcome
+       650 ms later). Only then does it count as said for the visit; a dialog that opens over it later takes it down unsaid,
+       and it comes back once the page is clear. A visitor already busy by then (a click, a key, the wheel outside the gate,
+       the intro and dialogs, or focus already inside an embedded chart) gets it as an ordinary line that goes by itself. */
+    let busy = false, greetTries = 0, clearSince = 0;
+    function covered() {
+      if (window.AGE && (AGE.needed || AGE.isOpen)) return true;
+      if ((document.body.dataset.intro && !sawEntered) || document.querySelector('#intro')) return true;
+      for (const m of document.querySelectorAll('[aria-modal="true"]')) if (m.getClientRects().length) return true;
+      return false;
+    }
+    function busyOn(e) {
+      if (asIs(e) || covered()) return;
+      busy = true; GREET_ON.forEach((t) => document.removeEventListener(t, busyOn, true));
+    }
+    GREET_ON.forEach((t) => document.addEventListener(t, busyOn, { capture: true, passive: true }));
+    function clearToGreet() { return !covered() && widget.getClientRects().length > 0 && document.visibilityState === 'visible' && !isOpen() && !flying; }
+    function waitToGreet() {
+      if (store.get('greeted')) return;
+      if (!clearToGreet()) clearSince = 0;
+      else if (!clearSince) clearSince = Date.now();
+      else if (Date.now() - clearSince >= 1200) {
+        const u = window.AUTH && AUTH.user && AUTH.user.username, f = document.activeElement, inFrame = !!f && f.tagName === 'IFRAME';
+        if (say(u ? 'hellouser' : 'hello', { name: u }, true, !busy && !inFrame)) { store.set('greeted', true); watchGreet(); return; }
+      }
+      if (++greetTries < 1300) setTimeout(waitToGreet, 700);   // looks again for about 15 minutes, then leaves it to the next page
+    }
+    function watchGreet() { if (!widget.classList.contains('say-greet')) return; if (covered()) unGreet(); else setTimeout(watchGreet, 700); }
+    function unGreet() { hideSay(); store.set('greeted', false); clearSince = 0; greetTries = 0; waitToGreet(); }
     rocket.addEventListener('click', () => { if (!sayEl.hasAttribute('hidden')) hideSay(); }, true);   // opening the popup clears a bubble
     document.addEventListener('egg:found', (e) => { const d = e.detail || {}; if (d.id != null) say('egg', { found: d.found, total: d.total }, true); });
     document.addEventListener('post:created', (e) => { say(e.detail && e.detail.call_id ? 'call' : 'post'); });
@@ -673,7 +760,7 @@
     document.addEventListener('auth:change', (e) => { if (e.detail && e.detail.username) say('signin', { name: e.detail.username }); else if (!e.detail) say('signout'); });
     document.addEventListener('site-prefs', () => { say('theme'); });
     document.addEventListener('boost:changed', () => { say('boost'); });
-    document.addEventListener('jsi:entered', (e) => { say(e.detail && e.detail.firstVisit ? 'firstvisit' : 'entered', null, true); });
+    document.addEventListener('jsi:entered', (e) => { if (store.get('greeted')) say(e.detail && e.detail.firstVisit ? 'firstvisit' : 'entered', null, true); });   // a visit's first page says hello instead
     document.addEventListener('click', (e) => {
       if (e.target.closest('[data-call-go]')) { setTimeout(() => say('callopen'), 250); return; }
       const w = e.target.closest('.np-watch');   // the ☆: read its state once the toggle has landed; signed out it only opens the sign-in
@@ -687,23 +774,16 @@
     }
     window.SENDY = { say };   // the pages can ask for a reaction of their own: SENDY.say('post')
 
-    /* ---------- show up: the greeting once per visit, then just the rocket ---------- */
+    /* ---------- show up: the rocket, closed; once a visit a hello, when it can be seen ---------- */
     setTimeout(() => {
       widget.removeAttribute('hidden');
-      if (!store.get('greeted')) {
-        store.set('greeted', true);
-        // a page whose game sits where the popup opens (the slot machine's lever) gets the small bubble, so the first pull is not blocked
-        if (document.querySelector('#slot-cab')) say('entered', null, true);   // querySelector: the page's element, not one of Sendy's own ids
-        else {
-          $('sendy-greeting').textContent = greeting();
-          openPopup();
-          autoHide = setTimeout(() => { if (isOpen() && chatMode.hasAttribute('hidden') && !popup.contains(document.activeElement) && !popup.matches(':hover')) closePopup(); }, 9000);   // only the tips view hides itself — never a chat someone started, never under a pointer or a focus
-        }
-      }
+      startActs(navigator.connection && navigator.connection.saveData ? 0 : 2);
       if (!isMobile()) scheduleFlight();
       shownUp = true;
+      const d = earlyEntered; earlyEntered = null;
+      if (!store.get('greeted')) waitToGreet();
       // the intro ended while Sendy was still waiting for the page to load: say now what he would have said then
-      if (earlyEntered) { const d = earlyEntered; earlyEntered = null; say(d.firstVisit ? 'firstvisit' : 'entered', null, true); }
+      else if (d) say(d.firstVisit ? 'firstvisit' : 'entered', null, true);
     }, 1400);
   }
 
@@ -719,8 +799,9 @@
      he was up 1.4 s after DOMContentLoaded, so an intro that ended later than that got his line; one that ended sooner
      did not (say() stays quiet while he is hidden). Keep exactly that: remember a late-enough event, and replay it
      once he shows up. Earlier ones are dropped, as they always were. */
-  let shownUp = false, earlyEntered = null;
+  let shownUp = false, earlyEntered = null, sawEntered = false;
   document.addEventListener('jsi:entered', (e) => {
+    sawEntered = true;   // the homepage's intro (and the 18+ question after it) are over: the hello may show
     if (shownUp) return;   // he is on screen: init's own listener answers it
     const nav = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
     const dcl = nav && nav.domContentLoadedEventEnd;
