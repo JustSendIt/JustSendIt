@@ -126,6 +126,7 @@
       group('chart', '📈 Chart', true, chartHTML(p)) +
       group('market', '📊 Market', true, market) + group('activity', '🔁 Activity', false, activity) + group('holders', '👥 Holders', false, holders) + group('contract', '📄 Contract &amp; copy', false, contract) +
       group('block0', '🎯 Block 0 — the first buyers', true, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
+      group('bundles', '📦 Bundlers — bought and moved in one block', true, '<div class="np-bd" data-token="' + esc(p.token.address) + '"></div>') +
       '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee, not an audit, not advice. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>' +
       /* what you can do with a saved token: open its full profile in the Scanner (the score breakdown lives there,
          not in this lighter card), or call it — the same Send Call pair every view of a token ends in. A call from

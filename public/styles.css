@@ -4452,6 +4452,35 @@ div.comm-page > *, header.comm-page > * { margin-top: 0; margin-bottom: 0; }
 .b0-fine b { color: var(--text); }
 @media (max-width: 420px) { .b0-tiles { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); } }
 
+/* ===== 23b. Bundlers — bought and moved in one block, on every token detail (public/bundlers.js) =====
+   The block-0 panel's tiles, messages and pop-down pill are reused as they are; these are the bundler rows. */
+.np-bd { display: block; }
+.bd-lead { margin: 0 0 0.6rem; font-size: max(var(--text-floor), 0.9rem); line-height: 1.5; color: var(--text); }
+.bd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.55rem; }
+.bd-b { background: var(--ink); border: 1px solid var(--ink-4); border-radius: 12px; padding: 0.65rem 0.75rem; min-width: 0; }
+.bd-b-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.5rem; margin-bottom: 0.3rem; }
+.bd-b-n { font-size: max(var(--text-floor), 0.92rem); font-weight: 900; color: var(--text); }
+.bd-kind { font-size: max(var(--text-floor), 0.7rem); font-weight: 800; border-radius: var(--r-pill); padding: 0.12rem 0.5rem; background: rgba(255,179,64,0.12); color: var(--gold); border: 1px solid rgba(255,179,64,0.4); overflow-wrap: anywhere; }
+.bd-b-when { margin: 0 0 0.35rem; font-size: max(var(--text-floor), 0.78rem); line-height: 1.5; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.bd-b-when a { color: var(--diamond); white-space: nowrap; }
+.bd-b-stats, .bd-wl-stats { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: max(var(--text-floor), 0.8rem); color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.bd-b-stats b, .bd-wl-stats b { color: var(--text); font-weight: 800; }
+.bd-b-stats b.b0-up { color: var(--green-bright); }
+.bd-b-stats b.b0-down { color: var(--red); }
+.bd-b-stats i, .bd-wl-stats i { font-style: normal; opacity: 0.75; }
+.bd-wallets .bd-wl-list { gap: 0.3rem; }
+.bd-wallets .bd-wl { display: block; padding: 0.4rem 0.55rem; }
+.bd-wl-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.2rem 0.6rem; margin-bottom: 0.2rem; }
+.bd-addr { font-family: ui-monospace, Menlo, monospace; font-size: max(var(--text-floor), 0.8rem); color: var(--diamond); }
+code.bd-addr { color: var(--text); }
+.bd-roles { font-size: max(var(--text-floor), 0.72rem); color: var(--text-dim); }
+/* a P&L tile's figure keeps its sign colour: `.b0-tile b` (green) is more specific than `.b0-down`, so a loss was drawn green */
+.b0-tile b.b0-down { color: var(--red); }
+.b0-tile b.b0-flat { color: var(--text); }
+.bd-none { display: grid; gap: 0.25rem; }
+.bd-none p { margin: 0; }
+.bd-none .bd-none-h { font-size: max(var(--text-floor), 1.05rem); font-weight: 900; color: var(--green-bright); line-height: 1.3; }
+
 /* --- The 90-day beta campaign banner ------------------------------------
    Amber for the deadline, green for what you keep — the two things a reader
    needs to tell apart at a glance. Never colour alone: the countdown says

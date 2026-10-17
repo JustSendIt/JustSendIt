@@ -35,7 +35,9 @@
      (oauth-btn, arc-btn, np-caret-btn). scripts/check.mjs matches on exactly these two rules, so the set
      it certifies and the set this can reach are the same set; when they disagreed, the check passed ten
      controls this could never show a description for. */
-  var SEL = 'button, a.btn, a[class*="-btn"], [role="button"], input[type="submit"], input[type="button"]';
+  /* summary[data-tip]: a pop-down's summary styled as a pill is a control to the reader too (the bundler and block-0
+     panels' "All N wallets" pills); only the ones that carry a description opt in, so no plain summary is affected. */
+  var SEL = 'button, a.btn, a[class*="-btn"], [role="button"], input[type="submit"], input[type="button"], summary[data-tip]';
   var HOVER_DELAY = 350;   // long enough that sweeping the pointer across a toolbar does not strobe
   var TOUCH_HOLD = 400;    // press-and-hold shows it; a quick tap just activates the button
   var GAP = 10;            // clear air between the control and the bubble, so it never covers it

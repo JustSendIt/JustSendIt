@@ -108,6 +108,7 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
        so a copy of a key stops opening anything soon after it is taken. See "Key rotation" further down and DEPLOY.md. */
 const KEYLIB = require('./lib/keys.js');
 const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
+const BUNDLES = require('./lib/bundles.js');   // who bought and moved tokens in the same block (lib/bundles.js)
 const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
 let DATA_KEY_SOURCE = 'generated';   // where the key came from: 'env', 'file' (DATA_KEY_FILE), 'data-dir' (beside the database) — shown to the admin, never the key
 let KEY_RING_FILE = null;            // set when DATA_KEY_FILE holds a keyring: the file rotation rewrites
@@ -570,6 +571,22 @@ CREATE TABLE IF NOT EXISTS sniper_scans (
   attempts     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_sniper_status ON sniper_scans(status, finished_at);
+/* Bundler scans, one row per token (lib/bundles.js; scanBundles in server.js). Chain data, not a member's: every
+   figure in it is read from the token's own transfers and its pool's swaps, and it is rebuilt in full on each read. */
+CREATE TABLE IF NOT EXISTS bundle_scans (
+  token_addr   TEXT PRIMARY KEY,
+  pair_addr    TEXT,
+  status       TEXT NOT NULL DEFAULT 'queued',   -- queued | running | done | partial | failed
+  reason       TEXT,                             -- why it is partial or failed, in plain words
+  data         TEXT,                             -- the last complete read: the JSON the API and the panel render
+  summary      TEXT,                             -- the few figures every token row carries (applyBundleFlags)
+  calls        INTEGER,
+  started_at   INTEGER,
+  finished_at  INTEGER,
+  retry_at     INTEGER,                          -- not read again before this (the background sweep's clock)
+  attempts     INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_bundle_retry ON bundle_scans(retry_at);
 CREATE TABLE IF NOT EXISTS holder_snapshot_chunks (
   snapshot_id INTEGER NOT NULL REFERENCES holder_snapshots(id) ON DELETE CASCADE,
   chunk       INTEGER NOT NULL,
@@ -8774,14 +8791,31 @@ function isSystemAddr(a, token, pair) {
 /* The shared rpc() is deliberately fail-fast — the pairs refresher must not stall behind a slow node. A
    sniper scan is the opposite: it is a background job with nobody waiting, and the public RPC answers 429
    under load, so it waits and tries again rather than recording "no snipers" for a read it never made. */
-function sniperBudget() {
+function sniperBudget(max) {
+  const cap = max || SNIPE.CALL_BUDGET;
   let n = 0;
   return {
     get used() { return n; },
-    spent() { return n >= SNIPE.CALL_BUDGET; },
+    spent() { return n >= cap; },
+    /* Several calls in ONE request (rpcBatch), counted as one against the budget and retried like a single call when
+       the node is congested. An item the node refused for its own reason (a revert) comes back null — unread, never 0. */
+    async batch(calls) {
+      n++;
+      if (n > cap) throw Object.assign(new Error('read budget spent'), { budget: true });
+      let last;
+      for (let i = 0; i < SNIPE.TRIES; i++) {
+        try { return await rpcBatch(calls); } catch (e) {
+          last = e;
+          const msg = String((e && e.message) || '');
+          if (!(isThrottle(e) || /too many requests|timed out|timeout|abort|http 5|http 403|http 429|ECONNRESET|fetch failed/i.test(msg))) throw e;
+          await sleep(SNIPE.BACKOFF_MS * (i + 1));
+        }
+      }
+      throw last;
+    },
     async call(m, p) {
       n++;
-      if (n > SNIPE.CALL_BUDGET) throw Object.assign(new Error('read budget spent'), { budget: true });
+      if (n > cap) throw Object.assign(new Error('read budget spent'), { budget: true });
       let last;
       for (let i = 0; i < SNIPE.TRIES; i++) {
         try { return await rpc(m, p); } catch (e) {
@@ -9151,7 +9185,7 @@ function queueSniperScan(token, pair, createdAtMs) {
   sniperQueue.push({ token: t, pair: pr, createdAtMs: Number(createdAtMs) || 0 });
 }
 async function runSniperQueue() {
-  if (sniperScanning) return;
+  if (sniperScanning || bundleScanning) return;        // one chain scan at a time, block-0 and bundles alike
   const job = sniperQueue.shift();
   if (!job) return;
   sniperScanning = true;
@@ -9199,6 +9233,301 @@ function sniperVerdict(d) {
     dump: !!(complete && t.netSellers > 0 && snipedPct != null && snipedPct >= SNIPE_MATERIAL_PCT),
     snipedPct, holdsPct,
   };
+}
+
+/* ===== Bundlers: wallets that bought and moved tokens in the same block ===================================
+   Owner, 2026-10-17: "pull all buy side transactions and transfers and determine whether there is a bundler in
+   token, how many bundlers there are and how much they still hold vs sold and their PNL" — "only pick out
+   transactions that bought and transferred in the same block" — "allow the user to expand and see all the wallets
+   that the bundler has in the token and show … how much each wallet holds and how much each has sold" — "make sure
+   this is active for all tokens on the platform".
+
+   The rules live in lib/bundles.js (pure, tested as they run). This is the chain side: read EVERY Transfer the token
+   emitted and every Swap and Mint of its pool since the pool's first trade, fold them, check that the wallets in a
+   bundle really are wallets (a second pool of the same token is not a holder), read what each one holds now and the
+   pool's price, and store the answer. Like the block-0 scan it runs in the background, one token at a time with a
+   rest between, and every token on the site is swept: a viewer who opens a token's details moves it to the front.
+   Nothing is estimated — a read that cannot be finished says why, and is never shown as "no bundlers". */
+const BUND = {
+  CALL_BUDGET: 900,          // hard ceiling on RPC requests for one token (a batch of balances is one request)
+  MAX_LOGS: 150000,          // transfers or pool events beyond this: too long a history to read in full here, and said so
+  MAX_WALLETS: 400,          // wallets checked and read per token (any beyond are counted, never guessed at)
+  BATCH: 40,                 // calls per batched request
+  TTL: 6 * 3600 * 1000,      // the background sweep reads a token again after this
+  VIEW_TTL: 30 * 60 * 1000,  // someone looking at a token gets a fresh read once the last one is this old
+  RETRY_MS: 30 * 60 * 1000,  // a failed read waits this long, doubling with each failure in a row (up to 8×)
+  BIG_RETRY_MS: 24 * 3600 * 1000,   // a history too long to read is asked about once a day
+  GAP_MS: 30 * 1000,         // rest between whole scans
+  FEED_GAP_MS: 60 * 1000,    // how often the sweep adds ONE token to an empty queue
+  QUEUE_MAX: 300,
+  STALE_MS: 15 * 60 * 1000,  // a queued/running claim older than this belonged to a process that is gone
+  MAX_BUNDLERS: 100,         // bundlers listed in one answer (the largest; the totals count every one)
+  QUIET_BLOCKS: 2600000,     // ~3 days of ~0.1 s blocks with no transfer of the token: nothing about it is changing
+  QUIET_TTL: 48 * 3600 * 1000,      // ...so the sweep reads it again only this often (a viewer still gets VIEW_TTL)
+};
+const EIP7702_CODE = /^0xef0100[0-9a-f]{40}$/i;   // an ordinary wallet that delegated to a contract (EIP-7702) is still a wallet
+
+// a 32-byte word as an address, or null
+const wordAddr = (h) => (typeof h === 'string' && /^0x[0-9a-fA-F]{64}$/.test(h) ? lcAddr('0x' + h.slice(26)) : null);
+async function bundleBatchRead(B, calls) {
+  const out = [];
+  for (let i = 0; i < calls.length; i += BUND.BATCH) out.push(...await B.batch(calls.slice(i, i + BUND.BATCH)));
+  return out;
+}
+
+async function scanBundles(token, pair) {
+  token = lcAddr(token); pair = lcAddr(pair);
+  const B = sniperBudget(BUND.CALL_BUDGET);
+  const notes = [];
+  let capped = false;
+  const head = parseInt(await B.call('eth_blockNumber', []), 16);
+  if (!(head > 0)) throw new Error('the chain did not answer');
+  const [supHex, t0h, t1h, resHex] = await bundleBatchRead(B, [
+    ['eth_call', [{ to: token, data: '0x18160ddd' }, 'latest']],
+    ['eth_call', [{ to: pair, data: '0x0dfe1681' }, 'latest']],
+    ['eth_call', [{ to: pair, data: '0xd21220a7' }, 'latest']],
+    ['eth_call', [{ to: pair, data: '0x0902f1ac' }, 'latest']],
+  ]);
+  /* The rules read a Uniswap-v2-style pool: its Swap and Mint events, and getReserves() for the price. A pool of another
+     kind (v3, concentrated liquidity) emits neither, and an empty walk over it would read as "never traded — no
+     bundlers". So the pool must answer getReserves(), asked once more on its own if the batch item came back empty. */
+  let reserves = resHex && resHex.length >= 130 ? resHex : null;
+  if (!reserves) {
+    try { const r = await B.call('eth_call', [{ to: pair, data: '0x0902f1ac' }, 'latest']); reserves = r && r.length >= 130 ? r : null; }
+    catch (e) { if (!/revert/i.test(String((e && e.message) || ''))) throw e; }
+    if (!reserves) throw new Error('this pool is not a Uniswap-v2-style pool, so its trades cannot be read here');
+  }
+  const supply = supHex && supHex !== '0x' ? BigInt(supHex) : 0n;
+  if (!(supply > 0n)) throw new Error('total supply unreadable');
+  const token0 = wordAddr(t0h), token1 = wordAddr(t1h);
+  if (!token0 || !token1) throw new Error('the pool could not be read');
+  if (token0 !== token && token1 !== token) throw new Error('this pool does not trade the token');
+  const tokenIsZero = token0 === token, quoteAddr = tokenIsZero ? token1 : token0;
+  if (!QUOTE_SET.has(quoteAddr)) throw new Error('the pool’s other side is not WETH or USDG, so its trades cannot be priced here');
+  let quoteDec = 18;
+  if (quoteAddr !== WETH_ADDR) { const d = await B.call('eth_call', [{ to: quoteAddr, data: '0x313ce567' }, 'latest']); quoteDec = d && d !== '0x' ? Number(BigInt(d)) : NaN; if (!(quoteDec >= 0 && quoteDec <= 36)) throw new Error('the quote token’s decimals could not be read'); }
+  const quote = { addr: quoteAddr, symbol: quoteAddr === WETH_ADDR ? 'WETH' : 'USDG', decimals: quoteDec };
+
+  /* Every Swap and Mint of the pool, from the pool's first trade (the block-0 scan's answer when it has one — a pool
+     pays nothing out before its first buy, and a launch that funds the pool and buys in one transaction does both in
+     that block), then every Transfer of the token from the pool's first event on. */
+  const sn = sniperRow(token);
+  const start = sn && sn.pair_addr === pair && sn.block0 > 0 ? sn.block0 : 0;
+  const read = (q) => B.call('eth_getLogs', [q]);
+  /* two passes, one topic each: measured 2026-10-17, the node caps a query that sends two values in one topic position
+     ([Swap, Mint]) at 100,000 blocks ("send one value per position"), where one value per position gets the whole
+     10,000,000-block window an address filter allows */
+  const pairLogs = await transferLogWalk(pair, [[BUNDLES.SWAP_TOPIC], [BUNDLES.MINT_TOPIC]], start, head, BUND.MAX_LOGS, read);
+  let first = Infinity;
+  for (const l of pairLogs) { const b = parseInt(l.blockNumber, 16); if (b < first) first = b; }
+  const base = { v: 1, token, pair, quote, supply: supply.toString(), head, scannedTo: head, calls: 0 };
+  if (first === Infinity) {
+    /* No Swap and no Mint. Before that is called "never traded", the token's own transfers out of the pool are asked: a
+       pool that paid tokens out without a Swap this read understands is a pool it cannot read, not a clean one. */
+    let paidOut = 0;
+    try { paidOut = (await transferLogWalk(token, [[TRANSFER_TOPIC, topicAddr(pair)]], start, head, 20, read)).length; }
+    catch (e) { if (/longer than the chain read budget/.test(String((e && e.message) || ''))) paidOut = 21; else throw e; }
+    if (paidOut) throw new Error('the pool paid tokens out but emitted no swap this read understands, so its trades cannot be read here');
+    return { ...base, fromBlock: null, lastBlock: null, transfers: null, buyTxs: 0, sellTxs: 0, routers: 0, feeWallets: 0, float: supply.toString(), priceQ: null,
+      bundlers: [], totals: bundleTotals([]), notes: ['This pool has never traded — nobody has bought yet.'], capped: false, calls: B.used };
+  }
+  const tokenLogs = await transferLogWalk(token, [[TRANSFER_TOPIC]], first, head, BUND.MAX_LOGS, read);
+  const isSys = (a) => isSystemAddr(a, token, pair) || QUOTE_SET.has(lcAddr(a));
+  const fold = BUNDLES.bundleFold(tokenLogs, pairLogs, { token, pair, tokenIsZero, isSys });
+  if (fold.eventsDropped) { capped = true; notes.push('Found more bundle moments than this read keeps (' + (fold.events.length + fold.eventsDropped).toLocaleString('en-US') + '); the first ' + fold.events.length + ' are shown.'); }
+
+  /* Is every address in a bundle a wallet? A contract can be one (a bundler's own buy-and-split contract, a smart
+     wallet), but another pool of this token cannot: it "holds" whatever its traders left in it. One request finds
+     which addresses have code; only those are asked whether they are a pool of this token. */
+  const everyone = [];
+  { const seen = new Set(); for (const e of fold.events) { if (!seen.has(e.lead)) { seen.add(e.lead); everyone.push(e.lead); } } for (const e of fold.events) for (const a of e.members.keys()) if (!seen.has(a)) { seen.add(a); everyone.push(a); } }
+  const checked = everyone.slice(0, BUND.MAX_WALLETS);
+  const unread = new Set(everyone.slice(checked.length));          // beyond the cap: listed in their bundles, never read
+  if (unread.size) { capped = true; notes.push('Checked and read the first ' + checked.length + ' of ' + everyone.length.toLocaleString('en-US') + ' wallets in these bundles; the rest are listed without a balance.'); }
+  const notWallets = new Set();
+  const codes = checked.length ? await bundleBatchRead(B, checked.map((a) => ['eth_getCode', [a, 'latest']])) : [];
+  // an item the batch came back without is asked once more on its own; one still unanswered stays UNREAD — kept in its
+  // bundle with no balance, never dropped (dropping it once made a 70%-of-supply launch bundle vanish as "no bundlers")
+  for (let i = 0; i < checked.length; i++) if (codes[i] == null) { try { codes[i] = await B.call('eth_getCode', [checked[i], 'latest']); } catch { codes[i] = null; } }
+  checked.forEach((a, i) => { if (codes[i] == null) unread.add(a); });
+  const contracts = checked.filter((a, i) => codes[i] != null && codes[i] !== '0x' && !EIP7702_CODE.test(codes[i]));
+  if (contracts.length) {
+    const ids = await bundleBatchRead(B, [].concat(...contracts.map((a) => [['eth_call', [{ to: a, data: '0x0dfe1681' }, 'latest']], ['eth_call', [{ to: a, data: '0xd21220a7' }, 'latest']]])));
+    for (let i = 0; i < contracts.length; i++) {
+      const a = contracts[i];
+      if (wordAddr(ids[2 * i]) === token || wordAddr(ids[2 * i + 1]) === token) { notWallets.add(a); continue; }
+      if (ids[2 * i] != null || ids[2 * i + 1] != null) continue;      // it answered, and it is not a pool of this token
+      // neither answered: a revert means "no such function" (an ordinary contract); anything else leaves it unread
+      try { const t0 = await B.call('eth_call', [{ to: a, data: '0x0dfe1681' }, 'latest']); if (wordAddr(t0) === token) notWallets.add(a); else if (t0 == null || t0 === '0x') unread.add(a); }
+      catch (e) { if (!/revert/i.test(String((e && e.message) || ''))) unread.add(a); }
+    }
+  }
+  const unchecked = [...unread].filter((a) => checked.includes(a)).length;
+  if (unchecked) { capped = true; notes.push(unchecked + ' address' + (unchecked === 1 ? '' : 'es') + ' in these bundles could not be checked (the node did not answer), so ' + (unchecked === 1 ? 'it is' : 'they are') + ' listed without a balance.'); }
+  const groups = BUNDLES.bundleGroup(fold, notWallets);
+
+  // what each wallet holds now (never asked of an unread address: its holding is unknown, not zero), and the pool's price
+  const addrs = [...new Set([].concat(...groups.map((g) => g.wallets.map((w) => w.addr))))].filter((a) => !unread.has(a));
+  const bals = addrs.length ? await bundleBatchRead(B, addrs.map((a) => ['eth_call', [{ to: token, data: '0x70a08231' + a.slice(2).padStart(64, '0') }, 'latest']])) : [];
+  const holds = new Map(addrs.map((a, i) => [a, bals[i] && bals[i] !== '0x' ? BigInt(bals[i]) : null]));   // null = unread, never 0
+  let priceQ = null;
+  try {
+    const r = await B.call('eth_call', [{ to: pair, data: '0x0902f1ac' }, 'latest']);
+    if (r && r.length >= 130) { const r0 = BigInt('0x' + r.slice(2, 66)), r1 = BigInt('0x' + r.slice(66, 130)); const [tr, qr] = tokenIsZero ? [r0, r1] : [r1, r0]; if (tr > 0n) priceQ = Number(qr) / Number(tr); }
+  } catch { priceQ = null; }
+  const float = await tokenFloat(B, token, pair, supply);
+
+  const all = groups.map((g, i) => bundleEntry(g, i + 1, holds, priceQ));
+  const bundlers = all.slice(0, BUND.MAX_BUNDLERS);                 // groups come largest first
+  if (all.length > bundlers.length) notes.push('Listing the ' + bundlers.length + ' largest of ' + all.length.toLocaleString('en-US') + ' bundlers; the totals above cover every one.');
+  if (bundlers.some((b) => b.holds == null)) notes.push('At least one wallet’s balance could not be read, so its bundle has no "still holds" or P&L figure.');
+  let lastBlock = first;
+  for (const l of tokenLogs) { const b = parseInt(l.blockNumber, 16); if (b > lastBlock) lastBlock = b; }
+  for (const l of pairLogs) { const b = parseInt(l.blockNumber, 16); if (b > lastBlock) lastBlock = b; }
+  return { ...base, fromBlock: first, lastBlock, transfers: tokenLogs.length, buyTxs: fold.buyTxs, sellTxs: fold.sellTxs,
+    routers: fold.routers.size, feeWallets: fold.fees.size, float: float.toString(), priceQ,
+    bundlers, totals: bundleTotals(all), notes, capped, calls: B.used };
+}
+
+// one bundler, every figure as a string (the JSON carries no BigInt); a wallet whose balance was not read makes the bundle's holdings unknown
+function bundleEntry(g, id, holds, priceQ) {
+  const S = (v) => (v == null ? null : v.toString());
+  const sum = (f) => g.wallets.reduce((s, w) => s + f(w), 0n);
+  const wallets = g.wallets.map((w) => {
+    const h = holds.has(w.addr) ? holds.get(w.addr) : null;
+    return { addr: w.addr, roles: w.roles, inBundle: { bought: S(w.inBundle.bought), received: S(w.inBundle.received), moved: S(w.inBundle.moved) },
+      bought: S(w.bought), sold: S(w.sold), sentOutside: S(w.sentOutside), soldElsewhere: S(w.soldElsewhere || 0n), liquidity: S(w.liquidity), holds: S(h),
+      cost: S(w.cost), proceeds: S(w.proceeds), buys: w.buys, sells: w.sells };
+  });
+  const known = g.wallets.every((w) => holds.get(w.addr) != null);
+  const held = g.wallets.reduce((s, w) => s + (holds.get(w.addr) || 0n), 0n);
+  const cost = sum((w) => w.cost), proceeds = sum((w) => w.proceeds);
+  /* P&L values only what came through the bundle (lib: attributable — its buys here and what members sent it, less what
+     it sold, pooled and sent on): a holding topped up on another pool or from outside cost nothing here, and valuing it
+     would show a profit nobody made. "Still holds" stays the whole balance, which is what it is. */
+  const valued = g.wallets.reduce((s, w) => { const h = holds.get(w.addr) || 0n, a = w.attributable == null ? h : w.attributable; return s + (h < a ? h : a); }, 0n);
+  const unrealised = known && priceQ != null ? BigInt(Math.round(Number(valued) * priceQ)) : null;
+  return {
+    id, lead: g.lead, kinds: g.kinds, firstBlock: g.firstBlock, blocks: g.blocks.slice(0, 20), blockCount: g.blocks.length,
+    txs: g.txs.slice(0, 12), txCount: g.txs.length,
+    took: S(g.took), bought: S(sum((w) => w.bought)), received: S(sum((w) => w.inBundle.received)),
+    holds: known ? S(held) : null, valued: known ? S(valued) : null, sold: S(sum((w) => w.sold)), sentOutside: S(sum((w) => w.sentOutside)), soldElsewhere: S(sum((w) => w.soldElsewhere || 0n)), liquidity: S(sum((w) => w.liquidity)),
+    cost: S(cost), proceeds: S(proceeds), unrealised: S(unrealised), pnl: unrealised == null ? null : S(proceeds + unrealised - cost),
+    wallets,
+  };
+}
+function bundleTotals(bundlers) {
+  const big = (f) => bundlers.reduce((s, b) => s + (b[f] == null ? 0n : BigInt(b[f])), 0n).toString();
+  const all = bundlers.every((b) => b.holds != null), priced = bundlers.every((b) => b.pnl != null);
+  return { bundlers: bundlers.length, wallets: new Set([].concat(...bundlers.map((b) => b.wallets.map((w) => w.addr)))).size,
+    took: big('took'), holds: all ? big('holds') : null, sold: big('sold'), sentOutside: big('sentOutside'), soldElsewhere: big('soldElsewhere'), liquidity: big('liquidity'),
+    cost: big('cost'), proceeds: big('proceeds'), unrealised: priced ? big('unrealised') : null, pnl: priced ? big('pnl') : null };
+}
+// the handful of figures every token row carries (applyBundleFlags): shares of the supply, to 4 significant figures
+function bundleSummary(d) {
+  if (!d || !d.totals) return null;
+  const sup = Number(d.supply || 0);
+  const pctOf = (v) => (v == null || !(sup > 0) ? null : Number(Number(Number(v) / sup * 100).toPrecision(4)));
+  const t = d.totals;
+  return { bundlers: t.bundlers, wallets: t.wallets, tookPct: pctOf(t.took), holdsPct: pctOf(t.holds), soldPct: pctOf(t.sold),
+    pnl: t.pnl, quote: d.quote ? d.quote.symbol : null, quoteDecimals: d.quote ? d.quote.decimals : 18, capped: !!d.capped, fromBlock: d.fromBlock,
+    buyTxs: d.buyTxs == null ? null : d.buyTxs, transfers: d.transfers == null ? null : d.transfers };   // what was read, so "none found" says out of how many
+}
+
+function bundleRow(token) {
+  try { return db.prepare('SELECT * FROM bundle_scans WHERE token_addr = ?').get(lcAddr(token)) || null; } catch { return null; }
+}
+function bundleData(row) {
+  if (!row || !row.data) return null;
+  try { return JSON.parse(row.data); } catch { return null; }
+}
+const bundleQueue = [];                 // [{ token, pair }] — in memory: boot re-opens any claim the last process left behind
+let bundleScanning = false;
+try {
+  const orphans = db.prepare("UPDATE bundle_scans SET status = CASE WHEN data IS NULL THEN 'failed' ELSE 'done' END, reason = COALESCE(reason, 'interrupted by a restart'), retry_at = 0 WHERE status IN ('queued','running')").run();
+  if (orphans.changes) console.log('bundle scans: re-opened ' + orphans.changes + ' interrupted by the last shutdown');
+} catch {}
+/* `front`: someone is looking at this token — it jumps the queue, and gets a fresh read if the last is older than
+   VIEW_TTL. The sweep (front = false) only adds a token whose retry clock has run out. */
+function queueBundleScan(token, pair, front) {
+  const t = lcAddr(token), pr = lcAddr(pair);
+  if (!/^0x[0-9a-f]{40}$/.test(t) || !/^0x[0-9a-f]{40}$/.test(pr)) return false;
+  const at = bundleQueue.findIndex((q) => q.token === t);
+  if (at >= 0) { if (front) { const q = bundleQueue.splice(at, 1)[0]; q.front = true; bundleQueue.unshift(q); } return true; }
+  if (bundleQueue.length >= BUND.QUEUE_MAX) return false;
+  const row = bundleRow(t);
+  if (row) {
+    if ((row.status === 'running' || row.status === 'queued') && now() - (row.started_at || 0) < BUND.STALE_MS) return true;
+    const age = now() - (row.finished_at || 0);
+    if (front) {
+      if ((row.status === 'done' || row.status === 'partial') && row.pair_addr === pr && age < BUND.VIEW_TTL) return false;
+      // a viewer may ask again once RETRY_MS has passed since a failure, whatever the sweep's own (longer) backoff says
+      if (row.status === 'failed' && now() < Math.min(row.retry_at || 0, (row.finished_at || 0) + BUND.RETRY_MS)) return false;
+    } else if (now() < (row.retry_at || 0)) return false;
+  }
+  try {
+    db.prepare(`INSERT INTO bundle_scans (token_addr, pair_addr, status, started_at) VALUES (?,?,'queued',?)
+                ON CONFLICT(token_addr) DO UPDATE SET pair_addr = excluded.pair_addr, status = 'queued', started_at = excluded.started_at`).run(t, pr, now());
+  } catch { return false; }
+  if (front) bundleQueue.unshift({ token: t, pair: pr, front: true }); else bundleQueue.push({ token: t, pair: pr, front: false });
+  return true;
+}
+async function runBundleQueue() {
+  if (bundleScanning || sniperScanning) return;        // one chain scan at a time, block-0 and bundles alike
+  /* The sweep's own reads wait while block-0 scans are queued and while the node is refusing this address
+     (ledgerCoolUntil): every chain read on the site shares that node. A viewer's read goes ahead. */
+  if (bundleQueue.length && !bundleQueue[0].front && (sniperQueue.length || now() < ledgerCoolUntil)) return;
+  const job = bundleQueue.shift();
+  if (!job) return;
+  bundleScanning = true;
+  try {
+    db.prepare("UPDATE bundle_scans SET status = 'running', started_at = ?, attempts = attempts + 1 WHERE token_addr = ?").run(now(), job.token);
+    const data = await scanBundles(job.token, job.pair);
+    data.readAt = now();
+    db.prepare(`UPDATE bundle_scans SET status = ?, reason = ?, data = ?, summary = ?, calls = ?, finished_at = ?, retry_at = ?, attempts = 0
+                WHERE token_addr = ?`)
+      .run(data.capped ? 'partial' : 'done', data.notes.length ? data.notes.join(' ') : null, JSON.stringify(data), JSON.stringify(bundleSummary(data)),
+           data.calls, now(), now() + (data.lastBlock != null && data.head - data.lastBlock > BUND.QUIET_BLOCKS ? BUND.QUIET_TTL : BUND.TTL), job.token);
+  } catch (e) {
+    /* A failed read is recorded as a failure with its reason — never as "no bundlers". The last complete read stays
+       (it is still true of the blocks it covered, and the panel says when it was made and that a newer one failed). */
+    const msg = String((e && e.message) || 'the chain could not be read');
+    const big = /longer than the chain read budget|too dense/.test(msg);
+    const row = bundleRow(job.token), n = Math.max(1, Math.min(8, (row && row.attempts) || 1));
+    const why = big ? 'this token’s history is longer than ' + BUND.MAX_LOGS.toLocaleString('en-US') + ' transfers or trades, too long to read in full here'
+      : /read budget/.test(msg) ? 'the read needed more chain requests than one scan may make'
+      : /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|timed out|timeout|abort|http 5\d\d|http 4(03|29)|too many requests/i.test(msg) ? 'the chain node did not answer — it is asked again later'
+      : msg.slice(0, 200);
+    db.prepare("UPDATE bundle_scans SET status = 'failed', reason = ?, finished_at = ?, retry_at = ? WHERE token_addr = ?")
+      .run(why, now(), now() + (big ? BUND.BIG_RETRY_MS : BUND.RETRY_MS * Math.min(8, Math.pow(2, n - 1))), job.token);
+  } finally {
+    setTimeout(() => { bundleScanning = false; }, BUND.GAP_MS).unref();
+  }
+}
+/* Every token on the site, slowly: $SEND and $GWC, then every token the site has a pool for (the block-0 scan's
+   table is the site's list of them: every token in the radar and every one anybody opened), the never-read first,
+   then the oldest. Exactly one per tick, and only into an empty queue, so a viewer's request is never behind a sweep. */
+function bundleSweepPick() {
+  for (const k of ['SEND', 'GWC']) {
+    const row = bundleRow(TOK[k]);
+    if (!row || (row.status !== 'queued' && row.status !== 'running' && now() >= (row.retry_at || 0))) { if (queueBundleScan(TOK[k], OG_PAIR[k], false)) return true; }
+  }
+  const c = db.prepare(`SELECT s.token_addr AS token, s.pair_addr AS pair FROM sniper_scans s LEFT JOIN bundle_scans b ON b.token_addr = s.token_addr
+    WHERE s.pair_addr IS NOT NULL AND (b.token_addr IS NULL OR (b.status NOT IN ('queued','running') AND COALESCE(b.retry_at, 0) <= ?))
+    ORDER BY (b.token_addr IS NOT NULL), COALESCE(b.finished_at, 0) LIMIT 1`).get(now());
+  return !!(c && queueBundleScan(c.token, c.pair, false));
+}
+/* the summary every token row carries: informational, it changes no score and no verdict. This runs for every pair on
+   every refresh, so it reads the three small columns it needs and never the full read in `data` */
+function bundleFlagsRow(token) {
+  try { return db.prepare('SELECT status, summary, finished_at FROM bundle_scans WHERE token_addr = ?').get(lcAddr(token)) || null; } catch { return null; }
+}
+function applyBundleFlags(e, r) {
+  const row = bundleFlagsRow(e.token.address);
+  let s = null;
+  if (row && row.summary) { try { s = JSON.parse(row.summary); } catch { s = null; } }
+  r.bundles = s ? { status: row.status === 'queued' || row.status === 'running' ? 'refreshing' : row.status, ...s, scannedAt: row.finished_at || null }
+    : { status: row ? (row.status === 'failed' ? 'failed' : 'pending') : 'unscanned', bundlers: null };
 }
 
 function num(x) { const n = Number(x); return isFinite(n) ? n : 0; }
@@ -9394,6 +9723,7 @@ function applyRisk(e, deployerCounts, deployerDied) {
   r.serialDeployer = !!(dep && deployerCounts[dep] >= 3);
   if (r.serialDeployer) { r.deployerLaunches = deployerCounts[dep]; r.deployerDied = deployerDied[dep] || 0; }
   applySniperFlags(e, r);
+  applyBundleFlags(e, r);
   const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
   r.health = Math.max(0, Math.min(100, 100 - penalty));
   r.triage = r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid';
@@ -9447,6 +9777,7 @@ function rescoreCachedPair(pair) {
     if (!pair || !pair.risk || !pair.token) return pair;
     const before = pair.risk.sniperOk;
     applySniperFlags(pair, pair.risk);
+    applyBundleFlags(pair, pair.risk);
     if (before === pair.risk.sniperOk && pair.risk.dataKnown && 'snipers' in pair.risk.dataKnown) return pair;
     const r = pair.risk;
     const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
@@ -16998,6 +17329,34 @@ const server = http.createServer(async (req, res) => {
           ...(data || {}),
         });
       }
+      /* Bundlers in a token: wallets that bought and moved tokens in the same block, what they still hold, what they sold,
+         and their P&L (scanBundles). Asking never waits on the chain: an unread token is queued at the front and the
+         answer says so; a read older than BUND.VIEW_TTL is served as it stands while a fresh one is made. */
+      if (p === '/api/token/bundlers' && req.method === 'GET') {
+        const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
+        if (!/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'enter a valid 0x token address');
+        if (!rateLimit('bundlers:' + clientIp(req), 90, 6e4)) return bad(res, 'slow down', 429);
+        const row = bundleRow(token);
+        let pair = row && row.pair_addr ? row.pair_addr : null;
+        if (!pair) { const sr = sniperRow(token); if (sr && sr.pair_addr) pair = sr.pair_addr; }
+        if (!pair) { try { const tc = tokenCacheGet(token); const pj = tc && tc.found ? JSON.parse(tc.pair_json || 'null') : null; if (pj && pj.pair && pj.pair.address) pair = lcAddr(pj.pair.address); } catch {} }
+        if (!pair) { for (const k of ['SEND', 'GWC']) if (TOK[k] === token) pair = OG_PAIR[k]; }
+        const queued = pair ? queueBundleScan(token, pair, true) : false;
+        const fresh = bundleRow(token), data = bundleData(fresh);
+        if (!data) {
+          if (fresh && fresh.status === 'failed' && !queued) return send(res, 200, { status: 'failed', token, reason: fresh.reason || null, scannedAt: fresh.finished_at || null, retryAt: fresh.retry_at || null, bundlers: null, summary: null });
+          if (pair && !queued && !bundleQueue.some((q) => q.token === token)) return send(res, 200, { status: 'busy', token, bundlers: null, summary: null, message: 'Many tokens are being read right now — this one is asked for again in a moment.' });
+          return send(res, 200, { status: pair ? 'queued' : 'unknown', token, bundlers: null, summary: null,
+            message: pair ? 'Reading every buy and transfer of this token now — check back in a moment.' : 'No indexed pool for this token, so there are no buys to read.' });
+        }
+        return send(res, 200, {
+          status: fresh.status, token, reason: fresh.reason || null,
+          refreshing: fresh.status === 'queued' || fresh.status === 'running',
+          lastFailed: fresh.status === 'failed' ? (fresh.reason || 'the last read failed') : null,
+          ...data, scannedAt: data.readAt || fresh.finished_at || null, explorer: BLOCKSCOUT,
+          summary: bundleSummary(data),   // the same few figures every token row carries, so the card can be redrawn from this answer
+        });
+      }
       /* ----- Telegram scanner ----- */
       // Public: what the New Pairs page needs to offer the bot honestly — including saying it is not set up.
       if (p === '/api/telegram/info' && req.method === 'GET') {
@@ -19163,6 +19522,11 @@ const sniperFeedTimer = setInterval(() => {
   } catch {}
 }, SNIPE.FEED_GAP_MS);
 sniperFeedTimer.unref();
+// bundler scans: one at a time, the viewer's first, then the sweep over every token on the site (bundleSweepPick)
+const bundleTimer = setInterval(() => { runBundleQueue().catch(() => {}); }, 15 * 1000);
+bundleTimer.unref();
+const bundleFeedTimer = setInterval(() => { try { if (!bundleQueue.length) bundleSweepPick(); } catch {} }, BUND.FEED_GAP_MS);
+bundleFeedTimer.unref();
 propTimer.unref();
 commHolderTimer.unref();
 ledgerTimer.unref(); ledgerFirst.unref();

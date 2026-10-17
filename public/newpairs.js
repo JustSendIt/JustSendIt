@@ -1137,6 +1137,8 @@
       group('holders', '👥 Holders', S.holders, holdersInner) +
       // the first buyers this pool ever had — filled in by block0.js wherever this body is inserted
       group('block0', '🎯 Block 0 — the first buyers', S.block0 !== false, '<div class="np-b0" data-token="' + esc(p.token.address) + '"></div>') +
+      // wallets that bought and moved tokens in the same block — filled in by bundlers.js, like block 0 above
+      group('bundles', '📦 Bundlers — bought and moved in one block', S.bundles !== false, '<div class="np-bd" data-token="' + esc(p.token.address) + '"></div>') +
       group('contract', '📄 Contract &amp; copy', S.contract, contractInner) +
       (tgTokenLink(p.token.address) ? '<p class="np-tg-row">' + tgTokenLink(p.token.address) + '</p>' : '') +
       HONEST +
@@ -1209,6 +1211,36 @@
       '<div><dt>Took</dt><dd>' + (sn.snipedPct != null ? pctPlain(sn.snipedPct) + ' of the circulating float' : UNREAD) + '</dd></div>' +
       '<div><dt>Still hold</dt><dd>' + (sn.holdsPct != null ? pctPlain(sn.holdsPct) + ' of the float' : UNREAD) + '</dd></div>' +
     '</dl><p class="tkd-line' + (r.sniperDump ? ' tkd-bad' : r.sniperHeavy ? ' tkd-warn' : '') + '">' + (r.sniperDump || r.sniperHeavy ? '🎯 ' : '') + esc(say) + '</p>';
+  }
+  /* The bundler read in a sentence and a few figures. `b` is the server's summary (applyBundleFlags puts it on every token
+     as risk.bundles, and /api/token/bundlers sends the same shape), so the card says the same thing wherever a token's
+     details open — and bundlers.js redraws it in place the moment a read that was still running comes back, so a token
+     with none says "No bundlers" without anyone reloading. bundlers.js draws every bundler and wallet in the pop-down. */
+  function bundleSummaryHTML(b) {
+    b = b || {};
+    const sh = (n) => n == null ? UNREAD : (n === 0 ? '0%' : n < 0.1 ? 'under 0.1%' : pctPlain(n)) + ' of supply';   // a dust share is never rounded to zero
+    if (b.status === 'unknown') return '<p class="tkd-note">No pool the site knows trades this token, so there are no buys to read for bundlers.</p>';
+    if (b.bundlers == null) return '<p class="tkd-note">🌫️ ' + (b.status === 'failed' ? 'The bundler read could not finish for this token yet' : 'Reading every buy and transfer of this token for bundlers now') + ' — whether anyone bought and moved tokens in the same block is still an open question, not a pass.</p>';
+    if (b.bundlers === 0 && b.fromBlock === null) return '<dl class="tkd-mini"><div><dt>Bundlers</dt><dd>None found</dd></div></dl><p class="tkd-line">✔ <b>No bundlers.</b> This pool has never traded, so nobody has bought yet.</p>';
+    if (b.bundlers === 0) {
+      return '<dl class="tkd-mini">' +
+        '<div><dt>Bundlers</dt><dd>None found</dd></div>' +
+        // what the answer was read from, as one figure so the two sit side by side on a phone
+        (b.buyTxs != null ? '<div><dt>Read</dt><dd>' + npNum(b.buyTxs) + ' buy' + (b.buyTxs === 1 ? '' : 's') + (b.transfers != null ? ' · ' + npNum(b.transfers) + ' transfer' + (b.transfers === 1 ? '' : 's') : '') + '</dd></div>' : '') +
+      '</dl><p class="tkd-line">✔ <b>No bundlers.</b> No wallet bought and moved tokens in the same block' + (b.capped ? ' in the part of its history that could be read' : ' since this pool first traded') + ' — which is not the same as safe.</p>';
+    }
+    return '<dl class="tkd-mini">' +
+      '<div><dt>Bundlers</dt><dd>' + npNum(b.bundlers) + ' (' + npNum(b.wallets) + ' wallet' + (b.wallets === 1 ? '' : 's') + ')</dd></div>' +
+      '<div><dt>Took</dt><dd>' + sh(b.tookPct) + '</dd></div>' +
+      '<div><dt>Still hold</dt><dd>' + sh(b.holdsPct) + '</dd></div>' +
+      '<div><dt>Sold</dt><dd>' + sh(b.soldPct) + '</dd></div>' +
+    '</dl><p class="tkd-line tkd-warn">📦 ' + (b.bundlers === 1 ? 'A wallet' : 'Wallets') + ' here bought and moved tokens in the same block — the pop-down shows every one, with what each holds and has sold.</p>';
+  }
+  // the card heading's answer at a glance: how many, "None", or not read yet
+  function bundleAsideHTML(b) {
+    b = b || {};
+    if (b.bundlers == null) return b.status === 'unknown' ? 'no pool' : 'not read yet';
+    return b.bundlers === 0 ? '<b>None</b>' : '<b>' + npNum(b.bundlers) + '</b> found';
   }
   function dashboardHTML(p, opts) {
     opts = opts || {};
@@ -1301,6 +1333,8 @@
       p.indexed ? txTableHTML(p) : '', 'Buys and sells by window');
     const cBlock0 = dashCard(u, 'block0', hc, '🎯 Block 0 — the first buyers', block0SummaryHTML(p),
       '<div class="np-b0" data-token="' + esc(t.address) + '"></div>', 'Every first buyer, wallet by wallet');
+    const cBundles = dashCard(u, 'bundles', hc, '📦 Bundlers', '<div class="np-bd-sum" data-token="' + esc(t.address) + '">' + bundleSummaryHTML(r.bundles) + '</div>',
+      '<div class="np-bd" data-token="' + esc(t.address) + '"></div>', 'Every bundler, wallet by wallet', '<span class="np-bd-aside" data-token="' + esc(t.address) + '">' + bundleAsideHTML(r.bundles) + '</span>');
     const caps = p.caps;
     const mBody = (liqPct != null ? '<p class="tkd-line">💧 Liquidity is <b>' + pctPlain(liqPct) + '</b> of the market cap. ' + depthSay(liqPct) + '</p>' : '') +
       reservesHTML(p) +
@@ -1329,7 +1363,7 @@
           '<div class="tkd-col tkd-col--c">' + cChart + cActivity + '</div>' +
           '<div class="tkd-side">' +
             '<div class="tkd-col tkd-col--l">' + cSafety + cContract + '</div>' +
-            '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cBlock0 + comm + cLinks + '</div>' +
+            '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cBlock0 + cBundles + comm + cLinks + '</div>' +
           '</div>' +
           '<div class="tkd-col tkd-col--c2">' + cScore + '</div>' +
         '</div>' +
@@ -2799,6 +2833,8 @@
     dashboardHTML,
     mountDashboard,
     animateRings,
+    bundleSummaryHTML,   // bundlers.js redraws the bundler card with these when a read comes back
+    bundleAsideHTML,
   };
 
   /* Lazy-load the honeypot/contract read the first time its section is expanded. Attached on EVERY page,
