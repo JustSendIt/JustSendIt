@@ -1220,7 +1220,13 @@
     b = b || {};
     const sh = (n) => n == null ? UNREAD : (n === 0 ? '0%' : n < 0.1 ? 'under 0.1%' : pctPlain(n)) + ' of supply';   // a dust share is never rounded to zero
     if (b.status === 'unknown') return '<p class="tkd-note">No pool the site knows trades this token, so there are no buys to read for bundlers.</p>';
-    if (b.bundlers == null) return '<p class="tkd-note">🌫️ ' + (b.status === 'failed' ? 'The bundler read could not finish for this token yet' : 'Reading every buy and transfer of this token for bundlers now') + ' — whether anyone bought and moved tokens in the same block is still an open question, not a pass.</p>';
+    if (b.bundlers == null) {
+      const why = b.status === 'failed' ? 'The bundler read could not finish for this token yet'
+        : b.status === 'busy' ? 'Many tokens are being read for bundlers right now — this one is asked for again in a moment'
+        : b.status === 'unscanned' ? 'Not read for bundlers yet — it is asked for as this opens'
+        : 'Reading every buy and transfer of this token for bundlers now';
+      return '<p class="tkd-note">🌫️ ' + why + ' — whether anyone bought and moved tokens in the same block is still an open question, not a pass.</p>';
+    }
     if (b.bundlers === 0 && b.fromBlock === null) return '<dl class="tkd-mini"><div><dt>Bundlers</dt><dd>None found</dd></div></dl><p class="tkd-line">✔ <b>No bundlers.</b> This pool has never traded, so nobody has bought yet.</p>';
     if (b.bundlers === 0) {
       return '<dl class="tkd-mini">' +

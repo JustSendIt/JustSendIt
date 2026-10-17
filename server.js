@@ -587,6 +587,14 @@ CREATE TABLE IF NOT EXISTS bundle_scans (
   attempts     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_bundle_retry ON bundle_scans(retry_at);
+/* Routers and fee wallets one token's bundler read found, kept for every other token's (lib/bundles.js ctx.known): a
+   public aggregator that served a thin token once or twice is still a router there. Chain facts, not a member's. */
+CREATE TABLE IF NOT EXISTS bundle_plumbing (
+  addr        TEXT PRIMARY KEY,
+  kind        TEXT NOT NULL,                     -- router | fee
+  seen_on     TEXT,                              -- the token whose read found it first
+  updated_at  INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS holder_snapshot_chunks (
   snapshot_id INTEGER NOT NULL REFERENCES holder_snapshots(id) ON DELETE CASCADE,
   chunk       INTEGER NOT NULL,
@@ -9264,6 +9272,8 @@ const BUND = {
   MAX_BUNDLERS: 100,         // bundlers listed in one answer (the largest; the totals count every one)
   QUIET_BLOCKS: 2600000,     // ~3 days of ~0.1 s blocks with no transfer of the token: nothing about it is changing
   QUIET_TTL: 48 * 3600 * 1000,      // ...so the sweep reads it again only this often (a viewer still gets VIEW_TTL)
+  FRESH_POOL_MS: 2 * 60 * 1000,     // a viewer looking at a pool read before its first trade gets a new read this soon (a launch is minutes away)
+  COOL_MS: 10 * 60 * 1000,          // after the node refuses a bundle read, the sweep stands down this long
 };
 const EIP7702_CODE = /^0xef0100[0-9a-f]{40}$/i;   // an ordinary wallet that delegated to a contract (EIP-7702) is still a wallet
 
@@ -9329,11 +9339,14 @@ async function scanBundles(token, pair) {
     catch (e) { if (/longer than the chain read budget/.test(String((e && e.message) || ''))) paidOut = 21; else throw e; }
     if (paidOut) throw new Error('the pool paid tokens out but emitted no swap this read understands, so its trades cannot be read here');
     return { ...base, fromBlock: null, lastBlock: null, transfers: null, buyTxs: 0, sellTxs: 0, routers: 0, feeWallets: 0, float: supply.toString(), priceQ: null,
-      bundlers: [], totals: bundleTotals([]), notes: ['This pool has never traded — nobody has bought yet.'], capped: false, calls: B.used };
+      bundlers: [], totals: bundleTotals([]), notes: [], capped: false, calls: B.used };
   }
   const tokenLogs = await transferLogWalk(token, [[TRANSFER_TOPIC]], first, head, BUND.MAX_LOGS, read);
   const isSys = (a) => isSystemAddr(a, token, pair) || QUOTE_SET.has(lcAddr(a));
-  const fold = BUNDLES.bundleFold(tokenLogs, pairLogs, { token, pair, tokenIsZero, isSys });
+  const known = { routers: new Set(), fees: new Set() };
+  try { for (const r of db.prepare('SELECT addr, kind FROM bundle_plumbing').all()) (r.kind === 'router' ? known.routers : known.fees).add(r.addr); } catch {}
+  const fold = BUNDLES.bundleFold(tokenLogs, pairLogs, { token, pair, tokenIsZero, isSys, known });
+  bundleLearn(token, fold, known);
   if (fold.eventsDropped) { capped = true; notes.push('Found more bundle moments than this read keeps (' + (fold.events.length + fold.eventsDropped).toLocaleString('en-US') + '); the first ' + fold.events.length + ' are shown.'); }
 
   /* Is every address in a bundle a wallet? A contract can be one (a bundler's own buy-and-split contract, a smart
@@ -9352,14 +9365,28 @@ async function scanBundles(token, pair) {
   checked.forEach((a, i) => { if (codes[i] == null) unread.add(a); });
   const contracts = checked.filter((a, i) => codes[i] != null && codes[i] !== '0x' && !EIP7702_CODE.test(codes[i]));
   if (contracts.length) {
-    const ids = await bundleBatchRead(B, [].concat(...contracts.map((a) => [['eth_call', [{ to: a, data: '0x0dfe1681' }, 'latest']], ['eth_call', [{ to: a, data: '0xd21220a7' }, 'latest']]])));
+    /* Is it a pool of this token? token0() first: a v2 pair never reverts it, so a revert answers "an ordinary contract"
+       and token1() is never asked of it (keeping a contract-heavy bundle well inside the read budget). An item the batch
+       came back without is asked on its own; one that still will not answer is UNREAD — never called a wallet. Only a
+       contract that answered token0() with something else is asked token1() (a pool laid out [WETH, token]). */
+    const ask1 = async (a, sel) => { try { const v = await B.call('eth_call', [{ to: a, data: sel }, 'latest']); return v == null ? { unknown: true } : { v }; } catch (e) { return /revert/i.test(String((e && e.message) || '')) ? { revert: true } : { unknown: true }; } };
+    const t0s = await bundleBatchRead(B, contracts.map((a) => ['eth_call', [{ to: a, data: '0x0dfe1681' }, 'latest']]));
+    const second = [];
     for (let i = 0; i < contracts.length; i++) {
       const a = contracts[i];
-      if (wordAddr(ids[2 * i]) === token || wordAddr(ids[2 * i + 1]) === token) { notWallets.add(a); continue; }
-      if (ids[2 * i] != null || ids[2 * i + 1] != null) continue;      // it answered, and it is not a pool of this token
-      // neither answered: a revert means "no such function" (an ordinary contract); anything else leaves it unread
-      try { const t0 = await B.call('eth_call', [{ to: a, data: '0x0dfe1681' }, 'latest']); if (wordAddr(t0) === token) notWallets.add(a); else if (t0 == null || t0 === '0x') unread.add(a); }
-      catch (e) { if (!/revert/i.test(String((e && e.message) || ''))) unread.add(a); }
+      let r0 = t0s[i] != null ? { v: t0s[i] } : await ask1(a, '0x0dfe1681');
+      if (r0.unknown) { unread.add(a); continue; }
+      if (r0.revert || r0.v === '0x') continue;                         // no token0(): not a pair
+      if (wordAddr(r0.v) === token) { notWallets.add(a); continue; }
+      second.push(a);
+    }
+    if (second.length) {
+      const t1s = await bundleBatchRead(B, second.map((a) => ['eth_call', [{ to: a, data: '0xd21220a7' }, 'latest']]));
+      for (let i = 0; i < second.length; i++) {
+        const r1 = t1s[i] != null ? { v: t1s[i] } : await ask1(second[i], '0xd21220a7');
+        if (r1.unknown) unread.add(second[i]);
+        else if (r1.v && wordAddr(r1.v) === token) notWallets.add(second[i]);
+      }
     }
   }
   const unchecked = [...unread].filter((a) => checked.includes(a)).length;
@@ -9389,6 +9416,19 @@ async function scanBundles(token, pair) {
     bundlers, totals: bundleTotals(all), notes, capped, calls: B.used };
 }
 
+/* What this read teaches the others: its routers and fee wallets — but only on strong evidence. A router must have
+   carried single buys for LEARN_MIN (25) different buyers here, a fee wallet must have sat next to LEARN_MIN_FEE (10):
+   one thin token where a wallet passed its own buys on three times must never teach "router" and hide that wallet's
+   bundles everywhere else. Measured: $SEND's and $GWC's public routers served 27–800 buyers. */
+function bundleLearn(token, fold, known) {
+  try {
+    const ins = db.prepare(`INSERT INTO bundle_plumbing (addr, kind, seen_on, updated_at) VALUES (?,?,?,?)
+                            ON CONFLICT(addr) DO UPDATE SET updated_at = excluded.updated_at`);
+    const ev = fold.evidence || { routers: new Map(), fees: new Map() };
+    for (const [a, n] of ev.routers) if (n >= BUNDLES.LIMITS.LEARN_MIN) ins.run(a, 'router', token, now());
+    for (const [a, n] of ev.fees) if (n >= BUNDLES.LIMITS.LEARN_MIN_FEE && !ev.routers.has(a)) ins.run(a, 'fee', token, now());
+  } catch {}
+}
 // one bundler, every figure as a string (the JSON carries no BigInt); a wallet whose balance was not read makes the bundle's holdings unknown
 function bundleEntry(g, id, holds, priceQ) {
   const S = (v) => (v == null ? null : v.toString());
@@ -9401,7 +9441,9 @@ function bundleEntry(g, id, holds, priceQ) {
   });
   const known = g.wallets.every((w) => holds.get(w.addr) != null);
   const held = g.wallets.reduce((s, w) => s + (holds.get(w.addr) || 0n), 0n);
-  const cost = sum((w) => w.cost), proceeds = sum((w) => w.proceeds);
+  /* got back: every sale (what the wallets really received), and of that, the sales of the bundle's own tokens — the part
+     P&L counts (lib: proceedsOwn): selling tokens that came from outside is no profit of this bundle's */
+  const cost = sum((w) => w.cost), proceeds = sum((w) => w.proceeds), proceedsOwn = sum((w) => (w.proceedsOwn == null ? w.proceeds : w.proceedsOwn));
   /* P&L values only what came through the bundle (lib: attributable — its buys here and what members sent it, less what
      it sold, pooled and sent on): a holding topped up on another pool or from outside cost nothing here, and valuing it
      would show a profit nobody made. "Still holds" stays the whole balance, which is what it is. */
@@ -9412,7 +9454,7 @@ function bundleEntry(g, id, holds, priceQ) {
     txs: g.txs.slice(0, 12), txCount: g.txs.length,
     took: S(g.took), bought: S(sum((w) => w.bought)), received: S(sum((w) => w.inBundle.received)),
     holds: known ? S(held) : null, valued: known ? S(valued) : null, sold: S(sum((w) => w.sold)), sentOutside: S(sum((w) => w.sentOutside)), soldElsewhere: S(sum((w) => w.soldElsewhere || 0n)), liquidity: S(sum((w) => w.liquidity)),
-    cost: S(cost), proceeds: S(proceeds), unrealised: S(unrealised), pnl: unrealised == null ? null : S(proceeds + unrealised - cost),
+    cost: S(cost), proceeds: S(proceeds), proceedsOwn: S(proceedsOwn), unrealised: S(unrealised), pnl: unrealised == null ? null : S(proceedsOwn + unrealised - cost),
     wallets,
   };
 }
@@ -9421,7 +9463,7 @@ function bundleTotals(bundlers) {
   const all = bundlers.every((b) => b.holds != null), priced = bundlers.every((b) => b.pnl != null);
   return { bundlers: bundlers.length, wallets: new Set([].concat(...bundlers.map((b) => b.wallets.map((w) => w.addr)))).size,
     took: big('took'), holds: all ? big('holds') : null, sold: big('sold'), sentOutside: big('sentOutside'), soldElsewhere: big('soldElsewhere'), liquidity: big('liquidity'),
-    cost: big('cost'), proceeds: big('proceeds'), unrealised: priced ? big('unrealised') : null, pnl: priced ? big('pnl') : null };
+    cost: big('cost'), proceeds: big('proceeds'), proceedsOwn: big('proceedsOwn'), unrealised: priced ? big('unrealised') : null, pnl: priced ? big('pnl') : null };
 }
 // the handful of figures every token row carries (applyBundleFlags): shares of the supply, to 4 significant figures
 function bundleSummary(d) {
@@ -9443,6 +9485,11 @@ function bundleData(row) {
 }
 const bundleQueue = [];                 // [{ token, pair }] — in memory: boot re-opens any claim the last process left behind
 let bundleScanning = false;
+let bundleCoolUntil = 0;                // the node refused a bundle read: the sweep waits until then
+/* Reads made before any router or fee wallet was known (the plumbing table is empty: a first deploy) may count a public
+   aggregator's solver slice on a thin token as a bundle. Every read is made due again, and the sweep re-reads $SEND and
+   $GWC first, which is where the site's routers are learned. */
+try { if (!db.prepare('SELECT 1 FROM bundle_plumbing LIMIT 1').get()) db.prepare('UPDATE bundle_scans SET retry_at = 0').run(); } catch {}
 try {
   const orphans = db.prepare("UPDATE bundle_scans SET status = CASE WHEN data IS NULL THEN 'failed' ELSE 'done' END, reason = COALESCE(reason, 'interrupted by a restart'), retry_at = 0 WHERE status IN ('queued','running')").run();
   if (orphans.changes) console.log('bundle scans: re-opened ' + orphans.changes + ' interrupted by the last shutdown');
@@ -9460,7 +9507,9 @@ function queueBundleScan(token, pair, front) {
     if ((row.status === 'running' || row.status === 'queued') && now() - (row.started_at || 0) < BUND.STALE_MS) return true;
     const age = now() - (row.finished_at || 0);
     if (front) {
-      if ((row.status === 'done' || row.status === 'partial') && row.pair_addr === pr && age < BUND.VIEW_TTL) return false;
+      let fresh = BUND.VIEW_TTL;
+      try { const sm = row.summary ? JSON.parse(row.summary) : null; if (sm && sm.fromBlock == null && sm.bundlers === 0) fresh = BUND.FRESH_POOL_MS; } catch {}
+      if ((row.status === 'done' || row.status === 'partial') && row.pair_addr === pr && age < fresh) return false;
       // a viewer may ask again once RETRY_MS has passed since a failure, whatever the sweep's own (longer) backoff says
       if (row.status === 'failed' && now() < Math.min(row.retry_at || 0, (row.finished_at || 0) + BUND.RETRY_MS)) return false;
     } else if (now() < (row.retry_at || 0)) return false;
@@ -9476,7 +9525,7 @@ async function runBundleQueue() {
   if (bundleScanning || sniperScanning) return;        // one chain scan at a time, block-0 and bundles alike
   /* The sweep's own reads wait while block-0 scans are queued and while the node is refusing this address
      (ledgerCoolUntil): every chain read on the site shares that node. A viewer's read goes ahead. */
-  if (bundleQueue.length && !bundleQueue[0].front && (sniperQueue.length || now() < ledgerCoolUntil)) return;
+  if (bundleQueue.length && !bundleQueue[0].front && (sniperQueue.length || now() < ledgerCoolUntil || now() < bundleCoolUntil)) return;
   const job = bundleQueue.shift();
   if (!job) return;
   bundleScanning = true;
@@ -9493,13 +9542,17 @@ async function runBundleQueue() {
        (it is still true of the blocks it covered, and the panel says when it was made and that a newer one failed). */
     const msg = String((e && e.message) || 'the chain could not be read');
     const big = /longer than the chain read budget|too dense/.test(msg);
+    // the node refused THIS read: the sweep stands down (viewers' reads still go), and the token is not made to wait
+    // a failure's backoff for what was only the node being busy
+    const throttled = isThrottle(e) || /too many requests|http 40[39]/i.test(msg);
+    if (throttled) bundleCoolUntil = now() + BUND.COOL_MS;
     const row = bundleRow(job.token), n = Math.max(1, Math.min(8, (row && row.attempts) || 1));
     const why = big ? 'this token’s history is longer than ' + BUND.MAX_LOGS.toLocaleString('en-US') + ' transfers or trades, too long to read in full here'
       : /read budget/.test(msg) ? 'the read needed more chain requests than one scan may make'
       : /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket|timed out|timeout|abort|http 5\d\d|http 4(03|29)|too many requests/i.test(msg) ? 'the chain node did not answer — it is asked again later'
       : msg.slice(0, 200);
-    db.prepare("UPDATE bundle_scans SET status = 'failed', reason = ?, finished_at = ?, retry_at = ? WHERE token_addr = ?")
-      .run(why, now(), now() + (big ? BUND.BIG_RETRY_MS : BUND.RETRY_MS * Math.min(8, Math.pow(2, n - 1))), job.token);
+    db.prepare("UPDATE bundle_scans SET status = 'failed', reason = ?, finished_at = ?, retry_at = ?, attempts = ? WHERE token_addr = ?")
+      .run(why, now(), now() + (big ? BUND.BIG_RETRY_MS : throttled ? BUND.COOL_MS : BUND.RETRY_MS * Math.min(8, Math.pow(2, n - 1))), throttled ? Math.max(0, n - 1) : n, job.token);
   } finally {
     setTimeout(() => { bundleScanning = false; }, BUND.GAP_MS).unref();
   }
@@ -17341,11 +17394,23 @@ const server = http.createServer(async (req, res) => {
         if (!pair) { const sr = sniperRow(token); if (sr && sr.pair_addr) pair = sr.pair_addr; }
         if (!pair) { try { const tc = tokenCacheGet(token); const pj = tc && tc.found ? JSON.parse(tc.pair_json || 'null') : null; if (pj && pj.pair && pj.pair.address) pair = lcAddr(pj.pair.address); } catch {} }
         if (!pair) { for (const k of ['SEND', 'GWC']) if (TOK[k] === token) pair = OG_PAIR[k]; }
+        /* The rules read a Uniswap-v2-style pair (a 20-byte address). A token whose known pool is something else — a v4
+           pool id is 32 bytes — is asked of the factory for its v2 WETH or USDG pair; without one it is answered honestly. */
+        if (pair && !/^0x[0-9a-f]{40}$/.test(pair)) {
+          let v2 = null;
+          try { v2 = (await factoryGetPair(token, WETH_ADDR, true)) || (await factoryGetPair(token, USDG_ADDR, true)); }
+          catch { return send(res, 200, { status: 'failed', token, bundlers: null, summary: null, reason: 'the chain node did not answer — it is asked again on the next visit' }); }
+          if (!v2) return send(res, 200, { status: 'failed', token, bundlers: null, summary: null, reason: 'this token’s main pool is not a Uniswap-v2-style pair, so its trades cannot be read here' });
+          pair = v2;
+        }
         const queued = pair ? queueBundleScan(token, pair, true) : false;
         const fresh = bundleRow(token), data = bundleData(fresh);
         if (!data) {
           if (fresh && fresh.status === 'failed' && !queued) return send(res, 200, { status: 'failed', token, reason: fresh.reason || null, scannedAt: fresh.finished_at || null, retryAt: fresh.retry_at || null, bundlers: null, summary: null });
-          if (pair && !queued && !bundleQueue.some((q) => q.token === token)) return send(res, 200, { status: 'busy', token, bundlers: null, summary: null, message: 'Many tokens are being read right now — this one is asked for again in a moment.' });
+          // nothing was queued: an honest "busy" when the queue is full — never "reading now" for a read nobody is making
+          if (pair && !queued && !bundleQueue.some((q) => q.token === token)) return send(res, 200, bundleQueue.length >= BUND.QUEUE_MAX
+            ? { status: 'busy', token, bundlers: null, summary: null, message: 'Many tokens are being read right now — this one is asked for again in a moment.' }
+            : { status: 'failed', token, bundlers: null, summary: null, reason: 'the read could not be started — it is asked again on the next visit' });
           return send(res, 200, { status: pair ? 'queued' : 'unknown', token, bundlers: null, summary: null,
             message: pair ? 'Reading every buy and transfer of this token now — check back in a moment.' : 'No indexed pool for this token, so there are no buys to read.' });
         }

@@ -76,9 +76,10 @@
         (big(b.sentOutside) > 0n ? '<span>sent to other wallets <b>' + pct(share(b.sentOutside, sup)) + '</b></span>' : '') +
         '<span>P&amp;L <b class="' + pnlCls(pnl) + '">' + qty(b.pnl, q, true) + '</b> <i>' + esc(q.symbol) + (pnl == null ? '' : ' ' + pnlWord(pnl)) + '</i></span>' +
       '</div>' +
-      '<details class="b0-conn bd-wallets"><summary data-tip="Opens the list of every wallet this bundler has in the token, with what each one holds now and has sold">All ' + plural(b.wallets.length, 'wallet') + ' — what each holds and sold</summary>' +
+      '<details class="b0-conn bd-wallets" data-bd-id="' + esc(b.id) + '"><summary data-tip="Opens the list of every wallet this bundler has in the token, with what each one holds now and has sold">All ' + plural(b.wallets.length, 'wallet') + ' — what each holds and sold</summary>' +
         '<ul class="bd-wl-list">' + b.wallets.map((w) => walletLi(w, d, X)).join('') + '</ul>' +
         '<p class="b0-fine">Paid ' + qty(b.cost, q) + ' ' + esc(q.symbol) + ' for its buys, got ' + qty(b.proceeds, q) + ' ' + esc(q.symbol) + ' back from its sales' +
+          (b.proceedsOwn != null && b.proceedsOwn !== b.proceeds ? ' (' + qty(b.proceedsOwn, q) + ' of it from selling the bundle’s own tokens — the part its P&amp;L counts)' : '') +
           (b.unrealised != null ? ', and the tokens it still holds from its own buys are worth ' + qty(b.unrealised, q) + ' ' + esc(q.symbol) + ' at the pool’s price now' : '') + '.</p>' +
       '</details>' +
     '</li>';
@@ -144,6 +145,8 @@
     document.querySelectorAll('.np-bd-aside[data-token]').forEach((el) => { if (el.getAttribute('data-token').toLowerCase() === k) el.innerHTML = NP.bundleAsideHTML(b); });
   }
 
+  // on screen: the card or group around the panel is laid out (a closed popup, a hidden tab is not)
+  const shown = (el) => { const box = (el.closest && (el.closest('.tkd-card') || el.closest('.np-detail-group'))) || el; return typeof box.getClientRects !== 'function' || box.getClientRects().length > 0; };
   const loading = new WeakSet();
   async function fill(el) {
     if (loading.has(el) || el.dataset.bdDone === '1') return;
@@ -151,14 +154,30 @@
     if (!token) return;
     loading.add(el);
     if (!el.innerHTML) el.innerHTML = '<p class="b0-msg b0-wait">⏳ Reading every buy and transfer…</p>';
-    const again = (ms) => { el.dataset.bdDone = ''; setTimeout(() => { loading.delete(el); if (el.isConnected) fill(el); }, ms); };
+    /* Asked again later — but only while the token's details are on screen: a closed popup stops asking (and stops moving
+       its token to the front of the server's queue), and picks up where it left off when it is shown again. */
+    const again = (ms) => {
+      el.dataset.bdDone = '';
+      const tick = () => { if (!el.isConnected) { loading.delete(el); return; } if (!shown(el)) { setTimeout(tick, 5000); return; } loading.delete(el); fill(el); };
+      setTimeout(tick, ms);
+    };
     try {
       const j = await ask(token);
-      el.innerHTML = render(j);
-      redrawCard(token, j);
+      /* Redrawn only when the answer changed — a refresh that brings the same read back must not close the wallet list the
+         reader has open — and the lists that were open stay open when it does change. */
+      const key = JSON.stringify([j.status, !!j.refreshing, j.scannedAt || null, j.lastFailed || null, j.reason || null, j.totals ? j.totals.bundlers : null, j.totals ? j.totals.holds : null]);
+      if (el.dataset.bdKey !== key) {
+        const open = el.querySelectorAll ? [...el.querySelectorAll('.bd-wallets[open]')].map((d) => d.getAttribute('data-bd-id')) : [];
+        el.innerHTML = render(j);
+        el.dataset.bdKey = key;
+        for (const id of open) { const d = el.querySelector && el.querySelector('.bd-wallets[data-bd-id="' + id + '"]'); if (d) d.open = true; }
+        redrawCard(token, j);
+      }
       el.dataset.bdTries = '0';
       // a read in flight finishes in the background; look again shortly rather than leaving a stale answer
       if (j && (j.status === 'queued' || j.status === 'running' || j.status === 'busy' || j.refreshing)) return again(20000);
+      // a pool read before its first trade: a launch is minutes away, so it is looked at again (the server re-reads it)
+      if (j && j.totals && j.fromBlock === null) return again(60000);
       el.dataset.bdDone = '1';
       loading.delete(el);
     } catch (e) {
@@ -166,6 +185,7 @@
          wait — never left looking like a read that is under way, and never shown as "no bundlers". */
       const n = Math.min(4, Number(el.dataset.bdTries || 0) + 1);
       el.dataset.bdTries = String(n);
+      delete el.dataset.bdKey;   // the failure line replaced the answer: the next answer is always drawn, even an unchanged one
       el.innerHTML = '<p class="b0-msg b0-fail">' + (e && e.status === 429 ? 'Too many checks from here at once — trying again shortly.' : 'Could not reach the server for this check — trying again shortly.') + ' Nothing is assumed.</p>';
       again(15000 * Math.pow(2, n - 1));
     }
