@@ -38,52 +38,55 @@
   async function loadPinnedIds() {
     try { const j = await (await fetch('/api/pins/ids', { credentials: 'same-origin' })).json(); pinnedTokens.clear(); (j.ids || []).forEach(a => pinnedTokens.add(String(a).toLowerCase())); } catch {}
   }
+  /* A pin button's look and words follow the state: not pinned, it adds; pinned, it says so and how removal works (the
+     profile's Remove) — it is not a toggle, so it carries no pressed state. Compact buttons (the runner row, the DEX row)
+     are icon-only by design and live in tight action rails; they keep the pin and change only their words. */
+  const PIN_TIP_ADD = 'Adds this token to your Conviction Plays — it stays until you remove it from your own profile';
+  const PIN_TIP_ON = 'Already one of your Conviction Plays — to take it off, use Remove on your own profile';
+  function paintPins(token) {
+    const sel = '.np-pin[data-pin="' + (window.CSS && CSS.escape ? CSS.escape(token) : token) + '"]';
+    document.querySelectorAll(sel).forEach(b => {
+      const on = isPinned(token), sy = b.dataset.sym ? '$' + b.dataset.sym : 'this token';
+      b.classList.toggle('is-pinned', on); b.removeAttribute('aria-pressed'); b.setAttribute('data-tip', on ? PIN_TIP_ON : PIN_TIP_ADD);
+      if (b.dataset.pinIco) {
+        b.title = on ? 'Convicted — one of your Conviction Plays (remove it from your profile)' : 'Convict — pin to your wall';
+        b.setAttribute('aria-label', on ? sy + ' is one of your Conviction Plays' : 'Convict ' + sy + ' — pin to your wall');
+      } else b.textContent = on ? '💎 A Conviction Play' : '💎 Pin as Conviction Play';
+      b.disabled = false;
+    });
+  }
   loadPinnedIds();
   document.addEventListener('auth:change', loadPinnedIds); // re-sync on login/logout
+  // a play removed with the profile's Remove (this page or another): every button for it here goes back to adding it
+  document.addEventListener('pins:changed', async (e) => { const t = e.detail && e.detail.token; await loadPinnedIds(); if (t) paintPins(String(t).toLowerCase()); });
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-pin]');
     if (!btn) return;
     e.preventDefault(); e.stopPropagation();
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }
     const token = String(btn.dataset.pin || '').toLowerCase();
-    const wasOn = isPinned(token);
     btn.disabled = true;
-    if (window.SFX) SFX.play('tap');   // the press itself: the button's aria-pressed still holds the old state, so the generic switch sound would be the wrong way round
+    if (window.SFX) SFX.play('tap');   // the press itself
     try {
-      if (wasOn) {
-        // fetch() resolves on a 401/5xx too — without this check an expired session still toasted "Unpinned"
-        // and repainted the button while the pin stayed on the wall
-        const r = await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
-        if (!r.ok) { const j = await r.json().catch(() => ({})); if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast(j.error || 'Could not unpin'); btn.disabled = false; return; }
-        pinnedTokens.delete(token);
-        if (window.SFX) SFX.play('remove');   // off the wall
-        if (window.sendToast) sendToast('Unpinned $' + (btn.dataset.sym || '') + ' 📌');
-      } else {
-        const body = { token, pair: btn.dataset.pair, symbol: btn.dataset.sym, name: btn.dataset.name };
-        if (btn.dataset.logo) body.brand = { imageUrl: btn.dataset.logo };
-        const r = await fetch('/api/pins', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) { if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast(j.error || 'Could not pin'); btn.disabled = false; return; }
-        pinnedTokens.add(token);
-        if (window.SFX) SFX.play('success');   // a Conviction Play, on the wall
-        if (window.sendToast) sendToast('📌 Pinned $' + (btn.dataset.sym || '') + ' to your wall!');
+      /* Only ever adds (owner, 2026-10-17: a Conviction Play "stays forever unless the users says to delete" it). This
+         button used to take a pin off with one tap, anywhere a token showed — and with it the date and price it was
+         convicted at; pinning again started over. Removing is now the profile's Remove, confirmed. What it believes is
+         checked with the server first, so a play removed in another tab is not reported as still there. */
+      if (isPinned(token)) await loadPinnedIds();
+      if (isPinned(token)) {
+        if (window.sendToast) sendToast('💎 ' + (btn.dataset.sym ? '$' + btn.dataset.sym : 'This token') + ' is one of your Conviction Plays — it stays until you remove it from your profile.');
+        paintPins(token);
+        return;
       }
-      const sel = '.np-pin[data-pin="' + (window.CSS && CSS.escape ? CSS.escape(btn.dataset.pin) : btn.dataset.pin) + '"]';
-      // Compact buttons (the runner row, the DEX row) are icon-only by design and live in tight action rails —
-      // rewriting them to "📌 Pinned to wall" would blow the row apart. They carry data-pin-ico and keep the pin.
-      document.querySelectorAll(sel).forEach(b => {
-        const on = isPinned(token);
-        b.classList.toggle('is-pinned', on);
-        b.setAttribute('aria-pressed', String(on));
-        if (b.dataset.pinIco) {
-          const sy = b.dataset.sym ? '$' + b.dataset.sym : 'this token';
-          b.title = on ? 'Convicted — tap to remove' : 'Convict — pin to your wall';
-          b.setAttribute('aria-label', (on ? 'Remove ' : 'Convict ') + sy + (on ? ' from your convictions' : ' — pin to your wall'));
-        } else {
-          b.textContent = on ? '📌 Pinned to wall' : '📌 Pin to my wall';
-        }
-        b.disabled = false;
-      });
+      const body = { token, pair: btn.dataset.pair, symbol: btn.dataset.sym, name: btn.dataset.name };
+      if (btn.dataset.logo) body.brand = { imageUrl: btn.dataset.logo };
+      const r = await fetch('/api/pins', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast(j.error || 'Could not pin'); btn.disabled = false; return; }
+      pinnedTokens.add(token);
+      if (window.SFX) SFX.play('success');   // a Conviction Play, on the wall
+      if (window.sendToast) sendToast('📌 Pinned $' + (btn.dataset.sym || '') + ' to your wall!');
+      paintPins(token);
       document.dispatchEvent(new CustomEvent('pins:changed', { detail: { token } })); // let the public wall's "Conviction Plays" re-render live
     } catch { if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast('Could not update pin'); btn.disabled = false; }
   });
@@ -750,7 +753,7 @@
   // "Pin to my wall" button HTML — appears on every token's on-chain detail (DEX list, Hot Feed, lookup, Send Call widget, popup). State/handler are set up at the top of the IIFE.
   function pinBtnHTML(p) {
     const on = isPinned(p.token.address);
-    return '<button class="np-pin btn btn-sm' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Adds this token to your Conviction Plays, or takes it off" data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' + (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') + ' aria-pressed="' + on + '">' + (on ? '💎 A Conviction Play' : '💎 Pin as Conviction Play') + '</button>';
+    return '<button class="np-pin btn btn-sm' + (on ? ' is-pinned' : '') + '" type="button" data-tip="' + (on ? PIN_TIP_ON : PIN_TIP_ADD) + '" data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' + (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') + '>' + (on ? '💎 A Conviction Play' : '💎 Pin as Conviction Play') + '</button>';
   }
   /* 📣 Send Call straight from the DEX list row.
      A call is PERMANENT and can never be deleted, so a single stray tap on a dense list row must not be able to
@@ -771,11 +774,11 @@
   function rowPinHTML(p) {
     const on = isPinned(p.token.address);
     const sy = p.token.symbol ? '$' + p.token.symbol : 'this token';
-    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-tip="Adds this token to your Conviction Plays, or takes it off" data-pin-ico="1"' +
+    return '<button class="np-row-pin np-pin' + (on ? ' is-pinned' : '') + '" type="button" data-tip="' + (on ? PIN_TIP_ON : PIN_TIP_ADD) + '" data-pin-ico="1"' +
       ' data-pin="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol) + '" data-name="' + esc(p.token.name) + '"' +
       (p.brand && p.brand.imageUrl ? ' data-logo="' + esc(p.brand.imageUrl) + '"' : '') +
-      ' aria-pressed="' + on + '" title="' + (on ? 'Convicted — tap to remove' : 'Convict — pin to your wall') + '"' +
-      ' aria-label="' + (on ? 'Remove ' + esc(sy) + ' from your convictions' : 'Convict ' + esc(sy) + ' — pin to your wall') + '">📌</button>';
+      ' title="' + (on ? 'Convicted — one of your Conviction Plays (remove it from your profile)' : 'Convict — pin to your wall') + '"' +
+      ' aria-label="' + (on ? esc(sy) + ' is one of your Conviction Plays' : 'Convict ' + esc(sy) + ' — pin to your wall') + '">📌</button>';
   }
   let callArmed = null, callArmTimer = 0;
   function disarmCall() {
@@ -2637,7 +2640,9 @@
   function runnerRow(r, i) {
     const logo = (r.brand && r.brand.imageUrl) ? '<img class="np-runner-logo-img" src="' + esc(r.brand.imageUrl) + '" alt="" loading="lazy" decoding="async">' : '<span class="np-runner-logo-none" aria-hidden="true">🪙</span>';
     const sym = r.symbol ? '$' + esc(r.symbol) : 'Token';
-    const pin = '<button class="np-pin np-runner-pin" type="button" data-tip="Adds this token to your Conviction Plays, or takes it off" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') + ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>';
+    const pinOn = isPinned(r.token);
+    const pin = '<button class="np-pin np-runner-pin' + (pinOn ? ' is-pinned' : '') + '" type="button" data-tip="' + (pinOn ? PIN_TIP_ON : PIN_TIP_ADD) + '" data-pin-ico="1" data-pin="' + esc(r.token) + '"' + (r.pair ? ' data-pair="' + esc(r.pair) + '"' : '') + ' data-sym="' + esc(r.symbol || '') + '" data-name="' + esc(r.name || '') + '"' + (r.brand && r.brand.imageUrl ? ' data-logo="' + esc(r.brand.imageUrl) + '"' : '') +
+      (pinOn ? ' aria-label="' + sym + ' is one of your Conviction Plays" title="Convicted — one of your Conviction Plays (remove it from your profile)">📌</button>' : ' aria-label="Convict ' + sym + ' — pin to your wall" title="Convict — pin to your wall">📌</button>');
     const chart = '<a class="np-runner-chart" href="https://dexscreener.com/robinhood/' + esc(r.pair || r.token) + '" target="_blank" rel="noopener nofollow" aria-label="Open ' + sym + ' chart in a new tab" title="Open chart ↗">📈</a>';
     /* Send Call straight off a runner. Same permanence, so the same two-press confirm the DEX list uses — a
        call can never be edited or deleted, and one tap on a scrolling list is not consent. Hidden below the

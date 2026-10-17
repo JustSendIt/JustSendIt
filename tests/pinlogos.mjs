@@ -146,7 +146,7 @@ try {
   const raw = 'tok_pinlogo_' + randomBytes(8).toString('hex');
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(createHash('sha256').update(raw).digest('hex'), uid, Date.now(), Date.now() + 864e5);
   made.sessions = [createHash('sha256').update(raw).digest('hex')];
-  const del = await get('/api/pins', { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'sid=' + raw + '; jsi_age=18' }, 'DELETE', JSON.stringify({ token: tokC }));
+  const del = await get('/api/pins', { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'sid=' + raw + '; jsi_age=18' }, 'DELETE', JSON.stringify({ token: tokC, confirm: 'REMOVE' }));   // removing a Conviction Play is said in so many words (2026-10-17)
   const rowC = db.prepare('SELECT 1 FROM token_logos WHERE token_addr = ?').get(tokC);
   check('unpinning a token nobody else holds a conviction on removes its logo row and its file', del.status === 200 && !rowC && !existsSync(path.join(LOGO_DIR, tokC + '-' + eC + '.png')), del.status + ' ' + del.buf.toString().slice(0, 120) + ' ' + JSON.stringify(rowC));
   const rC = await get('/api/logo/' + tokC);
@@ -179,7 +179,7 @@ try {
   }
   // a pin of a community's token: unpinning it keeps the logo, because the community still tracks the token
   pin.run(uid, tokD, null, 'DDD', 'Token D', null, Date.now());
-  const delD = await get('/api/pins', { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'sid=' + raw + '; jsi_age=18' }, 'DELETE', JSON.stringify({ token: tokD }));
+  const delD = await get('/api/pins', { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'sid=' + raw + '; jsi_age=18' }, 'DELETE', JSON.stringify({ token: tokD, confirm: 'REMOVE' }));   // removing a Conviction Play is said in so many words (2026-10-17)
   const rowD = db.prepare('SELECT etag FROM token_logos WHERE token_addr = ?').get(tokD);
   check('unpinning a token that has a community keeps its logo', delD.status === 200 && rowD && rowD.etag === eD && existsSync(path.join(LOGO_DIR, tokD + '-' + eD + '.png')), delD.status + ' ' + JSON.stringify(rowD));
 

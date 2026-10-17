@@ -335,7 +335,7 @@ try {
     const h = await api('/healthz');
     check('/healthz actually checks the database and the disk', h.status === 200 && h.j.db === 'ok', JSON.stringify(h.j));
     check('  ...and would answer 503 rather than lie', /res\.writeHead\(h\.ok \? 200 : 503/.test(SRC));
-    check('backups do not keep 7 copies on the volume they protect', /const BACKUP_KEEP = BACKUP_OFF_VOLUME \? 7 : 3;/.test(SRC));
+    check('backups keep only 3 copies on the volume they protect (a month of dailies and a year of monthlies only on a separate volume, 2026-10-17)', /const BACKUP_KEEP = BACKUP_OFF_VOLUME \? 30 : 3;/.test(SRC) && /const BACKUP_KEEP_MONTHS = BACKUP_OFF_VOLUME \? 12 : 0;/.test(SRC));
   }
 
   /* ═══════════ 17. restart no longer strands a block-0 scan ═══════════ */

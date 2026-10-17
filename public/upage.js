@@ -35,9 +35,41 @@ function pinChip(p, mine, owner) {
   const comm = window.tokenCommunitySlot ? tokenCommunitySlot(p.token, p.symbol || '') : ''; // 🏘️ Community / ＋ Start community (filled by tokentext.js)
   return '<span class="pin-chip" data-token="' + esc(p.token) + '" data-owner="' + esc(owner) + '" data-sym="' + esc(p.symbol || '') + '">' +
     '<button class="pin-chip-open" type="button" data-tip="Opens the on-chain details for this token" aria-describedby="' + tipId + '" data-pin-view="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" data-name="' + esc(p.name || '') + '">' + logo + '<span class="pin-chip-sym">' + sym + '</span></button>' + conv + stats + comm +
-    (mine ? '<button class="pin-chip-rm" type="button" data-tip="Drops this from your Conviction Plays — re-adding restarts its tracking" data-pin-rm="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" aria-label="Remove ' + sym + ' from your convictions">✕</button>' : '') +
+    (mine ? '<button class="pin-chip-rm" type="button" data-tip="' + RM_TIP + '" data-pin-rm="' + esc(p.token) + '" data-sym="' + esc(p.symbol || '') + '" aria-label="Remove ' + sym + ' from your Conviction Plays. Press twice to confirm.">✕</button>' : '') +
     '<span class="pin-hover" role="tooltip" id="' + tipId + '" aria-live="polite"><span class="pin-hover-load">holdings load on hover…</span></span>' +
     '</span>';
+}
+/* The profile's ✕: the one way a Conviction Play is taken off (owner, 2026-10-17: it "stays forever unless the users says
+   to delete" it). Two taps: the first asks, in words, and lapses after five seconds; a second tap within 600 ms of the first
+   (a double-click, a key held down) is not an answer to the question it has not had time to read. Only the confirming tap
+   sends confirm: 'REMOVE', which the server needs; any failure puts the button back to ✕, so no later single tap removes.
+   Its date and the price it was convicted at go with it — adding the token again later starts a new record. */
+const RM_TIP = 'Removes this from your Conviction Plays — a second tap confirms; adding it again later starts a new record';
+function removeDisarm(rm) {
+  clearTimeout(rm._disarm); delete rm.dataset.armed; rm.classList.remove('is-armed'); rm.textContent = '✕'; rm.disabled = false;
+  const sy = rm.dataset.sym ? '$' + rm.dataset.sym : 'this token';
+  rm.setAttribute('aria-label', 'Remove ' + sy + ' from your Conviction Plays. Press twice to confirm.'); rm.setAttribute('data-tip', RM_TIP);
+}
+async function removeTap(rm, e, box) {
+  const sy = rm.dataset.sym ? '$' + rm.dataset.sym : 'this token';
+  if (!rm.dataset.armed) {
+    rm.dataset.armed = '1'; rm._armedAt = Date.now(); rm.classList.add('is-armed'); rm.textContent = 'Remove ' + sy + '?';
+    rm.setAttribute('aria-label', 'Press again to remove ' + sy + ' from your Conviction Plays for good');
+    rm.setAttribute('data-tip', 'Tap again within five seconds to remove it — its date and convicted price go with it');
+    clearTimeout(rm._disarm); rm._disarm = setTimeout(() => removeDisarm(rm), 5000);
+    return 'armed';
+  }
+  if ((e && e.detail > 1) || Date.now() - (rm._armedAt || 0) < 600) return 'too-soon';   // the second half of a double-click
+  clearTimeout(rm._disarm); rm.disabled = true;
+  try {
+    const r = await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: rm.dataset.pinRm, confirm: 'REMOVE' }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({})); removeDisarm(rm); if (window.SFX) SFX.play('error'); if (window.sendToast) sendToast('⚠️ ' + (j.error || 'Could not remove it')); return 'failed'; }
+    if (window.SFX) SFX.play('remove');   // off the wall
+    if (window.sendToast) sendToast('Removed ' + sy + ' from your Conviction Plays');
+    document.dispatchEvent(new CustomEvent('pins:changed', { detail: { token: rm.dataset.pinRm, removed: true } }));
+    if (box) renderPins({ username: box._uname, isMe: box._isMe });
+    return 'removed';
+  } catch { removeDisarm(rm); if (window.SFX) SFX.play('error'); return 'failed'; }
 }
 function renderPins(u) {
   const box = document.getElementById('pub-pins');
@@ -145,18 +177,9 @@ function livePins(box) {
     } catch { go.disabled = false; msg.textContent = '⚠️ Could not pin that token — try again.'; if (window.SFX) SFX.play('error'); }
   });
   box.addEventListener('click', async (e) => {
-    // remove ✕ (own wall) — destructive, stays its own action
+    // remove ✕ (own wall) — the one way a Conviction Play is taken off (removeTap, below)
     const rm = e.target.closest('[data-pin-rm]');
-    if (rm) {
-      rm.disabled = true;
-      try {
-        await fetch('/api/pins', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: rm.dataset.pinRm }) });
-        if (window.SFX) SFX.play('remove');   // unpinned from the wall
-        if (window.sendToast) sendToast('Unpinned ' + (rm.dataset.sym ? '$' + rm.dataset.sym : 'token') + ' 📌');
-        renderPins({ username: box._uname, isMe: box._isMe });
-      } catch { rm.disabled = false; }
-      return;
-    }
+    if (rm) { removeTap(rm, e, box); return; }
     // the 💎 conviction badge and the 🏘️ community tag are real links — let them navigate, don't hijack them
     if (e.target.closest('.conv-badge') || e.target.closest('.tok-comm')) return;
     // click ANYWHERE else on the chip (logo, symbol, market cap, ▲x, padding) pops up the token info

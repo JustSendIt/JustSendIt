@@ -105,6 +105,24 @@
     </div>
   </section>
 
+  <!-- a member's kept history: every change and deletion of their data, and putting any of it back (adminrestore.js, /api/admin/history) -->
+  <section class="card adm-ov adm-hist" id="adm-hist" hidden aria-labelledby="adm-hist-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-hist-h" class="adm-h2">Restore a member's data 🛟</h2>
+    </div>
+    <p class="modal-note adm-codes-lede">When a member's Conviction Plays, posts, comments, Send Calls, profile or Diamond Hands streak change, or any of those or their community and squad memberships, follows, watchlist entries or post alerts are deleted, the earlier version is kept for as long as the account exists. What a moderator takes down is not kept. Look a member up, then put any one entry back.</p>
+    <form class="adm-hist-find" id="adm-hist-form" autocomplete="off">
+      <label class="f-label" for="adm-hist-user">Member</label>
+      <input class="addr-input" id="adm-hist-user" name="user" placeholder="username" spellcheck="false" autocapitalize="none">
+      <button class="btn btn-sm btn-primary" type="submit" data-tip="Lists everything kept for this member, newest first">Look up</button>
+      <label class="f-label" for="adm-hist-kind">Show</label>
+      <select class="addr-input adm-hist-kind" id="adm-hist-kind" data-tip="Shows one kind of entry only — Conviction Plays, posts, the profile…"><option value="">everything</option></select>
+    </form>
+    <p class="modal-note" id="adm-hist-sum" role="status" aria-live="polite"></p>
+    <div id="adm-hist-list"></div>
+    <button class="btn btn-sm" id="adm-hist-older" type="button" hidden data-tip="Shows the next, older entries kept for this member">Show older</button>
+  </section>
+
   <div id="adm-tools" hidden>
     <h2 class="adm-h2">Moderation 🧹</h2>
     <p class="modal-note" style="margin:0 0 1rem;">Reports from senders, newest first. Every action here notifies the person it lands on and is written to the report it resolves.</p>
@@ -145,5 +163,6 @@
 <script src="notifications.js"></script>
 <script src="admin.js"></script>
 <script src="admincodes.js"></script>
+<script src="adminrestore.js"></script>
 </body>
 </html>

@@ -2057,6 +2057,7 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .pin-chip-sym { color: var(--ctl-ink); }
 .pin-chip-rm { margin-left: 0.15rem; min-width: 24px; min-height: 24px; padding: 2px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--red); border: 1px solid var(--red); color: var(--on-red); font-size: max(var(--text-floor), 0.72rem); cursor: pointer; line-height: 1; }
 .pin-chip-rm:hover, .pin-chip-rm:focus-visible { background: var(--red-soft); border-color: var(--red-soft); color: var(--ctl-ink); }
+.pin-chip-rm.is-armed { border-radius: 999px; padding: 2px 0.6rem; font-weight: 800; white-space: nowrap; font-size: max(var(--text-floor), 0.8rem); }   /* the first tap asks, in words: "Remove $X?" */
 .wall-pins-empty { color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); margin: 0; }
 /* conviction chip stats (live mcap + Xs since conviction) */
 .pin-chip { position: relative; }
@@ -5085,6 +5086,17 @@ button.adm-code:focus-visible { outline: 3px solid var(--focus); outline-offset:
 .adm-codes-table td small { display: block; white-space: normal; min-width: 9em; }
 .adm-codes-mono { font-family: var(--mono); letter-spacing: 0.06em; white-space: nowrap; }
 .adm-codes-more { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+/* a member's kept history (adminrestore.js) */
+.adm-hist-find { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
+.adm-hist-find .addr-input { flex: 1 1 12rem; min-width: 0; }
+.adm-hist-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.45rem; }
+.adm-hist-row { padding: 0.55rem 0.7rem; border: 1px solid var(--edge-ctl); border-radius: 10px; background: var(--ink-3); display: grid; gap: 0.35rem; }
+.adm-hist-what { font-size: max(var(--text-floor), 0.92rem); line-height: 1.45; overflow-wrap: break-word; }
+.adm-hist-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); }
+.adm-hist-done { color: var(--green-bright); font-weight: 700; }
+.adm-hist-no { font-style: italic; }
+.adm-hist-kind { flex: 0 1 auto; width: auto; max-width: 100%; }
+#adm-hist-older { margin-top: 0.7rem; }
 @media (pointer: coarse) { .adm-code-tag a, .adm-codes-table a { display: inline-flex; align-items: center; min-height: 44px; } }   /* a profile link is a finger's target too */
 
 

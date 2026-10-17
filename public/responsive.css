@@ -366,6 +366,7 @@ html .wc-ico-emoji { --ava: 34px; font-size: calc(var(--ava) * 0.6); }
 html .np-count-badge { --ava: 1.25rem; font-size: calc(var(--ava) * 0.6); }
 html .np-search-clear { --ava: 22px; font-size: calc(var(--ava) * 0.55); }
 html .pin-chip-rm { --ava: 24px; width: var(--ava); height: var(--ava); min-width: var(--ava); min-height: var(--ava); padding: 0; font-size: calc(var(--ava) * 0.55); }
+html .pin-chip-rm.is-armed { width: auto; height: auto; padding: 2px 0.6rem; border-radius: 999px; white-space: nowrap; font-size: max(var(--text-floor), 0.8rem); }   /* "Remove $X?" grows into a pill rather than spilling over the tag beside it, where a tap would land on it */
 html .cmp-ava { --ava: 44px; font-size: calc(var(--ava) * 0.55); }
 html .cmp-step--1 .cmp-ava { --ava: 56px; }
 @media (max-width: 420px) { html .cmp-ava { --ava: 38px; } html .cmp-step--1 .cmp-ava { --ava: 48px; } }

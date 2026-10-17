@@ -1359,6 +1359,160 @@ CREATE INDEX IF NOT EXISTS idx_dh_moves_user ON dh_moves(user_id, status, applie
 
 try { for (const t of ['dh_follow', 'dh_moves']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
 
+/* ===== Data history: a member's data is kept, so a mistake can be undone (owner, 2026-10-17) ========================
+   "make sure all data is always cached so errors like this never happen and we can restore user's data if we need to
+   from the admin page." It came after a member's Conviction Play was removed by one stray tap: the date and the price it
+   was convicted at were gone for good, because nothing kept an earlier copy and the daily backups reached back a week.
+   Triggers keep each row as it was before every change that matters and before every deletion, for the tables in HIST,
+   in data_history — for as long as the account exists: deleting the account erases its history with everything else.
+   The admin page lists a member's history and puts any one entry back (GET/POST /api/admin/history, adminrestore.js).
+   Never kept: anything encrypted or indexed by a key (lib/keys.js ENC_FIELDS / ENC_BLOBS / IDX_COLUMNS — rewritten on
+   every key rotation, some erased on a schedule, so a copy here would outlive both), sign-in material, IPs, wallets.
+   A trigger must never make the member's own action fail: a value it cannot hold as JSON (a BLOB) is kept as null. */
+db.exec(`CREATE TABLE IF NOT EXISTS data_history (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  tbl         TEXT NOT NULL,                 -- which table the row was in (HIST)
+  row_key     TEXT NOT NULL,                 -- its key: the id, or a JSON array of a composite key
+  user_id     INTEGER,                       -- whose data it is (HIST[tbl].owner)
+  op          TEXT NOT NULL,                 -- 'delete' | 'update' (the row as it was before either)
+  old_json    TEXT NOT NULL,                 -- the kept columns, as they were
+  at          INTEGER NOT NULL,
+  restored_at INTEGER, restored_by INTEGER   -- when an admin put it back, and who
+);
+CREATE INDEX IF NOT EXISTS idx_hist_user ON data_history(user_id, id);
+CREATE INDEX IF NOT EXISTS idx_hist_row ON data_history(tbl, row_key, id);`);
+const HIST = {
+  pinned_tokens:     { owner: 'user_id', key: ['user_id', 'token_addr'], watch: ['token_addr', 'pair_addr', 'added_at', 'pin_price', 'pin_mc'], restore: 'all', label: 'Conviction Play' },
+  posts:             { owner: 'user_id', key: ['id'], watch: ['text', 'image', 'call_id', 'community_id', 'private', 'board', 'squad_id'], label: 'post' },
+  comments:          { owner: 'user_id', key: ['id'], watch: ['text'], label: 'comment' },
+  hop_comments:      { owner: 'user_id', key: ['id'], watch: ['text'], label: 'comment on a Sent It' },
+  /* not post_id: a new call is inserted first and linked to its widget post a moment later, which would write a junk entry for
+     every call; not the snapshot either (display data, up to 40 KB, rewritten at call time) */
+  calls:             { owner: 'user_id', key: ['id'], watch: ['user_id', 'token_addr', 'pair_addr', 'entry_price', 'entry_mc', 'entry_liq', 'entry_spend_usd', 'created_at', 'squad_id'], skip: ['wallet', 'snapshot'], label: 'Send Call' },
+  users:             { owner: 'id', key: ['id'], noDelete: true, label: 'profile',
+                       only: ['id', 'username', 'auto_named', 'avatar', 'bio', 'accent', 'wall_bg', 'avatar_img', 'header_img', 'bg_img', 'twitter_handle', 'ig_handle'],
+                       watch: ['username', 'avatar', 'bio', 'accent', 'wall_bg', 'avatar_img', 'header_img', 'bg_img', 'twitter_handle', 'ig_handle'] },
+  holder_state:      { owner: 'user_id', key: ['user_id'], noDelete: true, label: 'Diamond Hands streak',
+                       only: ['user_id', 'streak_start', 'base_bp', 'paused_at', 'paused_ms', 'gwc_streak_start', 'gwc_base_bp', 'gwc_paused_at', 'gwc_paused_ms'], watch: ['streak_start', 'gwc_streak_start'], restore: 'all' },   // a streak's fields only mean something together
+  community_members: { owner: 'user_id', key: ['community_id', 'user_id'], watch: [], label: 'community membership' },
+  squad_members:     { owner: 'user_id', key: ['squad_id', 'user_id'], watch: [], label: 'Send Squad membership' },
+  watchlist:         { owner: 'user_id', key: ['user_id', 'pair_addr'], watch: [], label: 'watchlist entry' },
+  follows:           { owner: 'follower_id', key: ['follower_id', 'followee_id'], watch: [], label: 'follow' },
+  alerts:            { owner: 'user_id', key: ['user_id', 'target_id'], watch: [], label: 'post alert' },
+};
+const HIST_NEVER = new Set([...KEYLIB.ENC_FIELDS, ...KEYLIB.ENC_BLOBS].map(([t, c]) => t + '.' + c).concat(KEYLIB.IDX_COLUMNS.map((x) => x.t + '.' + x.c)));
+const HIST_PER_USER = 5000;   // the newest this many per member: room for years of ordinary use, and a ceiling if something runs away
+function histInstall() {
+  const at = "CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)";
+  const val = (c) => `CASE WHEN typeof(OLD."${c}") = 'blob' THEN NULL ELSE OLD."${c}" END`;
+  for (const [t, h] of Object.entries(HIST)) {
+    const have = db.prepare('SELECT name FROM pragma_table_info(?)').all(t).map((r) => r.name);
+    db.exec(`DROP TRIGGER IF EXISTS hist_${t}_del; DROP TRIGGER IF EXISTS hist_${t}_upd;`);   // rebuilt each boot, so a column added since is kept too
+    if (!have.length) { h.cols = []; continue; }
+    h.cols = (h.only || have).filter((c) => have.includes(c) && !HIST_NEVER.has(t + '.' + c) && !(h.skip || []).includes(c));
+    const obj = 'json_object(' + h.cols.map((c) => `'${c}', ${val(c)}`).join(', ') + ')';
+    const key = h.key.length === 1 ? `CAST(OLD."${h.key[0]}" AS TEXT)` : 'json_array(' + h.key.map((c) => `OLD."${c}"`).join(', ') + ')';
+    const ins = (op) => `INSERT INTO data_history (tbl, row_key, user_id, op, old_json, at) VALUES ('${t}', ${key}, OLD."${h.owner}", '${op}', ${obj}, ${at});`;
+    if (!h.noDelete) db.exec(`CREATE TRIGGER hist_${t}_del AFTER DELETE ON ${t} BEGIN ${ins('delete')} END`);
+    const watch = (h.watch || []).filter((c) => h.cols.includes(c));
+    if (watch.length) db.exec(`CREATE TRIGGER hist_${t}_upd AFTER UPDATE OF ${watch.map((c) => '"' + c + '"').join(', ')} ON ${t} WHEN ${watch.map((c) => `OLD."${c}" IS NOT NEW."${c}"`).join(' OR ')} BEGIN ${ins('update')} END`);
+  }
+}
+try { histInstall(); } catch (e) { console.error('data history: the triggers could not be installed —', e && e.message); }
+// and again once every boot migration has run: a column a later one adds (community_members.block_reason) is kept too
+setImmediate(() => { try { histInstall(); } catch (e) { console.error('data history: the triggers could not be rebuilt —', e && e.message); } });
+// an account deleted before this existed (or a crash between its erasure and this table's): its history goes too
+try { db.prepare('DELETE FROM data_history WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL) OR (user_id IS NOT NULL AND user_id NOT IN (SELECT id FROM users))').run(); } catch {}
+try { histForgetAbout(db.prepare('SELECT id FROM users WHERE deleted_at IS NOT NULL').all().map((r) => r.id)); } catch {}
+function histPrune() {
+  try {
+    for (const r of db.prepare('SELECT user_id, COUNT(*) n FROM data_history GROUP BY user_id HAVING n > ?').all(HIST_PER_USER))
+      db.prepare('DELETE FROM data_history WHERE user_id IS ? AND id <= (SELECT id FROM data_history WHERE user_id IS ? ORDER BY id DESC LIMIT 1 OFFSET ?)').run(r.user_id, r.user_id, HIST_PER_USER);
+  } catch (e) { console.error('data history prune', e && e.message); }
+}
+setInterval(histPrune, 6 * 3600e3).unref();
+setTimeout(histPrune, 60e3).unref();   // a server restarted more often than every six hours prunes too
+/* What moderation removes is not kept: a takedown erases the history its own changes just wrote (the words, the picture's
+   name, the comments that went with a post), so abusive or doxxing content is gone, not one tap from coming back. */
+const histMark = () => (db.prepare('SELECT MAX(id) m FROM data_history').get() || {}).m || 0;
+const histForgetSince = (mark) => { try { db.prepare('DELETE FROM data_history WHERE id > ?').run(mark); } catch {} };
+// a deleted account's traces in OTHER members' history: their follows of it and their alerts on it (ids only, but about it)
+function histForgetAbout(uids) {
+  for (const uid of uids) {
+    try { db.prepare("DELETE FROM data_history WHERE (tbl = 'follows' AND json_extract(old_json, '$.followee_id') = ?) OR (tbl = 'alerts' AND json_extract(old_json, '$.target_id') = ?)").run(uid, uid); } catch {}
+  }
+}
+const histKeyWhere = (h) => h.key.map((c) => `"${c}" = ?`).join(' AND ');
+// the row as it is now, the kept columns only (null when it no longer exists)
+function histCurrent(t, old) {
+  const h = HIST[t]; if (!h || !h.cols || !h.cols.length || h.key.some((c) => !(c in old))) return null;
+  try { return db.prepare(`SELECT ${h.cols.map((c) => '"' + c + '"').join(', ')} FROM ${t} WHERE ${histKeyWhere(h)}`).get(...h.key.map((c) => old[c])) || null; } catch { return null; }
+}
+/* Why an entry cannot be put back as things stand (null when it can): the row it hangs on is gone, the person on the other
+   side has deleted their account, a mute stands between them, or the member is at the Conviction Play limit. */
+function histBlocked(r, old) {
+  const h = HIST[r.tbl]; if (!h || !old) return 'this kind of entry cannot be put back';
+  const one = (sql, ...v) => { try { return db.prepare(sql).get(...v); } catch { return null; } };
+  const now0 = histCurrent(r.tbl, old);
+  if (r.op === 'update' && !now0) return 'it no longer exists, so there is nothing to set back';
+  if (r.op === 'delete' && h.noDelete) return 'this kind of entry cannot be put back';
+  const gone = (id) => { const u = one('SELECT deleted_at FROM users WHERE id = ?', id); return !u || !!u.deleted_at; };
+  if (h.owner && gone(old[h.owner])) return 'the account has been deleted';
+  switch (r.tbl) {
+    case 'follows': if (gone(old.followee_id)) return 'the account they followed has been deleted'; if (one('SELECT 1 FROM mutes WHERE (user_id = ? AND muted_id = ?) OR (user_id = ? AND muted_id = ?)', old.follower_id, old.followee_id, old.followee_id, old.follower_id)) return 'one of them has muted the other'; break;
+    case 'alerts': if (gone(old.target_id)) return 'that account has been deleted'; if (one('SELECT 1 FROM mutes WHERE user_id = ? AND muted_id = ?', old.user_id, old.target_id)) return 'they have muted that account since'; break;
+    case 'comments': if (!one('SELECT 1 FROM posts WHERE id = ?', old.post_id)) return 'the post it was on is gone'; break;
+    case 'hop_comments': if (!one('SELECT 1 FROM calls WHERE id = ?', old.call_id)) return 'the Send Call it was on is gone'; break;
+    case 'community_members': if (!one('SELECT 1 FROM communities WHERE id = ?', old.community_id)) return 'that community is gone'; break;
+    case 'squad_members': if (!one('SELECT 1 FROM squads WHERE id = ?', old.squad_id)) return 'that Send Squad is gone'; break;
+    case 'posts':
+      if (old.community_id && !one('SELECT 1 FROM communities WHERE id = ?', old.community_id)) return 'the community it was in is gone';
+      if (old.squad_id && !one('SELECT 1 FROM squads WHERE id = ?', old.squad_id)) return 'the Send Squad it was in is gone';
+      break;
+    case 'pinned_tokens':
+      if (!now0 && (one('SELECT COUNT(*) n FROM pinned_tokens WHERE user_id = ?', old.user_id) || { n: 0 }).n >= PIN_MAX) return 'they have ' + PIN_MAX + ' Conviction Plays, the most there can be — one has to go first';
+      break;
+  }
+  return null;
+}
+/* Put one kept version back. A deleted row comes back as it was; if one with the same key exists since (a token pinned
+   again, a membership rejoined), it is overwritten — after its own copy is kept, so this is undoable too. An update entry
+   sets the changed columns back (every kept column, for a table whose fields only mean something together). Counters that
+   follow a table are recounted, and a picture whose file is gone is not pointed at again. */
+function histRestore(r, adminId) {
+  const h = HIST[r.tbl]; if (!h) throw new Error('that kind of entry cannot be put back');
+  const old = JSON.parse(r.old_json);
+  const blocked = histBlocked(r, old); if (blocked) throw new Error(blocked);
+  const have = db.prepare('SELECT name FROM pragma_table_info(?)').all(r.tbl).map((x) => x.name);
+  const cols = Object.keys(old).filter((c) => have.includes(c) && h.cols.includes(c));
+  if (h.key.some((c) => !cols.includes(c))) throw new Error('the entry does not name its row');
+  const vals = Object.assign({}, old), notes = [];
+  if (r.tbl === 'users') for (const c of ['avatar_img', 'header_img', 'bg_img']) if (vals[c] && !fs.existsSync(path.join(UPLOAD_DIR, String(vals[c])))) { vals[c] = null; notes.push('its ' + c.replace('_img', '') + ' picture is no longer on the server'); }
+  const keyVals = h.key.map((c) => vals[c]);
+  const cur = histCurrent(r.tbl, old);
+  const setCols = (r.op === 'update' && h.restore !== 'all' ? (h.watch || []).filter((c) => cols.includes(c)) : cols).filter((c) => !h.key.includes(c));
+  const ownTrigger = (h.watch || []).some((c) => h.cols.includes(c));
+  db.exec('BEGIN');
+  try {
+    if (!cur) db.prepare(`INSERT INTO ${r.tbl} (${cols.map((c) => '"' + c + '"').join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...cols.map((c) => vals[c]));
+    else if (setCols.length) {
+      // a table with no update trigger keeps no copy of what is overwritten by itself: keep it here
+      if (!ownTrigger) db.prepare('INSERT INTO data_history (tbl, row_key, user_id, op, old_json, at) VALUES (?,?,?,?,?,?)').run(r.tbl, r.row_key, cur[h.owner] != null ? cur[h.owner] : r.user_id, 'update', JSON.stringify(cur), now());
+      db.prepare(`UPDATE ${r.tbl} SET ${setCols.map((c) => `"${c}" = ?`).join(', ')} WHERE ${histKeyWhere(h)}`).run(...setCols.map((c) => vals[c]), ...keyVals);
+    }
+    if (r.tbl === 'community_members') {
+      db.prepare('UPDATE communities SET member_count = (SELECT COUNT(*) FROM community_members WHERE community_id = ?), qual_count = (SELECT COUNT(*) FROM community_members WHERE community_id = ? AND qualified = 1) WHERE id = ?').run(vals.community_id, vals.community_id, vals.community_id);
+      db.prepare("UPDATE users SET live_comm_count = (SELECT COUNT(*) FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.user_id = ? AND cm.qualified = 1 AND c.status = 'live' AND c.demo = 0) WHERE id = ?").run(vals.user_id, vals.user_id);
+    }
+    if (r.tbl === 'squad_members') db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(vals.squad_id, vals.squad_id);
+    db.prepare('UPDATE data_history SET restored_at = ?, restored_by = ? WHERE id = ?').run(now(), adminId, r.id);
+    db.exec('COMMIT');
+  } catch (e) { try { db.exec('ROLLBACK'); } catch {} throw e; }
+  // a post's picture is a file: if it was erased with the post, the row comes back without it
+  if (r.tbl === 'posts' && old.image && !fs.existsSync(path.join(UPLOAD_DIR, String(old.image)))) notes.push('the picture this post had is no longer on the server');
+  return { restored: { id: r.id, what: h.label, op: r.op }, now: histCurrent(r.tbl, old), note: notes.length ? notes.join('; ') : null };
+}
+
 /* ===== Key rotation, part 1: what happens at boot =====================================================
    Only with a keyring (DATA_KEY_FILE holding JSON — see lib/keys.js), and only on the database that OWNS it (ring.owner:
    its key_meta db_id and its folder, set by scripts/keys.mjs init or claim). Any other process reading the same ring —
@@ -12717,9 +12871,11 @@ function adminOverview() {
 /* Remove a post the way its author could, plus what an author cannot: a Send Call post is permanent, so
    its text and media go and the call row stays under a moderation note. */
 function takeDownPost(row, note) {
+  const mark = histMark();
   deleteUpload(row.image, row.user_id);
   if (row.call_id) db.prepare("UPDATE posts SET text = ?, image = NULL WHERE id = ?").run('[removed' + (note ? ': ' + note : '') + ']', row.id);
   else db.prepare('DELETE FROM posts WHERE id = ?').run(row.id);
+  histForgetSince(mark);   // a takedown is not kept for restoring (see "Data history")
 }
 function lockoutAlert(userId) {
   if (!rateLimit('lockalert:' + userId, 1, 864e5)) return;
@@ -14810,6 +14966,41 @@ const server = http.createServer(async (req, res) => {
         } else if (!db.prepare('SELECT 1 FROM invite_codes WHERE admin = 1 LIMIT 1').get()) mintCodes(me.id, ADMIN_CODE_BATCH, true);   // synchronous: two first visits cannot both make a batch
         return send(res, 200, adminCodes(), { 'Cache-Control': 'no-store' });
       }
+      /* A member's kept history (see "Data history"): newest first, each entry with what the row is now, so the page can
+         say what putting it back would change. */
+      if (p === '/api/admin/history' && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        const name = String(url.searchParams.get('user') || '').trim().replace(/^@/, '');
+        const u = name ? db.prepare('SELECT id, username, deleted_at FROM users WHERE username = ? COLLATE NOCASE').get(name) : null;
+        if (!u) return bad(res, 'no member by that name', 404);
+        const before = Number(url.searchParams.get('before')) || Number.MAX_SAFE_INTEGER, kind = String(url.searchParams.get('kind') || '');
+        if (kind && !HIST[kind]) return bad(res, 'no such kind');
+        const rows = db.prepare('SELECT id, tbl, row_key, op, old_json, at, restored_at, restored_by FROM data_history WHERE user_id = ? AND id < ?' + (kind ? ' AND tbl = ?' : '') + ' ORDER BY id DESC LIMIT 200').all(...[u.id, before].concat(kind ? [kind] : []));
+        const entries = rows.map((r) => {
+          const h = HIST[r.tbl]; let old = null; try { old = JSON.parse(r.old_json); } catch {}
+          const one = (sql, v) => { try { return db.prepare(sql).get(v) || {}; } catch { return {}; } };
+          const ctx = !old ? null : r.tbl === 'community_members' ? '$' + (one('SELECT symbol FROM communities WHERE id = ?', old.community_id).symbol || '?') + ' community'
+            : r.tbl === 'squad_members' ? (one('SELECT name FROM squads WHERE id = ?', old.squad_id).name || 'a squad since deleted')
+            : r.tbl === 'follows' ? '@' + (one('SELECT username FROM users WHERE id = ?', old.followee_id).username || '?')
+            : r.tbl === 'alerts' ? '@' + (one('SELECT username FROM users WHERE id = ?', old.target_id).username || '?') : null;
+          const blocked = histBlocked(r, old);
+          return { id: r.id, tbl: r.tbl, what: h ? h.label : r.tbl, op: r.op, at: r.at, old, ctx, now: h && old ? histCurrent(r.tbl, old) : null,
+            restoredAt: r.restored_at || null, restorable: !blocked, blocked };
+        });
+        const total = db.prepare('SELECT COUNT(*) n FROM data_history WHERE user_id = ?' + (kind ? ' AND tbl = ?' : '')).get(...[u.id].concat(kind ? [kind] : [])).n;
+        const kinds = db.prepare('SELECT tbl, COUNT(*) n FROM data_history WHERE user_id = ? GROUP BY tbl').all(u.id).map((x) => ({ kind: x.tbl, what: HIST[x.tbl] ? HIST[x.tbl].label : x.tbl, n: x.n }));
+        return send(res, 200, { user: { username: u.username, deleted: !!u.deleted_at }, total, kinds, entries, more: rows.length === 200 ? rows[rows.length - 1].id : null }, { 'Cache-Control': 'no-store' });
+      }
+      if (p === '/api/admin/history/restore' && req.method === 'POST') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        if (!sudoActive(me)) return bad(res, NEED_VERIFY_MSG + ' — putting a member\'s data back changes their account', 401);
+        const b = await readBody(req);
+        if (b.confirm !== 'RESTORE') return bad(res, 'send confirm: "RESTORE" to put it back');
+        const r = db.prepare('SELECT * FROM data_history WHERE id = ?').get(Number(b.id));
+        if (!r) return bad(res, 'no such entry', 404);
+        try { return send(res, 200, Object.assign({ ok: true }, histRestore(r, me.id))); }
+        catch (e) { return bad(res, 'could not put it back: ' + ((e && e.message) || 'it no longer fits'), 409); }
+      }
       if (p === '/api/admin/activity' && req.method === 'GET') {   // daily visitors and active members, for the chart
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         return send(res, 200, adminActivity(), { 'Cache-Control': 'no-store' });
@@ -14848,6 +15039,7 @@ const server = http.createServer(async (req, res) => {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         const b = await readBody(req);
         const id = Number(b.id), note = String(b.note || '').trim().slice(0, 140);
+        const histAt = histMark();   // whatever this takedown removes is not kept for restoring (see "Data history")
         if (b.kind === 'post') {
           const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
           if (!row) return bad(res, 'post not found', 404);
@@ -14886,6 +15078,7 @@ const server = http.createServer(async (req, res) => {
           for (const c of ['avatar_img', 'banner_img']) db.prepare('UPDATE squads SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           deleteUpload(name, row.user_id);
         } else return bad(res, 'kind must be post, comment, hopcomment or upload');
+        histForgetSince(histAt);
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?").run(now(), me.id, b.kind === 'upload' ? 'post' : b.kind, id);
         return send(res, 200, { ok: true });
       }
@@ -15004,6 +15197,8 @@ const server = http.createServer(async (req, res) => {
             gate_wallets = NULL, gate_hold_until = 0, gate_floor = 0, redeem_base_send = 0, redeem_floor = 0,
             signup_ip = NULL, last_ip = NULL, age_at = NULL, restrict_reason = NULL,
             live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?`).run(tombstone, now(), uid);
+          db.prepare('DELETE FROM data_history WHERE user_id = ?').run(uid);   // last: the deletion itself was just recorded there, row by row
+          histForgetAbout([uid]);   // and other members' follows of them and alerts on them
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('account delete', e && e.message); return bad(res, 'could not delete the account right now — try again', 500); }
         for (const n of media) { try { deleteUpload(n, null); } catch {} }
@@ -17285,9 +17480,14 @@ const server = http.createServer(async (req, res) => {
         try { logoOnPin(token); } catch {}
         return send(res, 200, { ok: true, pinned: true, symbol, name });
       }
+      /* Removing a Conviction Play is the member's own deliberate act (owner, 2026-10-17: "it stays forever unless the users
+         says to delete the conviction play"): only the profile's Remove, confirmed, sends confirm: 'REMOVE'. Every other
+         pin button only ever adds. A stray tap used to take one off — and with it the date and price it was convicted
+         at — and pinning again started over from that day. The removed row is kept in data_history either way. */
       if (p === '/api/pins' && req.method === 'DELETE') { // unpin
         if (!me) return bad(res, 'sign in first', 401);
         const b = await readBody(req);
+        if (b.confirm !== 'REMOVE') return bad(res, 'a Conviction Play is removed only from your own profile, with Remove — send confirm: "REMOVE"');
         db.prepare('DELETE FROM pinned_tokens WHERE user_id=? AND token_addr=?').run(me.id, String(b.token || '').toLowerCase());
         try { dropLogoIfUntracked(b.token); } catch {}
         return send(res, 200, { ok: true, pinned: false });
@@ -18327,7 +18527,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    /* The admin page and its scripts (admin.js, admincodes.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
+    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
        page that does not exist — for every method and every spelling that reaches the file (case on a case-insensitive
        disk, //, /./, %2e), so the test is on the file the path RESOLVES to, before anything else serves it. Neither
        may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
@@ -18336,10 +18536,11 @@ const server = http.createServer(async (req, res) => {
       // its address is /admin now (2026-10-15); /admin.html, /Admin, /admin/ and the rest are the same page to this gate
       const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase().replace(/[\\/]+$/, ''), base = PUBLIC_DIR.toLowerCase() + path.sep;
       const isPage = fpLc === base + 'admin' || fpLc === base + 'admin.html';
-      if (isPage || fpLc === base + 'admin.js' || fpLc === base + 'admincodes.js') {
+      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js'].find((n) => fpLc === base + n);
+      if (isPage || adminScript) {
         if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
         if (isPage && p !== '/admin') { res.writeHead(301, { Location: '/admin' + url.search, 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', ...SEC_HEADERS }); return res.end(); }
-        return serveFile(req, res, path.join(PUBLIC_DIR, isPage ? 'admin.html' : path.basename(fpLc) === 'admincodes.js' ? 'admincodes.js' : 'admin.js'), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
+        return serveFile(req, res, path.join(PUBLIC_DIR, isPage ? 'admin.html' : adminScript), { 'Cache-Control': 'private, no-store', 'Vary': 'Cookie' });
       }
     }
     /* ===== addresses that answer for search engines and browsers before the static files =====
@@ -18450,7 +18651,11 @@ const BACKUP_OFF_VOLUME = (() => {
   if (!process.env.BACKUP_DIR || path.resolve(process.env.BACKUP_DIR).startsWith(path.resolve(DATA_DIR) + path.sep)) return false;
   try { return fs.statSync(process.env.BACKUP_DIR).dev !== fs.statSync(DATA_DIR).dev; } catch { return false; }
 })();
-const BACKUP_KEEP = BACKUP_OFF_VOLUME ? 7 : 3;
+/* Off-volume it keeps a month of dailies and the first copy of each of the last twelve months (owner, 2026-10-17: "make
+   sure all data is always cached … we can restore user's data"): seven days was too short to reach back to a Conviction
+   Play lost in early October. Each copy is about the size of the database, and key rotation rewrites each one. */
+const BACKUP_KEEP = BACKUP_OFF_VOLUME ? 30 : 3;
+const BACKUP_KEEP_MONTHS = BACKUP_OFF_VOLUME ? 12 : 0;
 /* ===== Key rotation, part 2: the schedule, the backups, and dropping old keys ==========================
    With a keyring (part 1, near the top, covers boot):
      · every KEY_ROTATE_HOURS (24) a new data key becomes current; the live database is re-encrypted in batches between
@@ -18717,6 +18922,42 @@ function keyStatus() {
 const keyTimer = setInterval(() => { keyTick().catch(() => {}); }, KEY_TICK_MS);
 keyTimer.unref();
 if (KEY_OWNER) setTimeout(() => { keyMaintenance('boot').catch(() => {}); }, keyNum(process.env.KEY_MAINT_DELAY_MS, 20000, 0)).unref();   // after the first snapshot below
+/* A backup is kept up to a year, so it must not keep what the live site erases on a schedule (privacy.html §5 and §9): IP
+   hashes, sign-in sessions and challenges, the visitor-counting keys, guest flights no account took, Diamond Hands moves and
+   tried-email records. They are abuse checks and passing state, nobody's data to bring back; a restore from a backup simply
+   starts them afresh. Every backup is written without them, and an older one without the mark is scrubbed when next seen. */
+const BACKUP_SCRUB = [
+  'UPDATE calls SET ip = NULL', 'UPDATE users SET signup_ip = NULL, last_ip = NULL', 'UPDATE communities SET creator_ip = NULL',
+  'UPDATE community_members SET join_ip = NULL', 'UPDATE squads SET creator_ip = NULL', 'UPDATE squad_members SET join_ip = NULL',
+  'UPDATE alerts SET ip = NULL', 'UPDATE proposals SET author_ip = NULL', 'UPDATE proposal_votes SET vote_ip = NULL',
+  'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
+  'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
+  'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces',
+];
+function scrubBackup(file) {
+  let b = null;
+  try {
+    b = new DatabaseSync(file); b.exec('PRAGMA busy_timeout = 5000');
+    if (b.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_jsi_scrubbed'").get()) return false;
+    b.exec('BEGIN');
+    for (const q of BACKUP_SCRUB) { try { b.exec(q); } catch {} }   // a table an older backup does not have yet is simply skipped
+    b.exec('CREATE TABLE _jsi_scrubbed (at INTEGER NOT NULL); INSERT INTO _jsi_scrubbed VALUES (' + Date.now() + ');');
+    b.exec('COMMIT');
+    try { b.exec('VACUUM'); } catch {}   // the erased values must not linger in free pages
+    return true;
+  } catch (e) { try { b && b.exec('ROLLBACK'); } catch {} console.error('backup scrub failed for ' + path.basename(file) + ':', e && e.message); return false; }
+  finally { try { b && b.close(); } catch {} }
+}
+function scrubBackups() {
+  try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db$/.test(n)) scrubBackup(path.join(BACKUP_DIR, n)); } catch {}
+}
+// which dated backups stay: the newest `days`, and the first copy of each of the last `months` months (names sort by date)
+function backupKeepSet(all, days, months) {
+  const keep = new Set(all.slice(-days)), firsts = new Map();
+  for (const n of all) if (!firsts.has(n.slice(4, 11))) firsts.set(n.slice(4, 11), n);
+  if (months > 0) for (const n of [...firsts.values()].slice(-months)) keep.add(n);
+  return keep;
+}
 function snapshotDb() { return withKeyLock(snapshotDbNow); }
 async function snapshotDbNow() {
   if (typeof sqliteBackup !== 'function') return;
@@ -18725,7 +18966,7 @@ async function snapshotDbNow() {
   const f = path.join(BACKUP_DIR, 'app-' + new Date().toISOString().slice(0, 10) + '.db');
   const tmp = f + '.part';
   try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db\.part$/.test(n) && path.join(BACKUP_DIR, n) !== tmp) fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} // a .part orphaned by a hard kill on an earlier day
-  if (fs.existsSync(f)) return; // today's snapshot already exists
+  if (fs.existsSync(f)) { scrubBackups(); return; } // today's snapshot already exists (an older one from before the scrub is cleaned)
   // Need room for a whole extra copy of the DB plus the live site's own headroom, or don't start.
   try {
     const dbBytes = fs.statSync(path.join(DATA_DIR, 'app.db')).size;
@@ -18734,9 +18975,12 @@ async function snapshotDbNow() {
   } catch {}
   try {
     await sqliteBackup(db, tmp, { rate: 256 });
+    if (!scrubBackup(tmp)) throw new Error('the copy could not be scrubbed, so it is not kept');
     fs.renameSync(tmp, f);
-    const old = fs.readdirSync(BACKUP_DIR).filter(n => /^app-\d{4}-\d{2}-\d{2}\.db$/.test(n)).sort().slice(0, -BACKUP_KEEP);
-    for (const n of old) { try { fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} }
+    const all = fs.readdirSync(BACKUP_DIR).filter(n => /^app-\d{4}-\d{2}-\d{2}\.db$/.test(n)).sort();
+    const keep = backupKeepSet(all, BACKUP_KEEP, BACKUP_KEEP_MONTHS);
+    for (const n of all) if (!keep.has(n)) { try { fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} }
+    scrubBackups();
   } catch (e) { try { fs.unlinkSync(tmp); } catch {} console.error('db snapshot failed:', e && e.message); }
 }
 const backupTimer = setInterval(() => { snapshotDb().catch(() => {}); }, 60 * 60 * 1000);
