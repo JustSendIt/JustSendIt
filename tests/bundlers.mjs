@@ -243,6 +243,13 @@ for (const zero of [true, false]) {
     for (let k = 0; k < 5; k++) { c.t(520 + k, 320 + k, PAIR, K, 100n * E18); for (let j = 0; j < 5; j++) c.t(520 + k, 320 + k, K, W(0x9200 + j), rot[(j + k) % 5] * E18); c.buy(520 + k, 320 + k, 100n * E18, E18); }
     f = c.fold({ routers: new Set([K]) });
     check(tag + 'five wallets bought in five rounds through a contract known as a router elsewhere: still one bundler of five (each round reached 3+ wallets; none of them is a "fee wallet")', f.fees.size === 0 && LIB.bundleGroup(f).length === 1 && LIB.bundleGroup(f)[0].wallets.length === 5, JSON.stringify({ fees: [...f.fees], n: LIB.bundleGroup(f).length }));
+    // a label another token taught applies only in its role: a "router" that buys and sends on here is still a bundler,
+    // a "fee wallet" that takes a big share straight from the pool here is still a bundle wallet
+    c = chainZ().t(450, 1, PAIR, K, 300n * E18).buy(450, 1, 300n * E18, E18);
+    for (let j = 0; j < 10; j++) c.t(450, 2 + j, K, W(0x9500 + j), 30n * E18);
+    check(tag + 'an address other tokens know as a router, which here buys and then sends to 10 wallets in that block, is still a bundler', LIB.bundleGroup(c.fold({ routers: new Set([K]) })).length === 1 && LIB.bundleGroup(c.fold({ routers: new Set([K]) }))[0].wallets.length === 11);
+    c = chainZ().t(460, 1, PAIR, A, 300n * E18).t(460, 1, PAIR, F, 200n * E18).buy(460, 1, 500n * E18, E18);
+    check(tag + 'a wallet other tokens know as a fee wallet, taking 40% straight from the pool in a two-wallet launch buy here, is still a bundle wallet', LIB.bundleGroup(c.fold({ fees: new Set([F]) })).length === 1 && LIB.bundleGroup(c.fold({ fees: new Set([F]) }))[0].wallets.some((w) => w.addr === F));
     // a known fee wallet is set aside only where this token says nothing against it
     c = chainZ().t(530, 1, PAIR, A, 50n * E18).t(530, 1, PAIR, F, 50n * E18).buy(530, 1, 100n * E18, E18).t(531, 2, PAIR, F, 50n * E18).t(531, 2, PAIR, B2, 50n * E18).t(531, 2, PAIR, A, 40n * E18).buy(531, 2, 140n * E18, E18);
     check(tag + 'a fee wallet another token taught is not set aside on a token where it buys alongside the same wallets (its peers here)', LIB.bundleGroup(c.fold({ fees: new Set([F]) })).some((g) => g.wallets.some((w) => w.addr === F)));
@@ -319,7 +326,8 @@ function liftScan(node) {
   const ctx = vm.createContext({ BigInt, Number, Math, Set, Map, Array, Object, String, JSON, Promise, Error, parseInt, isFinite, Infinity, console,
     setTimeout: (f) => { f(); return 0; }, rpc: node.call, rpcBatch: node.batch, rpcRetry: (f) => f(),
     SWAP_ROUTER: '0x89e5db8b5aa49aa85ac63f691524311aeb649eba', FACTORY: '0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f', WETH_ADDR: '0x0bd7d308f8e1639fab988df18a8011f41eacad73',
-    QUOTE_SET: new Set(['0x0bd7d308f8e1639fab988df18a8011f41eacad73', '0x5fc5360d0400a0fd4f2af552add042d716f1d168']), TRANSFER_TOPIC: T, BUNDLES: LIB,
+    QUOTE_SET: new Set(['0x0bd7d308f8e1639fab988df18a8011f41eacad73', '0x5fc5360d0400a0fd4f2af552add042d716f1d168']), TRANSFER_TOPIC: T,
+    BUNDLES: { ...LIB, bundleFold: (a, b2, c2) => { node.seenKnown = c2.known; return LIB.bundleFold(a, b2, c2); } },
     sniperRow: (t) => (node.sniper ? node.sniper(t) : null), now: () => 1e12,
     db: { prepare: (q) => ({ all: () => (node.plumbing || []), run: (...a) => { (node.learned || (node.learned = [])).push(a); } }) } });
   vm.runInContext([
@@ -437,7 +445,7 @@ try {
   // routers and fee wallets another token taught are used here
   const d9n = fakeNode(fx); d9n.plumbing = [{ addr: '0x' + '42'.repeat(20), kind: 'router' }];
   const d9 = await liftScan(d9n).scan(fx.token, fx.pair);
-  check('  ...the routers other tokens\' reads found are read from the shared table and used', d9.routers === d.routers + 1, d9.routers + ' vs ' + d.routers);
+  check('  ...the routers other tokens\' reads found are read from the shared table and given to the rules (not counted as this token\'s own)', d9n.seenKnown && d9n.seenKnown.routers.has('0x' + '42'.repeat(20)) && d9.routers === d.routers, JSON.stringify({ r: d9.routers }));
   // a USDG pool: its decimals are read, and an unreadable answer stops the read
   const USDGA = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';
   const usd = { ...fx, [fx.token0 === fx.token ? 'token1' : 'token0']: USDGA };
