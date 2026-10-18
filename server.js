@@ -19228,9 +19228,11 @@ function keyFiles() {
   return { files: [...new Set(out.map((f) => path.resolve(f)))].filter((f) => f !== live), blocked };
 }
 const keyFileName = (f) => f.startsWith(path.resolve(BACKUP_DIR) + path.sep) ? path.relative(path.resolve(BACKUP_DIR), f) : f.replace(require('node:os').homedir(), '~');
+let keyMaintQueued = 0;   // passes running or waiting for the key lock (keyTick starts no check while one is)
 async function keyMaintenance(why) {
   if (!KEY_OWNER) return null;
-  return withKeyLock(async () => {
+  keyMaintQueued++;
+  try { return await withKeyLock(async () => {
     const t0 = Date.now(), rep = { at: t0, why, swept: 0, files: [], blocked: [], live: null, dropped: [], waiting: [] };
     try {
       // 1. the live database: whatever is still under an older key
@@ -19260,7 +19262,7 @@ async function keyMaintenance(why) {
     KEY_ROT.lastMaintenance = rep;
     try { KEYLIB.setMeta(db, 'last_maintenance', JSON.stringify(rep)); } catch {}
     return rep;
-  });
+  }); } finally { keyMaintQueued--; }
 }
 /* Drop what nothing needs. A key "is needed" while any value it opens is left — in the live database or in any copy.
    Values no key opens never hold a key back (keeping a key that does not open them helps nothing). A copy that could
@@ -19357,10 +19359,12 @@ async function keyTick() {
     const cur = KEYS.ring.dek.keys.find((k) => k.id === KEYS.current);
     const dataAt = Number(KEYLIB.getMeta(db, 'dek_rotated_at')) || (cur && cur.added) || t;
     if (KEY_ROTATE_HOURS > 0 && t - dataAt >= KEY_ROTATE_HOURS * 3600e3 && keyEscrowOk()) { await keyRotateNow('data', false, 'every ' + KEY_ROTATE_HOURS + ' h'); return; }
-    // old keys waiting to go, or a file not yet brought along: look again hourly
+    /* old keys waiting to go, or a file not yet brought along: look again hourly. Not while a pass is running or queued (the
+       boot pass, a rotation): its report is the answer, and a check queued behind it would find everything done and put a
+       report of nothing over the one that says what was re-keyed and dropped (a slow boot pass outlasting the first tick). */
     const last = KEY_ROT.lastMaintenance;
     const pending = KEYS.ring.dek.keys.length > 1 || KEYS.ring.idx.outer.some((o) => o.epoch < KEYS.epoch) || !last || (last.blocked || []).length || (last.files || []).some((f) => f.status === 'failed');
-    if (pending && (!last || t - last.at >= 3600e3)) await keyMaintenance('check');
+    if (pending && !keyMaintQueued && (!last || t - last.at >= 3600e3)) await keyMaintenance('check');
     // the weekly index epoch, at the quiet hour
     const idxAt = Number(KEYLIB.getMeta(db, 'idx_rotated_at')) || 0;
     if (IDX_ROTATE_DAYS > 0 && t - idxAt >= IDX_ROTATE_DAYS * 864e5 && new Date(t).getHours() === KEY_ROTATE_HOUR && keyEscrowOk()) {

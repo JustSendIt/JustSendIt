@@ -262,10 +262,15 @@ try {
   const rq = cli('request', '--all', '--compromised');
   check('request --all --compromised leaves a request for the next start', rq.ok && fs.existsSync(path.join(KV, 'rotate-request.json')));
   let t0 = Date.now();
-  s = await start();
+  /* the boot pass starts just before the first one-second tick, so that tick lands while the pass is still running. On a
+     slow runner that happened by itself (GitHub run 39082655259): the tick, seeing no finished report yet, queued a second
+     pass behind it, and that pass's report (every file already current, nothing left to drop) replaced the one that did the
+     work. The server now starts no check while a pass is running or queued; this start keeps that honest on any machine. */
+  s = await start({ KEY_MAINT_DELAY_MS: '950' });
   check('the server starts on the keyring and takes the request before serving: new data key, index epoch 0 → 1, live data re-encrypted', s.up && /data key 2 made current/.test(s.log) && /index key: epoch 0 → 1/.test(s.log) && /re-encrypted \d+ values under data key 2/.test(s.log), s.log.slice(-600));
   let m = await maintenanceAfter(t0);
   check('  ...then brings every backup file along and drops the stolen key (compromised: no grace)', m && m.files.length === 4 && m.files.every((f) => f.status === 'rekeyed') && m.dropped.includes('data key 1'), m && JSON.stringify({ files: m.files.map((f) => f.file + ':' + f.status + ':' + (f.why || '')), dropped: m.dropped, waiting: m.waiting, err: m.error }));
+  const bootPass = m;
   let ring = ringNow().ring;
   check('the keyring now holds only data key 2 and index epoch 1; key 1 is listed as dropped', ring.dek.keys.map((k) => k.id).join() === '2' && ring.dek.dropped.some((x) => x.id === 1) && ring.idx.outer.map((o) => o.epoch).join() === '1');
   check('  ...and the old key is nowhere beside it: not in the ring, not in keyring.prev.json, no temp file', !fs.readdirSync(KV).some((n) => fs.readFileSync(path.join(KV, n), 'utf8').includes(K1.toString('hex'))), fs.readdirSync(KV).join(','));
@@ -302,6 +307,8 @@ try {
   const tc = await api('/api/tracker/cache?address=' + TRACKED, { sid: login.sid });
   const wl = await api('/api/wallets', { sid: login.sid });
   check('  ...the tracker finds its saved report and lists the tracked wallet', tc.j && tc.j.report && tc.j.report.report === 'kr' && JSON.stringify(wl.j || {}).includes(TRACKED), JSON.stringify(tc.j) + ' ' + wl.status);
+  { const last = JSON.parse(metaOf('last_maintenance') || 'null');
+    check('the re-keying pass was the only one: the tick that came while it ran queued no second pass to replace its report', !!bootPass && bootPass.why === 'boot' && !!last && last.at === bootPass.at && last.why === 'boot', JSON.stringify(last && { why: last.why, at: last.at, boot: bootPass && bootPass.at, files: last.files.map((f) => f.status), dropped: last.dropped })); }
   const snap1 = plainOf(k2);
   await stop();
 
