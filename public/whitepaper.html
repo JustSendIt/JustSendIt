@@ -489,6 +489,7 @@
     .wp-colophon { margin-top: 26px; padding-top: 14px; font-size: max(var(--text-floor), 8.5pt); break-inside: avoid; }
   }
 </style>
+<script src="/ga.js" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main">Skip to content</a>
@@ -711,21 +712,24 @@ Expiration Time: &lt;10 minutes later&gt;
         <div class="sec-head"><span class="sec-num">06</span><h2>Locking the doors</h2></div>
         <p>Web attacks mostly work by getting a browser to run code it should not, or by tricking your browser into doing something while you are logged in. The site closes those doors with rules the browser itself enforces.</p>
         <h3>The strict list</h3>
-        <p>A <strong>Content Security Policy</strong> is a list the site hands your browser saying where code and images may come from. This one is unusually tight: scripts may only load from the site itself, and there is no inline script anywhere on any page. If an attacker somehow slipped a script tag into a post, the browser would refuse to run it.</p>
+        <p>A <strong>Content Security Policy</strong> is a list the site hands your browser saying where code and images may come from. This one is unusually tight: scripts may only load from the site itself and the analytics hosts the policy names, and there is no inline script anywhere on any page. If an attacker somehow slipped a script tag into a post, the browser would refuse to run it.</p>
         <div class="figure">
 default-src 'self'
 script-src  'self' https://static.cloudflareinsights.com   &larr; our own code, plus Cloudflare's analytics beacon
+            (+ www.googletagmanager.com, only while Google Analytics is turned on)
 style-src   'self' 'unsafe-inline'
 font-src    'self'                        &larr; our own copies of the fonts
 img-src     'self' data: blob:            &larr; token art comes through our server
+            (+ Google Analytics' hosts, only while it is turned on)
 media-src   'self' blob: data:            &larr; video and voice posts, served from this site
 connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://cloudflareinsights.com   &larr; the swap and wallet flows, and the beacon's report
-frame-src   'none'                        &larr; no third-party frames at all
+            (+ Google Analytics' collection hosts, only while it is turned on)
+frame-src   https://dexscreener.com https://www.geckoterminal.com   &larr; a pool's chart from them, only when you pick it
 base-uri    'self'
 form-action 'self'                        &larr; forms may only submit to this site
 frame-ancestors 'none'                    &larr; nobody can hide us in their page
 object-src  'none'
-          <div class="cap">The full policy. Beside Cloudflare's analytics beacon, pages load nothing from other companies: the fonts are served from this site, and token pictures, prices and wallet history are fetched by our server and passed on, so Google, Dexscreener and Blockscout never see a visitor's address. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking. <span class="mono">frame-src</span> names exactly two sites, dexscreener.com and www.geckoterminal.com: the site draws its price charts itself from each pair contract's own swap events, and a viewer can switch a token's chart to Dexscreener's or CoinGecko's &mdash; a frame that is only loaded when they pick it, offered only when our server has confirmed that site lists the pool.</div>
+          <div class="cap">The full policy. Beside Cloudflare's analytics beacon — and Google Analytics' tag, only while the operator has it turned on (the privacy policy, section 7, says what it sends) — pages load nothing from other companies: the fonts are served from this site, and token pictures, prices and wallet history are fetched by our server and passed on, so Dexscreener, Blockscout and the image hosts never see a visitor's address. <span class="mono">frame-ancestors 'none'</span> stops a scammer loading the real site invisibly inside a fake one, an attack called clickjacking. <span class="mono">frame-src</span> names exactly two sites, dexscreener.com and www.geckoterminal.com: the site draws its price charts itself from each pair contract's own swap events, and a viewer can switch a token's chart to Dexscreener's or CoinGecko's &mdash; a frame that is only loaded when they pick it, offered only when our server has confirmed that site lists the pool.</div>
         </div>
         <h3>Checking who asked</h3>
         <p>Whenever something changes &mdash; a post, a call, a setting &mdash; the server checks which website the request came from and rejects it unless it came from this one. That stops another site from acting for you while you happen to be logged in.</p>

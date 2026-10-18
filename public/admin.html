@@ -83,6 +83,16 @@
   </section>
 
   <!-- admin invite codes: for the admin to hand out, each tracked to the account that signed up with it (admincodes.js, /api/admin/codes) -->
+  <!-- Google Analytics: what the site's GA4 property reports (adminanalytics.js, GET /api/admin/analytics) -->
+  <section class="card adm-ov adm-ga" id="adm-ga" hidden aria-labelledby="adm-ga-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-ga-h" class="adm-h2">Google Analytics 📊</h2>
+      <button class="btn btn-sm" id="adm-ga-refresh" type="button" data-tip="Asks Google Analytics for its latest figures now (otherwise they are kept for 10 minutes)">↻ Refresh</button>
+    </div>
+    <p class="modal-note" id="adm-ga-sum" role="status" aria-live="polite"></p>
+    <div id="adm-ga-body"></div>
+  </section>
+
   <section class="card adm-ov adm-codes" id="adm-codes" hidden aria-labelledby="adm-codes-h">
     <div class="adm-ov-head">
       <h2 id="adm-codes-h" class="adm-h2">Admin invite codes 🎟️</h2>
@@ -164,5 +174,6 @@
 <script src="admin.js"></script>
 <script src="admincodes.js"></script>
 <script src="adminrestore.js"></script>
+<script src="adminanalytics.js"></script>
 </body>
 </html>

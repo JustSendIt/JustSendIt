@@ -224,6 +224,17 @@ body.gate {
    redeem / wallet checks. Mirrors styles.css .btn:disabled; the static 0.35 grid (below) already marks the tile as inert. */
 .g-btn:disabled { background: var(--ctl-fill-dis, var(--g-green-lo)); color: var(--g-on); opacity: 1; cursor: not-allowed; box-shadow: none; }
 .g-btn:focus-visible { outline: 3px solid var(--g-focus); outline-offset: 3px; }
+/* tips.js's description bubble, dressed for the pages that load gate.css and not styles.css (the legal pages):
+   the same rules as styles.css .tip-bubble, on the gate's tokens */
+.tip-bubble { position: fixed; z-index: 9990; pointer-events: auto; max-width: 300px; padding: 0.5rem 0.65rem;
+  font-size: max(var(--text-floor), 0.8rem); line-height: 1.4; font-weight: 600; color: var(--g-text); background: var(--g-ink-2);
+  border: 1.5px solid var(--edge-ctl, var(--g-green)); border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  opacity: 0; transform: translateY(2px); transition: opacity 0.13s ease, transform 0.13s ease; }
+.tip-bubble.is-on { opacity: 1; transform: none; }
+.tip-bubble.is-instant { transition: none; transform: none; }
+@media (prefers-reduced-motion: reduce) { .tip-bubble { transition: none; transform: none; } }
+/* the privacy page's "turn Google Analytics off in this browser" line (ga.js wires it) */
+.ga-optout { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.8rem; }
 
 /* ---- modal ---- */
 .g-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 1rem;

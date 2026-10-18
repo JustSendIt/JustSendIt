@@ -29,8 +29,9 @@ try {
     const missing = withButtons.filter(f => !/tips\.js/.test(readFileSync(path.join(PUB, f), 'utf8')));
     check('every page that has a button loads tips.js', missing.length === 0, missing.join(', '));
     // pages whose buttons are all rendered later by script still need it
-    // (the rocket cursor, cursor.js, is the one script that draws no controls: the legal pages load it and nothing else)
-    const scripted = pages.filter(f => /<script src="(?!\/?cursor\.js")/.test(readFileSync(path.join(PUB, f), 'utf8')));
+    // (the rocket cursor, cursor.js, and the Google Analytics tag, ga.js, draw no controls: the legal pages load them and
+    //  nothing else — ga.js only wires the privacy page's own switch, which that page's tips.js describes)
+    const scripted = pages.filter(f => [...readFileSync(path.join(PUB, f), 'utf8').matchAll(/<script src="([^"]+)"/g)].some((m) => !/^\/?(?:cursor|ga)\.js$/.test(m[1])));
     const missingScripted = scripted.filter(f => !/tips\.js/.test(readFileSync(path.join(PUB, f), 'utf8')));
     check('  ...and so does every page that renders controls from script', missingScripted.length === 0, missingScripted.join(', '));
     check('it is CSP-safe — no inline script is introduced', !/<script/i.test(TIPS));

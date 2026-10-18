@@ -107,7 +107,7 @@ try {
   /* ═══ what people are told ═══ */
   const PRIV = read('privacy.html');
   check('the Privacy Policy says a question to Sendy goes to Anthropic with the page and the chat, that the question and answer are kept without who asked, rated, and that Sendy sees the public figures', /When you ask Sendy a question, our server sends that question, the page you are on and the last few messages of that chat to Anthropic/.test(PRIV) && /Nothing about your account goes with it/.test(PRIV) && /We keep the question and the answer, without who asked/.test(PRIV) && /figures the site already shows to everyone/.test(PRIV));
-  check('  ...and the policy\'s version moved for it (again on 2026-10-09, for Cloudflare\'s analytics beacon, on 2026-10-10 for the stored-IP list, on 2026-10-12 for the Diamond Hands watch on wallets coins were sent to, on 2026-10-13 for the Dexscreener/CoinGecko chart switch, and on 2026-10-17 for the kept earlier versions and the longer backups)', /Version 2026-10-17 · \$Send \/ JustSendIt/.test(PRIV));
+  check('  ...and the policy\'s version moved for it (again on 2026-10-09, for Cloudflare\'s analytics beacon, on 2026-10-10 for the stored-IP list, on 2026-10-12 for the Diamond Hands watch on wallets coins were sent to, on 2026-10-13 for the Dexscreener/CoinGecko chart switch, on 2026-10-17 for the kept earlier versions and the longer backups, and on 2026-10-18 for Google Analytics)', /Version 2026-10-18 · \$Send \/ JustSendIt/.test(PRIV));
 
   /* ═══ where it rides ═══ */
   const PAGES = ['index', 'about', 'arcade', 'communities', 'community', 'data', 'newpairs', 'profile', 'squad', 'support', 'tracker', 'u', 'wall', 'watchlist', 'whitepaper'];

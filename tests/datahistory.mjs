@@ -317,7 +317,7 @@ try {
   check('the Privacy Policy says earlier versions are kept, what of, who can see them, that they never hold secrets, wallets or IP hashes, and that deleting the account erases them; and how long backups last',
     /Earlier versions, so a mistake can be undone\./.test(PRIV) && /Only the site's admin can see these versions/.test(PRIV) && /never include passwords, sign-in secrets, wallet addresses, IP hashes/.test(PRIV)
     && /deleting your account erases them/.test(PRIV) && /What a moderator takes down is not kept\./.test(PRIV) && /the last 30 days, and the first of each month for the last 12 months/.test(PRIV)
-    && /Every backup is written without IP hashes, sign-in sessions and challenges, the visitor-counting keys, guest Rocket Run flights, the Diamond Hands record of moves and tried-email records/.test(PRIV) && /Version 2026-10-17 · \$Send \/ JustSendIt/.test(PRIV));
+    && /Every backup is written without IP hashes, sign-in sessions and challenges, the visitor-counting keys, guest Rocket Run flights, the Diamond Hands record of moves and tried-email records/.test(PRIV) && /Version 2026-10-18 · \$Send \/ JustSendIt/.test(PRIV));
   check('backups: 30 dailies and 12 monthlies on the separate volume only (3 on the same one), each pass of the pruning keeping that set',
     /const BACKUP_KEEP = BACKUP_OFF_VOLUME \? 30 : 3;/.test(SRC) && /const BACKUP_KEEP_MONTHS = BACKUP_OFF_VOLUME \? 12 : 0;/.test(SRC) && /const keep = backupKeepSet\(all, BACKUP_KEEP, BACKUP_KEEP_MONTHS\);/.test(SRC));
 } catch (e) {

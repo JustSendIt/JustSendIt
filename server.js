@@ -109,6 +109,7 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 const KEYLIB = require('./lib/keys.js');
 const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
 const BUNDLES = require('./lib/bundles.js');   // who bought and moved tokens in the same block (lib/bundles.js)
+const GA4 = require('./lib/ga.js');           // Google Analytics: the admin page's reports (lib/ga.js)
 const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
 let DATA_KEY_SOURCE = 'generated';   // where the key came from: 'env', 'file' (DATA_KEY_FILE), 'data-dir' (beside the database) — shown to the admin, never the key
 let KEY_RING_FILE = null;            // set when DATA_KEY_FILE holds a keyring: the file rotation rewrites
@@ -9429,6 +9430,32 @@ function bundleLearn(token, fold, known) {
     for (const [a, n] of ev.fees) if (n >= BUNDLES.LIMITS.LEARN_MIN_FEE && !ev.routers.has(a)) ins.run(a, 'fee', token, now());
   } catch {}
 }
+/* The Google Analytics reports for the admin page: one client (it keeps its access token), one read at a time, kept
+   GA_TTL. The key file is read only when a token is needed; its contents are never logged or sent anywhere but Google. */
+const GA_TTL = 10 * 60 * 1000;
+let gaCache = { at: 0, data: null }, gaInflight = null, gaClient = null;
+async function gaReport(force) {
+  if (!force && gaCache.data && now() - gaCache.at < GA_TTL) return gaCache.data;
+  if (gaInflight) return gaInflight;
+  if (!gaClient) gaClient = GA4.makeClient({
+    propertyId: GA_PROPERTY, now,
+    readKey: async () => { try { return await fs.promises.readFile(GA_KEY_FILE, 'utf8'); } catch { throw new Error('the key file (GA_KEY_FILE) could not be read by the server'); } },
+    fetch: (u, o) => fetch(u, { ...o, signal: AbortSignal.timeout(20000) }),
+    tokenUrl: process.env.GA_TOKEN_URL || undefined, apiBase: process.env.GA_API_BASE || undefined, adminBase: process.env.GA_ADMIN_BASE || undefined, measurementId: GA_ID,
+  });
+  /* A read in which Google answered nothing (an outage, a refused key) never replaces the last good figures: they stay,
+     and the failure is reported beside them. A read with some parts answered replaces them (its failures are listed). */
+  gaInflight = (async () => {
+    const r = await gaClient.report();
+    const answered = !!(r.totals || r.devices || r.realtime);
+    if (!answered && gaCache.data && (gaCache.data.totals || gaCache.data.devices || gaCache.data.realtime)) {
+      throw new Error('Google Analytics did not answer: ' + Object.values(r.errors || {}).join('; ').slice(0, 280));
+    }
+    gaCache = { at: now(), data: r };
+    return r;
+  })();
+  try { return await gaInflight; } finally { gaInflight = null; }
+}
 // one bundler, every figure as a string (the JSON carries no BigInt); a wallet whose balance was not read makes the bundle's holdings unknown
 function bundleEntry(g, id, holds, priceQ) {
   const S = (v) => (v == null ? null : v.toString());
@@ -10695,6 +10722,14 @@ const SEC_HEADERS = {
   'Cross-Origin-Resource-Policy': 'same-origin',
   ...(IS_HTTPS ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}),
 };
+/* Google Analytics (owner, 2026-10-17: "add in google analytic and add analytics api data to the admin page"). Off until
+   the operator sets GA_MEASUREMENT_ID (the page tag, public/ga.js) and GA_PROPERTY_ID + GA_KEY_FILE (the admin page's
+   reports, lib/ga.js). With no measurement id the CSP names no Google host at all, and /ga.js loads nothing. */
+const GA_ID = (() => { const v = String(process.env.GA_MEASUREMENT_ID || '').trim().toUpperCase(); return /^G-[A-Z0-9]{4,20}$/.test(v) ? v : null; })();
+// "properties/123456789" (how Google's API docs write it) is read as 123456789; anything else that is not a number is named as set-but-wrong
+const GA_PROPERTY = (() => { const v = String(process.env.GA_PROPERTY_ID || '').trim().replace(/^properties\//i, ''); return /^\d{1,20}$/.test(v) ? v : null; })();
+const GA_INVALID = [String(process.env.GA_MEASUREMENT_ID || '').trim() && !GA_ID ? 'GA_MEASUREMENT_ID' : null, String(process.env.GA_PROPERTY_ID || '').trim() && !GA_PROPERTY ? 'GA_PROPERTY_ID' : null].filter(Boolean);
+const GA_KEY_FILE = String(process.env.GA_KEY_FILE || '').trim() || null;
 // strict CSP for pages: no inline scripts anywhere on this site
 const CSP = [
   "default-src 'self'",
@@ -10702,15 +10737,15 @@ const CSP = [
      edge, and it reports page loads to cloudflareinsights.com (the hosts are the two Cloudflare's own CSP guidance
      names: script-src static.cloudflareinsights.com; connect-src cloudflareinsights.com). The privacy page says so.
      Still no inline script, no nonce, no 'unsafe-inline'. */
-  "script-src 'self' https://static.cloudflareinsights.com",
+  "script-src 'self' https://static.cloudflareinsights.com" + (GA_ID ? ' https://www.googletagmanager.com' : ''),   // + gtag.js, only when Google Analytics is on
   /* Fonts are served from this origin (public/fonts) and token artwork through /api/img, so no page load
      reaches Google or Dexscreener. The other third party is the chain's own RPC, used only by the swap and
      wallet flows — the wallet app the visitor connected already talks to that same endpoint. */
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob:" + (GA_ID ? ' https://*.google-analytics.com https://*.googletagmanager.com' : ''),
   "media-src 'self' blob: data:",
-  "connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://cloudflareinsights.com",
+  "connect-src 'self' https://rpc.mainnet.chain.robinhood.com https://cloudflareinsights.com" + (GA_ID ? ' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com' : ''),   // Google Analytics' collection hosts (Google's own CSP guidance), only when it is on
   /* The only frames: Dexscreener's and CoinGecko's (GeckoTerminal) chart of a pool, when a viewer switches a token's
      chart to one of them (chart.js CHART_EMBEDS — created on that tap, never on load). Exactly those two origins. */
   "frame-src https://dexscreener.com https://www.geckoterminal.com",
@@ -11741,6 +11776,12 @@ function hashedFont(filePath, st) {
   if (fontHashMemo.size >= 64) fontHashMemo.clear();
   fontHashMemo.set(filePath, { size: st.size, mtimeMs: st.mtimeMs, ok });
   return ok;
+}
+let _gaTag = { mtimeMs: -1, src: '' };
+function gaTagSource() {
+  const fp = path.join(PUBLIC_DIR, 'ga.js'), st = fs.statSync(fp);
+  if (st.mtimeMs !== _gaTag.mtimeMs) _gaTag = { mtimeMs: st.mtimeMs, src: fs.readFileSync(fp, 'utf8') };
+  return _gaTag.src;
 }
 /* serveFile(req, res, filePath, extraHeaders, patch) — `patch`, when given, is the built <head> for this request
    (see applySeoPatch); only HTML takes one. */
@@ -15336,6 +15377,21 @@ const server = http.createServer(async (req, res) => {
       }
       /* Admin codes (owner, 2026-10-16). The first time an admin opens them, ADMIN_CODE_BATCH are made for that admin; "make
          more" adds another batch (up to ADMIN_CODE_MAX in all) and, as it lets more people in, needs "confirm it's you". */
+      /* Google Analytics for the admin page (lib/ga.js): what is set up, and the property's reports — kept 10 minutes,
+         read again on request (6 a minute). Admin only; anyone else gets the 404 a missing route gets. */
+      if (p === '/api/admin/analytics' && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'unknown endpoint', 404);   // the same answer as a route that does not exist
+        const setup = { tag: !!GA_ID, measurementId: GA_ID, api: !!(GA_PROPERTY && GA_KEY_FILE), propertyId: GA_PROPERTY, keyFile: !!GA_KEY_FILE,
+          missing: [GA_ID ? null : 'GA_MEASUREMENT_ID', GA_PROPERTY ? null : 'GA_PROPERTY_ID', GA_KEY_FILE ? null : 'GA_KEY_FILE'].filter(Boolean), invalid: GA_INVALID };
+        if (!setup.api) return send(res, 200, { setup, report: null });
+        const asked = url.searchParams.get('refresh') === '1', force = asked && rateLimit('ga-refresh:' + me.id, 6, 6e4);
+        try {
+          const report = await gaReport(force);
+          return send(res, 200, { setup, report, cachedAt: gaCache.at, throttled: asked && !force });
+        } catch (e) {
+          return send(res, 200, { setup, report: gaCache.data, cachedAt: gaCache.at || null, error: String((e && e.message) || 'the reports could not be read').slice(0, 300) });
+        }
+      }
       if (p === '/api/admin/codes' && (req.method === 'GET' || req.method === 'POST')) {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         if (req.method === 'POST') {
@@ -18951,7 +19007,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
+    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js, adminanalytics.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
        page that does not exist — for every method and every spelling that reaches the file (case on a case-insensitive
        disk, //, /./, %2e), so the test is on the file the path RESOLVES to, before anything else serves it. Neither
        may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
@@ -18960,7 +19016,7 @@ const server = http.createServer(async (req, res) => {
       // its address is /admin now (2026-10-15); /admin.html, /Admin, /admin/ and the rest are the same page to this gate
       const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase().replace(/[\\/]+$/, ''), base = PUBLIC_DIR.toLowerCase() + path.sep;
       const isPage = fpLc === base + 'admin' || fpLc === base + 'admin.html';
-      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js'].find((n) => fpLc === base + n);
+      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js', 'adminanalytics.js'].find((n) => fpLc === base + n);
       if (isPage || adminScript) {
         if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
         if (isPage && p !== '/admin') { res.writeHead(301, { Location: '/admin' + url.search, 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', ...SEC_HEADERS }); return res.end(); }
@@ -18972,6 +19028,17 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' || req.method === 'HEAD') {
       // browsers and crawlers ask for /favicon.ico whatever the page says; answer with the site's icon, not a 404
       if (p === '/favicon.ico') return serveFile(req, res, path.join(PUBLIC_DIR, 'assets', 'logo-128.png'), { 'Cache-Control': 'public, max-age=604800' });
+      /* the Google Analytics tag with this site's measurement id filled in (none until GA_MEASUREMENT_ID is set: then it
+         does nothing). Revalidated every time, so turning it on or off reaches every browser on its next page. */
+      if (p === '/ga.js') {
+        let body;
+        try { body = Buffer.from(gaTagSource().replace('__GA_MEASUREMENT_ID__', GA_ID || ''), 'utf8'); } catch { return notFoundPage(res); }
+        const etag = '"' + crypto.createHash('sha1').update(body).digest('base64url').slice(0, 20) + '"';
+        const head = { 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'no-cache', ETag: etag, ...SEC_HEADERS };
+        if (inmMatches(req, etag)) { res.writeHead(304, head); return res.end(); }
+        head['Content-Length'] = body.length;
+        res.writeHead(200, head); return res.end(req.method === 'HEAD' ? undefined : body);
+      }
       if (p === '/sitemap.xml' || SITEMAP_CHILDREN.includes(p)) return serveSitemap(req, res, p);
       /* Pages by their names (lib/routes.js — owner, 2026-10-15): /about, /newpairs, /community?id=5; the home page's sections
          /guide, /swap, /tokens, /beta serve the home page. Every other spelling — /about.html, /About, /about/, /index.html —
