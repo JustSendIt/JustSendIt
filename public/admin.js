@@ -129,7 +129,7 @@
     for (const b of ovBody.querySelectorAll('[data-keyrot]')) b.disabled = true;
     say('Rotating…');
     try {
-      const j = await AUTH.api('/api/admin/keys/rotate', { method: 'POST', body: { confirm: 'ROTATE', scope: compromised ? 'all' : 'data', compromised } });
+      const j = await window.api('/api/admin/keys/rotate', { method: 'POST', body: { confirm: 'ROTATE', scope: compromised ? 'all' : 'data', compromised } });
       if (window.SFX) SFX.play('success');
       if (j.restarting) { say('Done with the data key. The server is restarting for the index key — this panel reads again in 20 seconds.'); setTimeout(loadOverview, 20000); }
       else { say('Done: data key #' + j.keys.currentKey + ' is current' + (j.report && j.report.error ? ' — ⚠️ ' + j.report.error : '') + '.'); loadOverview(); }

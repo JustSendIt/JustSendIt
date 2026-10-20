@@ -142,6 +142,14 @@ try {
   check('backups count as separate only on another volume: inside data/ no, a sibling folder on the same volume no, another volume yes',
     bv({ BACKUP_DIR: '/data/backups' }, { '/data/backups': 1, '/data': 1 }) === false && bv({ BACKUP_DIR: '/elsewhere' }, { '/elsewhere': 1, '/data': 1 }) === false && bv({ BACKUP_DIR: '/Volumes/B' }, { '/Volumes/B': 2, '/data': 1 }) === true && bv({}, {}) === false);
   check('admin.js shows where the key and the backups are', /Encryption key/.test(ADMINJS) && /Backups on their own volume/.test(ADMINJS));
+  /* the rotate route needs "confirm it's you": only auth.js's api() (window.api) opens that step and sends again — admin.js's own
+     post() does not. The buttons once called AUTH.api, which nothing defines, so every press said "AUTH.api is not a function" */
+  check('the key-rotation buttons send through auth.js\'s window.api, which opens "confirm it\'s you" and sends again',
+    /await window\.api\('\/api\/admin\/keys\/rotate', \{ method: 'POST'/.test(ADMINJS) && /\n  window\.api = api;\n/.test(AUTHJS)
+    && /res\.status === 401 && j\.code === 'need_verify'[\s\S]{0,300}?return api\(path, /.test(AUTHJS));
+  const authHas = new Set([...AUTHJS.matchAll(/\bAUTH\.([A-Za-z_$][\w$]*)\s*=(?!=)/g)].map((m) => m[1]));
+  const authMissing = [...new Set([...ADMINJS.matchAll(/\bAUTH\.([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))].filter((n) => !authHas.has(n));
+  check('  ...and every AUTH.<name>() that admin.js calls is one auth.js defines', authMissing.length === 0, authMissing.join(', '));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);
