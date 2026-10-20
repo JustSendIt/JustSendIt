@@ -72,7 +72,7 @@
      own browser) connects here the same way — one personal_sign — so a wallet not named below still works; the list is for
      branding, ranking, and the download / open links. Owner, 2026-10-20: "add all wallets on the open market … abiding by the read-only sign rules": every entry
      goes through that one read-only path, none through a wallet's own SDK.
-     `featured`: the first FEATURED entries are shown at once; the rest sit behind "Show all". `deep(full,bare)` → a mobile
+     The picker lists them all; the home guide shows the first FEATURED at once and the rest behind "Show all". `deep(full,bare)` → a mobile
      universal-link that reopens this page inside the wallet's in-app browser (only ones measured to work). `get` → the
      official download page (each one checked to answer and still offer the wallet, 2026-10-20). `chain:true` → ships
      Robinhood Chain (Robinhood Wallet, Phantom, Rabby and the Coinbase Wallet app verified 2026-10-09; Uniswap Wallet per
@@ -123,7 +123,7 @@
   function knownRank(info) { const k = knownFor(info); return k ? KNOWN.indexOf(k) : 90; }
 
   // --- picker modal ---
-  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '', pickOpts = {}, showAll = false;
+  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '', pickOpts = {};
   // the way for a wallet that cannot sign, or is not listed: close the picker (the caller hears a quiet 'cancelled') and open the burn proof
   function toBurn(key) {
     close(null);
@@ -162,6 +162,7 @@
     listEl.innerHTML = '';
     // 1) wallets detected in this browser → one-tap Connect (popular ones sorted first, branded)
     if (wraps.length) {
+      const last = remembered();
       for (const v of wraps) {
         const k = knownFor(v.info);
         const b = document.createElement('button');
@@ -170,8 +171,9 @@
         const icon = v.info.icon
           ? '<img class="wc-ico" src="' + esc(v.info.icon) + '" alt="">'
           : '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + (k ? k.emoji : '👛') + '</span>';
-        b.innerHTML = icon + '<span class="wc-name">' + esc(v.info.name || 'Wallet') + badgeHTML(k && !k.burn ? k : null) + '</span><span class="wc-go" aria-hidden="true">Connect →</span>';   // a detected one is tried like any wallet: no "can't sign" badge on it
+        b.innerHTML = icon + '<span class="wc-name">' + esc(v.info.name || 'Wallet') + badgeHTML(k && !k.burn ? k : null) + (v === last ? '<span class="wc-badge wc-last">Last used</span>' : '') + '</span><span class="wc-go" aria-hidden="true">Connect →</span>';   // a detected one is tried like any wallet: no "can't sign" badge on it
         b.setAttribute('data-tip', 'Connects using this wallet');
+        if (v === last) b.setAttribute('data-last', '');
         b.addEventListener('click', () => finish(v));
         listEl.appendChild(b);
       }
@@ -195,24 +197,8 @@
         a.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + k.emoji + '</span><span class="wc-name">' + esc(k.name) + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">' + label + '</span>';
         return a;
       };
-      // the best-fitting few at once; the rest of the market behind one press (a list of 31 is a wall, not a choice)
-      const first = undetected.filter((k) => KNOWN.indexOf(k) < FEATURED), rest = undetected.filter((k) => KNOWN.indexOf(k) >= FEATURED);
-      for (const k of first) footEl.appendChild(row(k));
-      if (rest.length) {
-        const more = document.createElement('div');
-        more.className = 'wc-rest';
-        more.hidden = !showAll;
-        for (const k of rest) more.appendChild(row(k));
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'wc-more';
-        b.setAttribute('aria-expanded', String(showAll));
-        b.textContent = showAll ? 'Fewer wallets ▴' : 'Show all ' + undetected.length + ' wallets ▾';
-        b.setAttribute('data-tip', showAll ? 'Hides the rest of the list and keeps the best-fitting wallets' : 'Lists every wallet on the market that can connect here, with a link to get each');
-        b.addEventListener('click', () => { showAll = !showAll; renderList(); if (showAll) { const f = overlay.querySelector('.wc-rest .wc-deep'); if (f) f.focus(); } else overlay.querySelector('.wc-more').focus(); });
-        footEl.appendChild(b);
-        footEl.appendChild(more);
-      }
+      // every wallet on the market, the best-fitting first (owner: all of them visible where people sign up)
+      for (const k of undetected) footEl.appendChild(row(k));
       // wallets that ship Robinhood Chain are called out; most other EVM wallets can add it (chain id 4663), a few run a fixed list
       if (!detected.has('robinhood')) {
         const tip = document.createElement('p');
@@ -248,7 +234,6 @@
 
   function openPicker(opts) {
     pickOpts = opts || {};
-    showAll = false;   // "Show all" is a choice made inside one picker, not carried into the next
     if (!overlay) buildModal();
     renderList();
     // late wallets announce for a moment after opening: redraw only when the announced set changed, so a redraw never takes the focus
@@ -260,7 +245,9 @@
     if (window.SFX) SFX.play('open');
     prevOverflow = document.body.style.overflow;   // the sign-in modal or the ticket beneath may hold the scroll lock — hand it back, not ''
     document.body.style.overflow = 'hidden';
-    const first = overlay.querySelector('.wc-item, .wc-deep, .wc-x'); if (first) first.focus();
+    // the wallet this browser used last, else its first wallet, else the first in the list: one press, as before the list opened every time
+    const first = overlay.querySelector('.wc-item[data-last]') || overlay.querySelector('.wc-item') || overlay.querySelector('.wc-deep') || overlay.querySelector('.wc-x');
+    if (first) first.focus();
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }   // never stack a second trap on the same card
     if (window.trapFocus) { try { releaseTrap = window.trapFocus(overlay.querySelector('.wc-modal')); } catch {} }
     return new Promise((res) => { resolver = res; });
@@ -284,11 +271,16 @@
      sign-up, linking), so the picker also offers the burn proof for a wallet that cannot sign or is not listed. Left off
      where a particular wallet's own signature is the point (two-factor, "confirm it's you"). */
   async function connect(opts) {
-    // fast path: a single wallet, or a remembered one, connects without the picker
     const all = list();
-    let chosen = selected;
-    if (!chosen) chosen = remembered();
-    if (!chosen && all.length === 1) chosen = all[0];
+    let chosen = null;
+    /* Proving a wallet (sign-in, sign-up, linking) always shows the list: every wallet on the market, the ones this
+       browser has at the top and focused — so a browser with one wallet installed still sees the rest, GMGN and the burn
+       proof (owner, 2026-10-20: "I don't see all the new wallets in the sign-up screen"). Where one particular wallet
+       has to sign (two-factor, "confirm it's you"), a single or remembered wallet still connects without the list. */
+    if (!(opts && opts.burn)) {
+      chosen = selected || remembered();
+      if (!chosen && all.length === 1) chosen = all[0];
+    }
     if (!chosen) {
       chosen = await openPicker(opts);
       if (!chosen) throw new Error('cancelled');

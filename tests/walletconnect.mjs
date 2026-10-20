@@ -202,11 +202,17 @@ try {
     check('  ...run against what each wallet announces, every one brands as itself and a bystander as nothing', !wrong.length, wrong.join(', '));
     const cross = KNOWN.filter((k) => KNOWN.some((o) => o !== k && k.re.test(o.name))).map((k) => k.key);
     check('  ...and no entry\'s pattern matches another entry\'s name', !cross.length, cross.join(','));
-    check('  ...every entry is reached by the one picker: "Show all" opens closed on every open, and a late announcement redraws only when the set changed',
-      /pickOpts = opts \|\| \{\};\n    showAll = false;/.test(WALLET) && /if \(s !== last\) \{ last = s; renderList\(\); \}/.test(WALLET) && /if \(s !== last\) \{ last = s; render\(\); \}/.test(strip(HOME)));
-    check('  ...the best-fitting eight first, the rest behind "Show all" in the picker and in the guide',
-      /const FEATURED = 8;/.test(WALLET_C) && /KNOWN\.indexOf\(k\) < FEATURED/.test(WALLET_C) && /'Show all ' \+ undetected\.length \+ ' wallets ▾'/.test(WALLET_C)
-      && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
+    check('  ...and a late announcement redraws a list only when the set changed, so a redraw never takes the focus',
+      /if \(s !== last\) \{ last = s; renderList\(\); \}/.test(WALLET) && /if \(s !== last\) \{ last = s; render\(\); \}/.test(strip(HOME)));
+    /* owner, 2026-10-20: "I don't see all the new wallets in the sign-up screen" — a browser with one wallet went straight to it */
+    check('signing in, signing up or linking always shows the whole list (a browser with one wallet installed included); two-factor and "confirm it\'s you" still go straight to their wallet',
+      /if \(!\(opts && opts\.burn\)\) \{\n      chosen = selected \|\| remembered\(\);\n      if \(!chosen && all\.length === 1\) chosen = all\[0\];\n    \}/.test(WALLET_C) && !/fast path/.test(WALLET_C));
+    check('  ...the picker lists every wallet, none behind a toggle', /for \(const k of undetected\) footEl\.appendChild\(row\(k\)\);/.test(WALLET_C) && !/wc-more|showAll/.test(WALLET_C));
+    check('  ...the wallet this browser used before is marked "Last used" and focused first', /<span class="wc-badge wc-last">Last used<\/span>/.test(WALLET_C) && /overlay\.querySelector\('\.wc-item\[data-last\]'\) \|\| overlay\.querySelector\('\.wc-item'\)/.test(WALLET_C));
+    check('the sign-in and sign-up screen itself names the wallets that work here, from the same registry, every one a press away',
+      /<details class="w-works" id="w-works" hidden>/.test(AUTH_C) && /'Works with ' \+ all\.length \+ ' wallets — '/.test(AUTH_C) && /WALLET\.known\(\)/.test(AUTH_C));
+    check('  ...the home guide shows the best-fitting eight first and the rest behind "Show all"',
+      /const FEATURED = 8;/.test(WALLET_C) && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
     check('  ...and every entry goes through the one read-only path: no wallet SDK, no WalletConnect, no transaction', !/walletconnect|@walletconnect|sdk|eth_sendTransaction/i.test(WALLET_C));
   }
 } catch (e) {

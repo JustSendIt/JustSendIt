@@ -1852,11 +1852,8 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .wc-tip { font-size: max(var(--text-floor), 0.76rem); color: var(--text-dim); line-height: 1.5; background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid var(--g-veil); border-radius: 10px; padding: 0.5rem 0.65rem; margin: 0.3rem 0 0; }
 .wc-tip b { color: var(--green-bright); }
 @media (prefers-reduced-motion: reduce) { .wc-item, .wc-deep { transition: none; } .wc-item:hover, .wc-deep:hover { transform: none; } }
-/* the rest of the market, behind one press: the picker shows the best-fitting few at once */
-.wc-more { width: 100%; box-sizing: border-box; background: var(--ctl-fill-lo); border: 1.5px dashed var(--edge-ctl); border-radius: 14px; padding: 0.6rem 0.85rem; color: var(--ctl-ink); font: inherit; font-weight: 700; font-size: max(var(--text-floor), 0.88rem); cursor: pointer; }
-.wc-more:hover, .wc-more:focus-visible { border-color: var(--green); background: var(--ctl-fill-hi); }
-.wc-rest { display: grid; gap: 0.5rem; }
-.wc-rest[hidden] { display: none; }
+/* "Last used" on the wallet this browser signed with before: the list opens on every sign-in, and that one is first */
+.wc-last { background: var(--ink-1); color: var(--green-bright); }
 /* the picker's way out for a wallet that cannot sign (GMGN) or is not listed: the burn proof */
 .wc-burn { border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
 .wc-burn .wc-badge { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: var(--on-gold); }
@@ -1894,6 +1891,14 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .bp-actions .btn { flex: 1 1 12rem; }
 .bp-status:empty { display: none; }
 .bp-alt { text-align: center; margin: 0.6rem 0 0; }
+/* the sign-in / sign-up screen names the wallets that work here; open, it lists every one */
+.w-works { margin: 0 0 0.8rem; border: 1px solid var(--hair); border-radius: 12px; padding: 0.45rem 0.7rem; background: var(--ink-1); }
+.w-works > summary { cursor: pointer; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; overflow-wrap: anywhere; }
+.w-works > summary:hover, .w-works > summary:focus-visible { color: var(--text); }
+.w-works-list { list-style: none; margin: 0.5rem 0 0.1rem; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr)); gap: 0.25rem 0.6rem;
+  font-size: max(var(--text-floor), 0.82rem); color: var(--text); }
+.w-works-list li { min-width: 0; overflow-wrap: anywhere; }
+.w-works-list small { color: var(--green-bright); font-size: max(var(--text-floor), 0.72rem); font-weight: 700; }
 .bp-alt .linklike { margin-top: 0.3rem; }
 
 /* ===== New Pairs Radar ===== */

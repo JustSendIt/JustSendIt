@@ -82,6 +82,7 @@
         <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
       </div>
       <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
+      <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet you can sign in with here"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
       <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Opens the burn proof: send the exact dust amount of $SEND it shows from the wallet to the burn address, instead of signing">Prove it by a burn 🔥</button></p>
@@ -359,6 +360,18 @@
     if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite(); });
     const burnAlt = modal.querySelector('#btn-burn-alt');
     if (burnAlt) burnAlt.addEventListener('click', () => AUTH.openBurnProof({ from: 'signin' }));
+    /* The wallets that work here, named on the sign-in and sign-up screen itself (owner, 2026-10-20: "I don't see all the new
+       wallets in the sign-up screen"): the best-known few in the line, every one of them a press away. Drawn from the same
+       registry the picker uses (WALLET.known), so the two can never disagree; the wallet button then opens that full list. */
+    const works = modal.querySelector('#w-works');
+    if (works && window.WALLET && WALLET.known) {
+      const all = WALLET.known();
+      const lead = all.slice(0, 5).map((k) => k.name);
+      works.querySelector('summary').textContent = 'Works with ' + all.length + ' wallets — ' + lead.join(', ') + ' and ' + (all.length - lead.length) + ' more ▾';
+      const esc2 = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      works.querySelector('.w-works-list').innerHTML = all.map((k) => '<li><span aria-hidden="true">' + esc2(k.emoji) + '</span> ' + esc2(k.name) + (k.chain ? ' <small>· ships Robinhood Chain</small>' : '') + '</li>').join('');
+      works.hidden = false;
+    }
     segLogin.addEventListener('click', () => setRegMode(false));
     /* Choosing "Sign up" is the moment the ticket is needed, so that is where it appears — before
        anyone fills in a form that was always going to be refused at the end of it. Someone who
