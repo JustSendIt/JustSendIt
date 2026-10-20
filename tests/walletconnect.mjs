@@ -222,8 +222,11 @@ try {
       && /if \(!AUTH\.user && AUTH\._showBurnTab\) \{/.test(AUTH_C));
     check('  ...the picker lists every wallet, none behind a toggle', /for \(const k of undetected\) footEl\.appendChild\(row\(k\)\);/.test(WALLET_C) && !/wc-more|showAll/.test(WALLET_C));
     check('  ...the wallet this browser used before is marked "Last used" and focused first', /<span class="wc-badge wc-last">Last used<\/span>/.test(WALLET_C) && /overlay\.querySelector\('\.wc-item\[data-last\]'\) \|\| overlay\.querySelector\('\.wc-item'\)/.test(WALLET_C));
-    check('the sign-in and sign-up screen itself names the wallets that work here, from the same registry, every one a press away',
-      /<details class="w-works" id="w-works" hidden>/.test(AUTH_C) && /'Works with ' \+ all\.length \+ ' wallets — '/.test(AUTH_C) && /WALLET\.known\(\)/.test(AUTH_C));
+    check('the sign-in and sign-up screen itself names the wallets that work here, from the same registry, every one a press away — the signing ones counted as such, GMGN apart',
+      /<details class="w-works" id="w-works" hidden>/.test(AUTH_C) && /'Works with ' \+ signing\.length \+ ' wallets — '/.test(AUTH_C) && /' by Burn Verification'/.test(AUTH_C) && /WALLET\.known\(\)/.test(AUTH_C));
+    check('  ...but the home "Get a wallet" guide lists only wallets to get and connect: never GMGN', /\.filter\(\(k\) => !k\.burn\)\.map\(\(k, i\) => Object\.assign\(\{\}, k, \{ featured: i < 8 \}\)\)/.test(strip(HOME)) && !/verifies by a burn/.test(HOME));
+    check('  ...a sign-up opened while Burn Verification was on show lands on the email form, and the picker\'s GMGN row leaves the focus on that option',
+      /if \(b && e && b\.classList\.contains\('active'\)\) e\.click\(\);/.test(AUTH_C) && /tabs\.burn\.click\(\); tabs\.burn\.focus\(\);[^\n]*\n\s*return true;/.test(AUTH_C));
     check('  ...the home guide shows the best-fitting eight first and the rest behind "Show all"',
       /const FEATURED = 8;/.test(WALLET_C) && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
     check('  ...and every entry goes through the one read-only path: no wallet SDK, no WalletConnect, no transaction', !/walletconnect|@walletconnect|sdk|eth_sendTransaction/i.test(WALLET_C));

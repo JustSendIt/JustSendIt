@@ -83,7 +83,7 @@
         <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
       </div>
       <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
-      <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet you can sign in with here"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
+      <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
       <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a dust burn of $SEND instead of a signature">Use Burn Verification 🔥</button></p>
@@ -263,7 +263,7 @@
     if (!AUTH.user && AUTH._showBurnTab) {
       if (confirmReject) return Promise.resolve();
       if (modal.hasAttribute('hidden')) openModal();
-      AUTH._showBurnTab();
+      AUTH._showBurnTab();   // refuses quietly while a two-factor step is up
       return Promise.resolve();
     }
     if (!modal.hasAttribute('hidden') && !confirmReject) closeModal();
@@ -292,6 +292,9 @@
      straight to the account modal; one without sees the ticket first. */
   AUTH.openSignup = function (opts) {
     openModal();
+    // Burn Verification has no sign-up form of its own — it goes with an email and a password — so a sign-up opened while it was
+    // the option on show lands on the email form
+    if (!(opts && opts.tab)) { const b = modal.querySelector('#tab-burn'), e = modal.querySelector('#tab-email'); if (b && e && b.classList.contains('active')) e.click(); }
     const seg = modal.querySelector('#seg-signup');
     if (seg) seg.click();
     const wseg = modal.querySelector('#wseg-signup');   // the wallet tab too: @username first, then the wallet
@@ -382,7 +385,11 @@
     if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite(); });
     const burnAlt = modal.querySelector('#btn-burn-alt');
     if (burnAlt) burnAlt.addEventListener('click', () => { tabs.burn.click(); tabs.burn.focus(); });
-    AUTH._showBurnTab = () => { tabs.burn.click(); };
+    AUTH._showBurnTab = () => {
+      if (modal.querySelector('.auth-tabs').hidden) return false;   // a two-factor step or a confirm is up: it is not the moment to switch
+      tabs.burn.click(); tabs.burn.focus();   // the picker that sent us here handed focus back to a button this hides
+      return true;
+    };
     /* Burn Verification signs nobody in: it goes with an email and a password. These two buttons take the person to that form
        — making the account, or signing in — and leave a note, so the burn step opens by itself once they are in (resumeBurnProof). */
     const burnGo = (join) => {
@@ -400,9 +407,10 @@
        registry the picker uses (WALLET.known), so the two can never disagree; the wallet button then opens that full list. */
     const works = modal.querySelector('#w-works');
     if (works && window.WALLET && WALLET.known) {
-      const all = WALLET.known();
-      const lead = all.slice(0, 5).map((k) => k.name);
-      works.querySelector('summary').textContent = 'Works with ' + all.length + ' wallets — ' + lead.join(', ') + ' and ' + (all.length - lead.length) + ' more';
+      const all = WALLET.known(), signing = all.filter((k) => !k.burn), burnOnly = all.filter((k) => k.burn);
+      const lead = signing.slice(0, 5).map((k) => k.name);
+      // the wallets that sign in by a signature, counted as such; GMGN (no signature here) named apart, with how it joins
+      works.querySelector('summary').textContent = 'Works with ' + signing.length + ' wallets — ' + lead.join(', ') + ' and ' + (signing.length - lead.length) + ' more' + (burnOnly.length ? ', plus ' + burnOnly.map((k) => k.name).join(', ') + ' by Burn Verification' : '');
       const esc2 = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       works.querySelector('.w-works-list').innerHTML = all.map((k) => '<li><span aria-hidden="true">' + esc2(k.emoji) + '</span> ' + esc2(k.name) + (k.burn ? ' <small>· by Burn Verification</small>' : k.chain ? ' <small>· ships Robinhood Chain</small>' : '') + '</li>').join('');
       works.hidden = false;

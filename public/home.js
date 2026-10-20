@@ -393,7 +393,9 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
 
   function render() {
     const has = installedKeys();
-    const all = WALLET.known() || [];
+    // wallets to GET and connect: GMGN (a trading app that holds the wallet for you, and cannot connect here) is not one of them —
+    // it is named in the sign-in list, where its row opens Burn Verification
+    const all = (WALLET.known() || []).filter((k) => !k.burn).map((k, i) => Object.assign({}, k, { featured: i < 8 }));
     // the best-fitting few, plus any the browser has; the rest of the market behind one press (the sign-in list shows them all)
     const shown = all.filter((k) => k.featured || has(k) || showAll), rest = all.length - shown.length;
     list.innerHTML = shown.map(k => {
@@ -403,7 +405,6 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
           '<span class="g1-w-ico" aria-hidden="true">' + esc(k.emoji) + '</span>' +
           '<span class="g1-w-name">' + esc(k.name) + '</span>' +
           (k.chain ? '<span class="g1-w-tag">native to this chain</span>' : '') +
-          (k.burn ? '<span class="g1-w-tag">verifies by a burn</span>' : '') +
           (here ? '<span class="g1-w-tag is-here">installed</span>' : '') +
         '</a></li>';
     }).join('') + (rest || showAll

@@ -70,7 +70,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('a burn proof is kept encrypted and indexed under the key registry, scrubbed from every backup, and deleted with the account',
     /\['burn_proofs', 'addr_enc'\], \['burn_proofs', 'tx_enc'\]/.test(KEYS) && /\{ t: 'burn_proofs', c: 'addr_idx' \}/.test(KEYS)
     && /'DELETE FROM burn_proofs',\n\];/.test(SRC) && /'wallet_hist', 'burn_proofs'\]\)/.test(SRC));
-  check('the picker offers GMGN and "my wallet isn\'t listed" — only where a wallet is being proved',
+  check('the picker offers GMGN and "my wallet isn\'t listed" — only where a wallet is being proved (and the home "Get a wallet" guide never offers GMGN)',
     /\{ key: 'gmgn', name: 'GMGN', [^}]*burn: true/.test(WAL) && /if \(pickOpts\.burn\) \{/.test(WAL) && /My wallet isn’t listed, or can’t sign/.test(WAL)
     && /!detected\.has\(k\.key\) && \(!k\.burn \|\| pickOpts\.burn\)/.test(WAL));
   check('  ...the sign-in and link doors ask for it; "confirm it\'s you" and two-factor (a particular wallet\'s signature) do not',
