@@ -95,8 +95,8 @@ try {
   check('  ...and the banner\'s button never takes a press meant for the avatar or the buttons beside it',
     /\.wall-id-top \{ position: relative; z-index: 2; \}/.test(CSS) && /\.wall-view--banner \{ z-index: 1; \}/.test(CSS) && /\.wall-view--avatar \{ z-index: 3; border-radius: 50%; \}/.test(CSS)
     && /\.wall-id-top, \.wall-id-actions \{ pointer-events: none; \}\n\.wall-avatar, \.wall-id-actions > \* \{ pointer-events: auto; \}/.test(CSS));
-  check('the pop-up steps aside for a layer opened above it (the $SEND check, the wallet picker, a sign-in check, the age question): their Esc and Back are theirs',
-    /const above = \(\) => document\.documentElement\.classList\.contains\('age-open'\) \|\| !!document\.querySelector\('#invite-overlay\[data-open\], \.wc-overlay:not\(\[hidden\]\), #auth-modal:not\(\[hidden\]\)'\);/.test(APP)
+  check('the pop-up steps aside for a layer opened above it (the $SEND check, the wallet picker, the burn proof, a sign-in check, the age question): their Esc and Back are theirs',
+    /const above = \(\) => document\.documentElement\.classList\.contains\('age-open'\) \|\| !!document\.querySelector\('#invite-overlay\[data-open\], \.wc-overlay:not\(\[hidden\]\), \.bp-overlay:not\(\[hidden\]\), #auth-modal:not\(\[hidden\]\)'\);/.test(APP)
     && /if \(above\(\)\) \{ try \{ history\.pushState\(\{ cf: 1 \}, ''\); \} catch \{\} return; \}/.test(APP) && /!root\.contains\(e\.target\) && !above\(\)\) close\('key'\);/.test(APP));
   check('  ...a video in the full view can be reached and played from the keyboard; a picture that will not load falls back to the emoji (the banner says so)',
     /iframe,video\[controls\],audio\[controls\],\[tabindex\]/.test(APP) && /if \(which === 'avatar'\) m\.replaceWith\(emoji\(\)\);/.test(UP) && /p\.textContent = 'This banner could not be loaded\.';/.test(UP)

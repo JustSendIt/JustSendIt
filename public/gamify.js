@@ -91,7 +91,7 @@
   const EARN_DESC = {
     egg: 'You found one of the hidden ghosts. A hundred haunt the site; each pays once — if today\'s allowance is full, it pays on a later visit.',
     swap: 'Swap ETH for $SEND or $GWC via the in-page swap. Verified on-chain — the biggest fixed award on the board.',
-    connect_wallet: 'Link a wallet holding $SEND/$GWC (read-only signature). Once per wallet.',
+    connect_wallet: 'Link a wallet holding $SEND/$GWC (read-only signature, or a burn proof for a wallet that can’t sign). Once per wallet.',
     first_post: 'A one-time bonus for your very first post on the Send Wall.',
     post: 'Post on the Send Wall — memes, gains, pain.',
     track_wallet: 'Save a new wallet to your private tracker.',
@@ -1137,7 +1137,7 @@
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Be a <b>net accumulator</b> — you have bought more than you have sold.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Then keep it: selling that $SEND within <b>' + hrs + ' hours</b> of buying it is a strike on the read-only ladder — a day, then a week, then for good; $25 of $SEND a day buys it out, doubled if you sell that too.</span></li>' +
       '</ul>' +
-      '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction. ' + esc(p.reason || '') + '</p>' +
+      '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction — or, for a wallet that can’t sign, a dust burn of $SEND you send from it yourself. ' + esc(p.reason || '') + '</p>' +
     '</section>';
   }
 
@@ -1209,7 +1209,7 @@
 
     items.push(recDt('Strikes', nf(g.strikes || 0), (g.strikes || 0) === 0 ? 'none — they never expire' : 'they never expire', (g.strikes || 0) > 0 ? 'bad' : 'ok'));
     items.push(recDt('Days away', nf(d.streak || 0), (d.streak || 0) > (d.graceDays || 2) ? 'past the free window' : 'grace is ' + (d.graceDays || 2) + ' days', (d.streak || 0) > (d.graceDays || 2) ? 'bad' : 'ok'));
-    items.push(recDt('Wallets linked', nf(g.wallets || 0), (g.wallets || 0) === 0 ? 'boosts need at least one' : 'read-only, signature only', (g.wallets || 0) === 0 ? 'bad' : ''));
+    items.push(recDt('Wallets linked', nf(g.wallets || 0), (g.wallets || 0) === 0 ? 'boosts need at least one' : 'read-only: a signature or a burn proved each', (g.wallets || 0) === 0 ? 'bad' : ''));
     items.push(recDt('Participation', g.holderVerified ? 'Verified' : 'Read-only', g.holderVerified ? 'you can do everything' : 'prove your bags to act', g.holderVerified ? 'ok' : 'bad'));
 
     if (g.og) items.push(recDt('OG badge', '🏅 ' + esc(g.ogTierName || ''), (g.ogBonus || 1) + '× — revoked if you sell out'));
@@ -1418,7 +1418,7 @@
         ogRulesHtml(g) +
         '<p><b>📣 Send Calls — what one call can pay.</b> A call pays three ways: an opening award (bigger for a bigger on-chain buy), a milestone for each whole X it hits — the rungs rise in a <b>straight line</b>, not with the multiple, so a 50x rung is worth about six of the first rung rather than fifty, and a <b>diamond-hands hold bonus</b> that compounds the longer and higher it stays in profit. Everything one call ever pays you comes out of <b>one lifetime budget — the Send Power it takes to reach Level 70 (' + nCap(R.callBudget, 737627) + ')</b> — and that budget is carved on purpose: the opening award may take at most a tenth, the ladder at most three tenths, and <b>at least 60% is reserved for holding in profit</b>. Your hold bonus also accrues faster when the people who Sent It on your call are in profit too: <b>+10% per Sender in the green, up to 3×</b>. Level 100 is about twenty perfect calls; no single call can carry anyone to the top.</p>' +
         '<p><b>🏆 Biggest Sender — a fresh race every week.</b> Every Monday at 00:00 UTC the Biggest Sender board resets to zero, so the week\'s standings are only what you earned inside it. When the week ends, the game master pays the <b>top 10</b> a Send Power boost <b>by finishing place</b> — #1 gets 5×, then 4.5×, 4×, 3.5×, 3×, 2.5×, 2×, 1.75×, 1.5× and 1.25× for #10; exactly ten prizes, a tie at the edge to whoever joined first — on everything they earn for the whole of the following week, added on top of their other boosts. The board ranks <b>base points</b>: what you did, with every boost (Holder, OG, community, Rocket Run) and any prize taken out, so a whale, an OG and a newcomer race on the same footing. Toggle the Arena to 🏆 Biggest Senders to watch it.</p>' +
-        '<p><b>🔒 Fair &amp; safe.</b> Your holdings, and whether you\'ve sold, are read straight from the blockchain and re-verified — so no one can fake diamond hands to cheat their level. Connecting your wallet is a <b>free signature — never a transaction</b>, and this site can never touch or move your funds.</p>' +
+        '<p><b>🔒 Fair &amp; safe.</b> Your holdings, and whether you\'ve sold, are read straight from the blockchain and re-verified — so no one can fake diamond hands to cheat their level. Connecting your wallet is a <b>free signature — never a transaction</b>, and this site can never touch or move your funds. (A wallet that can’t sign is proved by a dust burn you send from it yourself.)</p>' +
       '</div>' +
     '</details>';
   }

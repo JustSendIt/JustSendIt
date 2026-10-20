@@ -247,11 +247,12 @@ function renderWallets(me) {
   const fallback = (me.twofa === 'wallet' && !me.twofaWallet) ? ws[0].address : null;
   list.innerHTML = ws.map((w) => {
     const key = w.is2fa || w.address === fallback;
-    const canPick = me.twofa === 'wallet' && !key;
+    const canPick = me.twofa === 'wallet' && !key && !w.byBurn;   // a wallet proved by a burn may not be able to sign at all — never offered as the key
     return '<li class="wl-row' + (key ? ' is-2fa' : '') + '">' +
-      '<span class="wl-ico" aria-hidden="true">🦊</span>' +
+      '<span class="wl-ico" aria-hidden="true">' + (w.byBurn ? '🔥' : '🦊') + '</span>' +
       '<span class="wl-addr">' + esc(w.address) + '</span>' +
       (key ? '<span class="wl-tag">🔐 Sign-in key</span>' : '') +
+      (w.byBurn ? '<span class="wl-tag">🔥 Proved by burn</span>' : '') +
       '<span class="wl-acts">' +
         (canPick ? '<button class="btn btn-ghost btn-sm js-wl-2fa" data-tip="Asks this wallet to sign, making it your two-factor key" data-a="' + esc(w.address) + '">Use for 2FA</button>' : '') +
         '<button class="btn btn-ghost btn-sm js-wl-unlink" data-tip="Unlinks this wallet, so it stops counting toward your boost" data-a="' + esc(w.address) + '">Unlink</button>' +
@@ -589,13 +590,16 @@ function loadConnectedWallet() {
   if (!wallets.length) {
     sel.innerHTML = '';
     body.innerHTML =
-      '<p class="modal-note" style="margin-top:0.2rem;">Connect a wallet to see your <b>$SEND &amp; $GWC holdings, trade history and PNL</b> here — pulled live from the chain. It\'s a <b>free signature, never a transaction</b>, and it unlocks your Holder Boost too.</p>' +
+      '<p class="modal-note" style="margin-top:0.2rem;">Connect a wallet to see your <b>$SEND &amp; $GWC holdings, trade history and PNL</b> here — pulled live from the chain. It\'s a <b>free signature, never a transaction</b>, and it unlocks your Holder Boost too. A wallet that can\'t sign (GMGN) can be proved by a burn instead.</p>' +
       '<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.5rem;">' +
         '<button class="btn btn-primary btn-sm" id="cw-connect" data-tip="Links a wallet by signature so this panel can read it">Connect wallet 🔗</button>' +
+        '<button class="btn btn-ghost btn-sm" id="cw-burn" data-tip="For a wallet that can’t sign: send the exact dust amount of $SEND shown from it to the burn address within an hour">Prove by a burn 🔥</button>' +
         '<a class="btn btn-ghost btn-sm" href="/tracker" data-tip="Opens the tracker to follow any address read-only">Or track any wallet 💼</a>' +
       '</div>';
     const c = document.getElementById('cw-connect');
     if (c) c.addEventListener('click', linkWallet);
+    const cb = document.getElementById('cw-burn');
+    if (cb) cb.addEventListener('click', () => AUTH.openBurnProof({ from: 'profile' }));
     return;
   }
   if (wallets.length > 1) {
@@ -618,6 +622,9 @@ document.getElementById('signedout-cta').addEventListener('click', () => AUTH.op
 document.getElementById('signout-btn').addEventListener('click', () => AUTH.logout().then(() => location.reload()));
 document.getElementById('save-profile-btn').addEventListener('click', saveProfile);
 document.getElementById('link-wallet-btn').addEventListener('click', linkWallet);
+document.getElementById('burn-wallet-btn').addEventListener('click', () => AUTH.openBurnProof({ from: 'profile' }));
+// a wallet the burn proof linked (it may finish while this page is open, with or without its panel): repaint what this page shows of the wallets
+document.addEventListener('jsi:walletlinked', async () => { try { await loadMe(); loadConnectedWallet(); if (window.loadGamify) loadGamify(); if (window.refreshNavBalances) refreshNavBalances(); } catch {} });
 /* ---------- delete the account (X02): typed confirmation, then proof of ownership, then gone ---------- */
 (function () {
   const inp = document.getElementById('acct-delete-confirm'), btn = document.getElementById('acct-delete-btn'), st = document.getElementById('acct-delete-status');

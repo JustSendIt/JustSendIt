@@ -801,7 +801,7 @@
   }
   /* A layer the site opens above the pop-up on purpose — the $SEND check, the wallet picker, a sign-in check, the age question
      — answers Esc and Back itself; the pop-up underneath stays put (and so does its scroll lock) until it is the top layer. */
-  const above = () => document.documentElement.classList.contains('age-open') || !!document.querySelector('#invite-overlay[data-open], .wc-overlay:not([hidden]), #auth-modal:not([hidden])');
+  const above = () => document.documentElement.classList.contains('age-open') || !!document.querySelector('#invite-overlay[data-open], .wc-overlay:not([hidden]), .bp-overlay:not([hidden]), #auth-modal:not([hidden])');
   // Back closes it; the step we took back ourselves is just let go; a Back meant for a layer above leaves it open (step put back)
   window.addEventListener('popstate', () => {
     if (backing) { backing = false; return; }
@@ -816,7 +816,7 @@
      question, a toast, a tip). */
   document.addEventListener('focusin', (e) => {
     if (!view || !root || root.contains(e.target)) return;
-    if (e.target.closest && e.target.closest('#age-gate, .wc-overlay, #auth-modal, #invite-overlay, #toast-zone, .tip-bubble')) return;
+    if (e.target.closest && e.target.closest('#age-gate, .wc-overlay, .bp-overlay, #auth-modal, #invite-overlay, #toast-zone, .tip-bubble')) return;
     try { dialog.focus({ preventScroll: true }); } catch {}
   });
   window.FullView = { open, swap, close: (how) => close(how || 'key'), isOpen: () => !!view, contains: (el) => !!(root && root.contains(el)) };

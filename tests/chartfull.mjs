@@ -90,7 +90,7 @@ try {
     /parent\.moveBefore\(node, before \|\| null\);\n        const d = node\.style\.display; node\.style\.display = 'none'; void node\.offsetWidth; node\.style\.display = d;/.test(APP));
   check('  ...an outside chart\'s frame is a Tab stop, and focus that wanders out of the pop-up is brought back (not from the layers above it)',
     /details > summary,iframe,video\[controls\],audio\[controls\],\[tabindex\]/.test(APP) && /document\.addEventListener\('focusin', \(e\) => \{\n    if \(!view \|\| !root \|\| root\.contains\(e\.target\)\) return;/.test(APP)
-    && /e\.target\.closest\('#age-gate, \.wc-overlay, #auth-modal, #invite-overlay, #toast-zone, \.tip-bubble'\)/.test(APP));
+    && /e\.target\.closest\('#age-gate, \.wc-overlay, \.bp-overlay, #auth-modal, #invite-overlay, #toast-zone, \.tip-bubble'\)/.test(APP));
   check('  ...on a short screen (a phone held sideways) every chart is sized to the room under it, its time axis on screen',
     /@media \(max-height: 520px\) \{\n  \.cf \{ padding: 0; \}/.test(CSS) && /  \.cf \.oc-plot \{ min-height: 150px; min-height: max\(150px, calc\(100vh - 205px\)\); min-height: max\(150px, calc\(100dvh - 205px\)\); \}/.test(CSS)
     && /  \.cf \.chart-embed \{ min-height: 180px;/.test(CSS) && /  \.cf \.trk-dash \.wc-plot \{ min-height: 150px;/.test(CSS) && /  \.cf \.adm-chart-plot \{ min-height: 140px;/.test(CSS) && /  \.cf \.np-vol \{ min-height: 130px;/.test(CSS));

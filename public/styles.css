@@ -1844,12 +1844,50 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .wc-deep { border-style: dashed; }
 .wc-deep .wc-go { color: var(--ctl-ink); }
 .wc-name { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
-.wc-badge { font-size: max(var(--text-floor), 0.64rem); font-weight: 800; color: var(--on-green); background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); border-radius: 999px; padding: 0.08rem 0.45rem; letter-spacing: 0.01em; white-space: nowrap; }
+.wc-badge { font-size: max(var(--text-floor), 0.64rem); font-weight: 800; color: var(--on-green); background: linear-gradient(180deg, var(--green-bright), var(--green-dark)); border-radius: 0.75em; padding: 0.08rem 0.45rem; letter-spacing: 0.01em; white-space: normal; max-width: 100%; }   /* wraps: at 320px a one-line badge ran off the picker (a pill on one line, a rounded box on two) */
 .wc-feat { border-color: var(--green); box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 30%, transparent), 0 0 22px color-mix(in srgb, var(--green) 14%, transparent); }
 .wc-feat:hover, .wc-feat:focus-visible { border-color: var(--green-bright); }
 .wc-tip { font-size: max(var(--text-floor), 0.76rem); color: var(--text-dim); line-height: 1.5; background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid var(--g-veil); border-radius: 10px; padding: 0.5rem 0.65rem; margin: 0.3rem 0 0; }
 .wc-tip b { color: var(--green-bright); }
 @media (prefers-reduced-motion: reduce) { .wc-item, .wc-deep { transition: none; } .wc-item:hover, .wc-deep:hover { transform: none; } }
+/* the picker's way out for a wallet that cannot sign (GMGN) or is not listed: the burn proof */
+.wc-burn { border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+.wc-burn .wc-badge { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: var(--on-gold); }
+/* a row's longest badge must never widen the column past the picker (every row would spill off its right edge) */
+.wc-list, .wc-foot { grid-template-columns: minmax(0, 1fr); }
+.wc-name { min-width: 0; }
+
+/* ===== Proving a wallet by a burn (burnproof.js) — above the ticket (9000) and the picker (9100), below the toasts (9200) and "confirm it's you" (9500) ===== */
+.bp-overlay { position: fixed; inset: 0; z-index: 9150; display: grid; place-items: center; padding: 1rem; background: rgba(4,6,10,0.84); backdrop-filter: blur(6px); }
+.bp-overlay[hidden] { display: none; }
+.bp-card {
+  position: relative; width: min(480px, 100%); max-height: 92vh; overflow-y: auto; box-sizing: border-box;
+  background: linear-gradient(180deg, var(--ink-3), var(--ink-2)); border: 2px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 20px; padding: 1.4rem 1.3rem 1.3rem; box-shadow: 0 0 60px color-mix(in srgb, var(--gold) 14%, transparent), 0 30px 60px rgba(0,0,0,0.6);
+}
+.bp-x { position: absolute; top: 0.7rem; right: 0.8rem; background: var(--ctl-fill-lo); border: none; color: var(--ctl-ink); width: 34px; height: 34px; border-radius: 50%; cursor: pointer; font-size: max(var(--text-floor), 0.95rem); display: inline-flex; align-items: center; justify-content: center; line-height: 1; padding: 0; }
+.bp-x:hover { background: var(--red); color: var(--on-red); }
+.bp-kicker { margin: 0 2.4rem 0.2rem 0; font-size: max(var(--text-floor), 0.78rem); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
+.bp-title { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.45rem); color: var(--green-bright); margin: 0 2.4rem 0.4rem 0; letter-spacing: 0.02em; text-wrap: balance; }
+.bp-card .modal-note { margin: 0.55rem 0; }
+.bp-lead { color: var(--text); }
+.bp-ok { color: var(--text); font-size: max(var(--text-floor), 0.95rem); }
+.bp-mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; overflow-wrap: anywhere; }
+.bp-box { margin: 0.25rem 0 0.7rem; }
+.bp-box code { flex: 1; min-width: 0; }
+.bp-form { display: grid; gap: 0.15rem; margin-top: 0.4rem; }
+.bp-form .addr-input { margin-bottom: 0.45rem; }
+.bp-form .btn { width: 100%; margin-top: 0.4rem; }
+.bp-steps { margin: 0.2rem 0 0.4rem; padding-left: 1.3rem; display: grid; gap: 0.25rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.5; }
+.bp-rules { list-style: none; margin: 0.5rem 0; padding: 0.6rem 0.75rem; display: grid; gap: 0.4rem; border-radius: 12px;
+  background: color-mix(in srgb, var(--gold) 7%, transparent); border: 1px solid color-mix(in srgb, var(--gold) 30%, transparent);
+  color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); line-height: 1.5; }
+.bp-rules b { color: var(--text); }
+.bp-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.bp-actions .btn { flex: 1 1 12rem; }
+.bp-status:empty { display: none; }
+.bp-alt { text-align: center; margin: 0.6rem 0 0; }
+.bp-alt .linklike { margin-top: 0.3rem; }
 
 /* ===== New Pairs Radar ===== */
 :root { --triage-high: #ff7a3d; }

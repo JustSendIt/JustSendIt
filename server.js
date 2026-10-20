@@ -596,6 +596,29 @@ CREATE TABLE IF NOT EXISTS bundle_plumbing (
   seen_on     TEXT,                              -- the token whose read found it first
   updated_at  INTEGER NOT NULL
 );
+/* Proving a wallet by a burn (owner, 2026-10-20): one row per hour-long window a member opened to show a wallet is
+   theirs by sending $SEND from it to 0x…dEaD, for wallets that cannot sign a message (GMGN's) or members who would
+   rather not. The wallet and the transaction are kept encrypted, like every wallet↔account link here. */
+CREATE TABLE IF NOT EXISTS burn_proofs (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL,
+  addr_idx    TEXT NOT NULL,                     -- blind index of the wallet (lowercase)
+  addr_enc    TEXT NOT NULL,                     -- the wallet, encrypted
+  from_block  INTEGER NOT NULL,                  -- the chain head when the window opened: the burn must be in a LATER block
+  scanned_to  INTEGER NOT NULL,                  -- the chain has been read up to here for this window
+  opened_at   INTEGER NOT NULL,
+  deadline    INTEGER NOT NULL,                  -- opened_at + BURN_PROOF_MS
+  status      TEXT NOT NULL DEFAULT 'open',      -- open | linked | expired | refused | cancelled
+  reason      TEXT,                              -- why it ended without a link, in plain words
+  tx_enc      TEXT,                              -- the burn that settled it, encrypted
+  done_at     INTEGER,
+  opened_by   TEXT,                              -- the session that opened it (its hashed token): ending the other sessions calls its window off
+  foreign_seen INTEGER NOT NULL DEFAULT 0,       -- a burn of the amount landed in the hour but was not the wallet's own transaction (a Safe owner's, a relayer's)
+  amount_enc  TEXT,                              -- the exact amount (in wei) this window asks for, encrypted: with the chain it would name the wallet
+  amount_seen_enc TEXT                           -- the wallet's own burn of a DIFFERENT amount in the hour (a typo), as $SEND text, encrypted
+);
+CREATE INDEX IF NOT EXISTS idx_burn_proofs_status ON burn_proofs(status);
+CREATE INDEX IF NOT EXISTS idx_burn_proofs_user ON burn_proofs(user_id, id);
 CREATE TABLE IF NOT EXISTS holder_snapshot_chunks (
   snapshot_id INTEGER NOT NULL REFERENCES holder_snapshots(id) ON DELETE CASCADE,
   chunk       INTEGER NOT NULL,
@@ -949,6 +972,11 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN redeem_mult REAL NOT NULL DEFAULT 1", // >1 makes buying out of read-only cost more (sybil rings pay double)
   "ALTER TABLE identities ADD COLUMN is_2fa INTEGER NOT NULL DEFAULT 0", // exactly one wallet per account may be the sign-in second factor
   "ALTER TABLE identities ADD COLUMN label TEXT",       // a name the owner gives a linked wallet, so a list of 0x… is readable
+  "ALTER TABLE identities ADD COLUMN proof TEXT",       // how a linked wallet was proved: NULL = it signed; 'burn' = it sent $SEND to 0x…dEaD (burn_proofs), and it may not be able to sign at all
+  "ALTER TABLE burn_proofs ADD COLUMN opened_by TEXT",               // (all four are in the CREATE above; these only bring a table made by an earlier build of it up to date)
+  "ALTER TABLE burn_proofs ADD COLUMN foreign_seen INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE burn_proofs ADD COLUMN amount_enc TEXT",
+  "ALTER TABLE burn_proofs ADD COLUMN amount_seen_enc TEXT",
   "ALTER TABLE calls ADD COLUMN ip TEXT",               // bidx of the IP a call was made from — the signal for same-IP rings on one token
   "CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip)",
   "CREATE INDEX IF NOT EXISTS idx_calls_ip_token ON calls(ip, token_addr)",
@@ -1892,7 +1920,8 @@ function sudoActive(me) { return !!(me && me.sudo_until && me.sudo_until > now()
 function vouchingWallets(userId, sidAt) {
   try {
     const u = db.prepare('SELECT created_at FROM users WHERE id = ?').get(userId);
-    return db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet'").all(userId).filter((w) =>
+    // a wallet proved by a burn never signed anything here, so it is never the one asked to sign for the account
+    return db.prepare("SELECT linked_at FROM identities WHERE user_id = ? AND type = 'wallet' AND (proof IS NULL OR proof <> 'burn')").all(userId).filter((w) =>
       !w.linked_at || (!(sidAt && w.linked_at > sidAt) && (w.linked_at <= ((u && u.created_at) || 0) + 60000 || now() - w.linked_at >= 864e5))).length;
   } catch { return 0; }
 }
@@ -1986,9 +2015,9 @@ function walletAddresses(userId) {
 /* Every linked wallet, with the detail a settings screen needs to show a real list rather than a row of
    anonymous 0x…. Oldest first, matching walletAddresses. */
 function walletList(userId) {
-  return db.prepare("SELECT id, identifier_enc, label, linked_at, is_2fa FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id")
+  return db.prepare("SELECT id, identifier_enc, label, linked_at, is_2fa, proof FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id")
     .all(userId)
-    .map(r => ({ id: r.id, address: decField(r.identifier_enc), label: r.label || '', linkedAt: r.linked_at || null, is2fa: !!r.is_2fa }))
+    .map(r => ({ id: r.id, address: decField(r.identifier_enc), label: r.label || '', linkedAt: r.linked_at || null, is2fa: !!r.is_2fa, byBurn: r.proof === 'burn' }))
     .filter(w => w.address);
 }
 /* THE wallet that satisfies two-factor, when one has been chosen. Returns null for accounts that enabled
@@ -2036,6 +2065,8 @@ function emailIdentity(userId) { return db.prepare("SELECT * FROM identities WHE
 const noEmailMark = (userId) => bidx('nomail:' + userId);
 function insertPasswordOnly(userId, pwHash) { insertIdentity(userId, 'email', 'nomail:' + userId, pwHash); }
 function isPasswordOnly(row) { return !!row && row.type === 'email' && row.identifier === noEmailMark(row.user_id); }
+// a real email AND its password: what an account that proves wallets by a burn signs in with (a burn signs nobody in)
+function hasEmailAndPassword(userId) { const e = emailIdentity(userId); return !!(e && e.secret && !isPasswordOnly(e)); }
 /* "That email already belongs to another account" is a fact about somebody ELSE, and this site has no email it could
    send instead — so wherever that answer has to come out, it is RATIONED: EMAIL_MISS_MAX of them per EMAIL_MISS_MS,
    counted per account AND per connection, so deleting an account and making another does not reset the count. The
@@ -13397,6 +13428,272 @@ function walletTooNew(me, addr) {
   if (!founding && now() - w.linked_at < 864e5) return 'that wallet was linked less than 24 hours ago — a newly linked wallet cannot authorise security changes yet; sign with an older one';
   return null;
 }
+/* ===== Linking a wallet to an account, however it was proved =====
+   The one place a wallet joins an account that is already signed in: by its signature (/api/auth/wallet/verify) or by a
+   burn sent from it (the burn-proof watcher below). Everything the site reads per wallet — holdings, gates, Diamond
+   Hands, OG, the participation check — reads identities rows of type 'wallet', so a wallet linked either way counts
+   the same. `me` is the account's users row; it carries `sid` only when a request made the link. The caller has
+   already refused a wallet that is linked anywhere, and an account at MAX_LINKED_WALLETS. */
+async function linkWalletTo(me, address, how) {
+  insertIdentity(me.id, 'wallet', address);
+  if (how === 'burn') db.prepare("UPDATE identities SET proof = 'burn' WHERE type = 'wallet' AND identifier = ?").run(bidx(address));
+  // linked by its signature while a burn proof for it was still running: that hour has nothing left to prove
+  else { try { db.prepare("UPDATE burn_proofs SET status = 'linked', reason = 'linked by its signature instead', done_at = ? WHERE user_id = ? AND addr_idx = ? AND status = 'open'").run(now(), me.id, bidx(address)); } catch {} }
+  notify(me.id, '🔗', how === 'burn'
+    ? 'A wallet was linked to your account by a burn sent from it. Not you? Unlink it and end other sessions in Settings → Security.'
+    : 'A new wallet was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
+  // what other sessions proved no longer describes the account; a link the watcher made has no session of its own to keep
+  if (me.sid) sudoOthersOff(me); else { try { db.prepare('UPDATE sessions SET sudo_until = NULL WHERE user_id = ?').run(me.id); } catch {} }
+  forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
+  refreshSupplyForUser(me.id); // their communities' share of supply now includes this wallet
+  // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
+  // while read-only — so an empty throwaway keypair (or a flagged account) can't farm the bonus.
+  let sendBal = 0, gwcHeld = false;
+  try { sendBal = Number(await erc20Balance(TOK.SEND, address)) / 1e18; gwcHeld = (await erc20Balance(TOK.GWC, address)) > 0n; } catch {}
+  // bidx, not the address. The ref only has to be a stable unique key for the once-per-address
+  // dedup — and writing the raw address here undid the encryption everywhere else: identities and
+  // tracked_wallets store addresses encrypted with a blind index precisely so a database leak does
+  // not map usernames to on-chain wallets, and the points ledger was publishing them in clear text
+  // beside the user_id that owns them. The blind index dedupes identically and reveals nothing.
+  if ((sendBal > 0 || gwcHeld) && !restrictionOf(me)) awardPoints(me.id, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address)); // once per address ever
+  // if this wallet is linked mid-restriction/probation, its $SEND is PRE-EXISTING — fold it into the redemption
+  // baseline (so linking a bag can't fake the "buy $SEND" requirement) and into any active hold floor (so its
+  // balance must be maintained too). Only when the baseline is already known (>=0); an unknown baseline is set at redeem.
+  if (sendBal > 0 && (restrictionOf(me) || probationOf(me))) {
+    db.prepare('UPDATE users SET redeem_base_send = redeem_base_send + ? WHERE id=? AND redeem_base_send >= 0').run(sendBal, me.id);
+    db.prepare('UPDATE users SET redeem_floor = redeem_floor + ? WHERE id=? AND redeem_hold_until > 0').run(sendBal, me.id);
+  }
+  balCache.delete(me.id); // the linked wallet set grew — recompute nav balances on next fetch
+  checkOg(me.id).catch(() => {}); // a newly linked wallet might be an early buyer → verify OG in the background
+  // A wallet is exactly what the participation check needs. Start it without being asked — the
+  // person who just linked one is plainly trying to get in, and making them press a second button
+  // to begin a check they cannot see would be ceremony.
+  if (needsHolderProof(me)) queueHolderProof(me.id);
+}
+
+/* ===== Proving a wallet by a burn =====
+   Owner, 2026-10-20: "If a wallet can not sign or a user does not want to sign, a user can do a proof of ownership by
+   sending a small amount of $Send to the burn address … no minimum on the amount, can just be dust. Then the site can
+   go look on chain to confirm the transaction was actually made by the wallet that the user is trying to confirm is
+   theirs. Allow a one hour time limit … otherwise the process restarts." An account that proves a wallet this way must
+   have an email and a password: a burn signs nobody in, so they are how it signs in.
+
+   The whole rule:
+     · the member — signed in, with an email and a password, past "confirm it's you" — names an address. Its window
+       opens at the chain's current block, closes BURN_PROOF_MS later, and asks for one EXACT amount of dust the server
+       picks (burnProofAmount: four significant figures, worth about two cents at most): a burn the wallet makes for any
+       other reason — a dev's announced burn, a Data API key — does not carry it, so nobody can claim a wallet they do
+       not control by keeping a window open on it, and one account's window cannot spoil another's;
+     · the watcher reads that wallet's own $SEND Transfers to 0x…dEaD after that block (one log walk per wallet, filtered
+       on both ends) and takes a burn as the proof only when (a) it is that exact amount — as it reached 0x…dEaD, or as
+       the wallet sent it in total in that transaction, should a transfer tax take a cut on the way, (b) the
+       TRANSACTION was the wallet's own: sent by it, or its smart-account UserOperation (sentBy), so an app holding an
+       allowance cannot make one for it, and (c) its block was stamped inside the window;
+     · one burn proves one account: two open windows for one wallet never ask for the same amount, and if a burn ever
+       matched two, neither would get it (the burn could not say which of them sent it) and both would be told;
+     · a window ends unproved only once the chain has been READ past its deadline. A node that would not answer leaves
+       it "still checking", never "no burn arrived" — a week of that, and it ends saying so.
+   The site never builds, asks for or sends the burn: the member makes it in their own wallet app. Whatever they send
+   is gone for good. */
+const BURN_PROOF_TO = '0x000000000000000000000000000000000000dEaD';   // shown as people usually write it; compared lowercase (DEAD_ADDR)
+// the hour, the clock slack and the watcher's pace — only tests/burnproof.mjs sets these (to seconds), the live site never does
+const burnEnvMs = (k, d) => { const v = process.env[k]; return v != null && v !== '' && Number(v) >= 0 ? Number(v) : d; };
+const BURN_PROOF_MS = burnEnvMs('BURN_PROOF_MS', 60 * 60e3) || 60 * 60e3;
+const BURN_PROOF_SKEW_MS = burnEnvMs('BURN_PROOF_SKEW_MS', 2 * 60e3);   // a block stamped this far past the deadline still counts: two clocks
+/* ...but at the OPENING only the rounding of a block's stamp (whole seconds) and a little clock drift: there, from_block is
+   the guard, and a node whose head lags must not let a burn made before the window slip in through a wide stamp slack */
+const BURN_PROOF_OPEN_SKEW_MS = Math.min(BURN_PROOF_SKEW_MS, 2000);
+const BURN_PROOF_TICK_MS = burnEnvMs('BURN_PROOF_TICK_MS', 15e3) || 15e3;
+const BURN_PROOF_DAY_MAX = 8;                 // windows one account may open in 24 hours
+const BURN_PROOF_KEEP_MS = 7 * 864e5;         // a finished window is shown for this long, then deleted
+const BURN_PROOF_STALE_MS = 7 * 864e5;        // a window the chain could not be read for, for this long, ends
+let burnProofBusy = false, burnProofCoolUntil = 0, burnProofWarnAt = 0, burnProofDown = false;
+const BURN_WRONG_AMOUNT = 'a burn from that wallet arrived, but not of the exact amount this hour asked for, so nothing was linked — start again for a new hour and amount';
+const burnProofReads = new Map();   // wallet -> { okAt, failing }: how the last read of THAT wallet's burns went (one wallet's trouble is not everyone's)
+// wei -> "$SEND" text, exact (no float): 48210000000000000000n -> "48.21"
+function sendText(wei) {
+  let b; try { b = BigInt(wei); } catch { return null; }   // a value no key opens (decField null) is no amount, not a crash
+  const s = b.toString().padStart(19, '0'), i = s.slice(0, -18).replace(/^0+(?=\d)/, ''), f = s.slice(-18).replace(/0+$/, '');
+  return f ? i + '.' + f : i;
+}
+/* The window's exact amount: four significant figures (1000–9999 of a power of ten), scaled so the largest of them is worth
+   about two cents at today's guarded price — dust at any price, and still easy to type (48.21, 0.4821, 4821). Never the
+   amount another open window for the same wallet asks for (burnProofPick). */
+async function burnProofScale() {
+  /* sized at the HIGHER of the pool's price now and its 24-hour median: unlike a payout, a higher price here only makes the
+     amount smaller, so "two cents' worth at most" holds at the price the member actually pays (a rise since the median
+     included). No readable price: 0.1000–0.9999 $SEND. */
+  let px = null;
+  try {
+    const st = await poolState(TOK.SEND);
+    if (st && st.spot > 0 && st.median > 0 && st.covered >= POOL_WINDOW_MS) {
+      const qv = await quoteValue(st.pair, st.token);
+      if (qv && qv.usd > 0) px = Math.max(st.spot, st.median) * qv.usd;
+    }
+  } catch {}
+  return Math.max(-14, Math.min(6, px > 0 ? Math.floor(Math.log10(0.02 / (9999 * px))) : -4));
+}
+// synchronous on purpose: the start route calls it with no await between it and the INSERT, so two starts cannot draw the same amount
+function burnProofPick(addrIdx, k) {
+  const used = new Set(db.prepare("SELECT amount_enc FROM burn_proofs WHERE status = 'open' AND addr_idx = ?").all(addrIdx).map((r) => decField(r.amount_enc)));
+  const scale = 10n ** BigInt(18 + k);
+  for (let i = 0; i < 64; i++) { const wei = (BigInt(1000 + crypto.randomInt(0, 9000)) * scale).toString(); if (!used.has(wei)) return wei; }
+  for (let n = 1000n; n <= 9999n; n++) { const wei = (n * scale).toString(); if (!used.has(wei)) return wei; }
+  return null;   // every amount at this scale is open on this wallet already
+}
+function burnProofView(r) {
+  if (!r) return null;
+  const amt = r.amount_enc ? decField(r.amount_enc) : null, seen = r.amount_seen_enc ? decField(r.amount_seen_enc) : null;
+  /* the figures of a wrong-amount ending are put into its reason here, for the owner's own view, and never stored with it:
+     the reason column is plain text, and an amount with the chain names the wallet */
+  const reason = r.status === 'expired' && r.reason === BURN_WRONG_AMOUNT && seen && amt
+    ? 'a burn from that wallet arrived, but of ' + seen + ' $SEND, not the exact ' + sendText(amt) + ' $SEND this hour asked for, so nothing was linked — start again for a new hour and amount'
+    : r.reason;
+  return {
+    id: r.id, address: decField(r.addr_enc) || null, status: r.status, reason: reason || null,
+    openedAt: r.opened_at, deadline: r.deadline,
+    leftMs: r.status === 'open' ? Math.max(0, r.deadline - now()) : 0,   // relative: the page's clock need not agree with ours
+    tx: r.tx_enc ? decField(r.tx_enc) : null, doneAt: r.done_at || null,
+    doneAgoMs: r.done_at ? Math.max(0, now() - r.done_at) : null,   // relative, like leftMs: "just now" on a page whose clock is off
+    foreignSeen: !!r.foreign_seen,
+    amount: amt,                                                      // wei, exact
+    amountText: amt ? sendText(amt) : null,
+    amountSeen: seen,
+  };
+}
+function burnProofState(me, r) {
+  return {
+    proof: burnProofView(r),
+    needEmail: !hasEmailAndPassword(me.id),
+    passwordOnly: isPasswordOnly(emailIdentity(me.id)),
+    burnAddress: BURN_PROOF_TO, token: TOK.SEND, chainId: 4663, minutes: Math.round(BURN_PROOF_MS / 60e3),
+    wallets: walletAddresses(me.id).length, maxWallets: MAX_LINKED_WALLETS,
+    chain: burnProofChain(r),
+  };
+}
+// how the chain read for THIS window's wallet stands: a read from before the window opened says nothing about it
+function burnProofChain(r) {
+  const rd = r && r.status === 'open' ? burnProofReads.get(decField(r.addr_enc)) : null;
+  return { readAgoMs: rd && rd.okAt >= r.opened_at ? now() - rd.okAt : null, failing: !!(r && r.status === 'open' && (burnProofDown || (rd && rd.failing))) };
+}
+function burnProofEnd(r, status, reason, tx) {
+  return db.prepare("UPDATE burn_proofs SET status = ?, reason = ?, tx_enc = ?, done_at = ? WHERE id = ? AND status = 'open'").run(status, reason || null, tx ? encField(tx) : null, now(), r.id).changes;
+}
+// the other sessions were ended: a window one of them opened is called off with them (the caller's own stays)
+function burnProofsOff(me, reason) {
+  try { db.prepare("UPDATE burn_proofs SET status = 'cancelled', reason = ?, done_at = ? WHERE user_id = ? AND status = 'open' AND (opened_by IS NULL OR opened_by <> ?)").run(reason, now(), me.id, hashToken(me.sid)); } catch {}
+}
+async function completeBurnProof(r, address, tx) {
+  // read again here, after the awaits that found the burn: a window cancelled or replaced meanwhile links nothing
+  const cur = db.prepare('SELECT status FROM burn_proofs WHERE id = ?').get(r.id);
+  if (!cur || cur.status !== 'open') return;
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(r.user_id);
+  if (!u || u.deleted_at) return burnProofEnd(r, 'cancelled', 'the account was closed', tx);
+  const ident = findIdentity('wallet', address);
+  if (ident && ident.user_id === u.id) return burnProofEnd(r, 'linked', null, tx);   // linked meanwhile — by a signature, or by this burn on an earlier pass
+  if (ident) return burnProofEnd(r, 'refused', 'that wallet is already linked to another account — sign in to that account and unlink it there first', tx);
+  if (walletAddresses(u.id).length >= MAX_LINKED_WALLETS) return burnProofEnd(r, 'refused', 'this account already has ' + MAX_LINKED_WALLETS + ' wallets linked — unlink one in Settings → Security, then start again', tx);
+  // no await from the checks above to linkWalletTo's insert, so nothing else can link this wallet or end this window in between;
+  // the window is ended first, so a cancel arriving while the link's own reads run cannot say "cancelled" over a linked wallet
+  if (!burnProofEnd(r, 'linked', null, tx)) return;
+  await linkWalletTo(u, address, 'burn');
+}
+async function burnProofMatch(l) {
+  if (String(l.address || '').toLowerCase() !== TOK.SEND || !Array.isArray(l.topics) || l.topics.length !== 3) return;
+  let v = 0n; try { v = BigInt(l.data); } catch { return; }
+  if (!(v > 0n)) return;
+  const from = '0x' + String(l.topics[1]).slice(-40).toLowerCase();
+  const bn = parseInt(l.blockNumber, 16);
+  // read fresh, not from the tick's list: a window opened while this tick ran is matched (or not) on its own terms
+  const rows = db.prepare("SELECT * FROM burn_proofs WHERE status = 'open' AND addr_idx = ? AND from_block < ?").all(bidx(from), bn);
+  if (!rows.length) return;
+  const ms = await chainBlockTime(bn);
+  const inWin = rows.filter((r) => ms >= Math.floor(r.opened_at / 1000) * 1000 - BURN_PROOF_OPEN_SKEW_MS && ms <= r.deadline + BURN_PROOF_SKEW_MS);
+  if (!inWin.length) return;
+  const { entry, raw } = await dhTxEntry(l.transactionHash);
+  // what the wallet sent in this transaction in all: the burn itself, plus any cut a transfer tax took on the way
+  const gross = raw.reduce((t, [tok, f, , val]) => (tok === TOK.SEND && f === from ? t + val : t), 0n);
+  const want = (r) => { try { return BigInt(decField(r.amount_enc) || '0'); } catch { return 0n; } };
+  const hit = inWin.filter((r) => want(r) > 0n && (want(r) === v || want(r) === gross));
+  const own = sentBy(entry, from);
+  if (!hit.length) {
+    // the wallet's own burn, but not the amount asked: remembered, so the window can say "it has to be exactly …"
+    if (own) for (const r of inWin) db.prepare("UPDATE burn_proofs SET amount_seen_enc = ? WHERE id = ? AND status = 'open'").run(encField(sendText(gross > v ? gross : v)), r.id);   // what the wallet sent, as the matcher counts it
+    return;
+  }
+  if (!own) {
+    /* the amount, but not the wallet's own act: an app holding an allowance, a Safe's owner key or a relayer sent it. It
+       proves nothing — but it is remembered, so the window can say what happened rather than "no burn arrived" */
+    db.prepare("UPDATE burn_proofs SET foreign_seen = 1 WHERE status = 'open' AND id IN (" + hit.map(() => '?').join(',') + ')').run(...hit.map((r) => r.id));
+    return;
+  }
+  const tx = String(l.transactionHash).toLowerCase();
+  if (new Set(hit.map((r) => r.user_id)).size > 1) {
+    for (const r of hit) {
+      burnProofEnd(r, 'refused', 'another account was proving this same wallet when the burn landed, and the burn fit both windows (one by what reached the burn address, the other by what the wallet sent in all), so it cannot say which of you sent it — nothing was linked. Start again; a new hour asks for a new amount', tx);
+      try { notify(r.user_id, '🔥', 'A burn from the wallet you were proving matched two accounts\' windows at once, so it linked neither. Start again from Settings → Security.', 'alert'); } catch {}
+    }
+    return;
+  }
+  for (const r of hit) await completeBurnProof(r, from, tx);   // one account (a second window of its own just ends linked)
+}
+async function burnProofTick() {
+  if (burnProofBusy || now() < burnProofCoolUntil) return;
+  const open = db.prepare("SELECT id, addr_enc, scanned_to FROM burn_proofs WHERE status = 'open'").all();
+  if (!open.length) { burnProofDown = false; return; }   // nothing watched, nothing to report as down
+  burnProofBusy = true;
+  try {
+    const head = parseInt(await rpc('eth_blockNumber', []), 16);
+    if (!(head > 0)) throw new Error('the chain gave no block number');
+    burnProofDown = false;
+    /* One read per wallet being proved, filtered on BOTH ends (from that wallet, to 0x…dEaD) — so nobody else's burns
+       count toward a read's budget — and each wallet's windows move on by themselves: a wallet whose read fails waits
+       alone (and says so on its own windows), and the rest are read. */
+    const byAddr = new Map();
+    for (const r of open) { const a = decField(r.addr_enc); if (!a) continue; if (!byAddr.has(a)) byAddr.set(a, []); byAddr.get(a).push(r); }
+    for (const [addr, rows] of byAddr) {
+      try {
+        const from = Math.min(...rows.map((r) => r.scanned_to)) + 1;
+        if (from <= head) {
+          const logs = await transferLogWalk(TOK.SEND, [[TRANSFER_TOPIC, addrTopic(addr), addrTopic(DEAD_ADDR)]], from, head, 20000);
+          for (const l of logs) await burnProofMatch(l);
+        }
+        // only the windows this pass covered move on: one opened meanwhile is read from its own block next time
+        const ids = rows.map((r) => r.id);
+        db.prepare("UPDATE burn_proofs SET scanned_to = ? WHERE status = 'open' AND scanned_to < ? AND id IN (" + ids.map(() => '?').join(',') + ')').run(head, head, ...ids);
+        burnProofReads.set(addr, { okAt: now(), failing: false });
+      } catch (e) {
+        if (isThrottle(e)) throw e;   // the node is refusing: stop asking it this round
+        // a wallet that sent more to 0x…dEaD in the hour than one read may hold will be just as unreadable next time: say so now
+        if (/history longer than the chain read budget|history too dense/i.test(String((e && e.message) || e))) {
+          for (const r of rows) burnProofEnd(r, 'refused', 'that wallet sent so many transfers to the burn address in the hour that they could not all be read, so the burn could not be checked and nothing was linked — sign with the wallet instead, or start again later');
+          burnProofReads.delete(addr);
+          continue;
+        }
+        burnProofReads.set(addr, { okAt: (burnProofReads.get(addr) || {}).okAt || 0, failing: true });
+        if (now() - burnProofWarnAt > 5 * 60e3) { burnProofWarnAt = now(); console.warn('[burnproof] one wallet\'s burns could not be read: ' + ((e && e.message) || e) + ' — its window keeps waiting'); }
+      }
+    }
+    for (const a of [...burnProofReads.keys()]) if (!byAddr.has(a)) burnProofReads.delete(a);   // wallets no window is proving any more
+    // a window ends unproved only once the chain itself — read through the head — is stamped past its deadline
+    const due = db.prepare("SELECT id, deadline, foreign_seen, amount_seen_enc FROM burn_proofs WHERE status = 'open' AND scanned_to >= ? AND deadline < ?").all(head, now() - BURN_PROOF_SKEW_MS);
+    if (due.length) {
+      const headMs = await chainBlockTime(head);
+      for (const r of due) {
+        if (!(headMs > r.deadline + BURN_PROOF_SKEW_MS)) continue;
+        burnProofEnd(r, 'expired', r.foreign_seen
+          ? 'a burn of that amount from the wallet did arrive, but its transaction was sent by another address (a Safe or multisig owner, a relayer, or an app with an allowance), not by the wallet itself, so it does not count and nothing was linked — a wallet like that can usually sign a message instead'
+          : r.amount_seen_enc ? BURN_WRONG_AMOUNT   // the figures are added when the owner reads it (burnProofView), never stored
+          : 'no burn of the exact amount, sent by that wallet itself, reached the burn address within the hour, so nothing was linked — start again for a new hour');
+      }
+    }
+  } catch (e) {
+    burnProofDown = true;
+    if (isThrottle(e)) burnProofCoolUntil = now() + 30e3;
+    if (now() - burnProofWarnAt > 5 * 60e3) { burnProofWarnAt = now(); console.warn('[burnproof] the chain could not be read: ' + ((e && e.message) || e) + ' — open windows keep waiting'); }
+  } finally { burnProofBusy = false; }
+  try { db.prepare("UPDATE burn_proofs SET status = 'expired', reason = ?, done_at = ? WHERE status = 'open' AND deadline < ?").run('the chain could not be read for this window, so the burn could not be checked — start again', now(), now() - BURN_PROOF_STALE_MS); } catch {}
+}
 function presenceCount() {
   const cutoff = now() - PRESENCE_WINDOW; let n = 0;
   for (const [k, t] of presence) { if (t < cutoff) presence.delete(k); else n++; }
@@ -13555,7 +13852,7 @@ function settleBeta() {
 
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
    are for. This decides who may make an account. */
-const TOS_VERSION = '2026-10-14';   // 2026-10-14: the Arcade's slot machine (Just Spin It) joins Rocket Run in §§1, 2, 31 and 45
+const TOS_VERSION = '2026-10-20';   // 2026-10-14: the Arcade's slot machine (Just Spin It) joins Rocket Run in §§1, 2, 31 and 45
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
@@ -14192,8 +14489,9 @@ function holderProofState(u) {
     wallets: walletAddresses(u.id).length,
     /* The assurance, in the words it has to be said in. A signature is not an approval and this site
        never asks for one: personal_sign puts a sentence in front of you and returns a signature over
-       that sentence. It cannot move a token, and nothing here ever calls eth_sendTransaction. */
-    readOnly: 'Connecting is read-only. You sign a sentence to prove the wallet is yours — that signature moves nothing, approves nothing, and costs no gas. This site can never send your funds anywhere.',
+       that sentence. It cannot move a token, and nothing here ever calls eth_sendTransaction. The burn
+       proof is the one exception to "nothing moves", and it is the member's own transaction, said as such. */
+    readOnly: 'Connecting is read-only. You sign a sentence to prove the wallet is yours — that signature moves nothing, approves nothing, and costs no gas. This site can never send your funds anywhere. A wallet that can’t sign can be proved instead by sending the exact dust amount of $SEND the site shows you from it to the burn address yourself — a real transaction you make in your own wallet app, and what you send is gone for good.',
   };
 }
 // only the read-only SANCTION — for an account's own profile, which a new member may set up before the $SEND check
@@ -14211,7 +14509,7 @@ function blockReadOnly(res, me) {
      not proved itself yet has done nothing wrong. */
   if (needsHolderProof(me)) {
     send(res, 403, {
-      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND. No waiting period.',
+      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND (a wallet that can’t sign can be proved by a burn instead). No waiting period.',
       needsProof: true, proof: holderProofState(me),
     });
     return true;
@@ -14253,6 +14551,7 @@ const sweeper = setInterval(() => {
   try {
     db.prepare('DELETE FROM nonces WHERE expires_at < ?').run(t);
     db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(t);
+    db.prepare("DELETE FROM burn_proofs WHERE status <> 'open' AND done_at < ?").run(t - BURN_PROOF_KEEP_MS);   // a finished burn-proof window, shown for a week
   } catch {}
   sweepIpIndexes(t);
 }, 6e5); // every 10 min
@@ -14784,7 +15083,7 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (me.holder_verified_at) return send(res, 200, { verified: true });
         if (!rateLimit('hproof:' + me.id, 12, 6e5)) return bad(res, 'we are already checking — give it a minute', 429);
-        if (!walletAddresses(me.id).length) return bad(res, 'connect a wallet first — that is what we read the chain against', 400);
+        if (!walletAddresses(me.id).length) return bad(res, 'connect a wallet first (or prove one by a burn) — that is what we read the chain against', 400);
         /* A 'pending' from a process that is gone must not block a retry forever. Anything older than
            PROOF_STALE_MS is treated as abandoned, which is the lesson the block-0 scanner taught. */
         const stale = me.holder_state === 'pending' && (now() - (me.holder_proof_at || 0)) > PROOF_STALE_MS;
@@ -14902,7 +15201,7 @@ const server = http.createServer(async (req, res) => {
           media: OPTIONAL_MEDIA,   // X04: the theme song and the feature video ship outside git; pages hide what is not here
           /* the versions of the files auth.js injects at sign-up time: the HTML rewriter versions every file a page names,
              but these three are added by script, so they went out bare — and Cloudflare kept a bare file for four hours */
-          assets: { 'gate.css': assetVer('gate.css'), 'invite.css': assetVer('invite.css'), 'invite.js': assetVer('invite.js') },
+          assets: { 'gate.css': assetVer('gate.css'), 'invite.css': assetVer('invite.css'), 'invite.js': assetVer('invite.js'), 'burnproof.js': assetVer('burnproof.js') },
           features: { voiceMemos: VOICE_MEMOS },
           auth: {
             wallet: true, email: true,
@@ -15345,6 +15644,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/auth/sessions' && req.method === 'DELETE') {
         if (!me) return bad(res, 'sign in first', 401);
         const r = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid));
+        burnProofsOff(me, 'you ended your other sessions, and one of them had started this window');   // a window those sessions opened goes with them
         const keyReset = resetDataKeySecret(me.id, 'you ended your other sessions');
         return send(res, 200, { ok: true, endedOthers: r.changes, dataKeyReset: keyReset });
       }
@@ -15604,7 +15904,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist'])
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -15666,6 +15966,7 @@ const server = http.createServer(async (req, res) => {
         }
         db.prepare('UPDATE identities SET secret = ? WHERE id = ?').run(await hashPassword(next), e.id);
         const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
+        burnProofsOff(me, 'the password was changed, and another session had started this window');
         resetDataKeySecret(me.id, 'your password was changed');
         notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended.' : '.'), 'wallet');
         return send(res, 200, { ok: true, endedOthers: dropped });
@@ -15823,6 +16124,49 @@ const server = http.createServer(async (req, res) => {
         sudoOthersOff(me);
         notify(me.id, '🔐', 'Your two-factor wallet changed — sign-ins now need the wallet you just chose (Settings → Security shows which).', 'wallet');
         return send(res, 200, { ok: true, twofaWallet: next });
+      }
+      /* Proving a wallet by a burn (the rule is at BURN_PROOF_MS): this account's latest window, opening one, and
+         calling one off. The watcher, not these, decides — they only start the hour and say where it stands. */
+      if (p === '/api/wallet/burnproof' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        return send(res, 200, burnProofState(me, db.prepare('SELECT * FROM burn_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1').get(me.id)));
+      }
+      if (p === '/api/wallet/burnproof/start' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('bpstart:' + clientIp(req), 30, 9e5)) return bad(res, 'slow down', 429);
+        const b = await readBody(req);
+        const address = String(b.address || '').trim().toLowerCase();
+        if (!/^0x[0-9a-f]{40}$/.test(address)) return bad(res, 'paste the wallet’s address: 0x followed by 40 letters and numbers');
+        if (address === DEAD_ADDR || address === ZERO_ADDR || address === TOK.SEND || address === TOK.GWC) return bad(res, 'that is not a wallet — paste the address of the wallet that holds your $SEND');
+        // a burn signs nobody in, so the account needs its own way in before it relies on one
+        if (!hasEmailAndPassword(me.id)) return send(res, 400, { error: 'add an email and a password to your account first — a wallet proved by a burn can’t sign you in, so they are how you will', code: 'need_email' });
+        // F011, as every link: asked of every signed-in caller alike, before anything about this address is looked up
+        const err = await ownershipRefusal(me, b.current || {}); if (err) return bad(res, 'to prove a wallet, ' + err, 401);
+        let head = 0;
+        try { head = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16); } catch {}
+        if (!(head > 0)) return bad(res, 'the chain isn’t answering right now, so the hour can’t start yet — try again in a minute', 503);
+        burnProofDown = false;   // it just answered
+        const k = await burnProofScale();
+        /* ---- from here to the INSERT, no await: the checks, the call-off of this account's open window, the amount and the row
+           happen as one step, so parallel starts cannot each see room under the daily cap, or draw the same amount ---- */
+        const ident = findIdentity('wallet', address);
+        if (ident && ident.user_id === me.id) return bad(res, 'that wallet is already linked to your account', 409);   // about this account only: whether ANOTHER has it is said after the burn, as after a signature
+        if (walletAddresses(me.id).length >= MAX_LINKED_WALLETS) return bad(res, 'you can link up to ' + MAX_LINKED_WALLETS + ' wallets — unlink one in Settings → Security first');
+        const today = db.prepare('SELECT COUNT(*) n FROM burn_proofs WHERE user_id = ? AND opened_at > ?').get(me.id, now() - 864e5).n;
+        if (today >= BURN_PROOF_DAY_MAX) return bad(res, 'you have started ' + BURN_PROOF_DAY_MAX + ' burn proofs in the last 24 hours — try again tomorrow', 429);
+        const amount = burnProofPick(bidx(address), k);
+        if (!amount) return bad(res, 'too many proofs are open on that wallet right now — try again in an hour', 503);
+        db.prepare("UPDATE burn_proofs SET status = 'cancelled', reason = 'a new window was started', done_at = ? WHERE user_id = ? AND status = 'open'").run(now(), me.id);   // one open window per account
+        const at = now();
+        const id = db.prepare('INSERT INTO burn_proofs (user_id, addr_idx, addr_enc, from_block, scanned_to, opened_at, deadline, opened_by, amount_enc) VALUES (?,?,?,?,?,?,?,?,?)').run(me.id, bidx(address), encField(address), head, head, at, at + BURN_PROOF_MS, hashToken(me.sid), encField(amount)).lastInsertRowid;
+        // a way a wallet can join this account: said where the owner looks, like every other change to how it is reached
+        notify(me.id, '🔥', 'A one-hour burn proof was started on your account. Not you? Cancel it in Settings → Security (Prove one by a burn) and change your password.', 'alert');
+        return send(res, 200, Object.assign({ ok: true }, burnProofState(me, db.prepare('SELECT * FROM burn_proofs WHERE id = ?').get(id))));
+      }
+      if (p === '/api/wallet/burnproof/cancel' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        db.prepare("UPDATE burn_proofs SET status = 'cancelled', reason = 'you cancelled it', done_at = ? WHERE user_id = ? AND status = 'open'").run(now(), me.id);
+        return send(res, 200, Object.assign({ ok: true }, burnProofState(me, db.prepare('SELECT * FROM burn_proofs WHERE user_id = ? ORDER BY id DESC LIMIT 1').get(me.id))));
       }
       /* Unlink ONE wallet and leave the rest. /api/wallet/disconnect removes every wallet at once, which is
          the wrong tool when someone simply wants to swap which wallet they hold from. Guards mirror it. */
@@ -15992,7 +16336,7 @@ const server = http.createServer(async (req, res) => {
            is never gated at all — nobody should need to prove anything to stop being notified. */
         if (req.method === 'POST' && needsHolderProof(me)) {
           return send(res, 403, {
-            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND. No waiting period.',
+            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND (a wallet that can’t sign can be proved by a burn instead). No waiting period.',
             needsProof: true, proof: holderProofState(me),
           });
         }
@@ -16103,34 +16447,7 @@ const server = http.createServer(async (req, res) => {
           /* Linking a wallet ADDS A WAY INTO THE ACCOUNT: without a proof, a stolen session cookie was enough to
              attach an attacker's own wallet, enable wallet 2FA with it and lock the real owner out for good. The
              proof is asked at the top of this route, before the signature is spent (F011). */
-          insertIdentity(me.id, 'wallet', address);
-          notify(me.id, '🔗', 'A new wallet was linked to your account. Not you? Unlink it and end other sessions in Settings → Security.', 'alert');
-          sudoOthersOff(me);
-          forgetHoldings(me.id); // a cached "doesn't hold" must not hide the bag in the wallet they just linked
-          refreshSupplyForUser(me.id); // their communities' share of supply now includes this wallet
-          // connect points are earned only by a wallet that actually HOLDS $SEND/$GWC on-chain, and never
-          // while read-only — so an empty throwaway keypair (or a flagged account) can't farm the bonus.
-          let sendBal = 0, gwcHeld = false;
-          try { sendBal = Number(await erc20Balance(TOK.SEND, address)) / 1e18; gwcHeld = (await erc20Balance(TOK.GWC, address)) > 0n; } catch {}
-          // bidx, not the address. The ref only has to be a stable unique key for the once-per-address
-          // dedup — and writing the raw address here undid the encryption everywhere else: identities and
-          // tracked_wallets store addresses encrypted with a blind index precisely so a database leak does
-          // not map usernames to on-chain wallets, and the points ledger was publishing them in clear text
-          // beside the user_id that owns them. The blind index dedupes identically and reveals nothing.
-          if ((sendBal > 0 || gwcHeld) && !restrictionOf(me)) awardPoints(me.id, 'connect_wallet', PTS.connect_wallet, 'connect:' + bidx(address)); // once per address ever
-          // if this wallet is linked mid-restriction/probation, its $SEND is PRE-EXISTING — fold it into the redemption
-          // baseline (so linking a bag can't fake the "buy $SEND" requirement) and into any active hold floor (so its
-          // balance must be maintained too). Only when the baseline is already known (>=0); an unknown baseline is set at redeem.
-          if (sendBal > 0 && (restrictionOf(me) || probationOf(me))) {
-            db.prepare('UPDATE users SET redeem_base_send = redeem_base_send + ? WHERE id=? AND redeem_base_send >= 0').run(sendBal, me.id);
-            db.prepare('UPDATE users SET redeem_floor = redeem_floor + ? WHERE id=? AND redeem_hold_until > 0').run(sendBal, me.id);
-          }
-          balCache.delete(me.id); // the linked wallet set grew — recompute nav balances on next fetch
-          checkOg(me.id).catch(() => {}); // a newly linked wallet might be an early buyer → verify OG in the background
-          // A wallet is exactly what the participation check needs. Start it without being asked — the
-          // person who just linked one is plainly trying to get in, and making them press a second button
-          // to begin a check they cannot see would be ceremony.
-          if (needsHolderProof(me)) queueHolderProof(me.id);
+          await linkWalletTo(me, address, 'signature');
           return send(res, 200, { ok: true, linked: true, username: me.username });
         } else {
           // A brand-new account from a wallet signature is still a new account, so BOTH the invite and the
@@ -19427,7 +19744,7 @@ const BACKUP_SCRUB = [
   'UPDATE alerts SET ip = NULL', 'UPDATE proposals SET author_ip = NULL', 'UPDATE proposal_votes SET vote_ip = NULL',
   'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
   'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
-  'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces',
+  'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
 ];
 function scrubBackup(file) {
   let b = null;
@@ -19663,6 +19980,9 @@ const bundleTimer = setInterval(() => { runBundleQueue().catch(() => {}); }, 15 
 bundleTimer.unref();
 const bundleFeedTimer = setInterval(() => { try { if (!bundleQueue.length) bundleSweepPick(); } catch {} }, BUND.FEED_GAP_MS);
 bundleFeedTimer.unref();
+// burn proofs: one log walk per wallet being proved (its own burns only); idle (one SELECT) when no window is open
+const burnProofTimer = setInterval(() => { burnProofTick().catch(() => {}); }, BURN_PROOF_TICK_MS);
+burnProofTimer.unref();
 propTimer.unref();
 commHolderTimer.unref();
 ledgerTimer.unref(); ledgerFirst.unref();

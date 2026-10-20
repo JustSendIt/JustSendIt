@@ -5,6 +5,9 @@
  * injected provider. STRICTLY READ-ONLY: this layer only ever requests accounts + a signature
  * (personal_sign, gas-free, moves nothing). It NEVER sends a transaction. The one on-chain action
  * on the whole site (the opt-in swap) lives in chain.js and is user-signed in their own wallet.
+ * A wallet that cannot sign at all (GMGN's), or one not on the list, is pointed at the burn proof
+ * (burnproof.js): the member sends $SEND to the burn address from their own wallet app, and the
+ * server only reads the chain. Nothing here builds or sends that transaction either.
  * Load this BEFORE chain.js / auth.js / profile.js. */
 (function () {
   const LS_KEY = 'sendit_wallet_rdns';
@@ -77,12 +80,21 @@
     { key: 'rabby', name: 'Rabby', emoji: '🐰', re: /rabby/i, get: 'https://rabby.io/' },
     { key: 'okx', name: 'OKX Wallet', emoji: '⭕', re: /okx|okex/i, get: 'https://www.okx.com/download', deep: (full) => 'https://www.okx.com/download?deeplink=' + encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + encodeURIComponent(full)) },
     { key: 'rainbow', name: 'Rainbow', emoji: '🌈', re: /rainbow/i, get: 'https://rainbow.me/' },
+    /* GMGN holds its wallets for you and gives no way to sign a message for another site, so it cannot connect here.
+       `burn`: offered where a wallet is being proved (connect({ burn: true })) as the way it CAN be — a burn from it. If
+       it ever announces a provider of its own, that is tried like any other wallet. */
+    { key: 'gmgn', name: 'GMGN', emoji: '📈', re: /gmgn/i, burn: true, badge: 'Can’t sign — prove it by a burn', get: 'https://gmgn.ai/' },
   ];
   function knownFor(info) { const s = (info && (info.name + ' ' + (info.rdns || ''))) || ''; return KNOWN.find(k => k.re.test(String(s))) || null; }
   function knownRank(info) { const k = knownFor(info); return k ? KNOWN.indexOf(k) : 90; }
 
   // --- picker modal ---
-  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '';
+  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '', pickOpts = {};
+  // the way for a wallet that cannot sign, or is not listed: close the picker (the caller hears a quiet 'cancelled') and open the burn proof
+  function toBurn(key) {
+    close(null);
+    if (window.AUTH && AUTH.openBurnProof) AUTH.openBurnProof({ wallet: key || '' });
+  }
   function buildModal() {
     overlay = document.createElement('div');
     overlay.className = 'wc-overlay';
@@ -107,7 +119,7 @@
     document.addEventListener('keydown', (e) => { if (!overlay.hidden && e.key === 'Escape') { e.stopPropagation(); close(null); } }, true);
   }
 
-  function badgeHTML(k) { return (k && k.badge) ? '<span class="wc-badge">✓ ' + esc(k.badge) + '</span>' : ''; }
+  function badgeHTML(k) { return (k && k.badge) ? '<span class="wc-badge">' + (k.burn ? '🔥 ' : '✓ ') + esc(k.badge) + '</span>' : ''; }   // a tick says "works here"; the burn row's badge says why it doesn't
   function renderList() {
     const wraps = list();
     const listEl = overlay.querySelector('#wc-list');
@@ -124,18 +136,18 @@
         const icon = v.info.icon
           ? '<img class="wc-ico" src="' + esc(v.info.icon) + '" alt="">'
           : '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + (k ? k.emoji : '👛') + '</span>';
-        b.innerHTML = icon + '<span class="wc-name">' + esc(v.info.name || 'Wallet') + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">Connect →</span>';
+        b.innerHTML = icon + '<span class="wc-name">' + esc(v.info.name || 'Wallet') + badgeHTML(k && !k.burn ? k : null) + '</span><span class="wc-go" aria-hidden="true">Connect →</span>';   // a detected one is tried like any wallet: no "can't sign" badge on it
         b.setAttribute('data-tip', 'Connects using this wallet');
         b.addEventListener('click', () => finish(v));
         listEl.appendChild(b);
       }
     } else {
-      listEl.innerHTML = '<p class="wc-empty">No wallet detected in this browser.</p>';
+      listEl.innerHTML = '<p class="wc-empty">No wallet detected in this browser.' + (pickOpts.burn ? ' Using GMGN, or a wallet inside an app? Prove it by a burn — below.' : '') + '</p>';
     }
     // 2) popular hot wallets you don't have here yet → open in-app (mobile) or get the app
     const mobile = isMobile();
     const full = location.href, bare = location.host + location.pathname + location.search;
-    const undetected = KNOWN.filter(k => !detected.has(k.key));
+    const undetected = KNOWN.filter(k => !detected.has(k.key) && !k.burn);
     footEl.innerHTML = '';
     if (undetected.length) {
       footEl.innerHTML = '<div class="wc-sub">' + (wraps.length ? 'More popular wallets' : (mobile ? '📱 Open this page in your wallet app' : 'Popular wallets — get one, then reload')) + '</div>';
@@ -157,9 +169,33 @@
         footEl.appendChild(tip);
       }
     }
+    // 3) a wallet that cannot sign here, or is not on this list: the burn proof (only where a wallet is being proved)
+    if (pickOpts.burn) {
+      const sub = document.createElement('div');
+      sub.className = 'wc-sub';
+      sub.textContent = 'Can’t sign, or not on the list?';
+      footEl.appendChild(sub);
+      for (const k of KNOWN.filter(x => x.burn && !detected.has(x.key))) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'wc-deep wc-burn';
+        b.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + k.emoji + '</span><span class="wc-name">' + esc(k.name) + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">Burn 🔥</span>';
+        b.setAttribute('data-tip', 'Opens the burn proof: send the exact dust amount of $SEND it shows from your ' + k.name + ' wallet to the burn address, instead of signing');
+        b.addEventListener('click', () => toBurn(k.key));
+        footEl.appendChild(b);
+      }
+      const any = document.createElement('button');
+      any.type = 'button';
+      any.className = 'wc-deep wc-burn';
+      any.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">🔥</span><span class="wc-name">My wallet isn’t listed, or can’t sign</span><span class="wc-go" aria-hidden="true">Burn 🔥</span>';
+      any.setAttribute('data-tip', 'Proves any wallet by a burn instead: send the exact dust amount of $SEND shown from it to the burn address, within an hour');
+      any.addEventListener('click', () => toBurn(''));
+      footEl.appendChild(any);
+    }
   }
 
-  function openPicker() {
+  function openPicker(opts) {
+    pickOpts = opts || {};
     if (!overlay) buildModal();
     renderList();
     // keep re-rendering briefly as late wallets announce
@@ -187,23 +223,25 @@
   function finish(v) { selected = v; remember(v); close(v); }
 
   // Public: open the picker and resolve with the chosen provider wrapper (or null if dismissed)
-  function pick() { return openPicker(); }
+  function pick(opts) { return openPicker(opts); }
 
-  // Public: connect (read-only) — returns { provider, address, info }.
-  async function connect() {
+  /* Public: connect (read-only) — returns { provider, address, info }. opts.burn: this connect PROVES a wallet (sign-in,
+     sign-up, linking), so the picker also offers the burn proof for a wallet that cannot sign or is not listed. Left off
+     where a particular wallet's own signature is the point (two-factor, "confirm it's you"). */
+  async function connect(opts) {
     // fast path: a single wallet, or a remembered one, connects without the picker
     const all = list();
     let chosen = selected;
     if (!chosen) chosen = remembered();
     if (!chosen && all.length === 1) chosen = all[0];
     if (!chosen) {
-      chosen = await openPicker();
+      chosen = await openPicker(opts);
       if (!chosen) throw new Error('cancelled');
     }
     selected = chosen; remember(chosen);
     let accts;
     try { accts = await chosen.provider.request({ method: 'eth_requestAccounts' }); }
-    catch (e) { throw explain(e); }
+    catch (e) { throw explain(e, opts); }
     if (!accts || !accts[0]) throw new Error('No account authorized');
     /* EVERY connect lands on Robinhood Chain — sign-in, linking a wallet, and the swap alike. It used to
        be the swap's job alone, so somebody who connected from anywhere else stayed on whatever network
@@ -235,27 +273,27 @@
   const utf8Hex = (s) => '0x' + Array.from(new TextEncoder().encode(String(s)), (b) => b.toString(16).padStart(2, '0')).join('');
   const isHexSig = (s) => typeof s === 'string' && /^0x[0-9a-fA-F]{2,}$/.test(s);
   const wantsText = (e) => { const m = String((e && e.message) || ''); return (e && (e.code === -32602 || e.code === -32000)) || /invalid param|must be a (utf-?8 )?string|not a hex|expected string/i.test(m); };
-  async function sign(provider, address, message) {
+  async function sign(provider, address, message, opts) {   // opts.burn: proving a wallet — a refusal may point at the burn proof
     const p = provider || get();
     if (!p) throw new Error('No wallet connected');
     let sig;
     try {
       try { sig = await p.request({ method: 'personal_sign', params: [utf8Hex(message), address] }); }
       catch (e) { if (!wantsText(e)) throw e; sig = await p.request({ method: 'personal_sign', params: [String(message), address] }); }
-    } catch (e) { throw explain(e); }
+    } catch (e) { throw explain(e, opts); }
     if (!isHexSig(sig)) throw new Error('the wallet did not return a signature — try again, or try another wallet');
     return sig;
   }
   /* What a wallet's refusal means, in words a person can act on. Codes are EIP-1193 / EIP-1474; the message
      tests cover wallets that use the code loosely. 'cancelled' is what every caller already treats as "say
      nothing": the person closed the prompt themselves. Anything unrecognised is passed on as the wallet said it. */
-  function explain(e) {
+  function explain(e, opts) {
     // the words come from strings only: a wallet that rejects with a bare object (a code, a nested data.message) must not become "[object Object]"
     const code = e && e.code, m = typeof e === 'string' ? e : String((e && (e.message || (e.data && e.data.message))) || '');
     if (m === 'cancelled') return e;
     if (code === 4001 || /user (rejected|denied|cancel|declined)|rejected the request|denied (message|transaction|account)/i.test(m)) return new Error('cancelled');
     if (code === -32002 || /already pending|request already|already (processing|in progress)/i.test(m)) return Object.assign(new Error('Your wallet already has a request open — open the wallet, approve or dismiss it, then try again.'), { code });
-    if (code === 4100 || code === 4200 || /unsupported method|method not (supported|found)|unauthorized/i.test(m)) return Object.assign(new Error('This wallet can’t sign a message here — try another wallet.'), { code });
+    if (code === 4100 || code === 4200 || /unsupported method|method not (supported|found)|unauthorized/i.test(m)) return Object.assign(new Error('This wallet can’t sign a message here — try another wallet' + (opts && opts.burn ? ', or prove it by a burn instead (🔥 below the wallet button, or in Settings → Security).' : '.')), { code });   // the burn hint only where a burn can stand in: never for two-factor or "confirm it's you"
     if (code === 4900 || code === 4901 || /disconnected|not connected|no accounts|unlock/i.test(m)) return Object.assign(new Error('Your wallet is locked or disconnected — unlock it, then try again.'), { code });
     const out = new Error(m.replace(/^(MetaMask|Coinbase Wallet|Phantom|Rabby|Trust Wallet)[^:]*:\s*/i, '').trim() || 'the wallet could not do that');
     if (code !== undefined) out.code = code;
@@ -264,6 +302,6 @@
 
   /* The curated registry, exposed so other surfaces (the How-to-Buy guide) can render the SAME list the
      picker shows. Copied, not shared, so a caller cannot mutate the registry the picker depends on. */
-  function known() { return KNOWN.map(k => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '' })); }
+  function known() { return KNOWN.filter(k => !k.burn).map(k => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '' })); }   // wallets to get — not one that cannot connect
   window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected, known, sign, explain };
 })();

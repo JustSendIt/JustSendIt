@@ -84,6 +84,7 @@
       <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
+      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Opens the burn proof: send the exact dust amount of $SEND it shows from the wallet to the burn address, instead of signing">Prove it by a burn 🔥</button></p>
     </div>
 
     <div id="pane-email" role="tabpanel" aria-labelledby="tab-email" hidden>
@@ -229,6 +230,37 @@
   }
   AUTH.openInvite = openInvite;
   AUTH.loadInvite = loadInvite;
+  /* The burn proof (burnproof.js): a wallet that cannot sign, or is not on the picker's list, is proved by a burn sent
+     from it. Fetched the first time somebody needs it, like the ticket. It opens over the ticket and the picker; the
+     sign-in panel, when it is up for a sign-in rather than a "confirm it's you", steps aside for it. */
+  let burnPromise = null;
+  function loadBurn() {
+    if (window.BURNPROOF) return Promise.resolve(window.BURNPROOF);
+    if (burnPromise) return burnPromise;
+    burnPromise = new Promise((resolve, reject) => {
+      const av = (AUTH.config && AUTH.config.assets) || {};
+      const sc = document.createElement('script');
+      sc.src = '/burnproof.js' + (av['burnproof.js'] ? '?v=' + encodeURIComponent(av['burnproof.js']) : '');
+      sc.onload = () => window.BURNPROOF ? resolve(window.BURNPROOF) : reject(new Error('burn proof failed to load'));
+      sc.onerror = () => { burnPromise = null; reject(new Error('burn proof failed to load')); };
+      document.head.appendChild(sc);
+    });
+    return burnPromise;
+  }
+  AUTH.openBurnProof = function (opts) {
+    if (!modal.hasAttribute('hidden') && !confirmReject) closeModal();
+    return loadBurn().then((b) => b.open(opts || {})).catch(() => { if (window.sendToast) sendToast('⚠️ The burn proof could not load — reload the page and try again.'); });
+  };
+  // someone who chose "make an account" or "sign in" from the burn proof gets it back once they are in (a page change included)
+  function resumeBurnProof() {
+    if (!AUTH.user) return;
+    let at = 0; try { at = Number(sessionStorage.getItem('jsi:burnproof')) || 0; } catch {}
+    if (!at) return;
+    try { sessionStorage.removeItem('jsi:burnproof'); } catch {}
+    if (Date.now() - at > 15 * 60e3) return;   // a sign-in begun from the panel and abandoned long ago does not reopen it later
+    const go = () => setTimeout(() => AUTH.openBurnProof({ from: 'resume' }), 700);   // after the welcome and the nav repaint
+    if (window.AGE && AGE.needed && AGE.whenOk) AGE.whenOk(go); else go();
+  }
   // Does this visitor already hold a ticket? Cached for the page's life — it only ever changes
   // through the ticket itself, which updates this when it does.
   let gateState = null;
@@ -325,6 +357,8 @@
     }
     const ticketLink = modal.querySelector('#auth-ticket');
     if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite(); });
+    const burnAlt = modal.querySelector('#btn-burn-alt');
+    if (burnAlt) burnAlt.addEventListener('click', () => AUTH.openBurnProof({ from: 'signin' }));
     segLogin.addEventListener('click', () => setRegMode(false));
     /* Choosing "Sign up" is the moment the ticket is needed, so that is where it appears — before
        anyone fills in a form that was always going to be refused at the end of it. Someone who
@@ -525,7 +559,12 @@
         const first = need.password ? q('cf-pw') : need.code ? q('cf-code') : need.wallet ? q('cf-wallet') : q('cf-signout');
         try { first.focus(); } catch {}
         confirmReject = reject;
-        q('cf-signout').onclick = async () => { confirmReject = null; closeModal(); reject(new Error('cancelled')); await AUTH.logout(); openModal(); };
+        q('cf-signout').onclick = async () => {
+          confirmReject = null; closeModal(); reject(new Error('cancelled'));
+          // asked for by the burn proof? It steps aside (the sign-in would open under it) and comes back once they are in
+          if (window.BURNPROOF && BURNPROOF.isOpen()) { try { sessionStorage.setItem('jsi:burnproof', String(Date.now())); } catch {} BURNPROOF.close(); }
+          await AUTH.logout(); openModal();
+        };
         q('cf-wallet').onclick = async () => {
           try {
             setStatus(status, 'Choose the wallet… 👛');
@@ -694,10 +733,10 @@
           return;
         }
         setStatus(status, 'Choose your wallet… 👛');
-        const { provider, address } = await WALLET.connect();
+        const { provider, address } = await WALLET.connect({ burn: true });
         setStatus(status, 'Approve the signature in your wallet… ✍️');
         const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
-        const signature = await WALLET.sign(provider, address, message);
+        const signature = await WALLET.sign(provider, address, message, { burn: true });
         const body = Object.assign({ address, signature, intent: wRegMode ? 'signup' : 'signin' }, fields || {});
         const j = await api('/api/auth/wallet/verify', { method: 'POST', body });
         setStatus(status, '');
@@ -779,9 +818,9 @@
        account confirms by signing in again. Inside the unlocked window (a new account's setup, or a recent
        confirm) this resolves at once. */
     const current = await AUTH.stepUp(note || 'Linking a wallet adds a new way to sign in to this account.');
-    const { provider, address } = await WALLET.connect();
+    const { provider, address } = await WALLET.connect({ burn: true });
     const { message } = await api('/api/auth/wallet/nonce?purpose=link&address=' + address);
-    const signature = await WALLET.sign(provider, address, message);
+    const signature = await WALLET.sign(provider, address, message, { burn: true });
     const j = await api('/api/auth/wallet/verify', { method: 'POST', body: { address, signature, current } });
     if (j.linked) { await refresh(); onAuthChange(); }
     if (j.linked && window.SFX) SFX.play('connect');
@@ -1159,6 +1198,7 @@
     // decoupled sign-in signal for compose.js / tour.js (window.onAuthReady is owned by the wall page)
     document.dispatchEvent(new CustomEvent('auth:change', { detail: AUTH.user }));
     if (typeof window.onAuthReady === 'function') window.onAuthReady(AUTH.user);
+    resumeBurnProof();
   }
 
   /* ---------- connected-wallet balances in the nav (read-only convenience) ---------- */

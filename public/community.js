@@ -197,7 +197,7 @@
       // The sandbox community has no token to hold and deliberately grants no multiplier, so it must
       // not repeat the standard copy — that would be telling people something untrue about it.
       document.getElementById('comm-wall-locked').innerHTML = wall === 'holders'
-        ? '🔒 <b>This wall is for verified holders of $' + (C ? esc(C.symbol) : '') + '.</b> Its posts are never sent to anyone else — not to this page, not to the Send Wall, not to the public data feed. To read it, <b>opt in</b> above: connect a wallet (a free signature, never a transaction) and hold the token, checked on-chain. Sell it and the wall closes again.'
+        ? '🔒 <b>This wall is for verified holders of $' + (C ? esc(C.symbol) : '') + '.</b> Its posts are never sent to anyone else — not to this page, not to the Send Wall, not to the public data feed. To read it, <b>opt in</b> above: connect a wallet (a free signature, never a transaction — or a dust burn for a wallet that can’t sign) and hold the token, checked on-chain. Sell it and the wall closes again.'
         : joined ? ''
         : ((C && C.demo)
           ? '👀 <b>Anyone can read this wall.</b> This is the open sandbox: <b>join with no token of its own to hold</b> (the $100 $SEND wallet check still applies) and try everything — posting, proposals and voting. It is for learning, so it earns <b>no Send Power multiplier</b>.'
@@ -342,7 +342,7 @@
               const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
               gate.hidden = false;
               gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'You must hold this token to join.') +
-                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
+                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction; a wallet that can’t sign is proved by a dust burn) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
                 ' <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">Get $' + esc(C.symbol) + ' ↗</button>';
             }
             join.disabled = false; return;
