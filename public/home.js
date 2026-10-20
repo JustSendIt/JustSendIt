@@ -382,6 +382,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   if (!list || !btn || !window.WALLET) return;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  let showAll = false;   // the guide's "Show all N wallets" — the best-fitting few are shown until pressed
   function installedKeys() {
     // WALLET.list() is what EIP-6963 actually announced in this browser
     try {
@@ -392,7 +393,10 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
 
   function render() {
     const has = installedKeys();
-    list.innerHTML = (WALLET.known() || []).map(k => {
+    const all = WALLET.known() || [];
+    // the best-fitting few, plus any the browser has; the rest of the market behind one press, as in the picker
+    const shown = all.filter((k) => k.featured || has(k) || showAll), rest = all.length - shown.length;
+    list.innerHTML = shown.map(k => {
       const here = has(k);
       return '<li class="g1-w">' +
         '<a class="g1-w-link" href="' + esc(k.get) + '" target="_blank" rel="noopener">' +
@@ -401,7 +405,11 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
           (k.chain ? '<span class="g1-w-tag">native to this chain</span>' : '') +
           (here ? '<span class="g1-w-tag is-here">installed</span>' : '') +
         '</a></li>';
-    }).join('');
+    }).join('') + (rest || showAll
+      ? '<li class="g1-w g1-w-more"><button type="button" class="g1-more" aria-expanded="' + (showAll ? 'true' : 'false') + '" data-tip="' + (showAll ? 'Hides the rest of the list and keeps the best-fitting wallets' : 'Lists every wallet on the market that can connect here — all connect the same read-only way') + '">' + (showAll ? 'Fewer wallets ▴' : 'Show all ' + all.length + ' wallets ▾') + '</button></li>'
+      : '');
+    const more = list.querySelector('.g1-more');
+    if (more) more.addEventListener('click', () => { showAll = !showAll; render(); const m = list.querySelector('.g1-more'); if (m) m.focus(); });
   }
 
   // Signed out → the sign-in modal (its wallet button signs you in and makes the account).
@@ -437,7 +445,9 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   render();
   // wallets announce themselves asynchronously — repaint briefly so "installed" appears
   let ticks = 0;
-  const iv = setInterval(() => { if (++ticks > 8) return clearInterval(iv); render(); }, 400);
+  const sig = () => { try { return (WALLET.list() || []).map((w) => (w.info && (w.info.rdns || w.info.name)) || '').join('|'); } catch { return ''; } };
+  let last = sig();
+  const iv = setInterval(() => { if (++ticks > 8) return clearInterval(iv); const s = sig(); if (s !== last) { last = s; render(); } }, 400);   // only when the announced set changed, so a redraw never takes the focus
 })();
 
 /* ===== The 90-day beta campaign banner ==================================================

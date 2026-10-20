@@ -67,19 +67,53 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const toast = (m) => { if (window.sendToast) sendToast(m); };
 
-  // --- curated registry of popular hot wallets, ordered by how well they fit THIS site (Robinhood Chain first) ---
-  // `deep(full,bare)` → a mobile universal-link that reopens this page inside the wallet's in-app browser.
-  // `get` → official download page. `chain:true` → natively supports Robinhood Chain (verified). `re` matches the
-  // wallet's announced EIP-6963 name/rdns so a detected wallet gets branded + prioritized.
+  /* --- the registry of wallets, ordered by how well they fit THIS site (Robinhood Chain first) ---
+     Every wallet that injects an EIP-6963 / window.ethereum provider (an extension, or this page opened in the wallet app's
+     own browser) connects here the same way — one personal_sign — so a wallet not named below still works; the list is for
+     branding, ranking, and the download / open links. Owner, 2026-10-20: "add all wallets on the open market … abiding by the read-only sign rules": every entry
+     goes through that one read-only path, none through a wallet's own SDK.
+     `featured`: the first FEATURED entries are shown at once; the rest sit behind "Show all". `deep(full,bare)` → a mobile
+     universal-link that reopens this page inside the wallet's in-app browser (only ones measured to work). `get` → the
+     official download page (each one checked to answer and still offer the wallet, 2026-10-20). `chain:true` → ships
+     Robinhood Chain (Robinhood Wallet, Phantom, Rabby and the Coinbase Wallet app verified 2026-10-09; Uniswap Wallet per
+     Uniswap's launch post of 2026-07-02). `re` matches the wallet's announced EIP-6963 name/rdns so a detected wallet gets
+     branded + prioritized. A wallet with no injected provider and no in-app browser (a WalletConnect-only app such as
+     Kraken Wallet, a bare hardware wallet such as a Ledger, Exodus since it dropped both in Oct 2026) is left out: it has
+     no way to connect here; Ctrl Wallet (ex-XDEFI) shut down in Aug 2026. */
+  const FEATURED = 8;
   const KNOWN = [
     { key: 'robinhood', name: 'Robinhood Wallet', emoji: '🪶', re: /robinhood/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://robinhood.com/wallet/' },
-    { key: 'phantom', name: 'Phantom', emoji: '👻', re: /phantom/i, get: 'https://phantom.app/download', deep: (full, bare) => 'https://phantom.app/ul/browse/' + encodeURIComponent(full) + '?ref=' + encodeURIComponent(location.origin) },
+    { key: 'phantom', name: 'Phantom', emoji: '👻', re: /phantom/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://phantom.com/download', deep: (full, bare) => 'https://phantom.app/ul/browse/' + encodeURIComponent(full) + '?ref=' + encodeURIComponent(location.origin) },
     { key: 'metamask', name: 'MetaMask', emoji: '🦊', re: /metamask/i, get: 'https://metamask.io/download/', deep: (full, bare) => 'https://metamask.app.link/dapp/' + bare },
-    { key: 'coinbase', name: 'Coinbase Wallet', emoji: '🔵', re: /coinbase/i, get: 'https://www.coinbase.com/wallet/downloads', deep: (full) => 'https://go.cb-w.com/dapp?cb_url=' + encodeURIComponent(full) },
-    { key: 'trust', name: 'Trust Wallet', emoji: '🛡️', re: /trust/i, get: 'https://trustwallet.com/download', deep: (full) => 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encodeURIComponent(full) },
-    { key: 'rabby', name: 'Rabby', emoji: '🐰', re: /rabby/i, get: 'https://rabby.io/' },
+    { key: 'coinbase', name: 'Coinbase Wallet', emoji: '🔵', re: /coinbase/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://www.coinbase.com/wallet/downloads', deep: (full) => 'https://go.cb-w.com/dapp?cb_url=' + encodeURIComponent(full) },
+    { key: 'trust', name: 'Trust Wallet', emoji: '🛡️', re: /trust ?wallet|trustwallet/i, get: 'https://trustwallet.com/download', deep: (full) => 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encodeURIComponent(full) },
+    { key: 'rabby', name: 'Rabby', emoji: '🐰', re: /rabby/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://rabby.io/' },
     { key: 'okx', name: 'OKX Wallet', emoji: '⭕', re: /okx|okex/i, get: 'https://www.okx.com/download', deep: (full) => 'https://www.okx.com/download?deeplink=' + encodeURIComponent('okx://wallet/dapp/url?dappUrl=' + encodeURIComponent(full)) },
     { key: 'rainbow', name: 'Rainbow', emoji: '🌈', re: /rainbow/i, get: 'https://rainbow.me/' },
+    // ...and the rest of the market, alphabetically
+    { key: '1inch', name: '1inch Wallet', emoji: '1️⃣', re: /1inch/i, get: 'https://1inch.com/wallet' },
+    { key: 'ambire', name: 'Ambire', emoji: '🅰️', re: /ambire/i, get: 'https://www.ambire.com/' },
+    { key: 'backpack', name: 'Backpack', emoji: '🎒', re: /backpack/i, get: 'https://backpack.app/' },
+    { key: 'binance', name: 'Binance Wallet', emoji: '🟨', re: /binance/i, get: 'https://www.binance.com/en/web3wallet' },
+    { key: 'bitget', name: 'Bitget Wallet', emoji: '🅱️', re: /bitget|bitkeep/i, get: 'https://web3.bitget.com/' },
+    { key: 'brave', name: 'Brave Wallet', emoji: '🦁', re: /brave/i, get: 'https://brave.com/wallet/' },
+    { key: 'coin98', name: 'Coin98', emoji: '🟡', re: /coin98/i, get: 'https://coin98.com/wallet' },
+    { key: 'core', name: 'Core', emoji: '🔺', re: /\bcore\b|app\.core|avalanche/i, get: 'https://core.app/' },
+    { key: 'cryptocom', name: 'Crypto.com Onchain', emoji: '💠', re: /crypto\.com|cdcwallet|com\.crypto\.wallet/i, get: 'https://crypto.com/onchain' },
+    { key: 'enkrypt', name: 'Enkrypt', emoji: '🔐', re: /enkrypt/i, get: 'https://www.enkrypt.com/' },
+    { key: 'frame', name: 'Frame', emoji: '🖼️', re: /\bframe\b/i, get: 'https://frame.sh/' },
+    { key: 'imtoken', name: 'imToken', emoji: '🔷', re: /imtoken/i, get: 'https://token.im/' },
+    { key: 'keplr', name: 'Keplr', emoji: '🌌', re: /keplr/i, get: 'https://www.keplr.app/' },
+    { key: 'magiceden', name: 'Magic Eden Wallet', emoji: '🪄', re: /magic ?eden/i, get: 'https://wallet.magiceden.io/' },
+    { key: 'mathwallet', name: 'MathWallet', emoji: '➗', re: /math ?wallet/i, get: 'https://mathwallet.org/' },
+    { key: 'mew', name: 'MEW wallet', emoji: '🐱', re: /\bmew\b|myetherwallet/i, get: 'https://www.mewwallet.com/' },
+    { key: 'nightly', name: 'Nightly', emoji: '🌙', re: /nightly/i, get: 'https://nightly.app/' },
+    { key: 'safepal', name: 'SafePal', emoji: '🔒', re: /safepal/i, get: 'https://www.safepal.com/' },
+    { key: 'taho', name: 'Taho', emoji: '🐾', re: /taho|tally ?ho/i, get: 'https://taho.xyz/' },
+    { key: 'talisman', name: 'Talisman', emoji: '🧿', re: /talisman/i, get: 'https://talisman.xyz/' },
+    { key: 'tokenpocket', name: 'TokenPocket', emoji: '👝', re: /tokenpocket|token ?pocket/i, get: 'https://www.tokenpocket.pro/' },
+    { key: 'uniswap', name: 'Uniswap Wallet', emoji: '🦄', re: /uniswap/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://wallet.uniswap.org/' },
+    { key: 'zerion', name: 'Zerion', emoji: '🟣', re: /zerion/i, get: 'https://zerion.io/' },
     /* GMGN holds its wallets for you and gives no way to sign a message for another site, so it cannot connect here.
        `burn`: offered where a wallet is being proved (connect({ burn: true })) as the way it CAN be — a burn from it. If
        it ever announces a provider of its own, that is tried like any other wallet. */
@@ -89,7 +123,7 @@
   function knownRank(info) { const k = knownFor(info); return k ? KNOWN.indexOf(k) : 90; }
 
   // --- picker modal ---
-  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '', pickOpts = {};
+  let overlay = null, resolver = null, lastFocus = null, releaseTrap = null, prevOverflow = '', pickOpts = {}, showAll = false;
   // the way for a wallet that cannot sign, or is not listed: close the picker (the caller hears a quiet 'cancelled') and open the burn proof
   function toBurn(key) {
     close(null);
@@ -106,7 +140,7 @@
       '<div class="wc-modal">' +
         '<button class="wc-x" type="button" aria-label="Close" data-tip="Closes the wallet picker without connecting anything">✕</button>' +
         '<h2 class="wc-title">Connect a wallet</h2>' +
-        '<p class="wc-note">🔒 <b>Read-only.</b> We only read your address &amp; token balances — <b>we can never move your funds</b> and will never ask you to approve a transaction to connect.</p>' +
+        '<p class="wc-note">🔒 <b>Read-only.</b> We only read your address &amp; token balances — <b>we can never move your funds</b> and will never ask you to approve a transaction to connect. Any wallet that shows up in this browser — an extension, or this page opened in the wallet app’s own browser — connects the same way: one signed message, never a transaction. A wallet that only pairs by QR code can’t connect here.</p>' +
         '<div class="wc-list" id="wc-list"></div>' +
         '<div class="wc-foot" id="wc-foot"></div>' +
       '</div>';
@@ -150,22 +184,40 @@
     const undetected = KNOWN.filter(k => !detected.has(k.key) && !k.burn);
     footEl.innerHTML = '';
     if (undetected.length) {
-      footEl.innerHTML = '<div class="wc-sub">' + (wraps.length ? 'More popular wallets' : (mobile ? '📱 Open this page in your wallet app' : 'Popular wallets — get one, then reload')) + '</div>';
-      for (const k of undetected) {
+      footEl.innerHTML = '<div class="wc-sub">' + (wraps.length ? 'More wallets' : (mobile ? '📱 Open this page in a wallet app’s own browser — or get one' : 'Wallets — get one, then reload')) + '</div>';
+      const row = (k) => {
         const a = document.createElement('a');
         a.rel = 'noopener nofollow';
         let label;
         if (mobile && k.deep) { a.href = k.deep(full, bare); label = 'Open ↗'; }
-        else { a.href = k.get; a.target = '_blank'; label = mobile ? 'Get app ↗' : 'Get ↗'; }
+        else { a.href = k.get; a.target = '_blank'; label = 'Get ↗'; }
         a.className = 'wc-deep' + (k.chain ? ' wc-feat' : '');
         a.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + k.emoji + '</span><span class="wc-name">' + esc(k.name) + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">' + label + '</span>';
-        footEl.appendChild(a);
+        return a;
+      };
+      // the best-fitting few at once; the rest of the market behind one press (a list of 31 is a wall, not a choice)
+      const first = undetected.filter((k) => KNOWN.indexOf(k) < FEATURED), rest = undetected.filter((k) => KNOWN.indexOf(k) >= FEATURED);
+      for (const k of first) footEl.appendChild(row(k));
+      if (rest.length) {
+        const more = document.createElement('div');
+        more.className = 'wc-rest';
+        more.hidden = !showAll;
+        for (const k of rest) more.appendChild(row(k));
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'wc-more';
+        b.setAttribute('aria-expanded', String(showAll));
+        b.textContent = showAll ? 'Fewer wallets ▴' : 'Show all ' + undetected.length + ' wallets ▾';
+        b.setAttribute('data-tip', showAll ? 'Hides the rest of the list and keeps the best-fitting wallets' : 'Lists every wallet on the market that can connect here, with a link to get each');
+        b.addEventListener('click', () => { showAll = !showAll; renderList(); if (showAll) { const f = overlay.querySelector('.wc-rest .wc-deep'); if (f) f.focus(); } else overlay.querySelector('.wc-more').focus(); });
+        footEl.appendChild(b);
+        footEl.appendChild(more);
       }
-      // Robinhood Wallet is the only major hot wallet that natively supports Robinhood Chain — call it out
+      // wallets that ship Robinhood Chain are called out; most other EVM wallets can add it (chain id 4663), a few run a fixed list
       if (!detected.has('robinhood')) {
         const tip = document.createElement('p');
         tip.className = 'wc-tip';
-        tip.innerHTML = '🪶 <b>On Robinhood Chain?</b> Robinhood Wallet supports it natively — get the app, then open this page in its in-app <b>Web3 browser</b>.';
+        tip.innerHTML = '🪶 <b>On Robinhood Chain?</b> Robinhood Wallet, Phantom, Rabby, Coinbase Wallet and Uniswap Wallet ship it. Most other wallets here can add the network (chain ID 4663); a few run a fixed list and can\'t. On a phone, open this page in the wallet\'s in-app <b>Web3 browser</b>.';
         footEl.appendChild(tip);
       }
     }
@@ -196,10 +248,13 @@
 
   function openPicker(opts) {
     pickOpts = opts || {};
+    showAll = false;   // "Show all" is a choice made inside one picker, not carried into the next
     if (!overlay) buildModal();
     renderList();
-    // keep re-rendering briefly as late wallets announce
-    let ticks = 0; const iv = setInterval(() => { if (overlay.hidden || ++ticks > 8) { clearInterval(iv); return; } renderList(); }, 350);
+    // late wallets announce for a moment after opening: redraw only when the announced set changed, so a redraw never takes the focus
+    const sig = () => list().map((v) => keyOf(v.info, v.provider)).join('|');
+    let ticks = 0, last = sig();
+    const iv = setInterval(() => { if (overlay.hidden || ++ticks > 8) { clearInterval(iv); return; } const s = sig(); if (s !== last) { last = s; renderList(); } }, 350);
     lastFocus = document.activeElement;
     overlay.hidden = false;
     if (window.SFX) SFX.play('open');
@@ -302,6 +357,6 @@
 
   /* The curated registry, exposed so other surfaces (the How-to-Buy guide) can render the SAME list the
      picker shows. Copied, not shared, so a caller cannot mutate the registry the picker depends on. */
-  function known() { return KNOWN.filter(k => !k.burn).map(k => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '' })); }   // wallets to get — not one that cannot connect
+  function known() { return KNOWN.filter(k => !k.burn).map((k, i) => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '', featured: i < FEATURED })); }   // wallets to get — not one that cannot connect
   window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected, known, sign, explain };
 })();

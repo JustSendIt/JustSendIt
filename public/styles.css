@@ -915,6 +915,8 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 .auth-invite { margin: 1rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--hair);
   font-size: max(var(--text-floor), 0.83rem); line-height: 1.55; color: var(--text-dim); text-align: center; }
 #auth-modal[hidden] { display: none; }
+/* the title keeps clear of the ✕ in the corner (at 320px it ran under it and lost its last word), and breaks evenly when it wraps */
+#auth-title { padding: 0 1.9rem; text-wrap: balance; overflow-wrap: anywhere; }
 .modal-backdrop { position: absolute; inset: 0; background: rgba(4,6,10,0.78); backdrop-filter: blur(6px); }
 .modal-card {
   position: relative; width: min(420px, 100%); max-height: 92vh; overflow-y: auto;
@@ -1850,6 +1852,11 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .wc-tip { font-size: max(var(--text-floor), 0.76rem); color: var(--text-dim); line-height: 1.5; background: color-mix(in srgb, var(--green) 6%, transparent); border: 1px solid var(--g-veil); border-radius: 10px; padding: 0.5rem 0.65rem; margin: 0.3rem 0 0; }
 .wc-tip b { color: var(--green-bright); }
 @media (prefers-reduced-motion: reduce) { .wc-item, .wc-deep { transition: none; } .wc-item:hover, .wc-deep:hover { transform: none; } }
+/* the rest of the market, behind one press: the picker shows the best-fitting few at once */
+.wc-more { width: 100%; box-sizing: border-box; background: var(--ctl-fill-lo); border: 1.5px dashed var(--edge-ctl); border-radius: 14px; padding: 0.6rem 0.85rem; color: var(--ctl-ink); font: inherit; font-weight: 700; font-size: max(var(--text-floor), 0.88rem); cursor: pointer; }
+.wc-more:hover, .wc-more:focus-visible { border-color: var(--green); background: var(--ctl-fill-hi); }
+.wc-rest { display: grid; gap: 0.5rem; }
+.wc-rest[hidden] { display: none; }
 /* the picker's way out for a wallet that cannot sign (GMGN) or is not listed: the burn proof */
 .wc-burn { border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
 .wc-burn .wc-badge { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: var(--on-gold); }
@@ -2680,9 +2687,12 @@ input[type="range"] { width: 100%; accent-color: var(--green); min-height: 44px;
 .g1-w-ico { font-size: max(var(--text-floor), 1.05rem); line-height: 1; }
 .g1-w-name { flex: 1 1 auto; min-width: 0; overflow-wrap: break-word; }
 .g1-w-tag { font-size: max(var(--text-floor), 0.62rem); font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
-  padding: 0.15rem 0.4rem; border-radius: 999px; white-space: nowrap;
+  padding: 0.15rem 0.4rem; border-radius: 0.75em; white-space: normal; max-width: 100%; box-sizing: border-box; text-align: center;   /* at the text floor a one-line badge was wider than its tile and ran out of it: it wraps (a pill on one line, a rounded box on two) */
   background: var(--ink-1); color: var(--gold); }   /* badges on a green tile: ink pills, so the gold / green words stay legible at every step of the fill ladder */
 .g1-w-tag.is-here { background: var(--ink-1); color: var(--green-bright); }
+.g1-w-more { grid-column: 1 / -1; }
+.g1-more { width: 100%; min-height: 44px; box-sizing: border-box; background: var(--ctl-fill-lo); border: 1.5px dashed var(--edge-ctl); border-radius: 10px; padding: 0.5rem 0.7rem; color: var(--ctl-ink); font: inherit; font-weight: 700; font-size: max(var(--text-floor), 0.88rem); cursor: pointer; }
+.g1-more:hover, .g1-more:focus-visible { border-color: var(--green); background: var(--ctl-fill-hi); }
 .g1-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.8rem; }
 .g1-hint { font-size: max(var(--text-floor), 0.85rem); color: var(--text-dim); }
 .g1-safe { margin-top: 0.8rem; font-size: max(var(--text-floor), 0.85rem); color: var(--text-dim); line-height: 1.55; }

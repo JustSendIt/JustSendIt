@@ -176,6 +176,39 @@ try {
     check('  ...so the hand-rolled copy is gone', !/purpose=link&address=/.test(PJS));
     check('  ...while the page still repaints what only it has', /loadConnectedWallet\(\)/.test(PJS) && /loadGamify\(\)/.test(PJS));
   }
+
+  /* ═══════════ 3. the whole market, one read-only way (owner, 2026-10-20) ═══════════ */
+  {
+    const entries = [...WALLET_C.matchAll(/\{ key: '([a-z0-9]+)', name: '([^']+)', emoji: '[^']+', re: \/[^/]+\/i,([^}]*)\}/g)].map((m) => ({ key: m[1], name: m[2], rest: m[3] }));
+    const keys = entries.map((e) => e.key);
+    check('the registry names the market: 31 wallets plus GMGN, every key unique', entries.length === 32 && new Set(keys).size === keys.length && keys.includes('gmgn'), entries.length + ' ' + keys.join(','));
+    check('  ...every one with an official https download page', entries.every((e) => /get: 'https:\/\/[^']+'/.test(e.rest)));
+    check('  ...the five that ship Robinhood Chain say so, and no other claims it', entries.filter((e) => /chain: true/.test(e.rest)).map((e) => e.key).sort().join(',') === 'coinbase,phantom,rabby,robinhood,uniswap');
+    check('  ...none of the wallets that cannot connect here is listed (WalletConnect-only, bare hardware, shut down)', !keys.some((k) => ['kraken', 'ledger', 'exodus', 'ctrl', 'trezor', 'safe', 'argent', 'zengo'].includes(k)));
+    /* the registry, run: what each wallet announces (EIP-6963 name + rdns) brands as itself and nothing else */
+    const KNOWN_SRC = /const KNOWN = \[([\s\S]*?)\n  \];/.exec(WALLET)[1];
+    const KNOWN = new Function('location', 'return [' + KNOWN_SRC + '\n];')({ origin: 'https://x' });
+    const knownFor = (name, rdns) => KNOWN.find((k) => k.re.test(name + ' ' + (rdns || ''))) || null;
+    const announce = [['MetaMask', 'io.metamask', 'metamask'], ['Phantom', 'app.phantom', 'phantom'], ['Coinbase Wallet', 'com.coinbase.wallet', 'coinbase'], ['Trust Wallet', 'com.trustwallet.app', 'trust'],
+      ['Rabby Wallet', 'io.rabby', 'rabby'], ['OKX Wallet', 'com.okex.wallet', 'okx'], ['Rainbow', 'me.rainbow', 'rainbow'], ['Robinhood Wallet', 'com.robinhood.wallet', 'robinhood'],
+      ['Brave Wallet', 'com.brave.wallet', 'brave'], ['Crypto.com Onchain', 'com.crypto.wallet', 'cryptocom'], ['Crypto.com | DeFi Wallet', 'com.crypto.wallet', 'cryptocom'], ['Core', 'app.core.extension', 'core'],
+      ['MEW wallet', 'com.mewwallet', 'mew'], ['Enkrypt', 'com.enkrypt', 'enkrypt'], ['Uniswap Extension', 'org.uniswap.app', 'uniswap'], ['Zerion', 'io.zerion.wallet', 'zerion'], ['Bitget Wallet', 'com.bitget.web3', 'bitget'],
+      ['Binance Wallet', 'com.binance.wallet', 'binance'], ['Backpack', 'app.backpack', 'backpack'], ['Taho', 'xyz.taho.wallet', 'taho'], ['Talisman', 'xyz.talisman', 'talisman'], ['Keplr', 'app.keplr', 'keplr'], ['Frame', 'sh.frame', 'frame'],
+      ['Nightly', 'app.nightly', 'nightly'], ['SafePal', 'com.safepal', 'safepal'], ['TokenPocket', 'pro.tokenpocket', 'tokenpocket'], ['MathWallet', 'org.mathwallet', 'mathwallet'], ['Coin98', 'coin98.com', 'coin98'],
+      ['1inch Wallet', 'io.1inch.wallet', '1inch'], ['Ambire', 'com.ambire.wallet', 'ambire'], ['imToken', 'im.token.app', 'imtoken'], ['Magic Eden', 'io.magiceden.wallet', 'magiceden'], ['GMGN', 'ai.gmgn', 'gmgn'],
+      // bystanders: wallets not listed must brand as nothing, never as a listed one
+      ['Trustee Wallet', 'com.trusteeglobal', null], ['XDEFI Wallet', 'io.xdefi', null], ['Bitcoin.com Wallet', 'com.bitcoin.wallet', null], ['Ledger Live', 'com.ledger.live', null], ['Exodus', 'com.exodus', null]];
+    const wrong = announce.filter(([n, r, want]) => ((knownFor(n, r) || {}).key || null) !== want).map(([n, r, want]) => n + '→' + ((knownFor(n, r) || {}).key || 'none') + ' (want ' + want + ')');
+    check('  ...run against what each wallet announces, every one brands as itself and a bystander as nothing', !wrong.length, wrong.join(', '));
+    const cross = KNOWN.filter((k) => KNOWN.some((o) => o !== k && k.re.test(o.name))).map((k) => k.key);
+    check('  ...and no entry\'s pattern matches another entry\'s name', !cross.length, cross.join(','));
+    check('  ...every entry is reached by the one picker: "Show all" opens closed on every open, and a late announcement redraws only when the set changed',
+      /pickOpts = opts \|\| \{\};\n    showAll = false;/.test(WALLET) && /if \(s !== last\) \{ last = s; renderList\(\); \}/.test(WALLET) && /if \(s !== last\) \{ last = s; render\(\); \}/.test(strip(HOME)));
+    check('  ...the best-fitting eight first, the rest behind "Show all" in the picker and in the guide',
+      /const FEATURED = 8;/.test(WALLET_C) && /KNOWN\.indexOf\(k\) < FEATURED/.test(WALLET_C) && /'Show all ' \+ undetected\.length \+ ' wallets ▾'/.test(WALLET_C)
+      && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
+    check('  ...and every entry goes through the one read-only path: no wallet SDK, no WalletConnect, no transaction', !/walletconnect|@walletconnect|sdk|eth_sendTransaction/i.test(WALLET_C));
+  }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join('\n'));
 }

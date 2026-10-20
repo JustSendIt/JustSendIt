@@ -114,7 +114,7 @@
    itself it clears with room to spare; the wash is for the bright unused chips, where it is a highlight. */
 .inv-code.is-used .inv-tag { background: none; }
 .inv-note { margin: 0.65rem 0 0; font-size: max(var(--text-floor), 0.84rem); color: var(--g-dim, #b6beac); line-height: 1.5; }
-.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: max(var(--text-floor), 0.88rem); color: var(--red-soft, #ffb4b4); }
+.inv-err { margin: 0.6rem 0 0; min-height: 1.2em; font-size: max(var(--text-floor), 0.88rem); color: var(--red-soft, #ffb4b4); overflow-wrap: anywhere; }   /* a reason that names an address must wrap, not widen the step */
 .inv-err.is-ok { color: var(--g-green-hi, var(--green-bright)); }
 
 .inv-in {
