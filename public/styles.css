@@ -932,7 +932,8 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 .modal-x:hover { background: var(--red); color: var(--on-red); }
 .modal-sub { text-align: center; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); margin: 0.4rem 0 1.2rem; }
 .modal-note { color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.5; margin: 0.7rem 0; }
-.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1.1rem; }
+/* the three ways in — Connect wallet, Burn Verification, Email — as one stacked menu: three labels this long never fit side by side at the text floor */
+.auth-tabs { display: grid; grid-template-columns: 1fr; gap: 0.45rem; margin-bottom: 1.1rem; }
 .auth-tab {
   background: var(--ctl-fill-lo); border: 2px solid var(--ctl-fill-lo); color: var(--ctl-ink);
   padding: 0.65rem; border-radius: 12px; font-weight: 800; font-size: max(var(--text-floor), 0.95rem); cursor: pointer;
@@ -1893,7 +1894,10 @@ button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .bp-alt { text-align: center; margin: 0.6rem 0 0; }
 /* the sign-in / sign-up screen names the wallets that work here; open, it lists every one */
 .w-works { margin: 0 0 0.8rem; border: 1px solid var(--hair); border-radius: 12px; padding: 0.45rem 0.7rem; background: var(--ink-1); }
-.w-works > summary { cursor: pointer; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; overflow-wrap: anywhere; }
+.w-works > summary { cursor: pointer; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; overflow-wrap: anywhere; list-style: none; }
+.w-works > summary::-webkit-details-marker { display: none; }
+.w-works > summary::after { content: ' ▾'; }
+.w-works[open] > summary::after { content: ' ▴'; }
 .w-works > summary:hover, .w-works > summary:focus-visible { color: var(--text); }
 .w-works-list { list-style: none; margin: 0.5rem 0 0.1rem; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 9.5rem), 1fr)); gap: 0.25rem 0.6rem;
   font-size: max(var(--text-floor), 0.82rem); color: var(--text); }

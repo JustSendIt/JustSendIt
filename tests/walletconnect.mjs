@@ -186,6 +186,7 @@ try {
     check('  ...the five that ship Robinhood Chain say so, and no other claims it', entries.filter((e) => /chain: true/.test(e.rest)).map((e) => e.key).sort().join(',') === 'coinbase,phantom,rabby,robinhood,uniswap');
     check('  ...none of the wallets that cannot connect here is listed (WalletConnect-only, bare hardware, shut down)', !keys.some((k) => ['kraken', 'ledger', 'exodus', 'ctrl', 'trezor', 'safe', 'argent', 'zengo'].includes(k)));
     /* the registry, run: what each wallet announces (EIP-6963 name + rdns) brands as itself and nothing else */
+    const PROF_C = strip(readFileSync(path.join(PUB, 'profile.js'), 'utf8'));
     const KNOWN_SRC = /const KNOWN = \[([\s\S]*?)\n  \];/.exec(WALLET)[1];
     const KNOWN = new Function('location', 'return [' + KNOWN_SRC + '\n];')({ origin: 'https://x' });
     const knownFor = (name, rdns) => KNOWN.find((k) => k.re.test(name + ' ' + (rdns || ''))) || null;
@@ -205,8 +206,20 @@ try {
     check('  ...and a late announcement redraws a list only when the set changed, so a redraw never takes the focus',
       /if \(s !== last\) \{ last = s; renderList\(\); \}/.test(WALLET) && /if \(s !== last\) \{ last = s; render\(\); \}/.test(strip(HOME)));
     /* owner, 2026-10-20: "I don't see all the new wallets in the sign-up screen" — a browser with one wallet went straight to it */
-    check('signing in, signing up or linking always shows the whole list (a browser with one wallet installed included); two-factor and "confirm it\'s you" still go straight to their wallet',
-      /if \(!\(opts && opts\.burn\)\) \{\n      chosen = selected \|\| remembered\(\);\n      if \(!chosen && all\.length === 1\) chosen = all\[0\];\n    \}/.test(WALLET_C) && !/fast path/.test(WALLET_C));
+    check('signing in, signing up or linking always shows the whole list (a browser with one wallet installed included)',
+      /\} else if \(!\(opts && opts\.burn\)\) \{\n      chosen = selected \|\| remembered\(\);/.test(WALLET_C) && !/fast path/.test(WALLET_C));
+    check('  ...two-factor and "confirm it\'s you" go straight only to an only wallet; with several installed the person picks (never a wallet linked a minute ago, again and again)',
+      /if \(opts && opts\.choose\) \{\n[^\n]*\n[^\n]*\n      if \(all\.length === 1\) chosen = all\[0\];/.test(WALLET_C)
+      && (AUTH_C.match(/WALLET\.connect\(\{ choose: true \}\)/g) || []).length === 2 && (PROF_C.match(/WALLET\.connect\(\{ choose: true \}\)/g) || []).length === 2
+      && !/WALLET\.connect\(\)/.test(AUTH_C) && !/WALLET\.connect\(\)/.test(PROF_C));
+    check('GMGN is in the main list wherever a wallet is being proved, and its row opens Burn Verification', /!detected\.has\(k\.key\) && \(!k\.burn \|\| pickOpts\.burn\)/.test(WALLET_C) && /if \(k\.burn\) \{[\s\S]{0,900}?toBurn\(k\.key\)/.test(WALLET_C)
+      && /\{ key: 'phantom'[^\n]*\n(?:[^\n]*\n){0,3}\s+\{ key: 'gmgn'/.test(WALLET) && /burn: !!k\.burn/.test(WALLET_C));
+    check('the sign-in panel\'s main options are Connect wallet, Burn Verification and Email, in that order',
+      /id="tab-wallet"[^>]*>🦊 Connect wallet<\/button>\s*<button[^>]*id="tab-burn"[^>]*>🔥 Burn Verification<\/button>\s*<button[^>]*id="tab-email"[^>]*>✉️ Email<\/button>/.test(AUTH)
+      && /<div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>/.test(AUTH));
+    check('  ...Burn Verification takes a signed-out visitor to the email form (make the account or sign in) and opens the burn step once they are in',
+      /sessionStorage\.setItem\('jsi:burnproof', String\(Date\.now\(\)\)\); \} catch \{\}\s*tabs\.email\.click\(\);\s*if \(join\) segSignup\.click\(\); else segLogin\.click\(\);/.test(AUTH_C)
+      && /if \(!AUTH\.user && AUTH\._showBurnTab\) \{/.test(AUTH_C));
     check('  ...the picker lists every wallet, none behind a toggle', /for \(const k of undetected\) footEl\.appendChild\(row\(k\)\);/.test(WALLET_C) && !/wc-more|showAll/.test(WALLET_C));
     check('  ...the wallet this browser used before is marked "Last used" and focused first', /<span class="wc-badge wc-last">Last used<\/span>/.test(WALLET_C) && /overlay\.querySelector\('\.wc-item\[data-last\]'\) \|\| overlay\.querySelector\('\.wc-item'\)/.test(WALLET_C));
     check('the sign-in and sign-up screen itself names the wallets that work here, from the same registry, every one a press away',

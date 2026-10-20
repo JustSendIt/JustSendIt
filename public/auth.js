@@ -54,9 +54,10 @@
     <h2 id="auth-title" class="display" style="color:var(--green-bright); text-align:center; font-size:max(var(--text-floor), 1.6rem);">Welcome to The Send 🚀</h2>
     <p class="modal-sub">One account. Your wall, your reactions, your private wallet tracker.</p>
 
-    <div class="auth-tabs" role="tablist" aria-label="Sign-in method">
-      <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet" data-tip="Shows the wallet sign-in panel instead of email">🦊 Wallet</button>
-      <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email" data-tip="Shows the email and password panel instead of wallet">✉️ Email</button>
+    <div class="auth-tabs" role="tablist" aria-label="Sign-in method" aria-orientation="vertical">
+      <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet" data-tip="Sign in or sign up by connecting a wallet and signing a free message">🦊 Connect wallet</button>
+      <button class="auth-tab" id="tab-burn" role="tab" aria-selected="false" aria-controls="pane-burn" data-tip="For GMGN and any wallet that can't sign: prove it by sending a dust amount of $SEND to the burn address">🔥 Burn Verification</button>
+      <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email" data-tip="Sign in or sign up with an email and a password">✉️ Email</button>
     </div>
 
     <div id="pane-wallet" role="tabpanel" aria-labelledby="tab-wallet">
@@ -85,7 +86,16 @@
       <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet you can sign in with here"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
-      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Opens the burn proof: send the exact dust amount of $SEND it shows from the wallet to the burn address, instead of signing">Prove it by a burn 🔥</button></p>
+      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a dust burn of $SEND instead of a signature">Use Burn Verification 🔥</button></p>
+    </div>
+
+    <div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>
+      <p class="modal-note">For a wallet that can’t sign a message — a <b>GMGN</b> wallet, or any wallet an app holds for you — or when you’d rather not sign. You prove the wallet by sending the <b>exact dust amount of $SEND</b> the site shows you (two cents’ worth at most) from it to the burn address, within an hour. You make that transaction yourself, in your own wallet app; this site never sends it or asks your wallet to.</p>
+      <p class="modal-note">🔑 <b>A burn can’t sign you in</b>, so Burn Verification goes with an <b>email and a password</b> — that’s how you sign in. Make your account (or sign in), and the burn step opens straight after.</p>
+      <div class="bp-actions">
+        <button class="btn btn-primary" type="button" id="burn-join" data-tip="Opens account creation with an email and a password; the burn step follows once you are in">Create account &amp; verify ✨</button>
+        <button class="btn btn-ghost" type="button" id="burn-signin" data-tip="Opens email and password sign-in; the burn step follows once you are in">Sign in &amp; verify 🚪</button>
+      </div>
     </div>
 
     <div id="pane-email" role="tabpanel" aria-labelledby="tab-email" hidden>
@@ -249,6 +259,13 @@
     return burnPromise;
   }
   AUTH.openBurnProof = function (opts) {
+    // signed out, Burn Verification is a way in like the other two: the sign-in panel, on that option
+    if (!AUTH.user && AUTH._showBurnTab) {
+      if (confirmReject) return Promise.resolve();
+      if (modal.hasAttribute('hidden')) openModal();
+      AUTH._showBurnTab();
+      return Promise.resolve();
+    }
     if (!modal.hasAttribute('hidden') && !confirmReject) closeModal();
     return loadBurn().then((b) => b.open(opts || {})).catch(() => { if (window.sendToast) sendToast('⚠️ The burn proof could not load — reload the page and try again.'); });
   };
@@ -319,8 +336,10 @@
     });
 
     // tabs
-    const tabs = { wallet: modal.querySelector('#tab-wallet'), email: modal.querySelector('#tab-email') };
-    const panes = { wallet: modal.querySelector('#pane-wallet'), email: modal.querySelector('#pane-email') };
+    // the three ways in, in this order (owner, 2026-10-20: "sign-in by connecting wallet, Burn Verification, or Email")
+    const tabs = { wallet: modal.querySelector('#tab-wallet'), burn: modal.querySelector('#tab-burn'), email: modal.querySelector('#tab-email') };
+    const panes = { wallet: modal.querySelector('#pane-wallet'), burn: modal.querySelector('#pane-burn'), email: modal.querySelector('#pane-email') };
+    const hidePanes = () => { for (const k of Object.keys(panes)) panes[k].hidden = true; };
     for (const key of Object.keys(tabs)) {
       tabs[key].addEventListener('click', () => {
         for (const k of Object.keys(tabs)) {
@@ -330,10 +349,13 @@
         }
       });
     }
-    // Left/Right move between the tabs, as a tablist promises — click alone left a keyboard user on the first
+    // the arrow keys move between the tabs, as a tablist promises — click alone left a keyboard user on the first
     modal.querySelector('.auth-tabs').addEventListener('keydown', e => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const other = e.target === tabs.wallet ? tabs.email : tabs.wallet;
+      const step = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : (e.key === 'ArrowUp' || e.key === 'ArrowLeft') ? -1 : 0;
+      if (!step) return;
+      const order = Object.keys(tabs).map((k) => tabs[k]), i = order.indexOf(e.target);
+      if (i < 0) return;
+      const other = order[(i + step + order.length) % order.length];
       e.preventDefault(); other.click(); other.focus();
     });
     // one writer for the status lines, so a failure's red is dropped again by the next progress message
@@ -359,7 +381,20 @@
     const ticketLink = modal.querySelector('#auth-ticket');
     if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite(); });
     const burnAlt = modal.querySelector('#btn-burn-alt');
-    if (burnAlt) burnAlt.addEventListener('click', () => AUTH.openBurnProof({ from: 'signin' }));
+    if (burnAlt) burnAlt.addEventListener('click', () => { tabs.burn.click(); tabs.burn.focus(); });
+    AUTH._showBurnTab = () => { tabs.burn.click(); };
+    /* Burn Verification signs nobody in: it goes with an email and a password. These two buttons take the person to that form
+       — making the account, or signing in — and leave a note, so the burn step opens by itself once they are in (resumeBurnProof). */
+    const burnGo = (join) => {
+      if (AUTH.user) { AUTH.openBurnProof({ from: 'signin' }); return; }
+      try { sessionStorage.setItem('jsi:burnproof', String(Date.now())); } catch {}
+      tabs.email.click();
+      if (join) segSignup.click(); else segLogin.click();
+      const f = modal.querySelector(join ? '#f-username' : '#f-email'); if (f && !modal.hasAttribute('hidden')) f.focus();
+    };
+    const bj = modal.querySelector('#burn-join'), bs = modal.querySelector('#burn-signin');
+    if (bj) bj.addEventListener('click', () => burnGo(true));
+    if (bs) bs.addEventListener('click', () => burnGo(false));
     /* The wallets that work here, named on the sign-in and sign-up screen itself (owner, 2026-10-20: "I don't see all the new
        wallets in the sign-up screen"): the best-known few in the line, every one of them a press away. Drawn from the same
        registry the picker uses (WALLET.known), so the two can never disagree; the wallet button then opens that full list. */
@@ -367,9 +402,9 @@
     if (works && window.WALLET && WALLET.known) {
       const all = WALLET.known();
       const lead = all.slice(0, 5).map((k) => k.name);
-      works.querySelector('summary').textContent = 'Works with ' + all.length + ' wallets — ' + lead.join(', ') + ' and ' + (all.length - lead.length) + ' more ▾';
+      works.querySelector('summary').textContent = 'Works with ' + all.length + ' wallets — ' + lead.join(', ') + ' and ' + (all.length - lead.length) + ' more';
       const esc2 = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      works.querySelector('.w-works-list').innerHTML = all.map((k) => '<li><span aria-hidden="true">' + esc2(k.emoji) + '</span> ' + esc2(k.name) + (k.chain ? ' <small>· ships Robinhood Chain</small>' : '') + '</li>').join('');
+      works.querySelector('.w-works-list').innerHTML = all.map((k) => '<li><span aria-hidden="true">' + esc2(k.emoji) + '</span> ' + esc2(k.name) + (k.burn ? ' <small>· by Burn Verification</small>' : k.chain ? ' <small>· ships Robinhood Chain</small>' : '') + '</li>').join('');
       works.hidden = false;
     }
     segLogin.addEventListener('click', () => setRegMode(false));
@@ -427,8 +462,7 @@
     function show2fa(j) {
       // hide tabs + panes, show the challenge
       modal.querySelector('.auth-tabs').hidden = true;
-      panes.wallet.hidden = true;
-      panes.email.hidden = true;
+      hidePanes();
       const pane = modal.querySelector('#pane-2fa');
       pane.hidden = false;
       modal.querySelector('#twofa-totp').hidden = j.twofa !== 'totp';
@@ -463,7 +497,7 @@
         modal.querySelector('#wallet2fa-submit').onclick = async () => {
           try {
             status.textContent = 'Choose your wallet… 👛';
-            const { provider, address } = await WALLET.connect();
+            const { provider, address } = await WALLET.connect({ choose: true });
             // Ask for the challenge for THIS wallet only. The server used to hand back a challenge for
             // every linked wallet the moment the password was right, which told anyone with the password
             // exactly which on-chain addresses belong to this account — the one thing wallet two-factor
@@ -492,8 +526,7 @@
       modal.querySelector('.auth-tabs').hidden = false;
       modal.querySelector('#pane-2fa').hidden = true;
       modal.querySelector('#pane-confirm').hidden = true;
-      panes.wallet.hidden = !tabs.wallet.classList.contains('active');
-      panes.email.hidden = !tabs.email.classList.contains('active');
+      for (const k of Object.keys(panes)) panes[k].hidden = !tabs[k].classList.contains('active');
     };
 
     /* The same masked pane, in a CONFIRM mode. A credential change made elsewhere (linking a wallet,
@@ -510,8 +543,7 @@
         heads[pw ? 2 : 3].textContent = pw ? '🔐 Enter your account password to confirm.' : '🔐 Enter the 6-digit code from your authenticator app to confirm.';
         modal.querySelector('.auth-tabs').hidden = true;
         modal.querySelector('.auth-invite').hidden = true;   // "new here?" is not a question for someone already in
-        panes.wallet.hidden = true;
-        panes.email.hidden = true;
+        hidePanes();
         modal.querySelector('#pane-2fa').hidden = false;
         modal.querySelector('#twofa-totp').hidden = pw;
         modal.querySelector('#twofa-wallet').hidden = true;
@@ -548,7 +580,7 @@
         heads[1].textContent = 'Once — then every security setting on this device is unlocked for ' + (need.minutes || 30) + ' minutes.';
         modal.querySelector('.auth-tabs').hidden = true;
         modal.querySelector('.auth-invite').hidden = true;
-        panes.wallet.hidden = true; panes.email.hidden = true;
+        hidePanes();
         modal.querySelector('#pane-2fa').hidden = true;
         const pane = modal.querySelector('#pane-confirm');
         pane.hidden = false;
@@ -581,7 +613,7 @@
         q('cf-wallet').onclick = async () => {
           try {
             setStatus(status, 'Choose the wallet… 👛');
-            const { provider, address } = await WALLET.connect();
+            const { provider, address } = await WALLET.connect({ choose: true });
             const { message } = await api('/api/auth/wallet/nonce?purpose=manage&address=' + address);
             setStatus(status, 'Approve the signature… ✍️');
             const signature = await WALLET.sign(provider, address, message);

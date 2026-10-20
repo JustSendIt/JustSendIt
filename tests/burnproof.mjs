@@ -70,11 +70,11 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('a burn proof is kept encrypted and indexed under the key registry, scrubbed from every backup, and deleted with the account',
     /\['burn_proofs', 'addr_enc'\], \['burn_proofs', 'tx_enc'\]/.test(KEYS) && /\{ t: 'burn_proofs', c: 'addr_idx' \}/.test(KEYS)
     && /'DELETE FROM burn_proofs',\n\];/.test(SRC) && /'wallet_hist', 'burn_proofs'\]\)/.test(SRC));
-  check('the picker offers GMGN and "my wallet isn\'t listed" — only where a wallet is being proved, and never as a wallet to get',
+  check('the picker offers GMGN and "my wallet isn\'t listed" — only where a wallet is being proved',
     /\{ key: 'gmgn', name: 'GMGN', [^}]*burn: true/.test(WAL) && /if \(pickOpts\.burn\) \{/.test(WAL) && /My wallet isn’t listed, or can’t sign/.test(WAL)
-    && /KNOWN\.filter\(k => !k\.burn\)\.map/.test(WAL) && /!detected\.has\(k\.key\) && !k\.burn/.test(WAL));
+    && /!detected\.has\(k\.key\) && \(!k\.burn \|\| pickOpts\.burn\)/.test(WAL));
   check('  ...the sign-in and link doors ask for it; "confirm it\'s you" and two-factor (a particular wallet\'s signature) do not',
-    (strip(AUTH).match(/WALLET\.connect\(\{ burn: true \}\)/g) || []).length === 2 && /WALLET\.connect\(\)/.test(strip(AUTH)));
+    (strip(AUTH).match(/WALLET\.connect\(\{ burn: true \}\)/g) || []).length === 2 && (strip(AUTH).match(/WALLET\.connect\(\{ choose: true \}\)/g) || []).length === 2);
   check('the burn proof is offered in the sign-in panel, Settings → Security, the connected-wallet card and the participation check',
     /id="btn-burn-alt"/.test(AUTH) && /id="burn-wallet-btn"/.test(PROFH) && /id="cw-burn"/.test(PROF) && /id="inv-proof-burn"/.test(INV) && /AUTH\.openBurnProof\(\{ from: 'proof' \}\)/.test(INV));
   const z = (sel) => { const m = new RegExp(sel.replace(/[.#]/g, (c) => '\\' + c) + ' \\{[^}]*z-index: (\\d+)').exec(CSS); return m ? +m[1] : NaN; };

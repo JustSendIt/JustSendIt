@@ -287,7 +287,7 @@ async function makeTwofaWallet(address) {
   try {
     const current = await currentFactorBody('Changing which wallet is your two-factor key.');
     sendToast('Now switch to ' + shortAddr(address) + ' in your wallet and sign ✍️');
-    const { provider, address: got } = await WALLET.connect();
+    const { provider, address: got } = await WALLET.connect({ choose: true });   // a particular wallet must sign: with several installed, the person picks it
     if (got !== address) throw new Error('that is ' + shortAddr(got) + ' — switch to ' + shortAddr(address) + ' in your wallet app, then try again');
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const newSignature = await WALLET.sign(provider, address, message);
@@ -333,7 +333,7 @@ async function enableWallet2fa() {
     if (!confirm('Turn on wallet two-factor?\n\nFrom now on, signing in will need a signature from this wallet — and so will turning two-factor back off. If you lose access to the wallet, you lose access to the account.\n\nYou will be asked to sign now to prove you can.')) return;
     // confirm it's you FIRST: the server spends the wallet's signature below, so it must not be asked for after
     await currentFactorBody('Turning on wallet two-factor changes how you sign in.');
-    const { provider, address } = await WALLET.connect();
+    const { provider, address } = await WALLET.connect({ choose: true });
     const { message } = await api('/api/auth/wallet/nonce?purpose=2fa-on&address=' + address);
     const signature = await WALLET.sign(provider, address, message);
     await api('/api/2fa/wallet/enable', { method: 'POST', body: { address, signature } });

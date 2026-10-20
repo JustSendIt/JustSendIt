@@ -46,7 +46,7 @@
   const isMobile = () => /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '');
   function hasInjected() { return list().length > 0; }
 
-  // remembered provider (by rdns) so returning users reconnect without the picker
+  // the provider this browser used last (by rdns): marked "Last used" and focused first in the list; the swap reuses it
   function remembered() {
     let rdns = ''; try { rdns = localStorage.getItem(LS_KEY) || ''; } catch {}
     if (!rdns) return null;
@@ -84,6 +84,10 @@
   const KNOWN = [
     { key: 'robinhood', name: 'Robinhood Wallet', emoji: '🪶', re: /robinhood/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://robinhood.com/wallet/' },
     { key: 'phantom', name: 'Phantom', emoji: '👻', re: /phantom/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://phantom.com/download', deep: (full, bare) => 'https://phantom.app/ul/browse/' + encodeURIComponent(full) + '?ref=' + encodeURIComponent(location.origin) },
+    /* GMGN holds its wallets for you and gives no way to sign a message for another site, so it cannot connect here.
+       `burn`: in the main list wherever a wallet is being proved (connect({ burn: true })), and its row opens Burn
+       Verification — the way it CAN be proved. If it ever announces a provider of its own, that is tried like any wallet. */
+    { key: 'gmgn', name: 'GMGN', emoji: '📈', re: /gmgn/i, burn: true, badge: 'Verifies by a burn — no signature', get: 'https://gmgn.ai/' },
     { key: 'metamask', name: 'MetaMask', emoji: '🦊', re: /metamask/i, get: 'https://metamask.io/download/', deep: (full, bare) => 'https://metamask.app.link/dapp/' + bare },
     { key: 'coinbase', name: 'Coinbase Wallet', emoji: '🔵', re: /coinbase/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://www.coinbase.com/wallet/downloads', deep: (full) => 'https://go.cb-w.com/dapp?cb_url=' + encodeURIComponent(full) },
     { key: 'trust', name: 'Trust Wallet', emoji: '🛡️', re: /trust ?wallet|trustwallet/i, get: 'https://trustwallet.com/download', deep: (full) => 'https://link.trustwallet.com/open_url?coin_id=60&url=' + encodeURIComponent(full) },
@@ -114,10 +118,6 @@
     { key: 'tokenpocket', name: 'TokenPocket', emoji: '👝', re: /tokenpocket|token ?pocket/i, get: 'https://www.tokenpocket.pro/' },
     { key: 'uniswap', name: 'Uniswap Wallet', emoji: '🦄', re: /uniswap/i, chain: true, badge: 'Supports Robinhood Chain', get: 'https://wallet.uniswap.org/' },
     { key: 'zerion', name: 'Zerion', emoji: '🟣', re: /zerion/i, get: 'https://zerion.io/' },
-    /* GMGN holds its wallets for you and gives no way to sign a message for another site, so it cannot connect here.
-       `burn`: offered where a wallet is being proved (connect({ burn: true })) as the way it CAN be — a burn from it. If
-       it ever announces a provider of its own, that is tried like any other wallet. */
-    { key: 'gmgn', name: 'GMGN', emoji: '📈', re: /gmgn/i, burn: true, badge: 'Can’t sign — prove it by a burn', get: 'https://gmgn.ai/' },
   ];
   function knownFor(info) { const s = (info && (info.name + ' ' + (info.rdns || ''))) || ''; return KNOWN.find(k => k.re.test(String(s))) || null; }
   function knownRank(info) { const k = knownFor(info); return k ? KNOWN.indexOf(k) : 90; }
@@ -183,11 +183,20 @@
     // 2) popular hot wallets you don't have here yet → open in-app (mobile) or get the app
     const mobile = isMobile();
     const full = location.href, bare = location.host + location.pathname + location.search;
-    const undetected = KNOWN.filter(k => !detected.has(k.key) && !k.burn);
+    const undetected = KNOWN.filter(k => !detected.has(k.key) && (!k.burn || pickOpts.burn));   // GMGN only where a wallet is being proved
     footEl.innerHTML = '';
     if (undetected.length) {
       footEl.innerHTML = '<div class="wc-sub">' + (wraps.length ? 'More wallets' : (mobile ? '📱 Open this page in a wallet app’s own browser — or get one' : 'Wallets — get one, then reload')) + '</div>';
       const row = (k) => {
+        if (k.burn) {   // GMGN: cannot sign here, so its row opens Burn Verification instead of a download page
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'wc-deep wc-burn';
+          b.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + k.emoji + '</span><span class="wc-name">' + esc(k.name) + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">Verify 🔥</span>';
+          b.setAttribute('data-tip', 'Opens Burn Verification: send the exact dust amount of $SEND it shows from your ' + k.name + ' wallet to the burn address, instead of signing');
+          b.addEventListener('click', () => toBurn(k.key));
+          return b;
+        }
         const a = document.createElement('a');
         a.rel = 'noopener nofollow';
         let label;
@@ -207,26 +216,17 @@
         footEl.appendChild(tip);
       }
     }
-    // 3) a wallet that cannot sign here, or is not on this list: the burn proof (only where a wallet is being proved)
+    // 3) a wallet that is not on this list, or cannot sign: Burn Verification (only where a wallet is being proved)
     if (pickOpts.burn) {
       const sub = document.createElement('div');
       sub.className = 'wc-sub';
-      sub.textContent = 'Can’t sign, or not on the list?';
+      sub.textContent = 'Not on the list, or can’t sign?';
       footEl.appendChild(sub);
-      for (const k of KNOWN.filter(x => x.burn && !detected.has(x.key))) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'wc-deep wc-burn';
-        b.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + k.emoji + '</span><span class="wc-name">' + esc(k.name) + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">Burn 🔥</span>';
-        b.setAttribute('data-tip', 'Opens the burn proof: send the exact dust amount of $SEND it shows from your ' + k.name + ' wallet to the burn address, instead of signing');
-        b.addEventListener('click', () => toBurn(k.key));
-        footEl.appendChild(b);
-      }
       const any = document.createElement('button');
       any.type = 'button';
       any.className = 'wc-deep wc-burn';
-      any.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">🔥</span><span class="wc-name">My wallet isn’t listed, or can’t sign</span><span class="wc-go" aria-hidden="true">Burn 🔥</span>';
-      any.setAttribute('data-tip', 'Proves any wallet by a burn instead: send the exact dust amount of $SEND shown from it to the burn address, within an hour');
+      any.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">🔥</span><span class="wc-name">My wallet isn’t listed, or can’t sign</span><span class="wc-go" aria-hidden="true">Verify 🔥</span>';
+      any.setAttribute('data-tip', 'Opens Burn Verification for any wallet: send the exact dust amount of $SEND shown from it to the burn address, within an hour');
       any.addEventListener('click', () => toBurn(''));
       footEl.appendChild(any);
     }
@@ -276,9 +276,13 @@
     /* Proving a wallet (sign-in, sign-up, linking) always shows the list: every wallet on the market, the ones this
        browser has at the top and focused — so a browser with one wallet installed still sees the rest, GMGN and the burn
        proof (owner, 2026-10-20: "I don't see all the new wallets in the sign-up screen"). Where one particular wallet
-       has to sign (two-factor, "confirm it's you"), a single or remembered wallet still connects without the list. */
-    if (!(opts && opts.burn)) {
-      chosen = selected || remembered();
+       has to sign (two-factor, "confirm it's you"), an only wallet connects without the list (opts.choose). */
+    if (opts && opts.choose) {
+      // one particular wallet has to sign (two-factor, "confirm it's you"): only an only-wallet is assumed — with several, the
+      // person picks (the one used last focused), or a wallet linked a minute ago would be asked and refused, again and again
+      if (all.length === 1) chosen = all[0];
+    } else if (!(opts && opts.burn)) {
+      chosen = selected || remembered();   // the swap: the wallet in use
       if (!chosen && all.length === 1) chosen = all[0];
     }
     if (!chosen) {
@@ -349,6 +353,6 @@
 
   /* The curated registry, exposed so other surfaces (the How-to-Buy guide) can render the SAME list the
      picker shows. Copied, not shared, so a caller cannot mutate the registry the picker depends on. */
-  function known() { return KNOWN.filter(k => !k.burn).map((k, i) => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, badge: k.badge || '', featured: i < FEATURED })); }   // wallets to get — not one that cannot connect
+  function known() { return KNOWN.map((k, i) => ({ key: k.key, name: k.name, emoji: k.emoji, get: k.get, chain: !!k.chain, burn: !!k.burn, badge: k.badge || '', featured: i < FEATURED })); }   // every wallet the list names, GMGN (burn: verified by a burn) included
   window.WALLET = { list, get, getInfo, request, connect, pick, forget, isMobile, hasInjected, known, sign, explain };
 })();
