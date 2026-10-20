@@ -294,6 +294,24 @@ try {
   }
   check('  ...a rewritten backup keeps its date (the admin list and pruning go by it)', fs.statSync(path.join(BK, 'app-2026-01-01.db')).mtimeMs === OLD_MTIME.getTime());
   check('  ...and a copy of the database from before the flip sits beside the backups, brought along too', fs.readdirSync(BK).some((n) => /^pre-idx-e0-.*\.db$/.test(n)));
+  /* that copy was made with the sign-in session from 2a and its challenge in it. The first snapshot after the boot (15 s)
+     scrubs it like a daily, and it keeps its date (the newest two are kept by it) and all a restore needs */
+  {
+    const pre = fs.readdirSync(BK).find((n) => /^pre-idx-e0-.*\.db$/.test(n)), f = pre ? path.join(BK, pre) : null, mt = f ? fs.statSync(f).mtimeMs : 0;
+    const hadSessions = (() => { const d = openDb(); try { return d.prepare('SELECT COUNT(*) n FROM sessions WHERE created_at < ?').get(t0).n; } finally { d.close(); } })();
+    const got = f && await waitFor(() => {
+      const d = new DatabaseSync(f, { readOnly: true });
+      try {
+        d.exec('PRAGMA busy_timeout = 2000');
+        if (!d.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_jsi_scrubbed'").get()) return null;
+        const n = (sql, ...a) => d.prepare(sql).get(...a).n;
+        return { sessions: n('SELECT COUNT(*) n FROM sessions'), challenges: n('SELECT COUNT(*) n FROM wallet_challenges'), ips: n('SELECT COUNT(*) n FROM users WHERE signup_ip IS NOT NULL'),
+          census: K.trialCensus(d, k2), dbId: K.getMeta(d, 'db_id'), email: n('SELECT COUNT(*) n FROM identities WHERE user_id = ? AND identifier = ?', uid, k2.bidxAt(A.email.toLowerCase(), 1)) };
+      } finally { d.close(); }
+    });
+    check('  ...that copy is scrubbed like a daily at the first snapshot: no sessions, challenges or IP hashes (it was made with a session in it)', hadSessions > 0 && !!got && got.sessions === 0 && got.challenges === 0 && got.ips === 0, JSON.stringify({ pre, hadSessions, got: got && { s: got.sessions, c: got.challenges, ips: got.ips } }));
+    check('  ...keeps its date, and all a restore needs: key 2 only at epoch 1, its database id, the member found by email', !!got && Math.abs(fs.statSync(f).mtimeMs - mt) < 1 && JSON.stringify(Object.keys(got.census.refs)) === '["2"]' && !Object.keys(got.census.unreadable).length && got.census.epoch === 1 && got.dbId === metaOf('db_id') && got.email === 1, JSON.stringify(got && { mt: fs.statSync(f).mtimeMs - mt, refs: got.census.refs, epoch: got.census.epoch, id: got.dbId === metaOf('db_id'), email: got.email }));
+  }
   check('the live database and every copy were compacted under key 2 (no old ciphertext left in their free space)', metaOf('scrubbed_kid') === '2' && [path.join(BK, 'app-2026-01-01.db'), path.join(EXTRA, 'dev.db')].every((f) => { const d = new DatabaseSync(f, { readOnly: true }); try { return K.getMeta(d, 'scrubbed_kid') === '2'; } finally { d.close(); } }));
   check('init marked the backups folder, and the database knows its marker', JSON.parse(fs.readFileSync(path.join(BK, '.jsi-backups'), 'utf8')).dbId === metaOf('backup_marker') && metaOf('backup_marker') === metaOf('db_id') && ringNow().ring.owner && ringNow().ring.owner.dbId === metaOf('db_id'));
   // the flows a member uses, on the new keys

@@ -276,15 +276,20 @@ try {
     "CREATE TABLE arcade_guest_rounds (id INTEGER, ip TEXT, net TEXT, user_id INTEGER); INSERT INTO arcade_guest_rounds VALUES (1, 'x', 'y', NULL), (2, 'x', 'y', 5);" +
     "CREATE TABLE dh_moves (id INTEGER); INSERT INTO dh_moves VALUES (1);");
   bdb.close();
-  const scrub = new Function('DatabaseSync', 'path', 'console', scrubSrc + '\nreturn scrubBackup;')(DatabaseSync, path, { error() {} });
+  const fsm = await import('node:fs'), OLD = new Date('2026-10-01T12:00:00Z');
+  fsm.utimesSync(bf, OLD, OLD);
+  const scrub = new Function('DatabaseSync', 'path', 'fs', 'console', scrubSrc + '\nreturn scrubBackup;')(DatabaseSync, path, fsm, { error() {} });
   const first = scrub(bf), again = scrub(bf);
   const chk = new DatabaseSync(bf);
   const left = { ip: chk.prepare('SELECT ip FROM calls').get().ip, price: chk.prepare('SELECT entry_price FROM calls').get().entry_price, signup: chk.prepare('SELECT signup_ip, last_ip, username FROM users').get(),
     sessions: chk.prepare('SELECT COUNT(*) n FROM sessions').get().n, seen: chk.prepare('SELECT COUNT(*) n FROM visit_seen').get().n, guests: chk.prepare('SELECT id, ip FROM arcade_guest_rounds').all(), moves: chk.prepare('SELECT COUNT(*) n FROM dh_moves').get().n };
-  chk.close(); rmSync(dir, { recursive: true, force: true });
-  check('  ...and every backup is written without what the live site erases on a schedule — IP hashes, sessions, visitor keys, guest flights, Diamond Hands moves — and keeps the rest; once, marked (run on a real file)',
+  chk.close(); left.mtime = fsm.statSync(bf).mtimeMs; rmSync(dir, { recursive: true, force: true });
+  check('  ...and every backup is written without what the live site erases on a schedule — IP hashes, sessions, visitor keys, guest flights, Diamond Hands moves — and keeps the rest and its date; once, marked (run on a real file)',
     first === true && again === false && left.ip === null && left.price === 2 && left.signup.signup_ip === null && left.signup.last_ip === null && left.signup.username === 'ann' && left.sessions === 0 && left.seen === 0
-    && left.guests.length === 1 && left.guests[0].id === 2 && left.guests[0].ip === null && left.moves === 0 && /if \(!scrubBackup\(tmp\)\) throw new Error/.test(SRC), JSON.stringify(left));
+    && left.guests.length === 1 && left.guests[0].id === 2 && left.guests[0].ip === null && left.moves === 0 && left.mtime === OLD.getTime() && /if \(!scrubBackup\(tmp\)\) throw new Error/.test(SRC), JSON.stringify(left));
+  check('  ...and the full copy made before an index flip is scrubbed the same way (keyFlipAtBoot cannot: BACKUP_SCRUB is declared after it)',
+    /function scrubBackups\(\) \{\n[^\n]*\/\^pre-idx-e\\d\+-\.\*\\\.db\$\/\.test\(n\)\) scrubBackup\(/.test(SRC) && SRC.indexOf('function keyFlipAtBoot') < SRC.indexOf('const BACKUP_SCRUB = [')
+    && !/scrubBackups?\(/.test(SRC.slice(SRC.indexOf('function keyFlipAtBoot'), SRC.indexOf('if (KEY_RING_FILE && !KEY_OWNER) console.warn'))));
 
   /* ═══ 5. deleting the account erases its history, with everything else ═══ */
   const secret = 'JBSWY3DPEHPK3PXP';

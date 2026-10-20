@@ -1647,7 +1647,8 @@ function keyFlipAtBoot() {
   const from = KEYS.epoch;
   try {
     const to = keyStageIndex();
-    // the database exactly as it was, beside the backups — written to .part and renamed, so a crash never leaves half a copy
+    /* the database exactly as it was, beside the backups — written to .part and renamed, so a crash never leaves half a copy.
+       The first snapshot after this boot scrubs it like a daily (scrubBackups): BACKUP_SCRUB is not declared yet here. */
     try {
       fs.mkdirSync(KEY_BACKUP_DIR, { recursive: true });
       const name = 'pre-idx-e' + from + '-' + new Date().toISOString().replace(/[:.]/g, '').slice(0, 17) + '-' + crypto.randomBytes(3).toString('hex') + '.db';
@@ -19737,7 +19738,9 @@ if (KEY_OWNER) setTimeout(() => { keyMaintenance('boot').catch(() => {}); }, key
 /* A backup is kept up to a year, so it must not keep what the live site erases on a schedule (privacy.html §5 and §9): IP
    hashes, sign-in sessions and challenges, the visitor-counting keys, guest flights no account took, Diamond Hands moves and
    tried-email records. They are abuse checks and passing state, nobody's data to bring back; a restore from a backup simply
-   starts them afresh. Every backup is written without them, and an older one without the mark is scrubbed when next seen. */
+   starts them afresh. Every backup is written without them, and an older one without the mark is scrubbed when next seen.
+   So is the full copy keyFlipAtBoot makes before an index flip: a restore from it needs only what the scrub leaves (key_meta,
+   the members and their encrypted data; the flip itself deletes the sign-in challenges), as from a daily. */
 const BACKUP_SCRUB = [
   'UPDATE calls SET ip = NULL', 'UPDATE users SET signup_ip = NULL, last_ip = NULL', 'UPDATE communities SET creator_ip = NULL',
   'UPDATE community_members SET join_ip = NULL', 'UPDATE squads SET creator_ip = NULL', 'UPDATE squad_members SET join_ip = NULL',
@@ -19747,8 +19750,9 @@ const BACKUP_SCRUB = [
   'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
 ];
 function scrubBackup(file) {
-  let b = null;
+  let b = null, st = null;
   try {
+    st = fs.statSync(file);
     b = new DatabaseSync(file); b.exec('PRAGMA busy_timeout = 5000');
     if (b.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_jsi_scrubbed'").get()) return false;
     b.exec('BEGIN');
@@ -19758,10 +19762,12 @@ function scrubBackup(file) {
     try { b.exec('VACUUM'); } catch {}   // the erased values must not linger in free pages
     return true;
   } catch (e) { try { b && b.exec('ROLLBACK'); } catch {} console.error('backup scrub failed for ' + path.basename(file) + ':', e && e.message); return false; }
-  finally { try { b && b.close(); } catch {} }
+  // it keeps its date, as a re-keyed copy does: the admin list shows it, and keyFlipAtBoot keeps the newest two pre-flip copies by it
+  finally { try { b && b.close(); } catch {} if (st) { try { fs.utimesSync(file, st.atime, st.mtime); } catch {} } }
 }
+// the dailies, and the pre-flip copies keyFlipAtBoot leaves beside them
 function scrubBackups() {
-  try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db$/.test(n)) scrubBackup(path.join(BACKUP_DIR, n)); } catch {}
+  try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db$/.test(n) || /^pre-idx-e\d+-.*\.db$/.test(n)) scrubBackup(path.join(BACKUP_DIR, n)); } catch {}
 }
 // which dated backups stay: the newest `days`, and the first copy of each of the last `months` months (names sort by date)
 function backupKeepSet(all, days, months) {
