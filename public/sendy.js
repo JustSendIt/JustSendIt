@@ -92,7 +92,7 @@
     '/data': { tips: ['The Data API is read-only public data behind a key.', 'Keys are the burn kind — the docs on this page say how.', 'Limits are per key; the page lists them.'] }
   };
   // the page, by its name: /about (an old /about.html or a trailing / reads the same); the home page's sections are the home page
-  const path = () => { const p = location.pathname.replace(/\/+$/, '').replace(/\.html$/, '').toLowerCase() || '/'; return /^\/(index|guide|swap|tokens|beta)$/.test(p) ? '/' : p; };
+  const path = () => { const p = location.pathname.replace(/\/+$/, '').replace(/\.html$/, '').toLowerCase() || '/'; return /^\/(index|guide|swap|tokens|beta|rocketize)$/.test(p) ? '/' : p; };
   const tipsFor = () => (pageTips[path()] || pageTips['/']).tips;
   const greeting = () => {
     const u = window.AUTH && AUTH.user && AUTH.user.username;
@@ -379,7 +379,7 @@
     function linkify(text, into) {
       // site paths and the email become links; everything else stays text (an answer is never markup)
       // a page by its name (/about, /newpairs?scan=…, /terms#s12), an old .html path, a wall, a home section, the email
-      const re = /((?<![\w/.])\/(?:about|arcade|communities|community|data|newpairs|privacy|profile|squad|support|terms|tracker|wall|watchlist|whitepaper|guide|swap|tokens|beta)(?:\?[\w=&%-]+(?:\.[\w=&%-]+)*)?(?:#[\w-]+)?(?![\w/])|\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]*\.html(?:#[\w-]+)?|\/u\/[A-Za-z0-9._-]+|\/#[\w-]+|SendRH@Atomicmail\.io)/g;
+      const re = /((?<![\w/.])\/(?:about|arcade|communities|community|data|newpairs|privacy|profile|squad|support|terms|tracker|wall|watchlist|whitepaper|guide|swap|tokens|beta|rocketize)(?:\?[\w=&%-]+(?:\.[\w=&%-]+)*)?(?:#[\w-]+)?(?![\w/])|\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]*\.html(?:#[\w-]+)?|\/u\/[A-Za-z0-9._-]+|\/#[\w-]+|SendRH@Atomicmail\.io)/g;
       let last = 0, m;
       while ((m = re.exec(text))) {
         if (m.index > last) into.appendChild(document.createTextNode(text.slice(last, m.index)));

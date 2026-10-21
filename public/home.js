@@ -502,17 +502,18 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   setInterval(tick, 30000);
 })();
 
-/* ===== The home page's sections have addresses of their own: /guide, /swap, /tokens, /beta =====
+/* ===== The home page's sections have addresses of their own: /guide, /swap, /tokens, /beta, /rocketize =====
    Owner, 2026-10-15: "make sure every page is just their name and not the . file name or a # [symbol] in front of it". How
-   to Buy, Swap, Tokens and the Beta board were /#guide, /#swap…; they are /guide, /swap, /tokens, /beta now. The server
+   to Buy, Swap, Tokens and the Beta board were /#guide, /#swap…; they are /guide, /swap, /tokens, /beta now. Owner, 2026-10-21:
+   "Create a route to the rocketize section … sendrh.com/rocketize": Rocketize your pic is /rocketize the same way. The server
    serves this page at each (lib/routes.js); here:
    - arriving at /swap scrolls to the Swap section (again once the token panels above it have filled in and moved it,
      unless the visitor has started scrolling themselves);
    - on this page, a link to a section scrolls there and the address follows, with no reload; Back and Forward go along;
    - an old /#swap link still lands (the browser scrolls) and its address becomes /swap. */
 (function homeSections() {
-  const SECTIONS = ['guide', 'swap', 'tokens', 'beta'];
-  const at = () => { const m = /^\/(guide|swap|tokens|beta)\/?$/.exec(location.pathname); return m ? m[1] : null; };
+  const SECTIONS = ['guide', 'swap', 'tokens', 'beta', 'rocketize'];
+  const at = () => { const m = /^\/(guide|swap|tokens|beta|rocketize)\/?$/.exec(location.pathname); return m ? m[1] : null; };
   const smooth = () => !(window.prefersReduced && prefersReduced()) && !document.documentElement.classList.contains('motion-off');
   function go(name, glide, focus) {
     const el = document.getElementById(name); if (!el) return;
@@ -520,7 +521,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     // where a keyboard or screen reader goes next, as a jump to an anchor would: the section, not the link pressed
     if (focus) { if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1'); try { el.focus({ preventScroll: true }); } catch {} }
   }
-  if (location.pathname === '/' && /^#(guide|swap|tokens|beta)$/.test(location.hash)) {
+  if (location.pathname === '/' && /^#(guide|swap|tokens|beta|rocketize)$/.test(location.hash)) {
     try { history.replaceState(history.state, '', '/' + location.hash.slice(1) + location.search); } catch {}
   }
   // the address last shown: Back within the same address (a chart or picture closed full screen) is not a section change
@@ -541,7 +542,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   document.addEventListener('click', (e) => {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     const a = e.target.closest && e.target.closest('a[href]'); if (!a || (a.target && a.target !== '_self')) return;
-    const m = /^\/(guide|swap|tokens|beta)$/.exec(a.getAttribute('href') || ''); if (!m || !SECTIONS.includes(m[1])) return;
+    const m = /^\/(guide|swap|tokens|beta|rocketize)$/.exec(a.getAttribute('href') || ''); if (!m || !SECTIONS.includes(m[1])) return;
     e.preventDefault();
     if (location.pathname !== '/' + m[1]) { try { history.pushState(history.state, '', '/' + m[1]); } catch {} }
     shownPath = location.pathname;

@@ -63,9 +63,16 @@ try {
     const r = await raw('GET', '/' + s);
     if (r.status !== 200 || !/<link rel="canonical" href="[^"]*\/">/.test(r.text) || !r.text.includes('id="' + s + '"')) secs.push('/' + s + ' → ' + r.status);
   }
-  check('/guide, /swap, /tokens and /beta serve the home page (its canonical stays /), which has each section', ROUTES.HOME_SECTIONS.join() === 'guide,swap,tokens,beta' && !secs.length, secs.join(' | '));
+  check('/guide, /swap, /tokens, /beta and /rocketize serve the home page (its canonical stays /), which has each section', ROUTES.HOME_SECTIONS.join() === 'guide,swap,tokens,beta,rocketize' && !secs.length, secs.join(' | '));
   const sx = await raw('GET', '/swap.html'), ss = await raw('GET', '/swap/');
   check('  ...a section is not a file: /swap.html is a 404, /swap/ a 301 to /swap', sx.status === 404 && ss.status === 301 && ss.location === '/swap', sx.status + ' ' + ss.status + ' ' + ss.location);
+  // owner, 2026-10-21: sendrh.com/rocketize goes to Rocketize your pic. The section shares its name with its script and styles,
+  // which must still load as files (the home page links them relatively: at /rocketize they resolve to /rocketize.js and .css)
+  const rz = await raw('GET', '/rocketize'), rzJs = await raw('GET', '/rocketize.js'), rzCss = await raw('GET', '/rocketize.css'), rzUp = await raw('GET', '/Rocketize/?a=1');
+  check('  .../rocketize is the Rocketize your pic section (the picture editor), and rocketize.js and rocketize.css still load as files',
+    rz.status === 200 && /<section id="rocketize"[^>]*>[\s\S]*?id="rz-pick"/.test(rz.text) && /<script src="rocketize\.js(\?v=[\w-]+)?"><\/script>/.test(rz.text) && /<link rel="stylesheet" href="rocketize\.css(\?v=[\w-]+)?">/.test(rz.text)
+    && rzJs.status === 200 && /\(function \(\) \{/.test(rzJs.text) && rzCss.status === 200 && !/<html/i.test(rzCss.text) && rzUp.status === 301 && rzUp.location === '/rocketize?a=1',
+    [rz.status, rzJs.status, rzCss.status, rzUp.status, rzUp.location].join(' '));
 
   /* ═══ 4. never a page where there should be none ═══ */
   const not = [];
@@ -82,25 +89,28 @@ try {
   /* ═══ 5. the route table itself ═══ */
   const R = (p) => JSON.stringify(ROUTES.resolve(PAGES, p));
   check('lib/routes.js: the one table the server and scripts/check.mjs share', R('/about') === '{"page":"about"}' && R('/about.html') === '{"redirect":"/about"}' && R('/') === '{"page":"index"}'
-    && R('/swap') === '{"section":"swap"}' && R('/u') === 'null' && R('/admin') === 'null' && R('/assets/x.png') === 'null' && R('/nope') === 'null' && ROUTES.cleanPath('index.html') === '/' && ROUTES.cleanPath('wall.html') === '/wall');
+    && R('/swap') === '{"section":"swap"}' && R('/rocketize') === '{"section":"rocketize"}' && R('/rocketize.html') === 'null' && R('/u') === 'null' && R('/admin') === 'null' && R('/assets/x.png') === 'null' && R('/nope') === 'null' && ROUTES.cleanPath('index.html') === '/' && ROUTES.cleanPath('wall.html') === '/wall');
 
   /* ═══ 6. the page code: no # in the address ═══ */
   const DT = read('dashtabs.js'), HJ = read('home.js'), SY = read('sendy.js'), EG = read('eggs.js'), AU = read('auth.js'), CHK = readFileSync(path.join(ROOT, 'scripts', 'check.mjs'), 'utf8');
   check('the dashboard no longer writes #tab-… into the address (a refresh restores the tab from this device); a #tab- link it follows is tidied away',
     !/replaceState\(null, '', '#tab-' \+ name\)/.test(DT) && /if \(\/\^#tab-\/\.test\(location\.hash\)\) \{ try \{ history\.replaceState\(history\.state, '', location\.pathname \+ location\.search\); \} catch \{\} \}/.test(DT));
   check('the home page scrolls to a section at its address, moves between them with no reload (Back too), and turns an old /#swap into /swap',
-    /const at = \(\) => \{ const m = \/\^\\\/\(guide\|swap\|tokens\|beta\)\\\/\?\$\/\.exec\(location\.pathname\);/.test(HJ) && /history\.pushState\(history\.state, '', '\/' \+ m\[1\]\)/.test(HJ)
+    /const at = \(\) => \{ const m = \/\^\\\/\(guide\|swap\|tokens\|beta\|rocketize\)\\\/\?\$\/\.exec\(location\.pathname\);/.test(HJ)
+    && /const SECTIONS = \['guide', 'swap', 'tokens', 'beta', 'rocketize'\];/.test(HJ) && /\/\^#\(guide\|swap\|tokens\|beta\|rocketize\)\$\/\.test\(location\.hash\)/.test(HJ)
+    && /\/\^\\\/\(guide\|swap\|tokens\|beta\|rocketize\)\$\/\.exec\(a\.getAttribute\('href'\) \|\| ''\)/.test(HJ) && /history\.pushState\(history\.state, '', '\/' \+ m\[1\]\)/.test(HJ)
     && /history\.replaceState\(history\.state, '', '\/' \+ location\.hash\.slice\(1\) \+ location\.search\)/.test(HJ) && /if \(location\.pathname === shownPath\) return;/.test(HJ));
   check('Sendy knows the page by its name (and its sections as the home page), and turns a page name in an answer into a link; the eggs find their page the same way',
-    /'\/newpairs': \{ tips:/.test(SY) && /return \/\^\\\/\(index\|guide\|swap\|tokens\|beta\)\$\/\.test\(p\) \? '\/' : p;/.test(SY) && /\(\?<!\[\\w\/\.\]\)\\\/\(\?:about\|arcade\|communities/.test(SY)
-    && /\/\^\\\/\(index\(\\\.html\)\?\|guide\|swap\|tokens\|beta\)\$\/\.test\(p\)\) return 'index\.html';/.test(EG));
+    /'\/newpairs': \{ tips:/.test(SY) && /return \/\^\\\/\(index\|guide\|swap\|tokens\|beta\|rocketize\)\$\/\.test\(p\) \? '\/' : p;/.test(SY) && /\|whitepaper\|guide\|swap\|tokens\|beta\|rocketize\)\(\?:/.test(SY) && /\(\?<!\[\\w\/\.\]\)\\\/\(\?:about\|arcade\|communities/.test(SY)
+    && /\/\^\\\/\(index\(\\\.html\)\?\|guide\|swap\|tokens\|beta\|rocketize\)\$\/\.test\(p\)\) return 'index\.html';/.test(EG)
+    && /if \(\/\^\\\/\(guide\|swap\|tokens\|beta\|rocketize\)\$\/\.test\(href\) && document\.getElementById\(href\.slice\(1\)\)\) return sound\('select'\);/.test(read('sfx.js')));
   check('sign-in and two-factor still know when they are on the dashboard (/profile, or an old /profile.html on its way there)', /const onProfile = \/\^\\\/profile\(\\\.html\)\?\\\/\?\$\/\.test\(location\.pathname\);/.test(AU));
   const SQ = read('squad.js'), SRV = readFileSync(path.join(ROOT, 'server.js'), 'utf8');
   check('the squad page keeps its tab out of the address too (remembered for this browser tab; a #calls link opens Calls, then is tidied)',
     !/history\.replaceState\(null, '', location\.pathname \+ location\.search \+ '#' \+ which\)/.test(SQ) && /sessionStorage\.setItem\('sqd:tab:' \+ id, which\);/.test(SQ)
     && /if \(TABS\.indexOf\(h\) >= 0\) \{ tab = h; try \{ history\.replaceState\(history\.state, '', location\.pathname \+ location\.search\); \} catch \{\} return; \}/.test(SQ));
   check('Sendy is told the pages and sections by their names (no .html, no /#): its site map and the heading over each page\'s text',
-    /the How to Buy guide \(\/guide\), the swap \(\/swap\), the tokens \(\/tokens\), the beta board \(\/beta\)/.test(SRV) && !/\(\/#(guide|swap|tokens)\)/.test(SRV) && /'=== the page ' \+ ROUTES\.cleanPath\(f \+ '\.html'\)/.test(SRV));
+    /the How to Buy guide \(\/guide\), the swap \(\/swap\), the tokens \(\/tokens\), the beta board \(\/beta\), Rocketize your pic \(\/rocketize:/.test(SRV) && !/\(\/#(guide|swap|tokens)\)/.test(SRV) && /'=== the page ' \+ ROUTES\.cleanPath\(f \+ '\.html'\)/.test(SRV));
   check('scripts/check.mjs fails a page link by file name, a relative page link in a script, and a link to a page the server does not answer',
     /links a page by its file name/.test(CHK) && /links a page relatively/.test(CHK) && /links to a page the server does not answer/.test(CHK) && /const ROUTES = createRequire\(import\.meta\.url\)\(path\.join\(ROOT, 'lib', 'routes\.js'\)\);/.test(CHK));
 } catch (e) {

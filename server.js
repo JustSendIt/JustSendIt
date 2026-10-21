@@ -10846,7 +10846,7 @@ const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').repl
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
   .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 const SENDY_SITE_MAP = `PAGES — point people to these by path:
-/ — home: what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta)
+/ — home: what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta), Rocketize your pic (/rocketize: add rockets to a picture, in the browser, and make it your profile pic)
 /about — how everything works: Send Power, Send Calls, the holder boost, the rules
 /newpairs — the Scanner: paste any token or pool address for its on-chain profile; the New Pairs radar is a tab of it
 /wall — the Send Wall: every Send Call, live
@@ -19359,7 +19359,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/sitemap.xml' || SITEMAP_CHILDREN.includes(p)) return serveSitemap(req, res, p);
       /* Pages by their names (lib/routes.js — owner, 2026-10-15): /about, /newpairs, /community?id=5; the home page's sections
-         /guide, /swap, /tokens, /beta serve the home page. Every other spelling — /about.html, /About, /about/, /index.html —
+         /guide, /swap, /tokens, /beta, /rocketize serve the home page. Every other spelling — /about.html, /About, /about/, /index.html —
          is a 301 to the clean one in a single hop, the query kept (the # part is the browser's and survives). The Location
          is built from the page's name alone, never from the raw path, so a target such as /.//host/X can never become a
          protocol-relative //host/… redirect off the site. An hour, not a day, in caches: a redirect is easy to change. */
