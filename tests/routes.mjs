@@ -73,6 +73,11 @@ try {
     rz.status === 200 && /<section id="rocketize"[^>]*>[\s\S]*?id="rz-pick"/.test(rz.text) && /<script src="rocketize\.js(\?v=[\w-]+)?"><\/script>/.test(rz.text) && /<link rel="stylesheet" href="rocketize\.css(\?v=[\w-]+)?">/.test(rz.text)
     && rzJs.status === 200 && /\(function \(\) \{/.test(rzJs.text) && rzCss.status === 200 && !/<html/i.test(rzCss.text) && rzUp.status === 301 && rzUp.location === '/rocketize?a=1',
     [rz.status, rzJs.status, rzCss.status, rzUp.status, rzUp.location].join(' '));
+  // owner, 2026-10-21: a Rocketize Profile button in the hero, next to Live Charts, takes you down to it. A jump there focuses the
+  // section, which is also the editor's key listener: on the section itself the keys are the page's, not the selected rocket's
+  check('  ...and the hero has a Rocketize Profile button beside Live Charts that goes there',
+    /<div class="cta-row">[\s\S]*?href="\/tokens"[^>]*>Live Charts 📈<\/a>\s*<a class="btn btn-flame" href="\/rocketize" data-tip="[^"]+">Rocketize Profile&nbsp;🖼️<\/a>\s*<\/div>/.test(home.text)
+    && /root\.addEventListener\('keydown', \(e\) => \{\s*if \(!base\) return;\s*const t = e\.target, tag = t && t\.tagName;[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*if \(t === root\) return;/.test(rzJs.text));
 
   /* ═══ 4. never a page where there should be none ═══ */
   const not = [];

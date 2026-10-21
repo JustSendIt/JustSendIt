@@ -294,6 +294,9 @@
   root.addEventListener('keydown', (e) => {
     if (!base) return;
     const t = e.target, tag = t && t.tagName;
+    // the section itself has focus after a /rocketize link on this page (home.js moves it there, as a jump to an anchor would):
+    // its keys scroll the page, and a selected rocket is not nudged or deleted by them
+    if (t === root) return;
     const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable);
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.altKey && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
