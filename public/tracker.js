@@ -262,7 +262,7 @@ function csvFrom(activity, exp) {
     return '"' + s.replace(/"/g, '""') + '"';
   };
   const num = (v) => (v == null || isNaN(v)) ? '' : String(Math.abs(Number(v)));
-  const KIND = { buy: 'buy', sell: 'sell', swap: 'swap', in: 'received', out: 'sent', mint: 'mint', burn: 'burn', mixed: 'mixed', self: 'self-transfer' };
+  const KIND = { buy: 'buy', sell: 'sell', swap: 'swap', in: 'transfer in', out: 'transfer out', mint: 'mint', burn: 'burn', mixed: 'mixed', self: 'self-transfer' };
   const lines = ['time,hash,type,token,symbol,direction,amount,wethPaid,usdgPaid,wethGot,usdgGot,explorerUrl'];
   for (const a of activity || []) {
     const when = a.ts ? new Date(a.ts).toISOString() : 'block ' + a.block;
@@ -568,7 +568,7 @@ function pnlArrow(n) { return n == null || n === 0 ? '' : n > 0 ? '▲ ' : '▼ 
    top of a saved one — keeps what the reader opened, keeps their place on the page and puts focus back where it was,
    by the stable data-trk-key every control carries. */
 function trkState(zone) {
-  if (!zone._trk) zone._trk = { openToks: new Set(), actFilter: 'all', actToken: '', actPages: 1, wcRange: '7d', wcSeries: { value: true, invested: true }, tableOpen: false, focusKey: null, defsOpen: false, uid: 'trk' + Math.floor(Math.random() * 1e6) };
+  if (!zone._trk) zone._trk = { openToks: new Set(), actKinds: new Set(), actToken: '', actPages: 1, wcRange: '7d', wcSeries: { value: true, invested: true }, tableOpen: false, focusKey: null, defsOpen: false, uid: 'trk' + Math.floor(Math.random() * 1e6) };
   return zone._trk;
 }
 function trkFindKey(zone, key) {
@@ -584,7 +584,7 @@ function renderTracker(zone, r, prefs) {
   // the zone's UI state belongs to one wallet: a different wallet rendered into the same zone (the tracker page's
   // report zone, the profile's wallet picker) starts with its own filters, pages and open rows — a token chosen for
   // wallet A must not filter wallet B's list down to "Showing 0 of 0". Display choices (range, series, unit) stay.
-  if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actFilter = 'all'; S.actToken = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
+  if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actKinds = new Set(); S.actToken = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
   const money = P.usd ? trkUsd : trkEth;
   const inUnit = (usd) => usd == null ? null : (P.usd ? usd : (r.ethUsd ? usd / r.ethUsd : null));   // a USD figure in the chosen unit
   const exp = TRK_EXPLORER;
@@ -828,16 +828,34 @@ function trkTradeTable(t, exp) {
 
 /* ---- transactions ---- */
 const TRK_KINDS = {
-  buy: ['🟢', 'Buy'], sell: ['🔴', 'Sell'], swap: ['🔁', 'Swap'], in: ['📥', 'Received'], out: ['📤', 'Sent'],
+  buy: ['🟢', 'Buy'], sell: ['🔴', 'Sell'], swap: ['🔁', 'Swap'], in: ['📥', 'Transfer in'], out: ['📤', 'Transfer out'],
   mint: ['✨', 'Mint'], burn: ['🔥', 'Burn'], mixed: ['🔀', 'Mixed'], self: ['↩️', 'Self-transfer'],
 };
-function trkActMatches(a, filter) {
-  if (filter === 'all') return true;
-  if (filter === 'buy') return a.kind === 'buy' || a.kind === 'swap';
-  if (filter === 'sell') return a.kind === 'sell' || a.kind === 'swap';
-  if (filter === 'in') return a.kind === 'in' || a.kind === 'mint';
-  if (filter === 'out') return a.kind === 'out' || a.kind === 'burn';
-  return a.kind === 'mixed' || a.kind === 'self';
+/* The filters (owner, 2026-10-22: "filter transactions by transfers in, transfers out, buys, sells, and other"), in that
+   order. Any number may be on at once — a transaction shows when it is in ANY chosen one; none on is everything ("All").
+   A swap of one token for another is in both Buys and Sells (it buys one and sells the other); a mint arrives like a
+   transfer in and a burn leaves like a transfer out; Other is the rest: a transaction that moved tokens both ways and was
+   not read as a buy or a sell (its receipt unread, or a swap in someone else's transaction), and a self-transfer. */
+const TRK_ACT_CATS = [
+  ['in', 'Transfers in', 'tokens received (and minted)'], ['out', 'Transfers out', 'tokens sent (and burned)'],
+  ['buy', 'Buys', 'buys, and swaps of one token for another'], ['sell', 'Sells', 'sells, and swaps of one token for another'],
+  ['other', 'Other', 'transactions that moved tokens both ways and were not read as a buy or a sell (Mixed), and self-transfers'],
+];
+function trkActCats(a) {
+  switch (a.kind) {
+    case 'buy': return ['buy'];
+    case 'sell': return ['sell'];
+    case 'swap': return ['buy', 'sell'];
+    case 'in': case 'mint': return ['in'];
+    case 'out': case 'burn': return ['out'];
+    default: return ['other'];
+  }
+}
+// `cats`: the chosen filters (a Set, or one filter's name); none chosen — or 'all' — matches everything
+function trkActMatches(a, cats) {
+  if (cats == null || cats === 'all') return true;
+  const set = typeof cats === 'string' ? new Set([cats]) : cats;
+  return !set.size || trkActCats(a).some(c => set.has(c));
 }
 function trkLegLine(l) {
   const sign = l.dir === 'in' ? '+' : '−';
@@ -867,25 +885,40 @@ function trkActivityHTML(r, P, S, exp) {
   }
   const tokens = new Map();
   for (const a of all) for (const l of a.legs) if (!tokens.has(l.token)) tokens.set(l.token, l.symbol);
-  const filtered = all.filter(a => trkActMatches(a, S.actFilter) && (!S.actToken || a.legs.some(l => l.token === S.actToken)));
+  const ofToken = S.actToken ? all.filter(a => a.legs.some(l => l.token === S.actToken)) : all;
+  const filtered = ofToken.filter(a => trkActMatches(a, S.actKinds));
   const shown = filtered.slice(0, TRK_PAGE * S.actPages);
-  const FILTERS = [['all', 'All', 'Shows every transaction'], ['buy', 'Buys', 'Shows only buys and swaps'], ['sell', 'Sells', 'Shows only sells and swaps'], ['in', 'Received', 'Shows only tokens received and minted'], ['out', 'Sent', 'Shows only tokens sent and burned'], ['other', 'Other', 'Shows mixed and self-transfers']];
-  html += '<div class="trk-act-tools" role="group" aria-label="Filter transactions">' +
-    // the pressed filter carries the same "✓ " text prefix as the report toggles: its state is never fill colour alone
-    FILTERS.map(([k, lbl, tip]) => '<button class="react-btn' + (S.actFilter === k ? ' lit' : '') + '" data-tip="' + tip + '" type="button" data-act-filter="' + k + '" data-trk-key="act:' + k + '" aria-pressed="' + (S.actFilter === k) + '">' + (S.actFilter === k ? '✓ ' : '') + lbl + '</button>').join('') +
-    '<label class="trk-act-tok" for="' + S.uid + '-act-token">Token</label>' +
+  // how many of the token's transactions each filter holds (a swap counts in Buys and in Sells)
+  const counts = { in: 0, out: 0, buy: 0, sell: 0, other: 0 };
+  for (const a of ofToken) for (const c of trkActCats(a)) counts[c]++;
+  // the count is a number on screen; a screen reader hears "Transfers in (3 transactions)"
+  const chip = (k, lbl, tip, on, n) => '<button class="react-btn' + (on ? ' lit' : '') + '" data-tip="' + tip + '" type="button" data-act-filter="' + k + '" data-trk-key="act:' + k + '" aria-pressed="' + on + '">' + (on ? '✓ ' : '') + lbl +
+    (n == null ? '' : ' <span class="trk-act-n"><span class="sr-only">(</span>' + trkN(n) + '<span class="sr-only"> ' + (n === 1 ? 'transaction' : 'transactions') + ')</span></span>') + '</button>';
+  // each tip says what a click on it does from here: narrow to it, add it, take it out, or (the last one on) show every type again
+  const sw = { buy: 'sell', sell: 'buy' }, swName = { buy: 'Buys', sell: 'Sells' };
+  const tipFor = (k, what) => {
+    if (!S.actKinds.size) return 'Shows only ' + what;
+    if (!S.actKinds.has(k)) return 'Also includes ' + what;
+    if (S.actKinds.size === 1) return 'Turns this filter off and shows every type again';
+    return 'Stops including ' + what + (sw[k] && S.actKinds.has(sw[k]) ? ' (swaps stay while ' + swName[sw[k]] + ' is on)' : '');
+  };
+  html += '<div class="trk-act-tools" role="group" aria-label="Filter transactions — choose one or more">' +
+    // a pressed filter carries the same "✓ " text prefix as the report toggles: its state is never fill colour alone
+    chip('all', 'All', S.actToken ? 'Clears the type filters (the token choice stays)' : 'Clears the type filters and shows every transaction', !S.actKinds.size, null) +
+    TRK_ACT_CATS.map(([k, lbl, what]) => chip(k, lbl, tipFor(k, what), S.actKinds.has(k), counts[k])).join('') +
+    '<span class="trk-act-tokwrap"><label class="trk-act-tok" for="' + S.uid + '-act-token">Token</label>' +
     '<select id="' + S.uid + '-act-token" data-tip="Shows only transactions that moved the chosen token" data-act-token data-trk-key="act:token"><option value="">All tokens</option>' +
     [...tokens.entries()].sort((x, y) => String(x[1]).localeCompare(String(y[1]))).map(([addr, sym]) => '<option value="' + trkEsc(addr) + '"' + (S.actToken === addr ? ' selected' : '') + '>' + trkEsc(sym) + '</option>').join('') +
-    '</select>' +
+    '</select></span>' +   // the label and its select wrap as one, never "Token" at a line's end and the select on the next
     // no role=status: the zone is rebuilt by innerHTML on every re-render, so a live region here would be a new one each
     // time (re-spoken on an unrelated toggle on VoiceOver, never on NVDA/JAWS); the count is announced by trkWire
     // through the page's one persistent live region (window.announce) when a filter, the token or the page changes
     '<p class="trk-act-count">Showing ' + trkN(shown.length) + ' of ' + trkN(filtered.length) + '</p></div>';
-  if (!filtered.length) html += '<p class="modal-note">No transactions match this filter.</p>';
+  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (S.actKinds.size > 1 ? 'these filters' : 'this filter') + '.</p>';
   else {
     const rows = shown.map((a, i) => {
       const K = TRK_KINDS[a.kind] || TRK_KINDS.mixed;
-      const kindTxt = a.viaOthers ? (a.kind === 'in' ? 'Received (from a swap in someone else’s transaction)' : a.kind === 'out' ? 'Sent (by a swap in someone else’s transaction)' : K[1] + ' (in someone else’s transaction)') : K[1];
+      const kindTxt = a.viaOthers ? (a.kind === 'in' ? 'Transfer in (from a swap in someone else’s transaction)' : a.kind === 'out' ? 'Transfer out (by a swap in someone else’s transaction)' : K[1] + ' (in someone else’s transaction)') : K[1];
       const valn = trkValuation(a);
       return '<tr role="row" class="trk-arow kind-' + trkEsc(a.kind) + '" data-i="' + i + '">' +
         '<td role="cell" data-l="When" class="c-when">' + (a.ts ? '<span class="a-date">' + trkEsc(trkDate(a.ts)) + '</span><span class="a-time">' + trkEsc(trkTime(a.ts)) + '</span>' : '<span class="a-date">block ' + trkN(a.block) + '</span>') + '</td>' +
@@ -897,7 +930,7 @@ function trkActivityHTML(r, P, S, exp) {
   }
   html += '<div class="trk-act-btns">' +
     (filtered.length > shown.length ? '<button class="btn btn-ghost btn-sm" data-tip="Shows the next 50 transactions" type="button" data-act-more data-trk-key="act:more">Show 50 more</button>' : '') +
-    (all.length ? '<button class="btn btn-ghost btn-sm" data-tip="Downloads every listed transaction as a CSV file" type="button" data-act-csv data-trk-key="act:csv">Download CSV</button>' : '') +
+    (filtered.length ? '<button class="btn btn-ghost btn-sm" data-tip="' + (filtered.length < all.length ? 'Downloads the ' + trkPlural(filtered.length, 'transaction') + ' the filters show as a CSV file' : 'Downloads every listed transaction as a CSV file') + '" type="button" data-act-csv data-trk-key="act:csv">Download CSV</button>' : '') +
     '</div>';
   const sent = txc ? txc.sent : null, isC = txc ? txc.isContract : false, deleg = txc ? txc.delegated : false;
   const listed = txc ? txc.listed : all.filter(a => !a.self).length, nft = txc ? txc.nft : (r.info && r.info.nftTransfers) || 0;
@@ -961,14 +994,14 @@ function trkWire(zone) {
     }
     const f = e.target.closest('[data-act-filter]');
     if (f && zone.contains(f)) {
-      S.actFilter = f.dataset.actFilter; S.actPages = 1;
-      // the row's state in place first (aria-pressed, the lit fill and the "✓ " prefix move together), then the list
-      zone.querySelectorAll('[data-act-filter]').forEach(b => {
-        const on = b.dataset.actFilter === S.actFilter;
-        b.setAttribute('aria-pressed', String(on)); b.classList.toggle('lit', on);
-        b.textContent = (on ? '✓ ' : '') + b.textContent.replace(/^✓ /, '');
-      });
-      rerender('act:' + S.actFilter); sayCount(); return;
+      const k = f.dataset.actFilter;
+      if (k === 'all') S.actKinds.clear();
+      else if (S.actKinds.has(k)) S.actKinds.delete(k);
+      else S.actKinds.add(k);
+      S.actPages = 1;
+      // the zone is redrawn with every chip's state (aria-pressed, the lit fill and the "✓ " prefix together), and the
+      // focus stays on the chip pressed
+      rerender('act:' + k); sayCount(); return;
     }
     const m = e.target.closest('[data-act-more]');
     if (m && zone.contains(m)) {
@@ -983,7 +1016,7 @@ function trkWire(zone) {
       return;
     }
     const csv = e.target.closest('[data-act-csv]');
-    if (csv && zone.contains(csv)) { trkDownloadCsv(c.r); return; }
+    if (csv && zone.contains(csv)) { trkDownloadCsv(c.r, trkActShown(c.r, S)); return; }
   });
   zone.addEventListener('change', (e) => {
     const sel = e.target.closest && e.target.closest('[data-act-token]');
@@ -994,9 +1027,14 @@ function trkWire(zone) {
     sayCount();
   });
 }
-function trkDownloadCsv(r) {
+// the transactions the filters and the token choice let through, all pages of them
+function trkActShown(r, S) {
+  const all = Array.isArray(r && r.activity) ? r.activity : [];
+  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)));
+}
+function trkDownloadCsv(r, rows) {
   if (typeof document === 'undefined' || !r || !Array.isArray(r.activity)) return;
-  const csv = csvFrom(r.activity, TRK_EXPLORER);
+  const csv = csvFrom(rows || r.activity, TRK_EXPLORER);
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

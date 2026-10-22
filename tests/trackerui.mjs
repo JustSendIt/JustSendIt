@@ -164,7 +164,7 @@ try {
   check('the holdings table: roles, the ETH row first, the column classes that fold, a details button per token', /<table class="trk-htable" role="table"><thead role="rowgroup"><tr role="row"><th role="columnheader" scope="col">Token<\/th>/.test(D) && /<tbody role="rowgroup"><tr role="row" class="trk-hrow trk-hrow-eth">/.test(D) && /class="num c-price"/.test(D) && /class="num c-share"/.test(D) && /class="num c-avg"/.test(D) && new RegExp('data-trk-more="' + FOO + '" data-trk-key="more:' + FOO + '" aria-expanded="false" aria-controls="[^"]+" aria-label="Details, \\$FOO"').test(D));
   check('  ...the price says where it came from, and the column definitions sit beside the heading (one ⓘ, none in a <th>)', /\$0\.01 <span class="t-src">· pool<\/span>/.test(D) && /<div class="trk-h-row"><h3 [^>]*class="trk-h">Holdings &amp; PNL by token<\/h3><button class="trk-defs-btn"/.test(D) && !/<th[^>]*>[^<]*ⓘ/.test(D));
   check('the transactions section: filters, the token select, the count line, the table roles, 44px tx links, the two buttons', /<section class="trk-activity"/.test(D) && /data-act-filter="all" data-trk-key="act:all" aria-pressed="true"/.test(D) && /<select id="[^"]+" data-tip="[^"]+" data-act-token data-trk-key="act:token">/.test(D) && /<p class="trk-act-count">Showing 11 of 11<\/p>/.test(D) && /<table class="trk-atable" role="table">/.test(D) && /class="a-tx" href="https:\/\/robinhoodchain\.blockscout\.com\/tx\/0x0/.test(D) && /data-act-csv data-trk-key="act:csv"/.test(D) && !/data-act-more/.test(D));
-  check('  ...the type chip hides its emoji from screen readers and names the via-others case', /<span aria-hidden="true">🟢<\/span> Buy</.test(D) && /Received \(from a swap in someone else’s transaction\)/.test(D) && /Self-transfer/.test(D));
+  check('  ...the type chip hides its emoji from screen readers and names the via-others case', /<span aria-hidden="true">🟢<\/span> Buy</.test(D) && /Transfer in \(from a swap in someone else’s transaction\)/.test(D) && /Self-transfer/.test(D));
   check('  ...what moved reads natively: "paid 0.05 ETH", "got 0.03 ETH", a swap through the pools, "not valued"', /<div class="a-val">paid 0\.05 ETH<\/div>/.test(D) && /<div class="a-val">got 0\.03 ETH<\/div>/.test(D) && /swapped −\$FOO → \+\$BAR \(0\.01 ETH through the pools\)/.test(D) && /<div class="a-val">not valued<\/div>/.test(D));
   check('  ...an unread amount shows its raw integer in <code>, and a row with no block time says "block N"', /amount unread \(unknown decimals\), raw <code>12345<\/code>/.test(D) && /<span class="a-date">block 400<\/span>/.test(D));
   check('  ...the transactions note, verbatim', /42 transactions sent by this wallet \(its nonce\) · 10 transactions moved a token to or from it, whoever sent them — those are listed\. Plain ETH transfers and contract calls that move no token leave no log on the chain and are not listed\. 3 NFT transfers counted, not listed\./.test(D));
@@ -175,8 +175,26 @@ try {
   check('paging: 50 rows a page, a "Show 50 more" button, the count line says so', (z2.innerHTML.match(/class="trk-arow /g) || []).length === 50 && /Showing 50 of 60/.test(z2.innerHTML) && /data-act-more data-trk-key="act:more">Show 50 more</.test(z2.innerHTML));
   z2._trk.actPages = 2; ctx.renderTracker(z2, big, { usd: true });
   check('  ...the next page shows the rest', (z2.innerHTML.match(/class="trk-arow /g) || []).length === 60 && /Showing 60 of 60/.test(z2.innerHTML) && !/data-act-more/.test(z2.innerHTML));
-  z2._trk.actFilter = 'sell'; ctx.renderTracker(z2, rep, { usd: true });
-  check('  ...a filter narrows the list from the zone\'s own state', /Showing 2 of 2/.test(z2.innerHTML) && /data-act-filter="sell" data-trk-key="act:sell" aria-pressed="true"/.test(z2.innerHTML));
+  z2._trk.actKinds = new Set(['sell']); ctx.renderTracker(z2, rep, { usd: true });
+  check('  ...a filter narrows the list from the zone\'s own state', /Showing 2 of 2/.test(z2.innerHTML) && /data-act-filter="sell" data-trk-key="act:sell" aria-pressed="true"/.test(z2.innerHTML) && /data-act-filter="all" data-trk-key="act:all" aria-pressed="false"/.test(z2.innerHTML));
+  /* owner, 2026-10-22: "filter transactions by transfers in, transfers out, buys, sells, and other" — the five, in that
+     order after All, each with how many it holds; any number on at once; a swap is in Buys and in Sells */
+  const order = ['all', 'in', 'out', 'buy', 'sell', 'other'].map(k => D.indexOf('data-act-filter="' + k + '"'));
+  check('the filters: All, then Transfers in, Transfers out, Buys, Sells, Other — each with its count (a swap in both Buys and Sells)',
+    order.every((p, i) => p > 0 && (i === 0 || p > order[i - 1]))
+    && [['in', 'Transfers in', 3], ['out', 'Transfers out', 2], ['buy', 'Buys', 3], ['sell', 'Sells', 2], ['other', 'Other', 2]].every(([k, lbl, n]) => new RegExp('data-act-filter="' + k + '" data-trk-key="act:' + k + '" aria-pressed="false">' + lbl + ' <span class="trk-act-n"><span class="sr-only">\\(</span>' + n + '<span class="sr-only"> transactions\\)</span></span></button>').test(D)),
+    order.join(','));
+  z2._trk.actKinds = new Set(['buy', 'in']); ctx.renderTracker(z2, rep, { usd: true });
+  check('  ...several at once show what is in ANY of them (buys and transfers in: 6 of the 11), each chip pressed with its ✓', /Showing 6 of 6/.test(z2.innerHTML)
+    && /aria-pressed="true">✓ Transfers in </.test(z2.innerHTML) && /aria-pressed="true">✓ Buys </.test(z2.innerHTML) && /aria-pressed="false">Sells </.test(z2.innerHTML));
+  check('  ...the CSV takes what the filters and the token choice show; a transfer is named so in it', ctx.trkActShown(rep, { actKinds: new Set(['other']), actToken: '' }).length === 2
+    && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '' }).length === 11 && /,"transfer in",/.test(ctx.csvFrom(rep.activity.filter(a => a.kind === 'in'))));
+  // each tip says what its click does from where the reader is
+  const tipOf = (html, k) => (new RegExp('data-tip="([^"]*)" type="button" data-act-filter="' + k + '"').exec(html) || [])[1];
+  check('  ...each chip\'s tip says what its click does from here: narrow to it, add it, take it out, or (the last one) show every type again',
+    /^Shows only buys/.test(tipOf(D, 'buy')) && /^Also includes tokens sent/.test(tipOf(z2.innerHTML, 'out')) && /^Stops including buys.*\(swaps stay while Sells is on\)$/.test((() => { const z6 = fakeZone(); z6._trk = null; ctx.renderTracker(z6, rep, { usd: true }); z6._trk.actKinds = new Set(['buy', 'sell']); ctx.renderTracker(z6, rep, { usd: true }); return tipOf(z6.innerHTML, 'buy'); })())
+    && /^Turns this filter off and shows every type again$/.test((() => { const z7 = fakeZone(); ctx.renderTracker(z7, rep, { usd: true }); z7._trk.actKinds = new Set(['other']); ctx.renderTracker(z7, rep, { usd: true }); return tipOf(z7.innerHTML, 'other'); })()),
+    [tipOf(D, 'buy'), tipOf(z2.innerHTML, 'out')].join(' / '));
   // the ETH mode
   const z3 = fakeZone(); ctx.renderTracker(z3, rep, { usd: false });
   check('ETH mode: the unit changes in the label and the USDG conversion is stated', /Portfolio value <span class="unit">\(ETH\)<\/span>/.test(z3.innerHTML) && /USDG-quoted pools and USDG legs converted at today’s ETH price/.test(z3.innerHTML));
