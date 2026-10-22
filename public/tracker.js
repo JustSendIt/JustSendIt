@@ -568,7 +568,7 @@ function pnlArrow(n) { return n == null || n === 0 ? '' : n > 0 ? '▲ ' : '▼ 
    top of a saved one — keeps what the reader opened, keeps their place on the page and puts focus back where it was,
    by the stable data-trk-key every control carries. */
 function trkState(zone) {
-  if (!zone._trk) zone._trk = { openToks: new Set(), actKinds: new Set(), actToken: '', actPages: 1, wcRange: '7d', wcSeries: { value: true, invested: true }, tableOpen: false, focusKey: null, defsOpen: false, uid: 'trk' + Math.floor(Math.random() * 1e6) };
+  if (!zone._trk) zone._trk = { openToks: new Set(), actKinds: new Set(), actToken: '', actRange: 'all', actFrom: '', actTo: '', actPages: 1, wcRange: '7d', wcSeries: { value: true, invested: true }, tableOpen: false, focusKey: null, defsOpen: false, uid: 'trk' + Math.floor(Math.random() * 1e6) };
   return zone._trk;
 }
 function trkFindKey(zone, key) {
@@ -584,7 +584,7 @@ function renderTracker(zone, r, prefs) {
   // the zone's UI state belongs to one wallet: a different wallet rendered into the same zone (the tracker page's
   // report zone, the profile's wallet picker) starts with its own filters, pages and open rows — a token chosen for
   // wallet A must not filter wallet B's list down to "Showing 0 of 0". Display choices (range, series, unit) stay.
-  if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actKinds = new Set(); S.actToken = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
+  if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actKinds = new Set(); S.actToken = ''; S.actRange = 'all'; S.actFrom = ''; S.actTo = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
   const money = P.usd ? trkUsd : trkEth;
   const inUnit = (usd) => usd == null ? null : (P.usd ? usd : (r.ethUsd ? usd / r.ethUsd : null));   // a USD figure in the chosen unit
   const exp = TRK_EXPLORER;
@@ -857,6 +857,26 @@ function trkActMatches(a, cats) {
   const set = typeof cats === 'string' ? new Set([cats]) : cats;
   return !set.size || trkActCats(a).some(c => set.has(c));
 }
+/* The date range (owner, 2026-10-22: "add a date range filter to the wallet tracker transactions"): a span back from now,
+   or chosen days in the reader's own time zone — the zone the rows' dates are shown in — From's first moment to To's last
+   (either may be left empty: open-ended; From after To is read the other way round). A transaction whose block time was
+   not read has no date, so a range leaves it out, and the list says how many. */
+const TRK_ACT_RANGES = [['all', 'All time'], ['1d', 'Last 24 hours'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['365d', 'Last 12 months'], ['custom', 'Choose dates…']];
+const trkDayStart = (ymd) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : null; };
+const trkYmd = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+// { from, to } in ms (either may be null: open-ended), or null when every date counts
+function trkActBounds(S, nowMs) {
+  const r = S.actRange || 'all';
+  if (r === 'all') return null;
+  if (r !== 'custom') { const days = { '1d': 1, '7d': 7, '30d': 30, '90d': 90, '365d': 365 }[r]; return days ? { from: nowMs - days * 864e5, to: null } : null; }
+  let a = trkDayStart(S.actFrom), b = trkDayStart(S.actTo);
+  if (a != null && b != null && a > b) { const t = a; a = b; b = t; }
+  if (a == null && b == null) return null;
+  // To's last moment: the next local midnight, less one (a day is not always 24 hours where clocks change)
+  const end = b == null ? null : (() => { const d = new Date(b); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() - 1; })();
+  return { from: a, to: end };
+}
+const trkActInRange = (a, b) => !b || (a.ts != null && (b.from == null || a.ts >= b.from) && (b.to == null || a.ts <= b.to));
 function trkLegLine(l) {
   const sign = l.dir === 'in' ? '+' : '−';
   const name = (l.cash ? '' : '$') + trkEsc(l.symbol);
@@ -885,10 +905,13 @@ function trkActivityHTML(r, P, S, exp) {
   }
   const tokens = new Map();
   for (const a of all) for (const l of a.legs) if (!tokens.has(l.token)) tokens.set(l.token, l.symbol);
-  const ofToken = S.actToken ? all.filter(a => a.legs.some(l => l.token === S.actToken)) : all;
+  const bounds = trkActBounds(S, Date.now());
+  const tokenRows = S.actToken ? all.filter(a => a.legs.some(l => l.token === S.actToken)) : all;
+  const ofToken = bounds ? tokenRows.filter(a => trkActInRange(a, bounds)) : tokenRows;   // the token and the dates: what the type counts are of
+  const untimed = bounds ? tokenRows.filter(a => a.ts == null).length : 0;
   const filtered = ofToken.filter(a => trkActMatches(a, S.actKinds));
   const shown = filtered.slice(0, TRK_PAGE * S.actPages);
-  // how many of the token's transactions each filter holds (a swap counts in Buys and in Sells)
+  // how many of the chosen token's transactions in the chosen dates each filter holds (a swap counts in Buys and in Sells)
   const counts = { in: 0, out: 0, buy: 0, sell: 0, other: 0 };
   for (const a of ofToken) for (const c of trkActCats(a)) counts[c]++;
   // the count is a number on screen; a screen reader hears "Transfers in (3 transactions)"
@@ -904,17 +927,27 @@ function trkActivityHTML(r, P, S, exp) {
   };
   html += '<div class="trk-act-tools" role="group" aria-label="Filter transactions — choose one or more">' +
     // a pressed filter carries the same "✓ " text prefix as the report toggles: its state is never fill colour alone
-    chip('all', 'All', S.actToken ? 'Clears the type filters (the token choice stays)' : 'Clears the type filters and shows every transaction', !S.actKinds.size, null) +
+    chip('all', 'All', S.actToken || bounds ? 'Clears the type filters (the ' + (S.actToken && bounds ? 'token and date choices stay' : S.actToken ? 'token choice stays' : 'date choice stays') + ')' : 'Clears the type filters and shows every transaction', !S.actKinds.size, null) +
     TRK_ACT_CATS.map(([k, lbl, what]) => chip(k, lbl, tipFor(k, what), S.actKinds.has(k), counts[k])).join('') +
     '<span class="trk-act-tokwrap"><label class="trk-act-tok" for="' + S.uid + '-act-token">Token</label>' +
     '<select id="' + S.uid + '-act-token" data-tip="Shows only transactions that moved the chosen token" data-act-token data-trk-key="act:token"><option value="">All tokens</option>' +
     [...tokens.entries()].sort((x, y) => String(x[1]).localeCompare(String(y[1]))).map(([addr, sym]) => '<option value="' + trkEsc(addr) + '"' + (S.actToken === addr ? ' selected' : '') + '>' + trkEsc(sym) + '</option>').join('') +
     '</select></span>' +   // the label and its select wrap as one, never "Token" at a line's end and the select on the next
+    // the date controls go together: the span and, when days are chosen, From and To — never To alone on the next line
+    '<span class="trk-act-dates"><span class="trk-act-tokwrap"><label class="trk-act-tok" for="' + S.uid + '-act-range">Dates</label>' +
+    '<select id="' + S.uid + '-act-range" data-tip="Shows only transactions from the chosen span of time" data-act-range data-trk-key="act:range">' +
+    TRK_ACT_RANGES.map(([k, lbl]) => '<option value="' + k + '"' + ((S.actRange || 'all') === k ? ' selected' : '') + '>' + lbl + '</option>').join('') + '</select></span>' +
+    (S.actRange === 'custom'
+      // native date fields: the reader's own calendar and locale; each bounds the other in the picker
+      ? '<span class="trk-act-tokwrap"><label class="trk-act-tok" for="' + S.uid + '-act-from">From</label><input type="date" id="' + S.uid + '-act-from" value="' + trkEsc(S.actFrom || '') + '"' + (S.actTo ? ' max="' + trkEsc(S.actTo) + '"' : '') + ' data-tip="The first day to include, in your own time zone (leave empty for no start)" data-act-from data-trk-key="act:from"></span>' +
+        '<span class="trk-act-tokwrap"><label class="trk-act-tok" for="' + S.uid + '-act-to">To</label><input type="date" id="' + S.uid + '-act-to" value="' + trkEsc(S.actTo || '') + '"' + (S.actFrom ? ' min="' + trkEsc(S.actFrom) + '"' : '') + ' data-tip="The last day to include, in your own time zone (leave empty for up to today)" data-act-to data-trk-key="act:to"></span>'
+      : '') + '</span>' +
     // no role=status: the zone is rebuilt by innerHTML on every re-render, so a live region here would be a new one each
     // time (re-spoken on an unrelated toggle on VoiceOver, never on NVDA/JAWS); the count is announced by trkWire
     // through the page's one persistent live region (window.announce) when a filter, the token or the page changes
     '<p class="trk-act-count">Showing ' + trkN(shown.length) + ' of ' + trkN(filtered.length) + '</p></div>';
-  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (S.actKinds.size > 1 ? 'these filters' : 'this filter') + '.</p>';
+  if (untimed) html += '<p class="modal-note">' + trkPlural(untimed, 'transaction') + ' with no block time read ' + (untimed === 1 ? 'is' : 'are') + ' left out while a date range is on — ' + (untimed === 1 ? 'its' : 'their') + ' date is not known.</p>';
+  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (S.actKinds.size + (S.actToken ? 1 : 0) + (bounds ? 1 : 0) > 1 ? 'these filters' : 'this filter') + '.</p>';
   else {
     const rows = shown.map((a, i) => {
       const K = TRK_KINDS[a.kind] || TRK_KINDS.mixed;
@@ -1019,18 +1052,30 @@ function trkWire(zone) {
     if (csv && zone.contains(csv)) { trkDownloadCsv(c.r, trkActShown(c.r, S)); return; }
   });
   zone.addEventListener('change', (e) => {
-    const sel = e.target.closest && e.target.closest('[data-act-token]');
-    if (!sel || !zone.contains(sel)) return;
+    const t = e.target;
+    if (!t || !t.closest || !zone.contains(t)) return;
     const S = trkState(zone);
-    S.actToken = sel.value; S.actPages = 1;
-    rerender('act:token');
-    sayCount();
+    if (t.closest('[data-act-token]')) { S.actToken = t.value; S.actPages = 1; rerender('act:token'); sayCount(); return; }
+    if (t.closest('[data-act-range]')) {
+      S.actRange = t.value; S.actPages = 1;
+      // choosing dates starts from the last 30 days, today included, for the reader to move
+      if (S.actRange === 'custom' && !S.actFrom && !S.actTo) { const n = Date.now(); S.actFrom = trkYmd(n - 30 * 864e5); S.actTo = trkYmd(n); }
+      rerender('act:range'); sayCount(); return;
+    }
+    if (t.closest('[data-act-from]') || t.closest('[data-act-to]')) {
+      const from = !!t.closest('[data-act-from]');
+      const v = /^\d{4}-\d{2}-\d{2}$/.test(t.value) ? t.value : '';   // a cleared field is open-ended
+      if (from) S.actFrom = v; else S.actTo = v;
+      S.actPages = 1;
+      rerender(from ? 'act:from' : 'act:to'); sayCount();
+    }
   });
 }
 // the transactions the filters and the token choice let through, all pages of them
-function trkActShown(r, S) {
+function trkActShown(r, S, nowMs) {
   const all = Array.isArray(r && r.activity) ? r.activity : [];
-  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)));
+  const b = trkActBounds(S, nowMs == null ? Date.now() : nowMs);
+  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActInRange(a, b));
 }
 function trkDownloadCsv(r, rows) {
   if (typeof document === 'undefined' || !r || !Array.isArray(r.activity)) return;

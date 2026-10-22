@@ -189,6 +189,27 @@ try {
     && /aria-pressed="true">✓ Transfers in </.test(z2.innerHTML) && /aria-pressed="true">✓ Buys </.test(z2.innerHTML) && /aria-pressed="false">Sells </.test(z2.innerHTML));
   check('  ...the CSV takes what the filters and the token choice show; a transfer is named so in it', ctx.trkActShown(rep, { actKinds: new Set(['other']), actToken: '' }).length === 2
     && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '' }).length === 11 && /,"transfer in",/.test(ctx.csvFrom(rep.activity.filter(a => a.kind === 'in'))));
+  /* owner, 2026-10-22: "add a date range filter to the wallet tracker transactions" — a span back from now, or chosen days in
+     the reader's own zone; the type counts follow it, a transaction with no block time is left out and said to be */
+  const zR = fakeZone(); ctx.renderTracker(zR, rep, { usd: true });
+  check('the date range: a Dates select with the spans back from now and "Choose dates…", All time by default',
+    /<select id="[^"]+-act-range" data-tip="[^"]+" data-act-range data-trk-key="act:range"><option value="all" selected>All time<\/option><option value="1d">Last 24 hours<\/option><option value="7d">Last 7 days<\/option><option value="30d">Last 30 days<\/option><option value="90d">Last 90 days<\/option><option value="365d">Last 12 months<\/option><option value="custom">Choose dates…<\/option><\/select>/.test(zR.innerHTML) && !/data-act-from/.test(zR.innerHTML));
+  zR._trk.actRange = '7d'; ctx.renderTracker(zR, rep, { usd: true });
+  check('  ...the last 7 days of a wallet whose transactions are weeks old: none shown, the counts follow, the one with no block time is said to be left out',
+    /Showing 0 of 0/.test(zR.innerHTML) && /aria-pressed="false">Buys <span class="trk-act-n"><span class="sr-only">\(<\/span>0</.test(zR.innerHTML) && /1 transaction with no block time read is left out while a date range is on/.test(zR.innerHTML)
+    && /Clears the type filters \(the date choice stays\)/.test(zR.innerHTML));
+  const dayOf = (ms) => { const d = new Date(ms); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  const timed = rep.activity.filter(a => a.ts != null), pick = timed[Math.floor(timed.length / 2)], day = dayOf(pick.ts);
+  const want = timed.filter(a => dayOf(a.ts) === day).length;
+  zR._trk.actRange = 'custom'; zR._trk.actFrom = day; zR._trk.actTo = day; ctx.renderTracker(zR, rep, { usd: true });
+  check('  ...chosen days are whole days in the reader\'s own time zone, From\'s first moment to To\'s last (each field bounding the other)',
+    new RegExp('Showing ' + want + ' of ' + want).test(zR.innerHTML) && want > 0 && new RegExp('type="date" id="[^"]+-act-from" value="' + day + '" max="' + day + '"').test(zR.innerHTML) && new RegExp('type="date" id="[^"]+-act-to" value="' + day + '" min="' + day + '"').test(zR.innerHTML), want + ' on ' + day);
+  const later = dayOf(pick.ts + 864e5 * 400);
+  check('  ...From after To is read the other way round, an empty field is open-ended, and the CSV takes the same rows',
+    ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'custom', actFrom: later, actTo: day }).length === timed.filter(a => dayOf(a.ts) >= day).length
+    && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'custom', actFrom: day, actTo: '' }).length === timed.filter(a => dayOf(a.ts) >= day).length
+    && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'custom', actFrom: '', actTo: '' }).length === 11);
+
   // each tip says what its click does from where the reader is
   const tipOf = (html, k) => (new RegExp('data-tip="([^"]*)" type="button" data-act-filter="' + k + '"').exec(html) || [])[1];
   check('  ...each chip\'s tip says what its click does from here: narrow to it, add it, take it out, or (the last one) show every type again',
