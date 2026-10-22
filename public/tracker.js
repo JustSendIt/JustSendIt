@@ -568,7 +568,7 @@ function pnlArrow(n) { return n == null || n === 0 ? '' : n > 0 ? '▲ ' : '▼ 
    top of a saved one — keeps what the reader opened, keeps their place on the page and puts focus back where it was,
    by the stable data-trk-key every control carries. */
 function trkState(zone) {
-  if (!zone._trk) zone._trk = { openToks: new Set(), actKinds: new Set(), actToken: '', actRange: 'all', actFrom: '', actTo: '', actPages: 1, wcRange: '7d', wcSeries: { value: true, invested: true }, tableOpen: false, focusKey: null, defsOpen: false, uid: 'trk' + Math.floor(Math.random() * 1e6) };
+  if (!zone._trk) zone._trk = { openToks: new Set(), actKinds: new Set(), actToken: '', actRange: 'all', actFrom: '', actTo: '', actQuery: '', actPages: 1, wcRange: '7d', wcSeries: { value: true, invested: true }, tableOpen: false, focusKey: null, defsOpen: false, uid: 'trk' + Math.floor(Math.random() * 1e6) };
   return zone._trk;
 }
 function trkFindKey(zone, key) {
@@ -584,7 +584,7 @@ function renderTracker(zone, r, prefs) {
   // the zone's UI state belongs to one wallet: a different wallet rendered into the same zone (the tracker page's
   // report zone, the profile's wallet picker) starts with its own filters, pages and open rows — a token chosen for
   // wallet A must not filter wallet B's list down to "Showing 0 of 0". Display choices (range, series, unit) stay.
-  if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actKinds = new Set(); S.actToken = ''; S.actRange = 'all'; S.actFrom = ''; S.actTo = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
+  if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actKinds = new Set(); S.actToken = ''; S.actRange = 'all'; S.actFrom = ''; S.actTo = ''; S.actQuery = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
   const money = P.usd ? trkUsd : trkEth;
   const inUnit = (usd) => usd == null ? null : (P.usd ? usd : (r.ethUsd ? usd / r.ethUsd : null));   // a USD figure in the chosen unit
   const exp = TRK_EXPLORER;
@@ -602,6 +602,9 @@ function renderTracker(zone, r, prefs) {
     if (keyed) { focusKey = keyed.dataset.trkKey; anchorEl = keyed; }
   }
   const anchorTop = anchorEl ? anchorEl.getBoundingClientRect().top : null;
+  // ...and, in a text field being typed in (the transactions search), where the caret was
+  let caret = null;
+  try { if (anchorEl && anchorEl === active && typeof anchorEl.selectionStart === 'number') caret = [anchorEl.selectionStart, anchorEl.selectionEnd, anchorEl.selectionDirection || 'none']; } catch {}
   S.focusKey = null;
 
   let html = '<div class="trk-dash">';
@@ -702,6 +705,7 @@ function renderTracker(zone, r, prefs) {
     const el = trkFindKey(zone, focusKey);
     if (el) {
       try { el.focus({ preventScroll: true }); } catch { try { el.focus(); } catch {} }
+      if (caret && el.setSelectionRange) { try { el.setSelectionRange(caret[0], caret[1], caret[2]); } catch {} }
       if (anchorTop != null && typeof window !== 'undefined' && window.scrollBy) {
         const d = el.getBoundingClientRect().top - anchorTop;
         if (Math.abs(d) > 1) window.scrollBy(0, d);
@@ -877,6 +881,20 @@ function trkActBounds(S, nowMs) {
   return { from: a, to: end };
 }
 const trkActInRange = (a, b) => !b || (a.ts != null && (b.from == null || a.ts >= b.from) && (b.to == null || a.ts <= b.to));
+/* The search (owner, 2026-10-22: "add a search box to the wallet tracker transactions"): what is typed, in any case, found
+   in a token's symbol ("$" or not), a token's contract address, the transaction hash, or the type the row shows ("buy",
+   "transfer in", "burn"). Every word typed has to be found somewhere in the row: "foo buy" is a buy that moved $FOO. */
+function trkActSearchText(a) {
+  const K = TRK_KINDS[a.kind] || TRK_KINDS.mixed;
+  return [a.hash, K[1], a.kind === 'swap' ? 'buy sell' : '', a.viaOthers ? 'someone else’s transaction' : '']
+    .concat((a.legs || []).flatMap(l => [l.symbol, '$' + l.symbol, l.token])).join(' ').toLowerCase();
+}
+function trkActFound(a, q) {
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const hay = trkActSearchText(a);
+  return words.every(w => hay.includes(w));
+}
 function trkLegLine(l) {
   const sign = l.dir === 'in' ? '+' : '−';
   const name = (l.cash ? '' : '$') + trkEsc(l.symbol);
@@ -905,13 +923,14 @@ function trkActivityHTML(r, P, S, exp) {
   }
   const tokens = new Map();
   for (const a of all) for (const l of a.legs) if (!tokens.has(l.token)) tokens.set(l.token, l.symbol);
-  const bounds = trkActBounds(S, Date.now());
-  const tokenRows = S.actToken ? all.filter(a => a.legs.some(l => l.token === S.actToken)) : all;
-  const ofToken = bounds ? tokenRows.filter(a => trkActInRange(a, bounds)) : tokenRows;   // the token and the dates: what the type counts are of
-  const untimed = bounds ? tokenRows.filter(a => a.ts == null).length : 0;
+  S.actNow = Date.now();   // the moment the list was drawn: the CSV of a "last N days" span covers exactly these rows
+  const bounds = trkActBounds(S, S.actNow);
+  const tokenRows = all.filter(a => (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActFound(a, S.actQuery));
+  const ofToken = bounds ? tokenRows.filter(a => trkActInRange(a, bounds)) : tokenRows;   // the token, the search and the dates: what the type counts are of
+  const untimed = bounds ? tokenRows.filter(a => a.ts == null && trkActMatches(a, S.actKinds)).length : 0;   // ones the other filters would have shown
   const filtered = ofToken.filter(a => trkActMatches(a, S.actKinds));
   const shown = filtered.slice(0, TRK_PAGE * S.actPages);
-  // how many of the chosen token's transactions in the chosen dates each filter holds (a swap counts in Buys and in Sells)
+  // how many of the transactions the token, the search and the dates leave each filter holds (a swap counts in Buys and in Sells)
   const counts = { in: 0, out: 0, buy: 0, sell: 0, other: 0 };
   for (const a of ofToken) for (const c of trkActCats(a)) counts[c]++;
   // the count is a number on screen; a screen reader hears "Transfers in (3 transactions)"
@@ -925,9 +944,13 @@ function trkActivityHTML(r, P, S, exp) {
     if (S.actKinds.size === 1) return 'Turns this filter off and shows every type again';
     return 'Stops including ' + what + (sw[k] && S.actKinds.has(sw[k]) ? ' (swaps stay while ' + swName[sw[k]] + ' is on)' : '');
   };
+  const narrowed = [S.actToken ? 'token' : '', S.actQuery ? 'search' : '', bounds ? 'date' : ''].filter(Boolean);
+  html += '<div class="trk-act-search"><label class="trk-act-tok" for="' + S.uid + '-act-q">Search</label>' +
+    '<input type="search" id="' + S.uid + '-act-q" value="' + trkEsc(S.actQuery || '') + '" placeholder="Token, address, tx hash or type" autocomplete="off" spellcheck="false" maxlength="100" enterkeyhint="search"' +
+    ' data-tip="Shows only transactions with every word you type in a token’s name or address, the transaction hash or its type" data-act-search data-trk-key="act:search"></div>';
   html += '<div class="trk-act-tools" role="group" aria-label="Filter transactions — choose one or more">' +
     // a pressed filter carries the same "✓ " text prefix as the report toggles: its state is never fill colour alone
-    chip('all', 'All', S.actToken || bounds ? 'Clears the type filters (the ' + (S.actToken && bounds ? 'token and date choices stay' : S.actToken ? 'token choice stays' : 'date choice stays') + ')' : 'Clears the type filters and shows every transaction', !S.actKinds.size, null) +
+    chip('all', 'All', narrowed.length ? 'Clears the type filters (the ' + narrowed.join(narrowed.length > 2 ? ', ' : ' and ').replace(/, ([^,]+)$/, ' and $1') + ' ' + (narrowed.length > 1 ? 'choices stay' : 'choice stays') + ')' : 'Clears the type filters and shows every transaction', !S.actKinds.size, null) +
     TRK_ACT_CATS.map(([k, lbl, what]) => chip(k, lbl, tipFor(k, what), S.actKinds.has(k), counts[k])).join('') +
     '<span class="trk-act-tokwrap"><label class="trk-act-tok" for="' + S.uid + '-act-token">Token</label>' +
     '<select id="' + S.uid + '-act-token" data-tip="Shows only transactions that moved the chosen token" data-act-token data-trk-key="act:token"><option value="">All tokens</option>' +
@@ -947,7 +970,7 @@ function trkActivityHTML(r, P, S, exp) {
     // through the page's one persistent live region (window.announce) when a filter, the token or the page changes
     '<p class="trk-act-count">Showing ' + trkN(shown.length) + ' of ' + trkN(filtered.length) + '</p></div>';
   if (untimed) html += '<p class="modal-note">' + trkPlural(untimed, 'transaction') + ' with no block time read ' + (untimed === 1 ? 'is' : 'are') + ' left out while a date range is on — ' + (untimed === 1 ? 'its' : 'their') + ' date is not known.</p>';
-  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (S.actKinds.size + (S.actToken ? 1 : 0) + (bounds ? 1 : 0) > 1 ? 'these filters' : 'this filter') + '.</p>';
+  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (S.actQuery && !S.actKinds.size && !S.actToken && !bounds ? 'that search' : S.actKinds.size + narrowed.length > 1 ? 'these filters' : 'this filter') + '.</p>';
   else {
     const rows = shown.map((a, i) => {
       const K = TRK_KINDS[a.kind] || TRK_KINDS.mixed;
@@ -976,6 +999,36 @@ function trkActivityHTML(r, P, S, exp) {
   return html;
 }
 
+/* A date field being typed in is never rebuilt: Chrome reports a value after every part of a date (and "" part-way
+   through one), and a rebuilt field puts the caret back on its first part, so a date could not be typed or stepped with
+   the arrow keys. Instead the transactions section is drawn afresh and moved in around it: everything but the date group
+   is replaced, and in that group everything but the field (whose min/max follow the other one). False when the shapes
+   differ, for a full redraw. */
+function trkPatchActivity(zone, keep) {
+  const c = zone._trkCtx, old = zone.querySelector('.trk-activity');
+  if (!c || !old || !keep || !old.contains(keep) || typeof document === 'undefined') return false;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = trkActivityHTML(c.r, c.P, trkState(zone), TRK_EXPLORER);
+  const neu = tpl.content.querySelector('.trk-activity');
+  const oT = old.querySelector('.trk-act-tools'), nT = neu && neu.querySelector('.trk-act-tools');
+  const oD = oT && oT.querySelector('.trk-act-dates'), nD = nT && nT.querySelector('.trk-act-dates');
+  if (!oT || !nT || !oD || !nD || !oD.contains(keep) || oT.parentElement !== old || nT.parentElement !== neu) return false;
+  const oC = [...oT.children], nC = [...nT.children], oG = [...oD.children], nG = [...nD.children];
+  if (oC.length !== nC.length || oG.length !== nG.length || oC.indexOf(oD) !== nC.indexOf(nD)) return false;
+  const oTop = [...old.children], nTop = [...neu.children], nTi = nTop.indexOf(nT);
+  for (const el of oTop) if (el !== oT) el.remove();
+  for (let i = 0; i < nTi; i++) old.insertBefore(nTop[i], oT);
+  for (let i = nTi + 1; i < nTop.length; i++) old.appendChild(nTop[i]);
+  for (let i = 0; i < oC.length; i++) if (oC[i] !== oD) oC[i].replaceWith(nC[i]);
+  for (let i = 0; i < oG.length; i++) {
+    if (!oG[i].contains(keep)) { oG[i].replaceWith(nG[i]); continue; }
+    const ni = nG[i].querySelector('input');
+    // only a bound that changed is touched: setting one again resets the part of the date being typed
+    for (const a of ['min', 'max']) { const v = (ni && ni.getAttribute(a)) || null; if (v !== keep.getAttribute(a)) { if (v) keep.setAttribute(a, v); else keep.removeAttribute(a); } }
+  }
+  return true;
+}
+
 /* ---- wiring: one delegated listener per zone, reading the latest report from zone._trkCtx ---- */
 function trkWire(zone) {
   if (zone._trkWired) return;
@@ -991,6 +1044,9 @@ function trkWire(zone) {
     const p = zone.querySelector('.trk-act-count');
     if (p && typeof window !== 'undefined' && typeof window.announce === 'function') window.announce(p.textContent);
   };
+  // while a date is being typed, the count is said once the typing pauses, not after every part of it
+  let sayT = 0;
+  const sayCountSoon = () => { clearTimeout(sayT); sayT = setTimeout(sayCount, 700); };
   zone.addEventListener('click', (e) => {
     const c = zone._trkCtx; if (!c) return;
     const S = trkState(zone);
@@ -1049,7 +1105,29 @@ function trkWire(zone) {
       return;
     }
     const csv = e.target.closest('[data-act-csv]');
-    if (csv && zone.contains(csv)) { trkDownloadCsv(c.r, trkActShown(c.r, S)); return; }
+    if (csv && zone.contains(csv)) { trkDownloadCsv(c.r, trkActShown(c.r, S, S.actNow)); return; }
+  });
+  // the search filters as you type, a moment after the last key (and never in the middle of composing a character)
+  let searchT = 0;
+  const runSearch = (box) => {
+    clearTimeout(searchT); searchT = 0;
+    const cur = zone.querySelector('[data-act-search]') || box;   // the box as it is now (a report landing meanwhile redraws it)
+    const S = trkState(zone), v = String(cur.value || '').slice(0, 100);
+    if (v === (S.actQuery || '')) return;
+    S.actQuery = v; S.actPages = 1;
+    // the caret stays in the box while it is being typed in; a reader who has tabbed on keeps their place
+    rerender(typeof document !== 'undefined' && document.activeElement === cur ? 'act:search' : null); sayCount();
+  };
+  zone.addEventListener('input', (e) => {
+    const box = e.target && e.target.closest && e.target.closest('[data-act-search]');
+    if (!box || !zone.contains(box) || e.isComposing) return;
+    clearTimeout(searchT); searchT = setTimeout(() => runSearch(box), 250);
+  });
+  zone.addEventListener('compositionend', (e) => { const box = e.target && e.target.closest && e.target.closest('[data-act-search]'); if (box && zone.contains(box)) { clearTimeout(searchT); searchT = setTimeout(() => runSearch(box), 250); } });
+  zone.addEventListener('keydown', (e) => {
+    const box = e.target && e.target.closest && e.target.closest('[data-act-search]');
+    if (!box || !zone.contains(box) || e.isComposing) return;
+    if (e.key === 'Enter') { e.preventDefault(); runSearch(box); }   // not a form: Enter applies it now, and submits nothing
   });
   zone.addEventListener('change', (e) => {
     const t = e.target;
@@ -1063,19 +1141,43 @@ function trkWire(zone) {
       rerender('act:range'); sayCount(); return;
     }
     if (t.closest('[data-act-from]') || t.closest('[data-act-to]')) {
-      const from = !!t.closest('[data-act-from]');
-      const v = /^\d{4}-\d{2}-\d{2}$/.test(t.value) ? t.value : '';   // a cleared field is open-ended
+      // in the field: known from focusin/focusout — Chrome's own focus says "elsewhere" at the moment a date part changes
+      const from = !!t.closest('[data-act-from]'), typing = zone._trkDateIn === t;
+      const v = /^\d{4}-\d{2}-\d{2}$/.test(t.value) ? t.value : '';
+      // "" part-way through typing a date is not a cleared field: that counts once the reader leaves it (focusout below)
+      if (!v && typing) return;
+      if (v === (from ? S.actFrom : S.actTo)) return;
       if (from) S.actFrom = v; else S.actTo = v;
       S.actPages = 1;
-      rerender(from ? 'act:from' : 'act:to'); sayCount();
+      if (!typing) { rerender(from ? 'act:from' : 'act:to'); sayCount(); return; }
+      /* a moment later, not now: Chrome reports a date part while it moves the caret on to the next part, and the page
+         rearranged in the middle of that move drops the focus on the body (a plain date field keeps it) */
+      clearTimeout(zone._trkDateT);
+      zone._trkDateT = setTimeout(() => {
+        if (zone._trkDateIn === t && t.isConnected && trkPatchActivity(zone, t)) sayCountSoon();
+        else { rerender(from ? 'act:from' : 'act:to'); sayCount(); }
+      }, 0);
     }
+  });
+  zone.addEventListener('focusin', (e) => { const t = e.target; if (t && t.matches && t.matches('[data-act-from], [data-act-to]')) zone._trkDateIn = t; });
+  // leaving a date field: an empty (or half-typed) one is open-ended, and it is drawn as the range now reads
+  zone.addEventListener('focusout', (e) => {
+    const t = e.target;
+    if (!t || !t.matches || !t.matches('[data-act-from], [data-act-to]') || !zone.contains(t)) return;
+    if (zone._trkDateIn === t) zone._trkDateIn = null;
+    const S = trkState(zone), from = t.matches('[data-act-from]');
+    const v = /^\d{4}-\d{2}-\d{2}$/.test(t.value) ? t.value : '';
+    if (v === (from ? S.actFrom : S.actTo) && t.value === v) return;
+    if (from) S.actFrom = v; else S.actTo = v;
+    S.actPages = 1;
+    setTimeout(() => { rerender(null); sayCount(); }, 0);   // after the focus has moved, so it stays where the reader went
   });
 }
 // the transactions the filters and the token choice let through, all pages of them
 function trkActShown(r, S, nowMs) {
   const all = Array.isArray(r && r.activity) ? r.activity : [];
   const b = trkActBounds(S, nowMs == null ? Date.now() : nowMs);
-  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActInRange(a, b));
+  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActFound(a, S.actQuery) && trkActInRange(a, b));
 }
 function trkDownloadCsv(r, rows) {
   if (typeof document === 'undefined' || !r || !Array.isArray(r.activity)) return;

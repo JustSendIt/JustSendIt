@@ -170,13 +170,17 @@
 
 /* ---- transactions ---- */
 .trk-dash .trk-act-tools { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin: 0 0 0.6rem; }
+/* the transactions search: a label and a box as wide as the row allows */
+.trk-dash .trk-act-search { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.55rem; max-width: 34rem; }
+.trk-dash .trk-act-search input { flex: 1 1 auto; min-width: 0; color-scheme: dark; }
+.trk-dash .trk-act-search input::placeholder { color: var(--text-dim); opacity: 1; }
 .trk-dash .trk-act-dates { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; max-width: 100%; min-width: 0; }
 .trk-dash .trk-act-tokwrap { display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%; min-width: 0; }   /* a long token symbol must not widen the page */
 .trk-dash .trk-act-tokwrap select[data-act-token], .trk-dash .trk-act-tokwrap select[data-act-range], .trk-dash .trk-act-tokwrap input[type="date"] { min-width: 0; }
 /* the date fields sit on the dark field colour: their calendar icon and picker drawn for a dark page, not black on near-black */
 .trk-dash input[data-act-from], .trk-dash input[data-act-to] { color-scheme: dark; }
 .trk-dash .trk-act-tok { font-size: max(var(--text-floor), 0.85rem); font-weight: 600; color: var(--text-dim); margin-left: 0.3rem; }
-.trk-dash select[data-act-token], .trk-dash select[data-act-range], .trk-dash input[data-act-from], .trk-dash input[data-act-to] { min-height: 36px; padding: 0.3rem 0.6rem; border-radius: 10px; border: 1.5px solid var(--ink-4); background: var(--ink); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.85rem); max-width: 100%; }
+.trk-dash select[data-act-token], .trk-dash select[data-act-range], .trk-dash input[data-act-from], .trk-dash input[data-act-to], .trk-dash input[data-act-search] { min-height: 36px; padding: 0.3rem 0.6rem; border-radius: 10px; border: 1.5px solid var(--ink-4); background: var(--ink); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.85rem); max-width: 100%; }
 /* how many transactions a filter holds, inside its chip: a ring in the chip's own text colour, never a tint behind the digits
    (a darker tint under dark ink would take a custom accent below 4.5:1, which prefs.js only guarantees for the chip itself) */
 .trk-dash .trk-act-n { display: inline-block; min-width: 1.5em; padding: 0 0.4em; border-radius: 999px; font-size: max(var(--text-floor), 0.8em); font-weight: 800; font-variant-numeric: tabular-nums; box-shadow: inset 0 0 0 1.5px currentColor; }
@@ -198,7 +202,9 @@
 
 /* ---- a finger, not a pointer ---- */
 @media (pointer: coarse) {
-  .trk-dash .react-btn, .trk-dash .wc-range, .trk-dash .wc-sw, .trk-dash .trk-more, .trk-dash .trk-defs-btn, .trk-dash select[data-act-token], .trk-dash select[data-act-range], .trk-dash input[data-act-from], .trk-dash input[data-act-to], .trk-dash .btn-sm { min-height: 44px; }
+  .trk-dash .react-btn, .trk-dash .wc-range, .trk-dash .wc-sw, .trk-dash .trk-more, .trk-dash .trk-defs-btn, .trk-dash select[data-act-token], .trk-dash select[data-act-range], .trk-dash input[data-act-from], .trk-dash input[data-act-to], .trk-dash input[data-act-search], .trk-dash .btn-sm { min-height: 44px; }
+  /* responsive.css gives touch fields 16px so iOS does not zoom the page on focus; these rules are more specific, so say it again */
+  .trk-dash select[data-act-token], .trk-dash select[data-act-range], .trk-dash input[data-act-from], .trk-dash input[data-act-to], .trk-dash input[data-act-search] { font-size: max(var(--text-floor), max(16px, 1em)); }
   .trk-dash .trk-more, .trk-dash .trk-defs-btn { width: 44px; height: 44px; }
   .trk-dash .wc-slider { height: 24px; }
 }

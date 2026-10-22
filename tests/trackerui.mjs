@@ -210,6 +210,36 @@ try {
     && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'custom', actFrom: day, actTo: '' }).length === timed.filter(a => dayOf(a.ts) >= day).length
     && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'custom', actFrom: '', actTo: '' }).length === 11);
 
+  /* owner, 2026-10-22: "add a search box to the wallet tracker transactions" — every word typed found in a token's symbol or
+     address, the hash or the type; the counts, the list and the CSV follow it like the other filters */
+  const zQ = fakeZone(); ctx.renderTracker(zQ, rep, { usd: true });
+  check('the search: a labelled search box first, before the filters, empty by default',
+    /<div class="trk-act-search"><label class="trk-act-tok" for="([^"]+)-act-q">Search<\/label><input type="search" id="\1-act-q" value="" placeholder="Token, address, tx hash or type"[^>]* data-tip="[^"]+" data-act-search data-trk-key="act:search"><\/div><div class="trk-act-tools"/.test(zQ.innerHTML));
+  const withSym = (s) => rep.activity.filter(a => a.legs.some(l => String(l.symbol).toLowerCase() === s)).length;
+  zQ._trk.actQuery = 'BAR'; ctx.renderTracker(zQ, rep, { usd: true });
+  check('  ...a token\'s symbol, in any case, finds the transactions that moved it (and the count, the chips and the "All" tip follow)',
+    new RegExp('Showing ' + withSym('bar') + ' of ' + withSym('bar')).test(zQ.innerHTML) && withSym('bar') > 0 && /value="BAR"/.test(zQ.innerHTML) && /Clears the type filters \(the search choice stays\)/.test(zQ.innerHTML), withSym('bar'));
+  const h3 = rep.activity.find(a => a.kind === 'swap').hash;
+  check('  ...a transaction hash (pasted in capitals too), "$FOO", a type, and two words that must both be found',
+    rep.activity.filter(a => ctx.trkActFound(a, h3.toUpperCase().replace('0X', '0x'))).length === 1
+    && rep.activity.filter(a => ctx.trkActFound(a, '$foo')).length === withSym('foo')
+    && rep.activity.filter(a => ctx.trkActFound(a, 'transfer in')).every(a => a.kind === 'in')
+    && rep.activity.filter(a => ctx.trkActFound(a, 'foo buy')).every(a => (a.kind === 'buy' || a.kind === 'swap') && a.legs.some(l => l.symbol === 'FOO'))
+    && rep.activity.filter(a => ctx.trkActFound(a, '')).length === 11);
+  zQ._trk.actQuery = 'nothing-like-this'; ctx.renderTracker(zQ, rep, { usd: true });
+  check('  ...a search nothing matches says so, and the CSV takes what the search shows', /No transactions match that search\./.test(zQ.innerHTML)
+    && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'all', actQuery: 'bar' }).length === withSym('bar'));
+
+  /* review, 2026-10-22: Chrome reports a date after every part typed (and "" part-way), so a rebuilt field put the caret back
+     on its first part — a date could not be typed or arrow-stepped. Measured in Chrome with real keys (08152025 → 2025-08-15). */
+  check('  ...a date being typed is never rebuilt: the section is redrawn around it a moment later (focus known from focusin), "" part-way waits for the reader to leave, a bound is touched only when it changed',
+    /function trkPatchActivity\(zone, keep\)/.test(SRC) && /typing = zone\._trkDateIn === t;/.test(SRC) && /if \(!v && typing\) return;/.test(SRC)
+    && /zone\._trkDateT = setTimeout\(\(\) => \{\n        if \(zone\._trkDateIn === t && t\.isConnected && trkPatchActivity\(zone, t\)\) sayCountSoon\(\);/.test(SRC)
+    && /if \(v !== keep\.getAttribute\(a\)\)/.test(SRC) && /zone\.addEventListener\('focusout'/.test(SRC));
+  check('  ...the CSV of a "last N days" span takes the moment the list was drawn; the no-block-time note counts only rows the other filters let through; touch fields keep 16px',
+    /S\.actNow = Date\.now\(\);/.test(SRC) && /trkActShown\(c\.r, S, S\.actNow\)/.test(SRC) && /a\.ts == null && trkActMatches\(a, S\.actKinds\)/.test(SRC)
+    && /input\[data-act-search\] \{ font-size: max\(var\(--text-floor\), max\(16px, 1em\)\); \}/.test(CSS));
+
   // each tip says what its click does from where the reader is
   const tipOf = (html, k) => (new RegExp('data-tip="([^"]*)" type="button" data-act-filter="' + k + '"').exec(html) || [])[1];
   check('  ...each chip\'s tip says what its click does from here: narrow to it, add it, take it out, or (the last one) show every type again',
