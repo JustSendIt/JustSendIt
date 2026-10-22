@@ -56,7 +56,7 @@
 
     <div class="auth-tabs" role="tablist" aria-label="Sign-in method" aria-orientation="vertical">
       <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet" data-tip="Sign in or sign up by connecting a wallet and signing a free message">🦊 Connect wallet</button>
-      <button class="auth-tab" id="tab-burn" role="tab" aria-selected="false" aria-controls="pane-burn" data-tip="For GMGN and any wallet that can't sign: prove it by sending a dust amount of $SEND or ETH to the burn address">🔥 Burn Verification</button>
+      <button class="auth-tab" id="tab-burn" role="tab" aria-selected="false" aria-controls="pane-burn" data-tip="For GMGN and any wallet that can't sign: prove it by sending any amount of $SEND or ETH to the burn address">🔥 Burn Verification</button>
       <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email" data-tip="Sign in or sign up with an email and a password">✉️ Email</button>
     </div>
 
@@ -86,16 +86,37 @@
       <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
-      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a dust burn of $SEND or ETH instead of a signature">Use Burn Verification 🔥</button></p>
+      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a burn of $SEND or ETH (any amount) instead of a signature">Use Burn Verification 🔥</button></p>
     </div>
 
     <div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>
-      <p class="modal-note">For a wallet that can’t sign a message — a <b>GMGN</b> wallet, or any wallet an app holds for you — or when you’d rather not sign. You prove the wallet by sending the <b>exact dust amount of $SEND or of ETH</b> the site shows you (a few cents’ worth at most) from it to the burn address, within an hour. You make that transaction yourself, in your own wallet app; this site never sends it or asks your wallet to.</p>
-      <p class="modal-note">🔑 <b>A burn can’t sign you in</b>, so Burn Verification goes with an <b>email and a password</b> — that’s how you sign in. Make your account (or sign in), and the burn step opens straight after.</p>
-      <div class="bp-actions">
-        <button class="btn btn-primary" type="button" id="burn-join" data-tip="Opens account creation with an email and a password; the burn step follows once you are in">Create account &amp; verify ✨</button>
-        <button class="btn btn-ghost" type="button" id="burn-signin" data-tip="Opens email and password sign-in; the burn step follows once you are in">Sign in &amp; verify 🚪</button>
+      <p class="modal-note">For <b>GMGN</b> or any wallet that can’t sign. Fill this in once, then send <b>any amount of $SEND or ETH</b> — as much or as little as you like — from that wallet to the burn address within an hour, from your own wallet app. This site never sends it.</p>
+      <div class="auth-segment" role="group" aria-label="New here, or already have an account">
+        <button type="button" class="auth-seg active" id="bseg-signup" aria-pressed="true" data-tip="Sets this up to make a new account with an email and a password">Create account</button>
+        <button type="button" class="auth-seg" id="bseg-login" aria-pressed="false" data-tip="Sets this up for an account you already have">I have an account</button>
       </div>
+      <form id="burn-form" novalidate>
+        <p class="modal-note bp-ticket-note" id="b-ticket" hidden>🎟️ Joining takes an invite code. You’ll enter it straight after this, then your account is made and your burn step opens — what you typed here is kept while you finish the ticket.</p>
+        <div id="b-reg">
+          <label class="f-label" for="b-username">Pick your @username <span class="f-hint">— your public name</span></label>
+          <input class="addr-input" id="b-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
+          <p class="modal-note" id="b-uname-status" aria-live="polite"></p>
+        </div>
+        <label class="f-label" for="b-email" id="b-email-label">Email</label>
+        <input class="addr-input" id="b-email" type="email" autocomplete="email" placeholder="you@example.com">
+        <label class="f-label" for="b-pw" id="b-pw-label">Password <span class="f-hint">(8+ characters)</span></label>
+        <input class="addr-input" id="b-pw" type="password" autocomplete="new-password" placeholder="••••••••">
+        <div id="b-reg2">
+          <label class="f-label" for="b-pw2">Confirm password</label>
+          <input class="addr-input" id="b-pw2" type="password" autocomplete="new-password" placeholder="••••••••">
+        </div>
+        <label class="f-label" for="b-addr">The wallet you’re verifying <span class="f-hint" id="b-addr-hint">— its address, copied from GMGN or your wallet app (starts with 0x)</span></label>
+        <input class="addr-input" id="b-addr" autocomplete="off" spellcheck="false" maxlength="64" placeholder="0x…">
+        <p class="modal-note">🔑 A burn can’t sign you in, so this <b>email and password are how you sign in</b> — on any device, wallet or not.</p>
+        <p class="modal-note auth-terms" id="b-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
+        <button class="btn btn-primary" type="submit" style="width:100%;" id="burn-submit" data-tip="Makes your account (or signs you in), starts your one hour and shows where to send the burn">Create account &amp; verify 🔥</button>
+      </form>
+      <p class="modal-note" id="burn-status" aria-live="polite"></p>
     </div>
 
     <div id="pane-email" role="tabpanel" aria-labelledby="tab-email" hidden>
@@ -197,7 +218,7 @@
   }
   function closeModal() {
     modal.setAttribute('hidden', '');
-    for (const id of ['f-2fa-pw', 'f-totp', 'cf-pw', 'cf-code', 'w-pw', 'w-pw2']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
+    for (const id of ['f-2fa-pw', 'f-totp', 'cf-pw', 'cf-code', 'w-pw', 'w-pw2', 'b-pw', 'b-pw2']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
     document.body.style.overflow = prevOverflow;
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) lastFocus.focus();
@@ -274,9 +295,10 @@
     if (!AUTH.user) return;
     let at = 0; try { at = Number(sessionStorage.getItem('jsi:burnproof')) || 0; } catch {}
     if (!at) return;
+    let address = ''; try { address = sessionStorage.getItem('jsi:burnproof-addr') || ''; sessionStorage.removeItem('jsi:burnproof-addr'); } catch {}
     try { sessionStorage.removeItem('jsi:burnproof'); } catch {}
     if (Date.now() - at > 15 * 60e3) return;   // a sign-in begun from the panel and abandoned long ago does not reopen it later
-    const go = () => setTimeout(() => AUTH.openBurnProof({ from: 'resume' }), 700);   // after the welcome and the nav repaint
+    const go = () => setTimeout(() => AUTH.openBurnProof({ from: 'resume', address }), 700);   // after the welcome and the nav repaint
     if (window.AGE && AGE.needed && AGE.whenOk) AGE.whenOk(go); else go();
   }
   // Does this visitor already hold a ticket? Cached for the page's life — it only ever changes
@@ -292,15 +314,23 @@
      straight to the account modal; one without sees the ticket first. */
   AUTH.openSignup = function (opts) {
     openModal();
-    // Burn Verification has no sign-up form of its own — it goes with an email and a password — so a sign-up opened while it was
-    // the option on show lands on the email form
-    if (!(opts && opts.tab)) { const b = modal.querySelector('#tab-burn'), e = modal.querySelector('#tab-email'); if (b && e && b.classList.contains('active')) e.click(); }
+    // Burn Verification has its own sign-up (an email and a password, and the wallet): a sign-up opened on it stays there
+    if (opts && opts.tab === 'burn') { const t = modal.querySelector('#tab-burn'); if (t) t.click(); }
+    if (AUTH._burnMode) AUTH._burnMode(true);
     const seg = modal.querySelector('#seg-signup');
     if (seg) seg.click();
     const wseg = modal.querySelector('#wseg-signup');   // the wallet tab too: @username first, then the wallet
     if (wseg) wseg.click();
     if (opts && opts.tab === 'wallet') { const t = modal.querySelector('#tab-wallet'); if (t) t.click(); }
     if (opts && opts.tab === 'email') { const t = modal.querySelector('#tab-email'); if (t) t.click(); }
+  };
+  // the sign-in panel, on Burn Verification, set for a new account (join) or an existing one
+  AUTH.openBurnSignup = function (join) {
+    if (AUTH.user) { AUTH.openBurnProof({ from: 'signin' }); return; }
+    if (modal.hasAttribute('hidden')) openModal();
+    if (AUTH._showBurnTab) AUTH._showBurnTab();
+    if (AUTH._burnMode) AUTH._burnMode(join !== false);
+    const f = modal.querySelector(join !== false ? '#b-username' : '#b-email'); if (f) f.focus();
   };
   AUTH.startJoin = async function (opts) {
     const g = await gate();
@@ -390,18 +420,151 @@
       tabs.burn.click(); tabs.burn.focus();   // the picker that sent us here handed focus back to a button this hides
       return true;
     };
-    /* Burn Verification signs nobody in: it goes with an email and a password. These two buttons take the person to that form
-       — making the account, or signing in — and leave a note, so the burn step opens by itself once they are in (resumeBurnProof). */
-    const burnGo = (join) => {
-      if (AUTH.user) { AUTH.openBurnProof({ from: 'signin' }); return; }
-      try { sessionStorage.setItem('jsi:burnproof', String(Date.now())); } catch {}
-      tabs.email.click();
-      if (join) segSignup.click(); else segLogin.click();
-      const f = modal.querySelector(join ? '#f-username' : '#f-email'); if (f && !modal.hasAttribute('hidden')) f.focus();
+    /* ═══ Burn Verification: one form ════════════════════════════════════════════════════════════
+       Owner, 2026-10-22: "Fix the sign-up process for the burn verification so that its fluid for signing up process and
+       make sure its easy for all users to sign up this way". It was three forms and two wrong turns: this option sent people
+       to the email form, a sign-up without a ticket went through the ticket and came back on the WALLET option, and the burn
+       step then asked for the wallet all over again. Now the account (or the sign-in) and the wallet are asked for together,
+       and one press makes the account, starts the hour and opens the burn step on where to send it. Without a ticket, the
+       ticket comes first and this carries on by itself after it, with what was typed kept. A burn signs nobody in, so a new
+       account here always gets an email and a password (typed twice: it is the only way in). */
+    let bRegMode = true, burnPending = null, burnBusy = false;
+    const bq = (id) => modal.querySelector('#' + id);
+    const bSegSignup = bq('bseg-signup'), bSegLogin = bq('bseg-login'), bStatus = bq('burn-status');
+    async function paintBurnTicket() {
+      const n = bq('b-ticket'); if (!n) return;
+      if (!bRegMode) { n.hidden = true; return; }
+      const g = await gate();
+      n.hidden = !bRegMode || !!(g.access || g.signedIn);
+    }
+    function setBurnMode(v) {
+      bRegMode = v;
+      bq('b-reg').hidden = !v; bq('b-reg2').hidden = !v; bq('b-terms').hidden = !v;
+      bSegSignup.classList.toggle('active', v); bSegSignup.setAttribute('aria-pressed', String(v));
+      bSegLogin.classList.toggle('active', !v); bSegLogin.setAttribute('aria-pressed', String(!v));
+      const em = bq('b-email');
+      bq('b-email-label').textContent = v ? 'Email' : 'Email or username';
+      em.type = v ? 'email' : 'text'; em.autocomplete = v ? 'email' : 'username'; em.placeholder = v ? 'you@example.com' : 'you@example.com or your @handle';
+      bq('b-pw-label').innerHTML = v ? 'Password <span class="f-hint">(8+ characters)</span>' : 'Password';
+      bq('b-pw').autocomplete = v ? 'new-password' : 'current-password';
+      bq('burn-submit').textContent = v ? 'Create account & verify 🔥' : 'Sign in & verify 🔥';
+      // a member whose wallet is already proved signs in here too: for a sign-in the wallet is optional
+      bq('b-addr-hint').textContent = v ? '— its address, copied from GMGN or your wallet app (starts with 0x)' : '— to prove another wallet; leave it empty if yours is already proved, and this just signs you in';
+      setStatus(bStatus, '');
+      paintBurnTicket();
+    }
+    AUTH._burnMode = setBurnMode;
+    bSegSignup.addEventListener('click', () => setBurnMode(true));
+    bSegLogin.addEventListener('click', () => setBurnMode(false));
+    tabs.burn.addEventListener('click', () => paintBurnTicket());
+    // the same live availability check as the other sign-up forms
+    let bUnameTimer;
+    bq('b-username').addEventListener('input', (e) => {
+      clearTimeout(bUnameTimer);
+      const v = e.target.value.trim(), el = bq('b-uname-status');
+      if (!v) { el.textContent = ''; return; }
+      bUnameTimer = setTimeout(async () => {
+        try {
+          const j = await api('/api/username-check?u=' + encodeURIComponent(v));
+          el.textContent = j.available ? '✅ available' : ('❌ ' + (j.reason || 'taken — try another'));
+          el.style.color = j.available ? 'var(--green-bright)' : 'var(--red)';
+        } catch {}
+      }, 300);
+    });
+    // after the ticket (the only thing that was in the way): back here, everything as typed, and carry on
+    function resumeBurnForm() {
+      const p = burnPending; burnPending = null; clearTimeout(burnPendingT);
+      if (modal.hasAttribute('hidden')) openModal();
+      tabs.burn.click(); setBurnMode(true);
+      if (!p) { burnFail('your ticket is ready — type your password again (twice) and press Create account to carry on', 'b-pw'); return; }
+      bq('b-username').value = p.username; bq('b-email').value = p.email; bq('b-pw').value = p.pw; bq('b-pw2').value = p.pw2; bq('b-addr').value = p.address;
+      burnSubmit();
+    }
+    // what was typed waits for the ticket half an hour at most (a typed password must not wait in the page longer)
+    let burnPendingT = 0;
+    const toTicket = (v) => {
+      burnPending = Object.assign({}, v, { at: Date.now() });
+      clearTimeout(burnPendingT); burnPendingT = setTimeout(() => { burnPending = null; }, 30 * 60e3);
+      closeModal(); openInvite({ then: resumeBurnForm });
     };
-    const bj = modal.querySelector('#burn-join'), bs = modal.querySelector('#burn-signin');
-    if (bj) bj.addEventListener('click', () => burnGo(true));
-    if (bs) bs.addEventListener('click', () => burnGo(false));
+    // an error is said beside the button and the focus goes to the field it is about, so it is never below the fold unseen
+    const burnFail = (msg, field) => {
+      setStatus(bStatus, '⚠️ ' + msg, true);
+      for (const id of ['b-username', 'b-email', 'b-pw', 'b-pw2', 'b-addr']) bq(id).removeAttribute('aria-invalid');
+      const id = field || (/username|@/i.test(msg) ? 'b-username' : /email/i.test(msg) ? 'b-email' : /passwords? don|match/i.test(msg) ? 'b-pw2' : /password|credentials/i.test(msg) ? 'b-pw' : /address|wallet|0x/i.test(msg) ? 'b-addr' : null);
+      const f = id && bq(id);
+      if (f && !f.closest('[hidden]')) { f.setAttribute('aria-invalid', 'true'); f.focus(); } else bq('burn-submit').focus();
+      try { bStatus.scrollIntoView({ block: 'nearest' }); } catch {}
+    };
+    async function burnSubmit() {
+      if (burnBusy) return;
+      const v = { username: bq('b-username').value.trim(), email: bq('b-email').value.trim(), pw: bq('b-pw').value, pw2: bq('b-pw2').value, address: bq('b-addr').value.trim() };
+      const btn = bq('burn-submit');
+      try {
+        // checked here first, so nothing is sent — and no ticket shown — for a form that would be refused
+        if (bRegMode) {
+          if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(v.username)) throw new Error('pick a @username: 3–24 letters, numbers, _ . -');
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email)) throw new Error('enter a valid email — with your password, it’s how you sign in');
+          if (v.pw.length < 8) throw new Error('the password needs at least 8 characters');
+          if (v.pw !== v.pw2) throw new Error('the two passwords don’t match');
+        } else {
+          if (!v.email) throw new Error('enter your email or @username');
+          if (!v.pw) throw new Error('enter your password');
+        }
+        if (!(v.address === '' && !bRegMode) && !/^0x[0-9a-fA-F]{40}$/.test(v.address)) throw Object.assign(new Error('paste the wallet’s address: 0x followed by 40 letters and numbers'), { field: 'b-addr' });
+        burnBusy = true; btn.disabled = true;
+        if (bRegMode) {   // a taken name is said now, not after the whole ticket
+          let chk = null; try { chk = await api('/api/username-check?u=' + encodeURIComponent(v.username)); } catch {}
+          if (chk && chk.available === false) throw Object.assign(new Error('@' + v.username + ' is ' + (chk.reason || 'taken — pick another')), { field: 'b-username' });
+        }
+        let j;
+        if (bRegMode) {
+          const g = await gate();
+          if (!g.signedIn && !g.access) { setStatus(bStatus, ''); toTicket(v); return; }
+          setStatus(bStatus, 'Making your account…');
+          j = await api('/api/auth/register', { method: 'POST', body: { username: v.username, email: v.email, password: v.pw } });
+        } else {
+          setStatus(bStatus, 'Signing in…');
+          j = await api('/api/auth/login', { method: 'POST', body: { identifier: v.email, password: v.pw } });
+          if (j.twofa) {
+            // the second step first; the burn step then opens by itself, on this wallet (resumeBurnProof)
+            if (v.address) { try { sessionStorage.setItem('jsi:burnproof', String(Date.now())); sessionStorage.setItem('jsi:burnproof-addr', v.address); } catch {} }
+            setStatus(bStatus, '');
+            if (v.address) sendToast('🔐 Two-factor is on: after your code, the burn step opens on this wallet — starting the hour asks you to confirm it’s you once more.', 8000);
+            show2fa(j); return;
+          }
+        }
+        /* in: start the hour now. A new account's own session needs no "confirm it's you" for its first hour; a sign-in hands
+           over the password it was given a moment ago, which is that confirmation. Whatever the start says, the burn step
+           opens next — on the amounts, or on this wallet with the reason it could not start yet. */
+        let startErr = null, alreadyMine = false;
+        if (v.address) {
+          setStatus(bStatus, 'Starting your hour…');
+          try { await api('/api/wallet/burnproof/start', { method: 'POST', body: Object.assign({ address: v.address }, bRegMode ? {} : { current: { password: v.pw } }) }); }
+          catch (err) { if (err && err.status === 409) alreadyMine = true; else startErr = err; }   // 409: that wallet is already proved on this account
+        }
+        // the form is done with: nothing of it waits for whoever uses this browser next
+        for (const id of ['b-username', 'b-email', 'b-pw', 'b-pw2', 'b-addr']) { bq(id).value = ''; bq(id).removeAttribute('aria-invalid'); }
+        bq('b-uname-status').textContent = '';
+        setStatus(bStatus, '');
+        try { sessionStorage.removeItem('jsi:burnproof'); sessionStorage.removeItem('jsi:burnproof-addr'); } catch {}   // an older note must not reopen the step on another wallet
+        const hi = 'Welcome' + (j && j.newAccount ? '' : ' back') + ', @' + (j && j.username) + '! ';
+        if (window.SFX) SFX.play(startErr ? 'notify' : 'success');
+        sendToast(hi + (j && j.emailNotAdded ? emailNotAddedMsg(j.username)
+          : !v.address ? '🚪 You’re signed in.' : alreadyMine ? '✅ That wallet is already proved on your account.'
+          : startErr && startErr.code !== 'need_email' ? '⚠️ Your hour couldn’t start yet — the reason is in the burn step.'
+          : '🔥 Now send any amount of $SEND or ETH from your wallet to the burn address.'), j && j.emailNotAdded ? 9000 : 6000);
+        closeModal();
+        await refresh(); onAuthChange();
+        if (v.address && !alreadyMine) await AUTH.openBurnProof({ from: 'signup', address: v.address, error: startErr && startErr.code !== 'need_email' ? startErr.message : '' });
+      } catch (err) {
+        // no ticket yet (or terms not accepted): the ticket, then this carries on. A spent code is said, not looped through the ticket
+        if (bRegMode && (err.code === 'need_invite' || err.code === 'need_tos')) { setStatus(bStatus, ''); toTicket(v); return; }
+        if (err && err.code === 'need_age' && window.AGE) { setStatus(bStatus, ''); AGE.reopen(); return; }
+        burnFail((err && err.message) || 'that didn’t work — try again', err && err.field);
+      } finally { burnBusy = false; if (btn) btn.disabled = false; }
+    }
+    bq('burn-form').addEventListener('submit', (e) => { e.preventDefault(); burnSubmit(); });
     /* The wallets that work here, named on the sign-in and sign-up screen itself (owner, 2026-10-20: "I don't see all the new
        wallets in the sign-up screen"): the best-known few in the line, every one of them a press away. Drawn from the same
        registry the picker uses (WALLET.known), so the two can never disagree; the wallet button then opens that full list. */
@@ -710,7 +873,7 @@
       const g = await gate();
       if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
     });
-    AUTH._resetModes = () => { setRegMode(false); setWalletMode(false); };
+    AUTH._resetModes = () => { setRegMode(false); setWalletMode(false); if (AUTH._burnMode) AUTH._burnMode(true); };
     setWalletMode(false);
 
     // the same live availability check as the email form, for the wallet form's @username

@@ -191,7 +191,7 @@
   // the door to a private tab, in words: who can see it and what to do about it. The server refuses the
   // feed itself to anyone without a verified slot — this control is the door, not the lock.
   function lockedCopy(what) {
-    if (!isMember()) return '🔒 <b>The ' + what + ' is for verified members of this squad.</b> It is never sent to anyone else. <b>Join above</b>' + (gated() ? ' — the squad reads your linked wallets on-chain (linked by a free signature, never a transaction — or a dust burn for a wallet that can’t sign) and checks they hold ' + esc((S.gate && S.gate.text) || 'what the gate takes') + '.' : ' — anyone with an account can.');
+    if (!isMember()) return '🔒 <b>The ' + what + ' is for verified members of this squad.</b> It is never sent to anyone else. <b>Join above</b>' + (gated() ? ' — the squad reads your linked wallets on-chain (linked by a free signature, never a transaction — or a burn of any amount for a wallet that can’t sign) and checks they hold ' + esc((S.gate && S.gate.text) || 'what the gate takes') + '.' : ' — anyone with an account can.');
     return '⏸ <b>Your spot isn’t verified right now</b>, so the ' + what + ' is closed to you. <b>Re-verify above</b> — the squad re-reads your linked wallets on-chain' + (gated() ? ' for ' + esc(gateSym()) : '') + '.';
   }
 
@@ -402,7 +402,7 @@
     const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
     return '🪙 ' + esc(j.error || 'Your linked wallets do not hold what this squad takes.') +
       ' <b>It takes ' + takes + '</b>; your linked wallets hold <b>' + holds + '</b> (summed, read on-chain).' +
-      (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction; a wallet that can’t sign is proved by a dust burn).' : '');
+      (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction; a wallet that can’t sign is proved by a burn of any amount).' : '');
   }
   async function membership(btn, leaving) {
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return; }

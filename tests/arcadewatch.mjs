@@ -77,7 +77,7 @@ try {
   const TERMS = readFileSync(path.join(ROOT, 'public', 'terms.html'), 'utf8');
   check('the terms cover the slot machine beside Rocket Run: in scope, nothing at stake and not gambling, no legal claim — and the version moved',
     /Rocket Run, Just Spin It \(the Arcade's slot machine\), New Pairs Radar/.test(TERMS) && /<h3>31\. Rocket Run and Just Spin It have nothing at stake and are not gambling<\/h3>/.test(TERMS)
-    && /<h3>45\. Send Power, Rocket Run and Just Spin It create no legal claim<\/h3>/.test(TERMS) && /Version 2026-10-21 ·/.test(TERMS) && /const TOS_VERSION = '2026-10-21';/.test(SRC));
+    && /<h3>45\. Send Power, Rocket Run and Just Spin It create no legal claim<\/h3>/.test(TERMS) && /Version 2026-10-22 ·/.test(TERMS) && /const TOS_VERSION = '2026-10-22';/.test(SRC));
   check('  ...and say only what the machine does: free for anyone, nothing staked, nothing of value paid, a score kept in the browser, every stop equally likely',
     /Anyone can play it, signed in or not, as often as they like\./.test(TERMS) && /It pays nothing of value — no Send Power, no boost, no prize, no tokens, no money\./.test(TERMS) && /is never sent to us/.test(TERMS) && /every stop equally likely/.test(TERMS));
 } catch (e) {

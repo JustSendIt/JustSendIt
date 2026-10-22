@@ -9,16 +9,16 @@
       places a burn proof is kept and scrubbed, the picker's GMGN and "not listed" rows, and that nothing on the client
       builds or sends the burn.
    2. A real server of its own, against a FAKE chain node this suite runs (so it can mine burns, refuse reads and stamp
-      blocks), with the hour shortened to four seconds: what links a wallet (its window's exact dust amount, as received
-      or as the wallet's gross send under a transfer tax), and every burn that must not — nothing sent, the wrong amount,
-      sent by someone else's allowance or a relayer, from another wallet, to another address, another coin, before the
-      window (a lagging node included), after it, made for another reason while a squatter's window was open, or for a
-      wallet already on another account — plus a smart account's UserOperation, a chain that will not answer past the
-      deadline (never "no burn"), a flood of other wallets' burns, the email-and-password rule, "confirm it's you", ended
-      sessions, one window per account, the daily cap, the Data API total and account deletion. Then ETH (owner, 2026-10-21:
-      "send with a dust amount of $Send or Ethereum"): its own exact amount, found by the wallet's transaction count and
-      the blocks read whole, and every ETH send that must not count — the wrong amount, another wallet's, to another
-      address, one that failed — a contract wallet offered $SEND alone, an EIP-7702 account offered both, and a burn
+      blocks), with the hour shortened to four seconds: what links a wallet (a burn of ANY amount — owner, 2026-10-22:
+      "users can burn as much or as little as they want" — dust, a big one, under a transfer tax), and every burn that must
+      not — nothing sent, sent by someone else's allowance or a relayer, from another wallet, to another address, another
+      coin, before the window (a lagging node included), after it, while another account's window was open on the same
+      wallet, or for a wallet already on another account — plus a smart account's UserOperation, a chain that will not
+      answer past the deadline (never "no burn"), a flood of other wallets' burns, the email-and-password rule, "confirm
+      it's you", ended sessions, one window per account, the daily cap, the Data API total and account deletion. Then ETH
+      (owner, 2026-10-21: "send with a dust amount of $Send or Ethereum"): any amount, found by the wallet's transaction
+      count and the blocks read whole, and every ETH send that must not count — another wallet's, to another address, one
+      that failed, a bridge deposit — a contract wallet offered $SEND alone, an EIP-7702 account offered both, and a burn
       landed while the chain could not be read, a thousand blocks back, that still links once it can. Everything lives
       in a temporary directory, deleted. */
 import { spawn } from 'node:child_process';
@@ -46,14 +46,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const BP = PUB('burnproof.js'), WAL = PUB('wallet.js'), AUTH = PUB('auth.js'), CSS = PUB('styles.css'), INV = PUB('invite.js'), PROF = PUB('profile.js'), PROFH = PUB('profile.html');
   const code = strip(BP) + strip(WAL) + strip(AUTH);
   check('nothing on the client builds or sends the burn: no eth_sendTransaction, no prefilled ethereum: transfer link', !/eth_sendTransaction|ethereum:/.test(code));
-  check('the watcher takes only a transfer of more than nothing, of $SEND, sent by the wallet itself, in a later block, stamped inside the window',
-    /if \(!\(v > 0n\)\) return;/.test(SRC) && /String\(l\.address \|\| ''\)\.toLowerCase\(\) !== TOK\.SEND/.test(SRC) && /const own = sentBy\(entry, from\);/.test(SRC) && /if \(!own\) \{[\s\S]{0,500}?return;\n  \}/.test(SRC)
+  check('the watcher takes a transfer of more than nothing, of $SEND, sent by the wallet itself, in a later block, stamped inside the window',
+    /if \(!\(v > 0n\)\) return;/.test(SRC) && /String\(l\.address \|\| ''\)\.toLowerCase\(\) !== TOK\.SEND/.test(SRC) && /if \(!sentBy\(entry, from\)\) \{[\s\S]{0,500}?return;\n  \}/.test(SRC)
     && /status = 'open' AND addr_idx = \? AND from_block < \?/.test(SRC) && /&& ms <= r\.deadline \+ BURN_PROOF_SKEW_MS\);/.test(SRC));
-  check('  ...and only the window\'s own exact amount, as it reached 0x…dEaD or as the wallet sent it in all (a transfer tax\'s cut included)',
-    /const hit = inWin\.filter\(\(r\) => want\(r\) > 0n && \(want\(r\) === v \|\| want\(r\) === gross\)\);/.test(SRC) && /tok === TOK\.SEND && f === from \? t \+ val : t/.test(SRC));
-  check('  ...an amount the server picks: four significant figures, about two cents at most, never shared by two open windows on one wallet, kept encrypted',
-    /Math\.floor\(Math\.log10\(0\.02 \/ \(9999 \* px\)\)\)/.test(SRC) && /if \(!used\.has\(wei\)\) return wei;/.test(SRC) && /\['burn_proofs', 'amount_enc'\], \['burn_proofs', 'amount_seen_enc'\]/.test(KEYS));
-  check('  ...one burn proves one account: if a burn ever matched two windows, it would link neither', /if \(new Set\(hit\.map\(\(r\) => r\.user_id\)\)\.size > 1\)/.test(SRC));
+  check('  ...of ANY amount (owner, 2026-10-22: "users can burn as much or as little as they want"): no amount is picked, asked for or compared',
+    !/burnProofPick|burnProofScale|want\(r\)/.test(SRC) && /await burnProofSettle\(inWin, from, String\(l\.transactionHash\)\.toLowerCase\(\)\);/.test(SRC));
+  check('  ...one burn proves one account: with windows from more than one account open on the wallet, it links none of them, and tells them', /async function burnProofSettle\(rows, from, tx\) \{\n  if \(new Set\(rows\.map\(\(r\) => r\.user_id\)\)\.size > 1\) \{/.test(SRC)
+    && /landed while another account was proving the same wallet, so it linked neither/.test(SRC));
+  check('  ...an hour still open when the server starts is read again from its start (the rule it is read by may have changed)', /UPDATE burn_proofs SET scanned_to = from_block, amount_seen_enc = NULL WHERE status = 'open' AND scanned_to > from_block/.test(SRC));
   check('  ...a lagging head cannot let an earlier burn in: at the opening only a block stamp\'s rounding is forgiven, not the deadline\'s two minutes',
     /const BURN_PROOF_OPEN_SKEW_MS = Math\.min\(BURN_PROOF_SKEW_MS, 2000\);/.test(SRC) && /ms >= Math\.floor\(r\.opened_at \/ 1000\) \* 1000 - BURN_PROOF_OPEN_SKEW_MS/.test(SRC));
   check('  ...each wallet is read on its own, filtered on both ends, so nobody else\'s burns can stall a window', /transferLogWalk\(TOK\.SEND, \[\[TRANSFER_TOPIC, addrTopic\(addr\), addrTopic\(DEAD_ADDR\)\]\]/.test(SRC));
@@ -62,7 +62,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('  ...a wallet linked by its signature while its burn proof ran ends that hour as linked, not "expired"', /reason = 'linked by its signature instead'/.test(SRC));
   check('  ...a wallet whose burns are too many to read ends its own windows, saying so, instead of holding everyone\'s status', /history longer than the chain read budget\|history too dense/.test(SRC) && /burnProofReads\.set\(addr, \{ okAt: now\(\), failing: false \}\)/.test(SRC));
   check('  ...and the "prove it by a burn" hint only follows a refusal where a burn can stand in', /explain\(e, opts\)/.test(PUB('wallet.js')) && (strip(PUB('auth.js')).match(/WALLET\.sign\(provider, address, message, \{ burn: true \}\)/g) || []).length === 2);
-  check('  ...and a window ends unproved only once the chain has been read past its deadline', /status = 'open' AND scanned_to >= \? AND \(eth_amount_enc IS NULL OR eth_block >= \?\) AND deadline < \?/.test(SRC) && /if \(!\(headMs > r\.deadline \+ BURN_PROOF_SKEW_MS\)\) continue;/.test(SRC) && /burnProofEnd\(r, 'expired', r\.foreign_seen/.test(SRC));
+  check('  ...and a window ends unproved only once the chain has been read past its deadline', /status = 'open' AND scanned_to >= \? AND \(eth_block IS NULL OR eth_none IS NOT NULL OR eth_block >= \?\) AND deadline < \?/.test(SRC) && /if \(!\(headMs > r\.deadline \+ BURN_PROOF_SKEW_MS\)\) continue;/.test(SRC) && /burnProofEnd\(r, 'expired', r\.foreign_seen/.test(SRC));
   check('a wallet linked either way goes through the one link helper (signature and burn)', (SRC.match(/await linkWalletTo\(/g) || []).length === 2 && /await linkWalletTo\(me, address, 'signature'\)/.test(SRC) && /await linkWalletTo\(u, address, 'burn'\)/.test(SRC));
   check('a burn-proved wallet is marked, never vouches for the account, and is never offered as the two-factor key',
     /ALTER TABLE identities ADD COLUMN proof TEXT/.test(SRC) && /AND \(proof IS NULL OR proof <> 'burn'\)/.test(SRC.slice(SRC.indexOf('function vouchingWallets'), SRC.indexOf('function onlyProofIsSignIn')))
@@ -85,30 +85,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check('the panel sits above the wallet picker and below the toasts and "confirm it\'s you" (which opens over it when the server asks)', z('.wc-overlay') < z('.bp-overlay') && z('.bp-overlay') < z('#toast-zone') && z('.bp-overlay') < 9500, z('.wc-overlay') + ' / ' + z('.bp-overlay') + ' / ' + z('#toast-zone'));
   check('the panel never signs anyone in: an account without an email and a password is sent to make one first', /A burn can’t sign you in/.test(BP) && /data-form="emailpw"/.test(BP) && /'\/api\/account\/email'/.test(BP));
   check('  ...and it says the burn is destroyed for good, costs gas, is made by the member, and goes only to the burn address',
-    /destroyed for good/.test(BP) && /costs a little ETH for gas/.test(BP) && /You make the transaction yourself/.test(BP) && /Only ever to the burn address shown here, and only the amount on your own screen/.test(BP) && /exact amount of \$SEND/.test(BP) && /Or this exact amount of ETH/.test(BP));
+    /destroyed for good/.test(BP) && /costs a little ETH for gas/.test(BP) && /You make the transaction yourself/.test(BP) && /Only ever to the burn address shown here\.<\/b> Any amount counts/.test(BP)
+    && /Send <b>any amount<\/b> of \$SEND/.test(BP) && !/exact amount/.test(BP));
   check('  ...and never tells anyone to buy', !/\bbuy (some|more|\$SEND)|purchase/i.test(BP));
-  check('the terms and the privacy policy say what it is, and their versions moved', /\(g\) Proving a wallet by a burn\./.test(PUB('terms.html')) && /Version 2026-10-21 ·/.test(PUB('terms.html'))
-    && /A wallet that cannot sign can be linked instead by a burn/.test(PUB('privacy.html')) && /Version 2026-10-21 ·/.test(PUB('privacy.html')));
+  check('the terms and the privacy policy say what it is, and their versions moved', /\(g\) Proving a wallet by a burn\./.test(PUB('terms.html')) && /Version 2026-10-22 ·/.test(PUB('terms.html'))
+    && /A wallet that cannot sign can be linked instead by a burn/.test(PUB('privacy.html')) && /Version 2026-10-22 ·/.test(PUB('privacy.html')));
   check('  ...and both say ETH counts too: straight from the wallet\'s own address, a contract wallet offered $SEND only, the transaction count kept',
-    /one exact dust amount of \$SEND and, for a wallet that sends its own transactions, one exact dust amount of ETH/.test(PUB('terms.html')) && /a wallet with contract code on Robinhood Chain \(other than an EIP-7702 delegation, which still sends its own transactions\) is offered \$SEND only, as is a wallet that sent more than ten transactions/.test(PUB('terms.html'))
-    && /burning \$SEND or ETH to prove a wallet are not payments to us/.test(PUB('terms.html'))
+    /you send any amount of \$SEND — or, for a wallet that sends its own transactions, of ETH — from that wallet/.test(PUB('terms.html')) && /Any amount above nothing counts, as much or as little as you choose/.test(PUB('terms.html'))
+    && /if windows from more than one account are open on the same wallet when its burn lands, the burn cannot show whose it is, so it links none of them/.test(PUB('terms.html')) && !/exact (dust )?amount/.test(PUB('terms.html')) && /a wallet with contract code on Robinhood Chain \(other than an EIP-7702 delegation, which still sends its own transactions\) is offered \$SEND only, as is a wallet that sent more than ten transactions/.test(PUB('terms.html'))
+    && /burning \$SEND or ETH to prove a wallet are not payments to us/.test(PUB('terms.html')) && !/exact amounts it asked for/.test(PUB('privacy.html'))
     && /an ETH proof burn counts toward neither/.test(PUB('terms.html')) && /An ETH send leaves no log, so to find one we read the wallet's public transaction count/.test(PUB('privacy.html')));
-  check('ETH (owner, 2026-10-21): only a successful send the wallet itself made straight to 0x…dEaD, of the window\'s exact ETH amount, in a later block stamped inside the window',
+  check('ETH (owner, 2026-10-21): a successful send of any amount the wallet itself made straight to 0x…dEaD, in a later block stamped inside the window',
     /if \(String\(t\.from \|\| ''\)\.toLowerCase\(\) !== addr\) continue;/.test(SRC) && /if \(String\(t\.to \|\| ''\)\.toLowerCase\(\) !== DEAD_ADDR \|\| !\(v > 0n\)\) continue;/.test(SRC)
-    && /if \(rc\.status === '0x1'\) await burnProofMatchEth\(addr, t\.hash, v, nums\[i\], ms\);/.test(SRC) && /AND addr_idx = \? AND from_block < \? AND eth_amount_enc IS NOT NULL/.test(SRC)
-    && /const hit = inWin\.filter\(\(r\) => want\(r\) > 0n && want\(r\) === v\);/.test(SRC));
+    && /if \(rc\.status === '0x1'\) await burnProofMatchEth\(addr, t\.hash, v, nums\[i\], ms\);/.test(SRC) && /AND addr_idx = \? AND from_block < \? AND eth_block IS NOT NULL AND eth_none IS NULL/.test(SRC)
+    && /await burnProofSettle\(inWin, from, String\(hash\)\.toLowerCase\(\)\);/.test(SRC));
   check('  ...found by the wallet\'s transaction count at the head; when it moved, the blocks holding its sends are found by the count in between and read whole (only transactions it signed counted), a bounded stretch a pass',
     /rpc\('eth_getTransactionCount', \[addr, burnHex\(head\)\]\)/.test(SRC) && /const end = Math\.min\(top, b0 \+ BURN_ETH_SCAN_STEP\);/.test(SRC) && /if \(nHead === n0\) return move\(head, nHead\);/.test(SRC)
     && /const nums = known \? await burnEthSendBlocks\(addr, b0, n0, end, nEnd\) : burnRange\(b0, end\);/.test(SRC) && /\['eth_getBlockByNumber', \[burnHex\(b\), true\]\]/.test(SRC)
     && /const k = Math\.min\(24, hi - lo - 1\)/.test(SRC) && /if \(!\(ty >= 0 && ty <= 4\)\) continue;/.test(SRC));
-  check('  ...a window ends unproved only once its ETH side has been read through the head too', /AND scanned_to >= \? AND \(eth_amount_enc IS NULL OR eth_block >= \?\) AND deadline < \?/.test(SRC));
+  check('  ...a window ends unproved only once its ETH side has been read through the head too', /AND scanned_to >= \? AND \(eth_block IS NULL OR eth_none IS NOT NULL OR eth_block >= \?\) AND deadline < \?/.test(SRC));
   check('  ...and that read never goes past the last block stamped inside the hour, never waits out a refusal past a minute, and a busy wallet is not offered ETH',
     /const top = \(await chainBlockTime\(head\)\) > limitMs \? await burnLastBlockBy\(b0, head, limitMs\) : head;/.test(SRC) && /if \(end === top && top < head\) return move\(head, nHead\);/.test(SRC)
     && /const burnPaced = \(calls\) => pacedBatchAll\(calls, null, requestThrottleGuard\);/.test(SRC) && !/pacedBatchAll\(/.test(SRC.slice(SRC.indexOf('async function burnEthSendBlocks'), SRC.indexOf('async function burnProofTick')))
     && /nonce0 - parseInt\(nonceAgo, 16\) > BURN_ETH_BUSY \? 'busy' : null;/.test(SRC) && /p\.ethNone === 'busy'/.test(BP));
-  check('  ...three significant figures, about five cents at most, never shared by two open windows on one wallet, kept encrypted with the count',
-    /Math\.floor\(Math\.log10\(0\.05e18 \/ \(999 \* \(usd > 0 \? usd : 1e4\)\)\)\)/.test(SRC) && /return burnProofFree\(used, 100, 999, 10n \*\* BigInt\(e\)\);/.test(SRC)
-    && /\['burn_proofs', 'eth_amount_enc'\], \['burn_proofs', 'eth_nonce_enc'\]/.test(KEYS));
+  check('  ...the wallet\'s transaction count where its ETH sends were last read is kept encrypted', /\['burn_proofs', 'eth_amount_enc'\], \['burn_proofs', 'eth_nonce_enc'\]/.test(KEYS));
   check('  ...a wallet with code is offered $SEND only (its ETH moves through the contract), an EIP-7702 account both, and the panel says which and why',
     /const ethNone = !\(code === '0x' \|\| \/\^0xef0100\[0-9a-f\]\{40\}\$\/i\.test\(code\)\) \? 'contract'/.test(SRC) && /\|\| code == null\) return bad\(res, 'the chain isn’t answering right now/.test(SRC)
     && /p\.ethNone === 'contract'/.test(BP) && /a Safe or multisig transaction that an owner key executes doesn’t count/.test(BP) && /This hour started before ETH could be used/.test(BP)
@@ -259,7 +259,8 @@ const linkedTo = () => { const d = openDb(); try { const rows = d.prepare("SELEC
 
 try {
   await start();
-  const amt = (o) => BigInt((o && o.j && o.j.proof && o.j.proof.amount) || '0');
+  const ANY = (n) => BigInt(n) * 10n ** 15n;   // whatever a test likes to burn: any amount counts (owner, 2026-10-22)
+  const nLinked = () => linkedTo().length;
 
   check('signed out, there is nothing to read', (await api('/api/wallet/burnproof')).status === 401);
   const A = await account();
@@ -287,31 +288,28 @@ try {
   const vf = await api('/api/auth/verify', { method: 'POST', sid: A2.sid, body: { password: A.password } });
   check('  ...and once it has, the window opens', vf.status === 200 && (await open(A2, wallet())).status === 200, vf.status);
 
-  // the burns that must not prove a wallet, then the one that does
+  // the burns that must not prove a wallet, then one of any amount that does
   const X = wallet(), Y = wallet(), Z = wallet();
-  const o = await open(A, X), AX = amt(o);
+  const o = await open(A, X);
   const a = o.j.proof || {};
-  check('starting a window answers with it open, for this wallet, its time left, and the one exact dust amount it asks for',
-    o.status === 200 && a.status === 'open' && a.address === X && a.leftMs > 0 && a.leftMs <= HOUR && AX > 0n && /^\d+(\.\d+)?$/.test(a.amountText || '')
-    && (a.amountText.replace('.', '').replace(/^0+/, '').replace(/0+$/, '').length <= 4), JSON.stringify(a));
-  check('  ...a figure that is dust whatever the price: four significant figures, under one $SEND here (no price to scale by)', AX < 10n ** 18n && AX >= 10n ** 17n, String(AX));
+  check('starting a window answers with it open, for this wallet and its time left — and no amount to match: any amount counts, $SEND or ETH',
+    o.status === 200 && a.status === 'open' && a.address === X && a.leftMs > 0 && a.leftMs <= HOUR && !('amount' in a) && a.eth === true && a.ethNone === null, JSON.stringify(a));
   check('  ...and the window opened before it (another wallet) was ended: one open window per account', (() => { const d = openDb(); const n = d.prepare("SELECT COUNT(*) n FROM burn_proofs WHERE user_id = (SELECT id FROM users WHERE username = ?) AND status = 'open'").get(A.name).n; const c = d.prepare("SELECT COUNT(*) n FROM burn_proofs WHERE user_id = (SELECT id FROM users WHERE username = ?) AND status = 'cancelled' AND reason = 'a new window was started'").get(A.name).n; d.close(); return n === 1 && c >= 1; })());
-  check('  ...the amount and the wallet are kept encrypted, not as figures the chain could be searched for', (() => { const d = openDb(); const r = d.prepare("SELECT addr_enc, amount_enc FROM burn_proofs WHERE status = 'open' AND user_id = (SELECT id FROM users WHERE username = ?)").get(A.name); d.close(); return r && !r.amount_enc.includes(AX.toString()) && !r.addr_enc.includes(X.slice(2)); })());
-  transfer({ from: X, value: 0n });                 // nothing moved: any contract can log that for anybody
-  transfer({ from: X, value: AX, sender: Y });      // the amount, moved by an app holding an allowance — not sent by the wallet
-  transfer({ from: Z, value: AX });                 // another wallet's burn of the amount
-  transfer({ from: X, to: wallet(), value: AX });   // the wallet's own transfer of the amount, not to the burn address
-  transfer({ from: X, token: GWC, value: AX });     // the wallet's own burn of the amount, of another coin
-  transfer({ from: X, value: AX + 1n });            // the wallet's own burn, one wei off: not the amount
+  check('  ...the wallet is kept encrypted, not as an address the chain could be searched for', (() => { const d = openDb(); const r = d.prepare("SELECT addr_enc FROM burn_proofs WHERE status = 'open' AND user_id = (SELECT id FROM users WHERE username = ?)").get(A.name); d.close(); return r && !r.addr_enc.includes(X.slice(2)); })());
+  transfer({ from: X, value: 0n });                     // nothing moved: any contract can log that for anybody
+  transfer({ from: X, value: ANY(7), sender: Y });      // moved by an app holding an allowance — not sent by the wallet
+  transfer({ from: Z, value: ANY(7) });                 // another wallet's burn
+  transfer({ from: X, to: wallet(), value: ANY(7) });   // the wallet's own transfer, not to the burn address
+  transfer({ from: X, token: GWC, value: ANY(7) });     // the wallet's own burn, of another coin
   await sleep(1300);
   const sx = await state(A);
-  check('none of these proves the wallet: nothing sent, an allowance\'s move, another wallet\'s, to another address, another coin, the wrong amount',
-    sx.j.proof.status === 'open' && !linkedTo().length, JSON.stringify(sx.j.proof));
-  check('  ...the wrong amount from the wallet itself is said in the window, with its coin, so a typo can be put right in the same hour', / \$SEND$/.test(sx.j.proof.amountSeen || '') && sx.j.proof.foreignSeen === true, JSON.stringify(sx.j.proof));
-  const tx = transfer({ from: X, value: AX });
+  check('none of these proves the wallet: nothing sent, an allowance\'s move, another wallet\'s, to another address, another coin',
+    sx.j.proof.status === 'open' && !nLinked(), JSON.stringify(sx.j.proof));
+  check('  ...the allowance\'s move is said in the window, so the owner knows why it did not count', sx.j.proof.foreignSeen === true, JSON.stringify(sx.j.proof));
+  const tx = transfer({ from: X, value: 1n });          // one wei of $SEND: as little as anybody likes
   const got = await until(async () => (await statusOf(A)) === 'linked', 4000);
   const sA = await state(A);
-  check('a burn of exactly the amount, sent by the wallet itself inside the hour, links it', got && sA.j.proof.tx === tx, JSON.stringify(sA.j.proof));
+  check('a burn of any amount — one wei of $SEND here — sent by the wallet itself inside the hour links it', got && sA.j.proof.tx === tx, JSON.stringify(sA.j.proof));
   const me = await api('/api/me', { sid: A.sid });
   const wl = (me.j.user && me.j.user.walletList) || [];
   check('  ...as a wallet of the account, marked as proved by a burn', wl.length === 1 && wl[0].address === X && wl[0].byBurn === true, JSON.stringify(wl));
@@ -322,11 +320,17 @@ try {
   await api('/api/auth/verify', { method: 'POST', sid: A.sid, body: { password: A.password } });
   check('  ...and a wallet already on this account is refused a second window', (await open(A, X)).status === 409);
 
-  // a transfer tax: the wallet sends the amount, the coin keeps a cut, less reaches 0x…dEaD — it still proves the wallet
+  // as much as anybody likes: a big burn proves it just the same
+  const BG = await account(), WBG = wallet(), n1 = nLinked();
+  await open(BG, WBG);
+  transfer({ from: WBG, value: 5000000n * 10n ** 18n });
+  check('  ...and as much as anybody likes: a burn of five million $SEND links it just the same', await until(async () => (await statusOf(BG)) === 'linked', 4000) && nLinked() === n1 + 1);
+
+  // a transfer tax: the coin keeps a cut on the way — still the wallet's own burn
   const TX_ = await account(), WT = wallet();
-  const ot = await open(TX_, WT), AT = amt(ot);
-  transfer({ from: WT, value: AT - AT / 100n, fee: AT / 100n });
-  check('a burn of the amount that a transfer tax took a cut of on the way still proves the wallet (the gross send is the amount)', await until(async () => (await statusOf(TX_)) === 'linked', 4000));
+  await open(TX_, WT);
+  transfer({ from: WT, value: ANY(9), fee: ANY(1) });
+  check('a burn a transfer tax took a cut of on the way still proves the wallet', await until(async () => (await statusOf(TX_)) === 'linked', 4000));
 
   // a burn made BEFORE the window opened never counts, and an hour with no burn ends — once the chain says the hour is over
   const B = await account(), V = wallet();
@@ -337,14 +341,14 @@ try {
   check('a burn made before the window opened does not count', (await statusOf(B)) === 'open');
   const ended = await until(async () => (await statusOf(B)) === 'expired', HOUR + SKEW + 3000);
   const sB = await state(B);
-  check('  ...and the hour ends without a link, saying why', ended && /no burn of the exact amount, sent by that wallet itself, reached the burn address within the hour/.test(sB.j.proof.reason || ''), JSON.stringify(sB.j.proof));
+  check('  ...and the hour ends without a link, saying why', ended && /no burn sent by that wallet itself reached the burn address within the hour/.test(sB.j.proof.reason || ''), JSON.stringify(sB.j.proof));
 
   // the chain will not answer: a window waits rather than ending "no burn" — and a burn inside the hour still counts once it is read
   const C = await account(), W1 = wallet();
-  const oc = await open(C, W1);
+  await open(C, W1);
   chain.down = true;
   await sleep(400);
-  transfer({ from: W1, value: amt(oc) });          // mined inside the hour, while the site cannot read the chain
+  transfer({ from: W1, value: ANY(3) });             // mined inside the hour, while the site cannot read the chain
   await sleep(HOUR + SKEW + 1200);
   const sC = await state(C);
   check('a chain that will not answer leaves the window open past its deadline — never "no burn arrived"', sC.j.proof.status === 'open' && sC.j.chain.failing === true, JSON.stringify(sC.j));
@@ -353,34 +357,36 @@ try {
   check('  ...and once it answers, the burn that landed inside the hour links the wallet', await until(async () => (await statusOf(C)) === 'linked', 5000));
 
   // a burn stamped after the hour, read late, does not count
-  const D = await account(), W2 = wallet();
-  const od = await open(D, W2);
+  const D = await account(), W2 = wallet(), n2 = nLinked();
+  await open(D, W2);
   chain.down = true;
   await sleep(HOUR + SKEW + 1200);
-  transfer({ from: W2, value: amt(od) });          // after the deadline
+  transfer({ from: W2, value: ANY(3) });             // after the deadline
   chain.down = false;
   const lateEnd = await until(async () => (await statusOf(D)) === 'expired', 5000);
-  check('a burn stamped after the hour does not count, even read with the hour\'s window still open', lateEnd && linkedTo().length === 3, (await statusOf(D)) + ' / ' + linkedTo().length);
+  check('a burn stamped after the hour does not count, even read with the hour\'s window still open', lateEnd && nLinked() === n2, (await statusOf(D)) + ' / ' + nLinked());
 
-  // a squatter: an account with a window open on a wallet it does not control
-  const S1 = await account(), OWN = await account(), U = wallet();
-  const os1 = await open(S1, U);
-  transfer({ from: U, value: 123456789n * 10n ** 9n });   // the wallet burns for a reason of its own (a dev burn, a Data API key)
-  await sleep(1200);
-  check('a burn the wallet makes for its own reasons does not hand it to an account that only kept a window open on it', (await statusOf(S1)) === 'open' && linkedTo().length === 3);
-  const oo = await open(OWN, U);
-  check('  ...two windows open on one wallet never ask for the same amount', amt(oo) > 0n && amt(oo) !== amt(os1), amt(oo) + ' / ' + amt(os1));
-  transfer({ from: U, value: amt(oo) });          // the owner sends the amount on THEIR screen
-  check('  ...and the owner\'s burn of their own amount links it to them, whoever else is watching it', await until(async () => (await statusOf(OWN)) === 'linked', 4000) && (await statusOf(S1)) === 'open');
-  await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: S1.sid, body: {} });
+  // two accounts on one wallet: the burn cannot say whose it is, so it links neither, and both are told
+  const S1 = await account(), OWN = await account(), U = wallet(), n3 = nLinked();
+  await open(S1, U); await open(OWN, U);
+  transfer({ from: U, value: ANY(2) });
+  const both = await until(async () => (await statusOf(S1)) === 'refused' && (await statusOf(OWN)) === 'refused', 4000);
+  check('with two accounts\' windows open on one wallet, its burn links neither — nobody takes a wallet by watching it while its owner proves it — and both are told',
+    both && /another account was proving this same wallet/.test(((await state(OWN)).j.proof || {}).reason || '') && nLinked() === n3
+    && (() => { const d = openDb(); const n = d.prepare("SELECT COUNT(*) n FROM notifications WHERE text LIKE '%linked neither%'").get().n; d.close(); return n === 2; })());
+  // ...and the risk the owner accepted with "any amount" (said in the terms): a window held alone takes any burn the wallet makes in its hour
+  const S2 = await account(), U2 = wallet();
+  await open(S2, U2);
+  transfer({ from: U2, value: ANY(40) });            // the wallet burns for a reason of its own
+  check('  ...while a window held alone takes any burn the wallet itself makes in its hour (the risk "any amount" carries, said in the terms)', await until(async () => (await statusOf(S2)) === 'linked', 4000));
 
   // a wallet already on another account: the window opens (nothing about another account is said before a burn), the burn is refused
-  const G = await account();
+  const G = await account(), n4 = nLinked();
   const go = await open(G, X);
-  transfer({ from: X, value: amt(go) });
+  transfer({ from: X, value: ANY(4) });
   const gEnd = await until(async () => (await statusOf(G)) === 'refused', 4000);
   check('a window for a wallet on another account opens like any other (nothing about another account is said before a burn)', go.status === 200, go.status);
-  check('  ...and its burn is refused: the wallet stays where it was', gEnd && /already linked to another account/.test(((await state(G)).j.proof || {}).reason || '') && linkedTo().length === 4);   // X, WT, W1, U
+  check('  ...and its burn is refused: the wallet stays where it was', gEnd && /already linked to another account/.test(((await state(G)).j.proof || {}).reason || '') && nLinked() === n4);
   // everything X sent to 0x…dEaD counts toward the Data API, like a signed wallet's: an allowance's move, the proof, and G's
   const el = await api('/api/data/eligibility?fresh=1', { sid: A.sid });
   const xBurns = chain.logs.filter((l) => l.address === SEND && l.topics[1] === topic(X) && l.topics[2] === topic(DEAD)).reduce((t, l) => t + BigInt(l.data), 0n);
@@ -388,40 +394,33 @@ try {
 
   // a smart account: its UserOperation, carried by a bundler, is the wallet's own act
   const H = await account(), S = wallet(), BUNDLER = wallet();
-  const oh = await open(H, S);
-  transfer({ from: S, value: amt(oh), sender: BUNDLER, op: S });
+  await open(H, S);
+  transfer({ from: S, value: ANY(5), sender: BUNDLER, op: S });
   check('a smart account\'s burn, sent as its own ERC-4337 UserOperation by a bundler, proves it', await until(async () => (await statusOf(H)) === 'linked', 4000));
 
-  // a node whose head lags: the window opens below a burn of its own amount stamped seconds before it opened
-  const L = await account(), WL = wallet();
+  // a node whose head lags: the window opens below a burn stamped seconds before it opened
+  const L = await account(), WL = wallet(), n5 = nLinked();
   await sleep(3500);
   chain.lag = 40;
   const lo = await open(L, WL);
   chain.lag = 0;
-  { // a block inside the lag, stamped well before the window opened, carries the very amount it asks for
+  { // a block inside the lag, stamped well before the window opened, carries a burn from the wallet
     let b = 0; for (const [n, t] of chain.ts) if (n > chain.head - 38 && t * 1000 < Date.now() - 4500) b = Math.max(b, n);
-    if (b) transfer({ from: WL, value: amt(lo), block: b });
+    if (b) transfer({ from: WL, value: ANY(2), block: b });
     check('  (the planted burn sits in a block the lagging head let the window open below)', b > 0, b);
   }
   await sleep(1600);
-  check('a burn of the window\'s own amount made before it opened does not count, even when the node\'s head lags behind it', lo.status === 200 && (await statusOf(L)) === 'open' && linkedTo().length === 5, (await statusOf(L)) + ' / ' + linkedTo().length);   // ...and S
+  check('a burn made before the window opened does not count, even when the node\'s head lags behind it', lo.status === 200 && (await statusOf(L)) === 'open' && nLinked() === n5, (await statusOf(L)) + ' / ' + nLinked());
   await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: L.sid, body: {} });
 
-  // a burn of the amount that the wallet did not send itself (a Safe's owner key, a relayer): it does not count, and the window says so
-  const FA = await account(), WF = wallet();
-  const of = await open(FA, WF);
-  transfer({ from: WF, value: amt(of), sender: wallet() });
+  // a burn the wallet did not send itself (a Safe's owner key, a relayer): it does not count, and the window says so
+  const FA = await account(), WF = wallet(), n6 = nLinked();
+  await open(FA, WF);
+  transfer({ from: WF, value: ANY(6), sender: wallet() });
   await sleep(1200);
-  check('a burn of the amount from the wallet, sent by another address, is flagged while the window is open', ((await state(FA)).j.proof || {}).foreignSeen === true);
+  check('a burn from the wallet, sent by another address, is flagged while the window is open', ((await state(FA)).j.proof || {}).foreignSeen === true);
   const fEnd = await until(async () => (await statusOf(FA)) === 'expired', HOUR + SKEW + 3000);
-  check('  ...and the window ends saying what happened, not "no burn arrived"', fEnd && /sent by another address/.test(((await state(FA)).j.proof || {}).reason || '') && linkedTo().length === 5);
-
-  // the wrong amount, from the wallet itself, all hour: the window ends naming both amounts
-  const WA = await account(), WW = wallet();
-  const ow = await open(WA, WW);
-  transfer({ from: WW, value: amt(ow) * 2n });
-  const wEnd = await until(async () => (await statusOf(WA)) === 'expired', HOUR + SKEW + 3000);
-  check('a burn of the wrong amount ends the hour naming what arrived and what it had to be (either coin\'s amount)', wEnd && /but of \d[\d.]* \$SEND, not the exact [\d.]+ \$SEND or [\d.]+ ETH this hour asked for/.test(((await state(WA)).j.proof || {}).reason || ''), JSON.stringify((await state(WA)).j.proof));
+  check('  ...and the window ends saying what happened, not "no burn arrived"', fEnd && /sent by another address/.test(((await state(FA)).j.proof || {}).reason || '') && nLinked() === n6);
 
   // the other sessions ended: a window one of them opened goes with them; the caller's own stays
   const R = await account(), WR = wallet(), WR2 = wallet();
@@ -437,86 +436,60 @@ try {
   await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: R.sid, body: {} });
 
   // calling it off
-  const I = await account(), Q = wallet();
-  const oq = await open(I, Q);
+  const I = await account(), Q = wallet(), n7 = nLinked();
+  await open(I, Q);
   const cx = await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: I.sid, body: {} });
-  transfer({ from: Q, value: amt(oq) });
+  transfer({ from: Q, value: ANY(1) });
   await sleep(1000);
-  check('a cancelled window ends, and a burn after it links nothing', cx.status === 200 && cx.j.proof.status === 'cancelled' && (await statusOf(I)) === 'cancelled' && linkedTo().length === 5, linkedTo().length);
+  check('a cancelled window ends, and a burn after it links nothing', cx.status === 200 && cx.j.proof.status === 'cancelled' && (await statusOf(I)) === 'cancelled' && nLinked() === n7, nLinked());
 
   // more burns to 0x…dEaD from other wallets than one read may hold: they never reach a window's read
   const K = await account(), WK = wallet();
-  const ok_ = await open(K, WK);
+  await open(K, WK);
   { const b = mine(); for (let i = 0; i < 21000; i++) chain.logs.push({ address: SEND, topics: [TRANSFER, topic(wallet()), topic(DEAD)], data: '0x' + word(1), blockNumber: hx(b), transactionHash: '0x' + randomBytes(32).toString('hex'), logIndex: hx(i), removed: false }); }
-  transfer({ from: WK, value: amt(ok_) });
+  transfer({ from: WK, value: ANY(1) });
   check('21,000 other wallets\' burns in the hour do not stall the window: its own burn still links it', await until(async () => (await statusOf(K)) === 'linked', 5000));
   chain.logs = chain.logs.filter((l) => chain.receipts.has(l.transactionHash));   // the flood is not wanted by anything after
 
-  // every amount at the scale but one is open on a wallet: a new window must draw the one left (the pick never repeats an open amount)
-  const UQ = wallet(), n0 = 1000n + BigInt(Math.floor(Math.random() * 9000));
-  { const d = openDb(); d.exec('BEGIN'); for (let n = 1000n; n <= 9999n; n++) if (n !== n0) d.prepare("INSERT INTO burn_proofs (user_id, addr_idx, addr_enc, from_block, scanned_to, opened_at, deadline, status, amount_enc) VALUES (999999,?,?,?,?,?,?,'open',?)").run(KK.bidx(UQ), KK.encField(UQ), chain.head, chain.head, Date.now(), Date.now() + 3600e3, KK.encField((n * 10n ** 14n).toString())); d.exec('COMMIT'); d.close(); }
-  const UQA = await account();
-  const ouq = await open(UQA, UQ);
-  check('with every other amount open on a wallet, a new window draws the one amount left — two open windows never share one', amt(ouq) === n0 * 10n ** 14n, amt(ouq) + ' / ' + n0);
-  { const d = openDb(); d.prepare('DELETE FROM burn_proofs WHERE user_id = 999999').run(); d.close(); }
-  await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: UQA.sid, body: {} });
-
-  // if a burn ever fits two accounts' windows (one by what reached 0x…dEaD, the other by the gross a transfer tax took a cut of), it links neither
-  const E1 = await account(), E2 = await account(), WE = wallet();
-  const a1 = amt(await open(E1, WE)), a2 = amt(await open(E2, WE));
-  const aLo = a1 < a2 ? a1 : a2, aHi = a1 < a2 ? a2 : a1;
-  transfer({ from: WE, value: aLo, fee: aHi - aLo });
-  const both = await until(async () => (await statusOf(E1)) === 'refused' && (await statusOf(E2)) === 'refused', 4000);
-  check('a burn that fits two accounts\' windows links neither, and both are told why', both && /cannot say which of you sent it/.test(((await state(E1)).j.proof || {}).reason || '') && linkedTo().length === 6   /* ...and WK */
-    && (() => { const d = openDb(); const n = d.prepare("SELECT COUNT(*) n FROM notifications WHERE text LIKE '%linked neither%'").get().n; d.close(); return n === 2; })());
-
-  // a window left by an earlier build, with no amount: no burn can prove it (and nothing breaks reading it)
+  // a window left by an earlier build (with an exact amount, or none): any burn proves it now
   const NA = wallet(), NAU = await account();
-  { const d = openDb(); const uid = d.prepare('SELECT id FROM users WHERE username = ?').get(NAU.name).id; d.prepare("INSERT INTO burn_proofs (user_id, addr_idx, addr_enc, from_block, scanned_to, opened_at, deadline, status) VALUES (?,?,?,?,?,?,?,'open')").run(uid, KK.bidx(NA), KK.encField(NA), chain.head, chain.head, Date.now(), Date.now() + HOUR); d.close(); }
-  transfer({ from: NA, value: 10n ** 17n });
-  await sleep(1200);
-  const sna = await state(NAU);
-  check('a window with no amount (an earlier build\'s) is never proved by a burn, and still reads', sna.status === 200 && sna.j.proof.status === 'open' && sna.j.proof.amount === null && linkedTo().length === 6, JSON.stringify(sna.j.proof));
-  await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: NAU.sid, body: {} });
+  { const d = openDb(); const uid = d.prepare('SELECT id FROM users WHERE username = ?').get(NAU.name).id; d.prepare("INSERT INTO burn_proofs (user_id, addr_idx, addr_enc, from_block, scanned_to, opened_at, deadline, status, amount_enc) VALUES (?,?,?,?,?,?,?,'open',?)").run(uid, KK.bidx(NA), KK.encField(NA), chain.head, chain.head, Date.now(), Date.now() + HOUR, KK.encField('4821' + '0'.repeat(14))); d.close(); }
+  transfer({ from: NA, value: ANY(8) });             // not the amount that window once asked for
+  const sna = await until(async () => (await statusOf(NAU)) === 'linked', 4000);
+  check('a window an earlier build opened (with an exact amount asked) is proved by a burn of any amount now, and reads as ETH-less ("earlier")', sna && (await state(NAU)).j.proof.ethNone === 'earlier', JSON.stringify((await state(NAU)).j.proof));
 
   /* ═══ ETH (owner, 2026-10-21: "send with a dust amount of $Send or Ethereum to the dead address") ═══ */
-  const ethOf = (o) => BigInt((o && o.j && o.j.proof && o.j.proof.ethAmount) || '0');
-  const weiText = (w) => { const s = w.toString().padStart(19, '0'), i = s.slice(0, -18).replace(/^0+(?=\d)/, ''), f = s.slice(-18).replace(/0+$/, ''); return f ? i + '.' + f : i; };
-  const EA = await account(), WEA = wallet();
-  const oe = await open(EA, WEA), pe0 = oe.j.proof || {}, EAmt = ethOf(oe);
-  const digits = EAmt.toString().replace(/0+$/, '');
-  check('a window also asks for one exact dust amount of ETH: three significant figures, under a thousandth of an ETH, said as text',
-    oe.status === 200 && EAmt > 0n && digits.length <= 3 && EAmt < 10n ** 15n && pe0.ethNone === null && pe0.ethAmountText === weiText(EAmt), JSON.stringify(pe0));
-  ethSend({ from: WEA, value: EAmt + 1n });              // the wallet's own ETH burn, one wei off
-  ethSend({ from: wallet(), value: EAmt });              // another wallet's ETH burn of the amount
-  ethSend({ from: WEA, to: wallet(), value: EAmt });     // the wallet's own send of the amount, not to the burn address
-  ethSend({ from: WEA, value: EAmt, ok: false });        // the wallet's own send of the amount to 0x…dEaD that reverted
-  ethSend({ from: WEA, value: EAmt, type: '0x64' });     // a bridge deposit naming the wallet as its sender: not a transaction it signed here
-  transfer({ from: WEA, to: wallet(), value: 5n });      // ...and an ordinary $SEND transfer in between: its count moves for that too
+  const EA = await account(), WEA = wallet(), n8 = nLinked();
+  const oe = await open(EA, WEA);
+  check('a window on a wallet that sends its own transactions watches ETH as well', oe.status === 200 && oe.j.proof.eth === true && oe.j.proof.ethNone === null, JSON.stringify(oe.j.proof));
+  ethSend({ from: wallet(), value: ANY(3) });             // another wallet's ETH burn
+  ethSend({ from: WEA, to: wallet(), value: ANY(3) });    // the wallet's own send, not to the burn address
+  ethSend({ from: WEA, value: ANY(3), ok: false });       // the wallet's own send to 0x…dEaD that reverted
+  ethSend({ from: WEA, value: ANY(3), type: '0x64' });    // a bridge deposit naming the wallet as its sender: not a transaction it signed here
+  transfer({ from: WEA, to: wallet(), value: 5n });       // ...and an ordinary $SEND transfer in between: its count moves for that too
   await sleep(1300);
   const se = await state(EA);
-  check('none of these proves the wallet by ETH: the wrong amount, another wallet\'s, to another address, one that reverted, a bridge deposit', se.j.proof.status === 'open' && linkedTo().length === 6, JSON.stringify(se.j.proof));
-  check('  ...the wrong ETH amount from the wallet itself is said in the window, as ETH', se.j.proof.amountSeen === weiText(EAmt + 1n) + ' ETH', JSON.stringify(se.j.proof));
-  const etx = ethSend({ from: WEA, value: EAmt });
-  check('an ETH send of exactly the amount, from the wallet itself straight to 0x…dEaD inside the hour, links it', await until(async () => (await statusOf(EA)) === 'linked', 4000) && (await state(EA)).j.proof.tx === etx && linkedTo().length === 7, JSON.stringify((await state(EA)).j.proof));
+  check('none of these proves the wallet by ETH: another wallet\'s, to another address, one that reverted, a bridge deposit', se.j.proof.status === 'open' && nLinked() === n8, JSON.stringify(se.j.proof));
+  const etx = ethSend({ from: WEA, value: 1n });           // one wei of ETH: as little as anybody likes
+  check('an ETH send of any amount — one wei here — from the wallet itself straight to 0x…dEaD inside the hour links it', await until(async () => (await statusOf(EA)) === 'linked', 4000) && (await state(EA)).j.proof.tx === etx && nLinked() === n8 + 1, JSON.stringify((await state(EA)).j.proof));
   const wle = ((await api('/api/me', { sid: EA.sid })).j.user || {}).walletList || [];
   check('  ...as a wallet of the account, marked as proved by a burn', wle.length === 1 && wle[0].address === WEA && wle[0].byBurn === true, JSON.stringify(wle));
 
-  // a contract wallet: no ETH amount (its ETH moves through its code, which is not traced), and the panel is told why; a 7702 account is a key
+  // a contract wallet: ETH is not watched (its ETH moves through its code, which is not traced), and the panel is told why; a 7702 account is a key
   const CA = await account(), CW = wallet(), SW = wallet();
   chain.code.set(CW, '0x6080604052348015600f57600080fd5b50');
   chain.code.set(SW, '0xef0100' + wallet().slice(2));
   const oc2 = await open(CA, CW);
-  check('a wallet with code on the chain is offered $SEND only, and the window says why', oc2.status === 200 && ethOf(oc2) === 0n && oc2.j.proof.ethNone === 'contract' && amt(oc2) > 0n, JSON.stringify(oc2.j.proof));
+  check('a wallet with code on the chain is offered $SEND only, and the window says why', oc2.status === 200 && oc2.j.proof.eth === false && oc2.j.proof.ethNone === 'contract', JSON.stringify(oc2.j.proof));
   const o7 = await open(CA, SW);
-  check('  ...while an EIP-7702 account (its code only a pointer: still a key that sends its own) is offered ETH as well', o7.status === 200 && ethOf(o7) > 0n && o7.j.proof.ethNone === null, JSON.stringify(o7.j.proof));
+  check('  ...while an EIP-7702 account (its code only a pointer: still a key that sends its own) is offered ETH as well', o7.status === 200 && o7.j.proof.eth === true && o7.j.proof.ethNone === null, JSON.stringify(o7.j.proof));
   await api('/api/wallet/burnproof/cancel', { method: 'POST', sid: CA.sid, body: {} });
 
   // a wallet busy when the hour starts (more than ten sends in the last thousand blocks) is offered $SEND alone
   const BA = await account(), WB = wallet();
   for (let i = 0; i < 12; i++) ethSend({ from: WB, to: wallet(), value: 1n });
   const ob = await open(BA, WB);
-  check('a wallet that sent more than ten transactions in the last thousand blocks is offered $SEND only, and told why', ob.status === 200 && ethOf(ob) === 0n && ob.j.proof.ethNone === 'busy' && amt(ob) > 0n, JSON.stringify(ob.j.proof));
+  check('a wallet that sent more than ten transactions in the last thousand blocks is offered $SEND only, and told why', ob.status === 200 && ob.j.proof.eth === false && ob.j.proof.ethNone === 'busy', JSON.stringify(ob.j.proof));
   // a code the node would not give: no hour on a guess (it could be a contract offered ETH it cannot use)
   chain.codeFails = true;
   const cf = await open(BA, wallet());
@@ -526,27 +499,27 @@ try {
 
   // the chain will not answer while the ETH burn lands, a thousand blocks after the window opened: it still links once read — and the hour waits for it
   const ED = await account(), WED = wallet();
-  const oed = await open(ED, WED);
+  await open(ED, WED);
   chain.down = true;
   await sleep(400);
   for (let i = 0; i < 1000; i++) mine();
-  ethSend({ from: WED, value: ethOf(oed) });
+  ethSend({ from: WED, value: ANY(3) });
   await sleep(HOUR + SKEW + 1200);
   check('an ETH burn made while the chain could not be read leaves the window waiting past its deadline — never "no burn arrived"', (await statusOf(ED)) === 'open');
   chain.down = false;
-  check('  ...and once it answers, the blocks are read in steps, the burn found and the wallet linked (not expired while the ETH side catches up)', await until(async () => (await statusOf(ED)) === 'linked', 8000) && linkedTo().length === 8, (await statusOf(ED)) + ' / ' + linkedTo().length);
+  check('  ...and once it answers, the blocks are read in steps, the burn found and the wallet linked (not expired while the ETH side catches up)', await until(async () => (await statusOf(ED)) === 'linked', 8000), await statusOf(ED));
 
   // the node keeps only the newest counts: the blocks in between are read whole instead, and the burn is still found
   const EF = await account(), WEF = wallet();
-  const oef = await open(EF, WEF);
+  await open(EF, WEF);
   chain.down = true;
   await sleep(300);
   for (let i = 0; i < 25; i++) mine();
-  ethSend({ from: WEF, value: ethOf(oef) });
+  ethSend({ from: WEF, value: ANY(4) });
   for (let i = 0; i < 25; i++) mine();
   chain.stateDepth = 10;
   chain.down = false;
-  check('with the counts in between no longer kept by the node, the blocks are read whole and the ETH burn still links the wallet', await until(async () => (await statusOf(EF)) === 'linked', 15000) && linkedTo().length === 9, (await statusOf(EF)) + ' / ' + linkedTo().length);
+  check('with the counts in between no longer kept by the node, the blocks are read whole and the ETH burn still links the wallet', await until(async () => (await statusOf(EF)) === 'linked', 15000), await statusOf(EF));
   chain.stateDepth = Infinity;
 
   // however long the chain was away, the ETH read stops at the hour: no block stamped after the deadline (and the slack) is read whole
@@ -564,18 +537,11 @@ try {
   chain.stateDepth = Infinity;
 
   // an hour with no burn of either coin ends, once the chain has been read past it for both
-  const EN = await account(), WEN = wallet();
+  const EN = await account(), WEN = wallet(), n9 = nLinked();
   await open(EN, WEN);
   ethSend({ from: WEN, to: wallet(), value: 3n });     // the wallet is busy elsewhere: its count moves, nothing goes to 0x…dEaD
   const enEnd = await until(async () => (await statusOf(EN)) === 'expired', HOUR + SKEW + 4000);
-  check('an hour with neither burn ends without a link, saying so', enEnd && /no burn of the exact amount, sent by that wallet itself/.test(((await state(EN)).j.proof || {}).reason || '') && linkedTo().length === 9);
-
-  // the wrong ETH amount, all hour: the ending names it as ETH, and both amounts it had to be
-  const EW = await account(), WEW = wallet();
-  const oew = await open(EW, WEW);
-  ethSend({ from: WEW, value: ethOf(oew) * 2n });
-  const ewEnd = await until(async () => (await statusOf(EW)) === 'expired', HOUR + SKEW + 4000);
-  check('an ETH burn of the wrong amount ends the hour naming it in ETH, and what it had to be', ewEnd && /but of [\d.]+ ETH, not the exact [\d.]+ \$SEND or [\d.]+ ETH this hour asked for/.test(((await state(EW)).j.proof || {}).reason || ''), JSON.stringify((await state(EW)).j.proof));
+  check('an hour with neither burn ends without a link, saying so', enEnd && /no burn sent by that wallet itself reached the burn address/.test(((await state(EN)).j.proof || {}).reason || '') && nLinked() === n9);
 
   // twelve starts at once from one account: the daily cap, one open window per account and the amounts all still hold
   const PAR = await account();

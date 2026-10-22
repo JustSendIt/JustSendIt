@@ -193,7 +193,7 @@
           b.type = 'button';
           b.className = 'wc-deep wc-burn';
           b.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">' + k.emoji + '</span><span class="wc-name">' + esc(k.name) + badgeHTML(k) + '</span><span class="wc-go" aria-hidden="true">Verify 🔥</span>';
-          b.setAttribute('data-tip', 'Opens Burn Verification: send the exact dust amount of $SEND or ETH it shows from your ' + k.name + ' wallet to the burn address, instead of signing');
+          b.setAttribute('data-tip', 'Opens Burn Verification: send any amount of $SEND or ETH from your ' + k.name + ' wallet to the burn address, instead of signing');
           b.addEventListener('click', () => toBurn(k.key));
           return b;
         }
@@ -226,7 +226,7 @@
       any.type = 'button';
       any.className = 'wc-deep wc-burn';
       any.innerHTML = '<span class="wc-ico wc-ico-emoji" aria-hidden="true">🔥</span><span class="wc-name">My wallet isn’t listed, or can’t sign</span><span class="wc-go" aria-hidden="true">Verify 🔥</span>';
-      any.setAttribute('data-tip', 'Opens Burn Verification for any wallet: send the exact dust amount of $SEND or ETH shown from it to the burn address, within an hour');
+      any.setAttribute('data-tip', 'Opens Burn Verification for any wallet: send any amount of $SEND or ETH from it to the burn address, within an hour');
       any.addEventListener('click', () => toBurn(''));
       footEl.appendChild(any);
     }

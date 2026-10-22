@@ -217,16 +217,32 @@ try {
     check('the sign-in panel\'s main options are Connect wallet, Burn Verification and Email, in that order',
       /id="tab-wallet"[^>]*>🦊 Connect wallet<\/button>\s*<button[^>]*id="tab-burn"[^>]*>🔥 Burn Verification<\/button>\s*<button[^>]*id="tab-email"[^>]*>✉️ Email<\/button>/.test(AUTH)
       && /<div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>/.test(AUTH));
-    check('  ...Burn Verification takes a signed-out visitor to the email form (make the account or sign in) and opens the burn step once they are in',
-      /sessionStorage\.setItem\('jsi:burnproof', String\(Date\.now\(\)\)\); \} catch \{\}\s*tabs\.email\.click\(\);\s*if \(join\) segSignup\.click\(\); else segLogin\.click\(\);/.test(AUTH_C)
-      && /if \(!AUTH\.user && AUTH\._showBurnTab\) \{/.test(AUTH_C));
+    /* owner, 2026-10-22: "Fix the sign-up process for the burn verification so that its fluid" — one form, not three */
+    check('  ...Burn Verification is one form: a new account (username, email, password twice) or a sign-in, plus the wallet, and one press',
+      /<form id="burn-form" novalidate>/.test(AUTH) && /id="b-username"/.test(AUTH) && /id="b-pw2"/.test(AUTH) && /id="b-addr"/.test(AUTH) && /id="bseg-signup"[^>]*>Create account</.test(AUTH) && /id="bseg-login"[^>]*>I have an account</.test(AUTH)
+      && /if \(!AUTH\.user && AUTH\._showBurnTab\) \{/.test(AUTH_C) && !/id="burn-join"|burnGo/.test(AUTH_C));
+    check('  ...that press makes the account (or signs in), starts the hour — a sign-in handing over its password as "confirm it\'s you" — and opens the burn step on the wallet',
+      /j = await api\('\/api\/auth\/register', \{ method: 'POST', body: \{ username: v\.username, email: v\.email, password: v\.pw \} \}\);/.test(AUTH_C)
+      && /api\('\/api\/wallet\/burnproof\/start', \{ method: 'POST', body: Object\.assign\(\{ address: v\.address \}, bRegMode \? \{\} : \{ current: \{ password: v\.pw \} \}\) \}\)/.test(AUTH_C)
+      && /await AUTH\.openBurnProof\(\{ from: 'signup', address: v\.address, error:/.test(AUTH_C));
+    check('  ...without a ticket the ticket comes first, and the form carries on by itself after it with what was typed; a two-factor sign-in comes back to the burn step on its wallet',
+      /if \(!g\.signedIn && !g\.access\) \{ setStatus\(bStatus, ''\); toTicket\(v\); return; \}/.test(AUTH_C) && /openInvite\(\{ then: resumeBurnForm \}\)/.test(AUTH_C)
+      && /bq\('b-addr'\)\.value = p\.address;\s*burnSubmit\(\);/.test(AUTH_C) && /sessionStorage\.setItem\('jsi:burnproof-addr', v\.address\)/.test(AUTH_C) && /AUTH\.openBurnProof\(\{ from: 'resume', address \}\)/.test(AUTH_C));
+    /* review, 2026-10-22 */
+    check('  ...a spent code is said, never looped through the ticket; a taken @username is said before the ticket; what was typed waits half an hour at most',
+      /if \(bRegMode && \(err\.code === 'need_invite' \|\| err\.code === 'need_tos'\)\) \{/.test(AUTH_C) && !/err\.code === 'code_spent'\)\) \{ setStatus\(bStatus/.test(AUTH_C)
+      && /api\('\/api\/username-check\?u=' \+ encodeURIComponent\(v\.username\)\)/.test(AUTH_C) && /burnPendingT = setTimeout\(\(\) => \{ burnPending = null; \}, 30 \* 60e3\);/.test(AUTH_C));
+    check('  ...a member whose wallet is proved can just sign in (the wallet optional), the form is emptied after, no older note reopens the step, an error takes the focus to its field, the toast says what happened',
+      /if \(!\(v\.address === '' && !bRegMode\) && !\/\^0x\[0-9a-fA-F\]\{40\}\$\/\.test\(v\.address\)\)/.test(AUTH_C) && /for \(const id of \['b-username', 'b-email', 'b-pw', 'b-pw2', 'b-addr'\]\) \{ bq\(id\)\.value = '';/.test(AUTH_C)
+      && /sessionStorage\.removeItem\('jsi:burnproof'\); sessionStorage\.removeItem\('jsi:burnproof-addr'\);/.test(AUTH_C) && /f\.setAttribute\('aria-invalid', 'true'\); f\.focus\(\);/.test(AUTH_C)
+      && /'⚠️ Your hour couldn’t start yet — the reason is in the burn step\.'/.test(AUTH_C) && /id="b-addr" autocomplete="off" spellcheck="false" maxlength="64"/.test(AUTH));
     check('  ...the picker lists every wallet, none behind a toggle', /for \(const k of undetected\) footEl\.appendChild\(row\(k\)\);/.test(WALLET_C) && !/wc-more|showAll/.test(WALLET_C));
     check('  ...the wallet this browser used before is marked "Last used" and focused first', /<span class="wc-badge wc-last">Last used<\/span>/.test(WALLET_C) && /overlay\.querySelector\('\.wc-item\[data-last\]'\) \|\| overlay\.querySelector\('\.wc-item'\)/.test(WALLET_C));
     check('the sign-in and sign-up screen itself names the wallets that work here, from the same registry, every one a press away — the signing ones counted as such, GMGN apart',
       /<details class="w-works" id="w-works" hidden>/.test(AUTH_C) && /'Works with ' \+ signing\.length \+ ' wallets — '/.test(AUTH_C) && /' by Burn Verification'/.test(AUTH_C) && /WALLET\.known\(\)/.test(AUTH_C));
     check('  ...but the home "Get a wallet" guide lists only wallets to get and connect: never GMGN', /\.filter\(\(k\) => !k\.burn\)\.map\(\(k, i\) => Object\.assign\(\{\}, k, \{ featured: i < 8 \}\)\)/.test(strip(HOME)) && !/verifies by a burn/.test(HOME));
-    check('  ...a sign-up opened while Burn Verification was on show lands on the email form, and the picker\'s GMGN row leaves the focus on that option',
-      /if \(b && e && b\.classList\.contains\('active'\)\) e\.click\(\);/.test(AUTH_C) && /tabs\.burn\.click\(\); tabs\.burn\.focus\(\);[^\n]*\n\s*return true;/.test(AUTH_C));
+    check('  ...a sign-up opened on Burn Verification stays on its own form, and the picker\'s GMGN row leaves the focus on that option',
+      /if \(opts && opts\.tab === 'burn'\) \{ const t = modal\.querySelector\('#tab-burn'\); if \(t\) t\.click\(\); \}\s*if \(AUTH\._burnMode\) AUTH\._burnMode\(true\);/.test(AUTH_C) && /tabs\.burn\.click\(\); tabs\.burn\.focus\(\);[^\n]*\n\s*return true;/.test(AUTH_C));
     check('  ...the home guide shows the best-fitting eight first and the rest behind "Show all"',
       /const FEATURED = 8;/.test(WALLET_C) && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
     check('  ...and every entry goes through the one read-only path: no wallet SDK, no WalletConnect, no transaction', !/walletconnect|@walletconnect|sdk|eth_sendTransaction/i.test(WALLET_C));
