@@ -127,11 +127,11 @@
             '</ul>' +
             '<p class="inv-note">⏳ <b>No waiting period — but keep the bag.</b> The door opens as soon as you hold it. If you sell that $SEND within 24 hours of buying it, the account goes read-only for a day; buying back in lifts it early.</p>' +
             '<p class="inv-safe">🔒 <b>Read-only, and it stays read-only.</b> You sign a sentence to prove the wallet is yours. That signature <b>moves nothing, approves nothing and costs no gas</b> — this site can never send your funds anywhere, and never asks your wallet to.</p>' +
-            '<p class="inv-note">🔥 <b>Wallet can’t sign (GMGN), or not on the list?</b> Prove it by a burn instead: within an hour, send the exact dust amount of $SEND the site shows you (two cents’ worth at most) from it to the burn address yourself. Whatever you send is gone for good — and it needs an email and a password on your account, since a burn can’t sign you in.</p>' +
+            '<p class="inv-note">🔥 <b>Wallet can’t sign (GMGN), or not on the list?</b> Prove it by a burn instead: within an hour, send the exact dust amount of $SEND or ETH the site shows you (a few cents’ worth at most) from it to the burn address yourself. Whatever you send is gone for good — and it needs an email and a password on your account, since a burn can’t sign you in.</p>' +
             '<p class="inv-err" id="inv-proof-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;">' +
               '<button class="g-btn g-btn-primary" id="inv-proof-go" type="button" data-tip="Asks your wallet to sign a sentence, then starts the chain check">Connect wallet — read-only 🔗</button>' +
-              '<button class="g-btn g-btn-ghost" id="inv-proof-burn" type="button" data-tip="Opens the burn proof, for a wallet that can’t sign: send a little $SEND from it to the burn address">Prove by a burn 🔥</button>' +
+              '<button class="g-btn g-btn-ghost" id="inv-proof-burn" type="button" data-tip="Opens the burn proof, for a wallet that can’t sign: send a little $SEND or ETH from it to the burn address">Prove by a burn 🔥</button>' +
               '<button class="g-btn g-btn-ghost" id="inv-proof-again" type="button" hidden data-tip="Runs the check again on the wallets you already linked">Check again ↻</button>' +
             '</div>' +
           '</div>' +
@@ -153,7 +153,7 @@
               '<li><span class="inv-tick">3</span><div><b>Turn on two-factor <em>(optional)</em></b><small>An authenticator app, your password, or a wallet you nominate as the key.</small></div></li>' +
               '<li><span class="inv-tick">4</span><div><b>Link more wallets <em>(optional)</em></b><small>Every wallet you link counts toward the same Send Power — and all of them stay read-only.</small></div></li>' +
             '</ul>' +
-            '<p class="inv-safe">🔒 All of it is read-only. Linking a wallet is one signature over a sentence: it moves nothing, approves nothing, and costs no gas — or, for a wallet that can’t sign, a dust burn of $SEND you send from it yourself, which is a real transaction. For your first hour, none of these settings stops to ask for your password.</p>' +
+            '<p class="inv-safe">🔒 All of it is read-only. Linking a wallet is one signature over a sentence: it moves nothing, approves nothing, and costs no gas — or, for a wallet that can’t sign, a dust burn of $SEND or ETH you send from it yourself, which is a real transaction. For your first hour, none of these settings stops to ask for your password.</p>' +
           '</div>' +
           '<div class="inv-actions">' +
             '<button class="g-btn g-btn-primary" id="inv-setup-go" type="button" data-tip="Closes this and opens your profile settings">Set up my profile →</button>' +
@@ -194,7 +194,7 @@
       '<h3 id="inv-rules-h">How to get in</h3>' +
       '<ol class="inv-tests inv-rules-list">' +
         '<li><span class="inv-tick">1</span><div><b>Redeem an invite code</b><small>Someone already inside hands you one. Each code works once.</small></div></li>' +
-        '<li><span class="inv-tick">2</span><div><b>Connect your wallet — read-only</b><small>You sign a sentence to prove the wallet is yours. That signature moves nothing, approves nothing and costs no gas. A wallet that can’t sign (GMGN) is proved instead by sending an exact dust amount of $SEND, shown to you, from it to the burn address yourself.</small></div></li>' +
+        '<li><span class="inv-tick">2</span><div><b>Connect your wallet — read-only</b><small>You sign a sentence to prove the wallet is yours. That signature moves nothing, approves nothing and costs no gas. A wallet that can’t sign (GMGN) is proved instead by sending an exact dust amount of $SEND or ETH, shown to you, from it to the burn address yourself.</small></div></li>' +
         '<li><span class="inv-tick">3</span><div><b>Hold <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span></b><small>Valued at the lower of the current price and its <span data-rule="median">24-hour</span> median, across every wallet you link, and you can\'t be a net seller. That unlocks full access: posting, calling and voting.</small></div></li>' +
       '</ol>' +
       '<p class="inv-note">Under <span data-rule="min">$100</span>? You can still make your account. It stays <b>read-only</b> until your wallets hold <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span>. Sell that $SEND within <span data-rule="hours">24 hours</span> of buying it and the account goes read-only for a day.</p>' +

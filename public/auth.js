@@ -56,7 +56,7 @@
 
     <div class="auth-tabs" role="tablist" aria-label="Sign-in method" aria-orientation="vertical">
       <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet" data-tip="Sign in or sign up by connecting a wallet and signing a free message">🦊 Connect wallet</button>
-      <button class="auth-tab" id="tab-burn" role="tab" aria-selected="false" aria-controls="pane-burn" data-tip="For GMGN and any wallet that can't sign: prove it by sending a dust amount of $SEND to the burn address">🔥 Burn Verification</button>
+      <button class="auth-tab" id="tab-burn" role="tab" aria-selected="false" aria-controls="pane-burn" data-tip="For GMGN and any wallet that can't sign: prove it by sending a dust amount of $SEND or ETH to the burn address">🔥 Burn Verification</button>
       <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email" data-tip="Sign in or sign up with an email and a password">✉️ Email</button>
     </div>
 
@@ -86,11 +86,11 @@
       <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
       <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
-      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a dust burn of $SEND instead of a signature">Use Burn Verification 🔥</button></p>
+      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a dust burn of $SEND or ETH instead of a signature">Use Burn Verification 🔥</button></p>
     </div>
 
     <div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>
-      <p class="modal-note">For a wallet that can’t sign a message — a <b>GMGN</b> wallet, or any wallet an app holds for you — or when you’d rather not sign. You prove the wallet by sending the <b>exact dust amount of $SEND</b> the site shows you (two cents’ worth at most) from it to the burn address, within an hour. You make that transaction yourself, in your own wallet app; this site never sends it or asks your wallet to.</p>
+      <p class="modal-note">For a wallet that can’t sign a message — a <b>GMGN</b> wallet, or any wallet an app holds for you — or when you’d rather not sign. You prove the wallet by sending the <b>exact dust amount of $SEND or of ETH</b> the site shows you (a few cents’ worth at most) from it to the burn address, within an hour. You make that transaction yourself, in your own wallet app; this site never sends it or asks your wallet to.</p>
       <p class="modal-note">🔑 <b>A burn can’t sign you in</b>, so Burn Verification goes with an <b>email and a password</b> — that’s how you sign in. Make your account (or sign in), and the burn step opens straight after.</p>
       <div class="bp-actions">
         <button class="btn btn-primary" type="button" id="burn-join" data-tip="Opens account creation with an email and a password; the burn step follows once you are in">Create account &amp; verify ✨</button>

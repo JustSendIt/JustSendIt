@@ -593,7 +593,7 @@ function loadConnectedWallet() {
       '<p class="modal-note" style="margin-top:0.2rem;">Connect a wallet to see your <b>$SEND &amp; $GWC holdings, trade history and PNL</b> here — pulled live from the chain. It\'s a <b>free signature, never a transaction</b>, and it unlocks your Holder Boost too. A wallet that can\'t sign (GMGN) can be proved by a burn instead.</p>' +
       '<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-top:0.5rem;">' +
         '<button class="btn btn-primary btn-sm" id="cw-connect" data-tip="Links a wallet by signature so this panel can read it">Connect wallet 🔗</button>' +
-        '<button class="btn btn-ghost btn-sm" id="cw-burn" data-tip="For a wallet that can’t sign: send the exact dust amount of $SEND shown from it to the burn address within an hour">Prove by a burn 🔥</button>' +
+        '<button class="btn btn-ghost btn-sm" id="cw-burn" data-tip="For a wallet that can’t sign: send the exact dust amount of $SEND or ETH shown from it to the burn address within an hour">Prove by a burn 🔥</button>' +
         '<a class="btn btn-ghost btn-sm" href="/tracker" data-tip="Opens the tracker to follow any address read-only">Or track any wallet 💼</a>' +
       '</div>';
     const c = document.getElementById('cw-connect');

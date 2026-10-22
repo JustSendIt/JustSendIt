@@ -1137,7 +1137,7 @@
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Be a <b>net accumulator</b> — you have bought more than you have sold.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Then keep it: selling that $SEND within <b>' + hrs + ' hours</b> of buying it is a strike on the read-only ladder — a day, then a week, then for good; $25 of $SEND a day buys it out, doubled if you sell that too.</span></li>' +
       '</ul>' +
-      '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction — or, for a wallet that can’t sign, a dust burn of $SEND you send from it yourself. ' + esc(p.reason || '') + '</p>' +
+      '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction — or, for a wallet that can’t sign, a dust burn of $SEND or ETH you send from it yourself. ' + esc(p.reason || '') + '</p>' +
     '</section>';
   }
 

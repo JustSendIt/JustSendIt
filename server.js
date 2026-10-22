@@ -596,9 +596,9 @@ CREATE TABLE IF NOT EXISTS bundle_plumbing (
   seen_on     TEXT,                              -- the token whose read found it first
   updated_at  INTEGER NOT NULL
 );
-/* Proving a wallet by a burn (owner, 2026-10-20): one row per hour-long window a member opened to show a wallet is
-   theirs by sending $SEND from it to 0x…dEaD, for wallets that cannot sign a message (GMGN's) or members who would
-   rather not. The wallet and the transaction are kept encrypted, like every wallet↔account link here. */
+/* Proving a wallet by a burn (owner, 2026-10-20; ETH as well as $SEND, 2026-10-21): one row per hour-long window a member
+   opened to show a wallet is theirs by sending dust $SEND or ETH from it to 0x…dEaD, for wallets that cannot sign a message
+   (GMGN's) or members who would rather not. The wallet and the transaction are kept encrypted, like every wallet↔account link here. */
 CREATE TABLE IF NOT EXISTS burn_proofs (
   id          INTEGER PRIMARY KEY,
   user_id     INTEGER NOT NULL,
@@ -615,7 +615,11 @@ CREATE TABLE IF NOT EXISTS burn_proofs (
   opened_by   TEXT,                              -- the session that opened it (its hashed token): ending the other sessions calls its window off
   foreign_seen INTEGER NOT NULL DEFAULT 0,       -- a burn of the amount landed in the hour but was not the wallet's own transaction (a Safe owner's, a relayer's)
   amount_enc  TEXT,                              -- the exact amount (in wei) this window asks for, encrypted: with the chain it would name the wallet
-  amount_seen_enc TEXT                           -- the wallet's own burn of a DIFFERENT amount in the hour (a typo), as $SEND text, encrypted
+  amount_seen_enc TEXT,                          -- the wallet's own burn of a DIFFERENT amount in the hour (a typo), as text with its coin ("48.2 $SEND", "0.000001 ETH"), encrypted
+  eth_amount_enc TEXT,                           -- the exact ETH amount (in wei) this window also takes, encrypted; NULL = ETH not offered (a contract wallet, or an earlier build's row)
+  eth_block   INTEGER,                           -- every block up to here has been read for the wallet's own ETH sends (or its nonce showed it sent nothing)
+  eth_nonce_enc TEXT,                            -- the wallet's transaction count at eth_block, encrypted: with the block it would narrow down the wallet
+  eth_none    TEXT                               -- why ETH was not offered: 'contract' (it has code) | 'busy' (too many sends to pick one out); NULL with no amount = an earlier build's row
 );
 CREATE INDEX IF NOT EXISTS idx_burn_proofs_status ON burn_proofs(status);
 CREATE INDEX IF NOT EXISTS idx_burn_proofs_user ON burn_proofs(user_id, id);
@@ -972,11 +976,15 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN redeem_mult REAL NOT NULL DEFAULT 1", // >1 makes buying out of read-only cost more (sybil rings pay double)
   "ALTER TABLE identities ADD COLUMN is_2fa INTEGER NOT NULL DEFAULT 0", // exactly one wallet per account may be the sign-in second factor
   "ALTER TABLE identities ADD COLUMN label TEXT",       // a name the owner gives a linked wallet, so a list of 0x… is readable
-  "ALTER TABLE identities ADD COLUMN proof TEXT",       // how a linked wallet was proved: NULL = it signed; 'burn' = it sent $SEND to 0x…dEaD (burn_proofs), and it may not be able to sign at all
+  "ALTER TABLE identities ADD COLUMN proof TEXT",       // how a linked wallet was proved: NULL = it signed; 'burn' = it sent $SEND or ETH to 0x…dEaD (burn_proofs), and it may not be able to sign at all
   "ALTER TABLE burn_proofs ADD COLUMN opened_by TEXT",               // (all four are in the CREATE above; these only bring a table made by an earlier build of it up to date)
   "ALTER TABLE burn_proofs ADD COLUMN foreign_seen INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE burn_proofs ADD COLUMN amount_enc TEXT",
   "ALTER TABLE burn_proofs ADD COLUMN amount_seen_enc TEXT",
+  "ALTER TABLE burn_proofs ADD COLUMN eth_amount_enc TEXT",          // ETH as well as $SEND (owner, 2026-10-21): the three are in the CREATE above too
+  "ALTER TABLE burn_proofs ADD COLUMN eth_block INTEGER",
+  "ALTER TABLE burn_proofs ADD COLUMN eth_nonce_enc TEXT",
+  "ALTER TABLE burn_proofs ADD COLUMN eth_none TEXT",
   "ALTER TABLE calls ADD COLUMN ip TEXT",               // bidx of the IP a call was made from — the signal for same-IP rings on one token
   "CREATE INDEX IF NOT EXISTS idx_users_signup_ip ON users(signup_ip)",
   "CREATE INDEX IF NOT EXISTS idx_calls_ip_token ON calls(ip, token_addr)",
@@ -13477,7 +13485,9 @@ async function linkWalletTo(me, address, how) {
    sending a small amount of $Send to the burn address … no minimum on the amount, can just be dust. Then the site can
    go look on chain to confirm the transaction was actually made by the wallet that the user is trying to confirm is
    theirs. Allow a one hour time limit … otherwise the process restarts." An account that proves a wallet this way must
-   have an email and a password: a burn signs nobody in, so they are how it signs in.
+   have an email and a password: a burn signs nobody in, so they are how it signs in. Owner, 2026-10-21: "make it so users
+   [can] send with a dust amount of $Send or Ethereum to the dead address for the burn verification" — so each window
+   takes either coin, each at its own exact amount.
 
    The whole rule:
      · the member — signed in, with an email and a password, past "confirm it's you" — names an address. Its window
@@ -13490,6 +13500,13 @@ async function linkWalletTo(me, address, how) {
        the wallet sent it in total in that transaction, should a transfer tax take a cut on the way, (b) the
        TRANSACTION was the wallet's own: sent by it, or its smart-account UserOperation (sentBy), so an app holding an
        allowance cannot make one for it, and (c) its block was stamped inside the window;
+     · ETH leaves no log, so it is read another way (burnProofEthRead): the wallet's transaction count, asked at the head
+       each pass, says whether it has sent anything since the blocks last read, and only then are those blocks read
+       whole for its own transactions. ETH counts when it went STRAIGHT from the wallet to 0x…dEaD — the transaction's
+       sender is the wallet, its recipient the burn address, its value the window's exact ETH amount — and succeeded,
+       in a block stamped inside the window. ETH a contract or a bundler moves for a wallet is not traced, so a wallet
+       with code (a Safe, a smart account) is not offered ETH at all: $SEND, whose UserOperation is traced, is its way.
+       An EIP-7702 account is still a key that sends its own transactions, and is offered both;
      · one burn proves one account: two open windows for one wallet never ask for the same amount, and if a burn ever
        matched two, neither would get it (the burn could not say which of them sent it) and both would be told;
      · a window ends unproved only once the chain has been READ past its deadline. A node that would not answer leaves
@@ -13508,6 +13525,8 @@ const BURN_PROOF_TICK_MS = burnEnvMs('BURN_PROOF_TICK_MS', 15e3) || 15e3;
 const BURN_PROOF_DAY_MAX = 8;                 // windows one account may open in 24 hours
 const BURN_PROOF_KEEP_MS = 7 * 864e5;         // a finished window is shown for this long, then deleted
 const BURN_PROOF_STALE_MS = 7 * 864e5;        // a window the chain could not be read for, for this long, ends
+const BURN_ETH_SCAN_STEP = burnEnvMs('BURN_ETH_SCAN_STEP', 600) || 600;   // blocks one pass covers for a wallet that sent something (the chain makes ~150 a pass)
+const BURN_ETH_BUSY = 10, BURN_ETH_BUSY_SPAN = 1000;   // more sends than this in the last ~1,000 blocks (about two minutes): ETH is not offered
 let burnProofBusy = false, burnProofCoolUntil = 0, burnProofWarnAt = 0, burnProofDown = false;
 const BURN_WRONG_AMOUNT = 'a burn from that wallet arrived, but not of the exact amount this hour asked for, so nothing was linked — start again for a new hour and amount';
 const burnProofReads = new Map();   // wallet -> { okAt, failing }: how the last read of THAT wallet's burns went (one wallet's trouble is not everyone's)
@@ -13534,21 +13553,40 @@ async function burnProofScale() {
   } catch {}
   return Math.max(-14, Math.min(6, px > 0 ? Math.floor(Math.log10(0.02 / (9999 * px))) : -4));
 }
+/* The ETH amount: three significant figures (100–999 of a power of ten in wei), the largest worth about five cents at the
+   ETH price — dust, and no more decimals than it must have (0.00000482 ETH at $4,000). One figure fewer than $SEND's:
+   ETH is worth so much a unit that a fourth would only add a decimal place to type. No price read: as if ETH were $10,000. */
+async function burnProofEthScale() {
+  // a person is waiting on the start: the price the site last read, or a fresh one if it comes within a second and a half
+  const usd = await Promise.race([ethUsd().catch(() => 0), sleep(1500).then(() => ethUsdCache.usd || 0)]);
+  return Math.max(6, Math.min(14, Math.floor(Math.log10(0.05e18 / (999 * (usd > 0 ? usd : 1e4))))));
+}
+// one of lo…hi times `scale` (wei) that no amount in `used` already is, or null when every one is taken
+function burnProofFree(used, lo, hi, scale) {
+  for (let i = 0; i < 64; i++) { const wei = (BigInt(lo + crypto.randomInt(0, hi - lo + 1)) * scale).toString(); if (!used.has(wei)) return wei; }
+  for (let n = BigInt(lo); n <= BigInt(hi); n++) { const wei = (n * scale).toString(); if (!used.has(wei)) return wei; }
+  return null;
+}
 // synchronous on purpose: the start route calls it with no await between it and the INSERT, so two starts cannot draw the same amount
 function burnProofPick(addrIdx, k) {
   const used = new Set(db.prepare("SELECT amount_enc FROM burn_proofs WHERE status = 'open' AND addr_idx = ?").all(addrIdx).map((r) => decField(r.amount_enc)));
-  const scale = 10n ** BigInt(18 + k);
-  for (let i = 0; i < 64; i++) { const wei = (BigInt(1000 + crypto.randomInt(0, 9000)) * scale).toString(); if (!used.has(wei)) return wei; }
-  for (let n = 1000n; n <= 9999n; n++) { const wei = (n * scale).toString(); if (!used.has(wei)) return wei; }
-  return null;   // every amount at this scale is open on this wallet already
+  return burnProofFree(used, 1000, 9999, 10n ** BigInt(18 + k));   // null: every amount at this scale is open on this wallet already
 }
+// ...and the ETH amount, the same way, among the ETH amounts open on that wallet
+function burnProofPickEth(addrIdx, e) {
+  const used = new Set(db.prepare("SELECT eth_amount_enc FROM burn_proofs WHERE status = 'open' AND addr_idx = ? AND eth_amount_enc IS NOT NULL").all(addrIdx).map((r) => decField(r.eth_amount_enc)));
+  return burnProofFree(used, 100, 999, 10n ** BigInt(e));
+}
+// a wrong amount seen, as kept: "48.2 $SEND" or "0.000001 ETH" (an earlier build kept the $SEND figure alone)
+const burnSeenText = (s) => (/ (\$SEND|ETH)$/.test(s) ? s : s + ' $SEND');
 function burnProofView(r) {
   if (!r) return null;
-  const amt = r.amount_enc ? decField(r.amount_enc) : null, seen = r.amount_seen_enc ? decField(r.amount_seen_enc) : null;
+  const amt = r.amount_enc ? decField(r.amount_enc) : null, seenRaw = r.amount_seen_enc ? decField(r.amount_seen_enc) : null;
+  const eth = r.eth_amount_enc ? decField(r.eth_amount_enc) : null, seen = seenRaw ? burnSeenText(seenRaw) : null;
   /* the figures of a wrong-amount ending are put into its reason here, for the owner's own view, and never stored with it:
      the reason column is plain text, and an amount with the chain names the wallet */
   const reason = r.status === 'expired' && r.reason === BURN_WRONG_AMOUNT && seen && amt
-    ? 'a burn from that wallet arrived, but of ' + seen + ' $SEND, not the exact ' + sendText(amt) + ' $SEND this hour asked for, so nothing was linked — start again for a new hour and amount'
+    ? 'a burn from that wallet arrived, but of ' + seen + ', not the exact ' + sendText(amt) + ' $SEND' + (eth ? ' or ' + sendText(eth) + ' ETH' : '') + ' this hour asked for, so nothing was linked — start again for a new hour and amount'
     : r.reason;
   return {
     id: r.id, address: decField(r.addr_enc) || null, status: r.status, reason: reason || null,
@@ -13559,7 +13597,10 @@ function burnProofView(r) {
     foreignSeen: !!r.foreign_seen,
     amount: amt,                                                      // wei, exact
     amountText: amt ? sendText(amt) : null,
-    amountSeen: seen,
+    ethAmount: eth,                                                   // wei, exact; null = ETH is not offered for this wallet
+    ethAmountText: eth ? sendText(eth) : null,                        // ETH has 18 decimals too
+    ethNone: eth ? null : r.eth_none || (r.eth_block == null ? 'earlier' : 'contract'),   // why there is no ETH amount: a wallet with code, one too busy, or an hour started before ETH was taken
+    amountSeen: seen,                                                 // with its coin: "48.2 $SEND", "0.000001 ETH"
   };
 }
 function burnProofState(me, r) {
@@ -13619,7 +13660,7 @@ async function burnProofMatch(l) {
   const own = sentBy(entry, from);
   if (!hit.length) {
     // the wallet's own burn, but not the amount asked: remembered, so the window can say "it has to be exactly …"
-    if (own) for (const r of inWin) db.prepare("UPDATE burn_proofs SET amount_seen_enc = ? WHERE id = ? AND status = 'open'").run(encField(sendText(gross > v ? gross : v)), r.id);   // what the wallet sent, as the matcher counts it
+    if (own) for (const r of inWin) db.prepare("UPDATE burn_proofs SET amount_seen_enc = ? WHERE id = ? AND status = 'open'").run(encField(sendText(gross > v ? gross : v) + ' $SEND'), r.id);   // what the wallet sent, as the matcher counts it
     return;
   }
   if (!own) {
@@ -13638,9 +13679,120 @@ async function burnProofMatch(l) {
   }
   for (const r of hit) await completeBurnProof(r, from, tx);   // one account (a second window of its own just ends linked)
 }
+/* One ETH send the wallet itself made straight to 0x…dEaD, and that succeeded (burnProofEthRead found it): the windows on
+   that wallet it can prove, by the same rules as a $SEND burn — a later block than the window's opening, stamped inside
+   it, of exactly the window's ETH amount. The sender is the wallet by construction, so there is no "someone else sent it". */
+async function burnProofMatchEth(from, hash, v, bn, ms) {
+  const rows = db.prepare("SELECT * FROM burn_proofs WHERE status = 'open' AND addr_idx = ? AND from_block < ? AND eth_amount_enc IS NOT NULL").all(bidx(from), bn);
+  const inWin = rows.filter((r) => ms >= Math.floor(r.opened_at / 1000) * 1000 - BURN_PROOF_OPEN_SKEW_MS && ms <= r.deadline + BURN_PROOF_SKEW_MS);
+  if (!inWin.length) return;
+  const want = (r) => { try { return BigInt(decField(r.eth_amount_enc) || '0'); } catch { return 0n; } };
+  const hit = inWin.filter((r) => want(r) > 0n && want(r) === v);
+  if (!hit.length) {
+    for (const r of inWin) db.prepare("UPDATE burn_proofs SET amount_seen_enc = ? WHERE id = ? AND status = 'open'").run(encField(sendText(v) + ' ETH'), r.id);
+    return;
+  }
+  const tx = String(hash).toLowerCase();
+  if (new Set(hit.map((r) => r.user_id)).size > 1) {   // two open windows on one wallet never share an ETH amount (burnProofPickEth): kept as the $SEND rule's guard
+    for (const r of hit) burnProofEnd(r, 'refused', 'another account was proving this same wallet when the burn landed, and it fit both windows, so it cannot say which of you sent it — nothing was linked. Start again; a new hour asks for a new amount', tx);
+    return;
+  }
+  for (const r of hit) await completeBurnProof(r, from, tx);
+}
+/* The ETH side of one wallet's windows. Each keeps (eth_block, its transaction count there): every block up to eth_block has
+   been read for the wallet's own transactions, or the count showed there were none. A pass asks the count at the head —
+   the node keeps recent state (measured 2026-10-21: it answered 3,000 blocks back, not 25,000) — and when it has not
+   moved, the wallet sent nothing since and the windows move on to the head: one read. When it has, the blocks that hold
+   the wallet's new transactions are found by asking the count in between (burnEthSendBlocks) and only those are read
+   whole, so a send costs a few dozen reads, not one per block; every transaction the wallet sent straight to 0x…dEaD
+   with ETH is then checked. Two bounds keep it from taking the site's shared read pace for long:
+     · a wallet that was busy when the hour started is not offered ETH at all (BURN_ETH_BUSY, at the start route);
+     · the read never goes past the last block stamped inside the latest of these windows (its deadline and the clock
+       slack): once the head is past that, a pass reads up to it and then moves the windows straight on to the head, since
+       no later block can prove any of them. So however long the chain could not be read, catching up is one hour of
+       blocks at most, never a chase after the head.
+   A pass covers BURN_ETH_SCAN_STEP blocks at most. A block or a count the node will not give back stops the pass where it
+   is (a refusal past a minute ends the tick, like every other read here), and the next pass starts from there. */
+const burnHex = (n) => '0x' + n.toString(16);
+const burnRange = (lo, hi) => { const out = []; for (let b = lo + 1; b <= hi; b++) out.push(b); return out; };
+const burnPaced = (calls) => pacedBatchAll(calls, null, requestThrottleGuard);   // a refusal past a minute throws a throttle: the tick stops and cools off
+/* The blocks in (lo, hi] holding a transaction the wallet sent, given its count at lo and at hi: the count is asked at up to
+   24 blocks in between, in one batch, and each stretch where it rose is narrowed the same way. A stretch the wallet was busy
+   in (a send for every few blocks), a short one, or one whose counts the node no longer keeps comes back whole, to be read. */
+async function burnEthSendBlocks(addr, lo, nLo, hi, nHi) {
+  if (nHi === nLo) return [];
+  if (nHi < nLo) throw new Error('the wallet\'s transaction count went down between two blocks');
+  if (hi - lo <= 8 || (nHi - nLo) * 4 >= hi - lo) return burnRange(lo, hi);
+  const k = Math.min(24, hi - lo - 1), pts = [];
+  for (let i = 1; i <= k; i++) { const p = lo + Math.round(i * (hi - lo) / (k + 1)); if (p > lo && p < hi && p !== pts[pts.length - 1]) pts.push(p); }
+  const got = await burnPaced(pts.map((p) => ['eth_getTransactionCount', [addr, burnHex(p)]]));
+  const ns = got.map((h) => (h == null ? NaN : parseInt(h, 16)));
+  if (ns.some((n) => !Number.isSafeInteger(n))) return burnRange(lo, hi);   // state the node no longer keeps: read the stretch whole
+  const out = [];
+  let pl = lo, pn = nLo;
+  for (let i = 0; i <= pts.length; i++) {
+    const p = i < pts.length ? pts[i] : hi, n = i < pts.length ? ns[i] : nHi;
+    if (n !== pn) out.push(...(await burnEthSendBlocks(addr, pl, pn, p, n)));
+    pl = p; pn = n;
+  }
+  return out;
+}
+// the last block in [lo, hi] stamped at or before ms (block stamps never go backwards); lo itself when even it is later
+async function burnLastBlockBy(lo, hi, ms) {
+  if ((await chainBlockTime(lo)) > ms) return lo;
+  if ((await chainBlockTime(hi)) <= ms) return hi;
+  while (hi - lo > 1) { const mid = Math.floor((lo + hi) / 2); if ((await chainBlockTime(mid)) <= ms) lo = mid; else hi = mid; }
+  return lo;
+}
+async function burnProofEthRead(addr, rows, head) {
+  const base = rows.reduce((m, r) => (m == null || r.eth_block < m.eth_block ? r : m), null);
+  const b0 = base.eth_block, n0 = Number(decField(base.eth_nonce_enc));
+  if (!(b0 < head)) return;
+  if (!Number.isSafeInteger(n0)) throw new Error('this window\'s place in the wallet\'s ETH sends could not be read');
+  const nHead = parseInt(await rpcRetry(() => rpc('eth_getTransactionCount', [addr, burnHex(head)])), 16);
+  if (!Number.isSafeInteger(nHead)) throw new Error('the chain gave no transaction count for the wallet');
+  const move = (to, n) => { const ids = rows.map((r) => r.id); db.prepare("UPDATE burn_proofs SET eth_block = ?, eth_nonce_enc = ? WHERE status = 'open' AND eth_block < ? AND id IN (" + ids.map(() => '?').join(',') + ')').run(to, encField(String(n)), to, ...ids); };
+  if (nHead === n0) return move(head, nHead);   // it sent nothing since: nothing to read
+  // no block after the last one stamped inside the latest of these windows can prove any of them
+  const limitMs = Math.max(...rows.map((r) => r.deadline)) + BURN_PROOF_SKEW_MS;
+  const top = (await chainBlockTime(head)) > limitMs ? await burnLastBlockBy(b0, head, limitMs) : head;
+  if (top <= b0) return move(head, nHead);
+  const end = Math.min(top, b0 + BURN_ETH_SCAN_STEP);
+  let nEnd = nHead;
+  if (end < head) {   // the count where this pass stops, when the node still keeps it; if not, this stretch is read whole and counted
+    const h = (await burnPaced([['eth_getTransactionCount', [addr, burnHex(end)]]]))[0];
+    nEnd = h == null ? NaN : parseInt(h, 16);
+  }
+  const known = Number.isSafeInteger(nEnd);
+  const nums = known ? await burnEthSendBlocks(addr, b0, n0, end, nEnd) : burnRange(b0, end);
+  const blocks = nums.length ? await burnPaced(nums.map((b) => ['eth_getBlockByNumber', [burnHex(b), true]])) : [];
+  let found = 0;
+  for (let i = 0; i < nums.length; i++) {
+    const blk = blocks[i];
+    if (!blk || !Array.isArray(blk.transactions) || parseInt(blk.number, 16) !== nums[i]) throw new Error('block ' + nums[i] + ' could not be read whole');
+    const ms = parseInt(blk.timestamp, 16) * 1000;
+    for (const t of blk.transactions) {
+      if (!t || typeof t !== 'object') throw new Error('block ' + nums[i] + ' came back without its transactions');
+      if (String(t.from || '').toLowerCase() !== addr) continue;
+      const ty = parseInt(t.type == null ? '0x0' : t.type, 16);
+      if (!(ty >= 0 && ty <= 4)) continue;   // an Arbitrum system transaction (a deposit, a retryable) names a sender that did not sign it here
+      found++;
+      let v = 0n; try { v = BigInt(t.value || '0x0'); } catch {}
+      if (String(t.to || '').toLowerCase() !== DEAD_ADDR || !(v > 0n)) continue;
+      const rc = await rpcRetry(() => rpc('eth_getTransactionReceipt', [t.hash]));
+      if (!rc) throw new Error('the receipt of a send to the burn address is not available yet');
+      if (rc.status === '0x1') await burnProofMatchEth(addr, t.hash, v, nums[i], ms);
+    }
+  }
+  if (end === top && top < head) return move(head, nHead);   // read through the last block that could prove any of them
+  /* read to `end` whole with no count there: what it was plus what was found. That can only come out low — an EIP-7702
+     authorization the wallet signed raises its count inside someone else's transaction — and a low count only makes the
+     next pass look again and find nothing, never skip a send */
+  move(end, known ? nEnd : n0 + found);
+}
 async function burnProofTick() {
   if (burnProofBusy || now() < burnProofCoolUntil) return;
-  const open = db.prepare("SELECT id, addr_enc, scanned_to FROM burn_proofs WHERE status = 'open'").all();
+  const open = db.prepare("SELECT id, addr_enc, scanned_to, deadline, eth_block, eth_nonce_enc, eth_amount_enc IS NOT NULL AS eth_on FROM burn_proofs WHERE status = 'open'").all();
   if (!open.length) { burnProofDown = false; return; }   // nothing watched, nothing to report as down
   burnProofBusy = true;
   try {
@@ -13653,6 +13805,7 @@ async function burnProofTick() {
     const byAddr = new Map();
     for (const r of open) { const a = decField(r.addr_enc); if (!a) continue; if (!byAddr.has(a)) byAddr.set(a, []); byAddr.get(a).push(r); }
     for (const [addr, rows] of byAddr) {
+      let failed = null;
       try {
         const from = Math.min(...rows.map((r) => r.scanned_to)) + 1;
         if (from <= head) {
@@ -13662,7 +13815,6 @@ async function burnProofTick() {
         // only the windows this pass covered move on: one opened meanwhile is read from its own block next time
         const ids = rows.map((r) => r.id);
         db.prepare("UPDATE burn_proofs SET scanned_to = ? WHERE status = 'open' AND scanned_to < ? AND id IN (" + ids.map(() => '?').join(',') + ')').run(head, head, ...ids);
-        burnProofReads.set(addr, { okAt: now(), failing: false });
       } catch (e) {
         if (isThrottle(e)) throw e;   // the node is refusing: stop asking it this round
         // a wallet that sent more to 0x…dEaD in the hour than one read may hold will be just as unreadable next time: say so now
@@ -13671,13 +13823,21 @@ async function burnProofTick() {
           burnProofReads.delete(addr);
           continue;
         }
-        burnProofReads.set(addr, { okAt: (burnProofReads.get(addr) || {}).okAt || 0, failing: true });
-        if (now() - burnProofWarnAt > 5 * 60e3) { burnProofWarnAt = now(); console.warn('[burnproof] one wallet\'s burns could not be read: ' + ((e && e.message) || e) + ' — its window keeps waiting'); }
+        failed = e;
       }
+      // ETH, read on its own: a $SEND read that failed does not hold it back, nor the other way round
+      const eth = rows.filter((r) => r.eth_on && r.eth_block != null);
+      if (eth.length) {
+        try { await burnProofEthRead(addr, eth, head); }
+        catch (e) { if (isThrottle(e)) throw e; failed = failed || e; }
+      }
+      if (!failed) { burnProofReads.set(addr, { okAt: now(), failing: false }); continue; }
+      burnProofReads.set(addr, { okAt: (burnProofReads.get(addr) || {}).okAt || 0, failing: true });
+      if (now() - burnProofWarnAt > 5 * 60e3) { burnProofWarnAt = now(); console.warn('[burnproof] one wallet\'s burns could not be read: ' + ((failed && failed.message) || failed) + ' — its window keeps waiting'); }
     }
     for (const a of [...burnProofReads.keys()]) if (!byAddr.has(a)) burnProofReads.delete(a);   // wallets no window is proving any more
-    // a window ends unproved only once the chain itself — read through the head — is stamped past its deadline
-    const due = db.prepare("SELECT id, deadline, foreign_seen, amount_seen_enc FROM burn_proofs WHERE status = 'open' AND scanned_to >= ? AND deadline < ?").all(head, now() - BURN_PROOF_SKEW_MS);
+    // a window ends unproved only once the chain itself — read through the head, for $SEND and for ETH — is stamped past its deadline
+    const due = db.prepare("SELECT id, deadline, foreign_seen, amount_seen_enc FROM burn_proofs WHERE status = 'open' AND scanned_to >= ? AND (eth_amount_enc IS NULL OR eth_block >= ?) AND deadline < ?").all(head, head, now() - BURN_PROOF_SKEW_MS);
     if (due.length) {
       const headMs = await chainBlockTime(head);
       for (const r of due) {
@@ -13853,7 +14013,7 @@ function settleBeta() {
 
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
    are for. This decides who may make an account. */
-const TOS_VERSION = '2026-10-20';   // 2026-10-14: the Arcade's slot machine (Just Spin It) joins Rocket Run in §§1, 2, 31 and 45
+const TOS_VERSION = '2026-10-21';   // 2026-10-21: §9(g) — a burn proof takes ETH as well as $SEND (2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45)
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
@@ -14492,7 +14652,7 @@ function holderProofState(u) {
        never asks for one: personal_sign puts a sentence in front of you and returns a signature over
        that sentence. It cannot move a token, and nothing here ever calls eth_sendTransaction. The burn
        proof is the one exception to "nothing moves", and it is the member's own transaction, said as such. */
-    readOnly: 'Connecting is read-only. You sign a sentence to prove the wallet is yours — that signature moves nothing, approves nothing, and costs no gas. This site can never send your funds anywhere. A wallet that can’t sign can be proved instead by sending the exact dust amount of $SEND the site shows you from it to the burn address yourself — a real transaction you make in your own wallet app, and what you send is gone for good.',
+    readOnly: 'Connecting is read-only. You sign a sentence to prove the wallet is yours — that signature moves nothing, approves nothing, and costs no gas. This site can never send your funds anywhere. A wallet that can’t sign can be proved instead by sending the exact dust amount of $SEND or ETH the site shows you from it to the burn address yourself — a real transaction you make in your own wallet app, and what you send is gone for good.',
   };
 }
 // only the read-only SANCTION — for an account's own profile, which a new member may set up before the $SEND check
@@ -16147,7 +16307,20 @@ const server = http.createServer(async (req, res) => {
         try { head = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16); } catch {}
         if (!(head > 0)) return bad(res, 'the chain isn’t answering right now, so the hour can’t start yet — try again in a minute', 503);
         burnProofDown = false;   // it just answered
-        const k = await burnProofScale();
+        /* where the ETH side starts: the wallet's transaction count at that same block (the watcher reads its sends from there
+           on), and whether it has code — a contract wallet's ETH moves through its contract, which is not traced, so it is
+           offered $SEND alone. An EIP-7702 account's code is only a pointer (0xef0100…): it is a key, and sends its own. */
+        /* ...and how busy it is: a wallet that sent more than BURN_ETH_BUSY transactions in the last BURN_ETH_BUSY_SPAN blocks
+           would have its ETH side read block by block all hour (the shared read pace, for everyone) — it is offered $SEND alone */
+        let nonceAt = null, code = null, nonceAgo = null;
+        try { [nonceAt, code, nonceAgo] = await rpcRetry(() => rpcBatch([['eth_getTransactionCount', [address, burnHex(head)]], ['eth_getCode', [address, burnHex(head)]], ['eth_getTransactionCount', [address, burnHex(Math.max(0, head - BURN_ETH_BUSY_SPAN))]]])); } catch {}
+        const nonce0 = nonceAt == null ? NaN : parseInt(nonceAt, 16);
+        // a count or a code the node would not give: no hour on a guess (an unread code could be a contract offered ETH it cannot use)
+        if (!Number.isSafeInteger(nonce0) || code == null) return bad(res, 'the chain isn’t answering right now, so the hour can’t start yet — try again in a minute', 503);
+        const ethNone = !(code === '0x' || /^0xef0100[0-9a-f]{40}$/i.test(code)) ? 'contract'
+          : nonceAgo != null && nonce0 - parseInt(nonceAgo, 16) > BURN_ETH_BUSY ? 'busy' : null;
+        const ethOk = !ethNone;
+        const k = await burnProofScale(), ethK = await burnProofEthScale();
         /* ---- from here to the INSERT, no await: the checks, the call-off of this account's open window, the amount and the row
            happen as one step, so parallel starts cannot each see room under the daily cap, or draw the same amount ---- */
         const ident = findIdentity('wallet', address);
@@ -16157,9 +16330,12 @@ const server = http.createServer(async (req, res) => {
         if (today >= BURN_PROOF_DAY_MAX) return bad(res, 'you have started ' + BURN_PROOF_DAY_MAX + ' burn proofs in the last 24 hours — try again tomorrow', 429);
         const amount = burnProofPick(bidx(address), k);
         if (!amount) return bad(res, 'too many proofs are open on that wallet right now — try again in an hour', 503);
+        const ethAmount = ethOk ? burnProofPickEth(bidx(address), ethK) : null;
+        if (ethOk && !ethAmount) return bad(res, 'too many proofs are open on that wallet right now — try again in an hour', 503);   // so "no ETH" always has its reason
         db.prepare("UPDATE burn_proofs SET status = 'cancelled', reason = 'a new window was started', done_at = ? WHERE user_id = ? AND status = 'open'").run(now(), me.id);   // one open window per account
         const at = now();
-        const id = db.prepare('INSERT INTO burn_proofs (user_id, addr_idx, addr_enc, from_block, scanned_to, opened_at, deadline, opened_by, amount_enc) VALUES (?,?,?,?,?,?,?,?,?)').run(me.id, bidx(address), encField(address), head, head, at, at + BURN_PROOF_MS, hashToken(me.sid), encField(amount)).lastInsertRowid;
+        const id = db.prepare('INSERT INTO burn_proofs (user_id, addr_idx, addr_enc, from_block, scanned_to, opened_at, deadline, opened_by, amount_enc, eth_amount_enc, eth_block, eth_nonce_enc, eth_none) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+          .run(me.id, bidx(address), encField(address), head, head, at, at + BURN_PROOF_MS, hashToken(me.sid), encField(amount), ethAmount ? encField(ethAmount) : null, head, encField(String(nonce0)), ethNone).lastInsertRowid;
         // a way a wallet can join this account: said where the owner looks, like every other change to how it is reached
         notify(me.id, '🔥', 'A one-hour burn proof was started on your account. Not you? Cancel it in Settings → Security (Prove one by a burn) and change your password.', 'alert');
         return send(res, 200, Object.assign({ ok: true }, burnProofState(me, db.prepare('SELECT * FROM burn_proofs WHERE id = ?').get(id))));

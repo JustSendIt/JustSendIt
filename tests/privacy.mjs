@@ -175,7 +175,7 @@ try {
     // the one script from another company is Cloudflare's Web Analytics beacon (the two hosts Cloudflare's own CSP guidance names), and the privacy page says so
     check('  ...the only script host beside this site is Cloudflare\'s analytics beacon, its report endpoint the only other connect host, and no inline script', /script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/.test(csp) && /connect-src 'self' https:\/\/rpc\.mainnet\.chain\.robinhood\.com https:\/\/cloudflareinsights\.com(;|$)/.test(csp) && !/unsafe-inline'[^;]*;?[^;]*script|script-src[^;]*(nonce|unsafe-inline)/.test(csp), csp);
     const privHtml = readFileSync(path.join(PUB, 'privacy.html'), 'utf8');
-    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-10-20/.test(privHtml) && !/no analytics scripts/.test(privHtml));
+    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-10-21/.test(privHtml) && !/no analytics scripts/.test(privHtml));
     const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));
     const google = pages.filter((f) => /fonts\.(googleapis|gstatic)\.com/.test(readFileSync(path.join(PUB, f), 'utf8').replace(/<p>[\s\S]*?<\/p>/g, '')));
     check('no page loads Google Fonts', google.length === 0, google.join(','));

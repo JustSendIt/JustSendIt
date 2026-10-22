@@ -1,10 +1,10 @@
 /* ===== Proving a wallet by a burn — the panel =====
    Owner, 2026-10-20: a wallet that cannot sign a message (GMGN's, or any wallet an app holds for you), or a member who
-   would rather not sign, proves the wallet is theirs by sending a dust amount of $SEND from it to the burn address
-   0x…dEaD within an hour. The server reads the chain and links the wallet when it sees that burn, sent by the wallet
-   itself (server.js, "Proving a wallet by a burn" — the rule lives there; this only shows it). The amount is one exact
-   dust figure the server picks for each hour (about two cents' worth at most): a burn the wallet makes for any other
-   reason never carries it, so nobody can claim a wallet by keeping a window open on it.
+   would rather not sign, proves the wallet is theirs by sending a dust amount of $SEND — or of ETH (owner, 2026-10-21) —
+   from it to the burn address 0x…dEaD within an hour. The server reads the chain and links the wallet when it sees that
+   burn, sent by the wallet itself (server.js, "Proving a wallet by a burn" — the rule lives there; this only shows it).
+   Each coin has one exact dust figure the server picks for each hour (a few cents' worth at most): a burn the wallet
+   makes for any other reason never carries it, so nobody can claim a wallet by keeping a window open on it.
 
    What this panel never does: build, ask for or send that transaction. It shows the two addresses and a clock, and
    the member makes the burn in their own wallet app. It also never signs anyone in: a burn proves a wallet, not a
@@ -73,14 +73,15 @@
   /* ---------- what the panel shows, from the server's answer ---------- */
   const intro = () =>
     '<p class="modal-note">For a wallet that can’t sign a message — a <b>GMGN</b> wallet, for one — or when you’d rather not sign. ' +
-    'You send <b>a dust amount of $SEND</b> from that wallet to the burn address — the exact figure this panel gives you, two cents’ worth at most — and the site sees on Robinhood Chain that the wallet itself sent it.</p>';
+    'You send <b>a dust amount of $SEND or ETH</b> from that wallet to the burn address — the exact figure this panel gives you, a few cents’ worth at most — and the site sees on Robinhood Chain that the wallet itself sent it.</p>';
   const warnings = () =>
     '<ul class="bp-rules">' +
       '<li>🔥 <b>Whatever you send is destroyed for good</b> — nobody can get it back, us included — and the transaction costs a little ETH for gas (unless your smart wallet’s gas is sponsored).</li>' +
       '<li>🙋 <b>You make the transaction yourself</b>, in your own wallet app. This site never sends it and never asks your wallet to.</li>' +
       '<li>🛑 <b>Only ever to the burn address shown here, and only the amount on your own screen.</b> Anyone who asks you to send somewhere else, or a different or larger amount to prove a wallet, is not us.</li>' +
-      '<li>✍️ <b>It has to be the wallet’s own transaction</b>, sent from its own address (or as its own smart-account UserOperation, even when a bundler carries it). A Safe or multisig run by an owner key, or a send a relayer makes for it outside a UserOperation, doesn’t count — such a wallet can usually sign a message instead.</li>' +
-      '<li>⏳ Inside a day of your last buy, burning more than 2% of the bag you joined with counts like a sale in the first-day watch — dust doesn’t.</li>' +
+      '<li>✍️ <b>It has to be the wallet’s own transaction</b>, sent from its own address (or, for $SEND, as its own smart-account UserOperation, even when a bundler carries it). A Safe or multisig run by an owner key, or a send a relayer makes for it outside a UserOperation, doesn’t count — such a wallet can usually sign a message instead.</li>' +
+      '<li>⛽ <b>ETH counts only when it goes straight from the wallet to the burn address</b>, in a transaction sent from the wallet’s own address — from any wallet app, GMGN included. ETH that a smart account, a contract, a relayer or a bundler moves for the wallet isn’t traced: a smart-account wallet sends $SEND instead.</li>' +
+      '<li>⏳ Inside a day of your last buy, burning more than 2% of the $SEND bag you joined with counts like a sale in the first-day watch — dust doesn’t, and ETH never touches it.</li>' +
     '</ul>';
 
   function viewSignedOut() {
@@ -127,7 +128,7 @@
             '<input class="addr-input" id="bp-addr" autocomplete="off" spellcheck="false" maxlength="42" placeholder="0x…" value="' + esc(value) + '">' +
             '<ol class="bp-steps">' +
               '<li>Start your hour below.</li>' +
-              '<li>In that wallet’s own app, send <b>the exact amount of $SEND</b> this panel shows next to the burn address it shows.</li>' +
+              '<li>In that wallet’s own app, send <b>the exact amount of $SEND or of ETH</b> this panel shows to the burn address it shows — either one.</li>' +
               '<li>The site sees the burn and links the wallet — you can close this, it keeps checking.</li>' +
             '</ol>' +
             warnings() +
@@ -143,21 +144,34 @@
     return '⛓️ Watching the chain — last read ' + (sec < 120 ? sec + ' s' : Math.round(sec / 60) + ' min') + ' ago.';
   };
   const foreignText = '⚠️ A burn of that amount arrived, but it was sent by another address (an owner key, a relayer, or an app with an allowance) — it doesn’t count. Send one from the wallet itself.';
-  const seenText = (p) => '⚠️ A burn of ' + p.amountSeen + ' $SEND from this wallet arrived — the proof needs exactly ' + p.amountText + ' $SEND. Send that amount; the hour is still running.';
+  const wantText = (p) => 'exactly ' + p.amountText + ' $SEND' + (p.ethAmountText ? ' or exactly ' + p.ethAmountText + ' ETH' : '');
+  const seenText = (p) => '⚠️ A burn of ' + p.amountSeen + ' from this wallet arrived — the proof needs ' + wantText(p) + '. Send that; the hour is still running.';
 
   function viewOpen(s) {
     const p = s.proof;
-    return '<p class="modal-note bp-lead">Send exactly <b class="bp-mono">' + esc(p.amountText) + ' $SEND</b> from <b class="bp-mono">' + esc(short(p.address)) + '</b> to the burn address below. ' +
+    const eth = p.ethAmountText;
+    return '<p class="modal-note bp-lead">' + (eth
+          ? 'Send <b>one</b> of these from <b class="bp-mono">' + esc(short(p.address)) + '</b> to the burn address below: exactly <b class="bp-mono">' + esc(p.amountText) + ' $SEND</b>, or exactly <b class="bp-mono">' + esc(eth) + ' ETH</b>. '
+          : 'Send exactly <b class="bp-mono">' + esc(p.amountText) + ' $SEND</b> from <b class="bp-mono">' + esc(short(p.address)) + '</b> to the burn address below. ') +
         '<span id="bp-clock" aria-live="off"></span></p>' +
-      '<div class="f-label">The exact amount <span class="f-hint">— a burn of any other amount doesn’t count</span></div>' +
-      '<div class="contract-box bp-box bp-amount"><code>' + esc(p.amountText) + ' $SEND</code>' +
-        '<button class="copy-btn" type="button" data-copy="' + esc(p.amountText) + '" data-tip="Copies the exact amount to paste into your wallet\'s amount field">Copy 📋</button></div>' +
-      '<div class="f-label">The burn address</div>' +
+      '<div class="f-label">The burn address <span class="f-hint">— the recipient, whichever coin you send</span></div>' +
       '<div class="contract-box bp-box"><code>' + esc(s.burnAddress) + '</code>' +
         '<button class="copy-btn" type="button" data-copy="' + esc(s.burnAddress) + '" data-tip="Copies the burn address to paste into your wallet as the recipient">Copy 📋</button></div>' +
-      '<div class="f-label">The coin to send: $SEND on Robinhood Chain (chain ID ' + esc(s.chainId) + ')</div>' +
+      '<div class="f-label">' + (eth ? 'Either this' : 'The') + ' exact amount of $SEND <span class="f-hint">— any other amount doesn’t count</span></div>' +
+      '<div class="contract-box bp-box bp-amount"><code>' + esc(p.amountText) + ' $SEND</code>' +
+        '<button class="copy-btn" type="button" data-copy="' + esc(p.amountText) + '" data-tip="Copies the exact $SEND amount to paste into your wallet\'s amount field">Copy 📋</button></div>' +
+      '<div class="f-label">The coin: $SEND on Robinhood Chain (chain ID ' + esc(s.chainId) + ')</div>' +
       '<div class="contract-box bp-box"><code>' + esc(s.token) + '</code>' +
         '<button class="copy-btn" type="button" data-copy="' + esc(s.token) + '" data-tip="Copies the $SEND contract, to find the right coin in your wallet">Copy 📋</button></div>' +
+      (eth
+        ? '<div class="f-label">Or this exact amount of ETH <span class="f-hint">— Robinhood Chain’s own coin, the one you pay gas with; any other amount doesn’t count</span></div>' +
+          '<div class="contract-box bp-box bp-amount"><code>' + esc(eth) + ' ETH</code>' +
+            '<button class="copy-btn" type="button" data-copy="' + esc(eth) + '" data-tip="Copies the exact ETH amount to paste into your wallet\'s amount field">Copy 📋</button></div>'
+        : p.ethNone === 'contract'
+          ? '<p class="modal-note">This wallet has code on Robinhood Chain (a smart-contract wallet), so this hour takes <b>$SEND</b> only: ETH it sends goes through that code, which the site can’t trace back to it. A smart account counts with $SEND sent as its own ERC-4337 operation; a Safe or multisig transaction that an owner key executes doesn’t count — such a wallet can usually sign a message instead.</p>'
+          : p.ethNone === 'busy'
+          ? '<p class="modal-note">This wallet sent more than ten transactions in about the two minutes before this hour started — too many for the site to pick an ETH send out among them — so this hour takes <b>$SEND</b> only. Or wait until it is quieter, cancel this and start a new hour.</p>'
+          : '<p class="modal-note">This hour started before ETH could be used, so it takes <b>$SEND</b> only. To send ETH instead, cancel it and start a new hour.</p>') +
       '<p class="modal-note">✅ <b>From that wallet itself.</b> A transfer from any other wallet, one an app makes from it with an allowance, or a relayed send doesn’t count. The full address you’re proving: <span class="bp-mono">' + esc(p.address) + '</span></p>' +
       '<p class="modal-note is-err" id="bp-foreign"' + (p.foreignSeen ? '' : ' hidden') + '>' + esc(foreignText) + '</p>' +
       '<p class="modal-note is-err" id="bp-seen"' + (p.amountSeen ? '' : ' hidden') + '>' + (p.amountSeen ? esc(seenText(p)) : '') + '</p>' +
