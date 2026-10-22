@@ -213,8 +213,8 @@ try {
   /* owner, 2026-10-22: "add a search box to the wallet tracker transactions" — every word typed found in a token's symbol or
      address, the hash or the type; the counts, the list and the CSV follow it like the other filters */
   const zQ = fakeZone(); ctx.renderTracker(zQ, rep, { usd: true });
-  check('the search: a labelled search box first, before the filters, empty by default',
-    /<div class="trk-act-search"><label class="trk-act-tok" for="([^"]+)-act-q">Search<\/label><input type="search" id="\1-act-q" value="" placeholder="Token, address, tx hash or type"[^>]* data-tip="[^"]+" data-act-search data-trk-key="act:search"><\/div><div class="trk-act-tools"/.test(zQ.innerHTML));
+  check('the search: a box named "Search transactions" first, before the filters, empty by default, with its rule on the page (aria-describedby)',
+    /<div class="trk-act-search"><label class="trk-act-tok" for="([^"]+)-act-q">Search transactions<\/label><input type="search" id="\1-act-q" value="" placeholder="\$TOKEN, 0x… or a type"[^>]* aria-describedby="\1-act-qh" data-tip="[^"]+" data-act-search data-trk-key="act:search"><p class="trk-act-qhint" id="\1-act-qh">Every word must match: [^<]+<\/p><\/div><div class="trk-act-tools"/.test(zQ.innerHTML));
   const withSym = (s) => rep.activity.filter(a => a.legs.some(l => String(l.symbol).toLowerCase() === s)).length;
   zQ._trk.actQuery = 'BAR'; ctx.renderTracker(zQ, rep, { usd: true });
   check('  ...a token\'s symbol, in any case, finds the transactions that moved it (and the count, the chips and the "All" tip follow)',
@@ -223,9 +223,19 @@ try {
   check('  ...a transaction hash (pasted in capitals too), "$FOO", a type, and two words that must both be found',
     rep.activity.filter(a => ctx.trkActFound(a, h3.toUpperCase().replace('0X', '0x'))).length === 1
     && rep.activity.filter(a => ctx.trkActFound(a, '$foo')).length === withSym('foo')
-    && rep.activity.filter(a => ctx.trkActFound(a, 'transfer in')).every(a => a.kind === 'in')
+    && rep.activity.filter(a => ctx.trkActFound(a, 'transfer in')).every(a => ctx.trkActCats(a).includes('in'))
     && rep.activity.filter(a => ctx.trkActFound(a, 'foo buy')).every(a => (a.kind === 'buy' || a.kind === 'swap') && a.legs.some(l => l.symbol === 'FOO'))
     && rep.activity.filter(a => ctx.trkActFound(a, '')).length === 11);
+  // review, 2026-10-22: a type word is a phrase about the row, never a loose substring; hex finds only the start of a hash or contract
+  const synth = (kind, sym, hash, extra) => Object.assign({ hash, kind, legs: [{ token: '0x' + 'ab'.repeat(20), symbol: sym, dir: kind === 'out' ? 'out' : 'in' }] }, extra || {});
+  const COINOUT = synth('out', 'COIN', '0x' + '1'.repeat(64)), SIXNINE = synth('in', '69', '0x' + 'c'.repeat(64)), HEX69 = synth('in', 'FOO', '0x' + '5'.repeat(30) + '69' + '5'.repeat(32));
+  const VIA = synth('in', 'FOO', '0x' + 'd'.repeat(64), { viaOthers: true }), NAMED = synth('in', 'GLD', '0x' + 'e'.repeat(64));
+  const nm = new Map([['0x' + 'ab'.repeat(20), 'Gold Standard']]);
+  check('  ...a type is matched as a phrase about the row: "transfer in" never finds a $COIN transfer out; "transfers out" (the chip\'s words) does',
+    !ctx.trkActFound(COINOUT, 'transfer in') && ctx.trkActFound(COINOUT, 'transfers out') && ctx.trkActFound(COINOUT, 'coin transfer out') && !ctx.trkActFound(COINOUT, 'coin buy'));
+  check('  ..."69" finds $69, not a hash with 69 inside it; 0x… finds the start of a hash; a token\'s name finds it; "swap" finds one in someone else\'s transaction; spaces alone search nothing',
+    ctx.trkActFound(SIXNINE, '69') && !ctx.trkActFound(HEX69, '69') && ctx.trkActFound(HEX69, '0x5555') && !ctx.trkActFound(HEX69, '0x69')
+    && ctx.trkActFound(NAMED, 'gold', nm) && !ctx.trkActFound(NAMED, 'gold') && ctx.trkActFound(VIA, 'swap') && ctx.trkActQuery('   ') === null);
   zQ._trk.actQuery = 'nothing-like-this'; ctx.renderTracker(zQ, rep, { usd: true });
   check('  ...a search nothing matches says so, and the CSV takes what the search shows', /No transactions match that search\./.test(zQ.innerHTML)
     && ctx.trkActShown(rep, { actKinds: new Set(), actToken: '', actRange: 'all', actQuery: 'bar' }).length === withSym('bar'));

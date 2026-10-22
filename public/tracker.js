@@ -584,6 +584,9 @@ function renderTracker(zone, r, prefs) {
   // the zone's UI state belongs to one wallet: a different wallet rendered into the same zone (the tracker page's
   // report zone, the profile's wallet picker) starts with its own filters, pages and open rows — a token chosen for
   // wallet A must not filter wallet B's list down to "Showing 0 of 0". Display choices (range, series, unit) stay.
+  // typed but not yet applied (a report landing, or a chip clicked, inside the pause): the box is this wallet's search
+  const liveQ = zone.querySelector ? zone.querySelector('[data-act-search]') : null;
+  if (liveQ && S.addr === r.address) { const raw = String(liveQ.value || '').slice(0, 100), v = raw.trim() ? raw : ''; if (v !== (S.actQuery || '')) { S.actQuery = v; S.actPages = 1; } }
   if (S.addr !== r.address) { S.addr = r.address; S.openToks = new Set(); S.actKinds = new Set(); S.actToken = ''; S.actRange = 'all'; S.actFrom = ''; S.actTo = ''; S.actQuery = ''; S.actPages = 1; S.defsOpen = false; S.focusKey = null; }
   const money = P.usd ? trkUsd : trkEth;
   const inUnit = (usd) => usd == null ? null : (P.usd ? usd : (r.ethUsd ? usd / r.ethUsd : null));   // a USD figure in the chosen unit
@@ -881,20 +884,52 @@ function trkActBounds(S, nowMs) {
   return { from: a, to: end };
 }
 const trkActInRange = (a, b) => !b || (a.ts != null && (b.from == null || a.ts >= b.from) && (b.to == null || a.ts <= b.to));
-/* The search (owner, 2026-10-22: "add a search box to the wallet tracker transactions"): what is typed, in any case, found
-   in a token's symbol ("$" or not), a token's contract address, the transaction hash, or the type the row shows ("buy",
-   "transfer in", "burn"). Every word typed has to be found somewhere in the row: "foo buy" is a buy that moved $FOO. */
-function trkActSearchText(a) {
-  const K = TRK_KINDS[a.kind] || TRK_KINDS.mixed;
-  return [a.hash, K[1], a.kind === 'swap' ? 'buy sell' : '', a.viaOthers ? 'someone else’s transaction' : '']
-    .concat((a.legs || []).flatMap(l => [l.symbol, '$' + l.symbol, l.token])).join(' ').toLowerCase();
+/* The search (owner, 2026-10-22: "add a search box to the wallet tracker transactions"). What is typed is read in two
+   parts (review, 2026-10-22: a type word matched as a loose substring found "transfer in" in a $COIN transfer OUT):
+     · type words, matched as whole phrases against what the row is — "transfer in", "transfers out", "buy(s)",
+       "sell(s)", "swap(s)" (a swap, or a swap in someone else's transaction), "mint", "burn", "mixed", "self-transfer",
+       "other" — the chip names and the row labels both;
+     · every other word, each of which must be found in the row: in a token's symbol ("$" or not) or its name, or — a
+       0x… word, or hex of 4+ characters — as the START of the transaction hash or of a token's contract (so "69" finds
+       $69, not every hash with a 6 and a 9 in it).
+   Case, and a curly or straight apostrophe, do not matter. */
+const TRK_ACT_TYPE_WORDS = [
+  ['self-transfers', (a) => a.kind === 'self'], ['self-transfer', (a) => a.kind === 'self'], ['self transfer', (a) => a.kind === 'self'],
+  ['transfers in', (a) => trkActCats(a).includes('in')], ['transfer in', (a) => trkActCats(a).includes('in')],
+  ['transfers out', (a) => trkActCats(a).includes('out')], ['transfer out', (a) => trkActCats(a).includes('out')],
+  ['buys', (a) => trkActCats(a).includes('buy')], ['buy', (a) => trkActCats(a).includes('buy')],
+  ['sells', (a) => trkActCats(a).includes('sell')], ['sell', (a) => trkActCats(a).includes('sell')],
+  ['swaps', (a) => a.kind === 'swap' || !!a.viaOthers], ['swap', (a) => a.kind === 'swap' || !!a.viaOthers],
+  ['mints', (a) => a.kind === 'mint'], ['mint', (a) => a.kind === 'mint'], ['burns', (a) => a.kind === 'burn'], ['burn', (a) => a.kind === 'burn'],
+  ['mixed', (a) => a.kind === 'mixed'], ['other', (a) => trkActCats(a).includes('other')],
+];
+// the query, read once: { types: [test…], words: [word…] } (null when there is nothing to search for)
+function trkActQuery(q) {
+  let t = ' ' + String(q || '').toLowerCase().replace(/[’‘]/g, "'").replace(/\s+/g, ' ').trim() + ' ';
+  if (!t.trim()) return null;
+  const types = [];
+  for (const [phrase, test] of TRK_ACT_TYPE_WORDS) {   // longest phrases first in the table, so "transfers in" is not read as "in"
+    const at = t.indexOf(' ' + phrase + ' ');
+    if (at >= 0) { types.push(test); t = t.slice(0, at) + ' ' + t.slice(at + phrase.length + 1); }
+  }
+  return { types, words: t.split(' ').filter(Boolean) };
 }
-function trkActFound(a, q) {
-  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
-  if (!words.length) return true;
-  const hay = trkActSearchText(a);
-  return words.every(w => hay.includes(w));
+// `names`: token address → name (the report's tokens), so a name the holdings table shows finds its transactions
+function trkActFound(a, q, names) {
+  const Q = q && typeof q === 'object' ? q : trkActQuery(q);
+  if (!Q) return true;
+  if (!Q.types.every(test => test(a))) return false;
+  if (!Q.words.length) return true;
+  const legs = a.legs || [], hash = String(a.hash || '').toLowerCase().replace(/^0x/, '');
+  return Q.words.every((w) => {
+    const bare = w.replace(/^\$/, '');
+    if (bare && legs.some(l => String(l.symbol || '').toLowerCase().includes(bare) || String((names && names.get(l.token)) || '').toLowerCase().includes(w))) return true;
+    const hex = /^0x[0-9a-f]*$/.test(w) ? w.slice(2) : (/^[0-9a-f]{4,}$/.test(w) ? w : null);
+    return hex != null && hex !== '' && (hash.startsWith(hex) || legs.some(l => String(l.token || '').toLowerCase().replace(/^0x/, '').startsWith(hex)));
+  });
 }
+// token address → name, from the report's own token list
+const trkActNames = (r) => new Map(((r && r.tokens) || []).filter(t => t && t.address && t.name).map(t => [t.address, String(t.name)]));
 function trkLegLine(l) {
   const sign = l.dir === 'in' ? '+' : '−';
   const name = (l.cash ? '' : '$') + trkEsc(l.symbol);
@@ -925,7 +960,8 @@ function trkActivityHTML(r, P, S, exp) {
   for (const a of all) for (const l of a.legs) if (!tokens.has(l.token)) tokens.set(l.token, l.symbol);
   S.actNow = Date.now();   // the moment the list was drawn: the CSV of a "last N days" span covers exactly these rows
   const bounds = trkActBounds(S, S.actNow);
-  const tokenRows = all.filter(a => (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActFound(a, S.actQuery));
+  const Q = trkActQuery(S.actQuery), names = trkActNames(r);
+  const tokenRows = all.filter(a => (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActFound(a, Q, names));
   const ofToken = bounds ? tokenRows.filter(a => trkActInRange(a, bounds)) : tokenRows;   // the token, the search and the dates: what the type counts are of
   const untimed = bounds ? tokenRows.filter(a => a.ts == null && trkActMatches(a, S.actKinds)).length : 0;   // ones the other filters would have shown
   const filtered = ofToken.filter(a => trkActMatches(a, S.actKinds));
@@ -944,10 +980,12 @@ function trkActivityHTML(r, P, S, exp) {
     if (S.actKinds.size === 1) return 'Turns this filter off and shows every type again';
     return 'Stops including ' + what + (sw[k] && S.actKinds.has(sw[k]) ? ' (swaps stay while ' + swName[sw[k]] + ' is on)' : '');
   };
-  const narrowed = [S.actToken ? 'token' : '', S.actQuery ? 'search' : '', bounds ? 'date' : ''].filter(Boolean);
-  html += '<div class="trk-act-search"><label class="trk-act-tok" for="' + S.uid + '-act-q">Search</label>' +
-    '<input type="search" id="' + S.uid + '-act-q" value="' + trkEsc(S.actQuery || '') + '" placeholder="Token, address, tx hash or type" autocomplete="off" spellcheck="false" maxlength="100" enterkeyhint="search"' +
-    ' data-tip="Shows only transactions with every word you type in a token’s name or address, the transaction hash or its type" data-act-search data-trk-key="act:search"></div>';
+  const narrowed = [S.actToken ? 'token' : '', Q ? 'search' : '', bounds ? 'date' : ''].filter(Boolean);
+  // the hint is on the page, not in a tip: a tip never shows on a text field, and the every-word rule needs saying
+  html += '<div class="trk-act-search"><label class="trk-act-tok" for="' + S.uid + '-act-q">Search transactions</label>' +
+    '<input type="search" id="' + S.uid + '-act-q" value="' + trkEsc(S.actQuery || '') + '" placeholder="$TOKEN, 0x… or a type" autocomplete="off" spellcheck="false" maxlength="100" enterkeyhint="search" aria-describedby="' + S.uid + '-act-qh"' +
+    ' data-tip="Shows only the transactions that match every word you type" data-act-search data-trk-key="act:search">' +
+    '<p class="trk-act-qhint" id="' + S.uid + '-act-qh">Every word must match: a token’s symbol or name, the start of a tx hash or token contract (0x…), or a type — buy, sell, swap, transfer in, transfer out, mint, burn, other.</p></div>';
   html += '<div class="trk-act-tools" role="group" aria-label="Filter transactions — choose one or more">' +
     // a pressed filter carries the same "✓ " text prefix as the report toggles: its state is never fill colour alone
     chip('all', 'All', narrowed.length ? 'Clears the type filters (the ' + narrowed.join(narrowed.length > 2 ? ', ' : ' and ').replace(/, ([^,]+)$/, ' and $1') + ' ' + (narrowed.length > 1 ? 'choices stay' : 'choice stays') + ')' : 'Clears the type filters and shows every transaction', !S.actKinds.size, null) +
@@ -970,7 +1008,7 @@ function trkActivityHTML(r, P, S, exp) {
     // through the page's one persistent live region (window.announce) when a filter, the token or the page changes
     '<p class="trk-act-count">Showing ' + trkN(shown.length) + ' of ' + trkN(filtered.length) + '</p></div>';
   if (untimed) html += '<p class="modal-note">' + trkPlural(untimed, 'transaction') + ' with no block time read ' + (untimed === 1 ? 'is' : 'are') + ' left out while a date range is on — ' + (untimed === 1 ? 'its' : 'their') + ' date is not known.</p>';
-  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (S.actQuery && !S.actKinds.size && !S.actToken && !bounds ? 'that search' : S.actKinds.size + narrowed.length > 1 ? 'these filters' : 'this filter') + '.</p>';
+  if (!filtered.length) html += '<p class="modal-note">No transactions match ' + (Q && !S.actKinds.size && !S.actToken && !bounds ? 'that search' : S.actKinds.size + narrowed.length > 1 ? 'these filters' : 'this filter') + '.</p>';
   else {
     const rows = shown.map((a, i) => {
       const K = TRK_KINDS[a.kind] || TRK_KINDS.mixed;
@@ -999,33 +1037,38 @@ function trkActivityHTML(r, P, S, exp) {
   return html;
 }
 
-/* A date field being typed in is never rebuilt: Chrome reports a value after every part of a date (and "" part-way
-   through one), and a rebuilt field puts the caret back on its first part, so a date could not be typed or stepped with
-   the arrow keys. Instead the transactions section is drawn afresh and moved in around it: everything but the date group
-   is replaced, and in that group everything but the field (whose min/max follow the other one). False when the shapes
-   differ, for a full redraw. */
+/* A field being typed in is never rebuilt (review, 2026-10-22). Chrome reports a date after every part typed (and ""
+   part-way), and a rebuilt date field put the caret back on its first part, so a date could not be typed or stepped with
+   the arrow keys; a rebuilt search box dropped what was being composed on a phone keyboard and was announced afresh after
+   every pause. Instead the transactions section is drawn afresh and moved in around the field: everything is replaced
+   but the field and the elements that hold it, level by level (same place, same kind of element at each), and of the
+   field itself only a min/max that changed (setting one again resets the part of a date being typed). False when the
+   shapes differ, for a full redraw. */
 function trkPatchActivity(zone, keep) {
   const c = zone._trkCtx, old = zone.querySelector('.trk-activity');
   if (!c || !old || !keep || !old.contains(keep) || typeof document === 'undefined') return false;
   const tpl = document.createElement('template');
   tpl.innerHTML = trkActivityHTML(c.r, c.P, trkState(zone), TRK_EXPLORER);
   const neu = tpl.content.querySelector('.trk-activity');
-  const oT = old.querySelector('.trk-act-tools'), nT = neu && neu.querySelector('.trk-act-tools');
-  const oD = oT && oT.querySelector('.trk-act-dates'), nD = nT && nT.querySelector('.trk-act-dates');
-  if (!oT || !nT || !oD || !nD || !oD.contains(keep) || oT.parentElement !== old || nT.parentElement !== neu) return false;
-  const oC = [...oT.children], nC = [...nT.children], oG = [...oD.children], nG = [...nD.children];
-  if (oC.length !== nC.length || oG.length !== nG.length || oC.indexOf(oD) !== nC.indexOf(nD)) return false;
-  const oTop = [...old.children], nTop = [...neu.children], nTi = nTop.indexOf(nT);
-  for (const el of oTop) if (el !== oT) el.remove();
-  for (let i = 0; i < nTi; i++) old.insertBefore(nTop[i], oT);
-  for (let i = nTi + 1; i < nTop.length; i++) old.appendChild(nTop[i]);
-  for (let i = 0; i < oC.length; i++) if (oC[i] !== oD) oC[i].replaceWith(nC[i]);
-  for (let i = 0; i < oG.length; i++) {
-    if (!oG[i].contains(keep)) { oG[i].replaceWith(nG[i]); continue; }
-    const ni = nG[i].querySelector('input');
-    // only a bound that changed is touched: setting one again resets the part of the date being typed
-    for (const a of ['min', 'max']) { const v = (ni && ni.getAttribute(a)) || null; if (v !== keep.getAttribute(a)) { if (v) keep.setAttribute(a, v); else keep.removeAttribute(a); } }
+  if (!neu) return false;
+  const path = []; for (let n = keep; n && n !== old; n = n.parentElement) path.unshift(n);
+  if (!path.length || path[0].parentElement !== old) return false;
+  const twins = []; let o = old, n = neu;
+  for (const p of path) {
+    const i = [...o.children].indexOf(p), t = n.children[i];
+    if (!t || t.tagName !== p.tagName || t.className !== p.className || (o !== old && o.children.length !== n.children.length)) return false;
+    twins.push(t); o = p; n = t;
   }
+  const top = path[0], nKids = [...neu.children], ti = nKids.indexOf(twins[0]);
+  for (const el of [...old.children]) if (el !== top) el.remove();
+  for (let i = 0; i < ti; i++) old.insertBefore(nKids[i], top);
+  for (let i = ti + 1; i < nKids.length; i++) old.appendChild(nKids[i]);
+  for (let d = 1; d < path.length; d++) {
+    const oc = [...path[d - 1].children], nc = [...twins[d - 1].children];
+    for (let i = 0; i < oc.length; i++) if (oc[i] !== path[d]) oc[i].replaceWith(nc[i]);
+  }
+  const nk = twins[twins.length - 1];
+  for (const a of ['min', 'max']) { const v = nk.getAttribute(a); if (v !== keep.getAttribute(a)) { if (v) keep.setAttribute(a, v); else keep.removeAttribute(a); } }
   return true;
 }
 
@@ -1107,27 +1150,28 @@ function trkWire(zone) {
     const csv = e.target.closest('[data-act-csv]');
     if (csv && zone.contains(csv)) { trkDownloadCsv(c.r, trkActShown(c.r, S, S.actNow)); return; }
   });
-  // the search filters as you type, a moment after the last key (and never in the middle of composing a character)
+  /* the search filters as you type, a moment after the last key — mid-composition too (a phone keyboard composes every
+     word): the list is redrawn around the box, never the box itself, so nothing being typed or composed is lost */
   let searchT = 0;
-  const runSearch = (box) => {
+  const runSearch = () => {
     clearTimeout(searchT); searchT = 0;
-    const cur = zone.querySelector('[data-act-search]') || box;   // the box as it is now (a report landing meanwhile redraws it)
-    const S = trkState(zone), v = String(cur.value || '').slice(0, 100);
+    const cur = zone.querySelector('[data-act-search]');
+    if (!cur) return;   // the dashboard was replaced meanwhile (another wallet): this search was for the last one
+    const S = trkState(zone), raw = String(cur.value || '').slice(0, 100), v = raw.trim() ? raw : '';
     if (v === (S.actQuery || '')) return;
     S.actQuery = v; S.actPages = 1;
-    // the caret stays in the box while it is being typed in; a reader who has tabbed on keeps their place
-    rerender(typeof document !== 'undefined' && document.activeElement === cur ? 'act:search' : null); sayCount();
+    if (typeof document !== 'undefined' && document.activeElement === cur && trkPatchActivity(zone, cur)) sayCountSoon();
+    else { rerender(null); sayCount(); }
   };
   zone.addEventListener('input', (e) => {
     const box = e.target && e.target.closest && e.target.closest('[data-act-search]');
-    if (!box || !zone.contains(box) || e.isComposing) return;
-    clearTimeout(searchT); searchT = setTimeout(() => runSearch(box), 250);
+    if (!box || !zone.contains(box)) return;
+    clearTimeout(searchT); searchT = setTimeout(runSearch, 250);
   });
-  zone.addEventListener('compositionend', (e) => { const box = e.target && e.target.closest && e.target.closest('[data-act-search]'); if (box && zone.contains(box)) { clearTimeout(searchT); searchT = setTimeout(() => runSearch(box), 250); } });
   zone.addEventListener('keydown', (e) => {
     const box = e.target && e.target.closest && e.target.closest('[data-act-search]');
     if (!box || !zone.contains(box) || e.isComposing) return;
-    if (e.key === 'Enter') { e.preventDefault(); runSearch(box); }   // not a form: Enter applies it now, and submits nothing
+    if (e.key === 'Enter') { e.preventDefault(); runSearch(); }   // not a form: Enter applies it now, and submits nothing
   });
   zone.addEventListener('change', (e) => {
     const t = e.target;
@@ -1177,7 +1221,8 @@ function trkWire(zone) {
 function trkActShown(r, S, nowMs) {
   const all = Array.isArray(r && r.activity) ? r.activity : [];
   const b = trkActBounds(S, nowMs == null ? Date.now() : nowMs);
-  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActFound(a, S.actQuery) && trkActInRange(a, b));
+  const Q = trkActQuery(S.actQuery), names = trkActNames(r);
+  return all.filter(a => trkActMatches(a, S.actKinds) && (!S.actToken || a.legs.some(l => l.token === S.actToken)) && trkActFound(a, Q, names) && trkActInRange(a, b));
 }
 function trkDownloadCsv(r, rows) {
   if (typeof document === 'undefined' || !r || !Array.isArray(r.activity)) return;
