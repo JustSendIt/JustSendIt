@@ -22,12 +22,12 @@
   };
 
   const STEPS = [
-    { sel: '.mcap-panel', title: 'This number is alive 📈', body: "$SEND's market cap, live from the charts. Memecoins fly up AND crater down, fast — fun to watch, never a promise." },
+    { sel: '#dash-send', title: 'This number is alive 📈', body: "$SEND's market cap, live from the charts. Memecoins fly up AND crater down, fast — fun to watch, never a promise." },
     { sel: '.contract-box', title: 'Copy the REAL address 🪙', body: '$SEND and $GWC live here. Tap Copy to grab the exact contract — scammers clone tokens, so only ever trust the address on this page. Heads-up: $GWC charges a 5% buy / 5% sell tax.' },
     { sel: '.security-step', title: 'Your seed phrase = your money 🔐', body: 'The one rule that matters: write your seed phrase on paper, NEVER type it into any website, and no one legit will ever ask for it.' },
     { sel: '#guide h2', title: 'Set up in order 🧭', body: 'Wallet → seed phrase → add Robinhood Chain → get a little ETH here (bridge it over, or card → ETH through a third-party on-ramp) → swap. The guide walks every step with the real links, and you can stop at any point — reading is free.' },
     { sel: '#swap', title: 'Swap in one move 💱', body: 'Turn ETH into $SEND or $GWC in a single transaction YOU sign in your own wallet. We never hold your funds. Start tiny while you learn.' },
-    { sel: '.do-card[href="/wall"]', title: 'Meet the Send Wall 🧱', body: 'Post wins, memes and cope; react 🔥, reply, claim your @handle, and build your own public wall.' },
+    { sel: '#dash-wall', title: 'Meet the Send Wall 🧱', body: 'Post wins, memes and cope; react 🔥, reply, claim your @handle, and build your own public wall.' },
     { sel: '#nav-auth', title: 'Level up to Biggest Sender 🏆', body: () => 'Almost everything you do here earns Send Power that levels you up on an exponential curve — there is no top level. Holding $SEND/$GWC multiplies every point (bigger bags, held longer = bigger boost), and joining a live community adds a flat 10×. ' + (signedIn() ? 'Your level & points live right here' : 'Sign in here (free) and your level & points will live right here') + ', and the leaderboard crowns the Biggest Sender 👑. ' + (signedIn() ? '(Full rules are on your profile.)' : '(Full rules land on your profile once you have one.)') },
     { sel: '#compose-fab', title: 'Post from anywhere ✏️', body: 'This button follows you across the whole site — tap it to post on the Wall in seconds. (P.S. tap the player bottom-left for the theme 🔊.)' },
   ];

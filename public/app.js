@@ -236,7 +236,7 @@
       const media = (j && j.media) || {};
       vids.forEach(v => {
         if (media.poster === false) v.removeAttribute('poster');
-        if (media.video === false) { const sec = v.closest('section') || v.closest('.feature-frame'); if (sec) sec.hidden = true; }
+        if (media.video === false) { const sec = v.closest('section') || v.closest('.feature-frame'); if (sec) sec.hidden = true; document.querySelectorAll('[data-needs-video]').forEach(el => { el.hidden = true; }); }   // …and the dashboard tile that points at it
       });
     }).catch(() => {});
   })();

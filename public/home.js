@@ -140,7 +140,7 @@ async function refreshMcap(opts) {
       if (p.priceUsd && p.priceNative && Number(p.priceNative) > 0) lastEthUsd = Number(p.priceUsd) / Number(p.priceNative);
       lastTokUsd[key] = Number(p.priceUsd) || null;
       const lbl = document.getElementById('mcap-label-' + key);
-      if (lbl) lbl.textContent = '$' + key + (hasMc ? ' Market Cap · Live' : ' FDV (fully diluted) · Live');
+      if (lbl) lbl.textContent = hasMc ? 'Market cap · live' : 'FDV (fully diluted) · live';   // the tile's own name says which coin
       const sub = document.getElementById('mcap-sub-' + key);
       if (sub) sub.textContent = '$' + Number(p.priceUsd).toPrecision(3) + ' per $' + key + ' · 24h vol ' + (p.volume && p.volume.h24 != null ? fmtUsd(p.volume.h24) : '—') + (p.source === 'reserves' ? ' · from the pool’s reserves' : '');
       // 24h delta chip (never color-only — always an arrow + sign)
@@ -153,6 +153,10 @@ async function refreshMcap(opts) {
       if (banner && img) banner.style.backgroundImage = 'url("' + img + '")';
       a11yText += '$' + key + (hasMc ? ' market cap about ' : ' fully diluted value about ') + fmtUsd(fdv) + (chg != null ? ', ' + (chg >= 0 ? 'up ' : 'down ') + Math.abs(chg).toFixed(1) + '% today. ' : '. ');
     }
+    // the swap tile of the dashboard: the ETH price the swap's quotes are priced in (ETH/USD = priceUsd ÷ priceNative, from
+    // the same pair reading as the market caps — the figure the swap panel itself uses for its dollar line, not a second feed)
+    const ethEl = document.getElementById('dash-eth');
+    if (ethEl && lastEthUsd) { ethEl.textContent = '1 ETH ≈ ' + fmtUsd(Math.round(lastEthUsd)) + ' right now'; ethEl.hidden = false; }
     const a11y = document.getElementById('mcap-a11y');
     if (a11y && a11yText) {
       // first fill is announced; later refreshes only update the text for a reader who goes looking for it —
@@ -170,11 +174,6 @@ refreshMcap();
 // don't hammer Dexscreener for a tab nobody is looking at — poll only while visible, and catch up on return
 setInterval(() => { if (!document.hidden) refreshMcap(); }, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshMcap({ fast: true }); });
-
-/* each mcap panel is a button → jump to the live charts */
-document.querySelectorAll('[data-mcap-jump]').forEach(j => {
-  j.addEventListener('click', () => { const t = document.getElementById('tokens'); if (t) t.scrollIntoView({ behavior: _reduced() ? 'auto' : 'smooth' }); });
-});
 
 /* The looping clips: user-pausable (WCAG 2.2.2), a still with controls under reduced motion (CSS can't
    pause <video>), and fetched only once they scroll into view. They carry preload="none" and no autoplay
@@ -460,6 +459,8 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   const count = document.getElementById('beta-count');
   const board = document.getElementById('beta-board');
   if (!when || !board) return;
+  // the dashboard tile's clock and leader: the same reading written twice, never a second request
+  const dashCount = document.getElementById('dash-beta-count'), dashLead = document.getElementById('dash-beta-lead');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const DAY = 86400000;
   let endsAt = null, settled = false;
@@ -467,9 +468,10 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   function tick() {
     if (endsAt == null) return;
     const left = endsAt - Date.now();
-    if (left <= 0) { count.textContent = settled ? 'Reset complete' : 'Resetting…'; return; }
     const d = Math.floor(left / DAY), h = Math.floor((left % DAY) / 3600000), m = Math.floor((left % 3600000) / 60000);
-    count.textContent = d + 'd ' + h + 'h ' + m + 'm';
+    const text = left <= 0 ? (settled ? 'Reset complete' : 'Resetting…') : d + 'd ' + h + 'h ' + m + 'm';
+    count.textContent = text;
+    if (dashCount) dashCount.textContent = text;
   }
 
   async function load() {
@@ -488,6 +490,10 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
             '<a class="beta-nm" href="/u/' + encodeURIComponent(t.username) + '">@' + esc(t.username) + '</a>' +   // every name on a board opens that person's Send Wall
             '<span class="beta-pt">' + Number(t.points || 0).toLocaleString('en-US') + '</span></li>').join('')
         : '<li class="beta-empty">Nobody on the board yet — every point counts from here.</li>';
+      // the dashboard tile: who leads, from the same top list (the name opens that person's wall, as it does on the board)
+      if (dashLead) dashLead.innerHTML = (j.top || []).length
+        ? '🥇 <a href="/u/' + encodeURIComponent(j.top[0].username) + '">@' + esc(j.top[0].username) + '</a> leads with ' + Number(j.top[0].points || 0).toLocaleString('en-US') + ' Send Power'
+        : 'Nobody on the board yet — every point counts from here.';
       const meEl = document.getElementById('beta-me');
       if (j.me && meEl) {
         meEl.innerHTML = j.me.rank
@@ -496,6 +502,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
       }
     } catch {
       board.innerHTML = '<li class="beta-empty">Board unavailable right now.</li>';
+      if (dashLead) dashLead.textContent = 'Board unavailable right now.';
     }
   }
   load();
@@ -547,6 +554,12 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     if (location.pathname !== '/' + m[1]) { try { history.pushState(history.state, '', '/' + m[1]); } catch {} }
     shownPath = location.pathname;
     go(m[1], true, true);
+  });
+  // the dashboard's jump buttons: a section with no address of its own (the video, the $GWC and OG-site cards) — the same
+  // scroll and focus as a section link, the address left alone
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('button[data-jump]'); if (!b) return;
+    go(b.dataset.jump, true, true);
   });
   addEventListener('popstate', () => {
     if (location.pathname === shownPath) return;

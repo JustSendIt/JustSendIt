@@ -440,10 +440,13 @@ a { color: var(--gold); }
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 /* ===== Hero ===== */
+/* Owner, 2026-10-23: the hero is a dashboard now (Mission Control, below). It is as tall as what it holds — the old 88vh
+   floor made a short page of a tall one and a tall page of a short one — and its content column is the 1040px .wrap
+   the sections use, so the tiles line up with the cards under them. */
 .hero {
-  position: relative; min-height: 88vh;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; padding: 3rem 1.25rem 4.5rem;
+  position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 1.5rem 1.25rem 3.2rem;
   /* overflow was written to crop the background video. The video is gone and this stays: it is now the only
      thing clipping the .float-emoji spans, which travel 26px past these edges. Not a leftover to sweep. */
   overflow: hidden;
@@ -456,9 +459,9 @@ a { color: var(--gold); }
   background: radial-gradient(ellipse 70% 60% at 50% 45%, transparent 30%, var(--ink) 100%);
   pointer-events: none;
 }
-.hero > .hero-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
+.hero > .hero-content { position: relative; z-index: 2; width: 100%; max-width: 1040px; display: flex; flex-direction: column; align-items: center; gap: 1.3rem; }
 .hero-logo {
-  width: min(340px, 68vw); height: auto; cursor: pointer;
+  width: min(260px, 60vw); height: auto; cursor: pointer;
   filter: drop-shadow(0 0 45px var(--glow-g)) drop-shadow(0 12px 30px rgba(0,0,0,0.6));
   animation: bob 4s ease-in-out infinite;
   transition: transform 0.2s ease;
@@ -500,6 +503,137 @@ a { color: var(--gold); }
 .cta-row { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; margin-top: 2rem; }
 /* a 320px phone gives the row 248px: "Rocketize Profile 🖼️" needs 198px of type, so 2rem a side would push it onto two lines */
 @media (max-width: 380px) { .cta-row .btn { padding-inline: 1.1rem; } }
+
+/* ===== The identity band (the hero's top) =====
+   Stacked and centred on a phone, as the hero always was; from 900px the mark sits beside the words, which align left —
+   the header of a dashboard rather than a poster. The per-element margins the centred stack carried (.rh-badge, .risk-chip,
+   .cta-row, .reassure) are owned here by the row they sit in, so the band's spacing is one set of gaps, not four margins. */
+.hero-top { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.hero-words { display: flex; flex-direction: column; align-items: center; min-width: 0; max-width: 100%; }
+.hero-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 0.8rem; margin-top: 1.2rem; }
+.hero-chips .rh-badge, .hero-chips .risk-chip { margin-top: 0; }
+.hero-actions { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.hero-actions .cta-row { margin-top: 1.5rem; }
+.hero-actions .reassure { margin-top: 1.3rem; width: 100%; max-width: none; }
+@media (min-width: 900px) {
+  /* row one: the mark beside the words; row two, the actions across both — the band is ~390px tall this way, so the
+     dashboard's first row is on the first screen of a 900px-tall laptop. The headline comes down from the poster size
+     (clamp 2.4–4.6rem) to a header's: it shares a row with the mark now, not the whole width. */
+  .hero-top { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.2rem 2.2rem; text-align: left; }
+  .hero-words { align-items: flex-start; }
+  .hero-actions { grid-column: 1 / -1; align-items: flex-start; }
+  .hero-logo { width: 200px; }
+  .hero h1 { margin-top: 0; font-size: max(var(--text-floor), clamp(2rem, 3.8vw, 3.1rem)); }
+  .hero .tag { margin-top: 0.4rem; }
+  .hero .tag, .hero .hero-lede { margin-left: 0; margin-right: 0; text-align: left; }
+  .hero-chips { margin-top: 0.8rem; }
+  .hero-chips, .hero-actions .cta-row { justify-content: flex-start; }
+  /* the four on one line: at the 19pt floor their words take 805px, so the padding comes down from the poster's 2rem */
+  .hero-actions .cta-row { margin-top: 0.8rem; gap: 0.8rem; }
+  .hero-actions .cta-row .btn { padding: 0.75rem 1rem; }
+  .hero-actions .reassure { margin: 0.8rem 0 0; }
+}
+
+/* ===== Mission Control: the hero dashboard =====
+   One tile per thing on the page (index.html says which, and why). A tile is a column: the head (an icon disc, the name,
+   a LIVE pill where the reading is live), the glance (one line, or a live reading), the Details drop-down with the long
+   read folded away, and the foot with the one way in. Twelve tiles in two columns at every width from 560px — six full
+   rows, the two coins first — and one column under that: a pair on a phone broke the names mid-word (a 145px tile holds
+   77px of name beside its icon) and stood every tile 500px tall.
+   Two columns, not three, on a desktop too: the text floor is 19pt from 1280px up, and a third of the 1040px column
+   holds 24 characters of it a line, which made every tile a tower. Each tile is a container, so its own width — a
+   ~160px phone pair, a ~512px desktop tile — sizes the big readings and the foot, not the viewport. */
+.dash { width: 100%; padding: 0; text-align: left; }   /* a <section>: the page's section padding is not for a panel inside the hero */
+.dash-title {
+  display: flex; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0.2rem 0.7rem; margin: 0 0 0.7rem;
+  font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; font-size: max(var(--text-floor), clamp(1.4rem, 2.8vw, 1.8rem));
+  color: var(--green-bright); text-shadow: 0 2px 0 var(--green-dark), 0 0 24px color-mix(in srgb, var(--green) 30%, transparent);
+  transform: rotate(-1deg);
+}
+.dash-title-ico { font-size: max(var(--text-floor), 1.2em); text-shadow: none; }
+.dash-title-sub { font-family: 'Rubik', sans-serif; font-weight: 700; letter-spacing: 0; font-size: max(var(--text-floor), 0.95rem); color: var(--text-dim); text-shadow: none; }
+.dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
+@media (max-width: 559px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } .dash-tile { padding: 0.85rem 0.9rem 0.8rem; gap: 0.5rem; } }
+@media (min-width: 1000px) { .dash-grid { gap: 1rem; } }
+.dash-tile {
+  --tile: var(--green);
+  position: relative; overflow: hidden; isolation: isolate; container-type: inline-size;
+  display: flex; flex-direction: column; gap: 0.6rem; min-width: 0;
+  padding: 0.95rem 1rem 0.9rem;
+  background: var(--ink-2); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--tile) 30%, var(--hair)); border-radius: var(--r-3);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent), 0 12px 32px rgba(0,0,0,0.35);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dash-tile > * { position: relative; z-index: 2; }
+.dash-tile:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--tile) 70%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tile) 22%, transparent), 0 16px 40px rgba(0,0,0,0.45); }
+/* the accent each tile wears on its border, its icon disc and its big reading — the site's own few, no new colours */
+.dash-tile.is-gwc, .dash-tile.is-og, .dash-tile.is-communities, .dash-tile.is-origin { --tile: var(--gold); }
+.dash-tile.is-guide { --tile: var(--rh-green); }
+.dash-tile.is-beta, .dash-tile.is-tracker { --tile: var(--diamond); }
+.dash-tile.is-rocketize, .dash-tile.is-watch { --tile: var(--gold-deep); }
+/* the two coins: the Dexscreener banner behind (home.js sets background-image), dimmed, under a DARK scrim — the ground
+   every reading is measured against (--text on --ink-2 ≥ 15:1). They are deliberately not matrix tiles: the banner is
+   the texture, and a tile's ::after would replace the scrim that keeps the numbers readable. */
+.dash-tile > .mcap-banner { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; opacity: 0.3; }
+.dash-tile.is-token::after { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, color-mix(in srgb, var(--ink-2) 72%, transparent), color-mix(in srgb, var(--ink-2) 94%, transparent)); pointer-events: none; }
+.dash-head { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.dash-ico {
+  flex: none; display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 12px;
+  background: color-mix(in srgb, var(--tile) 16%, var(--ink-3)); border: 1px solid color-mix(in srgb, var(--tile) 40%, transparent);
+  font-size: max(var(--text-floor), 1.3rem); line-height: 1; transition: transform 0.2s ease;
+}
+.dash-tile:hover .dash-ico { transform: rotate(-8deg) scale(1.08); }
+.dash-name { flex: 1 1 auto; min-width: 0; margin: 0; font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; font-size: max(var(--text-floor), 1.15rem); line-height: 1.1; color: var(--text); }
+.dash-name-sub { display: block; margin-top: 0.15rem; font-family: 'Rubik', sans-serif; font-weight: 700; letter-spacing: 0.01em; font-size: max(var(--text-floor), 0.76rem); color: var(--text-dim); }
+.dash-live { flex: none; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.55rem; border-radius: 999px; border: 1.5px solid var(--rh-green); background: rgba(0,200,5,0.1); color: var(--rh-green); font-weight: 800; font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.08em; text-transform: uppercase; }
+.dash-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--rh-green); animation: pulse 1.6s ease-in-out infinite; }
+.dash-glance { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.dash-line { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.92rem); line-height: 1.45; text-wrap: pretty; overflow-wrap: anywhere; }
+.dash-line b { color: var(--text); }
+.dash-k { font-size: max(var(--text-floor), 0.76rem); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
+.dash-big { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.1rem, 11cqi, 2.4rem)); line-height: 1.1; color: var(--text); text-shadow: 0 0 22px color-mix(in srgb, var(--tile) 45%, transparent); font-variant-numeric: tabular-nums; }
+.dash-sub { font-size: max(var(--text-floor), 0.8rem); color: var(--text-mute); font-weight: 600; }
+.dash-sub a { color: var(--gold); }
+/* the readings keep the names the market-cap panels had (home.js writes to those ids); sized by the tile, not the viewport */
+.dash-tile .mcap-value { font-size: max(var(--text-floor), clamp(1.1rem, 12cqi, 2.6rem)); line-height: 1.1; }
+/* the drop-down: the long read, folded. The summary is a pill on the site's control ladder (light fill, black type);
+   the chevron is drawn here so the summary's own word stays its label. */
+/* the foot floats at the left of the action block, the summary takes the rest of its line, and the opened read clears both:
+   button and pill on one row, the long read across the tile's full width under them — no script, no second column */
+.dash-act { display: flow-root; margin-top: auto; }
+.dash-foot { float: left; margin: 0 0.45rem 0.4rem 0; }
+.dash-more { display: block; margin: 0; }
+.dash-more > summary {
+  display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; padding: 0.3rem 0.85rem; border-radius: 999px; vertical-align: top;
+  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink);
+  font-weight: 800; font-size: max(var(--text-floor), 0.85rem); cursor: pointer; list-style: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.dash-more > summary::-webkit-details-marker { display: none; }
+.dash-more > summary::after { content: '▾'; }
+.dash-more[open] > summary::after { content: '▴'; }
+.dash-more > summary:hover { background: var(--ctl-fill-hi); border-color: var(--green); }
+.dash-more > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dash-more-body { clear: both; padding: 0.7rem 0.1rem 0.2rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.55; overflow-wrap: anywhere; }
+.dash-more-body p { margin: 0 0 0.6rem; }
+.dash-more-body p:last-child { margin-bottom: 0; }
+.dash-more-body b { color: var(--text); }
+/* a narrow tile (a phone pair): tighter, the LIVE pill down to its dot (the word stays for a screen reader), the way-in
+   button across the full width so its label never breaks mid-word */
+@container (max-width: 230px) {
+  .dash-tile { padding: 0.8rem 0.75rem 0.75rem; gap: 0.5rem; }
+  .dash-ico { width: 2.1rem; height: 2.1rem; }
+  .dash-live { padding: 0.3rem; gap: 0; }
+  .dash-live > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .dash-go { width: 100%; padding-inline: 0.6rem; }
+  .dash-more > summary { min-height: 36px; padding: 0.2rem 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-tile, .dash-ico, .dash-more > summary { transition: none; }
+  .dash-tile:hover, .dash-tile:hover .dash-ico { transform: none; }
+  .dash-live i { animation: none; }
+}
 
 /* ===== Buttons ===== */
 .btn {
@@ -882,9 +1016,10 @@ video.media-preview-el { width: auto; }
    ~710px the top rail reaches the logo and the 45px glow around it. Hiding the field is the one-line fix, and
    561-700px is already this file's landscape-phone cohort. .float-emoji is shared with about.html, whose three
    spans are hidden across the same band; they are decoration, and that page loses nothing by it. */
-/* …and with the larger text the content column spans nearly the whole hero up to a small laptop, so the field
-   would drift over the market-cap cards and the buy button: it shows only where the page has side gutters */
-@media (max-width: 1099px) {
+/* …and the hero's content column is the 1040px .wrap now (the dashboard fills it), so the field shows only from 1500px,
+   where the gutter beyond it (230px a side, 15.3%) is wider than the rails: at 1300px a glyph at right:12% would sit on
+   a live reading. */
+@media (max-width: 1499px) {
   .float-emoji { display: none; }
 }
 
@@ -1192,29 +1327,7 @@ body { padding-bottom: 5.5rem; }
 }
 .intro-skip:hover { border-color: var(--green); background: var(--ctl-fill-hi); color: var(--ctl-ink); }
 
-/* ===== Market cap hero ===== */
-.mcap-panels { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; margin-top: 1.4rem; }
-/* The two live trackers in the hero are DATA panels, not calls to action: a dark well over the
-   Dexscreener banner, so the readings can carry their own colours — the market cap in bright text, the
-   24h move green when it is up and red when it is down (with ▲/▼ so colour is never the only signal),
-   the label and the source line dimmer. They are deliberately not matrix tiles: the banner is the
-   texture, and the tile's ::after would replace the scrim that keeps the numbers readable. */
-.mcap-panel {
-  position: relative; overflow: hidden; isolation: isolate;
-  display: inline-flex; flex-direction: column; align-items: center; gap: 0.1rem;
-  padding: 0.9rem 2rem; border-radius: 20px; flex: 1 1 260px; max-width: 360px; min-width: 240px;
-  background: var(--ink-2); color: var(--text); border: 1px solid var(--green);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--green) 25%, transparent), 0 12px 32px color-mix(in srgb, var(--void) 55%, transparent);
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
-}
-.mcap-panel[data-mcap-jump="GWC"] { border-color: var(--gold); box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 25%, transparent), 0 12px 32px color-mix(in srgb, var(--void) 55%, transparent); }
-.mcap-panel:hover { transform: translateY(-2px); }
-.mcap-panel:focus-visible { outline: 3px solid var(--focus, var(--green-bright)); outline-offset: 3px; }
-/* Dexscreener banner behind each tracker (JS sets background-image), dimmed so the numbers stay readable */
-.mcap-banner { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; opacity: 0.3; }
-/* a DARK scrim over the banner: the ground every reading is measured against (--text on --ink-2 ≥ 15:1) */
-.mcap-panel::after { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, color-mix(in srgb, var(--ink-2) 72%, transparent), color-mix(in srgb, var(--ink-2) 94%, transparent)); pointer-events: none; }
-.mcap-panel > .mcap-label, .mcap-panel > .mcap-value, .mcap-panel > .mcap-delta, .mcap-panel > .mcap-sub { position: relative; z-index: 2; }
+/* ===== Market cap readings — on the dashboard's two coin tiles (.dash-tile.is-token); home.js writes them by id ===== */
 .mcap-label { font-size: max(var(--text-floor), 0.78rem); font-weight: 800; letter-spacing: 0.1em; color: var(--text-dim); text-transform: uppercase; }
 .mcap-value {
   font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.8rem, 5vw, 2.8rem));
@@ -1470,7 +1583,6 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 .mcap-delta { font-size: max(var(--text-floor), 0.8rem); font-weight: 800; margin-top: 0.2rem; color: var(--text-dim); }
 .mcap-delta.up { color: var(--green-bright); }   /* up is green, down is red — and the ▲ / ▼ glyph says it too */
 .mcap-delta.down { color: var(--red-soft); }
-button.mcap-panel { cursor: pointer; font: inherit; text-align: center; }
 .gwc-tax-chip { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0.4rem 0 0.2rem; background: rgba(255,179,64,0.12); border: 1.5px solid rgba(255,179,64,0.45); color: var(--gold); border-radius: 10px; padding: 0.35rem 0.7rem; font-weight: 800; font-size: max(var(--text-floor), 0.78rem); }
 .send-tax-chip { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0.4rem 0 0.2rem; background: color-mix(in srgb, var(--green) 12%, transparent); border: 1.5px solid var(--g-lit); color: var(--green-bright); border-radius: 10px; padding: 0.35rem 0.7rem; font-weight: 800; font-size: max(var(--text-floor), 0.78rem); }
 
@@ -5087,7 +5199,7 @@ code.bd-addr { color: var(--text); }
 html.motion-off .ticker-track, html.motion-off .float-emoji, html.motion-off .hero-logo, html.motion-off .hero h1 .rocket,
 html.motion-off #compose-fab, html.motion-off .og-banner, html.motion-off .og-banner::before, html.motion-off .og-shine,
 html.motion-off .og-confetti span, html.motion-off .og-medal, html.motion-off .og-banner-cta, html.motion-off .og-cta-arrow,
-html.motion-off body::before, html.motion-off .rh-badge .dot, html.motion-off .mcap-value.pumping, html.motion-off .np-verdict.np-t-perfect,
+html.motion-off body::before, html.motion-off .rh-badge .dot, html.motion-off .dash-live i, html.motion-off .mcap-value.pumping, html.motion-off .np-verdict.np-t-perfect,
 html.motion-off #music-player .eq span, html.motion-off .relic-pip, html.motion-off .forge-flame, html.motion-off .gxp.near .gxp-fill,
 /* the same infinite pulses the prefers-reduced-motion rules stop — the switch is for readers without the OS setting */
 html.motion-off .nav-live-dot, html.motion-off .og-timer.og-timer-soon, html.motion-off .np-live-dot, html.motion-off .comm-pulse i, html.motion-off .np-feed-hint { animation-play-state: paused !important; }

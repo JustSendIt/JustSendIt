@@ -172,13 +172,11 @@
 <header class="hero">
   <!-- The field reads bottom-up: fire at the base, rockets through the middle, moons in the sky, so twelve
        glyphs land as one launch column rather than twelve unrelated stickers. Both rails stay inside the
-       outer 15%, which is the only band clear of the 663px content column on a wide screen and behind the
-       frosted glass of .mcap-panel on a narrow one.
-       They are NOT clear of the logo at every width, and the comment should not pretend otherwise:
-       .hero-logo is min(340px, 68vw), so above a ~500px viewport it stops shrinking while these rails, being
-       percentages of the hero box, keep marching inward. Below 700px they would reach it — which is what
-       the display:none at the foot of styles.css is for, and why that breakpoint moved with this change.
-       A span added here needs BOTH inline values. The class now carries a floor duration so a missing one is
+       outer 15%. The content column is the 1040px .wrap now (the dashboard fills it), so the band clear of
+       it is the gutter beyond that: at 1500px it is 230px a side (15.3%), and from there up the rails miss
+       the tiles. Below 1500px the field is hidden outright (the display:none at the foot of styles.css):
+       at 1300px a glyph at right:12% would sit on a live reading.
+       A span added here needs BOTH inline values. The class carries a floor duration so a missing one is
        visible rather than silent, but it carries no phase: without a negative delay a new glyph drifts in
        lockstep with everything sharing its duration. -->
   <span class="hero-floats" aria-hidden="true">
@@ -196,60 +194,344 @@
     <span class="float-emoji"       style="bottom:6%;  right:9%;  animation-duration:6.2s; animation-delay:-1.9s;">🔥</span>
   </span>
   <div class="hero-content">
-    <button type="button" class="hero-logo-btn" aria-label="Fire confetti" data-tip="Fires a burst of confetti — just for fun"><img class="hero-logo" src="assets/logo-mark.png" alt="$Send — Just Send It logo" width="900" height="900" fetchpriority="high"></button>
-    <h1 class="display">Just $Send It! <span class="rocket">🚀</span></h1>
-    <p class="tag">Socially <strong>Send It</strong> on Crypto</p>
-    <p class="hero-lede">Just Send It (sendrh.com) is an independent community site for $SEND, the SEND IT memecoin, and $GWC on Robinhood Chain. Entertainment only, not affiliated with Robinhood.</p>
-    <div class="rh-badge"><span class="dot"></span> LIVE ON ROBINHOOD CHAIN · ID 4663</div>
-    <a class="risk-chip" href="/guide">🎢 High-risk fun · Not financial advice</a>
-    <div class="mcap-panels">
-      <button class="mcap-panel" type="button" data-mcap-jump="SEND" aria-labelledby="mcap-label-SEND mcap-value-SEND mcap-delta-SEND" data-tip="Scrolls down to the token cards and their charts">
-        <span class="mcap-banner" id="mcap-banner-SEND" aria-hidden="true"></span>
-        <span class="mcap-label" id="mcap-label-SEND">$SEND Market Cap · Live</span>
-        <span class="mcap-value" id="mcap-value-SEND">$———</span>
-        <span class="mcap-delta" id="mcap-delta-SEND"></span>
-        <span class="mcap-sub" id="mcap-sub-SEND">loading the price…</span>
-      </button>
-      <button class="mcap-panel" type="button" data-mcap-jump="GWC" aria-labelledby="mcap-label-GWC mcap-value-GWC mcap-delta-GWC" data-tip="Scrolls down to the token cards and their charts">
-        <span class="mcap-banner" id="mcap-banner-GWC" aria-hidden="true"></span>
-        <span class="mcap-label" id="mcap-label-GWC">$GWC Market Cap · Live</span>
-        <span class="mcap-value" id="mcap-value-GWC">$———</span>
-        <span class="mcap-delta" id="mcap-delta-GWC"></span>
-        <span class="mcap-sub" id="mcap-sub-GWC">loading the price…</span>
-      </button>
-    </div>
-    <span class="sr-only" role="status" aria-live="polite" id="mcap-a11y"></span>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="/swap" data-tip="Jumps down to the swap panel on this page">Buy $Send 🚀</a>
-      <a class="btn btn-rh" href="/guide" data-tip="Jumps to the step-by-step buying guide below">How To Buy 📖</a>
-      <a class="btn btn-gold" href="/tokens" data-tip="Jumps to the token cards and their live charts">Live Charts 📈</a>
-      <a class="btn btn-flame" href="/rocketize" data-tip="Jumps down to the picture editor: add rockets to a picture, then download it or make it your profile pic">Rocketize Profile&nbsp;🖼️</a>
-    </div>
-    <details class="reassure">
-      <summary>New here? What is $Send — and what are the risks?</summary>
-      <div class="reassure-body">
-        $Send is a community memecoin on Robinhood Chain, made for fun and memes. Entertainment only, not financial advice, not affiliated with Robinhood.
-        <ul>
-          <li>🔐 Your money stays in <b>your</b> wallet — this site never takes custody and never asks for your seed phrase.</li>
-          <li>🎢 Memecoins are maximum-risk — prices can go to zero; only send what you can afford to lose completely.</li>
-          <li>✅ Always copy contract addresses from this page and verify them on the explorer.</li>
-        </ul>
+    <!-- The identity band: the mark and the words side by side from 900px, stacked and centred below that.
+         Everything the scripts, the eggs and the tour reach for keeps its class and its place: .hero-logo-btn (the
+         confetti in app.js, eggs 12 and 13; entry.js borrows its src for the intro), .hero h1 .rocket (egg 14),
+         .rh-badge .dot (egg 19), details.reassure (egg 20), and .hero-lede — the one plain sentence on what the site
+         is, for a reader with no scripts and for the crawlers; tests/seo-pages.mjs pins its words. -->
+    <div class="hero-top">
+      <button type="button" class="hero-logo-btn" aria-label="Fire confetti" data-tip="Fires a burst of confetti — just for fun"><img class="hero-logo" src="assets/logo-mark.png" alt="$Send — Just Send It logo" width="900" height="900" fetchpriority="high"></button>
+      <div class="hero-words">
+        <h1 class="display">Just $Send It! <span class="rocket">🚀</span></h1>
+        <p class="tag">Socially <strong>Send It</strong> on Crypto</p>
+        <p class="hero-lede">Just Send It (sendrh.com) is an independent community site for $SEND, the SEND IT memecoin, and $GWC on Robinhood Chain. Entertainment only, not affiliated with Robinhood.</p>
+        <div class="hero-chips">
+          <div class="rh-badge"><span class="dot"></span> LIVE ON ROBINHOOD CHAIN · ID 4663</div>
+          <a class="risk-chip" href="/guide">🎢 High-risk fun · Not financial advice</a>
+        </div>
       </div>
-    </details>
+      <!-- the actions: a row of their own under the mark and the words, so the band stays short enough for the dashboard
+           to show on the first screen of a laptop; the drop-down under them is the first of the page's long reads -->
+      <div class="hero-actions">
+        <div class="cta-row">
+          <a class="btn btn-primary" href="/swap" data-tip="Jumps down to the swap panel on this page">Buy $Send 🚀</a>
+          <a class="btn btn-rh" href="/guide" data-tip="Jumps to the step-by-step buying guide below">How To Buy 📖</a>
+          <a class="btn btn-gold" href="/tokens" data-tip="Jumps to the token cards and their live charts">Live Charts 📈</a>
+          <a class="btn btn-flame" href="/rocketize" data-tip="Jumps down to the picture editor: add rockets to a picture, then download it or make it your profile pic">Rocketize Profile&nbsp;🖼️</a>
+        </div>
+        <details class="reassure">
+          <summary>New here? What is $Send — and what are the risks?</summary>
+          <div class="reassure-body">
+            $Send is a community memecoin on Robinhood Chain, made for fun and memes. Entertainment only, not financial advice, not affiliated with Robinhood.
+            <ul>
+              <li>🔐 Your money stays in <b>your</b> wallet — this site never takes custody and never asks for your seed phrase.</li>
+              <li>🎢 Memecoins are maximum-risk — prices can go to zero; only send what you can afford to lose completely.</li>
+              <li>✅ Always copy contract addresses from this page and verify them on the explorer.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- ===== MISSION CONTROL: the dashboard =====
+         Owner, 2026-10-23: "Redo the landing Hero so its more of a fun dashboard that shows the users at first glance
+         everything on the landing page so users can easily access all the info and have long text as drop downs for those
+         sections on the landing dashboard." Twelve tiles, two to a row (one on a phone): one per thing on this page — the two coins first,
+         then page order, the OG strip above included — plus the three pages the quick-path cards under the old hero pointed
+         at (the Wall, the tracker, the communities). A tile is: the name, one line on what it is, the live reading where
+         there is one (the two market caps, the ETH price the swap's quotes are priced in, the beta clock and its leader, the
+         OG window's clock — written by home.js from the SAME requests the sections and the strip make, never a second
+         source and never a placeholder figure), a Details drop-down holding the long read, and
+         one way in: the section's own address (/tokens, /guide, /swap, /beta, /rocketize — home.js scrolls there and the
+         address follows), a jump button where a section has no address of its own (the video, the $GWC and OG-site cards),
+         or the page itself. The video tile carries data-needs-video: app.js hides it with the video's section on a deploy
+         that has no video file. -->
+    <section class="dash" aria-labelledby="dash-title">
+      <h2 class="dash-title" id="dash-title"><span class="dash-title-ico" aria-hidden="true">🛸</span> Mission Control <span class="dash-title-sub">everything on this page, at a glance</span></h2>
+      <div class="dash-grid">
+
+        <article class="dash-tile is-token is-send" id="dash-send">
+          <span class="mcap-banner" id="mcap-banner-SEND" aria-hidden="true"></span>
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🚀</span>
+            <h3 class="dash-name">$SEND <span class="dash-name-sub">SEND IT · Robinhood Chain</span></h3>
+            <span class="dash-live"><i aria-hidden="true"></i><span>live</span></span>
+          </div>
+          <div class="dash-glance">
+            <span class="mcap-label" id="mcap-label-SEND">Market cap · live</span>
+            <span class="mcap-value" id="mcap-value-SEND">$———</span>
+            <span class="mcap-delta" id="mcap-delta-SEND"></span>
+            <span class="mcap-sub" id="mcap-sub-SEND">loading the price…</span>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/tokens" data-tip="Scrolls down to the $SEND card: the live chart, the address to copy, the explorer link and Add to Wallet">Chart &amp; contract ↓</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on $SEND, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>SEND IT trades on Robinhood Chain in a Uniswap v2 pool. A <b>1% tax on every buy, sell and transfer</b>, and 100% of it is automatically added to the liquidity pool (pooled and deployed in batches as volume builds). The contract is <b>verified and ownership is renounced</b>, so the fee can never change and there is no tax wallet.</p>
+              <p>The chart on the card below is drawn from the pair's own on-chain swaps, with the recent transactions under it. The card also has the contract address to copy — always double-check you're trading the real contract — the explorer link and Add to Wallet.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-token is-gwc" id="dash-gwc">
+          <span class="mcap-banner" id="mcap-banner-GWC" aria-hidden="true"></span>
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">💰</span>
+            <h3 class="dash-name">$GWC <span class="dash-name-sub">Generational Wealth Coin · Robinhood Chain</span></h3>
+            <span class="dash-live"><i aria-hidden="true"></i><span>live</span></span>
+          </div>
+          <div class="dash-glance">
+            <span class="mcap-label" id="mcap-label-GWC">Market cap · live</span>
+            <span class="mcap-value" id="mcap-value-GWC">$———</span>
+            <span class="mcap-delta" id="mcap-delta-GWC"></span>
+            <span class="mcap-sub" id="mcap-sub-GWC">loading the price…</span>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/tokens" data-tip="Scrolls down to the $GWC card: the live chart, the address to copy, the explorer link and Add to Wallet">Chart &amp; contract ↓</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on $GWC, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>Generational Wealth Coin trades on Robinhood Chain in a Uniswap v2 pool. Its contract charges a <b>5% buy / 5% sell tax</b> (as of Sep 1, 2026), auto-converted to ETH for its tax wallet — factor it in.</p>
+              <p>$Send and $GWC are independent tokens: always verify each contract yourself on the explorer. The card below has the live chart, the contract address to copy, the explorer link and Add to Wallet.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-guide" id="dash-guide">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">📖</span>
+            <h3 class="dash-name">How To Buy <span class="dash-name-sub">the easy way</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line"><b>Five steps, about ten minutes:</b> a wallet → your seed phrase → Robinhood Chain → a little ETH → the swap.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/guide" data-tip="Scrolls down to the five-step How To Buy guide with the real links">Open the guide ↓</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the guide, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>Never touched crypto before? No stress. <b>1</b> Get a wallet — Robinhood Wallet supports Robinhood Chain out of the box, and the other wallets listed in the guide connect here too. <b>🔐</b> Lock down your seed phrase: on paper, twice, never typed into a website, never given to anyone. <b>2</b> Add Robinhood Chain (chain ID 4663) with one click, or by hand. <b>3</b> Bridge ETH over with Relay, or card → ETH through a third-party on-ramp. <b>4</b> Swap into $Send or $GWC. <b>5</b> See your bags in the Wallet Tracker.</p>
+              <p>Only ever download a wallet from its official site or your phone's app store. Connecting a wallet here is read-only: you sign a message to prove it's yours, and that's all it can ever do. Reading is free, and you can stop at any step.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-swap" id="dash-swap">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">💱</span>
+            <h3 class="dash-name">One-Click Swap <span class="dash-name-sub">signed in your own wallet</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">ETH already on Robinhood Chain → <b>$SEND</b> or <b>$GWC</b>, in one transaction you review and sign yourself.</p>
+            <span class="dash-sub" id="dash-eth" hidden></span>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/swap" data-tip="Scrolls down to the swap panel, where you set an amount, see the quote and sign in your wallet">Open the swap ↓</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the swap, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>A direct call to Robinhood Chain's public Uniswap v2 router with the verified token address prefilled, so you can't fat-finger a fake. This site never holds your funds and there are no approvals to grant: you review and sign the one transaction in your own wallet. The quote already takes off the token's own contract tax ($Send 1%, $GWC 5%) and shows the price impact of your size on a thin pool; the 10% slippage guard only covers price movement between the quote and your confirmation.</p>
+              <p>Coming from another chain? Bridging is a separate step through a third-party bridge such as Relay. No crypto anywhere yet? MoonPay can sell you ETH with a card — their sign-up, their fees, their rules. We don't vouch for any third party. Start small, read what you sign.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-beta" id="dash-beta">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🏁</span>
+            <h3 class="dash-name">The 90-Day Beta <span class="dash-name-sub">it ends with a clean slate</span></h3>
+            <span class="dash-live"><i aria-hidden="true"></i><span>live</span></span>
+          </div>
+          <div class="dash-glance">
+            <span class="dash-k">Beta ends · Send Power resets in</span>
+            <span class="dash-big" id="dash-beta-count">—</span>
+            <span class="dash-sub" id="dash-beta-lead">reading the board…</span>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/beta" data-tip="Scrolls down to the beta countdown and the live top ten">See the board ↓</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the beta, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>The site is in open beta, and it ends with a clean slate: when the beta ends — the same moment Gold OG closes — <b>every Send Power balance goes back to zero</b>, including the top of the board.</p>
+              <p><b>What the top 10 keep:</b> a permanent badge showing the place they finished, an automatic 2× on everything they earn afterwards (it joins the same additive stack as every other boost, so it never multiplies with an OG tier), and their final score on the record. <b>Why everything resets:</b> a beta is where the numbers get tuned, and keeping its balances would ship an economy where the earliest players are permanently ahead because of rules that no longer exist. Ranked on Send Power at the moment the beta ends. A badge has no monetary value and cannot be sold or transferred.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-og" id="dash-og">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🏅</span>
+            <h3 class="dash-name">OG badge <span class="dash-name-sub">hold both $SEND &amp; $GWC</span></h3>
+            <span class="dash-live"><i aria-hidden="true"></i><span>live</span></span>
+          </div>
+          <div class="dash-glance">
+            <span class="dash-k"><span class="og-tier-label">this window</span> closes in</span>
+            <span class="dash-big" data-og-deadline="" data-og-window="current">—</span>
+            <span class="dash-sub">A permanent badge and a Send Power bonus for holding both — not a reason to buy.</span>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/about#og-rules" data-tip="Opens the About page at the OG rules: the tiers, the windows, and how a badge is kept or lost">How OG works →</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the OG badge, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>Hold <b>both $SEND and $GWC</b>, and keep holding: a permanent badge and a Send Power bonus on everything you earn. 💎 Diamond 20× went to those who bought both in $GWC's first month and bought more of each than they sold that month (that month has closed). <b>Gold 10×</b> until the beta ends, <b>silver 5×</b> for the 90 days after, <b>bronze 3×</b> until $GWC turns one — added to your other boosts, never multiplied. Sell out of either and it's gone for good. Not a reason to buy.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-rocketize" id="dash-rocketize">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🖼️</span>
+            <h3 class="dash-name">Rocketize your pic <span class="dash-name-sub">all in your browser</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">Upload a picture → tap to add rockets 🚀 → download it, or make it your profile pic.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/rocketize" data-tip="Scrolls down to the picture editor">Open the editor ↓</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the picture editor, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>Drop in a JPG, PNG, WebP or GIF (first frame) up to 12 MB, tap anywhere on it to add a 🚀, drag a rocket to move it, resize and rotate the selected one, duplicate or remove it, undo and redo. Then download the PNG, or make it your profile pic — that signs you in first if you aren't already.</p>
+              <p>Nothing leaves your device unless you choose to make it your profile pic. The keyboard works too: the arrow keys nudge the selected rocket, Delete removes it, Enter adds one in the centre.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-watch" id="dash-watch" data-needs-video>
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🎬</span>
+            <h3 class="dash-name">The Full Send <span class="dash-name-sub">the feature video</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">Sit back, crank it up, and witness the send. It starts when you press play.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <button class="btn btn-ghost btn-sm dash-go" type="button" data-jump="watch" data-tip="Scrolls down to the video player">Watch ↓</button>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the video, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>The site's feature video, in its own player further down the page. It never autoplays, and the video itself is not fetched until you press play — so a slow connection pays for it only when you ask.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-wall" id="dash-wall">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🧱</span>
+            <h3 class="dash-name">The Send Wall <span class="dash-name-sub">the community feed</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">Post your sends, your memes, your gains, your pain. React 🔥, reply 💬, claim your @handle.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/wall" data-tip="Opens the public Send Wall feed">Enter the Wall →</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the Wall, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>The live community feed. Post wins, memes and cope, react 🔥, reply 💬, and claim your unique @handle before someone else does — every name on a board opens that person's own wall. Reading is open to anyone; posting takes a free account.</p>
+              <p>Only your Wall posts are public. Your wallet tracker stays private to you.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-tracker" id="dash-tracker">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">💼</span>
+            <h3 class="dash-name">Wallet Tracker <span class="dash-name-sub">private to you</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">Any wallet on Robinhood Chain: every coin it holds, live value and PNL from on-chain data.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/tracker" data-tip="Opens the Wallet Tracker page">Open the tracker →</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the tracker, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>With your free account, track any wallets you like — with your own labels — see every coin they hold, and get live value and PNL read from the chain itself. Every transaction is listed, with filters for transfers in and out, buys, sells and other, a date range and a search box.</p>
+              <p>Your tracker is private to you; only your Send Wall posts are public.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-communities" id="dash-communities">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">🏘️</span>
+            <h3 class="dash-name">Communities <span class="dash-name-sub">holders-only walls · Send Squads</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">A community goes live at 10 verified holders — and joining a live one adds a flat 10× to your points.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <a class="btn btn-ghost btn-sm dash-go" href="/communities" data-tip="Opens the communities directory and Send Squads">Open communities →</a>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on communities, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>Holders-only walls and proposals for the coins you hold, plus Send Squads. A community goes live at 10 verified holders; joining a live one adds a flat 10× to the Send Power you earn, added to your other boosts. A weekly board shows which community's members earned the most this week.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+        <article class="dash-tile is-origin" id="dash-origin">
+          <div class="dash-head">
+            <span class="dash-ico" aria-hidden="true">💸</span>
+            <h3 class="dash-name">Powered by $GWC <span class="dash-name-sub">and the OG $SEND site</span></h3>
+          </div>
+          <div class="dash-glance">
+            <p class="dash-line">GenerationalWealthCoin.com, its Telegram and X — and JustSendItCoin.com, where $SEND started.</p>
+          </div>
+          <div class="dash-act">
+          <div class="dash-foot">
+            <button class="btn btn-ghost btn-sm dash-go" type="button" data-jump="origin" data-tip="Scrolls down to the $GWC and JustSendItCoin.com cards with their links">The links ↓</button>
+          </div>
+          <details class="dash-more">
+            <summary data-tip="Opens the longer read on the two sites, right here on the tile">More</summary>
+            <div class="dash-more-body">
+              <p>The rocket fuel behind the send is <b>$GWC</b>: its own site, the Telegram community and the X account. Beside it, <b>JustSendItCoin.com</b> — where $SEND started: <em>“You don’t hold it. You send it.”</em> The coin's original one-page home, with its contract, a live chart, the 1% tax that feeds the liquidity pool and the four rules that are its whole white paper.</p>
+            </div>
+          </details>
+          </div>
+        </article>
+
+      </div>
+      <span class="sr-only" role="status" aria-live="polite" id="mcap-a11y"></span>
+    </section>
   </div>
 </header>
-
-<!-- ===== QUICK PATHS ===== -->
-<section aria-label="What you can do here">
-  <div class="wrap">
-    <div class="do-grid">
-      <a class="do-card" href="/guide"><div class="do-ico" aria-hidden="true">📖</div><div class="do-title">Buy your first coin</div><div class="do-sub">5 simple steps · ~10 min · safety-first</div></a>
-      <a class="do-card" href="/tracker"><div class="do-ico" aria-hidden="true">💼</div><div class="do-title">Track wallets &amp; PNL</div><div class="do-sub">Private to you · live on-chain data</div></a>
-      <a class="do-card" href="/wall"><div class="do-ico" aria-hidden="true">🧱</div><div class="do-title">Post on the Send Wall</div><div class="do-sub">The community feed · post &amp; react</div></a>
-      <a class="do-card" href="/communities"><div class="do-ico" aria-hidden="true">🏘️</div><div class="do-title">Join a community</div><div class="do-sub">Live at 10 verified holders · a flat 10×</div></a>
-    </div>
-  </div>
-</section>
 
 <!-- ===== TOKENS ===== -->
 <section id="tokens" class="alt-bg">
@@ -637,8 +919,8 @@
   </div>
 </section>
 
-<!-- ===== GWC + community, and the OG $SEND site beside it ===== -->
-<section>
+<!-- ===== GWC + community, and the OG $SEND site beside it (the dashboard's "The links" button lands here) ===== -->
+<section id="origin">
   <div class="origin-pair">
   <div class="gwc-hero reveal">
     <div class="coins">💸💰🪙</div>
