@@ -56,6 +56,13 @@ initTokenCards();
     // if it fails) every deadline is empty, which made allClosed true and greyed the banner out —
     // presenting a live campaign as expired on every page load and on every flaky connection.
     if (banner && loaded) banner.classList.toggle('og-banner-closed', allClosed);
+    // the dashboard's OG tile follows the strip: once every window has closed its chip says so and its label stops counting
+    const tile = document.getElementById('dash-og');
+    if (tile && loaded) {
+      tile.classList.toggle('is-over', allClosed);
+      const chip = tile.querySelector('.dash-live > span'); if (chip) chip.textContent = allClosed ? 'closed' : 'live';
+      const k = tile.querySelector('.dash-k'); if (k && allClosed) k.textContent = 'every window has closed';
+    }
   }
   tick();
   setInterval(() => { if (!document.hidden) tick(); }, 1000); // a countdown nobody can see doesn't need repainting
@@ -80,6 +87,9 @@ initTokenCards();
     cta.setAttribute('href', href);
     cta.setAttribute('aria-label', text + '. ' + tail);
     if (base) banner.setAttribute('aria-label', base);
+    // the dashboard's OG tile offers the same one action as the strip, so a signed-in reader never sees two different calls
+    const tgo = document.querySelector('#dash-og .dash-go');
+    if (tgo) { tgo.textContent = text + '\u00a0→'; tgo.setAttribute('href', href); tgo.setAttribute('data-tip', tail); }   // the arrow never orphans onto a line of its own
   }
   /* the strip: tap the head to pop the rest down; remembered for the visit so a return to the page finds it as left */
   const head = document.getElementById('og-banner-head'), more = document.getElementById('og-banner-more');
@@ -123,6 +133,7 @@ async function refreshMcap(opts) {
   try {
     const pairs = await fetchPairs();
     let a11yText = '';
+    let ethFresh = false;   // whether THIS pass read an ETH price — the swap tile says "right now" only then
     for (const key of ['SEND', 'GWC']) {
       const p = pairs[key];
       // Dexscreener: marketCap = circulating market cap, fdv = fully-diluted. Show the real market cap; only
@@ -137,7 +148,7 @@ async function refreshMcap(opts) {
       const fdv = Number(hasMc ? p.marketCap : p.fdv);
       setMcap(key, fdv, opts);
       // remember live USD prices so the swap panel can show dollar equivalents (ETH/USD = priceUsd ÷ priceNative)
-      if (p.priceUsd && p.priceNative && Number(p.priceNative) > 0) lastEthUsd = Number(p.priceUsd) / Number(p.priceNative);
+      if (p.priceUsd && p.priceNative && Number(p.priceNative) > 0) { lastEthUsd = Number(p.priceUsd) / Number(p.priceNative); ethFresh = true; }
       lastTokUsd[key] = Number(p.priceUsd) || null;
       const lbl = document.getElementById('mcap-label-' + key);
       if (lbl) lbl.textContent = hasMc ? 'Market cap · live' : 'FDV (fully diluted) · live';   // the tile's own name says which coin
@@ -156,7 +167,7 @@ async function refreshMcap(opts) {
     // the swap tile of the dashboard: the ETH price the swap's quotes are priced in (ETH/USD = priceUsd ÷ priceNative, from
     // the same pair reading as the market caps — the figure the swap panel itself uses for its dollar line, not a second feed)
     const ethEl = document.getElementById('dash-eth');
-    if (ethEl && lastEthUsd) { ethEl.textContent = '1 ETH ≈ ' + fmtUsd(Math.round(lastEthUsd)) + ' right now'; ethEl.hidden = false; }
+    if (ethEl && lastEthUsd) { ethEl.textContent = '1 ETH ≈ ' + fmtUsd(Math.round(lastEthUsd)) + (ethFresh ? ' right now' : ' · last reading'); ethEl.hidden = false; }
     const a11y = document.getElementById('mcap-a11y');
     if (a11y && a11yText) {
       // first fill is announced; later refreshes only update the text for a reader who goes looking for it —
@@ -168,6 +179,8 @@ async function refreshMcap(opts) {
   } catch {
     // nothing could be read at all: say so on both panels rather than "loading" for the whole outage
     for (const key of ['SEND', 'GWC']) { const sub = document.getElementById('mcap-sub-' + key); if (sub && /^loading/.test(sub.textContent)) sub.textContent = 'not read yet — trying again every 30 seconds'; }
+    // …and an ETH price shown earlier stops claiming to be current (the next good read says "right now" again)
+    const ethEl = document.getElementById('dash-eth'); if (ethEl && !ethEl.hidden) ethEl.textContent = ethEl.textContent.replace(' right now', ' · last reading');
   }
 }
 refreshMcap();
@@ -472,6 +485,8 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     const text = left <= 0 ? (settled ? 'Reset complete' : 'Resetting…') : d + 'd ' + h + 'h ' + m + 'm';
     count.textContent = text;
     if (dashCount) dashCount.textContent = text;
+    // the tile's label stops saying "resets in" once the moment has passed
+    const k = document.querySelector('#dash-beta .dash-k'); if (k) k.textContent = left <= 0 ? 'Beta ended · Send Power' : 'Beta ends · Send Power resets in';
   }
 
   async function load() {
@@ -482,6 +497,9 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
       endsAt = j.endsAt; settled = !!j.settled;
       when.textContent = endsAt ? new Date(endsAt).toUTCString().replace(' GMT', ' UTC') : '—';
       document.getElementById('beta-live').textContent = settled ? 'final' : 'live';
+      // the tile's chip says the same word as the section's, and goes quiet once the board is final
+      const tile = document.getElementById('dash-beta');
+      if (tile) { tile.classList.toggle('is-over', settled); const chip = tile.querySelector('.dash-live > span'); if (chip) chip.textContent = settled ? 'final' : 'live'; }
       tick();
       board.innerHTML = (j.top || []).length
         ? j.top.map(t => '<li class="beta-row' + (t.rank <= 3 ? ' is-top' : '') + '">' +

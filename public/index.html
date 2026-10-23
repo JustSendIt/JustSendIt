@@ -169,13 +169,13 @@
     <a class="og-banner-cta" id="og-banner-cta" href="/about#og-rules">How OG works <span class="og-cta-arrow">→</span></a>
   </div>
 </div>
-<header class="hero">
+<header class="hero hero-dash">
   <!-- The field reads bottom-up: fire at the base, rockets through the middle, moons in the sky, so twelve
        glyphs land as one launch column rather than twelve unrelated stickers. Both rails stay inside the
        outer 15%. The content column is the 1040px .wrap now (the dashboard fills it), so the band clear of
-       it is the gutter beyond that: at 1500px it is 230px a side (15.3%), and from there up the rails miss
-       the tiles. Below 1500px the field is hidden outright (the display:none at the foot of styles.css):
-       at 1300px a glyph at right:12% would sit on a live reading.
+       it is the gutter beyond that: from 1600px (280px a side) the rails miss the tiles on their own
+       percentages; between 1200 and 1599px styles.css pins them to the column's edge instead (at 1300px a
+       glyph at right:12% would sit on a live reading), and below 1200px the field is hidden outright.
        A span added here needs BOTH inline values. The class carries a floor duration so a missing one is
        visible rather than silent, but it carries no phase: without a negative delay a new glyph drifts in
        lockstep with everything sharing its duration. -->
@@ -210,8 +210,8 @@
           <a class="risk-chip" href="/guide">🎢 High-risk fun · Not financial advice</a>
         </div>
       </div>
-      <!-- the actions: a row of their own under the mark and the words, so the band stays short enough for the dashboard
-           to show on the first screen of a laptop; the drop-down under them is the first of the page's long reads -->
+      <!-- the actions: a row of their own under the mark and the words (a 2×2 on a phone), so the band stays short enough
+           for the dashboard's first row to reach a laptop's first screen -->
       <div class="hero-actions">
         <div class="cta-row">
           <a class="btn btn-primary" href="/swap" data-tip="Jumps down to the swap panel on this page">Buy $Send 🚀</a>
@@ -219,17 +219,6 @@
           <a class="btn btn-gold" href="/tokens" data-tip="Jumps to the token cards and their live charts">Live Charts 📈</a>
           <a class="btn btn-flame" href="/rocketize" data-tip="Jumps down to the picture editor: add rockets to a picture, then download it or make it your profile pic">Rocketize Profile&nbsp;🖼️</a>
         </div>
-        <details class="reassure">
-          <summary>New here? What is $Send — and what are the risks?</summary>
-          <div class="reassure-body">
-            $Send is a community memecoin on Robinhood Chain, made for fun and memes. Entertainment only, not financial advice, not affiliated with Robinhood.
-            <ul>
-              <li>🔐 Your money stays in <b>your</b> wallet — this site never takes custody and never asks for your seed phrase.</li>
-              <li>🎢 Memecoins are maximum-risk — prices can go to zero; only send what you can afford to lose completely.</li>
-              <li>✅ Always copy contract addresses from this page and verify them on the explorer.</li>
-            </ul>
-          </div>
-        </details>
       </div>
     </div>
 
@@ -241,7 +230,7 @@
          at (the Wall, the tracker, the communities). A tile is: the name, one line on what it is, the live reading where
          there is one (the two market caps, the ETH price the swap's quotes are priced in, the beta clock and its leader, the
          OG window's clock — written by home.js from the SAME requests the sections and the strip make, never a second
-         source and never a placeholder figure), a Details drop-down holding the long read, and
+         source and never a placeholder figure), a More drop-down holding the long read, and
          one way in: the section's own address (/tokens, /guide, /swap, /beta, /rocketize — home.js scrolls there and the
          address follows), a jump button where a section has no address of its own (the video, the $GWC and OG-site cards),
          or the page itself. The video tile carries data-needs-video: app.js hides it with the video's section on a deploy
@@ -265,7 +254,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/tokens" data-tip="Scrolls down to the $SEND card: the live chart, the address to copy, the explorer link and Add to Wallet">Chart &amp; contract ↓</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/tokens" data-tip="Scrolls down to the $SEND card: the live chart, the address to copy, the explorer link and Add to Wallet">Chart &amp; contract&nbsp;↓</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on $SEND, right here on the tile">More</summary>
@@ -292,7 +281,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/tokens" data-tip="Scrolls down to the $GWC card: the live chart, the address to copy, the explorer link and Add to Wallet">Chart &amp; contract ↓</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/tokens" data-tip="Scrolls down to the $GWC card: the live chart, the address to copy, the explorer link and Add to Wallet">Chart &amp; contract&nbsp;↓</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on $GWC, right here on the tile">More</summary>
@@ -314,7 +303,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/guide" data-tip="Scrolls down to the five-step How To Buy guide with the real links">Open the guide ↓</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/guide" data-tip="Scrolls down to the five-step How To Buy guide with the real links">Open the guide&nbsp;↓</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the guide, right here on the tile">More</summary>
@@ -337,7 +326,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/swap" data-tip="Scrolls down to the swap panel, where you set an amount, see the quote and sign in your wallet">Open the swap ↓</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/swap" data-tip="Scrolls down to the swap panel, where you set an amount, see the quote and sign in your wallet">Open the swap&nbsp;↓</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the swap, right here on the tile">More</summary>
@@ -362,7 +351,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/beta" data-tip="Scrolls down to the beta countdown and the live top ten">See the board ↓</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/beta" data-tip="Scrolls down to the beta countdown and the live top ten">See the board&nbsp;↓</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the beta, right here on the tile">More</summary>
@@ -387,7 +376,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/about#og-rules" data-tip="Opens the About page at the OG rules: the tiers, the windows, and how a badge is kept or lost">How OG works →</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/about#og-rules" data-tip="Opens the About page at the OG rules: the tiers, the windows, and how a badge is kept or lost">How OG works&nbsp;→</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the OG badge, right here on the tile">More</summary>
@@ -408,7 +397,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/rocketize" data-tip="Scrolls down to the picture editor">Open the editor ↓</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/rocketize" data-tip="Scrolls down to the editor: drop in a picture, tap to add rockets, then download it or make it your profile pic">Open the editor&nbsp;↓</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the picture editor, right here on the tile">More</summary>
@@ -430,7 +419,7 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <button class="btn btn-ghost btn-sm dash-go" type="button" data-jump="watch" data-tip="Scrolls down to the video player">Watch ↓</button>
+            <button class="btn btn-ghost btn-sm dash-go" type="button" data-jump="watch" data-tip="Scrolls down to the video player">Watch&nbsp;↓</button>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the video, right here on the tile">More</summary>
@@ -451,12 +440,12 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/wall" data-tip="Opens the public Send Wall feed">Enter the Wall →</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/wall" data-tip="Opens the public Send Wall feed">Enter the Wall&nbsp;→</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the Wall, right here on the tile">More</summary>
             <div class="dash-more-body">
-              <p>The live community feed. Post wins, memes and cope, react 🔥, reply 💬, and claim your unique @handle before someone else does — every name on a board opens that person's own wall. Reading is open to anyone; posting takes a free account.</p>
+              <p>The live community feed. Post wins, memes and cope, react 🔥, reply 💬, and claim your unique @handle before someone else does — every name on a board opens that person's own wall. Reading is open to anyone. Posting takes a free account and a read-only wallet check that you hold $SEND — the rule is on the About page.</p>
               <p>Only your Wall posts are public. Your wallet tracker stays private to you.</p>
             </div>
           </details>
@@ -473,12 +462,12 @@
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/tracker" data-tip="Opens the Wallet Tracker page">Open the tracker →</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/tracker" data-tip="Opens the Wallet Tracker: any wallet's coins, live value and PNL from the chain, with your own labels">Open the tracker&nbsp;→</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the tracker, right here on the tile">More</summary>
             <div class="dash-more-body">
-              <p>With your free account, track any wallets you like — with your own labels — see every coin they hold, and get live value and PNL read from the chain itself. Every transaction is listed, with filters for transfers in and out, buys, sells and other, a date range and a search box.</p>
+              <p>With your free account, track any wallets you like — with your own labels — see every coin they hold, and get live value and PNL read from the chain itself. Every transaction that moved a token is listed, with filters for transfers in and out, buys, sells and other, a date range and a search box.</p>
               <p>Your tracker is private to you; only your Send Wall posts are public.</p>
             </div>
           </details>
@@ -491,16 +480,16 @@
             <h3 class="dash-name">Communities <span class="dash-name-sub">holders-only walls · Send Squads</span></h3>
           </div>
           <div class="dash-glance">
-            <p class="dash-line">A community goes live at 10 verified holders — and joining a live one adds a flat 10× to your points.</p>
+            <p class="dash-line">A community goes live at 10 verified holders — and a verified holder in a live one earns a flat 10× on their points.</p>
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <a class="btn btn-ghost btn-sm dash-go" href="/communities" data-tip="Opens the communities directory and Send Squads">Open communities →</a>
+            <a class="btn btn-ghost btn-sm dash-go" href="/communities" data-tip="Opens the communities directory and Send Squads">Open communities&nbsp;→</a>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on communities, right here on the tile">More</summary>
             <div class="dash-more-body">
-              <p>Holders-only walls and proposals for the coins you hold, plus Send Squads. A community goes live at 10 verified holders; joining a live one adds a flat 10× to the Send Power you earn, added to your other boosts. A weekly board shows which community's members earned the most this week.</p>
+              <p>Holders-only walls and proposals for the coins you hold, plus Send Squads. A community goes live at 10 verified holders; a verified holder in a live one — the token in a linked wallet — earns a flat 10× on their Send Power, added to their other boosts. A weekly board shows which community's members earned the most this week.</p>
             </div>
           </details>
           </div>
@@ -512,22 +501,35 @@
             <h3 class="dash-name">Powered by $GWC <span class="dash-name-sub">and the OG $SEND site</span></h3>
           </div>
           <div class="dash-glance">
-            <p class="dash-line">GenerationalWealthCoin.com, its Telegram and X — and JustSendItCoin.com, where $SEND started.</p>
+            <p class="dash-line">GenerationalWealthCoin.com and its Telegram, the community X account — and JustSendItCoin.com, where $SEND started.</p>
           </div>
           <div class="dash-act">
           <div class="dash-foot">
-            <button class="btn btn-ghost btn-sm dash-go" type="button" data-jump="origin" data-tip="Scrolls down to the $GWC and JustSendItCoin.com cards with their links">The links ↓</button>
+            <button class="btn btn-ghost btn-sm dash-go" type="button" data-jump="origin" data-tip="Scrolls down to the $GWC and JustSendItCoin.com cards with their links">The links&nbsp;↓</button>
           </div>
           <details class="dash-more">
             <summary data-tip="Opens the longer read on the two sites, right here on the tile">More</summary>
             <div class="dash-more-body">
-              <p>The rocket fuel behind the send is <b>$GWC</b>: its own site, the Telegram community and the X account. Beside it, <b>JustSendItCoin.com</b> — where $SEND started: <em>“You don’t hold it. You send it.”</em> The coin's original one-page home, with its contract, a live chart, the 1% tax that feeds the liquidity pool and the four rules that are its whole white paper.</p>
+              <p>The rocket fuel behind the send is <b>$GWC</b>: its own site and its Telegram community, beside the community X account. Beside it, <b>JustSendItCoin.com</b> — where $SEND started: <em>“You don’t hold it. You send it.”</em> The coin's original one-page home, with its contract, a live chart, the 1% tax that feeds the liquidity pool and the four rules that are its whole white paper.</p>
             </div>
           </details>
           </div>
         </article>
 
       </div>
+      <!-- the first of the page's long reads, folded like the tiles' — it sat in the band before, where it pushed the
+           dashboard a screen down; egg 20 still counts taps on its summary -->
+      <details class="reassure">
+        <summary>New here? What is $Send — and what are the risks?</summary>
+        <div class="reassure-body">
+          $Send is a community memecoin on Robinhood Chain, made for fun and memes. Entertainment only, not financial advice, not affiliated with Robinhood.
+          <ul>
+            <li>🔐 Your money stays in <b>your</b> wallet — this site never takes custody and never asks for your seed phrase.</li>
+            <li>🎢 Memecoins are maximum-risk — prices can go to zero; only send what you can afford to lose completely.</li>
+            <li>✅ Always copy contract addresses from this page and verify them on the explorer.</li>
+          </ul>
+        </div>
+      </details>
       <span class="sr-only" role="status" aria-live="polite" id="mcap-a11y"></span>
     </section>
   </div>

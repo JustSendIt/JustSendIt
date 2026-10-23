@@ -440,13 +440,13 @@ a { color: var(--gold); }
 @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 
 /* ===== Hero ===== */
-/* Owner, 2026-10-23: the hero is a dashboard now (Mission Control, below). It is as tall as what it holds — the old 88vh
-   floor made a short page of a tall one and a tall page of a short one — and its content column is the 1040px .wrap
-   the sections use, so the tiles line up with the cards under them. */
+/* .hero is shared with about.html (its <header class="hero about-hero">): what follows is the poster hero both pages had.
+   The home page's header is .hero.hero-dash — the dashboard (Mission Control, further down) — and every rule the
+   dashboard changed is scoped to it, so About keeps its 88vh, its 340px mark and its 90px headline. */
 .hero {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center;
-  text-align: center; padding: 1.5rem 1.25rem 3.2rem;
+  position: relative; min-height: 88vh;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 3rem 1.25rem 4.5rem;
   /* overflow was written to crop the background video. The video is gone and this stays: it is now the only
      thing clipping the .float-emoji spans, which travel 26px past these edges. Not a leftover to sweep. */
   overflow: hidden;
@@ -459,9 +459,15 @@ a { color: var(--gold); }
   background: radial-gradient(ellipse 70% 60% at 50% 45%, transparent 30%, var(--ink) 100%);
   pointer-events: none;
 }
-.hero > .hero-content { position: relative; z-index: 2; width: 100%; max-width: 1040px; display: flex; flex-direction: column; align-items: center; gap: 1.3rem; }
+.hero > .hero-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
+/* Owner, 2026-10-23: the home hero is a dashboard. It is as tall as what it holds — the 88vh floor made a short page of a
+   tall one and a tall page of a short one — and its content column is the 1040px .wrap the sections use, so the tiles line
+   up with the cards under them. */
+.hero.hero-dash { min-height: 0; justify-content: flex-start; padding: 1.5rem 1.25rem 3.2rem; }
+.hero-dash > .hero-content { width: 100%; max-width: 1040px; gap: 1.3rem; }
+.hero-dash .hero-logo { width: min(220px, 56vw); }
 .hero-logo {
-  width: min(260px, 60vw); height: auto; cursor: pointer;
+  width: min(340px, 68vw); height: auto; cursor: pointer;
   filter: drop-shadow(0 0 45px var(--glow-g)) drop-shadow(0 12px 30px rgba(0,0,0,0.6));
   animation: bob 4s ease-in-out infinite;
   transition: transform 0.2s ease;
@@ -514,29 +520,32 @@ a { color: var(--gold); }
 .hero-chips .rh-badge, .hero-chips .risk-chip { margin-top: 0; }
 .hero-actions { display: flex; flex-direction: column; align-items: center; width: 100%; }
 .hero-actions .cta-row { margin-top: 1.5rem; }
-.hero-actions .reassure { margin-top: 1.3rem; width: 100%; max-width: none; }
-@media (min-width: 900px) {
-  /* row one: the mark beside the words; row two, the actions across both — the band is ~390px tall this way, so the
-     dashboard's first row is on the first screen of a 900px-tall laptop. The headline comes down from the poster size
-     (clamp 2.4–4.6rem) to a header's: it shares a row with the mark now, not the whole width. */
+/* a phone: the four as a 2×2 instead of a 254px stack — the band is the one thing between a visitor and the dashboard */
+@media (max-width: 559px) {
+  .hero-actions .cta-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; width: 100%; margin-top: 1.1rem; }
+  .hero-actions .cta-row .btn { padding: 0.6rem 0.5rem; font-size: max(var(--text-floor), 0.95rem); }
+}
+@media (min-width: 1000px) {
+  /* row one: the mark beside the words; row two, the actions across both — so the dashboard's first row reaches the first
+     screen of a 900px-tall laptop. The headline comes down from the poster size (clamp 2.4–4.6rem) to a header's: it
+     shares a row with the mark now, not the whole width. From 1000px, not 900: the four buttons' words take 805px at the
+     floor, and between 900 and 999px the row is 818–917px wide, where Rocketize Profile dropped to a line of its own. */
   .hero-top { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.2rem 2.2rem; text-align: left; }
   .hero-words { align-items: flex-start; }
   .hero-actions { grid-column: 1 / -1; align-items: flex-start; }
-  .hero-logo { width: 200px; }
-  .hero h1 { margin-top: 0; font-size: max(var(--text-floor), clamp(2rem, 3.8vw, 3.1rem)); }
-  .hero .tag { margin-top: 0.4rem; }
-  .hero .tag, .hero .hero-lede { margin-left: 0; margin-right: 0; text-align: left; }
+  .hero-top .hero-logo { width: 200px; }
+  .hero-top h1 { margin-top: 0; font-size: max(var(--text-floor), clamp(2rem, 3.8vw, 3.1rem)); }
+  .hero-top .tag { margin-top: 0.4rem; }
+  .hero-top .tag, .hero-top .hero-lede { margin-left: 0; margin-right: 0; text-align: left; }
   .hero-chips { margin-top: 0.8rem; }
   .hero-chips, .hero-actions .cta-row { justify-content: flex-start; }
-  /* the four on one line: at the 19pt floor their words take 805px, so the padding comes down from the poster's 2rem */
   .hero-actions .cta-row { margin-top: 0.8rem; gap: 0.8rem; }
   .hero-actions .cta-row .btn { padding: 0.75rem 1rem; }
-  .hero-actions .reassure { margin: 0.8rem 0 0; }
 }
 
 /* ===== Mission Control: the hero dashboard =====
    One tile per thing on the page (index.html says which, and why). A tile is a column: the head (an icon disc, the name,
-   a LIVE pill where the reading is live), the glance (one line, or a live reading), the Details drop-down with the long
+   a LIVE pill where the reading is live), the glance (one line, or a live reading), the More drop-down with the long
    read folded away, and the foot with the one way in. Twelve tiles in two columns at every width from 560px — six full
    rows, the two coins first — and one column under that: a pair on a phone broke the names mid-word (a 145px tile holds
    77px of name beside its icon) and stood every tile 500px tall.
@@ -553,8 +562,13 @@ a { color: var(--gold); }
 .dash-title-ico { font-size: max(var(--text-floor), 1.2em); text-shadow: none; }
 .dash-title-sub { font-family: 'Rubik', sans-serif; font-weight: 700; letter-spacing: 0; font-size: max(var(--text-floor), 0.95rem); color: var(--text-dim); text-shadow: none; }
 .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
-@media (max-width: 559px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } .dash-tile { padding: 0.85rem 0.9rem 0.8rem; gap: 0.5rem; } }
+/* while a long read is open, every tile keeps its own height: with the row stretched, the neighbour's button sank to the
+   foot of a tile that was mostly air. Closed, the rows stay even (an engine without :has() keeps them even throughout). */
+.dash-grid:has(.dash-more[open]) { align-items: start; }
+@media (max-width: 559px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (min-width: 1000px) { .dash-grid { gap: 1rem; } }
+/* the New-here read, folded like the tiles' and across the grid's width (the base .reassure is a 620px centred box) */
+.dash > .reassure { margin: 0.9rem 0 0; width: 100%; max-width: none; }
 .dash-tile {
   --tile: var(--green);
   position: relative; overflow: hidden; isolation: isolate; container-type: inline-size;
@@ -566,6 +580,9 @@ a { color: var(--gold); }
   transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .dash-tile > * { position: relative; z-index: 2; }
+/* tighter on a phone (one column) and in the narrowest pairs (560–639px); after the base rule, which otherwise wins the tie */
+@media (max-width: 559px) { .dash-tile { padding: 0.85rem 0.9rem 0.8rem; gap: 0.5rem; } }
+@media (min-width: 560px) and (max-width: 639px) { .dash-tile { padding: 0.8rem 0.75rem 0.75rem; gap: 0.5rem; } }
 .dash-tile:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--tile) 70%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tile) 22%, transparent), 0 16px 40px rgba(0,0,0,0.45); }
 /* the accent each tile wears on its border, its icon disc and its big reading — the site's own few, no new colours */
 .dash-tile.is-gwc, .dash-tile.is-og, .dash-tile.is-communities, .dash-tile.is-origin { --tile: var(--gold); }
@@ -575,7 +592,8 @@ a { color: var(--gold); }
 /* the two coins: the Dexscreener banner behind (home.js sets background-image), dimmed, under a DARK scrim — the ground
    every reading is measured against (--text on --ink-2 ≥ 15:1). They are deliberately not matrix tiles: the banner is
    the texture, and a tile's ::after would replace the scrim that keeps the numbers readable. */
-.dash-tile > .mcap-banner { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; opacity: 0.3; }
+.dash-tile > .mcap-banner { position: absolute; inset: 0; z-index: 0; background-size: cover; background-position: center; opacity: 0.22; }
+.dash-tile.is-token .mcap-sub { color: var(--text-dim); }   /* the source line sits where the banner's lettering is brightest: --text-mute measured 3.9:1 there */
 .dash-tile.is-token::after { content: ''; position: absolute; inset: 0; z-index: 1; background: linear-gradient(180deg, color-mix(in srgb, var(--ink-2) 72%, transparent), color-mix(in srgb, var(--ink-2) 94%, transparent)); pointer-events: none; }
 .dash-head { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .dash-ico {
@@ -588,15 +606,22 @@ a { color: var(--gold); }
 .dash-name-sub { display: block; margin-top: 0.15rem; font-family: 'Rubik', sans-serif; font-weight: 700; letter-spacing: 0.01em; font-size: max(var(--text-floor), 0.76rem); color: var(--text-dim); }
 .dash-live { flex: none; display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.12rem 0.55rem; border-radius: 999px; border: 1.5px solid var(--rh-green); background: rgba(0,200,5,0.1); color: var(--rh-green); font-weight: 800; font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.08em; text-transform: uppercase; }
 .dash-live i { width: 8px; height: 8px; border-radius: 50%; background: var(--rh-green); animation: pulse 1.6s ease-in-out infinite; }
+/* a tile whose reading is over (the beta settled, every OG window closed): home.js marks it, the chip goes quiet and says so */
+.dash-tile.is-over .dash-live { border-color: var(--text-mute); background: transparent; color: var(--text-dim); }
+.dash-tile.is-over .dash-live i { animation: none; background: var(--text-mute); }
+/* the OG tile's clock takes the strip's two states (home.js sets them on the same elements as the strip's timer):
+   red through the last three days of the open window, dim once it has closed */
+.dash-glance.og-timer-soon .dash-big { color: var(--red); text-shadow: 0 0 22px color-mix(in srgb, var(--red) 45%, transparent); }
+.dash-big.og-timer-closed { color: var(--text-dim); text-shadow: none; }
 .dash-glance { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .dash-line { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.92rem); line-height: 1.45; text-wrap: pretty; overflow-wrap: anywhere; }
 .dash-line b { color: var(--text); }
 .dash-k { font-size: max(var(--text-floor), 0.76rem); font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); }
-.dash-big { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.1rem, 11cqi, 2.4rem)); line-height: 1.1; color: var(--text); text-shadow: 0 0 22px color-mix(in srgb, var(--tile) 45%, transparent); font-variant-numeric: tabular-nums; }
+.dash-big { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 2rem); font-size: max(var(--text-floor), clamp(1.1rem, 11cqi, 2.4rem)); line-height: 1.1; color: var(--text); text-shadow: 0 0 22px color-mix(in srgb, var(--tile) 45%, transparent); font-variant-numeric: tabular-nums; }
 .dash-sub { font-size: max(var(--text-floor), 0.8rem); color: var(--text-mute); font-weight: 600; }
 .dash-sub a { color: var(--gold); }
 /* the readings keep the names the market-cap panels had (home.js writes to those ids); sized by the tile, not the viewport */
-.dash-tile .mcap-value { font-size: max(var(--text-floor), clamp(1.1rem, 12cqi, 2.6rem)); line-height: 1.1; }
+.dash-tile .mcap-value { font-size: max(var(--text-floor), 2rem); font-size: max(var(--text-floor), clamp(1.1rem, 12cqi, 2.6rem)); line-height: 1.1; }   /* the first is the floor for an engine without cqi */
 /* the drop-down: the long read, folded. The summary is a pill on the site's control ladder (light fill, black type);
    the chevron is drawn here so the summary's own word stays its label. */
 /* the foot floats at the left of the action block, the summary takes the rest of its line, and the opened read clears both:
@@ -619,15 +644,14 @@ a { color: var(--gold); }
 .dash-more-body p { margin: 0 0 0.6rem; }
 .dash-more-body p:last-child { margin-bottom: 0; }
 .dash-more-body b { color: var(--text); }
-/* a narrow tile (a phone pair): tighter, the LIVE pill down to its dot (the word stays for a screen reader), the way-in
-   button across the full width so its label never breaks mid-word */
+/* a narrow tile (the narrowest pairs): a smaller icon disc, and the way-in button across the full width — the foot stops
+   floating there, since a floated box shrinks to fit and a 100% width inside it is no width at all. The LIVE pill keeps
+   its word: a green ring alone would be a colour-only signal. (A tile cannot query itself, so the padding is a media
+   rule above.) */
 @container (max-width: 230px) {
-  .dash-tile { padding: 0.8rem 0.75rem 0.75rem; gap: 0.5rem; }
   .dash-ico { width: 2.1rem; height: 2.1rem; }
-  .dash-live { padding: 0.3rem; gap: 0; }
-  .dash-live > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .dash-foot { float: none; margin-right: 0; }
   .dash-go { width: 100%; padding-inline: 0.6rem; }
-  .dash-more > summary { min-height: 36px; padding: 0.2rem 0.75rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dash-tile, .dash-ico, .dash-more > summary { transition: none; }
@@ -1016,11 +1040,24 @@ video.media-preview-el { width: auto; }
    ~710px the top rail reaches the logo and the 45px glow around it. Hiding the field is the one-line fix, and
    561-700px is already this file's landscape-phone cohort. .float-emoji is shared with about.html, whose three
    spans are hidden across the same band; they are decoration, and that page loses nothing by it. */
-/* …and the hero's content column is the 1040px .wrap now (the dashboard fills it), so the field shows only from 1500px,
-   where the gutter beyond it (230px a side, 15.3%) is wider than the rails: at 1300px a glyph at right:12% would sit on
-   a live reading. */
-@media (max-width: 1499px) {
+/* …and with the larger text the content column spans nearly the whole hero up to a small laptop, so the field
+   would drift over the cards and the buttons: it shows only where the page has side gutters (about.html) */
+@media (max-width: 1099px) {
   .float-emoji { display: none; }
+}
+/* The home hero's content column is the 1040px .wrap (the dashboard fills it). From 1600px the gutter beyond it (280px a
+   side) clears the rails' own percentages (the inmost, left:14%, ends at 263px there; at 1500px it reached 19px into the
+   column). Between 1200 and 1599px the rails are pinned to the column's edge instead — a glyph at right:12% would sit on
+   a live reading at 1300px — so eggs 16 and 17 (the 7th and 4th glyphs) stay reachable on a laptop; !important because
+   every span positions itself inline. Under 1200px there is no gutter to speak of, and the home field is hidden. */
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .hero-floats .float-emoji:nth-child(1), .hero-floats .float-emoji:nth-child(3), .hero-floats .float-emoji:nth-child(4), .hero-floats .float-emoji:nth-child(5),
+  .hero-floats .float-emoji:nth-child(8), .hero-floats .float-emoji:nth-child(9), .hero-floats .float-emoji:nth-child(11) { left: calc((100% - 1040px) / 2 - 2.8rem) !important; }
+  .hero-floats .float-emoji:nth-child(2), .hero-floats .float-emoji:nth-child(6), .hero-floats .float-emoji:nth-child(7), .hero-floats .float-emoji:nth-child(10),
+  .hero-floats .float-emoji:nth-child(12) { right: calc((100% - 1040px) / 2 - 2.8rem) !important; }
+}
+@media (max-width: 1199px) {
+  .hero-dash .float-emoji { display: none; }
 }
 
 /* visible by default. Parked at opacity 0 only once app.js has taken responsibility (it adds html.js

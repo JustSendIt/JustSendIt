@@ -10854,7 +10854,7 @@ const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').repl
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
   .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 const SENDY_SITE_MAP = `PAGES — point people to these by path:
-/ — home: Mission Control at the top (a dashboard: one tile per section with a one-line glance, the live readings, a Details drop-down holding the long read, and a button into the section), what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta), Rocketize your pic (/rocketize: add rockets to a picture, in the browser, and make it your profile pic), the feature video, the $GWC and JustSendItCoin.com links
+/ — home: Mission Control at the top (a dashboard: one tile per section with a one-line glance, the live readings, a More drop-down holding the long read, and a button into the section), what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta), Rocketize your pic (/rocketize: add rockets to a picture, in the browser, and make it your profile pic), the feature video, the $GWC and JustSendItCoin.com links
 /about — how everything works: Send Power, Send Calls, the holder boost, the rules
 /newpairs — the Scanner: paste any token or pool address for its on-chain profile; the New Pairs radar is a tab of it
 /wall — the Send Wall: every Send Call, live

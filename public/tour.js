@@ -82,7 +82,7 @@
   }
 
   function positionAll(target) {
-    if (!target) return;
+    if (!target || !spot || !tip) return;   // the two re-measures renderStep queues can land after finish() has removed both
     const r = target.getBoundingClientRect();
     const pad = 8;
     spot.style.left = (r.left - pad) + 'px';
