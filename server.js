@@ -11193,8 +11193,14 @@ function readBody(req, limit = 256 * 1024) {
       chunks.push(c);
     });
     req.on('end', () => {
-      try { finish(resolve, chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}); }
-      catch { finish(reject, new HttpError('malformed JSON body', 400)); }
+      let v;
+      try { v = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}; }
+      catch { return finish(reject, new HttpError('malformed JSON body', 400)); }
+      /* Every route reads named fields off what this returns (b.code, b.text …), so a body of JSON null, a list,
+         a number or a string is malformed for all of them. Let through, `null.code` threw a TypeError that the
+         router logged with its whole stack and answered as a 500. */
+      if (!v || typeof v !== 'object' || Array.isArray(v)) return finish(reject, new HttpError('malformed JSON body', 400));
+      finish(resolve, v);
     });
     req.on('error', () => finish(reject, new HttpError('request stream error', 400)));
   });
@@ -15790,7 +15796,6 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('onboard:' + me.id, 120, 10 * 60e3)) return bad(res, 'slow down', 429);
         const b = await readBody(req, 1024);
-        if (!b || typeof b !== 'object' || Array.isArray(b)) return bad(res, 'bad request');   // a JSON null or list is a 400, not a 500
         const action = String(b.action || ''), step = Number(b.step);
         if (action === 'step') {
           if (!Number.isInteger(step) || step < 0 || step > ONBOARD_MAX_STEP) return bad(res, 'bad step');
