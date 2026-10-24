@@ -204,7 +204,7 @@
     document.body.appendChild(root);
     owner = me() && me().username;   // whose tour this is: another account signing in closes it (auth:change)
     blocker = root.querySelector('.ob-block'); spot = root.querySelector('.ob-spot'); guide = root.querySelector('#ob-sendy'); card = root.querySelector('.ob-card'); live = root.querySelector('.ob-live');
-    blocker.addEventListener('click', () => { card.classList.remove('ob-nudge'); void card.offsetWidth; card.classList.add('ob-nudge'); const b = card.querySelector('[data-ob="next"]'); if (b) b.focus(); });
+    blocker.addEventListener('click', () => { card.classList.remove('ob-nudge'); void card.offsetWidth; card.classList.add('ob-nudge'); card.focus({ preventScroll: true }); });
     card.addEventListener('click', onCard);
     document.addEventListener('keydown', onKey, true);
     window.addEventListener('resize', relayout); window.addEventListener('scroll', relayout, { passive: true });
@@ -266,7 +266,10 @@
       flyTo(L.sx, L.sy, () => { face(val(s.act) || 'point'); });
       if (!arriving) sfx(idx === 0 ? 'open' : 'nav');
       live.textContent = val(s.title);
-      const b = card.querySelector('[data-ob="next"], [data-ob="finish"]'); if (b) b.focus({ preventScroll: true });
+      /* Focus goes to the card (a labelled dialog: its title and words are read out), not to a button: the site shows a
+         button's description on every focus (tips.js), and here it covered the very words the member is reading. Enter on the
+         card goes on (onKey); Tab reaches the buttons. */
+      card.focus({ preventScroll: true });
       // and three more looks over the first two seconds, for a section that is slower to fill in (refit)
       [450, 1100, 2200].forEach((ms) => setTimeout(() => { if (root && seq === show.seq && mode === 'step' && refit()) relayout(); }, ms));
     };
@@ -403,6 +406,7 @@
     }
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (mode === 'step') skip(); return; }
     if (mode !== 'step') return;
+    if (e.key === 'Enter' && e.target === card) { e.preventDefault(); const b = card.querySelector('[data-ob="next"], [data-ob="finish"]'); if (b) b.click(); return; }
     const inField = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
     if (!inField && e.key === 'ArrowRight' && !STEPS[idx].final) { e.preventDefault(); show(idx + 1); }
     else if (!inField && e.key === 'ArrowLeft' && idx > 0) { e.preventDefault(); show(idx - 1); }

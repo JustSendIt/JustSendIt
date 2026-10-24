@@ -157,9 +157,9 @@
     renderStep();
   }
 
-  function finish(completed) {
+  function finish(completed, quiet) {   // quiet: handed over to Sendy's tour — no sound, and the focus is his to place
     active = false;
-    if (!completed && window.SFX) SFX.play('close');
+    if (!completed && !quiet && window.SFX) SFX.play('close');
     document.removeEventListener('keydown', onKey);
     removeEventListener('scroll', onReflow);
     removeEventListener('resize', onReflow);
@@ -177,7 +177,7 @@
       if (window.sendConfetti) sendConfetti(innerWidth / 2, innerHeight / 2.4, { count: 70, emojiRatio: 0.5 });
     }
     // land the user on what they just learned (or restore prior focus)
-    const dest = lastTarget || lastFocus;
+    const dest = quiet ? null : (lastTarget || lastFocus);
     if (dest && dest.focus) {
       try {
         if ((dest.tabIndex == null || dest.tabIndex < 0) && !/^(A|BUTTON|INPUT|TEXTAREA|SELECT)$/.test(dest.tagName)) dest.tabIndex = -1;
@@ -212,6 +212,12 @@
     if (!anyModalOpen()) showWelcome();
   };
 
+  /* A visitor who signs up while this tour is open: the new account is due Sendy's tour (onboard.js), which shows everything this
+     one does and the account besides — and waits while this one is up. So this one steps aside, quietly, and is marked seen. */
+  document.addEventListener('auth:change', () => {
+    if (!(active || welcome) || !signedIn() || !(window.ONBOARD && ONBOARD.due())) return;
+    setFlag('onboard'); finish(false, true);
+  });
   document.addEventListener('jsi:entered', maybeStart);
   if (onHome()) setTimeout(maybeStart, 3500); // fallback if jsi:entered never arrives
 
