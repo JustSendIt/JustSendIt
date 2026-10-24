@@ -6116,3 +6116,12 @@ button.sc-chain--ethereum.is-on, button.sc-chain--solana.is-on { background: col
 .tkd-swap-note { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.5; }
 .tkd-swap-wallets { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; vertical-align: middle; }
 @media (max-width: 420px) { .tkd-swap-lines { grid-template-columns: 1fr; gap: 0.1rem; } .tkd-swap-lines dd { margin-bottom: 0.35rem; } }
+
+/* ===== Contract facts: owner powers a renounce neutralised, who holds the LP (owner, 2026-10-24) ===== */
+.tkd-neutral { color: var(--text-dim); }
+.np-hp-powers .np-hp-neutral { color: var(--text-dim); }
+.tkd-lp-holders { list-style: none; margin: 0 0 0.3rem; padding: 0; display: grid; gap: 0.25rem; }
+.tkd-lp-holders li { overflow-wrap: anywhere; }
+.np-addr-link { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.tkd-facts > div.tkd-facts-list { grid-column: 1 / -1; flex-direction: column; gap: 0.3rem; }
+.tkd-facts > div.tkd-facts-list dd { text-align: left; }

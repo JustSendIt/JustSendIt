@@ -108,6 +108,7 @@ const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
        so a copy of a key stops opening anything soon after it is taken. See "Key rotation" further down and DEPLOY.md. */
 const KEYLIB = require('./lib/keys.js');
 const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
+const CF = require('./lib/contractfacts.js');   // a contract's powers, the dead addresses, and whether a renounce has neutralised a power
 const BUNDLES = require('./lib/bundles.js');   // who bought and moved tokens in the same block (lib/bundles.js)
 const GA4 = require('./lib/ga.js');           // Google Analytics: the admin page's reports (lib/ga.js)
 const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
@@ -5557,7 +5558,7 @@ function recordRunners(pairs) {
          and cannot be one stored number. This is the shared, comparable moment: the first time the
          scanner would have given this token its top verdict on its own default settings. Recorded once,
          never moved, and left null for a token that has never cleared it. */
-      const qualNow = !!(p.risk && p.risk.triage === 'ok' && (p.risk.health || 0) >= 100 && p.risk.sniperOk === true && !p.risk.thinData);
+      const qualNow = !!(p.risk && p.risk.triage === 'ok' && (p.risk.health || 0) >= 100 && p.risk.sniperOk === true && !p.risk.thinData && !CF.redFacts(Object.assign({ chain: 'robinhood' }, p)).found.length);   // and no red power still usable
       const ex = db.prepare('SELECT peak_price, peak_mc, qual_mc FROM runner_tokens WHERE token_addr=?').get(tok);
       if (!ex) {
         db.prepare('INSERT INTO runner_tokens (token_addr,pair_addr,symbol,name,brand,first_price,first_mc,first_seen_at,peak_price,peak_at,peak_mc,qual_mc,qual_at,cur_price,cur_mc,cur_liq,cur_pc24,cur_holders,cur_health,last_seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
@@ -6464,7 +6465,7 @@ async function checkLpLock(pairAddr) {
     if (supplyRaw <= 0n) return { known: false };
     const h = await jget(BLOCKSCOUT + '/api/v2/tokens/' + pairAddr + '/holders?items_count=15');
     const items = (h && h.items) || [];
-    const BURN = new Set(['0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead']);
+    const BURN = CF.DEAD_ADDRS;   // the zero address, 0x…dEaD and 0xdead…42069
     let lockedRaw = 0n;
     for (const it of items) {
       const addr = ((it.address && it.address.hash) || '').toLowerCase();
@@ -6482,7 +6483,10 @@ function contractSummaryOf(o) {
   if (o.verified === false) return 'The contract source is NOT published, so no one can read what it actually does' + via + '. That is itself a red flag; treat it as high-risk.';
   if (o.verified == null) return 'Couldn’t read the contract right now.';
   if (!o.powers.length) return 'No obvious owner powers to mint, blacklist, pause, toggle trading, or change taxes were found — the usual honeypot/rug levers weren’t detected. Still DYOR; a scan isn’t an audit.';
-  return (o.source === 'goplus' ? 'An automated scan of the contract' : 'A heuristic read of the verified source') + ' says the owner’s code appears able to ' + o.powers.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders. A scan is not an audit.';
+  const live = o.powers.filter((p) => !p.neutralised), dead = o.powers.filter((p) => p.neutralised);
+  const by = o.source === 'goplus' ? 'An automated scan of the contract' : 'A heuristic read of the verified source';
+  if (!live.length) return by + ' finds owner functions to ' + dead.map(p => p.can.toLowerCase()).join(', ') + ' — but ownership is renounced to a dead address, so nobody can call them any more. A scan is not an audit.';
+  return by + ' says the owner’s code appears able to ' + live.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders.' + (dead.length ? ' (Its ' + dead.map(p => p.can.toLowerCase()).join(', ') + ' cannot be used: ownership is renounced.)' : '') + ' A scan is not an audit.';
 }
 /* The pair is supplied by whoever asked, and the answer used to be cached under the TOKEN alone — so
    asking about token X while naming some unrelated pool whose LP happens to be burned wrote "Liquidity
@@ -6521,11 +6525,11 @@ async function analyzeContract(tokenAddr, pairAddr) {
       out.source = 'goplus';
       out.honeypot = gpFlag(g.is_honeypot);
       out.buyTax = gpNum(g.buy_tax); out.sellTax = gpNum(g.sell_tax);
-      out.renounced = g.owner_address ? /^0x0{40}$/.test(String(g.owner_address).toLowerCase()) : null;
+      out.renounced = g.owner_address ? CF.isDead(g.owner_address) && gpFlag(g.can_take_back_ownership) !== true && gpFlag(g.hidden_owner) !== true : null;   // a dead owner, with no way back and no hidden owner
       out.readAt = gp.at;
       if (Array.isArray(g.lp_holders) && g.lp_holders.length) {
         // LP lock, from the same reading: the share of LP tokens held in a locked or burn position
-        const locked = g.lp_holders.filter((h) => gpFlag(h.is_locked) === true || /^0x0{40}$|dead$/i.test(String(h.address || '')));
+        const locked = g.lp_holders.filter((h) => gpFlag(h.is_locked) === true || CF.isDead(h.address));
         const pct = locked.reduce((a, h) => a + ((gpNum(h.percent) || 0) * 100), 0);
         out.liquidity = { known: true, lockedPct: pct, locked: pct >= 50, source: 'goplus' };
       }
@@ -6535,6 +6539,12 @@ async function analyzeContract(tokenAddr, pairAddr) {
     const sc = await jget(BLOCKSCOUT + '/api/v2/smart-contracts/' + tok);
     if (sc) { if (out.verified == null) out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); const src = String(sc.source_code || ''); if (out.verified && src && !out.powers.length) out.powers = scanContractSource(src); }
   } catch {}
+  /* A renounced owner cannot call the owner's functions (owner, 2026-10-24): each power an owner calls is marked neutralised —
+     said on the card, and kept out of the warning. A take-back path or a hidden owner is never neutralised (it is what makes a
+     renounce not real), nor is a sell limit (the token's behaviour, not an owner's call). The owner() read answers when GoPlus
+     did not. */
+  if (out.renounced == null) { try { out.renounced = (await tokenOwner(tok)).renounced; } catch {} }
+  if (out.renounced === true) { const NEUTRAL = new Set(['mint', 'blacklist', 'pausable', 'fees', 'trading', 'maxlimits', 'maxlimits-mod', 'cooldown', 'whitelist', 'balance']); out.powers = out.powers.map((p) => NEUTRAL.has(p.key) ? Object.assign({}, p, { neutralised: true }) : p); }
   if (!out.liquidity.known && pair && await pairContainsToken(pair, tok)) out.liquidity = await checkLpLock(pair);
   else if (!out.liquidity.known && pair) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
   out.summary = contractSummaryOf(out);
@@ -9753,6 +9763,16 @@ async function getReserves(pairAddr) {                        // getReserves() 0
   if (!r || r.length < 130) return null;
   try { return { r0: BigInt('0x' + r.slice(2, 66)), r1: BigInt('0x' + r.slice(66, 130)) }; } catch { return null; }
 }
+/* The home chain's owner, for the profile: owner() first (the chain's own answer); GoPlus's owner_address when the contract has
+   no owner() to call. { owner: a LIVE owner or null, ownerBurn: the dead address it was renounced to, renounced, ownerIsContract,
+   ownerSource }. A take-back path or a hidden owner (GoPlus) is the client's and redFacts' to weigh — renounced stays the read. */
+function homeOwner(ownerInfo, g) {
+  let a = ownerInfo && ownerInfo.owner ? String(ownerInfo.owner).toLowerCase() : null, src = a ? 'chain' : null, isContract = ownerInfo ? ownerInfo.isContract : null;
+  if (!a && g && g.owner_address != null && String(g.owner_address).trim() !== '') { a = String(g.owner_address).toLowerCase(); src = 'goplus'; isContract = null; }
+  if (!a) return { owner: null, ownerBurn: null, renounced: ownerInfo ? ownerInfo.renounced : null, ownerIsContract: null, ownerSource: null };
+  const dead = CF.isDead(a);
+  return { owner: dead ? null : a, ownerBurn: dead ? a : null, renounced: dead, ownerIsContract: dead ? null : isContract, ownerSource: src };
+}
 /* owner() changes only on a transfer or a renounce, which are rare and one-way in practice; a successful
    read is kept for ten minutes. A failed read is not cached — "unknown" must be re-asked, not remembered. */
 const _ownerCache = new Map();
@@ -9764,13 +9784,43 @@ async function tokenOwner(token) {                            // owner() 0x8da5c
   const r = await ethCall(token, '0x8da5cb5b');
   if (!r || r === '0x' || r.length < 66) return { owner: null, renounced: null };
   const a = '0x' + r.slice(26, 66);
-  const v = { owner: a, renounced: /^0x0{40}$/.test(a) };     // zero address = ownership renounced
+  /* Renounced = the owner is a DEAD address (lib/contractfacts.js: the zero address, 0x…dEaD, 0xdead…42069) — nobody holds
+     its key, so nobody can call the owner's functions (owner, 2026-10-24). A live owner: is it a contract or a wallet? One
+     eth_getCode, kept with the owner — so the card can say which, with the address. */
+  const dead = CF.isDead(a);
+  let isContract = null;
+  if (!dead) { try { isContract = MC.codeKind(await rpc('eth_getCode', [a, 'latest'])); } catch {} }
+  const v = { owner: a, renounced: dead, isContract };
   pruneCache(_ownerCache, 20000); _ownerCache.set(k, { at: now(), v });
+  return v;
+}
+/* How much of a pool's LP sits at a DEAD address — burned, gone for good (owner, 2026-10-24: "check is liquidity is locked by
+   checking if the liquidity is owned by a dead address"). The chain's own answer for a v2 pair: its totalSupply() and its
+   balanceOf() each dead address, in one batch. Uniswap v2 sends the first 1,000 wei of LP to the zero address when a pool is
+   made; that is burned too, and counted. null when the pool has no LP token to read (or the node did not answer) — not 0.
+   Kept 15 minutes: a burn is one-way, and an un-burn is impossible. */
+const _lpBurnCache = new Map();
+const LP_BURN_TTL = 15 * 60 * 1000;
+async function lpBurnRead(pair) {
+  const k = String(pair || '').toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(k)) return null;
+  const c = _lpBurnCache.get(k);
+  if (c && now() - c.at < LP_BURN_TTL) return c.v;
+  const dead = [...CF.DEAD_ADDRS];
+  let out; try { out = await rpcBatch([['eth_call', [{ to: k, data: '0x18160ddd' }, 'latest']]].concat(dead.map((d) => ['eth_call', [{ to: k, data: '0x70a08231' + d.slice(2).padStart(64, '0') }, 'latest']]))); } catch { return null; }
+  const big = (h) => { try { return h && h !== '0x' ? BigInt(h) : null; } catch { return null; } };
+  const supply = big(out[0]); if (!(supply > 0n)) return null;
+  const parts = dead.map((d, i) => ({ address: d, raw: big(out[i + 1]) }));
+  if (parts.some((x) => x.raw == null)) return null;   // one balance unread: the sum would be a guess
+  const burned = parts.reduce((a, x) => a + x.raw, 0n);
+  const pctOf = (x) => Number((x * 1000000n) / supply) / 10000;
+  const v = { burnedPct: pctOf(burned), by: parts.filter((x) => x.raw > 0n).map((x) => ({ address: x.address, pct: pctOf(x.raw) })), source: 'chain', at: now() };
+  pruneCache(_lpBurnCache, 20000); _lpBurnCache.set(k, { at: now(), v });
   return v;
 }
 let usdgDecimals = null; // cached once (Global Dollar's decimals — don't hardcode)
 
-function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tokenDec, gp) {
+function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tokenDec, gp, lpBurn) {
   /* gp: the GoPlus reading for this token, when we have one. It is preferred over the explorer for the
      holder count, the top-ten list, verification and ownership — the explorer refuses server requests on
      this chain, so those readings are otherwise simply absent. Every field falls back to the explorer's
@@ -9841,7 +9891,16 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
   }
   const txns = dex && dex.txns ? dex.txns : {}, vol = dex && dex.volume ? dex.volume : {}, pc = dex && dex.priceChange ? dex.priceChange : {};
   const createdAt = (dex && dex.pairCreatedAt) || ts || 0;
+  /* The contract's powers and its LP, as on Ethereum (lib/contractfacts.js; owner, 2026-10-24: "apply the red flag rule to
+     robinhood too") — GoPlus's reading of chain 4663, already fetched for the holder count, so no extra read. The LP burned at
+     dead addresses is the chain's own answer when the pair could be read (lpBurnRead), GoPlus's top-ten list otherwise; the
+     LP holders' addresses come from GoPlus. null when GoPlus has nothing for this token — then the lazy contract read
+     (analyzeContract: the verified source) is what the card shows. */
+  const chainFacts = g ? CF.evmFacts(g) : null;
+  if (chainFacts && lpBurn && lpBurn.burnedPct != null) { chainFacts.lpBurnedPct = lpBurn.burnedPct; chainFacts.lpBurnSource = 'chain'; }
+  else if (chainFacts) chainFacts.lpBurnSource = chainFacts.lpBurnedPct != null ? 'goplus' : null;
   return {
+    chainFacts,
     token: {
       address: t.token,
       name: (meta && meta.name) || (dex && dex.baseToken && dex.baseToken.name) || 'Unknown Token',
@@ -9850,8 +9909,9 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
       isVerified: (g && gpFlag(g.is_open_source) != null) ? gpFlag(g.is_open_source)
         : (addr && typeof addr.is_verified === 'boolean' ? addr.is_verified : null),
       deployer: (addr && addr.creator_address_hash) ? String(addr.creator_address_hash).toLowerCase() : null,
-      owner: ownerInfo ? ownerInfo.owner : null,
-      renounced: ownerInfo ? ownerInfo.renounced : null,
+      // the chain's own owner() read; GoPlus's owner_address only where the contract has no owner() to read. A dead owner is
+      // renounced, and is kept (ownerBurn) so the card can say where ownership went; owner is a LIVE owner or null
+      ...homeOwner(ownerInfo, g),
     },
     pair: { address: t.pair, quoteSymbol: t.quoteSymbol, token0: t.token0 || null, token1: t.token1 || null, createdAt, ageMinutes: createdAt ? Math.max(0, Math.round((now() - createdAt) / 60000)) : null },
     market: {
@@ -10014,7 +10074,7 @@ async function enrichPairs() {
        default every tick re-bought all three reads for all 48 tokens — 288 requests a minute, more than
        the keyed explorer tier allows. A token's name and verification do not change in five minutes; its
        holder list moves slowly enough that two is honest, and the row says when it was read. */
-    const [meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp] = await Promise.all([
+    const [meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp, lpBurn] = await Promise.all([
       jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
       jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
       jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
@@ -10023,8 +10083,9 @@ async function enrichPairs() {
       tokenOwner(t.token),        // owner()/renounced (read-only)
       tokenDecimals(t.token),     // authoritative decimals (read-only)
       goplusToken(t.token),       // holder count, top ten and owner powers — the explorer will not serve a server
+      lpBurnRead(t.pair),         // the LP at dead addresses (read-only; kept 15 min)
     ]);
-    const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp);
+    const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp, lpBurn);
     /* The price feed could not be asked about this token. Carry forward the last reading we actually took
        rather than publishing zeros: a blank row is not neutral, it reads as "dead token" to every reader and
        to our own scoring. The carried numbers are labelled with when they were true, and `priceStale` stops
@@ -10120,7 +10181,7 @@ async function enrichOne(item, opts = {}) {
   const t = { token: item.token_addr, pair: item.pair_addr, token0: item.token0, token1: item.token1, quoteSymbol: item.quote_symbol || '?', block: 0 };
   // the on-chain holder ledger: built or brought up to date behind this read, so the next read shows the chain's count
   try { ensureLedger(t.token).catch(() => {}); } catch {}
-  const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr, gp] = await Promise.all([
+  const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr, gp, lpBurn] = await Promise.all([
     jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
     jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
     jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
@@ -10130,6 +10191,7 @@ async function enrichOne(item, opts = {}) {
     // a caller that has just fetched this token's pairs passes them in; nobody pays for the same URL twice
     opts.dexArr !== undefined ? Promise.resolve(opts.dexArr) : jget('https://api.dexscreener.com/tokens/v1/robinhood/' + t.token),
     goplusToken(t.token),         // holder count, top ten and owner powers
+    lpBurnRead(t.pair),           // the LP at dead addresses (read-only; kept 15 min)
   ]);
   if (usdgDecimals == null) { const d = await tokenDecimals(USDG_ADDR); if (d != null) usdgDecimals = d; }
   let dex = null; const arr = dexArr || [];
@@ -10141,7 +10203,7 @@ async function enrichOne(item, opts = {}) {
     if (oc.name || oc.symbol) metaN = Object.assign({}, meta || {}, { name: (meta && meta.name) || oc.name, symbol: (meta && meta.symbol) || oc.symbol });
   }
   if (!dex && !opts.strictPair && arr[0]) dex = arr[0]; // strictPair (lookups): never borrow a DIFFERENT pool's market data
-  const p = buildPair(t, dex, metaN, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp);
+  const p = buildPair(t, dex, metaN, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp, lpBurn);
   if (p.market.priceUsd == null && ownPoolOf(t.token)) await fillFromOwnPool(p);   // $SEND / $GWC: the pool prices them when the feed does not
   if (DEXTOOLS_ON) p.brand.dextools = await dextoolsInfo(t.token); // opt-in; no-op unless DEXTOOLS_API_KEY+CHAIN set
   // serial-deployer flag needs a window of other launches; the live New-Pairs set (passed by lookups) supplies one
@@ -20365,6 +20427,12 @@ function scanVerdict(p) {
   const r = p.risk || {};
   const health = Math.round(r.health || 0);
   if (r.thinData) return { emoji: '🌫️', word: 'Not enough data yet', note: 'Too little is readable about this token to judge it. That is not a pass — it is an unknown.' };
+  // a red power the contract read found and no renounce has neutralised (lib/contractfacts.js) — the client's floor says the same
+  const red = CF.redFacts(Object.assign({ chain: p.chain || 'robinhood' }, p)).found;
+  if (red.length && r.triage !== 'avoid' && !r.honeypotSuspect && !r.dumping && !r.sniperDump) {
+    const words = red.map((k) => (CF.RED_EVM.find((x) => x[0] === k) || [k, k])[1].toLowerCase());
+    return { emoji: '🟡', word: 'Caution', note: 'The contract read reports: ' + words.join(', ') + ' — and ownership is not renounced to a dead address, so they can still be used. Not a promise either way; most new tokens still go to zero.' };
+  }
   if (r.triage === 'ok' && health >= 100 && r.sniperOk !== true) {
     const st = r.snipers && r.snipers.status;
     return (st === 'done' || st === 'partial')

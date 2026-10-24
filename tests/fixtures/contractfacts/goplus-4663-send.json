@@ -1,0 +1,175 @@
+{
+ "capturedAt": "2026-10-24",
+ "chain": 4663,
+ "token": "0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105",
+ "result": {
+  "anti_whale_modifiable": "0",
+  "buy_tax": "0.01",
+  "can_take_back_ownership": "0",
+  "cannot_buy": "0",
+  "cannot_sell_all": "0",
+  "creator_address": "0x896cB15542A50e084CB01138211daA110b1Fe8F2",
+  "creator_balance": "0",
+  "creator_percent": "0.000000",
+  "dex": [
+   {
+    "liquidity_type": "UniV2",
+    "name": "UniswapV2",
+    "liquidity": "13653.62066915",
+    "pair": "0xf30bb531d0255969be155533abac34b22bd63414"
+   }
+  ],
+  "external_call": "1",
+  "hidden_owner": "0",
+  "holder_count": "117",
+  "holders": [
+   {
+    "address": "0x99E192D330b37d8858D8a32CEA7916faF3C22e12",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "9010439905.801459567784011552",
+    "percent": "0.901044",
+    "is_locked": 0
+   },
+   {
+    "address": "0x000000000000000000000000000000000000dEaD",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "500000000",
+    "percent": "0.050000",
+    "is_locked": 1
+   },
+   {
+    "address": "0x30C8e80Cd30eeb919C9BDD569A564c3eda2ADACD",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "110421589.929383639642747378",
+    "percent": "0.011042",
+    "is_locked": 0
+   },
+   {
+    "address": "0xf30Bb531d0255969be155533AbAC34b22bD63414",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "70449662.981046422180255501",
+    "percent": "0.007045",
+    "is_locked": 0
+   },
+   {
+    "address": "0x254625F8EE8a323D6C1d156C39A6E41A59bf7515",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "45267227.286378746268062588",
+    "percent": "0.004527",
+    "is_locked": 0
+   },
+   {
+    "address": "0x5Ec3F8c3A9C18d474BAaDe37f08974C77D81DB66",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "39123982.376996318462780955",
+    "percent": "0.003912",
+    "is_locked": 0
+   },
+   {
+    "address": "0x02626C51837A3dB9dec9603be7A8F8e552bbF83A",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "33659417.928055556171961031",
+    "percent": "0.003366",
+    "is_locked": 0
+   },
+   {
+    "address": "0xDd11158b5D8C0Af08834f2C58cdB7593311a1590",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "31055341.97751135667391523",
+    "percent": "0.003106",
+    "is_locked": 0
+   },
+   {
+    "address": "0x2F389E20B336262D17d211b70DeeD4794D3F4f97",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "25010334.404736181626088706",
+    "percent": "0.002501",
+    "is_locked": 0
+   },
+   {
+    "address": "0xf19B46b63e9a7Cd48949EA93C955Ff607b418cEB",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "20995947.312963833828906908",
+    "percent": "0.002100",
+    "is_locked": 0
+   }
+  ],
+  "honeypot_with_same_creator": "0",
+  "is_anti_whale": "0",
+  "is_blacklisted": "1",
+  "is_honeypot": "0",
+  "is_in_dex": "1",
+  "is_mintable": "0",
+  "is_open_source": "1",
+  "is_proxy": "0",
+  "is_whitelisted": "1",
+  "lp_holder_count": "4",
+  "lp_holders": [
+   {
+    "address": "0x99E192D330b37d8858D8a32CEA7916faF3C22e12",
+    "tag": "",
+    "value": "12025.519979318142567753",
+    "is_contract": 1,
+    "balance": "17402.51837780367091754",
+    "percent": "0.880757",
+    "NFT_list": null,
+    "is_locked": 0
+   },
+   {
+    "address": "0x000000000000000000000000000000000000dEaD",
+    "tag": "",
+    "value": "1575.632883896241114279",
+    "is_contract": 0,
+    "balance": "2280.149238106448215523",
+    "percent": "0.115400",
+    "NFT_list": null,
+    "is_locked": 1
+   },
+   {
+    "address": "0x2aC03e14Cfe755426DaAEe0a4994184Ce81482F8",
+    "tag": "",
+    "value": "52.467805937331242260",
+    "is_contract": 1,
+    "balance": "75.92785664468335754",
+    "percent": "0.003843",
+    "NFT_list": null,
+    "is_locked": 0
+   },
+   {
+    "address": "0x0000000000000000000000000000000000000000",
+    "tag": "",
+    "value": "0.000000000000000691",
+    "is_contract": 0,
+    "balance": "0.000000000000001000",
+    "percent": "0.000000",
+    "NFT_list": null,
+    "is_locked": 1
+   }
+  ],
+  "lp_total_supply": "19758.5954725548",
+  "owner_address": "0x0000000000000000000000000000000000000000",
+  "owner_balance": "0",
+  "owner_change_balance": "0",
+  "owner_percent": "0.0",
+  "personal_slippage_modifiable": "0",
+  "selfdestruct": "0",
+  "sell_tax": "0.01",
+  "slippage_modifiable": "0",
+  "token_name": "SEND IT",
+  "token_symbol": "SEND",
+  "total_supply": "10000000000",
+  "trading_cooldown": "0",
+  "transfer_pausable": "0",
+  "transfer_tax": "0.01"
+ }
+}

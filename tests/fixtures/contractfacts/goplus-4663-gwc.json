@@ -1,0 +1,155 @@
+{
+ "capturedAt": "2026-10-24",
+ "chain": 4663,
+ "token": "0x61339f11384dde4b2dc3a33e75b4dc23cc620f22",
+ "result": {
+  "anti_whale_modifiable": "0",
+  "buy_tax": "0.05",
+  "can_take_back_ownership": "0",
+  "cannot_buy": "0",
+  "cannot_sell_all": "0",
+  "creator_address": "0xbbb4a20d7c3a841676ba57d8bcfe5af8dd513237",
+  "creator_balance": "5673672.864360912320772086",
+  "creator_percent": "0.005674",
+  "dex": [
+   {
+    "liquidity_type": "UniV2",
+    "name": "UniswapV2",
+    "liquidity": "3091.21454806",
+    "pair": "0x22df73eef683a93680dff3b51fdf3ee91e7352d9"
+   }
+  ],
+  "external_call": "1",
+  "hidden_owner": "0",
+  "holder_count": "90",
+  "holders": [
+   {
+    "address": "0x22Df73eEf683a93680DFF3b51fDf3eE91e7352d9",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "578506164.737384121557586768",
+    "percent": "0.578506",
+    "is_locked": 0
+   },
+   {
+    "address": "0x4D5c96d72A6326960132642972c180AB03f058E0",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "42260028.606019978972177772",
+    "percent": "0.042260",
+    "is_locked": 0
+   },
+   {
+    "address": "0x2F389E20B336262D17d211b70DeeD4794D3F4f97",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "40028815.537754067100458195",
+    "percent": "0.040029",
+    "is_locked": 0
+   },
+   {
+    "address": "0x26115fA4FdB32d0221f2A14848d90379F7033269",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "29749312.27337682082332672",
+    "percent": "0.029749",
+    "is_locked": 0
+   },
+   {
+    "address": "0x084f9B65343aFD3a565A18d3B6114B4047583157",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "27160543.830636838561968711",
+    "percent": "0.027161",
+    "is_locked": 0
+   },
+   {
+    "address": "0x254625F8EE8a323D6C1d156C39A6E41A59bf7515",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "24336125.916260929135195312",
+    "percent": "0.024336",
+    "is_locked": 0
+   },
+   {
+    "address": "0xA569D2E282E76c725d2f814840bf5dA4e4b92ecc",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "23377112.467577286342314371",
+    "percent": "0.023377",
+    "is_locked": 0
+   },
+   {
+    "address": "0x02626C51837A3dB9dec9603be7A8F8e552bbF83A",
+    "tag": "",
+    "is_contract": 0,
+    "balance": "22689071.496699351299655049",
+    "percent": "0.022689",
+    "is_locked": 0
+   },
+   {
+    "address": "0xbccCAC24E0e86D109eCEBA253660E6308210f110",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "21039088.795667584540838647",
+    "percent": "0.021039",
+    "is_locked": 0
+   },
+   {
+    "address": "0x6a159A7C45fA1D064d3f2a919F534A5Ce33B45C7",
+    "tag": "",
+    "is_contract": 1,
+    "balance": "20467308.51891239952847085",
+    "percent": "0.020467",
+    "is_locked": 0
+   }
+  ],
+  "honeypot_with_same_creator": "0",
+  "is_anti_whale": "0",
+  "is_blacklisted": "0",
+  "is_honeypot": "0",
+  "is_in_dex": "1",
+  "is_mintable": "0",
+  "is_open_source": "1",
+  "is_proxy": "0",
+  "is_whitelisted": "1",
+  "lp_holder_count": "2",
+  "lp_holders": [
+   {
+    "address": "0x000000000000000000000000000000000000dEaD",
+    "tag": "",
+    "value": "3091.214548059876926184",
+    "is_contract": 0,
+    "balance": "26692.695630078278026028",
+    "percent": "1.000000",
+    "NFT_list": null,
+    "is_locked": 1
+   },
+   {
+    "address": "0x0000000000000000000000000000000000000000",
+    "tag": "",
+    "value": "0.000000000000000116",
+    "is_contract": 0,
+    "balance": "0.000000000000001000",
+    "percent": "0.000000",
+    "NFT_list": null,
+    "is_locked": 1
+   }
+  ],
+  "lp_total_supply": "26692.695630078277",
+  "owner_address": "0x0000000000000000000000000000000000000000",
+  "owner_balance": "0",
+  "owner_change_balance": "0",
+  "owner_percent": "0.0",
+  "personal_slippage_modifiable": "0",
+  "selfdestruct": "0",
+  "sell_tax": "0.05",
+  "slippage_modifiable": "0",
+  "token_name": "Generational Wealth Coin",
+  "token_symbol": "GWC",
+  "total_supply": "1000000000",
+  "trading_cooldown": "0",
+  "transfer_pausable": "0",
+  "transfer_tax": "0"
+ }
+}
