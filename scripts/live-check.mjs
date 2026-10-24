@@ -151,7 +151,7 @@ warn('the chart switch can tell which sites list $SEND\'s pool (Dexscreener and 
    Solana nodes, and the home chain's router (lib/multichain.js, lib/swapkit.js). A vendor the origin cannot reach is a WARN — not
    the site's fault, and the server says so with {unavailable}; a wrong answer, a refusal or a proxy error is a FAIL. ---- */
 const PEPE = '0x6982508145454ce325ddbe47a25d4ec3d2311933', BONK = 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', BONK_POOL = '5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9';
-const NOBODY = '0x1111111111111111111111111111111111111111', V2_ROUTER = '0x89e5db8b5aa49aa85ac63f691524311aeb649eba';   // the public Uniswap v2 router on Robinhood Chain
+const V2_ROUTER = '0x89e5db8b5aa49aa85ac63f691524311aeb649eba';   // the public Uniswap v2 router on Robinhood Chain
 const json = (r) => { try { return JSON.parse(r.text); } catch { return null; } };
 const brief = (r) => r.status + ' ' + r.text.slice(0, 140);
 const soft = (j) => !!(j && j.unavailable);   // the server's own word for "the vendor could not be reached" — a WARN, never a FAIL
@@ -165,9 +165,10 @@ const bonk = await get('/api/scan?address=' + BONK, { timeout: 45000 });
 const bj = json(bonk);
 say(verdict(bonk.status === 200 && bj && bj.kind === 'token' && bj.chain === 'solana' && bj.pair && bj.pair.token && bj.pair.token.symbol === 'Bonk', bj),
     'a Solana token scans through the origin (Bonk, chain read from the address: Dexscreener, GoPlus and the Solana node reachable)', why(bonk, bj));
-const pin = await get('/api/scan?address=' + NOBODY + '&chain=robinhood', { timeout: 45000 });
+// PEPE trades on Ethereum, not on Robinhood Chain: pinned to the home chain it must be answered there — the probe the 2026-10-23 bug would fail
+const pin = await get('/api/scan?address=' + PEPE + '&chain=robinhood', { timeout: 45000 });
 const nj = json(pin);
-pass('a 0x address pinned to Robinhood Chain (?chain=robinhood) is answered on Robinhood Chain — not found or unavailable, never an Ethereum profile', pin.status === 200 && nj && nj.chain === 'robinhood' && (nj.notFound === true || nj.unavailable === true), pin.status + ' chain=' + (nj && nj.chain) + ' ' + String(nj && nj.message || nj && nj.error || '').slice(0, 120));
+pass('a 0x address pinned to Robinhood Chain (PEPE, ?chain=robinhood) is answered on Robinhood Chain — not found or unavailable, never its Ethereum profile', pin.status === 200 && nj && nj.chain === 'robinhood' && (nj.notFound === true || nj.unavailable === true) && !nj.pair && !/Ethereum profile/.test(String(nj.note || nj.message || '')), pin.status + ' chain=' + (nj && nj.chain) + ' ' + String(nj && nj.message || nj && nj.error || '').slice(0, 120));
 const ch = await get('/api/chart?chain=solana&pair=' + BONK_POOL + '&tf=1h&hours=24', { timeout: 45000 });
 const cj = json(ch);
 say(ch.status === 200 && cj && Array.isArray(cj.candles) && cj.candles.length > 0 ? 'PASS' : ch.status === 200 && cj && cj.error && cj.retry === true ? 'WARN' : 'FAIL',
