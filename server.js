@@ -20508,11 +20508,12 @@ function scanVerdict(p) {
   const red = CF.redFacts(pp).found;
   if (red.length && (r.triage === 'ok' || r.triage === 'caution') && !r.honeypotSuspect && !r.dumping && !r.sniperDump) {
     const word = (k) => (CF.RED_EVM.find((x) => x[0] === k) || [k, k])[1].toLowerCase();
-    const owned = red.filter((k) => CF.OWNER_GATED.has(k)), always = red.filter((k) => !CF.OWNER_GATED.has(k)), ren = CF.renouncedReal(pp);
+    const owned = red.filter((k) => CF.OWNER_GATED.has(k)), always = red.filter((k) => !CF.OWNER_GATED.has(k) && k !== 'lpUnlocked'), ren = CF.renouncedReal(pp);
     const f = pp.chainFacts || {};
     const why = [];
     if (owned.length) why.push(owned.map(word).join(', ') + ' — ' + (ren === null ? 'whether ownership is renounced was not read' : (f.takeBack === true || f.hiddenOwner === true || f.proxy === true) ? 'ownership reads as renounced, but ' + (f.proxy === true ? 'the contract is a proxy whose code can be swapped' : 'GoPlus reads a way back to it or a hidden owner') : 'ownership is not renounced to a dead address') + ', so the owner can still use ' + (owned.length > 1 ? 'them' : 'it'));
     if (always.length) why.push(always.map(word).join(', ') + ' — ' + (always.length > 1 ? 'these apply' : 'this applies') + ' whoever the owner is');
+    if (red.includes('lpUnlocked')) why.push('less than half of its pool’s LP is burned or in a locker — whoever holds the rest can pull it');   // unlocked LP (owner, 2026-10-24: a caution flag)
     return { emoji: '🟡', word: 'Caution', note: 'The contract read reports ' + why.join('; ') + '. Not a promise either way; most new tokens still go to zero.' };
   }
   if (r.thinData) return { emoji: '🌫️', word: 'Not enough data yet', note: 'Too little is readable about this token to judge it. That is not a pass — it is an unknown.' };

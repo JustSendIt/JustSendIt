@@ -255,6 +255,11 @@
     ['selfdestruct', 'Self-destruct', 'the contract can destroy itself'],
   ];
   const OWNER_GATED = new Set(['mintable', 'blacklist', 'pausable', 'ownerChangeBalance', 'slippageModifiable', 'personalSlippage', 'antiWhaleModifiable']);
+  /* Unlocked LP is a caution flag too (owner, 2026-10-24) — lib/contractfacts.js LP_UNLOCKED / lpUnlocked, word for word: under half of
+     the pool's LP burned or in a locker, both shares read for this pool; null (not read) otherwise, never a flag. The card's LP warning
+     reads this same test, so the flag and the warning can never disagree. */
+  const LP_UNLOCKED = ['lpUnlocked', 'LP not burned or locked', 'less than half of the pool’s LP is burned or in a locker, so whoever holds the rest can pull it'];
+  const lpUnlocked = (f) => { if (!f || f.lpEmptied || f.lpOtherPool) return null; const b = f.lpBurnedPct, l = f.lpLockerPct; return b == null || l == null ? null : b + l < 50; };
   // nobody holds a key to these: the zero address, 0x…dEaD and 0xdead…42069 (lib/contractfacts.js DEAD_ADDRS)
   const DEAD_ADDRS = new Set(['0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead', '0xdead000000000000000042069420694206942069']);
   const isDead = (a) => DEAD_ADDRS.has(String(a || '').toLowerCase());
@@ -270,20 +275,28 @@
   function vendorFacts(p) {
     const f = p && p.chainFacts;
     if (!f) return [];
+    // who read each one: the contract facts are the vendor's (or Solana's node); the LP's burned share is the chain's own read where it was
+    const src = vendorSrc(p), lpSrc = f.lpBurnSource === 'chain' ? 'The chain’s own LP read' : 'GoPlus Security';
+    const lp = lpUnlocked(f) === true ? [{ k: LP_UNLOCKED[0], word: LP_UNLOCKED[1], say: LP_UNLOCKED[2], src: lpSrc }] : [];
     if (chainOf(p).slug === 'solana') {
-      const rev = solRevoked(f);
-      if (rev !== false) return [];
-      const out = [];
-      if (f.mintable === true) out.push({ k: 'mintable', word: 'Mint authority held', say: 'more tokens can be minted' });
-      if (f.freezable === true) out.push({ k: 'freezable', word: 'Freeze authority held', say: 'holders’ accounts can be frozen' });
-      return out.length ? out : [{ k: 'authority', word: 'An authority held', say: 'someone can still mint more or freeze accounts' }];
+      const rev = solRevoked(f), out = [];
+      if (rev === false) {
+        if (f.mintable === true) out.push({ k: 'mintable', word: 'Mint authority held', say: 'more tokens can be minted', src });
+        if (f.freezable === true) out.push({ k: 'freezable', word: 'Freeze authority held', say: 'holders’ accounts can be frozen', src });
+        if (!out.length) out.push({ k: 'authority', word: 'An authority held', say: 'someone can still mint more or freeze accounts', src });
+      }
+      return out.concat(lp);
     }
     const ren = renouncedReal(p) === true, hp = !!(p.risk && p.risk.honeypotSuspect);
-    return VENDOR_EVM.filter(([k]) => f[k] === true && !(k === 'honeypot' && hp) && !(ren && OWNER_GATED.has(k))).map(([k, word, say]) => ({ k, word, say }));
+    return VENDOR_EVM.filter(([k]) => f[k] === true && !(k === 'honeypot' && hp) && !(ren && OWNER_GATED.has(k))).map(([k, word, say]) => ({ k, word, say, src })).concat(lp);
   }
   const vendorSrc = (p) => chainOf(p).slug === 'solana' && p.chainFacts && p.chainFacts.program ? 'Solana’s own node' : 'GoPlus Security';
   // "GoPlus Security reports: blacklist, pausable transfers" — the words the verdict, the audit and "Why we say" share
-  const vendorLine = (p, V) => vendorSrc(p) + ' reports: ' + V.map(x => x.word.charAt(0).toLowerCase() + x.word.slice(1)).join(', ');
+  // the first letter lower-cased only where it is a capital before small letters ("Blacklist" → "blacklist"; "LP not burned" stays)
+  const lc1 = (w) => /^[A-Z][a-z]/.test(w) ? w.charAt(0).toLowerCase() + w.slice(1) : w;
+  // each reader names what it read: "GoPlus Security reports: blacklist; the chain’s own LP read reports: LP not burned or locked"
+  const srcLc = (s) => s.replace(/^The /, 'the ');   // a source mid-sentence: "the chain’s own LP read"; "GoPlus Security" stays as it is
+  const vendorLine = (p, V) => { const by = new Map(); V.forEach((x) => { const s = x.src || vendorSrc(p); by.set(s, (by.get(s) || []).concat(lc1(x.word))); }); return [...by].map(([s, ws], i) => (i ? srcLc(s) : s) + ' reports: ' + ws.join(', ')).join('; '); };
   /* Does this token clear the bar the reader actually set? Health, the flags they chose to hide, the
      signals they insisted were genuinely checked — the same predicate the board filters on, so the tag
      and the list can never disagree about what qualifies. */
@@ -530,7 +543,7 @@
       /* found: what another chain's contract read turned up that the server's score has no weight for (vendorFacts) —
          listed in Contract & trust as found, marked "not in the score", and never subtracted here: this section explains
          the server's number, and a deduction the server did not make would be a figure that was never computed. */
-      const found = sec.key === 'contract' ? vendorFacts(p).map(x => ({ say: vendorSrc(p) + ' reports: ' + x.word + ' — ' + x.say + '.' })) : [];
+      const found = sec.key === 'contract' ? vendorFacts(p).map(x => ({ say: (x.src || vendorSrc(p)) + ' reports: ' + x.word + ' — ' + x.say + '.' })) : [];
       return { key: sec.key, label: sec.label, ico: sec.ico, score, grade: gradeOf(score), fails, found, wins: sectionPositives(sec.key, p) };
     });
   }
@@ -833,7 +846,7 @@
     // count (vendorFacts): a strip that read "✔ No automatic red flags" over a blacklist was the PEPE case
     const flags = activeFlags(p), V = vendorFacts(p);
     const chips = flags.map(k => '<span class="np-flag np-flag--' + FLAG[k].sev + '">' + FLAG[k].ico + ' ' + esc(flagWord(k, p)) + '</span>')
-      .concat(V.map(x => '<span class="np-flag np-flag--warn">⚠️ ' + esc(x.word) + '<span class="sr-only"> — ' + esc(vendorSrc(p)) + ' reports it; not in the score</span></span>'));
+      .concat(V.map(x => '<span class="np-flag np-flag--warn">' + (x.k === 'lpUnlocked' ? '🔓 ' : '⚠️ ') + esc(x.word) + '<span class="sr-only"> — ' + esc(x.src || vendorSrc(p)) + ' reports it; not in the score</span></span>'));
     let inner = '';
     if (!chips.length) {
       inner = '<span class="np-flag np-flag--ok">✔ No automatic red flags — still DYOR</span>';
@@ -1229,7 +1242,7 @@
     // ---- what another chain's contract read found that the score does not count (vendorFacts) ----
     if (V.length) {
       rows.push(['⚠️', 'What the contract read found',
-        V.map(x => '<b>' + esc(x.word) + '</b> — ' + esc(x.say) + '.').join('<br>') + '<br>Read by ' + esc(vendorSrc(p)) + ' — an automated reading, not an audit, and not counted in the score.']);
+        V.map(x => '<b>' + esc(x.word) + '</b> — ' + esc(x.say) + '.').join('<br>') + '<br>Read by ' + esc(andList([...new Set(V.map(x => srcLc(x.src || vendorSrc(p))))])) + ' — an automated reading, not an audit, and not counted in the score.']);
     }
     // ---- what tripped, named plainly ----
     if (flags.length) {
@@ -1268,7 +1281,7 @@
       let why = '<section class="np-why"><' + hx + ' class="np-why-h">' + (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></' + hx + '><ul class="np-why-list">';
       flags.forEach(k => { why += '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].say(p)) + '</li>'; });
       // another chain's contract powers (vendorFacts): found by the read, not in the score — said so, so the list and the number agree
-      V.forEach(x => { why += '<li class="np-why-warn"><span aria-hidden="true">⚠️</span> ' + esc(vendorSrc(p) + ' reports: ' + x.word + ' — ' + x.say + '. Not counted in the score; the Contract card has the read.') + '</li>'; });
+      V.forEach(x => { why += '<li class="np-why-warn"><span aria-hidden="true">' + (x.k === 'lpUnlocked' ? '🔓' : '⚠️') + '</span> ' + esc((x.src || vendorSrc(p)) + ' reports: ' + x.word + ' — ' + x.say + '. Not counted in the score; the Contract card has the read.') + '</li>'; });
       return why + '</ul></section>';
     }
     return '<section class="np-why"><p class="np-why-clean">✔ No automatic red flags tripped. That doesn\'t mean it\'s safe — most new tokens still go to zero. Do your own research.</p></section>';
@@ -1625,11 +1638,10 @@
         // the token's own contract or the pool itself is named as that; else the node's answer (a contract / a wallet), GoPlus's only where the node did not say
         const tokA = String((p.token && p.token.address) || '').toLowerCase(), poolA = String((p.pair && p.pair.address) || '').toLowerCase();
         const whoIs = (h) => h.address === tokA ? ' (this token’s own contract)' : h.address === poolA ? ' (the pool itself)' : h.contract == null ? '' : h.kindSource === 'chain' ? kindWord(h.contract) : (h.contract ? ' (a contract, per GoPlus)' : ' (a wallet, per GoPlus)');
-        const sumShown = others.reduce((a, h) => a + (h.pct || 0), 0);
         rows.push(['Who else holds the LP', others.length
           ? '<ul class="tkd-lp-holders">' + others.map((h) => '<li>' + addrLinkHTML(p, h.address, 'this LP holder') + ' <b>' + esc(h.pct == null ? 'share not read' : h.pct < 0.1 ? '<0.1%' : pctPlain(h.pct)) + '</b>' + esc(whoIs(h)) + (h.tag ? ' · ' + esc(h.tag) : '') + '</li>').join('') + '</ul>' +
             (f.lpHolders > f.lpTop.length ? '<small class="np-src">GoPlus lists its top ' + f.lpTop.length + ' of ' + npNum(f.lpHolders) + ' LP holders</small>' : '') +
-            (sumShown >= 50 ? '<span class="tkd-bad">Most of the LP is neither burned nor in a locker — whoever holds it can pull it (a contract, only if its code has a way to).</span>' : '')
+            (lpUnlocked(f) === true ? '<span class="tkd-bad">🔓 Most of the LP is neither burned nor in a locker — whoever holds it can pull it (a contract, only if its code has a way to). A caution flag.</span>' : '')
           : lpListed ? 'nobody else among the LP holders GoPlus lists' : unread]);
         if (f.lpPool && foreignChain(p)) rows.push(['LP figures are for', 'the pool GoPlus reads, ' + addrLinkHTML(p, f.lpPool, 'the pool GoPlus reads')]);
       }
@@ -3298,7 +3310,7 @@
     bundleSummaryHTML,   // bundlers.js redraws the bundler card with these when a read comes back
     bundleAsideHTML,
     // the red-fact rule as the page applies it — tests/contractfacts.mjs runs it beside lib/contractfacts.js's redFacts on the same profiles
-    redFactsOf: (p) => ({ found: vendorFacts(p).map((x) => x.k), neutralised: vendorNeutral(p).map((x) => x.k) }), VENDOR_EVM, OWNER_GATED: [...OWNER_GATED], DEAD_ADDRS: [...DEAD_ADDRS],
+    redFactsOf: (p) => ({ found: vendorFacts(p).map((x) => x.k), neutralised: vendorNeutral(p).map((x) => x.k) }), VENDOR_EVM, OWNER_GATED: [...OWNER_GATED], DEAD_ADDRS: [...DEAD_ADDRS], LP_UNLOCKED,
     verdictWordOf: (p) => { const v = verdictOf(p); return { word: v.word, vendor: /np-t-vendor/.test(v.cls || '') }; },   // the verdict the page gives — the same test runs it beside scanVerdict
   };
 

@@ -38,7 +38,8 @@ const gSend = FIX('goplus-4663-send.json'), gGwc = FIX('goplus-4663-gwc.json');
   check('$GWC: every LP token at a dead address — 100% burned', Math.abs(fg.lpBurnedPct - 100) < 1e-9 && fg.lpLockerPct === 0 && fg.lpTop.every((h) => h.dead));
   check('a blank share is unread, never 0; no LP holders listed is unread, never 0; no GoPlus answer is no facts', CF.evmFacts(Object.assign({}, gSend, { lp_holders: [{ address: SEND_LP_HOLDER, percent: '', is_locked: 0 }, { address: '0x000000000000000000000000000000000000dEaD', percent: '' , is_locked: 1 }] })).lpBurnedPct === null
     && CF.evmFacts(Object.assign({}, gSend, { lp_holders: [] })).lpBurnedPct === null && CF.evmFacts(null) === null);
-  const prof = (over, factsOver, tokenOver) => Object.assign({ chain: 'robinhood', token: Object.assign({ renounced: true }, tokenOver || {}), chainFacts: Object.assign(CF.evmFacts(gSend), factsOver || {}), risk: {} }, over || {});
+  // the power-rule profiles: $SEND's facts with its LP fully burned, so only the powers are under test (its real LP is below)
+  const prof = (over, factsOver, tokenOver) => Object.assign({ chain: 'robinhood', token: Object.assign({ renounced: true }, tokenOver || {}), chainFacts: Object.assign(CF.evmFacts(gSend), { lpBurnedPct: 100, lpLockerPct: 0 }, factsOver || {}), risk: {} }, over || {});
   const r1 = CF.redFacts(prof()), r2 = CF.redFacts(prof({}, {}, { renounced: false })), r3 = CF.redFacts(prof({}, { takeBack: true })), r4 = CF.redFacts(prof({}, { hiddenOwner: true, mintable: true }));
   check('the rule: $SEND renounced → its blacklist is neutralised (found nothing); the same code with a live owner → blacklist found', r1.found.length === 0 && r1.neutralised.join() === 'blacklist' && r2.found.join() === 'blacklist' && r2.neutralised.length === 0, JSON.stringify([r1, r2]));
   check('  ...a take-back path or a hidden owner makes the renounce not real: nothing is neutralised, and the path itself is found', r3.found.join() === 'blacklist,takeBack' && r3.neutralised.length === 0 && r4.found.join() === 'mintable,blacklist,hiddenOwner', JSON.stringify([r3, r4]));
@@ -46,6 +47,13 @@ const gSend = FIX('goplus-4663-send.json'), gGwc = FIX('goplus-4663-gwc.json');
   check('  ...what is not an owner\'s call stays red whatever the owner: a honeypot, a sell limit, self-destruct; the owner\'s pause is neutralised', r5.found.join() === 'honeypot,cannotSellAll,selfdestruct' && r5.neutralised.join() === 'blacklist,pausable', JSON.stringify(r5));
   check('  ...a honeypot already on the floor (risk.honeypotSuspect) is not said twice; Solana: a held authority is found, a revoked one is not', CF.redFacts(prof({ risk: { honeypotSuspect: true } }, { honeypot: true }, { renounced: false })).found.join() === 'blacklist'
     && CF.redFacts({ chain: 'solana', chainFacts: { mintable: true, freezable: false } }).found.join() === 'mintable' && CF.redFacts({ chain: 'solana', chainFacts: { mintable: false, freezable: false } }).found.length === 0 && CF.redFacts({ chain: 'robinhood' }).found.length === 0);
+  // unlocked LP (owner, 2026-10-24: "make unlocked LP a caution flag"): under half burned or in a locker, both shares read for this pool
+  const lpf = (o) => CF.redFacts({ chain: 'robinhood', token: { renounced: true }, chainFacts: Object.assign(CF.evmFacts(gSend), o), risk: {} }).found.includes('lpUnlocked');
+  check('UNLOCKED LP is a caution flag: $SEND as it is (11.54% burned, nothing in a locker) is flagged though it is renounced — a renounce does not lock a pool; $GWC (100% burned) is not',
+    CF.redFacts({ chain: 'robinhood', token: { renounced: true }, chainFacts: CF.evmFacts(gSend), risk: {} }).found.join() === 'lpUnlocked' && !CF.redFacts({ chain: 'robinhood', token: { renounced: true }, chainFacts: CF.evmFacts(gGwc), risk: {} }).found.length && CF.lpUnlocked(CF.evmFacts(gSend)) === true);
+  check('  ...the line is half: 30% burned + 25% in a locker is locked enough, 30% + 19.9% is not; it is READ, never guessed — an unread locker share, another pool\'s figures or an emptied pool flag nothing',
+    !lpf({ lpBurnedPct: 30, lpLockerPct: 25 }) && lpf({ lpBurnedPct: 30, lpLockerPct: 19.9 }) && !lpf({ lpBurnedPct: 10, lpLockerPct: null }) && !lpf({ lpBurnedPct: null, lpLockerPct: 0 }) && !lpf({ lpBurnedPct: 10, lpLockerPct: 0, lpOtherPool: '0x' + 'ab'.repeat(20) }) && !lpf({ lpBurnedPct: null, lpLockerPct: 0, lpEmptied: true })
+    && CF.redFacts({ chain: 'solana', chainFacts: { mintable: false, freezable: false, lpBurnedPct: 5, lpLockerPct: 0 } }).found.join() === 'lpUnlocked');
   check('the owner-gated powers are exactly the owner\'s calls: mint, blacklist, pause, change balances, change the tax, set one wallet\'s tax, change the trade caps', [...CF.OWNER_GATED].sort().join() === 'antiWhaleModifiable,blacklist,mintable,ownerChangeBalance,pausable,personalSlippage,slippageModifiable');
   // review, 2026-10-24: a proxy's code can be swapped by whoever administers it — a renounced owner() neutralises nothing there
   const rp = CF.redFacts(prof({}, { proxy: true, mintable: true }));
@@ -62,16 +70,16 @@ const ctx = { window, document, localStorage: { getItem: nil, setItem: noop }, f
 ctx.globalThis = ctx; window.window = window; vm.createContext(ctx); vm.runInContext(NP, ctx);
 const NPC = window.NPCard;
 {
-  check('the page\'s list is the server\'s, key for key and word for word, with the same owner-gated set and dead addresses', JSON.stringify(NPC.VENDOR_EVM) === JSON.stringify(CF.RED_EVM) && NPC.OWNER_GATED.slice().sort().join() === [...CF.OWNER_GATED].sort().join() && NPC.DEAD_ADDRS.slice().sort().join() === [...CF.DEAD_ADDRS].sort().join());
+  check('the page\'s list is the server\'s, key for key and word for word (the unlocked-LP flag too), with the same owner-gated set and dead addresses', JSON.stringify(NPC.VENDOR_EVM) === JSON.stringify(CF.RED_EVM) && JSON.stringify(NPC.LP_UNLOCKED) === JSON.stringify(CF.LP_UNLOCKED) && NPC.OWNER_GATED.slice().sort().join() === [...CF.OWNER_GATED].sort().join() && NPC.DEAD_ADDRS.slice().sort().join() === [...CF.DEAD_ADDRS].sort().join());
   const KEYS = ['honeypot', 'cannotSellAll', 'cannotBuy', 'mintable', 'blacklist', 'pausable', 'ownerChangeBalance', 'slippageModifiable', 'hiddenOwner', 'takeBack', 'selfdestruct'];
   let n = 0, bad = [];
-  for (let mask = 0; mask < 64; mask++) for (const ren of [true, false, null]) for (const chain of ['robinhood', 'ethereum']) for (const hp of [false, true]) {
-    const facts = {}; KEYS.forEach((k, i) => { facts[k] = (mask >> (i % 6)) & 1 ? (i < 6 ? true : (mask & 32) ? true : false) : false; });
+  for (let mask = 0; mask < 64; mask++) for (const ren of [true, false, null]) for (const chain of ['robinhood', 'ethereum']) for (const hp of [false, true]) for (const lp of [[100, 0], [10, 0], [10, null], [30, 25]]) {
+    const facts = { lpBurnedPct: lp[0], lpLockerPct: lp[1] }; KEYS.forEach((k, i) => { facts[k] = (mask >> (i % 6)) & 1 ? (i < 6 ? true : (mask & 32) ? true : false) : false; });
     const p = { chain, token: { renounced: ren }, chainFacts: facts, risk: { honeypotSuspect: hp } };
     const a = CF.redFacts(p), b = NPC.redFactsOf(p); n++;
     if (a.found.join() !== b.found.join() || a.neutralised.join() !== b.neutralised.join()) bad.push(JSON.stringify({ p, a, b }));
   }
-  for (const sol of [{ mintable: true, freezable: true }, { mintable: false, freezable: true }, { mintable: false, freezable: false }]) { const p = { chain: 'solana', token: {}, chainFacts: sol, risk: {} }; const a = CF.redFacts(p), b = NPC.redFactsOf(p); n++; if (a.found.join() !== b.found.join()) bad.push(JSON.stringify({ sol, a, b })); }
+  for (const sol of [{ mintable: true, freezable: true }, { mintable: false, freezable: true }, { mintable: false, freezable: false }, { mintable: false, freezable: false, lpBurnedPct: 5, lpLockerPct: 0 }]) { const p = { chain: 'solana', token: {}, chainFacts: sol, risk: {} }; const a = CF.redFacts(p), b = NPC.redFactsOf(p); n++; if (a.found.join() !== b.found.join()) bad.push(JSON.stringify({ sol, a, b })); }
   check('on ' + n + ' profiles (every chain, renounced / owned / unread, honeypot flagged or not) the page and the server find and neutralise the same powers', bad.length === 0, bad.slice(0, 2).join(' | '));
 }
 
@@ -82,8 +90,8 @@ const grab = (re, what) => { const m = re.exec(SRC); if (!m) throw new Error('co
     (() => {
       const vb = { CF, Object, Math }; vm.createContext(vb); vm.runInContext(grab(/function scanVerdict\(p\) \{[\s\S]*?\n\}\n/, 'scanVerdict') + 'this.v = scanVerdict;', vb);
       const bad = [];
-      for (const triage of ['ok', 'caution', 'high', 'avoid']) for (const thin of [false, true]) for (const sniperOk of [true, null]) for (const red of [[], ['blacklist'], ['selfdestruct']]) for (const ren of [true, false, null]) for (const proxy of [false, true]) {
-        const facts = Object.assign(CF.evmFacts(gSend), { blacklist: false, whitelist: false, proxy }); red.forEach((k) => { facts[k] = true; });
+      for (const triage of ['ok', 'caution', 'high', 'avoid']) for (const thin of [false, true]) for (const sniperOk of [true, null]) for (const red of [[], ['blacklist'], ['selfdestruct']]) for (const ren of [true, false, null]) for (const proxy of [false, true]) for (const burned of [100, 10]) {
+        const facts = Object.assign(CF.evmFacts(gSend), { blacklist: false, whitelist: false, proxy, lpBurnedPct: burned, lpLockerPct: 0 }); red.forEach((k) => { facts[k] = true; });
         const health = triage === 'ok' ? 100 : triage === 'caution' ? 60 : triage === 'high' ? 30 : 5;
         const p = { chain: 'robinhood', token: { address: SEND, renounced: ren }, chainFacts: facts, risk: { health, triage, thinData: thin, sniperOk, dataKnown: { indexed: !thin, liquidity: true, holders: !thin } }, market: {}, holders: {}, txns: { h24: {} }, pair: {}, volume: {}, priceChange: {} };
         const sv = vb.v(p), pv = NPC.verdictWordOf(p), redFound = CF.redFacts(p).found.length > 0;
@@ -130,8 +138,9 @@ const grab = (re, what) => { const m = re.exec(SRC); if (!m) throw new Error('co
   check('homeOwner: an owner at 0x…dEaD is renounced and kept as ownerBurn (never as a live owner); a live owner keeps its address and kind; with no owner() the GoPlus owner_address answers, said as GoPlus\'s',
     o1.renounced === true && o1.owner === null && o1.ownerBurn === '0x000000000000000000000000000000000000dead' && o2.owner === LIVE_OWNER && o2.ownerIsContract === true && o2.renounced === false && o3.renounced === true && o3.ownerSource === 'goplus' && o3.ownerBurn === '0x0000000000000000000000000000000000000000', JSON.stringify([o1, o2, o3]));
   const vb = { CF, Object, Math }; vm.createContext(vb); vm.runInContext(grab(/function scanVerdict\(p\) \{[\s\S]*?\n\}\n/, 'scanVerdict') + 'this.v = scanVerdict;', vb);
-  const base = (renounced) => ({ token: { renounced }, chainFacts: CF.evmFacts(gSend), risk: { health: 100, triage: 'ok', sniperOk: true, thinData: false } });
-  check('scanVerdict (the server\'s own verdict — Telegram, the runners): $SEND renounced keeps 🚀; the same code with a live owner is 🟡 Caution naming the blacklist', vb.v(base(true)).word === 'Looks Good, Send It' && vb.v(base(false)).word === 'Caution' && /blacklist/.test(vb.v(base(false)).note), JSON.stringify([vb.v(base(true)).word, vb.v(base(false))]));
+  const base = (renounced, lpOver) => ({ token: { renounced }, chainFacts: Object.assign(CF.evmFacts(gSend), lpOver === undefined ? { lpBurnedPct: 100, lpLockerPct: 0 } : lpOver), risk: { health: 100, triage: 'ok', sniperOk: true, thinData: false } });
+  check('scanVerdict (the server\'s own verdict — Telegram, the runners): $SEND\'s code renounced with its LP burned keeps 🚀; with a live owner it is 🟡 Caution naming the blacklist; with its REAL LP (11.54% burned) it is 🟡 Caution naming the unlocked LP', vb.v(base(true)).word === 'Looks Good, Send It' && vb.v(base(false)).word === 'Caution' && /blacklist/.test(vb.v(base(false)).note)
+    && vb.v(base(true, {})).word === 'Caution' && /less than half of its pool’s LP is burned or in a locker — whoever holds the rest can pull it/.test(vb.v(base(true, {})).note) && !/blacklist/.test(vb.v(base(true, {})).note), JSON.stringify([vb.v(base(true)).word, vb.v(base(false)).word, vb.v(base(true, {}))]));
 }
 
 /* ═══ 4. the dashboards ═══ */
@@ -144,13 +153,15 @@ const grab = (re, what) => { const m = re.exec(SRC); if (!m) throw new Error('co
     holders: { count: 900, topHolderPct: 5, top10Pct: 30, top: [], source: 'chain', block: 123 }, links: { explorer: 'https://robinhoodchain.blockscout.com/token/' + SEND, dex: 'https://dexscreener.com/robinhood/x' },
     chainFacts: Object.assign(CF.evmFacts(gSend), { lpBurnedPct: 11.54, lpBurnSource: 'chain' }, factsOver || {}, { lpTop: ((factsOver && factsOver.lpTop) || CF.evmFacts(gSend).lpTop).map((h) => h.address === SEND_LP_HOLDER ? Object.assign({}, h, { contract: false, kindSource: 'chain' }) : h) }),
     risk: { health: 100, triage: 'ok', thinData: false, sniperOk: true, dataKnown: { indexed: true, liquidity: true, holders: true, concentration: true, verified: true, snipers: true } } });
-  const sendNow = NPC.dashboardHTML(home()), sendT = text(sendNow);
-  check('$SEND as it is: renounced to the zero address → still 🚀 Looks Good, Send It; the owner line says where ownership went and that its blacklist can no longer be used; the Contract card says the same on the row',
-    /Looks Good, Send It/.test(sendT) && /Ownership renounced — the owner is the zero address 0x0000…0000 nobody holds a key to, so the deployer can no longer change the contract\. Its blacklist function can no longer be used by the owner\./.test(sendT)
-    && /Blacklist yes — but ownership is renounced, so the owner can no longer use it/.test(sendT) && /Renounced, so the owner can no longer use its blacklist/.test(sendT), sendT.slice(sendT.indexOf('Ownership renounced') - 20, sendT.indexOf('Ownership renounced') + 260));
+  const sendNow = NPC.dashboardHTML(home()), sendT = text(sendNow), burnedT = text(NPC.dashboardHTML(home({}, { lpBurnedPct: 100, lpLockerPct: 0, lpTop: [] })));
+  check('$SEND as it is: 🟡 Caution, the reason named — the chain’s own LP read reports the LP not burned or locked — with a 🔓 chip; its blacklist neutralised by the renounce is not a reason',
+    !/Looks Good, Send It/.test(sendT) && /The chain’s own LP read reports: LP not burned or locked/.test(sendT) && /🔓 LP not burned or locked/.test(sendT) && !/reports: blacklist/.test(sendT) && /A caution flag\./.test(sendT), sendT.slice(0, 400));
+  check('the same code with its LP burned: renounced to the zero address → 🚀 Looks Good, Send It; the owner line says where ownership went and that its blacklist can no longer be used; the Contract card says the same on the row',
+    /Looks Good, Send It/.test(burnedT) && /Ownership renounced — the owner is the zero address 0x0000…0000 nobody holds a key to, so the deployer can no longer change the contract\. Its blacklist function can no longer be used by the owner\./.test(burnedT)
+    && /Blacklist yes — but ownership is renounced, so the owner can no longer use it/.test(burnedT) && /Renounced, so the owner can no longer use its blacklist/.test(burnedT), burnedT.slice(burnedT.indexOf('Ownership renounced') - 20, burnedT.indexOf('Ownership renounced') + 260));
   check('  ...its LP: 11.54% burned (read on-chain), nothing in a locker, and 88.08% held by a contract — its address a link to the explorer with a copy button, and the warning that most of the LP is neither burned nor locked',
     /LP burned — held by a dead address 11\.5\d?% read on-chain/.test(sendT) && /LP in a locker \(GoPlus marks it locked\) 0%/.test(sendT) && /Who else holds the LP 0x99e1…2e12 ↗ 📋 88\.\d+% \(a wallet\)/.test(sendT)
-    && sendNow.includes('href="https://robinhoodchain.blockscout.com/address/' + SEND_LP_HOLDER + '"') && sendNow.includes('data-copy="' + SEND_LP_HOLDER + '"') && /Most of the LP is neither burned nor in a locker — whoever holds it can pull it \(a contract, only if its code has a way to\)\./.test(sendT), sendT.slice(sendT.indexOf('LP burned'), sendT.indexOf('LP burned') + 300));
+    && sendNow.includes('href="https://robinhoodchain.blockscout.com/address/' + SEND_LP_HOLDER + '"') && sendNow.includes('data-copy="' + SEND_LP_HOLDER + '"') && /Most of the LP is neither burned nor in a locker — whoever holds it can pull it \(a contract, only if its code has a way to\)\. A caution flag\./.test(sendT), sendT.slice(sendT.indexOf('LP burned'), sendT.indexOf('LP burned') + 300));
   const owned = NPC.dashboardHTML(home({ renounced: false, owner: LIVE_OWNER, ownerBurn: null, ownerIsContract: true })), ownedT = text(owned);
   check('the same code with a LIVE owner: 🟡 Caution naming the blacklist (never the rocket); the owner shown as a link with a copy button, said to be a contract; the Blacklist row red',
     !/Looks Good, Send It/.test(ownedT) && /GoPlus Security reports: blacklist/.test(ownedT) && /Owner 0x1234…5678 ↗ 📋 \(a contract\) — can still change the contract\./.test(ownedT) && owned.includes('href="https://robinhoodchain.blockscout.com/address/' + LIVE_OWNER + '"') && /<b class="tkd-bad">yes — wallets can be blocked<\/b>/.test(owned),
