@@ -156,8 +156,8 @@ try {
       && /data-chartsrc="dexscreener" hidden data-tip="/.test(NPJ) && /data-chartsrc="geckoterminal" hidden data-tip="/.test(NPJ) && /'<div class="chart-embed" hidden><\/div>'/.test(NPJ));
     check('  ...a third party\'s chart is an iframe made only when picked, removed on switching back, no referrer, sandboxed — and the pick is remembered on the device',
       /if \(em\) \{ em\.hidden = true; em\.innerHTML = ''; \}/.test(CHART) && /referrerpolicy="no-referrer"/.test(CHART) && /sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"/.test(CHART)
-      && /const SRC_KEY = 'chart:src';/.test(CHART) && /'https:\/\/dexscreener\.com\/robinhood\/' \+ pair \+ '\?embed=1/.test(CHART) && /'https:\/\/www\.geckoterminal\.com\/robinhood\/pools\/' \+ pair \+ '\?embed=1/.test(CHART)
-      && /if \(!CHART_EMBEDS\[src\] \|\| !\/\^0x\[0-9a-f\]\{40\}\$\/\.test\(pair\)\) src = 'onchain';/.test(CHART));
+      && /const SRC_KEY = 'chart:src';/.test(CHART) && /'https:\/\/dexscreener\.com\/' \+ \(ds \|\| 'robinhood'\) \+ '\/' \+ pair \+ '\?embed=1/.test(CHART) && /'https:\/\/www\.geckoterminal\.com\/' \+ \(gt \|\| 'robinhood'\) \+ '\/pools\/' \+ pair \+ '\?embed=1/.test(CHART)   // the slug is the chain's (owner, 2026-10-23); the home chain's is the default
+      && /if \(!CHART_EMBEDS\[src\] \|\| !pair\) src = 'onchain';/.test(CHART) && /const poolAddr = \(wrap\) => \{ const raw = String\(wrap\.dataset\.pair \|\| ''\); if \(\/\^0x\[0-9a-fA-F\]\{40\}\$\/\.test\(raw\)\) return raw\.toLowerCase\(\);/.test(CHART));
     check('  ...and the privacy page says what picking one means (that company sees your IP and the pool), and that nothing loads until you pick it', /If you switch a chart to <b>Dexscreener<\/b> or <b>CoinGecko<\/b>/.test(PRIV) && /Nothing is loaded from either until you pick it, the frame is removed when you switch back/.test(PRIV));
     /* only the charts that exist (owner, 2026-10-13: "If the dexscreener or coingecko chart is not available for a token then just
        have those two toggle buttons be not visible"): the buttons are drawn hidden, and shown for a yes from our server */

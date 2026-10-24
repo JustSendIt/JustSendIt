@@ -19,7 +19,24 @@
   if (!tabScan || !tabNew || !panScan || !panNew) return;
   const form = $('sc-form'), input = $('sc-addr'), go = $('sc-go'), status = $('sc-status'), result = $('sc-result');
   const recentBox = $('sc-recent'), recentList = $('sc-recent-list'), locked = $('sc-locked'), radar = $('sc-radar'), lock = $('sc-lock');
-  const ADDR = /^0x[0-9a-fA-F]{40}$/;
+  /* An address on one of the chains the Scanner reads (owner, 2026-10-23: Ethereum and Solana too): 0x and 40 hex on the EVM
+     chains; 32–44 base58 characters on Solana, whose case is part of the address and is never lowered. */
+  const ADDR = /^0x[0-9a-fA-F]{40}$/, SOL_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  const isAddr = (s) => ADDR.test(s) || SOL_ADDR.test(s);
+  const normAddr = (s) => ADDR.test(s) ? s.toLowerCase() : s;
+  const CHAIN_META = (window.NPCard && NPCard.CHAIN_META) || {};
+  const chainName = (slug) => (CHAIN_META[slug] && CHAIN_META[slug].name) || (slug === 'ethereum' ? 'Ethereum' : slug === 'solana' ? 'Solana' : 'Robinhood Chain');
+  // the chain chooser: Auto (the address decides; a 0x address is tried on Robinhood Chain, then Ethereum) or one chain
+  let chainPick = (function () { try { const v = localStorage.getItem('sc:chain'); return ['auto', 'robinhood', 'ethereum', 'solana'].includes(v) ? v : 'auto'; } catch { return 'auto'; } })();
+  const chainBtns = () => [...document.querySelectorAll('.sc-chain[data-chain]')];
+  function paintChains() { chainBtns().forEach((b) => { const on = b.dataset.chain === chainPick; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); }); }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('.sc-chain[data-chain]'); if (!b) return;
+    chainPick = b.dataset.chain; try { localStorage.setItem('sc:chain', chainPick); } catch {}
+    paintChains();
+    if (window.announce) announce(chainPick === 'auto' ? 'The chain is read from the address.' : 'Scanning on ' + chainName(chainPick) + '.');
+  });
+  paintChains();
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const shortAddr = (a) => a.slice(0, 6) + '…' + a.slice(-4);
   const signedIn = () => !!(window.AUTH && AUTH.user);
@@ -67,10 +84,11 @@
 
   /* ---------- recent scans (this browser only) ---------- */
   const RECENT_KEY = 'sc:recent', RECENT_MAX = 6;
-  const recent = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter((r) => r && ADDR.test(r.addr || '')) : []; } catch { return []; } };
-  function remember(addr, sym) {
+  const recent = () => { try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); return Array.isArray(v) ? v.filter((r) => r && isAddr(r.addr || '')) : []; } catch { return []; } };
+  function remember(addr, sym, chain) {
     try {
-      const list = [{ addr: addr.toLowerCase(), sym: String(sym || '').slice(0, 16) }].concat(recent().filter((r) => r.addr !== addr.toLowerCase())).slice(0, RECENT_MAX);
+      const a = normAddr(addr), ch = chain && chain !== 'robinhood' ? chain : null;
+      const list = [{ addr: a, sym: String(sym || '').slice(0, 16), ...(ch ? { chain: ch } : {}) }].concat(recent().filter((r) => !(r.addr === a && (r.chain || null) === ch))).slice(0, RECENT_MAX);
       localStorage.setItem(RECENT_KEY, JSON.stringify(list));
     } catch {}
     paintRecent();
@@ -79,7 +97,7 @@
     if (!recentBox || !recentList) return;
     const list = recent();
     recentBox.hidden = !list.length;
-    recentList.innerHTML = list.map((r) => '<button class="np-chip" type="button" data-scan="' + esc(r.addr) + '" data-tip="Scans this address again">' + (r.sym ? '$' + esc(r.sym) : esc(shortAddr(r.addr))) + '</button>').join(' ');
+    recentList.innerHTML = list.map((r) => '<button class="np-chip" type="button" data-scan="' + esc(r.addr) + '"' + (r.chain ? ' data-scan-chain="' + esc(r.chain) + '"' : '') + ' data-tip="Scans this address again' + (r.chain ? ' on ' + esc(chainName(r.chain)) : '') + '">' + (r.sym ? '$' + esc(r.sym) : esc(shortAddr(r.addr))) + (r.chain ? ' <small>' + esc((CHAIN_META[r.chain] && CHAIN_META[r.chain].emoji) || chainName(r.chain)) + '</small>' : '') + '</button>').join(' ');
   }
   paintRecent();
 
@@ -90,9 +108,9 @@
     try {
       const r = await fetch('/api/scan/recent', { credentials: 'same-origin' });
       const j = await r.json().catch(() => ({}));
-      const list = (r.ok && Array.isArray(j.scans)) ? j.scans.filter((x) => x && ADDR.test(x.token || '') && x.symbol) : [];
+      const list = (r.ok && Array.isArray(j.scans)) ? j.scans.filter((x) => x && isAddr(x.token || '') && x.symbol) : [];
       commBox.hidden = !list.length;
-      commList.innerHTML = list.map((x) => '<button class="np-chip" type="button" data-scan="' + esc(x.token) + '" data-tip="' + esc((x.name || x.symbol) + ' — scanned ' + x.count + (x.count === 1 ? ' time' : ' times') + ', last ' + ago(x.lastAt) + '; pulls up the latest read') + '">$' + esc(x.symbol) + '<span class="sc-chip-meta">' + (x.kind === 'pool' ? '🏊 ' : '') + esc(ago(x.lastAt)) + (x.count > 1 ? ' · ×' + Number(x.count) : '') + '</span></button>').join(' ');
+      commList.innerHTML = list.map((x) => '<button class="np-chip" type="button" data-scan="' + esc(x.token) + '"' + (x.chain && x.chain !== 'robinhood' ? ' data-scan-chain="' + esc(x.chain) + '"' : '') + ' data-tip="' + esc((x.name || x.symbol) + (x.chain && x.chain !== 'robinhood' ? ' on ' + chainName(x.chain) : '') + ' — scanned ' + x.count + (x.count === 1 ? ' time' : ' times') + ', last ' + ago(x.lastAt) + '; pulls up the latest read') + '">$' + esc(x.symbol) + '<span class="sc-chip-meta">' + (x.kind === 'pool' ? '🏊 ' : '') + esc(ago(x.lastAt)) + (x.count > 1 ? ' · ×' + Number(x.count) : '') + '</span></button>').join(' ');
     } catch { /* the strip is optional — a failed read leaves it hidden */ }
   }
   paintCommunity();
@@ -123,25 +141,31 @@
     if (j.retryAfter) setTimeout(() => { if (my === seq) names(q, false); }, j.retryAfter * 1000);   // too many searches: once more, after the wait
     else if (j.pending) TokenNames.follow(q, () => my === seq, (k) => TokenNames.refill(box, k));   // holders, in place
   }
-  async function scan(raw, heard) {   // heard: the visitor asked for this scan in this tab (a deep link on load scans quietly)
+  async function scan(raw, heard, chainWant) {   // heard: the visitor asked for this scan in this tab (a deep link on load scans quietly); chainWant: a chip's or link's chain
     const addr = String(raw || '').trim();
-    if (/^[0-9a-f]{40}$/i.test(addr)) return scan('0x' + addr, heard);   // an address pasted without its 0x
-    if (!ADDR.test(addr) && window.TokenNames && TokenNames.isNameQuery(addr)) { names(TokenNames.normQ(addr), heard); return; }   // a name: list the tokens called that
-    if (!ADDR.test(addr)) { setStatus('That is not an address. It starts with 0x and is 42 characters long — or type a token\u2019s name to list every token called that.', 'err'); if (input) input.focus(); if (window.SFX) SFX.play('error'); return; }
+    if (/^[0-9a-f]{40}$/i.test(addr)) return scan('0x' + addr, heard, chainWant);   // an address pasted without its 0x
+    if (!isAddr(addr) && window.TokenNames && TokenNames.isNameQuery(addr)) { names(TokenNames.normQ(addr), heard); return; }   // a name: list the tokens called that (a Solana address is an address first)
+    if (!isAddr(addr)) { setStatus('That is not an address. A 0x address is 42 characters long; a Solana address is 32 to 44 letters and digits — or type a token\u2019s name to list every token called that.', 'err'); if (input) input.focus(); if (window.SFX) SFX.play('error'); return; }
+    // which chain: the chip's or link's own; else the chooser; a Solana address is Solana's whatever is chosen
+    const chainQ = SOL_ADDR.test(addr) && !ADDR.test(addr) ? 'solana' : (chainWant && chainWant !== 'auto' ? chainWant : (chainPick !== 'auto' ? chainPick : ''));
+    if (chainQ === 'solana' && ADDR.test(addr)) { setStatus('That is a 0x address, which Solana does not use — pick Robinhood Chain, Ethereum or Auto.', 'err'); if (window.SFX) SFX.play('error'); return; }
     const my = ++seq;
     if (heard && window.SFX) SFX.play('scan');   // the radar ping: a read of the chain has started
     lastPair = null;                                                   // the ☆ saves only the pair on screen, never the one before
     if (input) { input.value = addr; input.dispatchEvent(new Event('input')); }   // shows the ✕ for a chip or deep-link scan too
     if (go) { go.disabled = true; go.setAttribute('aria-disabled', 'true'); }
-    setStatus('Reading the chain for ' + shortAddr(addr) + '…', 'busy');
-    result.innerHTML = '<p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading the chain for the latest on-chain detail…</p>';
-    try { const u = new URL(location.href); u.searchParams.set('scan', addr.toLowerCase()); u.searchParams.delete('tab'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {}
+    const where = chainQ ? chainName(chainQ) : 'the chain';
+    setStatus('Reading ' + where + ' for ' + shortAddr(addr) + '…', 'busy');
+    result.innerHTML = '<p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading ' + esc(where) + ' for the latest on-chain detail…</p>';
+    try { const u = new URL(location.href); u.searchParams.set('scan', normAddr(addr)); if (chainQ) u.searchParams.set('chain', chainQ); else u.searchParams.delete('chain'); u.searchParams.delete('tab'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {}
     try {
-      const r = await fetch('/api/scan?address=' + encodeURIComponent(addr.toLowerCase()), { credentials: 'same-origin' });
+      const r = await fetch('/api/scan?address=' + encodeURIComponent(normAddr(addr)) + (chainQ ? '&chain=' + encodeURIComponent(chainQ) : ''), { credentials: 'same-origin' });
       const j = await r.json().catch(() => ({}));
       if (my !== seq) return;
       if (r.ok && j.pair) {
-        const p = j.pair, tok = (p.token && p.token.address) || addr.toLowerCase();
+        const p = j.pair, tok = (p.token && p.token.address) || normAddr(addr);
+        const chainSlug = j.chain || p.chain || 'robinhood', cm = j.chainMeta || CHAIN_META[chainSlug] || null;
+        if (cm && !p.chain) p.chain = chainSlug;   // the dashboard reads the chain from the profile
         lastPair = p;
         const sym = (p.token && p.token.symbol) || '';
         const sc = Object.assign({ readAt: Date.now(), stale: false, kept: false }, j.scan || {});
@@ -157,8 +181,10 @@
            Everything a call needs (sign-in, the $SEND check, today's allowance, enough liquidity) is still
            asked by the composer and the server, exactly as for any other call. */
         const kicker = j.kind === 'pool' ? '🏊 Pool <code>' + esc(shortAddr(j.pool)) + '</code> ' + (j.poolVerified === true ? 'prices this token' : 'says it prices this token') : '🪙 Token';
+        // a 0x address the home chain had nothing for, read on Ethereum instead: the answer says so, and so does the page
+        const chainNote = j.note ? '<span class="sc-hit-note sc-chain-note">' + esc((cm && cm.emoji ? cm.emoji + ' ' : '') + j.note) + '</span>' : '';
         const meta =
-          '<p class="sc-hit-s">' + (sc.stale ? 'Last read ' : 'Read ') + agoEl(sc.readAt) + ' · 🔁 ' + (!sc.kept ? 'This scan could not be kept just now — nothing was stored for others.'
+          '<p class="sc-hit-s">' + chainNote + (sc.stale ? 'Last read ' : 'Read ') + agoEl(sc.readAt) + ' · 🔁 ' + (!sc.kept ? 'This scan could not be kept just now — nothing was stored for others.'
                                           : (sc.count > 1 ? 'Scanned ' + Number(sc.count) + ' times by the community · first ' + agoEl(sc.firstAt) : 'First scan of this address on record — it is kept now, so it pulls up for everyone')) +
             holdersNote +
             (sc.stale ? '<span class="sc-stale">⏳ ' + (sc.busy ? 'Lots of scans are running right now' : 'The price feed and the chain could not be reached just now') + ' — this is the last snapshot, read ' + agoEl(sc.readAt) + ' (' + esc(clock(sc.readAt)) + '). Nothing on it is live. Scan again in a moment.</span>' : '') +
@@ -169,7 +195,7 @@
         if (window.NPCard && NPCard.mountDashboard) NPCard.mountDashboard(result);   // ring, chart, community slot, the contract read, the ☆ state
         setStatus(sc.stale ? 'Showing the last snapshot of ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + ', not live.' : 'Scanned ' + ((p.token && p.token.name) || shortAddr(tok)) + (sym ? ' $' + sym : '') + ' — read ' + ago(sc.readAt) + '.', sc.stale ? 'busy' : 'ok');
         if (heard && window.SFX) { if (sc.stale) SFX.play('warn'); else SFX.play('success'); }   // the profile landed (a last snapshot is a caution, not a live read)
-        remember(tok, sym);
+        remember(tok, sym, chainSlug);
         paintCommunity();
         const h = result.querySelector('.tkd-h'); if (h) { try { h.focus({ preventScroll: false }); } catch {} }
       } else if (!r.ok || (j && j.unavailable)) {
@@ -179,7 +205,7 @@
         if (heard && window.SFX) SFX.play('error');
       } else if (j && j.notFound) {
         result.innerHTML = '';
-        setStatus('🤷 ' + (j.message || 'No token or pool found at this address on Robinhood Chain.'), 'err');
+        setStatus('🤷 ' + (j.message || 'No token or pool found at this address on ' + chainName(j.chain || chainQ || 'robinhood') + '.'), 'err');
         if (heard && window.SFX) SFX.play('error');
       } else {
         result.innerHTML = '';
@@ -227,17 +253,18 @@
     const b = e.target.closest && e.target.closest('[data-scan]');
     if (!b || !panScan.contains(b)) return;
     show('scan', { quiet: true });
-    scan(b.getAttribute('data-scan'), true);
+    scan(b.getAttribute('data-scan'), true, b.getAttribute('data-scan-chain') || null);   // a chip carries its chain (a recent scan, a community scan, an example)
   });
   // a pasted address scans straight away — nobody pastes one to look at it
-  if (input) input.addEventListener('paste', () => { setTimeout(() => { if (ADDR.test(input.value.trim())) scan(input.value, true); }, 0); });
+  if (input) input.addEventListener('paste', () => { setTimeout(() => { if (isAddr(input.value.trim())) scan(input.value, true); }, 0); });
 
   /* ---------- deep links ---------- */
   const q = new URLSearchParams(location.search);
   const fromHash = /^#0x[0-9a-fA-F]{40}$/.test(location.hash) ? location.hash.slice(1) : '';
   const want = q.get('scan') || fromHash;
+  const wantChain = ['robinhood', 'ethereum', 'solana'].includes(q.get('chain')) ? q.get('chain') : null;   // ?chain= names the chain a shared scan was read on
   if (q.get('tab') === 'new') show('new', { quiet: true }); else show('scan', { quiet: true });
-  if (want && want.trim().length >= 2) scan(want);   // an address scans; a name lists the tokens called that
+  if (want && want.trim().length >= 2) scan(want, false, wantChain);   // an address scans; a name lists the tokens called that
   // the sign-in state arrives after the page (AUTH.ready): re-run the gate once it is known
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(() => { if (lock) lock.hidden = signedIn(); if (current === 'new') gateRadar(); }).catch(() => {});
 })();

@@ -656,6 +656,7 @@
      the same visibility gate the price poll uses: a chart nobody is looking at asks for nothing. */
   async function loadMarkers(host) {
     const d = host._data; if (!d) return;
+    if (host.dataset.chain && host.dataset.chain !== 'robinhood') return;   // Send Calls and Sent Its are the home chain's; a pool elsewhere has no markers
     const pts = d.points || []; if (!pts.length) return;
     /* Deliberately WIDER than the chart draws. A 5m chart covers twelve hours, and on a token whose
        calls are three days old it would come back empty and the legend would say "none in this window" —
@@ -712,7 +713,7 @@
     const first = pts[0].p, last = pts[pts.length - 1].p;
     const chg = first > 0 ? ((last - first) / first) * 100 : 0;
     return fmtPrice(last, quoteUsd(data), data.quote) + ' — ' + (chg >= 0 ? 'up ' : 'down ') + Math.abs(chg).toFixed(2) +
-      '% over this window, from ' + data.swaps + (data.swaps === 1 ? ' on-chain swap' : ' on-chain swaps') + '.';
+      '% over this window' + (data.swaps != null ? ', from ' + data.swaps + (data.swaps === 1 ? ' on-chain swap' : ' on-chain swaps') : '') + '.';
   }
 
   function tableHTML(data) {
@@ -765,6 +766,8 @@
     if (!rows.length) return '';
     const traders = data.traders || {};
     const exp = typeof data.explorer === 'string' ? data.explorer.replace(/\/+$/, '') : '';
+    // the explorer's paths differ by chain (Solscan reads /account/, not /address/); the server says which
+    const pAddr = (data.explorerPaths && data.explorerPaths.address) || '/address/', pTx = (data.explorerPaths && data.explorerPaths.tx) || '/tx/';
     const qsym = data.quote || '';
     const pct = (v) => (v == null || !isFinite(v)) ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(Math.abs(v) < 10 ? 2 : 1) + '%';
     const body = rows.map((r) => {
@@ -776,7 +779,7 @@
       const note = (r.viaContract || (tr && tr.basis === 'contract')) ? ' This is a contract — a router, an aggregator or another pool — not a person’s own address.' : '';
       const pnlTxt = (!r.firstBuy && tr && tr.basis === 'ok' && tr.pnlPct != null) ? pct(tr.pnlPct) : '';
       const wcell = r.wallet
-        ? '<a class="oc-w ' + st.cls + '" href="' + esc(exp + '/address/' + r.wallet) + '" target="_blank" rel="noopener"' +
+        ? '<a class="oc-w ' + st.cls + '" href="' + esc(exp + pAddr + r.wallet) + '" target="_blank" rel="noopener"' +
           ' title="' + esc(st.tip + note + ' Opens this address on the explorer.') + '">' +
             '<span class="oc-w-a">' + esc(walletTxt) + '</span>' +
             '<span class="oc-w-s">' + esc(st.word) + (pnlTxt ? ' ' + esc(pnlTxt) : '') +
@@ -785,7 +788,7 @@
           '</a>'
         : '<span class="oc-w ' + st.cls + '" title="' + esc(st.tip) + '"><span class="oc-w-a">' + esc(walletTxt) + '</span></span>';
       const hcell = r.hash
-        ? '<a class="oc-tx" href="' + esc(exp + '/tx/' + r.hash) + '" target="_blank" rel="noopener"' +
+        ? '<a class="oc-tx" href="' + esc(exp + pTx + r.hash) + '" target="_blank" rel="noopener"' +
           ' title="Opens this transaction on the chain explorer">' + esc(short(r.hash)) + ' ↗</a>'
         : '—';
       return '<tr class="' + (r.isBuy ? 'is-buy' : 'is-sell') + '">' +
@@ -896,7 +899,9 @@
     if ((host._data.points || []).length < 2) paint(host, true);
     let res = null, d = null;
     try {
-      res = await fetch('/api/chart?pair=' + encodeURIComponent(pair) + '&token=' + encodeURIComponent(token) +
+      // a pool on another chain (owner, 2026-10-23) names its chain; the server draws its candles from GeckoTerminal
+      const chainQ = host.dataset.chain && host.dataset.chain !== 'robinhood' ? 'chain=' + encodeURIComponent(host.dataset.chain) + '&' : '';
+      res = await fetch('/api/chart?' + chainQ + 'pair=' + encodeURIComponent(pair) + '&token=' + encodeURIComponent(token) +
         '&tf=' + encodeURIComponent(tf) + '&hours=' + (HOURS[tf] || 168), { credentials: 'same-origin' });
       d = await res.json().catch(() => null);
     } catch {}
@@ -959,7 +964,8 @@
     const ago = d.stale && (d._staleAt || d.asOf) ? Math.max(1, Math.round((Date.now() - (d._staleAt || d.asOf)) / 60000)) : 0;
     const sum = (ago ? '⚠️ The chain is not answering reads just now, so this is the chart as it stood ' + ago + ' minute' + (ago === 1 ? '' : 's') + ' ago. ' + (host._reasking ? 'This page asks again every minute while you are looking at it. ' : 'Reload the page to try again. ') : '') + summarise(d);
     const srcChip = host.querySelector('.oc-src');
-    if (srcChip) srcChip.textContent = ago ? '⛓️ on-chain · as of ' + new Date(d._staleAt || d.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '⛓️ on-chain · live';
+    const far = host.dataset.chain && host.dataset.chain !== 'robinhood';   // another chain's candles come from GeckoTerminal, not from a live reserves read
+    if (srcChip) srcChip.textContent = ago ? (far ? '📊 GeckoTerminal · as of ' : '⛓️ on-chain · as of ') + new Date(d._staleAt || d.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (far ? '📊 GeckoTerminal · refreshed' : '⛓️ on-chain · live');
     /* F004: this is a polite live region, and paint() runs on every 1s poll tick — so a screen reader was
        read the whole summary sentence once a second for as long as the chart was on screen. The canvas
        label follows every repaint silently; the SPOKEN line only changes when the summary text actually
@@ -988,6 +994,13 @@
   function startTicking(host) {
     stopTicking(host);
     const pair = host.dataset.pair, token = host.dataset.token;
+    /* a pool on another chain has no reserves read of its own here: its candles are asked for again (served from the server's
+       cache between refreshes), once a minute at most, and only while someone can see the chart */
+    if (host.dataset.chain && host.dataset.chain !== 'robinhood') {
+      const every = Math.max(30000, Number(host.dataset.poll) || 60000);
+      host._tick = setInterval(() => { if (!document.hidden && host.isConnected && host._visible) load(host, true); }, every);
+      return;
+    }
     let missed = 0;
     const tick = async () => {
       if (document.hidden || !host.isConnected || !host._visible) return;
@@ -1046,12 +1059,15 @@
     host.innerHTML =
       '<div class="oc-head">' +
         '<div class="oc-tfs" role="tablist" aria-label="Chart timeframe">' +
-          TF.map(([k, lbl]) => '<button class="oc-tf' + (k === (host.dataset.tf || '1h') ? ' is-on' : '') +
+          // another chain's candles come from GeckoTerminal, whose finest width is a minute: no 1s button there
+          TF.filter(([k]) => !(k === '1s' && host.dataset.chain && host.dataset.chain !== 'robinhood')).map(([k, lbl]) => '<button class="oc-tf' + (k === (host.dataset.tf || '1h') ? ' is-on' : '') +
             '" type="button" data-tip="Reloads the chart at this candle size and window" role="tab" aria-selected="' + (k === (host.dataset.tf || '1h')) + '" data-tf="' + k + '">' + lbl + '</button>').join('') +
         '</div>' +
         '<span class="oc-live" aria-live="off"></span>' +
-        '<span class="oc-src" title="History from this pair contract&#39;s own Swap events; the live price from its reserves, every ' +
-          Math.round(Math.max(1000, Number(host.dataset.poll) || 1000) / 1000) + 's">⛓️ on-chain · live</span>' +
+        (host.dataset.chain && host.dataset.chain !== 'robinhood'
+          ? '<span class="oc-src" title="Candles and trades for this pool from GeckoTerminal, drawn by this site and asked for again every ' + Math.round(Math.max(30000, Number(host.dataset.poll) || 60000) / 1000) + 's">📊 GeckoTerminal · refreshed</span>'
+          : '<span class="oc-src" title="History from this pair contract&#39;s own Swap events; the live price from its reserves, every ' +
+          Math.round(Math.max(1000, Number(host.dataset.poll) || 1000) / 1000) + 's">⛓️ on-chain · live</span>') +
         '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc(host.closest('[data-cf-unit]').getAttribute('data-cf-title') || 'price chart') + ' full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
       '</div>' +
       '<div class="oc-plot">' +
@@ -1135,17 +1151,20 @@
      hidden; our server says which sites list the pool (/api/chart/sources — it asks them, the browser does not), and a
      button appears only for a yes. No yes, no switch: our chart alone needs no picker. "Could not ask" (null) keeps the
      button hidden and is asked once more a minute later. */
+  // the slugs each site uses for a chain ride on the switch (data-ds, data-gt — newpairs.js chartHTML); the home chain's are the default
   const CHART_EMBEDS = {
     dexscreener: { name: 'Dexscreener', host: 'dexscreener.com',
-      url: (pair) => 'https://dexscreener.com/robinhood/' + pair + '?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15' },
+      url: (pair, ds) => 'https://dexscreener.com/' + (ds || 'robinhood') + '/' + pair + '?embed=1&loadChartSettings=0&trades=0&tabs=0&info=0&chartLeftToolbar=0&chartDefaultOnMobile=1&chartTheme=dark&theme=dark&chartStyle=1&chartType=usd&interval=15' },
     geckoterminal: { name: 'CoinGecko (GeckoTerminal)', host: 'geckoterminal.com',
-      url: (pair) => 'https://www.geckoterminal.com/robinhood/pools/' + pair + '?embed=1&info=0&swaps=0&grayscale=0&light_chart=0&chart_type=price&resolution=15m' },
+      url: (pair, gt) => 'https://www.geckoterminal.com/' + (gt || 'robinhood') + '/pools/' + pair + '?embed=1&info=0&swaps=0&grayscale=0&light_chart=0&chart_type=price&resolution=15m' },
   };
+  // a pool address: 0x on the EVM chains (lower-cased), base58 on Solana (its case kept — the address IS the case)
+  const poolAddr = (wrap) => { const raw = String(wrap.dataset.pair || ''); if (/^0x[0-9a-fA-F]{40}$/.test(raw)) return raw.toLowerCase(); return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(raw) && wrap.dataset.chain === 'solana' ? raw : ''; };
   const SRC_KEY = 'chart:src';
   function chartSrcPref() { try { const v = localStorage.getItem(SRC_KEY); return v && CHART_EMBEDS[v] ? v : 'onchain'; } catch { return 'onchain'; } }
   function showChartSrc(wrap, src) {
-    const pair = String(wrap.dataset.pair || '').toLowerCase();
-    if (!CHART_EMBEDS[src] || !/^0x[0-9a-f]{40}$/.test(pair)) src = 'onchain';
+    const pair = poolAddr(wrap);
+    if (!CHART_EMBEDS[src] || !pair) src = 'onchain';
     if (src !== 'onchain' && !(wrap._srcs && wrap._srcs[src])) src = 'onchain';   // only a site that lists this pool
     wrap._src = src;
     wrap.querySelectorAll('.chart-src-btn').forEach((b) => { const on = b.dataset.chartsrc === src; b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); });
@@ -1162,7 +1181,7 @@
     if (ours) ours.hidden = true;
     if (em) {
       em.hidden = false;
-      em.innerHTML = '<iframe class="chart-embed-frame" src="' + esc(E.url(pair)) + '" title="' + esc(E.name + ' chart' + sym) + '" loading="lazy" referrerpolicy="no-referrer"' +
+      em.innerHTML = '<iframe class="chart-embed-frame" src="' + esc(E.url(pair, src === 'dexscreener' ? wrap.dataset.ds : wrap.dataset.gt)) + '" title="' + esc(E.name + ' chart' + sym) + '" loading="lazy" referrerpolicy="no-referrer"' +
         ' sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>';
     }
     if (note) { note.hidden = false; note.textContent = E.name + '\u2019s chart, loaded from ' + E.host + ' — their data, which can trail a brand-new pool. Your pick is remembered on this device.'; }
@@ -1201,6 +1220,8 @@
       });
   }
   function wantSources(wrap) {
+    // a pool on another chain came from Dexscreener and is charted from GeckoTerminal, so both list it: no ask needed
+    if (wrap.dataset.chain && wrap.dataset.chain !== 'robinhood') { if (poolAddr(wrap)) applySources(wrap, { dexscreener: true, geckoterminal: true }); return; }
     const pool = String(wrap.dataset.pair || '').toLowerCase();
     if (!/^0x[0-9a-f]{40}$/.test(pool)) return;
     const k = srcKnown.get(pool);

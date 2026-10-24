@@ -1,0 +1,232 @@
+{
+"code": 1,
+"message": "ok",
+"result": {
+"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263": {
+"balance_mutable_authority": {
+"authority": [],
+"status": "0"
+},
+"closable": {
+"authority": [],
+"status": "0"
+},
+"creators": [],
+"default_account_state": "1",
+"default_account_state_upgradable": {
+"authority": [],
+"status": "0"
+},
+"dex": [
+{
+"burn_percent": null,
+"day": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "598220.582652338000"
+},
+"dex_name": "orca",
+"fee_rate": "0.0005",
+"id": "5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9",
+"lp_amount": null,
+"month": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "20011919.22422950"
+},
+"open_time": "0",
+"price": "32019513.399365227940",
+"tvl": "318775.29",
+"type": "Concentrated",
+"week": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "3164300.35480416"
+}
+},
+{
+"burn_percent": null,
+"day": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "3182.295831826520"
+},
+"dex_name": "orca",
+"fee_rate": "0.01",
+"id": "BqnpCdDLPV2pFdAaLnVidmn3G93RP2p5oRdGEY2sJGez",
+"lp_amount": null,
+"month": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "89723.641189674700"
+},
+"open_time": "0",
+"price": "31780508.713684849374",
+"tvl": "142771.67",
+"type": "Concentrated",
+"week": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "44117.684664499900"
+}
+},
+{
+"burn_percent": null,
+"day": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "20308.844543392300"
+},
+"dex_name": "orca",
+"fee_rate": "0.003",
+"id": "3ne4mWqdYuNiYrYZC9TrA3FcfuFdErghH97vNPbjicr1",
+"lp_amount": null,
+"month": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "309016.531992565000"
+},
+"open_time": "0",
+"price": "31998579.749367626731",
+"tvl": "81326.72",
+"type": "Concentrated",
+"week": {
+"price_max": "-1",
+"price_min": "-1",
+"volume": "30478.737549354600"
+}
+}
+],
+"freezable": {
+"authority": [],
+"status": "0"
+},
+"holder_count": "1020153",
+"holders": [
+{
+"account": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+"balance": "7770515063166.43106",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0883",
+"tag": "",
+"token_account": "5hpfC9VBxVcoW9opCnM2PqR6YWRLBzrBpabJTZnwwNiw"
+},
+{
+"account": "51yZyDSnec4xnUv7XLRVYcDyV4x3wUtzrDcRaYbmQU5j",
+"balance": "5972593511837.95277",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0679",
+"tag": "",
+"token_account": "2vPvEovB1gw8bAUqasThEv6YMAdJ77AU3RxiUNqknEiw"
+},
+{
+"account": "4xLpwxgYuPwPvtQjE94RLS4WZ4aD8NJYYKr2AJk99Qdg",
+"balance": "3192383482297.66758",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0363",
+"tag": "",
+"token_account": "6LozHQrLbEPeJGWKpN6wnnk76GhD4bGAVSoTBE5xXpsf"
+},
+{
+"account": "9RpzaFh4J8F6Qg1gjnhrhSp9eXdVDjsesZXe53qp7ubB",
+"balance": "2688260337507.06899",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0306",
+"tag": "",
+"token_account": "9LHQb1Nh9U65WHgD63FgpkjgPHUfU8s54PXqwwdM8g6K"
+},
+{
+"account": "EbLm4ZtRqDftrQnZaMMvnwcKjK5ef5vm1Hg3sAPv3tKi",
+"balance": "2677127770008.68465",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0304",
+"tag": "",
+"token_account": "FNGhHbP4D9FtsiRpYXrr9mXjsegKJZ8exEvKAeUtgXPz"
+},
+{
+"account": "CK8i4zFXkDE2KWfyg7g9S748r6mwxajbcKcyGhQMR3qQ",
+"balance": "2438274361611.32291",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0277",
+"tag": "",
+"token_account": "HH85bz3qwhGqe5Yd22ty13H7oKUFoVLwsjw5KmvR5bPd"
+},
+{
+"account": "8Mm46CsqxiyAputDUp2cXHg41HE3BfynTeMBDwzrMZQH",
+"balance": "2382187651309.99460",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0271",
+"tag": "",
+"token_account": "6jFRDDFQDCasLcWVMtixuu1eQCDnMhCttXktVeL7cEYM"
+},
+{
+"account": "3B7XAQrLoEMDEGvX8569F9GRb9PcXXocJmj5wvhhei9z",
+"balance": "2318249903516.47446",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0263",
+"tag": "",
+"token_account": "EHQPpncJDsLdpskV7EfrR6pCZRkCqJJNcvgPRsBQzq8E"
+},
+{
+"account": "DDrxSAP14UxBJ9Xz2EaqM9WSTuavX6SuBNtsDpiVhGr6",
+"balance": "2217984526593.84220",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0252",
+"tag": "",
+"token_account": "EkJbghrin4HbD2Bx8sGQ4LWyY8DDksTnxJDsq2Tj8Hqb"
+},
+{
+"account": "1tjoQzWg21ceMAhyLVs4s2Zc1Pm27mLTcJ9EfEFu7km",
+"balance": "2155369217149.93014",
+"is_locked": 0,
+"locked_detail": [],
+"percent": "0.0245",
+"tag": "",
+"token_account": "3bYqu63xiF13prJMhwoxozTHGeRoLdkhWXyaJEfbsdCs"
+}
+],
+"lp_holders": [],
+"metadata": {
+"description": "The Official Bonk Inu token",
+"name": "Bonk",
+"symbol": "Bonk",
+"uri": "https://arweave.net/QPC6FYdUn-3V8ytFNuoCS85S2tHAuiDblh6u3CIZLsw"
+},
+"metadata_mutable": {
+"metadata_upgrade_authority": [
+{
+"address": "9AhKqLR67hwapvG8SA2JFXaCshXc9nALJjpKaHZrsbkw",
+"malicious_address": 0
+}
+],
+"status": "1"
+},
+"mintable": {
+"authority": [],
+"status": "0"
+},
+"non_transferable": "0",
+"total_supply": "87994357732509.84075",
+"transfer_fee": {},
+"transfer_fee_upgradable": {
+"authority": [],
+"status": "0"
+},
+"transfer_hook": [],
+"transfer_hook_upgradable": {
+"authority": [],
+"status": "0"
+},
+"trusted_token": 0
+}
+}
+}

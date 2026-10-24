@@ -27,7 +27,7 @@ try {
   check('  ...the price chart: the ⤢ is in its head, and a chart on its own is its own unit (inside a switch, the whole switch goes)',
     /'<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog"/.test(CJ) && /if \(!host\.closest\('\[data-cf-unit\]'\)\) \{ host\.setAttribute\('data-cf-unit', ''\);/.test(CJ));
   check('  ...the switch is the unit (with its title), and its own ⤢ beside the source buttons stands in for the head\'s when another site lists the pool',
-    /'<div class="chart-switch" data-pair="' \+ esc\(p\.pair\.address\) \+ '" data-sym="' \+ esc\(p\.token\.symbol \|\| ''\) \+ '" data-cf-unit data-cf-title="/.test(NP)
+    /'<div class="chart-switch" data-pair="' \+ esc\(p\.pair\.address\) \+ '" data-sym="' \+ esc\(p\.token\.symbol \|\| ''\) \+ '" data-chain="' \+ esc\(ch\.slug\) \+ '" data-ds="' \+ esc\(ch\.ds \|\| ''\) \+ '" data-gt="' \+ esc\(ch\.gt \|\| ''\) \+ '" data-cf-unit data-cf-title="/.test(NP)   // the chain rides on the switch too (2026-10-23)
     && /'<div class="chart-src-row">' \+/.test(NP) && /wrap\.classList\.toggle\('has-src', any\);/.test(CJ)
     && /\.chart-switch\.has-src > \.chart-src-row \{ display: flex;/.test(CSS) && /\.chart-switch\.has-src \.oc-head \.cf-open \{ display: none; \}/.test(CSS) && /\.chart-src-row \{ display: none; \}/.test(CSS));
   check('  ...every chart is named in the pop-up: $SEND and $GWC on the home page, the token\'s symbol elsewhere, "Value over time", the admin chart\'s title',

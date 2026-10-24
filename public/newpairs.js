@@ -273,7 +273,7 @@
     /* A perfect score whose first block is still unresolved is held back from the top tag rather than
        handed it — an unfinished check is an open question, not a pass. Tested before the 75 tier so that
        "Checking block 0…" is not swallowed by the milder word. */
-    if (tri === 'ok' && health >= 100 && !sniperOk(p)) {
+    if (tri === 'ok' && health >= 100 && !sniperOk(p) && !foreignChain(p)) {   // block 0 is never read on another chain: no "checking" to wait for
       const st = p.risk && p.risk.snipers ? p.risk.snipers.status : null;
       return st === 'done' || st === 'partial'
         ? { cls: 'np-t-caution np-t-snipe', ico: '🎯', word: 'Block-0 snipers sold' }
@@ -289,7 +289,9 @@
     return TRI[tri];
   }
   const FLAG = {
-    honeypotSuspect: { ico: '🍯', word: () => "Can't sell?", sev: 'bad', say: p => `People are buying (${npNum(p.txns.h24.buys)}) but almost nobody's selling (${npNum(p.txns.h24.sells)}) — you may not be able to sell either.` },
+    honeypotSuspect: { ico: '🍯', word: () => "Can't sell?", sev: 'bad', say: p => p.risk && p.risk.honeypotSource === 'goplus'
+      ? `GoPlus Security's automated check says this token cannot be sold once bought — a vendor's reading, not an audit, and reason enough to stay away.`
+      : `People are buying (${npNum(p.txns.h24.buys)}) but almost nobody's selling (${npNum(p.txns.h24.sells)}) — you may not be able to sell either.` },
     dumping: { ico: '📉', word: () => 'Dumping', sev: 'bad', say: p => `Down ${pctPlain(Math.abs(p.priceChange.h1))} in the last hour — falling off a cliff right now.` },
     serialDeployer: { ico: '🔁', word: () => 'Serial deployer', sev: 'bad', say: p => { const l = p.risk.deployerLaunches, d = p.risk.deployerDied; return l ? `Made by a wallet that launched ${l} recent tokens${d ? `; ${d} already look dead` : ''}.` : 'Made by a wallet that has launched many tokens that later died.'; } },
     lowLiquidity: { ico: '💧', word: () => 'Thin liquidity', sev: 'bad', say: p => `Only ${npFmtUsd(p.market.liquidityUsd)} pooled — easy to rug, hard to exit.` },
@@ -661,7 +663,24 @@
   // The Dexscreener CDN sends no CORS header, so we can't read the logo's pixels — instead we derive a STABLE
   // unique hue from the token address (its on-chain identity), so every card gets a color unique to that token.
   function tokHue(addr) { let h = 5381; const s = String(addr || ''); for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0; return h % 360; }
-  function tokVars(p) { const h = tokHue(p.token.address); return '--tok:hsl(' + h + ' 72% 60%);--tok-soft:hsl(' + h + ' 72% 60% / .14)'; }
+  /* ---------- the chains a token can be read on (owner, 2026-10-23: Ethereum and Solana scan too) ----------
+     The server sends a profile's `chain` and the scan's `chainMeta`; this table is what the page knows on its own, so a
+     stored snapshot that carries only the slug still gets its name, its colour and its explorer. A token read on another
+     chain wears that chain's brand colour on its frames — Ethereum blue, Solana purple — in place of the per-token hue, so
+     a reader always knows which chain they are looking at. */
+  const CHAIN_META = {
+    robinhood: { slug: 'robinhood', name: 'Robinhood Chain', emoji: '🏹', color: null, evm: true, native: 'ETH', explorer: 'https://robinhoodchain.blockscout.com', paths: { token: '/token/', address: '/address/', tx: '/tx/' }, ds: 'robinhood', gt: 'robinhood' },
+    ethereum: { slug: 'ethereum', name: 'Ethereum', emoji: 'Ξ', color: '#627eea', evm: true, native: 'ETH', explorer: 'https://etherscan.io', paths: { token: '/token/', address: '/address/', tx: '/tx/' }, ds: 'ethereum', gt: 'eth' },
+    solana: { slug: 'solana', name: 'Solana', emoji: '◎', color: '#9945ff', evm: false, native: 'SOL', explorer: 'https://solscan.io', paths: { token: '/token/', address: '/account/', tx: '/tx/' }, ds: 'solana', gt: 'solana' },
+  };
+  const chainOf = (p) => (p && p.chain && CHAIN_META[p.chain]) ? CHAIN_META[p.chain] : CHAIN_META.robinhood;
+  const foreignChain = (p) => chainOf(p).slug !== 'robinhood';
+  function tokVars(p) {
+    const c = chainOf(p);
+    if (c.color) return '--tok:' + c.color + ';--tok-soft:color-mix(in srgb, ' + c.color + ' 14%, transparent);--chain:' + c.color;
+    const h = tokHue(p.token.address); return '--tok:hsl(' + h + ' 72% 60%);--tok-soft:hsl(' + h + ' 72% 60% / .14)';
+  }
+  const chainChipHTML = (p) => foreignChain(p) ? ' <span class="tkd-chain" title="Read on ' + esc(chainOf(p).name) + '">' + esc(chainOf(p).emoji + ' ' + chainOf(p).name) + '</span>' : '';
   const SOCIAL_ICON = { twitter: '𝕏', x: '𝕏', telegram: '✈️', discord: '💬', website: '🌐', github: '💻', medium: '✍️', reddit: '👽', instagram: '📸', tiktok: '🎵', youtube: '▶️', facebook: 'f', link: '🔗' };
   const SOCIAL_LABEL = { twitter: 'X', x: 'X', telegram: 'Telegram', discord: 'Discord', website: 'Website', github: 'GitHub', medium: 'Medium', reddit: 'Reddit', instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', link: 'Link' };
   function isBranded(p) { return !!(p.brand && p.brand.enhanced && p.brand.imageUrl); }
@@ -875,20 +894,23 @@
     // minus the tracking surface and the extra hop. Dexscreener's and CoinGecko's are a tap away, never loaded unasked.
     const dex = p.links && p.links.dex;   // a stored snapshot can carry no link (the server drops any that is not plain http/https)
     // the whole switch is what opens full screen (ChartFull, app.js): ours, or the outside chart picked, with the buttons to swap
-    return '<div class="chart-switch" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol || '') + '" data-cf-unit data-cf-title="' + esc(p.token.symbol ? '$' + p.token.symbol + ' price chart' : 'Price chart') + '">' +
+    const ch = chainOf(p), far = foreignChain(p);
+    return '<div class="chart-switch" data-pair="' + esc(p.pair.address) + '" data-sym="' + esc(p.token.symbol || '') + '" data-chain="' + esc(ch.slug) + '" data-ds="' + esc(ch.ds || '') + '" data-gt="' + esc(ch.gt || '') + '" data-cf-unit data-cf-title="' + esc(p.token.symbol ? '$' + p.token.symbol + ' price chart' : 'Price chart') + '">' +
       // the source row shows only where another site lists the pool (chart.js applySources sets .has-src); its ⤢ then stands in
       // for the one in our chart's head, so a Dexscreener or CoinGecko view can go full screen too
       '<div class="chart-src-row">' +
       '<div class="chart-src" role="group" aria-label="Chart source" hidden>' +
-        '<button class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="Our own chart, drawn from this pool&#39;s swaps on the chain — nothing loads from another company">⛓️ On-chain</button>' +
+        (far
+          ? '<button class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="Candles and trades for this pool from GeckoTerminal, drawn by this site — nothing loads in your browser from another company">📊 Candles</button>'
+          : '<button class="chart-src-btn is-on" type="button" aria-pressed="true" data-chartsrc="onchain" data-tip="Our own chart, drawn from this pool&#39;s swaps on the chain — nothing loads from another company">⛓️ On-chain</button>') +
         '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="dexscreener" hidden data-tip="Dexscreener&#39;s chart of this pool — your browser loads it from dexscreener.com once you pick it">Dexscreener</button>' +
         '<button class="chart-src-btn" type="button" aria-pressed="false" data-chartsrc="geckoterminal" hidden data-tip="CoinGecko&#39;s chart of this pool (GeckoTerminal) — your browser loads it from geckoterminal.com once you pick it">CoinGecko</button>' +
       '</div>' +
       '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc(p.token.symbol ? '$' + p.token.symbol + ' price chart' : 'price chart') + ' full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
       '</div>' +
-      '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-tf="1h" data-poll="2000"></div>' +
+      '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-chain="' + esc(ch.slug) + '" data-tf="1h" data-poll="' + (far ? '60000' : '2000') + '"></div>' +
       '<div class="chart-embed" hidden></div>' +
-      '<p class="np-chart-note">Built live from on-chain swaps.' +
+      '<p class="np-chart-note">' + (far ? 'Candles and trades from GeckoTerminal for this pool, drawn here; refreshed every minute.' : 'Built live from on-chain swaps.') +
       (dex ? ' <a class="np-dex-xcheck" href="' + esc(dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a>' : '') + '</p>' +
       '<p class="chart-src-note" hidden></p>' +
     '</div>';
@@ -979,8 +1001,8 @@
     if (!dk.liquidity) gaps.push('the liquidity');
     if (!dk.holders) gaps.push('the holder count');
     if (!dk.concentration) gaps.push('how concentrated it is');
-    if (!dk.verified) gaps.push('whether the contract is verified');
-    if (!dk.snipers) gaps.push('who bought first');
+    if (!dk.verified && chainOf(p).slug !== 'solana') gaps.push('whether the contract is verified');   // a Solana program's source is not something this site reads
+    if (!dk.snipers) gaps.push(foreignChain(p) ? 'who bought first (block-0 reads are Robinhood Chain only)' : 'who bought first');
     rows.push(['❓', 'What we could not check',
       gaps.length ? 'We could not read ' + esc(gaps.join(', ')) + '. That is missing information, <b>not a pass</b> — every check above is only as good as the data behind it.'
                   : 'Nothing — every check above had the data it needed.']);
@@ -1089,6 +1111,11 @@
     }).join('') + '</div>';
   }
   function ownerLineHTML(p) {
+    if (chainOf(p).slug === 'solana') {   // Solana's version of ownership: the mint and freeze authorities
+      if (p.token.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Mint and freeze authorities revoked</b> — nobody can mint more or freeze holders’ accounts.</p>';
+      if (p.token.renounced === false) return '<p class="np-owner owned">🔑 <b>An authority is still held</b> — someone can still mint more, or freeze accounts (the Contract card says which).</p>';
+      return '<p class="np-owner">🔑 The mint and freeze authorities could not be read.</p>';
+    }
     if (p.token.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — the deployer can no longer change the contract.</p>';
     if (p.token.owner) return '<p class="np-owner owned">🔑 Owner <code>' + esc(shortAddr(p.token.owner)) + '</code> ' + copyBtn(p.token.owner, 'owner address') + ' <b>— can still change the contract.</b></p>';
     return '<p class="np-owner">🔑 Owner unknown (no standard owner() function).</p>';
@@ -1178,6 +1205,7 @@
      left; the market, holders, block 0, community and links on its right. On a phone it is one column in
      source order, which is also the order focus and a screen reader take. */
   let dashSeq = 0;
+  const dashLast = new Map();   // token address → the profile its dashboard was drawn from (bounded below)
   const UNREAD = '<span class="tkd-unread">not read yet</span>';
   const dashUsd = (n) => (n == null || !isFinite(n)) ? UNREAD : npFmtUsd(n);
   // one figure in the strip; a flagged figure names its flag in words (🚩 a red flag, ⚠︎ a warning) — never colour alone
@@ -1248,6 +1276,57 @@
     if (b.bundlers == null) return b.status === 'unknown' ? 'no pool' : 'not read yet';
     return b.bundlers === 0 ? '<b>None</b>' : '<b>' + npNum(b.bundlers) + '</b> found';
   }
+  /* The contract facts a profile from another chain carries (lib/multichain.js: GoPlus Security's security read, and the
+     chain's own node). Each is a yes, a no, or "not read" — never a pass by silence. */
+  function chainFactsHTML(p) {
+    const f = p.chainFacts, c = chainOf(p);
+    if (!f) return '<p class="np-contract-load">The contract could not be read on ' + esc(c.name) + ' just now — not a pass, missing information.</p>';
+    const yn = (v, yes, no) => v === true ? '<b class="tkd-bad">' + yes + '</b>' : v === false ? '<span>' + no + '</span>' : '<span class="tkd-unread">not read</span>';
+    const pct = (v) => v == null ? '<span class="tkd-unread">not read</span>' : v === 0 ? '0%' : pctPlain(v);
+    const rows = [];
+    if (c.slug === 'solana') {
+      rows.push(['Mint authority', yn(f.mintable, 'held — more tokens can be minted', 'revoked')]);
+      rows.push(['Freeze authority', yn(f.freezable, 'held — accounts can be frozen', 'revoked')]);
+      rows.push(['Transfer fee', pct(f.transferFeePct)]);
+      rows.push(['Non-transferable', yn(f.nonTransferable, 'yes — cannot be moved', 'no')]);
+      if (f.closable != null) rows.push(['Closable', yn(f.closable, 'yes — the program could be closed', 'no')]);
+      if (f.balanceMutable != null) rows.push(['Balances changeable by the developer', yn(f.balanceMutable, 'yes', 'no')]);
+      if (f.metadataMutable != null) rows.push(['Metadata', f.metadataMutable ? 'can still change' : 'frozen']);
+      if (f.transferHook != null) rows.push(['Transfer hook program', yn(f.transferHook, 'present — can block trades', 'none')]);
+      if (f.defaultFrozen != null) rows.push(['New accounts', f.defaultFrozen ? '<b class="tkd-bad">frozen by default</b>' : 'open by default']);
+      if (f.lpBurnedPct != null) rows.push(['LP burned (main pool)', pct(f.lpBurnedPct)]);
+      if (f.program) rows.push(['Token program', '<code>' + esc(shortAddr(f.program)) + '</code>']);
+    } else {
+      rows.push(['Honeypot check', yn(f.honeypot, 'cannot be sold once bought', 'can be sold')]);
+      rows.push(['Buy tax', pct(f.buyTax)]); rows.push(['Sell tax', pct(f.sellTax)]);
+      if (f.transferTax) rows.push(['Transfer tax', pct(f.transferTax)]);
+      rows.push(['Mintable', yn(f.mintable, 'yes — supply can grow', 'no')]);
+      rows.push(['Blacklist', yn(f.blacklist, 'yes — wallets can be blocked', 'none')]);
+      rows.push(['Pausable transfers', yn(f.pausable, 'yes', 'no')]);
+      rows.push(['Trading cooldown', yn(f.cooldown, 'yes', 'no')]);
+      rows.push(['Proxy contract', yn(f.proxy, 'yes — the code can be swapped', 'no')]);
+      if (f.takeBack != null) rows.push(['Ownership can be taken back', yn(f.takeBack, 'yes', 'no')]);
+      if (f.hiddenOwner != null) rows.push(['Hidden owner', yn(f.hiddenOwner, 'yes', 'no')]);
+      if (f.selfdestruct != null) rows.push(['Self-destruct', yn(f.selfdestruct, 'present', 'none')]);
+      if (f.lpLockedPct != null) rows.push(['LP locked', pct(f.lpLockedPct)]);
+    }
+    return '<dl class="tkd-facts">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>').join('') + '</dl>' +
+      '<p class="np-hp-disclaim">Read by GoPlus Security’s automated scanner' + (f.program || c.slug === 'solana' ? ' and the chain’s own node' : '') + ' — <b>not an audit</b>, and not a live buy/sell simulation. Always DYOR.</p>';
+  }
+  // every pool of the token, deepest first — Dexscreener's list, each a button that points the chart card at that pool
+  function poolsHTML(p, from, to) {   // from..to: a slice of the list (the card shows the deepest few, the rest in its pop-down)
+    const cur = p.pair && p.pair.address;
+    const list = p.pools.slice(from || 0, to == null ? undefined : to);
+    return '<ul class="tkd-pools" aria-label="' + (from ? 'Pools #' + (from + 1) + ' to #' + (from + list.length) : 'Pools that trade this token') + '">' + list.map((o) => {
+      const on = o.address === cur;
+      const lbl = esc([o.dex || 'pool'].concat(o.labels || []).join(' ')) + ' · ' + esc(o.quote && o.quote.symbol || '?');
+      return '<li class="tkd-pool' + (on ? ' is-on' : '') + '">' +
+        '<span class="tkd-pool-id"><b>' + lbl + '</b><code title="' + esc(o.address) + '">' + esc(shortAddr(o.address)) + '</code></span>' +
+        '<span class="tkd-pool-f">' + (o.liquidityUsd != null ? npFmtUsd(o.liquidityUsd) + ' liquidity' : 'liquidity not read') + (o.volume24 != null ? ' · ' + npFmtUsd(o.volume24) + ' 24h' : '') + '</span>' +
+        '<button class="btn btn-sm btn-ghost tkd-pool-chart" type="button" data-pool-chart="' + esc(o.address) + '" data-pool-quote="' + esc(o.quote && o.quote.symbol || '') + '" data-pool-url="' + esc(o.url || '') + '"' + (on ? ' aria-pressed="true"' : ' aria-pressed="false"') + ' data-tip="Points the chart card at this pool’s candles and trades">' + (on ? '📈 Charted' : '📈 Chart') + '</button>' +
+      '</li>';
+    }).join('') + '</ul>';
+  }
   function dashboardHTML(p, opts) {
     opts = opts || {};
     const u = 'tkd' + (++dashSeq), hl = opts.level === 3 ? 3 : 2, hc = hl + 1;
@@ -1262,7 +1341,7 @@
       '<div class="tkd-head">' +
         '<div class="tkd-id">' + logo +
           '<div class="tkd-idt">' +
-            '<p class="tkd-kicker">' + (opts.kicker || '🪙 Token') + ' · 🏹 Robinhood Chain</p>' +
+            '<p class="tkd-kicker">' + (opts.kicker || '🪙 Token') + (foreignChain(p) ? ' ·' + chainChipHTML(p) : ' · ' + esc(chainOf(p).emoji + ' ' + chainOf(p).name)) + '</p>' +
             '<h' + hl + ' class="tkd-h" id="' + u + '-h" tabindex="-1">' + esc(t.name || 'Token') + (t.symbol ? ' <span class="tkd-sym">$' + esc(t.symbol) + '</span>' : '') + '</h' + hl + '>' +
             '<p class="tkd-sub"><span class="tkd-addr"><code title="' + esc(t.address) + '">' + esc(shortAddr(t.address)) + '</code>' + copyBtn(t.address, 'token contract address') + '</span>' +
               '<span>🕐 ' + (pr.ageMinutes != null ? esc(npFmtAge(pr.ageMinutes)) + ' old' : 'age not read yet') + '</span>' +
@@ -1310,13 +1389,15 @@
       '<div class="tkd-actbar">' +
         '<p class="tkd-caveat">⚠️ Read from public chain data by automated checks — not an audit, not advice, never a tip to buy. Most new tokens go to zero.</p>' +
         '<div class="tkd-acts" role="group" aria-label="' + esc('What you can do with ' + (t.symbol ? '$' + t.symbol : 'this token')) + '">' +
-          // 📣 to the Wall, and 🛡️ to your Send Squad when you are a verified member of one (compose.js adds that button as the row appears)
-          (opts.hideCall || !(window.COMPOSE && COMPOSE.callRowHTML) ? '' : COMPOSE.callRowHTML(t.address, { cls: 'tkd-call', viewed: true })) +   // this IS the full detail
-          (window.Watchlist ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
-          pinBtnHTML(p) +
+          // 📣 to the Wall, and 🛡️ to your Send Squad when you are a verified member of one (compose.js adds that button as the row appears).
+          // Send Calls, the watchlist and wall pins are the home chain's (their records are keyed by a Robinhood Chain address)
+          (opts.hideCall || foreignChain(p) || !(window.COMPOSE && COMPOSE.callRowHTML) ? '' : COMPOSE.callRowHTML(t.address, { cls: 'tkd-call', viewed: true })) +   // this IS the full detail
+          (window.Watchlist && !foreignChain(p) ? Watchlist.btnHTML(p, 'btn btn-sm btn-ghost np-watch-wide', true) : '') +
+          (foreignChain(p) ? '' : pinBtnHTML(p)) +
           (lk.explorer ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(lk.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' : '') +
           (lk.dex && p.indexed ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab to cross-check the figures" href="' + esc(lk.dex) + '" target="_blank" rel="noopener nofollow">📈 Dexscreener ↗</a>' : '') +
         '</div>' +
+        (foreignChain(p) ? '<p class="tkd-note tkd-chain-note">Send Calls, the watchlist and wall pins work with Robinhood Chain tokens; on ' + esc(chainOf(p).name) + ' the Scanner reads the profile.</p>' : '') +
       '</div>';
 
     // ---- the cards ----
@@ -1326,21 +1407,33 @@
       (A.gaps.length ? '<p class="tkd-gaps">❓ We could not read ' + esc(A.gaps.join(', ')) + ' — missing information, <b>not a pass</b>.</p>' : ''),
       auditRowsHTML(A.rows) + AUDIT_FINE, '📋 The short version, in full');
     const cContract = dashCard(u, 'contract', hc, '📄 Contract',
-      verifiedLineHTML(p) + ownerLineHTML(p) +
+      (chainOf(p).slug === 'solana' ? '' : verifiedLineHTML(p)) + ownerLineHTML(p) +
       (r.serialDeployer ? '<p class="np-owner owned">🔁 <b>Serial deployer</b> — ' + esc(FLAG.serialDeployer.say(p)) + '</p>' : '') +
-      // the honeypot / owner-powers / LP-lock read, fetched as soon as the dashboard mounts (mountDashboard)
-      '<div class="np-contract" data-dash="1" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '"><p class="np-contract-load"><span class="np-live-dot" aria-hidden="true"></span> Reading the contract code…</p></div>',
-      addrRowsHTML(p) + (tgTokenLink(t.address) ? '<p class="np-tg-row">' + tgTokenLink(t.address) + '</p>' : ''), '📋 Token, pool and deployer addresses');
+      // the honeypot / owner-powers / LP-lock read, fetched as soon as the dashboard mounts (mountDashboard) — on the home chain;
+      // on another chain the same facts came with the profile (GoPlus and the chain's node; lib/multichain.js) and are listed here
+      (foreignChain(p)
+        ? chainFactsHTML(p)
+        : '<div class="np-contract" data-dash="1" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '"><p class="np-contract-load"><span class="np-live-dot" aria-hidden="true"></span> Reading the contract code…</p></div>'),
+      addrRowsHTML(p) + (foreignChain(p) || !tgTokenLink(t.address) ? '' : '<p class="np-tg-row">' + tgTokenLink(t.address) + '</p>'), '📋 Token, pool and deployer addresses');
     const cScore = dashCard(u, 'score', hc, '🎯 Score breakdown', breakdownHTML(p, true), '', '', '<b' + ratingInk(health) + '>' + health + '</b>/100');
     const cChart = dashCard(u, 'chart', hc, '📈 Price chart', chartHTML(p));
     const flow = flowHTML(p);
     const cActivity = dashCard(u, 'activity', hc, '🔁 Trading activity',
       (flow || noTradesHTML(p)) + (p.indexed ? volWrapHTML(p, 'Volume by window') : ''),
       p.indexed ? txTableHTML(p) : '', 'Buys and sells by window');
-    const cBlock0 = dashCard(u, 'block0', hc, '🎯 Block 0 — the first buyers', block0SummaryHTML(p),
+    // block 0 and bundlers follow a token's whole on-chain history, which this site reads only on its home chain; on another
+    // chain one card says so, instead of two cards waiting on reads that will never come
+    const cBlock0 = foreignChain(p)
+      ? dashCard(u, 'chainreads', hc, '⛓️ Chain reads', '<p class="tkd-note">Block-0 and bundler reads follow every transfer a token has ever made, which this site reads only on Robinhood Chain. On ' + esc(chainOf(p).name) + ' the holders, the contract flags and the pools come from GoPlus Security, Dexscreener and GeckoTerminal — automated readings, not an audit.</p>')
+      : dashCard(u, 'block0', hc, '🎯 Block 0 — the first buyers', block0SummaryHTML(p),
       '<div class="np-b0" data-token="' + esc(t.address) + '"></div>', 'Every first buyer, wallet by wallet');
-    const cBundles = dashCard(u, 'bundles', hc, '📦 Bundlers', '<div class="np-bd-sum" data-token="' + esc(t.address) + '">' + bundleSummaryHTML(r.bundles) + '</div>',
+    const cBundles = foreignChain(p) ? '' : dashCard(u, 'bundles', hc, '📦 Bundlers', '<div class="np-bd-sum" data-token="' + esc(t.address) + '">' + bundleSummaryHTML(r.bundles) + '</div>',
       '<div class="np-bd" data-token="' + esc(t.address) + '"></div>', 'Every bundler, wallet by wallet', '<span class="np-bd-aside" data-token="' + esc(t.address) + '">' + bundleAsideHTML(r.bundles) + '</span>');
+    // every pool of the token (owner: "enable all pools"), deepest first; any of them can be charted in the chart card
+    const POOLS_SHOWN = 6;
+    const cPools = foreignChain(p) && Array.isArray(p.pools) && p.pools.length
+      ? dashCard(u, 'pools', hc, '🏊 Pools', poolsHTML(p, 0, POOLS_SHOWN), p.pools.length > POOLS_SHOWN ? poolsHTML(p, POOLS_SHOWN) : '', 'Pools #' + (POOLS_SHOWN + 1) + ' to #' + p.pools.length, '<b>' + p.pools.length + '</b>')
+      : '';
     const caps = p.caps;
     const mBody = (liqPct != null ? '<p class="tkd-line">💧 Liquidity is <b>' + pctPlain(liqPct) + '</b> of the market cap. ' + depthSay(liqPct) + '</p>' : '') +
       reservesHTML(p) +
@@ -1353,13 +1446,15 @@
     const topN = (h.top || []).length;
     const cHolders = dashCard(u, 'holders', hc, '👥 Holders',
       holderCountHTML(h) + concHTML(h) + topHoldersHTML(h, 0, 3) +
+        (h.kind === 'token accounts' ? '<p class="tkd-note">On Solana the top holders are listed by token account, as GoPlus Security reports them — one wallet can hold more than one.</p>' : '') +
         (h.count == null ? '<p class="tkd-note">Holder data lags for brand-new tokens — check back in a bit.</p>' : ''),
       topN > 3 ? topHoldersHTML(h, 3, topN) : '', 'Holders #4 to #' + topN);
-    const comm = window.tokenCommunitySlot ? '<div class="tkd-slot">' + tokenCommunitySlot(t.address, t.symbol || '', 'panel', hc) + '</div>' : '';   // its heading at the cards' level
+    const comm = window.tokenCommunitySlot && !foreignChain(p) ? '<div class="tkd-slot">' + tokenCommunitySlot(t.address, t.symbol || '', 'panel', hc) + '</div>' : '';   // its heading at the cards' level; communities are the home chain's
     const cLinks = dashCard(u, 'links', hc, '🔗 Links &amp; listings',
       (socialsHTML(p) || '<p class="tkd-note">No website or socials are listed for this token.</p>') + brandStatusHTML(p));
 
-    return '<div class="tkd" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '" style="' + tokVars(p) + '">' +
+    dashLast.set(t.address, p);   // for the pools card's chart switch (mountDashboard reads it back by the token)
+    return '<div class="tkd" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '" data-chain="' + esc(chainOf(p).slug) + '" style="' + tokVars(p) + '">' +
       '<div class="tkd-in">' +
         head + (opts.meta ? '<div class="tkd-meta">' + opts.meta + '</div>' : '') + flagstripHTML(p) + stats + acts +
         // source order is the phone's reading order: the chart and the trading, then the safety read and the contract,
@@ -1369,7 +1464,7 @@
           '<div class="tkd-col tkd-col--c">' + cChart + cActivity + '</div>' +
           '<div class="tkd-side">' +
             '<div class="tkd-col tkd-col--l">' + cSafety + cContract + '</div>' +
-            '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cBlock0 + cBundles + comm + cLinks + '</div>' +
+            '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cPools + cBlock0 + cBundles + comm + cLinks + '</div>' +
           '</div>' +
           '<div class="tkd-col tkd-col--c2">' + cScore + '</div>' +
         '</div>' +
@@ -1383,6 +1478,22 @@
     if (!root) return;
     animateRings(root);
     mountCharts(root);
+    // the pools card: a pool's button re-points the chart card at that pool (its candles, its trades, its Dexscreener link)
+    root.querySelectorAll('.tkd').forEach((dash) => {
+      if (dash._poolsWired) return; dash._poolsWired = true;
+      dash._pair = dashLast.get(dash.dataset.token) || null;
+      if (dashLast.size > 50) dashLast.delete(dashLast.keys().next().value);
+      dash.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-pool-chart]'); if (!b || !dash.contains(b)) return;
+        const card = dash.querySelector('.tkd-card--chart .tkd-card-b'); if (!card) return;
+        const p2 = dash._pair; if (!p2) return;
+        const q = Object.assign({}, p2, { pair: Object.assign({}, p2.pair, { address: b.dataset.poolChart, quoteSymbol: b.dataset.poolQuote || p2.pair.quoteSymbol }), links: Object.assign({}, p2.links, { dex: b.dataset.poolUrl || null }) });
+        card.innerHTML = chartHTML(q);
+        mountCharts(card);
+        dash.querySelectorAll('[data-pool-chart]').forEach((x) => { const on = x === b; x.setAttribute('aria-pressed', String(on)); x.textContent = on ? '📈 Charted' : '📈 Chart'; x.closest('.tkd-pool').classList.toggle('is-on', on); });
+        if (window.announce) announce('Chart switched to the ' + (b.dataset.poolQuote || '') + ' pool.');
+      });
+    });
     commDecorate(root);
     root.querySelectorAll('.tkd .np-contract[data-dash]').forEach(el => loadContract(el));
     if (window.Watchlist && Watchlist.syncButtons) Watchlist.syncButtons(root);
@@ -2833,6 +2944,7 @@
 
   // Expose the full token-detail renderer so the Send Wall / profiles can pop down the exact same New Pairs detail.
   window.NPCard = {
+    CHAIN_META, chainOf,   // the chains a token can be read on (scanner.js names them in its chooser and its status lines)
     // the Send Call buttons show wherever this detail renders (the Scanner, the token popup, a call's detail); pass { hideCall: true } to leave them out
     detailHTML: (p, opts) => bodyHTML(p, (opts && opts.sections) || { why: true, chart: true, score: true, market: true, activity: false, holders: false, contract: false }, Object.assign({}, opts)),
     // the dashboard — the default view wherever someone reads more about a token; insert it, then call mountDashboard(root)

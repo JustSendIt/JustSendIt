@@ -693,6 +693,23 @@ CREATE INDEX IF NOT EXISTS idx_token_cache_fresh ON token_cache(found, updated_a
 -- full profile read for it. A scan always re-reads the chain (see SCAN_FRESH_MS) and rewrites the snapshot, so the
 -- row is as fresh as the latest scan; when the upstreams are down the snapshot is served, labelled with read_at.
 -- Nothing about WHO scanned is stored — no user id, no IP — so the recent list can be public.
+-- The same record for a token scanned on Ethereum or Solana (lib/multichain.js). Its own table, keyed by (chain, token):
+-- a 0x address can exist on Robinhood Chain AND Ethereum, and a Solana address keeps its case.
+CREATE TABLE IF NOT EXISTS scans_mc (
+  chain        TEXT NOT NULL,
+  token_addr   TEXT NOT NULL,
+  pool_addr    TEXT,
+  kind         TEXT NOT NULL DEFAULT 'token',
+  symbol       TEXT,
+  name         TEXT,
+  pair_json    TEXT,
+  first_at     INTEGER NOT NULL,
+  last_at      INTEGER NOT NULL,
+  read_at      INTEGER NOT NULL,
+  count        INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (chain, token_addr)
+);
+CREATE INDEX IF NOT EXISTS idx_scans_mc_last ON scans_mc(last_at);
 CREATE TABLE IF NOT EXISTS scans (
   token_addr   TEXT PRIMARY KEY,                       -- lowercased; a pool scan is recorded under the token it prices
   pool_addr    TEXT,                                   -- the pool address when the last scan was of the pool itself
@@ -8706,6 +8723,24 @@ const CHAIN_BY_SLUG = Object.fromEntries(CHAINS.map(c => [c.slug, c]));
 // home chain is the one this site is actually about.
 const DEFAULT_CHAIN = 'robinhood';
 const MULTICHAIN = process.env.MULTICHAIN === '1';
+/* ===== The Scanner's other chains: Ethereum and Solana (owner, 2026-10-23) ================================
+   The radar list above stays as it was (market-only, behind MULTICHAIN). The SCANNER — one address, its full profile —
+   now reads Ethereum and Solana tokens too, through lib/multichain.js: every pool of the token from Dexscreener, the
+   security read (holders, verification, ownership, taxes, honeypot; mint / freeze authorities, transfer fees) from
+   GoPlus, name / symbol / decimals / supply from the chain's own node, and candles and trades from GeckoTerminal — all
+   built into the same `pair` shape buildPair makes, then scored by the same applyRisk, so the dashboard reads the same.
+   The URLs are env so the test suites can point every read at a fake; the budgets are the vendors' meters above. */
+const MC = require('./lib/multichain.js');
+const MC_URLS = {
+  ds: process.env.MC_DEXSCREENER_URL || 'https://api.dexscreener.com',
+  gt: process.env.MC_GECKO_URL || 'https://api.geckoterminal.com/api/v2',
+  goplus: process.env.MC_GOPLUS_URL || 'https://api.gopluslabs.io/api/v1',
+  ethRpc: process.env.ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com',
+  solRpc: process.env.SOL_RPC_URL || 'https://api.mainnet-beta.solana.com',
+};
+let _mcInst = null;
+const mc = () => _mcInst || (_mcInst = MC.createMultichain({ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS }));
+const chainMetaFor = (slug) => MC.publicMeta(slug);
 const PUBLIC_CHAINS = MULTICHAIN ? CHAINS : CHAINS.filter(c => c.slug === DEFAULT_CHAIN);
 const FOREIGN_TTL = 90 * 1000;
 const foreignCache = new Map();   // slug -> { pairs, updatedAt, building, error }
@@ -9871,6 +9906,19 @@ function applyRisk(e, deployerCounts, deployerDied) {
   e.risk = r;
 }
 
+/* The totals of applyRisk, re-derived from the flags as they stand now: lib/multichain.js sets a vendor's honeypot
+   verdict on a profile after applyRisk has scored it, and the health, triage and honesty floor must follow. */
+function riskFinish(e) {
+  const r = e && e.risk; if (!r) return;
+  const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
+  r.health = Math.max(0, Math.min(100, 100 - penalty));
+  r.triage = r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid';
+  if (r.thinData && r.triage === 'ok') r.triage = 'caution';
+  const SEV_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
+  const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
+  if (worst >= 3 && r.triage === 'ok') r.triage = 'caution';
+}
+
 /* Block-0 snipers, read from the cached scan — a synchronous primary-key lookup, because this runs for
    every pair on every refresh. A token that has not been scanned yet is `sniperOk: null`: NOT CHECKED,
    which withholds the top verdict without inventing a penalty for a read we have not made. */
@@ -10272,12 +10320,38 @@ function scanRecord(tok, kind, pool, pair, readAt, counted) {
   } catch {}
   return scanRow(tok);
 }
+// the same record for a scan on Ethereum or Solana (scans_mc); the rules are scanRecord's
+function scanRecordMc(chain, tok, kind, pool, pair, readAt, counted) {
+  try {
+    const t = now();
+    const sym = String((pair && pair.token && pair.token.symbol) || '').slice(0, 16) || null;
+    const nm = String((pair && pair.token && pair.token.name) || '').slice(0, 60) || null;
+    const pj = pair ? JSON.stringify(pair) : null;
+    db.prepare(`INSERT INTO scans_mc (chain, token_addr, pool_addr, kind, symbol, name, pair_json, first_at, last_at, read_at, count)
+      VALUES (?,?,?,?,?,?,?,?,?,?,1)
+      ON CONFLICT(chain, token_addr) DO UPDATE SET
+        pool_addr = COALESCE(excluded.pool_addr, pool_addr), kind = excluded.kind,
+        last_at = CASE WHEN ? THEN excluded.last_at ELSE last_at END, count = count + ?,
+        symbol = COALESCE(excluded.symbol, symbol), name = COALESCE(excluded.name, name),
+        pair_json = CASE WHEN excluded.pair_json IS NOT NULL AND excluded.read_at >= read_at THEN excluded.pair_json ELSE pair_json END,
+        read_at = CASE WHEN excluded.pair_json IS NOT NULL AND excluded.read_at >= read_at THEN excluded.read_at ELSE read_at END`)
+      .run(chain, tok, pool || null, kind, sym, nm, pj, t, t, readAt || t, counted ? 1 : 0, counted ? 1 : 0);
+    _scanRecentMemo.at = 0;
+    const n = db.prepare('SELECT COUNT(*) n FROM scans_mc').get().n;
+    if (n > SCANS_KEEP) db.prepare('DELETE FROM scans_mc WHERE rowid IN (SELECT rowid FROM scans_mc ORDER BY last_at DESC, rowid DESC LIMIT -1 OFFSET ?)').run(SCANS_KEEP);
+  } catch {}
+  try { return db.prepare('SELECT * FROM scans_mc WHERE chain=? AND token_addr=?').get(chain, tok) || null; } catch { return null; }
+}
 function scanRecent() {                            // what everyone sees: the token, when, how many times — never who
   if (_scanRecentMemo.v && now() - _scanRecentMemo.at < 5000) return _scanRecentMemo.v;
   let v = [];
   try {
     v = db.prepare('SELECT token_addr, pool_addr, kind, symbol, name, last_at, read_at, count FROM scans WHERE symbol IS NOT NULL ORDER BY last_at DESC LIMIT ?').all(SCAN_RECENT_N)
-      .map((r) => ({ token: r.token_addr, pool: r.pool_addr || null, kind: r.kind, symbol: r.symbol, name: r.name, lastAt: r.last_at, readAt: r.read_at, count: r.count }));
+      .map((r) => ({ token: r.token_addr, pool: r.pool_addr || null, kind: r.kind, symbol: r.symbol, name: r.name, lastAt: r.last_at, readAt: r.read_at, count: r.count, chain: 'robinhood' }));
+    // …and the other chains' scans, in the same list, newest first (every entry says its chain)
+    const mcRows = db.prepare('SELECT chain, token_addr, pool_addr, kind, symbol, name, last_at, read_at, count FROM scans_mc WHERE symbol IS NOT NULL ORDER BY last_at DESC LIMIT ?').all(SCAN_RECENT_N)
+      .map((r) => ({ token: r.token_addr, pool: r.pool_addr || null, kind: r.kind, symbol: r.symbol, name: r.name, lastAt: r.last_at, readAt: r.read_at, count: r.count, chain: r.chain }));
+    v = v.concat(mcRows).sort((a, b) => b.lastAt - a.lastAt).slice(0, SCAN_RECENT_N);
   } catch {}
   _scanRecentMemo = { at: now(), v };
   return v;
@@ -10856,7 +10930,7 @@ const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').repl
 const SENDY_SITE_MAP = `PAGES — point people to these by path:
 / — home: Mission Control at the top (a dashboard: one tile per section with a one-line glance, the live readings, a More drop-down holding the long read, and a button into the section), what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta), Rocketize your pic (/rocketize: add rockets to a picture, in the browser, and make it your profile pic), the feature video, the $GWC and JustSendItCoin.com links
 /about — how everything works: Send Power, Send Calls, the holder boost, the rules
-/newpairs — the Scanner: paste any token or pool address for its on-chain profile; the New Pairs radar is a tab of it
+/newpairs — the Scanner: paste any token or pool address on Robinhood Chain, Ethereum or Solana for its on-chain profile (every pool of the token; Ethereum tokens are framed blue, Solana purple); the New Pairs radar is a tab of it
 /wall — the Send Wall: every Send Call, live
 /watchlist — the tokens you saved with the ☆
 /tracker — the wallet tracker: holdings, trades, cost basis and PNL read from the chain
@@ -17768,6 +17842,20 @@ const server = http.createServer(async (req, res) => {
       }
       /* ----- on-chain candles: our own chart, no third-party chart service ----- */
       if (p === '/api/chart' && req.method === 'GET') {
+        /* a pool on Ethereum or Solana (owner, 2026-10-23): GeckoTerminal's candles and trades, in this chart's shape (lib/multichain.js) */
+        const chainQ = String(url.searchParams.get('chain') || 'robinhood').toLowerCase().trim();
+        if (chainQ !== 'robinhood') {
+          if (!MC.SCAN_CHAINS.includes(chainQ)) return bad(res, 'unknown chain');
+          const pp = MC.parseAddress(url.searchParams.get('pair'), chainQ);
+          if (!pp) return bad(res, 'bad pool address');
+          if (!rateLimit('chart:' + clientIp(req), 240, 6e4)) return bad(res, 'slow down', 429);
+          const tfq = Object.prototype.hasOwnProperty.call(CHART_TF, url.searchParams.get('tf')) ? url.searchParams.get('tf') : '1h';
+          const hoursq = Math.min(720, Math.max(0.02, Number(url.searchParams.get('hours')) || 168));
+          let d = null; try { d = await mc().candles(chainQ, pp.addr, tfq, hoursq); } catch (e) { console.error('[chart:' + chainQ + '] ' + String((e && e.message) || e)); }
+          if (!d) return bad(res, 'could not read the chart source', 502);
+          if (d.error) return send(res, 200, { pair: pp.addr, tf: tfq, chain: chainQ, error: d.error, retry: !!d.retry });
+          return send(res, 200, d, { 'Cache-Control': 'public, max-age=' + (d.stale ? 5 : 30) });
+        }
         const pair = String(url.searchParams.get('pair') || '').toLowerCase().trim();
         const token = String(url.searchParams.get('token') || '').toLowerCase().trim();
         if (!/^0x[0-9a-f]{40}$/.test(pair) || !/^0x[0-9a-f]{40}$/.test(token)) return bad(res, 'bad pair or token address');
@@ -18022,17 +18110,50 @@ const server = http.createServer(async (req, res) => {
          scan is that token's, with the pool named so the reader knows what was pasted. Only reached when
          the address is not a token with a pool of its own (the lookup above is tried first). */
       if (p === '/api/scan' && req.method === 'GET') {
-        const addr = String(url.searchParams.get('address') || '').toLowerCase().trim();
-        if (!/^0x[0-9a-f]{40}$/.test(addr)) return bad(res, 'enter a valid 0x address — a token or a pool on Robinhood Chain');
+        /* Owner, 2026-10-23: Ethereum and Solana tokens scan too. The address says which chain it can be on: a Solana
+           address is only ever Solana's; a 0x address is the home chain's unless ?chain=ethereum names Ethereum — and a 0x
+           address the home chain has nothing for is tried on Ethereum before "not found". The reads are lib/multichain.js's. */
+        const chainQ = String(url.searchParams.get('chain') || '').toLowerCase().trim();
+        const parsed = MC.parseAddress(url.searchParams.get('address'), chainQ || null);
+        if (!parsed) return bad(res, chainQ && !MC.SCAN_CHAINS.includes(chainQ) ? 'unknown chain' : 'enter a valid 0x address (a token or a pool on Robinhood Chain or Ethereum) or a Solana token or pool address');
         if (!rateLimit('scan:' + clientIp(req), 40, 6e4)) return bad(res, 'too many scans — slow down', 429);
         const risk = () => Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }]));
+        const foreign = async (slug, a, note) => {
+          const m = chainMetaFor(slug);
+          const r = await mc().scan(slug, a);
+          if (r.unavailable) return send(res, 200, { unavailable: true, chain: slug, chainMeta: m, reason: r.reason || null, message: 'We couldn’t reach the price feed for ' + m.name + ' just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
+          if (r.notFound) return send(res, 200, { notFound: true, chain: slug, chainMeta: m, reason: r.reason || null, message: r.reason === 'quote'
+            ? 'That’s a base trading asset on ' + m.name + ' (' + m.native + ', a stablecoin or a wrapped coin), not a token to profile here.'
+            : 'No token or pool found at this address on ' + m.name + ' — the price feed indexes none.' + (note ? ' ' + note : '') });
+          const tok = r.pair.token.address;
+          const counted = rateLimit('scanc:' + clientIp(req) + '|' + slug + ':' + tok, 1, 10 * 60e3);
+          const s = scanRecordMc(slug, tok, r.kind, r.kind === 'pool' ? r.pool : null, r.pair, r.readAt, counted);
+          return send(res, 200, {
+            kind: r.kind, ...(r.pool ? { pool: r.pool, poolVerified: true } : {}),
+            pair: r.pair, pools: r.pools, risk: risk(), community: null, chain: slug, chainMeta: m, ...(note ? { note } : {}),
+            scan: { now: now(), readAt: r.readAt, stale: false, kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}) },
+          });
+        };
+        if (parsed.chain !== 'robinhood') {
+          try { return await foreign(parsed.chain, parsed.addr); }
+          catch (e) { console.error('[scan:' + parsed.chain + '] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'scan failed — try again', 502); }
+        }
+        const addr = parsed.addr;
+        const RH = { chain: 'robinhood', chainMeta: chainMetaFor('robinhood') };
+        // the same 0x address may be a token on Ethereum: tried when the home chain says "nothing here" (or cannot be read)
+        const tryEthereum = async (why) => {   // true once the Ethereum profile has been SENT — the caller must not answer again
+          let eth = null; try { eth = await mc().scan('ethereum', addr); } catch {}
+          if (!eth || !eth.pair) return false;
+          await foreign('ethereum', addr, why);
+          return true;
+        };
         // a hit: record the scan (for everyone, by token — never by who asked) and answer with the profile plus the scan's own facts
         const hit = (kind, pool, tok, r, poolOk) => {
           const counted = rateLimit('scanc:' + clientIp(req) + '|' + tok, 1, 10 * 60e3);   // one count per client per coin per ten minutes
           const s = scanRecord(tok, kind, poolOk === true ? pool : null, r.pair, r.readAt, counted);
           return send(res, 200, {
             kind, ...(pool ? { pool, poolVerified: poolOk === true ? true : (poolOk === false ? false : null) } : {}),
-            pair: r.pair, risk: risk(), community: communityForToken(tok),
+            ...RH, pair: r.pair, risk: risk(), community: communityForToken(tok),
             // count/firstAt/lastAt come from the store or not at all — a failed write is "not kept", never "1 scan, just now"
             scan: { now: now(), readAt: r.readAt, stale: !!r.stale, ...(r.stale ? { reason: r.reason || null, busy: !!r.busy } : {}),
                     kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}) },
@@ -18045,13 +18166,16 @@ const server = http.createServer(async (req, res) => {
             await ensureLedger(known.token_addr, { wait: true }).catch(() => null);   // the chain's holder count, bounded wait
             const rk = await scanRead(known.token_addr);
             if (rk.pair) return hit('pool', addr, known.token_addr, rk, true);   // only a verified pool is ever stored
-            if (rk.unavailable) return send(res, 200, { unavailable: true, reason: rk.reason || null, message: 'That pool is known, but the price feed and the chain could not be read just now — try again in a moment.' });
+            if (rk.unavailable) return send(res, 200, { unavailable: true, ...RH, reason: rk.reason || null, message: 'That pool is known, but the price feed and the chain could not be read just now — try again in a moment.' });
           }
           await ensureLedger(addr, { wait: true }).catch(() => null);                 // a token's ledger (a pool or a wallet yields an empty one, cheaply)
           const r = await scanRead(addr);
           if (r.pair) return hit('token', null, addr, r);
-          if (r.unavailable) return send(res, 200, { unavailable: true, reason: r.reason || null, message: r.busy ? 'Lots of scans are running right now — try again in a moment.' : 'We couldn’t reach the price feed or the chain just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
-          if (r.notFound && r.reason === 'quote') return send(res, 200, { notFound: true, reason: 'quote', message: 'That’s a base trading asset (WETH/USDG), not a token to profile here.' });
+          if (r.unavailable) {
+            if (await tryEthereum('Robinhood Chain could not be read just now; this address trades on Ethereum, so this is its Ethereum profile.')) return;
+            return send(res, 200, { unavailable: true, ...RH, reason: r.reason || null, message: r.busy ? 'Lots of scans are running right now — try again in a moment.' : 'We couldn’t reach the price feed or the chain just now, so we can’t tell you anything about this address yet. Nothing here is a judgement about it — try again in a moment.' });
+          }
+          if (r.notFound && r.reason === 'quote') return send(res, 200, { notFound: true, ...RH, reason: 'quote', message: 'That’s a base trading asset (WETH/USDG), not a token to profile here.' });
           // no pool for this address as a token — is the address itself a pool?
           let pt = null; try { pt = await pairTokens(addr); } catch {}
           if (pt && pt.token0 && pt.token1) {
@@ -18059,9 +18183,11 @@ const server = http.createServer(async (req, res) => {
             await ensureLedger(base, { wait: true }).catch(() => null);
             const r2 = await scanRead(base);
             if (r2.pair) return hit('pool', addr, base, r2, await poolVerified(addr, pt, r2.pair));
-            if (r2.unavailable) return send(res, 200, { unavailable: true, reason: r2.reason || null, message: 'That looks like a pool, but the chain could not be read just now — try again in a moment.' });
+            if (r2.unavailable) return send(res, 200, { unavailable: true, ...RH, reason: r2.reason || null, message: 'That looks like a pool, but the chain could not be read just now — try again in a moment.' });
           }
-          return send(res, 200, { notFound: true, reason: r.reason || null, message: 'No token or pool found at this address on Robinhood Chain — the chain itself says so. It may be a wallet, a contract that is not a token, or an address on another chain (other chains are coming soon).' });
+          // nothing on the home chain: the same 0x address may be a token on Ethereum
+          if (await tryEthereum('Robinhood Chain has no token or pool at this address; this is its Ethereum profile.')) return;
+          return send(res, 200, { notFound: true, ...RH, reason: r.reason || null, message: 'No token or pool found at this address on Robinhood Chain or Ethereum — the chain says so, and the price feed indexes none. It may be a wallet, a contract that is not a token, or an address on another chain. A Solana address scans here too.' });
         } catch (e) {
           // a designed refusal (an HttpError: busy, bad address) says its own words; anything else is logged, not echoed
           if (e && e.status) return bad(res, e.message, e.status);

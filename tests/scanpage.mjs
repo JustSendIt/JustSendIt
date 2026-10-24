@@ -53,8 +53,8 @@ try {
   check('two tabs: scan an address, and New Pairs', /id="sc-tab-scan" type="button" role="tab" aria-selected="true" aria-controls="sc-scan"/.test(HTML) && /id="sc-tab-new" type="button" role="tab" aria-selected="false" aria-controls="sc-new"/.test(HTML));
   check('  ...each driving a named tab panel', /id="sc-scan" role="tabpanel" aria-labelledby="sc-tab-scan"/.test(HTML) && /id="sc-new" role="tabpanel" aria-labelledby="sc-tab-new" hidden/.test(HTML));
   check('  ...the radar tab carries a lock while signed out', /<span class="sc-lock" id="sc-lock" aria-hidden="true">🔒<\/span>/.test(HTML) && /lock\.hidden = signedIn\(\)/.test(SC));
-  check('the address form: one input, one Scan button, described by the help line', /<input class="sc-addr" id="sc-addr"[^>]*maxlength="42"[^>]*aria-describedby="sc-help"/.test(HTML) && /id="sc-go" type="submit"/.test(HTML) && /id="sc-help">Any token, or any pool, on Robinhood Chain/.test(HTML));
-  check('the page says which chain, and that others are coming', /🏹 Robinhood Chain today · other chains are coming soon\./.test(HTML) && /Other chains · coming soon/.test(HTML));
+  check('the address form: one input, one Scan button, described by the help line', /<input class="sc-addr" id="sc-addr"[^>]*maxlength="44"[^>]*aria-describedby="sc-help"/.test(HTML) && /id="sc-go" type="submit"/.test(HTML) && /id="sc-help">Any token, or any pool, on Robinhood Chain, Ethereum or Solana/.test(HTML));   // 44: a Solana address is up to 44 characters (owner, 2026-10-23)
+  check('the page names its three chains and offers the chooser (owner, 2026-10-23: Ethereum and Solana scan too)', /🏹 Robinhood Chain, Ξ Ethereum and ◎ Solana — the chain's colour frames every token read there\./.test(HTML) && /<button class="sc-chain is-on" type="button" aria-pressed="true" data-chain="auto"/.test(HTML) && /data-chain="ethereum"/.test(HTML) && /data-chain="solana"/.test(HTML) && !/coming soon/.test(HTML));
   check('the tab strip is a matrix tile like every other control (CSS list and app.js SEL agree)', /\.sc-tab::before/.test(CSS) && /, \.sc-tab'/.test(APP));
   check('the radar tab panel holds the whole radar and a locked card', /<div class="sc-locked" id="sc-locked" hidden>/.test(HTML) && /<div id="sc-radar" hidden>/.test(HTML) && /<\/div><!-- \/sc-radar -->/.test(HTML) && /id="np-chainbar"/.test(HTML) && /id="np-runners"/.test(HTML));
   check('  ...whose button opens sign-in', /id="sc-signin"/.test(HTML) && /signin\.addEventListener\('click', \(\) => \{ if \(window\.AUTH && AUTH\.open\) AUTH\.open\(\); \}\)/.test(SC));
@@ -68,7 +68,7 @@ try {
   check('the contract read is wired on every page now, not only inside the radar', /window\.NPCard\.loadContract = loadContract;/.test(NP) && NP.indexOf("document.addEventListener('toggle'") > NP.indexOf('window.NPCard = {'));
   check('the scan renders the token dashboard and mounts it, the contract read starting at once', /NPCard\.dashboardHTML\(p, \{ kicker, meta \}\)/.test(SC) && /NPCard\.mountDashboard\(result\)/.test(SC)
     && /root\.querySelectorAll\('\.tkd \.np-contract\[data-dash\]'\)\.forEach\(el => loadContract\(el\)\)/.test(NP) && /el\.innerHTML = contractHTML\(j, !!el\.dataset\.dash\)/.test(NP));
-  check('a scan is shareable (?scan=) and a pasted address scans at once', /u\.searchParams\.set\('scan', addr\.toLowerCase\(\)\)/.test(SC) && /input\.addEventListener\('paste'/.test(SC));
+  check('a scan is shareable (?scan=, with ?chain= when one was named; a Solana address keeps its case) and a pasted address scans at once', /u\.searchParams\.set\('scan', normAddr\(addr\)\); if \(chainQ\) u\.searchParams\.set\('chain', chainQ\)/.test(SC) && /const normAddr = \(s\) => ADDR\.test\(s\) \? s\.toLowerCase\(\) : s;/.test(SC) && /input\.addEventListener\('paste'/.test(SC));
   check('recent scans on this device stay in this browser (localStorage; the page never POSTs anything)', /localStorage\.setItem\(RECENT_KEY/.test(SC) && !/method:\s*'POST'/.test(SC) && !/body:/.test(SC));
 
   /* ═══ the door on the radar ═══ */
@@ -144,7 +144,7 @@ try {
   // IP), there is honestly nothing to list, and the check is that it says so rather than inventing an entry
   const scanned = scan.status === 200 && sj.kind === 'token';
   check('the public recent list is served, one entry per token' + (scanned ? '' : ' (the chain refused this run, so it is honestly empty)'), rec.status === 200 && Array.isArray(rj.scans) && (scanned ? rj.scans.some((x) => x.token === SEND) : true) && new Set(rj.scans.map((x) => x.token)).size === rj.scans.length, rec.status + ' ' + JSON.stringify(rj).slice(0, 120));
-  check('  ...each entry is the token, when, how many times — and nothing about a person', rj.scans && rj.scans.every((x) => ['token', 'pool', 'kind', 'symbol', 'name', 'lastAt', 'readAt', 'count'].every((k) => k in x) && Object.keys(x).length === 8), rj.scans && JSON.stringify(Object.keys(rj.scans[0] || {})));
+  check('  ...each entry is the token, its chain, when, how many times — and nothing about a person', rj.scans && rj.scans.every((x) => ['token', 'pool', 'kind', 'symbol', 'name', 'lastAt', 'readAt', 'count', 'chain'].every((k) => k in x) && Object.keys(x).length === 9), rj.scans && JSON.stringify(Object.keys(rj.scans[0] || {})));
   check('  ...and answers without a session', rec.status === 200);
   check('the fallback: an unreachable upstream serves the last snapshot, marked stale with its read time', /if \(cached && usable\(cached\.pair\)\) return \{ pair: cached\.pair, readAt: row\.updated_at, stale: true/.test(SRC) && /if \(usable\(p\)\) return \{ pair: rescoreCachedPair\(p\), readAt: s\.read_at, stale: true/.test(SRC));
   check('  ...and a snapshot only ever replaces an OLDER one, so a stale answer cannot overwrite fresher data', /pair_json = CASE WHEN excluded\.pair_json IS NOT NULL AND excluded\.read_at >= read_at THEN excluded\.pair_json ELSE pair_json END/.test(SRC));
@@ -164,7 +164,7 @@ try {
 
   const quote = await api('/api/scan?address=0x0bd7d308f8e1639fab988df18a8011f41eacad73');
   check('a quote asset (WETH) is named as one, not profiled', quote.status === 200 && quote.j && quote.j.notFound && quote.j.reason === 'quote', quote.status + ' ' + JSON.stringify(quote.j).slice(0, 80));
-  check('the scan route says "other chains are coming soon" when nothing is found', /other chains are coming soon/.test(SRC.slice(SRC.indexOf("p === '/api/scan'"), SRC.indexOf("p === '/api/scan'") + 8000)));
+  check('the scan route tries Ethereum for a 0x address the home chain has nothing for, and says so when neither has it', /No token or pool found at this address on Robinhood Chain or Ethereum/.test(SRC.slice(SRC.indexOf("p === '/api/scan'"), SRC.indexOf("p === '/api/scan'") + 12000)) && (SRC.match(/if \(await tryEthereum\(/g) || []).length === 2 && !/other chains are coming soon/.test(SRC));
 
   /* ═══ a Send Call straight from a scan: to the Wall, or to the reader's Send Squad when they are in one ═══ */
   const CMP = read('compose.js');

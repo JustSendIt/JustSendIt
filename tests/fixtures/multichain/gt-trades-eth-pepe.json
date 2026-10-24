@@ -1,0 +1,256 @@
+{
+"data": [
+{
+"id": "eth_26258863_0x411b2a4c02ada8a01509043df93bd0a7ab67514c7e4ad1e12941bff659648f62_18_1792801083",
+"type": "trade",
+"attributes": {
+"block_number": 26258863,
+"block_timestamp": "2026-10-24T00:17:59Z",
+"tx_hash": "0x411b2a4c02ada8a01509043df93bd0a7ab67514c7e4ad1e12941bff659648f62",
+"tx_from_address": "0xff83d6e3a1172ff9463c0cee4124dceade3e7afa",
+"kind": "buy",
+"from_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"to_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"from_token_amount": "0.919481396685604",
+"to_token_amount": "477915843.844829",
+"price_from_in_usd": "2379.48",
+"price_to_in_usd": "0.00000457797669184584",
+"price_from_in_currency_token": "1.0",
+"price_to_in_currency_token": "0.00000000192393997505583",
+"volume_in_usd": "2187.88759378546",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258862_0xca9264ae690163d67ae6175121d0c2cfa3e41ef5c765627893a5f6ffb9a410ea_18_1792801074",
+"type": "trade",
+"attributes": {
+"block_number": 26258862,
+"block_timestamp": "2026-10-24T00:17:47Z",
+"tx_hash": "0xca9264ae690163d67ae6175121d0c2cfa3e41ef5c765627893a5f6ffb9a410ea",
+"tx_from_address": "0x5b43453fce04b92e190f391a83136bfbecedefd1",
+"kind": "buy",
+"from_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"to_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"from_token_amount": "0.632813750199012",
+"to_token_amount": "328995036.465457",
+"price_from_in_usd": "2379.48",
+"price_to_in_usd": "0.00000457687045525274",
+"price_from_in_currency_token": "1.0",
+"price_to_in_currency_token": "0.00000000192347506818832",
+"volume_in_usd": "1505.76766232355",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258861_0x6b2d693a1ac061bd2f7add97b5bba6ed77172c438a31e80149ee5cb332450db1_163_1792801067",
+"type": "trade",
+"attributes": {
+"block_number": 26258861,
+"block_timestamp": "2026-10-24T00:17:35Z",
+"tx_hash": "0x6b2d693a1ac061bd2f7add97b5bba6ed77172c438a31e80149ee5cb332450db1",
+"tx_from_address": "0xb64619712b73fb0e6740040af205a0f8134ef8f9",
+"kind": "buy",
+"from_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"to_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"from_token_amount": "0.572298884044072",
+"to_token_amount": "297588608.771711",
+"price_from_in_usd": "2379.48",
+"price_to_in_usd": "0.00000457602780639311",
+"price_from_in_currency_token": "1.0",
+"price_to_in_currency_token": "0.00000000192312093667235",
+"volume_in_usd": "1361.77374860519",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258846_0xe8c19950b144d56fc780aee7e89774f1d7a53763a3e80a56d538392a7335deb5_312_1792800879",
+"type": "trade",
+"attributes": {
+"block_number": 26258846,
+"block_timestamp": "2026-10-24T00:14:35Z",
+"tx_hash": "0xe8c19950b144d56fc780aee7e89774f1d7a53763a3e80a56d538392a7335deb5",
+"tx_from_address": "0x4337016838785634c63fce393bfc6222564436c4",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "3942812.63184188",
+"to_token_amount": "0.00753640721649829",
+"price_from_in_usd": "0.00000455174371004287",
+"price_to_in_usd": "2381.33",
+"price_from_in_currency_token": "0.00000000191142920554601",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "17.9466725968639",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258824_0xc637370b96139cbb8d74ae736596d5a22a746e544dd957a307013b2c0f1d30d5_88_1792800617",
+"type": "trade",
+"attributes": {
+"block_number": 26258824,
+"block_timestamp": "2026-10-24T00:10:11Z",
+"tx_hash": "0xc637370b96139cbb8d74ae736596d5a22a746e544dd957a307013b2c0f1d30d5",
+"tx_from_address": "0x5b43453fce04b92e190f391a83136bfbecedefd1",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "119678064.566911",
+"to_token_amount": "0.228764534913077",
+"price_from_in_usd": "0.00000455600120207846",
+"price_to_in_usd": "2383.47",
+"price_from_in_currency_token": "0.00000000191149928552844",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "545.253406029272",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258819_0x08e9afbab0f9ac65b6c912f0c4a7d6fb6706eb71e230820b408176f55f98df68_893_1792800569",
+"type": "trade",
+"attributes": {
+"block_number": 26258819,
+"block_timestamp": "2026-10-24T00:09:11Z",
+"tx_hash": "0x08e9afbab0f9ac65b6c912f0c4a7d6fb6706eb71e230820b408176f55f98df68",
+"tx_from_address": "0x188c91daa2dd6b99331a65f87be6f9b0f18f218f",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "368101549.694004",
+"to_token_amount": "0.70372617839963",
+"price_from_in_usd": "0.00000455655524817957",
+"price_to_in_usd": "2383.42",
+"price_from_in_currency_token": "0.0000000019117718438964",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "1677.27504812125",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258818_0xe4e16ce4dd0ecfa71ad11cb40f300cb891e7d2f0193d054753ae8739a7266c28_473_1792800551",
+"type": "trade",
+"attributes": {
+"block_number": 26258818,
+"block_timestamp": "2026-10-24T00:08:59Z",
+"tx_hash": "0xe4e16ce4dd0ecfa71ad11cb40f300cb891e7d2f0193d054753ae8739a7266c28",
+"tx_from_address": "0x3a67b184803641ba107c4c75276d747d123e49ca",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "167453174.641439",
+"to_token_amount": "0.320183020904046",
+"price_from_in_usd": "0.00000455605395468535",
+"price_to_in_usd": "2382.78",
+"price_from_in_currency_token": "0.00000000191207495223451",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "762.925698549743",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258815_0xfe378c3fa0b6ec515b473cca32034c81310186885cf590d574b5958581323ace_194_1792800515",
+"type": "trade",
+"attributes": {
+"block_number": 26258815,
+"block_timestamp": "2026-10-24T00:08:23Z",
+"tx_hash": "0xfe378c3fa0b6ec515b473cca32034c81310186885cf590d574b5958581323ace",
+"tx_from_address": "0xa172577031eafd8b03dce022533863fe988159cd",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "333566495.213668",
+"to_token_amount": "0.637900353517593",
+"price_from_in_usd": "0.00000455964803035072",
+"price_to_in_usd": "2384.3",
+"price_from_in_currency_token": "0.00000000191236338982121",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "1520.945812892",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258815_0x0a063db5f43bc8c47fec067b39f53d7e5aa8ad4c114dac326467217992ceb0a7_846_1792800517",
+"type": "trade",
+"attributes": {
+"block_number": 26258815,
+"block_timestamp": "2026-10-24T00:08:23Z",
+"tx_hash": "0x0a063db5f43bc8c47fec067b39f53d7e5aa8ad4c114dac326467217992ceb0a7",
+"tx_from_address": "0x43370188473a398394e4ba4a7c7cbb2c6265e22a",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "3973021.93782279",
+"to_token_amount": "0.00759711612490995",
+"price_from_in_usd": "0.00000455920059342767",
+"price_to_in_usd": "2384.3",
+"price_from_in_currency_token": "0.00000000191217573016301",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "18.1138039766228",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258810_0xe0d05baa611f84f9a994b8a643aa18e3e3a96d0c94d23e7575083d3db34e24aa_20_1792800450",
+"type": "trade",
+"attributes": {
+"block_number": 26258810,
+"block_timestamp": "2026-10-24T00:07:23Z",
+"tx_hash": "0xe0d05baa611f84f9a994b8a643aa18e3e3a96d0c94d23e7575083d3db34e24aa",
+"tx_from_address": "0x5b43453fce04b92e190f391a83136bfbecedefd1",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "175641884.850772",
+"to_token_amount": "0.335942430030349",
+"price_from_in_usd": "0.00000456022992497532",
+"price_to_in_usd": "2384.24",
+"price_from_in_currency_token": "0.00000000191265557367351",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "800.967379375558",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258809_0x4b1c10178338c1593951d1b3f4ae8f6ec4be5a131792115bf691b5008f5208ce_31_1792800444",
+"type": "trade",
+"attributes": {
+"block_number": 26258809,
+"block_timestamp": "2026-10-24T00:07:11Z",
+"tx_hash": "0x4b1c10178338c1593951d1b3f4ae8f6ec4be5a131792115bf691b5008f5208ce",
+"tx_from_address": "0x5b43453fce04b92e190f391a83136bfbecedefd1",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "1713169243.52396",
+"to_token_amount": "3.27853943441002",
+"price_from_in_usd": "0.00000456278612906842",
+"price_to_in_usd": "2384.24",
+"price_from_in_currency_token": "0.00000000191372769900195",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "7816.82486109775",
+"is_anomalous": false
+}
+},
+{
+"id": "eth_26258807_0x18651f56793484dcc976f42f45d19310c544deb5069863822867aaa41aee612f_16_1792800413",
+"type": "trade",
+"attributes": {
+"block_number": 26258807,
+"block_timestamp": "2026-10-24T00:06:47Z",
+"tx_hash": "0x18651f56793484dcc976f42f45d19310c544deb5069863822867aaa41aee612f",
+"tx_from_address": "0x5b43453fce04b92e190f391a83136bfbecedefd1",
+"kind": "sell",
+"from_token_address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"to_token_address": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+"from_token_amount": "838132959.384633",
+"to_token_amount": "1.60517089093117",
+"price_from_in_usd": "0.00000456631231235594",
+"price_to_in_usd": "2384.28",
+"price_from_in_currency_token": "0.00000000191517452327576",
+"price_to_in_currency_token": "1.0",
+"volume_in_usd": "3827.17685182937",
+"is_anomalous": false
+}
+}
+]
+}

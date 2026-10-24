@@ -1,0 +1,178 @@
+{
+"code": 1,
+"message": "OK",
+"result": {
+"0x6982508145454ce325ddbe47a25d4ec3d2311933": {
+"anti_whale_modifiable": "1",
+"buy_tax": "0",
+"can_take_back_ownership": "0",
+"cannot_buy": "0",
+"cannot_sell_all": "0",
+"creator_address": "0xfbfEaF0DA0F2fdE5c66dF570133aE35f3eB58c9A",
+"creator_balance": "3718337.06",
+"creator_percent": "0.000000",
+"dex": [
+{
+"liquidity_type": "UniV2",
+"name": "UniswapV2",
+"liquidity": "15293152.61022687",
+"pool_fee": "0.0030",
+"pair": "0xa43fe16908251ee70ef74718545e4fe6c5ccec9f"
+},
+{
+"liquidity_type": "UniV3",
+"name": "UniswapV3",
+"liquidity": "39942.774340364250776221650000000000",
+"pool_fee": "0.003",
+"pair": "0x11950d141ecb863f01007add7d1a342041227b58"
+},
+{
+"liquidity_type": "UniV3",
+"name": "UniswapV3",
+"liquidity": "11088.334686630522861355200000000000",
+"pool_fee": "0.01",
+"pair": "0xf239009a101b6b930a527deaab6961b6e7dec8a6"
+}
+],
+"external_call": "0",
+"hidden_owner": "0",
+"holder_count": "601181",
+"holders": [
+{
+"address": "0xf977814e90da44bfa03b6295a0616a897441acec",
+"tag": "",
+"is_contract": 0,
+"balance": "45883895320880.641",
+"percent": "0.109068212380902399",
+"is_locked": 0
+},
+{
+"address": "0x1d48963dd8fada6ab5c2c7b92eba81ecc5030270",
+"tag": "",
+"is_contract": 0,
+"balance": "25941899262095.646104356460249562",
+"percent": "0.061665134542197763",
+"is_locked": 0
+},
+{
+"address": "0x5a52e96bacdabb82fd05763e25335261b270efcb",
+"tag": "",
+"is_contract": 0,
+"balance": "18856015673840.9608773786689001",
+"percent": "0.044821650554943306",
+"is_locked": 0
+},
+{
+"address": "0x3f9a8345729ea842708e080e238c92731e5699b8",
+"tag": "",
+"is_contract": 0,
+"balance": "13662463384883.486025455461239812",
+"percent": "0.032476328517614941",
+"is_locked": 0
+},
+{
+"address": "0x611f7bf868a6212f871e89f7e44684045ddfb09d",
+"tag": "",
+"is_contract": 0,
+"balance": "12735987097735.610391872716941006",
+"percent": "0.030274050098447477",
+"is_locked": 0
+},
+{
+"address": "0xc93e48d89f2d6dbc1672908aa68ce7c24d0413b4",
+"tag": "",
+"is_contract": 0,
+"balance": "8600000000130.02",
+"percent": "0.020442611071494770",
+"is_locked": 0
+},
+{
+"address": "0xbf45fb5d20bc3d0954188773e803b4e30e87e0b8",
+"tag": "",
+"is_contract": 0,
+"balance": "8051614074754.31707225",
+"percent": "0.019139071514591542",
+"is_locked": 0
+},
+{
+"address": "0x176f3dab24a159341c0509bb36b833e7fdd0a132",
+"tag": "",
+"is_contract": 0,
+"balance": "7268180950036.54",
+"percent": "0.017276813529836979",
+"is_locked": 0
+},
+{
+"address": "0xc671b05671a7cd3080c6ceae79d284bdde0ef271",
+"tag": "",
+"is_contract": 0,
+"balance": "7099282164030.592493831579570323",
+"percent": "0.016875333042311978",
+"is_locked": 0
+},
+{
+"address": "0x000000000000000000000000000000000000dead",
+"tag": "",
+"is_contract": 0,
+"balance": "6917549545880.938959867444617341",
+"percent": "0.016443345922337365",
+"is_locked": 1
+}
+],
+"honeypot_with_same_creator": "0",
+"is_anti_whale": "1",
+"is_blacklisted": "1",
+"is_honeypot": "0",
+"is_in_cex": {
+"listed": "1",
+"cex_list": [
+"Binance",
+"Coinbase"
+]
+},
+"is_in_dex": "1",
+"is_mintable": "0",
+"is_open_source": "1",
+"is_proxy": "0",
+"is_whitelisted": "0",
+"lp_holder_count": "78",
+"lp_holders": [
+{
+"address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+"tag": "",
+"value": "15197702.918695355997651771",
+"is_contract": 1,
+"balance": "27987939.902750970427665813",
+"percent": "0.993758664811355539",
+"NFT_list": null,
+"is_locked": 0
+},
+{
+"address": "0x7a6a59588b8106045303e1923227a2cefbec2b66",
+"tag": "",
+"value": "28586.469104143556275546",
+"is_contract": 1,
+"balance": "52644.559746881776412508",
+"percent": "0.001869233233507860",
+"NFT_list": null,
+"is_locked": 0
+}
+],
+"lp_total_supply": "28163719.113899650905949868",
+"owner_address": "0x0000000000000000000000000000000000000000",
+"owner_balance": "0",
+"owner_change_balance": "0",
+"owner_percent": "0.0",
+"personal_slippage_modifiable": "0",
+"selfdestruct": "0",
+"sell_tax": "0",
+"slippage_modifiable": "0",
+"token_name": "Pepe",
+"token_symbol": "PEPE",
+"total_supply": "420689899644076.395603788792296954",
+"trading_cooldown": "0",
+"transfer_pausable": "1",
+"transfer_tax": "0"
+}
+}
+}

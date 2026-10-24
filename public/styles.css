@@ -6055,3 +6055,40 @@ html.motion-off .cf .cf-dialog { animation: none; }
 .ws-save-row .modal-note { margin: 0; }
 .ws-more { margin: 0; }
 
+
+/* ===== Chains (owner, 2026-10-23): a token read on Ethereum or Solana wears that chain's colour on its frames =====
+   newpairs.js puts --chain (and --tok) on the dashboard from CHAIN_META, and data-chain on the dashboard, the chart switch and
+   the chart host; the home chain sets neither, so nothing there changes. Blue is Ethereum's brand (#627eea), purple Solana's
+   (#9945ff). The colour frames; it never carries a state — the verdict ring and the flags keep their own words and colours. */
+.tkd[data-chain="ethereum"], .sc-chain--ethereum { --chain: #627eea; }
+.tkd[data-chain="solana"], .sc-chain--solana { --chain: #9945ff; }
+.tkd[data-chain]:not([data-chain="robinhood"]) .tkd-head,
+.tkd[data-chain]:not([data-chain="robinhood"]) .tkd-card,
+.tkd[data-chain]:not([data-chain="robinhood"]) .tkd-actbar,
+.tkd[data-chain]:not([data-chain="robinhood"]) .onchain-chart { border-color: color-mix(in srgb, var(--chain) 58%, var(--ink-4)); }
+.tkd[data-chain]:not([data-chain="robinhood"]) .tkd-head { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chain) 18%, transparent), 0 0 40px color-mix(in srgb, var(--chain) 14%, transparent); }
+.tkd[data-chain]:not([data-chain="robinhood"]) .onchain-chart.is-up, .tkd[data-chain]:not([data-chain="robinhood"]) .onchain-chart.is-down { border-color: color-mix(in srgb, var(--chain) 58%, var(--ink-4)); }
+.tkd-chain { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.4rem; padding: 0.08rem 0.55rem; border-radius: 999px; border: 1.5px solid var(--chain, var(--green)); background: color-mix(in srgb, var(--chain, var(--green)) 16%, transparent); color: var(--text); font-size: max(var(--text-floor), 0.72rem); font-weight: 800; letter-spacing: 0.04em; text-transform: none; vertical-align: middle; }
+.tkd-chain-note { margin: 0.4rem 0 0; }
+/* the Scanner's chain chooser: buttons on the control ladder; the chosen one takes its chain's colour */
+button.sc-chain { font: inherit; cursor: pointer; background: var(--ctl-fill-lo); border-color: var(--ctl-fill-lo); color: var(--ctl-ink); }
+button.sc-chain:hover { background: var(--ctl-fill-hi); border-color: var(--green); color: var(--ctl-ink); }
+button.sc-chain:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+button.sc-chain.is-on { background: var(--green); border-color: var(--green); color: var(--on-green); }
+button.sc-chain--ethereum.is-on, button.sc-chain--solana.is-on { background: color-mix(in srgb, var(--chain) 26%, var(--ink-2)); border-color: var(--chain); color: var(--text); }
+.sc-chain-note { display: block; margin-bottom: 0.3rem; color: var(--text); }
+/* the contract facts another chain's profile carries, and its pools */
+.tkd-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 0.45rem 1rem; margin: 0.5rem 0 0; }
+.tkd-facts > div { display: flex; justify-content: space-between; gap: 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid var(--ink-4); font-size: max(var(--text-floor), 0.88rem); }
+.tkd-facts dt { color: var(--text-dim); }
+.tkd-facts dd { margin: 0; text-align: right; }
+.tkd-facts code { font-size: max(var(--text-floor), 0.8rem); }
+.tkd-pools { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.tkd-pool { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3rem 0.8rem; align-items: center; padding: 0.55rem 0.7rem; border: 1px solid var(--ink-4); border-radius: 12px; background: var(--ink-3); }
+.tkd-pool.is-on { border-color: color-mix(in srgb, var(--chain, var(--green)) 60%, var(--ink-4)); }
+.tkd-pool-id { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.6rem; min-width: 0; font-size: max(var(--text-floor), 0.9rem); }
+.tkd-pool-id code { font-size: max(var(--text-floor), 0.8rem); color: var(--text-dim); }
+.tkd-pool-f { grid-column: 1; font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim); }
+.tkd-pool-chart { grid-column: 2; grid-row: 1 / span 2; white-space: nowrap; }
+.tkd-pool-chart[aria-pressed="true"] { background: var(--green); color: var(--on-green); border-color: var(--green); }
+@media (max-width: 480px) { .tkd-pool { grid-template-columns: minmax(0, 1fr); } .tkd-pool-chart { grid-column: 1; grid-row: auto; justify-self: start; } }
