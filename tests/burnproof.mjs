@@ -88,7 +88,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     /destroyed for good/.test(BP) && /costs a little ETH for gas/.test(BP) && /You make the transaction yourself/.test(BP) && /Only ever to the burn address shown here\.<\/b> Any amount counts/.test(BP)
     && /Send <b>any amount<\/b> of \$SEND/.test(BP) && !/exact amount/.test(BP));
   check('  ...and never tells anyone to buy', !/\bbuy (some|more|\$SEND)|purchase/i.test(BP));
-  check('the terms and the privacy policy say what it is, and their versions moved', /\(g\) Proving a wallet by a burn\./.test(PUB('terms.html')) && /Version 2026-10-22 ·/.test(PUB('terms.html'))
+  check('the terms and the privacy policy say what it is, and their versions moved', /\(g\) Proving a wallet by a burn\./.test(PUB('terms.html')) && /Version 2026-10-23 ·/.test(PUB('terms.html'))
     && /A wallet that cannot sign can be linked instead by a burn/.test(PUB('privacy.html')) && /Version 2026-10-23 ·/.test(PUB('privacy.html')));
   check('  ...and both say ETH counts too: straight from the wallet\'s own address, a contract wallet offered $SEND only, the transaction count kept',
     /you send any amount of \$SEND — or, for a wallet that sends its own transactions, of ETH — from that wallet/.test(PUB('terms.html')) && /Any amount above nothing counts, as much or as little as you choose/.test(PUB('terms.html'))

@@ -2,8 +2,10 @@
  * Safety-first: the biggest thing on every row is a RISK health ring, not a gain number.
  * Server owns all risk computation (/api/pairs/new); the client only maps it to pixels, filters/sorts/
  * searches instantly in-memory, remembers your preferences, and refreshes without ever yanking the user.
- * Tons of filters + full on-chain detail + one-tap copy on every address. No buy/swap CTA anywhere —
- * this page protects, it doesn't funnel. Read-only, honest. CSP-safe: addEventListener only, no inline JS. */
+ * Tons of filters + full on-chain detail + one-tap copy on every address. The radar's rows carry no buy CTA — the
+ * list protects, it doesn't funnel. The token DETAIL carries one swap button (swapkit.js; owner, 2026-10-23: "a simple
+ * button on every token on-chain details"), under the caveat: it builds a buy for the reader's own wallet to review and
+ * sign — a tool beside the read, never a tip. Honest. CSP-safe: addEventListener only, no inline JS. */
 (function () {
   const listEl = document.getElementById('np-list');
   // NOTE: we do NOT early-return when np-list is absent — the render helpers below are also exported as window.NPCard
@@ -1396,6 +1398,8 @@
           (foreignChain(p) ? '' : pinBtnHTML(p)) +
           (lk.explorer ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(lk.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' : '') +
           (lk.dex && p.indexed ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab to cross-check the figures" href="' + esc(lk.dex) + '" target="_blank" rel="noopener nofollow">📈 Dexscreener ↗</a>' : '') +
+          // 🚀 Swap in my wallet (owner, 2026-10-23): on every chain — quotes a buy and builds it for the reader's own wallet (swapkit.js inserts its panel under this bar)
+          (window.SwapKit && !opts.hideSwap ? SwapKit.buttonHTML(p) : '') +
         '</div>' +
         (foreignChain(p) ? '<p class="tkd-note tkd-chain-note">Send Calls, the watchlist and wall pins work with Robinhood Chain tokens; on ' + esc(chainOf(p).name) + ' the Scanner reads the profile.</p>' : '') +
       '</div>';
@@ -1494,6 +1498,7 @@
         if (window.announce) announce('Chart switched to the ' + (b.dataset.poolQuote || '') + ' pool.');
       });
     });
+    if (window.SwapKit) SwapKit.mount(root);   // the swap button and its panel
     commDecorate(root);
     root.querySelectorAll('.tkd .np-contract[data-dash]').forEach(el => loadContract(el));
     if (window.Watchlist && Watchlist.syncButtons) Watchlist.syncButtons(root);

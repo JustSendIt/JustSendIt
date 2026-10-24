@@ -304,7 +304,8 @@
        result rides along as chainOk so a caller can say something useful, and ensureRobinhoodChain asks
        eth_chainId before prompting, so a wallet already on the right chain is never interrupted. */
     let chainOk = null;
-    try { if (typeof window.ensureRobinhoodChain === 'function') chainOk = await window.ensureRobinhoodChain(chosen.provider, 'connect'); }
+    // opts.noSwitch: the caller puts the wallet on the chain it needs itself (the swap button on an Ethereum token), so no courtesy switch here
+    try { if (!(opts && opts.noSwitch) && typeof window.ensureRobinhoodChain === 'function') chainOk = await window.ensureRobinhoodChain(chosen.provider, 'connect'); }
     catch { chainOk = false; }
     /* The person who declined the prompt, or whose wallet is locked: say so — connect() is where the account was asked
        for, so that refusal is a cancelled connect, not a chain problem. (eth_requestAccounts threw above; this is only

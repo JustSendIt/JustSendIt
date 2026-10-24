@@ -114,7 +114,7 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
               ...(process.env.CHAIN_LIVE === '1' ? {} : { CHART_SRC_DS_URL: 'http://127.0.0.1:9/', CHART_SRC_GT_URL: 'http://127.0.0.1:9/' }),
               // …and the Scanner's Ethereum / Solana reads (lib/multichain.js: Dexscreener, GeckoTerminal, GoPlus, the two nodes) — tests/multichain.mjs
               // runs its own server against fakes of them; here they are dead, so a scan of a 0x address the home chain cannot read is "could not reach"
-              ...(process.env.CHAIN_LIVE === '1' ? {} : { MC_DEXSCREENER_URL: 'http://127.0.0.1:9', MC_GECKO_URL: 'http://127.0.0.1:9', MC_GOPLUS_URL: 'http://127.0.0.1:9', ETH_RPC_URL: 'http://127.0.0.1:9/', SOL_RPC_URL: 'http://127.0.0.1:9/' }),
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { MC_DEXSCREENER_URL: 'http://127.0.0.1:9', MC_GECKO_URL: 'http://127.0.0.1:9', MC_GOPLUS_URL: 'http://127.0.0.1:9', ETH_RPC_URL: 'http://127.0.0.1:9/', SOL_RPC_URL: 'http://127.0.0.1:9/', JUPITER_URL: 'http://127.0.0.1:9' }),
               // and the token-by-name search's two (GeckoTerminal, Dexscreener): the suites read the site's own records only
               ...(process.env.CHAIN_LIVE === '1' ? {} : { TOKSEARCH_GT_URL: FIXTURE + '/gt', TOKSEARCH_DS_URL: FIXTURE + '/ds', OUTBOUND_RPM_SEARCH_GECKOTERMINAL: '600' }) };   // the suite asks more than the live 4/min share
 

@@ -6092,3 +6092,27 @@ button.sc-chain--ethereum.is-on, button.sc-chain--solana.is-on { background: col
 .tkd-pool-chart { grid-column: 2; grid-row: 1 / span 2; white-space: nowrap; }
 .tkd-pool-chart[aria-pressed="true"] { background: var(--green); color: var(--on-green); border-color: var(--green); }
 @media (max-width: 480px) { .tkd-pool { grid-template-columns: minmax(0, 1fr); } .tkd-pool-chart { grid-column: 1; grid-row: auto; justify-self: start; } }
+
+/* ===== Swap in my wallet (owner, 2026-10-23): the panel swapkit.js opens under a token's actions — framed in the chain's colour ===== */
+.tkd-swap { margin-top: 0.8rem; padding: 0.9rem 1rem; border: 2px solid color-mix(in srgb, var(--chain, var(--green)) 58%, var(--ink-4)); border-radius: 14px; background: color-mix(in srgb, var(--chain, var(--green)) 7%, var(--ink-1)); display: grid; gap: 0.6rem; text-align: left; }
+.tkd-swap[hidden] { display: none; }
+.tkd-swap-head { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; align-items: baseline; font-size: max(var(--text-floor), 1rem); }
+.tkd-swap-chain { color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); }
+.tkd-swap-amt { display: grid; gap: 0.3rem; font-size: max(var(--text-floor), 0.85rem); color: var(--text-dim); }
+.tkd-swap-amt input { width: 100%; box-sizing: border-box; margin: 0; font-size: max(var(--text-floor), 1.15rem); font-weight: 800; padding: 0.55rem 0.7rem; border-radius: 10px; border: 1px solid var(--ink-4); background: var(--ink-1); color: var(--text); }
+.tkd-swap-amt input:focus-visible { outline: 2px solid var(--chain, var(--green)); outline-offset: 2px; }
+.tkd-swap-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.tkd-swap-lines { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.8rem; margin: 0; font-size: max(var(--text-floor), 0.9rem); }
+.tkd-swap-lines dt { color: var(--text-dim); }
+.tkd-swap-lines dd { margin: 0; font-weight: 700; overflow-wrap: anywhere; }
+.tkd-swap-lines dd.is-warn { color: var(--gold); }
+.tkd-swap-lines code { font-size: max(var(--text-floor), 0.85rem); }
+.tkd-swap-status { margin: 0; min-height: 1.2em; font-size: max(var(--text-floor), 0.9rem); color: var(--text-dim); overflow-wrap: anywhere; line-height: 1.45; }
+.tkd-swap-status.is-error { color: var(--red); font-weight: 700; }
+.tkd-swap-status.is-ok { color: var(--green-bright); font-weight: 700; }
+.tkd-swap-status a { color: inherit; text-decoration: underline; }
+.tkd-swap-go { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.tkd-swap-go [aria-busy="true"] { opacity: 0.7; }
+.tkd-swap-note { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.5; }
+.tkd-swap-wallets { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; vertical-align: middle; }
+@media (max-width: 420px) { .tkd-swap-lines { grid-template-columns: 1fr; gap: 0.1rem; } .tkd-swap-lines dd { margin-bottom: 0.35rem; } }

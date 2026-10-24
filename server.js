@@ -6067,6 +6067,7 @@ const OUTBOUND_RPM = {
   'api.coingecko.com': 20,
   'api.gopluslabs.io': 28,          // the free tier is 30 calls/min; a paid plan raises it via OUTBOUND_RPM_API_GOPLUSLABS_IO
   'api.geckoterminal.com': 10,
+  'api.jup.ag': 25,                 // Jupiter's keyless swap API: half a request a second (measured 2026-10-23); a portal key raises it via OUTBOUND_RPM_API_JUP_AG
   'search:geckoterminal': 4,        // the share of it the menu's name search may use (searchTokensByName); the rest is the chart switch's
   'search:goplus': 8,               // the share of GoPlus's 28 the name search's holder reads may use; the rest is the dashboards'
   'robinhoodchain.blockscout.com': 240,
@@ -8741,6 +8742,22 @@ const MC_URLS = {
 let _mcInst = null;
 const mc = () => _mcInst || (_mcInst = MC.createMultichain({ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS }));
 const chainMetaFor = (slug) => MC.publicMeta(slug);
+/* ===== Swap in my wallet (owner, 2026-10-23): "a simple button on every token on-chain details that takes the contract address and
+   sets up a swap in their wallet to purchase that token they are looking at." lib/swapkit.js quotes and builds the transaction —
+   the home chain's v2 router (the landing page's), Uniswap v2 / v3 and SushiSwap routers on Ethereum, Jupiter on Solana — and the
+   reader's own wallet shows, signs and sends it. The chain's node is read here (a revert is null; an unreachable node says so). */
+const SWAPKIT = require('./lib/swapkit.js');
+let _skInst = null;
+const swapkit = () => _skInst || (_skInst = SWAPKIT.createSwapKit({
+  mc: mc(), ethUsd, take: outboundTake, now,
+  jgetR: (u, headers) => (headers && Object.keys(headers).length ? jgetHR(u, headers) : jgetR(u)),
+  rhCall: async (to, data) => {
+    try { return await rpc('eth_call', [{ to, data }, 'latest']); }
+    catch (e) { if (/revert|invalid opcode|out of gas|execution/i.test(String((e && e.message) || ''))) return null; throw Object.assign(new Error('Robinhood Chain could not be read'), { unavailable: true }); }
+  },
+  urls: { ethRpc: MC_URLS.ethRpc, solRpc: MC_URLS.solRpc, jupiter: process.env.JUPITER_URL || 'https://api.jup.ag' },
+  jupiterKey: process.env.JUPITER_API_KEY || '',
+}));
 const PUBLIC_CHAINS = MULTICHAIN ? CHAINS : CHAINS.filter(c => c.slug === DEFAULT_CHAIN);
 const FOREIGN_TTL = 90 * 1000;
 const foreignCache = new Map();   // slug -> { pairs, updatedAt, building, error }
@@ -10930,7 +10947,7 @@ const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').repl
 const SENDY_SITE_MAP = `PAGES — point people to these by path:
 / — home: Mission Control at the top (a dashboard: one tile per section with a one-line glance, the live readings, a More drop-down holding the long read, and a button into the section), what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta), Rocketize your pic (/rocketize: add rockets to a picture, in the browser, and make it your profile pic), the feature video, the $GWC and JustSendItCoin.com links
 /about — how everything works: Send Power, Send Calls, the holder boost, the rules
-/newpairs — the Scanner: paste any token or pool address on Robinhood Chain, Ethereum or Solana for its on-chain profile (every pool of the token; Ethereum tokens are framed blue, Solana purple); the New Pairs radar is a tab of it
+/newpairs — the Scanner: paste any token or pool address on Robinhood Chain, Ethereum or Solana for its on-chain profile (every pool of the token; Ethereum tokens are framed blue, Solana purple); every token's detail has a 🚀 Swap in my wallet button that quotes a buy with ETH or SOL and builds it for the person's own wallet to review and sign (the site never holds funds; it is a tool, not a tip); the New Pairs radar is a tab of it
 /wall — the Send Wall: every Send Call, live
 /watchlist — the tokens you saved with the ☆
 /tracker — the wallet tracker: holdings, trades, cost basis and PNL read from the chain
@@ -14025,7 +14042,7 @@ function settleBeta() {
 
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
    are for. This decides who may make an account. */
-const TOS_VERSION = '2026-10-22';   // 2026-10-22: §9(g) — a burn proof takes any amount; 2026-10-21: ETH as well as $SEND; 2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45
+const TOS_VERSION = '2026-10-23';   // 2026-10-23: the swap paragraphs cover the Swap in my wallet button (Ethereum and Solana routers, Jupiter); 2026-10-22: §9(g) — a burn proof takes any amount; 2026-10-21: ETH as well as $SEND; 2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
@@ -18104,6 +18121,43 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/sendy/live' && req.method === 'GET') {   // what Sendy is fed right now — for the operator's eyes
         if (!isAdmin(me)) return bad(res, 'admins only', 403);
         return send(res, 200, { live: sendyLive(), knowledgeChars: sendyKnowledge().length, answered: sendyAnswered, kept: db.prepare('SELECT COUNT(*) n FROM sendy_qa').get().n });
+      }
+      /* ===== Swap in my wallet (owner, 2026-10-23): the quote and the transaction for any token the Scanner shows ==========
+         GET  /api/swap/quote?chain=&token=&amount=[&slippage=]   — what the router (or Jupiter) pays for that much ETH / SOL right now
+         POST /api/swap/build {chain, token, amount, from, slippage} — the same, plus the transaction for the reader's wallet to show
+         GET  /api/swap/status?chain=solana&sig=                  — a Solana signature's standing (an EVM receipt comes from the wallet's own node)
+         No session: a swap is the reader's own, from their own wallet, to a public router. Nothing here is kept — not the amount, not
+         the wallet. The client checks the transaction's `to` against the same router list before handing it to a wallet. */
+      if (p === '/api/swap/quote' && req.method === 'GET') {
+        if (!rateLimit('swapq:' + clientIp(req), 60, 6e4)) return bad(res, 'too many quotes — slow down', 429);
+        const chain = String(url.searchParams.get('chain') || 'robinhood').toLowerCase().trim();
+        const parsed = MC.SCAN_CHAINS.includes(chain) ? MC.parseAddress(url.searchParams.get('token'), chain) : null;
+        if (!parsed) return bad(res, 'a token address on Robinhood Chain, Ethereum or Solana is needed');
+        try {
+          const q = await swapkit().quote(chain, parsed.addr, url.searchParams.get('amount'), { slippagePct: url.searchParams.get('slippage') });
+          if (q.bad) return bad(res, q.bad);
+          return send(res, 200, q);
+        } catch (e) { console.error('[swap:quote] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'the quote failed — try again', 502); }
+      }
+      if (p === '/api/swap/build' && req.method === 'POST') {
+        if (!rateLimit('swapb:' + clientIp(req), 20, 6e4)) return bad(res, 'too many swaps built — slow down', 429);
+        const b = await readBody(req, 4096);
+        const chain = String(b.chain || 'robinhood').toLowerCase().trim();
+        const parsed = MC.SCAN_CHAINS.includes(chain) ? MC.parseAddress(b.token, chain) : null;
+        if (!parsed) return bad(res, 'a token address on Robinhood Chain, Ethereum or Solana is needed');
+        const from = String(b.from || '').trim();
+        if (chain === 'solana' ? !MC.isSolanaAddr(from) : !/^0x[0-9a-fA-F]{40}$/.test(from)) return bad(res, 'the wallet address the swap is for is needed');
+        try {
+          const r = await swapkit().build(chain, parsed.addr, b.amount, from, { slippagePct: b.slippage });
+          if (r.bad) return bad(res, r.bad);
+          return send(res, 200, r);
+        } catch (e) { console.error('[swap:build] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'the swap could not be built — try again', 502); }
+      }
+      if (p === '/api/swap/status' && req.method === 'GET') {
+        if (!rateLimit('swaps:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+        let r; try { r = await swapkit().status(String(url.searchParams.get('chain') || ''), url.searchParams.get('sig')); } catch { return bad(res, 'the status could not be read', 502); }
+        if (r.bad) return bad(res, r.bad);
+        return send(res, 200, r);
       }
       /* The scanner takes ANY address on the chain: a token, or the POOL that prices one. A pool answers
          token0()/token1(); the token it exists to price is the side that is not a quote asset, and the
