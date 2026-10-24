@@ -6,6 +6,7 @@
  * has a control, a control has a field, and a strategy only sets fields that exist.
  */
 import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import path from 'node:path';
 import { ROOT, SERVER_JS } from './_paths.mjs';
 
@@ -102,16 +103,39 @@ try {
       /function clearsSiteBar\(p\) \{[\s\S]{0,220}?!thinData\(p\)[\s\S]{0,160}?sniperOk\(p\)/.test(NP));
     check('four things can never be waived by any setting', /const VERDICT_FLOOR = \['honeypotSuspect', 'dumping', 'sniperDump'\]/.test(NP) && /triageOf\(p\) === 'avoid'\) return true/.test(NP));
     check('  ...and no strategy can turn them off', !/hide: \{[^}]*honeypotSuspect: false/.test(NP));
-    /* ONE RULE: A FULL 100 EARNS THE ROCKET.
+    /* ONE RULE: A FULL 100 EARNS THE ROCKET — when it was READ.
        The tag used to need more than the score — readable data, the risk model's top tier and a finished
        block-0 scan — so on a board whose explorer is unreachable every 100 fell through to the milder
-       tag. Measured at the time: three tokens scored 100 and not one wore the rocket. The score is the
-       whole rule now, and the floor is the only thing that can take it away. */
+       tag. Measured at the time: three tokens scored 100 and not one wore the rocket. The score became the
+       whole rule, and the floor the only thing that can take it away. The floor now holds missing data on
+       every chain (owner, 2026-10-24: "apply the missing data rule on robinhood chain also"): a 100 scored on
+       data that could not be read is an unknown, said as 🌫️ Not enough data yet. */
     check('every token scoring a full 100 earns the rocket',
       /if \(health >= 100 && !floorBreached\(p\)\) \{/.test(NP)
       && /ico: '🚀', word: 'Looks Good, Send It'/.test(NP));
-    check('  ...and the score is the whole of the rule — no data or block-0 gate on top of it',
+    check('  ...and the score plus the floor is the whole of the rule — no block-0 gate on top of it',
       /const earnsSendIt = \(p\) => healthOfP\(p\) >= 100 && !floorBreached\(p\);/.test(NP));
+    check('  ...and missing data is on the floor on EVERY chain — not only off the home chain',
+      /function floorBreached\(p\) \{\s*if \(!p\.risk\) return true;\s*if \(thinData\(p\)\) return true;/.test(NP) && !/foreignChain\(p\) && \(thinData\(p\)/.test(NP));
+    {
+      // run it: the dashboard's own code in a sandbox, a home-chain token scored 100 with everything read, and the same token with its holders unread
+      const noop = () => {}, nil = () => null;
+      const document = { addEventListener: noop, getElementById: nil, querySelector: nil, querySelectorAll: () => [], body: { classList: { toggle: noop, remove: noop } }, hidden: false };
+      const window = { document, addEventListener: noop, CSS: { escape: (x) => x } };
+      const ctx = { window, document, localStorage: { getItem: nil, setItem: noop }, fetch: () => Promise.reject(new Error('offline')), setTimeout, clearTimeout, setInterval: noop, requestAnimationFrame: noop, cancelAnimationFrame: noop, console, CustomEvent: function () {}, Node: {} };
+      ctx.globalThis = ctx; window.window = window; vm.createContext(ctx); vm.runInContext(NP, ctx);
+      const tokenOf = (thin) => ({ chain: 'robinhood', indexed: true,
+        token: { address: '0x' + 'a'.repeat(40), name: 'Test', symbol: 'TST', decimals: 18, totalSupply: '1000000000000000000000000', isVerified: true, renounced: true, owner: null },
+        pair: { address: '0x' + 'b'.repeat(40), ageMinutes: 60, quoteSymbol: 'WETH' }, market: { priceUsd: 0.01, liquidityUsd: 50000, marketCap: 100000, fdv: 100000 },
+        volume: { m5: 1, h1: 10, h6: 100, h24: 5000 }, txns: { h1: { buys: 5, sells: 4 }, h6: { buys: 10, sells: 9 }, h24: { buys: 50, sells: 40 } }, priceChange: { h1: 1, h6: 2, h24: 3 },
+        holders: thin ? { count: null, topHolderPct: null, top10Pct: null, top: [], source: null } : { count: 500, topHolderPct: 5, top10Pct: 30, top: [], source: 'chain', block: 123 },
+        links: { explorer: 'https://x.test/t', dex: 'https://dexscreener.com/x' },
+        risk: { health: 100, triage: thin ? 'caution' : 'ok', thinData: thin, sniperOk: true, dataKnown: { indexed: true, liquidity: true, holders: !thin, concentration: !thin, verified: true, snipers: true } } });
+      const text = (h) => String(h).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+      const full = text(window.NPCard.dashboardHTML(tokenOf(false))), thin = text(window.NPCard.dashboardHTML(tokenOf(true)));
+      check('  ...run: a home-chain 100 with everything read wears 🚀 Looks Good, Send It; the same 100 with its holders unread says 🌫️ Not enough data yet and names what was not read — never the rocket',
+        /Looks Good, Send It/.test(full) && !/Looks Good, Send It/.test(thin) && /Not enough data yet/.test(thin) && /We could not read [^.]*the holder count/.test(thin), thin.slice(thin.indexOf('Not enough') - 40, thin.indexOf('Not enough') + 220));
+    }
     check('  ...but the floor still takes it away at any score',
       /health >= 100 && !floorBreached\(p\)/.test(NP) && /const VERDICT_FLOOR = \['honeypotSuspect', 'dumping', 'sniperDump'\]/.test(NP));
     check('  ...and the reason says what a 100 does and does not mean',

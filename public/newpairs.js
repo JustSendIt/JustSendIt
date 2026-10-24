@@ -189,28 +189,30 @@
        dumping         — it is falling off a cliff as you read this
        sniperDump      — the wallets that got in first have already sold into you
        triage avoid    — the risk model's own bottom tier
-     and, on ANOTHER chain only (Ethereum, Solana — a profile the Scanner read through lib/multichain.js):
-       thinData        — too little of it was READ to judge (server: no liquidity or no holder count)
-       a held power    — the contract read found something red the score does not count (vendorFacts, below)
-     Those two are not flags the server scores, and they are on the floor for the same reason the others
-     are: no setting can turn a reading that was not made into one that passed, or a blacklist into a clean
-     contract. Flags only trip on data we could read, and off the home chain every contract and holder fact
-     comes from ONE vendor read (GoPlus Security) — when it misses, the profile scores 100 on nothing, and
-     when it answers with a blacklist or a pause switch, the server's score still says 100 because it has no
-     weight for either. Neither may wear the rocket (or the ✅ tier, or ride the Hot Feed: earnsSendIt and
-     meetsYourBar read this same floor). The server's own mirror of the verdict (scanVerdict, server.js) has
-     always put "Not enough data yet" before the rocket; verdictOf now agrees off the home chain and names
-     what was not read (unreadGaps) or what was found (vendorFacts) in the chip's caveat.
-     The HOME chain is deliberately left as it was: there a 100 earns the rocket on the score alone (the
-     owner's rule — see verdictOf: three 100s once fell through to the milder tag while the explorer was
-     down), and its readings come from the chain's own ledger and node rather than one vendor's answer.
+     and two more that are not flags the server scores:
+       thinData        — too little of it was READ to judge (server: not indexed, or no liquidity, or no holder
+                         count) — on EVERY chain (owner, 2026-10-24: "apply the missing data rule on robinhood
+                         chain also"; it was off the home chain only from 2026-10-23)
+       a held power    — another chain's contract read found something red the score does not count
+                         (vendorFacts, below) — Ethereum and Solana only, where GoPlus reads those powers
+     They are on the floor for the same reason the others are: no setting can turn a reading that was not
+     made into one that passed, or a blacklist into a clean contract. Flags only trip on data we could read,
+     so a token whose liquidity or holders were unreadable has fewer ways to lose points — it can score 100
+     on nothing. Neither may wear the rocket (or the ✅ tier, or ride the Hot Feed: earnsSendIt and
+     meetsYourBar read this same floor). The server's own mirror of the verdict (scanVerdict, server.js) and
+     its Hot Feed (qualNow) have always put thin data before the rocket; verdictOf now agrees on every chain
+     and names what was not read (unreadGaps) or what was found (vendorFacts) in the chip's caveat. The cost,
+     accepted: while the explorer cannot be read, a home-chain 100 shows 🌫️ Not enough data yet instead of
+     the rocket (three 100s once did exactly that, which is why the rule was lifted in the first place) —
+     an unknown is said as an unknown.
      Everything else — unverified, few holders, thin liquidity, one big wallet, quiet volume, a serial
      deployer, a heavy block-0 — is a judgement the reader is entitled to make for themselves, as long as
      the card keeps saying plainly that it was made. */
   const VERDICT_FLOOR = ['honeypotSuspect', 'dumping', 'sniperDump'];
   function floorBreached(p) {
     if (!p.risk) return true;
-    if (foreignChain(p) && (thinData(p) || vendorFacts(p).length)) return true;   // off the home chain only — see above
+    if (thinData(p)) return true;                                   // too little read to judge — every chain (owner, 2026-10-24)
+    if (foreignChain(p) && vendorFacts(p).length) return true;     // a power the score does not count — read on Ethereum and Solana only
     if (triageOf(p) === 'avoid') return true;
     return VERDICT_FLOOR.some(k => !!p.risk[k]);
   }
@@ -332,14 +334,15 @@
 
        The floor is still absolute and is the only thing that can take it away: a honeypot, a token
        dumping as it is read, block-0 buyers who already sold, or the risk model's own avoid tier can
-       never carry it whatever they score — and, off the home chain (2026-10-23), neither can a profile
-       too thin to judge or one whose contract read found a power the score does not count (floorBreached).
+       never carry it whatever they score — and neither can a profile too thin to judge (every chain, since
+       2026-10-24) or, off the home chain, one whose contract read found a power the score does not count
+       (floorBreached).
 
        Worth being plain about what 100 means here, because the card is: flags only trip on data we could
        actually READ, so a token whose liquidity, holders and verification were unreadable has fewer ways
-       to lose points than one we could check in full. On Ethereum and Solana that gap is one vendor read
-       wide, which is why a thin or red-fact profile there is held back below with what was missing or found
-       named. The panel says the rest in the same breath — the audit line, the "what we could not check" row
+       to lose points than one we could check in full — which is why a thin profile, on any chain, is held
+       back below with what was missing named (and, on Ethereum and Solana, a red-fact one with what was
+       found). The panel says the rest in the same breath — the audit line, the "what we could not check" row
        and the 🌫️ markers all still render underneath. */
     if (health >= 100 && !floorBreached(p)) {
       return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
@@ -369,9 +372,8 @@
       return { cls: TRI.caution.cls + ' np-t-vendor', ico: TRI.caution.ico, word: TRI.caution.word,
         why: vendorLine(p, V) + ' — read the Contract card. The ' + health + '/100 does not count these, so it is not the whole story. Not a promise either way; most new tokens still go to zero.' };
     }
-    /* Too little of it was read to judge. On another chain that is on the floor (floorBreached), so a thin 100 there
-       reaches this line instead of the rocket; on the home chain this is the line for a thin token under 75, as it
-       always was. The chip keeps the caution tier the server's triage gives thin data and the server mirror's word
+    /* Too little of it was read to judge. That is on the floor on every chain (floorBreached), so a thin 100 reaches
+       this line instead of the rocket, and a thin 75–99 instead of ✅. The chip keeps the caution tier the server's triage gives thin data and the server mirror's word
        (scanVerdict: "Not enough data yet"), and its caveat names what was not read in the audit's ❓ words, so "we
        could not check" can never look like "we checked and it is fine". */
     if (thinData(p)) {
