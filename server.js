@@ -946,6 +946,12 @@ for (const col of [
        at      — last attempt; verified_at — when it last PASSED, which is what the gate reads */
   "ALTER TABLE users ADD COLUMN holder_state TEXT NOT NULL DEFAULT 'none'",
   "ALTER TABLE users ADD COLUMN holder_verified_at INTEGER",
+  /* The tour with Sendy after sign-up (owner, 2026-10-24: "a whole tutorial onboarding experience right after users sign-up").
+     onboard_state: NULL (never offered — every account from before the tour), 'due', 'done' or 'skipped'; onboard_step: where
+     the member is in it (they leave and come back, on any device); onboard_at: when it was finished or skipped. */
+  "ALTER TABLE users ADD COLUMN onboard_state TEXT",
+  "ALTER TABLE users ADD COLUMN onboard_step INTEGER",
+  "ALTER TABLE users ADD COLUMN onboard_at INTEGER",
   "ALTER TABLE users ADD COLUMN holder_proof_at INTEGER",
   "ALTER TABLE users ADD COLUMN holder_proof_reason TEXT",
   "ALTER TABLE users ADD COLUMN holder_proof TEXT",
@@ -14801,6 +14807,20 @@ function holderProofVerdict(scans, nowMs, prices) {
 }
 /* Does this account still need to prove itself? Reads only stored state — no chain, no explorer — so it
    is cheap enough to sit in front of every write on the site. */
+/* ===== The tour with Sendy (owner, 2026-10-24) =====================================================================
+   "Make a whole tutorial onboarding experience right after users sign-up for the platform that shows the user everything that
+   they have access to with a verified account on the platform. Allow users to skip this if they want to just explore themselves."
+   public/onboard.js runs it, on whichever page the new member lands on next — so every way of signing up (email, wallet, a burn
+   proof, a social sign-in) leads to it without each of them having to start it. It is due for every account made from
+   ONBOARD_SINCE on, until it is finished or skipped; anyone can take it again from Sendy's menu (replay). Nothing is earned or
+   lost by it — it is a guide. */
+const ONBOARD_SINCE = Number(process.env.ONBOARD_SINCE) || Date.UTC(2026, 9, 24);
+const ONBOARD_MAX_STEP = 60;
+function onboardOf(u) {
+  if (!u || u.system) return null;
+  const state = u.onboard_state || (u.created_at >= ONBOARD_SINCE ? 'due' : null);
+  return { due: state === 'due', state, step: Number.isInteger(u.onboard_step) && u.onboard_step >= 0 ? u.onboard_step : 0 };
+}
 function needsHolderProof(u) {
   return !!u && !u.system && !u.holder_verified_at;
 }
@@ -15760,8 +15780,27 @@ const server = http.createServer(async (req, res) => {
             nextCheckinAt: nextCheckinAt(me.id, me),
             arcade: arcadeState(me.id),        // today's Rocket Run boost (nav badge + arcade page)
             boost: effectiveMult(me.id),       // {holder, og, community, arcade, total} — the nav badge shows total
+            onboard: onboardOf(me),            // the tour with Sendy: { due, state, step } (public/onboard.js)
           },
         });
+      }
+      /* The tour's progress: { action: 'step', step } as the member moves through it, 'done' at the end, 'skip' when they would
+         rather explore themselves, 'replay' to take it again (Sendy's menu). Only the member's own row; nothing else changes. */
+      if (p === '/api/onboard' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('onboard:' + me.id, 120, 10 * 60e3)) return bad(res, 'slow down', 429);
+        const b = await readBody(req, 1024);
+        const action = String(b.action || ''), step = Number(b.step);
+        if (action === 'step') {
+          if (!Number.isInteger(step) || step < 0 || step > ONBOARD_MAX_STEP) return bad(res, 'bad step');
+          db.prepare("UPDATE users SET onboard_state = 'due', onboard_step = ? WHERE id = ? AND (onboard_state IS NULL OR onboard_state = 'due')").run(step, me.id);
+        } else if (action === 'done' || action === 'skip') {
+          db.prepare('UPDATE users SET onboard_state = ?, onboard_at = ?' + (Number.isInteger(step) && step >= 0 && step <= ONBOARD_MAX_STEP ? ', onboard_step = ' + step : '') + ' WHERE id = ?').run(action === 'done' ? 'done' : 'skipped', now(), me.id);
+        } else if (action === 'replay') {
+          db.prepare("UPDATE users SET onboard_state = 'due', onboard_step = 0, onboard_at = NULL WHERE id = ?").run(me.id);
+        } else return bad(res, 'unknown action');
+        const u = db.prepare('SELECT id, system, created_at, onboard_state, onboard_step FROM users WHERE id = ?').get(me.id);
+        return send(res, 200, { ok: true, onboard: onboardOf(u) });
       }
       if (p === '/api/username-check' && req.method === 'GET') {
         if (!rateLimit('ucheck:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);

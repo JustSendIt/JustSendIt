@@ -127,6 +127,7 @@
             '<button class="sendy-btn sendy-btn-primary" id="sendy-chat" type="button" data-tip="Opens a chat with Sendy — it answers from the site\'s own pages">💬 Ask Sendy a question</button>' +
             '<button class="sendy-btn sendy-btn-secondary" id="sendy-support" type="button" data-tip="Opens the Support board, where you can ask in public and answer others">Support board</button>' +
             '<button class="sendy-btn sendy-btn-tertiary" id="sendy-newtip" type="button" data-tip="Shows a different tip about this page">Another tip</button>' +
+            '<button class="sendy-btn sendy-btn-tertiary" id="sendy-tour" type="button" hidden data-tip="Takes the guided tour of everything your account can do — Sendy flies you around the site, step by step">🎓 Show me around</button>' +
           '</div>' +
           '<p class="sendy-fine">Prefer email? <a class="sendy-link" href="' + MAILTO + '">' + EMAIL + '</a> — private, and a person reads it.</p>' +
         '</div>' +
@@ -372,6 +373,11 @@
       $('sendy-tip').textContent = '💡 ' + t;
     });
     $('sendy-support').addEventListener('click', () => { location.href = '/support'; });
+    // the tour with Sendy (public/onboard.js), for members: from here it can be taken again any time
+    const tourBtn = $('sendy-tour');
+    const tourShow = () => { if (tourBtn) tourBtn.hidden = !(window.AUTH && AUTH.user && window.ONBOARD); };
+    tourShow(); document.addEventListener('auth:change', tourShow);
+    if (tourBtn) tourBtn.addEventListener('click', () => { closePopup(); if (window.ONBOARD) ONBOARD.replay(); });
     $('sendy-close').addEventListener('click', closePopup);
     $('sendy-close').addEventListener('click', () => { if (window.SFX) SFX.play('close'); });   // the ✕ shuts the popup (a plain button to the generic layer)
 
@@ -757,7 +763,7 @@
     document.addEventListener('egg:found', (e) => { const d = e.detail || {}; if (d.id != null) say('egg', { found: d.found, total: d.total }, true); });
     document.addEventListener('post:created', (e) => { say(e.detail && e.detail.call_id ? 'call' : 'post'); });
     document.addEventListener('squad:call', () => { say('squadcall'); });
-    document.addEventListener('auth:change', (e) => { if (e.detail && e.detail.username) say('signin', { name: e.detail.username }); else if (!e.detail) say('signout'); });
+    document.addEventListener('auth:change', (e) => { if (window.ONBOARD && (ONBOARD.active() || ONBOARD.due())) return; if (e.detail && e.detail.username) say('signin', { name: e.detail.username }); else if (!e.detail) say('signout'); });
     document.addEventListener('site-prefs', () => { say('theme'); });
     document.addEventListener('boost:changed', () => { say('boost'); });
     document.addEventListener('jsi:entered', (e) => { if (store.get('greeted')) say(e.detail && e.detail.firstVisit ? 'firstvisit' : 'entered', null, true); });   // a visit's first page says hello instead

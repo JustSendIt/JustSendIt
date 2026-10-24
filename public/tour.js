@@ -190,6 +190,7 @@
   let armed = false;
   function maybeStart() {
     if (armed || active || welcome || !onHome() || flagged()) return;
+    if (window.ONBOARD && (ONBOARD.active() || ONBOARD.due())) return;   // a new member is on the tour with Sendy (onboard.js), which covers this one
     if (anyModalOpen()) { // defer until the sign-in/compose modal closes
       document.addEventListener('jsi:modalclose', maybeStart, { once: true });
       return;
