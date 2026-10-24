@@ -1,0 +1,32 @@
+{
+ "capturedAt": "2026-10-24",
+ "note": "A real Jupiter /swap/v1/swap answer for SOL → BONK built for an unfunded public key; never signed. Used to test the client's check of the transaction bytes (fee payer, Jupiter program).",
+ "userPublicKey": "H5g7jkKkFVm2mvSPjaY6a6RkcPEiMR6dC7ekm3uZCGuw",
+ "quote": {
+  "inAmount": "100000000",
+  "outAmount": "332714227515",
+  "otherAmountThreshold": "299442804764",
+  "priceImpactPct": "0.000335943468714690396172361",
+  "routePlan": [
+   {
+    "swapInfo": {
+     "ammKey": "5zpyutJu9ee6jFymDGoK7F6S5Kczqtc9FomP3ueKuyA9",
+     "label": "Whirlpool",
+     "inputMint": "So11111111111111111111111111111111111111112",
+     "outputMint": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+     "inAmount": "100000000",
+     "outAmount": "332714227515",
+     "updateContextSlot": "460740602"
+    },
+    "percent": 100,
+    "bps": null
+   }
+  ]
+ },
+ "swapTransaction": "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAGDO7tivdLZsnWB3f0H8cxc+0bwEVUf0jGv/JvjfeC0E7SGzu+wbNz6kzWjPSMzF1ZSldIuWarRPXRRMKVgbx8jZFLoYAevzRQULSY8V+/HVhkZzaaNLNEGThQGGhimFffmE7QEGAQcVkPdYJlMaSAfoY6OYM3YIzoNJFBtf4A2pzedJ5b/a0lhhaalV1W+kMqWVNik6zu5pNN8WtMz03fKG92p2foFhqDYpDBsRkhtuS0CgTJumIiWhyxyJYKCGZibQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAEedVb8jHAbu50xW7OaBUH/bGy3qP0jlECsc2iVrwTjwbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpjJclj04kifG7PRApFI4NgwtaE5na/xCEBI572Nvp+Fm0P/on9df2SnTAmx8pWHneSwmrNt/J3VFLMhqns4zl6NX7nPuCbW1lwRRwZWs+e33GgJ2Yl56jabMPGjNwVFrKBwcABQLAXBUACgYAAgAPBgkBAQYCAAIMAgAAAADh9QUAAAAACQECAREKBgAFABEGCQEBCBUJAAIFCBEICwgQCQANAg4FDAEEAxIk5RfLl3rjrSoBAAAAEQFkAAEA4fUFAAAAADs3UHdNAAAA6AMACQMCAAABCQFFKDPG32aOo8Oci/jBAstrH8oA9CV36eGaAJtHwuxGbAMBCgwEAAsCBw==",
+ "lastValidBlockHeight": 438771475,
+ "simulationError": {
+  "errorCode": "TRANSACTION_ERROR",
+  "error": "Attempt to debit an account but found no record of a prior credit."
+ }
+}

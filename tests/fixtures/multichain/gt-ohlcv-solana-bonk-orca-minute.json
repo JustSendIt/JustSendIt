@@ -1,0 +1,3 @@
+{"data":{"id":"bfacf484-ebe9-4174-90da-ebf81a2410ba","type":"ohlcv_request_response","attributes":{"ohlcv_list":[[1792821180,3.00778885827518e-8,3.00787481233745e-8,3.00423979213431e-8,3.00697129453002e-8,1.739485876],
+[1792821120,3.0047071787614e-8,3.00778885827518e-8,3.0047071787614e-8,3.00778885827518e-8,0.123270555],
+[1792821060,3.00472312000529e-8,3.00472772717627e-8,3.0046856850276e-8,3.0047071787614e-8,0.029836845]]}},"meta":{"base":{"name":"Bonk","symbol":"Bonk","coingecko_coin_id":"bonk","address":"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"},"quote":{"name":"Wrapped SOL","symbol":"SOL","coingecko_coin_id":"wrapped-solana","address":"So11111111111111111111111111111111111111112"}}}

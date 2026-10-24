@@ -51,6 +51,23 @@
     let s = '1'.repeat(zeros); for (let k = digits.length - 1; k >= 0; k--) s += B58[digits[k]]; return s;
   }
   const b64bytes = (b64) => Uint8Array.from(atob(String(b64)), (c) => c.charCodeAt(0));
+  /* A serialized Solana transaction's static account keys (legacy or v0): [shortvec n][n × 64-byte signatures][message], the message
+     opening with a 0x80 version byte for v0, then a 3-byte header, [shortvec k][k × 32-byte keys]. The fee payer is keys[0], and every
+     program an instruction calls is a static key (v0 cannot load a program id from a lookup table) — so "the fee payer is the connected
+     account and Jupiter's program is in it" is checked on the bytes the wallet will sign (review, 2026-10-24: the old check compared a
+     constant the server sent with itself). null when the bytes are not a transaction. */
+  function shortvec(u, o) { let v = 0, sh = 0, b; do { if (o >= u.length) return [null, o]; b = u[o++]; v |= (b & 0x7f) << sh; sh += 7; } while ((b & 0x80) && sh < 21); return [v, o]; }
+  function solTxKeys(u) {
+    try {
+      let [n, o] = shortvec(u, 0); if (n == null || n > 16) return null; o += 64 * n;
+      if (o >= u.length) return null;
+      if (u[o] & 0x80) { if ((u[o] & 0x7f) !== 0) return null; o++; }   // v0 only; legacy has no version byte
+      o += 3;
+      let k; [k, o] = shortvec(u, o); if (k == null || k < 1 || k > 256 || o + 32 * k > u.length) return null;
+      const keys = []; for (let i = 0; i < k; i++) keys.push(b58enc(u.subarray(o + 32 * i, o + 32 * (i + 1))));
+      return keys;
+    } catch { return null; }
+  }
 
   /* ---- Solana wallets: the Wallet Standard registry (a wallet announces itself; the page asks who is there) ---- */
   const solWallets = [];
@@ -74,7 +91,10 @@
     if (!c || !t.address) return '';
     const sym = t.symbol ? '$' + t.symbol : 'this token';
     const px = p.market && Number(p.market.priceUsd) > 0 ? Number(p.market.priceUsd) : null;   // the profile's own price: the home chain's quote carries no dollar figure of its own
-    return '<button type="button" class="btn btn-sm btn-primary tkd-swap-btn" data-swap-open data-swap-chain="' + esc(chain) + '" data-swap-token="' + esc(t.address) + '" data-swap-symbol="' + esc(t.symbol || '') + '"' + (px ? ' data-swap-usd="' + px + '"' : '') + ' aria-expanded="false" ' +
+    // the scan's read of the token's tax: GoPlus's buy tax on Ethereum (passed to the quote, which leaves room for it), its transfer fee on Solana (said only)
+    const f = p.chainFacts || {};
+    const tax = chain === 'ethereum' && Number.isFinite(f.buyTax) ? f.buyTax : chain === 'solana' && Number.isFinite(f.transferFeePct) ? f.transferFeePct : null;
+    return '<button type="button" class="btn btn-sm btn-primary tkd-swap-btn" data-swap-open data-swap-chain="' + esc(chain) + '" data-swap-token="' + esc(t.address) + '" data-swap-symbol="' + esc(t.symbol || '') + '"' + (px ? ' data-swap-usd="' + px + '"' : '') + (tax != null ? ' data-swap-tax="' + tax + '"' : '') + ' aria-expanded="false" ' +
       'data-tip="' + esc('Opens a panel that quotes a buy of ' + sym + ' with ' + c.native + ' on ' + c.name + ' and builds it for your own wallet to review and sign — nothing moves until you confirm there') + '">🚀 Swap in my wallet</button>';
   }
   const line = (k, label, v) => '<dt>' + esc(label) + '</dt><dd data-swap-line="' + k + '">' + v + '</dd>';
@@ -84,14 +104,16 @@
       '<div class="tkd-swap-head"><b>Buy ' + esc(sym) + ' with ' + esc(c.native) + '</b> <span class="tkd-swap-chain">on ' + esc(c.name) + ' · ' + SLIP + '% slippage guard</span></div>' +
       '<label class="tkd-swap-amt"><span>' + esc(c.native) + ' to spend</span><input type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="' + esc(c.presets[1]) + '" maxlength="20" aria-label="' + esc(c.native + ' amount to swap for ' + sym) + '"></label>' +
       '<div class="tkd-swap-presets" role="group" aria-label="Amount presets">' + c.presets.map((v) => '<button type="button" class="btn btn-sm btn-ghost" data-swap-preset="' + v + '" data-tip="' + esc('Sets the amount to ' + v + ' ' + c.native) + '">' + v + ' ' + esc(c.native) + '</button>').join('') + '</div>' +
-      '<dl class="tkd-swap-lines" aria-live="polite">' + line('pay', 'You spend', '—') + line('get', 'You get about', 'enter an amount ☝️') + line('min', 'At least', '—') + line('impact', 'Price impact', '—') + line('route', 'Route', '—') + '</dl>' +
+      '<dl class="tkd-swap-lines" aria-live="polite">' + line('pay', 'You spend', '—') + line('get', 'You get about', 'enter an amount ☝️') + line('min', 'At least', '—') + line('tax', chain === 'solana' ? 'Transfer fee' : 'Buy tax', '—') + line('impact', 'Price impact', '—') + line('route', 'Route', '—') + '</dl>' +
       '<p class="tkd-swap-status" role="status" aria-live="polite"></p>' +
       '<div class="tkd-swap-go">' +
         '<button type="button" class="btn btn-primary" data-swap-go data-tip="Builds this swap and hands it to your wallet, which shows it for you to check and sign — nothing is sent until you confirm there">Swap in my wallet 🚀</button>' +
         '<button type="button" class="btn btn-sm btn-ghost" data-swap-close data-tip="Closes the swap panel; nothing is sent">Close</button>' +
       '</div>' +
-      '<p class="tkd-swap-note">Your wallet shows this transaction before anything moves — check that <b>To</b> is the router named in the route line and the amount is yours. This site never holds funds, never asks for a token approval, and cannot cancel, reverse or refund a swap. A quote moves with the market; the slippage guard is the most the price may move before the swap fails instead of filling. ' +
-        (chain === 'solana' ? 'Jupiter builds the Solana transaction from your wallet\'s public key. ' : '') + 'Not advice, never a tip to buy — most new tokens go to zero.</p>' +
+      '<p class="tkd-swap-note">' + (chain === 'solana'
+        ? 'Your wallet shows this transaction before anything moves — check the SOL going out and the token coming in. Jupiter builds it from your wallet\'s public address; this page checks that your account pays for it and that Jupiter\'s program is in it before your wallet sees it. '
+        : 'Your wallet shows this transaction before anything moves — check that <b>To</b> is the router named in the route line, the network is ' + esc(c.name) + ' and the amount is yours. ') +
+        'This site never holds funds, never asks for a token approval, and cannot cancel, reverse or refund a swap. A quote moves with the market; the slippage guard is the most the price may move before the swap fails instead of filling. Not advice, never a tip to buy — most new tokens go to zero.</p>' +
     '</div>';
   }
 
@@ -104,23 +126,35 @@
   }
   const txLink = (chain, id) => '<a href="' + esc(CH[chain].tx + id) + '" target="_blank" rel="noopener nofollow">' + esc(short(id)) + ' ↗</a>';
   function resetLines(panel, hint) {
-    setLine(panel, 'pay', '—'); setLine(panel, 'get', hint || 'enter an amount ☝️'); setLine(panel, 'min', '—'); setLine(panel, 'impact', '—'); setLine(panel, 'route', '—');
+    setLine(panel, 'pay', '—'); setLine(panel, 'get', hint || 'enter an amount ☝️'); setLine(panel, 'min', '—'); setLine(panel, 'tax', '—'); setLine(panel, 'impact', '—'); setLine(panel, 'route', '—');
     panel._q = null;
   }
   function renderQuote(panel, q) {
     const chain = panel.dataset.chain, c = CH[chain];
     const sym = q.symbol ? '$' + q.symbol : panel.dataset.symbol ? '$' + panel.dataset.symbol : 'tokens';   // the home chain's quote names no symbol; the profile does
-    const tokUsd = q.tokenUsd > 0 ? q.tokenUsd : Number(panel.dataset.usd) > 0 ? Number(panel.dataset.usd) : null;   // likewise its dollar price
+    // its dollar price: the quote's own (the pool it goes through) where there is one, else the scan's, and then it is said to be the scan's
+    const liveUsd = q.tokenUsd > 0, tokUsd = liveUsd ? q.tokenUsd : Number(panel.dataset.usd) > 0 ? Number(panel.dataset.usd) : null;
+    const usdTag = (x) => (x == null ? '' : usd(x) + (liveUsd ? '' : ' at the scan\'s price'));
     const inN = units(q.amountIn, q.nativeDecimals);
-    const outN = q.decimals != null ? units(q.amountOut, q.decimals) : null, minN = q.decimals != null ? units(q.minOut, q.decimals) : null;
+    const landed = q.amountLanded || q.amountOut, least = q.minLanded || q.minOut;   // what reaches the wallet: after a known tax
+    const outN = q.decimals != null ? units(landed, q.decimals) : null, minN = q.decimals != null ? units(least, q.decimals) : null;
     setLine(panel, 'pay', esc(fmt(inN) + ' ' + c.native) + esc(usd(q.nativeUsd > 0 && inN != null ? inN * q.nativeUsd : null)));
-    setLine(panel, 'get', outN != null ? esc(fmt(outN) + ' ' + sym) + esc(usd(tokUsd ? outN * tokUsd : null)) : esc(q.amountOut + ' base units of ' + sym + ' (decimals unread)'));
-    setLine(panel, 'min', minN != null ? esc(fmt(minN) + ' ' + sym + ' — or the swap fails instead of filling') : esc(q.minOut + ' base units'));
+    setLine(panel, 'get', outN != null ? esc(fmt(outN) + ' ' + sym) + esc(usdTag(tokUsd ? outN * tokUsd : null)) : esc(landed + ' base units of ' + sym + ' (decimals unread)'));
+    setLine(panel, 'min', minN != null ? esc(fmt(minN) + ' ' + sym + ' — or the swap fails instead of filling') : esc(least + ' base units'));
+    // the tax: a buy tax known to the quote is already taken off the two lines above; an unknown one is said as unknown, never as none
+    if (chain === 'solana') {
+      const fee = Number(panel.dataset.tax);
+      setLine(panel, 'tax', panel.dataset.tax == null || panel.dataset.tax === '' ? 'not read' : fee > 0 ? esc(fmt(fee) + '% of every transfer (GoPlus\'s read) — check what lands in your wallet') : 'none (GoPlus\'s read)', fee > 0);
+    } else if (q.taxPct != null) {
+      setLine(panel, 'tax', q.taxPct > 0 ? esc(fmt(q.taxPct) + '% (' + (q.taxSource === 'contract' ? 'the token\'s contract' : 'GoPlus\'s read') + ') — already taken off the two lines above') : esc('none (' + (q.taxSource === 'contract' ? 'the token\'s contract' : 'GoPlus\'s read') + ')'));
+    } else setLine(panel, 'tax', 'not read — a token that taxes buys lands less than this', true);
     const imp = q.impactPct;
     setLine(panel, 'impact', imp == null ? 'not read' : esc((imp < 0.01 ? '<0.01' : imp.toFixed(2)) + '%') + (imp >= IMPACT_WARN ? ' <b>⚠️ high — this size moves the pool</b>' : ''), imp != null && imp >= IMPACT_WARN);
     const r = q.route || {};
     setLine(panel, 'route', esc(r.dex || '—') + (r.fee ? esc(' · ' + (r.fee / 10000) + '% pool') : '') + (r.hops > 1 ? esc(' · ' + r.hops + ' hops') : '') +
-      ' · To: <code>' + esc(short(r.router || r.program || '')) + '</code>' + (r.router || r.program ? ' <button type="button" class="copy-btn" data-copy="' + esc(r.router || r.program) + '" data-tip="Copies the router address your wallet will show as To, so you can compare it">Copy</button>' : ''));
+      (r.program
+        ? ' · program <code>' + esc(short(r.program)) + '</code> <button type="button" class="copy-btn" data-copy="' + esc(r.program) + '" data-tip="Copies Jupiter\'s program address, which this page checks is in the transaction before your wallet sees it">Copy</button>'
+        : ' · To: <code>' + esc(short(r.router || '')) + '</code>' + (r.router ? ' <button type="button" class="copy-btn" data-copy="' + esc(r.router) + '" data-tip="Copies the router address your wallet will show as To, so you can compare it">Copy</button>' : '')));
     if (imp != null && imp >= IMPACT_WARN && panel._warnedAt !== q.amountIn) { panel._warnedAt = q.amountIn; sfx('warn'); }
     panel._q = q;
   }
@@ -132,9 +166,10 @@
     const input = panel.querySelector('input'); const amount = String(input.value || '').trim();
     const seq = (panel._seq = (panel._seq || 0) + 1);
     if (!amount) { resetLines(panel); status(panel, '', ''); return; }
+    if (/^\d+\.$/.test(amount)) { resetLines(panel, 'keep typing…'); status(panel, '', ''); return; }   // a trailing point is a number still being typed
     if (!/^\d{0,12}(\.\d{0,18})?$/.test(amount) || !(Number(amount) > 0)) { resetLines(panel, 'a plain number, please'); status(panel, 'Enter the amount as a plain number, like ' + CH[panel.dataset.chain].presets[1] + ' ✍️', 'error'); return; }
     status(panel, 'Asking the router…', 'busy');
-    const j = await getJSON('/api/swap/quote?chain=' + encodeURIComponent(panel.dataset.chain) + '&token=' + encodeURIComponent(panel.dataset.token) + '&amount=' + encodeURIComponent(amount) + '&slippage=' + SLIP);
+    const j = await getJSON('/api/swap/quote?chain=' + encodeURIComponent(panel.dataset.chain) + '&token=' + encodeURIComponent(panel.dataset.token) + '&amount=' + encodeURIComponent(amount) + '&slippage=' + SLIP + (panel.dataset.chain === 'ethereum' && panel.dataset.tax ? '&tax=' + encodeURIComponent(panel.dataset.tax) : ''));
     if (seq !== panel._seq) return;   // a newer amount was typed meanwhile
     if (!j) { resetLines(panel, 'no quote'); status(panel, 'Could not reach the site for a quote — try again 📡', 'error'); return; }
     if (j.error) { resetLines(panel, 'no quote'); status(panel, j.error, 'error'); return; }
@@ -146,16 +181,24 @@
   }
 
   /* ---- EVM: Robinhood Chain and Ethereum ---- */
-  async function ensureChain(prov, chain) {
+  /* Wallets differ in how they answer (review, 2026-10-24): a chain id as a number or uppercase hex; 4902 ("add this chain first") wrapped
+     in data.originalError or as a -32603 (MetaMask mobile); eth_chainId lagging a successful switch by a moment; a declined prompt as 4001,
+     sometimes wrapped too. A declined switch is the reader's own choice, said as a cancel — not an error. */
+  const hexChain = (c) => { try { return typeof c === 'number' ? '0x' + c.toString(16) : /^(0x[0-9a-f]+|\d+)$/i.test(String(c)) ? '0x' + BigInt(String(c)).toString(16) : String(c || '').toLowerCase(); } catch { return ''; } };
+  const errs = (e) => [e, e && e.data, e && e.data && e.data.originalError, e && e.cause].filter(Boolean);
+  const declined = (e) => errs(e).some((x) => x.code === 4001);
+  const unknownChain = (e) => errs(e).some((x) => x.code === 4902 || /unrecognized chain|unknown chain|not (been )?added|unsupported chain|try adding the chain/i.test(String(x.message || '')));
+  async function onChain(prov, want, tries) { for (let i = 0; i < (tries || 1); i++) { try { if (hexChain(await prov.request({ method: 'eth_chainId' })) === want) return true; } catch {} if (i + 1 < (tries || 1)) await sleep(250); } return false; }
+  async function ensureChain(prov, chain) {   // → 'ok' | 'declined' | 'failed'
     const want = CH[chain].hexId;
-    try { const cur = await prov.request({ method: 'eth_chainId' }); if (String(cur).toLowerCase() === want) return true; } catch {}
+    if (await onChain(prov, want, 1)) return 'ok';
     try { await prov.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: want }] }); }
     catch (e) {
-      const unknown = e && (e.code === 4902 || /unrecognized|unknown chain|not (been )?added|unsupported chain/i.test(String((e && e.message) || '')));
-      if (!(unknown && CH[chain].add)) return false;
-      try { await prov.request({ method: 'wallet_addEthereumChain', params: [CH[chain].add] }); } catch { return false; }
+      if (declined(e)) return 'declined';
+      if (!(unknownChain(e) && CH[chain].add)) return 'failed';
+      try { await prov.request({ method: 'wallet_addEthereumChain', params: [CH[chain].add] }); } catch (e2) { return declined(e2) ? 'declined' : 'failed'; }
     }
-    try { const cur = await prov.request({ method: 'eth_chainId' }); return String(cur).toLowerCase() === want; } catch { return false; }
+    return (await onChain(prov, want, 8)) ? 'ok' : 'failed';   // up to 2 s for the wallet's answer to catch up with its own switch
   }
   async function goEvm(panel, q) {
     const chain = panel.dataset.chain, c = CH[chain], amount = panel.querySelector('input').value.trim();
@@ -164,22 +207,27 @@
     try { const w = await WALLET.connect({ noSwitch: true }); prov = w.provider; address = w.address; }
     catch (e) { if (e && e.message === 'cancelled') status(panel, 'Connect cancelled — nothing was sent', 'info'); else { sfx('error'); status(panel, 'Connect a wallet to swap 🔌' + (e && e.message ? ' — ' + e.message : ''), 'error'); } return; }
     if (!address) { sfx('error'); status(panel, 'Connect a wallet to swap 🔌', 'error'); return; }
-    if (!(await ensureChain(prov, chain))) { sfx('error'); status(panel, 'Switch your wallet to ' + c.name + ' to swap ⛓️ — nothing was sent', 'error'); return; }
+    const on = await ensureChain(prov, chain);
+    if (on === 'declined') { status(panel, 'Network switch cancelled in your wallet — nothing was sent', 'info'); return; }
+    if (on !== 'ok') { sfx('error'); status(panel, 'Switch your wallet to ' + c.name + ' to swap ⛓️ — nothing was sent', 'error'); return; }
     try {   // the balance, through the wallet's own node: "no ETH on this chain" is the first-timer failure worth naming
       const bal = BigInt(await prov.request({ method: 'eth_getBalance', params: [address, 'latest'] }));
       const need = BigInt(q.amountIn) + 300000000000000n;   // plus a little gas (the landing page's reserve)
       if (bal < need) { sfx('error'); status(panel, 'Not enough ' + c.native + ' on ' + c.name + ' — this wallet has ' + fmt(units(bal.toString(), 18)) + ' ' + c.native + ' and the swap needs ' + amount + ' plus a little gas. Nothing was sent.', 'error'); return; }
     } catch {}
     status(panel, 'Building the transaction…', 'busy');
-    const r = await post('/api/swap/build', { chain, token: panel.dataset.token, amount, from: address, slippage: SLIP });
+    const r = await post('/api/swap/build', { chain, token: panel.dataset.token, amount, from: address, slippage: SLIP, ...(chain === 'ethereum' && panel.dataset.tax ? { tax: panel.dataset.tax } : {}) });
     if (!r || !r.tx) { sfx('error'); status(panel, (r && (r.error || r.unavailable || r.unsupported)) ? 'Could not build the swap: ' + (r.error || r.unavailable || r.unsupported) : 'Could not build the swap — try again 📡', 'error'); return; }
     if (!TO_OK[chain].includes(String(r.tx.to || '').toLowerCase()) || String(r.tx.chainId).toLowerCase() !== c.hexId || !/^0x[0-9a-f]+$/i.test(String(r.tx.value || ''))) {
       sfx('error'); status(panel, 'The transaction did not match a router this page knows — nothing was sent.', 'error'); return;
     }
     renderQuote(panel, r);   // the build re-quoted; the lines show what the wallet is about to be handed
     status(panel, 'Check it in your wallet: To ' + short(r.tx.to) + ' on ' + c.name + ', ' + amount + ' ' + c.native + '…', 'busy');
+    // the wallet may have changed network since the switch: check once more, and name the chain in the transaction itself (EIP-1193 wallets
+    // refuse a chainId that is not the one they are on) — Ethereum calldata and value must never be sent on another chain
+    if (!(await onChain(prov, c.hexId, 1))) { sfx('error'); status(panel, 'Your wallet left ' + c.name + ' — switch back and press the button again. Nothing was sent.', 'error'); return; }
     let hash;
-    try { hash = await prov.request({ method: 'eth_sendTransaction', params: [{ from: address, to: r.tx.to, value: r.tx.value, data: r.tx.data }] }); }
+    try { hash = await prov.request({ method: 'eth_sendTransaction', params: [{ from: address, to: r.tx.to, value: r.tx.value, data: r.tx.data, chainId: c.hexId }] }); }
     catch (e) {
       if (e && e.code === 4001) { status(panel, 'Swap cancelled in your wallet — nothing was sent', 'info'); return; }
       sfx('error'); status(panel, 'Your wallet rejected the transaction 😬 — nothing left your wallet. Usual causes: not enough ' + c.native + ' for gas, or the price moved past the slippage guard. Try again.', 'error'); return;
@@ -233,13 +281,19 @@
     status(panel, 'Building the transaction with Jupiter…', 'busy');
     const r = await post('/api/swap/build', { chain: 'solana', token: panel.dataset.token, amount, from: account.address, slippage: SLIP });
     if (!r || !r.tx || !r.tx.swapTransaction) { sfx('error'); status(panel, (r && (r.error || r.unavailable || r.unsupported)) ? 'Could not build the swap: ' + (r.error || r.unavailable || r.unsupported) : 'Could not build the swap — try again 📡', 'error'); return; }
-    if (r.tx.program !== JUPITER) { sfx('error'); status(panel, 'The transaction did not come from Jupiter\'s program — nothing was sent.', 'error'); return; }
-    if (r.tx.simulationError) { sfx('warn'); status(panel, 'Jupiter simulated this swap and it failed (' + String((r.tx.simulationError && r.tx.simulationError.error) || r.tx.simulationError).slice(0, 120) + ') — nothing was sent. Try a smaller amount.', 'error'); return; }
+    // checked on the bytes the wallet will sign: the connected account pays for it, and Jupiter's program is in it
+    const txBytes = b64bytes(r.tx.swapTransaction), keys = solTxKeys(txBytes);
+    if (!keys || keys[0] !== account.address || !keys.includes(JUPITER)) { sfx('error'); status(panel, 'The transaction Jupiter built did not check out (' + (!keys ? 'not a transaction' : keys[0] !== account.address ? 'someone else pays for it' : 'Jupiter\'s program is not in it') + ') — nothing was sent.', 'error'); return; }
+    if (r.tx.simulationError) {   // Jupiter ran it first and it failed: say what it said, and the usual reason in words (an empty wallet reads "no record of a prior credit")
+      const said = String((r.tx.simulationError && r.tx.simulationError.error) || r.tx.simulationError).slice(0, 120);
+      const why = /no record of a prior credit|insufficient (funds|lamports)/i.test(said) ? 'this wallet does not hold enough SOL for the swap and its network fee' : 'usually not enough SOL for the swap and its fee, or a price that moved';
+      sfx('warn'); status(panel, 'Jupiter simulated this swap and it failed (' + said + ') — ' + why + '. Nothing was sent.', 'error'); return;
+    }
     renderQuote(panel, r);
     status(panel, 'Check it in your wallet: a Jupiter swap of ' + amount + ' SOL…', 'busy');
     let sig = null;
     try {
-      const out = await w.features['solana:signAndSendTransaction'].signAndSendTransaction({ account, transaction: b64bytes(r.tx.swapTransaction), chain: 'solana:mainnet' });
+      const out = await w.features['solana:signAndSendTransaction'].signAndSendTransaction({ account, transaction: txBytes, chain: 'solana:mainnet' });
       const s0 = Array.isArray(out) ? out[0] : out; sig = s0 && s0.signature ? b58enc(s0.signature) : null;
     } catch (e) {
       const m = String((e && e.message) || '');
@@ -253,9 +307,11 @@
     status(panel, 'Sent! 🚀 ' + link + ' — waiting for Solana…', 'ok', true);
     for (let i = 0; i < 40; i++) {
       await sleep(3000);
-      const s = await getJSON('/api/swap/status?chain=solana&sig=' + encodeURIComponent(sig));
+      const s = await getJSON('/api/swap/status?chain=solana&sig=' + encodeURIComponent(sig) + (r.tx.lastValidBlockHeight ? '&lvbh=' + encodeURIComponent(r.tx.lastValidBlockHeight) : ''));
       if (s && (s.status === 'confirmed' || s.status === 'finalized')) { status(panel, 'Confirmed ✅ ' + link + ' — the tokens are in your wallet.', 'ok', true); return; }
       if (s && s.status === 'failed') { sfx('error'); status(panel, 'Failed on-chain 😬 — only the network fee was taken. ' + link, 'error', true); return; }
+      // past its last valid block it can never land: say so plainly (the explorer would show nothing at all)
+      if (s && s.status === 'expired') { sfx('warn'); status(panel, 'Expired — Solana did not include the transaction before its blockhash ran out, so it never landed and nothing was taken. Press the button to try again.', 'error'); return; }
     }
     status(panel, 'Still unconfirmed after two minutes — the explorer link shows what happened ⏳ ' + link, 'info', true);
   }
@@ -275,7 +331,7 @@
     let panel = bar.querySelector('.tkd-swap');
     if (!panel) {
       bar.insertAdjacentHTML('beforeend', panelHTML(btn.dataset.swapChain, btn.dataset.swapSymbol));
-      panel = bar.querySelector('.tkd-swap'); panel.dataset.token = btn.dataset.swapToken; panel.dataset.symbol = btn.dataset.swapSymbol || ''; if (btn.dataset.swapUsd) panel.dataset.usd = btn.dataset.swapUsd;
+      panel = bar.querySelector('.tkd-swap'); panel.dataset.token = btn.dataset.swapToken; panel.dataset.symbol = btn.dataset.swapSymbol || ''; if (btn.dataset.swapUsd) panel.dataset.usd = btn.dataset.swapUsd; if (btn.dataset.swapTax != null) panel.dataset.tax = btn.dataset.swapTax;
       panel.querySelector('input').addEventListener('input', () => { clearTimeout(panel._t); panel._t = setTimeout(() => quote(panel), 450); });
       panel.querySelector('input').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(panel._t); quote(panel).then(() => { if (panel._q) go(panel); }); } });
       btn.setAttribute('aria-expanded', 'true'); panel.querySelector('input').focus();
@@ -300,5 +356,5 @@
     dashes.forEach((dash) => { if (dash._swapWired) return; dash._swapWired = true; dash.addEventListener('click', onClick); });
   }
 
-  window.SwapKit = { buttonHTML, panelHTML, mount, CH, TO_OK, SLIP, IMPACT_WARN, b58enc, fmt, units, _solWallets: solWallets };
+  window.SwapKit = { buttonHTML, panelHTML, mount, CH, TO_OK, SLIP, IMPACT_WARN, b58enc, fmt, units, solTxKeys, hexChain, _solWallets: solWallets };
 })();

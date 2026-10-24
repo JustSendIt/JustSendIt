@@ -6068,6 +6068,8 @@ const OUTBOUND_RPM = {
   'api.gopluslabs.io': 28,          // the free tier is 30 calls/min; a paid plan raises it via OUTBOUND_RPM_API_GOPLUSLABS_IO
   'api.geckoterminal.com': 10,
   'api.jup.ag': 25,                 // Jupiter's keyless swap API: half a request a second (measured 2026-10-23); a portal key raises it via OUTBOUND_RPM_API_JUP_AG
+  'ethereum-rpc.publicnode.com': 240,   // the swap's Ethereum quotes (lib/swapkit.js); publicnode publishes no keyless number, so a ceiling of our own
+  'api.mainnet-beta.solana.com': 120,   // the swap's Solana reads (decimals, a signature's status); the public RPC allows 100 per 10 s per IP
   'search:geckoterminal': 4,        // the share of it the menu's name search may use (searchTokensByName); the rest is the chart switch's
   'search:goplus': 8,               // the share of GoPlus's 28 the name search's holder reads may use; the rest is the dashboards'
   'robinhoodchain.blockscout.com': 240,
@@ -7835,7 +7837,7 @@ let ethUsdCache = { at: 0, usd: 0 };
 
 async function ethUsd() {
   if (ethUsdCache.usd && now() - ethUsdCache.at < 60000) return ethUsdCache.usd;
-  const j = await jget('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+  const j = await jget(process.env.ETHUSD_URL || 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');   // ETHUSD_URL: a test's fake, so no suite asks CoinGecko live
   const v = j && j.ethereum && Number(j.ethereum.usd);
   if (v > 0) ethUsdCache = { at: now(), usd: v };
   return ethUsdCache.usd || 0;   // 0 means "unknown"; the client shows native units rather than a wrong dollar figure
@@ -8753,7 +8755,7 @@ const swapkit = () => _skInst || (_skInst = SWAPKIT.createSwapKit({
   jgetR: (u, headers) => (headers && Object.keys(headers).length ? jgetHR(u, headers) : jgetR(u)),
   rhCall: async (to, data) => {
     try { return await rpc('eth_call', [{ to, data }, 'latest']); }
-    catch (e) { if (/revert|invalid opcode|out of gas|execution/i.test(String((e && e.message) || ''))) return null; throw Object.assign(new Error('Robinhood Chain could not be read'), { unavailable: true }); }
+    catch (e) { if (/revert|invalid opcode|out of gas/i.test(String((e && e.message) || ''))) return null; throw Object.assign(new Error('Robinhood Chain could not be read'), { unavailable: true }); }   // only a revert is "no route": a bare /execution/ also matched "execution timeout"
   },
   urls: { ethRpc: MC_URLS.ethRpc, solRpc: MC_URLS.solRpc, jupiter: process.env.JUPITER_URL || 'https://api.jup.ag' },
   jupiterKey: process.env.JUPITER_API_KEY || '',
@@ -10947,7 +10949,7 @@ const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').repl
 const SENDY_SITE_MAP = `PAGES — point people to these by path:
 / — home: Mission Control at the top (a dashboard: one tile per section with a one-line glance, the live readings, a More drop-down holding the long read, and a button into the section), what $Send is, the How to Buy guide (/guide), the swap (/swap), the tokens (/tokens), the beta board (/beta), Rocketize your pic (/rocketize: add rockets to a picture, in the browser, and make it your profile pic), the feature video, the $GWC and JustSendItCoin.com links
 /about — how everything works: Send Power, Send Calls, the holder boost, the rules
-/newpairs — the Scanner: paste any token or pool address on Robinhood Chain, Ethereum or Solana for its on-chain profile (every pool of the token; Ethereum tokens are framed blue, Solana purple); every token's detail has a 🚀 Swap in my wallet button that quotes a buy with ETH or SOL and builds it for the person's own wallet to review and sign (the site never holds funds; it is a tool, not a tip); the New Pairs radar is a tab of it
+/newpairs — the Scanner: paste any token or pool address on Robinhood Chain, Ethereum or Solana for its on-chain profile (the pools Dexscreener lists for it, up to 30; Ethereum tokens are framed blue, Solana purple); every token's detail has a 🚀 Swap in my wallet button that quotes a buy with ETH or SOL and builds it for the person's own wallet to review and sign (the site never holds funds; it is a tool, not a tip); the New Pairs radar is a tab of it
 /wall — the Send Wall: every Send Call, live
 /watchlist — the tokens you saved with the ☆
 /tracker — the wallet tracker: holdings, trades, cost basis and PNL read from the chain
@@ -17863,12 +17865,15 @@ const server = http.createServer(async (req, res) => {
         const chainQ = String(url.searchParams.get('chain') || 'robinhood').toLowerCase().trim();
         if (chainQ !== 'robinhood') {
           if (!MC.SCAN_CHAINS.includes(chainQ)) return bad(res, 'unknown chain');
-          const pp = MC.parseAddress(url.searchParams.get('pair'), chainQ);
+          // a Uniswap v4 pool on Ethereum is a 32-byte id, not an address (GeckoTerminal serves its candles by that id — measured 2026-10-24)
+          const rawPair = String(url.searchParams.get('pair') || '').trim();
+          const pp = chainQ === 'ethereum' && /^0x[0-9a-f]{64}$/i.test(rawPair) ? { addr: rawPair.toLowerCase() } : MC.parseAddress(rawPair, chainQ);
           if (!pp) return bad(res, 'bad pool address');
+          const tq = MC.parseAddress(url.searchParams.get('token'), chainQ);   // the token the candles are priced in — GeckoTerminal is asked for exactly that side
           if (!rateLimit('chart:' + clientIp(req), 240, 6e4)) return bad(res, 'slow down', 429);
           const tfq = Object.prototype.hasOwnProperty.call(CHART_TF, url.searchParams.get('tf')) ? url.searchParams.get('tf') : '1h';
           const hoursq = Math.min(720, Math.max(0.02, Number(url.searchParams.get('hours')) || 168));
-          let d = null; try { d = await mc().candles(chainQ, pp.addr, tfq, hoursq); } catch (e) { console.error('[chart:' + chainQ + '] ' + String((e && e.message) || e)); }
+          let d = null; try { d = await mc().candles(chainQ, pp.addr, tfq, hoursq, tq ? tq.addr : undefined); } catch (e) { console.error('[chart:' + chainQ + '] ' + String((e && e.message) || e)); }
           if (!d) return bad(res, 'could not read the chart source', 502);
           if (d.error) return send(res, 200, { pair: pp.addr, tf: tfq, chain: chainQ, error: d.error, retry: !!d.retry });
           return send(res, 200, d, { 'Cache-Control': 'public, max-age=' + (d.stale ? 5 : 30) });
@@ -18133,8 +18138,10 @@ const server = http.createServer(async (req, res) => {
         const chain = String(url.searchParams.get('chain') || 'robinhood').toLowerCase().trim();
         const parsed = MC.SCAN_CHAINS.includes(chain) ? MC.parseAddress(url.searchParams.get('token'), chain) : null;
         if (!parsed) return bad(res, 'a token address on Robinhood Chain, Ethereum or Solana is needed');
+        // Jupiter's keyless budget (25/min) is the whole site's: one reader may spend a share of it, not all of it
+        if (chain === 'solana' && !rateLimit('swapqs:' + clientIp(req), 12, 6e4)) return bad(res, 'too many Solana quotes — slow down', 429);
         try {
-          const q = await swapkit().quote(chain, parsed.addr, url.searchParams.get('amount'), { slippagePct: url.searchParams.get('slippage') });
+          const q = await swapkit().quote(chain, parsed.addr, url.searchParams.get('amount'), { slippagePct: url.searchParams.get('slippage'), taxPct: url.searchParams.get('tax') });
           if (q.bad) return bad(res, q.bad);
           return send(res, 200, q);
         } catch (e) { console.error('[swap:quote] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'the quote failed — try again', 502); }
@@ -18147,15 +18154,16 @@ const server = http.createServer(async (req, res) => {
         if (!parsed) return bad(res, 'a token address on Robinhood Chain, Ethereum or Solana is needed');
         const from = String(b.from || '').trim();
         if (chain === 'solana' ? !MC.isSolanaAddr(from) : !/^0x[0-9a-fA-F]{40}$/.test(from)) return bad(res, 'the wallet address the swap is for is needed');
+        if (chain === 'solana' && !rateLimit('swapbs:' + clientIp(req), 6, 6e4)) return bad(res, 'too many Solana swaps built — slow down', 429);
         try {
-          const r = await swapkit().build(chain, parsed.addr, b.amount, from, { slippagePct: b.slippage });
+          const r = await swapkit().build(chain, parsed.addr, b.amount, from, { slippagePct: b.slippage, taxPct: b.tax });
           if (r.bad) return bad(res, r.bad);
           return send(res, 200, r);
         } catch (e) { console.error('[swap:build] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'the swap could not be built — try again', 502); }
       }
       if (p === '/api/swap/status' && req.method === 'GET') {
-        if (!rateLimit('swaps:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
-        let r; try { r = await swapkit().status(String(url.searchParams.get('chain') || ''), url.searchParams.get('sig')); } catch { return bad(res, 'the status could not be read', 502); }
+        if (!rateLimit('swaps:' + clientIp(req), 40, 6e4)) return bad(res, 'slow down', 429);   // the panel asks every 3 s for two minutes; the node is metered too
+        let r; try { r = await swapkit().status(String(url.searchParams.get('chain') || ''), url.searchParams.get('sig'), url.searchParams.get('lvbh')); } catch { return bad(res, 'the status could not be read', 502); }
         if (r.bad) return bad(res, r.bad);
         return send(res, 200, r);
       }
@@ -18183,7 +18191,7 @@ const server = http.createServer(async (req, res) => {
           const counted = rateLimit('scanc:' + clientIp(req) + '|' + slug + ':' + tok, 1, 10 * 60e3);
           const s = scanRecordMc(slug, tok, r.kind, r.kind === 'pool' ? r.pool : null, r.pair, r.readAt, counted);
           return send(res, 200, {
-            kind: r.kind, ...(r.pool ? { pool: r.pool, poolVerified: true } : {}),
+            kind: r.kind, ...(r.pool ? { pool: r.pool, poolVerified: null } : {}),   // Dexscreener's word, not a chain read: the kicker says "says it prices this token"
             pair: r.pair, pools: r.pools, risk: risk(), community: null, chain: slug, chainMeta: m, ...(note ? { note } : {}),
             scan: { now: now(), readAt: r.readAt, stale: false, kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}) },
           });
@@ -18194,10 +18202,15 @@ const server = http.createServer(async (req, res) => {
         }
         const addr = parsed.addr;
         const RH = { chain: 'robinhood', chainMeta: chainMetaFor('robinhood') };
+        /* ?chain=robinhood is a PIN (the Scanner's "Robinhood Chain" button: "Reads a 0x address on Robinhood Chain only"):
+           Ethereum is never tried for it. Only Auto (no ?chain) carries a 0x address on to Ethereum. */
+        const pinned = chainQ === 'robinhood';
         // the same 0x address may be a token on Ethereum: tried when the home chain says "nothing here" (or cannot be read)
+        let ethSaid = null;   // what Ethereum answered when it was asked: 'none' | 'unavailable' | 'quote' — the final answer words it
         const tryEthereum = async (why) => {   // true once the Ethereum profile has been SENT — the caller must not answer again
+          if (pinned) return false;            // the reader asked for Robinhood Chain only
           let eth = null; try { eth = await mc().scan('ethereum', addr); } catch {}
-          if (!eth || !eth.pair) return false;
+          if (!eth || !eth.pair) { ethSaid = !eth || eth.unavailable ? 'unavailable' : eth.notFound && eth.reason === 'quote' ? 'quote' : 'none'; return false; }
           await foreign('ethereum', addr, why);
           return true;
         };
@@ -18241,7 +18254,13 @@ const server = http.createServer(async (req, res) => {
           }
           // nothing on the home chain: the same 0x address may be a token on Ethereum
           if (await tryEthereum('Robinhood Chain has no token or pool at this address; this is its Ethereum profile.')) return;
-          return send(res, 200, { notFound: true, ...RH, reason: r.reason || null, message: 'No token or pool found at this address on Robinhood Chain or Ethereum — the chain says so, and the price feed indexes none. It may be a wallet, a contract that is not a token, or an address on another chain. A Solana address scans here too.' });
+          return send(res, 200, { notFound: true, ...RH, reason: r.reason || null, message: pinned
+            ? 'No token or pool found at this address on Robinhood Chain — the chain says so, and the price feed indexes none. It may be a wallet, a contract that is not a token, or a token on another chain; Auto tries the other chains an address like this can be on.'
+            : ethSaid === 'unavailable'
+            ? 'No token or pool found at this address on Robinhood Chain — the chain says so, and the price feed indexes none. Ethereum could not be checked just now (its price feed did not answer), so if it trades there, try again in a moment.'
+            : ethSaid === 'quote'
+            ? 'No token or pool found at this address on Robinhood Chain. On Ethereum this address is a base trading asset (ETH, a stablecoin or a wrapped coin), not a token to profile here.'
+            : 'No token or pool found at this address on Robinhood Chain or Ethereum — the chain says so, and the price feed indexes none. It may be a wallet, a contract that is not a token, or an address on another chain. A Solana address scans here too.' });
         } catch (e) {
           // a designed refusal (an HttpError: busy, bad address) says its own words; anything else is logged, not echoed
           if (e && e.status) return bad(res, e.message, e.status);

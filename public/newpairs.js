@@ -161,6 +161,18 @@
   // unknown. Without this it would trip no flags, score 100, and carry the greenest verdict on the site,
   // which would make "we could not check" look identical to "we checked and it is fine".
   const thinData = (p) => !!(p.risk && p.risk.thinData);
+  /* What the server could not read for this token, named the way a person would — ONE list, so the verdict's
+     caveat (verdictOf), the Safety card's ❓ line and the audit's last row (auditParts) can never disagree about
+     what is missing. Plain text — it rides in a title attribute and the spoken line as well as in HTML. */
+  function unreadGaps(p) {
+    const dk = (p.risk && p.risk.dataKnown) || {}, gaps = [];
+    if (!dk.liquidity) gaps.push('the liquidity');
+    if (!dk.holders) gaps.push('the holder count');
+    if (!dk.concentration) gaps.push('how concentrated it is');
+    if (!dk.verified && chainOf(p).slug !== 'solana') gaps.push('whether the contract is verified');   // a Solana program's source is not something this site reads
+    if (!dk.snipers) gaps.push(foreignChain(p) ? 'who bought first (block-0 reads are Robinhood Chain only)' : 'who bought first');
+    return gaps;
+  }
   /* The block-0 test, in one place. "Looks Good, Send It" is only ever given to a token whose FIRST block
      is clean: nobody sniped it, or every block-0 cluster still holds what it took, or those clusters are
      immaterial (under 1% of the float, taken and held). `sniperOk` is null until the scan finishes — not
@@ -169,23 +181,81 @@
   /* ═══ THE FLOOR THE READER CANNOT LOWER ═══════════════════════════════════════════════════════════
      "Looks Good, Send It" is awarded against the READER'S OWN BAR — that is the whole point of the
      settings, and it is why the tag can now appear at all. But a bar somebody sets for themselves is not
-     permission to call a honeypot clean. These four are absolute: no setting waives them, no strategy
-     relaxes them, and a token carrying any of them can never wear the tag whatever the filters say.
+     permission to call a honeypot clean. These are absolute: no setting waives them, no strategy relaxes
+     them, and a token carrying any of them can never wear the tag whatever the filters say.
 
      They are the ones where being wrong is not a matter of taste:
        honeypotSuspect — people are buying and nobody can sell
        dumping         — it is falling off a cliff as you read this
        sniperDump      — the wallets that got in first have already sold into you
        triage avoid    — the risk model's own bottom tier
+     and, on ANOTHER chain only (Ethereum, Solana — a profile the Scanner read through lib/multichain.js):
+       thinData        — too little of it was READ to judge (server: no liquidity or no holder count)
+       a held power    — the contract read found something red the score does not count (vendorFacts, below)
+     Those two are not flags the server scores, and they are on the floor for the same reason the others
+     are: no setting can turn a reading that was not made into one that passed, or a blacklist into a clean
+     contract. Flags only trip on data we could read, and off the home chain every contract and holder fact
+     comes from ONE vendor read (GoPlus Security) — when it misses, the profile scores 100 on nothing, and
+     when it answers with a blacklist or a pause switch, the server's score still says 100 because it has no
+     weight for either. Neither may wear the rocket (or the ✅ tier, or ride the Hot Feed: earnsSendIt and
+     meetsYourBar read this same floor). The server's own mirror of the verdict (scanVerdict, server.js) has
+     always put "Not enough data yet" before the rocket; verdictOf now agrees off the home chain and names
+     what was not read (unreadGaps) or what was found (vendorFacts) in the chip's caveat.
+     The HOME chain is deliberately left as it was: there a 100 earns the rocket on the score alone (the
+     owner's rule — see verdictOf: three 100s once fell through to the milder tag while the explorer was
+     down), and its readings come from the chain's own ledger and node rather than one vendor's answer.
      Everything else — unverified, few holders, thin liquidity, one big wallet, quiet volume, a serial
      deployer, a heavy block-0 — is a judgement the reader is entitled to make for themselves, as long as
      the card keeps saying plainly that it was made. */
   const VERDICT_FLOOR = ['honeypotSuspect', 'dumping', 'sniperDump'];
   function floorBreached(p) {
     if (!p.risk) return true;
+    if (foreignChain(p) && (thinData(p) || vendorFacts(p).length)) return true;   // off the home chain only — see above
     if (triageOf(p) === 'avoid') return true;
     return VERDICT_FLOOR.some(k => !!p.risk[k]);
   }
+  /* ═══ WHAT THE CONTRACT READ FOUND THAT THE SCORE DOES NOT COUNT (another chain only) ══════════════════
+     chainFactsHTML prints each of these as a red row on the Contract card, but none of them has a weight in
+     the server's risk model, so a token carrying a blacklist and a pause switch used to score 100, read
+     "nothing tripped a flag" under 🚀, and leave the Contract & trust section at "No signal either way yet"
+     (PEPE, 2026-10-23: Blacklist yes, Pausable yes, under Looks Good). The score is the server's and is not
+     changed here; what changes is that every surface that would have said "nothing found" names these instead —
+     the verdict (held back to caution, verdictOf), the flag strip, "Why we say", the audit and the Contract &
+     trust section of the breakdown, where each is listed as found and marked as not in the score.
+     The keys are lib/multichain.js's own (evmFacts / solFacts / authoritiesRevoked), and only a true counts:
+     a null is a reading not made, which the Contract card already says. `say` is a clause for the plain text
+     of a title attribute and a spoken line; `src` names who made the reading — GoPlus Security on an EVM chain,
+     and on Solana the chain's own node when its mint read answered (chainFacts.program is set only from it). */
+  /* Solana's "renounced": chainFacts.authoritiesRevoked (lib/multichain.js) — true when the mint and freeze authorities are
+     both gone, false while either is held, null unread; a profile stored before that field derives it from mintable /
+     freezable the same way. One helper, so the verdict (vendorFacts) and the ownership lines (ownership) cannot drift. */
+  const solRevoked = (f) => f.authoritiesRevoked !== undefined ? f.authoritiesRevoked
+    : (f.mintable === false && f.freezable === false) ? true : (f.mintable === true || f.freezable === true) ? false : null;
+  const VENDOR_EVM = [
+    ['blacklist', 'Blacklist', 'wallets can be blocked from trading'],
+    ['pausable', 'Pausable transfers', 'transfers can be switched off'],
+    ['hiddenOwner', 'Hidden owner', 'an owner the public owner() call does not show'],
+    ['takeBack', 'Ownership can be taken back', 'ownership can be reclaimed after it is given up'],
+    ['selfdestruct', 'Self-destruct', 'the contract can destroy itself'],
+    ['cannotSellAll', 'Cannot sell all at once', 'a holder cannot sell a whole balance in one go'],
+    ['cannotBuy', 'Cannot buy', 'buying is blocked'],
+  ];
+  function vendorFacts(p) {
+    const f = p && p.chainFacts;
+    if (!f || !foreignChain(p)) return [];
+    if (chainOf(p).slug === 'solana') {
+      const rev = solRevoked(f);
+      if (rev !== false) return [];
+      const out = [];
+      if (f.mintable === true) out.push({ k: 'mintable', word: 'Mint authority held', say: 'more tokens can be minted' });
+      if (f.freezable === true) out.push({ k: 'freezable', word: 'Freeze authority held', say: 'holders’ accounts can be frozen' });
+      return out.length ? out : [{ k: 'authority', word: 'An authority held', say: 'someone can still mint more or freeze accounts' }];
+    }
+    return VENDOR_EVM.filter(([k]) => f[k] === true).map(([k, word, say]) => ({ k, word, say }));
+  }
+  const vendorSrc = (p) => chainOf(p).slug === 'solana' && p.chainFacts && p.chainFacts.program ? 'Solana’s own node' : 'GoPlus Security';
+  // "GoPlus Security reports: blacklist, pausable transfers" — the words the verdict, the audit and "Why we say" share
+  const vendorLine = (p, V) => vendorSrc(p) + ' reports: ' + V.map(x => x.word.charAt(0).toLowerCase() + x.word.slice(1)).join(', ');
   /* Does this token clear the bar the reader actually set? Health, the flags they chose to hide, the
      signals they insisted were genuinely checked — the same predicate the board filters on, so the tag
      and the list can never disagree about what qualifies. */
@@ -262,12 +332,15 @@
 
        The floor is still absolute and is the only thing that can take it away: a honeypot, a token
        dumping as it is read, block-0 buyers who already sold, or the risk model's own avoid tier can
-       never carry it whatever they score.
+       never carry it whatever they score — and, off the home chain (2026-10-23), neither can a profile
+       too thin to judge or one whose contract read found a power the score does not count (floorBreached).
 
        Worth being plain about what 100 means here, because the card is: flags only trip on data we could
        actually READ, so a token whose liquidity, holders and verification were unreadable has fewer ways
-       to lose points than one we could check in full. The panel says so in the same breath — the audit
-       line, the "what we could not check" row and the 🌫️ markers all still render underneath. */
+       to lose points than one we could check in full. On Ethereum and Solana that gap is one vendor read
+       wide, which is why a thin or red-fact profile there is held back below with what was missing or found
+       named. The panel says the rest in the same breath — the audit line, the "what we could not check" row
+       and the 🌫️ markers all still render underneath. */
     if (health >= 100 && !floorBreached(p)) {
       return { cls: 'np-t-ok np-t-perfect', ico: '🚀', word: 'Looks Good, Send It',
         why: 'Our checks score this a full 100 out of 100 — nothing we could read tripped a flag. That is not a promise, and it is not the same as safe: most new tokens still go to zero.' };
@@ -287,7 +360,25 @@
       return { cls: 'np-t-ok np-t-good', ico: '✅', word: 'Looks Good',
         why: 'Scores ' + health + ' out of 100 — something we check did trip, so read the flags below. Not a promise; most new tokens still go to zero.' };
     }
-    if (thinData(p)) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
+    /* Another chain's contract read found a power the score does not count (vendorFacts) — the floor kept it out of
+       both tiers above. Said as the caution tier it is, naming each power and who read it, so the chip can never
+       say "nothing tripped" over a blacklist. A worse triage (high, avoid) keeps its own, worse word. Tested before
+       the thin-data line: a fact that was found outranks one that is missing. */
+    const V = vendorFacts(p);
+    if (V.length && (tri === 'ok' || tri === 'caution')) {
+      return { cls: TRI.caution.cls + ' np-t-vendor', ico: TRI.caution.ico, word: TRI.caution.word,
+        why: vendorLine(p, V) + ' — read the Contract card. The ' + health + '/100 does not count these, so it is not the whole story. Not a promise either way; most new tokens still go to zero.' };
+    }
+    /* Too little of it was read to judge. On another chain that is on the floor (floorBreached), so a thin 100 there
+       reaches this line instead of the rocket; on the home chain this is the line for a thin token under 75, as it
+       always was. The chip keeps the caution tier the server's triage gives thin data and the server mirror's word
+       (scanVerdict: "Not enough data yet"), and its caveat names what was not read in the audit's ❓ words, so "we
+       could not check" can never look like "we checked and it is fine". */
+    if (thinData(p)) {
+      const gaps = unreadGaps(p);
+      return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet',
+        why: (gaps.length ? 'We could not read ' + gaps.join(', ') : 'Too little of it is readable to judge') + ' — missing information, not a pass, so the ' + health + '/100 is not a verdict yet. Most new tokens still go to zero.' };
+    }
     return TRI[tri];
   }
   const FLAG = {
@@ -296,10 +387,11 @@
       : `People are buying (${npNum(p.txns.h24.buys)}) but almost nobody's selling (${npNum(p.txns.h24.sells)}) — you may not be able to sell either.` },
     dumping: { ico: '📉', word: () => 'Dumping', sev: 'bad', say: p => `Down ${pctPlain(Math.abs(p.priceChange.h1))} in the last hour — falling off a cliff right now.` },
     serialDeployer: { ico: '🔁', word: () => 'Serial deployer', sev: 'bad', say: p => { const l = p.risk.deployerLaunches, d = p.risk.deployerDied; return l ? `Made by a wallet that launched ${l} recent tokens${d ? `; ${d} already look dead` : ''}.` : 'Made by a wallet that has launched many tokens that later died.'; } },
-    lowLiquidity: { ico: '💧', word: () => 'Thin liquidity', sev: 'bad', say: p => `Only ${npFmtUsd(p.market.liquidityUsd)} pooled — easy to rug, hard to exit.` },
+    // the server scores the deepest pool (market.liquidityUsd); where the card shows a total across pools (liqOf), this says which figure it is
+    lowLiquidity: { ico: '💧', word: () => 'Thin liquidity', sev: 'bad', say: p => `Only ${npFmtUsd(p.market.liquidityUsd)} pooled${liqOf(p).total ? ' in its deepest pool' : ''} — easy to rug, hard to exit.` },
     lowHolders: { ico: '👥', word: p => `${p.holders.count} holders`, sev: 'bad', say: p => `Just ${p.holders.count} wallets hold this — a few people control the price.` },
     concentrated: { ico: '🐋', word: () => 'Whale-heavy', sev: 'warn', say: p => `One wallet holds ${pctPlain(p.holders.topHolderPct)}${p.holders.top10Pct != null ? ` (top 10 hold ${pctPlain(p.holders.top10Pct)})` : ''} — they can dump on you.` },
-    unverified: { ico: '📄', word: () => 'Unverified', sev: 'warn', say: () => `Contract source isn't published — nobody can audit what it does.` },
+    unverified: { ico: '📄', word: () => 'Unverified', sev: 'warn', say: p => `Contract source isn't published${perGP(p)} — nobody can audit what it does.` },
     sellPressure: { ico: '🔻', word: () => 'Heavy selling', sev: 'warn', say: p => `Sells outnumber buys (${npNum(p.txns.h24.sells)} vs ${npNum(p.txns.h24.buys)}).` },
     deadVolume: { ico: '💤', word: () => 'No volume', sev: 'note', say: p => `Almost no trading in 24h (${npFmtUsd(p.volume.h24)}).` },
     /* The two block-0 flags the SERVER scores (RISK.sniperDump 28, RISK.sniperHeavy 14) but this panel
@@ -312,13 +404,60 @@
   };
   const FLAG_ORDER = ['honeypotSuspect', 'dumping', 'serialDeployer', 'lowLiquidity', 'sniperDump', 'lowHolders', 'concentrated', 'unverified', 'sniperHeavy', 'sellPressure', 'deadVolume'];
   const activeFlags = (p) => FLAG_ORDER.filter(k => p.risk && p.risk[k]);
+  /* ═══ OWNERSHIP, AS EACH CHAIN MEANS IT — ONE ANSWER FOR EVERY SURFACE ═══════════════════════════════
+     The flag strip's good sign, the score breakdown's positive, the audit sentence and the Contract card's
+     owner line all used to read p.token.renounced on their own, and for a Solana token one card said
+     "renounced" while the next said "authorities revoked" — or, with the server leaving renounced null on
+     Solana (lib/multichain.js, 2026-10-23), nothing at all. This is the single read they all share.
+       Solana — there is no owner(): "renounced" means the mint AND freeze authorities are revoked
+                (chainFacts.authoritiesRevoked; derived from chainFacts.mintable/freezable when an older profile
+                carries only those). `held` names which is still held.
+       EVM    — owner() from the chain or from GoPlus. On Ethereum a zero owner is NOT the end of it: GoPlus
+                also reads whether ownership can be taken back and whether a hidden owner exists, and either
+                makes "renounced" false whatever the owner address says (`caveats` names them; the server's
+                own derivation agrees). Robinhood Chain carries no chainFacts, so there the answer is the
+                server's owner() read, unchanged. `owner` is the held address, never the zero address.
+     renounced is true, false or null — null is "not read", never a pass; `vendor` says the read was GoPlus's, and
+     `answered` whether GoPlus answered at all (chainFacts is null only when it did not — lib/multichain.js evmFacts).
+     An owner GoPlus did not NAME (owner_address blank) is also null upstream, so "GoPlus did not answer" is said only
+     when that is what happened. */
+  function ownership(p) {
+    const t = p.token || {}, f = p.chainFacts || {}, c = chainOf(p);
+    if (c.slug === 'solana') {
+      const rev = solRevoked(f);
+      const held = [f.mintable === true ? 'mint' : '', f.freezable === true ? 'freeze' : ''].filter(Boolean);
+      return { kind: 'authorities', renounced: rev === true ? true : rev === false ? false : null, held, caveats: [], owner: null, vendor: true };
+    }
+    const caveats = [];
+    if (f.takeBack === true) caveats.push('ownership can be taken back');
+    if (f.hiddenOwner === true) caveats.push('there is a hidden owner the owner() call does not show');
+    const owner = t.owner && !/^0x0{40}$/i.test(String(t.owner)) ? t.owner : null;
+    const renounced = caveats.length ? false : t.renounced === true ? true : t.renounced === false ? false : null;
+    // zero: an owner was read and it is the zero address (upstream keeps t.owner null for it, with renounced true or false)
+    const zero = !owner && (t.renounced === true || t.renounced === false);
+    return { kind: 'owner', renounced, owner, zero, caveats, held: [], vendor: foreignChain(p), answered: !foreignChain(p) || !!p.chainFacts };
+  }
+  /* " (per GoPlus)" on a fact GoPlus read on another EVM chain — the verified source (is_open_source), the owner and
+     renounced lines (owner_address) and the deployer (creator_address) — so a vendor's answer never reads as the chain's
+     own words. '' on the home chain, whose wording stays exactly as it was, and on Solana, whose authorities come from
+     the chain's own mint read first. */
+  const perGP = (p) => foreignChain(p) && chainOf(p).evm ? ' (per GoPlus)' : '';
+  // the held-authority sentence — the audit and the Contract card say it in the same words
+  const heldSay = (o) => {
+    const m = o.held.includes('mint'), f = o.held.includes('freeze');
+    return m && f ? 'The <b>mint and freeze authorities are still held</b> — more tokens can be minted and holders’ accounts frozen.'
+      : m ? 'The <b>mint authority is still held</b> — more tokens can be minted.'
+      : f ? 'The <b>freeze authority is still held</b> — holders’ accounts can be frozen.'
+      : 'An authority is <b>still held</b> — someone can still mint more, or freeze accounts.';
+  };
+  const renouncedSign = (p) => { const o = ownership(p); return o.renounced === true ? (o.kind === 'authorities' ? 'Authorities revoked' : 'Ownership renounced' + perGP(p)) : ''; };
   function goodSigns(p) {
     const g = [];
-    if (p.token.isVerified === true) g.push('✓ Verified code');
+    if (p.token.isVerified === true) g.push('✓ Verified code' + perGP(p));
     if (p.market.liquidityUsd != null && p.market.liquidityUsd >= 25000) g.push('✓ Deep liquidity');
     if (p.holders.topHolderPct != null && p.holders.topHolderPct < 15) g.push('✓ Spread out');
     if (p.holders.count != null && p.holders.count >= 200) g.push('✓ Many holders');
-    if (p.token.renounced === true) g.push('✓ Ownership renounced');
+    if (renouncedSign(p)) g.push('✓ ' + renouncedSign(p));   // "Authorities revoked" on Solana — the same read the Contract card shows (ownership)
     return g.slice(0, 3);
   }
   const flagWord = (k, p) => typeof FLAG[k].word === 'function' ? FLAG[k].word(p) : FLAG[k].word;
@@ -343,7 +482,7 @@
     else if (key === 'holders') { if (h.topHolderPct != null && h.topHolderPct < 15) g.push('Top wallet under 15%'); if (h.count != null && h.count >= 200) g.push('200+ holders'); }
     else if (key === 'trading') { const b = p.txns.h24.buys, s = p.txns.h24.sells; if (b > 0 && b >= s) g.push('Buys keeping up with sells'); if (p.priceChange.h1 != null && p.priceChange.h1 > 0) g.push('Up in the last hour'); }
     else if (key === 'launch') { const sn = p.risk && p.risk.snipers; if (sn && sn.wallets === 0) g.push('Nobody sniped block 0'); else if (sn && sn.snipedPct != null && sn.snipedPct < 5) g.push('Block-0 buyers took under 5%'); }
-    else if (key === 'contract') { if (p.token.isVerified === true) g.push('Verified source'); if (p.token.renounced === true) g.push('Ownership renounced'); }
+    else if (key === 'contract') { if (p.token.isVerified === true) g.push('Verified source' + perGP(p)); if (renouncedSign(p)) g.push(renouncedSign(p)); }
     return g;
   }
   function scoreBreakdown(p) {
@@ -354,21 +493,28 @@
       sec.flags.forEach(k => { if (r[k]) { score -= (WEIGHTS[k] || 0); fails.push({ k, impact: WEIGHTS[k] || 0, say: FLAG[k].say(p), word: flagWord(k, p) }); } });
       score = Math.max(0, score);
       fails.sort((a, b) => b.impact - a.impact); // biggest hit first → it's the "key metric" shown collapsed
-      return { key: sec.key, label: sec.label, ico: sec.ico, score, grade: gradeOf(score), fails, wins: sectionPositives(sec.key, p) };
+      /* found: what another chain's contract read turned up that the server's score has no weight for (vendorFacts) —
+         listed in Contract & trust as found, marked "not in the score", and never subtracted here: this section explains
+         the server's number, and a deduction the server did not make would be a figure that was never computed. */
+      const found = sec.key === 'contract' ? vendorFacts(p).map(x => ({ say: vendorSrc(p) + ' reports: ' + x.word + ' — ' + x.say + '.' })) : [];
+      return { key: sec.key, label: sec.label, ico: sec.ico, score, grade: gradeOf(score), fails, found, wins: sectionPositives(sec.key, p) };
     });
   }
+  const NOT_SCORED = ' <i class="np-bd-unscored">(found, not in the score)</i>';
   function breakdownHTML(p, noContract) {   // noContract: the dashboard reads the contract on its own card, so the slot here would fetch it twice
     const health = Math.round((p.risk && p.risk.health) || 0);
     const secs = scoreBreakdown(p);
     const totalPenalty = 100 - health;
     const rows = secs.map(s => {
-      // the KEY metric shown collapsed = the biggest hit, else the top positive, else neutral
+      // the KEY metric shown collapsed = the biggest hit, else a found contract power, else the top positive, else neutral
       const key = s.fails.length
         ? '<span class="np-bd-x" aria-hidden="true">✕</span> ' + esc(s.fails[0].say) + ' <b class="np-bd-impact">−' + s.fails[0].impact + '</b>'
+        : s.found.length ? '<span class="np-bd-x" aria-hidden="true">✕</span> ' + esc(s.found[0].say) + NOT_SCORED
         : (s.wins.length ? '<span class="np-bd-check" aria-hidden="true">✓</span> ' + esc(s.wins[0]) : '<span class="np-bd-neutraltxt">No signal either way yet</span>');
       const items = s.fails.map(f => '<li class="np-bd-fail"><span class="np-bd-x" aria-hidden="true">✕</span> ' + esc(f.say) + ' <b class="np-bd-impact">−' + f.impact + '</b></li>').join('') +
+        s.found.map(f => '<li class="np-bd-fail"><span class="np-bd-x" aria-hidden="true">✕</span> ' + esc(f.say) + NOT_SCORED + '</li>').join('') +
         s.wins.map(w => '<li class="np-bd-win"><span class="np-bd-check" aria-hidden="true">✓</span> ' + esc(w) + '</li>').join('') +
-        (!s.fails.length && !s.wins.length ? '<li class="np-bd-neutral">No signal either way yet.</li>' : '');
+        (!s.fails.length && !s.found.length && !s.wins.length ? '<li class="np-bd-neutral">No signal either way yet.</li>' : '');
       // the Contract section's dropdown lazy-loads the deep honeypot / contract-code read
       const contractSlot = s.key === 'contract' && !noContract
         ? '<div class="np-contract" data-token="' + esc(p.token.address) + '" data-pair="' + esc(p.pair.address) + '"><p class="np-contract-load"><span class="np-live-dot" aria-hidden="true"></span> Reading the contract code…</p></div>'
@@ -649,15 +795,18 @@
       '</svg><span class="np-gauge-num">' + health + '</span></span>';
   }
   function flagstripHTML(p) {
-    const flags = activeFlags(p);
+    // the server's flags first, then — on another chain — the contract powers its read found that the score does not
+    // count (vendorFacts): a strip that read "✔ No automatic red flags" over a blacklist was the PEPE case
+    const flags = activeFlags(p), V = vendorFacts(p);
+    const chips = flags.map(k => '<span class="np-flag np-flag--' + FLAG[k].sev + '">' + FLAG[k].ico + ' ' + esc(flagWord(k, p)) + '</span>')
+      .concat(V.map(x => '<span class="np-flag np-flag--warn">⚠️ ' + esc(x.word) + '<span class="sr-only"> — ' + esc(vendorSrc(p)) + ' reports it; not in the score</span></span>'));
     let inner = '';
-    if (!flags.length) {
+    if (!chips.length) {
       inner = '<span class="np-flag np-flag--ok">✔ No automatic red flags — still DYOR</span>';
       goodSigns(p).forEach(g => { inner += '<span class="np-flag np-flag--ok">' + esc(g) + '</span>'; });
     } else {
-      const show = flags.slice(0, 3);
-      show.forEach(k => { inner += '<span class="np-flag np-flag--' + FLAG[k].sev + '">' + FLAG[k].ico + ' ' + esc(flagWord(k, p)) + '</span>'; });
-      if (flags.length > 3) inner += '<span class="np-flag-more">+' + (flags.length - 3) + '</span>';
+      inner = chips.slice(0, 3).join('');
+      if (chips.length > 3) inner += '<span class="np-flag-more">+' + (chips.length - 3) + '</span>';
     }
     return '<div class="np-flagstrip">' + inner + '</div>';
   }
@@ -716,7 +865,11 @@
       ? '<span class="np-status-yes">✓ Info added' + (b.boosted > 0 ? ' · ⚡ Paid boost ×' + b.boosted : '') + '</span>'
       : '<span class="np-status-no">— no info added</span>';
     let dext;
-    if (b.dextools == null) dext = '<span class="np-status-unk" title="Needs a Dextools API key to check (and Robinhood Chain must be listed there)">— not connected<span class="sr-only"> — needs a Dextools API key to check, and Robinhood Chain must be listed there</span></span>';
+    /* DEXTools is asked about the home chain only (server.js dextoolsInfo, behind an API key); on another chain the read is
+       simply not made. So that line says so — not that the chain "must be listed there", which was Robinhood Chain's story
+       printed over every Ethereum and Solana profile. Dexscreener's info IS read on every chain (pairFromDex → brandFromDex). */
+    if (b.dextools == null && foreignChain(p)) dext = '<span class="np-status-unk">— not read on ' + esc(chainOf(p).name) + '<span class="sr-only"> — this site does not ask Dextools about tokens on ' + esc(chainOf(p).name) + ', so this is a reading not made, not a listing status</span></span>';
+    else if (b.dextools == null) dext = '<span class="np-status-unk" title="Needs a Dextools API key to check (and Robinhood Chain must be listed there)">— not connected<span class="sr-only"> — needs a Dextools API key to check, and Robinhood Chain must be listed there</span></span>';
     else if (b.dextools.updated) dext = '<span class="np-status-yes">✓ Logo or socials added</span>';
     else if (b.dextools.listed) dext = '<span class="np-status-no">listed, no branding</span>';
     else dext = '<span class="np-status-no">— not listed</span>';
@@ -912,7 +1065,7 @@
       '</div>' +
       '<div class="onchain-chart" data-pair="' + esc(p.pair.address) + '" data-token="' + esc(p.token.address) + '" data-chain="' + esc(ch.slug) + '" data-tf="1h" data-poll="' + (far ? '60000' : '2000') + '"></div>' +
       '<div class="chart-embed" hidden></div>' +
-      '<p class="np-chart-note">' + (far ? 'Candles and trades from GeckoTerminal for this pool, drawn here; refreshed every minute.' : 'Built live from on-chain swaps.') +
+      '<p class="np-chart-note">' + (far ? 'Candles and trades from GeckoTerminal for this pool, drawn here; asked for again every minute (GeckoTerminal’s data, cached up to 90 s).' : 'Built live from on-chain swaps.') +
       (dex ? ' <a class="np-dex-xcheck" href="' + esc(dex) + '" target="_blank" rel="noopener nofollow">Cross-check on Dexscreener ↗</a>' : '') + '</p>' +
       '<p class="chart-src-note" hidden></p>' +
     '</div>';
@@ -939,32 +1092,60 @@
   const depthSay = (ratio) => ratio < 2 ? 'A pool that thin cannot pay everyone out; getting back to cash may not be possible at the price shown.'
     : ratio < 8 ? 'Thin enough that a large sell moves the price a long way.'
     : 'Deep enough to trade in and out of at something near the price shown.';
+  /* THE TOKEN'S LIQUIDITY, NOT ONE POOL'S. market.liquidityUsd is the DEEPEST pool's figure — the pool the chart draws
+     and the pair the profile is keyed by — but a token can trade in up to 30 pools (p.pools; lib/multichain.js sums them
+     into market.liquidityTotalUsd with market.poolCount), and a depth ratio against the TOKEN-WIDE market cap has to use
+     what every pool holds, or depthSay says "a pool that thin cannot pay everyone out" of one pool when nine others
+     could. With more than one pool known the total is the token's liquidity and the deepest pool is named beside it
+     (liqAcross); with one pool, or no total read, it is the deepest pool's figure as before. Never a number that was not
+     read: null stays null. The server's lowLiquidity flag still reads the pool it scored (the deepest), so its words
+     ("Only $X pooled") keep that figure. Used by the audit's Money row, the dashboard's headline strip and Market card. */
+  function liqOf(p) {
+    const m = p.market || {};
+    const total = (m.liquidityTotalUsd != null && isFinite(m.liquidityTotalUsd) && m.poolCount > 1) ? m.liquidityTotalUsd : null;
+    const deepest = (m.liquidityUsd != null && isFinite(m.liquidityUsd)) ? m.liquidityUsd : null;
+    return { usd: total != null ? total : deepest, total: total != null, pools: total != null ? m.poolCount : 0, deepest, capped: p.poolsCapped === true };
+  }
+  // "across N pools · deepest $X" (a sub-label) or, as prose, "across N pools (the deepest holds $X)" — only when the figure is a total
+  // with the list capped (p.poolsCapped: Dexscreener stops at 30) the total is the LISTED pools', and says so; a deepest figure
+  // that was not read is left out rather than printed as a dash
+  const liqAcross = (L, prose) => {
+    if (!L.total) return '';
+    const n = 'across ' + (L.capped ? 'the ' + npNum(L.pools) + ' listed pools' : npNum(L.pools) + ' pools');
+    if (L.deepest == null) return n;
+    return prose ? n + ' (the deepest holds ' + npFmtUsd(L.deepest) + ')' : n + ' · deepest ' + npFmtUsd(L.deepest);
+  };
   function auditParts(p) {
     const r = p.risk || {}, m = p.market || {}, h = p.holders || {}, t = p.token || {};
-    const flags = activeFlags(p), health = healthOf(p);
+    const flags = activeFlags(p), health = healthOf(p), V = vendorFacts(p);
     const sym = t.symbol ? '$' + esc(t.symbol) : 'This token';
 
     // ---- the bottom line, in one sentence ----
     const age = p.pair && p.pair.ageMinutes != null ? npFmtAge(p.pair.ageMinutes) + ' old' : 'of unknown age';
     let line = sym + ' is ' + esc(age) + (p.pair && p.pair.quoteSymbol ? ', trading against ' + esc(p.pair.quoteSymbol) : '') + '. ';
+    // another chain's contract powers the score does not count (vendorFacts) are named here too — "nothing tripped" over a blacklist was the PEPE case
+    const vSay = V.length ? ' ' + esc(vendorLine(p, V)) + ', which the score does not count — read the Contract card.' : '';
     if (r.thinData) {
-      line += 'We cannot say much about it yet — too little of it is readable to judge, which is an unknown, not a pass.';
+      line += 'We cannot say much about it yet — too little of it is readable to judge, which is an unknown, not a pass.' + vSay;
     } else if (flags.length) {
-      line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and ' + (flags.length === 1 ? 'one thing tripped' : flags.length + ' things tripped') + ', listed below.';
+      line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and ' + (flags.length === 1 ? 'one thing tripped' : flags.length + ' things tripped') + ', listed below.' + vSay;
+    } else if (V.length) {
+      line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and nothing in the score tripped — but' + vSay;
     } else {
       line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and nothing tripped — which is not the same as safe.';
     }
 
     const rows = [];
     // ---- the money ----
-    if (m.marketCap != null || m.liquidityUsd != null) {
+    const L = liqOf(p);   // token-wide where more than one pool is known, else the deepest pool's figure
+    if (m.marketCap != null || L.usd != null) {
       let s = '';
       if (m.marketCap != null) s += 'Valued at <b>' + npFmtUsd(m.marketCap) + '</b>';
-      if (m.liquidityUsd != null) {
-        s += (s ? ' on ' : 'There is ') + '<b>' + npFmtUsd(m.liquidityUsd) + '</b> of liquidity';
-        // the number people cannot read on their own: what the pool is worth RELATIVE to the claim
+      if (L.usd != null) {
+        s += (s ? ' on ' : 'There is ') + '<b>' + npFmtUsd(L.usd) + '</b> of liquidity' + (L.total ? ' ' + esc(liqAcross(L, true)) : '');
+        // the number people cannot read on their own: what the pools are worth RELATIVE to the claim
         if (m.marketCap != null && m.marketCap > 0) {
-          const ratio = m.liquidityUsd / m.marketCap * 100;
+          const ratio = L.usd / m.marketCap * 100;
           s += ' — about <b>' + pctPlain(ratio) + '</b> of the market cap. ' + depthSay(ratio);
         } else s += '.';
       } else s += ', but the pool behind it could not be read.';
@@ -974,7 +1155,8 @@
     // ---- who owns it ----
     if (h.count != null || h.topHolderPct != null) {
       let s = '';
-      if (h.count != null) s += '<b>' + npNum(h.count) + '</b> wallet' + (h.count === 1 ? '' : 's') + ' hold it' + (h.count < 25 ? ' — few enough that a handful of people set the price' : '') + '. ';
+      // on Solana GoPlus does not say whether its count is of wallets or token accounts, so the count is said as its figure (holderSrcHTML)
+      if (h.count != null) s += '<b>' + npNum(h.count) + '</b> ' + (chainOf(p).slug === 'solana' ? 'holder' + (h.count === 1 ? '' : 's') + ' as GoPlus Security counts them' : 'wallet' + (h.count === 1 ? '' : 's') + ' hold it') + (h.count < 25 ? ' — few enough that a handful of people set the price' : '') + '. ';
       if (h.topHolderPct != null) {
         s += 'The largest holds <b>' + pctPlain(h.topHolderPct) + '</b>';
         if (h.top10Pct != null) s += ' and the top ten hold <b>' + pctPlain(h.top10Pct) + '</b>';
@@ -986,25 +1168,35 @@
     }
     // ---- the contract ----
     {
-      const bits = [];
-      if (t.isVerified === true) bits.push('The source code is published, so it can be read and checked.');
-      else if (t.isVerified === false) bits.push('The source code is <b>not published</b>, so nobody outside can see what it actually does.');
-      if (t.renounced === true) bits.push('Ownership is renounced — the rules can no longer be changed.');
-      else if (t.renounced === false) bits.push('Ownership is <b>not renounced</b>: whoever holds it can still change how the token behaves.');
+      const bits = [], o = ownership(p);   // the one ownership read every surface shares — this row and the Contract card cannot disagree
+      const gp = perGP(p);   // " (per GoPlus)" on another EVM chain, where these come from GoPlus's read; '' at home
+      if (t.isVerified === true) bits.push('The source code is published' + gp + ', so it can be read and checked.');
+      else if (t.isVerified === false) bits.push('The source code is <b>not published</b>' + gp + ', so nobody outside can see what it actually does.');
+      if (o.kind === 'authorities') {   // Solana: the mint and freeze authorities are what "renounced" means there
+        if (o.renounced === true) bits.push('Mint and freeze authorities revoked — nobody can mint more or freeze holders.');
+        else if (o.renounced === false) bits.push(heldSay(o));
+        else bits.push('Whether the mint and freeze authorities are revoked could not be read.');
+      } else if (o.caveats.length) {   // Ethereum: GoPlus reads past the owner address, and a take-back path or a hidden owner is not "renounced"
+        bits.push('Ownership is <b>not truly renounced</b>' + (o.zero ? ', though the owner reads as the zero address' : '') + ': GoPlus Security reads that ' + esc(o.caveats.join(' and ')) + '.');
+      } else if (o.renounced === true) bits.push('Ownership is renounced' + gp + ' — the rules can no longer be changed.');
+      else if (o.renounced === false) bits.push('Ownership is <b>not renounced</b>' + gp + ': whoever holds it can still change how the token behaves.');
+      // on another chain a missing owner is a reading — not made, or made with no owner named — never a claim about the code;
+      // on the home chain the Contract card carries the server's own owner() answer, so this row stays quiet as it always did
+      else if (o.vendor) bits.push(o.answered ? 'GoPlus Security named no owner for the contract, so whether ownership is renounced was not read.' : 'Who owns the contract could not be read (GoPlus Security did not answer).');
       if (bits.length) rows.push(['📄', 'The contract', bits.join(' ')]);
+    }
+    // ---- what another chain's contract read found that the score does not count (vendorFacts) ----
+    if (V.length) {
+      rows.push(['⚠️', 'What the contract read found',
+        V.map(x => '<b>' + esc(x.word) + '</b> — ' + esc(x.say) + '.').join('<br>') + '<br>Read by ' + esc(vendorSrc(p)) + ' — an automated reading, not an audit, and not counted in the score.']);
     }
     // ---- what tripped, named plainly ----
     if (flags.length) {
       rows.push(['🚩', flags.length === 1 ? 'What tripped' : 'What tripped (' + flags.length + ')',
         flags.map(k => '<b>' + esc(FLAG[k].word(p)) + '</b> — ' + esc(FLAG[k].say(p))).join('<br>')]);
     }
-    // ---- and, always, what we could not check ----
-    const dk = r.dataKnown || {}, gaps = [];
-    if (!dk.liquidity) gaps.push('the liquidity');
-    if (!dk.holders) gaps.push('the holder count');
-    if (!dk.concentration) gaps.push('how concentrated it is');
-    if (!dk.verified && chainOf(p).slug !== 'solana') gaps.push('whether the contract is verified');   // a Solana program's source is not something this site reads
-    if (!dk.snipers) gaps.push(foreignChain(p) ? 'who bought first (block-0 reads are Robinhood Chain only)' : 'who bought first');
+    // ---- and, always, what we could not check (unreadGaps — the same list the verdict's caveat names) ----
+    const gaps = unreadGaps(p);
     rows.push(['❓', 'What we could not check',
       gaps.length ? 'We could not read ' + esc(gaps.join(', ')) + '. That is missing information, <b>not a pass</b> — every check above is only as good as the data behind it.'
                   : 'Nothing — every check above had the data it needed.']);
@@ -1024,8 +1216,8 @@
 
   // "Why we say …": the flags in sentences, or the clean line (the classic body and the dashboard's Safety card)
   function whyHTML(p, hTag) {
-    const T = verdictOf(p), flags = activeFlags(p), hx = hTag || 'h3';
-    if (flags.length) {
+    const T = verdictOf(p), flags = activeFlags(p), hx = hTag || 'h3', V = vendorFacts(p);
+    if (flags.length || V.length) {
       /* Off the scanner page this heading is the ONLY verdict text there is — window.NPCard.detailHTML
          ships this panel into the Send Wall, communities, support, profiles and the token modal, where
          there is no chip, no icon and no byline. So the attribution has to live in the sentence itself.
@@ -1034,6 +1226,8 @@
          directly above a list of warnings the site itself raised. */
       let why = '<section class="np-why"><' + hx + ' class="np-why-h">' + (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></' + hx + '><ul class="np-why-list">';
       flags.forEach(k => { why += '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].say(p)) + '</li>'; });
+      // another chain's contract powers (vendorFacts): found by the read, not in the score — said so, so the list and the number agree
+      V.forEach(x => { why += '<li class="np-why-warn"><span aria-hidden="true">⚠️</span> ' + esc(vendorSrc(p) + ' reports: ' + x.word + ' — ' + x.say + '. Not counted in the score; the Contract card has the read.') + '</li>'; });
       return why + '</ul></section>';
     }
     return '<section class="np-why"><p class="np-why-clean">✔ No automatic red flags tripped. That doesn\'t mean it\'s safe — most new tokens still go to zero. Do your own research.</p></section>';
@@ -1059,10 +1253,12 @@
       volBarsHTML(p) + '</div>';
   }
   function marketKvHTML(p) {
-    const m = p.market || {}, r = p.risk || {}, supply = supplyOf(p);
+    const m = p.market || {}, r = p.risk || {}, supply = supplyOf(p), L = liqOf(p);
     return '<div class="np-kv">' +
       '<div class="hstat"><div class="lbl">Price</div><div class="val">' + npPrice(m.priceUsd) + '</div></div>' +
-      '<div class="hstat"><div class="lbl">Liquidity</div><div class="val' + (r.lowLiquidity ? ' red' : '') + '">' + npFmtUsd(m.liquidityUsd) + '</div></div>' +
+      // the token's liquidity (liqOf): a total across its pools when more than one is known, with the deepest pool named under it
+      '<div class="hstat"><div class="lbl">Liquidity' + (L.total ? ' · ' + npNum(L.pools) + ' pools' : '') + '</div><div class="val' + (r.lowLiquidity ? ' red' : '') + '">' + npFmtUsd(L.usd) + '</div></div>' +
+      (L.total ? '<div class="hstat"><div class="lbl">Deepest pool</div><div class="val">' + npFmtUsd(L.deepest) + '</div></div>' : '') +
       '<div class="hstat np-soft"><div class="lbl">Market cap ⚠︎</div><div class="val">' + npFmtUsd(m.marketCap) + '</div></div>' +
       '<div class="hstat np-soft"><div class="lbl">FDV ⚠︎</div><div class="val">' + npFmtUsd(m.fdv) + '</div></div>' +
       '<div class="hstat"><div class="lbl">Total supply</div><div class="val">' + (supply != null ? npCompact(supply) : '—') + '</div></div>' +
@@ -1078,7 +1274,9 @@
     return '<div class="np-flow"><div class="np-flow-bar" role="img" aria-label="' + npNum(b) + ' buys, ' + npNum(s) + ' sells, 24h">' +
       '<span class="np-flow-buy" style="flex:' + Math.max(b, 0.001) + '"></span><span class="np-flow-sell" style="flex:' + Math.max(s, 0.001) + '"></span></div>' +
       '<p class="np-flow-legend"><span class="np-buy">' + npNum(b) + ' buys</span> · <span class="np-sell">' + npNum(s) + ' sells</span>' +
-      (r.honeypotSuspect ? ' <span class="np-flow-note">— here, buys with almost no sells is a <b>red flag</b>, not a green one.</span>' : '') + '</p></div>';
+      // the note reads the COUNTS, so it rides only on the count-based flag: on another chain the flag is GoPlus's verdict
+      // (risk.honeypotSource 'goplus'), said in the vendor's words by FLAG.honeypotSuspect, and the bar may show plenty of sells
+      (r.honeypotSuspect && r.honeypotSource !== 'goplus' ? ' <span class="np-flow-note">— here, buys with almost no sells is a <b>red flag</b>, not a green one.</span>' : '') + '</p></div>';
   }
   // a coin the price feed does not index but whose market was read from its own pool (market.source 'reserves') has real 24h counts
   const poolRead = (p) => !!(p.market && p.market.source === 'reserves');
@@ -1089,13 +1287,26 @@
     return '<div class="np-txwrap"><table class="np-txtable"><thead><tr><th>Window</th><th>Buys</th><th>Sells</th></tr></thead><tbody>' +
       txrow('1h', tx.h1 || z) + txrow('6h', tx.h6 || z) + txrow('24h', tx.h24 || z) + '</tbody></table></div>';
   }
-  // where a holder count came from: the chain's own transfer ledger (wallets with a balance, as of a block) or an indexer
-  function holderSrcHTML(h) {
-    if (h.count == null) return '';
+  /* where a holder count came from: the home chain's own transfer ledger (wallets with a balance, as of a block), an indexer
+     while that ledger is still being built — or, on another chain, GoPlus Security's read (lib/multichain.js: holders.source
+     'goplus', holders.kind 'wallets' | 'token accounts'). This site builds no ledger on Ethereum or Solana, so the indexer
+     line's "being built" was false there; `p` says which chain the count is from. */
+  const holderSrcName = (h) => h.source === 'goplus' ? 'GoPlus Security' : String(h.source || '');
+  function holderSrcHTML(h, p) {
+    if (h.count == null || !h.source) return '';
     if (h.source === 'chain') return ' <small class="np-src np-src-chain" title="Counted from every Transfer event the token has emitted, read from the chain itself">on-chain' + (h.block ? ' · block ' + esc(String(h.block)) : '') + '</small>';
-    return h.source ? ' <small class="np-src" title="From an indexer (' + esc(h.source) + '); the chain’s own ledger is being built">' + esc(h.source) + '</small>' : '';
+    if (p && foreignChain(p)) {
+      /* The COUNT and the LIST are two different claims. On an EVM chain GoPlus counts holding addresses — wallets. On
+         Solana it does not say whether its holder_count counts owners or token accounts, so the count is said as GoPlus's
+         own figure and nothing more; the top-holder list is keyed by owner (lib/multichain.js, holders.kind 'wallets'),
+         or by token account on a profile stored before that change. */
+      const evm = chainOf(p).evm, list = h.kind === 'token accounts' ? 'token account (one wallet can hold more than one)' : 'wallet';
+      const what = evm ? 'holders counted by wallets' : 'holders as GoPlus counts them (it does not say whether that is wallets or token accounts); the top holders are listed by ' + list;
+      return ' <small class="np-src" title="From ' + esc(holderSrcName(h)) + '’s read — ' + what + '; this site reads no transfer ledger on ' + esc(chainOf(p).name) + '">' + esc(h.source === 'goplus' ? 'GoPlus' : h.source) + (evm ? ' · wallets' : '') + '</small>';
+    }
+    return ' <small class="np-src" title="From an indexer (' + esc(h.source) + '); the chain’s own ledger is being built">' + esc(h.source) + '</small>';
   }
-  function holderCountHTML(h) { return '<p class="np-supply"><b>' + esc(h.count != null ? (npNum(h.count) + ' holders') : 'not indexed yet') + '</b>' + holderSrcHTML(h) + '</p>'; }
+  function holderCountHTML(h, p) { return '<p class="np-supply"><b>' + esc(h.count != null ? (npNum(h.count) + ' holders') : 'not indexed yet') + '</b>' + holderSrcHTML(h, p) + '</p>'; }
   function concHTML(h) {
     if (h.topHolderPct == null) return '';
     return '<div class="np-conc"><div class="np-conc-bar"><span class="np-conc-top" style="width:' + Math.min(100, h.topHolderPct).toFixed(1) + '%"></span>' +
@@ -1113,21 +1324,32 @@
     }).join('') + '</div>';
   }
   function ownerLineHTML(p) {
-    if (chainOf(p).slug === 'solana') {   // Solana's version of ownership: the mint and freeze authorities
-      if (p.token.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Mint and freeze authorities revoked</b> — nobody can mint more or freeze holders’ accounts.</p>';
-      if (p.token.renounced === false) return '<p class="np-owner owned">🔑 <b>An authority is still held</b> — someone can still mint more, or freeze accounts (the Contract card says which).</p>';
-      return '<p class="np-owner">🔑 The mint and freeze authorities could not be read.</p>';
+    const o = ownership(p);   // the one ownership read (above) — the same answer the audit's contract row gives
+    if (o.kind === 'authorities') {   // Solana's version of ownership: the mint and freeze authorities
+      if (o.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Mint and freeze authorities revoked</b> — nobody can mint more or freeze holders’ accounts.</p>';
+      if (o.renounced === false) return '<p class="np-owner owned">🔑 ' + heldSay(o) + '</p>';
+      return '<p class="np-owner">🔑 The mint and freeze authorities could not be read — not a pass, missing information.</p>';
     }
-    if (p.token.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — the deployer can no longer change the contract.</p>';
-    if (p.token.owner) return '<p class="np-owner owned">🔑 Owner <code>' + esc(shortAddr(p.token.owner)) + '</code> ' + copyBtn(p.token.owner, 'owner address') + ' <b>— can still change the contract.</b></p>';
-    return '<p class="np-owner">🔑 Owner unknown (no standard owner() function).</p>';
+    // Ethereum: GoPlus reads past the owner address — a zero owner with a take-back path or a hidden owner is not renounced
+    if (o.caveats.length) return '<p class="np-owner owned">🔑 <b>Not truly renounced</b> — ' + (o.owner ? 'owner <code>' + esc(shortAddr(o.owner)) + '</code> ' + copyBtn(o.owner, 'owner address') + ', and ' : o.zero ? 'the owner reads as the zero address, but ' : '') + 'GoPlus Security reads that ' + esc(o.caveats.join(' and ')) + '.</p>';
+    // the home chain's two lines stay byte-for-byte as they were; on another EVM chain they say whose read they are (perGP)
+    if (o.renounced === true) return '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — the deployer can no longer change the contract' + perGP(p) + '.</p>';
+    if (o.owner) return '<p class="np-owner owned">🔑 Owner <code>' + esc(shortAddr(o.owner)) + '</code> ' + copyBtn(o.owner, 'owner address') + ' <b>— can still change the contract' + perGP(p) + '.</b></p>';
+    // no owner and not renounced: on another chain that is a reading — not made, or made with no owner named — never a claim
+    // about the contract's code (the home chain's "no standard owner() function" is its own node's answer, kept below)
+    if (o.vendor) return o.answered
+      ? '<p class="np-owner">🔑 Owner not read — GoPlus Security answered but named no owner (no owner() function, or one it could not find). Not a pass, missing information.</p>'
+      : '<p class="np-owner">🔑 Owner could not be read (GoPlus did not answer) — not a pass, missing information.</p>';
+    return '<p class="np-owner">🔑 Owner unknown (no standard owner() function).</p>';   // the home chain: the server's own owner() call found none
   }
-  const verifiedLineHTML = (p) => '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' : '📄 Verification unknown') + '</p>';
+  // the verified-source line: the home chain's words exactly as they were; " (per GoPlus)" where GoPlus read it (is_open_source)
+  const verifiedLineHTML = (p) => '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> contract source' + perGP(p) : p.token.isVerified === false ? '📄 <b class="red">Unverified</b> — source not published' + perGP(p) : '📄 Verification unknown') + '</p>';
   function addrRowsHTML(p) {
     const r = p.risk || {};
     return '<div class="np-addr-row"><span class="np-addr-lbl">Token</span>' + addrFit(p.token.address) + copyBtn(p.token.address, 'token contract address') + '</div>' +
       '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span>' + addrFit(p.pair.address) + copyBtn(p.pair.address, 'pair address') + '</div>' +
-      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + npNum(r.deployerLaunches) + ' launched' + (r.deployerDied ? ' · ' + npNum(r.deployerDied) + ' dead' : '') + '</span>' : '') + '</div>' : '');
+      // the deployer on another EVM chain is GoPlus's creator_address, and says so
+      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer' + perGP(p) + '</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + npNum(r.deployerLaunches) + ' launched' + (r.deployerDied ? ' · ' + npNum(r.deployerDied) + ' dead' : '') + '</span>' : '') + '</div>' : '');
   }
   const HONEST = '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>';
 
@@ -1144,7 +1366,7 @@
     const activityInner = (flowHTML(p) || noTradesHTML(p)) + (p.indexed ? txTableHTML(p) : '');
 
     // C. Holders — count + concentration + top-10
-    const holdersInner = holderCountHTML(h) + concHTML(h) + topHoldersHTML(h, 0, 10) +
+    const holdersInner = holderCountHTML(h, p) + concHTML(h) + topHoldersHTML(h, 0, 10) +
       (h.count == null ? '<p class="np-why-clean">Holder data lags for brand-new tokens — check back in a bit.</p>' : '');
 
     // D. Contract — the copy hub
@@ -1299,7 +1521,12 @@
       if (f.lpBurnedPct != null) rows.push(['LP burned (main pool)', pct(f.lpBurnedPct)]);
       if (f.program) rows.push(['Token program', '<code>' + esc(shortAddr(f.program)) + '</code>']);
     } else {
-      rows.push(['Honeypot check', yn(f.honeypot, 'cannot be sold once bought', 'can be sold')]);
+      /* A "0" from GoPlus's honeypot check is that check finding nothing, not a promise the token can be sold — so the no
+         is worded as what was (not) found. Its two siblings were read into chainFacts and never shown: a token can let you
+         buy and still refuse to sell your whole balance at once, or refuse buys outright. Each yes names GoPlus. */
+      rows.push(['Honeypot check', yn(f.honeypot, 'GoPlus’s check says it cannot be sold once bought', 'no honeypot found by GoPlus’s check')]);
+      rows.push(['Cannot sell all at once', yn(f.cannotSellAll, 'yes — per GoPlus, a whole balance cannot be sold in one go', 'no')]);
+      rows.push(['Cannot buy', yn(f.cannotBuy, 'yes — per GoPlus, buying is blocked', 'no')]);
       rows.push(['Buy tax', pct(f.buyTax)]); rows.push(['Sell tax', pct(f.sellTax)]);
       if (f.transferTax) rows.push(['Transfer tax', pct(f.transferTax)]);
       rows.push(['Mintable', yn(f.mintable, 'yes — supply can grow', 'no')]);
@@ -1310,16 +1537,20 @@
       if (f.takeBack != null) rows.push(['Ownership can be taken back', yn(f.takeBack, 'yes', 'no')]);
       if (f.hiddenOwner != null) rows.push(['Hidden owner', yn(f.hiddenOwner, 'yes', 'no')]);
       if (f.selfdestruct != null) rows.push(['Self-destruct', yn(f.selfdestruct, 'present', 'none')]);
-      if (f.lpLockedPct != null) rows.push(['LP locked', pct(f.lpLockedPct)]);
+      /* Not "LP locked": it is the sum of the shares GoPlus's top-10 LP holders carry with is_locked set — a vendor's
+         marking of ten wallets, not a read of every locker. Always listed, so a missing answer says "not read": when GoPlus
+         gave no LP holders (no count and nothing locked, or a count of none) the 0 it sums to is not a reading. */
+      rows.push(['LP marked locked by GoPlus (top 10 LP holders)', f.lpLockedPct != null && (f.lpHolders > 0 || f.lpLockedPct > 0) ? pct(f.lpLockedPct) : '<span class="tkd-unread">not read</span>']);
     }
     return '<dl class="tkd-facts">' + rows.map(([k, v]) => '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>').join('') + '</dl>' +
       '<p class="np-hp-disclaim">Read by GoPlus Security’s automated scanner' + (f.program || c.slug === 'solana' ? ' and the chain’s own node' : '') + ' — <b>not an audit</b>, and not a live buy/sell simulation. Always DYOR.</p>';
   }
-  // every pool of the token, deepest first — Dexscreener's list, each a button that points the chart card at that pool
+  // the pools Dexscreener lists for the token, deepest first — each a button that points the chart card at that pool. Its list
+  // stops at 30 pairs (p.poolsCapped), so it is never called "every pool": the label says whose list it is
   function poolsHTML(p, from, to) {   // from..to: a slice of the list (the card shows the deepest few, the rest in its pop-down)
     const cur = p.pair && p.pair.address;
     const list = p.pools.slice(from || 0, to == null ? undefined : to);
-    return '<ul class="tkd-pools" aria-label="' + (from ? 'Pools #' + (from + 1) + ' to #' + (from + list.length) : 'Pools that trade this token') + '">' + list.map((o) => {
+    return '<ul class="tkd-pools" aria-label="' + (from ? 'Pools #' + (from + 1) + ' to #' + (from + list.length) : 'Pools Dexscreener lists for this token') + '">' + list.map((o) => {
       const on = o.address === cur;
       const lbl = esc([o.dex || 'pool'].concat(o.labels || []).join(' ')) + ' · ' + esc(o.quote && o.quote.symbol || '?');
       return '<li class="tkd-pool' + (on ? ' is-on' : '') + '">' +
@@ -1367,7 +1598,8 @@
 
     // ---- the headline figures, in one strip ----
     const tx24 = (p.txns && p.txns.h24) || null;
-    const liqPct = (m.liquidityUsd != null && m.marketCap > 0) ? m.liquidityUsd / m.marketCap * 100 : null;
+    const L = liqOf(p);   // the token's liquidity: a total across its pools when more than one is known, else the deepest pool's
+    const liqPct = (L.usd != null && m.marketCap > 0) ? L.usd / m.marketCap * 100 : null;
     const supply = supplyOf(p);
     const notIdx = 'the price feed doesn’t index this pair';
     // volume and trades: the index's windows when it lists the pair; for a coin priced from its own pool, the pool's 24h
@@ -1377,9 +1609,10 @@
     const stats = '<dl class="tkd-stats">' +
       dashStat('mc', 'Market cap', dashUsd(m.marketCap)) +
       dashStat('fdv', 'FDV', dashUsd(m.fdv)) +
-      dashStat('liq', 'Liquidity', dashUsd(m.liquidityUsd), liqPct != null ? pctPlain(liqPct) + ' of market cap' : '', p, r.lowLiquidity ? 'lowLiquidity' : '') +
+      // a total says so and names the deepest pool (the ratio then lives on the Market card); one pool keeps its share of the market cap
+      dashStat('liq', 'Liquidity', dashUsd(L.usd), L.total ? esc(liqAcross(L)) : (liqPct != null ? pctPlain(liqPct) + ' of market cap' : ''), p, r.lowLiquidity ? 'lowLiquidity' : '') +
       dashStat('vol', 'Volume 24h', volKnown ? dashUsd(v.h24) : UNREAD, volKnown ? (pool ? 'read from its pool' : (v.h1 != null ? '1h ' + npFmtUsd(v.h1) : '')) : notIdx, p, r.deadVolume ? 'deadVolume' : '') +
-      dashStat('holders', 'Holders', h.count != null ? npNum(h.count) : UNREAD, h.count != null ? (h.source === 'chain' ? '⛓️ on-chain' : esc(h.source || '')) : '', p, r.lowHolders ? 'lowHolders' : '') +
+      dashStat('holders', 'Holders', h.count != null ? npNum(h.count) : UNREAD, h.count != null ? (h.source === 'chain' ? '⛓️ on-chain' : esc(holderSrcName(h))) : '', p, r.lowHolders ? 'lowHolders' : '') +
       dashStat('top10', 'Top 10 hold', h.top10Pct != null ? pctPlain(h.top10Pct) : UNREAD, h.topHolderPct != null ? 'largest ' + pctPlain(h.topHolderPct) : '', p, r.concentrated ? 'concentrated' : '') +
       dashStat('tx', 'Trades 24h', txKnown ? '<span class="np-buy">' + npNum(tx24.buys) + '</span> / <span class="np-sell">' + npNum(tx24.sells) + '</span>' : UNREAD,
         txKnown ? 'buys / sells' + (pool ? ' · read from its pool' : '') : notIdx, p, r.honeypotSuspect ? 'honeypotSuspect' : r.sellPressure ? 'sellPressure' : '') +
@@ -1433,23 +1666,29 @@
       '<div class="np-b0" data-token="' + esc(t.address) + '"></div>', 'Every first buyer, wallet by wallet');
     const cBundles = foreignChain(p) ? '' : dashCard(u, 'bundles', hc, '📦 Bundlers', '<div class="np-bd-sum" data-token="' + esc(t.address) + '">' + bundleSummaryHTML(r.bundles) + '</div>',
       '<div class="np-bd" data-token="' + esc(t.address) + '"></div>', 'Every bundler, wallet by wallet', '<span class="np-bd-aside" data-token="' + esc(t.address) + '">' + bundleAsideHTML(r.bundles) + '</span>');
-    // every pool of the token (owner: "enable all pools"), deepest first; any of them can be charted in the chart card
+    // the pools Dexscreener lists (owner: "enable all pools"), deepest first; any of them can be charted in the chart card.
+    // Dexscreener's token-pairs read stops at 30 (lib/multichain.js poolsCapped): then the count is "N+" (30+ when all 30
+    // listed price this token — the list keeps only those) and one line says there may be more, never "every pool"
     const POOLS_SHOWN = 6;
-    const cPools = foreignChain(p) && Array.isArray(p.pools) && p.pools.length
-      ? dashCard(u, 'pools', hc, '🏊 Pools', poolsHTML(p, 0, POOLS_SHOWN), p.pools.length > POOLS_SHOWN ? poolsHTML(p, POOLS_SHOWN) : '', 'Pools #' + (POOLS_SHOWN + 1) + ' to #' + p.pools.length, '<b>' + p.pools.length + '</b>')
+    const poolsN = Array.isArray(p.pools) ? p.pools.length : 0, poolsMore = p.poolsCapped === true;
+    const cPools = foreignChain(p) && poolsN
+      ? dashCard(u, 'pools', hc, '🏊 Pools', poolsHTML(p, 0, POOLS_SHOWN) + (poolsMore ? '<p class="tkd-note">Dexscreener lists at most 30 pools; there may be more.</p>' : ''),
+          poolsN > POOLS_SHOWN ? poolsHTML(p, POOLS_SHOWN) : '', 'Pools #' + (POOLS_SHOWN + 1) + ' to #' + poolsN,
+          '<b>' + poolsN + (poolsMore ? '+' : '') + '</b>' + (poolsMore ? '<span class="sr-only"> or more — Dexscreener lists at most 30</span>' : ''))
       : '';
     const caps = p.caps;
-    const mBody = (liqPct != null ? '<p class="tkd-line">💧 Liquidity is <b>' + pctPlain(liqPct) + '</b> of the market cap. ' + depthSay(liqPct) + '</p>' : '') +
+    // the depth ratio is token-wide (liqOf): with several pools the total is named, with the deepest pool, so the sentence is about what every pool holds
+    const mBody = (liqPct != null ? '<p class="tkd-line">💧 Liquidity is <b>' + pctPlain(liqPct) + '</b> of the market cap' + (L.total ? ' — <b>' + npFmtUsd(L.usd) + '</b> ' + esc(liqAcross(L, true)) : '') + '. ' + depthSay(liqPct) + '</p>' : '') +
       reservesHTML(p) +
       (caps && caps.peakMc > 0 && caps.offPeakPct != null && caps.offPeakPct > 0 ? '<p class="tkd-line">🏔️ The highest market cap this scanner has recorded for it is <b>' + npFmtUsd(caps.peakMc) + '</b>; it is <b>' + pctPlain(caps.offPeakPct) + '</b> below that now.</p>' : '');
     // with nothing else to say, say which figure is missing — the pool, or only the market cap to measure it against
-    const mNote = m.liquidityUsd == null ? '<p class="tkd-note">The pool could not be read just now, so there is no depth figure to show.</p>'
-      : '<p class="tkd-note">💧 Liquidity is <b>' + npFmtUsd(m.liquidityUsd) + '</b>. The market cap was not read, so there is no depth ratio to show.</p>';
+    const mNote = L.usd == null ? '<p class="tkd-note">The pool could not be read just now, so there is no depth figure to show.</p>'
+      : '<p class="tkd-note">💧 Liquidity is <b>' + npFmtUsd(L.usd) + '</b>' + (L.total ? ' ' + esc(liqAcross(L, true)) : '') + '. The market cap was not read, so there is no depth ratio to show.</p>';
     const cMarket = dashCard(u, 'market', hc, '📊 Market', mBody || mNote,
       marketKvHTML(p) + capTrail(p), '📊 Every market figure, then → now');
     const topN = (h.top || []).length;
     const cHolders = dashCard(u, 'holders', hc, '👥 Holders',
-      holderCountHTML(h) + concHTML(h) + topHoldersHTML(h, 0, 3) +
+      holderCountHTML(h, p) + concHTML(h) + topHoldersHTML(h, 0, 3) +
         (h.kind === 'token accounts' ? '<p class="tkd-note">On Solana the top holders are listed by token account, as GoPlus Security reports them — one wallet can hold more than one.</p>' : '') +
         (h.count == null ? '<p class="tkd-note">Holder data lags for brand-new tokens — check back in a bit.</p>' : ''),
       topN > 3 ? topHoldersHTML(h, 3, topN) : '', 'Holders #4 to #' + topN);
@@ -1492,6 +1731,9 @@
         const card = dash.querySelector('.tkd-card--chart .tkd-card-b'); if (!card) return;
         const p2 = dash._pair; if (!p2) return;
         const q = Object.assign({}, p2, { pair: Object.assign({}, p2.pair, { address: b.dataset.poolChart, quoteSymbol: b.dataset.poolQuote || p2.pair.quoteSymbol }), links: Object.assign({}, p2.links, { dex: b.dataset.poolUrl || null }) });
+        // the chart being replaced is torn down first — its poll timer, observer and listeners (chart.js OnChainChart.destroy) —
+        // or every pool switch left another chart ticking behind the one on screen; innerHTML alone only detaches the host
+        if (window.OnChainChart && OnChainChart.destroy) card.querySelectorAll('.onchain-chart').forEach((h) => OnChainChart.destroy(h));
         card.innerHTML = chartHTML(q);
         mountCharts(card);
         dash.querySelectorAll('[data-pool-chart]').forEach((x) => { const on = x === b; x.setAttribute('aria-pressed', String(on)); x.textContent = on ? '📈 Charted' : '📈 Chart'; x.closest('.tkd-pool').classList.toggle('is-on', on); });
@@ -1781,7 +2023,8 @@
       /* The 15s poll rewrites an open card's body, which destroys the chart and its transaction tape
          inside it — they mount once and were never remounted, so an expanded card lost them silently a
          few seconds after it was opened. Rebuild, then mount again. */
-      if (body && !busy) { body.outerHTML = bodyHTML(p); if (window.mountOnChainCharts) mountOnChainCharts(li); }
+      // the chart being replaced is torn down first (chart.js OnChainChart.destroy), as at the dashboard's pool switch — a rebuild every 15 s otherwise left one more ticking host behind each time
+      if (body && !busy) { if (window.OnChainChart && OnChainChart.destroy) body.querySelectorAll('.onchain-chart').forEach((h) => OnChainChart.destroy(h)); body.outerHTML = bodyHTML(p); if (window.mountOnChainCharts) mountOnChainCharts(li); }
     }
   }
   function patchExisting() {

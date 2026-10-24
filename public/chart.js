@@ -35,6 +35,22 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reduced = () => !!(window.prefersReduced && window.prefersReduced());
 
+  /* A pool on Ethereum or Solana (owner, 2026-10-23). Its host says so in data-chain, and three things follow. The candles
+     come from GeckoTerminal, not from the pair contract's own logs, so every "reading the chain" sentence names GeckoTerminal
+     there — a read this page never makes is never claimed. The marker layers (Send Calls, Sent Its, Conviction, the deployer,
+     the first ten buys) are the home chain's and are not read, so no legend is built for them: five toggles saying "none in
+     this window" over layers nobody looked at would be a result that was never read. And the chart switch learns which sites
+     list the pool from the chart answer itself (see markSources). The home chain's words are kept exactly as they were. */
+  const farChain = (host) => !!(host && host.dataset && host.dataset.chain && host.dataset.chain !== 'robinhood');
+  const readingWords = (host) => farChain(host) ? 'Reading GeckoTerminal…' : 'Reading the chain…';
+  const againWords = (host) => farChain(host) ? 'Asking GeckoTerminal again…' : 'Asking the chain again…';
+  const silentWords = (host) => farChain(host) ? 'GeckoTerminal is not answering just now' : 'The chain is not answering reads just now';
+  /* How often a far chart is asked for again, and in words. The ask is this page's; the candles behind it are GeckoTerminal's,
+     which the server keeps up to 90 s (lib/multichain.js CHART_TTL), so "refreshed" alone would promise a freshness nobody
+     measured. startTicking reads the same data-poll with the same 30 s floor. */
+  const farEveryMs = (host) => Math.max(30000, Number(host.dataset.poll) || 60000);
+  const farEveryWords = (host) => { const s = Math.round(farEveryMs(host) / 1000); return s === 60 ? 'every minute' : 'every ' + s + ' s'; };
+
   /* ABSENT and NULL are different answers and must not share a branch. A payload with no `quoteUsd` key
      at all predates the field, and falling back to the ETH rate keeps a WETH pool — every pool on this
      chain today — rendering exactly as it did before. A payload that carries `quoteUsd: null` is the
@@ -145,7 +161,8 @@
     }
     ctx.fillStyle = axis; ctx.font = '11px Rubik, system-ui, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const msg = (data && (data._msg || data.note)) || 'Reading the chain…';
+    // _reading is the host's own first-load sentence (paint() writes it): GeckoTerminal's on another chain, the chain's at home
+    const msg = (data && (data._msg || data.note)) || (data && data._reading) || 'Reading the chain…';
     // wrap by hand: canvas has no line breaking, and a one-line sentence would run under the gutter
     const words = String(msg).split(' '); const max = W - PAD.l - PAD.r - 20; const lines = []; let cur = '';
     for (const w of words) {
@@ -672,12 +689,17 @@
         '&pair=' + encodeURIComponent(host.dataset.pair) + '&to=' + to +
         '&tf=' + encodeURIComponent(host.dataset.tf || '1h') + (wantDev ? '&dev=1' : ''),
         { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null);
+      if (host._dead) return;   // the host was torn down while this was in flight (destroy): nothing to draw on
       if (m && m.types) { d.markers = m; host._devLoaded = wantDev; paint(host); renderLegend(host); }
     } catch { /* markers are an enhancement; a chart without them is still a chart */ }
   }
 
   /* ═══ the toggle row ═══ */
   function renderLegend(host) {
+    /* No marker layer is read for a pool on another chain (loadMarkers returns before asking), so there is no legend to draw —
+       not an empty one either. The host never gets an .oc-legend (see renderOnChainChart), and this guard stops every caller
+       (each load, the 60 s re-ask, a legend click) from building five "none in this window" toggles over layers nobody read. */
+    if (farChain(host)) return;
     const bar = host.querySelector('.oc-legend'); if (!bar) return;
     const d = host._data, sets = (d && d.markers && d.markers.types) || {};
     const notes = (d && d.markers && d.markers.notes) || {};
@@ -753,6 +775,11 @@
     unreadable: { cls: 'is-unknown', word: 'address unreadable', tip: 'This log did not carry a readable address.' },
   };
   const stateFor = (tr) => STATE[tr && (tr.basis === 'ok' ? tr.state : tr.basis)] || STATE['no-buy'];
+  /* A tape nobody followed. Ethereum's and Solana's trades come from GeckoTerminal (lib/multichain.js), which says who traded
+     but not what each address paid or took over the window, so the server sends `traders: null`. Before this every such row
+     fell through stateFor(null) to "no entry here — sold without buying", a verdict about each address that was never
+     measured. Outside STATE on purpose, so no server state word can ever map onto it. */
+  const UNFOLLOWED = { cls: 'is-unknown', word: 'not followed', tip: 'Profit and loss are followed on Robinhood Chain’s own tape only.' };
   /* Amounts are printed to significant figures, never to a fixed number of decimals: a real trade of
      0.0000004 tokens rounded to "0" is a figure that is not on the chain. */
   function amt(v) {
@@ -761,9 +788,18 @@
     if (v >= 1000) return Math.round(v).toLocaleString('en-US');
     return String(Number(v.toPrecision(4)));
   }
-  function tapeHTML(data) {
+  function tapeHTML(data, host) {
     const rows = data.trades || [];
     if (!rows.length) return '';
+    /* Followed = the home chain's own tape: every address's buys and sells over the window, read from the pair's Swap logs,
+       which is what the up / down / new / no-entry words are measured from. A `traders: null` answer (another chain's tape,
+       from GeckoTerminal) — or any pool on another chain, whatever its answer carries — is not followed: no row is given a
+       verdict, and no "paid to the contract" count is printed for a tape where nobody counted. `tapeAddr: 'signer'` says the
+       address on each row is the transaction's signer rather than whoever the pool paid, and the column says so too. The
+       home chain's strings below are exactly what they were. */
+    const followed = data.traders != null && !farChain(host);
+    const signer = !followed && data.tapeAddr === 'signer';
+    const far = farChain(host);
     const traders = data.traders || {};
     const exp = typeof data.explorer === 'string' ? data.explorer.replace(/\/+$/, '') : '';
     // the explorer's paths differ by chain (Solscan reads /account/, not /address/); the server says which
@@ -771,13 +807,15 @@
     const qsym = data.quote || '';
     const pct = (v) => (v == null || !isFinite(v)) ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(Math.abs(v) < 10 ? 2 : 1) + '%';
     const body = rows.map((r) => {
-      const tr = (r.wallet && traders[r.wallet]) || null;
-      const st = !r.wallet ? STATE.unreadable : (r.firstBuy ? STATE.first : stateFor(tr));
+      const tr = followed ? ((r.wallet && traders[r.wallet]) || null) : null;
+      const st = !r.wallet ? STATE.unreadable : !followed ? UNFOLLOWED : (r.firstBuy ? STATE.first : stateFor(tr));
       const when = Number.isFinite(r.ts) ? new Date(r.ts).toISOString().slice(5, 16).replace('T', ' ') : '—';
       const side = r.isBuy ? 'Buy' : 'Sell';
       const walletTxt = r.wallet ? short(r.wallet) : 'unreadable';
-      const note = (r.viaContract || (tr && tr.basis === 'contract')) ? ' This is a contract — a router, an aggregator or another pool — not a person’s own address.' : '';
-      const pnlTxt = (!r.firstBuy && tr && tr.basis === 'ok' && tr.pnlPct != null) ? pct(tr.pnlPct) : '';
+      // "a contract" is only ever said where the tape was followed: elsewhere nobody checked which addresses are contracts
+      const note = !followed ? (signer ? ' This is the address that signed the transaction.' : '')
+        : (r.viaContract || (tr && tr.basis === 'contract')) ? ' This is a contract — a router, an aggregator or another pool — not a person’s own address.' : '';
+      const pnlTxt = (followed && !r.firstBuy && tr && tr.basis === 'ok' && tr.pnlPct != null) ? pct(tr.pnlPct) : '';
       const wcell = r.wallet
         ? '<a class="oc-w ' + st.cls + '" href="' + esc(exp + pAddr + r.wallet) + '" target="_blank" rel="noopener"' +
           ' title="' + esc(st.tip + note + ' Opens this address on the explorer.') + '">' +
@@ -786,7 +824,7 @@
               (pnlTxt ? '<span class="sr-only"> across all of this address’s trades in the window, not this one row</span>' : '') +
             '</span>' +
           '</a>'
-        : '<span class="oc-w ' + st.cls + '" title="' + esc(st.tip) + '"><span class="oc-w-a">' + esc(walletTxt) + '</span></span>';
+        : '<span class="oc-w ' + st.cls + '" title="' + esc(followed ? st.tip : 'The chart source’s record of this trade carried no readable address.') + '"><span class="oc-w-a">' + esc(walletTxt) + '</span></span>';
       const hcell = r.hash
         ? '<a class="oc-tx" href="' + esc(exp + pTx + r.hash) + '" target="_blank" rel="noopener"' +
           ' title="Opens this transaction on the chain explorer">' + esc(short(r.hash)) + ' ↗</a>'
@@ -808,6 +846,22 @@
       : span >= 36e5 ? (Math.round(span / 36e5) === 1 ? 'hour' : Math.round(span / 36e5) + ' hours')
       : Math.max(1, Math.round(span / 6e4)) + (Math.max(1, Math.round(span / 6e4)) === 1 ? ' minute' : ' minutes');
     const readAt = Number.isFinite(data.tapeAt) ? new Date(data.tapeAt).toISOString().slice(11, 16) + ' UTC' : null;
+    if (!followed) {
+      /* Another chain's tape: what the address is, that no verdict is given and why, and where the rows came from. Its rows
+         ARE asked for again with the chart (each re-ask redraws the tape), so the home chain's "they do not follow the live
+         price" is not said here — there is no live price on such a chart to follow. */
+      return '<div class="oc-tape-scroll">' +
+        '<table class="oc-tape"><caption class="sr-only">Recent transactions for this pool as the chart source records them, newest first. Each row links to the transaction and ' + (signer ? 'the address that signed it' : 'the address shown') + ' on the block explorer.</caption>' +
+        '<thead><tr><th scope="col">Time (UTC)</th><th scope="col">Side</th><th scope="col">Tokens</th><th scope="col">Value</th><th scope="col">' + (signer ? 'Signer' : 'Address') + '</th><th scope="col">Transaction</th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table></div>' +
+        '<p class="oc-tape-note">' +
+        (signer ? 'The address shown is the one that signed the transaction — not necessarily the one the tokens or the proceeds went to. '
+          : 'The address shown is the one the chart source records for the trade. ') +
+        'Profit and loss are followed on Robinhood Chain’s own tape only, so every address here is marked <b class="oc-k">not followed</b> and no profit or loss is claimed for anyone. ' +
+        (readAt ? 'Rows read at ' + esc(readAt) + ' — they are asked for again with the chart. ' : '') +
+        'Figures are best-effort from ' + (far ? 'GeckoTerminal’s' : 'the chart source’s') + ' record of public chain data over this window only. They are not a guarantee, not an audit and not advice, and copying a wallet’s trades can lose you money.' +
+        '</p>';
+    }
     const viaN = Number.isFinite(data.tapeViaContract) ? data.tapeViaContract : null;
     const viaLine = viaN == null ? ''
       : viaN === 0 ? 'None of these rows was paid to the contract that called the swap. '
@@ -839,7 +893,7 @@
     clearTimeout(host._againTimer);
     host._reasking = true;               // what the stale line may promise: it says "asks again" only while this holds
     const fire = () => {
-      if (seq !== host._seq || !host.isConnected) return;
+      if (host._dead || seq !== host._seq || !host.isConnected) return;
       if (document.hidden || host._visible === false) { host._againTimer = setTimeout(fire, 15000); return; }
       load(host, { again: true });
     };
@@ -863,7 +917,7 @@
     else if (kind === 'edge') wait = n <= 3 ? 5000 * n : stale ? 60000 : 0;   // a stale chart on screen keeps its promise to ask again
     else if (kind === 'slow') wait = 60000;
     const what = kind === 'slow' ? 'This network is sending too many requests just now'
-      : kind === 'edge' ? 'The site could not be reached just now' : 'The chain is not answering reads just now';
+      : kind === 'edge' ? 'The site could not be reached just now' : silentWords(host);   // another chain's "chain" read is GeckoTerminal's
     status.textContent = '⚠️ ' + what + (wait ? ' — trying again in ' + (wait >= 60000 ? 'a minute' : Math.round(wait / 1000) + ' seconds') + '.' : '. Reload the page to try again.');
     host._data._msg = what + ' — the explorer link above still works.';
     if (!wait) host._reasking = false;
@@ -890,12 +944,12 @@
       host._view = defaultView();        // a new timeframe is a new window — it starts where it fits
       host._sayNow = true;               // a fresh load (first paint or a timeframe change) is always announced
       stopTicking(host);                 // the old timeframe's live tick must not keep drawing under the new button
-      status.textContent = 'Reading the chain…';
-    } else if (host._retries) status.textContent = 'Asking the chain again…';
+      status.textContent = readingWords(host);   // 'Reading the chain…' at home; 'Reading GeckoTerminal…' for a pool on another chain
+    } else if (host._retries) status.textContent = againWords(host);
     const cv = host.querySelector('canvas');
-    // something on the canvas while the chain is being read, rather than an empty box that reads as broken
+    // something on the canvas while the source is being read, rather than an empty box that reads as broken
     host._data = host._data || { points: [] };
-    if (!again) host._data._msg = 'Reading the chain…';
+    if (!again) host._data._msg = readingWords(host);
     if ((host._data.points || []).length < 2) paint(host, true);
     let res = null, d = null;
     try {
@@ -905,15 +959,30 @@
         '&tf=' + encodeURIComponent(tf) + '&hours=' + (HOURS[tf] || 168), { credentials: 'same-origin' });
       d = await res.json().catch(() => null);
     } catch {}
-    if (seq !== host._seq) return;      // a newer timeframe was chosen while this was in flight, or a failed OLD one must not land
+    if (host._dead || seq !== host._seq) return;      // torn down (destroy), or a newer timeframe was chosen while this was in flight: a failed OLD one must not land
     if (!res) return retryAfterFailure(host, seq, status, 'chain');            // the connection dropped
     if (!d) return retryAfterFailure(host, seq, status, 'edge');               // no JSON: the edge answered in the server's place
     if (d.retry) return retryAfterFailure(host, seq, status, 'chain');         // the chain is not answering just now
     if (res.status === 429) return retryAfterFailure(host, seq, status, 'slow');
-    if (d.error) { host._reasking = false; status.textContent = '⚠️ ' + d.error; host._data._msg = d.error; paint(host, true); return; }
+    if (d.error) { host._reasking = false; status.textContent = '⚠️ ' + d.error; host._data._msg = d.error; paint(host, true);
+      /* GeckoTerminal's last word on a pool it does not chart — `retry: false` is a miss (a 404), not a busy signal — so its
+         chart view leaves the switch too: an iframe of the same pool from the same site would show the same nothing. The
+         Dexscreener view stays; the error answer says nothing about that listing. The home chain's answers carry no retry
+         flag on a plain error and are not switches' concern here. */
+      if (farChain(host) && d.retry === false) markSources(host, { geckoterminal: false });
+      return;
+    }
     d.points = pointsFromCandles(d.candles);
+    // the answer says which sites list this pool (another chain's does; see markSources): the switch follows it, not an assumption
+    if (farChain(host) && d.sources) markSources(host, d.sources);
     if (d.stale) d._staleAt = Date.now() - (Number(d.ageMs) || 0);   // the server measured the age; count on from it here
-    d._msg = d.note || 'No swaps on this pool in this window. The pool exists; nobody traded it.';
+    /* An empty window is a fact about the pool only where the swaps were read from the pool itself. At home an empty answer IS
+       the chain's own Swap logs saying nobody traded; elsewhere it is GeckoTerminal having no candles, which says nothing
+       about whether anyone traded — so a far host says that, whatever the answer's own note claims. */
+    d._msg = !farChain(host) ? (d.note || 'No swaps on this pool in this window. The pool exists; nobody traded it.')
+      : !d.points.length ? 'GeckoTerminal has no candles for this pool in this window — that says nothing about whether it traded.'
+      : d.points.length < 2 ? 'GeckoTerminal has a single candle for this pool in this window — too few to draw a line, and that says nothing about how much it traded.'
+      : (d.note || null);
     // coming back from a failure, or a stale chart turning fresh (or the reverse), is said at once
     if (host._retries || !!d.stale !== !!(host._data && host._data.stale)) host._sayNow = true;
     host._retries = 0; host._edgeRetries = 0; host._reasking = false;
@@ -933,7 +1002,7 @@
     if (tbl) tbl.innerHTML = tableHTML(d);
     const tape = host.querySelector('.oc-tape-wrap');
     if (tape) {
-      tape.innerHTML = tapeHTML(d);
+      tape.innerHTML = tapeHTML(d, host);
       const det = host.querySelector('.oc-trades');
       // no swaps in the window → no tape to open, so the disclosure goes away rather than opening on nothing
       if (det) det.hidden = !(d.trades && d.trades.length);
@@ -955,6 +1024,7 @@
     const cv = host.querySelector('canvas');
     d._toggles = host._toggles;          // draw() reads these to decide which marker layers to render
     d._view = host._view || (host._view = defaultView());
+    d._reading = readingWords(host);     // drawEmpty()'s fallback sentence while nothing is drawn: the host's own source, never "the chain" for GeckoTerminal's candles
     draw(cv, d);
     const rb = host.querySelector('.oc-reset');
     if (rb) rb.hidden = !isZoomed(host._view);
@@ -962,10 +1032,10 @@
     // an old chart says so before anything else: the server marks it `stale`, with `asOf`, when the chain is not answering
     // a stale chart's age is worked out here on every draw (from the server's ageMs), so it never freezes at the minute it arrived
     const ago = d.stale && (d._staleAt || d.asOf) ? Math.max(1, Math.round((Date.now() - (d._staleAt || d.asOf)) / 60000)) : 0;
-    const sum = (ago ? '⚠️ The chain is not answering reads just now, so this is the chart as it stood ' + ago + ' minute' + (ago === 1 ? '' : 's') + ' ago. ' + (host._reasking ? 'This page asks again every minute while you are looking at it. ' : 'Reload the page to try again. ') : '') + summarise(d);
+    const sum = (ago ? '⚠️ ' + silentWords(host) + ', so this is the chart as it stood ' + ago + ' minute' + (ago === 1 ? '' : 's') + ' ago. ' + (host._reasking ? 'This page asks again every minute while you are looking at it. ' : 'Reload the page to try again. ') : '') + summarise(d);
     const srcChip = host.querySelector('.oc-src');
-    const far = host.dataset.chain && host.dataset.chain !== 'robinhood';   // another chain's candles come from GeckoTerminal, not from a live reserves read
-    if (srcChip) srcChip.textContent = ago ? (far ? '📊 GeckoTerminal · as of ' : '⛓️ on-chain · as of ') + new Date(d._staleAt || d.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (far ? '📊 GeckoTerminal · refreshed' : '⛓️ on-chain · live');
+    const far = farChain(host);   // another chain's candles come from GeckoTerminal, not from a live reserves read
+    if (srcChip) srcChip.textContent = ago ? (far ? '📊 GeckoTerminal · as of ' : '⛓️ on-chain · as of ') + new Date(d._staleAt || d.asOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : (far ? '📊 GeckoTerminal · ' + farEveryWords(host) : '⛓️ on-chain · live');
     /* F004: this is a polite live region, and paint() runs on every 1s poll tick — so a screen reader was
        read the whole summary sentence once a second for as long as the chart was on screen. The canvas
        label follows every repaint silently; the SPOKEN line only changes when the summary text actually
@@ -1008,6 +1078,7 @@
         const res = await fetch('/api/price?pair=' + encodeURIComponent(pair) + '&token=' + encodeURIComponent(token),
           { credentials: 'same-origin' });
         const r = await res.json().catch(() => null);
+        if (host._dead) return;   // torn down mid-tick (destroy): the interval is already cleared, this answer is nobody's
         if (res.ok && r && r.price > 0 && host._data) {
           missed = 0;
           const pts = host._data.points;
@@ -1053,6 +1124,7 @@
   window.renderOnChainChart = function (host) {
     if (!host || host._wired) { if (host && host._wired) load(host); return; }
     host._wired = true;
+    host._dead = false;   // a host destroy() tore down can be wired again from scratch
     // the ⤢ in the head opens the full-screen view (app.js, ChartFull). Inside a .chart-switch the whole switch goes, so its
     // source buttons and Dexscreener / CoinGecko views go too; a chart on its own is its own unit
     if (!host.closest('[data-cf-unit]')) { host.setAttribute('data-cf-unit', ''); if (!host.hasAttribute('data-cf-title')) host.setAttribute('data-cf-title', 'Price chart'); }
@@ -1065,7 +1137,7 @@
         '</div>' +
         '<span class="oc-live" aria-live="off"></span>' +
         (host.dataset.chain && host.dataset.chain !== 'robinhood'
-          ? '<span class="oc-src" title="Candles and trades for this pool from GeckoTerminal, drawn by this site and asked for again every ' + Math.round(Math.max(30000, Number(host.dataset.poll) || 60000) / 1000) + 's">📊 GeckoTerminal · refreshed</span>'
+          ? '<span class="oc-src" title="Candles and trades for this pool from GeckoTerminal, drawn by this site and asked for again ' + farEveryWords(host) + ' (GeckoTerminal’s data, cached up to 90 s)">📊 GeckoTerminal · ' + farEveryWords(host) + '</span>'
           : '<span class="oc-src" title="History from this pair contract&#39;s own Swap events; the live price from its reserves, every ' +
           Math.round(Math.max(1000, Number(host.dataset.poll) || 1000) / 1000) + 's">⛓️ on-chain · live</span>') +
         '<button class="cf-open" type="button" data-cf-open aria-haspopup="dialog" aria-label="Show the ' + esc(host.closest('[data-cf-unit]').getAttribute('data-cf-title') || 'price chart') + ' full screen" data-tip="Opens this chart full screen — Close or Esc brings it back"><i class="cf-ico" aria-hidden="true"></i></button>' +
@@ -1084,12 +1156,14 @@
           ' title="Drag to stretch or compress the price scale"><span><i class="oc-grab-ico oc-grab-ico-y" aria-hidden="true"></i></span></button>' +
         '<button class="oc-reset" type="button" data-tip="Puts the whole window back and follows the live price" hidden>↺ Fit</button>' +
       '</div>' +
-      '<div class="oc-legend" role="group" aria-label="Which markers to show"></div>' +
+      // the marker legend is the home chain's: no layer is read for a pool elsewhere, so no row of toggles is built for one (renderLegend guards the same)
+      (farChain(host) ? '' : '<div class="oc-legend" role="group" aria-label="Which markers to show"></div>') +
       '<p class="oc-status" role="status" aria-live="polite"></p>' +
       '<details class="oc-data"><summary>View the numbers</summary><div class="oc-table-wrap"></div></details>' +
       '<details class="oc-data oc-trades" hidden><summary>Recent transactions ⛓️</summary><div class="oc-tape-wrap"></div></details>';
     host._toggles = loadToggles();
-    host.addEventListener('click', (e) => {
+    // kept on the host so destroy() can take it off again: a host wired twice must not answer every click twice
+    host._onClick = (e) => {
       const b = e.target.closest('.oc-tf');
       if (b) {
         host.dataset.tf = b.dataset.tf;
@@ -1112,14 +1186,20 @@
       paint(host, true);
       // the deployer layer is fetched on demand, so switching it on for the first time has to go and get it
       if (host._toggles.dev && !host._devLoaded) loadMarkers(host);
-    });
+    };
+    host.addEventListener('click', host._onClick);
+    /* The window and document listeners, and the two observers, are kept BY REFERENCE on the host. Each one closes over the
+       host, so an anonymous listener left on window after the host was discarded (the dashboard's pool switcher replaces the
+       chart card's markup for another pool) kept the whole detached subtree alive for the life of the page, and kept firing
+       its timer against it. destroy() takes every one of these off again. */
     let rt;
-    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (host._data) paint(host); fitTape(host); }, 150); });
+    host._onResize = () => { clearTimeout(rt); rt = setTimeout(() => { if (host._dead) return; if (host._data) paint(host); fitTape(host); }, 150); };
+    window.addEventListener('resize', host._onResize);
     // ...and whenever its own box changes size with the window standing still (opened full screen, put back, a column
     // reflowing): redrawn sharp at the new size, not the old picture stretched
     if (typeof ResizeObserver === 'function') {
       let seen = '';
-      new ResizeObserver(() => {
+      host._ro = new ResizeObserver(() => {
         const r = host.querySelector('.oc-canvas').getBoundingClientRect(), k = Math.round(r.width) + 'x' + Math.round(r.height);
         if (!r.width || !r.height || k === seen) return;
         seen = k;
@@ -1134,11 +1214,36 @@
     host._visible = true;
     if ('IntersectionObserver' in window) {
       host._visible = false;
-      new IntersectionObserver((es) => { host._visible = es.some(e => e.isIntersecting); }, { rootMargin: '120px' }).observe(host);
+      host._io = new IntersectionObserver((es) => { host._visible = es.some(e => e.isIntersecting); }, { rootMargin: '120px' });
+      host._io.observe(host);
     }
-    document.addEventListener('visibilitychange', () => { if (!document.hidden && host._data) paint(host); });
+    host._onVis = () => { if (!document.hidden && host._data && !host._dead) paint(host); };
+    document.addEventListener('visibilitychange', host._onVis);
     load(host);
   };
+
+  /* ═══ teardown ═══
+     The dashboard's pool switcher (newpairs.js mountDashboard) replaces the chart card's markup for another pool, and before
+     this there was nothing to call first: the discarded host lived on — its 60 s re-ask (another chain) or its price tick kept
+     firing against a detached subtree, and its window and document listeners, closures over the host, kept that subtree in
+     memory for as long as the page did. Every timer, listener and observer the host owns is let go here; a fetch already in
+     flight lands on the _dead flag (checked after every await) and draws nothing; the sequence number moves on so an old
+     answer is outrun as well as flagged. Safe to call twice, and on a host that was never wired. Callers:
+       if (window.OnChainChart && OnChainChart.destroy) card.querySelectorAll('.onchain-chart').forEach((h) => OnChainChart.destroy(h)); */
+  function destroy(host) {
+    if (!host) return;
+    host._dead = true;
+    host._seq = (host._seq || 0) + 1;
+    stopTicking(host);
+    clearTimeout(host._againTimer); host._againTimer = null;
+    if (host._onResize) { window.removeEventListener('resize', host._onResize); host._onResize = null; }
+    if (host._onVis) { document.removeEventListener('visibilitychange', host._onVis); host._onVis = null; }
+    if (host._onClick) { try { host.removeEventListener('click', host._onClick); } catch {} host._onClick = null; }
+    if (host._ro) { try { host._ro.disconnect(); } catch {} host._ro = null; }
+    if (host._io) { try { host._io.disconnect(); } catch {} host._io = null; }
+    host._wired = false;   // rendered again, it is wired from scratch rather than handed to a load() that would stand down at the flag
+  }
+  window.OnChainChart = Object.assign(window.OnChainChart || {}, { destroy });
 
   /* ===== Which chart: ours (on-chain), Dexscreener's, or CoinGecko's (GeckoTerminal) =====
      A token's chart can be shown from either of those as well as drawn here — the viewer's pick, remembered on this
@@ -1220,7 +1325,8 @@
       });
   }
   function wantSources(wrap) {
-    // a pool on another chain came from Dexscreener and is charted from GeckoTerminal, so both list it: no ask needed
+    // a pool on another chain came from Dexscreener and is charted from GeckoTerminal, so both are assumed to list it — the
+    // chart answer then says which really do (markSources: a GeckoTerminal miss takes its view away again); no ask needed here
     if (wrap.dataset.chain && wrap.dataset.chain !== 'robinhood') { if (poolAddr(wrap)) applySources(wrap, { dexscreener: true, geckoterminal: true }); return; }
     const pool = String(wrap.dataset.pair || '').toLowerCase();
     if (!/^0x[0-9a-f]{40}$/.test(pool)) return;
@@ -1229,6 +1335,17 @@
     if (!srcWait.has(pool)) srcWait.set(pool, []);
     srcWait.get(pool).push(wrap);
     if (srcWait.size >= 30) askSources(); else if (!srcTimer) srcTimer = setTimeout(askSources, 60);
+  }
+  /* What a chart answer says about the pool's listings — sources: { dexscreener, geckoterminal }, a yes or a no per site —
+     carried to the switch the chart sits in. A pool on another chain is assumed listed on both when the switch mounts
+     (wantSources: it came from Dexscreener and is charted from GeckoTerminal), and the answer is the correction. Only
+     booleans are passed on: a "could not ask" (null) would set applySources re-asking the home-chain route about a
+     foreign pool, whose own wantSources would then put the assumption back. */
+  function markSources(host, s) {
+    const wrap = host.closest('.chart-switch'); if (!wrap || !s || typeof s !== 'object') return;
+    const was = wrap._srcs || { dexscreener: true, geckoterminal: true };
+    const pick = (k) => typeof s[k] === 'boolean' ? s[k] : !!was[k];
+    applySources(wrap, { dexscreener: pick('dexscreener'), geckoterminal: pick('geckoterminal') });
   }
   function applySources(wrap, s) {
     if (!wrap.isConnected) return;

@@ -6,8 +6,11 @@
  *                        signed in; the radar itself (newpairs.js) starts the first time the tab is open
  *                        for a member, and is parked while the other tab shows.
  *
- * URL: ?scan=0x… runs a scan on load and is kept in the address bar so a scan can be shared; ?tab=new
- * opens the radar tab. "Recent scans on this device" is localStorage, never sent; "Scanned by the
+ * URL: ?scan=0x… runs a scan on load and is kept in the address bar so a scan can be shared — with ?chain= naming the
+ * chain the answer CAME from, so the link reloads to the same profile on any device (a link without one is read as Auto,
+ * never through this device's chain chooser); ?tab=new opens the radar tab. The chooser applies only to what the reader
+ * types or pastes: every chip, name-search row and link carries its own chain. "Recent scans on this device" is
+ * localStorage, never sent; "Scanned by the
  * community" is the server's scan store (/api/scan/recent — the token, when, how many times; never who).
  * Every scan re-reads the chain and rewrites the stored snapshot; when the upstreams are down the server
  * answers with the last snapshot and says so (scan.stale + scan.readAt), and the page repeats it plainly.
@@ -97,7 +100,10 @@
     if (!recentBox || !recentList) return;
     const list = recent();
     recentBox.hidden = !list.length;
-    recentList.innerHTML = list.map((r) => '<button class="np-chip" type="button" data-scan="' + esc(r.addr) + '"' + (r.chain ? ' data-scan-chain="' + esc(r.chain) + '"' : '') + ' data-tip="Scans this address again' + (r.chain ? ' on ' + esc(chainName(r.chain)) : '') + '">' + (r.sym ? '$' + esc(r.sym) : esc(shortAddr(r.addr))) + (r.chain ? ' <small>' + esc((CHAIN_META[r.chain] && CHAIN_META[r.chain].emoji) || chainName(r.chain)) + '</small>' : '') + '</button>').join(' ');
+    /* Every chip names its chain, the home chain included (a stored row without one is a home-chain scan — remember() keeps
+       the chain only when it is not Robinhood's). A chip that carried none was scanned through the chain chooser, so with
+       the chooser left on Ethereum a $SEND chip went looking for $SEND on Ethereum. */
+    recentList.innerHTML = list.map((r) => '<button class="np-chip" type="button" data-scan="' + esc(r.addr) + '" data-scan-chain="' + esc(r.chain || 'robinhood') + '" data-tip="Scans this address again on ' + esc(chainName(r.chain || 'robinhood')) + '">' + (r.sym ? '$' + esc(r.sym) : esc(shortAddr(r.addr))) + (r.chain ? ' <small>' + esc((CHAIN_META[r.chain] && CHAIN_META[r.chain].emoji) || chainName(r.chain)) + '</small>' : '') + '</button>').join(' ');
   }
   paintRecent();
 
@@ -110,7 +116,8 @@
       const j = await r.json().catch(() => ({}));
       const list = (r.ok && Array.isArray(j.scans)) ? j.scans.filter((x) => x && isAddr(x.token || '') && x.symbol) : [];
       commBox.hidden = !list.length;
-      commList.innerHTML = list.map((x) => '<button class="np-chip" type="button" data-scan="' + esc(x.token) + '"' + (x.chain && x.chain !== 'robinhood' ? ' data-scan-chain="' + esc(x.chain) + '"' : '') + ' data-tip="' + esc((x.name || x.symbol) + (x.chain && x.chain !== 'robinhood' ? ' on ' + chainName(x.chain) : '') + ' — scanned ' + x.count + (x.count === 1 ? ' time' : ' times') + ', last ' + ago(x.lastAt) + '; pulls up the latest read') + '">$' + esc(x.symbol) + '<span class="sc-chip-meta">' + (x.kind === 'pool' ? '🏊 ' : '') + esc(ago(x.lastAt)) + (x.count > 1 ? ' · ×' + Number(x.count) : '') + '</span></button>').join(' ');
+      // every chip names its chain (the server sends one per entry; a missing one is the home chain's), so a chip never scans through the chooser
+      commList.innerHTML = list.map((x) => '<button class="np-chip" type="button" data-scan="' + esc(x.token) + '" data-scan-chain="' + esc(x.chain || 'robinhood') + '" data-tip="' + esc((x.name || x.symbol) + (x.chain && x.chain !== 'robinhood' ? ' on ' + chainName(x.chain) : '') + ' — scanned ' + x.count + (x.count === 1 ? ' time' : ' times') + ', last ' + ago(x.lastAt) + '; pulls up the latest read') + '">$' + esc(x.symbol) + '<span class="sc-chip-meta">' + (x.kind === 'pool' ? '🏊 ' : '') + esc(ago(x.lastAt)) + (x.count > 1 ? ' · ×' + Number(x.count) : '') + '</span></button>').join(' ');
     } catch { /* the strip is optional — a failed read leaves it hidden */ }
   }
   paintCommunity();
@@ -141,13 +148,17 @@
     if (j.retryAfter) setTimeout(() => { if (my === seq) names(q, false); }, j.retryAfter * 1000);   // too many searches: once more, after the wait
     else if (j.pending) TokenNames.follow(q, () => my === seq, (k) => TokenNames.refill(box, k));   // holders, in place
   }
-  async function scan(raw, heard, chainWant) {   // heard: the visitor asked for this scan in this tab (a deep link on load scans quietly); chainWant: a chip's or link's chain
+  async function scan(raw, heard, chainWant) {   // heard: the visitor asked for this scan in this tab (a deep link on load scans quietly); chainWant: a chip's, row's or link's own chain ('auto' = the address decides); none = typed or pasted, which the chooser governs
     const addr = String(raw || '').trim();
     if (/^[0-9a-f]{40}$/i.test(addr)) return scan('0x' + addr, heard, chainWant);   // an address pasted without its 0x
     if (!isAddr(addr) && window.TokenNames && TokenNames.isNameQuery(addr)) { names(TokenNames.normQ(addr), heard); return; }   // a name: list the tokens called that (a Solana address is an address first)
     if (!isAddr(addr)) { setStatus('That is not an address. A 0x address is 42 characters long; a Solana address is 32 to 44 letters and digits — or type a token\u2019s name to list every token called that.', 'err'); if (input) input.focus(); if (window.SFX) SFX.play('error'); return; }
-    // which chain: the chip's or link's own; else the chooser; a Solana address is Solana's whatever is chosen
-    const chainQ = SOL_ADDR.test(addr) && !ADDR.test(addr) ? 'solana' : (chainWant && chainWant !== 'auto' ? chainWant : (chainPick !== 'auto' ? chainPick : ''));
+    /* Which chain. A Solana address is Solana's whatever anyone chose. Otherwise a chip's, a row's or a link's own chain wins,
+       and its 'auto' means the address decides (the server tries the home chain, then Ethereum) — NOT the chooser. The chooser
+       governs only what the reader typed or pasted, which arrives with no chainWant at all. It used to be the fallback for every
+       chip and link that named no chain, so with the chooser left on Ethereum the $SEND chip, every home-chain recent, a
+       name-search row and a shared link all went looking on Ethereum. */
+    const chainQ = SOL_ADDR.test(addr) && !ADDR.test(addr) ? 'solana' : (chainWant ? (chainWant === 'auto' ? '' : chainWant) : (chainPick !== 'auto' ? chainPick : ''));
     if (chainQ === 'solana' && ADDR.test(addr)) { setStatus('That is a 0x address, which Solana does not use — pick Robinhood Chain, Ethereum or Auto.', 'err'); if (window.SFX) SFX.play('error'); return; }
     const my = ++seq;
     if (heard && window.SFX) SFX.play('scan');   // the radar ping: a read of the chain has started
@@ -166,6 +177,10 @@
         const p = j.pair, tok = (p.token && p.token.address) || normAddr(addr);
         const chainSlug = j.chain || p.chain || 'robinhood', cm = j.chainMeta || CHAIN_META[chainSlug] || null;
         if (cm && !p.chain) p.chain = chainSlug;   // the dashboard reads the chain from the profile
+        /* The address bar now names the chain the answer CAME from. An Auto scan of a 0x address the home chain had nothing
+           for is answered from Ethereum (j.note says so); the link written before the fetch carried no chain, so copied and
+           opened elsewhere it would run the Auto scan again — on a device whose home chain is reachable, a different profile. */
+        try { const u = new URL(location.href); u.searchParams.set('scan', normAddr(addr)); u.searchParams.set('chain', chainSlug); u.searchParams.delete('tab'); history.replaceState(null, '', u.pathname + u.search + u.hash); } catch {}
         lastPair = p;
         const sym = (p.token && p.token.symbol) || '';
         const sc = Object.assign({ readAt: Date.now(), stale: false, kept: false }, j.scan || {});
@@ -224,8 +239,10 @@
   if (form) form.addEventListener('submit', (e) => { e.preventDefault(); scan(input && input.value, true); });
   // the ☆ on the dashboard: saves this pair to the watchlist (or takes it off)
   result.addEventListener('click', (e) => {
-    const nr = e.target.closest('.np-named-row[data-token]');   // a token from a name search: scan it here (a new-tab click keeps its new tab)
-    if (nr && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) { e.preventDefault(); scan(nr.dataset.token, true); return; }
+    // a token from a name search: scan it here (a new-tab click keeps its new tab). The name search reads Robinhood Chain alone
+    // (/api/search/tokens), so its rows are home-chain tokens and say so — never the chooser's chain
+    const nr = e.target.closest('.np-named-row[data-token]');
+    if (nr && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) { e.preventDefault(); scan(nr.dataset.token, true, 'robinhood'); return; }
     const w = e.target.closest('.np-watch[data-wpair]');
     if (!w || !lastPair || !lastPair.pair || !window.Watchlist) return;
     if (String(w.dataset.wpair).toLowerCase() !== String(lastPair.pair.address).toLowerCase()) return;
@@ -262,7 +279,9 @@
   const q = new URLSearchParams(location.search);
   const fromHash = /^#0x[0-9a-fA-F]{40}$/.test(location.hash) ? location.hash.slice(1) : '';
   const want = q.get('scan') || fromHash;
-  const wantChain = ['robinhood', 'ethereum', 'solana'].includes(q.get('chain')) ? q.get('chain') : null;   // ?chain= names the chain a shared scan was read on
+  // ?chain= names the chain a shared scan was read on; a link without one is read as Auto (the address decides) — never through
+  // this device's chooser, which the person who shared the link knows nothing about
+  const wantChain = ['robinhood', 'ethereum', 'solana'].includes(q.get('chain')) ? q.get('chain') : 'auto';
   if (q.get('tab') === 'new') show('new', { quiet: true }); else show('scan', { quiet: true });
   if (want && want.trim().length >= 2) scan(want, false, wantChain);   // an address scans; a name lists the tokens called that
   // the sign-in state arrives after the page (AUTH.ready): re-run the gate once it is known

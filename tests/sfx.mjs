@@ -89,9 +89,11 @@ try {
   const strip = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   const block = (src, head, end) => { const a = src.indexOf(head); return a < 0 ? '' : src.slice(a, src.indexOf(end, a)); };
   const HC = strip('home.js');
-  // the three places a buy happens: the button (home.js), the send itself (chain.js executeSwap) and the wait for the chain (watchSwapTx)
-  const buyFns = [block(HC, "swapGo.addEventListener('click'", '\n});'), block(strip('chain.js'), 'async function executeSwap', '\n}'), block(HC, 'async function watchSwapTx', '\n}')];
-  const buyPlays = buyFns.flatMap((b) => [...b.matchAll(/SFX\.play\('([a-z]+)'\)/g)].map((m) => m[1]));
+  // the places a buy happens: the landing page's button (home.js), its send (chain.js executeSwap) and its wait for the chain (watchSwapTx);
+  // and the Swap in my wallet panel on every token's detail (swapkit.js — the whole file is the buy flow, and it plays through its own sfx())
+  const SK = strip('swapkit.js');
+  const buyFns = [block(HC, "swapGo.addEventListener('click'", '\n});'), block(strip('chain.js'), 'async function executeSwap', '\n}'), block(HC, 'async function watchSwapTx', '\n}'), SK];
+  const buyPlays = buyFns.flatMap((b) => [...b.matchAll(/(?:SFX\.play|\bsfx)\('([a-z]+)'\)/g)].map((m) => m[1]));
   check('  ...and the buy code plays only calm sounds: swap when the wallet sends it, error or warn when something is wrong — never launch, coin, success or a fanfare',
     buyFns.every(Boolean) && buyPlays.includes('swap') && buyPlays.every((n) => ['swap', 'error', 'warn', 'select'].includes(n)), buyPlays.join(','));
   // smooth: every voice's level rises from near silence and falls back to it (env, or the whoosh's own ramps); no level is switched on or off

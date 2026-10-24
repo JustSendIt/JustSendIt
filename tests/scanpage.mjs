@@ -71,6 +71,42 @@ try {
   check('a scan is shareable (?scan=, with ?chain= when one was named; a Solana address keeps its case) and a pasted address scans at once', /u\.searchParams\.set\('scan', normAddr\(addr\)\); if \(chainQ\) u\.searchParams\.set\('chain', chainQ\)/.test(SC) && /const normAddr = \(s\) => ADDR\.test\(s\) \? s\.toLowerCase\(\) : s;/.test(SC) && /input\.addEventListener\('paste'/.test(SC));
   check('recent scans on this device stay in this browser (localStorage; the page never POSTs anything)', /localStorage\.setItem\(RECENT_KEY/.test(SC) && !/method:\s*'POST'/.test(SC) && !/body:/.test(SC));
 
+  /* ═══ which chain a scan runs on (review, 2026-10-23) ═══
+     The chooser (Auto / Robinhood Chain / Ethereum / Solana, remembered on the device) used to be the fallback for anything that
+     named no chain — so with it left on Ethereum the $SEND example, every home-chain recent and community chip, a name-search
+     row and a shared ?scan= link all went looking on Ethereum. Now every chip carries its chain, rows and links name theirs,
+     and the chooser governs only what the reader types or pastes. */
+  check('the Scanner lead names its three chains (the trailing note stays)', /Paste any token or pool address on Robinhood Chain, Ethereum or Solana and read its profile — market cap, liquidity, holders, the contract’s powers, LP lock, block-0 buyers \(on Robinhood Chain\) and honeypot flags/.test(HTML)
+    && /🏹 Robinhood Chain, Ξ Ethereum and ◎ Solana — the chain's colour frames every token read there\./.test(HTML) && !/Paste any token or pool address on Robinhood Chain and read/.test(HTML));
+  const chips = [...HTML.matchAll(/<button class="np-chip" type="button" data-scan="[^"]+"[^>]*>/g)].map((m) => m[0]);
+  check('every example chip names its chain — $SEND and $GWC Robinhood Chain\'s, PEPE Ethereum\'s, BONK Solana\'s — and its tip says so without repeating the label',
+    chips.length === 4 && chips.every((c) => /data-scan-chain="(robinhood|ethereum|solana)"/.test(c) && /data-tip="[^"]+"/.test(c))
+    && /data-scan="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-scan-chain="robinhood" data-tip="Scans \$SEND on Robinhood Chain"/.test(HTML) && /data-scan="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-scan-chain="robinhood" data-tip="Scans \$GWC on Robinhood Chain"/.test(HTML)
+    && /data-scan="0x6982508145454ce325ddbe47a25d4ec3d2311933" data-scan-chain="ethereum"/.test(HTML) && /data-scan="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" data-scan-chain="solana"/.test(HTML), chips.join(' | '));
+  /* the other chains' examples are a row of their own (review, 2026-10-24): beside $SEND and $GWC they read as picks */
+  const tryRow = (lead) => (HTML.match(new RegExp('<p class="sc-try">' + lead + ' ([\\s\\S]*?)</p>')) || [])[1] || '';
+  const homeRow = tryRow('Try one:'), farRow = tryRow('Example reads on other chains:');
+  check('  ..."Try one:" holds the home chain\'s two; "Example reads on other chains:" holds PEPE and BONK, each tipped as an example read, not a pick (no "memecoin" pitch)',
+    (homeRow.match(/class="np-chip"/g) || []).length === 2 && /data-scan-chain="robinhood"[^>]*>\$SEND</.test(homeRow) && /data-scan-chain="robinhood"[^>]*>\$GWC</.test(homeRow) && !/data-scan-chain="(ethereum|solana)"/.test(homeRow)
+    && (farRow.match(/class="np-chip"/g) || []).length === 2 && /data-scan-chain="ethereum" data-tip="Scans PEPE on Ethereum — a widely traded token used only as an example read, not a pick">PEPE · Ξ</.test(farRow)
+    && /data-scan-chain="solana" data-tip="Scans BONK on Solana — a widely traded token used only as an example read, not a pick">BONK · ◎</.test(farRow) && !/memecoin/.test(farRow + homeRow), JSON.stringify([homeRow.slice(0, 80), farRow.slice(0, 80)]));
+  check('the help line says what is listed and where: the pools Dexscreener lists (up to 30, on Ethereum and Solana), and a name lists Robinhood Chain tokens (the name search reads that chain alone)',
+    /a pool address resolves to the token it prices, and on Ethereum and Solana the pools Dexscreener lists for it \(up to 30\) are listed\. Or type a name to list the Robinhood Chain tokens called that — traded or not — with their market cap, volume and holders\./.test(HTML)
+    && !/every pool of the token is listed/.test(HTML) && !/Or type a name to list the tokens called that/.test(HTML));
+  check('  ...and so does every recent and community chip the page builds — the home chain written out, never left to the chooser',
+    /data-scan="' \+ esc\(r\.addr\) \+ '" data-scan-chain="' \+ esc\(r\.chain \|\| 'robinhood'\) \+ '" data-tip="Scans this address again on ' \+ esc\(chainName\(r\.chain \|\| 'robinhood'\)\) \+ '"/.test(SC)
+    && /data-scan="' \+ esc\(x\.token\) \+ '" data-scan-chain="' \+ esc\(x\.chain \|\| 'robinhood'\) \+ '"/.test(SC) && !/\? ' data-scan-chain="/.test(SC)
+    && /scan\(b\.getAttribute\('data-scan'\), true, b\.getAttribute\('data-scan-chain'\) \|\| null\);/.test(SC));
+  check('the chooser applies only to what is typed or pasted: a chip\'s, row\'s or link\'s chain wins, its Auto is the address\'s own (never the chooser), the form and a paste pass none',
+    /const chainQ = SOL_ADDR\.test\(addr\) && !ADDR\.test\(addr\) \? 'solana' : \(chainWant \? \(chainWant === 'auto' \? '' : chainWant\) : \(chainPick !== 'auto' \? chainPick : ''\)\);/.test(SC)
+    && /form\.addEventListener\('submit', \(e\) => \{ e\.preventDefault\(\); scan\(input && input\.value, true\); \}\)/.test(SC) && /if \(isAddr\(input\.value\.trim\(\)\)\) scan\(input\.value, true\);/.test(SC)
+    && !/chainWant && chainWant !== 'auto' \? chainWant : \(chainPick/.test(SC));
+  check('  ...a name-search row is a home-chain token and says so', /scan\(nr\.dataset\.token, true, 'robinhood'\)/.test(SC) && !/scan\(nr\.dataset\.token, true\)/.test(SC));
+  check('  ...a shared link without ?chain= is read as Auto, not through this device\'s chooser', /const wantChain = \['robinhood', 'ethereum', 'solana'\]\.includes\(q\.get\('chain'\)\) \? q\.get\('chain'\) : 'auto';/.test(SC) && /if \(want && want\.trim\(\)\.length >= 2\) scan\(want, false, wantChain\);/.test(SC));
+  check('  ...and after a hit the address bar carries the chain the answer came from (an Auto scan answered from Ethereum reloads on Ethereum)',
+    /u\.searchParams\.set\('scan', normAddr\(addr\)\); u\.searchParams\.set\('chain', chainSlug\); u\.searchParams\.delete\('tab'\); history\.replaceState/.test(SC)
+    && SC.indexOf("u.searchParams.set('chain', chainSlug)") > SC.indexOf("const chainSlug = j.chain || p.chain || 'robinhood'") && SC.indexOf("u.searchParams.set('chain', chainSlug)") < SC.indexOf('lastPair = p;'));
+
   /* ═══ the door on the radar ═══ */
   const anonNew = await api('/api/pairs/new');
   check('the radar feed needs a session', anonNew.status === 401 && anonNew.j && anonNew.j.code === 'need_signin', anonNew.status);

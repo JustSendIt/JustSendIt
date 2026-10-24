@@ -67,7 +67,7 @@
 
 <header class="np-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Scanner 🔎</h1>
-  <p class="section-sub" style="margin-bottom:0.5rem;">Paste any token or pool address on Robinhood Chain and read its profile — market cap, liquidity, holders, the contract’s powers, LP lock, block-0 buyers and honeypot flags — from public chain data plus third-party price and security feeds. The same detail the site shows for every coin; no sign-in needed. <span class="section-sub-note">🏹 Robinhood Chain, Ξ Ethereum and ◎ Solana — the chain's colour frames every token read there.</span></p>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Paste any token or pool address on Robinhood Chain, Ethereum or Solana and read its profile — market cap, liquidity, holders, the contract’s powers, LP lock, block-0 buyers (on Robinhood Chain) and honeypot flags — from public chain data plus third-party price and security feeds. The same detail the site shows for every coin; no sign-in needed. <span class="section-sub-note">🏹 Robinhood Chain, Ξ Ethereum and ◎ Solana — the chain's colour frames every token read there.</span></p>
   <p class="np-hero-warn">⚠️ A scan is a reading of public chain data and price feeds, not an audit and not advice. We flag the obvious traps — but never do we tell you to buy. <b>Do your own research.</b></p>
 </header>
 
@@ -88,7 +88,7 @@
         </div>
         <button class="btn btn-primary btn-sm sc-go" id="sc-go" type="submit" data-tip="Looks the address up and shows its profile, or lists every token with that name">Scan 🔎</button>
       </form>
-      <p class="sc-help" id="sc-help">Any token, or any pool, on Robinhood Chain, Ethereum or Solana — a pool address resolves to the token it prices, and every pool of the token is listed. Or type a name to list the tokens called that — traded or not — with their market cap, volume and holders. Copy an address from the token’s own page or the explorer, never from a chat.</p>
+      <p class="sc-help" id="sc-help">Any token, or any pool, on Robinhood Chain, Ethereum or Solana — a pool address resolves to the token it prices, and on Ethereum and Solana the pools Dexscreener lists for it (up to 30) are listed. Or type a name to list the Robinhood Chain tokens called that — traded or not — with their market cap, volume and holders. Copy an address from the token’s own page or the explorer, never from a chat.</p>
       <!-- the chain the address is read on (owner, 2026-10-23): Auto reads it from the address — a Solana address is Solana's, a 0x
            address is tried on Robinhood Chain and then on Ethereum — or one chain is named. A token read on Ethereum is framed in
            Ethereum blue, one on Solana in Solana purple, so the chain is never a surprise. -->
@@ -98,7 +98,10 @@
         <button class="sc-chain sc-chain--ethereum" type="button" aria-pressed="false" data-chain="ethereum" data-tip="Reads a 0x address on Ethereum only">Ξ Ethereum</button>
         <button class="sc-chain sc-chain--solana" type="button" aria-pressed="false" data-chain="solana" data-tip="Reads a Solana token or pool address">◎ Solana</button>
       </div>
-      <p class="sc-try">Try one: <button class="np-chip" type="button" data-scan="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-tip="Scans $SEND">$SEND</button> <button class="np-chip" type="button" data-scan="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-tip="Scans $GWC">$GWC</button> <button class="np-chip" type="button" data-scan="0x6982508145454ce325ddbe47a25d4ec3d2311933" data-scan-chain="ethereum" data-tip="Scans PEPE on Ethereum — a well-known memecoin there, as an example of an Ethereum read">PEPE · Ξ</button> <button class="np-chip" type="button" data-scan="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" data-scan-chain="solana" data-tip="Scans BONK on Solana — a well-known memecoin there, as an example of a Solana read">BONK · ◎</button></p>
+      <!-- every example names its chain: a chip with none was scanned through the chooser above, so with it left on Ethereum the $SEND chip looked for $SEND on Ethereum -->
+      <p class="sc-try">Try one: <button class="np-chip" type="button" data-scan="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-scan-chain="robinhood" data-tip="Scans $SEND on Robinhood Chain">$SEND</button> <button class="np-chip" type="button" data-scan="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-scan-chain="robinhood" data-tip="Scans $GWC on Robinhood Chain">$GWC</button></p>
+      <!-- the other chains' examples sit in a row of their own: beside $SEND and $GWC they read as picks, and they are only example reads -->
+      <p class="sc-try">Example reads on other chains: <button class="np-chip" type="button" data-scan="0x6982508145454ce325ddbe47a25d4ec3d2311933" data-scan-chain="ethereum" data-tip="Scans PEPE on Ethereum — a widely traded token used only as an example read, not a pick">PEPE · Ξ</button> <button class="np-chip" type="button" data-scan="DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263" data-scan-chain="solana" data-tip="Scans BONK on Solana — a widely traded token used only as an example read, not a pick">BONK · ◎</button></p>
       <p class="sc-status" id="sc-status" role="status" aria-live="polite"></p>
       <div class="sc-result" id="sc-result"></div>
       <div class="sc-recent" id="sc-recent" hidden>
