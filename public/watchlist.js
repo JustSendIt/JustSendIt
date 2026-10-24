@@ -37,6 +37,11 @@
   function triageOf(p) { const r = p.risk || {}; if (TRI[r.triage]) return r.triage; if (r.health != null) return r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid'; return 'caution'; }
   // same honesty rule as the radar: unreadable data is an unknown, never a green verdict
   function verdictOf(p) { const tri = triageOf(p), h = Math.round((p.risk && p.risk.health) || 0);
+    /* A red power the contract read found and no renounce neutralised (owner, 2026-10-24) — the radar's own rule, read from it
+       (NPCard.redFactsOf: newpairs.js loads first on this page; lib/contractfacts.js on the server), in the same place: before thin
+       data, over the ok / caution tiers only. */
+    const r0 = p.risk || {}, red = window.NPCard && NPCard.redFactsOf ? NPCard.redFactsOf(p).found : [];
+    if (red.length && (tri === 'ok' || tri === 'caution') && !r0.honeypotSuspect && !r0.dumping && !r0.sniperDump) return { cls: 'np-t-caution', ico: '🟡', word: 'Caution' };
     if (p.risk && p.risk.thinData) return { cls: 'np-t-caution np-t-thin', ico: '🌫️', word: 'Not enough data yet' };
     /* Same words, same test. The radar's site bar also requires a clean first block — sniperOk === true,
        where null means the block-0 scan has not finished and is NOT the same as passed. Without this the

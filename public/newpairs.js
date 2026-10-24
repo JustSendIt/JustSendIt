@@ -248,17 +248,20 @@
     ['pausable', 'Pausable transfers', 'transfers can be switched off'],
     ['ownerChangeBalance', 'Owner can change balances', 'any wallet’s balance can be changed by the owner'],
     ['slippageModifiable', 'Changeable tax', 'the trading tax can be raised, up to trapping sellers'],
+    ['personalSlippage', 'Per-wallet tax', 'a tax can be set for one wallet, up to blocking it from selling'],
+    ['antiWhaleModifiable', 'Changeable trade caps', 'the caps on buys, sells or wallets can be tightened onto sellers'],
     ['hiddenOwner', 'Hidden owner', 'an owner the public owner() call does not show'],
     ['takeBack', 'Ownership can be taken back', 'ownership can be reclaimed after it is given up'],
     ['selfdestruct', 'Self-destruct', 'the contract can destroy itself'],
   ];
-  const OWNER_GATED = new Set(['mintable', 'blacklist', 'pausable', 'ownerChangeBalance', 'slippageModifiable']);
+  const OWNER_GATED = new Set(['mintable', 'blacklist', 'pausable', 'ownerChangeBalance', 'slippageModifiable', 'personalSlippage', 'antiWhaleModifiable']);
   // nobody holds a key to these: the zero address, 0x…dEaD and 0xdead…42069 (lib/contractfacts.js DEAD_ADDRS)
   const DEAD_ADDRS = new Set(['0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead', '0xdead000000000000000042069420694206942069']);
   const isDead = (a) => DEAD_ADDRS.has(String(a || '').toLowerCase());
   // is ownership REALLY given up: renounced to a dead address, with no take-back path and no hidden owner (contractfacts renouncedReal)
-  const renouncedReal = (p) => { const t = p.token || {}, f = p.chainFacts || {}; return f.takeBack === true || f.hiddenOwner === true ? false : t.renounced === true ? true : t.renounced === false ? false : null; };
-  // the owner's powers a real renounce has neutralised — said on the card as "renounced: nobody can use it", never on the floor
+  // a proxy's code can be swapped by whoever administers it, owner() or not; a dead owner counts however the profile stored it (ownerBurn, or an older profile's owner)
+  const renouncedReal = (p) => { const t = p.token || {}, f = p.chainFacts || {}; if (f.takeBack === true || f.hiddenOwner === true || f.proxy === true) return false; if (t.ownerBurn ? isDead(t.ownerBurn) : (t.owner && isDead(t.owner))) return true; return t.renounced === true ? true : t.renounced === false ? false : null; };
+  // the owner's powers a real renounce has neutralised — said on the card as "renounced: the owner can no longer use it", never on the floor
   function vendorNeutral(p) {
     const f = p && p.chainFacts;
     if (!f || chainOf(p).slug === 'solana' || renouncedReal(p) !== true) return [];
@@ -374,7 +377,8 @@
     /* A perfect score whose first block is still unresolved is held back from the top tag rather than
        handed it — an unfinished check is an open question, not a pass. Tested before the 75 tier so that
        "Checking block 0…" is not swallowed by the milder word. */
-    if (tri === 'ok' && health >= 100 && !sniperOk(p) && !foreignChain(p)) {   // block 0 is never read on another chain: no "checking" to wait for
+    const V = vendorFacts(p);
+    if (tri === 'ok' && health >= 100 && !sniperOk(p) && !foreignChain(p) && !V.length) {   // block 0 is never read on another chain: no "checking" to wait for; a red power is named first (below)
       const st = p.risk && p.risk.snipers ? p.risk.snipers.status : null;
       return st === 'done' || st === 'partial'
         ? { cls: 'np-t-caution np-t-snipe', ico: '🎯', word: 'Block-0 snipers sold' }
@@ -390,7 +394,6 @@
        both tiers above. Said as the caution tier it is, naming each power and who read it, so the chip can never
        say "nothing tripped" over a blacklist. A worse triage (high, avoid) keeps its own, worse word. Tested before
        the thin-data line: a fact that was found outranks one that is missing. */
-    const V = vendorFacts(p);
     if (V.length && (tri === 'ok' || tri === 'caution')) {
       return { cls: TRI.caution.cls + ' np-t-vendor', ico: TRI.caution.ico, word: TRI.caution.word,
         why: vendorLine(p, V) + ' — read the Contract card. The ' + health + '/100 does not count these, so it is not the whole story. Not a promise either way; most new tokens still go to zero.' };
@@ -456,12 +459,13 @@
     const caveats = [];
     if (f.takeBack === true) caveats.push('ownership can be taken back');
     if (f.hiddenOwner === true) caveats.push('there is a hidden owner the owner() call does not show');
+    if (f.proxy === true) caveats.push('the contract is a proxy, so whoever administers it can swap its code');
     // owner: a LIVE owner (never a dead address); burn: the dead address ownership was renounced to (token.ownerBurn — or an older
     // profile that kept a dead owner in token.owner)
     const raw = t.owner ? String(t.owner).toLowerCase() : null;
     const owner = raw && !isDead(raw) ? raw : null;
     const burn = t.ownerBurn ? String(t.ownerBurn).toLowerCase() : raw && isDead(raw) ? raw : null;
-    const renounced = caveats.length ? false : t.renounced === true || (t.renounced == null && burn) ? true : t.renounced === false ? false : null;
+    const renounced = caveats.length ? false : t.renounced === true || burn ? true : t.renounced === false ? false : null;   // a dead owner is renounced, whatever an older profile stored
     // zero: an owner was read and it is a dead address (upstream keeps t.owner null for it, with renounced true or false)
     const zero = !owner && (!!burn || t.renounced === true || t.renounced === false);
     return { kind: 'owner', renounced, owner, burn, zero, caveats, held: [], isContract: owner ? (t.ownerIsContract === true ? true : t.ownerIsContract === false ? false : null) : null,
@@ -480,7 +484,7 @@
       : f ? 'The <b>freeze authority is still held</b> — holders’ accounts can be frozen.'
       : 'An authority is <b>still held</b> — someone can still mint more, or freeze accounts.';
   };
-  const renouncedSign = (p) => { const o = ownership(p); return o.renounced === true ? (o.kind === 'authorities' ? 'Authorities revoked' : 'Ownership renounced' + perGP(p)) : ''; };
+  const renouncedSign = (p) => { const o = ownership(p); return o.renounced === true ? (o.kind === 'authorities' ? 'Authorities revoked' : 'Ownership renounced' + ownSrc(p)) : ''; };
   function goodSigns(p) {
     const g = [];
     if (p.token.isVerified === true) g.push('✓ Verified code' + perGP(p));
@@ -512,7 +516,7 @@
     else if (key === 'holders') { if (h.topHolderPct != null && h.topHolderPct < 15) g.push('Top wallet under 15%'); if (h.count != null && h.count >= 200) g.push('200+ holders'); }
     else if (key === 'trading') { const b = p.txns.h24.buys, s = p.txns.h24.sells; if (b > 0 && b >= s) g.push('Buys keeping up with sells'); if (p.priceChange.h1 != null && p.priceChange.h1 > 0) g.push('Up in the last hour'); }
     else if (key === 'launch') { const sn = p.risk && p.risk.snipers; if (sn && sn.wallets === 0) g.push('Nobody sniped block 0'); else if (sn && sn.snipedPct != null && sn.snipedPct < 5) g.push('Block-0 buyers took under 5%'); }
-    else if (key === 'contract') { if (p.token.isVerified === true) g.push('Verified source' + perGP(p)); if (renouncedSign(p)) g.push(renouncedSign(p)); const N = vendorNeutral(p); if (N.length) g.push('Renounced, so nobody can use its ' + andList(N.map(x => x.word.toLowerCase()))); }
+    else if (key === 'contract') { if (p.token.isVerified === true) g.push('Verified source' + perGP(p)); if (renouncedSign(p)) g.push(renouncedSign(p)); const N = vendorNeutral(p); if (N.length) g.push('Renounced, so the owner can no longer use its ' + andList(N.map(x => x.word.toLowerCase()))); }
     return g;
   }
   function scoreBreakdown(p) {
@@ -1028,7 +1032,11 @@
     j = j || {};
     const liq = j.liquidity;
     let liqLine = '';
-    if (liq && liq.known) {
+    if (liq && liq.known && liq.emptied) liqLine = '<p class="np-hp-bad">⚠️ <b>The pool’s LP has all been withdrawn</b> — only Uniswap’s permanent minimum is left (read on-chain).</p>';
+    else if (liq && liq.known && liq.burnedOnly) liqLine = liq.locked
+      ? '<p class="np-hp-ok">🔥 <b>Most of the LP is burned</b> — about <b>' + Math.round(liq.lockedPct) + '%</b> sits at a dead address nobody holds a key to (read on-chain).</p>'
+      : '<p class="np-hp-bad">⚠️ <b>Most of the LP is not burned</b> — about <b>' + Math.round(liq.lockedPct) + '%</b> sits at a dead address (read on-chain); whether the rest is in a locker was not read.</p>';
+    else if (liq && liq.known) {
       liqLine = liq.locked
         ? '<p class="np-hp-ok">🔒 <b>Liquidity looks locked / burned</b> — about <b>' + Math.round(liq.lockedPct) + '%</b> of the LP sits in a burn address or locker, so it can’t easily be pulled.</p>'
         : '<p class="np-hp-bad">⚠️ <b>Liquidity does NOT look locked</b> — only about <b>' + Math.round(liq.lockedPct) + '%</b> of the LP is burned/locked, so it could be pulled (rug risk).</p>';
@@ -1036,12 +1044,12 @@
     const sevCls = { critical: 'crit', high: 'high', medium: 'med' };
     const plist = j.powers || [];
     const pul = '<ul class="np-hp-powers">' + plist.map(x => x.neutralised
-      ? '<li class="np-hp-neutral"><b>' + esc(x.can) + '</b> — renounced: nobody can use it</li>'
+      ? '<li class="np-hp-neutral"><b>' + esc(x.can) + '</b> — renounced: the owner can no longer use it</li>'
       : '<li class="np-hp-' + (sevCls[x.sev] || 'med') + '"><b>' + esc(x.can) + '</b> — ' + esc(x.why) + '</li>').join('') + '</ul>';
     const liveN = plist.filter(x => !x.neutralised).length;
     const powers = plist.length
-      ? (dash ? '<details class="tkd-more tkd-more--in"><summary class="tkd-more-s"><span class="tkd-more-lbl">' + (liveN ? '⚠️ The owner’s code appears able to do ' + (liveN === 1 ? 'one thing' : liveN + ' things') : '🛡️ Owner functions found — renounced, so nobody can use them') + ' — see what</span><span class="tkd-more-caret" aria-hidden="true"></span></summary><div class="tkd-more-b">' + pul + '</div></details>'
-              : '<p class="np-hp-sub">The owner’s code appears able to:</p>' + pul)
+      ? (dash ? '<details class="tkd-more tkd-more--in"><summary class="tkd-more-s"><span class="tkd-more-lbl">' + (liveN ? '⚠️ The owner’s code appears able to do ' + (liveN === 1 ? 'one thing' : liveN + ' things') : '🛡️ Owner functions found — renounced, so the owner can no longer use them') + ' — see what</span><span class="tkd-more-caret" aria-hidden="true"></span></summary><div class="tkd-more-b">' + pul + '</div></details>'
+              : '<p class="np-hp-sub">' + (liveN ? 'The owner’s code appears able to:' : 'Owner functions found — renounced, so the owner can no longer use them:') + '</p>' + pul)
       : (j.verified ? '<p class="np-hp-ok">✔ No mint, blacklist, pause, trading-toggle or tax-changing powers were found in the source.</p>' : '');
     return '<div class="np-hp">' +
       '<p class="np-hp-h">🍯 Honeypot &amp; contract read</p>' +
@@ -1202,7 +1210,7 @@
     // ---- the contract ----
     {
       const bits = [], o = ownership(p);   // the one ownership read every surface shares — this row and the Contract card cannot disagree
-      const gp = perGP(p);   // " (per GoPlus)" on another EVM chain, where these come from GoPlus's read; '' at home
+      const gp = perGP(p), og = ownSrc(p);   // " (per GoPlus)" where GoPlus read it: the source on another EVM chain; the owner there, or at home when it named the owner
       if (t.isVerified === true) bits.push('The source code is published' + gp + ', so it can be read and checked.');
       else if (t.isVerified === false) bits.push('The source code is <b>not published</b>' + gp + ', so nobody outside can see what it actually does.');
       if (o.kind === 'authorities') {   // Solana: the mint and freeze authorities are what "renounced" means there
@@ -1210,9 +1218,9 @@
         else if (o.renounced === false) bits.push(heldSay(o));
         else bits.push('Whether the mint and freeze authorities are revoked could not be read.');
       } else if (o.caveats.length) {   // Ethereum: GoPlus reads past the owner address, and a take-back path or a hidden owner is not "renounced"
-        bits.push('Ownership is <b>not truly renounced</b>' + (o.zero ? ', though the owner reads as the zero address' : '') + ': GoPlus Security reads that ' + esc(o.caveats.join(' and ')) + '.');
-      } else if (o.renounced === true) bits.push('Ownership is renounced' + gp + ' — the rules can no longer be changed.');
-      else if (o.renounced === false) bits.push('Ownership is <b>not renounced</b>' + gp + ': whoever holds it can still change how the token behaves.');
+        bits.push('Ownership is <b>not truly renounced</b>' + (o.zero ? ', though the owner reads as ' + (o.burn ? deadWord(o.burn) + ' ' + esc(shortAddr(o.burn)) : 'the zero address') : '') + ': GoPlus Security reads that ' + esc(o.caveats.join(' and ')) + '.');
+      } else if (o.renounced === true) bits.push('Ownership is renounced' + og + ' — the owner can no longer change the rules.');
+      else if (o.renounced === false) bits.push('Ownership is <b>not renounced</b>' + og + ': whoever holds it can still change how the token behaves.');
       // on another chain a missing owner is a reading — not made, or made with no owner named — never a claim about the code;
       // on the home chain the Contract card carries the server's own owner() answer, so this row stays quiet as it always did
       else if (o.vendor) bits.push(o.answered ? 'GoPlus Security named no owner for the contract, so whether ownership is renounced was not read.' : 'Who owns the contract could not be read (GoPlus Security did not answer).');
@@ -1369,7 +1377,7 @@
     /* Renounced: the owner is a dead address nobody holds a key to — named, so the reader sees where ownership went — and the
        owner's powers the contract read found are said to be unusable now (vendorNeutral; owner, 2026-10-24). A live owner is
        shown as a link to the explorer, with whether it is a contract or a wallet. */
-    if (o.renounced === true) { const N = vendorNeutral(p); return '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — ' + (o.burn ? 'the owner is ' + deadWord(o.burn) + ' <code>' + esc(shortAddr(o.burn)) + '</code> nobody holds a key to, so ' : '') + 'the deployer can no longer change the contract' + ownSrc(p) + '.' + (N.length ? ' Its ' + esc(andList(N.map(x => x.word.toLowerCase()))) + ' function' + (N.length > 1 ? 's' : '') + ' can no longer be used by anyone.' : '') + '</p>'; }
+    if (o.renounced === true) { const N = vendorNeutral(p); return '<p class="np-owner renounced">🛡️ <b>Ownership renounced</b> — ' + (o.burn ? 'the owner is ' + deadWord(o.burn) + ' <code>' + esc(shortAddr(o.burn)) + '</code> nobody holds a key to, so ' : '') + 'the deployer can no longer change the contract' + ownSrc(p) + '.' + (N.length ? ' Its ' + esc(andList(N.map(x => x.word.toLowerCase()))) + ' function' + (N.length > 1 ? 's' : '') + ' can no longer be used by the owner.' : '') + '</p>'; }
     if (o.owner) return '<p class="np-owner owned">🔑 Owner ' + addrLinkHTML(p, o.owner, 'the owner address') + esc(kindWord(o.isContract)) + ' <b>— can still change the contract' + ownSrc(p) + '.</b></p>';
     // no owner and not renounced: on another chain that is a reading — not made, or made with no owner named — never a claim
     // about the contract's code (the home chain's "no standard owner() function" is its own node's answer, kept below)
@@ -1558,7 +1566,7 @@
     const pct = (v) => v == null ? '<span class="tkd-unread">not read</span>' : v === 0 ? '0%' : pctPlain(v);
     // an OWNER's power, once ownership is truly renounced: still in the code, but nobody can call it (vendorNeutral)
     const ren = renouncedReal(p) === true;
-    const pw = (k, yes, no) => f[k] === true && ren && OWNER_GATED.has(k) ? '<span class="tkd-neutral">yes — but ownership is renounced, so nobody can use it</span>' : yn(f[k], yes, no);
+    const pw = (k, yes, no) => f[k] === true && ren && OWNER_GATED.has(k) ? '<span class="tkd-neutral">yes — but ownership is renounced, so the owner can no longer use it</span>' : yn(f[k], yes, no);
     const unread = '<span class="tkd-unread">not read</span>';
     const rows = [];
     if (c.slug === 'solana') {
@@ -1588,6 +1596,8 @@
       rows.push(['Pausable transfers', pw('pausable', 'yes', 'no')]);
       if (f.ownerChangeBalance != null) rows.push(['Owner can change balances', pw('ownerChangeBalance', 'yes — any wallet’s balance', 'no')]);
       if (f.slippageModifiable != null) rows.push(['Tax changeable by the owner', pw('slippageModifiable', 'yes — up to trapping sellers', 'no')]);
+      if (f.personalSlippage != null) rows.push(['Tax for one wallet', pw('personalSlippage', 'yes — a wallet can be taxed out of selling', 'no')]);
+      if (f.antiWhaleModifiable != null) rows.push(['Trade caps changeable', pw('antiWhaleModifiable', 'yes — they can be tightened onto sellers', 'no')]);
       rows.push(['Trading cooldown', yn(f.cooldown, 'yes', 'no')]);
       rows.push(['Proxy contract', yn(f.proxy, 'yes — the code can be swapped', 'no')]);
       if (f.takeBack != null) rows.push(['Ownership can be taken back', yn(f.takeBack, 'yes', 'no')]);
@@ -1602,20 +1612,34 @@
          address a link (owner, 2026-10-24: "if another address is the owner of … liquidity make sure the users can see that
          contract address"). A share GoPlus did not list is "not read", never 0. */
       const lpListed = Array.isArray(f.lpTop) && f.lpTop.length > 0;
-      rows.push(['LP burned — held by a dead address', f.lpBurnedPct != null ? pct(f.lpBurnedPct) + ' <small class="np-src">' + (f.lpBurnSource === 'chain' ? 'read on-chain' : 'GoPlus') + '</small>' : unread]);
-      rows.push(['LP in a locker (GoPlus marks it locked)', lpListed && f.lpLockerPct != null ? pct(f.lpLockerPct) : unread]);
-      const others = lpListed ? f.lpTop.filter((h) => !h.dead && !h.locked && h.pct != null && h.pct > 0) : [];
-      // the token's own contract or the pool itself holding LP is named as that — a contract moves LP only if its code has a way to
-      const tokA = String((p.token && p.token.address) || '').toLowerCase(), poolA = String((p.pair && p.pair.address) || '').toLowerCase();
-      const whoIs = (h) => h.address === tokA ? ' (this token’s own contract)' : h.address === poolA ? ' (the pool itself)' : kindWord(h.contract);
-      rows.push(['Who else holds the LP', others.length
-        ? '<ul class="tkd-lp-holders">' + others.slice(0, 5).map((h) => '<li>' + addrLinkHTML(p, h.address, 'this LP holder') + ' <b>' + esc(h.pct < 0.1 ? '<0.1%' : pctPlain(h.pct)) + '</b>' + esc(whoIs(h)) + (h.tag ? ' · ' + esc(h.tag) : '') + '</li>').join('') + '</ul>' +
-          (others.reduce((a, h) => a + h.pct, 0) >= 50 ? '<span class="tkd-bad">Most of the LP is neither burned nor in a locker — whoever holds it can pull it (a contract, only if its code has a way to).</span>' : '')
-        : lpListed ? 'nobody else among the top ten GoPlus lists' : unread]);
+      /* ONE pool (review, 2026-10-24): the server keeps GoPlus's LP rows only when GoPlus read this profile's pool (lpOtherPool
+         says it did not), and a pool whose LP was all withdrawn is said as emptied (lpEmptied), never as burned. On Ethereum the
+         rows are GoPlus's pool, named when GoPlus named it (lpPool). */
+      if (f.lpEmptied) rows.push(['LP', '<b class="tkd-bad">all withdrawn — the pool’s LP tokens are gone (only Uniswap’s permanent minimum is left)</b> <small class="np-src">read on-chain</small>']);
+      else rows.push(['LP burned — held by a dead address', f.lpBurnedPct != null ? pct(f.lpBurnedPct) + ' <small class="np-src">' + (f.lpBurnSource === 'chain' ? 'read on-chain' : 'GoPlus') + '</small>' : unread]);
+      if (f.lpOtherPool) rows.push(['LP in a locker · who holds it', '<span class="tkd-unread">not read for this pool — GoPlus read ' + (f.lpOtherPool !== 'unnamed' ? 'another pool, ' + addrLinkHTML(p, f.lpOtherPool, 'the pool GoPlus read') : 'a pool it did not name') + '</span>']);
+      else {
+        rows.push(['LP in a locker (GoPlus marks it locked)', lpListed && f.lpLockerPct != null ? pct(f.lpLockerPct) : unread]);
+        // every LP holder GoPlus lists that is not dead or locked (its top ten), a blank share kept and said "not read"
+        const others = lpListed ? f.lpTop.filter((h) => !h.dead && !h.locked && (h.pct == null || h.pct > 0)) : [];
+        // the token's own contract or the pool itself is named as that; else the node's answer (a contract / a wallet), GoPlus's only where the node did not say
+        const tokA = String((p.token && p.token.address) || '').toLowerCase(), poolA = String((p.pair && p.pair.address) || '').toLowerCase();
+        const whoIs = (h) => h.address === tokA ? ' (this token’s own contract)' : h.address === poolA ? ' (the pool itself)' : h.contract == null ? '' : h.kindSource === 'chain' ? kindWord(h.contract) : (h.contract ? ' (a contract, per GoPlus)' : ' (a wallet, per GoPlus)');
+        const sumShown = others.reduce((a, h) => a + (h.pct || 0), 0);
+        rows.push(['Who else holds the LP', others.length
+          ? '<ul class="tkd-lp-holders">' + others.map((h) => '<li>' + addrLinkHTML(p, h.address, 'this LP holder') + ' <b>' + esc(h.pct == null ? 'share not read' : h.pct < 0.1 ? '<0.1%' : pctPlain(h.pct)) + '</b>' + esc(whoIs(h)) + (h.tag ? ' · ' + esc(h.tag) : '') + '</li>').join('') + '</ul>' +
+            (f.lpHolders > f.lpTop.length ? '<small class="np-src">GoPlus lists its top ' + f.lpTop.length + ' of ' + npNum(f.lpHolders) + ' LP holders</small>' : '') +
+            (sumShown >= 50 ? '<span class="tkd-bad">Most of the LP is neither burned nor in a locker — whoever holds it can pull it (a contract, only if its code has a way to).</span>' : '')
+          : lpListed ? 'nobody else among the LP holders GoPlus lists' : unread]);
+        if (f.lpPool && foreignChain(p)) rows.push(['LP figures are for', 'the pool GoPlus reads, ' + addrLinkHTML(p, f.lpPool, 'the pool GoPlus reads')]);
+      }
     }
     // a row whose answer is a list of addresses (who holds the LP) spans the card, label above — a narrow label beside a list breaks a word a line
     return '<dl class="tkd-facts">' + rows.map(([k, v]) => '<div' + (/<ul class="tkd-lp-holders"/.test(v) ? ' class="tkd-facts-list"' : '') + '><dt>' + k + '</dt><dd>' + v + '</dd></div>').join('') + '</dl>' +
-      '<p class="np-hp-disclaim">Read by GoPlus Security’s automated scanner' + (f.program || c.slug === 'solana' ? ' and the chain’s own node' : !foreignChain(p) ? ' (the owner and the burned LP: the chain’s own node)' : '') + ' — <b>not an audit</b>, and not a live buy/sell simulation. Always DYOR.</p>';
+      '<p class="np-hp-disclaim">Read by GoPlus Security’s automated scanner' + (f.program || c.slug === 'solana' ? ' and the chain’s own node' : (() => {
+        const byNode = [p.token && p.token.ownerSource === 'chain' ? 'the owner' : '', f.lpBurnSource === 'chain' ? 'the burned LP' : '', Array.isArray(f.lpTop) && f.lpTop.some((h) => h.kindSource === 'chain') ? 'whether each LP holder is a contract' : ''].filter(Boolean);
+        return byNode.length ? ' (' + andList(byNode) + ': the chain’s own node)' : '';
+      })()) + ' — <b>not an audit</b>, and not a live buy/sell simulation. Always DYOR.</p>';
   }
   // the pools Dexscreener lists for the token, deepest first — each a button that points the chart card at that pool. Its list
   // stops at 30 pairs (p.poolsCapped), so it is never called "every pool": the label says whose list it is
@@ -3275,6 +3299,7 @@
     bundleAsideHTML,
     // the red-fact rule as the page applies it — tests/contractfacts.mjs runs it beside lib/contractfacts.js's redFacts on the same profiles
     redFactsOf: (p) => ({ found: vendorFacts(p).map((x) => x.k), neutralised: vendorNeutral(p).map((x) => x.k) }), VENDOR_EVM, OWNER_GATED: [...OWNER_GATED], DEAD_ADDRS: [...DEAD_ADDRS],
+    verdictWordOf: (p) => { const v = verdictOf(p); return { word: v.word, vendor: /np-t-vendor/.test(v.cls || '') }; },   // the verdict the page gives — the same test runs it beside scanVerdict
   };
 
   /* Lazy-load the honeypot/contract read the first time its section is expanded. Attached on EVERY page,

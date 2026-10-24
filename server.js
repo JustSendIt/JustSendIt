@@ -6450,6 +6450,8 @@ const GOPLUS_POWERS = [
   ['anti_whale_modifiable', 'maxlimits-mod', 'high', 'Change those caps at will', 'a cap that moves can be tightened onto sellers'],
   ['trading_cooldown', 'cooldown', 'medium', 'Force a wait between trades', 'a cooldown delays getting out'],
   ['cannot_sell_all', 'sellall', 'medium', 'Stop you selling the whole balance', 'you may not be able to exit fully'],
+  ['personal_slippage_modifiable', 'perwallet', 'high', 'Set a tax for one wallet', 'one wallet can be taxed out of selling'],
+  ['is_proxy', 'proxy', 'high', 'Swap the contract’s code (a proxy)', 'whoever administers the proxy can change what the token does'],
 ];
 function goplusPowers(d) {
   const out = [];
@@ -6485,8 +6487,8 @@ function contractSummaryOf(o) {
   if (!o.powers.length) return 'No obvious owner powers to mint, blacklist, pause, toggle trading, or change taxes were found — the usual honeypot/rug levers weren’t detected. Still DYOR; a scan isn’t an audit.';
   const live = o.powers.filter((p) => !p.neutralised), dead = o.powers.filter((p) => p.neutralised);
   const by = o.source === 'goplus' ? 'An automated scan of the contract' : 'A heuristic read of the verified source';
-  if (!live.length) return by + ' finds owner functions to ' + dead.map(p => p.can.toLowerCase()).join(', ') + ' — but ownership is renounced to a dead address, so nobody can call them any more. A scan is not an audit.';
-  return by + ' says the owner’s code appears able to ' + live.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders.' + (dead.length ? ' (Its ' + dead.map(p => p.can.toLowerCase()).join(', ') + ' cannot be used: ownership is renounced.)' : '') + ' A scan is not an audit.';
+  if (!live.length) return by + ' finds owner functions to ' + dead.map(p => p.can.toLowerCase()).join(', ') + ' — but ownership is renounced to a dead address, so the owner can no longer call them. A scan is not an audit.';
+  return by + ' says the owner’s code appears able to ' + live.map(p => p.can.toLowerCase()).join(', ') + '. Each is a lever that can trap sellers or dump on holders.' + (dead.length ? ' (Its ' + dead.map(p => p.can.toLowerCase()).join(', ') + ' can no longer be used by the owner: ownership is renounced.)' : '') + ' A scan is not an audit.';
 }
 /* The pair is supplied by whoever asked, and the answer used to be cached under the TOKEN alone — so
    asking about token X while naming some unrelated pool whose LP happens to be burned wrote "Liquidity
@@ -6516,19 +6518,21 @@ async function analyzeContract(tokenAddr, pairAddr) {
   /* GoPlus first: it answers on this chain, and its flags are the same vocabulary the source scanner
      produces. The explorer's verified source is still read when it will answer — it names the contract
      and is a second opinion — but it is no longer the only way to learn what an owner can do. */
+  let g = null, src = '';
   try {
     const gp = await goplusToken(tok);
     if (gp && gp.raw) {
-      const g = gp.raw;
+      g = gp.raw;
       out.verified = gpFlag(g.is_open_source);
       out.powers = goplusPowers(g);
       out.source = 'goplus';
       out.honeypot = gpFlag(g.is_honeypot);
       out.buyTax = gpNum(g.buy_tax); out.sellTax = gpNum(g.sell_tax);
-      out.renounced = g.owner_address ? CF.isDead(g.owner_address) && gpFlag(g.can_take_back_ownership) !== true && gpFlag(g.hidden_owner) !== true : null;   // a dead owner, with no way back and no hidden owner
       out.readAt = gp.at;
-      if (Array.isArray(g.lp_holders) && g.lp_holders.length) {
-        // LP lock, from the same reading: the share of LP tokens held in a locked or burn position
+      // LP lock, from the same reading — only when GoPlus's pool is the one asked about (one pool, never two pools' numbers mixed)
+      const gpPool = Array.isArray(g.dex) && g.dex.length === 1 && g.dex[0] ? String(g.dex[0].pair || '').toLowerCase() : null;
+      if (Array.isArray(g.lp_holders) && g.lp_holders.length && (!pair || gpPool === pair)) {
+        // the share of LP tokens held in a locked or burn position
         const locked = g.lp_holders.filter((h) => gpFlag(h.is_locked) === true || CF.isDead(h.address));
         const pct = locked.reduce((a, h) => a + ((gpNum(h.percent) || 0) * 100), 0);
         out.liquidity = { known: true, lockedPct: pct, locked: pct >= 50, source: 'goplus' };
@@ -6537,15 +6541,29 @@ async function analyzeContract(tokenAddr, pairAddr) {
   } catch {}
   try {
     const sc = await jget(BLOCKSCOUT + '/api/v2/smart-contracts/' + tok);
-    if (sc) { if (out.verified == null) out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); const src = String(sc.source_code || ''); if (out.verified && src && !out.powers.length) out.powers = scanContractSource(src); }
+    if (sc) { if (out.verified == null) out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); src = String(sc.source_code || ''); if (out.verified && src && !out.powers.length) out.powers = scanContractSource(src); }
   } catch {}
-  /* A renounced owner cannot call the owner's functions (owner, 2026-10-24): each power an owner calls is marked neutralised —
-     said on the card, and kept out of the warning. A take-back path or a hidden owner is never neutralised (it is what makes a
-     renounce not real), nor is a sell limit (the token's behaviour, not an owner's call). The owner() read answers when GoPlus
-     did not. */
-  if (out.renounced == null) { try { out.renounced = (await tokenOwner(tok)).renounced; } catch {} }
-  if (out.renounced === true) { const NEUTRAL = new Set(['mint', 'blacklist', 'pausable', 'fees', 'trading', 'maxlimits', 'maxlimits-mod', 'cooldown', 'whitelist', 'balance']); out.powers = out.powers.map((p) => NEUTRAL.has(p.key) ? Object.assign({}, p, { neutralised: true }) : p); }
-  if (!out.liquidity.known && pair && await pairContainsToken(pair, tok)) out.liquidity = await checkLpLock(pair);
+  /* A renounced owner cannot call the owner's functions (owner, 2026-10-24) — the SAME rule as the profile's (lib/contractfacts.js):
+     the owner read the same way (owner() first, GoPlus's owner_address only when there is no owner() — homeOwner), and only the
+     owner's own calls are marked neutralised: mint, blacklist, pause, change balances, change the tax or one wallet's tax, change
+     the trade caps. A cap, a cooldown, a whitelist or a trading switch is the token's behaviour and still applies; a take-back path,
+     a hidden owner or a proxy makes the renounce not real (review, 2026-10-24). With no GoPlus reading, the source scan cannot see
+     who gates a function — another role, a pending owner, a hard-coded wallet — so a source that shows any of those neutralises
+     nothing. */
+  let ownerInfo = null; try { ownerInfo = await tokenOwner(tok); } catch {}
+  const own = homeOwner(ownerInfo, g);
+  const notReal = g ? (gpFlag(g.can_take_back_ownership) === true || gpFlag(g.hidden_owner) === true || gpFlag(g.is_proxy) === true)
+    : /onlyRole|hasRole|AccessControl|_previousOwner|pendingOwner|\bunlock\s*\(|msg\.sender\s*==\s*_?[A-Za-z]|upgradeTo|Proxy\b/.test(src);
+  out.renounced = own.renounced === true ? !notReal : own.renounced === false ? false : null;
+  out.ownerBurn = own.ownerBurn; out.owner = own.owner; out.ownerIsContract = own.ownerIsContract;
+  if (out.renounced === true) { const NEUTRAL = new Set(['mint', 'blacklist', 'pausable', 'fees', 'balance', 'perwallet', 'maxlimits-mod']); out.powers = out.powers.map((p) => NEUTRAL.has(p.key) ? Object.assign({}, p, { neutralised: true }) : p); }
+  // the LP: GoPlus's (same pool) first; else the chain's own read of what sits at dead addresses; else the explorer's holder list
+  if (!out.liquidity.known && pair && await pairContainsToken(pair, tok)) {
+    const lb = await lpBurnRead(pair);
+    if (lb && lb.emptied) out.liquidity = { known: true, emptied: true, source: 'chain' };
+    else if (lb && lb.burnedPct != null) out.liquidity = { known: true, lockedPct: lb.burnedPct, locked: lb.burnedPct >= 50, burnedOnly: true, source: 'chain' };
+    else out.liquidity = await checkLpLock(pair);
+  }
   else if (!out.liquidity.known && pair) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
   out.summary = contractSummaryOf(out);
   _contractCache.set(key, { t: now(), v: out });
@@ -9812,11 +9830,47 @@ async function lpBurnRead(pair) {
   const supply = big(out[0]); if (!(supply > 0n)) return null;
   const parts = dead.map((d, i) => ({ address: d, raw: big(out[i + 1]) }));
   if (parts.some((x) => x.raw == null)) return null;   // one balance unread: the sum would be a guess
+  /* Uniswap v2 sends the first 1,000 wei of LP to the zero address when the pool is made, for ever: that is not anyone's burn,
+     and counting it made a pool whose every other LP token was withdrawn read "100% burned" (review, 2026-10-24). It comes off
+     both sides; a pool with nothing left after it has been EMPTIED — said as that, never as burned. */
+  const MIN_LIQ = 1000n, z = parts.find((x) => x.address === '0x0000000000000000000000000000000000000000');
+  let sup = supply;
+  if (z && z.raw >= MIN_LIQ) { z.raw -= MIN_LIQ; sup -= MIN_LIQ; }
+  const supplyTokens = Number(supply) / 1e18;   // v2 LP tokens have 18 decimals — to match GoPlus's lp_total_supply against
+  if (!(sup > 0n)) { const v0 = { burnedPct: null, emptied: true, supplyTokens, by: [], source: 'chain', at: now() }; pruneCache(_lpBurnCache, 20000); _lpBurnCache.set(k, { at: now(), v: v0 }); return v0; }
   const burned = parts.reduce((a, x) => a + x.raw, 0n);
-  const pctOf = (x) => Number((x * 1000000n) / supply) / 10000;
-  const v = { burnedPct: pctOf(burned), by: parts.filter((x) => x.raw > 0n).map((x) => ({ address: x.address, pct: pctOf(x.raw) })), source: 'chain', at: now() };
+  const pctOf = (x) => Number((x * 1000000n) / sup) / 10000;
+  const v = { burnedPct: pctOf(burned), by: parts.filter((x) => x.raw > 0n).map((x) => ({ address: x.address, pct: pctOf(x.raw) })), supplyTokens, source: 'chain', at: now() };
   pruneCache(_lpBurnCache, 20000); _lpBurnCache.set(k, { at: now(), v });
   return v;
+}
+/* Is each of these addresses a contract or a wallet? The node's eth_getCode, in one batch, kept 15 minutes. GoPlus's is_contract
+   calls an EIP-7702 wallet (a wallet that delegated its code — $SEND's largest LP holder is one) "a contract"; the node's answer
+   (MC.codeKind) calls it what it is. Missing answers stay unknown. */
+const _kindCache = new Map();
+async function addrKinds(addrs) {
+  const out = new Map(), ask = [];
+  for (const a of new Set((addrs || []).map((x) => String(x || '').toLowerCase()).filter((x) => /^0x[0-9a-f]{40}$/.test(x)))) {
+    const c = _kindCache.get(a);
+    if (c && now() - c.at < LP_BURN_TTL) out.set(a, c.v); else ask.push(a);
+  }
+  if (ask.length) {
+    let res = null; try { res = await rpcBatch(ask.map((a) => ['eth_getCode', [a, 'latest']])); } catch {}
+    ask.forEach((a, i) => { const v = res ? MC.codeKind(res[i]) : null; if (v != null) { pruneCache(_kindCache, 20000); _kindCache.set(a, { at: now(), v }); } out.set(a, v); });
+  }
+  return out;
+}
+// the LP holders on the card are named by the node's answer (kindSource 'chain'); GoPlus's is_contract only where the node did not say
+async function markLpKinds(p) {
+  const f = p && p.chainFacts; if (!f || !Array.isArray(f.lpTop)) return;
+  const live = f.lpTop.filter((h) => !h.dead); if (!live.length) return;
+  const kinds = await addrKinds(live.map((h) => h.address));
+  for (const h of live) { const k = kinds.get(h.address); if (k != null) { h.contract = k; h.kindSource = 'chain'; } else if (h.contract != null) h.kindSource = 'goplus'; }
+}
+/* GoPlus's honeypot reading on the home chain goes on the floor the way Ethereum's does (lib/multichain.js): the honeypot flag,
+   its source named, the score re-finished — not a 100 with a "Caution" chip beside it. */
+function goplusHoneypotFloor(e) {
+  if (e && e.chainFacts && e.chainFacts.honeypot === true && e.risk && !e.risk.honeypotSuspect) { e.risk.honeypotSuspect = true; e.risk.honeypotSource = 'goplus'; riskFinish(e); }
 }
 let usdgDecimals = null; // cached once (Global Dollar's decimals — don't hardcode)
 
@@ -9897,8 +9951,21 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
      LP holders' addresses come from GoPlus. null when GoPlus has nothing for this token — then the lazy contract read
      (analyzeContract: the verified source) is what the card shows. */
   const chainFacts = g ? CF.evmFacts(g) : null;
-  if (chainFacts && lpBurn && lpBurn.burnedPct != null) { chainFacts.lpBurnedPct = lpBurn.burnedPct; chainFacts.lpBurnSource = 'chain'; }
-  else if (chainFacts) chainFacts.lpBurnSource = chainFacts.lpBurnedPct != null ? 'goplus' : null;
+  if (chainFacts) {
+    /* One pool on the card (review, 2026-10-24): GoPlus's LP holders, locker share and burned share describe the pool GoPlus read.
+       They are kept only when that is this profile's pool — GoPlus names it (lpPool), or its LP total supply matches the one the
+       chain just gave (within 0.5%). Otherwise they are dropped and the card says another pool was read, never one pool's burn
+       beside another pool's holders. */
+    const pairA = String(t.pair || '').toLowerCase();
+    const bySupply = lpBurn && lpBurn.supplyTokens > 0 && chainFacts.lpTotalSupply != null && Math.abs(lpBurn.supplyTokens - chainFacts.lpTotalSupply) <= lpBurn.supplyTokens * 0.005;
+    if (chainFacts.lpTop && !(chainFacts.lpPool === pairA || bySupply)) {
+      chainFacts.lpOtherPool = chainFacts.lpPool || 'unnamed';
+      chainFacts.lpTop = null; chainFacts.lpLockerPct = null; chainFacts.lpLockedPct = null; chainFacts.lpBurnedPct = null; chainFacts.lpSource = null;
+    }
+    if (lpBurn && lpBurn.emptied) { chainFacts.lpEmptied = true; chainFacts.lpBurnedPct = null; chainFacts.lpBurnSource = 'chain'; }
+    else if (lpBurn && lpBurn.burnedPct != null) { chainFacts.lpBurnedPct = lpBurn.burnedPct; chainFacts.lpBurnSource = 'chain'; }
+    else chainFacts.lpBurnSource = chainFacts.lpBurnedPct != null ? 'goplus' : null;
+  }
   return {
     chainFacts,
     token: {
@@ -10086,6 +10153,10 @@ async function enrichPairs() {
       lpBurnRead(t.pair),         // the LP at dead addresses (read-only; kept 15 min)
     ]);
     const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp, lpBurn);
+    /* GoPlus did not answer this pass: the facts it gave last time are carried, marked with when (staleAt) — an outage must never
+       read as "no red powers" and let a token onto the top tier (review, 2026-10-24). */
+    if (!p.chainFacts) { const prevF = (pairsCache.pairs || []).find((x) => x && x.pair && x.pair.address && x.pair.address.toLowerCase() === t.pair.toLowerCase()); if (prevF && prevF.chainFacts) p.chainFacts = Object.assign({}, prevF.chainFacts, { staleAt: prevF.chainFacts.staleAt || pairsCache.updatedAt || null }); }
+    await markLpKinds(p).catch(() => {});
     /* The price feed could not be asked about this token. Carry forward the last reading we actually took
        rather than publishing zeros: a blank row is not neutral, it reads as "dead token" to every reader and
        to our own scoring. The carried numbers are labelled with when they were true, and `priceStale` stops
@@ -10120,6 +10191,7 @@ async function enrichPairs() {
     if (e.priceStale && e._prevRisk) { e.risk = e._prevRisk; delete e._prevRisk; continue; }
     delete e._prevRisk;
     applyRisk(e, deployerCounts, deployerDied);
+    goplusHoneypotFloor(e);
   }
   // A carried-forward price must never set a Best Runners baseline, a peak, or a snapshot — the store would
   // record an old price as if it were a new observation and bend every "since scanned" X measured against it.
@@ -10204,6 +10276,7 @@ async function enrichOne(item, opts = {}) {
   }
   if (!dex && !opts.strictPair && arr[0]) dex = arr[0]; // strictPair (lookups): never borrow a DIFFERENT pool's market data
   const p = buildPair(t, dex, metaN, addr, holders, (dex && dex.pairCreatedAt) || 0, reserves, ownerInfo, tokenDec, gp, lpBurn);
+  await markLpKinds(p).catch(() => {});   // the LP holders' kind from the node, not GoPlus's is_contract
   if (p.market.priceUsd == null && ownPoolOf(t.token)) await fillFromOwnPool(p);   // $SEND / $GWC: the pool prices them when the feed does not
   if (DEXTOOLS_ON) p.brand.dextools = await dextoolsInfo(t.token); // opt-in; no-op unless DEXTOOLS_API_KEY+CHAIN set
   // serial-deployer flag needs a window of other launches; the live New-Pairs set (passed by lookups) supplies one
@@ -10213,6 +10286,7 @@ async function enrichOne(item, opts = {}) {
     const d = p.token.deployer; dc[d] = (dc[d] || 0) + 1; if (looksDead(p)) dd[d] = (dd[d] || 0) + 1; // include this token
   }
   applyRisk(p, dc, dd);
+  goplusHoneypotFloor(p);
   return p;
 }
 /* ---------- token lookup: resolve ANY token address → full pair detail (reuses the enrichOne pipeline) ----------
@@ -20426,13 +20500,22 @@ function tgSend(chatId, html, extra) {
 function scanVerdict(p) {
   const r = p.risk || {};
   const health = Math.round(r.health || 0);
-  if (r.thinData) return { emoji: '🌫️', word: 'Not enough data yet', note: 'Too little is readable about this token to judge it. That is not a pass — it is an unknown.' };
-  // a red power the contract read found and no renounce has neutralised (lib/contractfacts.js) — the client's floor says the same
-  const red = CF.redFacts(Object.assign({ chain: p.chain || 'robinhood' }, p)).found;
-  if (red.length && r.triage !== 'avoid' && !r.honeypotSuspect && !r.dumping && !r.sniperDump) {
-    const words = red.map((k) => (CF.RED_EVM.find((x) => x[0] === k) || [k, k])[1].toLowerCase());
-    return { emoji: '🟡', word: 'Caution', note: 'The contract read reports: ' + words.join(', ') + ' — and ownership is not renounced to a dead address, so they can still be used. Not a promise either way; most new tokens still go to zero.' };
+  /* A red power the contract read found and no renounce has neutralised (lib/contractfacts.js) — the page's verdictOf in the same
+     place: before thin data and the block-0 wait, and only over the ok / caution tiers (high and avoid keep their own, worse word).
+     The note says why each one still counts: an owner's power, because ownership is not (really) renounced or was not read; any
+     other, because it applies whoever the owner is. */
+  const pp = Object.assign({ chain: p.chain || 'robinhood' }, p);
+  const red = CF.redFacts(pp).found;
+  if (red.length && (r.triage === 'ok' || r.triage === 'caution') && !r.honeypotSuspect && !r.dumping && !r.sniperDump) {
+    const word = (k) => (CF.RED_EVM.find((x) => x[0] === k) || [k, k])[1].toLowerCase();
+    const owned = red.filter((k) => CF.OWNER_GATED.has(k)), always = red.filter((k) => !CF.OWNER_GATED.has(k)), ren = CF.renouncedReal(pp);
+    const f = pp.chainFacts || {};
+    const why = [];
+    if (owned.length) why.push(owned.map(word).join(', ') + ' — ' + (ren === null ? 'whether ownership is renounced was not read' : (f.takeBack === true || f.hiddenOwner === true || f.proxy === true) ? 'ownership reads as renounced, but ' + (f.proxy === true ? 'the contract is a proxy whose code can be swapped' : 'GoPlus reads a way back to it or a hidden owner') : 'ownership is not renounced to a dead address') + ', so the owner can still use ' + (owned.length > 1 ? 'them' : 'it'));
+    if (always.length) why.push(always.map(word).join(', ') + ' — ' + (always.length > 1 ? 'these apply' : 'this applies') + ' whoever the owner is');
+    return { emoji: '🟡', word: 'Caution', note: 'The contract read reports ' + why.join('; ') + '. Not a promise either way; most new tokens still go to zero.' };
   }
+  if (r.thinData) return { emoji: '🌫️', word: 'Not enough data yet', note: 'Too little is readable about this token to judge it. That is not a pass — it is an unknown.' };
   if (r.triage === 'ok' && health >= 100 && r.sniperOk !== true) {
     const st = r.snipers && r.snipers.status;
     return (st === 'done' || st === 'partial')
