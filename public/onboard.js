@@ -22,13 +22,14 @@
   const LS = 'jsi-onboard';                 // { user, step, at } — the step in hand across a page change
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.classList.contains('motion-off');
-  const phone = () => window.innerWidth < 768;
+  const phone = () => window.innerWidth < 768 || window.innerHeight < 500;   // a landscape phone too: the card is a sheet (styles.css)
   const sfx = (n) => { try { if (window.SFX) SFX.play(n); } catch {} };
   const me = () => (window.AUTH && AUTH.user) || null;
   const handle = () => (me() ? '@' + me().username : 'friend');
   const verified = () => !!(me() && me().holderVerified);
   const floorUsd = () => { const h = me() && me().holderProof; return h && h.minUsd ? h.minUsd : 100; };
-  const here = () => (location.pathname.replace(/\.html$/, '').replace(/\/+$/, '') || '/');
+  // a top-level page may be asked for as /name.html; a member's wall (/u/<handle>) is compared as it is — a handle can end in ".html"
+  const here = () => (location.pathname.replace(/^(\/[^/]+)\.html$/, '$1').replace(/\/+$/, '') || '/');
   const ownWall = () => (me() ? '/u/' + encodeURIComponent(me().username) : '/profile');
   const store = {
     get() { try { const v = JSON.parse(localStorage.getItem(LS) || 'null'); return v && me() && v.user === me().username && Date.now() - (v.at || 0) < 12 * 3600e3 ? v : null; } catch { return null; } },
@@ -49,41 +50,41 @@
     { id: 'unlock', page: '/', chapter: 'Your account', sel: ['#nav-auth'], act: () => (verified() ? 'cheer' : 'point'),
       title: () => (verified() ? 'You’re verified ✅' : 'One step opens everything 🔓'),
       body: () => (verified()
-        ? 'Posting, Send Calls, reactions, votes and communities are all open to you. Here’s what each one does.'
-        : 'Reading is open to everyone. Posting, Send Calls, reactions, votes and communities open once a wallet you link holds $' + floorUsd() + ' of $SEND bought on the market, kept for at least a day. Linking is read-only — a signature, never a transaction — and if you’d rather just read, you never need to.') },
+        ? 'Posting, following, Send Calls, reactions, votes, communities, squads, wallet tracking and Rocket Run are all open to you. Keep the bag: selling it within a day of a buy makes the account read-only for a while.'
+        : 'Reading is open to everyone. Posting, following, Send Calls, reactions, votes, communities, squads, wallet tracking and Rocket Run open the moment a wallet you link holds $' + floorUsd() + ' of $SEND bought on the market. No wait — but selling it within a day of buying makes the account read-only for a while.') },
     { id: 'fab', page: '/', chapter: 'Your account', sel: ['#compose-fab'], act: 'point', title: 'Post from anywhere ✏️',
       body: 'This button follows you around the whole site. Tap it to post on the Wall in seconds.' },
     { id: 'wall', page: '/wall', chapter: 'The Send Wall', sel: ['#post-text', '#composer-card'], act: 'sendit', title: 'The Send Wall 🧱',
-      body: 'Share wins, memes and cope — add a picture or a voice note. Everyone on the site can see it.' },
+      body: 'Share wins, memes and cope, with a picture if you like. Everyone on the site can see it.' },
     { id: 'feed', page: '/wall', chapter: 'The Send Wall', sel: ['#tab-following', '#tab-all', '#feed-panel'], act: 'giggle', title: 'React, reply, follow 🔥',
       body: 'React to posts, reply, and follow the people you like. The Following tab shows just them.' },
     { id: 'scan', page: '/newpairs', chapter: 'The Scanner', sel: ['#sc-form'], act: 'peek', title: 'Scan any token 🔎',
       body: 'Paste a token or pool address — Robinhood Chain, Ethereum or Solana — or type a name. You get its full on-chain read: risk, holders, liquidity, the contract.' },
     { id: 'call', page: '/newpairs', chapter: 'The Scanner', sel: ['#sc-form'], act: 'point', title: 'Make a Send Call 📣',
-      body: 'From a scan you can post a Send Call: a public scorecard of your pick that earns Send Power as it moves. Tap ☆ to keep a token on your Watchlist.' },
+      body: 'From a scan of a Robinhood Chain token you can post a Send Call: a public scorecard of your pick that earns Send Power as it moves. Tap ☆ to keep a token on your Watchlist.' },
     { id: 'swap', page: '/newpairs', chapter: 'The Scanner', sel: ['#sc-form'], act: 'vee', title: 'Swap in your own wallet 💱',
       body: 'Each token’s detail has a Swap button that builds the trade for your wallet to check and sign. We never hold your funds — and never tell you to buy.' },
     { id: 'radar', page: '/newpairs', chapter: 'The Scanner', sel: ['#sc-tab-new'], act: 'point', title: 'The New Pairs radar 📡',
-      body: 'Brand-new tokens on Robinhood Chain, scored for risk the moment they launch — a members’ tab.' },
+      body: 'Brand-new tokens on Robinhood Chain, found and scored for risk as they launch — a members’ tab.' },
     { id: 'comms', page: '/communities', chapter: 'Communities', sel: ['#comm-officials-h', '#comm-start', '#comm-officials'], act: 'hug', title: 'Token communities 👥',
-      body: 'Every token can have one. Holders join for a holders-only wall and proposals — and a 10× Send Power boost while they’re in.' },
+      body: 'Any Robinhood Chain token with a priced pool of $500 or more can have one. It goes live at 10 verified holders; members get a holders-only wall, proposals and, while they’re in a live one, a flat 10× Send Power boost.' },
     { id: 'squads', page: '/communities', chapter: 'Communities', sel: ['[data-cstatus="squads"]', '#sq-h'], act: 'wink', title: 'Send Squads 🛡️',
-      body: 'Private groups for your crew, gated by a token — this tab opens them. Make Send Calls only your squad sees, and earn points together.' },
+      body: 'Private groups for your crew — open, or gated by a token you choose. This tab opens them: make Send Calls only your squad sees, and earn points together.' },
     { id: 'tracker', page: '/tracker', chapter: 'Wallet tracker', sel: ['#trk-add', '#trk-so-form', '#trk-side-h', '#trk-signedout'], act: 'peek', title: 'Track any wallet 👛',
-      body: 'Add any wallet to see its holdings, every trade, its profit and loss, and its value over time — saved for you.' },
+      body: () => 'Add any Robinhood Chain wallet to see its holdings, every trade, its profit and loss, and its value over time — saved for you.' + (verified() ? '' : ' Adding one takes the same $SEND check as posting.') },
     { id: 'rocket', page: '/arcade', chapter: 'The Arcade', sel: ['#arc-game-h', '#arc-btn', '#arc-game'], act: 'sendit', title: 'Rocket Run 🕹️',
-      body: 'Fly the rocket for a Send Power boost for the day. Free to play — nothing to buy, nothing at stake.' },
+      body: () => 'Fly the rocket once a day for a Send Power boost for the day. ' + (verified() ? 'Free to play — nothing to buy, nothing at stake.' : 'It takes the same $SEND check as posting, and nothing is ever wagered.') },
     { id: 'slots', page: '/arcade', chapter: 'The Arcade', sel: ['#slots-h', '#slot-lever', '#slots'], act: 'twirl', title: 'Just Spin It 🎰',
       body: 'A free slot machine for fun and bragging rights. Score only — never money.' },
     { id: 'dash', page: '/profile', chapter: 'Your profile', sel: ['#dtabs', '#gamify-dash'], act: 'point', title: 'Your dashboard 📊',
       body: 'Quests, the leaderboard and every Send Power rule live on Overview. The other tabs hold your wallet, invites, tracked wallets and settings.' },
     { id: 'link', page: '/profile', chapter: 'Your profile', sel: ['#dtab-wallet'], act: 'point', title: () => (verified() ? 'Your wallets 🔗' : 'Link your wallet 🔗'),
       body: () => (verified()
-        ? 'Your linked wallets live here — they set your holder boost. Linking another is read-only: a signature, never a transaction.'
-        : 'Link a wallet here. It shows your holdings and is how the site checks the one rule for doing things. Read-only: a signature, never a transaction.') },
+        ? 'Your linked wallets live here — they set your holder boost. Linking one moves nothing: you sign a message. A wallet that can’t sign is proved by a burn of any amount you send yourself — a real transaction, gone for good.'
+        : 'Link a wallet here: it is how the site checks the one rule for doing things. Linking moves nothing — you sign a message. A wallet that can’t sign is proved by a burn of any amount you send yourself instead: a real transaction, gone for good.') },
     { id: 'safe', page: '/profile', chapter: 'Your profile', sel: ['#dtab-settings'], act: 'wink', title: 'Keep it safe 🔐',
       body: 'Settings has your profile, your sign-in methods and two-factor. Nobody here will ever ask for your seed phrase.' },
-    { id: 'mywall', page: ownWall, chapter: 'Your wall', sel: ['#checkin', 'main h1'], act: 'cheer', title: 'Your wall + daily check-in 📅',
+    { id: 'mywall', page: ownWall, chapter: 'Your wall', sel: ['#ci-go', '#checkin', 'main h1'], act: 'cheer', title: 'Your wall + daily check-in 📅',
       body: 'This is your public wall. Check in once a day for bonus Send Power, and style it your way.' },
     { id: 'done', page: ownWall, chapter: 'All set', act: 'bliss', final: true, title: () => 'You’re all set, ' + handle() + '! 🎉',
       body: 'That’s everything your account can do. Tap me in the corner any time to ask a question — and replay this tour from my menu. Entertainment only, never financial advice.' },
@@ -105,7 +106,7 @@
   }
 
   /* ---------- the guide: Sendy's sprite and faces ---------- */
-  let root = null, guide = null, spot = null, card = null, blocker = null, live = null, idx = 0, running = false, mode = null, pos = null, lastFocus = null, acts = null, actTimer = null, landAt = null, fitAt = null;
+  let root = null, guide = null, spot = null, card = null, blocker = null, live = null, idx = 0, running = false, mode = null, pos = null, lastFocus = null, acts = null, actTimer = null, landAt = null, fitAt = null, owner = null, flight = null, finishT = null, resumeT = null;
   function loadActs() {
     if (acts !== null) return; acts = false;
     fetch('/assets/sendy-acts.json').then((r) => (r.ok ? r.json() : null)).then((m) => {
@@ -129,21 +130,28 @@
     guide.removeAttribute('data-act'); void guide.offsetWidth; guide.setAttribute('data-act', id);
     clearTimeout(actTimer); actTimer = setTimeout(() => guide && guide.removeAttribute('data-act'), Math.round(acts.dur * 1000));
   }
-  const size = () => guide ? guide.getBoundingClientRect().width || 96 : 96;
+  const size = () => (guide ? guide.offsetWidth || 96 : 96);   // untransformed: a tilted sprite in flight measures wider
   function place(x, y) {
     const s = size();
     x = Math.max(4, Math.min(x, window.innerWidth - s - 4)); y = Math.max(4, Math.min(y, window.innerHeight - s - 4));
     guide.style.left = x + 'px'; guide.style.top = y + 'px'; pos = { x, y };
   }
   // a flight: a curve from where he is to where he is going, leaning into it (the corner helper's flight, longer and quicker)
-  function flyTo(x, y, cb) {
-    const s = size();
-    x = Math.max(4, Math.min(x, window.innerWidth - s - 4)); y = Math.max(4, Math.min(y, window.innerHeight - s - 4));
+  function flyTo(x, y, cb, opts) {
+    const s = size(), g = guide;
+    if (!g) return;
+    const off = !!(opts && opts.offscreen);   // off to the next page: past the edge, so the x is not kept on the screen
+    if (!off) x = Math.max(4, Math.min(x, window.innerWidth - s - 4));
+    y = Math.max(4, Math.min(y, window.innerHeight - s - 4));
+    let from = pos || { x: window.innerWidth + 20, y: window.innerHeight * 0.4 };
+    if (flight) {   // a flight still in the air is retired: this one starts from where he is now, and its landing never runs
+      const r = g.getBoundingClientRect(); from = { x: r.left + (r.width - s) / 2, y: r.top + (r.height - s) / 2 };
+      flight.stale = true; try { flight.anim.cancel(); } catch {} flight = null; g.classList.remove('is-flying');
+    }
     landAt = null;   // a re-layout during this flight sets where he lands instead (relayout)
-    const from = pos || { x: window.innerWidth + 20, y: window.innerHeight * 0.4 };
     const dx = x - from.x, dy = y - from.y, len = Math.hypot(dx, dy);
-    if (reduced() || !guide.animate || len < 8) { place(x, y); if (cb) cb(); return; }
-    guide.style.left = from.x + 'px'; guide.style.top = from.y + 'px';
+    if (reduced() || !g.animate || len < 8) { if (!off) place(x, y); if (cb) cb(); return; }
+    g.style.left = from.x + 'px'; g.style.top = from.y + 'px';
     const bend = Math.min(120, len / 3.5) * (dx >= 0 ? -1 : 1), cx = from.x + dx / 2 - dy / len * bend, cy = from.y + dy / 2 + dx / len * bend;
     const frames = [];
     for (let i = 0; i <= 18; i++) {
@@ -152,10 +160,16 @@
       const tilt = Math.max(-30, Math.min(30, Math.atan2(tx, -ty) * 180 / Math.PI * 0.4));
       frames.push({ transform: 'translate(' + (px - from.x) + 'px,' + (py - from.y) + 'px) rotate(' + (i === 18 ? 0 : tilt) + 'deg)' });
     }
-    guide.classList.add('is-flying');
-    const anim = guide.animate(frames, { duration: Math.min(1500, 650 + len * 0.55), easing: 'cubic-bezier(.45,.05,.25,1)' });
+    g.classList.add('is-flying');
+    const anim = g.animate(frames, { duration: Math.min(1500, 650 + len * 0.55), easing: 'cubic-bezier(.45,.05,.25,1)' });
+    const f = flight = { anim, stale: false };
     let done = false;
-    const end = () => { if (done) return; done = true; guide.classList.remove('is-flying'); const at = landAt || { x, y }; landAt = null; place(at.x, at.y); if (cb) cb(); };
+    const end = () => {
+      if (done || f.stale || g !== guide) return;   // retired by a newer flight, or the tour has closed
+      done = true; flight = null; g.classList.remove('is-flying');
+      if (off) { g.style.left = x + 'px'; g.style.top = y + 'px'; } else { const at = landAt || { x, y }; landAt = null; place(at.x, at.y); }
+      if (cb) cb();
+    };
     anim.onfinish = end; anim.oncancel = end;
     setTimeout(end, 1700);   // a background tab never finishes an animation: the step must not wait on it
   }
@@ -165,11 +179,11 @@
   function blocked() {
     const u = me();
     if (!u) return 'signed-out';
-    if (u.auto_named) return 'claim';                                         // choosing a handle comes first
+    if (u.auto_named && here() === '/profile') return 'claim';               // the handle form is open: choosing one comes first
     if (window.AGE && AGE.needed) return 'age';
-    for (const id of ['auth-modal', 'compose-modal', 'full-view', 'notif-panel']) if (shown(document.getElementById(id))) return id;
+    for (const id of ['intro', 'auth-modal', 'compose-modal', 'full-view', 'notif-panel']) if (shown(document.getElementById(id))) return id;   // intro: the homepage's loading screen
     if (document.querySelector('#invite-overlay[data-open], .bp-overlay:not([hidden]), .tour-welcome-wrap, .tour-tip')) return 'overlay';
-    if (here() === '/profile' && /^#(claim|sec-security)/.test(location.hash)) return 'setup';   // a handle or two-factor being set up right now
+    if (here() === '/profile' && /^#sec-security/.test(location.hash)) return 'setup';   // two-factor being set up right now
     return null;
   }
   function firstTarget(s) {
@@ -188,7 +202,7 @@
       '<div class="ob-card" role="dialog" aria-modal="true" aria-labelledby="ob-title" aria-describedby="ob-body" tabindex="-1"></div>' +
       '<span class="ob-live sr-only" role="status" aria-live="polite"></span>';
     document.body.appendChild(root);
-    const pad = document.createElement('div'); pad.className = 'ob-spacer'; pad.setAttribute('aria-hidden', 'true'); document.body.appendChild(pad);   // scroll room on a short page (styles.css)
+    owner = me() && me().username;   // whose tour this is: another account signing in closes it (auth:change)
     blocker = root.querySelector('.ob-block'); spot = root.querySelector('.ob-spot'); guide = root.querySelector('#ob-sendy'); card = root.querySelector('.ob-card'); live = root.querySelector('.ob-live');
     blocker.addEventListener('click', () => { card.classList.remove('ob-nudge'); void card.offsetWidth; card.classList.add('ob-nudge'); const b = card.querySelector('[data-ob="next"]'); if (b) b.focus(); });
     card.addEventListener('click', onCard);
@@ -199,10 +213,12 @@
     loadActs();
   }
   function teardown() {
+    if (flight) { flight.stale = true; try { flight.anim.cancel(); } catch {} flight = null; }
+    clearTimeout(finishT); clearTimeout(waitT); clearTimeout(resumeT); clearTimeout(relayT); clearTimeout(actTimer); owner = null;
     document.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', relayout); window.removeEventListener('scroll', relayout);
     if (root) root.remove(); document.querySelectorAll('.ob-spacer').forEach((x) => x.remove()); root = guide = spot = card = blocker = live = null; pos = null; running = false; mode = null;
-    document.documentElement.classList.remove('ob-on');
+    document.documentElement.classList.remove('ob-on', 'ob-tour');
     if (lastFocus && lastFocus.focus && document.contains(lastFocus)) { try { lastFocus.focus(); } catch {} }
   }
 
@@ -231,7 +247,7 @@
     if (!onPage(s)) return go(pageOf(s));   // its page is another one: off we fly
     mode = 'step';
     card.innerHTML = cardHTML(s, idx);
-    card.classList.remove('ob-resume');
+    card.classList.remove('ob-resume', 'ob-leaving'); card.inert = false;
     // what to light up: on the page now, or within two seconds (a section that loads its data first — the squads, the check-in)
     const seq = (show.seq = (show.seq || 0) + 1);
     const t0 = Date.now();
@@ -283,9 +299,10 @@
     const W = window.innerWidth, H = window.innerHeight, s = size(), pad = 8;
     const r = target ? target.getBoundingClientRect() : null;
     if (r && r.width && r.height) {
-      spot.hidden = false;
-      const top = Math.max(4, r.top - pad), left = Math.max(4, r.left - pad), w = Math.min(W - left - 4, r.width + pad * 2), h = Math.min(H - top - 4, r.height + pad * 2);
-      Object.assign(spot.style, { top: top + 'px', left: left + 'px', width: w + 'px', height: h + 'px' });
+      // only the part of the target on the screen is lit: scrolled away, it is not drawn over whatever is there instead
+      const top = Math.max(4, r.top - pad), left = Math.max(4, r.left - pad), bottom = Math.min(H - 4, r.bottom + pad), right = Math.min(W - 4, r.right + pad);
+      spot.hidden = bottom - top < 8 || right - left < 8;
+      if (!spot.hidden) Object.assign(spot.style, { top: top + 'px', left: left + 'px', width: (right - left) + 'px', height: (bottom - top) + 'px' });
     } else spot.hidden = true;
     card.style.left = card.style.top = card.style.right = card.style.bottom = '';
     if (phone()) {
@@ -300,9 +317,8 @@
       }
       const sheetTop = H - chh - 8;
       let sx = W - s - 10, sy = sheetTop - s * 0.85;
-      if (r && r.bottom < sheetTop - s * 0.2) {
-        sx = Math.min(W - s - 6, Math.max(6, r.right - s * 0.6)); sy = Math.min(sheetTop - s * 0.85, Math.max(6, r.bottom + pad - s * 0.08));
-        // a tall target leaves no room under it: above it then (over the dimmed menu bar), whichever covers less of it
+      if (r && r.bottom < sheetTop - s * 0.2) { sx = Math.min(W - s - 6, Math.max(6, r.right - s * 0.6)); sy = Math.min(sheetTop - s * 0.85, Math.max(6, r.bottom + pad - s * 0.08)); }
+      if (r && r.width) {   // a tall target leaves no room under it: above it then (over the dimmed menu bar), whichever covers less of it
         const k = s * 0.15, sr = { l: r.left - pad, t: r.top - pad, r: r.right + pad, b: r.bottom + pad };
         const over = (x, y) => Math.max(0, Math.min(x + s - k, sr.r) - Math.max(x + k, sr.l)) * Math.max(0, Math.min(y + s - k, sr.b) - Math.max(y + k, sr.t));
         const upY = Math.max(4, r.top - pad - s * 0.92);
@@ -329,6 +345,7 @@
     else if (W - r.right - G - M >= cw) { side = 'right'; cx = r.right + G; cy = clamp(r.top, top0, H - ch - M); }
     else if (r.left - G - M >= cw) { side = 'left'; cx = r.left - G - cw; cy = clamp(r.top, top0, H - ch - M); }
     else { side = H - r.bottom >= r.top ? 'below' : 'above'; cy = side === 'below' ? H - ch - M : top0; cx = (r.left + r.right) / 2 > W / 2 ? M : W - cw - M; }
+    cy = clamp(cy, M, Math.max(M, H - ch - M)); cx = clamp(cx, M, Math.max(M, W - cw - M));   // on the screen, whatever the target does
     card.style.left = cx + 'px'; card.style.top = cy + 'px';
     const tx = (r.left + r.right) / 2, nearRight = tx > cx + cw / 2;
     let sx, sy;
@@ -359,27 +376,32 @@
   function go(path) {
     if (!path || path === '*') return;
     sfx('launch');
-    mode = 'leaving';
+    mode = 'leaving';   // the card takes no more presses (onCard): a second click would move the tour twice
     if (spot) spot.hidden = true;
-    if (card) card.classList.add('ob-leaving');
+    if (card) { card.classList.add('ob-leaving'); card.inert = true; }
     const out = () => { location.href = path; };
-    if (guide && !reduced()) flyTo(window.innerWidth + 40, Math.max(20, window.innerHeight * 0.25), out); else out();
+    if (guide && !reduced()) flyTo(window.innerWidth + 40, Math.max(20, window.innerHeight * 0.25), out, { offscreen: true }); else out();
   }
 
   /* ---------- the controls ---------- */
   function onCard(e) {
+    if (mode !== 'step' && mode !== 'resume') return;   // leaving for the next page, or finishing
     const b = e.target.closest('[data-ob]'); if (!b) return;
     const a = b.getAttribute('data-ob');
     if (a === 'next') { const nx = idx + 1; if (nx < STEPS.length) show(nx); }
     else if (a === 'back') { if (idx > 0) { sfx('tap'); show(idx - 1); } }
     else if (a === 'skip') skip();
     else if (a === 'finish') finish();
-    else if (a === 'resume') { sfx('select'); show(idx); }
-    else if (a === 'later') { sfx('close'); try { sessionStorage.setItem('jsi-onboard-later', '1'); } catch {} teardown(); }
+    else if (a === 'resume') { sfx('select'); try { sessionStorage.removeItem('jsi-onboard-later'); } catch {} show(idx); }
+    else if (a === 'later') later();
   }
   function onKey(e) {
     if (!root) return;
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (mode === 'resume') { try { sessionStorage.setItem('jsi-onboard-later', '1'); } catch {} teardown(); } else skip(); return; }
+    if (mode === 'resume') {   // a small offer beside a page in use: only a key pressed in the card is its business
+      if (e.key === 'Escape' && card && card.contains(e.target)) { e.preventDefault(); later(); }
+      return;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (mode === 'step') skip(); return; }
     if (mode !== 'step') return;
     const inField = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
     if (!inField && e.key === 'ArrowRight' && !STEPS[idx].final) { e.preventDefault(); show(idx + 1); }
@@ -396,11 +418,13 @@
     if (window.sendToast) sendToast('Tour skipped — explore away! Replay it any time from Sendy’s menu 🚀', 5000);
     teardown();
   }
+  function later() { sfx('close'); try { sessionStorage.setItem('jsi-onboard-later', '1'); } catch {} teardown(); }   // "Not now": hidden for this visit, the place kept
   function finish() {
+    mode = 'finishing'; if (card) card.inert = true;   // done is done: no Esc turns it into a skip on the way out
     save('done', idx); store.clear();
     sfx('success');
     if (window.sendConfetti) sendConfetti(window.innerWidth / 2, window.innerHeight / 3, { count: 80, emojiRatio: 0.5 });
-    if (guide && !reduced()) { face('sendit'); setTimeout(() => flyTo(window.innerWidth - size() - 16, window.innerHeight - size() - 90, teardown), 500); } else teardown();
+    if (guide && !reduced()) { face('sendit'); finishT = setTimeout(() => flyTo(window.innerWidth - size() - 16, window.innerHeight - size() - 90, teardown), 500); } else teardown();
   }
 
   /* ---------- a member who wandered off mid-tour: a small offer to pick it up, not a wall ---------- */
@@ -425,13 +449,17 @@
     if (why) { waitT = setTimeout(() => start(n, opts), 900); return; }   // after whatever the member is in the middle of
     build(); running = true; blocker.hidden = false;
     card.setAttribute('aria-modal', 'true');
+    document.documentElement.classList.add('ob-tour');   // scroll anchoring off while the tour is out (styles.css)
+    if (!document.querySelector('.ob-spacer')) { const pad = document.createElement('div'); pad.className = 'ob-spacer'; pad.setAttribute('aria-hidden', 'true'); document.body.appendChild(pad); }   // scroll room on a short page (styles.css) — the full tour only
     show(n, opts && opts.arriving);
   }
   async function boot() {
     try { if (window.AUTH && AUTH.ready) await AUTH.ready; } catch {}
     check();
   }
+  const laterSet = () => { try { return sessionStorage.getItem('jsi-onboard-later') === '1'; } catch { return false; } };
   function check() {
+    clearTimeout(resumeT);
     if (running || root) return;
     const u = me(); if (!u) return;
     const ob = u.onboard; const local = store.get();
@@ -440,10 +468,10 @@
     try { localStorage.setItem('jsi-tour-v1', 'onboard'); } catch {}
     const n = Math.max(0, Math.min(STEPS.length - 1, local ? local.step : (ob.step || 0)));
     const s = STEPS[n];
+    if (n > 0 && !local && laterSet()) return;   // "Not now" holds for this visit on every page, the step's own page too
     if (n === 0 || onPage(s)) return start(n, { arriving: !!local });
-    let later = false; try { later = sessionStorage.getItem('jsi-onboard-later') === '1'; } catch {}
-    if (later) return;
-    const wait = () => { if (blocked()) return void setTimeout(wait, 900); offerResume(n); };
+    const who = u.username;   // one waiting chain at a time (resumeT), for this member only
+    const wait = () => { if (root || !me() || me().username !== who || laterSet()) return; if (blocked()) { resumeT = setTimeout(wait, 900); return; } offerResume(n); };
     wait();
   }
   // replay: from Sendy's menu, any time
@@ -451,12 +479,19 @@
     if (!me()) return;
     try { sessionStorage.removeItem('jsi-onboard-later'); } catch {}
     if (root) teardown();
+    clearTimeout(resumeT);
+    if (blocked() === 'claim' && window.sendToast) sendToast('Pick your handle first — the tour starts right after 🚀', 5000);
     store.set(0);
     if (me().onboard) me().onboard = { due: true, state: 'due', step: 0 };
     save('replay');
     start(0);
   }
   window.ONBOARD = { replay, active: () => !!root, due: () => !!(me() && me().onboard && me().onboard.due), STEPS, _layout: () => layout() };
-  document.addEventListener('auth:change', () => { if (!root) setTimeout(check, 300); });
+  document.addEventListener('auth:change', () => {
+    if (root && (!me() || me().username !== owner)) teardown();   // signed out, or another account in: this tour was not theirs
+    if (!root) { clearTimeout(waitT); clearTimeout(resumeT); setTimeout(check, 300); }
+  });
+  // back to a page left mid-flight (the back/forward cache keeps it as it was): undo the departure and offer the tour again
+  window.addEventListener('pageshow', (e) => { if (e.persisted && root && (mode === 'leaving' || mode === 'finishing')) { teardown(); check(); } });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

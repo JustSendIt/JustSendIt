@@ -15790,6 +15790,7 @@ const server = http.createServer(async (req, res) => {
         if (!me) return bad(res, 'sign in first', 401);
         if (!rateLimit('onboard:' + me.id, 120, 10 * 60e3)) return bad(res, 'slow down', 429);
         const b = await readBody(req, 1024);
+        if (!b || typeof b !== 'object' || Array.isArray(b)) return bad(res, 'bad request');   // a JSON null or list is a 400, not a 500
         const action = String(b.action || ''), step = Number(b.step);
         if (action === 'step') {
           if (!Number.isInteger(step) || step < 0 || step > ONBOARD_MAX_STEP) return bad(res, 'bad step');
