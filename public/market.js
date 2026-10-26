@@ -90,15 +90,20 @@
   const whyOf = (f) => (f && f.why ? esc(f.why) : 'The source gave no figure for this');
 
   /* ---------- the chains this page knows by name before the list arrives ---------- */
-  const KNOWN = { robinhood: 'Robinhood Chain', ethereum: 'Ethereum', solana: 'Solana', base: 'Base', arbitrum: 'Arbitrum', bsc: 'BNB Chain', optimism: 'OP Mainnet', polygon: 'Polygon' };
+  const KNOWN = { robinhood: 'Robinhood Chain', ethereum: 'Ethereum', solana: 'Solana', base: 'Base', arbitrum: 'Arbitrum', bsc: 'BNB Chain', optimism: 'OP Mainnet', polygon: 'Polygon', avalanche: 'Avalanche' };
   const SCANS = ['robinhood', 'ethereum', 'solana'];   // the chains the Scanner reads (newpairs.js CHAIN_META, lib/multichain.js)
+  const READS = ['robinhood', 'ethereum', 'solana', 'base', 'bsc', 'arbitrum', 'polygon', 'avalanche', 'optimism'];   // the chains /api/market/token reads (lib/marketdata.js GT_TRACKED)
+  const EVM_ADDR = /^0x[0-9a-fA-F]{40}$/, B58_ADDR = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+  // a token the main view can open: a chain the server reads, and an address it takes there (the server's own check) — a
+  // Dexscreener search hit on Tron or Sui is neither, and a button for it could only fail
+  const readable = (chain, addr) => READS.includes(chain) && (chain === 'solana' ? B58_ADDR.test(String(addr || '')) : EVM_ADDR.test(String(addr || '')));
+  const cap1 = (s) => String(s || '').replace(/^./, (c) => c.toUpperCase());
   const QUOTE = { '0x0bd7d308f8e1639fab988df18a8011f41eacad73': 'WETH', '0x5fc5360d0400a0fd4f2af552add042d716f1d168': 'USDG', '0x0000000000000000000000000000000000000000': 'ETH' };
   const DEFAULT_CHAIN = 'robinhood';
   const CHAIN_WINS = ['24h', '7d', '30d', 'custom'], TOKEN_WINS = ['5m', '1h', '6h', '24h', 'custom'];
   const DAY = /^\d{4}-\d{2}-\d{2}$/;
   const CHAIN_KEY = /^[a-z0-9][a-z0-9_-]{0,39}$/;
   const TOKEN_ADDR = /^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})$/;
-  const todayUTC = () => new Date().toISOString().slice(0, 10);
   const yesterdayUTC = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 
   /* ---------- state ---------- */
@@ -120,9 +125,11 @@
     const c = (q.get('chain') || '').toLowerCase(), t = q.get('token') || '', w = q.get('window') || '', f = q.get('from') || '', to = q.get('to') || '';
     S.view = { chain: CHAIN_KEY.test(c) ? c : DEFAULT_CHAIN, token: TOKEN_ADDR.test(t) ? (/^0x/i.test(t) ? t.toLowerCase() : t) : null };
     const k = S.view.token ? S.tokens : S.chains, wins = S.view.token ? TOKEN_WINS : CHAIN_WINS;
+    // an address without a time frame is the default one: Back to /market shows the 24 hours it showed, not the 7 days picked since
+    k.win = '24h'; k.from = ''; k.to = '';
     if (wins.includes(w)) {
       if (w === 'custom') { if (DAY.test(f) && DAY.test(to) && f <= to) { k.win = 'custom'; k.from = f; k.to = to; } }
-      else { k.win = w; k.from = ''; k.to = ''; }
+      else k.win = w;
     }
   }
   function urlFor(v) {
@@ -142,6 +149,9 @@
   /* ---------- reading the site's own API ---------- */
   const memo = new Map();   // url → { at, j }: a tab switch or a Back does not ask again within a minute
   const seq = { list: 0, view: 0, scan: 0, search: 0 };
+  // an answer that says some of it could not be read is not kept: Try again, a reload or a Back asks the site again rather
+  // than showing the same failure for a minute (the server keeps only its successes too)
+  const incomplete = (j) => !!j && typeof j === 'object' && !!(j.unavailable || j.why || (j.candles && j.candles.retry) || (j.custom && j.custom.retry) || (j.links && j.links.why));
   async function getJSON(url) {
     const m = memo.get(url);
     if (m && Date.now() - m.at < 60e3) return m.j;
@@ -150,13 +160,18 @@
     catch { const e = new Error('offline'); e.status = 0; throw e; }
     let j = null; try { j = await r.json(); } catch {}
     if (!r.ok) { const e = new Error('status ' + r.status); e.status = r.status; e.body = j; throw e; }
+    if (incomplete(j)) { memo.delete(url); return j; }
     if (memo.size > 60) memo.delete(memo.keys().next().value);
     memo.set(url, { at: Date.now(), j });
     return j;
   }
+  // a 400 about the time frame (lib/marketdata.js parseWindow's words): asking again gives the same answer, so it is said plainly
+  const winRefused = (e) => !!e && e.status === 400 && /window|UTC day|from is after|ten years|YYYY-MM-DD/i.test(String((e.body && (e.body.message || e.body.error)) || ''));
   function errText(e, what) {
     const said = e && e.body && (e.body.message || e.body.error);
     if (!e || e.status === 0) return 'Couldn’t reach this site just now — check your connection and try again. Nothing here is a reading of ' + what + '.';
+    if (winRefused(e)) return 'This time frame can’t be served: ' + String(said) + '. A custom time frame is whole UTC days that have ended, at most ten years of them.';
+    if (e.status === 400) return 'The site can’t answer this as asked: ' + (said ? String(said) : 'it refused the request') + '. Nothing here is a reading of ' + what + '.';
     if (e.status === 429) return 'Too many reads from this connection just now — wait a minute and try again.';
     if (e.status === 404) return said ? String(said) : 'This site has no record of ' + what + '.';
     if (said && /could not|couldn|not be read|unavailable/i.test(String(said))) return String(said) + (/try again/i.test(String(said)) ? '' : ' Try again in a moment.');
@@ -164,6 +179,8 @@
   }
   const loadingHTML = (t) => '<p class="tm-loading mkt-loading"><span class="np-live-dot" aria-hidden="true"></span> ' + esc(t) + '</p>';
   const retryBtn = (what) => '<button class="btn btn-sm btn-ghost mkt-retry" type="button" data-retry="' + what + '" data-tip="Asks the site for these figures again">↻ Try again</button>';
+  const resetWinBtn = (kind) => '<button class="btn btn-sm btn-ghost" type="button" data-reset-win="' + kind + '" data-tip="Goes back to the default time frame, which every list and view can serve">↺ Last 24 hours</button>';
+  const failActs = (e, what, kind) => (winRefused(e) ? resetWinBtn(kind) : retryBtn(what));   // asking again cannot change a refused time frame
 
   /* ---------- logos: same-origin only (the server's image proxy); anything else is a monogram ---------- */
   const mono = (s) => (Array.from(String(s || '?').replace(/^\$/, ''))[0] || '?').toUpperCase();
@@ -209,7 +226,7 @@
       box.querySelectorAll('[data-win]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.win === k.win)));
       const pre = kind === 'chains' ? 'mkt-cc' : 'mkt-tc', from = $(pre + '-from'), to = $(pre + '-to');
       if (from && to) {
-        const max = kind === 'chains' ? yesterdayUTC() : todayUTC();
+        const max = yesterdayUTC();   // both lists are served over whole UTC days that have ended (lib/marketdata.js parseWindow)
         from.max = max; to.max = max; from.min = '2009-01-03'; to.min = '2009-01-03';
         if (k.win === 'custom') { from.value = k.from; to.value = k.to; }
       }
@@ -259,8 +276,10 @@
       }
       if (b.id === pre + '-go') {
         const f = $(pre + '-from').value, t = $(pre + '-to').value, err = $(pre + '-err');
-        const max = kind === 'chains' ? yesterdayUTC() : todayUTC();
-        const bad = !DAY.test(f) || !DAY.test(t) ? 'Pick a start day and an end day.' : f > t ? 'The start day is after the end day — swap them.' : t > max ? (kind === 'chains' ? 'The last day has to be a whole UTC day: ' + max + ' or earlier.' : 'The last day can be today at the latest.') : '';
+        const max = yesterdayUTC(), days = DAY.test(f) && DAY.test(t) ? Math.round((Date.parse(t) - Date.parse(f)) / 864e5) + 1 : 0;
+        const bad = !DAY.test(f) || !DAY.test(t) ? 'Pick a start day and an end day.' : f > t ? 'The start day is after the end day — swap them.'
+          : t > max ? 'The last day has to be a whole UTC day that has ended: ' + max + ' or earlier (today is still going).'
+          : days > 3660 ? 'A custom time frame is at most ten years (3,660 days) — pick a later start day.' : '';
         err.hidden = !bad; err.textContent = bad;
         if (bad) return;
         k.win = 'custom'; k.from = f; k.to = t;
@@ -291,7 +310,7 @@
         syncControls();
       } catch (e) {
         if (my !== seq.list) return;
-        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the chains')) + '</span> ' + retryBtn('list');
+        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the chains')) + '</span> ' + failActs(e, 'list', 'chains');
       }
     } else {
       const chain = S.view.chain;
@@ -308,7 +327,7 @@
         paintTokens();
       } catch (e) {
         if (my !== seq.list) return;
-        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the tokens on ' + chainName(chain))) + '</span> ' + retryBtn('list');
+        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the tokens on ' + chainName(chain))) + '</span> ' + failActs(e, 'list', 'tokens');
       }
     }
   }
@@ -355,7 +374,7 @@
       (j.coverage && j.coverage.from ? '<span class="mkt-cap-n">Custom windows come from this site’s own pool readings, which start ' + esc(j.coverage.from) + '.</span>' : '') +
       (win.note ? '<span class="mkt-cap-n">' + esc(win.note) + '</span>' : '');
     foot.innerHTML = sortF === 'volume' && k.dir === 'desc' && !k.all ? 'Tokens whose volume is over 100× what their pools hold are left out of “highest volume” — “Include flagged volume” lists them too.' : '';
-    if (!rows.length) { list.innerHTML = '<li class="mkt-empty">No tokens are listed for ' + esc(chainName(j.chain || S.tokenFor)) + (k.win === 'custom' ? ' over these days yet' : ' yet') + '.</li>'; more.innerHTML = ''; return; }
+    if (!rows.length) { list.innerHTML = '<li class="mkt-empty">' + (j.why ? esc(cap1(j.why)) : 'No tokens are listed for ' + esc(chainName(j.chain || S.tokenFor)) + (k.win === 'custom' ? ' over these days yet' : ' yet')) + '.</li>'; more.innerHTML = ''; return; }
     const sec = sortF === 'volume' ? 'liquidity' : 'volume';
     list.innerHTML = rows.slice(0, S.shown).map((r, i) => {
       const f = fig(r[sortF]), s2 = fig(r[sec]);
@@ -385,8 +404,17 @@
     open({ chain: b.dataset.chain, token: b.dataset.token || null }, true);
   });
   document.addEventListener('click', (e) => {
+    const w = e.target.closest('[data-reset-win]');
+    if (w) {
+      const kind = w.dataset.resetWin === 'tokens' ? 'tokens' : 'chains', pre = kind === 'chains' ? 'mkt-cc' : 'mkt-tc';
+      Object.assign(S[kind], { win: '24h', from: '', to: '' });
+      const panel = $(pre); if (panel) panel.hidden = true;
+      const c = ctl[kind] && ctl[kind].querySelector('[data-win="custom"]'); if (c) c.setAttribute('aria-expanded', 'false');
+      syncControls(); windowChanged(kind, true); return;
+    }
     const r = e.target.closest('[data-retry]'); if (!r) return;
     if (r.dataset.retry === 'list') { memo.clear(); loadList(); } else if (r.dataset.retry === 'view') { memo.clear(); loadView(); } else if (r.dataset.retry === 'scan') { const h = $('mkt-scan-host'); if (h) { h._asked = false; loadScan(h); } }
+    else if (r.dataset.retry === 'search' && form) { memo.clear(); if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', { cancelable: true })); }
   });
 
   /* ════════════════════════════ the main view ════════════════════════════ */
@@ -425,6 +453,17 @@
     if (k.win === 'custom') { p.set('window', 'custom'); p.set('from', k.from); p.set('to', k.to); }
     return '/api/market/token?' + p.toString();
   }
+  // the main view when its read failed: what went wrong, a way to ask again, and the ways out
+  function failHTML(v, nm, text, act, scanner) {
+    const scanHref = scanner && typeof scanner.href === 'string' && /^\/newpairs\?/.test(scanner.href) ? scanner.href
+      : v.token && SCANS.includes(v.chain) ? '/newpairs?scan=' + encodeURIComponent(v.token) + '&chain=' + encodeURIComponent(v.chain) : null;
+    return '<div class="mkt-card mkt-fail"><h2 class="mkt-h" id="mkt-vh" tabindex="-1">' + esc(nm) + '</h2><p class="mkt-err-t">⏳ ' + esc(text) + '</p>' +
+      '<p class="mkt-acts">' + act + (v.chain !== DEFAULT_CHAIN || v.token ? ' <button class="btn btn-sm btn-ghost" type="button" data-open-chain="' + DEFAULT_CHAIN + '" data-tip="Goes back to Robinhood Chain, the default view">← Robinhood Chain</button>' : '') +
+      (scanHref ? ' <a class="btn btn-sm btn-ghost" href="' + esc(scanHref) + '" data-tip="Opens this address in the Scanner, which reads it straight from the chain">🔎 Open it in the Scanner</a>' : '') + '</p></div>';
+  }
+  // a 200 that says it could not read the thing (a token GeckoTerminal could not be asked about, a chain not read yet) is a
+  // failed read, not a token with no pools or a chain with no figures
+  const failedRead = (j, isToken) => !!j && (j.unavailable === true || (!!j.why && (isToken ? val(j.priceUsd) == null && !Array.isArray(j.pools) : !j.stats)));
   async function loadView(moveFocus) {
     const my = ++seq.view, v = S.view;
     destroyCharts(view);
@@ -434,6 +473,13 @@
     try {
       const j = await getJSON(v.token ? tokenViewURL(v.chain, v.token) : chainViewURL(v.chain));
       if (my !== seq.view) return;
+      if (failedRead(j, !!v.token)) {
+        S.viewData = null;
+        view.innerHTML = failHTML(v, nm, cap1(String(j.why || 'the site could not read this just now').replace(/\.$/, '')) + '. Nothing here is a reading of ' + nm + '.', retryBtn('view'), j.scanner);
+        if (moveFocus) focusHead();
+        say('Could not read ' + nm + ' just now.');
+        return;
+      }
       S.viewData = j;
       if (j && j.key && j.name) names.set(j.key, j.name);
       view.innerHTML = v.token ? tokenHTML(j) : chainHTML(j);
@@ -443,9 +489,8 @@
       say((v.token ? 'Showing ' + ((j && j.name) || 'the token') : 'Showing ' + ((j && j.name) || chainName(v.chain))) + ' in the main view.');
     } catch (e) {
       if (my !== seq.view) return;
-      view.innerHTML = '<div class="mkt-card mkt-fail"><h2 class="mkt-h" id="mkt-vh" tabindex="-1">' + esc(nm) + '</h2><p class="mkt-err-t">⏳ ' + esc(errText(e, nm)) + '</p>' +
-        '<p class="mkt-acts">' + retryBtn('view') + (v.chain !== DEFAULT_CHAIN || v.token ? ' <button class="btn btn-sm btn-ghost" type="button" data-open-chain="' + DEFAULT_CHAIN + '" data-tip="Goes back to Robinhood Chain, the default view">← Robinhood Chain</button>' : '') +
-        (v.token && SCANS.includes(v.chain) ? ' <a class="btn btn-sm btn-ghost" href="/newpairs?scan=' + encodeURIComponent(v.token) + '&amp;chain=' + encodeURIComponent(v.chain) + '" data-tip="Opens this address in the Scanner, which reads it straight from the chain">🔎 Open it in the Scanner</a>' : '') + '</p></div>';
+      S.viewData = null;
+      view.innerHTML = failHTML(v, nm, errText(e, nm), failActs(e, 'view', v.token ? 'tokens' : 'chains'), null);
       if (moveFocus) focusHead();
     } finally { if (my === seq.view) view.removeAttribute('aria-busy'); }
   }
@@ -498,7 +543,7 @@
         '<div class="mkt-vt"><p class="mkt-kicker">' + esc(kick) + '</p>' +
         '<h2 class="mkt-h" id="mkt-vh" tabindex="-1">' + esc(d.name || chainName(d.key)) + '</h2>' +
         '<p class="mkt-vsub">Figures for <b>' + esc(w.label || 'the last full UTC day') + '</b>' + (d.at ? ' · gathered ' + agoEl(d.at) : '') + '. Each card names its source and when that source was read.</p></div>' +
-      '</header>' +
+      '</header>' + (d.why ? '<p class="mkt-note mkt-basis">⏳ ' + esc(d.why) + '</p>' : '') +
       '<div class="mkt-groups">' + money + trade + feesG + act + '</div>' +
       chartsHTML(d) + pulseHTML(d) + l2HTML(d) + topTokensHTML(d) + newPoolsHTML(d) + sourcesHTML(d) +
     '</article>';
@@ -506,22 +551,28 @@
 
   /* the charts: one card, a range for all of them, each chart with its own source */
   const SERIES = [['tvl', 'DeFi TVL', usd], ['volume', 'DEX volume per day', usd], ['fees', 'Fees per day', usd], ['stables', 'Stablecoins', usd], ['txcount', 'Transactions per day', count]];
-  const seriesOf = (h) => {
-    if (!h) return { rows: [], src: null };
-    if (Array.isArray(h)) return { rows: h, src: h.src || null };
-    return { rows: Array.isArray(h.rows) ? h.rows : Array.isArray(h.points) ? h.points : [], src: h.src || null, at: h.at, why: h.why, label: h.label };
+  // the server sends each series as a plain array of [day, value], with its source beside it in history.src
+  const seriesOf = (h, src) => {
+    if (!h) return { rows: [], src: src || null };
+    if (Array.isArray(h)) return { rows: h, src: src || null };
+    return { rows: Array.isArray(h.rows) ? h.rows : Array.isArray(h.points) ? h.points : [], src: h.src || src || null, at: h.at, why: h.why, label: h.label };
   };
+  const seriesSrc = (hist, k) => (hist && hist.src && typeof hist.src === 'object' ? hist.src[k] || null : null);
   const toMs = (t) => (typeof t === 'number' ? (t < 1e12 ? t * 1000 : t) : DAY.test(String(t)) ? Date.parse(t + 'T00:00:00Z') : Date.parse(t));
+  const px = (x) => (x == null || x === '' ? NaN : Number(x));   // a value a source left out is a gap, never 0 (+null is 0)
   function chartsHTML(d) {
     const h = d.history || {};
     const cards = SERIES.map(([k, title, fmt]) => {
-      const s = seriesOf(h[k]), pts = s.rows.map((r) => [toMs(r[0]), r[1] == null ? null : Number(r[1])]).filter((r) => isFinite(r[0]) && r[1] != null && isFinite(r[1]));
+      const s = seriesOf(h[k], seriesSrc(h, k)), pts = s.rows.map((r) => [toMs(r[0]), px(r[1])]).filter((r) => isFinite(r[0]) && isFinite(r[1]));
       const t = s.label || title;
       if (pts.length < 2) {
         return '<figure class="mkt-chart is-empty"><figcaption><b>' + esc(t) + '</b></figcaption><p class="mkt-empty">' +
           (pts.length === 1 ? 'Only one day is recorded so far — a chart needs two.' : 'No history for this chain yet' + (s.why ? ' — ' + esc(s.why) : '') + '.') + '</p></figure>';
       }
-      return '<figure class="mkt-chart" data-series="' + k + '"><figcaption><b>' + esc(t) + '</b><span class="mkt-s">' + srcLine({ src: s.src, at: s.at }) + ' · daily, whole UTC days</span></figcaption>' +
+      // the series carries no read time of its own, so the caption says which whole day it reaches (the read time when it has one)
+      const last = Math.max(...pts.map((r) => r[0]));
+      const cap = [srcLine({ src: s.src, at: s.at }), 'daily, whole UTC days', 'latest ' + esc(xLong(last, 'day'))].filter(Boolean).join(' · ');
+      return '<figure class="mkt-chart" data-series="' + k + '"><figcaption><b>' + esc(t) + '</b><span class="mkt-s">' + cap + '</span></figcaption>' +
         '<div class="mkt-plot" tabindex="0" role="group" aria-label="' + esc(t + ' chart. Use the left and right arrow keys to read each day.') + '"></div>' +
         '<p class="mkt-readout"></p>' +
         '<details class="mkt-tbl"><summary>Every value as a table</summary><div class="mkt-tblw"></div></details></figure>';
@@ -532,35 +583,44 @@
       [[30, '30d', 'Shows the last 30 days on every chart'], [90, '90d', 'Shows the last 90 days on every chart'], [365, '1y', 'Shows the last year on every chart'], [0, 'All', 'Shows every day each source has']]
         .map(([n, l, tip]) => '<button class="np-chip" type="button" data-range="' + n + '" aria-pressed="' + (S.range === n) + '" data-tip="' + tip + '"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>' + l + '</button>').join('') +
       '</div></div><div class="mkt-chart-grid">' + cards + '</div>' +
-      '<p class="mkt-note">DefiLlama’s figure for today is still filling in, so the daily charts stop at the last whole UTC day (TVL and stablecoins, which are balances, end at their latest reading).</p></section>';
+      '<p class="mkt-note">Today’s figures are still filling in at their sources, so every daily chart stops at the last whole UTC day.</p></section>';
   }
 
+  /* how old a pulse reading may be before its tile says so: two of its collector's rounds and a minute (the head every minute,
+     the supplies every 10 minutes, the bridge every 15 — lib/marketdata.js JOBS.pulse). A reading is the latest one that worked,
+     so when the Ethereum read fails the bridge figure stays days old — it keeps its own time, never the head block's "just now". */
+  const PULSE_FRESH = { head: 3 * 60e3, supplies: 21 * 60e3, bridge: 31 * 60e3 };
+  const readWhen = (at, fresh) => (at && isFinite(at) ? 'read ' + agoEl(at) + (Date.now() - at > fresh ? ' — ⏳ older than this reading usually is' : '') : 'not read yet');
   function pulseHTML(d) {
     const p = d.pulse; if (!p) return '';
-    const n = p.now || {}, pc = (p.poolsCreated && p.poolsCreated.h24) || {}, pm = n.pm || {};
+    const n = p.now, pcAll = p.poolsCreated || {}, pc = pcAll.h24 || {};
+    const head = '<section class="mkt-card mkt-pulse" aria-labelledby="mkt-pl-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-pl-h">💓 Robinhood Chain pulse</h3><p class="mkt-s">Read by this site from the chain’s public node' + (n && n.at ? ' · latest block ' + readWhen(n.at, PULSE_FRESH.head) : '') + '</p></div>';
+    if (!n) return head + '<p class="mkt-empty">⏳ ' + esc(cap1(String(p.why || 'the chain has not been read yet').replace(/\.$/, ''))) + '.</p></section>';
+    const pm = n.pm || {};
     const tile = (label, value, sub) => '<div class="mkt-stat' + (value == null ? ' is-na' : '') + '"><dt>' + esc(label) + '</dt><dd><b class="mkt-v">' + (value == null ? NA : esc(value)) + '</b>' + (sub ? '<span class="mkt-s">' + sub + '</span>' : '') + '</dd></div>';
     const pmParts = [amount(val(pm.eth), 'ETH'), amount(val(pm.weth), 'WETH'), amount(val(pm.usdg), 'USDG')].filter(Boolean);
     const created = ['v2', 'v3', 'v4'].map((k) => (val(pc[k]) != null ? k + ' ' + count(val(pc[k])) : null)).filter(Boolean);
     const totalCreated = ['v2', 'v3', 'v4'].reduce((a, k) => (val(pc[k]) != null ? a + val(pc[k]) : a), 0);
+    const supWhen = readWhen(n.suppliesAt, PULSE_FRESH.supplies), brWhen = readWhen(n.bridgeAt, PULSE_FRESH.bridge);
     const hist = p.history || {};
     const H = [['gas', 'Gas price, our readings', (v) => gwei(v)], ['blockTimeMs', 'Block time, our readings', (v) => trimZ(Number(v).toFixed(1)) + ' ms'], ['bridgeEth', 'ETH in the canonical bridge, our readings', (v) => amount(v, 'ETH')]];
     const sparks = H.map(([k, t, fmt]) => {
       const rows = Array.isArray(hist[k]) ? hist[k] : seriesOf(hist[k]).rows;
-      const pts = rows.map((r) => [toMs(r[0]), Number(r[1])]).filter((r) => isFinite(r[0]) && isFinite(r[1]));
+      const pts = rows.map((r) => [toMs(r[0]), px(r[1])]).filter((r) => isFinite(r[0]) && isFinite(r[1]));
       if (pts.length < 2) return '';
       return '<figure class="mkt-chart" data-pulse="' + k + '"><figcaption><b>' + esc(t) + '</b><span class="mkt-s">read by this site from the chain</span></figcaption><div class="mkt-plot" tabindex="0" role="group" aria-label="' + esc(t + ' chart. Use the left and right arrow keys to read each point.') + '"></div><p class="mkt-readout"></p></figure>';
     }).join('');
-    return '<section class="mkt-card mkt-pulse" aria-labelledby="mkt-pl-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-pl-h">💓 Robinhood Chain pulse</h3><p class="mkt-s">Read by this site from the chain’s public node' + (n.at ? ' · ' + agoEl(n.at) : '') + '</p></div>' +
+    return head +
       '<dl class="mkt-stats">' +
         tile('Latest block', val(n.block) != null ? Math.round(val(n.block)).toLocaleString('en-US') : null) +
         tile('Block time', val(n.blockTimeMs) != null ? trimZ(val(n.blockTimeMs).toFixed(1)) + ' ms' : null, 'average between stored anchor blocks') +
         tile('Gas price', gwei(val(n.gasGwei)), [val(n.baseFeeGwei) != null ? 'base fee ' + esc(gwei(val(n.baseFeeGwei))) : '', val(n.minGasGwei) != null ? 'floor ' + esc(gwei(val(n.minGasGwei))) : ''].filter(Boolean).join(' · ')) +
         tile('L1 data price', val(n.l1PriceWei) != null ? Math.round(val(n.l1PriceWei)).toLocaleString('en-US') + ' wei' : null, 'per byte of calldata, ArbGasInfo') +
-        tile('Pools created, 24 h', created.length ? count(totalCreated) : null, created.length ? esc(created.join(' · ')) + ' — pools, not tokens' : 'not counted yet') +
-        tile('WETH supply', amount(val(n.wethSupply), 'WETH'), 'totalSupply of the chain’s WETH') +
-        tile('USDG supply', amount(val(n.usdgSupply), 'USDG'), 'totalSupply of USDG on the chain') +
-        tile('Held by the v4 PoolManager', pmParts.length ? pmParts.join(' + ') : null, 'includes claims and fees — assets held, not pool TVL') +
-        tile('ETH in the canonical bridge', amount(val(n.bridgeEth), 'ETH'), 'held by the bridge contract on Ethereum — not a net inflow') +
+        tile('Pools created, 24 h', created.length ? count(totalCreated) : null, created.length ? esc(created.join(' · ')) + ' — pools, not tokens' : esc(cap1(pcAll.why || 'not counted yet'))) +
+        tile('WETH supply', amount(val(n.wethSupply), 'WETH'), 'totalSupply of the chain’s WETH · ' + supWhen) +
+        tile('USDG supply', amount(val(n.usdgSupply), 'USDG'), 'totalSupply of USDG on the chain · ' + supWhen) +
+        tile('Held by the v4 PoolManager', pmParts.length ? pmParts.join(' + ') : null, 'includes claims and fees — assets held, not pool TVL · ' + supWhen) +
+        tile('ETH in the canonical bridge', amount(val(n.bridgeEth), 'ETH'), 'held by the bridge contract on Ethereum — not a net inflow · ' + brWhen) +
       '</dl>' +
       (sparks ? '<div class="mkt-chart-grid">' + sparks + '</div>' : '<p class="mkt-note">This site keeps its own readings of these from the day the page started collecting them; there are not enough of them to chart yet.</p>') +
     '</section>';
@@ -589,7 +649,7 @@
           '<span class="mkt-rank">' + (i + 1) + '</span>' + avaHTML(r.symbol || r.name, r.logo) +
           '<span class="mkt-nm"><b>' + esc(nm) + (r.symbol ? ' <span class="mkt-sym">$' + esc(r.symbol) + '</span>' : '') + '</b><small><code>' + esc(short(r.address)) + '</code>' + (l != null ? ' · Liq ' + esc(usd(l)) : '') + '</small></span>' +
           '<span class="mkt-fig">' + (v != null ? '<b>' + esc(usd(v)) + '</b><small>24h volume</small>' : '<b class="mkt-na">Not available</b><small>' + whyOf(fig(r.volume)) + '</small>') + '</span></button></li>';
-      }).join('') + '</ol>' : '<p class="mkt-empty">No token list for this chain yet.</p>') +
+      }).join('') + '</ol>' : '<p class="mkt-empty">' + (t.why ? esc(cap1(String(t.why).replace(/\.$/, ''))) + '.' : 'No token list for this chain yet.') + '</p>') +
       '<p class="mkt-acts"><button class="btn btn-sm btn-ghost" type="button" data-all-tokens="1" data-tip="Switches the side list to this chain’s tokens, with its sorting and time frames">All tokens, sorted your way →</button></p></section>';
   }
 
@@ -654,7 +714,8 @@
       '<section class="mkt-card mkt-links" aria-labelledby="mkt-lk-h"><h3 class="mkt-h3" id="mkt-lk-h">🔗 Links</h3>' +
         (webs.length || socs.length ? '<ul class="mkt-linklist">' + webs.map((x) => '<li><a href="' + esc(x.url) + '" target="_blank" rel="noopener nofollow">🌐 ' + esc(x.label || x.url.replace(/^https:\/\//, '')) + ' ↗</a></li>').join('') +
           socs.map((x) => '<li><a href="' + esc(x.url) + '" target="_blank" rel="noopener nofollow">' + esc((x.type || 'link').replace(/^./, (c) => c.toUpperCase())) + ' ↗</a></li>').join('') + '</ul><p class="mkt-note">Listed on Dexscreener by whoever runs the token — not checked by this site.</p>'
-          : '<p class="mkt-empty">No website or socials are listed for this token.</p>') +
+          : links.why ? '<p class="mkt-empty">' + esc(cap1(String(links.why).replace(/\.$/, ''))) + ', so this token’s website and socials can’t be shown just now — that does not mean it has none.</p>'
+          : '<p class="mkt-empty">No website or socials are listed for this token on Dexscreener.</p>') +
         (scanHref ? '<p class="mkt-acts"><a class="btn btn-sm btn-ghost" href="' + esc(scanHref) + '" data-tip="Opens this token in the Scanner page, with its own address bar and history">🔎 Open it in the Scanner</a></p>' : '') +
       '</section>' +
       (SCANS.includes(chain) && !(d.scanner && d.scanner.supported === false)
@@ -665,24 +726,27 @@
   function windowsHTML(d) {
     const ws = d.windows || {}, whys = new Set();
     const na = (f) => { const w = fig(f).why; if (w) whys.add(w); return NA; };   // each reason is said once, under the table
+    // trades: the server sends a count of them (windows[k].txns, a figure), for 24 h only — not buys and sells
     const rows = ['5m', '1h', '6h', '24h'].map((k) => {
       const x = ws[k] || {};
-      const tx = x.txns || {}, b = x.buys != null ? Number(x.buys) : tx.buys != null ? Number(tx.buys) : null, s = x.sells != null ? Number(x.sells) : tx.sells != null ? Number(tx.sells) : null;
       return '<tr' + (S.tokens.win === k ? ' class="is-on"' : '') + '><th scope="row" data-l="Window">' + esc(WIN_LABEL[k]) + (S.tokens.win === k ? ' <span class="mkt-s">(your time frame)</span>' : '') + '</th>' +
         '<td data-l="Volume">' + (val(x.volume) != null ? esc(usd(val(x.volume))) : na(x.volume)) + '</td>' +
         '<td data-l="Change">' + (val(x.change) != null ? esc(pct(val(x.change))) : na(x.change)) + '</td>' +
-        '<td data-l="Buys / sells">' + (b != null && s != null ? esc(count(b)) + ' / ' + esc(count(s)) : NA) + '</td></tr>';
+        '<td data-l="Trades">' + (val(x.txns) != null ? esc(count(val(x.txns))) : na(x.txns)) + '</td></tr>';
     });
+    let covNote = '';
     if (d.custom) {
-      const c = d.custom;
-      rows.push('<tr class="is-on"><th scope="row" data-l="Window">' + esc(S.tokens.from + ' – ' + S.tokens.to) + '</th><td data-l="Volume">' + (val(c.volume) != null ? esc(usd(val(c.volume))) : NA + ' <span class="mkt-s">' + whyOf(fig(c.volume)) + '</span>') + '</td>' +
-        '<td data-l="Change">' + (val(c.priceChange) != null ? esc(pct(val(c.priceChange))) : NA) + '</td><td data-l="Buys / sells">' + esc(c.coverage ? 'covered from ' + (c.coverage.from || c.coverage) : '—') + '</td></tr>');
+      const c = d.custom, cov = c.coverage && typeof c.coverage === 'object' ? c.coverage : null;
+      rows.push('<tr class="is-on"><th scope="row" data-l="Window">' + esc(S.tokens.from + ' – ' + S.tokens.to) + '</th><td data-l="Volume">' + (val(c.volume) != null ? esc(usd(val(c.volume))) : na(c.volume)) + '</td>' +
+        '<td data-l="Change">' + (val(c.priceChange) != null ? esc(pct(val(c.priceChange))) : na(c.priceChange)) + '</td><td data-l="Trades">' + na({ why: 'your days are summed from price candles, which carry no trade counts' }) + '</td></tr>');
+      // where the candles behind your days start (a pool GeckoTerminal has no candles for has no start: its reason is in the row)
+      if (cov && typeof cov.from === 'string' && cov.from) covNote = '<p class="mkt-note">Your days are summed from ' + esc(srcName(c.src || 'geckoterminal')) + '’s ' + (cov.tf === 'day' ? 'daily' : 'hourly') + ' candles for its deepest pool' + (cov.pool ? ' (<code title="' + esc(cov.pool) + '">' + esc(short(cov.pool)) + '</code>)' : '') + ', which start ' + esc(cov.from.slice(0, 10)) + '.</p>';
     }
     const any = ['5m', '1h', '6h', '24h'].find((k) => ws[k] && (ws[k].volume || ws[k].change));
     const src = any ? fig(ws[any].volume).src || fig(ws[any].change).src : null, at = any ? fig(ws[any].volume).at : null;
     return '<section class="mkt-card" aria-labelledby="mkt-tw-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-tw-h">⏱️ Trading by time frame</h3>' + (src ? '<p class="mkt-s">' + srcLine({ src, at }) + (d.custom && d.custom.src ? ' · your days: ' + esc(srcName(d.custom.src)) : '') + '</p>' : '') + '</div>' +
-      '<table class="mkt-table"><thead><tr><th scope="col">Window</th><th scope="col">Volume</th><th scope="col">Price change</th><th scope="col">Buys / sells</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>' +
-      (whys.size ? '<p class="mkt-note">Not available: ' + [...whys].map((w) => esc(String(w).replace(/\.$/, ''))).join('; ') + '.</p>' : '') + '</section>';
+      '<table class="mkt-table"><thead><tr><th scope="col">Window</th><th scope="col">Volume</th><th scope="col">Price change</th><th scope="col">Trades</th></tr></thead><tbody>' + rows.join('') + '</tbody></table>' +
+      (whys.size ? '<p class="mkt-note">Not available: ' + [...whys].map((w) => esc(String(w).replace(/\.$/, ''))).join('; ') + '.</p>' : '') + covNote + '</section>';
   }
   function paintTokenWindows() {   // a preset time frame needs no new read: the token's answer has all four windows
     const d = S.viewData; if (!d || !S.view.token) return;
@@ -695,18 +759,24 @@
   function candlesHTML(d) {
     const c = d.candles || {}, rows = Array.isArray(c.rows) ? c.rows : [];
     const tf = c.tf || 'hour';
-    if (rows.length < 2) return '<section class="mkt-card" aria-labelledby="mkt-pc-h"><h3 class="mkt-h3" id="mkt-pc-h">📈 Price</h3><p class="mkt-empty">No candles for this token' + (c.why ? ' — ' + esc(c.why) : ' yet') + '.</p></section>';
+    // a read that failed says so in its own words — never "no candles", which would say the token has none
+    if (rows.length < 2) return '<section class="mkt-card" aria-labelledby="mkt-pc-h"><h3 class="mkt-h3" id="mkt-pc-h">📈 Price</h3><p class="mkt-empty">' +
+      (c.why ? (c.retry ? '⏳ ' : '') + esc(cap1(String(c.why).replace(/\.$/, ''))) + '.' : rows.length === 1 ? 'Only one candle so far — a chart needs two.' : 'No candles for this token yet.') + '</p></section>';
     return '<section class="mkt-card" aria-labelledby="mkt-pc-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-pc-h">📈 Price, one candle per ' + esc(tf) + '</h3><p class="mkt-s">' + srcLine({ src: c.src, at: c.at }) + (c.pool ? ' · pool <code title="' + esc(c.pool) + '">' + esc(short(c.pool)) + '</code>' : '') + '</p></div>' +
       '<figure class="mkt-chart mkt-candles" data-candles="1"><div class="mkt-plot mkt-plot-tall" tabindex="0" role="group" aria-label="Price chart. Use the left and right arrow keys to read each candle."></div><p class="mkt-readout"></p></figure>' +
       '<p class="mkt-note">A ' + esc(tf) + ' with no trades has no candle. The newest candle may still be open. Hollow candles closed higher than they opened; filled ones closed lower.</p></section>';
   }
   function poolsHTML(d, n) {
-    const ps = Array.isArray(d.pools) ? d.pools : [];
-    return '<section class="mkt-card" aria-labelledby="mkt-po-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-po-h">🏊 Pools</h3><p class="mkt-s">' + (n ? n + ' pool' + (n === 1 ? '' : 's') + ' listed, deepest first' : '') + '</p></div>' +
-      (ps.length ? '<table class="mkt-table"><thead><tr><th scope="col">Pool</th><th scope="col">Venue</th><th scope="col">Holds</th><th scope="col">Volume, 24h</th><th scope="col">Price</th></tr></thead><tbody>' +
-        ps.map((p) => '<tr><th scope="row" data-l="Pool"><code title="' + esc(p.pool) + '">' + esc(short(p.pool)) + '</code>' + (p.quote ? ' <span class="mkt-s">/ ' + esc(p.quote) + '</span>' : '') + '</th><td data-l="Venue">' + esc(p.dex || '—') + '</td>' +
-          '<td data-l="Holds">' + (val(p.reserveUsd) != null ? esc(usd(val(p.reserveUsd))) : NA) + '</td><td data-l="Volume, 24h">' + (val(p.volume24h) != null ? esc(usd(val(p.volume24h))) : NA) + '</td><td data-l="Price">' + (val(p.priceUsd) != null ? esc(usd(val(p.priceUsd))) : NA) + '</td></tr>').join('') +
-      '</tbody></table>' : '<p class="mkt-empty">No pools are listed for this token.</p>') + '</section>';
+    const ps = Array.isArray(d.pools) ? d.pools : [], whys = new Set();
+    const cell = (x, fmt, why) => { const f = fig(x); if (f.v != null && isFinite(f.v)) return esc(fmt(Number(f.v))); whys.add(f.why || why); return NA; };   // each reason is said once, under the table
+    // GeckoTerminal sends a reserve of 0 for one it did not read (the server leaves those out of liquidity too) — never "$0"
+    const holds = (p) => { const f = fig(p.reserveUsd); return f.v != null && f.v <= 0 ? cell(null, usd, 'GeckoTerminal reports a reserve of 0 for a pool it did not read') : cell(f, usd, 'GeckoTerminal gave no reserve for this pool'); };
+    const rows = ps.map((p) => '<tr><th scope="row" data-l="Pool"><code title="' + esc(p.pool) + '">' + esc(short(p.pool)) + '</code>' + (p.quote ? ' <span class="mkt-s">/ ' + esc(p.quote) + '</span>' : '') + '</th><td data-l="Venue">' + esc(p.dex || '—') + '</td>' +
+      '<td data-l="Holds">' + holds(p) + '</td><td data-l="Volume, 24h">' + cell(p.volume24h, usd, 'GeckoTerminal gave no 24 h volume for this pool') + '</td><td data-l="Price">' + cell(p.priceUsd, usd, 'GeckoTerminal gave no price for this pool') + '</td></tr>').join('');
+    const head = [n ? n + ' pool' + (n === 1 ? '' : 's') + ' listed, deepest first' : '', ps.length ? srcLine({ src: 'geckoterminal', at: d.at }) : ''].filter(Boolean).join(' · ');
+    return '<section class="mkt-card" aria-labelledby="mkt-po-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-po-h">🏊 Pools</h3><p class="mkt-s">' + head + '</p></div>' +
+      (ps.length ? '<table class="mkt-table"><thead><tr><th scope="col">Pool</th><th scope="col">Venue</th><th scope="col">Holds</th><th scope="col">Volume, 24h</th><th scope="col">Price</th></tr></thead><tbody>' + rows +
+      '</tbody></table>' + (whys.size ? '<p class="mkt-note">Not available: ' + [...whys].map((w) => esc(String(w).replace(/\.$/, ''))).join('; ') + '.</p>' : '') : '<p class="mkt-empty">No pools are listed for this token.</p>') + '</section>';
   }
 
   /* ---------- mounting a view: charts, logos, the Scanner's dashboard ---------- */
@@ -716,7 +786,9 @@
       const box = view.querySelector('[data-candles] .mkt-plot');
       const c = d && d.candles;
       if (box && c && Array.isArray(c.rows)) {
-        const rows = c.rows.map((r) => [toMs(r[0]), +r[1], +r[2], +r[3], +r[4], r[5] == null ? null : +r[5]]).filter((r) => isFinite(r[0]) && isFinite(r[4])).sort((a, b) => a[0] - b[0]);
+        // a candle missing its time or any of its four prices is left out (a gap), never drawn at $0
+        const rows = c.rows.map((r) => [toMs(px(r[0])), px(r[1]), px(r[2]), px(r[3]), px(r[4]), r[5] == null ? null : px(r[5])])
+          .filter((r) => r[0] > 0 && [0, 1, 2, 3, 4].every((i) => isFinite(r[i]))).sort((a, b) => a[0] - b[0]);
         mountChart(box, { kind: 'candle', rows, fmt: usd, tf: c.tf || 'hour' });
       }
       const host = $('mkt-scan-host');
@@ -725,21 +797,24 @@
       const h = (d && d.history) || {};
       view.querySelectorAll('.mkt-chart[data-series] .mkt-plot').forEach((box) => {
         const k = box.closest('[data-series]').dataset.series, def = SERIES.find((s) => s[0] === k);
-        const all = seriesOf(h[k]).rows.map((r) => [toMs(r[0]), r[1] == null ? null : Number(r[1])]).filter((r) => isFinite(r[0]) && r[1] != null && isFinite(r[1])).sort((a, b) => a[0] - b[0]);
+        const all = seriesOf(h[k]).rows.map((r) => [toMs(r[0]), px(r[1])]).filter((r) => isFinite(r[0]) && isFinite(r[1])).sort((a, b) => a[0] - b[0]);
         mountChart(box, { kind: 'line', all, rows: ranged(all), fmt: def ? def[2] : usd, tf: 'day', ranged: true });
       });
       const p = d && d.pulse && d.pulse.history;
       view.querySelectorAll('.mkt-chart[data-pulse] .mkt-plot').forEach((box) => {
         const k = box.closest('[data-pulse]').dataset.pulse;
-        const rows = (Array.isArray(p[k]) ? p[k] : seriesOf(p[k]).rows).map((r) => [toMs(r[0]), Number(r[1])]).filter((r) => isFinite(r[0]) && isFinite(r[1])).sort((a, b) => a[0] - b[0]);
+        const rows = (Array.isArray(p[k]) ? p[k] : seriesOf(p[k]).rows).map((r) => [toMs(r[0]), px(r[1])]).filter((r) => isFinite(r[0]) && isFinite(r[1])).sort((a, b) => a[0] - b[0]);
         const fmt = k === 'gas' ? gwei : k === 'blockTimeMs' ? (v) => trimZ(Number(v).toFixed(1)) + ' ms' : (v) => amount(v, 'ETH');
         mountChart(box, { kind: 'line', rows, fmt, tf: 'minute', zeroBase: false });
       });
-      view.querySelectorAll('details.mkt-tbl').forEach((det) => det.addEventListener('toggle', () => {
-        if (!det.open || det._done) return; det._done = true;
-        const box = det.closest('.mkt-chart').querySelector('.mkt-plot'), s = charts.get(box);
-        const rows = (s && (s.all || s.rows) || []).slice().reverse();
-        det.querySelector('.mkt-tblw').innerHTML = '<table class="mkt-table mkt-table-2"><thead><tr><th scope="col">Day (UTC)</th><th scope="col">Value</th></tr></thead><tbody>' +
+      // only a chart's own table: the newest-pools card uses the same disclosure for its other pools, with its table already drawn
+      view.querySelectorAll('.mkt-chart details.mkt-tbl').forEach((det) => det.addEventListener('toggle', () => {
+        if (!det.open || det._done) return;
+        const chart = det.closest('.mkt-chart'), box = chart && chart.querySelector('.mkt-plot'), s = box && charts.get(box), tw = det.querySelector('.mkt-tblw');
+        if (!s || !tw) return;
+        det._done = true;
+        const rows = (s.all || s.rows || []).slice().reverse();
+        tw.innerHTML = '<table class="mkt-table mkt-table-2"><thead><tr><th scope="col">Day (UTC)</th><th scope="col">Value</th></tr></thead><tbody>' +
           rows.map((r) => '<tr><th scope="row" data-l="Day">' + esc(new Date(r[0]).toISOString().slice(0, 10)) + '</th><td data-l="Value">' + esc(s.fmt(r[1])) + '</td></tr>').join('') + '</tbody></table>';
       }));
     }
@@ -928,15 +1003,25 @@
       if (chains.length) h += '<h3 class="mkt-gh">Chains</h3><ul class="mkt-list mkt-list-in">' + chains.slice(0, 10).map((c) => '<li><button class="mkt-row" type="button" data-chain="' + esc(c.key) + '" data-tip="Opens ' + esc(c.name) + ' in the main view">' + avaHTML(c.name, c.logo) + '<span class="mkt-nm"><b>' + esc(c.name) + '</b></span></button></li>').join('') + '</ul>';
       if (toks.length) h += '<h3 class="mkt-gh">Tokens</h3><ul class="mkt-list mkt-list-in">' + toks.slice(0, 30).map((t) => {
         const nm = t.name || t.symbol || short(t.address), pr = val(t.priceUsd), lq = val(t.liquidity), vo = val(t.volume24h);
-        return '<li><button class="mkt-row" type="button" data-chain="' + esc(t.chain) + '" data-token="' + esc(t.address) + '" data-tip="Opens ' + esc(nm) + ' on ' + esc(chainName(t.chain)) + ' in the main view">' + avaHTML(t.symbol || t.name, t.logo) +
-          '<span class="mkt-nm"><b>' + esc(nm) + (t.symbol ? ' <span class="mkt-sym">$' + esc(t.symbol) + '</span>' : '') + '</b><small>' + esc(chainName(t.chain)) + ' · <code>' + esc(short(t.address)) + '</code>' + (lq != null ? ' · Liq ' + esc(usd(lq)) : '') + (vo != null ? ' · Vol ' + esc(usd(vo)) : '') + (t.src ? ' · ' + esc(srcName(t.src)) : '') + '</small></span>' +
-          '<span class="mkt-fig">' + (pr != null ? '<b>' + esc(usd(pr)) + '</b>' : '') + '</span></button></li>';
+        const body = avaHTML(t.symbol || t.name, t.logo) +
+          '<span class="mkt-nm"><b>' + esc(nm) + (t.symbol ? ' <span class="mkt-sym">$' + esc(t.symbol) + '</span>' : '') + '</b><small>' + esc(chainName(t.chain)) + ' · <code>' + esc(short(t.address)) + '</code>' + (lq != null ? ' · Liq ' + esc(usd(lq)) : '') + (vo != null ? ' · Vol ' + esc(usd(vo)) : '') + (t.src ? ' · ' + esc(srcName(t.src)) : '') + '</small>';
+        const figHTML = '<span class="mkt-fig">' + (pr != null ? '<b>' + esc(usd(pr)) + '</b>' : '') + '</span>';
+        // a hit the main view cannot read (a chain it does not read, an address it does not take there) is said, not offered
+        if (!readable(t.chain, t.address)) {
+          return '<li><div class="mkt-row mkt-row-off">' + body + '<small class="mkt-off">Not opened here: ' + (READS.includes(t.chain) ? 'this is not a token address the main view reads on ' + esc(chainName(t.chain)) : 'the main view reads tokens on ' + esc(READS.map(chainName).join(', ')) + ' only') + '.</small></span>' + figHTML + '</div></li>';
+        }
+        return '<li><button class="mkt-row" type="button" data-chain="' + esc(t.chain) + '" data-token="' + esc(t.address) + '" data-tip="Opens ' + esc(nm) + ' on ' + esc(chainName(t.chain)) + ' in the main view">' + body + '</span>' + figHTML + '</button></li>';
       }).join('') + '</ul>';
       if (!h && isAddr) {
         const evm = /^0x/i.test(text);
         h = '<p class="mkt-empty">No chain or token on record matches that address.</p><p class="mkt-acts">' + (evm ? ['robinhood', 'ethereum'] : ['solana']).map((c) => '<button class="btn btn-sm btn-ghost" type="button" data-chain="' + c + '" data-token="' + esc(text) + '" data-tip="Asks the site to read this address as a token on ' + esc(chainName(c)) + '">Open it on ' + esc(chainName(c)) + '</button>').join(' ') + '</p>';
       }
-      results.innerHTML = '<div class="mkt-res-h"><p class="mkt-s">' + (h ? 'Results for “' + esc(text) + '” — pick one to open it below.' : '') + '</p><button class="btn btn-sm btn-ghost mkt-mini" type="button" data-close-results="1" data-tip="Hides these search results">✕ Close</button></div>' + (h || '<p class="mkt-empty">Nothing matches “' + esc(text) + '” among the chains and tokens this site keeps, nor on Dexscreener.</p>');
+      // Dexscreener not read: say so, and never call the result a "not found" there
+      const dsWhy = j && j.why ? cap1(String(j.why).replace(/\.$/, '')) : '';
+      results.innerHTML = '<div class="mkt-res-h"><p class="mkt-s">' + (h ? 'Results for “' + esc(text) + '” — pick one to open it below.' : '') +
+          (dsWhy ? ' <span class="mkt-err-t">⏳ ' + esc(dsWhy) + ': only this site’s own records were searched.</span>' : '') + '</p>' +
+          '<span class="mkt-res-acts">' + (dsWhy ? retryBtn('search') + ' ' : '') + '<button class="btn btn-sm btn-ghost mkt-mini" type="button" data-close-results="1" data-tip="Hides these search results">✕ Close</button></span></div>' +
+        (h || '<p class="mkt-empty">Nothing matches “' + esc(text) + '” among the chains and tokens this site keeps' + (dsWhy ? '. Dexscreener could not be searched just now, so this is not a “not found” there — try again in a minute.' : ', nor on Dexscreener.') + '</p>');
       wireLogos(results);
       const n = chains.length + toks.length;
       const sr = $('mkt-search-sr'); if (sr) sr.textContent = n ? n + ' result' + (n === 1 ? '' : 's') + ' for ' + text : 'No results for ' + text;

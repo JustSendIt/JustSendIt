@@ -21,6 +21,7 @@
 .mkt-results { margin-top: 0.8rem; background: var(--ink-2); border: 1px solid var(--ink-4); border-radius: 16px; padding: 0.8rem; }
 .mkt-res-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 1rem; margin-bottom: 0.5rem; }
 .mkt-res-h .mkt-s { margin: 0; }
+.mkt-res-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 /* ---------- the two columns ---------- */
 .mkt-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.4rem; align-items: start; }
@@ -77,6 +78,9 @@
 .mkt-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 /* the row in the main view: a bar down its left edge as well as the colour, and aria-current for a screen reader */
 .mkt-row[aria-current="true"] { border-color: var(--green); background: var(--g-tint); box-shadow: inset 5px 0 0 var(--green); }
+/* a search hit the main view cannot open: a dashed card with the reason in words, not a button */
+.mkt-row-off, .mkt-row-off:hover { cursor: default; border-style: dashed; border-color: var(--ink-4); background: var(--ink-1); }
+.mkt-nm small.mkt-off { color: var(--text-dim); }
 .mkt-rank { flex: 0 0 auto; min-width: 1.7em; text-align: right; font-family: var(--font-mono); font-weight: 600; color: var(--text-mute); font-size: max(var(--text-floor), 0.8rem); }
 .mkt-ava {
   flex: 0 0 auto; width: 2.1em; height: 2.1em; border-radius: 50%; display: grid; place-items: center; overflow: hidden; position: relative;
