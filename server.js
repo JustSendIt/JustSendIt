@@ -10334,7 +10334,11 @@ MKT.migrate();
 try { const rr = MKT.radarRestore(Math.max(PAIRS_KEEP, 120)); if (rr.cursor && !pairsScanBlock) { pairsScanBlock = rr.cursor; pairsRaw = rr.raw; } } catch {}
 if (MKT_COLLECT_ON) {
   const st = process.env.MARKET_STAGGER_MS;
-  MKT.start({ staggerMs: st != null && st !== '' && Number(st) >= 0 ? Number(st) : 1000, jobs: String(process.env.MARKET_JOBS || '').split(',').map((s) => s.trim()).filter(Boolean) });
+  /* The radar sweep and the re-scan reach the explorer and Dexscreener through the Scanner's own fetchers, which send a
+     browser User-Agent: unattended on a timer they would ask robinhoodchain.blockscout.com every 10 minutes under a borrowed
+     identity. Until those reads go honest, neither runs unless MARKET_JOBS names it (the tests do, against fakes). */
+  const named = String(process.env.MARKET_JOBS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  MKT.start({ staggerMs: st != null && st !== '' && Number(st) >= 0 ? Number(st) : 1000, jobs: named.length ? named : Object.keys(MD.JOBS).filter((j) => j !== 'radar' && j !== 'scans') });
 }
 /* ----- the admin page's "Collected data": everything the platform collects that is public — the tables above, the caches
    the Scanner, the radar, the holder ledger and the chart switch keep, and the Send API's public views. PUBLIC COLUMNS ONLY:
