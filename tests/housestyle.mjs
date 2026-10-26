@@ -88,6 +88,18 @@ const bare = HOUSE.replace(/\/\*[\s\S]*?\*\//g, '');
     && /root\.querySelectorAll\('textarea\[placeholder\]'\)\.forEach\(watch\)/.test(APP));
 }
 
+/* ═══ 4. the white paper's contract addresses ═══ */
+{
+  const WP = PUB('whitepaper.html');
+  // owner, 2026-10-26: "make all contract addresses in the whitepaper full address and if the user clicks on them it copies the address"
+  check('the white paper writes every contract address out in full, each one a button that copies it (app.js data-copy) and says so',
+    /<button type="button" class="wp-addr" data-copy="0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105" data-tip="Copies the \$SEND contract address to your clipboard">0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105<span class="wp-addr-ico" aria-hidden="true">⧉<\/span><\/button>/.test(WP)
+    && /<button type="button" class="wp-addr" data-copy="0x61339f11384dde4b2dc3a33e75b4dc23cc620f22" data-tip="Copies the \$GWC contract address to your clipboard">0x61339f11384dde4b2dc3a33e75b4dc23cc620f22/.test(WP)
+    && !/0x[0-9a-f]{4,}(&hellip;|…)[0-9a-f]{4,}/i.test(WP));
+  check('  ...a full address wraps anywhere and its table fits a phone whole; the button is a full-size target with a visible focus ring',
+    /\.wp-addr \{[^}]*min-height: 44px;[^}]*overflow-wrap: anywhere; word-break: break-all; cursor: copy; \}/.test(WP) && /table:has\(\.wp-addr\) \{ min-width: 0; \}/.test(WP) && /\.wp-addr:focus-visible \{ outline: 3px solid/.test(WP));
+}
+
 let pass = 0;
 for (const [n, ok, extra] of results) { if (ok) pass++; console.log((ok ? '  ✓ ' : '  ✗ ') + n + (ok || !extra ? '' : '\n      ' + extra)); }
 console.log(`\n${pass}/${results.length} passed`);
