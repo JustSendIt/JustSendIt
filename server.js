@@ -6081,6 +6081,16 @@ const OUTBOUND_RPM = {
   'search:goplus': 8,               // the share of GoPlus's 28 the name search's holder reads may use; the rest is the dashboards'
   'robinhoodchain.blockscout.com': 240,
   'api.blockscout.com': 240,
+  /* Market Data (lib/marketdata.js, 2026-10-26). DefiLlama, L2BEAT and the logo CDNs publish no number, so these are ceilings
+     of our own, far below anything they would notice (DefiLlama is CDN-cached for 30 minutes and is read no faster than that);
+     growthepie publishes 10 a minute. GeckoTerminal is the site's 10 a minute: Market Data takes at most 3 of them
+     ('market:geckoterminal'), so the chart switch, the name search and the Scanner keep theirs. 'market:rpc' is Market Data's
+     own ceiling on the chain node — its batches also wait on the shared pace and stand down while the site's own reads are
+     refused (mktRpcBusy); it averages about one request a minute. */
+  'api.llama.fi': 30, 'coins.llama.fi': 10, 'stablecoins.llama.fi': 20, 'l2beat.com': 10,
+  'api.growthepie.xyz': 10, 'api.growthepie.com': 10,
+  'market:geckoterminal': 3, 'market:rpc': 12,
+  'coin-images.coingecko.com': 120, 'assets.geckoterminal.com': 120, 'icons.llamao.fi': 60, 'icons.llama.fi': 60, 'cdn.dexscreener.com': 300, 'dd.dexscreener.com': 300,
 };
 try { OUTBOUND_RPM[new URL(BLOCKSCOUT).host] = OUTBOUND_RPM[new URL(BLOCKSCOUT).host] || 240; } catch {}   // a keyed explorer host inherits the keyed ceiling
 const OUTBOUND_MAX_WAIT_MS = Number(process.env.OUTBOUND_MAX_WAIT_MS) || 15000;
@@ -7819,7 +7829,7 @@ const _pairsWarn = { at: 0, n: 0 };
 async function scanNewPairs() {
   // the block number is asked again on a refusal; the log walk below already halves and retries on its own
   const latest = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16);
-  const from = pairsScanBlock ? pairsScanBlock + 1 : Math.max(0, latest - 2500000);
+  const from = pairsScanBlock ? Math.max(pairsScanBlock + 1, latest - 2500000) : Math.max(0, latest - 2500000);   // a cursor restored from the database (Market Data keeps it) is never walked further back than a first run
   if (from > latest) return;
   const logs = await getLogsChunked(FACTORY, PAIRCREATED_TOPIC, from, latest);   // not wrapped in rpcRetry: it halves on any error, and a retry around that multiplies the calls
   for (const l of logs) {
@@ -10243,7 +10253,7 @@ async function enrichPairs() {
 async function refreshPairs() {
   if (pairsRefreshing) return;
   pairsRefreshing = true;
-  try { await scanNewPairs(); await enrichPairs(); }
+  try { await scanNewPairs(); await enrichPairs(); mktRadarKeep(); }
   catch (e) {
     pairsCache.error = e.message || 'refresh failed'; pairsCache.building = false;
     // said in the log, once per five minutes with a count — it used to fail without a word
@@ -10251,6 +10261,169 @@ async function refreshPairs() {
     if (now() - _pairsWarn.at >= 5 * 60 * 1000) { console.warn('[pairs] the new-pairs sweep failed: ' + pairsCache.error + (_pairsWarn.n > 1 ? ' (' + _pairsWarn.n + ' failed sweeps since the last note)' : '')); _pairsWarn.at = now(); _pairsWarn.n = 0; }
   }
   finally { pairsRefreshing = false; }
+}
+
+/* ===== Market Data (owner, 2026-10-26) ======================================================================================
+   "Setup a page named Market Data that has a full dashboard of all of the chain's data as much as can be found publicly …
+   Robinhood being the default view"; "make sure the token scanner and live new pair scanner is constantly caching data about
+   everything on every chain and make sure the new Market Data page does as well and have all that data be accessible through
+   the Send API"; "Make all cache data from the platform visible on the Admin page. Don't show anything on the admin page that
+   is encrypted." The collectors, the tables and the answers are lib/marketdata.js's; this wires them to the server's own
+   outbound meters, its chain reader and shared pace, the New Pairs radar and the Scanner. Every vendor URL is env (the test
+   runner points them all at a dead address; tests/marketdata.mjs at fakes). The collectors run only with MARKET_COLLECT=1, or
+   in production unless MARKET_COLLECT=0 — never in a test server. MARKET_JOBS (a comma list) limits which ones run. */
+const MD = require('./lib/marketdata.js');
+const MKT_URLS = {
+  llama: process.env.MARKET_LLAMA_URL || 'https://api.llama.fi',
+  coins: process.env.MARKET_LLAMA_COINS_URL || 'https://coins.llama.fi',
+  stables: process.env.MARKET_LLAMA_STABLES_URL || 'https://stablecoins.llama.fi',
+  l2beat: process.env.MARKET_L2BEAT_URL || 'https://l2beat.com/api',
+  growthepie: process.env.MARKET_GROWTHEPIE_URL || 'https://api.growthepie.xyz/v1',
+  growthepieMetrics: process.env.MARKET_GROWTHEPIE_METRICS_URL || process.env.MARKET_GROWTHEPIE_URL || 'https://api.growthepie.com/v1',
+  gt: process.env.MARKET_GT_URL || 'https://api.geckoterminal.com/api/v2',
+  ds: process.env.MARKET_DS_URL || 'https://api.dexscreener.com',
+  cg: process.env.MARKET_CG_URL || 'https://api.coingecko.com/api/v3',
+  ethRpc: process.env.MARKET_ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com',
+};
+const MKT_HTTP = MD.createHonestFetch();   // 'JustSendIt/1.0 (+https://sendrh.com)', ≥30 s, no redirects, a size cap — never BROWSER_UA
+const MKT_COLLECT_ON = process.env.MARKET_COLLECT === '1' || (process.env.NODE_ENV === 'production' && process.env.MARKET_COLLECT !== '0');
+// the shared pace has backed off — the site's own chain reads are being refused, or a long queue waits on the pace: Market Data steps aside
+const mktRpcBusy = () => _paceMs > PACE_MS_START * 1.2 || _paceAt - now() > 5000;
+let mktRadarLast = 0;
+function mktRadarKeep() {   // every finished radar sweep (on demand or the timer's) is kept: its pairs and the block it read up to
+  try { mktRadarLast = MKT.radarPersist(pairsCache.pairs || [], pairsScanBlock, pairsRaw); } catch (e) { console.warn('[market] radar not kept: ' + ((e && e.message) || e)); }
+}
+async function mktRadarSweep() {
+  if (pairsRefreshing) return { error: 'a sweep was already running' };
+  if (mktRpcBusy()) return { error: 'yielded: the site\'s own chain reads are being refused' };   // the timer's sweep gives way; a member opening the radar still builds it
+  const before = pairsCache.updatedAt;
+  await refreshPairs();
+  if (pairsCache.updatedAt === before) return { error: pairsCache.error || 'the sweep did not finish' };
+  return { persisted: mktRadarLast, cursor: pairsScanBlock };
+}
+/* the hourly re-scan of the most-scanned tokens: the Scanner's own reads, QUIET — the public "recently scanned" list and the
+   Scanner's counts are for scans people chose to make, so nothing is written there; only Market Data keeps the reading */
+async function mktScanQuiet(chain, addr) {
+  if (chain === 'robinhood') {
+    if (mktRpcBusy()) return null;   // the home chain's reads give way while the site's own are being refused
+    await ensureLedger(addr, { wait: true }).catch(() => null);
+    const r = await scanRead(addr);
+    return r && r.pair && !r.stale ? { pair: r.pair, readAt: r.readAt } : null;   // a stale snapshot is not a new reading
+  }
+  if (!MC.SCAN_CHAINS.includes(chain)) return null;
+  const r = await mc().scan(chain, addr);
+  return r && r.pair ? { pair: r.pair, readAt: r.readAt } : null;
+}
+let _mktLogAt = new Map();
+const MKT = MD.createMarketData({
+  db, now, urls: MKT_URLS, outboundTake, fetchJson: MKT_HTTP.fetchJson, fetchImage: MKT_HTTP.fetchImage,
+  // the chain node through the server's own reader (honest User-Agent, HTTP/2) on the shared pace; a log read weighs what it weighs there
+  rpcBatch: async (calls) => { await paceTake(calls.reduce((w, c) => w + (c[0] === 'eth_getLogs' ? PACE_LOG_WEIGHT : 1), 0)); return rpcBatch(calls); },
+  rpcBusy: mktRpcBusy, radarSweep: mktRadarSweep, scanRefresh: mktScanQuiet,
+  cgDemoKey: String(process.env.COINGECKO_DEMO_KEY || '').trim() || null,   // optional: a free CoinGecko Demo key for the market-cap fallback (keyless otherwise)
+  // a collector's failure is said in the log at most once in ten minutes per job
+  log: (m) => { const k = String(m).split(':')[0]; if (now() - (_mktLogAt.get(k) || 0) > 10 * 60e3) { _mktLogAt.set(k, now()); console.warn(m); } },
+});
+MKT.migrate();
+// the radar resumes where it stopped: its block cursor and its newest pairs (until now they lived in memory only)
+try { const rr = MKT.radarRestore(Math.max(PAIRS_KEEP, 120)); if (rr.cursor && !pairsScanBlock) { pairsScanBlock = rr.cursor; pairsRaw = rr.raw; } } catch {}
+if (MKT_COLLECT_ON) {
+  const st = process.env.MARKET_STAGGER_MS;
+  MKT.start({ staggerMs: st != null && st !== '' && Number(st) >= 0 ? Number(st) : 1000, jobs: String(process.env.MARKET_JOBS || '').split(',').map((s) => s.trim()).filter(Boolean) });
+}
+/* ----- the admin page's "Collected data": everything the platform collects that is public — the tables above, the caches
+   the Scanner, the radar, the holder ledger and the chart switch keep, and the Send API's public views. PUBLIC COLUMNS ONLY:
+   every column is named here (never SELECT * straight to the page), nothing encrypted, nothing that links a person to a
+   wallet, an email, a session, an address they connect from, a key or a preference. A view-mapped dataset is built from
+   the same function the public API uses (publicUserView, postView, callView, communityCardView). ----- */
+const ADMIN_CELL_MAX = 20000;   // a long value (a profile's JSON) is cut here; the answer says so
+const admJ = (v) => (v == null ? null : typeof v === 'object' ? JSON.stringify(v) : v);
+const ADMIN_COLLECTED = MKT.ADMIN_DATASETS.map((d) => Object.assign({ time: { mkt_new_pool: 'first_seen', mkt_radar: 'updated_at' }[d.table] || 'at', group: 'Market Data' }, d)).concat([
+  { id: 'token_cache', group: 'Scanner and radar', title: 'Token cache', description: 'Every token the Scanner or the token popup surfaced, with its last full profile (kept fresh for the most-viewed).', table: 'token_cache', time: 'updated_at', q: ['token_addr', 'symbol', 'name'],
+    cols: [['token_addr', 'Token'], ['symbol', 'Symbol'], ['name', 'Name'], ['found', 'Found'], ['reason', 'Not-found reason'], ['updated_at', 'Read at'], ['last_read_at', 'Last viewed'], ['reads', 'Views'], ['pair_json', 'Profile (JSON)']] },
+  { id: 'scans', group: 'Scanner and radar', title: 'Scanner — Robinhood Chain scans', description: 'The Scanner\'s own store: each token anyone scanned, how many times, its last profile. Never who.', table: 'scans', time: 'last_at', q: ['token_addr', 'symbol', 'name'],
+    cols: [['token_addr', 'Token'], ['pool_addr', 'Pool'], ['kind', 'Kind'], ['symbol', 'Symbol'], ['name', 'Name'], ['first_at', 'First scanned'], ['last_at', 'Last scanned'], ['read_at', 'Read at'], ['count', 'Scans'], ['pair_json', 'Profile (JSON)']] },
+  { id: 'scans_mc', group: 'Scanner and radar', title: 'Scanner — Ethereum and Solana scans', description: 'The same store for the other chains the Scanner reads.', table: 'scans_mc', time: 'last_at', q: ['chain', 'token_addr', 'symbol', 'name'],
+    cols: [['chain', 'Chain'], ['token_addr', 'Token'], ['pool_addr', 'Pool'], ['kind', 'Kind'], ['symbol', 'Symbol'], ['name', 'Name'], ['first_at', 'First scanned'], ['last_at', 'Last scanned'], ['read_at', 'Read at'], ['count', 'Scans'], ['pair_json', 'Profile (JSON)']] },
+  { id: 'runner_tokens', group: 'Scanner and radar', title: 'Best Runners store', description: 'Every token the radar met: its first, qualifying and peak readings (Dexscreener; may be stale — see last seen).', table: 'runner_tokens', time: 'last_seen_at', q: ['token_addr', 'symbol', 'name'],
+    cols: [['token_addr', 'Token'], ['pair_addr', 'Pair'], ['symbol', 'Symbol'], ['name', 'Name'], ['brand', 'Brand (JSON)'], ['first_price', 'First price'], ['first_mc', 'First market cap'], ['first_seen_at', 'First seen'], ['qual_mc', 'Qualifying market cap'], ['qual_at', 'Qualified at'], ['peak_price', 'Peak price'], ['peak_mc', 'Peak market cap'], ['peak_at', 'Peak at'], ['cur_price', 'Price'], ['cur_mc', 'Market cap'], ['cur_liq', 'Liquidity'], ['cur_pc24', 'Change 24 h %'], ['cur_holders', 'Holders'], ['cur_health', 'Health'], ['last_seen_at', 'Last seen']] },
+  { id: 'runner_snaps', group: 'Scanner and radar', title: 'Best Runners price points', description: 'The time series behind the runners\' trailing baselines.', table: 'runner_snaps', time: 'at', q: ['token_addr'],
+    cols: [['token_addr', 'Token'], ['at', 'At'], ['price', 'Price']] },
+  { id: 'holder_index', group: 'Holder ledger', title: 'Holder ledger — tokens', description: 'Each token\'s on-chain holder ledger (Transfer logs folded into balances): the count, the supply, the 25 largest balances.', table: 'holder_index', time: 'updated_at', q: ['token_addr', 'status'],
+    cols: [['token_addr', 'Token'], ['last_block', 'Complete to block'], ['first_block', 'First block'], ['holders', 'Holders'], ['supply', 'Supply (raw)'], ['decimals', 'Decimals'], ['logs', 'Transfers folded'], ['consistent', 'Consistent'], ['top_json', 'Largest balances (JSON)'], ['status', 'Status'], ['error', 'Last error'], ['updated_at', 'Updated']] },
+  { id: 'holder_balances', group: 'Holder ledger', title: 'Holder ledger — balances', description: 'Public on-chain balances, per token and holding address, from the token\'s own Transfer logs. Not linked to any member.', table: 'holder_balances', time: null, q: ['token_addr'],
+    cols: [['token_addr', 'Token'], ['address', 'Holding address (public chain data)', 'wallet'], ['balance', 'Balance (raw)'], ['positive', 'Above zero']] },
+  { id: 'chart_sources', group: 'Chart switch', title: 'Chart sources', description: 'Which other sites chart each pool (Dexscreener, GeckoTerminal): true listed, false not listed, empty could not ask. In memory, since the last restart.',
+    mem: () => [...chartSrcCache].map(([k, v]) => { const i = k.indexOf(':'); return { vendor: k.slice(0, i), pool: k.slice(i + 1), listed: v.v, at: v.at }; }).sort((a, b) => b.at - a.at),
+    cols: [['vendor', 'Site'], ['pool', 'Pool'], ['listed', 'Listed'], ['at', 'Asked at']], q: ['pool', 'vendor'] },
+  { id: 'users', group: 'Send API public views', title: 'Members — public profiles', description: 'What each member\'s wall already shows anyone (publicUserView, as the Send API serves it).', table: 'users', where: 'system = 0 AND deleted_at IS NULL', select: '*', time: 'created_at', q: ['username'],
+    map: (u) => publicUserView(u), cols: [['id', 'Id'], ['username', 'Username'], ['avatar', 'Avatar'], ['avatar_img', 'Picture'], ['bio', 'Bio'], ['accent', 'Accent'], ['joined', 'Joined'], ['points', 'Points'], ['level', 'Level'], ['title', 'Title'], ['og', 'OG tier'], ['twitter', 'X'], ['instagram', 'Instagram']] },
+  { id: 'posts', group: 'Send API public views', title: 'Posts — public', description: 'Public posts as the Send API serves them (holders-only and squad posts are private and not here).', table: 'posts', where: 'private = 0 AND squad_id IS NULL', select: '*', time: 'created_at', q: ['text'],
+    map: (p) => { const v = postView(p, null); return { id: v.id, username: v.username, text: v.text, image: v.image, created_at: v.created_at, reactions: admJ(v.reactions), comments: v.comments, score: v.score, call_id: v.call_id, community: admJ(v.community), tokens: admJ(v.tokens) }; },
+    cols: [['id', 'Id'], ['username', 'Author'], ['text', 'Text'], ['image', 'Image'], ['created_at', 'Posted'], ['reactions', 'Reactions (JSON)'], ['comments', 'Comments'], ['score', 'Score'], ['call_id', 'Send Call'], ['community', 'Community (JSON)'], ['tokens', 'Tokens (JSON)']] },
+  { id: 'comments', group: 'Send API public views', title: 'Comments — public', description: 'Comments under public posts, as the Send API serves them.', from: 'comments c JOIN users u ON u.id = c.user_id JOIN posts po ON po.id = c.post_id', rid: 'c.id', where: 'po.private = 0 AND po.squad_id IS NULL', time: 'c.created_at', q: ['c.text', 'u.username'],
+    cols: [['id', 'Id', 'c.id'], ['post_id', 'Post', 'c.post_id'], ['username', 'Author', 'u.username'], ['text', 'Text', 'c.text'], ['tokens', 'Tokens (JSON)', 'c.tokens'], ['created_at', 'Posted', 'c.created_at']] },
+  { id: 'calls', group: 'Send API public views', title: 'Send Calls — public', description: 'Public Send Calls as the Send API serves them, without the caller\'s wallet (squad calls are private and not here).', table: 'calls', where: 'squad_id IS NULL', select: '*', time: 'created_at', q: ['symbol', 'name', 'token_addr'],
+    map: (r) => { const u = db.prepare('SELECT username FROM users WHERE id = ?').get(r.user_id); const v = callView(r, null);
+      return { id: v.id, username: u ? u.username : null, symbol: v.symbol, name: v.name, token: v.token, pair: v.pair, quoteSymbol: v.quoteSymbol, calledAt: v.calledAt, entryPrice: v.entryPrice, entryMc: v.entryMc, curPrice: v.curPrice, curMc: v.curMc, peakMc: v.peakMc, curX: v.curX, maxX: v.maxX, grade: admJ(v.grade), hops: v.hops, peakAt: v.peakAt, lastCheck: v.lastCheck, callerSpend: v.callerSpend, hopSpend: v.hopSpend, holdEarned: v.holdEarned, noDyor: v.noDyor, rugged: v.rugged, stale: v.stale }; },
+    cols: [['id', 'Id'], ['username', 'Caller'], ['symbol', 'Symbol'], ['name', 'Name'], ['token', 'Token'], ['pair', 'Pair'], ['quoteSymbol', 'Quote'], ['calledAt', 'Called'], ['entryPrice', 'Entry price'], ['entryMc', 'Entry market cap'], ['curPrice', 'Price'], ['curMc', 'Market cap'], ['peakMc', 'Peak market cap'], ['curX', 'Now ×'], ['maxX', 'Peak ×'], ['grade', 'Grade'], ['hops', 'Sent Its'], ['peakAt', 'Peak at'], ['lastCheck', 'Last checked'], ['callerSpend', 'Caller in (rounded)'], ['hopSpend', 'Followers in (rounded)'], ['holdEarned', 'Hold bonus'], ['noDyor', 'No DYOR'], ['rugged', 'Rugged'], ['stale', 'Unpriced']] },
+  { id: 'communities', group: 'Send API public views', title: 'Communities', description: 'Every community card, as the Send API serves it.', table: 'communities', select: '*', time: 'created_at', q: ['symbol', 'name', 'token_addr'],
+    map: (c) => { const v = communityCardView(c, null); return { id: v.id, token: v.token, pair: v.pair, symbol: v.symbol, name: v.name, status: v.status, memberCount: v.memberCount, qualCount: v.qualCount, holders: v.holders, holdersSource: v.holdersSource, mcap: v.mcap, price: v.price, priceChange: v.priceChange, liq: v.liq, supply: admJ(v.supply), level: v.level, activity: v.activity, official: v.official, demo: v.demo }; },
+    cols: [['id', 'Id'], ['token', 'Token'], ['pair', 'Pair'], ['symbol', 'Symbol'], ['name', 'Name'], ['status', 'Status'], ['memberCount', 'Members'], ['qualCount', 'Qualifying'], ['holders', 'Holders'], ['holdersSource', 'Holders from'], ['mcap', 'Market cap'], ['price', 'Price'], ['priceChange', 'Change 24 h %'], ['liq', 'Liquidity'], ['supply', 'Members\' supply share (JSON)'], ['level', 'Level'], ['activity', 'Activity'], ['official', 'Official'], ['demo', 'Sandbox']] },
+  { id: 'leaderboard', group: 'Send API public views', title: 'Leaderboard', description: 'Members by points, as the Send API serves it (the top 1,000 here).',
+    mem: () => db.prepare('SELECT * FROM users WHERE points > 0 AND system = 0 AND deleted_at IS NULL ORDER BY points DESC, id ASC LIMIT 1000').all().map((u, i) => { const v = publicUserView(u); return { rank: i + 1, username: v.username, points: v.points, level: v.level, title: v.title, og: v.og }; }),
+    cols: [['rank', 'Rank'], ['username', 'Username'], ['points', 'Points'], ['level', 'Level'], ['title', 'Title'], ['og', 'OG tier']], q: ['username'] },
+  { id: 'competition', group: 'Send API public views', title: 'This week\'s competition', description: 'The weekly standings, the top 20 as the public board and the Send API show them.',
+    mem: () => { const { win, rows } = competitionStandings(); return rows.slice(0, 20).map((r) => ({ week: win.key, rank: r.rank, username: r.username, points: r.pts })); },
+    cols: [['week', 'Week'], ['rank', 'Rank'], ['username', 'Username'], ['points', 'Points']], q: ['username'] },
+]);
+const ADMIN_COLLECTED_BY_ID = new Map(ADMIN_COLLECTED.map((d) => [d.id, d]));
+const admFrom = (d) => d.from || d.table;
+const admRid = (d) => d.rid || 'rowid';
+function adminCollectedList() {
+  return ADMIN_COLLECTED.map((d) => {
+    let rows = null, oldestAt = null, newestAt = null;
+    try {
+      if (d.mem) { const all = d.mem(); rows = all.length; const ts = all.map((r) => r.at).filter((x) => Number.isFinite(x)); if (ts.length) { oldestAt = Math.min(...ts); newestAt = Math.max(...ts); } }
+      else {
+        const t = d.time || null;
+        const r = db.prepare('SELECT COUNT(*) n' + (t ? ', MIN(' + t + ') a, MAX(' + t + ') b' : '') + ' FROM ' + admFrom(d) + (d.where ? ' WHERE ' + d.where : '')).get();
+        rows = r.n; oldestAt = t ? r.a : null; newestAt = t ? r.b : null;
+      }
+    } catch {}
+    return { id: d.id, group: d.group || null, title: d.title, description: d.description, rows, oldestAt, newestAt, search: !!(d.q && d.q.length), columns: d.cols.map(([name, label]) => ({ name, label })) };
+  });
+}
+function adminCollectedRows(id, o) {
+  const d = ADMIN_COLLECTED_BY_ID.get(id);
+  if (!d) return null;
+  const limit = Math.min(200, Math.max(1, Number(o.limit) || 50));
+  const q = String(o.q || '').trim().slice(0, 100).toLowerCase();
+  const pick = (row) => { const out = {}; for (const [name] of d.cols) { let v = row[name]; if (v != null && typeof v === 'object') v = JSON.stringify(v); if (typeof v === 'string' && v.length > ADMIN_CELL_MAX) v = v.slice(0, ADMIN_CELL_MAX) + ' …'; out[name] = v === undefined ? null : v; } return out; };
+  if (d.mem) {
+    let all = d.mem();
+    if (q) all = all.filter((r) => (d.q || []).some((k) => String(r[k] == null ? '' : r[k]).toLowerCase().includes(q)));
+    const start = Math.max(0, Number(o.before) || 0);
+    const slice = all.slice(start, start + limit);
+    return { id, columns: d.cols.map(([name, label]) => ({ name, label })), rows: slice.map(pick), next: start + limit < all.length ? start + limit : null, cut: ADMIN_CELL_MAX };
+  }
+  const before = Number(o.before) || Number.MAX_SAFE_INTEGER;
+  const sel = d.select === '*' ? admRid(d) + ' AS _rid, *' : admRid(d) + ' AS _rid, ' + d.cols.map(([name, , expr]) => (expr || name) + ' AS "' + name + '"').join(', ');
+  const where = [admRid(d) + ' < ?'].concat(d.where ? ['(' + d.where + ')'] : []);
+  const args = [before];
+  if (q && d.q && d.q.length) { where.push('(' + d.q.map((k) => 'LOWER(CAST(' + k + " AS TEXT)) LIKE ? ESCAPE '\\'").join(' OR ') + ')'); for (let i = 0; i < d.q.length; i++) args.push('%' + q.replace(/[\\%_]/g, (m) => '\\' + m) + '%'); }
+  const raw = db.prepare('SELECT ' + sel + ' FROM ' + admFrom(d) + ' WHERE ' + where.join(' AND ') + ' ORDER BY ' + admRid(d) + ' DESC LIMIT ?').all(...args, limit);
+  const rows = raw.map((r) => pick(d.map ? d.map(r) : r));
+  return { id, columns: d.cols.map(([name, label]) => ({ name, label })), rows, next: raw.length === limit ? raw[raw.length - 1]._rid : null, cut: ADMIN_CELL_MAX };
+}
+const MKT_LOGO_ORIGIN = String(process.env.MARKET_LOGO_ORIGIN || '').replace(/\/+$/, '');   // a test's image fake: the allowed URL's path is fetched from here instead
+const mktLogoCache = new Map();   // url -> { ct, buf, at } | { fail: why, at }
+let mktLogoBytes = 0;
+const MKT_LOGO_TTL = 7 * 864e5, MKT_LOGO_FAIL_TTL = 10 * 60e3, MKT_LOGO_MAX_BYTES = 32 * 1024 * 1024, MKT_LOGO_ONE_MAX = 2 * 1024 * 1024;
+function mktLogoPut(u, v) {
+  const old = mktLogoCache.get(u); if (old) { if (old.buf) mktLogoBytes -= old.buf.length; mktLogoCache.delete(u); }
+  mktLogoCache.set(u, v); if (v.buf) mktLogoBytes += v.buf.length;
+  for (const [k, x] of mktLogoCache) { if (mktLogoBytes <= MKT_LOGO_MAX_BYTES && mktLogoCache.size <= 3000) break; mktLogoCache.delete(k); if (x.buf) mktLogoBytes -= x.buf.length; }
 }
 
 /* ---------- watchlist enrichment (reuses the pairs pipeline; cached so it scales) ---------- */
@@ -11098,6 +11271,7 @@ const SENDY_SITE_MAP = `PAGES — point people to these by path:
 /communities — communities (holders-only walls, proposals) and Send Squads
 /arcade — the Arcade: the weekly competitions and boards
 /data — the Data API
+/market — Market Data: chain and token figures with Robinhood Chain as the default view — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps where a chain or token has one, the chain's own pulse (blocks, gas, pools created) — each figure with its source and when it was read (DefiLlama, L2BEAT, growthepie, GeckoTerminal, Dexscreener, the chain itself); a search bar; top chains and top tokens sortable by market cap, liquidity, TVL, volume and fees over a chosen time frame
 /profile — the account: link wallets, username, two-factor, delete the account
 /support — the Support board: ask in public, answer others, vote answers up
 /whitepaper — the white paper · /terms — the Terms · /privacy — the Privacy Policy
@@ -11125,7 +11299,7 @@ function sendyKnowledge() {
   if (sendyKnowledgeCache) return sendyKnowledgeCache;
   const parts = [SENDY_SITE_MAP];
   try { const r = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8'); const i = r.indexOf('\n## 5.'); parts.push('=== README — how the site works ===\n' + (i > 0 ? r.slice(0, i) : r)); } catch {}
-  for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'privacy', 'whitepaper']) {
+  for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'market', 'privacy', 'whitepaper']) {
     try { parts.push('=== the page ' + ROUTES.cleanPath(f + '.html') + (f === 'whitepaper' ? ' — the white paper, in full' : '') + ' ===\n' + sendyHtmlToText(fs.readFileSync(path.join(__dirname, 'public', f + '.html'), 'utf8'))); } catch {}
   }
   // the Terms are long and legal: Sendy gets the section index and points people to the section, never paraphrasing what it cannot see
@@ -15721,7 +15895,7 @@ const server = http.createServer(async (req, res) => {
         const r = db.prepare('UPDATE api_keys SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL').run(now(), me.id);
         return send(res, 200, { ok: true, revoked: r.changes });
       }
-      const dm = /^\/api\/data\/v1\/([a-z]+)$/.exec(p);
+      const dm = /^\/api\/data\/v1\/([a-z][a-z-]{0,30})$/.exec(p);
       if (dm && req.method === 'GET') {
         res._rawImg = true;   // programs, not browsers: artwork URLs stay as the CDN serves them
         const k = dataKeyOf(req);
@@ -15743,7 +15917,13 @@ const server = http.createServer(async (req, res) => {
           case 'communities': { const rows = db.prepare('SELECT * FROM communities WHERE id < ? ORDER BY id DESC LIMIT ?').all(before, limit); return send(res, 200, page(rows.map(c => communityCardView(c, null)), r => r.id)); }
           case 'leaderboard': { const rows = db.prepare('SELECT * FROM users WHERE points > 0 AND system = 0 ORDER BY points DESC, id ASC LIMIT ?').all(limit); return send(res, 200, { data: rows.map((u, i) => ({ rank: i + 1, ...publicUserView(u) })), limit }); }
           case 'competition': { const { win, rows } = competitionStandings(); return send(res, 200, { data: { week: { key: win.key, startsAt: win.startsAt, endsAt: win.endsAt }, standings: rows.slice(0, 20).map(r => ({ rank: r.rank, username: r.username, points: r.pts })), last: lastSettledCompetition(), prize: { winners: WEEK_WINNERS, ladder: WEEK_PRIZES } } }); } // top 20 only — the same window the public board shows; the key changes the shape, never the scope
-          default: return bad(res, 'unknown resource — one of: me, users, posts, comments, calls, communities, leaderboard, competition', 404);
+          default: {
+            // Market Data's resources (lib/marketdata.js): the chains, their histories and snapshots, tokens, pools, new pools, the radar, every scan, the pulse, the collectors
+            const mq = {}; for (const [k2, v2] of url.searchParams) if (!(k2 in mq) && k2 !== 'before' && k2 !== 'limit') mq[k2] = String(v2).slice(0, 200);
+            const mr = MKT.RESOURCES.includes(dm[1]) ? await MKT.apiResource(dm[1], mq, { limit, before }) : null;
+            if (mr) return send(res, mr.status, mr.body);
+            return bad(res, 'unknown resource — one of: me, users, posts, comments, calls, communities, leaderboard, competition, ' + MKT.RESOURCES.join(', '), 404);
+          }
         }
       }
       if (p === '/api/me' && req.method === 'GET') {
@@ -16047,6 +16227,21 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/admin/overview' && req.method === 'GET') {
         if (!isAdmin(me)) return bad(res, 'not found', 404);
         return send(res, 200, adminOverview());
+      }
+      /* "Collected data" (owner, 2026-10-26): every dataset the platform collects that is public, and a page of one at a time —
+         public columns only (ADMIN_COLLECTED names every one). Admin only; anyone else gets the 404 any other admin route gives. */
+      if (p === '/api/admin/collected' && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        return send(res, 200, { datasets: adminCollectedList(), at: now() }, { 'Cache-Control': 'no-store' });
+      }
+      const acm = /^\/api\/admin\/collected\/([a-z0-9_-]{1,40})$/.exec(p);
+      if (acm && req.method === 'GET') {
+        if (!isAdmin(me)) return bad(res, 'not found', 404);
+        let out = null;
+        try { out = adminCollectedRows(acm[1], { before: url.searchParams.get('before'), limit: url.searchParams.get('limit'), q: url.searchParams.get('q') }); }
+        catch (e) { console.error('[admin] collected ' + acm[1] + ': ' + ((e && e.message) || e)); return bad(res, 'that dataset could not be read just now', 500); }
+        if (!out) return bad(res, 'no such dataset', 404);
+        return send(res, 200, out, { 'Cache-Control': 'no-store' });
       }
       /* Admin codes (owner, 2026-10-16). The first time an admin opens them, ADMIN_CODE_BATCH are made for that admin; "make
          more" adds another batch (up to ADMIN_CODE_MAX in all) and, as it lets more people in, needs "confirm it's you". */
@@ -18086,6 +18281,42 @@ const server = http.createServer(async (req, res) => {
         const maxAge = data.stale ? 5 : CHART_TF[tf] <= 60 ? 2 : 30;
         return send(res, 200, data, { 'Cache-Control': 'public, max-age=' + maxAge });
       }
+      /* ----- Market Data (lib/marketdata.js): the page's reads, same-origin. /api/market/scan is the Scanner's route, quiet. ----- */
+      if (p === '/api/market/logo' && (req.method === 'GET' || req.method === 'HEAD')) {
+        /* A token's or a chain's picture from the exact hosts the market sources use, served from our origin so the page's
+           img-src stays 'self'. The allow-list is the SSRF boundary (exact host names, https, no port, no credentials); no
+           redirect is followed; the type is read from the bytes and only rasters pass (never SVG); size capped; kept a week. */
+        const u = String(url.searchParams.get('u') || '');
+        if (!MD.logoAllowed(u)) return bad(res, 'unsupported image host');
+        if (!rateLimit('mktlogo:' + clientIp(req), 300, 6e4)) return bad(res, 'slow down', 429);
+        const head = (ct, len) => ({ 'Content-Type': ct, 'Cache-Control': 'public, max-age=604800', 'Content-Length': len, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' });
+        let hit = mktLogoCache.get(u);
+        if (hit && hit.fail && now() - hit.at < MKT_LOGO_FAIL_TTL) return bad(res, hit.fail, hit.code || 502);
+        if (!hit || !hit.buf || now() - hit.at > MKT_LOGO_TTL) {
+          if (!rateLimit('mktlogo-site', 1500, 6e4)) return bad(res, 'slow down', 429);
+          let target = u; if (MKT_LOGO_ORIGIN) { const x = new URL(u); target = MKT_LOGO_ORIGIN + x.pathname + x.search; }
+          try { await outboundTake(new URL(target).host, 3000); } catch { return bad(res, 'the picture could not be fetched just now', 503); }
+          const r = await MKT_HTTP.fetchImage(target, { maxBytes: MKT_LOGO_ONE_MAX });
+          if (!r.ok) { const code = r.status === 413 || r.status === 415 ? r.status : 502; mktLogoPut(u, { fail: r.reason, code, at: now() }); return bad(res, r.reason, code); }
+          hit = { ct: r.type, buf: r.buf, at: now() }; mktLogoPut(u, hit);
+        }
+        res.writeHead(200, head(hit.ct, hit.buf.length));
+        return res.end(req.method === 'HEAD' ? undefined : hit.buf);
+      }
+      if (p.startsWith('/api/market/') && p !== '/api/market/scan' && req.method === 'GET') {
+        const mq = {}; for (const [k, v] of url.searchParams) if (!(k in mq)) mq[k] = String(v).slice(0, 200);
+        if (!rateLimit('mkt:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
+        let r = null;
+        if (p === '/api/market/chains') r = MKT.chains(mq);
+        else if (p === '/api/market/chain') r = MKT.chain(mq);
+        else if (p === '/api/market/tokens') r = MKT.tokens(mq);
+        else if (p === '/api/market/new-pools') r = MKT.newPools(mq);
+        else if (p === '/api/market/status') r = MKT.status();
+        else if (p === '/api/market/token') { if (!rateLimit('mkttok:' + clientIp(req), 30, 6e4)) return bad(res, 'too many token reads — slow down', 429); r = await MKT.token(mq); }
+        else if (p === '/api/market/search') { if (!rateLimit('mktsearch:' + clientIp(req), 30, 6e4)) return bad(res, 'too many searches — slow down', 429); r = await MKT.search(mq); }
+        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo', 404);
+        return send(res, r.status, r.body);
+      }
       /* ----- which other sites chart these pools: the chart switch shows only the buttons that will draw a chart ----- */
       if (p === '/api/chart/sources' && req.method === 'GET') {
         if (!rateLimit('chsrc:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
@@ -18352,14 +18583,18 @@ const server = http.createServer(async (req, res) => {
          token0()/token1(); the token it exists to price is the side that is not a quote asset, and the
          scan is that token's, with the pool named so the reader knows what was pasted. Only reached when
          the address is not a token with a pool of its own (the lookup above is tried first). */
-      if (p === '/api/scan' && req.method === 'GET') {
+      if ((p === '/api/scan' && req.method === 'GET') || (p === '/api/market/scan' && req.method === 'GET')) {
+        /* The Market Data page reads the same profile through /api/market/scan, QUIET (owner, 2026-10-26): browsing a list is
+           not choosing to scan, so nothing is written to the Scanner's public store or its counts — the reading is kept in
+           Market Data's own store (mkt_scan) only. Every scan, quiet or not, is kept there. */
+        const quiet = p === '/api/market/scan';
         /* Owner, 2026-10-23: Ethereum and Solana tokens scan too. The address says which chain it can be on: a Solana
            address is only ever Solana's; a 0x address is the home chain's unless ?chain=ethereum names Ethereum — and a 0x
            address the home chain has nothing for is tried on Ethereum before "not found". The reads are lib/multichain.js's. */
         const chainQ = String(url.searchParams.get('chain') || '').toLowerCase().trim();
         const parsed = MC.parseAddress(url.searchParams.get('address'), chainQ || null);
         if (!parsed) return bad(res, chainQ && !MC.SCAN_CHAINS.includes(chainQ) ? 'unknown chain' : 'enter a valid 0x address (a token or a pool on Robinhood Chain or Ethereum) or a Solana token or pool address');
-        if (!rateLimit('scan:' + clientIp(req), 40, 6e4)) return bad(res, 'too many scans — slow down', 429);
+        if (!rateLimit((quiet ? 'mktscan:' : 'scan:') + clientIp(req), 40, 6e4)) return bad(res, 'too many scans — slow down', 429);
         const risk = () => Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }]));
         const foreign = async (slug, a, note) => {
           const m = chainMetaFor(slug);
@@ -18369,12 +18604,14 @@ const server = http.createServer(async (req, res) => {
             ? 'That’s a base trading asset on ' + m.name + ' (' + m.native + ', a stablecoin or a wrapped coin), not a token to profile here.'
             : 'No token or pool found at this address on ' + m.name + ' — the price feed indexes none.' + (note ? ' ' + note : '') });
           const tok = r.pair.token.address;
-          const counted = rateLimit('scanc:' + clientIp(req) + '|' + slug + ':' + tok, 1, 10 * 60e3);
-          const s = scanRecordMc(slug, tok, r.kind, r.kind === 'pool' ? r.pool : null, r.pair, r.readAt, counted);
+          const counted = !quiet && rateLimit('scanc:' + clientIp(req) + '|' + slug + ':' + tok, 1, 10 * 60e3);
+          const s = quiet ? (() => { try { return db.prepare('SELECT * FROM scans_mc WHERE chain=? AND token_addr=?').get(slug, tok) || null; } catch { return null; } })()
+            : scanRecordMc(slug, tok, r.kind, r.kind === 'pool' ? r.pool : null, r.pair, r.readAt, counted);
+          const mk = MKT.scanPut(slug, tok, r.pair, { src: quiet ? 'market' : 'scan', readAt: r.readAt, kind: r.kind });
           return send(res, 200, {
             kind: r.kind, ...(r.pool ? { pool: r.pool, poolVerified: null } : {}),   // Dexscreener's word, not a chain read: the kicker says "says it prices this token"
             pair: r.pair, pools: r.pools, risk: risk(), community: null, chain: slug, chainMeta: m, ...(note ? { note } : {}),
-            scan: { now: now(), readAt: r.readAt, stale: false, kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}) },
+            scan: { now: now(), readAt: r.readAt, stale: false, kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}), ...(quiet ? { quiet: true, marketKept: mk } : {}) },
           });
         };
         if (parsed.chain !== 'robinhood') {
@@ -18397,14 +18634,15 @@ const server = http.createServer(async (req, res) => {
         };
         // a hit: record the scan (for everyone, by token — never by who asked) and answer with the profile plus the scan's own facts
         const hit = (kind, pool, tok, r, poolOk) => {
-          const counted = rateLimit('scanc:' + clientIp(req) + '|' + tok, 1, 10 * 60e3);   // one count per client per coin per ten minutes
-          const s = scanRecord(tok, kind, poolOk === true ? pool : null, r.pair, r.readAt, counted);
+          const counted = !quiet && rateLimit('scanc:' + clientIp(req) + '|' + tok, 1, 10 * 60e3);   // one count per client per coin per ten minutes
+          const s = quiet ? scanRow(tok) : scanRecord(tok, kind, poolOk === true ? pool : null, r.pair, r.readAt, counted);
+          const mk = r.stale ? false : MKT.scanPut('robinhood', tok, r.pair, { src: quiet ? 'market' : 'scan', readAt: r.readAt, kind });   // a stale snapshot is not a new reading
           return send(res, 200, {
             kind, ...(pool ? { pool, poolVerified: poolOk === true ? true : (poolOk === false ? false : null) } : {}),
             ...RH, pair: r.pair, risk: risk(), community: communityForToken(tok),
             // count/firstAt/lastAt come from the store or not at all — a failed write is "not kept", never "1 scan, just now"
             scan: { now: now(), readAt: r.readAt, stale: !!r.stale, ...(r.stale ? { reason: r.reason || null, busy: !!r.busy } : {}),
-                    kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}) },
+                    kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}), ...(quiet ? { quiet: true, marketKept: mk } : {}) },
           });
         };
         try {
