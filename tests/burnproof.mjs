@@ -89,7 +89,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     && /Send <b>any amount<\/b> of \$SEND/.test(BP) && !/exact amount/.test(BP));
   check('  ...and never tells anyone to buy', !/\bbuy (some|more|\$SEND)|purchase/i.test(BP));
   check('the terms and the privacy policy say what it is, and their versions moved', /\(g\) Proving a wallet by a burn\./.test(PUB('terms.html')) && /Version 2026-10-23 ·/.test(PUB('terms.html'))
-    && /A wallet that cannot sign can be linked instead by a burn/.test(PUB('privacy.html')) && /Version 2026-10-23 ·/.test(PUB('privacy.html')));
+    && /A wallet that cannot sign can be linked instead by a burn/.test(PUB('privacy.html')) && /Version 2026-10-26 ·/.test(PUB('privacy.html')));
   check('  ...and both say ETH counts too: straight from the wallet\'s own address, a contract wallet offered $SEND only, the transaction count kept',
     /you send any amount of \$SEND — or, for a wallet that sends its own transactions, of ETH — from that wallet/.test(PUB('terms.html')) && /Any amount above nothing counts, as much or as little as you choose/.test(PUB('terms.html'))
     && /if windows from more than one account are open on the same wallet when its burn lands, the burn cannot show whose it is, so it links none of them/.test(PUB('terms.html')) && !/exact (dust )?amount/.test(PUB('terms.html')) && /a wallet with contract code on Robinhood Chain \(other than an EIP-7702 delegation, which still sends its own transactions\) is offered \$SEND only, as is a wallet that sent more than ten transactions/.test(PUB('terms.html'))

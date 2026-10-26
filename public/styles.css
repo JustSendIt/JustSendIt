@@ -4569,7 +4569,20 @@ video.post-avatar, video.c-ava, video.cm-ava, video.gb-ava, video.lb-ava, video.
 .dk-endpoints code { font-size: max(var(--text-floor), 0.82rem); }
 .dk-note { font-size: max(var(--text-floor), 0.86rem); color: var(--text-dim); line-height: 1.55; }
 pre.dk-pre { overflow-x: auto; padding: 0.75rem 0.9rem; border-radius: var(--r-2); background: var(--ink); border: 1px solid var(--hair); font-size: max(var(--text-floor), 0.8rem); line-height: 1.5; }
-@media (prefers-reduced-motion: reduce) { .np-caret-btn, .dk-bar > span { transition: none; } }
+/* the Data API reference (data.html): the two groups of the index, then one disclosure per resource — a request and what comes back */
+.dk-endpoints .dk-grp th { padding-top: 0.9rem; color: var(--gold); font-weight: 800; }
+.dk-res { border-top: 1px solid var(--hair); }
+.dk-res:last-of-type { border-bottom: 1px solid var(--hair); }
+.dk-res > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.6rem; min-height: 44px; box-sizing: border-box; padding: 0.6rem 0.1rem; cursor: pointer; list-style: none; font-size: max(var(--text-floor), 0.92rem); }
+.dk-res > summary::-webkit-details-marker { display: none; }
+.dk-res > summary::before { content: '▸'; flex: 0 0 auto; color: var(--green); transition: transform 0.15s ease; }
+.dk-res[open] > summary::before { transform: rotate(90deg); }
+.dk-res > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dk-res > summary code { font-weight: 700; color: var(--green-bright); }
+.dk-res > summary span { color: var(--text-dim); }
+.dk-res-body { padding: 0 0 0.8rem; min-width: 0; }
+.dk-res-body pre.dk-pre { margin: 0.4rem 0; white-space: pre-wrap; overflow-wrap: anywhere; }   /* a shape wraps like text at every width: no sideways scroll to read a field list */
+@media (prefers-reduced-motion: reduce) { .np-caret-btn, .dk-bar > span, .dk-res > summary::before { transition: none; } }
 
 /* ===== 21. The sandbox community — branded for a listed company, not a token ===== */
 .comm-stock-note { margin: 0 0 0.9rem; font-size: max(var(--text-floor), 0.8rem); line-height: 1.55; color: var(--text-dim); padding: 0.55rem 0.7rem; border-radius: var(--r-2); background: rgba(159,224,255,0.06); border: 1px solid rgba(159,224,255,0.28); }
@@ -5382,6 +5395,47 @@ button.adm-code:focus-visible { outline: 3px solid var(--focus); outline-offset:
 .adm-hist-no { font-style: italic; }
 .adm-hist-kind { flex: 0 1 auto; width: auto; max-width: 100%; }
 #adm-hist-older { margin-top: 0.7rem; }
+/* collected data (admin.js, GET /api/admin/collected): the datasets as cards, then one dataset's rows in a table that scrolls
+   inside its own box — the page itself never scrolls sideways, from a 320px phone to a 2560px screen */
+.adm-col-sets { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); }
+.adm-col-sets li { margin: 0; min-width: 0; }
+.adm-col-set { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; box-sizing: border-box; width: 100%; height: 100%; min-height: 44px; margin: 0; padding: 0.6rem 0.75rem;
+  border: 1px solid var(--edge-ctl); border-radius: 10px; background: var(--ink-3); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.9rem); line-height: 1.4; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.adm-col-set:hover { border-color: var(--green); }
+.adm-col-set:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.adm-col-set[aria-pressed="true"] { border: 2px solid var(--green); background: var(--g-wash); padding: calc(0.6rem - 1px) calc(0.75rem - 1px); }   /* the open one reads by shape and by its words ("open below"), not colour alone */
+.adm-col-set-t { font-weight: 800; font-size: max(var(--text-floor), 0.98rem); }
+.adm-col-set-n { font-weight: 700; font-variant-numeric: tabular-nums; }
+.adm-col-set-w, .adm-col-set-d { color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; }
+.adm-col-set-w { display: flex; flex-wrap: wrap; column-gap: 0.9em; }
+.adm-col-set-w > span { white-space: nowrap; }   /* "newest 2026-10-26 17:30 UTC" stays one piece; the two pieces share a line where they fit */
+.adm-col-on { font-style: normal; color: var(--green-bright); }
+.adm-col-view { margin-top: 1.1rem; padding-top: 0.3rem; border-top: 1px solid var(--hair); min-width: 0; }
+.adm-col-about { margin: 0 0 0.5rem; overflow-wrap: anywhere; }
+.adm-col-find { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.3rem; }
+.adm-col-find .f-label { flex: 1 1 100%; margin: 0.3rem 0 0; }
+.adm-col-find .addr-input { flex: 1 1 14rem; min-width: 0; }
+.adm-col-help { flex: 1 1 100%; margin: 0; }
+#adm-col-status { overflow-wrap: anywhere; }
+.adm-col-table { overflow-x: auto; max-width: 100%; margin-top: 0.4rem; }
+.adm-col-table:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.adm-col-table table { width: max-content; border-collapse: collapse; font-size: max(var(--text-floor), 0.85rem); font-variant-numeric: tabular-nums; }   /* as wide as its columns want (prose capped at 36ch): it scrolls, rather than squeezing every cell into a tower */
+.adm-col-table th, .adm-col-table td { padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: top; white-space: nowrap; }
+.adm-col-table thead th { color: var(--text-dim); font-weight: 800; vertical-align: bottom; white-space: normal; max-width: 20ch; }
+.adm-col-lab { display: block; }
+.adm-col-lab.is-one { white-space: nowrap; }   /* a short label ("Change 1 h (%)") keeps to one line; a long one wraps within 20ch */
+.adm-col-name { display: block; margin-top: 0.1rem; font-family: var(--mono); font-weight: 500; font-size: max(var(--text-floor), 0.75rem); color: var(--text-mute); }   /* never split: the stored name sets the column's least width, the label wraps over it */
+@media (min-width: 700px) { .adm-col-table th:first-child, .adm-col-table td:first-child { position: sticky; left: 0; z-index: 1; background: var(--ink-2); box-shadow: 1px 0 0 var(--hair); } }   /* the first column (usually the row) stays in view while the rest scrolls — where there is room for it to */
+.adm-col-table td.adm-col-n { text-align: right; }
+.adm-col-table td.adm-col-s { white-space: normal; overflow-wrap: anywhere; min-width: 20ch; max-width: 36ch; }
+.adm-col-table td.adm-col-null { color: var(--text-mute); }
+.adm-col-table td.adm-col-long { white-space: normal; min-width: 16ch; max-width: 44ch; }
+.adm-col-long summary { cursor: pointer; overflow-wrap: anywhere; }
+.adm-col-long summary small { color: var(--text-dim); font-size: max(var(--text-floor), 0.78rem); }
+.adm-col-long pre { margin: 0.4rem 0 0; padding: 0.5rem 0.6rem; border-radius: 8px; background: var(--ink); border: 1px solid var(--hair); white-space: pre-wrap; overflow-wrap: anywhere; font-size: max(var(--text-floor), 0.78rem); max-height: 24rem; overflow-y: auto; }
+.adm-col-refused { color: var(--gold); overflow-wrap: anywhere; }
+.adm-col-pager { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+#adm-col-older { margin-left: auto; }
 @media (pointer: coarse) { .adm-code-tag a, .adm-codes-table a { display: inline-flex; align-items: center; min-height: 44px; } }   /* a profile link is a finger's target too */
 
 

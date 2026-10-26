@@ -1,0 +1,6 @@
+{ "id": "api_users",
+  "columns": [{"name":"id","label":"Id"},{"name":"username","label":"Username"},{"name":"avatar","label":"Avatar"},{"name":"avatar_img","label":"Picture"},{"name":"bio","label":"Bio"},{"name":"accent","label":"Accent"},{"name":"joined","label":"Joined"},{"name":"points","label":"Send Power"},{"name":"level","label":"Level"},{"name":"title","label":"Title"},{"name":"og","label":"OG tier"},{"name":"twitter","label":"X"},{"name":"instagram","label":"Instagram"}],
+  "rows": [
+    {"id":74,"username":"sendooor","avatar":"🚀","avatar_img":null,"bio":"","accent":"","joined":1791547200000,"points":4210,"level":9,"title":"Sender","og":0,"twitter":null,"instagram":null},
+    {"id":2,"username":"JustSendIt","avatar":"🪙","avatar_img":"/uploads/3f2a9c0d1e4b5a6978c0d1e2.png","bio":"The house account. The house account. The house account. The house account. The house account. The house account. The house account. The house account. The house account. The house account. The house account. The house account.","accent":"#c6f000","joined":1788685200000,"points":0,"level":1,"title":"Rookie","og":4,"twitter":"sendrh_","instagram":null}
+  ] }
