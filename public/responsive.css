@@ -418,3 +418,1206 @@ html .btn > * { text-indent: 0; }
 html #compose-fab .fab-label { margin-right: -0.03em; line-height: normal; }   /* normal: the display font's ascent + descent is exactly 1em, so there is no leading for Chrome to round against the top */
 html #compose-fab .fab-ico { padding-top: 0.08em; }
 html .inv-tag { text-indent: 0.09em; }   /* the COPY tag's tracking after its last letter, balanced before the first */
+
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   ═══ The house style: wide screens and type (2026-10-26) ═══
+   Owner: "On wider screens use more of the screen to show the feature elements and the information … reduce scrolling
+   across the whole platform. Do not change anything functionally … best UI/UX and accessibility … a subtle avant-garde
+   styling to the typography … timeless design styles … relatable, fresh, and fascinating to explore."
+
+   1. TYPE, every width. Four voices with one job each: Luckiest Guy (display, as before), Rubik (reading, as before),
+      Newsreader (fonts.css) for the short introductions under section titles — an editorial serif against the cartoon
+      display — and IBM Plex Mono 600 for small uppercase labels and table heads, an annotation voice with tabular
+      figures. Headings balance their lines, paragraphs avoid orphans. Every size stays on the text floor.
+   2. WIDTH, 1280px and up. Reading pages step out from 1040px to 1200 / 1440 / 1680px (--page-max); tools and dashboards
+      (profile, tracker, watchlist, scanner) take 92% of the screen, up to 2240px (--dash-max). Sections
+      built as title + introduction + content put the title and introduction in a left rail (--rail) beside the
+      content, under a hairline (--house-rule) — less height, and a Swiss-grid edge the eye can follow.
+   3. Per page, 1280px and up, below: more columns side by side instead of one long stack. Reading order is the DOM
+      order everywhere; nothing is hidden; nothing below 1280px changes. Measured page by page at 1280, 1440, 1920
+      and 2560 (screens per page, width used, no clipping, no overflow, no overlap, nothing under the floor).
+   ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --font-serif: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --page-max: 1040px;   /* reading pages: a column a reader can follow */
+  --dash-max: var(--page-max);   /* tools and dashboards (profile, tracker, watchlist, scanner): from 1280px, 92% of the screen */
+  --rail: 30%;
+  --rail-gap: clamp(2rem, 3.2vw, 4.5rem);
+  --house-rule: color-mix(in srgb, var(--green) 40%, transparent);
+}
+@media (min-width: 1280px) { :root { --page-max: 1200px; --dash-max: max(var(--page-max), min(92vw, 2240px)); } }
+@media (min-width: 1600px) { :root { --page-max: 1440px; } }
+@media (min-width: 2000px) { :root { --page-max: 1680px; } }
+
+/* ---- type, every width ---- */
+html { font-kerning: normal; font-optical-sizing: auto; hanging-punctuation: first allow-end last; }
+h1, h2, h3, h4, .section-title { text-wrap: balance; }
+p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
+.section-sub { font-family: var(--font-serif); font-weight: 400; line-height: 1.42; letter-spacing: 0.002em; }
+.section-sub b, .section-sub strong { font-weight: 600; }
+.dash-k, .tkd-kicker, .bp-kicker, .age-kicker, .beta-k, .rec-k, .sc-hit-k, .tkd-stat dt, .tkd-mini dt, .tkd-price-l, .mcap-label,
+.hstat .lbl, .wall-stat .l, .np-stat-lbl, .np-liq-lbl, .np-stats .lbl, .np-fgroup-h, .search-sec, .kpi-sub, .cmb-l, .wk-xp-l, .trk-chips-lbl,
+.arc-table thead th, .snap-table thead th, .sqd-table thead th, .trk-table th, .ab-decay-table thead th, .oc-tape th, .gxp-table caption {
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; font-variant-numeric: tabular-nums slashed-zero;
+}
+
+/* ---- wide: the page uses the screen ---- */
+@media (min-width: 1280px) {
+  .wrap { max-width: var(--page-max); }
+  /* the section's title and its one-line introduction sit in a left rail; the section's content runs beside them */
+  section > .wrap:has(> .section-title) { display: flow-root; }
+  section > .wrap > .section-title, section > .wrap > .section-title + .section-sub {
+    float: left; clear: left; width: var(--rail); text-align: left; margin-left: 0; margin-right: 0;
+  }
+  section > .wrap > .section-title { margin-top: 0; padding-top: 0.9rem; border-top: 2px solid var(--house-rule); transform-origin: left top; }
+  section > .wrap > .section-title + .section-sub { margin-top: 0.6rem; margin-bottom: 1rem; max-width: none; }
+  section > .wrap:has(> .section-title) > :not(.section-title):not(.section-title + .section-sub) {
+    margin-left: calc(var(--rail) + var(--rail-gap)); margin-right: 0;
+  }
+}
+
+@media (min-width: 1280px) {
+  /* The house drop capital: a page's introduction opens on a two-line initial in the display face — the one flourish
+     every page header shares (Wall, Support, Scanner, Tracker, Watchlist, Arcade, Communities, Your data). */
+  :is(header.np-hero, header.profile-hero) > h1 + .section-sub::first-letter {
+    font-family: 'Luckiest Guy', 'Rubik', cursive; font-weight: 400; color: var(--green-bright); text-shadow: 0 3px 0 var(--green-dark);
+    -webkit-initial-letter: 2; initial-letter: 2; margin-right: 0.12em;
+  }
+  @supports not ((initial-letter: 2) or (-webkit-initial-letter: 2)) {
+    :is(header.np-hero, header.profile-hero) > h1 + .section-sub::first-letter { float: left; font-size: max(var(--text-floor), 2.9em); line-height: 0.82; margin: 0.06em 0.1em 0 0; }
+  }
+}
+
+/* ─── Home (index.html) ─── */
+/* ═══ Home (/) — wide screens. Load after base.css. Every rule sits at 1280px and up; nothing narrower changes. ═══
+   Two section forms share one geometry — the title column is base.css's rail (--rail), the content line is the rail plus
+   --rail-gap — so every left edge on the page lines up:
+     · the masthead (tokens, beta, guide, swap, the Wall teaser): the title and its introduction side by side under one
+       rule, the content across the whole column underneath — for sections whose content is wide or many-part;
+     · the rail (the video, Rocketize — base.css as it is): title and introduction stacked at the left, one object beside. */
+@media (min-width: 1280px) {
+
+  /* ---------- the hero: the identity band on one row, the dashboard across the page's column ---------- */
+  .hero-dash > .hero-content { max-width: var(--page-max); }
+  /* the mark | the words | the four ways in, stacked as one launch panel on the right (DOM order, left to right) */
+  .hero-dash .hero-top { grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--rail-gap); align-items: center; }
+  .hero-dash .hero-top .hero-logo { width: 210px; }
+  .hero-dash .hero-top h1 { font-size: max(var(--text-floor), clamp(2rem, 3.8vw, 3.5rem)); }
+  .hero-dash .hero-actions { grid-column: auto; align-items: stretch; }
+  .hero-dash .hero-actions .cta-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.7rem; margin-top: 0; }
+  .hero-dash .hero-actions .cta-row .btn { width: 100%; justify-content: flex-start; padding: 0.8rem 1.4rem; }
+  /* the one plain sentence on what the site is: the lede voice */
+  .hero-dash .hero-lede { font-family: var(--font-serif); font-size: max(var(--text-floor), 1.2rem); line-height: 1.42; max-width: 60ch; color: var(--text); }
+
+  /* Mission Control: the title at the column's left edge, its line in the serif italic, a hairline running out to the edge */
+  .hero-dash .dash-title { justify-content: flex-start; align-items: baseline; gap: 0.2rem 1rem; transform: none; margin-bottom: 1rem; }
+  .hero-dash .dash-title::after { content: ''; flex: 1 1 4rem; align-self: center; height: 2px; background: var(--house-rule); }
+  .hero-dash .dash-title-sub { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: 0.005em; }
+  /* three across (four rows of the twelve); four across once the column is 1680px */
+  .hero-dash .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+  /* a deploy with no video file drops the video tile (app.js): the last tile then closes its row instead of leaving a hole */
+  .hero-dash .dash-grid:has(> .dash-tile[hidden]) > .dash-tile:last-child { grid-column: span 2; }
+  /* the way in on its own line and the More pill under it, in every tile: at these widths the pair fits one line in some
+     tiles and not in others, and a row of tiles reads best when its buttons sit on one line and its pills on the next */
+  .hero-dash .dash-foot { float: none; margin: 0 0 0.45rem; }
+
+  /* ---------- the masthead ---------- */
+  #tokens > .wrap, #beta > .wrap, #guide > .wrap, #swap > .wrap, #origin + section > .wrap {
+    display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); column-gap: var(--rail-gap); align-items: start;
+  }
+  :is(#tokens, #beta, #guide, #swap, #origin + section) > .wrap > .section-title { grid-column: 1; grid-row: 1; float: none; width: auto; margin-bottom: 0; text-align: left; }
+  /* the introduction continues the title's rule, so the two read as one head */
+  :is(#tokens, #beta, #guide, #swap, #origin + section) > .wrap > .section-title + .section-sub {
+    grid-column: 2; grid-row: 1; float: none; width: auto; max-width: none; margin: 0; padding: 1.05rem max(0px, calc(100% - 58ch)) 0 0; text-align: left;
+    border-top: 2px solid var(--house-rule);
+  }
+  :is(#tokens, #beta, #guide, #swap) > .wrap > :where(:not(.section-title, .section-title + .section-sub)) { grid-column: 1 / -1; margin-left: 0; margin-right: 0; }
+  :is(#tokens, #beta, #guide, #swap) > .wrap > :nth-child(3) { margin-top: 2.2rem; }
+
+  /* the tokens: the two coins side by side across the column */
+  #tokens .token-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.6rem; }
+  /* the tokenomics note under them: two newspaper columns, set left, under a rule */
+  #tokens > .wrap > .token-grid + .section-sub { margin-top: 2rem !important; max-width: none; columns: 2; column-gap: var(--rail-gap); text-align: left; border-top: 2px solid var(--house-rule); padding-top: 1rem; }
+
+  /* the beta: the card across the column — what the top ten keep | why it resets, and the board under them in two
+     columns (1–5, then 6–10: read down, then across); the small print at a reading measure */
+  #beta .beta-card { max-width: none; }
+  #beta .beta-cols { gap: 1.2rem 2.4rem; }
+  #beta .beta-board { display: block; columns: 2; column-gap: 2.4rem; }
+  #beta .beta-board > li { break-inside: avoid; margin-bottom: 0.35rem; }
+  #beta .beta-card > .ab-fine { max-width: 75ch; }
+  #beta .beta-live { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.08em; }
+
+  /* the guide: step 1 (the wallet) across the column, then the other five in two newspaper columns — read down the first
+     and then the second, in their own order. In step 1 the words keep a reading measure, the wallets run three across and
+     the safety note sits in two columns under them. */
+  #guide .step-list { display: block; max-width: none; columns: 2; column-gap: 1.6rem; }
+  #guide .step-list > .step { break-inside: avoid; margin-bottom: 1.3rem; }
+  #guide .step-list > .step:first-child { column-span: all; margin-bottom: 1.6rem; }
+  #guide .step:first-child > div:last-child { flex: 1 1 auto; min-width: 0; column-gap: 2rem; }
+  #guide .step:first-child > div > :is(h3, p:not(.g1-safe)) { max-width: 75ch; }
+  #guide .step:first-child .g1-wallets { margin-left: 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+  #guide .step:first-child .g1-wallets > li { display: grid; }   /* each wallet fills its cell, so a row lines up */
+  #guide .step:first-child .g1-safe { columns: 2; column-gap: 2rem; }
+  /* (from 1600px, below: the words | the wallets side by side) */
+  #guide .step:first-child > div > h3 { grid-column: 1; grid-row: 1; }
+  #guide .step:first-child > div > p:not(.g1-alt):not(.g1-safe) { grid-column: 1; grid-row: 2; }
+  #guide .step:first-child > div > .g1-alt { grid-column: 1; grid-row: 3; }
+  #guide .step:first-child > div > .g1-wallets { grid-column: 2; grid-row: 1 / 5; align-self: start; }
+  #guide .step:first-child > div > .g1-actions { grid-column: 2; grid-row: 5; }
+  #guide .step:first-child > div > .g1-safe { grid-column: 1 / -1; grid-row: 6; }
+  /* the closing warning sits on the content line, at a reading measure */
+  #guide > .wrap > .warn-box { max-width: none; margin: 0.3rem 0 0 calc(var(--rail) + var(--rail-gap)); }
+  #guide .chain-params td:first-child { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; }
+
+  /* the swap: the form on the left, how it works (and the router to check) on the right */
+  #swap .swap-panel { max-width: none; columns: 2; column-gap: 2.6rem; column-rule: 1px solid var(--hair); }
+  #swap .swap-panel > * { break-inside: avoid; }
+  #swap .swap-panel > .swap-note { break-before: column; margin-top: 0; }
+  #swap .swap-panel > div:nth-child(1), #swap .swap-panel > div:nth-child(3) { font-family: var(--font-mono); font-weight: 600 !important; letter-spacing: 0.06em; }
+
+  /* ---------- the rail sections ---------- */
+  /* Rocketize: the three steps as one row on the content line */
+  #rocketize .rz-steps { margin: 0 0 1.4rem; max-width: none; justify-content: flex-start; }
+  #rocketize .rz-group-title { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; }
+  /* …and once a picture is in, the editor takes the masthead form, so the picture gets the column instead of a third of it:
+     the stage | the tools: History across the top, then Selected rocket | Finish (row by row, their own order) */
+  #rocketize > .wrap:has(#rz-editor:not([hidden])) { display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); column-gap: var(--rail-gap); align-items: start; }
+  #rocketize > .wrap:has(#rz-editor:not([hidden])) > .section-title { grid-column: 1; grid-row: 1; float: none; width: auto; margin-bottom: 0; }
+  #rocketize > .wrap:has(#rz-editor:not([hidden])) > .section-title + .section-sub { grid-column: 2; grid-row: 1; float: none; width: auto; max-width: none; margin: 0; padding: 1.05rem max(0px, calc(100% - 58ch)) 0 0; border-top: 2px solid var(--house-rule); }
+  #rocketize > .wrap:has(#rz-editor:not([hidden])) > :where(.rz-steps, .rz-card) { grid-column: 1 / -1; margin-left: 0; margin-right: 0; }
+  #rocketize > .wrap:has(#rz-editor:not([hidden])) > .rz-steps { margin-top: 2.2rem; }
+  #rocketize .rz-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 34rem); }
+  #rocketize .rz-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  #rocketize .rz-tools > .rz-group:first-child { grid-column: 1 / -1; }
+
+  /* the origin pair: on the page's column, so its edges line up with the sections above */
+  #origin .origin-pair { max-width: var(--page-max); }
+  #origin .og-site-tag { font-family: var(--font-mono); font-weight: 600; }
+
+  /* the Wall teaser: the title | its introduction with the way in under it */
+  #origin + section > .wrap { grid-template-rows: auto 1fr; }
+  #origin + section > .wrap > .section-title { grid-row: 1 / span 2; }
+  #origin + section > .wrap > .btn { grid-column: 2; grid-row: 2; justify-self: start; align-self: start; margin: 1.4rem 0 0; }
+
+  /* the floating field: pinned to the wider column's edge wherever its own place would reach the tiles (eggs 16 and 17
+     live on the 7th and 4th glyphs, so none is hidden) */
+  .hero-dash .hero-floats .float-emoji:nth-child(1)  { left:  max(0.25rem, min(5%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(3)  { left:  max(0.25rem, min(13%, calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(4)  { left:  max(0.25rem, min(6%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(5)  { left:  max(0.25rem, min(4%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(8)  { left:  max(0.25rem, min(12%, calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(9)  { left:  max(0.25rem, min(5%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(11) { left:  max(0.25rem, min(14%, calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(2)  { right: max(0.25rem, min(12%, calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(6)  { right: max(0.25rem, min(6%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(7)  { right: max(0.25rem, min(11%, calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(10) { right: max(0.25rem, min(4%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+  .hero-dash .hero-floats .float-emoji:nth-child(12) { right: max(0.25rem, min(9%,  calc((100% - var(--page-max)) / 2 - 2.8rem))) !important; }
+}
+
+@media (min-width: 1600px) {
+  /* from the 1440px column the words have room for their chips and the four buttons on single rows: the mark spans the
+     band, the words sit beside it and the actions run under the words — a shorter band, so the dashboard's first row
+     reaches the first screen */
+  .hero-dash .hero-top { grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; row-gap: 0; }
+  .hero-dash .hero-top .hero-logo-btn { grid-row: 1 / span 2; }
+  .hero-dash .hero-actions { grid-column: 2; }
+  .hero-dash .hero-actions .cta-row { display: flex; flex-wrap: wrap; justify-content: flex-start; margin-top: 1.1rem; }
+  .hero-dash .hero-actions .cta-row .btn { width: auto; padding: 0.75rem 1.2rem; }
+
+  /* step 1 of the guide: its words | the wallets, the safety note under both — while the short list shows; "Show all 31
+     wallets" puts the long list back under the words, three across */
+  #guide .step:first-child > div:last-child:not(:has(.g1-more[aria-expanded="true"])) {
+    display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); grid-template-rows: auto auto auto 1fr auto auto;
+  }
+  #guide .step:first-child > div:last-child:not(:has(.g1-more[aria-expanded="true"])) > .g1-wallets { margin-top: 0; }
+}
+
+@media (min-width: 2000px) {
+  /* the 1680px column: the twelve tiles four across, three rows */
+  .hero-dash .dash-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* ─── The Wall, Support and a member's wall (wall.html, support.html, u.html) ─── */
+/* ═══ Feeds — wide-screen layout for /wall, /support and /u/<name> (draft) ═══
+   Loaded after base.css. Every rule sits inside @media (min-width: 1280px); below that nothing changes.
+
+   One idea for all three pages: an EDITORIAL TWO-COLUMN SPREAD.
+     left  = the page's masthead (title + lede, or the member's banner + identity) and the tools that belong to it
+     right = the reading column (the posts), ~680–860px so a post line stays well under 75ch at the 25px text floor
+   The masthead lives in <header>, outside <main>, so it cannot join a grid. It FLOATS left at the left column's
+   width instead, and <main> starts beside it: the first post sits level with the page title instead of ~350px
+   lower. The tools that follow it in <main> float into the same column (clear: left stacks them under it); the
+   reading column is ordinary flow with a left margin — the same float-rail technique base.css uses for sections.
+   Reading order = DOM order: the left column reads first, top to bottom, then the right column.
+   A hairline column rule runs down the gutter (decorative, empty content), so a short left column reads as a
+   margin by design rather than a hole. */
+
+@media (min-width: 1280px) {
+  /* ---- the spread's measurements (own names; base tokens untouched) ---- */
+  body:is(:has(#feed-panel), [data-board="support"], :has(#who-hero)) {
+    --fd-read: 640px;                   /* the reading column (its pre-existing width; wider in the 1600/2000 tiers) */
+    --fd-gap: 3rem;                     /* the gutter */
+    --fd-wrap: min(var(--page-max), 100% - 2.5rem);   /* = main > .wrap's width, as seen from <body> (main pads 1.25rem a side) */
+    --fd-side: max(1.25rem, (100% - var(--page-max)) / 2);   /* = main > .wrap's left edge, as seen from <body> */
+  }
+
+  /* ════════ the masthead (header, outside <main>) → floats into the left column ════════ */
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero,
+  body:has(#who-hero) > #who-hero {
+    float: left;
+    width: calc(var(--fd-wrap) - var(--fd-read) - var(--fd-gap));
+    margin: 0 0 0 var(--fd-side);
+    max-width: none;
+  }
+  /* the Send Wall + Support mastheads: the page title on a rule, left-aligned, the lede in the serif voice */
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero {
+    padding: 1.2rem 0 1.4rem;           /* top = main's own top padding, so the title's rule and the first post line up */
+    text-align: left;
+  }
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero > .section-title {
+    text-align: left; transform-origin: left top;
+    padding-top: 0.9rem; border-top: 2px solid var(--house-rule);
+    font-size: max(var(--text-floor), 2.6rem); line-height: 1.02;   /* one line in the 1280 column; larger in the wider tiers */
+  }
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero > .section-sub {
+    text-align: left; max-width: 46ch; margin: 0.9rem 0 0;
+    color: var(--text);
+  }
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero > .my-wall-btn { margin-top: 1.1rem; }
+
+  /* ════════ <main>: the reading column + the tools column ════════ */
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) > .wrap {
+    position: relative;                 /* anchors the gutter rule */
+    max-width: var(--page-max) !important;   /* u.html sets max-width:640px inline on this wrap */
+  }
+  /* contain both columns: the wrap ends under whichever column is longer, so the footer never rides up */
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) > .wrap::after {
+    content: ""; display: block; clear: both;
+  }
+  /* the gutter rule — fades out as the reading column carries on */
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) > .wrap::before {
+    content: ""; position: absolute; top: 0.4rem; bottom: 0; width: 1px; pointer-events: none;
+    left: calc(100% - var(--fd-read) - var(--fd-gap) / 2);
+    background: linear-gradient(to bottom, var(--house-rule), color-mix(in srgb, var(--green) 12%, transparent) 55%, transparent);
+  }
+
+  /* left-column tools: stack under the masthead at its width */
+  main#main:has(#feed-panel) > .wrap > :is(.feed-tabs, .feed-sort, .resort-nudge, #composer-card),
+  main#main:has(> .wrap > .sup-contact) > .wrap > .sup-contact,
+  main#main:has(#panel-posts) > .wrap > #checkin {
+    float: left; clear: left;
+    width: calc(100% - var(--fd-read) - var(--fd-gap));
+    max-width: none; margin-left: 0; margin-right: 0;
+  }
+  /* right column: everything else in the wrap */
+  main#main:has(#feed-panel) > .wrap > #feed-panel,
+  main#main:has(> .wrap > .sup-contact) > .wrap > :is(.feed-sort, .resort-nudge, #composer-card, #feed, #empty, div:has(> #load-more), .sup-foot),
+  main#main:has(#panel-posts) > .wrap > :is(#pub-pins, #profile-composer, .wall-tabs, #panel-posts, #panel-calls, #panel-lb, #notfound) {
+    margin-left: calc(100% - var(--fd-read)); margin-right: 0; max-width: none;
+  }
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) #feed { max-width: none; }
+
+  /* ---- Send Wall: tools column ---- */
+  main#main:has(#feed-panel) > .wrap > .feed-tabs { justify-content: flex-start; margin: 0 0 1rem; }
+  main#main:has(#feed-panel) > .wrap > .feed-sort,
+  main#main:has(> .wrap > .sup-contact) > .wrap > .feed-sort { justify-content: flex-start; margin: 0 0 1.4rem; }
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact)) > .wrap > .feed-sort > .sort-caption {
+    text-align: left; margin: 0.5rem 0 0; max-width: 46ch;
+    font-family: var(--font-serif); font-style: italic; font-weight: 400; line-height: 1.4;
+  }
+  main#main:has(#feed-panel) > .wrap > .resort-nudge { text-align: left; margin: -0.6rem 0 1rem; }
+  main#main:has(#feed-panel) > .wrap > #composer-card { margin-bottom: 1.4rem; }
+  main#main:has(#feed-panel) #composer-signedout { text-align: left !important; }
+  /* a visitor's "Sign In To Post" card is short and fixed in size (one line + one button, ~25vh), so it keeps pace with
+     the feed instead of leaving the left column empty; the signed-in composer (resizable, can hold media) never sticks */
+  main#main:has(#feed-panel) > .wrap > #composer-card:has(> #composer-signedin[hidden]) { position: sticky; top: calc(64px + 1.2rem); }
+
+  /* ---- Support: contact note beside the masthead; sort + ask box head the reading column ---- */
+  main#main:has(> .wrap > .sup-contact) > .wrap > .sup-contact { margin-bottom: 1.4rem; }
+  main#main:has(> .wrap > .sup-contact) > .wrap > #composer-card { margin-bottom: 1.4rem; }
+  main#main:has(> .wrap > .sup-contact) > .wrap > .resort-nudge { text-align: left; }
+  main#main:has(> .wrap > .sup-contact) #composer-signedout { text-align: left !important; }
+  main#main:has(> .wrap > .sup-contact) > .wrap > .sup-foot {
+    text-align: left; max-width: none; margin-top: 2rem;
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+  }
+
+  /* ---- a member's wall: banner + identity + check-in on the left, pins / composer / tabs / posts on the right ---- */
+  body:has(#who-hero) > #who-hero { padding-bottom: 1.2rem; }
+  #who-hero .wall-banner { max-height: none; }          /* keeps the 3:1 banner whole at the column's width */
+  /* the wall's buttons get a row of their own under the picture (the phone arrangement): beside it, a visitor's four
+     (Follow, Alerts, Share, Moderation) stacked four high and pushed the picture off the banner's edge */
+  #who-hero .wall-id-top { flex-wrap: wrap; }
+  #who-hero .wall-id-actions { flex: 1 1 100%; justify-content: flex-start; margin-top: 0.9rem; padding: 0 0 0.25rem; }
+  main#main:has(#panel-posts) > .wrap > #checkin { margin-top: 0.4rem; }
+  main#main:has(#panel-posts) > .wrap > #pub-pins { margin-top: 0.4rem; }
+
+  /* ════════ type: a quieter, more editorial voice for the feed furniture ════════ */
+  /* the time a post went up reads as a dateline */
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) #feed .post-head .when {
+    font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; font-variant-numeric: tabular-nums;
+  }
+  /* the member's bio is their lede */
+  #who-hero .wall-bio { font-family: var(--font-serif); font-weight: 400; line-height: 1.38; max-width: 40ch; font-size: max(var(--text-floor), calc(var(--text-floor) * 1.12)); }
+  /* the counts become a small stat board: numeral in the display face beside its mono label, two by two */
+  #who-hero .wall-stats {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; margin-top: 0.9rem;
+  }
+  #who-hero .wall-stat {
+    flex-wrap: wrap; align-items: baseline; column-gap: 0.45rem; row-gap: 0;
+    padding: 0.45rem 0.7rem 0.4rem; border-radius: 14px; min-height: 44px;
+    background: color-mix(in srgb, var(--ink-2) 80%, transparent);
+    border: 1px solid color-mix(in srgb, var(--green) 20%, transparent);
+    border-top: 2px solid var(--house-rule);
+  }
+  #who-hero .wall-stat .n { font-family: 'Luckiest Guy', 'Rubik', cursive; font-weight: 400; font-size: max(var(--text-floor), 1.7rem); line-height: 1.1; }
+  #who-hero a.wall-stat:hover { border-color: var(--green); }
+  #who-hero a.wall-stat:focus-visible { outline: 3px solid var(--green-bright); outline-offset: 2px; }
+  /* the pinned-token strip and the check-in read as titled widgets, like the rest of the platform */
+  main#main:has(#panel-posts) #pub-pins .wall-pins-head {
+    font-family: 'Luckiest Guy', 'Rubik', cursive; font-weight: 400; letter-spacing: 0.02em; color: var(--green-bright);
+    font-size: max(var(--text-floor), 1.15rem); flex-wrap: wrap; row-gap: 0.1rem;
+  }
+  main#main:has(#panel-posts) #pub-pins .wall-pins-sub {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: 0; color: var(--text-dim);
+    flex-basis: 100%;
+  }
+
+  /* the ask / post boxes open tall enough to show their whole placeholder hint (3 lines) */
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) :is(#post-text, #pc-text) {
+    line-height: 1.3; min-height: calc(1.3em * 3 + 1.8rem + 2px);
+  }
+
+  /* a post's byline on one line — handle, a small dot, the dateline — one row shorter per post */
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) #feed .post-head > div:has(> .who) {
+    display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.7rem; row-gap: 0;
+  }
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) #feed .post-head > div:has(> .who) > .when {
+    display: inline-flex; align-items: center; gap: 0.7rem;
+  }
+  main#main:is(:has(#feed-panel), :has(> .wrap > .sup-contact), :has(#panel-posts)) #feed .post-head > div:has(> .who) > .when::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--house-rule); flex: 0 0 auto;
+  }
+}
+
+@media (min-width: 1600px) {
+  body:is(:has(#feed-panel), [data-board="support"], :has(#who-hero)) { --fd-read: 780px; --fd-gap: 4rem; }
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero > .section-title { font-size: max(var(--text-floor), 3.1rem); }
+}
+@media (min-width: 2000px) {
+  body:is(:has(#feed-panel), [data-board="support"], :has(#who-hero)) { --fd-read: 860px; --fd-gap: 4.5rem; }
+  body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero > .section-title { font-size: max(var(--text-floor), 3.5rem); }
+}
+
+/* ─── Profile, wallet tracker and watchlist (profile.html, tracker.html, watchlist.html) ─── */
+/* ═══ Wide screens — the member dashboard (/profile), the Wallet Tracker (/tracker), the Watchlist (/watchlist) ═══
+   Loaded after base.css. Every rule sits inside a min-width: 1280px query: below that nothing changes.
+   Layout only — no element is hidden, no text is cut, the DOM order is the reading order (rows read left to
+   right; nothing is reordered). Type sizes keep the site's text floor. */
+
+@media (min-width: 1280px) {
+
+  /* ───────────── /profile ───────────── */
+
+  /* the dashboard is a working surface, not a reading column: it takes most of the screen */
+  #main:has(> #signedin) { --pf-max: var(--dash-max); --pf-gap: clamp(0.9rem, 1.1vw, 1.5rem); }
+  #signedin > .wrap { max-width: var(--pf-max); }
+
+  /* the page heading: one line, set on the dashboard's left edge under a hairline rule (signed in only —
+     the signed-out invitation keeps its centred column) */
+  #main:has(> #signedin:not([hidden])) > .wrap:first-child {
+    max-width: var(--pf-max) !important; text-align: left !important; padding-top: 1.4rem !important; padding-inline: 1.25rem;
+  }
+  #main:has(> #signedin:not([hidden])) > .wrap:first-child > h1 {
+    margin: 0; padding-top: 0.7rem; border-top: 2px solid var(--house-rule); text-align: left;
+  }
+
+  /* ── Overview: one dashboard surface, laid out in rows that read left to right ── */
+  #gamify-dash { display: flex; flex-wrap: wrap; align-items: stretch; gap: var(--pf-gap); }
+  #gamify-dash > * { flex: 1 1 100%; min-width: 0; margin: 0; }
+  #gamify-dash > .gsec + .gsec { margin: 0; }
+
+  /* row 1 — who you are · what to do next · the four numbers */
+  #gamify-dash > .pc-hero { flex: 1 1 44%; flex-wrap: nowrap; }
+  #gamify-dash > .gobj { flex: 1 1 44%; display: flex; flex-direction: column; justify-content: center; }
+  #gamify-dash > .kpi-strip { flex: 1 1 100%; }
+
+  /* the play: quests in aligned columns, so the eye scans short rows instead of crossing the whole screen */
+  #gamify-dash #play-panel ul.gearn { grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: 0.45rem var(--pf-gap); }
+  /* the ⓘ discs: a full 44px target, the glyph drawn above the text floor */
+  #gamify-dash :is(.ge-info, .ll-info) { --ava: 44px; width: var(--ava); height: var(--ava); }
+
+  /* the small sections: closed, they are a row of status tiles; open, they pair up two to a row */
+  #gamify-dash > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"]):not([open]) { flex: 1 1 30%; }
+  #gamify-dash > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"])[open] { flex: 1 1 40%; }
+  #gamify-dash > details.gsec:not([open]) > .gsec-sum { height: 100%; align-items: flex-start; }
+  #gamify-dash :is(.og-block-body, .engine > p, .gcc-note, .gcc-boost, .loot-foot) { max-width: 75ch; }
+  #gamify-dash > details.gsec:not([open]) .gsec-d { white-space: normal; overflow: visible; text-overflow: clip; }
+
+  /* consequences: rows that read left to right — the long rules run the full width with their text set in
+     newspaper columns; the two short ones share a row */
+  #gamify-dash .grekt-grid { display: flex; flex-wrap: wrap; align-items: stretch; gap: var(--pf-gap); }
+  #gamify-dash .grekt-grid > .rekt-card { flex: 1 1 24rem; min-width: 0; }
+  #gamify-dash .grekt-grid > .rekt-card[aria-labelledby="rekt-call-h"] { flex-grow: 1.5; }
+  #gamify-dash .grekt-grid > .rekt-card:is([aria-labelledby="rekt-gate-h"], [aria-labelledby="rekt-mute-h"], [aria-labelledby="rekt-revoke-h"], [aria-labelledby="rekt-beta-h"]) {
+    flex-basis: 100%; display: block; columns: 4 22rem; column-gap: calc(var(--pf-gap) * 2); column-rule: 1px solid var(--hair);
+  }
+  #gamify-dash .grekt-grid > .rekt-card:is([aria-labelledby="rekt-gate-h"], [aria-labelledby="rekt-mute-h"], [aria-labelledby="rekt-revoke-h"], [aria-labelledby="rekt-beta-h"]) > * + * { margin-top: 0.5rem; }
+  #gamify-dash .grekt-grid > .rekt-card:is([aria-labelledby="rekt-gate-h"], [aria-labelledby="rekt-mute-h"], [aria-labelledby="rekt-revoke-h"], [aria-labelledby="rekt-beta-h"]) > .rekt-head { column-span: all; margin-bottom: 0.4rem; }
+  #gamify-dash .grekt-grid > .rekt-card :is(.rekt-row, .rekt-rung, .rekt-ladder, .rekt-live, .rekt-yes li, .rekt-no li, .rekt-h5) { break-inside: avoid; }
+  #gamify-dash .grekt-grid > .rekt-card .rekt-h5 { break-after: avoid; }
+  #gamify-dash .grekt-grid > .rekt-card:is([aria-labelledby="rekt-mute-h"], [aria-labelledby="rekt-revoke-h"]) .rekt-split { display: contents; }
+  #gamify-dash .grekt-grid > .rekt-card .rekt-split > div { break-inside: avoid; }
+  #gamify-dash .grekt-grid > .rekt-card .rekt-split > div + div { margin-top: 0.5rem; }
+  #gamify-dash .grekt-grid > .rekt-card .rekt-lede, #gamify-dash .grekt-grid > .rekt-card .rekt-p { max-width: 75ch; }
+  /* the beta notice is two short paragraphs: two columns, each paragraph whole */
+  #gamify-dash .grekt-grid > .rekt-card[aria-labelledby="rekt-beta-h"] { columns: 2 22rem; }
+  #gamify-dash .grekt-grid > .rekt-card[aria-labelledby="rekt-beta-h"] > :is(.rekt-lede, .rekt-p) { break-inside: avoid; }
+  #gamify-dash .grekt-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 1.6rem; }
+  #gamify-dash .grekt-head > .grekt-lede { flex: 1 1 30rem; }
+
+  /* type: the house voices on this page's own small parts — serif for the short ledes and blurbs, mono for
+     the uppercase labels and state pills (base.css carries the shared ones) */
+  #gamify-dash .grekt-lede { font-family: var(--font-serif); line-height: 1.45; }
+  #gamify-dash .qgroup-b { font-family: var(--font-serif); font-style: italic; letter-spacing: 0.005em; }
+  #gamify-dash :is(.rekt-h5, .rekt-state, .pc-power-lbl) { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; }
+  #gamify-dash .grekt-head > .gsub { padding-top: 0.6rem; border-top: 2px solid var(--house-rule); }
+
+  /* the record: wider name/value tiles */
+  #gamify-dash .rec-grid { grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 0.7rem; }
+
+  /* the rulebook: running text set in newspaper columns, never a 1,600px line; its tables span them all */
+  #gamify-dash .grules-body { columns: 3 30rem; column-gap: calc(var(--pf-gap) * 2); column-rule: 1px solid var(--hair); }
+  #gamify-dash .grules-body > * { break-inside: avoid; }
+  #gamify-dash .grules-body > :is(.gxp-table-wrap, table, div:has(> table)) { column-span: all; }
+
+  /* ── Wallet · Invites · Tracker tabs: running text keeps a readable measure ── */
+  #dpanel-wallet #cw-body > p, #invites-body .inv-note { max-width: 75ch; }
+  /* the tracker hand-off: heading and privacy note in a left rail, the explanation and the button beside them */
+  #dpanel-tracker > .card { display: grid; grid-template-columns: minmax(0, 30%) minmax(0, 75ch); grid-template-rows: auto auto 1fr auto; column-gap: var(--rail-gap); align-items: start; }
+  #dpanel-tracker > .card > h2 { grid-column: 1; grid-row: 1; }
+  #dpanel-tracker > .card > .privacy-chip { grid-column: 1; grid-row: 2; justify-self: start; }
+  #dpanel-tracker > .card > .modal-note { grid-column: 2; grid-row: 1 / span 3; margin-top: 0 !important; }
+  #dpanel-tracker > .card > .btn { grid-column: 2; grid-row: 4; justify-self: start; }
+
+  /* ── Settings: closed panels sit three to a row; an open one takes the row and sets its form in two columns,
+     split at a fixed point (never re-balanced while you type) ── */
+  #dpanel-settings .settings-group { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.8rem var(--pf-gap); }
+  #dpanel-settings .settings-group > details.setting-card { flex: 1 1 100%; min-width: 0; margin: 0; }
+  #dpanel-settings .settings-group > details.setting-card:not([open]) { flex-basis: 30%; }
+  #dpanel-settings .settings-group > details.setting-card[open] > .setting-body { columns: 2; column-gap: calc(var(--rail-gap) * 1.5); column-rule: 1px solid var(--hair); }
+  #dpanel-settings .setting-body > * { break-inside: avoid; }
+  #dpanel-settings .setting-body > .f-label { break-after: avoid; }
+  #dpanel-settings .setting-body p { max-width: 75ch; }
+  #sec-account > .setting-body > .danger-zone,
+  #sec-security > .setting-body > :is(#add-email-block:not([hidden]), #add-email-block[hidden] + #cred-block:not([hidden])),
+  #sec-wall > .setting-body > label.f-label:nth-of-type(3),
+  #sec-site > .setting-body > .theme-editor + .pref-row { break-before: column; }
+  /* the alerts list has no natural split: one column, readable width */
+  #dpanel-settings .settings-group > details#sec-alerts[open] > .setting-body { columns: auto; }
+
+  /* ───────────── /tracker ───────────── */
+  .trk-hero, .trk-wrap { --trk-max: var(--dash-max); }
+  /* the introduction becomes one band: title and warning on the left, the two paragraphs side by side */
+  .trk-hero {
+    max-width: var(--trk-max); display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--rail-gap); row-gap: 0.6rem; align-items: start; text-align: left; padding-bottom: 0.6rem;
+  }
+  .trk-hero > h1 { grid-column: 1; grid-row: 1; margin: 0 !important; padding-top: 0.7rem; border-top: 2px solid var(--house-rule); text-align: left; }
+  .trk-hero > .section-sub { grid-row: 1 / span 2; margin: 0 !important; padding-top: 0.9rem; max-width: 60ch; text-align: left; }
+  .trk-hero > .np-hero-warn { grid-column: 1; grid-row: 2; margin: 0; text-align: left; }
+  .trk-wrap { max-width: var(--trk-max); }
+  /* the report gets the room: the side column grows a little, the report takes the rest */
+  #trk-layout { grid-template-columns: minmax(24rem, 26%) minmax(0, 1fr); gap: var(--rail-gap); }   /* the side column holds its form's whole example text ("e.g. Whale I'm watching") */
+  #trk-report .trk-info { --ava: 44px; }   /* the ⓘ discs: a full target, the glyph above the text floor */
+  /* signed out: the five promises in two columns, the form under them */
+  .trk-signedout { max-width: none; margin-inline: 0; }
+  .trk-signedout .trk-so-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr)); gap: 1rem var(--rail-gap); }
+  .trk-signedout .trk-so-form { max-width: 75ch; }
+  .trk-signedout > .modal-note { max-width: 75ch; }
+
+  /* ───────────── /watchlist ───────────── */
+  body:has(#wl-token-panel) .np-hero {
+    max-width: var(--dash-max); display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.8fr);
+    column-gap: var(--rail-gap); align-items: center; text-align: left;
+  }
+  body:has(#wl-token-panel) .np-hero > * { margin: 0 !important; }
+  body:has(#wl-token-panel) .np-hero > h1 { padding-top: 0.6rem; border-top: 2px solid var(--house-rule); }
+  body:has(#wl-token-panel) .np-hero > .section-sub { max-width: 60ch; }
+  .np-wrap:has(> #wl-token-panel) { max-width: var(--dash-max); }
+  /* the hand-off to the tracker: one strip, the sentence and its button on the same line */
+  .np-wrap:has(> #wl-token-panel) > .wl-trk-card { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; text-align: left; }
+  .np-wrap:has(> #wl-token-panel) > .wl-trk-card > span { flex: 1 1 auto; min-width: 0; max-width: 75ch; }
+  .np-wrap:has(> #wl-token-panel) > .wl-trk-card > .btn { flex: 0 0 auto; }
+  #wl-token-panel > #wl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 29rem), 1fr)); gap: 0.8rem var(--rail-gap); align-items: stretch; }
+  #wl-token-panel > #wl-list > li { margin: 0; min-width: 0; }
+  /* in a card the name keeps a real width; the numbers and buttons move under it when the card runs out (the DEX list's rule) */
+  #wl-token-panel > #wl-list .np-head { flex-wrap: wrap; }
+  #wl-token-panel > #wl-list .np-id { flex: 1 1 14rem; min-width: min(14rem, 100%); }
+  #wl-token-panel > #wl-list > .np-msg { grid-column: 1 / -1; }
+}
+
+@media (min-width: 1600px) {
+  #gamify-dash > .pc-hero { flex: 1 1 36%; }
+  #gamify-dash > .gobj { flex: 1 1 26%; }
+  #gamify-dash > .kpi-strip { flex: 1 1 32%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #gamify-dash #play-panel ul.gearn { grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr)); }
+  /* the record and the rulebook, shut, share a row (below 1600px the rulebook's wide table needs the full row) */
+  #gamify-dash > details.gsec:is([data-sec="record"], [data-sec="rules"]):not([open]) { flex: 1 1 40%; }
+}
+@media (min-width: 1800px) {
+  /* the wallet report is 1,200px+ wide here: the four totals stand beside the chart */
+  #trk-report .trk-dash:has(> .trk-chart) { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
+  #trk-report .trk-dash:has(> .trk-chart) > * { grid-column: 1 / -1; }
+  #trk-report .trk-dash:has(> .trk-chart) > .trk-kpis { grid-column: 1; grid-template-columns: minmax(0, 1fr); }
+  #trk-report .trk-dash:has(> .trk-chart) > .trk-chart { grid-column: 2; }
+  /* five status tiles fit one row; with the sixth (the multiplier) they make two rows of three */
+  #gamify-dash > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"]):not([open]) { flex-basis: 15%; }
+  #gamify-dash:has(> details.gsec[data-sec="eq"]) > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"]):not([open]) { flex-basis: 30%; }
+}
+@media (min-width: 2000px) {
+  #gamify-dash:has(> details.gsec[data-sec="eq"]) > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"]):not([open]) { flex-basis: 14%; }
+}
+
+/* ─── The Scanner and the New Pairs radar (newpairs.html) ─── */
+/* ═══ Scanner (/newpairs) — wide screens ═════════════════════════════════════════════════════════════════
+   Loaded after base.css. Every rule sits at >= 1280px; below that nothing here applies.
+   Scope: the page is the one with #sc-scan (np-hero, np-wrap and the np-* radar classes are shared with other pages,
+   so each selector is anchored on #sc-scan / #sc-new / #sc-radar or on body:has(#sc-scan)).
+
+   The page is a tool, and its result — the token dashboard (NPCard.dashboardHTML) — already breaks out to
+   min(1680px, window − 2rem) so its three columns have room. Wide, the whole page takes that same measure (up to 1680px,
+   2080px from 2000px), so the masthead, the scan console, the dashboard and the radar share one left and one right edge.
+     masthead   title over a rule · serif lede (≤ ~70 characters a line) | the "not advice" card beside it
+     console    the controls (address box, chain, examples, status) | the help text as a margin note
+     result     the dashboard, full measure (its own container queries choose 2 or 3 columns)
+     radar      intro beside its warning, controls in one row, the pair cards two across
+   Hot Feed mode (body.np-mode-feed) keeps its own 900px column: it is a full-height card viewer. */
+
+@media (min-width: 1280px) {
+  body:has(#sc-scan) {
+    --sc-gutter: clamp(2rem, 2.6vw, 4rem);
+    --sc-measure: min(var(--dash-max), calc(100% - 2 * var(--sc-gutter)));
+    --sc-gap: clamp(2rem, 3vw, 4rem);
+    --sc-a: 1.5fr;   /* the console's control column against the help note's 1fr */
+  }
+
+  /* ---------- masthead ----------
+     title over its rule · the lede (serif, ~70 characters a line) beside the "not advice" card; under the card, where the
+     lede runs longer, a drawn radar scope (decoration only: an empty pseudo-element, no text, no motion) */
+  body:has(#sc-scan):not(.np-mode-feed) > header.np-hero {
+    box-sizing: border-box; width: var(--sc-measure); max-width: none; margin: 0 auto; padding: 1.8rem 0 0.2rem;
+    display: grid; grid-template-columns: minmax(0, min(var(--sc-lede, 36em), 62%)) minmax(13em, 1fr); grid-template-rows: auto auto 1fr;
+    column-gap: var(--sc-gap); align-items: start; text-align: left;
+  }
+  body:has(#sc-scan) > header.np-hero > h1.section-title {
+    grid-column: 1 / -1; grid-row: 1; justify-self: start; width: max-content; min-width: var(--rail); max-width: 100%;
+    text-align: left; margin: 0 0 1rem !important; padding: 0.85rem 1.2rem 0 0; border-top: 2px solid var(--house-rule); transform-origin: left top;
+    font-size: max(var(--text-floor), clamp(2.8rem, 3.3vw, 4.6rem)); line-height: 1.05;
+  }
+  body:has(#sc-scan) > header.np-hero > .section-sub {
+    grid-column: 1; grid-row: 2 / 4; margin: 0 !important; max-width: none; text-align: left;
+    font-size: max(var(--text-floor), clamp(1.6rem, 1.15vw, 2rem)); line-height: 1.42;
+  }
+  body:has(#sc-scan) > header.np-hero > .section-sub .section-sub-note {
+    margin-top: 0.7rem; padding-left: 0.9rem; border-left: 2px solid var(--house-rule); font-style: italic;
+    font-size: max(var(--text-floor), 0.92em);
+  }
+  body:has(#sc-scan) > header.np-hero > .np-hero-warn {
+    grid-column: 2; grid-row: 2; margin: 0.4rem 0 0; max-width: none; text-align: left;
+    padding: 1rem 1.25rem; border-radius: 16px; line-height: 1.5;
+    font-size: max(var(--text-floor), clamp(1.55rem, 1.2vw, 2rem));
+  }
+  body:has(#sc-scan):not(.np-mode-feed) > header.np-hero::after {
+    content: ''; grid-column: 2; grid-row: 3; align-self: stretch; min-height: 0; margin-top: 1rem;
+    border-bottom: 2px solid var(--house-rule);
+    background:
+      radial-gradient(circle at 63% 52%, var(--green-bright) 0 4px, color-mix(in srgb, var(--green-bright) 30%, transparent) 5px, transparent 10px),
+      radial-gradient(circle at 36% 74%, var(--gold) 0 3.5px, transparent 4.5px),
+      radial-gradient(circle at 78% 86%, var(--red) 0 3px, transparent 4px),
+      conic-gradient(from 0deg at 50% 100%, transparent 0deg 14deg, color-mix(in srgb, var(--green) 30%, transparent) 14deg, transparent 58deg 360deg),
+      repeating-radial-gradient(circle at 50% 100%, transparent 0 2.4em, color-mix(in srgb, var(--green) 34%, transparent) 2.4em calc(2.4em + 1.5px));
+    -webkit-mask-image: radial-gradient(farthest-side at 50% 100%, #000 55%, transparent 100%);
+            mask-image: radial-gradient(farthest-side at 50% 100%, #000 55%, transparent 100%);
+    opacity: 0.75; pointer-events: none;
+  }
+
+  /* ---------- the page column ---------- */
+  body:not(.np-mode-feed) #main:has(#sc-scan) { padding-inline: 0; }
+  body:not(.np-mode-feed) .np-wrap:has(> #sc-scan) { width: var(--sc-measure); max-width: none; }
+
+  /* the two tabs: left, on the page's edge, like the masthead above them */
+  .np-wrap > .sc-tabs:has(+ #sc-scan) { margin: 1.8rem 0 1.4rem; }
+
+  /* ---------- the scan console ---------- */
+  .np-wrap > #sc-scan {
+    max-width: none; margin: 0; padding: 0 0 1rem;
+    display: grid; grid-template-columns: minmax(0, var(--sc-a)) minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto 1fr;   /* the help note spans these five; any extra height it needs lands in the last (fr) row, never between the controls */
+    column-gap: var(--sc-gap); align-items: start;
+  }
+  #sc-scan > * { grid-column: 1 / -1; min-width: 0; }
+  #sc-scan > .sc-form { grid-column: 1; grid-row: 1; max-width: none; margin: 0; }
+  #sc-scan > .sc-help {
+    grid-column: 2; grid-row: 1 / 6; max-width: none; margin: 0; text-align: left;
+    padding: 0.15rem 0 0.2rem 1.3rem; border-left: 2px solid var(--house-rule); line-height: 1.55;
+  }
+  #sc-scan > .sc-chains { grid-column: 1; grid-row: 2; justify-content: flex-start; margin: 1rem 0 0; }
+  #sc-scan > .sc-chains + .sc-try { grid-column: 1; grid-row: 3; }
+  #sc-scan > .sc-try + .sc-try { grid-column: 1; grid-row: 4; }
+  #sc-scan > .sc-try { justify-content: flex-start; margin: 0.9rem 0 0; }
+  #sc-scan > .sc-status { grid-column: 1; grid-row: 5; max-width: none; margin: 0.9rem 0 0; text-align: left; }
+
+  /* the address box: the instrument of the page — a little more presence */
+  #sc-scan .sc-addr { padding-block: 0.95rem; }
+  #sc-scan .sc-go { padding-inline: 1.5rem; }
+
+  /* the lead-ins ("Try one:", "Recent scans…") speak in the serif voice, italic; the chips stay Rubik */
+  #sc-scan > .sc-try, #sc-scan .sc-recent-lead {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: 0.005em; color: var(--text-dim);
+  }
+  #sc-scan > .sc-try .np-chip, #sc-scan .sc-recent-list .np-chip { font-family: 'Rubik', system-ui, sans-serif; font-style: normal; letter-spacing: normal; }
+  #sc-scan .sc-chain, #sc-scan .np-chip { min-height: 44px; }
+
+  /* the result: the full measure, edge to edge with the masthead and the console (it no longer needs its own break-out) */
+  #sc-scan > .sc-result { margin: 1.6rem 0 0; }
+  #sc-scan > .sc-result:has(> .tkd) { width: auto; margin-left: 0; margin-right: 0; }
+
+  /* a name search: the matches in columns (rows keep a list-row width rather than stretching across the page); its notes keep a reading measure */
+  #sc-result .np-named-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 24em), 1fr)); column-gap: 1.1rem; }
+  #sc-result .np-named-note, #sc-result .np-named-none { max-width: 62em; }
+
+  /* recent / community strips: left-aligned; side by side when both are showing */
+  #sc-scan > .sc-recent { justify-content: flex-start; margin: 1.4rem 0 0; }
+  #sc-scan:has(> #sc-recent:not([hidden])):has(> #sc-community:not([hidden])) > #sc-recent { grid-column: 1; }
+  #sc-scan:has(> #sc-recent:not([hidden])):has(> #sc-community:not([hidden])) > #sc-community { grid-column: 2; }
+
+  /* the two foot notes, as one ruled footer row */
+  #sc-scan > .sc-foot-note, #sc-scan > .np-runners-foot {
+    max-width: none; margin: 1.8rem 0 0; padding-top: 0.9rem; border-top: 1px solid var(--hair); text-align: left;
+  }
+  #sc-scan > .sc-foot-note { grid-column: 1; font-family: var(--font-serif); font-style: italic; line-height: 1.5; }
+  #sc-scan > .np-runners-foot { grid-column: 2; }
+
+  /* ---------- the New Pairs tab ---------- */
+  body:not(.np-mode-feed) .np-wrap > #sc-new { max-width: none; margin: 0; padding: 0 0 1rem; }
+
+  /* signed out: the members' card as one banner — the words left, the way in right */
+  #sc-new > .sc-locked:not([hidden]) {
+    max-width: none; margin: 0; padding: 1.6rem 2rem; text-align: left;
+    display: grid; grid-template-columns: minmax(0, 40em) auto; column-gap: var(--sc-gap); align-items: center; justify-content: space-between;
+  }
+  #sc-new > .sc-locked > .sc-locked-h { grid-column: 1; }
+  #sc-new > .sc-locked > .sc-locked-p { grid-column: 1; margin-bottom: 0; }
+  #sc-new > .sc-locked > .inv-actions { grid-column: 2; grid-row: 1 / span 2; }
+
+  /* signed in: the radar's intro beside its warning (float + flow-root: a grid here would trap the sticky bars below) */
+  body:not(.np-mode-feed) #sc-radar > .section-sub {
+    float: left; width: min(36em, 62%); margin: 0 0 1.4rem !important; max-width: none; text-align: left;
+  }
+  body:not(.np-mode-feed) #sc-radar > .np-hero-warn {
+    display: flow-root; max-width: none; margin: 0.35rem 0 1.4rem calc(min(36em, 62%) + var(--sc-gap)); text-align: left; padding: 1rem 1.2rem; border-radius: 16px;
+  }
+  body:not(.np-mode-feed) #sc-radar > .np-hero-warn ~ * { clear: both; }   /* everything after the pair starts under both (the chain bar is hidden while only one chain is offered) */
+  #sc-radar .np-strats-lead { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: 0.005em; color: var(--text-dim); }
+
+  /* the quick-filter chips: all of them in view (they wrap) instead of a sideways strip — the strip's ›/‹ cue goes with the overflow */
+  body:not(.np-mode-feed) #sc-radar > #np-presets { flex-wrap: wrap; overflow-x: visible; row-gap: 0.5rem; }
+
+  /* the pair cards, two across (three from ~2000px): each card keeps about the width it had in the old 900px column; cards in
+     one row share a height, so the row reads as a row */
+  body:not(.np-mode-feed) #sc-radar #np-list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 26em), 1fr)); gap: 0.9rem 1.1rem; }
+  body:not(.np-mode-feed) #sc-radar #np-list > .np-row > .np-card { box-sizing: border-box; height: 100%; }
+
+  /* Best Runners: the board two across, read in rank order left to right (1 2 / 3 4 …); the section's own side padding
+     goes, so the board shares the page's edges */
+  body:not(.np-mode-feed) #sc-radar > #np-runners { padding: 1.2rem 0 0; }
+  body:not(.np-mode-feed) #sc-radar .np-runners-list { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1.1rem; }
+  body:not(.np-mode-feed) #sc-radar .np-runners-bar { justify-content: flex-start; }
+  body:not(.np-mode-feed) #sc-radar .np-runners-note, body:not(.np-mode-feed) #sc-radar .np-runners-status, body:not(.np-mode-feed) #sc-radar .np-runners-foot { max-width: 62em; margin-left: 0; text-align: left; }
+}
+
+/* forced colours: the drawn radar scope is decoration only — leave it out rather than let the system palette flatten it into a block */
+@media (min-width: 1280px) and (forced-colors: active) {
+  body:has(#sc-scan) > header.np-hero::after { content: none; }
+}
+/* 1280–1439: the console's control column is ~700px — the four chain buttons sit two by two rather than three and a lone fourth */
+@media (min-width: 1280px) and (max-width: 1439.98px) {
+  #sc-scan > .sc-chains { display: grid; grid-template-columns: repeat(2, max-content); }
+}
+@media (min-width: 1600px) {
+  body:has(#sc-scan) { --sc-a: 1.3fr; }
+}
+/* very wide: the tool takes ~80% of the screen (the dashboard's three columns get the room); the lede keeps its measure */
+@media (min-width: 2000px) {
+  body:has(#sc-scan) { --sc-measure: min(2080px, calc(100% - 2 * var(--sc-gutter))); --sc-lede: 40em; }
+  /* the dashboard at this measure: the safety + contract column gets the extra room, so the contract's fact list runs two
+     readable columns (label and answer side by side) instead of two cramped ones */
+  #sc-result .tkd-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.6fr) minmax(0, 1fr); }
+}
+
+/* ─── The Arcade (arcade.html) ─── */
+/* ═══ Arcade (/arcade) — wide screens. Loaded after base.css. Every rule sits inside (min-width: 1280px).
+   Scope: the page's own ids (#arc-game, #slots, #cmp, #cmp-*), its own .arc-/.slot-/.cmp- classes under .arc-wrap,
+   and the shared .np-hero header only where the page holds #arc-game. ═══ */
+@media (min-width: 1280px) {
+  /* page-local spacing: the gap between the four blocks, the Rocket Run split (screen | side panel), the column gutter */
+  .arc-wrap { --arc-gap: 2rem; --arc-split: minmax(0, 1.4fr) minmax(0, 1fr); --arc-col-gap: clamp(1.8rem, 2.4vw, 3rem); }
+
+  /* ---- hero: title and lede on the left, the free-games notice beside them ---- */
+  body:has(#arc-game) > header.np-hero {
+    display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); column-gap: var(--rail-gap); align-items: end;
+    max-width: var(--page-max); width: calc(100% - 2.5rem); margin: 0 auto; padding: 1.2rem 0 1.2rem; text-align: left;
+  }
+  body:has(#arc-game) > header.np-hero > h1 { grid-column: 1; grid-row: 1; text-align: left; transform-origin: left center; margin-left: 0; }
+  body:has(#arc-game) > header.np-hero > .section-sub { grid-column: 1; grid-row: 2; text-align: left; max-width: 64ch; margin: 0; }  body:has(#arc-game) > header.np-hero > .np-hero-warn {
+    grid-column: 2; grid-row: 1 / span 2; align-self: end; max-width: none; margin: 0; text-align: left;
+    border-width: 1px 1px 1px 4px; border-color: rgba(255,179,64,0.35) rgba(255,179,64,0.35) rgba(255,179,64,0.35) var(--gold);
+    border-radius: 6px 14px 14px 6px; padding: 0.9rem 1.1rem;
+  }
+
+  /* ---- shared: card titles sit left with a hairline running out to the edge ---- */
+  .arc-wrap > #arc-game > .arc-game-h, .arc-wrap > #slots > .arc-game-h, #cmp .cmp-h {
+    display: flex; align-items: center; gap: 0.6rem; text-align: left;
+  }
+  .arc-wrap > #arc-game > .arc-game-h::after, .arc-wrap > #slots > .arc-game-h::after, #cmp .cmp-h::after {
+    content: ''; flex: 1 1 2rem; min-width: 2rem; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg, var(--house-rule), transparent);
+  }
+
+  /* ---- Rocket Run: the screen and its button on the left, the state message beside them (a game's side panel),
+     today's Rocket Riders board across the full width underneath, its names two to a row (1 | 2, 3 | 4 …) ---- */
+  .arc-wrap > #arc-game {
+    max-width: none; margin: 0 0 var(--arc-gap); padding: 1.5rem 1.8rem 1.7rem;
+    display: grid; grid-template-columns: var(--arc-split); grid-template-rows: auto auto auto 1fr auto;
+    column-gap: var(--arc-col-gap); align-items: start;
+  }
+  #arc-game > .arc-game-h { grid-column: 1; grid-row: 1; margin-bottom: 0.9rem; }
+  #arc-game > .arc-badges { grid-column: 2; grid-row: 1; justify-content: flex-end; align-self: center; margin: 0 0 0.9rem; }
+  #arc-game > .arc-stage { grid-column: 1; grid-row: 2; }
+  #arc-game .arc-canvas, #arc-game .arc-static { height: clamp(280px, 30vh, 380px); }
+  #arc-game > .arc-controls { grid-column: 1; grid-row: 3; }
+  /* the message spans the screen, the button and a spare flexible row: a long one (a guest's name form) grows into
+     that row instead of pushing the button away from the screen */
+  #arc-game > .arc-panel { grid-column: 2; grid-row: 2 / 5; margin-top: 0; }
+  #arc-game > .arc-riders {
+    grid-column: 1 / -1; grid-row: 5; margin-top: 1.4rem; padding: 1.2rem 0 0;
+    display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--arc-col-gap); align-items: baseline;
+  }
+  #arc-riders > .arc-riders-h { grid-column: 1; margin: 0; }
+  #arc-riders > .arc-note:not(#arc-riders-more) { grid-column: 2; max-width: 70ch; margin: 0; }
+  #arc-riders > .arc-riders-list {
+    grid-column: 1 / -1; margin: 1rem 0 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem 0.8rem;
+  }
+  #arc-riders .arc-rider-none { grid-column: 1 / -1; }
+  #arc-riders > #arc-riders-more { grid-column: 1 / -1; }
+
+  /* ---- Just Spin It. 1280–1599: the machine dead centre with its lede as a caption in the margin beside it, the paytable
+     full width (table | how the odds work), how it plays underneath in two columns.
+     From 1600px the machine moves left and the paytable stands beside it (see the 1600px tier). ---- */
+  .arc-wrap > #slots { max-width: none; margin: 0 0 var(--arc-gap); padding: 1.5rem 1.8rem 1.7rem; }
+  /* the lede stands in the margin beside the machine, like a caption; the machine itself stays dead centre */
+  #slots > .slot-lede {
+    float: left; width: calc((100% - 540px) / 2 - var(--arc-col-gap)); margin: 0.2rem var(--arc-col-gap) 0 0;
+    text-align: left; font-family: var(--font-serif); line-height: 1.42;
+  }
+  #slots > .slot-cab { --reel-h: 248px; margin: 0; }   /* 248px = the reels' own height at these widths; the lever follows it */
+  #slots .slot-reel { height: var(--reel-h); }
+  #slots .slot-lever { height: calc(var(--reel-h) - 18px); }
+  #slots > .slot-info { clear: both; gap: 1.6rem; margin-top: 1.8rem; }
+  #slots .slot-paycard { display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); column-gap: var(--arc-col-gap); align-items: start; }
+  #slots .slot-paycard > .arc-h { grid-column: 1 / -1; }
+  #slots .slot-paycard > .arc-tablewrap { grid-column: 1; margin: 0; }
+  #slots .slot-paycard > .arc-note { grid-column: 2; }
+  /* a paytable line keeps its symbols and its words side by side (the words wrap beside the symbols, not under them) */
+  #slots .slot-pt-line { flex-wrap: nowrap; }
+  #slots .slot-pt-sym { flex: 0 0 auto; }
+  #slots .slot-pt-what { min-width: 0; }
+  #slots .slot-table td:last-child { white-space: nowrap; }
+  #slots .slot-howcard { columns: 2; column-gap: 3rem; column-rule: 1px solid var(--ink-4); }
+  #slots .slot-howcard > .arc-h { column-span: all; }
+  #slots .slot-howcard li, #slots .slot-howcard p, #slots .slot-howcard .arc-msg-actions { break-inside: avoid; }
+  #slots .slot-howcard .arc-note-honest { margin-top: 0; }
+  /* the machine's own labels in the house mono, like stencilled lettering on the cabinet */
+  #slots .slot-led-lbl, #slots .slot-jp { font-family: var(--font-mono); font-weight: 600; }
+
+  /* ---- competitions: the heading and the jump chips share a line, the six boards sit three to a row ---- */
+  .arc-wrap > #cmp {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--arc-col-gap); align-items: end;
+    padding: 0 0 var(--arc-gap);
+  }
+  #cmp > .cmp-head { grid-column: 1; text-align: left; max-width: none; margin: 0 0 1.2rem; }
+  #cmp .cmp-sub { font-family: var(--font-serif); line-height: 1.42; max-width: 60ch; }
+  /* the jump chips as a tidy matrix of equal cells: two across here, three across from 1600px */
+  #cmp > .cmp-jump { grid-column: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; margin: 0 0 1.2rem; }
+  #cmp > .cmp-jump:empty { display: none; }
+  #cmp .cmp-chip { justify-content: center; }
+  /* three boards to a row; the first column a little wider, because the OG Campaign below Biggest Sender carries the most */
+  #cmp > .cmp-grid { grid-column: 1 / -1; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 1fr); gap: 1.4rem; align-items: stretch; }
+  #cmp .cmp-live-pill { font-family: var(--font-mono); font-weight: 600; }
+  /* an OG window's dates go on their own line under its name instead of a five-line sliver */
+  #cmp-og .cmp-og-row { grid-template-columns: auto minmax(0, 1fr) auto; row-gap: 0.15rem; }
+  #cmp-og .cmp-og-state { grid-column: 2 / -1; text-align: left; }
+  /* Rocket Run's four counters as a two-by-two block, never three and an orphan */
+  #cmp-rocket .cmp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* ---- how it works + the boost curve: the long card gets the room, so the two end near the same line ---- */
+  .arc-wrap > .arc-info { padding: 0; }
+  .arc-wrap > .arc-info > .arc-info-grid { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: var(--arc-col-gap); }
+}
+
+@media (min-width: 1600px) {
+  .arc-wrap { --arc-split: minmax(0, 1.55fr) minmax(0, 1fr); }
+  /* the machine grows a size here (wider cabinet, taller reels and lever) and the paytable stands beside it */
+  .arc-wrap > #slots {
+    display: grid; grid-template-columns: 600px minmax(0, 1fr); grid-template-rows: auto auto 1fr auto;
+    column-gap: var(--arc-col-gap); align-items: start;
+  }
+  #slots > .arc-game-h { grid-column: 1; grid-row: 1; }
+  #slots > .slot-lede { grid-column: 1; grid-row: 2; float: none; width: auto; max-width: 60ch; margin: 0 0 1.2rem; }
+  #slots > .slot-cab { --reel-h: 290px; grid-column: 1; grid-row: 3; align-self: start; justify-self: center; width: 100%; max-width: 600px; margin: 0; }
+  #slots > .slot-info { display: contents; }   /* a plain div: its two cards take their own places in the card's grid */
+  #slots .slot-paycard { grid-column: 2; grid-row: 1 / 4; display: block; }
+  #slots .slot-paycard > .arc-tablewrap { margin: 0 0 0.7rem; }
+  #slots .slot-howcard { grid-column: 1 / -1; grid-row: 4; margin-top: 1.6rem; }
+  #cmp > .cmp-jump { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #cmp > .cmp-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
+}
+
+/* ─── Communities, a community, a squad (communities.html, community.html, squad.html) ─── */
+/* ═══ Communities group — wide screens (/communities, /community?id=…, /squad?id=…) ═══
+   Every rule sits behind @media (min-width: 1280px): below that nothing changes.
+   Loads after base.css (the house layer: --page-max, --rail, --rail-gap, --rule, --font-serif, --font-mono).
+   The page wraps carry an inline max-width (1000px / 680px), so the widths here need !important to win.
+   Reading order is the markup's: a band reads its left rail first, then what sits beside it. */
+
+@media (min-width: 1280px) {
+
+  /* ─────────────────────────────── /communities ─────────────────────────────── */
+
+  /* The hero: the title runs across the top, the lede reads down the left with the start-a-community form and
+     its message beside it, and the "how it works" rules run across the foot (opened, they read in two columns). */
+  header.comm-hero-top-page {
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: auto auto auto 1fr auto;
+    column-gap: var(--rail-gap); row-gap: 0; align-items: start;
+    max-width: calc(var(--page-max) + 2.5rem); margin-inline: auto; padding: 2.4rem 1.25rem 1.6rem; text-align: left;
+  }
+  header.comm-hero-top-page > .section-title {
+    grid-column: 1 / -1; grid-row: 1; justify-self: start; margin: 0 0 1.3rem; text-align: left;
+    padding-top: 0.9rem; border-top: 2px solid var(--house-rule); transform-origin: left top;
+  }
+  header.comm-hero-top-page > .section-sub { grid-column: 1; grid-row: 2 / 5; margin: 0; max-width: 64ch; text-align: left; }  header.comm-hero-top-page > .comm-start { grid-column: 2; grid-row: 2; max-width: none; margin: 0.2rem 0 0; justify-content: flex-start; }
+  /* the address field has its own full row (its placeholder is never cut); the two buttons share the row under
+     it when they fit and stack otherwise, always filling the same edge as the field */
+  header.comm-hero-top-page > .comm-start > .addr-field { flex: 1 1 100%; }
+  header.comm-hero-top-page > .comm-start > .btn { flex: 1 1 auto; }
+  header.comm-hero-top-page > .comm-start-msg { grid-column: 2; grid-row: 3; max-width: none; margin: 0.6rem 0 0; text-align: left; }
+  header.comm-hero-top-page > .comm-rules { grid-column: 1 / -1; grid-row: 5; max-width: none; margin: 1.4rem 0 0; }
+
+  /* the column under the hero spans the page */
+  #main > .wrap.comm-page:has(> #comm-grid) { max-width: var(--page-max) !important; }
+
+  /* Bands — the officials, this week's competition, my squads: each keeps its title and short introduction in a
+     left rail (the house rail), with what it introduces — the cards, the board — beside it. */
+  #comm-officials:not([hidden]), :is(#wk, #sq-weekly, #sq-mine):not([hidden]) { --band-rail: var(--rail); display: flow-root; padding: 1.3rem 1.4rem 1.4rem; }
+  #comm-officials > .comm-officials-h, #comm-officials > .comm-officials-note,
+  :is(#wk, #sq-weekly) > :is(.wk-head, .wk-explain),
+  #sq-mine > .sq-mine-h, #sq-mine > .sq-mine-note {
+    float: left; clear: left; width: var(--band-rail); max-width: none;
+  }
+  #comm-officials > :not(.comm-officials-h):not(.comm-officials-note),
+  :is(#wk, #sq-weekly) > :not(.wk-head):not(.wk-explain),
+  #sq-mine > :not(.sq-mine-h):not(.sq-mine-note) { margin-left: calc(var(--band-rail) + var(--rail-gap)); }
+  /* the two officials ($Send and $GWC), side by side */
+  #comm-officials > .comm-grid-official { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* rail titles take the house rule; their introductions take the serif voice */
+  #comm-officials > .comm-officials-h, :is(#wk, #sq-weekly) .wk-h, #sq-mine > .sq-mine-h { padding-top: 0.7rem; border-top: 2px solid var(--house-rule); line-height: 1.15; }
+  :is(#wk, #sq-weekly) .wk-h { border-top-color: rgba(255,179,64,0.45); }
+  :is(#wk, #sq-weekly) > .wk-head { flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+  :is(#wk, #sq-weekly) > .wk-head .wk-dates { white-space: normal; text-wrap: balance; }   /* in the rail the dates may take two lines — split at the dash, not mid-date */
+  #comm-officials > .comm-officials-note, :is(#wk, #sq-weekly) > .wk-explain, #sq-mine > .sq-mine-note {
+    font-family: var(--font-serif); line-height: 1.45; margin: 0.7rem 0 0.4rem;
+  }
+  #wk > .wk-rules { margin-top: 0; }
+  #sq-weekly > .sq-wk-last { margin-top: 0.9rem; }
+
+  /* small labels in the mono voice */
+  #wk .wk-when, #sq-weekly .wk-when, #comm-status, #sq-status {
+    font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.01em; font-variant-numeric: tabular-nums slashed-zero;
+  }
+  #squads-panel .sq-filter-l { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.08em; }
+
+  /* ── the 🛡️ Send Squads tab ── */
+  /* masthead: the title in the rail, the introduction beside it */
+  #squads-panel:not([hidden]) { display: flow-root; padding: 0.4rem 0 0; }   /* edges level with the tab bar above it */
+  #squads-panel > .sq-h {
+    float: left; width: var(--rail); padding-top: 0.7rem; border-top: 2px solid var(--house-rule); margin-bottom: var(--sec-gap);
+  }
+  #squads-panel > .sq-intro { margin-left: calc(var(--rail) + var(--rail-gap)); max-width: 72ch; font-family: var(--font-serif); line-height: 1.45; }
+  #squads-panel > :not(.sq-h):not(.sq-intro) { clear: left; margin-top: var(--sec-gap); }
+
+  /* signed in: the body keeps its one column, now the full page wide; the search field gets the whole row (its
+     placeholder is no longer cut), and this week's squad board and "my squads" are bands like the Live tab's */
+  #sq-body > #sq-search { max-width: none; }
+
+
+  /* ─────────────────────── /community?id=… and /squad?id=… ─────────────────────── */
+
+  /* The hero spans the page (its banner as a true header). Under it, the side sections read down the left —
+     members, proposals, snapshots (a squad: the editor and the lifetime tracker) — and the wall runs down the right. */
+  #main > .wrap.comm-page:is(:has(> #comm-hero), :has(> #sqd-hero)) {
+    max-width: var(--page-max) !important;
+    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    grid-template-rows: auto auto auto auto auto 1fr; column-gap: var(--rail-gap); row-gap: 0; align-items: start;
+  }
+  #main > .wrap.comm-page:is(:has(> #comm-hero), :has(> #sqd-hero)) > * { grid-column: 1; margin-bottom: var(--sec-gap); }
+  #main > .wrap.comm-page > :is(.comm-back, #comm-hero, #sqd-hero, #sqd-locked) { grid-column: 1 / -1; }
+  #main > .wrap.comm-page > :is(#comm-wall, #sqd-tabs-sec) {
+    grid-column: 2; grid-row: 3 / -1; max-width: none; margin: 0; padding: 0.3rem 0 0;   /* its first line level with the first card beside it */
+  }
+  :is(#comm-wall, #sqd-tabs-sec) :is(.wall-feed, .composer) { max-width: none; }
+  #main > .wrap.comm-page > #sqd-locked:not([hidden]) { max-width: 46rem; justify-self: center; width: 100%; }
+
+  /* inside the hero: who it is, its figures and notes on the left; status, level, actions and rules on the right */
+  :is(#comm-hero, #sqd-hero) .comm-hero-banner.has-img { height: clamp(150px, 11vw, 230px); }
+  :is(#comm-hero, #sqd-hero) .comm-hero-body { --hero-split: 55%; display: flow-root; padding: 1.2rem 1.6rem 1.5rem; }
+  /* the sandbox's stock note is long: its side takes more of the width so the two sides end near each other */
+  #comm-hero .comm-hero-body:has(> .comm-stock-note:not(.comm-supply-note)) { --hero-split: 61%; }
+  :is(#comm-hero, #sqd-hero) .comm-hero-body > :is(.comm-hero-top, .sqd-bio, .comm-hero-metrics, .comm-stock-note) {
+    float: left; clear: left; width: var(--hero-split);
+  }
+  :is(#comm-hero, #sqd-hero) .comm-hero-body > :not(.comm-hero-top, .sqd-bio, .comm-hero-metrics, .comm-stock-note) {
+    margin-left: calc(var(--hero-split) + var(--rail-gap)); max-width: none;
+  }
+  /* the name keeps the line beside the logo; a status badge wraps under them instead of squeezing the name */
+  :is(#comm-hero, #sqd-hero) .comm-hero-top > .comm-hero-id { flex-basis: 62%; }
+  #comm-hero .comm-hero-actions > .comm-squad-btn { width: 100%; margin-top: 0.5rem; }
+  :is(#comm-hero, #sqd-hero) .comm-hero-body > :is(.comm-hero-status, .comm-xp) { margin-top: 0.3rem; }
+  /* the rules close the card across its full width; opened, they read in two columns */
+  :is(#comm-hero, #sqd-hero) .comm-hero-body > .comm-rules { clear: both; margin: 1.1rem 0 0; }
+  :is(#comm-hero, #sqd-hero) .comm-hero-metrics { font-variant-numeric: tabular-nums; }
+  :is(#comm-hero, #sqd-hero) .comm-xp-sub { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.03em; font-variant-numeric: tabular-nums slashed-zero; }
+  #sqd-hero .sqd-bio { font-family: var(--font-serif); line-height: 1.45; max-width: 68ch; }
+
+  /* the lifetime tracker's six figures in two rows of three, so each label has room in the side column */
+  #sqd-life .sqd-life-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  /* a full-width "how it works" list reads in two columns, each a comfortable line length */
+  :is(header.comm-hero-top-page, #comm-hero, #sqd-hero, #sq-body) .comm-rules-list { display: block; columns: 2; column-gap: 2.6rem; }
+  :is(header.comm-hero-top-page, #comm-hero, #sqd-hero, #sq-body) .comm-rules-list > li { break-inside: avoid; margin: 0 0 0.6rem; }
+  header.comm-hero-top-page > .comm-rules > summary, #sq-body > .grules > summary { text-align: left; }
+
+  /* the section introductions take the serif voice */
+  #comm-members .comm-members-note, #comm-props .prop-intro, #comm-snaps .prop-intro, #comm-wall .cw-note,
+  #sqd-tabs-sec .cw-note, #sqd-life .sqd-life-note, #sqd-edit .sqd-edit-note {
+    font-family: var(--font-serif); line-height: 1.45;
+  }
+}
+
+/* Weekly board rows at 1280–1599px, where the band's board column is narrower than the old page: the level pill and
+   activity move under the name, so the name keeps a full line instead of wrapping beside them, and "pts this week"
+   takes two short lines. The rank, logo and points stand to either side. */
+@media (min-width: 1280px) and (max-width: 1599.98px) {
+  :is(#wk, #sq-weekly) .wk-link { grid-template-columns: auto auto minmax(0, 1fr) auto; grid-template-areas: "rank logo id score" "rank logo meta score"; row-gap: 0.35rem; }
+  :is(#wk, #sq-weekly) .wk-xp-l { max-width: 9.5ch; text-align: right; }
+}
+
+/* ─── About, the white paper and Your data (about.html, whitepaper.html, data.html) ─── */
+/* ═══ Longform group — /about, /whitepaper, /data — wide screens only (draft) ═══
+   Loads after base.css. Every rule sits inside @media (min-width: 1280px); nothing changes below 1280px.
+   Scopes: /about      → .about-hero and the sections after it (.about-hero ~ #what …) — about.html only
+           /whitepaper → body > .page, .page > .masthead, .page > .body-grid, the lf-wp container — whitepaper.html only.
+                         Each selector is one step more specific than the paper's own <style>, so it still wins if this
+                         file ends up loading BEFORE that block (it sits after responsive.css in the page).
+           /data       → .np-hero:has(+ main #dk-status), .np-wrap:has(> #dk-status) — data.html only */
+
+@media (min-width: 1280px) {
+
+  /* ───────────────────────────── /about ───────────────────────────── */
+
+  /* Hero: the logo on the left, the words on the right — about 900px tall instead of 1,330. */
+  .about-hero { min-height: 0; padding-block: 2.4rem 3.2rem; }
+  .about-hero > .hero-content {
+    display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); column-gap: var(--rail-gap);
+    align-items: center; justify-items: start; width: min(100%, var(--page-max)); text-align: left;
+  }
+  .about-hero .hero-logo-btn { grid-column: 1; grid-row: 1 / span 5; justify-self: center; }
+  .about-hero .hero-logo { width: clamp(300px, 23vw, 480px); }
+  .about-hero .hero-content > :not(.hero-logo-btn) { grid-column: 2; }
+  .about-hero h1 { margin-top: 0; transform-origin: left center; }
+  .about-hero .one-line {
+    margin: 1.1rem 0 0; max-width: 34em; font-family: var(--font-serif); font-weight: 400;
+    font-size: max(var(--text-floor), 1.45rem); line-height: 1.42; letter-spacing: 0.002em; color: var(--text);
+  }
+  .about-hero .one-line b { font-weight: 600; }
+  .about-hero .rh-badge { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; margin-top: 1.3rem; }
+  .about-hero .tldr-chips { justify-content: flex-start; max-width: none; margin: 1.1rem 0 0; }
+  .about-hero .cta-row { justify-content: flex-start; margin-top: 1.6rem; }
+
+  /* What it is: a dictionary entry across the page (headword left, definition right), then the three truths in a
+     row and the two contracts side by side. */
+  .about-hero ~ #what .def-card {
+    max-width: none; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 8fr); grid-template-rows: auto 1fr auto auto;
+    column-gap: var(--rail-gap); align-items: start;
+  }
+  .about-hero ~ #what .def-word { grid-column: 1; grid-row: 1; font-size: max(var(--text-floor), clamp(3.6rem, 4.8vw, 6rem)); }
+  .about-hero ~ #what .def-pos {
+    grid-column: 1; grid-row: 2; font-family: var(--font-mono); font-weight: 600; font-style: normal; text-transform: uppercase;
+    letter-spacing: 0.08em; font-size: max(var(--text-floor), 0.8rem); line-height: 1.5; margin: 0.9rem 0 0;
+  }
+  .about-hero ~ #what .def-body { grid-column: 2; grid-row: 1 / span 2; margin: 0; font-family: var(--font-serif); font-size: max(var(--text-floor), 1.32rem); line-height: 1.5; }
+  .about-hero ~ #what .def-body b { font-weight: 600; }
+  .about-hero ~ #what .def-tags { grid-column: 1 / -1; grid-row: 3; margin-top: 1.4rem; }
+  .about-hero ~ #what .def-share { grid-column: 1 / -1; grid-row: 4; justify-self: start; }
+  .about-hero ~ #what .truth-row, .about-hero ~ #what .tok-mini-grid { max-width: none; margin-top: 1.4rem; }
+  .about-hero ~ #what .verify-note { max-width: none; }
+
+  /* Get started: the four steps use the whole content column (the column is never wider than ~70 characters). */
+  .about-hero ~ #start .gs-steps, .about-hero ~ #start .gs-progress { max-width: none; }
+
+  /* Send Power: no 720px islands inside a 950px column; the OG rules read across; the two engines sit side by side,
+     the same height. */
+  .about-hero ~ #power .ab-demo, .about-hero ~ #power .ab-levels, .about-hero ~ #power .ab-decay, .about-hero ~ #power .ab-engines { max-width: none; }
+  .about-hero ~ #power .ab-engines { align-items: stretch; }
+  .about-hero ~ #power #og-rules { grid-column: 1 / -1; }
+  /* Each full-width card's heading stands in the rail beside it (the rail under the section title was empty for
+     ~12,000px): the rail reads as the section's index, the card keeps its body. The heading stays inside its card in
+     the DOM, so the order a screen reader hears is unchanged. Rail width = 3/7 of (card + gap), since the card is the
+     other 70% of the wrap. */
+  .about-hero ~ #power :is(.ab-levels, .ab-decay, #og-rules) > h3:first-child,
+  .about-hero ~ #power > .wrap > .ab-engine > h3:first-child {
+    position: absolute; top: 0; right: calc(100% + var(--rail-gap)); width: calc((100% + var(--rail-gap)) * 3 / 7);
+    margin: 0; padding-top: 0.8rem; border-top: 2px solid var(--house-rule);
+    font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.6rem, 1.9vw, 2.1rem)); line-height: 1.1; letter-spacing: 0.02em;
+    color: var(--green-bright); text-wrap: balance;
+  }
+  .about-hero ~ #power .ab-lbl {
+    font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    font-size: max(var(--text-floor), 0.8rem); font-variant-numeric: tabular-nums slashed-zero;
+  }
+  .about-hero ~ #power .ab-decay-table caption { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  /* the decay card: the rates beside the one thing that stops them; the four add-ons run across underneath */
+  .about-hero ~ #power .ab-decay-side { display: contents; }
+  .about-hero ~ #power .ab-decay-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .about-hero ~ #power .ab-decay-adds { grid-column: 1 / -1; margin: 0.2rem 0 0; }
+
+  /* Fair play: three promises as wide rows (icon | heading over text) instead of three 300px towers; the questions in
+     two columns, read across. */
+  .about-hero ~ #safe .safe-grid { grid-template-columns: minmax(0, 1fr); max-width: none; gap: 1rem; }
+  .about-hero ~ #safe .safe-card { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 1.2rem; align-items: start; }
+  .about-hero ~ #safe .safe-ico { grid-row: 1 / span 2; font-size: max(var(--text-floor), 2.6rem); padding-top: 0.2rem; }
+  .about-hero ~ #safe .safe-card h3 { margin: 0 0 0.35rem; }
+  /* "Common questions" joins the rail as the label beside the questions, like the card headings in Send Power */
+  .about-hero ~ #safe .faq-h {
+    float: left; clear: left; width: var(--rail); margin: 0; padding-top: 0.8rem; border-top: 2px solid var(--house-rule); text-align: left;
+    font-size: max(var(--text-floor), clamp(1.6rem, 1.9vw, 2.1rem)); line-height: 1.1;
+  }
+  .about-hero ~ #safe .faq { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem 1rem; align-items: start; }
+  .about-hero ~ #safe .faq .reassure { margin: 0; max-width: none; }
+  .about-hero ~ #safe .faq .reassure:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .about-hero ~ #safe .warn-box { max-width: none; }
+
+  /* Ready? the four doors two by two while the column is narrow, four across from 1600px — never three and an orphan. */
+  .about-hero ~ #join .do-grid { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+
+  /* ─────────────────────────── /whitepaper ─────────────────────────── */
+  /* The reading measure stays what it is today (840px of running text, about 68 characters a line). The width goes
+     to margin heads on the left — section numbers and subheadings hang beside the text they head — and to the right:
+     tables, figures and the long notes reach across it, and a short note in mid-section sits in it as a side note.
+     No floats: a subheading and the paragraph it heads share one grid row, so neither can drift from the other. */
+  body > .page { max-width: none; padding-inline: 24px; --lf-toc: 210px; --lf-gap: 56px; --lf-hang: 180px; --lf-text: 840px; }
+  .page > .body-grid { grid-template-columns: var(--lf-toc) minmax(0, 1fr); gap: var(--lf-gap); }
+  .page > .body-grid > main#main { max-width: none; container: lf-wp / inline-size; }
+  .body-grid > main#main > section > :is(p, ul, ol, h3, .note) { max-width: var(--lf-text); }
+  .body-grid > main#main > section > .sec-head { max-width: calc(var(--lf-text) + 50px); }
+  /* a note of several paragraphs reads in two columns once it is wide enough for two (about 22em each) */
+  .body-grid > main#main > section > .note:has(> p + p) { columns: 2 22em; column-gap: 44px; }
+  .body-grid > main#main > section > .note:has(> p + p) > .lbl { column-span: all; }
+  .page > .masthead {
+    max-width: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: clamp(32px, 4vw, 88px);
+    align-items: end; padding-top: 56px;
+  }
+  .page > .masthead > .eyebrow { grid-column: 1 / -1; grid-row: 1; }
+  .page > .masthead > h1 { grid-column: 1; grid-row: 2; margin: 0; font-size: max(var(--text-floor), clamp(62px, 4.4vw, 104px)); line-height: 1; }
+  .page > .masthead > .standfirst { grid-column: 2; grid-row: 2; margin: 0; max-width: 36em; }
+  .page > .masthead > .byline { grid-column: 1 / -1; grid-row: 3; margin-top: 28px; }
+  .page > .wp-colophon { max-width: calc(var(--lf-text) + 50px); margin-left: calc(var(--lf-toc) + var(--lf-gap) + 20px); }
+}
+@media (min-width: 1600px) {
+  body > .page { padding-inline: 48px; --lf-toc: 250px; --lf-gap: 48px; --lf-hang: 200px; }
+}
+@media (min-width: 2000px) {
+  body > .page { max-width: 2060px; }
+}
+
+@media (min-width: 1280px) {
+  /* the colophon (outside main, so no container query reaches it) lines up with the text column from where the hang
+     opens: main's content box reaches 1,040px at 1384px (24px pads, 210px contents, 56px gap, 20px main padding) */
+  @media (min-width: 1384px) {
+    .page > .wp-colophon { margin-left: calc(var(--lf-toc) + var(--lf-gap) + 20px + var(--lf-hang) + 24px); max-width: var(--lf-text); }
+  }
+  /* hang | measure | margin, once main holds a hang and the measure (1,040px: every screen from about 1384px) */
+  @container lf-wp (min-width: 1040px) {
+    .body-grid > main#main > section {
+      display: grid; grid-template-columns: [hang] var(--lf-hang) [text] minmax(0, calc(var(--lf-text) + 24px)) [wide] minmax(0, 1fr);
+      align-items: start;
+    }
+    .body-grid > main#main > section > * { grid-column: text; margin-left: 24px; min-width: 0; }
+    .body-grid > main#main > section > .sec-head {
+      grid-column: hang / text-end; max-width: none; display: grid; grid-template-columns: var(--lf-hang) minmax(0, 1fr); gap: 0;
+      margin: 0 0 22px; align-items: baseline;
+    }
+    .body-grid > main#main > section > .sec-head > .sec-num { font-size: max(var(--text-floor), 2rem); letter-spacing: 0.02em; padding: 0; line-height: 1; }
+    .body-grid > main#main > section > .sec-head > h2 { margin-left: 24px; }
+    .body-grid > main#main > section > h3 {
+      grid-column: hang; max-width: none; margin: 14px 0 0; padding-top: 7px; border-top: 2px solid var(--accent); line-height: 1.3; align-self: baseline;
+    }
+    .body-grid > main#main > section > h3 + * { margin-top: 14px; align-self: baseline; }
+    .body-grid > main#main > section > :is(.tablewrap, .figure, .note:has(> p + p)) { grid-column: text / -1; max-width: none; }
+  }
+  /* side notes: a one-paragraph note in mid-section sits in the margin beside the paragraph before it and the two
+     after it, once the margin is a real column (main ≥ 1,440px → margin ≥ 370px). A note at the end of a section, one
+     followed by another note, or one that comes straight after a table, figure, callout or note keeps the measure in
+     the text column — beside those it would leave a hole in the text. */
+  @container lf-wp (min-width: 1440px) {
+    .body-grid > main#main > section > .note:not(:has(> p + p)):not(:last-child):has(+ * + *):not(:has(~ .note)):not(:is(.tablewrap, .figure, .note, .callout) + .note) {
+      grid-column: wide; grid-row: span 3; max-width: 34em; margin: 6px 0 22px 36px;
+    }
+  }
+}
+
+@media (min-width: 1280px) {
+  /* ─────────────────────────────── /data ─────────────────────────────── */
+  /* Header: title and promise on the left, the price of a key on the right. */
+  .np-hero:has(+ main #dk-status) {
+    max-width: var(--page-max); padding: 2.2rem 0 1.6rem; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    grid-template-rows: 1fr 1fr; column-gap: var(--rail-gap); align-items: center; text-align: left;
+  }
+  .np-hero:has(+ main #dk-status) > .section-title { grid-column: 1; grid-row: 1; align-self: end; text-align: left; transform-origin: left center; }
+  .np-hero:has(+ main #dk-status) > .section-sub { grid-column: 1; grid-row: 2; align-self: start; margin: 0; max-width: 36em; text-align: left; font-size: max(var(--text-floor), 1.3rem); }
+  .np-hero:has(+ main #dk-status) > .np-hero-warn { grid-column: 2; grid-row: 1 / span 2; margin: 0; max-width: none; }
+  /* The four panels flow down two newspaper columns, in order: status → how to qualify | what it opens → using it. */
+  .np-wrap:has(> #dk-status) { max-width: var(--page-max); columns: 2; column-gap: 1.4rem; }
+  .np-wrap:has(> #dk-status) > section { break-inside: avoid; }
+  /* table heads in the mono label voice — not upper-cased: the first head is a case-sensitive URL path */
+  .np-wrap:has(> #dk-status) .dk-endpoints thead th { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.02em; color: var(--text-dim); }
+  /* the curl example wraps inside its half column instead of hiding its end behind a sideways scroll */
+  .np-wrap:has(> #dk-status) pre.dk-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+}
+
+@media (min-width: 1600px) {
+  /* the words get the width their three buttons need on one line (≈1,010px); the logo takes the rest */
+  .about-hero > .hero-content { grid-template-columns: minmax(0, 1fr) minmax(0, 1010px); }
+  .about-hero .hero-logo { width: clamp(280px, 19vw, 480px); }
+  .about-hero ~ #join .do-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* the status rows' labels take the mono label voice once the half column is wide enough (≈700px) to keep
+     label and figure on one line each */
+  .np-wrap:has(> #dk-status) .dk-stat > span { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+}

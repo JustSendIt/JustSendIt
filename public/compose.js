@@ -35,7 +35,15 @@
             '<button class="cmp-mode is-on" type="button" role="tab" id="cmp-mode-post" aria-selected="true" aria-controls="compose-post-pane" data-tip="Switches to writing a plain post for the wall">🧱 Post</button>' +
             '<button class="cmp-mode" type="button" role="tab" id="cmp-mode-call" aria-selected="false" aria-controls="compose-call-pane" data-tip="Switches to making a permanent call on a token — public, or private to one of your squads">📣 Send Call</button>' +
           '</div>' +
-          '<p class="modal-note" style="text-align:center; margin-top:0;">Posting as <b>@<span id="compose-handle"></span></b></p>' +
+          '<div class="cmp-who">' +
+            '<p class="modal-note">Posting as <b>@<span id="compose-handle"></span></b></p>' +
+            // the two walls a post lands on, one tap from the box (owner, 2026-10-26: "make sure users can easily get to the
+            // Send Wall and their Send Wall from the composer")
+            '<nav class="cmp-walls" aria-label="Your walls">' +
+              '<a class="btn btn-ghost btn-sm" id="compose-go-wall" href="/wall" data-tip="Closes the composer and opens the Send Wall, where everyone’s posts land">🧱 Send Wall</a>' +
+              '<a class="btn btn-ghost btn-sm" id="compose-go-mine" href="/profile" data-tip="Closes the composer and opens your own wall: your posts, pins and daily check-in">🏠 My Send Wall</a>' +
+            '</nav>' +
+          '</div>' +
 
           '<div id="compose-post-pane" role="tabpanel" aria-labelledby="cmp-mode-post">' +
             '<label class="sr-only" for="compose-text">Write your post</label>' +
@@ -79,6 +87,7 @@
           '<p class="modal-note">Grab your free @handle to post, react 🔥, and start your own wall.</p>' +
           '<button class="btn btn-primary" id="compose-signin" data-tip="Opens sign-in, then brings this box back">Sign in / Create account 🚪</button>' +
           '<p class="modal-note">We never touch your funds and never ask for your seed phrase.</p>' +
+          '<nav class="cmp-walls" aria-label="The Send Wall"><a class="btn btn-ghost btn-sm" id="compose-out-wall" href="/wall" data-tip="Opens the public Send Wall; reading it needs no account">🧱 Read the Send Wall</a></nav>' +
         '</div>' +
 
         '<div id="compose-done" hidden style="text-align:center;">' +
@@ -86,6 +95,7 @@
           '<p style="font-weight:800; color:var(--green-bright); font-size:max(var(--text-floor), 1.1rem);" id="compose-done-msg">Posted on the Wall!</p>' +
           '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:0.9rem;">' +
             '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
+            '<a class="btn btn-ghost btn-sm" id="compose-done-mine" href="/profile" data-tip="Closes this and opens your own wall, with everything you have posted">🏠 My Send Wall</a>' +
             '<button class="btn btn-ghost btn-sm" id="compose-again" type="button" data-tip="Returns to the empty composer to send another">Post another ✏️</button>' +
           '</div>' +
         '</div>' +
@@ -102,6 +112,8 @@
   function showForAuth() {
     if (window.AUTH && AUTH.user) {
       const ch = modal.querySelector('#compose-handle'); ch.textContent = AUTH.user.username;
+      const mine = '/u/' + encodeURIComponent(AUTH.user.username);
+      modal.querySelectorAll('#compose-go-mine, #compose-done-mine').forEach((a) => { a.href = mine; });
       const oldOg = ch.parentElement.querySelector('.og-badge'); if (oldOg) oldOg.remove();   // opened again: one badge, not two
       if (AUTH.user.og && window.ogBadge) ch.insertAdjacentHTML('afterend', ogBadge(AUTH.user.og, 'new-tab'));
       showPanel('compose-in');
@@ -426,6 +438,7 @@
 
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) close(); });
     modal.querySelector('#compose-view').addEventListener('click', () => close()); // on /wall the link is a same-document #p<id> hash change — the dialog must not stay open over it
+    modal.querySelectorAll('#compose-go-wall, #compose-go-mine, #compose-out-wall, #compose-done-mine').forEach((a) => a.addEventListener('click', () => close()));
     modal.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
     const textEl = modal.querySelector('#compose-text');

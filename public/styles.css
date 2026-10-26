@@ -1564,6 +1564,17 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
   font-family: 'Rubik', sans-serif; font-size: max(var(--text-floor), 16px); margin-top: 0.4rem;
 }
 #compose-modal textarea:focus { border-color: var(--green); }
+/* Where you are posting, and the two walls a post lands on, one tap from the box (owner, 2026-10-26). */
+.cmp-who { text-align: center; margin: 0 0 0.2rem; }
+.cmp-who .modal-note { margin: 0 0 0.45rem; }
+.cmp-walls { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin: 0 0 0.6rem; }
+.cmp-walls .btn { flex: 1 1 0; min-width: max-content; padding-inline: 0.75rem; }   /* one row when both fit (a phone too), each on its own when not */
+#compose-out .cmp-walls { margin: 0.9rem 0 0; }
+/* The composer grows with the screen (the phone's width, 420px on a small tablet, up to 760px on a wide screen): at the wide-screen text
+   size its example text then takes a few lines instead of seven, and the dialog stays short enough to see whole. */
+#compose-modal .modal-card { width: min(clamp(420px, 54vw, 760px), 100%); }
+/* a short screen (a 720px laptop) keeps the whole dialog in view: less air above and below, not smaller words */
+@media (max-height: 780px) { #compose-modal .modal-card { padding-block: 1.05rem 1.1rem; } #compose-modal #compose-title { margin-block: 0 0.4rem; } #compose-modal .modal-note { margin-block: 0.45rem; } }
 
 /* ===== Onboarding tour ===== */
 .tour-welcome-wrap { position: fixed; inset: 0; z-index: 360; display: grid; place-items: center; padding: 1rem; }
@@ -2282,7 +2293,7 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .pin-hover-load { color: var(--text-dim); }
 /* paste-to-convict form */
 .pin-add { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; }
-.pin-add-input { flex: 1; min-width: 200px; margin: 0; font-size: max(var(--text-floor), 0.9rem); }
+.pin-add-input { flex: 1 1 calc(36ch + 2.6rem); min-width: 200px; margin: 0; font-size: max(var(--text-floor), 0.9rem); }   /* starts as wide as its whole example text ("Paste a token contract to pin (0x…)", monospace); when that and the button cannot share a row, the button moves under it */
 .pin-add-go { white-space: nowrap; }
 .pin-add-msg { color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); margin: 0.4rem 0 0; min-height: 1em; }
 .pin-add-msg:empty { display: none; }

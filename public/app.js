@@ -329,6 +329,47 @@
     return () => container.removeEventListener('keydown', onKey);
   };
 
+  /* Example text is always whole (owner, 2026-10-26: "make sure that all the example text always shows … responsive in font
+     size so the user never has to scroll to read the example text in the composer"). A writing box's example text (its
+     placeholder) is set at the box's own size, which follows the site's fluid text floor — so it is bigger on a bigger
+     screen — and the box is made at least as tall as that whole text at the current width and size: nothing to scroll
+     inside an empty box. Measured with an off-screen copy carrying the box's font, padding and wrapping; measured again when
+     the box changes width (a dialog opening, a column reflowing, a rotated phone), when its example text changes, and once
+     the web fonts have arrived. Only ever raises the box's minimum height above what the stylesheet already gives it. */
+  window.fitPlaceholder = function (ta) {
+    if (!ta || !ta.isConnected || ta.tagName !== 'TEXTAREA') return;
+    ta.style.minHeight = '';
+    const text = ta.getAttribute('placeholder') || '', w = ta.clientWidth;
+    if (!text || !w) return;
+    const cs = getComputedStyle(ta), m = document.createElement('div');
+    m.setAttribute('aria-hidden', 'true');
+    Object.assign(m.style, { position: 'absolute', left: '-99999px', top: '0', visibility: 'hidden', boxSizing: 'border-box', width: w + 'px',
+      padding: cs.padding, font: cs.font, letterSpacing: cs.letterSpacing, wordSpacing: cs.wordSpacing, lineHeight: cs.lineHeight,
+      textTransform: cs.textTransform, whiteSpace: 'pre-wrap', overflowWrap: 'break-word', wordBreak: cs.wordBreak, tabSize: cs.tabSize });
+    m.textContent = text;
+    document.body.appendChild(m);
+    const inner = m.scrollHeight;   // the text plus the box's padding
+    m.remove();
+    const borders = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    const need = Math.ceil(cs.boxSizing === 'border-box' ? inner + borders : inner - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom));
+    if (need > (parseFloat(cs.minHeight) || 0) + 1) ta.style.minHeight = need + 'px';
+  };
+  (function () {
+    const seen = new WeakSet();
+    const ro = window.ResizeObserver ? new ResizeObserver((es) => es.forEach((e) => window.fitPlaceholder(e.target))) : null;
+    const watch = (ta) => { if (seen.has(ta)) return; seen.add(ta); if (ro) ro.observe(ta); window.fitPlaceholder(ta); };
+    const scan = (root) => { if (root.matches && root.matches('textarea[placeholder]')) watch(root); if (root.querySelectorAll) root.querySelectorAll('textarea[placeholder]').forEach(watch); };
+    const start = () => {
+      scan(document);
+      new MutationObserver((ms) => ms.forEach((m) => {
+        if (m.type === 'attributes') { if (m.target.tagName === 'TEXTAREA') { watch(m.target); window.fitPlaceholder(m.target); } }
+        else m.addedNodes.forEach((n) => { if (n.nodeType === 1) scan(n); });
+      })).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['placeholder'] });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => document.querySelectorAll('textarea[placeholder]').forEach(window.fitPlaceholder));
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  })();
+
   // client-side mirror of the server level curve (display only; server is authoritative).
   // Exponential curve, no cap — must match server xpForLevel/levelForXp exactly.
   window.levelForXp = function (xp) {

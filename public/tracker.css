@@ -233,3 +233,7 @@ html.motion-off .trk-prog-fill { transition: none; }
   .cmb-row { grid-template-columns: minmax(0, 1fr) auto; }
   .cmb-row .cmb-cell:last-child { grid-column: 2; }
 }
+
+/* The label is a name the member gives a wallet, not an address: it is set in the reading face, so its example text
+   ("e.g. Whale I'm watching") fits the box whole at every width (owner, 2026-10-26: "all the example text always shows"). */
+#trk-label { font-family: var(--font-body); letter-spacing: 0; }
