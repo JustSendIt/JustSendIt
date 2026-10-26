@@ -6094,6 +6094,11 @@ const OUTBOUND_RPM = {
   'coin-images.coingecko.com': 120, 'assets.geckoterminal.com': 120, 'icons.llamao.fi': 60, 'icons.llama.fi': 60, 'cdn.dexscreener.com': 300, 'dd.dexscreener.com': 300,
 };
 try { OUTBOUND_RPM[new URL(BLOCKSCOUT).host] = OUTBOUND_RPM[new URL(BLOCKSCOUT).host] || 240; } catch {}   // a keyed explorer host inherits the keyed ceiling
+/* Two more shares, taken before the host's own meter: 'market:goplus', what Market Data's hourly re-scan may ask of GoPlus's 28 a minute
+   (the dashboards and the name search keep the rest), and 'market:logo', what the market page's image proxy may fetch a minute across
+   its hosts (the Conviction Play logo cache keeps the rest of each CDN's meter). */
+OUTBOUND_RPM['market:goplus'] = 3;
+OUTBOUND_RPM['market:logo'] = 120;
 const OUTBOUND_MAX_WAIT_MS = Number(process.env.OUTBOUND_MAX_WAIT_MS) || 15000;
 const outBuckets = new Map();
 function outboundRpm(host) {
@@ -7290,13 +7295,13 @@ async function mapLimit(arr, limit, fn) {
   await Promise.all(Array.from({ length: Math.min(limit, arr.length || 1) }, worker));
   return out;
 }
-async function getLogsChunked(address, topic, from, to) {
+async function getLogsChunked(address, topic, from, to, read) {   // read: the reader asked (rpc, unless a background job brings its own)
   try {
-    return await rpc('eth_getLogs', [{ fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16), address, topics: [topic] }]);
+    return await (read || rpc)('eth_getLogs', [{ fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16), address, topics: [topic] }]);
   } catch (e) {
-    if (to - from < 40000) throw e;               // small range still failing → bubble up
+    if (to - from < 40000 || (e && e.yielded)) throw e;   // small range still failing → bubble up; so does a background read that stood down (its halves would only ask again)
     const mid = Math.floor((from + to) / 2);
-    const [a, b] = [await getLogsChunked(address, topic, from, mid), await getLogsChunked(address, topic, mid + 1, to)];
+    const [a, b] = [await getLogsChunked(address, topic, from, mid, read), await getLogsChunked(address, topic, mid + 1, to, read)];
     return a.concat(b);
   }
 }
@@ -7827,12 +7832,14 @@ const identifiedPair = (p) => !!(p && p.token && namedToken(p.token.symbol, p.to
 let pairsRefreshing = false;
 const _pairsWarn = { at: 0, n: 0 };
 
-async function scanNewPairs() {
+// quiet: the background's reader (mktNodeRead) — every read of the walk goes through it, and a refusal ends the walk instead of being asked again
+async function scanNewPairs(quiet) {
   // the block number is asked again on a refusal; the log walk below already halves and retries on its own
-  const latest = parseInt(await rpcRetry(() => rpc('eth_blockNumber', [])), 16);
+  const latest = parseInt(quiet ? await quiet('eth_blockNumber', []) : await rpcRetry(() => rpc('eth_blockNumber', [])), 16);
+  if (quiet && !(latest > 0)) throw new Error('the node gave no head block');
   const from = pairsScanBlock ? Math.max(pairsScanBlock + 1, latest - 2500000) : Math.max(0, latest - 2500000);   // a cursor restored from the database (Market Data keeps it) is never walked further back than a first run
   if (from > latest) return;
-  const logs = await getLogsChunked(FACTORY, PAIRCREATED_TOPIC, from, latest);   // not wrapped in rpcRetry: it halves on any error, and a retry around that multiplies the calls
+  const logs = await getLogsChunked(FACTORY, PAIRCREATED_TOPIC, from, latest, quiet);   // not wrapped in rpcRetry: it halves on any error, and a retry around that multiplies the calls
   for (const l of logs) {
     if (!l.data || !l.topics || l.topics.length < 3) continue;
     pairsRaw.push({
@@ -10290,34 +10297,120 @@ const MKT_HTTP = MD.createHonestFetch();   // 'JustSendIt/1.0 (+https://sendrh.c
 const MKT_COLLECT_ON = process.env.MARKET_COLLECT === '1' || (process.env.NODE_ENV === 'production' && process.env.MARKET_COLLECT !== '0');
 /* The collectors give way to the site's own chain reads: for a minute after the node last refused one, or while the shared pace
    has reads queued more than 5 s ahead (a wallet or holder walk). The answer is the reason, for the run's note, or false. Not "while _paceMs is above its start": the pace only speeds up again on a successful whole-wallet read,
-   so on a quiet server one refusal at boot kept every chain collector idle for hours (seen on the first real-source run). */
+   so on a quiet server one refusal at boot kept every chain collector idle for hours (seen on the first real-source run).
+   And for five minutes after the node refused one of their own reads made a call at a time (mktNodeRead), as after a refused batch. */
+let _mktRefusedAt = 0;
 const mktRpcBusy = () => now() - _paceRefusedAt < 60000 ? 'the node refused one of the site\'s own reads in the last minute'
-  : _paceAt - now() > 5000 ? 'the site\'s own chain reads are queued' : false;
-let mktRadarLast = 0;
-function mktRadarKeep() {   // every finished radar sweep (on demand or the timer's) is kept: its pairs and the block it read up to
-  try { mktRadarLast = MKT.radarPersist(pairsCache.pairs || [], pairsScanBlock, pairsRaw); } catch (e) { console.warn('[market] radar not kept: ' + ((e && e.message) || e)); }
+  : _paceAt - now() > 5000 ? 'the site\'s own chain reads are queued'
+  : now() - _mktRefusedAt < 5 * 60000 ? 'the node refused one of Market Data\'s own reads in the last five minutes' : false;
+/* One read of the node for a background job that reads it a call at a time (the radar's walk of the factory's logs): from Market Data's
+   chain share and the shared pace, like its batches, and only while the site's own reads are not waiting — asked before every read, not
+   once a run. It is a paced read, so a refusal never makes the site's own reads give way (rpc's paceYield is for theirs): it stands the
+   background down for five minutes and ends the run, rather than being asked again. */
+async function mktNodeRead(method, params, counted) {
+  const busy = mktRpcBusy();
+  if (busy) throw Object.assign(new Error('yielded: ' + busy), { yielded: true });
+  try { await outboundTake('market:rpc'); } catch { throw Object.assign(new Error('yielded: the Market Data chain budget is spent'), { yielded: true }); }
+  await paceTake(method === 'eth_getLogs' ? PACE_LOG_WEIGHT : 1);
+  if (counted) counted();
+  try { return await rpc(method, params, true); }
+  catch (e) {
+    if (!isThrottle(e)) throw e;
+    _mktRefusedAt = now();
+    throw Object.assign(new Error('yielded: the node refused a background read (' + String((e && e.message) || e).slice(0, 80) + ')'), { yielded: true });
+  }
 }
-async function mktRadarSweep() {
+function mktRadarKeep() {   // every finished sweep of a member's (the radar open) is kept: its pairs, as judged, and the block it read up to
+  try { MKT.radarPersist(pairsCache.pairs || [], pairsScanBlock, pairsRaw); } catch (e) { console.warn('[market] radar not kept: ' + ((e && e.message) || e)); }
+}
+/* The radar's sweep on the Market Data timer (owner, 2026-10-26: "make sure the token scanner and live new pair scanner is constantly
+   caching data about everything on every chain"). Nobody is looking at the radar then, so it reads only what it can read honestly and
+   cheaply, and judges nothing:
+     · the new pairs: the radar's own walk of the factory's logs (scanNewPairs), every read through mktNodeRead — so it moves the radar's
+       cursor, and a member's next sweep reads on from it;
+     · their market figures: one Dexscreener read per 30 tokens, through Market Data's honest fetch and meters;
+     · the names Dexscreener does not give: name() and symbol() from the newest few tokens themselves, in one batch on Market Data's share.
+   The explorer, GoPlus, and each pair's reserves, owner and LP are a member's sweep's (refreshPairs, while the radar is open), and so is
+   the verdict: the rows this keeps have no health, verdict or flags (MKT.radarMarket), and the radar's own copy — pairsCache, the token
+   cache, the runners — is not touched. */
+const MKT_RADAR_NAMES_MAX = 12;   // tokens one background sweep names from the chain (two calls each, one batch)
+async function mktRadarSweep(tools) {
   if (pairsRefreshing) return { error: 'a sweep was already running' };
   const busy = mktRpcBusy();
   if (busy) return { error: 'yielded: ' + busy };   // the timer's sweep gives way; a member opening the radar still builds it
-  const before = pairsCache.updatedAt;
-  await refreshPairs();
-  if (pairsCache.updatedAt === before) return { error: pairsCache.error || 'the sweep did not finish' };
-  return { persisted: mktRadarLast, cursor: pairsScanBlock };
-}
-/* the hourly re-scan of the most-scanned tokens: the Scanner's own reads, QUIET — the public "recently scanned" list and the
-   Scanner's counts are for scans people chose to make, so nothing is written there; only Market Data keeps the reading */
-async function mktScanQuiet(chain, addr) {
-  if (chain === 'robinhood') {
-    if (mktRpcBusy()) return null;   // the home chain's reads give way to the site's own
-    await ensureLedger(addr, { wait: true }).catch(() => null);
-    const r = await scanRead(addr);
-    return r && r.pair && !r.stale ? { pair: r.pair, readAt: r.readAt } : null;   // a stale snapshot is not a new reading
+  const t = tools || {};
+  pairsRefreshing = true;   // the walk moves pairsRaw and the cursor: never beside a member's sweep
+  try { await scanNewPairs((method, params) => mktNodeRead(method, params, t.counted)); }
+  catch (e) { return { error: String((e && e.message) || e) }; }
+  finally { pairsRefreshing = false; }
+  const lc = (a) => String(a || '').toLowerCase();
+  const targets = [];
+  for (const r of pairsRaw.slice(-PAIRS_KEEP).reverse()) {   // the newest first: the pairs a member's sweep enriches
+    const t0 = lc(r.token0), t1 = lc(r.token1);
+    if (QUOTE_SET.has(t0) && QUOTE_SET.has(t1)) continue;   // WETH/USDG pair, not a new coin
+    const q = QUOTE_SET.has(t0) ? t0 : QUOTE_SET.has(t1) ? t1 : null;
+    targets.push({ pair: lc(r.pair), token: q === t0 ? t1 : t0, token0: t0, token1: t1, quote: q, quoteSymbol: q ? QUOTE_SYMBOL[q] : null, block: r.block });
   }
-  if (!MC.SCAN_CHAINS.includes(chain)) return null;
-  const r = await mc().scan(chain, addr);
-  return r && r.pair ? { pair: r.pair, readAt: r.readAt } : null;
+  const dex = new Map(), notes = [];
+  for (let i = 0; i < targets.length; i += 30) {
+    const slice = targets.slice(i, i + 30);
+    const r = await t.ask(MKT_URLS.ds + '/tokens/v1/robinhood/' + slice.map((x) => x.token).join(','), { maxBytes: 4 * 1024 * 1024 });
+    if (!r.ok || !Array.isArray(r.data)) { for (const x of slice) x.unread = true; if (!notes.length) notes.push('Dexscreener could not be read (' + (r.reason || 'not a list') + ')'); continue; }
+    for (const d of r.data) if (d && d.pairAddress) dex.set(lc(d.pairAddress), d);
+  }
+  // this token's side of the pool as Dexscreener lists it (its base, or its quote when Dexscreener has the pool the other way round)
+  const sideOf = (x) => { const d = dex.get(x.pair); if (!d) return null; if (d.baseToken && lc(d.baseToken.address) === x.token) return d.baseToken; return d.quoteToken && lc(d.quoteToken.address) === x.token ? d.quoteToken : null; };
+  const unnamed = targets.filter((x) => !x.unread && !(sideOf(x) || {}).symbol && !_tokenNameCache.has(x.token)).slice(0, MKT_RADAR_NAMES_MAX);
+  if (unnamed.length) {
+    try {
+      const res = await t.rpc(unnamed.flatMap((x) => [['eth_call', [{ to: x.token, data: '0x06fdde03' }, 'latest']], ['eth_call', [{ to: x.token, data: '0x95d89b41' }, 'latest']]]));
+      unnamed.forEach((x, i) => { const v = { name: abiText(res[2 * i]), symbol: abiText(res[2 * i + 1]) }; if (v.name || v.symbol) { pruneCache(_tokenNameCache, 20000); _tokenNameCache.set(x.token, v); } });
+    } catch (e) { notes.push('names not read (' + String((e && e.message) || e).slice(0, 80) + ')'); }   // stood down or refused: those pairs keep the name they had
+  }
+  const market = [];
+  for (const x of targets) {
+    if (x.unread) continue;   // Dexscreener could not be asked: the row keeps what it last read, never a blank in its place
+    const d = dex.get(x.pair) || null, side = sideOf(x) || {}, oc = _tokenNameCache.get(x.token) || {};
+    const priced = !!(d && d.baseToken && lc(d.baseToken.address) === x.token);   // Dexscreener's price, FDV and cap are its base token's: this one's only when it is the base
+    market.push({ pair: x.pair, token: x.token, token0: x.token0, token1: x.token1, quote: x.quote, quoteSymbol: x.quoteSymbol, block: x.block,
+      symbol: side.symbol || oc.symbol || null, name: side.name || oc.name || null, createdAt: d ? MD.num(d.pairCreatedAt) : null,
+      priceUsd: priced ? MD.num(d.priceUsd) : null, mcap: priced ? MD.num(d.marketCap) : null, fdv: priced ? MD.num(d.fdv) : null,
+      liquidityUsd: d && d.liquidity ? MD.num(d.liquidity.usd) : null, volume24: d && d.volume ? MD.num(d.volume.h24) : null });
+  }
+  return { market, cursor: pairsScanBlock, raw: pairsRaw, note: notes.join('; ') };
+}
+/* The hourly re-scan of the most-scanned tokens (the Market Data timer), QUIET: the public "recently scanned" list, the Scanner's counts and
+   the token cache's views are for what people chose to read, so nothing is written there; only Market Data keeps the reading.
+     · the home chain: the reading the site already holds — the token cache's row, which its own refresher keeps current — when it is from
+       the last hour and newer than the one Market Data has; nothing is fetched for it, and no holder ledger is walked;
+     · Ethereum and Solana: the Scanner's own read (lib/multichain.js), through an instance of its own that asks as the site itself
+       (Market Data's honest fetch and meters) and takes GoPlus only from a small share of its own, giving way when the site's GoPlus meter
+       has nothing to spare. A read that could not ask GoPlus is not kept: without the security read a token scores better than it is. */
+const MKT_RESCAN_MAX_AGE = 60 * 60 * 1000;
+const MKT_GOPLUS_WAIT_MS = 4 * OUTBOUND_MAX_WAIT_MS;   // a re-scan waits its turn on its GoPlus share (one every 20 s at 3 a minute)
+async function mktScanQuiet(chain, addr, tools, held) {
+  if (chain === 'robinhood') {
+    const row = tokenCacheGet(String(addr || '').toLowerCase());
+    if (!row || !row.found || now() - row.updated_at > MKT_RESCAN_MAX_AGE) return null;   // no reading from the last hour: none is made
+    if (held && held.lastReadAt != null && row.updated_at <= held.lastReadAt) return null;   // the reading Market Data already has
+    const res = tokenCacheRes(row);
+    return res && res.pair ? { pair: res.pair, readAt: row.updated_at } : null;
+  }
+  if (!MC.SCAN_CHAINS.includes(chain) || !tools || !tools.ask) return null;
+  let gpMissed = false;
+  const quiet = MC.createMultichain({ applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS,
+    jgetR: async (u) => {
+      const gp = u.startsWith(MC_URLS.goplus);
+      if (gp) { try { await outboundTake('market:goplus', MKT_GOPLUS_WAIT_MS); } catch { gpMissed = true; return { ok: false, data: null, reason: 'rate-limited' }; } }
+      const r = await tools.ask(u, gp ? { wait: 0 } : {});   // GoPlus: only a call its own meter has to spare at once
+      if (gp && !r.ok) gpMissed = true;
+      return { ok: r.ok, data: r.data, reason: r.reason === 'budget' ? 'rate-limited' : r.reason };
+    },
+    // the chain's own node (name, symbol, decimals, supply; an owner's code), asked the same way
+    fetchImpl: async (u, o) => { const r = await tools.ask(u, { body: JSON.parse(String((o && o.body) || 'null')), maxBytes: 1024 * 1024 }); return { ok: r.ok, json: async () => r.data }; },
+  });
+  const r = await quiet.scan(chain, addr);
+  return r && r.pair && !gpMissed ? { pair: r.pair, readAt: r.readAt } : null;
 }
 let _mktLogAt = new Map();
 const MKT = MD.createMarketData({
@@ -10334,11 +10427,7 @@ MKT.migrate();
 try { const rr = MKT.radarRestore(Math.max(PAIRS_KEEP, 120)); if (rr.cursor && !pairsScanBlock) { pairsScanBlock = rr.cursor; pairsRaw = rr.raw; } } catch {}
 if (MKT_COLLECT_ON) {
   const st = process.env.MARKET_STAGGER_MS;
-  /* The radar sweep and the re-scan reach the explorer and Dexscreener through the Scanner's own fetchers, which send a
-     browser User-Agent: unattended on a timer they would ask robinhoodchain.blockscout.com every 10 minutes under a borrowed
-     identity. Until those reads go honest, neither runs unless MARKET_JOBS names it (the tests do, against fakes). */
-  const named = String(process.env.MARKET_JOBS || '').split(',').map((s) => s.trim()).filter(Boolean);
-  MKT.start({ staggerMs: st != null && st !== '' && Number(st) >= 0 ? Number(st) : 1000, jobs: named.length ? named : Object.keys(MD.JOBS).filter((j) => j !== 'radar' && j !== 'scans') });
+  MKT.start({ staggerMs: st != null && st !== '' && Number(st) >= 0 ? Number(st) : 1000, jobs: String(process.env.MARKET_JOBS || '').split(',').map((s) => s.trim()).filter(Boolean) });
 }
 /* ----- the admin page's "Collected data": everything the platform collects that is public — the tables above, the caches
    the Scanner, the radar, the holder ledger and the chart switch keep, and the Send API's public views. PUBLIC COLUMNS ONLY:
@@ -10426,13 +10515,29 @@ function adminCollectedRows(id, o) {
   return { id, columns: d.cols.map(([name, label]) => ({ name, label })), rows, next: raw.length === limit ? raw[raw.length - 1]._rid : null, cut: ADMIN_CELL_MAX };
 }
 const MKT_LOGO_ORIGIN = String(process.env.MARKET_LOGO_ORIGIN || '').replace(/\/+$/, '');   // a test's image fake: the allowed URL's path is fetched from here instead
-const mktLogoCache = new Map();   // url -> { ct, buf, at } | { fail: why, at }
+const mktLogoCache = new Map();   // canonical url -> { ct, buf, at }
+const mktLogoFails = new Map();   // canonical url -> { fail: why, code, at } — kept apart and bounded, so a run of bad asks never pushes a picture out
 let mktLogoBytes = 0;
 const MKT_LOGO_TTL = 7 * 864e5, MKT_LOGO_FAIL_TTL = 10 * 60e3, MKT_LOGO_MAX_BYTES = 32 * 1024 * 1024, MKT_LOGO_ONE_MAX = 2 * 1024 * 1024;
 function mktLogoPut(u, v) {
   const old = mktLogoCache.get(u); if (old) { if (old.buf) mktLogoBytes -= old.buf.length; mktLogoCache.delete(u); }
   mktLogoCache.set(u, v); if (v.buf) mktLogoBytes += v.buf.length;
+  mktLogoFails.delete(u);
   for (const [k, x] of mktLogoCache) { if (mktLogoBytes <= MKT_LOGO_MAX_BYTES && mktLogoCache.size <= 3000) break; mktLogoCache.delete(k); if (x.buf) mktLogoBytes -= x.buf.length; }
+}
+function mktLogoFail(u, v) {
+  mktLogoFails.delete(u); mktLogoFails.set(u, v);
+  if (mktLogoFails.size > 1000) mktLogoFails.delete(mktLogoFails.keys().next().value);
+}
+/* A logo URL's canonical form: the key the cache and the meters go by, and what is fetched. On these hosts a query string names a
+   version or a size of the same picture (CoinGecko's is a version stamp, Dexscreener's OG images carry a timestamp), so it is dropped,
+   with any fragment — except the resize Dexscreener's image CDN takes, whose originals run to megabytes: that is set to the one size its
+   token icons come in. So a query string changed on every ask is the same picture, not a new fetch. */
+function mktLogoKey(u) {
+  const x = new URL(u);
+  x.hash = '';
+  x.search = x.hostname === 'cdn.dexscreener.com' && x.pathname.startsWith('/cms/images/') ? '?width=800&height=800&quality=95&format=auto' : '';
+  return x.toString();
 }
 
 /* ---------- watchlist enrichment (reuses the pairs pipeline; cached so it scales) ---------- */
@@ -18295,18 +18400,23 @@ const server = http.createServer(async (req, res) => {
         /* A token's or a chain's picture from the exact hosts the market sources use, served from our origin so the page's
            img-src stays 'self'. The allow-list is the SSRF boundary (exact host names, https, no port, no credentials); no
            redirect is followed; the type is read from the bytes and only rasters pass (never SVG); size capped; kept a week. */
-        const u = String(url.searchParams.get('u') || '');
-        if (!MD.logoAllowed(u)) return bad(res, 'unsupported image host');
+        /* One picture is one key (mktLogoKey), and what a picture not yet kept may cost is metered on its own: a visitor's misses, far
+           below its asks, and a share of the CDNs' meters ('market:logo') — so asks made up to miss neither drain the meters other
+           fetches share nor push real logos out (a failure is kept apart from the pictures). */
+        const raw = String(url.searchParams.get('u') || '');
+        if (!MD.logoAllowed(raw)) return bad(res, 'unsupported image host');
         if (!rateLimit('mktlogo:' + clientIp(req), 300, 6e4)) return bad(res, 'slow down', 429);
+        const u = mktLogoKey(raw);
         const head = (ct, len) => ({ 'Content-Type': ct, 'Cache-Control': 'public, max-age=604800', 'Content-Length': len, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' });
         let hit = mktLogoCache.get(u);
-        if (hit && hit.fail && now() - hit.at < MKT_LOGO_FAIL_TTL) return bad(res, hit.fail, hit.code || 502);
-        if (!hit || !hit.buf || now() - hit.at > MKT_LOGO_TTL) {
-          if (!rateLimit('mktlogo-site', 1500, 6e4)) return bad(res, 'slow down', 429);
+        if (!hit || now() - hit.at > MKT_LOGO_TTL) {
+          const failed = mktLogoFails.get(u);
+          if (failed && now() - failed.at < MKT_LOGO_FAIL_TTL) return bad(res, failed.fail, failed.code || 502);
+          if (!rateLimit('mktlogo-miss:' + clientIp(req), 60, 6e4)) return bad(res, 'slow down', 429);
           let target = u; if (MKT_LOGO_ORIGIN) { const x = new URL(u); target = MKT_LOGO_ORIGIN + x.pathname + x.search; }
-          try { await outboundTake(new URL(target).host, 3000); } catch { return bad(res, 'the picture could not be fetched just now', 503); }
+          try { await outboundTake('market:logo', 3000); await outboundTake(new URL(target).host, 3000); } catch { return bad(res, 'the picture could not be fetched just now', 503); }
           const r = await MKT_HTTP.fetchImage(target, { maxBytes: MKT_LOGO_ONE_MAX });
-          if (!r.ok) { const code = r.status === 413 || r.status === 415 ? r.status : 502; mktLogoPut(u, { fail: r.reason, code, at: now() }); return bad(res, r.reason, code); }
+          if (!r.ok) { const code = r.status === 413 || r.status === 415 ? r.status : 502; mktLogoFail(u, { fail: r.reason, code, at: now() }); return bad(res, r.reason, code); }
           hit = { ct: r.type, buf: r.buf, at: now() }; mktLogoPut(u, hit);
         }
         res.writeHead(200, head(hit.ct, hit.buf.length));
@@ -20483,6 +20593,13 @@ const BACKUP_SCRUB = [
   'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
   'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
   'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
+  /* Market Data's bulk public history (lib/marketdata.js) is read again from its sources after a restore, so a copy does not carry it —
+     at its full retention it ran to 1.3 GB. Kept: the tier the retention rules keep for ever (each network's first pool batch of a UTC
+     day, each chain's last row of one); dropped: the batches between, the new-pool feed (and its cursor, so a restore reads the chain's
+     last day of pools again) and the collectors' run log. */
+  'DELETE FROM mkt_pool_snap WHERE (network, at) NOT IN (SELECT network, MIN(at) FROM mkt_pool_snap GROUP BY network, at / 86400000)',
+  'DELETE FROM mkt_chain_snap WHERE id NOT IN (SELECT MAX(id) FROM mkt_chain_snap GROUP BY chain, at / 86400000)',
+  'DELETE FROM mkt_new_pool', "DELETE FROM mkt_state WHERE name = 'rh_newpools'", 'DELETE FROM mkt_runs',
 ];
 function scrubBackup(file) {
   let b = null, st = null;
@@ -20504,6 +20621,26 @@ function scrubBackup(file) {
 function scrubBackups() {
   try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db$/.test(n) || /^pre-idx-e\d+-.*\.db$/.test(n)) scrubBackup(path.join(BACKUP_DIR, n)); } catch {}
 }
+// a fresh copy: one that could not be scrubbed is not kept
+function scrubCopy(tmp) {
+  if (!scrubBackup(tmp)) throw new Error('the copy could not be scrubbed, so it is not kept');
+  return true;
+}
+/* The scrub runs on a thread of its own. node:sqlite is synchronous, and a copy's scrub and VACUUM held the whole site while they ran —
+   7.9 s, measured on a copy holding Market Data's history at its full retention. The thread runs these same functions, from their
+   source; fn is 'scrubCopy' (the fresh copy) or 'scrubBackups' (the folder). */
+const { Worker } = require('node:worker_threads');
+function scrubOffThread(fn, file) {
+  const src = "'use strict';\nconst { DatabaseSync } = require('node:sqlite'); const fs = require('node:fs'), path = require('node:path'); const { parentPort, workerData } = require('node:worker_threads');\n"
+    + 'const BACKUP_DIR = ' + JSON.stringify(BACKUP_DIR) + ', BACKUP_SCRUB = ' + JSON.stringify(BACKUP_SCRUB) + ';\n'
+    + [scrubBackup, scrubBackups, scrubCopy].map((f) => f.toString()).join('\n') + '\nparentPort.postMessage(' + fn + '(workerData) === true);';
+  return new Promise((ok, fail) => {
+    const w = new Worker(src, { eval: true, workerData: file || null });
+    w.once('message', ok);
+    w.once('error', fail);
+    w.once('exit', (code) => { if (code) fail(new Error('the scrub thread stopped (' + code + ')')); });
+  });
+}
 // which dated backups stay: the newest `days`, and the first copy of each of the last `months` months (names sort by date)
 function backupKeepSet(all, days, months) {
   const keep = new Set(all.slice(-days)), firsts = new Map();
@@ -20519,7 +20656,7 @@ async function snapshotDbNow() {
   const f = path.join(BACKUP_DIR, 'app-' + new Date().toISOString().slice(0, 10) + '.db');
   const tmp = f + '.part';
   try { for (const n of fs.readdirSync(BACKUP_DIR)) if (/^app-\d{4}-\d{2}-\d{2}\.db\.part$/.test(n) && path.join(BACKUP_DIR, n) !== tmp) fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} // a .part orphaned by a hard kill on an earlier day
-  if (fs.existsSync(f)) { scrubBackups(); return; } // today's snapshot already exists (an older one from before the scrub is cleaned)
+  if (fs.existsSync(f)) { await scrubOffThread('scrubBackups'); return; } // today's snapshot already exists (an older one from before the scrub is cleaned)
   // Need room for a whole extra copy of the DB plus the live site's own headroom, or don't start.
   try {
     const dbBytes = fs.statSync(path.join(DATA_DIR, 'app.db')).size;
@@ -20528,12 +20665,12 @@ async function snapshotDbNow() {
   } catch {}
   try {
     await sqliteBackup(db, tmp, { rate: 256 });
-    if (!scrubBackup(tmp)) throw new Error('the copy could not be scrubbed, so it is not kept');
+    await scrubOffThread('scrubCopy', tmp);
     fs.renameSync(tmp, f);
     const all = fs.readdirSync(BACKUP_DIR).filter(n => /^app-\d{4}-\d{2}-\d{2}\.db$/.test(n)).sort();
     const keep = backupKeepSet(all, BACKUP_KEEP, BACKUP_KEEP_MONTHS);
     for (const n of all) if (!keep.has(n)) { try { fs.unlinkSync(path.join(BACKUP_DIR, n)); } catch {} }
-    scrubBackups();
+    await scrubOffThread('scrubBackups');
   } catch (e) { try { fs.unlinkSync(tmp); } catch {} console.error('db snapshot failed:', e && e.message); }
 }
 const backupTimer = setInterval(() => { snapshotDb().catch(() => {}); }, 60 * 60 * 1000);
