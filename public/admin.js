@@ -364,7 +364,7 @@
     const d = colOpen.set, n = Array.isArray(d.columns) ? d.columns.length : 0;
     colHead.textContent = d.title || String(d.id);
     colAbout.textContent = (d.description ? d.description + ' ' : '') + '— ' + colRows(d.rows) + ' · ' + colSpan(d).join(' · ') + (n ? ' · ' + n + ' columns' : '') + ' · dataset “' + d.id + '”.';
-    colFind.hidden = d.searchable === false;   // every dataset takes a search unless the server says this one cannot
+    colFind.hidden = d.search === false || d.searchable === false;   // the server says which datasets take a search (search: false on the in-memory ones)
   }
   function colShow(d) {
     colOpen = { set: d, q: '', cursors: [null], counts: [] };   // cursors[i]: the `before` page i + 1 was asked with

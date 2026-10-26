@@ -198,7 +198,8 @@
       <p class="dk-note">Every market figure is an object <code>{ v, src, at, why?, label? }</code>: <code>v</code> is the number or <code>null</code>, <code>src</code> where it came from (<code>defillama</code>, <code>l2beat</code>, <code>growthepie</code>, <code>coingecko</code>, <code>geckoterminal</code>, <code>dexscreener</code>, <code>rpc</code> or <code>site</code>), <code>at</code> when it was read, <code>why</code> why <code>v</code> is empty, and <code>label</code> what kind of figure it is. A chain window is <code>24h</code>, <code>7d</code>, <code>30d</code> or <code>custom</code> with <code>from=</code> and <code>to=</code> — whole UTC days, both included; volume and fees add up over it, TVL and stablecoins give its start, end and change.</p>
       <details class="dk-res"><summary><code>chains</code> <span>every tracked chain, latest reading</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/chains"</pre>
-<pre class="dk-pre">{ data: [ { key, name, chainId|null, gtNetwork|null, logo|null, tvl, volume, liquidity, mcap, fees, stables, tvs, stage|null, isL2 } ] }</pre>
+<pre class="dk-pre">{ data: [ { key, name, chainId|null, gtNetwork|null, logo|null, tvl, volume, liquidity, mcap, fees, stables, tvs, stage|null, isL2 } ],
+  at, window, sort, dir, total, notes: [ … ] }</pre>
         <p class="dk-note"><code>liquidity</code> is DEX liquidity: the TVL of DefiLlama’s DEX protocols on that chain. <code>mcap</code> is the native token’s market cap, labelled with the token; Robinhood Chain’s is <code>null</code> — it has no native token, gas is paid in ETH.</p>
       </div></details>
       <details class="dk-res"><summary><code>chain</code> <span>one chain in full</span></summary><div class="dk-res-body">
@@ -213,8 +214,8 @@
       <details class="dk-res"><summary><code>chain-history</code> <span>one metric, day by day</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
   "https://YOUR-HOST/api/data/v1/chain-history?key=robinhood&amp;metric=tvl&amp;from=2026-09-01&amp;to=2026-10-25"</pre>
-<pre class="dk-pre">{ data: [ { chain, metric, day, value, src } ] }</pre>
-        <p class="dk-note"><code>metric</code> is <code>tvl</code>, <code>dex_volume</code>, <code>fees</code>, <code>app_fees</code>, <code>stables</code>, <code>txcount</code> or <code>daa</code> (daily active addresses); <code>day</code> is a whole UTC day, <code>YYYY-MM-DD</code>. Today’s provisional point is never stored as a full day.</p>
+<pre class="dk-pre">{ key, metric, from, to, data: [ { day, value, src, at } ] }</pre>
+        <p class="dk-note"><code>metric</code> is <code>tvl</code>, <code>dex_volume</code>, <code>fees</code>, <code>app_fees</code>, <code>stables</code>, <code>txcount</code>, <code>daa</code> (daily active addresses) or <code>txcost_median</code> (the median transaction cost, growthepie); <code>day</code> is a whole UTC day, <code>YYYY-MM-DD</code>. Today’s provisional point is never stored as a full day.</p>
       </div></details>
       <details class="dk-res"><summary><code>chain-snapshots</code> <span>every chain reading kept</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/chain-snapshots?limit=200"</pre>
@@ -236,8 +237,8 @@
       <details class="dk-res"><summary><code>tokens</code> <span>a chain’s top tokens</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
   "https://YOUR-HOST/api/data/v1/tokens?chain=robinhood&amp;sort=liquidity&amp;dir=desc&amp;window=24h"</pre>
-<pre class="dk-pre">{ data: { at, chain, network, basis, window, coverage?: { from },
-  rows: [ { chain, address, symbol, name, logo|null, priceUsd, mcap, fdv, liquidity: { v, pools }, volume, change, txns24h, flags: [ … ], scannable } ] } }</pre>
+<pre class="dk-pre">{ data: [ { chain, address, symbol, name, logo|null, priceUsd, mcap, fdv, liquidity: { v, pools }, volume, change, txns24h, flags: [ … ], scannable } ],
+  at, chain, network, basis, window, coverage?: { from }, total, notes: [ … ] }</pre>
         <p class="dk-note"><code>sort</code> is <code>volume</code>, <code>liquidity</code>, <code>mcap</code>, <code>fdv</code> or <code>change</code>; <code>dir</code> is <code>desc</code> or <code>asc</code>. <code>basis</code> says what the list is drawn from — on Robinhood Chain the 200 most-traded pools on GeckoTerminal, grouped by token — so “lowest” means lowest among those, never on the whole chain. <code>flags</code>: <code>thin</code> (under $10k in its pools), <code>wash</code> (24-hour volume over 100× its reserve — left out of the highest-volume list unless <code>include=all</code>), <code>global-mcap</code> (a market cap counted over every chain).</p>
       </div></details>
       <details class="dk-res"><summary><code>token</code> <span>one token in full</span></summary><div class="dk-res-body">
@@ -266,7 +267,7 @@
       <details class="dk-res"><summary><code>radar</code> <span>the New Pairs radar</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/radar?limit=200"</pre>
 <pre class="dk-pre">{ data: [ { pair, token, quote, …its created block and time, latest price, liquidity, risk and verdict, updated_at } ],
-  next, limit }</pre>
+  next, limit, cursor }</pre>
       </div></details>
       <details class="dk-res"><summary><code>scans</code> <span>every token the Scanner read</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
@@ -293,7 +294,7 @@
           <tr><td>Pools</td><td>GeckoTerminal’s 200 most-traded pools on Robinhood Chain; the top 60 on Ethereum, Solana, Base, BNB Chain, Arbitrum, Polygon, Avalanche and OP Mainnet.</td><td>Robinhood Chain every 10 minutes, the others hourly</td></tr>
           <tr><td>New pools</td><td>Robinhood Chain’s own logs (v2 PairCreated, v3 PoolCreated, v4 Initialize); GeckoTerminal’s new pools on the other networks.</td><td>Every 3 minutes; the other networks every 15</td></tr>
           <tr><td>Pulse</td><td>Robinhood Chain’s public RPC: block, block time, gas; WETH and USDG supply and the v4 PoolManager’s holdings; the canonical bridge’s ETH, from a public Ethereum node.</td><td>Every minute; supplies every 10 minutes; the bridge every 15</td></tr>
-          <tr><td>Radar</td><td>The New Pairs radar’s own sweep of new pairs.</td><td>Every 3 minutes</td></tr>
+          <tr><td>Radar</td><td>The New Pairs radar’s own sweep of new pairs (and at once whenever someone opens the radar).</td><td>Every 10 minutes</td></tr>
           <tr><td>Scans</td><td>The 40 tokens scanned most in the last 7 days, read again the way the Scanner reads them.</td><td>Hourly</td></tr>
           <tr><td>Tidy-up</td><td>Thins old rows to the spacing each resource above describes.</td><td>Hourly</td></tr>
         </tbody>
@@ -313,7 +314,7 @@
         <li><b><a href="https://www.coingecko.com" target="_blank" rel="noopener">CoinGecko</a></b> — native-token market caps where DefiLlama has none, and figures that count every chain together, labelled as such.</li>
         <li><b>Robinhood Chain’s public RPC</b> and <b>a public Ethereum node</b> — the chain’s own readings and its canonical bridge.</li>
       </ul>
-      <p class="dk-note">Our server reads them; your browser never does. Each source is named beside its figures on the Market Data page and in every answer here (<code>src</code>). Their figures are theirs: each source has its own terms, and they apply to whatever you build with them. The chain’s explorer is read only through a keyed endpoint when one is set — never scraped. Not affiliated with Robinhood Markets, Inc., or with any of these sources.</p>
+      <p class="dk-note">Our server reads them; your browser never does. Each source is named beside its figures on the <a href="/market">Market Data page</a> and in every answer here (<code>src</code>). Their figures are theirs: each source has its own terms, and they apply to whatever you build with them. The chain’s explorer is read only through a keyed endpoint when one is set — never scraped. Not affiliated with Robinhood Markets, Inc., or with any of these sources.</p>
     </section>
 
     <div class="sr-only" id="dk-sr" aria-live="polite"></div>

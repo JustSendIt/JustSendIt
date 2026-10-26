@@ -3328,8 +3328,9 @@ async function paceTake(weight) {
   if (wait > 0) await sleep(wait);
 }
 const paceOk = () => { _paceMs = Math.max(PACE_MS_MIN, _paceMs * 0.9); };
-const paceRefused = (attempt) => { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + Math.min(PACE_REFUSED_WAIT_MAX, 2500 * (attempt + 1))); };
-function paceYield() { _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + 2000); }
+let _paceRefusedAt = 0;   // when the node last refused one of the site's reads (the Market Data collectors stand aside for a minute after it)
+const paceRefused = (attempt) => { _paceRefusedAt = now(); _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + Math.min(PACE_REFUSED_WAIT_MAX, 2500 * (attempt + 1))); };
+function paceYield() { _paceRefusedAt = now(); _paceMs = Math.min(PACE_MS_MAX, _paceMs * 1.5); _paceAt = Math.max(_paceAt, now() + 2000); }
 const isThrottle = (e) => { const m = String((e && e.message) || e); return !/revert/i.test(m) && /\b429\b|\b403\b|too many requests|rate.?limit|capacity/i.test(m); };
 // one call's refusals: waited out while the budget lasts, then failed with the wait named (the message keeps the node's words, so the failure still reads as a throttle)
 const refusedTooLong = (e, since) => new Error('the chain refused this read for ' + Math.round((now() - since) / 60000) + ' minutes (' + String((e && e.message) || e) + ')');
@@ -10287,15 +10288,19 @@ const MKT_URLS = {
 };
 const MKT_HTTP = MD.createHonestFetch();   // 'JustSendIt/1.0 (+https://sendrh.com)', ≥30 s, no redirects, a size cap — never BROWSER_UA
 const MKT_COLLECT_ON = process.env.MARKET_COLLECT === '1' || (process.env.NODE_ENV === 'production' && process.env.MARKET_COLLECT !== '0');
-// the shared pace has backed off — the site's own chain reads are being refused, or a long queue waits on the pace: Market Data steps aside
-const mktRpcBusy = () => _paceMs > PACE_MS_START * 1.2 || _paceAt - now() > 5000;
+/* The collectors give way to the site's own chain reads: for a minute after the node last refused one, or while the shared pace
+   has reads queued more than 5 s ahead (a wallet or holder walk). The answer is the reason, for the run's note, or false. Not "while _paceMs is above its start": the pace only speeds up again on a successful whole-wallet read,
+   so on a quiet server one refusal at boot kept every chain collector idle for hours (seen on the first real-source run). */
+const mktRpcBusy = () => now() - _paceRefusedAt < 60000 ? 'the node refused one of the site\'s own reads in the last minute'
+  : _paceAt - now() > 5000 ? 'the site\'s own chain reads are queued' : false;
 let mktRadarLast = 0;
 function mktRadarKeep() {   // every finished radar sweep (on demand or the timer's) is kept: its pairs and the block it read up to
   try { mktRadarLast = MKT.radarPersist(pairsCache.pairs || [], pairsScanBlock, pairsRaw); } catch (e) { console.warn('[market] radar not kept: ' + ((e && e.message) || e)); }
 }
 async function mktRadarSweep() {
   if (pairsRefreshing) return { error: 'a sweep was already running' };
-  if (mktRpcBusy()) return { error: 'yielded: the site\'s own chain reads are being refused' };   // the timer's sweep gives way; a member opening the radar still builds it
+  const busy = mktRpcBusy();
+  if (busy) return { error: 'yielded: ' + busy };   // the timer's sweep gives way; a member opening the radar still builds it
   const before = pairsCache.updatedAt;
   await refreshPairs();
   if (pairsCache.updatedAt === before) return { error: pairsCache.error || 'the sweep did not finish' };
@@ -10305,7 +10310,7 @@ async function mktRadarSweep() {
    Scanner's counts are for scans people chose to make, so nothing is written there; only Market Data keeps the reading */
 async function mktScanQuiet(chain, addr) {
   if (chain === 'robinhood') {
-    if (mktRpcBusy()) return null;   // the home chain's reads give way while the site's own are being refused
+    if (mktRpcBusy()) return null;   // the home chain's reads give way to the site's own
     await ensureLedger(addr, { wait: true }).catch(() => null);
     const r = await scanRead(addr);
     return r && r.pair && !r.stale ? { pair: r.pair, readAt: r.readAt } : null;   // a stale snapshot is not a new reading

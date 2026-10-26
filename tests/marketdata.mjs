@@ -76,8 +76,11 @@ for (const p of allPools) { const a = baseOf(p).address || p.relationships.base_
 const num = (x) => (x == null || x === '' ? null : Number(x));
 const tokLiq = (a) => groupBy.get(a).reduce((s, p) => s + (num(p.attributes.reserve_in_usd) || 0), 0);
 const tokVol = (a, w = 'h24') => groupBy.get(a).reduce((s, p) => s + (num(p.attributes.volume_usd[w]) || 0), 0);
-const WASH = [...groupBy.keys()].filter((a) => tokVol(a) > 100 * Math.max(tokLiq(a), 1e-9));
-const THIN = [...groupBy.keys()].filter((a) => tokLiq(a) < 10000);
+// GeckoTerminal answers 0 for a reserve it did not read: a token whose pools all say 0 has no liquidity reading, and no flag rests on it
+const liqKnown = (a) => groupBy.get(a).some((p) => num(p.attributes.reserve_in_usd) > 0);
+const WASH = [...groupBy.keys()].filter((a) => liqKnown(a) && tokVol(a) > 100 * Math.max(tokLiq(a), 1e-9));
+const THIN = [...groupBy.keys()].filter((a) => liqKnown(a) && tokLiq(a) < 10000);
+const UNREAD = [...groupBy.keys()].filter((a) => !liqKnown(a));
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('0000000d49484452', 'hex'), randomBytes(40)]);
 
 /* ═══ the fake vendors: one server, a prefix per source ═══ */
@@ -227,7 +230,7 @@ try {
   /* ── the module's shape, in the source ── */
   check('one honest User-Agent, at least 30 s to answer, no redirect followed, a size cap — never the browser one', MD.HONEST_UA === UA && /Math\.max\(30000, Number\(o\.timeoutMs\) \|\| 30000\)/.test(LIB) && (LIB.match(/redirect: 'error'/g) || []).length === 2 && /readCapped\(res, Number\(o\.maxBytes\)/.test(LIB) && !/BROWSER_UA|Mozilla\//.test(LIB));
   check('every outbound read takes the meter first — the share (GeckoTerminal), then the host — and a spent meter is "could not ask"', /if \(o\.share\) await take\(o\.share, wait\);\s*const h = hostOf\(url\); if \(h\) await take\(h, wait\);/.test(LIB) && /catch \{ return \{ ok: false, status: 0, data: null, reason: 'budget' \}; \}/.test(LIB) && /const gtAsk = \(ctx, path, o = \{\}\) => ask\(ctx, urls\.gt \+ path, Object\.assign\(\{ share: GT_SHARE \}, o\)\);/.test(LIB));
-  check('the chain node is read only through the injected (paced) batch, stands aside while the site\'s own reads are refused, and cools down after a refusal', /if \(rpcBusy\(\)\) throw Object\.assign\(new Error\('yielded/.test(LIB) && /await take\(RPC_SHARE, BG_WAIT\)/.test(LIB) && /rpcCoolUntil = now\(\) \+ 5 \* MIN/.test(LIB) && !/fetch\(RH_RPC|rpc\.mainnet\.chain\.robinhood\.com/.test(LIB));
+  check('the chain node is read only through the injected (paced) batch, stands aside while the site\'s own reads are refused, and cools down after a refusal', /const busy = rpcBusy\(\);\s+if \(busy\) throw Object\.assign\(new Error\('yielded: '/.test(LIB) && /await take\(RPC_SHARE, BG_WAIT\)/.test(LIB) && /rpcCoolUntil = now\(\) \+ 5 \* MIN/.test(LIB) && !/fetch\(RH_RPC|rpc\.mainnet\.chain\.robinhood\.com/.test(LIB));
   check('a DefiLlama point dated today is never stored as a day', /if \(!validDay\(r\[2\]\) \|\| r\[2\] >= today \|\| r\[3\] == null\) continue;/.test(LIB));
   check('every table the contract names is created, each with an index for paging newest-first', ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_runs'].every((t) => q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t))
     && ['idx_mkt_chain_snap_at', 'idx_mkt_chain_series_at', 'idx_mkt_pool_snap_at', 'idx_mkt_new_pool_chain', 'idx_mkt_rh_pulse_at', 'idx_mkt_scan_at', 'idx_mkt_radar_upd', 'idx_mkt_runs_at'].every((i) => q1("SELECT name FROM sqlite_master WHERE type='index' AND name=?", i)));
@@ -264,6 +267,17 @@ try {
   const cgB = cgSeen[cgSeen.length - 1] || {};
   check('  ...with a CoinGecko Demo key (COINGECKO_DEMO_KEY) the fallback sends it as its header, never in the URL', rcB.ok && cgB.key === 'demo-key-for-the-test' && !/demo-key/.test(cgB.q) && cgSeen[0].key === null && /COINGECKO_DEMO_KEY/.test(SRC), brief(cgSeen));
   dbA.prepare('DELETE FROM mkt_chain_snap WHERE at > ?').run(NOW);   // keep the first run's snapshot as the latest
+  // a chain snapshot taken before L2BEAT's first read: the newer L2BEAT read wins, so the card never says "not read yet" above L2BEAT's own split
+  const dbC = new DatabaseSync(path.join(tmpA, 'c.db'));
+  const mdC = MD.createMarketData({ db: dbC, now: () => NOW, outboundTake: take, urls: URLS });
+  mdC.migrate(); await mdC.runJob('chains');
+  const tvs0 = mdC.chain({ key: 'robinhood' }).body.stats.tvs;
+  await mdC.runJob('l2beat');
+  const cdC = mdC.chain({ key: 'robinhood' }).body, rowC = mdC.chains({ limit: 200 }).body.rows.find((r) => r.key === 'robinhood'), ethC = mdC.chains({ limit: 200 }).body.rows.find((r) => r.key === 'ethereum');
+  dbC.close();
+  check('  ...a snapshot older than L2BEAT\'s read takes TVS, stage and L2 from the newer read (the detail and the list agree); a chain L2BEAT does not track says so', tvs0.v === null && /not been read yet/.test(tvs0.why)
+    && near(cdC.stats.tvs.v, RH_TVS) && cdC.stats.tvs.src === 'l2beat' && cdC.stats.tvsBreakdown && near(rowC.tvs.v, RH_TVS) && rowC.stage === 'Stage 0' && rowC.isL2 === true
+    && ethC && ethC.tvs.v === null && /L2s and L3s only/.test(ethC.tvs.why) && ethC.isL2 === false, brief({ tvs0, tvs: cdC.stats.tvs, row: rowC && rowC.tvs, eth: ethC && ethC.tvs }));
 
   const rg = await run('growthepie'), rs = await run('series');
   check('growthepie\'s fundamentals and the chain histories were read (DefiLlama TVL, DEX volume, app fees, stablecoins; growthepie txcount)', rg.ok && rs.ok && q1("SELECT COUNT(*) n FROM mkt_chain_series WHERE chain='robinhood' AND metric='tvl'").n > 100
@@ -315,8 +329,8 @@ try {
   const rnp2 = await run('newPoolsRh');
   check('  ...the next run reads only from the cursor on', rnp2.ok && /nothing new/.test(rnp2.note) || /blocks 98587508/.test(rnp2.note), rnp2.note);
   // a chain job steps aside while the site's own reads are refused
-  busy = true; const callsBefore = node.calls; const ry = await run('pulse', NOW + 120e3); busy = false;
-  check('a chain job steps aside while the site\'s own chain reads are being refused — and asks the node nothing', !ry.ok && /yielded/.test(ry.note) && node.calls === callsBefore, brief(ry));
+  busy = 'the site\'s own chain reads are queued'; const callsBefore = node.calls; const ry = await run('pulse', NOW + 120e3); busy = false;
+  check('a chain job steps aside while the site\'s own chain reads are refused or queued — asks the node nothing, and its note gives the reason', !ry.ok && /yielded: the site's own chain reads are queued/.test(ry.note) && node.calls === callsBefore, brief(ry));
   node.throttle = true; const rt = await run('pulse', NOW + 180e3); node.throttle = false; const callsAfterThrottle = node.calls;
   const rt2 = await run('pulse', NOW + 200e3);
   check('  ...and after the node refuses one of its reads it cools down for five minutes', !rt.ok && !rt2.ok && /cooling down/.test(rt2.note) && node.calls === callsAfterThrottle, brief([rt.note, rt2.note]));
@@ -395,7 +409,8 @@ try {
   const hv = md.tokens({ chain: 'robinhood', sort: 'volume', dir: 'desc', limit: 200 }).body;
   check('  ...and wash-flagged tokens are left out of "highest volume" (and the list says so) unless include=all', !hv.rows.some((r) => r.flags.includes('wash')) && hv.rows.length === groupBy.size - WASH.length && hv.notes.some((n) => /left out of the highest-volume list/.test(n)) && hv.rows.every((r, i, a) => i === 0 || a[i - 1].volume.v >= r.volume.v));
   const la = md.tokens({ chain: 'robinhood', sort: 'liquidity', dir: 'asc', limit: 200 }).body, h1 = md.tokens({ chain: 'robinhood', window: '1h', limit: 200, include: 'all' }).body;
-  check('  ...lowest first works, and says it is the lowest within this list, never the chain\'s; the 1 h window sums the pools\' 1 h volumes', la.rows.every((r, i, a) => i === 0 || a[i - 1].liquidity.v <= r.liquidity.v) && /never the whole chain/.test(la.notes[0]) && near(h1.rows.find((r) => r.address === USDG).volume.v, tokVol(USDG, 'h1')) && /last hour/.test(h1.window.label));
+  check('  ...a token whose pools GeckoTerminal answers with a 0 reserve has no liquidity reading (null, why) and no thin/wash flag on it', UNREAD.every((a) => { const r = tk.rows.find((x) => x.address === a); return r && r.liquidity.v === null && /not read/.test(r.liquidity.why) && !r.flags.includes('thin') && !r.flags.includes('wash'); }), brief({ unread: UNREAD.length }));
+  check('  ...lowest first works, and says it is the lowest within this list, never the chain\'s; the 1 h window sums the pools\' 1 h volumes', (() => { const v = la.rows.map((r) => r.liquidity.v); const k = v.findIndex((x) => x == null); return (k < 0 || v.slice(k).every((x) => x == null)) && v.filter((x) => x != null).every((x, i, a) => i === 0 || a[i - 1] <= x); })() && /never the whole chain/.test(la.notes[0]) && near(h1.rows.find((r) => r.address === USDG).volume.v, tokVol(USDG, 'h1')) && /last hour/.test(h1.window.label));
   const tc1 = md.tokens({ chain: 'robinhood', window: 'custom', from: '2026-10-24', to: '2026-10-25', limit: 200, include: 'all' }).body;
   const tcU = tc1.rows.find((r) => r.address === USDG);
   check('a custom token window is served only from our own snapshots: each day\'s volume is the 24 h figure of the first batch after it ended; the coverage is said', tc1.coverage && tc1.coverage.from === '2026-10-24' && tcU && near(tcU.volume.v, 2 * tokVol(USDG)) && tcU.volume.days === 2 && tcU.volume.src === 'site' && tcU.change.v === 0, brief({ c: tc1.coverage, v: tcU && tcU.volume }));
@@ -493,12 +508,13 @@ try {
     && !q1("SELECT 1 FROM mkt_new_pool WHERE pool='0xoldpool'") && !q1("SELECT 1 FROM mkt_scan WHERE address='0xoldscan'") && !q1("SELECT 1 FROM mkt_runs WHERE job='x'") && q1("SELECT COUNT(*) n FROM mkt_new_pool WHERE chain='robinhood'").n === npRows.length, rpr.note);
 
   /* ── the timetable ── */
-  check('the timetable is the contract\'s: pulse 60 s, chains 30 min, radar 3 min, pools 10 min, new pools 3 min (chain) / 15 min (others), others\' pools hourly, histories 6 h, growthepie daily, L2BEAT hourly, re-scan hourly, prune hourly — and a failed DefiLlama run is not retried sooner than DefiLlama refreshes (30 min)',
-    MD.JOBS.pulse.every === 60e3 && MD.JOBS.chains.every === 30 * 60e3 && MD.JOBS.radar.every === 3 * 60e3 && MD.JOBS.pools.every === 10 * 60e3 && MD.JOBS.newPoolsRh.every === 3 * 60e3 && MD.JOBS.newPoolsGt.every === 15 * 60e3 && MD.JOBS.poolsOther.every === 3600e3
+  check('the timetable is the contract\'s: pulse 60 s, chains 30 min, radar 10 min (its sweep is the radar\'s full node read), pools 10 min, new pools 3 min (chain) / 15 min (others), others\' pools hourly, histories 6 h, growthepie daily, L2BEAT hourly, re-scan hourly, prune hourly — and a failed DefiLlama run is not retried sooner than DefiLlama refreshes (30 min)',
+    MD.JOBS.pulse.every === 60e3 && MD.JOBS.chains.every === 30 * 60e3 && MD.JOBS.radar.every === 10 * 60e3 && MD.JOBS.pools.every === 10 * 60e3 && MD.JOBS.newPoolsRh.every === 3 * 60e3 && MD.JOBS.newPoolsGt.every === 15 * 60e3 && MD.JOBS.poolsOther.every === 3600e3
     && MD.JOBS.chains.retry >= 30 * 60e3 && MD.JOBS.liquidity.retry >= 30 * 60e3 && MD.JOBS.series.retry >= 30 * 60e3
     && MD.JOBS.series.every === 6 * 3600e3 && MD.JOBS.growthepie.every === 864e5 && MD.JOBS.l2beat.every === 3600e3 && MD.JOBS.scans.every === 3600e3 && MD.JOBS.prune.every === 3600e3);
   check('the collectors start only when asked (MARKET_COLLECT=1, or production unless MARKET_COLLECT=0), and the test runner points every vendor URL at a dead address', /const MKT_COLLECT_ON = process\.env\.MARKET_COLLECT === '1' \|\| \(process\.env\.NODE_ENV === 'production' && process\.env\.MARKET_COLLECT !== '0'\);/.test(SRC) && /if \(MKT_COLLECT_ON\) \{/.test(SRC)
     && ['MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_LOGO_ORIGIN'].every((k) => new RegExp(k + ": DEAD").test(RUNJS) && SRC.includes('process.env.' + k)) && !/MARKET_COLLECT: '1'/.test(RUNJS));
+  check('the server\'s busy signal decays: a minute after the node\'s last refusal, or while the shared pace is queued over 5 s — never "the pace has not sped up yet" (one refusal at boot kept every chain job idle for hours)', /const mktRpcBusy = \(\) => now\(\) - _paceRefusedAt < 60000 \? '[^']*'[^\n]*\n\s*: _paceAt - now\(\) > 5000 \? '/.test(SRC) && /const paceRefused = \(attempt\) => \{ _paceRefusedAt = now\(\);/.test(SRC) && /function paceYield\(\) \{ _paceRefusedAt = now\(\);/.test(SRC) && !/_paceMs > PACE_MS_START/.test(SRC));
   check('the server meters each new host and Market Data\'s share of GeckoTerminal (3 of the site\'s 10 a minute)', /'market:geckoterminal': 3, 'market:rpc': 12,/.test(SRC) && /'api\.llama\.fi': 30, 'coins\.llama\.fi': 10, 'stablecoins\.llama\.fi': 20, 'l2beat\.com': 10,/.test(SRC) && /'api\.growthepie\.xyz': 10, 'api\.growthepie\.com': 10,/.test(SRC) && /'api\.geckoterminal\.com': 10,/.test(SRC));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
