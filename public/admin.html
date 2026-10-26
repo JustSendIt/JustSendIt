@@ -54,7 +54,7 @@
 
 <main id="main" class="wrap" style="padding-top:2.2rem; padding-bottom:4rem;">
   <h1 class="display" style="font-size:max(var(--text-floor), 1.6rem); margin:0 0 0.3rem;">Admin 🛠️</h1>
-  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, then the moderation queue.</p>
+  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, every public dataset the platform collects, then the moderation queue.</p>
 
   <p class="modal-note" id="adm-gate" role="status" aria-live="polite">Checking who you are…</p>
 
@@ -131,6 +131,34 @@
     <p class="modal-note" id="adm-hist-sum" role="status" aria-live="polite"></p>
     <div id="adm-hist-list"></div>
     <button class="btn btn-sm" id="adm-hist-older" type="button" hidden data-tip="Shows the next, older entries kept for this member">Show older</button>
+  </section>
+
+  <!-- collected data: everything public the platform collects, read-only, exactly as the server keeps or serves it (admin.js, GET /api/admin/collected and /api/admin/collected/<id>) -->
+  <section class="card adm-ov adm-col" id="adm-col" hidden aria-labelledby="adm-col-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-col-h" class="adm-h2">Collected data 🗄️</h2>
+      <button class="btn btn-sm" id="adm-col-refresh" type="button" data-tip="Reads the list of datasets and the open table again, from the server">↻ Refresh</button>
+    </div>
+    <p class="modal-note adm-codes-lede">Everything the platform collects that is public — the Market Data collectors, the Scanner and the radar, the token caches, the on-chain holder ledger, and what the Send API serves — as the server keeps it. Read-only: nothing here changes anything. Nothing encrypted is shown: no email, linked wallet, two-factor setting, preference, session, IP hash, key, password or tracked wallet.</p>
+    <p class="modal-note" id="adm-col-sum" role="status" aria-live="polite"></p>
+    <ul class="adm-col-sets" id="adm-col-sets" aria-label="Datasets"></ul>
+    <div class="adm-col-view" id="adm-col-view" hidden>
+      <h3 class="adm-h3" id="adm-col-view-h">Rows</h3>
+      <p class="modal-note adm-col-about" id="adm-col-about"></p>
+      <form class="adm-col-find" id="adm-col-find" role="search" autocomplete="off">
+        <label class="f-label" for="adm-col-q">Search this dataset</label>
+        <input class="addr-input" id="adm-col-q" name="q" type="search" maxlength="100" placeholder="robinhood, SEND, 0x…" spellcheck="false" autocapitalize="none" aria-describedby="adm-col-q-help">
+        <button class="btn btn-sm btn-primary" type="submit" data-tip="Asks the server for the rows of this dataset that contain what you typed">Search</button>
+        <button class="btn btn-sm btn-ghost" id="adm-col-clear" type="button" hidden data-tip="Drops the search and shows every row again, from the newest">Clear</button>
+        <p class="modal-note adm-col-help" id="adm-col-q-help">Sent to the server, which picks the rows that match; this page never filters rows itself.</p>
+      </form>
+      <p class="modal-note" id="adm-col-status" role="status" aria-live="polite"></p>
+      <div class="adm-col-table" id="adm-col-table"></div>
+      <div class="adm-col-pager">
+        <button class="btn btn-sm" id="adm-col-newest" type="button" hidden data-tip="Goes back to the first page of this dataset">↑ Newest</button>
+        <button class="btn btn-sm" id="adm-col-older" type="button" hidden data-tip="Shows the next page: the rows that come after the last one here">Older →</button>
+      </div>
+    </div>
   </section>
 
   <div id="adm-tools" hidden>

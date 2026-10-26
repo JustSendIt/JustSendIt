@@ -1,0 +1,5 @@
+{ "id": "mkt_radar",
+  "columns": [{"name":"pair","label":"Pair"},{"name":"token","label":"Token"},{"name":"quote","label":"Quote"},{"name":"created_block","label":"Created block"},{"name":"price_usd","label":"Price (USD)"},{"name":"liquidity_usd","label":"Liquidity (USD)"},{"name":"verdict","label":"Verdict"},{"name":"updated_at","label":"Updated"}],
+  "rows": [
+
+  ] }

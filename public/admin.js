@@ -264,12 +264,209 @@
   });
   document.getElementById('adm-dau-refresh').addEventListener('click', loadActivity);
 
+  /* ----- collected data: everything public the platform collects, read-only (owner, 2026-10-26: "Make all cache data from the
+     platform visible on the Admin page. Don't show anything on the admin page that is encrypted.") -----
+       GET /api/admin/collected                          { datasets: [{ id, title, description, rows, newestAt, oldestAt, columns: [{ name, label }] }] }
+       GET /api/admin/collected/<id>?before=&limit=&q=   { id, columns, rows, next }
+     The server decides what a dataset holds and serves its public columns only. This draws what comes back as it comes — a
+     null as null, never as 0 or a blank that reads as nothing — and adds one guard of its own: a column whose NAME says it holds
+     something private (an encrypted value, an email, a password, two-factor, a session, an IP, a key, preferences, a linked or
+     tracked wallet, or the blind index of one) is never drawn; it is named instead, as a fault to report. Only GETs: nothing
+     here writes, and nothing in a cell is a link or a picture — an address or an upload path is shown as text. */
+  const col = document.getElementById('adm-col');
+  const colEl = (id) => document.getElementById('adm-col-' + id);
+  const colSets = colEl('sets'), colSum = colEl('sum'), colView = colEl('view'), colHead = colEl('view-h'), colAbout = colEl('about');
+  const colFind = colEl('find'), colQ = colEl('q'), colClear = colEl('clear'), colStatus = colEl('status'), colTable = colEl('table');
+  const colOlder = colEl('older'), colNewest = colEl('newest');
+  const COL_LIMIT = 50;
+  const COL_NEVER = new RegExp([
+    '_enc$', '^enc_', '_enc_',                                                     // encrypted at rest
+    'e_?mail', 'passw', 'pw_?hash', 'pass_?hash',                                  // emails, passwords
+    'totp', 'twofa', '2fa', 'two_?factor', 'recovery_?code',                       // second factors
+    '(^|_)sessions?($|_)', '(^|_)sid$', 'sudo',                                    // sessions
+    '(^|_)ips?($|_)', 'ip_?hash', 'net_?hash',                                     // IP addresses and their hashes
+    'key_?hash', 'api_?key', 'private_?key', 'priv_?key', 'data_?key', 'secret', 'seed_?phrase', 'mnemonic',   // keys and secrets
+    'prefs?$', '_prefs', 'prefs_',                                                 // preferences
+    'tracked_?wallet', 'linked_?wallet', 'wallet_?links?', '^wallets$', 'wallet_?list',                        // private wallet links
+    '(^|_)(addr|address|wallets?|to|from|ident|identifier)_idx$', 'creator_address_hash', 'blind',             // blind indexes of private values
+  ].join('|'), 'i');
+  const COL_TIME = /(^|_)(at|time|ts|date|until|seen|joined)$|[a-z]At$/;          // a column of points in time (not a duration such as block_time_ms)
+  let colList = null, colReadAt = 0, colOpen = null, colSeq = 0;                  // the datasets; when they were read; the open one; the latest table read
+  const colNum = (n) => Number(n).toLocaleString('en-US');
+  const colUtc = (t) => { const d = new Date(t); return isNaN(d.getTime()) ? String(t) : d.toISOString().slice(0, 19).replace('T', ' ') + ' UTC'; };
+  const colMin = (t) => colUtc(t).replace(/:\d\d UTC$/, ' UTC');
+  // a number exactly as stored — every digit, never rounded — with the whole part grouped in threes from 10,000 up so it can be read
+  const colExact = (v) => { const t = String(v); if (Math.abs(v) < 1e4 || /e/i.test(t)) return t; const [w, f] = t.split('.'); return w.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (f != null ? '.' + f : ''); };
+  const colRows = (n) => n == null ? 'rows not counted' : n === 0 ? 'empty' : colNum(n) + (n === 1 ? ' row' : ' rows');
+  // [newest, oldest] as words — or the one phrase that says why there are none
+  function colSpan(d) {
+    if (d.rows === 0) return ['nothing collected yet'];
+    if (d.newestAt == null && d.oldestAt == null) return ['no time kept with its rows'];
+    return [d.newestAt != null ? 'newest ' + colMin(d.newestAt) : '', d.oldestAt != null ? 'oldest ' + colMin(d.oldestAt) : ''].filter(Boolean);
+  }
+  async function colGet(url) {
+    let r;
+    try { r = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }); }
+    catch { throw new Error('the server could not be reached'); }
+    let j = null; try { j = await r.json(); } catch {}
+    if (!r.ok) {
+      throw new Error(j && j.error ? j.error + ' (' + r.status + ')'
+        : r.status === 404 ? 'the server answered 404 — it does not offer this read (an older server, or one that has not been restarted since an update)'
+        : r.status === 429 ? 'the server says slow down (429) — try again in a minute'
+        : 'the server answered ' + r.status);
+    }
+    if (!j || typeof j !== 'object') throw new Error('the server’s answer was not JSON');
+    return j;
+  }
+  function colRenderList() {
+    const ds = colList || [];
+    const counted = ds.filter((d) => typeof d.rows === 'number'), uncounted = ds.length - counted.length;
+    colSum.textContent = ds.length
+      ? ds.length + (ds.length === 1 ? ' dataset' : ' datasets') + ' · ' + colRows(counted.reduce((a, d) => a + d.rows, 0)).replace('empty', 'no rows') + ' in all' + (uncounted ? ' (' + uncounted + ' not counted)' : '') + ' · read ' + colUtc(colReadAt)
+      : 'The server lists no datasets.';
+    colSets.innerHTML = ds.map((d) => '<li><button class="adm-col-set" type="button" data-col-set="' + esc(d.id) + '" aria-pressed="false" aria-controls="adm-col-view" data-tip="Opens this dataset in the table below — read-only, a page of ' + COL_LIMIT + ' rows at a time">' +
+      '<b class="adm-col-set-t">' + esc(d.title || d.id) + '</b>' +
+      '<span class="adm-col-set-n">' + esc(colRows(d.rows)) + '<i class="adm-col-on" hidden> · open below</i></span>' +
+      '<span class="adm-col-set-w">' + colSpan(d).map((w) => '<span>' + esc(w) + '</span>').join(' ') + '</span>' +
+      (d.description ? '<span class="adm-col-set-d">' + esc(d.description) + '</span>' : '') +
+      '</button></li>').join('');
+    colMark();
+  }
+  // which dataset is open: pressed (filled, with "open below" written out — never colour alone), updated in place so focus stays put
+  function colMark() {
+    for (const b of colSets.querySelectorAll('[data-col-set]')) {
+      const on = !!colOpen && String(colOpen.set.id) === b.dataset.colSet;
+      b.setAttribute('aria-pressed', String(on));
+      const t = b.querySelector('.adm-col-on'); if (t) t.hidden = !on;
+    }
+  }
+  async function loadCollected() {
+    colSets.setAttribute('aria-busy', 'true');
+    const had = !!colList;
+    colSum.textContent = had ? 'Reading the list again…' : 'Reading the list of collected data…';
+    try {
+      const j = await colGet('/api/admin/collected');
+      if (!Array.isArray(j.datasets)) throw new Error('the server’s answer has no list of datasets');
+      colList = j.datasets.filter((d) => d && d.id != null); colReadAt = Date.now();
+      colRenderList();
+      if (colOpen) {
+        const fresh = colList.find((d) => String(d.id) === String(colOpen.set.id));
+        if (fresh) { colOpen.set = fresh; colAboutFill(); colLoad(); }
+        else { colOpen = null; colView.hidden = true; }
+      }
+    } catch (e) {
+      // what is on screen stays, said to be from when it was read; with nothing read yet there is nothing to show
+      colSum.textContent = '⚠️ Could not read the list of collected data: ' + ((e && e.message) || 'unknown error') + '.' +
+        (had ? ' What is shown is from ' + colUtc(colReadAt) + '.' : ' Nothing is shown rather than a guess.');
+    } finally { colSets.removeAttribute('aria-busy'); }
+  }
+  function colAboutFill() {
+    const d = colOpen.set, n = Array.isArray(d.columns) ? d.columns.length : 0;
+    colHead.textContent = d.title || String(d.id);
+    colAbout.textContent = (d.description ? d.description + ' ' : '') + '— ' + colRows(d.rows) + ' · ' + colSpan(d).join(' · ') + (n ? ' · ' + n + ' columns' : '') + ' · dataset “' + d.id + '”.';
+    colFind.hidden = d.searchable === false;   // every dataset takes a search unless the server says this one cannot
+  }
+  function colShow(d) {
+    colOpen = { set: d, q: '', cursors: [null], counts: [] };   // cursors[i]: the `before` page i + 1 was asked with
+    colQ.value = ''; colClear.hidden = true;
+    colAboutFill(); colMark();
+    colView.hidden = false;
+    colTable.innerHTML = '';
+    colLoad();
+    try { colView.scrollIntoView({ block: 'start' }); } catch {}
+  }
+  function colCell(name, v) {
+    if (v === null || v === undefined) return '<td class="adm-col-null"><i>null</i></td>';
+    if (typeof v === 'boolean') return '<td>' + v + '</td>';
+    if (typeof v === 'number') {
+      const ms = COL_TIME.test(name) && Number.isFinite(v) ? (v > 1e12 && v < 1e14 ? v : v > 1e9 && v < 1e10 ? v * 1000 : null) : null;
+      if (ms != null) return '<td class="adm-col-t"><time datetime="' + new Date(ms).toISOString() + '" title="' + esc(String(v)) + (ms === v ? ' (milliseconds since 1970)' : ' (seconds since 1970)') + '">' + esc(colUtc(ms)) + '</time></td>';
+      return '<td class="adm-col-n">' + esc(colExact(v)) + '</td>';
+    }
+    let s = typeof v === 'string' ? v : JSON.stringify(v), pretty = s;
+    if (/^\s*[[{]/.test(s)) { try { pretty = JSON.stringify(JSON.parse(s), null, 2); } catch {} }
+    if (s.length > 120 || pretty !== s && pretty.length > 60) {
+      return '<td class="adm-col-long"><details><summary>' + esc(s.slice(0, 24)) + '… <small>(' + colNum(s.length) + ' characters)</small></summary><pre>' + esc(pretty) + '</pre></details></td>';
+    }
+    // words wrap; an unbroken run up to an address's 42 characters stays whole on its line, so it reads and copies as one; a longer
+    // one (a v4 pool id, a hash: 66) breaks over two lines rather than take the whole table's width
+    return '<td' + (/\s/.test(s.trim()) ? (s.length > 24 ? ' class="adm-col-s"' : '') : s.length > 44 ? ' class="adm-col-s"' : '') + '>' + esc(s) + '</td>';
+  }
+  function colRenderTable(o, j) {
+    const rows = Array.isArray(j.rows) ? j.rows : [];
+    let columns = (Array.isArray(j.columns) && j.columns.length ? j.columns : o.set.columns || []).map((c) => (typeof c === 'string' ? { name: c, label: c } : c)).filter((c) => c && c.name != null);
+    if (!columns.length && rows[0] && !Array.isArray(rows[0])) columns = Object.keys(rows[0]).map((k) => ({ name: k, label: k }));
+    const kept = [], refused = [];
+    columns.forEach((c, i) => (COL_NEVER.test(String(c.name)) ? refused : kept).push({ name: String(c.name), label: c.label == null ? String(c.name) : String(c.label), i }));
+    const page = o.cursors.length;
+    o.counts[page - 1] = rows.length; o.counts.length = page;
+    const first = o.counts.slice(0, page - 1).reduce((a, n) => a + n, 0) + 1, last = first + rows.length - 1;
+    const title = o.set.title || String(o.set.id), q = o.q;
+    o.next = rows.length && j.next != null ? j.next : null;
+    colStatus.textContent = rows.length
+      ? 'Rows ' + colNum(first) + '–' + colNum(last) + (q ? ' matching “' + q + '”' : o.set.rows != null ? ' of ' + colNum(o.set.rows) : '') + ' · page ' + page + (o.next == null ? ' · nothing after these' : '')
+      : q ? 'No rows match “' + q + '”' + (page > 1 ? ' after these.' : '.')
+      : page > 1 ? 'No rows after these.' : 'Nothing in this dataset yet — the server sent no rows.';
+    colTable.innerHTML = (refused.length ? '<p class="modal-note adm-col-refused">⚠️ The server sent ' + (refused.length === 1 ? 'a column' : refused.length + ' columns') + ' this page never shows, because the name says it holds private data: ' +
+        refused.map((c) => '<code>' + esc(c.name) + '</code>').join(', ') + '. ' + (refused.length === 1 ? 'It was' : 'They were') + ' left out. That is a fault in the server — report it.</p>' : '') +
+      (rows.length && kept.length ? '<table><caption class="sr-only">' + esc(title) + ', rows ' + first + ' to ' + last + '</caption><thead><tr>' +
+        kept.map((c) => '<th scope="col"><span class="adm-col-lab' + (c.label.length <= 16 ? ' is-one' : '') + '">' + esc(c.label) + '</span>' + (c.label !== c.name ? '<code class="adm-col-name">' + esc(c.name) + '</code>' : '') + '</th>').join('') + '</tr></thead><tbody>' +
+        rows.map((r) => '<tr>' + kept.map((c) => colCell(c.name, Array.isArray(r) ? r[c.i] : (r || {})[c.name])).join('') + '</tr>').join('') + '</tbody></table>'
+      : rows.length ? '<p class="empty-wall">The server sent rows, but no column this page may show.</p>' : '');
+    if (rows.length && kept.length) { colTable.setAttribute('role', 'region'); colTable.setAttribute('tabindex', '0'); colTable.setAttribute('aria-label', 'Rows of ' + title + ' — scrolls sideways when it is wider than the page'); }
+    else { colTable.removeAttribute('role'); colTable.removeAttribute('tabindex'); colTable.removeAttribute('aria-label'); }
+    colOlder.hidden = o.next == null; colNewest.hidden = page === 1;
+  }
+  async function colLoad() {
+    const o = colOpen; if (!o) return;
+    const seq = ++colSeq, title = o.set.title || String(o.set.id);
+    const qs = new URLSearchParams({ limit: String(COL_LIMIT) });
+    const before = o.cursors[o.cursors.length - 1];
+    if (before != null) qs.set('before', String(before));
+    if (o.q) qs.set('q', o.q);
+    colTable.setAttribute('aria-busy', 'true');
+    colStatus.textContent = 'Reading ' + title + '…';
+    colOlder.disabled = true; colNewest.disabled = true;
+    try {
+      const j = await colGet('/api/admin/collected/' + encodeURIComponent(o.set.id) + '?' + qs.toString());
+      if (seq !== colSeq || o !== colOpen) return;   // another dataset or page was asked for since
+      colRenderTable(o, j);
+    } catch (e) {
+      if (seq !== colSeq || o !== colOpen) return;
+      colStatus.textContent = '';
+      colTable.innerHTML = '<p class="empty-wall">⚠️ Could not read ' + esc(title) + ': ' + esc((e && e.message) || 'unknown error') + '. Nothing is shown rather than a guess.</p>';
+      colTable.removeAttribute('role'); colTable.removeAttribute('tabindex'); colTable.removeAttribute('aria-label');
+      colOlder.hidden = true; colNewest.hidden = o.cursors.length <= 1;
+    } finally {
+      if (seq === colSeq) { colTable.removeAttribute('aria-busy'); colOlder.disabled = false; colNewest.disabled = false; }
+    }
+  }
+  colSets.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-col-set]'); if (!b || !colList) return;
+    const d = colList.find((x) => String(x.id) === b.dataset.colSet);
+    if (d) colShow(d);
+  });
+  colOlder.addEventListener('click', () => { if (!colOpen || colOpen.next == null) return; colOpen.cursors.push(colOpen.next); colLoad(); });
+  colNewest.addEventListener('click', () => { if (!colOpen) return; colOpen.cursors = [null]; colOpen.counts = []; colLoad(); });
+  colFind.addEventListener('submit', (e) => {
+    e.preventDefault(); if (!colOpen) return;
+    colOpen.q = colQ.value.trim().slice(0, 100); colOpen.cursors = [null]; colOpen.counts = [];
+    colClear.hidden = !colOpen.q;
+    colLoad();
+  });
+  colClear.addEventListener('click', () => {
+    if (!colOpen) return;
+    colQ.value = ''; colOpen.q = ''; colOpen.cursors = [null]; colOpen.counts = []; colClear.hidden = true;
+    colLoad(); colQ.focus();
+  });
+  document.getElementById('adm-col-refresh').addEventListener('click', loadCollected);
+
   function boot() {
-    if (!(window.AUTH && AUTH.user)) { gate.textContent = 'Sign in first.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; return; }
-    if (!AUTH.user.admin) { gate.textContent = 'This page is for the site operators. If that is you, your user id has to be in ADMIN_USER_IDS on the server.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; return; }
+    if (!(window.AUTH && AUTH.user)) { gate.textContent = 'Sign in first.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; col.hidden = true; return; }
+    if (!AUTH.user.admin) { gate.textContent = 'This page is for the site operators. If that is you, your user id has to be in ADMIN_USER_IDS on the server.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; col.hidden = true; return; }
     gate.textContent = 'Signed in as @' + AUTH.user.username + ' (admin).';
-    tools.hidden = false; ov.hidden = false; dau.hidden = false;
-    loadOverview(); loadActivity(); load();
+    tools.hidden = false; ov.hidden = false; dau.hidden = false; col.hidden = false;
+    loadOverview(); loadActivity(); load(); loadCollected();
   }
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(boot, boot); else boot();
   document.addEventListener('auth:change', boot);

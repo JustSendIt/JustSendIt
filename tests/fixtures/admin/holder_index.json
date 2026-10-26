@@ -1,0 +1,7 @@
+{ "id": "holder_index",
+  "columns": [{"name":"token","label":"Token"},{"name":"holders","label":"Holders"},{"name":"block","label":"Complete to block"},{"name":"status","label":"Status"},{"name":"updated_at","label":"Updated"}],
+  "rows": [
+    {"token":"0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105","holders":114,"block":97987164,"status":"ok","updated_at":1792973040000},
+    {"token":"0x61339f11384dde4b2dc3a33e75b4dc23cc620f22","holders":null,"block":null,"status":"building","updated_at":1792972980000},
+    {"token":"0x0bd7d308f8e1639fab988df18a8011f41eacad73","holders":null,"block":null,"status":"error","updated_at":1792972740000}
+  ] }

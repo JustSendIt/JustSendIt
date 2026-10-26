@@ -1,0 +1,10 @@
+{ "id": "mkt_runs",
+  "columns": [{"name":"id","label":"Row"},{"name":"job","label":"Job"},{"name":"at","label":"Ran at"},{"name":"ok","label":"Worked"},{"name":"ms","label":"Took (ms)"},{"name":"calls","label":"Outside calls"},{"name":"note","label":"Note"}],
+  "rows": [
+    {"id":60,"job":"rh_pulse","at":1793035800000,"ok":true,"ms":412,"calls":1,"note":null},
+    {"id":59,"job":"pools","at":1793035739000,"ok":true,"ms":20871,"calls":10,"note":"robinhood pages 1–10"},
+    {"id":58,"job":"chains","at":1793035678000,"ok":true,"ms":5120,"calls":7,"note":null},
+    {"id":57,"job":"new_pools","at":1793035617000,"ok":false,"ms":30012,"calls":3,"note":"GeckoTerminal timed out after 30 s"},
+    {"id":56,"job":"chain_series","at":1793035556000,"ok":true,"ms":61540,"calls":44,"note":null},
+    {"id":55,"job":"prune","at":1793035495000,"ok":true,"ms":18,"calls":0,"note":"removed 0 rows"}
+  ] }
