@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Market Data — Just Send It</title>
+<meta name="description" content="Market data for every chain, Robinhood Chain first: TVL, DEX volume, fees, stablecoins and the most-traded tokens, each with its source. Entertainment only.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#c6f000">
+<link rel="canonical" href="https://sendrh.com/market">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Just Send It">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://sendrh.com/market">
+<meta property="og:title" content="Market Data 📊 — chains, tokens, TVL &amp; volume">
+<meta property="og:description" content="Robinhood Chain first, then every chain: TVL, DEX volume, fees, stablecoins and top tokens, each figure with its source and read time. Entertainment only.">
+<meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="$Send — Just Send It logo">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@sendrh_">
+<meta name="twitter:title" content="Market Data 📊 — chains, tokens, TVL &amp; volume">
+<meta name="twitter:description" content="Robinhood Chain first, then every chain: TVL, DEX volume, fees, stablecoins and top tokens, each figure with its source and read time. Entertainment only.">
+<meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
+<meta name="twitter:image:alt" content="$Send — Just Send It logo">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://sendrh.com/market#webpage","url":"https://sendrh.com/market","name":"Market Data — Just Send It","description":"Market data for every chain, Robinhood Chain first: TVL, DEX volume, fees, stablecoins and the most-traded tokens, each with its source. Entertainment only.","inLanguage":"en","isPartOf":{"@type":"WebSite","@id":"https://sendrh.com/#website","name":"Just Send It","url":"https://sendrh.com/"},"breadcrumb":{"@id":"https://sendrh.com/market#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://sendrh.com/market#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://sendrh.com/"},{"@type":"ListItem","position":2,"name":"Market Data","item":"https://sendrh.com/market"}]}]}</script>
+<link rel="icon" href="assets/logo-128.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="cursor.css">
+<script src="cursor.js"></script>
+<script src="agegate.js"></script>
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="market.css">
+<link rel="stylesheet" href="responsive.css">
+<script src="/ga.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#mkt-view">Skip to the main view</a>
+
+<nav class="nav is-compact" aria-label="Main">
+  <a class="nav-logo" href="/"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <span id="nav-search-slot"></span>
+    <a href="/about">About</a>
+    <a href="/arcade">Arcade</a>
+    <a href="/communities">Communities</a>
+    <a href="/guide">How&nbsp;to&nbsp;Buy</a>
+    <a class="active" href="/market" aria-current="page">Market&nbsp;Data</a>
+    <a href="/newpairs">Scanner</a>
+    <a href="/wall">Send&nbsp;Wall</a>
+    <a href="/support">Support</a>
+    <a href="/swap">Swap</a>
+    <a href="/tokens">Tokens</a>
+    <a href="/watchlist">Watchlist</a>
+
+    <a href="/whitepaper">White&nbsp;Paper</a>
+
+  </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the page links menu"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="np-hero mkt-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">Market Data 📊</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Robinhood Chain first, then every chain the public sources cover: TVL, DEX volume, fees, stablecoins, activity and the most-traded tokens — each figure with its source and the time it was read.</p>
+  <p class="np-hero-warn">⚠️ Figures can be late, wrong or missing — a missing one is shown as missing, never as zero. Not advice, never a tip to buy. <b>Do your own research.</b></p>
+</header>
+
+<main id="main" tabindex="-1">
+  <div class="mkt-wrap">
+
+    <!-- search: chains and tokens; a result opens in the main view -->
+    <form class="mkt-search" id="mkt-search" role="search" action="/market" method="get" novalidate>
+      <label class="mkt-search-l" for="mkt-q">Search chains and tokens</label>
+      <div class="mkt-search-row">
+        <input class="addr-input mkt-q" id="mkt-q" name="q" type="search" autocomplete="off" spellcheck="false" maxlength="80" placeholder="Chain, token name, symbol or address" aria-describedby="mkt-search-help">
+        <button class="btn btn-sm btn-primary mkt-go" id="mkt-go" type="submit" data-tip="Looks the words up in the chains and tokens this site keeps, then on Dexscreener, and lists what matches">🔎 Search</button>
+      </div>
+      <p class="mkt-help" id="mkt-search-help">Pick a chain or a token on the side, or search: it opens in the main view. Search matches names, symbols and addresses and recommends nothing.</p>
+      <div class="mkt-results" id="mkt-results" hidden></div>
+      <p class="sr-only" id="mkt-search-sr" aria-live="polite"></p>
+    </form>
+
+    <div class="mkt-layout">
+      <!-- the side column: the two top lists -->
+      <aside class="mkt-side" id="mkt-side" aria-label="Top chains and top tokens">
+        <div class="sc-tabs mkt-tabs" role="tablist" aria-label="Top lists">
+          <button class="sc-tab is-on" id="mkt-tab-chains" type="button" role="tab" aria-selected="true" aria-controls="mkt-panel" data-tab="chains" data-tip="Lists the chains, ranked by the figure you pick">🔗 Top chains</button>
+          <button class="sc-tab" id="mkt-tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="tokens" data-tip="Lists the most-traded tokens on the chain in the main view">🪙 Top tokens</button>
+        </div>
+
+        <div class="mkt-panel" id="mkt-panel" role="tabpanel" aria-labelledby="mkt-tab-chains">
+          <!-- the chains list's controls -->
+          <div class="mkt-ctl" id="mkt-ctl-chains">
+            <div class="mkt-group" role="group" aria-labelledby="mkt-cs-l">
+              <p class="mkt-group-l" id="mkt-cs-l">Rank by</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-sort="tvl" data-tip="Ranks by DeFi TVL: what is deposited in the chain’s apps (DefiLlama)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>TVL</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="volume" data-tip="Ranks by DEX trading volume over the time frame (DefiLlama)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Volume</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="liquidity" data-tip="Ranks by DEX liquidity: the TVL of the chain’s DEX protocols (DefiLlama)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Liquidity</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="mcap" data-tip="Ranks by the market cap of the chain’s own token; chains with none come last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Market cap</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="fees" data-tip="Ranks by the gas fees users paid the chain over the time frame (DefiLlama)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Fees</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-cd-l">
+              <p class="mkt-group-l" id="mkt-cd-l">Order</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-dir="desc" data-tip="Puts the biggest figure at the top"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↓ Highest</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-dir="asc" data-tip="Puts the smallest figure at the top; a chain with no figure stays last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↑ Lowest</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-cw-l">
+              <p class="mkt-group-l" id="mkt-cw-l">Time frame</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-win="24h" data-tip="Uses the last full UTC day"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>24h</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-win="7d" data-tip="Adds up the last 7 full UTC days"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>7d</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-win="30d" data-tip="Adds up the last 30 full UTC days"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>30d</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-win="custom" aria-expanded="false" aria-controls="mkt-cc" data-tip="Opens two date boxes to pick your own whole UTC days"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Custom…</button>
+              </div>
+              <div class="mkt-custom" id="mkt-cc" hidden>
+                <label class="mkt-date"><span>From</span><input type="date" id="mkt-cc-from" aria-describedby="mkt-cc-note"></label>
+                <label class="mkt-date"><span>To</span><input type="date" id="mkt-cc-to" aria-describedby="mkt-cc-note"></label>
+                <button class="btn btn-sm btn-ghost mkt-apply" id="mkt-cc-go" type="button" data-tip="Reads the chains again over the days you picked">Apply</button>
+                <p class="mkt-note" id="mkt-cc-note">Whole UTC days, both included. Volume and fees are added up over the days; TVL and stablecoins are the value on the last day.</p>
+                <p class="mkt-err" id="mkt-cc-err" role="alert" hidden></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- the tokens list's controls -->
+          <div class="mkt-ctl" id="mkt-ctl-tokens" hidden>
+            <p class="mkt-on" id="mkt-tok-on">Tokens on <b>Robinhood Chain</b></p>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-ts-l">
+              <p class="mkt-group-l" id="mkt-ts-l">Rank by</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-sort="volume" data-tip="Ranks by trading volume over the time frame, added up across the token’s pools"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Volume</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="liquidity" data-tip="Ranks by liquidity: what the token’s listed pools hold, added up"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Liquidity</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="mcap" data-tip="Ranks by market cap where the source gives one; tokens without one come last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Market cap</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="fdv" data-tip="Ranks by fully diluted value: total supply times price"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>FDV</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-sort="change" data-tip="Ranks by price change over the time frame"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Change</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-td-l">
+              <p class="mkt-group-l" id="mkt-td-l">Order</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-dir="desc" data-tip="Puts the biggest figure at the top"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↓ Highest</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-dir="asc" data-tip="Puts the smallest figure at the top; a token with no figure stays last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↑ Lowest</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-tw-l">
+              <p class="mkt-group-l" id="mkt-tw-l">Time frame</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="false" data-win="5m" data-tip="Uses the last five minutes of trading"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>5m</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-win="1h" data-tip="Uses the last hour of trading"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>1h</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-win="6h" data-tip="Uses the last six hours of trading"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>6h</button>
+                <button class="np-chip" type="button" aria-pressed="true" data-win="24h" data-tip="Uses the last 24 hours of trading"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>24h</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-win="custom" aria-expanded="false" aria-controls="mkt-tc" data-tip="Opens two date boxes to pick your own whole UTC days"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Custom…</button>
+              </div>
+              <div class="mkt-custom" id="mkt-tc" hidden>
+                <label class="mkt-date"><span>From</span><input type="date" id="mkt-tc-from" aria-describedby="mkt-tc-note"></label>
+                <label class="mkt-date"><span>To</span><input type="date" id="mkt-tc-to" aria-describedby="mkt-tc-note"></label>
+                <button class="btn btn-sm btn-ghost mkt-apply" id="mkt-tc-go" type="button" data-tip="Reads the token list again over the days you picked">Apply</button>
+                <p class="mkt-note" id="mkt-tc-note">Whole UTC days, both included — served only where this site’s own pool readings cover them; the list says where they start.</p>
+                <p class="mkt-err" id="mkt-tc-err" role="alert" hidden></p>
+              </div>
+            </div>
+            <div class="mkt-group" id="mkt-wash-g">
+              <button class="np-chip mkt-wash" id="mkt-wash" type="button" aria-pressed="false" data-tip="Also lists tokens whose 24h volume is over 100 times what their pools hold — a sign of wash trading"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Include flagged volume</button>
+            </div>
+          </div>
+
+          <p class="mkt-cap" id="mkt-cap" aria-live="polite"></p>
+          <ol class="mkt-list" id="mkt-list" aria-labelledby="mkt-tab-chains"></ol>
+          <div class="mkt-more" id="mkt-more"></div>
+          <p class="mkt-foot" id="mkt-foot"></p>
+        </div>
+      </aside>
+
+      <!-- the main view: one chain or one token, in full -->
+      <section class="mkt-view" id="mkt-view" tabindex="-1" aria-label="Main view">
+        <p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading Robinhood Chain…</p>
+      </section>
+    </div>
+
+    <p class="sr-only" id="mkt-sr" aria-live="polite"></p>
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    Market figures come from DefiLlama, L2BEAT, growthepie (CC BY 4.0), CoinGecko, GeckoTerminal, Dexscreener and Robinhood Chain’s public node, read by this site’s server — your browser contacts none of them. Data is best-effort from public sources — not a guarantee, not an audit, not advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="me noopener">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+    <a href="/about">About</a>
+    <a href="/arcade">Arcade</a>
+    <a href="/communities">Communities</a>
+    <a href="/">Home</a>
+    <a href="/guide">How to Buy</a>
+    <a href="/market" aria-current="page">Market Data</a>
+    <a href="/profile">My Profile</a>
+    <a href="/newpairs">Scanner</a>
+    <a href="/wall">Send Wall</a>
+    <a href="/support">Support</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/tracker">Wallet Tracker</a>
+    <a href="/swap">Swap</a>
+    <a href="/tokens">Tokens</a>
+    <a href="/watchlist">Watchlist</a>
+    <a href="/whitepaper">White Paper</a>
+  </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="sfx.js"></script>
+<script src="eggs.js"></script>
+<script src="matrix.js"></script>
+<script src="tips.js"></script>
+<script src="livex.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="notifications.js"></script>
+<script src="watch.js"></script>
+<script src="chart.js"></script>
+<script src="newpairs.js"></script>
+<script src="tokenmodal.js"></script>
+<script src="swapkit.js"></script>
+<script src="market.js"></script>
+<script src="block0.js"></script>
+<script src="bundlers.js"></script>
+<script src="voicememo.js"></script>
+<script src="compose.js"></script>
+<script src="sendy.js"></script>
+<script src="onboard.js"></script>
+</body>
+</html>

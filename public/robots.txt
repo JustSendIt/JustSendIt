@@ -21,6 +21,11 @@ Allow: /api/calls
 Allow: /api/communities
 Allow: /api/competitions
 Allow: /api/scan/recent$
+# Market Data's first view (/market): the chain list, Robinhood Chain in full and its token list, at their default
+# addresses only. A search, another chain, a token, a scan, a custom window and the logo proxy stay below the Disallow.
+Allow: /api/market/chains$
+Allow: /api/market/chain?key=robinhood$
+Allow: /api/market/tokens?chain=robinhood$
 
 # Everything else under /api/ is personal, write-only, or a fresh chain read for an address the caller picks
 # (token lookups, contract scans, charts, the image proxies).

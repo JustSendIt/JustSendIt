@@ -110,7 +110,7 @@ try {
   check('  ...and the policy\'s version moved for it (again on 2026-10-09, for Cloudflare\'s analytics beacon, on 2026-10-10 for the stored-IP list, on 2026-10-12 for the Diamond Hands watch on wallets coins were sent to, on 2026-10-13 for the Dexscreener/CoinGecko chart switch, on 2026-10-17 for the kept earlier versions and the longer backups, on 2026-10-18 for Google Analytics, on 2026-10-20 for proving a wallet by a burn, on 2026-10-21 for proving one by an ETH burn, and on 2026-10-22 for a burn of any amount)', /Version 2026-10-23 · \$Send \/ JustSendIt/.test(PRIV));
 
   /* ═══ where it rides ═══ */
-  const PAGES = ['index', 'about', 'arcade', 'communities', 'community', 'data', 'newpairs', 'profile', 'squad', 'support', 'tracker', 'u', 'wall', 'watchlist', 'whitepaper'];
+  const PAGES = ['index', 'about', 'arcade', 'communities', 'community', 'data', 'market', 'newpairs', 'profile', 'squad', 'support', 'tracker', 'u', 'wall', 'watchlist', 'whitepaper'];
   const without = PAGES.filter((p) => !/<script src="\/?sendy\.js"><\/script>/.test(read(p + '.html')));
   check('Sendy rides on every main page', without.length === 0, without.join(', '));
   check('  ...after app.js, whose helpers it may use', PAGES.every((p) => { const h = read(p + '.html'); const a = h.indexOf('app.js'); return a < 0 || a < h.indexOf('sendy.js'); }));

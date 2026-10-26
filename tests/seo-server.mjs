@@ -96,14 +96,18 @@ try {
   const pageCalls = ['/api/config', '/api/og/campaign', '/api/beta', '/api/chain/pairs', '/api/posts', '/api/posts?sort=new', '/api/posts?board=support',
     '/api/posts?user=someone', '/api/posts/1/comments', '/api/users/someone', '/api/pins?user=someone', '/api/calls?user=someone', '/api/calls/leaderboard?window=all',
     '/api/calls/live?ids=1,2', '/api/communities', '/api/communities?status=live&sort=active', '/api/communities/weekly', '/api/communities/1',
-    '/api/communities/1/members', '/api/communities/1/posts?wall=public', '/api/communities/1/proposals', '/api/competitions', '/api/scan/recent'];
+    '/api/communities/1/members', '/api/communities/1/posts?wall=public', '/api/communities/1/proposals', '/api/competitions', '/api/scan/recent',
+    '/api/market/chains', '/api/market/chain?key=robinhood', '/api/market/tokens?chain=robinhood'];   // Market Data's first view, at its default addresses
   const shut = pageCalls.filter((u) => !robotsAllows(R, u));
   check('every public read a signed-out page makes while it renders is crawlable', shut.length === 0, shut.join(' '));
   const privateOrCostly = ['/api/me', '/api/presence?pid=x', '/api/gate/state', '/api/notifications', '/api/watchlist/ids', '/api/admin/reports',
     '/api/img?u=https%3A%2F%2Fcdn.dexscreener.com%2Fx.png', '/api/brand/0x' + '1'.repeat(40) + '/logo', '/api/pins/holding?user=x&token=0x1', '/api/pins/ids',
     '/api/pairs/lookup?token=0x1', '/api/pairs/contract?token=0x1', '/api/scan?address=0x1', '/api/token/snipers?token=0x1', '/api/chart?pair=0x1&token=0x2',
     '/api/price?pair=0x1&token=0x2', '/api/spot?pairs=x', '/api/chain/wallet?address=0x1', '/api/chain/pairs?x=1', '/api/chain/dex-tokens?addrs=0x1', '/api/squads',
-    '/api/search?q=x', '/api/data/eligibility', '/api/sendy/ask', '/api/auth/google', '/api/competition'];
+    '/api/search?q=x', '/api/data/eligibility', '/api/sendy/ask', '/api/auth/google', '/api/competition',
+    // Market Data's caller-chosen reads: a search, another chain, a sort or a window, a token, a scan, the logo proxy, the collectors
+    '/api/market/search?q=x', '/api/market/chain?key=base', '/api/market/chains?sort=volume', '/api/market/chains?window=custom&from=2026-10-01&to=2026-10-02', '/api/market/tokens?chain=robinhood&sort=mcap',
+    '/api/market/tokens?chain=base', '/api/market/token?chain=robinhood&address=0x1', '/api/market/scan?chain=robinhood&address=0x1', '/api/market/logo?u=x', '/api/market/status', '/api/market/new-pools?chain=robinhood'];
   const open = privateOrCostly.filter((u) => robotsAllows(R, u));
   check('  ...while personal, write-only and caller-chosen chain reads stay disallowed', open.length === 0, open.join(' '));
   check('  ...and the ticket card and the pages themselves are not blocked', robotsAllows(R, '/t/12.png') && robotsAllows(R, '/t/12') && robotsAllows(R, '/') && robotsAllows(R, '/u/someone') && robotsAllows(R, '/community?id=1'));
@@ -278,8 +282,8 @@ try {
   check('  ...and answers a repeat with a 304', !!idx.h('etag') && again304.status === 304, idx.h('etag') + ' ' + again304.status);
 
   const pagesMap = await get('/sitemap-pages.xml');
-  const want = ['/', '/about', '/wall', '/communities', '/newpairs', '/support', '/tracker', '/arcade', '/whitepaper', '/privacy'].map((p) => BASE + p);
-  check('the static pages sitemap lists exactly the ten indexable pages, with no invented lastmod or priority', pagesMap.status === 200 && JSON.stringify(locs(pagesMap.text).sort()) === JSON.stringify(want.slice().sort()) && !/<lastmod>|<priority>|<changefreq>/.test(pagesMap.text), locs(pagesMap.text).join(' '));
+  const want = ['/', '/about', '/wall', '/communities', '/newpairs', '/support', '/tracker', '/market', '/arcade', '/whitepaper', '/privacy'].map((p) => BASE + p);
+  check('the static pages sitemap lists exactly the eleven indexable pages, with no invented lastmod or priority', pagesMap.status === 200 && JSON.stringify(locs(pagesMap.text).sort()) === JSON.stringify(want.slice().sort()) && !/<lastmod>|<priority>|<changefreq>/.test(pagesMap.text), locs(pagesMap.text).join(' '));
   check('  ...and public/sitemap.xml is gone (the index is built by the server)', !existsSync(path.join(PUB, 'sitemap.xml')));
 
   const prof = await get('/sitemap-profiles.xml'), pl = locs(prof.text);

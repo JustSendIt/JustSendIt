@@ -1,0 +1,215 @@
+/* ===== Market Data (market.html) ======================================================================================
+   A tool page: it takes the dashboard width (--dash-max, responsive.css's house layer), a search bar across the top, the
+   two top lists in a side column and one chain or one token in the main view. Below 1280px the side column sits above the
+   main view (reading order = DOM order everywhere: the lists, then the view they open). Every size is on the text floor;
+   tables fold into labelled cards whenever the view is too narrow for their columns (a container query), so nothing ever
+   needs a sideways scroll; every control is at least 44px tall; a missing figure is written "Not available" with its
+   reason, in words — never a colour alone. Styles.css tokens only (prefs.js re-solves them per reader). */
+
+.mkt-wrap { max-width: var(--dash-max); margin: 0 auto; }
+
+/* ---------- search ---------- */
+.mkt-search { margin: 0.4rem 0 1.3rem; }
+.mkt-search-l, .mkt-group-l, .mkt-date > span, .mkt-gh, .mkt-kicker, .mkt-stat dt, .mkt-table thead th {
+  font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-variant-numeric: tabular-nums slashed-zero;
+}
+.mkt-search-l { display: block; font-size: max(var(--text-floor), 0.8rem); color: var(--text-dim); margin: 0 0 0.35rem; }
+.mkt-search-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: stretch; }
+.mkt-search-row .mkt-q { flex: 1 1 16rem; min-width: 0; margin: 0; min-height: 48px; color: var(--text); font-family: inherit; }
+.mkt-search-row .mkt-go { flex: 0 0 auto; }
+.mkt-help { color: var(--text-mute); font-size: max(var(--text-floor), 0.85rem); margin: 0.4rem 0 0; }
+.mkt-results { margin-top: 0.8rem; background: var(--ink-2); border: 1px solid var(--ink-4); border-radius: 16px; padding: 0.8rem; }
+.mkt-res-h { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 1rem; margin-bottom: 0.5rem; }
+.mkt-res-h .mkt-s { margin: 0; }
+
+/* ---------- the two columns ---------- */
+.mkt-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.4rem; align-items: start; }
+.mkt-side, .mkt-view { min-width: 0; }
+.mkt-view { container: mktv / inline-size; }
+.mkt-view, .mkt-sgroup { padding: 0; }   /* styles.css pads every <section> like a home-page band */
+.mkt-view:focus { outline: none; }
+.mkt-view { scroll-margin-top: calc(var(--nav-h, 60px) + 0.5rem); }
+
+/* ---------- the side column ---------- */
+.mkt-side { background: var(--ink-2); border: 1px solid var(--ink-4); border-radius: 18px; padding: 0.9rem; }
+.mkt-tabs.sc-tabs { width: 100%; margin: 0 0 0.9rem; box-sizing: border-box; }
+.mkt-tabs .sc-tab { flex: 1 1 0; min-width: 0; justify-content: center; white-space: normal; text-align: center; padding: 0.4rem 0.6rem; line-height: 1.2; }
+.mkt-ctl[hidden] { display: none; }
+.mkt-group { margin: 0 0 0.75rem; }
+.mkt-group-l { font-size: max(var(--text-floor), 0.75rem); color: var(--text-dim); margin: 0 0 0.3rem; }
+.mkt-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.mkt-chips .np-chip, .mkt-wash { min-height: 44px; white-space: normal; text-align: center; line-height: 1.2; }
+/* the chosen chip says so with a tick as well as its fill (a span: the matrix tile owns both pseudo-elements) */
+.mkt-tick { display: none; }
+.np-chip[aria-pressed="true"] > .mkt-tick { display: inline; }
+.mkt-on { margin: 0 0 0.7rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
+.mkt-on b { color: var(--text); }
+.mkt-custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.6rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px dashed var(--edge-ctl); border-radius: 12px; }
+.mkt-custom[hidden] { display: none; }
+.mkt-date { display: flex; flex-direction: column; gap: 0.2rem; flex: 1 1 9rem; min-width: 0; }
+.mkt-date > span { font-size: max(var(--text-floor), 0.72rem); color: var(--text-dim); }
+.mkt-date input {
+  width: 100%; box-sizing: border-box; min-height: 44px; padding: 0.35rem 0.6rem; border-radius: 10px;
+  background: var(--ink-1); color: var(--text); border: 1px solid var(--edge-ctl); font: inherit; font-size: max(var(--text-floor), 1rem); color-scheme: dark;
+}
+.mkt-date input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.mkt-custom .mkt-apply { flex: 0 0 auto; }
+.mkt-note { font-size: max(var(--text-floor), 0.82rem); color: var(--text-mute); margin: 0.5rem 0 0; line-height: 1.45; flex: 1 1 100%; }
+.mkt-err { flex: 1 1 100%; margin: 0; color: var(--red); font-weight: 700; font-size: max(var(--text-floor), 0.88rem); }
+.mkt-err[hidden] { display: none; }
+.mkt-cap { font-size: max(var(--text-floor), 0.86rem); color: var(--text-dim); margin: 0.5rem 0 0.7rem; line-height: 1.45; }
+.mkt-cap b { color: var(--text); }
+.mkt-cap-n { display: block; margin-top: 0.3rem; color: var(--text-mute); }
+.mkt-more { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.7rem; }
+.mkt-more:empty { display: none; }
+.mkt-foot { margin: 0.7rem 0 0; color: var(--text-mute); font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; }
+.mkt-foot:empty { display: none; }
+
+/* ---------- a list of rows (the side lists, the top tokens, search results): real buttons ---------- */
+.mkt-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+.mkt-list > li { min-width: 0; }
+.mkt-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; width: 100%; box-sizing: border-box; min-height: 52px;
+  padding: 0.55rem 0.7rem; border-radius: 14px; border: 1.5px solid var(--ink-4); background: var(--ink-1); color: var(--text);
+  font: inherit; font-size: max(var(--text-floor), 0.95rem); text-align: left; cursor: pointer; transition: border-color 0.12s ease, background 0.12s ease;
+}
+.mkt-row:hover { border-color: var(--g-lit); background: var(--g-wash); }
+.mkt-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+/* the row in the main view: a bar down its left edge as well as the colour, and aria-current for a screen reader */
+.mkt-row[aria-current="true"] { border-color: var(--green); background: var(--g-tint); box-shadow: inset 5px 0 0 var(--green); }
+.mkt-rank { flex: 0 0 auto; min-width: 1.7em; text-align: right; font-family: var(--font-mono); font-weight: 600; color: var(--text-mute); font-size: max(var(--text-floor), 0.8rem); }
+.mkt-ava {
+  flex: 0 0 auto; width: 2.1em; height: 2.1em; border-radius: 50%; display: grid; place-items: center; overflow: hidden; position: relative;
+  background: var(--ink-3); border: 1.5px solid var(--ink-5);
+}
+.mkt-ava-lg { width: 3.2em; height: 3.2em; }
+.mkt-mono { font-family: 'Luckiest Guy', 'Rubik', cursive; font-size: max(var(--text-floor), 1em); line-height: 1; color: var(--green-bright); }
+.mkt-ava-lg .mkt-mono { font-size: max(var(--text-floor), 1.5em); }
+.mkt-ava img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.mkt-nm { flex: 1 1 8em; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+.mkt-nm b { font-weight: 800; overflow-wrap: anywhere; }
+.mkt-sym { color: var(--text-dim); font-weight: 700; }
+.mkt-nm small, .mkt-fig small { font-size: max(var(--text-floor), 0.76rem); color: var(--text-mute); overflow-wrap: anywhere; line-height: 1.35; }
+.mkt-nm code { font-size: max(var(--text-floor), 0.95em); }
+.mkt-fig { flex: 0 1 auto; margin-left: auto; min-width: 0; max-width: 100%; display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; text-align: right; }
+.mkt-fig b { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mkt-flags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }
+.mkt-flag { font-size: max(var(--text-floor), 0.72rem); font-weight: 800; color: var(--gold); border: 1px solid var(--o-edge); border-radius: 999px; padding: 0 0.45rem; line-height: 1.5; }
+.mkt-na { color: var(--text-mute); font-style: italic; font-weight: 700; }
+.mkt-empty { color: var(--text-mute); font-style: italic; margin: 0.4rem 0; list-style: none; }
+.mkt-err-t { color: var(--gold); font-weight: 700; }
+.mkt-loading { text-align: left; padding: 0.6rem 0; }
+@media (min-width: 700px) and (max-width: 1279px) {
+  .mkt-side .mkt-list { grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr)); }
+}
+
+/* ---------- the main view ---------- */
+.mkt-back { margin: 0 0 0.7rem; }
+.mkt-vhead { display: flex; align-items: center; gap: 0.9rem; margin: 0 0 1.1rem; }
+.mkt-vt { min-width: 0; flex: 1 1 auto; }
+.mkt-kicker { margin: 0 0 0.2rem; font-size: max(var(--text-floor), 0.75rem); color: var(--green-bright); overflow-wrap: anywhere; }
+.mkt-h { margin: 0; font-family: 'Luckiest Guy', 'Rubik', cursive; font-weight: 400; letter-spacing: 0.02em; line-height: 1.1; font-size: max(var(--text-floor), clamp(1.6rem, 3.2vw, 2.5rem)); overflow-wrap: anywhere; }
+.mkt-h:focus { outline: none; }
+.mkt-h:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.mkt-h .mkt-sym { font-family: 'Rubik', sans-serif; font-size: max(var(--text-floor), 0.6em); }
+.mkt-vsub { margin: 0.35rem 0 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
+.mkt-addr { word-break: break-all; overflow-wrap: anywhere; font-size: max(var(--text-floor), 0.85rem); }
+.mkt-vsub .copy-btn { min-width: 44px; min-height: 44px; vertical-align: middle; }
+.mkt-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; margin: 0 0 1.2rem; }
+.mkt-gh { margin: 0 0 0.45rem; font-size: max(var(--text-floor), 0.78rem); color: var(--text-dim); }
+.mkt-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 10.5em), 1fr)); gap: 0.6rem; margin: 0; }   /* two across on a phone, more as the view widens */
+.mkt-stat { min-width: 0; padding: 0.7rem 0.85rem; border-radius: 14px; background: var(--ink-2); border: 1px solid var(--ink-4); }
+.mkt-stat dt { margin: 0 0 0.25rem; font-size: max(var(--text-floor), 0.72rem); color: var(--text-dim); }
+.mkt-stat dd { margin: 0; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.mkt-v { font-size: max(var(--text-floor), 1.35rem); font-weight: 800; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; line-height: 1.2; }
+.mkt-stat.is-na .mkt-v { font-size: max(var(--text-floor), 1rem); }
+.mkt-s { font-size: max(var(--text-floor), 0.78rem); color: var(--text-mute); overflow-wrap: anywhere; line-height: 1.4; }
+.mkt-s a, .mkt-src-l { color: var(--green-bright); }
+.mkt-tstats { margin: 0 0 1.2rem; }
+.mkt-basis { margin-top: 0.6rem; }
+.mkt-card { margin: 0 0 1.1rem; padding: 1rem; border-radius: 18px; background: var(--ink-2); border: 1px solid var(--ink-4); min-width: 0; }
+.mkt-card-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.4rem 1rem; margin: 0 0 0.75rem; }
+.mkt-card-h .mkt-s { margin: 0; }
+.mkt-h3 { margin: 0; font-size: max(var(--text-floor), 1.15rem); line-height: 1.25; }
+.mkt-card > .mkt-h3 { margin-bottom: 0.6rem; }
+.mkt-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.8rem 0 0; }
+.mkt-fail .mkt-h { margin-bottom: 0.6rem; }
+.mkt-stage { margin: 0 0 0.7rem; display: flex; flex-wrap: wrap; gap: 0.3rem 0.7rem; align-items: baseline; }
+.mkt-stage b { padding: 0.15rem 0.7rem; border-radius: 999px; border: 2px solid var(--gold); color: var(--gold); font-weight: 800; }
+.mkt-srclist, .mkt-linklist { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.35rem; }
+.mkt-srclist a, .mkt-linklist a { color: var(--green-bright); overflow-wrap: anywhere; }
+.mkt-list-in { margin: 0.2rem 0 0; }
+.mkt-mini { min-height: 44px; padding: 0.3rem 0.8rem; }
+
+/* ---------- charts (drawn by market.js in SVG at the box's own size, so the labels keep the text floor) ---------- */
+.mkt-chart-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 1rem; }
+.mkt-chart { margin: 0; min-width: 0; padding: 0.75rem; border-radius: 14px; background: var(--ink-1); border: 1px solid var(--ink-4); }
+.mkt-chart figcaption { display: flex; flex-direction: column; gap: 0.15rem; margin: 0 0 0.45rem; }
+.mkt-plot { font-size: max(var(--text-floor), 0.76rem); min-height: 6rem; touch-action: pan-y; border-radius: 8px; }
+.mkt-plot:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.mkt-svg { display: block; max-width: 100%; }
+.mkt-ax { fill: var(--text-mute); font-family: var(--font-mono); font-weight: 600; }
+.mkt-grid { stroke: var(--ink-4); stroke-width: 1; }
+.mkt-base { stroke: var(--ink-5); stroke-width: 1; }
+.mkt-line { fill: none; stroke: var(--green-bright); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.mkt-area { fill: var(--g-tint); stroke: none; }
+.mkt-guide { stroke: var(--text-dim); stroke-width: 1; stroke-dasharray: 4 3; }
+.mkt-dot { fill: var(--green-bright); stroke: var(--ink-1); stroke-width: 2; }
+.mkt-wick { stroke-width: 1.2; }
+.mkt-wick.up { stroke: var(--green-bright); }
+.mkt-wick.dn { stroke: var(--red); }
+.mkt-body.up { fill: var(--ink-1); stroke: var(--green-bright); stroke-width: 1.5; }
+.mkt-body.dn { fill: var(--red); stroke: var(--red); stroke-width: 1; }
+.mkt-vol { fill: var(--ink-5); }
+.mkt-readout { margin: 0.45rem 0 0; min-height: 2.8em; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mkt-chart.is-empty .mkt-empty { margin: 0.6rem 0; }
+.mkt-tbl { margin-top: 0.4rem; }
+.mkt-tbl > summary, .mkt-why > summary { cursor: pointer; color: var(--green-bright); font-weight: 700; min-height: 44px; display: flex; align-items: center; width: max-content; max-width: 100%; }
+.mkt-tbl > summary:focus-visible, .mkt-why > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.mkt-why > p { margin: 0.2rem 0 0.4rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); }
+
+/* ---------- tables: columns when they fit, labelled cards when they do not ---------- */
+.mkt-table { width: 100%; border-collapse: collapse; font-size: max(var(--text-floor), 0.88rem); }
+.mkt-table th, .mkt-table td { text-align: left; vertical-align: top; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--ink-4); overflow-wrap: anywhere; }
+.mkt-table thead th { font-size: max(var(--text-floor), 0.72rem); color: var(--text-dim); }
+.mkt-table tbody th { font-weight: 700; }
+.mkt-table tr.is-on { background: var(--g-wash); }
+.mkt-table code { font-size: max(var(--text-floor), 0.92em); }
+@container mktv (max-width: 46em) {
+  .mkt-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mkt-table, .mkt-table tbody, .mkt-table tr, .mkt-table th, .mkt-table td { display: block; width: 100%; box-sizing: border-box; }
+  /* each row a card whose cells run on as labelled phrases, wrapping where they must */
+  .mkt-table tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 1.1rem; margin: 0 0 0.5rem; padding: 0.45rem 0.7rem; border: 1px solid var(--ink-4); border-radius: 12px; }
+  .mkt-table th, .mkt-table td { width: auto; max-width: 100%; border: 0; padding: 0.1rem 0; }
+  .mkt-table tbody th { flex: 1 1 100%; }
+  .mkt-table td::before { content: attr(data-l) ': '; font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); font-size: max(var(--text-floor), 0.72rem); }
+  .mkt-table-2 tr { justify-content: space-between; }
+  .mkt-table-2 tbody th { flex: 0 1 auto; }
+}
+
+/* ---------- 1280px and up on a screen tall enough: the side column stays in view while the main view scrolls (its own
+   list scrolls inside it when it is longer than the screen; every row is a button, so the keyboard reaches all of it) ---------- */
+@media (min-width: 1280px) and (min-height: 700px) {
+  .mkt-side { position: sticky; top: calc(var(--nav-h, 60px) + 0.75rem); max-height: calc(100vh - var(--nav-h, 60px) - 1.5rem); overflow-y: auto; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--green-dark) transparent; }
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .mkt-wrap .np-live-dot { animation: none; }
+  .mkt-row { transition: none; }
+}
+
+/* ---------- 1280px and up: the house's dashboard width, the side column beside the main view ---------- */
+@media (min-width: 1280px) {
+  /* the introduction as one band: the title on the left under the house rule, the serif lede and the warning beside it */
+  header.np-hero.mkt-hero {
+    max-width: var(--dash-max); display: grid; grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+    column-gap: var(--rail-gap); row-gap: 0.8rem; align-items: start; text-align: left; padding-inline: 1rem;
+  }
+  header.np-hero.mkt-hero > * { margin: 0 !important; }
+  header.np-hero.mkt-hero > h1 { grid-column: 1; grid-row: 1 / span 2; padding-top: 0.6rem; border-top: 2px solid var(--house-rule); text-align: left; }
+  header.np-hero.mkt-hero > .section-sub { grid-column: 2; grid-row: 1; max-width: 62ch; padding-top: 0.9rem; text-align: left; }
+  header.np-hero.mkt-hero > .np-hero-warn { grid-column: 2; grid-row: 2; max-width: 62ch; }
+  .mkt-layout { grid-template-columns: minmax(min(24rem, 40%), 28%) minmax(0, 1fr); gap: var(--rail-gap); }
+  .mkt-groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); }
+}
