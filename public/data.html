@@ -204,10 +204,14 @@
       </div></details>
       <details class="dk-res"><summary><code>chain</code> <span>one chain in full</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/chain?key=robinhood&amp;window=7d"</pre>
-<pre class="dk-pre">{ data: { key, name, chainId, at,
-  stats: { tvl, volume24h, volume7d, volume30d, windowVolume, fees24h, appFees24h, stables, oi, mcap, tvs, tvsBreakdown, txcount24h, daa, medianTxCostUsd, stage, risks: [ … ] },
-  history: { tvl, volume, fees, stables, txcount }, // each [ [day, value], … ] with its src
-  topTokens: { rows: [ …as in tokens ], basis }, newPools: [ …the latest 20 ],
+<pre class="dk-pre">{ data: { key, name, chainId, at, window,
+  stats: { tvl, volume24h, volume7d, volume30d, windowVolume, fees24h, appFees24h, stables, oi, mcap, liquidity, tvs,
+    txcount24h, daa, medianTxCostUsd, // each a figure
+    tvsBreakdown|null, stage|null, risks: [ … ], l2beat: { url, hostChain, type, at }|null },
+  history: { from, to, // whole UTC days: the last 365, or the custom window
+    src: { tvl, volume, fees, appFees, stables, txcount, daa }, // each series' source: defillama, growthepie, l2beat or null
+    tvl, volume, fees, appFees, stables, txcount, daa }, // each [ [day, value], … ]
+  topTokens: { rows: [ …as in tokens ], basis, why? }, newPools: [ …the latest 20 ],
   pulse: { now, poolsCreated, history }, // Robinhood Chain only — see pulse
   sources: [ { id, name, url, licence? } ] } }</pre>
       </div></details>
@@ -221,13 +225,13 @@
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/chain-snapshots?limit=200"</pre>
 <pre class="dk-pre">{ data: [ { chain, at, tvl, dex_vol_24h, dex_vol_30d, fees_24h, app_fees_24h, stables, oi, mcap, tvs, stage, src, … } ],
   next, limit }</pre>
-        <p class="dk-note">One row per chain per collection: every run for 14 days, then one a day, kept. <code>fees_24h</code> is the chain’s own gas fees, <code>app_fees_24h</code> what its apps took; <code>src</code> names each figure’s source.</p>
+        <p class="dk-note">One row per chain per collection: every run for 7 days, then one a day, kept. <code>fees_24h</code> is the chain’s own gas fees, <code>app_fees_24h</code> what its apps took; <code>src</code> names each figure’s source.</p>
       </div></details>
       <details class="dk-res"><summary><code>pulse</code> <span>Robinhood Chain’s own readings</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/pulse?limit=200"</pre>
 <pre class="dk-pre">{ data: [ { at, block, block_time_ms, gas_price_wei, base_fee_wei, l1_price_wei, min_gas_wei, weth_supply, usdg_supply, pm_eth, pm_weth, pm_usdg, bridge_eth, bridge_batches, pools_created_v2, pools_created_v3, pools_created_v4 } ],
   next, limit }</pre>
-        <p class="dk-note">Read from the chain’s public RPC — every minute for two days, then hourly, kept. <code>pm_*</code> is what the v4 PoolManager holds, claims and fees included — not pool TVL. <code>bridge_eth</code> is the ETH held by the chain’s canonical bridge on Ethereum, not a net inflow. <code>pools_created_*</code> count pools created since the row before.</p>
+        <p class="dk-note">Read from the chain’s public RPC — every minute for two days; after that, of each hour, the first row and the first rows with a supply and a bridge reading, kept. <code>pm_*</code> is what the v4 PoolManager holds, claims and fees included — not pool TVL. <code>bridge_eth</code> is the ETH held by the chain’s canonical bridge on Ethereum, not a net inflow. <code>pools_created_*</code> count the pools created since the row before it, at any age: a kept row takes on the counts of the rows removed before it. They are <code>null</code> until our new-pools reader has passed the row’s block, and stay <code>null</code> where it did not read every block since the row before (it skips blocks when it falls days behind).</p>
       </div></details>
     </section>
 
@@ -239,7 +243,7 @@
   "https://YOUR-HOST/api/data/v1/tokens?chain=robinhood&amp;sort=liquidity&amp;dir=desc&amp;window=24h"</pre>
 <pre class="dk-pre">{ data: [ { chain, address, symbol, name, logo|null, priceUsd, mcap, fdv, liquidity: { v, pools }, volume, change, txns24h, flags: [ … ], scannable } ],
   at, chain, network, basis, window, coverage?: { from }, total, notes: [ … ] }</pre>
-        <p class="dk-note"><code>sort</code> is <code>volume</code>, <code>liquidity</code>, <code>mcap</code>, <code>fdv</code> or <code>change</code>; <code>dir</code> is <code>desc</code> or <code>asc</code>. <code>basis</code> says what the list is drawn from — on Robinhood Chain the 200 most-traded pools on GeckoTerminal, grouped by token — so “lowest” means lowest among those, never on the whole chain. <code>flags</code>: <code>thin</code> (under $10k in its pools), <code>wash</code> (24-hour volume over 100× its reserve — left out of the highest-volume list unless <code>include=all</code>), <code>global-mcap</code> (a market cap counted over every chain).</p>
+        <p class="dk-note"><code>sort</code> is <code>volume</code>, <code>liquidity</code>, <code>mcap</code>, <code>fdv</code> or <code>change</code>; <code>dir</code> is <code>desc</code> or <code>asc</code>. <code>basis</code> says what the list is drawn from — on Robinhood Chain the 200 most-traded pools on GeckoTerminal, grouped by token — so “lowest” means lowest among those, never on the whole chain. <code>flags</code>: <code>thin</code> (under $10k in its pools), <code>wash</code> (24-hour volume over 100× its reserve — left out of the highest-volume list unless <code>include=all</code>), <code>global-mcap</code> (a market cap counted over every chain); <code>thin</code> and <code>wash</code> are raised only when every one of its pools gave a reserve. A figure summed over its pools leaves out a pool that gave none — never counted as 0 — and then says so in its <code>label</code>, with <code>missing</code> the number left out.</p>
       </div></details>
       <details class="dk-res"><summary><code>token</code> <span>one token in full</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
@@ -256,13 +260,13 @@
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/pools?network=robinhood&amp;limit=200"</pre>
 <pre class="dk-pre">{ data: [ { network, pool, at, …the base token’s address, symbol and name, the quote’s symbol, dex, price_usd, reserve_usd, fdv_usd, mcap_usd|null, volume over 5m / 1h / 6h / 24h, 24-hour transactions, price change over 1h / 24h, created_at } ],
   next, limit }</pre>
-        <p class="dk-note">GeckoTerminal’s most-traded pools on each tracked network, as read: every 10 minutes for 7 days, hourly for 90, then daily, kept. Add <code>pool=</code> for one pool’s history. <code>mcap_usd</code> is <code>null</code> where GeckoTerminal has none.</p>
+        <p class="dk-note">GeckoTerminal’s most-traded pools on each tracked network, as read. Robinhood Chain: every read (10 minutes) for 7 days, the first of each hour for 90, then the first of each UTC day, kept. The other networks: every read (hourly) for 7 days, then the first of each UTC day, kept. <code>network</code> is a tracked chain — this site’s key or GeckoTerminal’s id, which is what the rows carry: <code>robinhood</code>, <code>ethereum</code> (<code>eth</code>), <code>solana</code>, <code>base</code>, <code>bsc</code>, <code>arbitrum</code>, <code>polygon</code> (<code>polygon_pos</code>), <code>avalanche</code> (<code>avax</code>), <code>optimism</code>. Add <code>pool=</code> for one pool’s history — a 0x address, or a Solana one exactly as written (it is case-sensitive). A network or a pool that can never match is a 400 that says why. <code>mcap_usd</code> is <code>null</code> where GeckoTerminal has none.</p>
       </div></details>
       <details class="dk-res"><summary><code>new-pools</code> <span>pools as they were created</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/new-pools?limit=200"</pre>
 <pre class="dk-pre">{ data: [ { chain, pool, dex, token0, token1, block|null, created_at|null, first_seen } ],
   next, limit }</pre>
-        <p class="dk-note">On Robinhood Chain read from the chain’s own logs — <code>dex</code> is <code>v2</code>, <code>v3</code> or <code>v4</code>, with the block; elsewhere GeckoTerminal’s new pools, with its DEX and creation time.</p>
+        <p class="dk-note">On Robinhood Chain read from the chain’s own logs — <code>dex</code> is <code>v2</code>, <code>v3</code> or <code>v4</code>, with the block — and kept 30 days; elsewhere GeckoTerminal’s new pools, with its DEX and creation time, kept 7 days. <code>chain=</code> is one of the tracked chains (as in <code>pools</code>, by this site’s key).</p>
       </div></details>
       <details class="dk-res"><summary><code>radar</code> <span>the New Pairs radar</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/radar?limit=200"</pre>
@@ -274,7 +278,7 @@
   "https://YOUR-HOST/api/data/v1/scans?chain=ethereum&amp;address=0x6982508145454ce325ddbe47a25d4ec3d2311933"</pre>
 <pre class="dk-pre">{ data: [ { chain, address, at, symbol, name, price_usd, mcap, liquidity_usd, volume_24h, verdict, risk, holders, json } ],
   next, limit }</pre>
-        <p class="dk-note"><code>json</code> is the public scan result as the Scanner showed it. Who scanned is never kept.</p>
+        <p class="dk-note"><code>json</code> is the public scan result as the Scanner showed it. Who scanned is never kept. One row per token, source and ten-minute slot of the clock, with <code>n</code> the scans in it; kept 90 days (the newest 100,000 rows at most), the full <code>json</code> on the newest rows only. <code>chain=</code> is <code>robinhood</code>, <code>ethereum</code> or <code>solana</code>; a Solana <code>address=</code> is case-sensitive.</p>
       </div></details>
       <details class="dk-res"><summary><code>collectors</code> <span>how the collectors are doing</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/collectors"</pre>
@@ -291,7 +295,7 @@
         <tbody>
           <tr><td>Chains</td><td>DefiLlama: TVL, DEX volume, fees, stablecoins, open interest, native-token market caps (CoinGecko when DefiLlama has none). L2BEAT: value secured and stage. growthepie: activity and fees.</td><td>Every 30 minutes — DefiLlama refreshes its own answers no faster. L2BEAT hourly, growthepie daily.</td></tr>
           <tr><td>Chain history</td><td>Daily series from DefiLlama, growthepie and L2BEAT for the top 40 or so chains by TVL, and always Robinhood Chain.</td><td>Every 6 hours</td></tr>
-          <tr><td>Pools</td><td>GeckoTerminal’s 200 most-traded pools on Robinhood Chain; the top 60 on Ethereum, Solana, Base, BNB Chain, Arbitrum, Polygon, Avalanche and OP Mainnet.</td><td>Robinhood Chain every 10 minutes, the others hourly</td></tr>
+          <tr><td>Pools</td><td>GeckoTerminal’s 200 most-traded pools on Robinhood Chain; the top 60 on Ethereum, Solana, Base, BNB Chain, Arbitrum, Polygon, Avalanche and OP Mainnet.</td><td>Robinhood Chain every 10 minutes, the others hourly, just after the hour</td></tr>
           <tr><td>New pools</td><td>Robinhood Chain’s own logs (v2 PairCreated, v3 PoolCreated, v4 Initialize); GeckoTerminal’s new pools on the other networks.</td><td>Every 3 minutes; the other networks every 15</td></tr>
           <tr><td>Pulse</td><td>Robinhood Chain’s public RPC: block, block time, gas; WETH and USDG supply and the v4 PoolManager’s holdings; the canonical bridge’s ETH, from a public Ethereum node.</td><td>Every minute; supplies every 10 minutes; the bridge every 15</td></tr>
           <tr><td>Radar</td><td>The New Pairs radar’s own sweep of new pairs (and at once whenever someone opens the radar).</td><td>Every 10 minutes</td></tr>
@@ -300,7 +304,7 @@
         </tbody>
       </table>
       </div>
-      <p class="dk-note">They run on the live site; a copy of the code run for testing leaves them off. They spend the same per-source budgets as everything else the site reads — GeckoTerminal, shared by the whole site, is asked at most 3 times a minute for them — and step aside while the chain’s node is busy with the site’s own reads. A run that fails is recorded with its reason and tried again at its next turn; nothing is filled in to cover the gap.</p>
+      <p class="dk-note">They run on the live site; a copy of the code run for testing leaves them off. They spend the same per-source budgets as everything else the site reads — GeckoTerminal, shared by the whole site, is asked at most 3 times a minute for them (2 more a minute are kept for people opening a token, and the collectors never use those) — and step aside while the chain’s node is busy with the site’s own reads. A run that fails is recorded with its reason and tried again at its next turn; nothing is filled in to cover the gap.</p>
     </section>
 
     <section class="card reveal" aria-labelledby="dk-src-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">

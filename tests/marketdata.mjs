@@ -28,6 +28,7 @@ const MD = require(path.join(ROOT, 'lib', 'marketdata.js'));
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
 const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'marketdata.js'), 'utf8');
 const RUNJS = fs.readFileSync(path.join(ROOT, 'tests', 'run.mjs'), 'utf8');
+const DOCS = fs.readFileSync(path.join(ROOT, 'public', 'data.html'), 'utf8');
 const FIX = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'marketdata', f), 'utf8'));
 const MCFIX = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'multichain', f), 'utf8'));
 const results = [];
@@ -86,7 +87,9 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 /* ═══ the fake vendors: one server, a prefix per source ═══ */
 const hits = {}, uas = new Set(), log = [];
 const hit = (k) => { hits[k] = (hits[k] || 0) + 1; };
-const vendorFail = { mcaps: false, gtAll: false }, cgSeen = [];
+const vendorFail = { mcaps: false, gtAll: false, noList: false }, cgSeen = [];
+// hold.rhPage2: a promise Robinhood Chain's second pools page waits on (a run caught partway through); asked: it was asked for
+const hold = { rhPage2: null, asked: false };
 const w256 = (hex) => String(hex).replace(/^0x/, '').padStart(64, '0');
 const abiStr = (s) => '0x' + w256('20') + w256(s.length.toString(16)) + Buffer.from(s).toString('hex').padEnd(64, '0');
 const vendor = http.createServer((req, res) => {
@@ -100,9 +103,10 @@ const vendor = http.createServer((req, res) => {
     hit(seg);
     // DefiLlama
     if (p === '/llama/v2/chains') return send(200, F.chains);
-    if (p === '/llama/overview/dexs') return send(200, F.dexs);
-    if (p === '/llama/overview/fees') return send(200, F.fees);
-    if (p === '/llama/overview/open-interest') return send(200, F.oi);
+    // vendorFail.noList: a 200 that carries an error instead of the protocols list (a schema change, a bad day)
+    if (p === '/llama/overview/dexs') return send(200, vendorFail.noList ? { error: 'no protocols today' } : F.dexs);
+    if (p === '/llama/overview/fees') return send(200, vendorFail.noList ? { error: 'no protocols today' } : F.fees);
+    if (p === '/llama/overview/open-interest') return send(200, vendorFail.noList ? { error: 'no protocols today' } : F.oi);
     if (p === '/llama/protocols') return send(200, F.protocols);
     if (p === '/llama/v2/historicalChainTvl/Robinhood%20Chain') return send(200, F.histtvl);
     if (p === '/llama/overview/dexs/Robinhood%20Chain') return send(200, F.dexsRh);
@@ -124,6 +128,7 @@ const vendor = http.createServer((req, res) => {
       hit('gt-' + (/\/ohlcv\//.test(p) ? 'ohlcv' : (p.match(/\/(new_pools|pools|tokens)\b/) || [, 'other'])[1]));
       if (vendorFail.gtAll) return send(500, { errors: [{ status: '500' }] });
       const page = Number(u.searchParams.get('page') || 1);
+      if (p === '/gt/networks/robinhood/pools' && page === 2 && hold.rhPage2) { hold.asked = true; return hold.rhPage2.then(() => send(200, F.gtP10)); }
       if (p === '/gt/networks/robinhood/pools') return send(200, page === 1 ? F.gtP1 : page === 2 ? F.gtP10 : { data: [] });
       if (p === '/gt/networks/eth/pools') return send(200, page === 1 ? F.gtEth : { data: [] });
       if (/^\/gt\/networks\/[a-z_]+\/pools$/.test(p)) return send(200, { data: [] });
@@ -229,11 +234,13 @@ const qa = (sql, ...a) => dbA.prepare(sql).all(...a);
 try {
   /* ── the module's shape, in the source ── */
   check('one honest User-Agent, at least 30 s to answer, no redirect followed, a size cap — never the browser one', MD.HONEST_UA === UA && /Math\.max\(30000, Number\(o\.timeoutMs\) \|\| 30000\)/.test(LIB) && (LIB.match(/redirect: 'error'/g) || []).length === 2 && /readCapped\(res, Number\(o\.maxBytes\)/.test(LIB) && !/BROWSER_UA|Mozilla\//.test(LIB));
-  check('every outbound read takes the meter first — the share (GeckoTerminal), then the host — and a spent meter is "could not ask"', /if \(o\.share\) await take\(o\.share, wait\);\s*const h = hostOf\(url\); if \(h\) await take\(h, wait\);/.test(LIB) && /catch \{ return \{ ok: false, status: 0, data: null, reason: 'budget' \}; \}/.test(LIB) && /const gtAsk = \(ctx, path, o = \{\}\) => ask\(ctx, urls\.gt \+ path, Object\.assign\(\{ share: GT_SHARE \}, o\)\);/.test(LIB));
+  check('every outbound read takes the meter first — the share (GeckoTerminal), then the host — and a spent meter is "could not ask"', /if \(o\.share\) await takeShare\(\[\]\.concat\(o\.share\), wait\);\s*const h = hostOf\(url\); if \(h\) await take\(h, wait\);/.test(LIB) && /catch \{ return \{ ok: false, status: 0, data: null, reason: 'budget' \}; \}/.test(LIB)
+    && /const gtAsk = \(ctx, path, o = \{\}\) => ask\(ctx, urls\.gt \+ path, Object\.assign\(\{ share: GT_SHARE \}, o\)\);/.test(LIB) && /const gtAskNow = \(path, o = \{\}\) => ask\(null, urls\.gt \+ path, Object\.assign\(\{ share: \[GT_ASKED, GT_SHARE\], wait: ASK_WAIT \}, o\)\);/.test(LIB)
+    && (LIB.match(/gtAskNow\('/g) || []).length === 2 && (LIB.match(/gtAsk\(ctx, '/g) || []).length === 2);
   check('the chain node is read only through the injected (paced) batch, stands aside while the site\'s own reads are refused, and cools down after a refusal', /const busy = rpcBusy\(\);\s+if \(busy\) throw Object\.assign\(new Error\('yielded: '/.test(LIB) && /await take\(RPC_SHARE, BG_WAIT\)/.test(LIB) && /rpcCoolUntil = now\(\) \+ 5 \* MIN/.test(LIB) && !/fetch\(RH_RPC|rpc\.mainnet\.chain\.robinhood\.com/.test(LIB));
   check('a DefiLlama point dated today is never stored as a day', /if \(!validDay\(r\[2\]\) \|\| r\[2\] >= today \|\| r\[3\] == null\) continue;/.test(LIB));
   check('every table the contract names is created, each with an index for paging newest-first', ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_runs'].every((t) => q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t))
-    && ['idx_mkt_chain_snap_at', 'idx_mkt_chain_series_at', 'idx_mkt_pool_snap_at', 'idx_mkt_new_pool_chain', 'idx_mkt_rh_pulse_at', 'idx_mkt_scan_at', 'idx_mkt_radar_upd', 'idx_mkt_runs_at'].every((i) => q1("SELECT name FROM sqlite_master WHERE type='index' AND name=?", i)));
+    && ['idx_mkt_chain_snap_at', 'idx_mkt_chain_series_at', 'idx_mkt_pool_snap_at', 'idx_mkt_pool_snap_net_id', 'idx_mkt_pool_snap_pool', 'idx_mkt_new_pool_chain', 'idx_mkt_rh_pulse_at', 'idx_mkt_scan_at', 'idx_mkt_scan_chain', 'idx_mkt_scan_tok_id', 'idx_mkt_radar_upd', 'idx_mkt_runs_at'].every((i) => q1("SELECT name FROM sqlite_master WHERE type='index' AND name=?", i)));
   check('the chain table maps this site\'s keys to every source (Robinhood Chain, BSC, OP Mainnet, Polygon measured 2026-10-26)', MD.CHAIN_BY_KEY.get('robinhood').gt === 'robinhood' && MD.CHAIN_BY_KEY.get('bsc').proto === 'Binance' && MD.CHAIN_BY_KEY.get('optimism').l2beat === 'optimism' && MD.CHAIN_BY_KEY.get('optimism').proto === 'Optimism'
     && MD.CHAIN_BY_KEY.get('polygon').gt === 'polygon_pos' && MD.CHAIN_BY_KEY.get('avalanche').bk === 'avax' && MD.chainOfLlama('Some New Chain').key === 'some-new-chain' && MD.chainOfLlama('Robinhood Chain').key === 'robinhood');
 
@@ -467,7 +474,7 @@ try {
   check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors'].every((n) => md.RESOURCES.includes(n)));
 
   // the budgets
-  const gtTakes = meter.log.filter(([k]) => k === 'market:geckoterminal').length, gtHits = Object.entries(hits).filter(([k]) => k.startsWith('gt-')).reduce((a, [, v]) => a + v, 0);
+  const gtTakes = meter.log.filter(([k]) => k === 'market:geckoterminal' || k === 'market:geckoterminal-asked').length, gtHits = Object.entries(hits).filter(([k]) => k.startsWith('gt-')).reduce((a, [, v]) => a + v, 0);
   const hostTakes = meter.log.filter(([k]) => k === '127.0.0.1:' + vendor.address().port).length;
   check('the meter is consulted for every read: every request took its host\'s meter, every GeckoTerminal one Market Data\'s share first, and every chain batch the chain share', gtTakes === gtHits && gtTakes > 10 && hostTakes === log.length && meter.log.filter(([k]) => k === 'market:rpc').length === node.calls,
     brief({ gtTakes, gtHits, hostTakes, requests: log.length, rpc: node.calls, rpcTakes: meter.log.filter(([k]) => k === 'market:rpc').length }));
@@ -477,35 +484,217 @@ try {
   const partial = md.tokens({ chain: 'robinhood' }).body;
   check('a spent meter stops a collector before it asks: two GeckoTerminal pages allowed → two asked, and the run says where it stopped', (hits['gt-pools'] || 0) - before === 2 && /stopped at page 3: the GeckoTerminal budget was spent/.test(rb.note), rb.note + ' ' + ((hits['gt-pools'] || 0) - before));
   check('  ...and the token list built on that batch says the read stopped short', /the read stopped at page 3: the GeckoTerminal budget was spent/.test(partial.basis), partial.basis);
-  meter.refuse = (k) => k === 'market:geckoterminal';
-  const tdb = (await md.token({ chain: 'robinhood', address: WETH })).body; meter.refuse = null;
-  check('  ...and a person waiting is told the truth when the share is spent ("being asked a lot right now"), never shown an empty chart as data', (tdb.candles && tdb.candles.rows === null && /being asked a lot/.test(tdb.candles.why) && tdb.candles.retry === true) || (tdb.unavailable && /being asked a lot/.test(tdb.why)), brief(tdb.candles || tdb));
-  check('the background waits its turn on the meter (up to its long wait); a person\'s read waits at most the short one', meter.log.some(([k, w]) => k === 'market:geckoterminal' && w === 1000) && /const ASK_WAIT = deps\.askWaitMs != null \? deps\.askWaitMs : 8000;/.test(LIB) && /const BG_WAIT = deps\.bgWaitMs != null \? deps\.bgWaitMs : 120000;/.test(LIB));
+  // three tokens of the snapshot whose candles nobody has read yet (each read below asks GeckoTerminal once)
+  const fresh = tk.rows.filter((r) => ![USDG, SEND].includes(r.address)).map((r) => r.address);
+  // the collectors' share spent — as when their pages are queued on it for minutes: a person's read is not held behind them
+  const gtShares = () => meter.log.filter(([k]) => k.startsWith('market:geckoterminal'));
+  meter.refuse = (k) => k === 'market:geckoterminal'; meter.log.length = 0;
+  const tdo = (await md.token({ chain: 'robinhood', address: fresh[0] })).body; meter.refuse = null;
+  check('a person\'s token read has a GeckoTerminal share of its own: with the collectors\' share spent (they queue on it for minutes), the candles still come', tdo.candles && Array.isArray(tdo.candles.rows) && tdo.candles.rows.length > 0
+    && gtShares().length === 1 && gtShares()[0][0] === 'market:geckoterminal-asked', brief({ c: tdo.candles && tdo.candles.why, log: meter.log }));
+  meter.refuse = (k) => k === 'market:geckoterminal-asked'; meter.log.length = 0;
+  const tdf = (await md.token({ chain: 'robinhood', address: fresh[1] })).body; meter.refuse = null;
+  check('  ...and when its own share is spent it may take a slot of the collectors\' that is free right now (waiting the short wait, never their long one)', tdf.candles && Array.isArray(tdf.candles.rows) && tdf.candles.rows.length > 0
+    && gtShares().map(([k]) => k).join() === 'market:geckoterminal-asked,market:geckoterminal' && gtShares().every(([, w]) => w === 1000), brief(meter.log));
+  meter.refuse = (k) => k === 'market:geckoterminal' || k === 'market:geckoterminal-asked';
+  const tdb = (await md.token({ chain: 'robinhood', address: fresh[2] })).body; meter.refuse = null;
+  check('  ...and a person waiting is told the truth when both are spent ("being asked a lot right now"), never shown an empty chart as data', (tdb.candles && tdb.candles.rows === null && /being asked a lot/.test(tdb.candles.why) && tdb.candles.retry === true) || (tdb.unavailable && /being asked a lot/.test(tdb.why)), brief(tdb.candles || tdb));
+  check('the background waits its turn on the meter (up to its long wait); a person\'s read waits at most the short one', /const ASK_WAIT = deps\.askWaitMs != null \? deps\.askWaitMs : 8000;/.test(LIB) && /const BG_WAIT = deps\.bgWaitMs != null \? deps\.bgWaitMs : 120000;/.test(LIB));
 
   // pruning
   const old = (d) => NOW - d * 864e5;
   const insSnap = dbA.prepare("INSERT INTO mkt_chain_snap (chain, name, at, tvl, src) VALUES ('robinhood', 'Robinhood Chain', ?, 1, '{}')");
   for (const h of [1, 5, 9, 13]) insSnap.run(old(20) - h * 3600e3);
+  const day10 = Math.floor(old(10) / 864e5) * 864e5;
+  for (const h of [3, 9]) insSnap.run(day10 + h * 3600e3);   // two runs of one day, 10 days back
   const insPool = dbA.prepare("INSERT INTO mkt_pool_snap (network, pool, at, base_addr) VALUES (?, '0xpool', ?, '0xbase')");
   const tOld = Date.parse('2026-10-15T10:00:00Z');
-  for (const m of [5, 15, 25]) { insPool.run('robinhood', tOld + m * 60e3); insPool.run('eth', tOld + m * 60e3); }
+  for (const m of [5, 15, 25, 125]) { insPool.run('robinhood', tOld + m * 60e3); insPool.run('eth', tOld + m * 60e3); }   // three batches in one hour, one two hours on
   const t100 = Date.parse('2026-07-01T00:00:00Z');
   for (const h of [1, 3, 5]) insPool.run('robinhood', t100 + h * 3600e3);
   const insPulse = dbA.prepare('INSERT INTO mkt_rh_pulse (at, block) VALUES (?, 1)');
   const tP = Date.parse('2026-10-22T05:00:00Z');
   for (const m of [1, 2, 3, 61]) insPulse.run(tP + m * 60e3);
   dbA.prepare("INSERT INTO mkt_new_pool (chain, pool, first_seen) VALUES ('robinhood', '0xoldpool', ?)").run(old(31));
+  dbA.prepare("INSERT INTO mkt_new_pool (chain, pool, first_seen) VALUES ('robinhood', '0xweekpool', ?)").run(old(8));
+  dbA.prepare("INSERT INTO mkt_new_pool (chain, pool, first_seen) VALUES ('ethereum', '0xweekpool', ?)").run(old(8));
   dbA.prepare("INSERT INTO mkt_scan (chain, address, at, src) VALUES ('robinhood', '0xoldscan', ?, 'scan')").run(old(91));
   dbA.prepare("INSERT INTO mkt_runs (job, at, ok) VALUES ('x', ?, 1)").run(old(15));
   const rpr = await run('prune');
-  check('pruning: chain snapshots older than 14 days keep the last of each day; pools older than 7 days the first batch of each hour, older than 90 days of each day', rpr.ok
+  const poolsOn = (net, a, b) => q1('SELECT COUNT(*) n FROM mkt_pool_snap WHERE at >= ? AND at < ? AND network = ?', a, b, net).n;
+  check('pruning: chain snapshots older than 7 days keep the last of each day; Robinhood Chain\'s pools older than 7 days the first batch of each hour, older than 90 days of each day', rpr.ok
     && q1('SELECT COUNT(*) n FROM mkt_chain_snap WHERE at < ?', old(14)).n === 1 && q1('SELECT at FROM mkt_chain_snap WHERE at < ?', old(14)).at === old(20) - 3600e3
-    && q1("SELECT COUNT(*) n FROM mkt_pool_snap WHERE at >= ? AND at < ? AND network='robinhood'", tOld, tOld + 3600e3).n === 1 && q1("SELECT COUNT(*) n FROM mkt_pool_snap WHERE at >= ? AND at < ? AND network='eth'", tOld, tOld + 3600e3).n === 1
+    && q1('SELECT COUNT(*) n FROM mkt_chain_snap WHERE at >= ? AND at < ?', day10, day10 + 864e5).n === 1 && q1('SELECT at FROM mkt_chain_snap WHERE at >= ? AND at < ?', day10, day10 + 864e5).at === day10 + 9 * 3600e3
+    && poolsOn('robinhood', tOld, tOld + 3600e3) === 1 && poolsOn('robinhood', tOld, tOld + 864e5) === 2
     && q1("SELECT COUNT(*) n FROM mkt_pool_snap WHERE at >= ? AND at < ?", t100, t100 + 864e5).n === 1 && q1("SELECT COUNT(*) n FROM mkt_pool_snap WHERE network='robinhood' AND at=?", NOW).n === nPools, rpr.note);
+  check('  ...the other networks\' pools (read hourly, 8 networks) go to the first batch of each UTC day once a week old, not 90 days of hours', poolsOn('eth', tOld, tOld + 864e5) === 1 && q1("SELECT at FROM mkt_pool_snap WHERE network='eth' AND at >= ? AND at < ?", tOld, tOld + 864e5).at === tOld + 5 * 60e3, rpr.note);
   const rpr2 = await run('prune'), wmk = JSON.parse(q1("SELECT value FROM mkt_state WHERE name='prune'").value);
-  check('  ...each run thins only the buckets that newly aged, from a watermark (never a rescan of everything already thinned)', /chains 0, pools 0, pulse 0/.test(rpr2.note) && wmk.chain14 === Math.floor((NOW - 14 * 864e5) / 864e5) * 864e5 && wmk.pool7 === Math.floor((NOW - 7 * 864e5) / 3600e3) * 3600e3 && wmk.pulse2 === Math.floor((NOW - 2 * 864e5) / 3600e3) * 3600e3 && /at >= \? AND at < \?/.test(LIB), rpr2.note + ' ' + brief(wmk));
-  check('  ...the pulse keeps every row 2 days, then the first of each hour; new pools 30 days; scans 90 days; runs 14 days', q1('SELECT COUNT(*) n FROM mkt_rh_pulse WHERE at >= ? AND at < ?', tP, tP + 2 * 3600e3).n === 2
-    && !q1("SELECT 1 FROM mkt_new_pool WHERE pool='0xoldpool'") && !q1("SELECT 1 FROM mkt_scan WHERE address='0xoldscan'") && !q1("SELECT 1 FROM mkt_runs WHERE job='x'") && q1("SELECT COUNT(*) n FROM mkt_new_pool WHERE chain='robinhood'").n === npRows.length, rpr.note);
+  check('  ...each run thins only the buckets that newly aged, from a watermark (never a rescan of everything already thinned)', /chains 0, pools 0, pulse 0/.test(rpr2.note) && wmk.chain7 === Math.floor((NOW - 7 * 864e5) / 864e5) * 864e5 && wmk.pool7 === Math.floor((NOW - 7 * 864e5) / 3600e3) * 3600e3
+    && wmk.poolOther7 === Math.floor((NOW - 7 * 864e5) / 864e5) * 864e5 && wmk.pulse2 === Math.floor((NOW - 2 * 864e5) / 3600e3) * 3600e3 && !('chain14' in wmk) && /at >= \? AND at < \?/.test(LIB), rpr2.note + ' ' + brief(wmk));
+  check('  ...the pulse keeps every row 2 days, then the first of each hour; Robinhood Chain\'s new pools 30 days, the other networks\' 7; scans 90 days; runs 14 days', q1('SELECT COUNT(*) n FROM mkt_rh_pulse WHERE at >= ? AND at < ?', tP, tP + 2 * 3600e3).n === 2
+    && !q1("SELECT 1 FROM mkt_new_pool WHERE pool='0xoldpool'") && q1("SELECT 1 FROM mkt_new_pool WHERE pool='0xweekpool' AND chain='robinhood'") && !q1("SELECT 1 FROM mkt_new_pool WHERE pool='0xweekpool' AND chain='ethereum'")
+    && !q1("SELECT 1 FROM mkt_scan WHERE address='0xoldscan'") && !q1("SELECT 1 FROM mkt_runs WHERE job='x'") && q1("SELECT COUNT(*) n FROM mkt_new_pool WHERE chain='robinhood'").n === npRows.length + 1, rpr.note);
+
+  /* ── the review's findings (2026-10-26): each on a database of its own, so nothing above moves ── */
+  const freshDb = (name) => new DatabaseSync(path.join(tmpA, name + '.db'));
+
+  // a pools run caught partway through: page 1 committed under the run's `at`, page 2 still being read
+  const dbF = freshDb('f'), mdF = MD.createMarketData({ db: dbF, now: () => clock, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 });
+  mdF.migrate(); clock = NOW;
+  await mdF.runJob('pools');
+  const fullF = mdF.tokens({ chain: 'robinhood', limit: 200, include: 'all' }).body;
+  let releaseF; hold.rhPage2 = new Promise((r) => { releaseF = r; }); hold.asked = false;
+  clock = NOW + 10 * 60e3;
+  const runF = mdF.runJob('pools');
+  for (let i = 0; i < 300 && !hold.asked; i++) await sleep(10);
+  mdF._test.memo.clear();   // as when the 15 s memo runs out during the run (it takes minutes on the shared budget)
+  const midF = mdF.tokens({ chain: 'robinhood', limit: 200, include: 'all' }).body, midRows = dbF.prepare('SELECT COUNT(*) n FROM mkt_pool_snap WHERE at = ?').get(NOW + 10 * 60e3).n;
+  releaseF(); hold.rhPage2 = null; await runF; clock = NOW;
+  const afterF = mdF.tokens({ chain: 'robinhood', limit: 200, include: 'all' }).body;
+  check('a pools run still reading is never served half-written: the token list keeps the last finished batch until the run\'s last page is in, then moves to it', hold.asked && midRows > 0 && midRows < nPools
+    && midF.at === NOW && midF.rows.length === fullF.rows.length && midF.basis === fullF.basis && afterF.at === NOW + 10 * 60e3 && afterF.rows.length === fullF.rows.length, brief({ midRows, mid: [midF.at, midF.rows.length], full: fullF.rows.length, after: afterF.at }));
+  meter.log.length = 0; await mdF.runJob('poolsOther'); await mdF.runJob('newPoolsGt'); await mdF.runJob('pools');
+  const bgShares = meter.log.filter(([k]) => k.startsWith('market:geckoterminal'));
+  check('the collectors take only their own GeckoTerminal share, never the one kept for people', bgShares.length > 10 && bgShares.every(([k]) => k === 'market:geckoterminal'), brief(bgShares.slice(0, 3)));
+  dbF.close();
+
+  // DefiLlama's overviews answering 200 without their protocols list
+  const dbE = freshDb('e'), mdE = MD.createMarketData({ db: dbE, now: () => NOW, outboundTake: take, urls: URLS });
+  mdE.migrate(); vendorFail.noList = true; const rcE = await mdE.runJob('chains'); vendorFail.noList = false;
+  const rhE = dbE.prepare("SELECT * FROM mkt_chain_snap WHERE chain='robinhood'").get(), srcE = rhE ? JSON.parse(rhE.src) : {};
+  dbE.close();
+  check('a DefiLlama overview that answers 200 without its protocols list is a read that failed, said so — the chains run still keeps every other figure (it threw before)', rcE.ok && rhE && near(rhE.tvl, RH_LLAMA.tvl) && near(rhE.stables, RH_STABLES)
+    && rhE.dex_vol_24h === null && rhE.oi === null && rhE.fees_24h === null && ['vol', 'oi', 'fees'].every((k) => /answered without a protocols list/.test(srcE[k] && srcE[k].why)) && /not read: DEX volume \(answered without a protocols list\)/.test(rcE.note), brief({ n: rcE.note, s: srcE.vol }));
+
+  // the other networks' pools on the clock
+  const dbG = freshDb('g'), mdG = MD.createMarketData({ db: dbG, now: () => clock, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 });
+  mdG.migrate();
+  const hr = (h, m = 0) => Date.parse('2026-10-26T' + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':00Z');
+  dbG.prepare("INSERT INTO mkt_runs (job, at, ok, ms) VALUES ('poolsOther', ?, 1, 420000)").run(hr(10, 7));
+  dbG.prepare("INSERT INTO mkt_runs (job, at, ok, ms) VALUES ('pools', ?, 1, 60000)").run(hr(10, 15));
+  clock = hr(10, 20); mdG.start({ staggerMs: 0, jobs: ['poolsOther', 'pools'] });
+  const stG = mdG.status().body.collectors; mdG.stop();
+  const nxtG = (j) => stG.find((c) => c.job === j).nextAt;
+  check('the other networks\' pools run on the clock, just after each whole hour — not an hour after the last run ended, which drifted out of the day\'s first hour that a custom window reads', nxtG('poolsOther') === hr(11) + 5000 && nxtG('pools') === hr(10, 25), brief({ o: new Date(nxtG('poolsOther')).toISOString(), p: new Date(nxtG('pools')).toISOString() }));
+  dbG.prepare("INSERT INTO mkt_runs (job, at, ok, ms) VALUES ('poolsOther', ?, 1, 420000)").run(hr(8, 0));
+  mdG.start({ staggerMs: 0, jobs: ['poolsOther'] });
+  let afterG = null;
+  for (let i = 0; i < 400; i++) { afterG = mdG.status().body.collectors.find((c) => c.job === 'poolsOther'); if (afterG.lastAt === clock && !afterG.running && afterG.nextAt > clock) break; await sleep(10); }
+  mdG.stop(); clock = NOW; dbG.close();
+  check('  ...and after a run the next one is set the same way (a run at 10:20 is followed by one just after 11:00)', afterG && afterG.lastAt === hr(10, 20) && afterG.ok === true && afterG.nextAt === hr(11) + 5000, brief(afterG));
+
+  // the new-pools reader fell 3.5 days behind: the blocks it skipped are a gap, and no pulse row counts across one
+  const dbH = freshDb('h');
+  const rpcH = async (calls) => calls.map(([m, p]) => { const r = nodeAnswer(m, p); return r.error ? null : r.result; });
+  const mdH = MD.createMarketData({ db: dbH, now: () => NOW, rpcBatch: rpcH, urls: URLS }); mdH.migrate();
+  const C0 = HEAD - 3000000;
+  dbH.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('rh_newpools', ?, ?)").run(JSON.stringify({ cursor: C0, start: C0 - 100000, startAt: NOW - 10 * 864e5, gaps: [] }), NOW - 3 * 864e5);
+  const insH = dbH.prepare('INSERT INTO mkt_rh_pulse (at, block) VALUES (?, ?)');
+  for (let k = 288; k >= 0; k--) insH.run(NOW - k * 600e3, HEAD - Math.round((k * 600e3 / 864e5) * 1e6));   // a row every 10 minutes for two days; a million blocks a day
+  const rnH = await mdH.runJob('newPoolsRh');
+  const stH = JSON.parse(dbH.prepare("SELECT value FROM mkt_state WHERE name='rh_newpools'").get().value), gapH = stH.gaps[stH.gaps.length - 1] || [];
+  const rowsH = dbH.prepare('SELECT id, at, block, pools_created_v2 v2, pools_created_v3 v3, pools_created_v4 v4 FROM mkt_rh_pulse ORDER BY id').all().map((r, i, a) => Object.assign(r, { prev: i ? a[i - 1].block : null }));
+  const fillable = rowsH.filter((r) => r.at > NOW - 2 * 864e5 && r.prev != null);
+  const acrossGap = fillable.filter((r) => r.prev < gapH[1]), readAll = fillable.filter((r) => r.prev >= gapH[1]);
+  const logsIn = (k, a, b) => F.logs[k].filter((l) => { const n = parseInt(l.blockNumber, 16); return n > a && n <= b; }).length;
+  const pvH = mdH.pulseView().poolsCreated;
+  dbH.close();
+  check('a pulse row whose blocks the new-pools reader skipped (a recorded gap) keeps no count — never a made-up 0', rnH.ok && gapH[0] === C0 + 1 && gapH[1] === HEAD - 900000 - 1 && acrossGap.length > 100 && acrossGap.every((r) => r.v2 === null && r.v3 === null && r.v4 === null), brief({ gap: gapH, across: acrossGap.length, sample: acrossGap.slice(0, 2) }));
+  check('  ...while the rows whose blocks were all read are counted, exactly', readAll.length > 100 && readAll.every((r) => r.v2 != null) && ['v2', 'v3', 'v4'].every((k) => readAll.reduce((s, r) => s + r[k], 0) === logsIn(k, readAll[0].prev, HEAD)) && logsIn('v2', readAll[0].prev, HEAD) > 0,
+    brief({ n: readAll.length, v2: readAll.reduce((s, r) => s + r.v2, 0), want: logsIn('v2', readAll[0].prev, HEAD) }));
+  check('  ...and the 24-hour count is withheld, with why, when the gap reaches into those 24 hours', pvH.h24 === null && /skipped some of the last 24 hours/.test(pvH.why), brief(pvH));
+
+  // the pulse thinned to hourly: the rows kept take on the counts of the rows removed before them
+  const dbI = freshDb('i'), mdI = MD.createMarketData({ db: dbI, now: () => NOW }); mdI.migrate();
+  const hI = Math.floor((NOW - 3 * 864e5) / 3600e3) * 3600e3;
+  const insI = dbI.prepare('INSERT INTO mkt_rh_pulse (at, block, weth_supply, bridge_eth, pools_created_v2, pools_created_v3, pools_created_v4) VALUES (?,?,?,?,?,?,?)');
+  // two hours of a row a minute (2 v2 pools and 1 v4 pool each), a supply reading at :03, :13 …, the bridge at :07, :22 …;
+  // the second hour has one row (:30) whose blocks were not all read; then the third hour's first row
+  for (const [hh, hole] of [[0, -1], [1, 30]]) for (let m = 0; m < 60; m++) { const u = m === hole; insI.run(hI + hh * 3600e3 + m * 60e3, 1000 * (hh + 1) + m, m % 10 === 3 ? 1 : null, m % 15 === 7 ? 2 : null, u ? null : 2, u ? null : 0, u ? null : 1); }
+  insI.run(hI + 2 * 3600e3, 3000, null, null, 2, 0, 1);
+  await mdI.runJob('prune');
+  const keptI = dbI.prepare('SELECT at, pools_created_v2 v2, pools_created_v4 v4, weth_supply, bridge_eth FROM mkt_rh_pulse ORDER BY id').all().map((r) => [Math.round((r.at - hI) / 60e3), r.v2, r.v4]);
+  const bridgeI = mdI.pulseView().history.bridgeEth.length;
+  dbI.close();
+  check('the pulse thinned to hourly keeps each hour\'s first row and its first supply and bridge readings, and a kept row\'s pool count is still "since the row before" — the counts of the rows removed before it, added', JSON.stringify(keptI) === JSON.stringify([[0, 2, 1], [3, 6, 3], [7, 8, 4], [60, 106, 53], [63, 6, 3], [67, 8, 4], [120, null, null]]) && bridgeI === 2, brief({ keptI, bridgeI }));
+  check('  ...the docs say so (the count is "since the row before it, at any age")', /a kept row takes on the counts of the rows removed before it/.test(DOCS) && /stay <code>null<\/code> where it did not read every block/.test(DOCS));
+
+  // the scans, capped like the Scanner's own stores
+  const dbJ = freshDb('j'), mdJ = MD.createMarketData({ db: dbJ, now: () => clock, scanKeep: 50, scanJsonBudget: 20000 }); mdJ.migrate();
+  clock = NOW - 3600e3;
+  for (let i = 0; i < 250; i++) { clock += 1000; mdJ.scanPut('ethereum', '0x' + (i + 1).toString(16).padStart(40, '0'), radarPairs[0], { src: 'scan' }); }
+  const midJ = dbJ.prepare('SELECT COUNT(*) n FROM mkt_scan').get().n;
+  clock = NOW; await mdJ.runJob('prune');
+  const capJ = dbJ.prepare('SELECT COUNT(*) n, MIN(id) a, MAX(id) b, SUM(LENGTH(CAST(json AS BLOB))) bytes, COUNT(json) withJson, MIN(CASE WHEN json IS NOT NULL THEN id END) firstJson FROM mkt_scan').get();
+  const oneJ = Buffer.byteLength(JSON.stringify(radarPairs[0]));
+  dbJ.close();
+  check('the scans are capped like the Scanner\'s own stores: the newest rows only, and the full profiles on the newest rows up to a byte budget (here 50 rows, 20,000 bytes)', midJ <= 100 && capJ.n === 50 && capJ.a === 201 && capJ.b === 250
+    && capJ.bytes <= 20000 && capJ.withJson === Math.floor(20000 / oneJ) && capJ.firstJson === 250 - capJ.withJson + 1, brief({ midJ, capJ, oneJ }));
+
+  // a token scanned every 9 minutes for 8 days: one row per ten-minute slot of the clock, never one row soaking up every scan
+  const dbJ2 = freshDb('j2'), mdJ2 = MD.createMarketData({ db: dbJ2, now: () => clock }); mdJ2.migrate();
+  const tokJ = '0x' + 'fe'.repeat(20);
+  let in7 = 0, allJ = 0;
+  dbJ2.exec('BEGIN');
+  for (clock = NOW - 8 * 864e5; clock <= NOW; clock += 9 * 60e3) { mdJ2.scanPut('robinhood', tokJ, radarPairs[0], { src: 'scan' }); allJ++; if (clock > NOW - 7 * 864e5) in7++; }
+  dbJ2.exec('COMMIT'); clock = NOW;
+  const rowsJ2 = dbJ2.prepare('SELECT COUNT(*) n, MAX(n) most FROM mkt_scan').get(), topJ2 = mdJ2.mostScanned(5);
+  dbJ2.close();
+  check('a scan folds into its token\'s row only within the same ten-minute slot: scans every 9 minutes for 8 days keep their readings, and "the last 7 days" counts the last 7 days\' scans', rowsJ2.n > 1000 && rowsJ2.most <= 2 && topJ2.length === 1 && Math.abs(topJ2[0].scans - in7) <= 1 && in7 < allJ, brief({ rowsJ2, top: topJ2, in7, allJ }));
+
+  // custom token windows, sums over a token's pools, and the Send API's filters — on a database whose every query is seen
+  const dbK = freshDb('k'), seenK = [];
+  const dbKp = { exec: (s) => dbK.exec(s), prepare: (s) => { const st = dbK.prepare(s); return { all: (...a) => { seenK.push([s, a]); return st.all(...a); }, get: (...a) => st.get(...a), run: (...a) => st.run(...a) }; } };
+  const mdK = MD.createMarketData({ db: dbKp, now: () => NOW, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 }); mdK.migrate();
+  const insK = dbK.prepare('INSERT INTO mkt_pool_snap (network, pool, at, rank, base_addr, base_symbol, price_usd, reserve_usd, vol_h24, tx_h24) VALUES (?,?,?,?,?,?,?,?,?,?)');
+  const XK = '0x' + '77'.repeat(20), YK = '0x' + '88'.repeat(20), SOLPOOL = '7qbRF6YsyGuLUVs6Y1q64bdVrfe4ZcUUz1JRdoVNUJnm', ETHPOOL = '0x' + 'ab'.repeat(20);
+  for (const [d, v] of [['2026-10-20', 100], ['2026-10-21', 1000], ['2026-10-22', null], ['2026-10-23', 1000]]) {
+    const at = Date.parse(d + 'T00:05:00Z');
+    insK.run('robinhood', '0x' + '71'.repeat(20), at, 1, XK, 'XK', 1, 50000, v, 10);
+    insK.run('robinhood', '0x' + '81'.repeat(20), at, 2, YK, 'YK', 2, 5000, 10, 4);
+    insK.run('robinhood', '0x' + '82'.repeat(20), at, 3, YK, 'YK', 2, 0, null, null);   // GeckoTerminal's 0 reserve (not read), no volume, no trade count
+  }
+  const lastK = Date.parse('2026-10-23T00:05:00Z');
+  insK.run('solana', SOLPOOL, lastK, 1, 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', 'BONK', 1, 1000, 5, 1);
+  insK.run('eth', ETHPOOL, lastK, 1, PEPE, 'PEPE', 1, 1000, 5, 1);
+  dbK.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('pools:robinhood', ?, ?)").run(JSON.stringify({ at: lastK, pages: 1, pools: 3, wanted: 10, why: null, ended: true }), lastK);
+  const xK = mdK.tokens({ chain: 'robinhood', window: 'custom', from: '2026-10-20', to: '2026-10-22', include: 'all' }).body.rows.find((r) => r.address === XK);
+  check('a custom token window with a day GeckoTerminal gave no volume for has no total: that day is not a 0, and the answer says which day', xK && xK.volume.v === null && /no 24 h volume for one or more of its pools in our snapshot after 2026-10-21/.test(xK.volume.why), brief(xK && xK.volume));
+  const yK = mdK.tokens({ chain: 'robinhood', include: 'all' }).body.rows.find((r) => r.address === YK), yKd = (await mdK.token({ chain: 'robinhood', address: YK })).body;
+  check('  ...and a sum over a token\'s pools leaves out a pool with no figure — counted, said in the label, never added as 0 — and raises no "thin" on a reserve it could not read', yK && yK.liquidity.v === 5000 && yK.liquidity.missing === 1 && /1 of its 2 pools gave no reserve/.test(yK.liquidity.label)
+    && yK.volume.v === 10 && yK.volume.missing === 1 && yK.txns24h.v === 4 && yK.txns24h.missing === 1 && !yK.flags.includes('thin')
+    && yKd.liquidity.v === 5000 && yKd.liquidity.missing === 1 && yKd.windows['24h'].volume.missing === 1 && yKd.windows['24h'].txns.missing === 1 && !yKd.flags.includes('thin'), brief({ l: yK && yK.liquidity, f: yK && yK.flags, d: yKd.liquidity }));
+  const apiK = (n, q) => mdK.apiResource(n, q, { limit: 50 });
+  mdK.scanPut('solana', 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263', radarPairs[0], { src: 'scan' });
+  mdK.scanPut('ethereum', PEPE, radarPairs[0], { src: 'scan' });
+  const pSol = await apiK('pools', { network: 'solana', pool: SOLPOOL }), pSolAny = await apiK('pools', { pool: SOLPOOL }), pEthKey = await apiK('pools', { network: 'ethereum' }), pEthGt = await apiK('pools', { network: 'eth' }), pUpper = await apiK('pools', { pool: ETHPOOL.toUpperCase().replace('0X', '0x') });
+  const sSol = await apiK('scans', { address: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263' }), sEth = await apiK('scans', { address: PEPE.toUpperCase().replace('0X', '0x') });
+  check('the Send API\'s pools: a Solana pool matches as written (case-sensitive, as stored), an EVM one in any case; network takes this site\'s key or GeckoTerminal\'s id; scans find a Solana address without chain=', pSol.body.data.length === 1 && pSolAny.body.data.length === 1 && pSol.body.data[0].pool === SOLPOOL
+    && pEthKey.body.data.length === 1 && pEthGt.body.data.length === 1 && pEthKey.body.data[0].network === 'eth' && pUpper.body.data.length === 1 && sSol.body.data.length === 1 && sEth.body.data.length === 1, brief([pSol.body.data.length, pSolAny.body.data.length, pEthKey.body.data.length, pUpper.body.data.length, sSol.body.data.length, sEth.body.data.length]));
+  const badK = await Promise.all([['pools', { network: 'nope' }], ['pools', { network: 'bitcoin' }], ['pools', { pool: 'nope' }], ['pools', { network: 'solana', pool: ETHPOOL }], ['pools', { network: 'eth', pool: SOLPOOL }],
+    ['scans', { chain: 'base' }], ['scans', { address: 'zz' }], ['scans', { chain: 'solana', address: PEPE }], ['new-pools', { chain: 'nope' }]].map(([n, q]) => apiK(n, q)));
+  check('  ...and a filter that can never match is a 400 that says why, not an empty page (pools, scans, new pools)', badK.every((r) => r.status === 400 && typeof r.body.error === 'string' && r.body.error.length > 10), badK.map((r) => r.status + ' ' + (r.body.error || '')).join(' | '));
+  // the plans of the queries the Send API really ran, on a table with enough rows for the planner to care, before and after ANALYZE
+  dbK.exec('BEGIN');
+  for (let i = 0; i < 20000; i++) insK.run(i % 2 ? 'base' : 'bsc', '0x' + (i % 400).toString(16).padStart(40, '0'), Date.parse('2026-09-01T00:00:00Z') + i * 1000, 1, '0xb' + (i % 50), 'B', 1, 1, 1, 1);
+  const insScanK = dbK.prepare("INSERT INTO mkt_scan (chain, address, at, src) VALUES (?, ?, ?, 'scan')");
+  for (let i = 0; i < 9000; i++) insScanK.run(MD.SCAN_CHAINS[i % 3], '0x' + (i % 900).toString(16).padStart(40, '0'), NOW - i * 1000);
+  dbK.exec('COMMIT');
+  seenK.length = 0;
+  const QK = [['pools', { network: 'base' }], ['pools', { pool: '0x' + (7).toString(16).padStart(40, '0') }], ['pools', { network: 'base', pool: '0x' + (7).toString(16).padStart(40, '0') }], ['scans', { chain: 'ethereum' }], ['scans', { chain: 'ethereum', address: '0x' + (4).toString(16).padStart(40, '0') }], ['scans', { address: '0x' + (4).toString(16).padStart(40, '0') }]];
+  for (const [n, q] of QK) await apiK(n, q);
+  const apiSql = seenK.filter(([s]) => /FROM mkt_(pool_snap|scan) WHERE id < \?/.test(s));
+  const planOf = ([s, a]) => dbK.prepare('EXPLAIN QUERY PLAN ' + s).all(...a).map((r) => r.detail).join(' | ');
+  const plans1 = apiSql.map(planOf); dbK.exec('ANALYZE'); const plans2 = apiSql.map(planOf);
+  const planOk = (p, i) => /USING INDEX idx_mkt_(pool_snap_net_id|pool_snap_pool|scan_chain|scan_tok_id) /.test(p) && !/SCAN mkt_/.test(p) && (i === 5 || !/TEMP B-TREE/.test(p));
+  dbK.close();
+  check('  ...and every query it runs for them walks an index in id order: no full scan, no sort of a whole network (0.8 s a call at retention before)', apiSql.length === QK.length && plans1.every(planOk) && plans2.every(planOk), brief({ plans1, plans2 }));
+
+  // the docs' chain shape is the chain resource's (every key it returns is named there)
+  const chainDoc = (DOCS.split('/api/data/v1/chain?key=robinhood')[1] || '').split('</pre>')[1] || '';
+  const named = (k) => new RegExp('\\b' + k + '\\b').test(chainDoc);
+  const keysCd = [...Object.keys(cd2), ...Object.keys(cd2.stats), ...Object.keys(cd2.history), ...Object.keys(cd2.history.src), ...Object.keys(cd2.topTokens)];
+  check('the docs\' "chain" shape names every key the resource returns (stats.liquidity and l2beat, history.from / to and its src map, appFees and daa)', keysCd.length > 30 && keysCd.every(named), keysCd.filter((k) => !named(k)).join(','));
 
   /* ── the timetable ── */
   check('the timetable is the contract\'s: pulse 60 s, chains 30 min, radar 10 min (its sweep is the radar\'s full node read), pools 10 min, new pools 3 min (chain) / 15 min (others), others\' pools hourly, histories 6 h, growthepie daily, L2BEAT hourly, re-scan hourly, prune hourly — and a failed DefiLlama run is not retried sooner than DefiLlama refreshes (30 min)',
@@ -515,7 +704,11 @@ try {
   check('the collectors start only when asked (MARKET_COLLECT=1, or production unless MARKET_COLLECT=0), and the test runner points every vendor URL at a dead address', /const MKT_COLLECT_ON = process\.env\.MARKET_COLLECT === '1' \|\| \(process\.env\.NODE_ENV === 'production' && process\.env\.MARKET_COLLECT !== '0'\);/.test(SRC) && /if \(MKT_COLLECT_ON\) \{/.test(SRC)
     && ['MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_LOGO_ORIGIN'].every((k) => new RegExp(k + ": DEAD").test(RUNJS) && SRC.includes('process.env.' + k)) && !/MARKET_COLLECT: '1'/.test(RUNJS));
   check('the server\'s busy signal decays: a minute after the node\'s last refusal, or while the shared pace is queued over 5 s — never "the pace has not sped up yet" (one refusal at boot kept every chain job idle for hours)', /const mktRpcBusy = \(\) => now\(\) - _paceRefusedAt < 60000 \? '[^']*'[^\n]*\n\s*: _paceAt - now\(\) > 5000 \? '/.test(SRC) && /const paceRefused = \(attempt\) => \{ _paceRefusedAt = now\(\);/.test(SRC) && /function paceYield\(\) \{ _paceRefusedAt = now\(\);/.test(SRC) && !/_paceMs > PACE_MS_START/.test(SRC));
-  check('the server meters each new host and Market Data\'s share of GeckoTerminal (3 of the site\'s 10 a minute)', /'market:geckoterminal': 3, 'market:rpc': 12,/.test(SRC) && /'api\.llama\.fi': 30, 'coins\.llama\.fi': 10, 'stablecoins\.llama\.fi': 20, 'l2beat\.com': 10,/.test(SRC) && /'api\.growthepie\.xyz': 10, 'api\.growthepie\.com': 10,/.test(SRC) && /'api\.geckoterminal\.com': 10,/.test(SRC));
+  // the shares carved out of GeckoTerminal's 10 a minute, read from the server's own table: they leave the chart switch and the Scanner some in the busiest minute
+  const rpmOf = (k) => { const m = SRC.match(new RegExp("'" + k.replace(/[.:]/g, '\\$&') + "': (\\d+),")); return m ? Number(m[1]) : null; };
+  check('the server meters each new host and Market Data\'s two shares of GeckoTerminal: the collectors\' 3 and 2 kept for people, which with the name search\'s share stay under the site\'s 10 a minute', rpmOf('market:geckoterminal') === 3 && rpmOf('market:geckoterminal-asked') === 2 && rpmOf('market:rpc') === 12
+    && rpmOf('market:geckoterminal') + rpmOf('market:geckoterminal-asked') + rpmOf('search:geckoterminal') < rpmOf('api.geckoterminal.com') && rpmOf('api.geckoterminal.com') === 10
+    && /'api\.llama\.fi': 30, 'coins\.llama\.fi': 10, 'stablecoins\.llama\.fi': 20, 'l2beat\.com': 10,/.test(SRC) && /'api\.growthepie\.xyz': 10, 'api\.growthepie\.com': 10,/.test(SRC), brief(['market:geckoterminal', 'market:geckoterminal-asked', 'search:geckoterminal', 'api.geckoterminal.com'].map(rpmOf)));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
   check('part 1 ran to the end', false, e.message);
@@ -667,6 +860,7 @@ try {
   const ob = await api('/api/admin/outbound', { sid: admin.sid });
   const hosts = (ob.j && ob.j.hosts) || {};
   check('the meters were consulted in the real wiring: Market Data\'s GeckoTerminal share and chain share, and the vendors\' host, each spent', hosts['market:geckoterminal'] && hosts['market:geckoterminal'].totalSinceBoot >= 3 && hosts['market:geckoterminal'].ceilingRpm === 600 && hosts['market:rpc'] && hosts['market:rpc'].totalSinceBoot >= 2 && hosts['market:rpc'].ceilingRpm === 12 && hosts[vHost] && hosts[vHost].totalSinceBoot > 5, brief(hosts));
+  check('  ...and the token view\'s candles came out of the share kept for people (2 a minute), not the collectors\'', hosts['market:geckoterminal-asked'] && hosts['market:geckoterminal-asked'].ceilingRpm === 2 && hosts['market:geckoterminal-asked'].totalSinceBoot >= 1, brief(hosts['market:geckoterminal-asked']));
 
   // the radar resumes its cursor after a restart
   const cur1 = JSON.parse(sdb.prepare("SELECT value FROM mkt_state WHERE name='radar'").get().value).cursor;

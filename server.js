@@ -6084,13 +6084,16 @@ const OUTBOUND_RPM = {
   'api.blockscout.com': 240,
   /* Market Data (lib/marketdata.js, 2026-10-26). DefiLlama, L2BEAT and the logo CDNs publish no number, so these are ceilings
      of our own, far below anything they would notice (DefiLlama is CDN-cached for 30 minutes and is read no faster than that);
-     growthepie publishes 10 a minute. GeckoTerminal is the site's 10 a minute: Market Data takes at most 3 of them
-     ('market:geckoterminal'), so the chart switch, the name search and the Scanner keep theirs. 'market:rpc' is Market Data's
-     own ceiling on the chain node — its batches also wait on the shared pace and stand down while the site's own reads are
-     refused (mktRpcBusy); it averages about one request a minute. */
+     growthepie publishes 10 a minute. GeckoTerminal is the site's 10 a minute: Market Data's collectors take at most 3 of them
+     ('market:geckoterminal', about 2 a minute on average), and 2 more are kept for a person opening a token on /market or
+     through the Send API ('market:geckoterminal-asked': its candles and token reads), which the collectors never take from —
+     they queue for minutes, and a person waits 8 s at most. With the name search's 4, that leaves the chart switch and the
+     Scanner at least 1 in the busiest minute, and in practice most of the 10. 'market:rpc' is Market Data's own ceiling on
+     the chain node — its batches also wait on the shared pace and stand down while the site's own reads are refused
+     (mktRpcBusy); it averages about one request a minute. */
   'api.llama.fi': 30, 'coins.llama.fi': 10, 'stablecoins.llama.fi': 20, 'l2beat.com': 10,
   'api.growthepie.xyz': 10, 'api.growthepie.com': 10,
-  'market:geckoterminal': 3, 'market:rpc': 12,
+  'market:geckoterminal': 3, 'market:geckoterminal-asked': 2, 'market:rpc': 12,
   'coin-images.coingecko.com': 120, 'assets.geckoterminal.com': 120, 'icons.llamao.fi': 60, 'icons.llama.fi': 60, 'cdn.dexscreener.com': 300, 'dd.dexscreener.com': 300,
 };
 try { OUTBOUND_RPM[new URL(BLOCKSCOUT).host] = OUTBOUND_RPM[new URL(BLOCKSCOUT).host] || 240; } catch {}   // a keyed explorer host inherits the keyed ceiling
