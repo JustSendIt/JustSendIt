@@ -1,0 +1,1402 @@
+{
+ "at": 1793035800000,
+ "chain": "robinhood",
+ "network": "robinhood",
+ "basis": "the 200 most-traded pools on GeckoTerminal, grouped by token",
+ "window": {
+  "kind": "1h",
+  "label": "Last hour"
+ },
+ "sort": "volume",
+ "dir": "desc",
+ "rows": [
+  {
+   "chain": "robinhood",
+   "address": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "symbol": "USDG",
+   "name": "Global Dollar",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F51281%2Flarge%2FGDN_USDG_Token_200x200.png%3F1730484111",
+   "priceUsd": {
+    "v": 0.999306850991425,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 3143615851.06444,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "global, all chains (CoinGecko) — not comparable with this chain’s FDV"
+   },
+   "fdv": {
+    "v": 672781451.846415,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 18071785.8909,
+    "pools": 2,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 8454115.179049946,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 2 listed pools"
+   },
+   "change": {
+    "v": -0.025,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 249270,
+   "flags": [
+    "global-mcap"
+   ],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x0000000000000000000000000000000000000000",
+   "symbol": "WETH",
+   "name": "WETH",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fassets.geckoterminal.com%2F7l7tdohmj7ud6i62llktrh18kcj6",
+   "priceUsd": {
+    "v": 2331,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 5759538889.16621,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 22607450.1448,
+    "pools": 3,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 2540069.3026538314,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 3 listed pools"
+   },
+   "change": {
+    "v": 0.679,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 31591,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x0bd7d308f8e1639fab988df18a8011f41eacad73",
+   "symbol": "WETH",
+   "name": "WETH",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174283%2Flarge%2Fweth-robinhood.jpeg%3F1782924507",
+   "priceUsd": {
+    "v": 2331,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 93351712.4528285,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 95372861.1770286,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 5677637.2128,
+    "pools": 3,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 2331307.671620956,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 3 listed pools"
+   },
+   "change": {
+    "v": 0.679,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 88425,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xa5b562d13486735d2a96d6b230489b1f33731440",
+   "symbol": "BTC",
+   "name": "Big Titty Coin",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102179782%2Flarge%2Flogo.png%3F1792952458",
+   "priceUsd": {
+    "v": 0.0205033102989764,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 20503310.3,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 20503310.3,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 424125.6831,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 816692.024263127,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 1.412,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 68192,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x39dbed3a2bd333467115de45665cc57f813c4571",
+   "symbol": "PONS",
+   "name": "Pons",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174571%2Flarge%2Fjhitvkisdq8fhxvimdkpcw7y3dx5.%3F1784093932",
+   "priceUsd": {
+    "v": 0.249866253080044,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 167959070.687326,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 167957986.628457,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 2696513.6204999997,
+    "pools": 3,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 350409.9698462413,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 3 listed pools"
+   },
+   "change": {
+    "v": 1.952,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 20427,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+   "symbol": "SPCX",
+   "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174129%2Flarge%2F0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png%3F1782444614",
+   "priceUsd": {
+    "v": 148.541497451708,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 12954301.4616156,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 13243422.2942033,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 1592559.9459,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 296805.757078846,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": -0.508,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 7768,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+   "symbol": "NVDA",
+   "name": "NVIDIA • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174110%2Flarge%2F0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png%3F1782444565",
+   "priceUsd": {
+    "v": 216.417541980062,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 18550571.673245,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 18551517.7581341,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 3105280.5777,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 206362.16774409,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0.398,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 5911,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+   "symbol": "SPY",
+   "name": "SPDR S&amp;P 500 ETF Trust • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174115%2Flarge%2F0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png%3F1782444578",
+   "priceUsd": {
+    "v": 767.959906013623,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 20541500.7450531,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 20513417.5399825,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 1954632.078,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 126574.598056914,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0.228,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 19228,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+   "symbol": "QQQ",
+   "name": "Invesco QQQ • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174119%2Flarge%2F0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png%3F1782444588",
+   "priceUsd": {
+    "v": 714.378830132917,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 5429224.1736209,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 5429223.41436322,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 1453176.8355,
+    "pools": 2,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 99145.6156949212,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 2 listed pools"
+   },
+   "change": {
+    "v": 0.269,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 18759,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x1ad98c5f529774c5d45c584521175ffaac20b6e2",
+   "symbol": "Kimchi",
+   "name": "Aura Final Boss",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.000255402256674792,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 254180.5293,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 76972.4744,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 68619.8685142904,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 24.115,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 1839,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xcec185eb182c47d1ba1efc84e6959e18cd620be4",
+   "symbol": "cbBTC",
+   "name": "Coinbase Wrapped BTC",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F40143%2Flarge%2Fcbbtc.webp%3F1726136727",
+   "priceUsd": {
+    "v": 80351.1045377986,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 7724165057.28376,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "global, all chains (CoinGecko) — not comparable with this chain’s FDV"
+   },
+   "fdv": {
+    "v": 2289307.80236797,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 954429.2064,
+    "pools": 2,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 43276.4727784845,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 2 listed pools"
+   },
+   "change": {
+    "v": 0.47,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 2657,
+   "flags": [
+    "global-mcap"
+   ],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xaa07a0e9209e16ac99708c3ec70159c6ef3128a3",
+   "symbol": "ORBIO",
+   "name": "Orbio.so",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102176665%2Flarge%2Forbio.jpg%3F1788424660",
+   "priceUsd": {
+    "v": 0.0266346457772102,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 25228869.3415,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 25228844.0356123,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 81844.2072,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 39838.2873970875,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": -4.801,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 5097,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+   "symbol": "amc",
+   "name": "AMC Entertainment Holdings, Inc. • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175476%2Flarge%2FAMC.png%3F1786375197",
+   "priceUsd": {
+    "v": 2.84481185717985,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 1850177.27835363,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 1848771.65483364,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 272002.402,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 29935.6793833514,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": -0.893,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 746,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+   "symbol": "GOOGL",
+   "name": "Alphabet Class A • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174124%2Flarge%2F0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png%3F1782444601",
+   "priceUsd": {
+    "v": 319.149009313591,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 6381044.58517414,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 6381087.24678078,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 615274.429,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 11502.8503258502,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": -1.548,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 1609,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+   "symbol": "TSLA",
+   "name": "Tesla • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174112%2Flarge%2F0x322f0929c4625ed5bad873c95208d54e1c003b2d.png%3F1782444570",
+   "priceUsd": {
+    "v": 396.743454076546,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 4291173.7277862,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 4289895.49924735,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 1121369.111,
+    "pools": 2,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 9440.3496388515,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 2 listed pools"
+   },
+   "change": {
+    "v": 0.281,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 1443,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x18e674231a58c239dc7daedcffe15ec3a24cff5c",
+   "symbol": "HOOKR",
+   "name": "Hookr.fun",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175265%2Flarge%2Fhookr.jpg%3F1786013509",
+   "priceUsd": {
+    "v": 0.0151045824906239,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 15000719.4,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 14904393.2718725,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 923944.6235,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 5834.6999560209,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0.202,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 1144,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xdba134ad399e15d9175ce6bc97beca7001fb96ea",
+   "symbol": "ZGAP",
+   "name": "Zero Gap",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.0000814524325319454,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 116202.043515283,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 28213.9647,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 3958.7451262191,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": -0.678,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 3750,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xea6bd2405e4c60d18f428a50d0d16df0028c4b07",
+   "symbol": "Claude",
+   "name": "Claude",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fassets.geckoterminal.com%2Ffd64if3f07nfrxzbh5zsic3bgxo2",
+   "priceUsd": {
+    "v": 0.0000819519939822443,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 8195199.398,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 8190545.9559,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 1.5752138265,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": -2.037,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 3847,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x621632fe422158e9ce8bc532498993e3dde526d5",
+   "symbol": "PONS",
+   "name": "Pons",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.23299863154817,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 200378823.09,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 69767478.0966,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 61,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x047a84485f1a4314196bed897cd14d3de245ab4d",
+   "symbol": "FLOP",
+   "name": "Flop Labs",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.00000232465215135833,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 2324.652151,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 2329.0288,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 22082,
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x0b7c6c138dc75622f4200d157b13fb93e6bd94fa",
+   "symbol": "MOW",
+   "name": "MowCat",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175295%2Flarge%2Flogo.jpg%3F1786074528",
+   "priceUsd": {
+    "v": 0.100438542794379,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": 100438542.8,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "fdv": {
+    "v": 100438542.8,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 10002998.3848,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 552,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xff83b2512bca8bee2f6a9d9c3e8ed4460fc6846c",
+   "symbol": "MAKERS",
+   "name": "MarketMakerCollective",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.00000231706812667391,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 2317.068127,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 2326.9368,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 9081,
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x67c51c928d5d8383f3a58fc591a4e6f6463949ed",
+   "symbol": "AnsemCat",
+   "name": "Ansem Cat",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174690%2Flarge%2Flogo.png%3F1784628480",
+   "priceUsd": {
+    "v": 0.000161567983010002,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal gives 0, which is not a reading"
+   },
+   "fdv": {
+    "v": 67970034.76827,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 16219809.0739,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 500,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xa6becc14d26d7fe735a4b52034828c75c2d185c2",
+   "symbol": "ETH",
+   "name": "Eternal Titty Heaven",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.0011149862067992,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 1114986.207,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": null,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 6273,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x57c6a7a9fb32280a03690867e67d7b6f537f2e2b",
+   "symbol": "GINNAN",
+   "name": "GinnanCoin",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.00000233184673861351,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 2331.846739,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 2325.0773,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 1676,
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x4d775de9f5f7a79d6917419dcff20a5f9b9b5815",
+   "symbol": "neet",
+   "name": "NotInEmploymentEnjoyingTitties",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.000112158706673366,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 112158.7067,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": 7.6705,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 1155,
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d",
+   "symbol": "NMS",
+   "name": "Not My Stock",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.0000234340617480582,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 23434.06175,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": null,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 543,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xea3d70311c1c2cd14f4c3f74aa8cf75a1a4110fe",
+   "symbol": "RUVO",
+   "name": "Ruvo",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.000315230570944443,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 315230.5709,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": null,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 965,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0xf5ee85dfbbeee4b017995073f411b6bdd7fb7d39",
+   "symbol": "KIVO",
+   "name": "Kivo",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.000407100045782573,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 407100.0458,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": null,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 606,
+   "flags": [],
+   "scannable": true
+  },
+  {
+   "chain": "robinhood",
+   "address": "0x86b0aade2fb99424e037ff79774052004f0c06d4",
+   "symbol": "Bow",
+   "name": "Save Bow",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.000311502593266453,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "from its deepest pool"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 311502.5933,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "total supply × price, this chain"
+   },
+   "liquidity": {
+    "v": null,
+    "pools": 1,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
+   },
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "summed across its 1 listed pool"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "price change of its deepest pool, %"
+   },
+   "txns24h": 736,
+   "flags": [],
+   "scannable": true
+  }
+ ]
+}

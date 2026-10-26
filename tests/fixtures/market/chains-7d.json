@@ -1,0 +1,632 @@
+{
+ "at": 1793035800000,
+ "window": {
+  "kind": "7d",
+  "label": "Last 7 full UTC days (2026-10-19 – 2026-10-25)"
+ },
+ "sort": "tvl",
+ "dir": "desc",
+ "total": 421,
+ "rows": [
+  {
+   "key": "ethereum",
+   "name": "Ethereum",
+   "chainId": 1,
+   "gtNetwork": "eth",
+   "logo": null,
+   "tvl": {
+    "v": 48511366247.407845,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 3945971952.296019,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": 283949545169.9954,
+    "src": "defillama",
+    "at": 1793035803000,
+    "label": "ETH (gas token)"
+   },
+   "fees": {
+    "v": 2093663,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 142258271638.1237,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "base",
+   "name": "Base",
+   "chainId": 8453,
+   "gtNetwork": "base",
+   "logo": null,
+   "tvl": {
+    "v": 6034308053.4866905,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": 6028186884.670002,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX volume, last 7 full UTC days"
+   },
+   "liquidity": {
+    "v": 864386264.6384401,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": null,
+    "src": "site",
+    "at": 1793035800000,
+    "why": "No native token — gas is paid in ETH"
+   },
+   "fees": {
+    "v": 543817,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 5053570168.705265,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": 14932068352,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "label": "Total Value Secured (L2BEAT)"
+   },
+   "stage": "Stage 1",
+   "isL2": true
+  },
+  {
+   "key": "solana",
+   "name": "Solana",
+   "chainId": null,
+   "gtNetwork": "solana",
+   "logo": null,
+   "tvl": {
+    "v": 5752153092.888224,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 2341741312.844978,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": 59805293069.23263,
+    "src": "defillama",
+    "at": 1793035803000,
+    "label": "SOL (gas token)"
+   },
+   "fees": {
+    "v": 4416063,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 15443173382.940329,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "bsc",
+   "name": "BNB Chain",
+   "chainId": 56,
+   "gtNetwork": "bsc",
+   "logo": null,
+   "tvl": {
+    "v": 5529717542.530968,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 2499998025.1460414,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": 97845649312.47754,
+    "src": "defillama",
+    "at": 1793035803000,
+    "label": "BNB (gas token)"
+   },
+   "fees": {
+    "v": 2939905,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 13083018084.073788,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "tron",
+   "name": "Tron",
+   "chainId": null,
+   "gtNetwork": "tron",
+   "logo": null,
+   "tvl": {
+    "v": 5427615166.214455,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 639290241.5514351,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": 31405937647.40275,
+    "src": "defillama",
+    "at": 1793035803000,
+    "label": "TRX (gas token)"
+   },
+   "fees": {
+    "v": 5410674,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 93884651629.68507,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "bitcoin",
+   "name": "Bitcoin",
+   "chainId": null,
+   "gtNetwork": null,
+   "logo": null,
+   "tvl": {
+    "v": 4312522347.676324,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 14744912.474934515,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "The coin price source gave no market cap for BTC in this read",
+    "label": "BTC (gas token)"
+   },
+   "fees": {
+    "v": 1366676,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "DefiLlama lists no stablecoins for this chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "hyperliquid",
+   "name": "Hyperliquid L1",
+   "chainId": null,
+   "gtNetwork": "hyperevm",
+   "logo": null,
+   "tvl": {
+    "v": 2403739584.0501566,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 235938565.52483037,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": 17477370635.808113,
+    "src": "defillama",
+    "at": 1793035803000,
+    "label": "HYPE (gas token)"
+   },
+   "fees": {
+    "v": 72280,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 6862327768.354618,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "arbitrum",
+   "name": "Arbitrum",
+   "chainId": 42161,
+   "gtNetwork": "arbitrum",
+   "logo": null,
+   "tvl": {
+    "v": 1490238001.6517708,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 238348678.00688815,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": 1161200175.8186817,
+    "src": "defillama",
+    "at": 1793035803000,
+    "label": "ARB (governance token; gas is paid in ETH)"
+   },
+   "fees": {
+    "v": 123601,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 3630868412.2109327,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": 10009061376,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "label": "Total Value Secured (L2BEAT)"
+   },
+   "stage": "Stage 1",
+   "isL2": true
+  },
+  {
+   "key": "robinhood",
+   "name": "Robinhood Chain",
+   "chainId": 4663,
+   "gtNetwork": "robinhood",
+   "logo": null,
+   "tvl": {
+    "v": 1125597534.4925978,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": 5348000000,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX volume, last 7 full UTC days"
+   },
+   "liquidity": {
+    "v": 339815365.1242991,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": null,
+    "src": "site",
+    "at": 1793035800000,
+    "why": "No native token — gas is paid in ETH"
+   },
+   "fees": {
+    "v": 296980,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 1045704688.073406,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": 2279030016,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "label": "Total Value Secured (L2BEAT)"
+   },
+   "stage": "Stage 0",
+   "isL2": true
+  },
+  {
+   "key": "polygon",
+   "name": "Polygon",
+   "chainId": 137,
+   "gtNetwork": "polygon_pos",
+   "logo": null,
+   "tvl": {
+    "v": 701041817.1805581,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 137705102.2908739,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "The coin price source gave no market cap for POL in this read",
+    "label": "POL (gas token)"
+   },
+   "fees": {
+    "v": 437521,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 2856554617.2542,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": 3785651200,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "label": "Total Value Secured (L2BEAT)"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "avalanche",
+   "name": "Avalanche",
+   "chainId": 43114,
+   "gtNetwork": "avax",
+   "logo": null,
+   "tvl": {
+    "v": 561451516.1957387,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 81858258.0189104,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "The coin price source gave no market cap for AVAX in this read",
+    "label": "AVAX (gas token)"
+   },
+   "fees": {
+    "v": 45579,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 1356858669.8805315,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": null,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "why": "L2BEAT covers Ethereum L2s and L3s only"
+   },
+   "stage": null,
+   "isL2": false
+  },
+  {
+   "key": "optimism",
+   "name": "OP Mainnet",
+   "chainId": 10,
+   "gtNetwork": "optimism",
+   "logo": null,
+   "tvl": {
+    "v": 419517588.93764603,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DeFi TVL now (a stock: the window does not add it up)"
+   },
+   "volume": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "7-day totals come from the daily history, which is not collected for this chain yet"
+   },
+   "liquidity": {
+    "v": 43237120.71963535,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
+   },
+   "mcap": {
+    "v": null,
+    "src": "defillama",
+    "at": 1793035200000,
+    "why": "The coin price source gave no market cap for OP in this read",
+    "label": "OP (governance token)"
+   },
+   "fees": {
+    "v": 17749,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Gas fees paid to the chain, last 7 full UTC days"
+   },
+   "stables": {
+    "v": 446500083.86706215,
+    "src": "defillama",
+    "at": 1793035200000,
+    "label": "Stablecoins on the chain"
+   },
+   "tvs": {
+    "v": 1750209280,
+    "src": "l2beat",
+    "at": 1793035500000,
+    "label": "Total Value Secured (L2BEAT)"
+   },
+   "stage": "Stage 1",
+   "isL2": true
+  }
+ ],
+ "notes": [
+  "DeFi TVL (DefiLlama) and Total Value Secured (L2BEAT) measure different things and are never ranked in one column.",
+  "DefiLlama updates these figures about every 30 minutes."
+ ]
+}

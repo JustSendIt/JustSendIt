@@ -89,6 +89,7 @@
     '/squad': { tips: ['Squad calls are private to the squad and score for it.', 'Only verified members count toward the gate.', 'The 🛡️ button on any token scan calls it to this squad.'] },
     '/tracker': { tips: ['Track any wallet: holdings, every token transaction, a value chart, cost basis, PNL — read from the chain.', 'On the public node a first read can take an hour or more — leave the page: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back). Later refreshes take seconds.', 'The explorer never learns which wallets you look at; this site reads them.', 'A wallet you track reopens from its saved report; a refresh reads only what is new.'] },
     '/arcade': { tips: ['The weekly competitions live here, with their boards.', 'Biggest Sender resets every week.', 'Tap any name on a board to open their Send Wall.'] },
+    '/market': { tips: ['Pick a chain or a token in the side list, or search for one: the main view shows everything we could read about it.', 'Every figure names its source and when it was read. A figure nobody could read says why — it is never shown as zero.', 'A list sorted lowest-first is lowest among what the source lists, not lowest on the whole chain.'] },
     '/data': { tips: ['The Data API is read-only public data behind a key.', 'Keys are the burn kind — the docs on this page say how.', 'Limits are per key; the page lists them.'] }
   };
   // the page, by its name: /about (an old /about.html or a trailing / reads the same); the home page's sections are the home page
@@ -385,7 +386,7 @@
     function linkify(text, into) {
       // site paths and the email become links; everything else stays text (an answer is never markup)
       // a page by its name (/about, /newpairs?scan=…, /terms#s12), an old .html path, a wall, a home section, the email
-      const re = /((?<![\w/.])\/(?:about|arcade|communities|community|data|newpairs|privacy|profile|squad|support|terms|tracker|wall|watchlist|whitepaper|guide|swap|tokens|beta|rocketize)(?:\?[\w=&%-]+(?:\.[\w=&%-]+)*)?(?:#[\w-]+)?(?![\w/])|\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]*\.html(?:#[\w-]+)?|\/u\/[A-Za-z0-9._-]+|\/#[\w-]+|SendRH@Atomicmail\.io)/g;
+      const re = /((?<![\w/.])\/(?:about|arcade|communities|community|data|market|newpairs|privacy|profile|squad|support|terms|tracker|wall|watchlist|whitepaper|guide|swap|tokens|beta|rocketize)(?:\?[\w=&%-]+(?:\.[\w=&%-]+)*)?(?:#[\w-]+)?(?![\w/])|\/(?:[a-z0-9._-]+\/)*[a-z0-9._-]*\.html(?:#[\w-]+)?|\/u\/[A-Za-z0-9._-]+|\/#[\w-]+|SendRH@Atomicmail\.io)/g;
       let last = 0, m;
       while ((m = re.exec(text))) {
         if (m.index > last) into.appendChild(document.createTextNode(text.slice(last, m.index)));
