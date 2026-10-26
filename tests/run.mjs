@@ -92,6 +92,7 @@ const fixture = http.createServer((req, res) => {
 await new Promise((ok) => fixture.listen(0, '127.0.0.1', ok));
 fixture.unref();
 const FIXTURE = 'http://127.0.0.1:' + fixture.address().port;
+const DEAD = 'http://127.0.0.1:9/';   // an address nothing listens on: a read there fails at once
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
               BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1',   // the terms step and voice memos are hidden by default; the suites still cover both
               LEDGER_COOL_MS: '5000',    // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out
@@ -116,7 +117,12 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
               // runs its own server against fakes of them; here they are dead, so a scan of a 0x address the home chain cannot read is "could not reach"
               ...(process.env.CHAIN_LIVE === '1' ? {} : { MC_DEXSCREENER_URL: 'http://127.0.0.1:9', MC_GECKO_URL: 'http://127.0.0.1:9', MC_GOPLUS_URL: 'http://127.0.0.1:9', ETH_RPC_URL: 'http://127.0.0.1:9/', SOL_RPC_URL: 'http://127.0.0.1:9/', JUPITER_URL: 'http://127.0.0.1:9' }),
               // and the token-by-name search's two (GeckoTerminal, Dexscreener): the suites read the site's own records only
-              ...(process.env.CHAIN_LIVE === '1' ? {} : { TOKSEARCH_GT_URL: FIXTURE + '/gt', TOKSEARCH_DS_URL: FIXTURE + '/ds', OUTBOUND_RPM_SEARCH_GECKOTERMINAL: '600' }) };   // the suite asks more than the live 4/min share
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { TOKSEARCH_GT_URL: FIXTURE + '/gt', TOKSEARCH_DS_URL: FIXTURE + '/ds', OUTBOUND_RPM_SEARCH_GECKOTERMINAL: '600' }),   // the suite asks more than the live 4/min share
+              /* Market Data (lib/marketdata.js): every source it reads is a dead address here, always (even with CHAIN_LIVE=1 — no
+                 suite needs a live one), and its collectors are off whatever a .env says: tests/marketdata.mjs runs its own server
+                 against fakes of every one of them. */
+              MARKET_COLLECT: '0', MARKET_LLAMA_URL: DEAD, MARKET_LLAMA_COINS_URL: DEAD, MARKET_LLAMA_STABLES_URL: DEAD, MARKET_L2BEAT_URL: DEAD,
+              MARKET_GROWTHEPIE_URL: DEAD, MARKET_GROWTHEPIE_METRICS_URL: DEAD, MARKET_GT_URL: DEAD, MARKET_DS_URL: DEAD, MARKET_CG_URL: DEAD, MARKET_ETH_RPC_URL: DEAD, MARKET_LOGO_ORIGIN: DEAD };
 
 const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
