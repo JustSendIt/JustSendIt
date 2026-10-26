@@ -1568,7 +1568,8 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 .cmp-who { text-align: center; margin: 0 0 0.2rem; }
 .cmp-who .modal-note { margin: 0 0 0.45rem; }
 .cmp-walls { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin: 0 0 0.6rem; }
-.cmp-walls .btn { flex: 1 1 0; min-width: max-content; padding-inline: 0.75rem; }   /* one row when both fit (a phone too), each on its own when not */
+.cmp-walls .btn { flex: 1 1 0; min-width: max-content; padding-inline: 0.75rem; }   /* one row when both fit, each on its own when not */
+@media (max-width: 479px) { .cmp-walls { flex-wrap: nowrap; } .cmp-walls .btn { flex: 1 1 auto; min-width: 0; padding-inline: 0.5rem; white-space: normal; } }   /* a phone: one row, a label wrapping inside its own button, so the Send button stays in view */
 #compose-out .cmp-walls { margin: 0.9rem 0 0; }
 /* The composer grows with the screen (the phone's width, 420px on a small tablet, up to 760px on a wide screen): at the wide-screen text
    size its example text then takes a few lines instead of seven, and the dialog stays short enough to see whole. */
@@ -2293,7 +2294,8 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .pin-hover-load { color: var(--text-dim); }
 /* paste-to-convict form */
 .pin-add { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; }
-.pin-add-input { flex: 1 1 calc(36ch + 2.6rem); min-width: 200px; margin: 0; font-size: max(var(--text-floor), 0.9rem); }   /* starts as wide as its whole example text ("Paste a token contract to pin (0x…)", monospace); when that and the button cannot share a row, the button moves under it */
+.pin-add-input { flex: 1 1 calc(36ch + 2.6rem); min-width: 200px; margin: 0; font-size: max(var(--text-floor), 0.9rem); }   /* starts as wide as its whole example text; when that and the button cannot share a row, the button moves under it */
+.pin-add-input::placeholder { font-family: 'Rubik', system-ui, sans-serif; letter-spacing: 0; }   /* the example in the reading face (narrower than monospace): whole on a 320px phone; a typed address stays monospace */
 .pin-add-go { white-space: nowrap; }
 .pin-add-msg { color: var(--text-dim); font-size: max(var(--text-floor), 0.82rem); margin: 0.4rem 0 0; min-height: 1em; }
 .pin-add-msg:empty { display: none; }

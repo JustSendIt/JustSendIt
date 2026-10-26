@@ -30,6 +30,7 @@
 .sq-search { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; max-width: 760px; }
 .sq-q-field { position: relative; display: flex; flex: 1 1 300px; min-width: 0; }
 .sq-q-field .addr-input { flex: 1 1 auto; min-width: 0; margin: 0; padding-right: 3rem; font-family: 'Rubik', sans-serif; color: var(--text); -webkit-appearance: none; appearance: none; }
+.sq-q-field .addr-input:placeholder-shown { padding-right: 0.8rem; }   /* the ✕ is hidden while the box is empty (communities.js paintQClear): its room goes to the example text */
 .sq-q-field .addr-input::-webkit-search-cancel-button, .sq-q-field .addr-input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
 .sq-search .btn { flex: 0 0 auto; }
 

@@ -50,7 +50,7 @@ const bare = HOUSE.replace(/\/\*[\s\S]*?\*\//g, '');
   // every rule outside the type layer sits in a 1280px-and-up block: walk the top level of the section
   const top = []; let depth = 0, buf = '';
   for (const ch of bare) { buf += ch; if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) { top.push(buf.trim()); buf = ''; } } }
-  const TYPE_OK = /^(:root|html|h1, h2, h3, h4, \.section-title|p, li, dd, blockquote, \.section-sub|\.section-sub|\.section-sub b, \.section-sub strong|\.dash-k, \.tkd-kicker)/;
+  const TYPE_OK = /^(:root|html|h1, h2, h3, h4, \.section-title|p, li, dd, blockquote, \.section-sub|\.section-sub|\.section-sub b, \.section-sub strong|\.dash-k, \.tkd-kicker|\.age-kicker \{|\.trk-dash \.hstat \.lbl \{)/;
   const stray = top.filter((b) => !/^@media \((min-width: (1[2-9]\d\d|[2-9]\d\d\d)px)\)/.test(b) && !TYPE_OK.test(b));
   check('  ...every layout rule lives at 1280px and up — phones and tablets are untouched (only the type layer applies at every width)', top.length > 20 && stray.length === 0, stray.map((b) => b.slice(0, 60)).join(' | '));
   const mediaConds = [...bare.matchAll(/@media ([^{]+)\{/g)].map((m) => m[1].trim());
@@ -73,10 +73,13 @@ const bare = HOUSE.replace(/\/\*[\s\S]*?\*\//g, '');
     && /id="compose-go-mine" href="\/profile" data-tip="Closes the composer and opens your own wall: your posts, pins and daily check-in">🏠 My Send Wall<\/a>/.test(C));
   check('  ...the member\'s own wall is /u/<their name>, set each time the box opens (in the box and after a post)',
     /const mine = '\/u\/' \+ encodeURIComponent\(AUTH\.user\.username\);\s*modal\.querySelectorAll\('#compose-go-mine, #compose-done-mine'\)\.forEach\(\(a\) => \{ a\.href = mine; \}\);/.test(C)
-    && /id="compose-done-mine" href="\/profile" data-tip="Closes this and opens your own wall, with everything you have posted">🏠 My Send Wall<\/a>/.test(C));
+    && /id="compose-done-mine" href="\/profile" data-tip="Closes this and opens your own wall: your public posts, calls and pins">🏠 My Send Wall<\/a>/.test(C));
   check('  ...signed out, the public wall is one tap away too (reading needs no account), and every wall link closes the dialog first',
     /id="compose-out-wall" href="\/wall" data-tip="Opens the public Send Wall; reading it needs no account">🧱 Read the Send Wall<\/a>/.test(C)
-    && /modal\.querySelectorAll\('#compose-go-wall, #compose-go-mine, #compose-out-wall, #compose-done-mine'\)\.forEach\(\(a\) => a\.addEventListener\('click', \(\) => close\(\)\)\);/.test(C));
+    && /modal\.querySelectorAll\('#compose-out-wall, #compose-done-mine'\)\.forEach\(\(a\) => a\.addEventListener\('click', \(\) => close\(\)\)\);/.test(C));
+  check('  ...a wall link never costs a draft: the wall you are on just closes the box (the draft stays), and with anything unsent the wall opens in a new tab (review, 2026-10-26)',
+    /if \(new URL\(a\.href, location\.href\)\.pathname === location\.pathname\) \{ e\.preventDefault\(\); close\(\); return; \}/.test(C) && /if \(unsent\(\)\) \{ e\.preventDefault\(\); window\.open\(a\.href, '_blank', 'noopener'\); return; \}/.test(C)
+    && /const unsent = \(\) => !!\(modal\.querySelector\('#compose-text'\)\.value\.trim\(\) \|\| pendingImg \|\| composeBusy/.test(C) && /@media \(max-width: 479px\) \{ \.cmp-walls \{ flex-wrap: nowrap; \}/.test(CSS));
   check('the dialog grows with the screen (to 760px) and keeps whole on a short screen by trimming air, not words',
     /#compose-modal \.modal-card \{ width: min\(clamp\(420px, 54vw, 760px\), 100%\); \}/.test(CSS) && /@media \(max-height: 780px\) \{ #compose-modal \.modal-card \{ padding-block: 1\.05rem 1\.1rem; \}/.test(CSS)
     && /\.cmp-walls \.btn \{ flex: 1 1 0; min-width: max-content;/.test(CSS));
@@ -98,6 +101,17 @@ const bare = HOUSE.replace(/\/\*[\s\S]*?\*\//g, '');
     && !/0x[0-9a-f]{4,}(&hellip;|…)[0-9a-f]{4,}/i.test(WP));
   check('  ...a full address wraps anywhere and its table fits a phone whole; the button is a full-size target with a visible focus ring',
     /\.wp-addr \{[^}]*min-height: 44px;[^}]*overflow-wrap: anywhere; word-break: break-all; cursor: copy; \}/.test(WP) && /table:has\(\.wp-addr\) \{ min-width: 0; \}/.test(WP) && /\.wp-addr:focus-visible \{ outline: 3px solid/.test(WP));
+}
+
+/* ═══ 5. the review round (2026-10-26) ═══ */
+{
+  check('review: the floated masthead of the Wall / Support / a member\'s wall sits above the positioned wrap, so its links and buttons take clicks',
+    /body:has\(#who-hero\) > #who-hero \{\s*float: left;[^}]*position: relative; z-index: 1;/.test(bare));
+  check('  ...focus scrolled to by Tab stops clear of the fixed corner widgets; the swap panel\'s controls clear the nav; tables and names never cut',
+    /@media \(min-width: 1280px\) \{ html \{ scroll-padding-bottom: 6\.5rem; \} \}/.test(bare) && /#swap \.swap-panel :is\(a, button, input, select, \[tabindex\]\) \{ scroll-margin-top:/.test(bare)
+    && /\.arc-info-grid \{ grid-template-columns: minmax\(0, 1\.8fr\) minmax\(min-content, 1fr\);/.test(bare) && /#who-hero \.wall-bio \{ overflow-wrap: anywhere;/.test(bare) && /#main > \.wrap\.comm-page \.cm-row \{ flex-wrap: wrap; \}/.test(bare));
+  check('  ...every example text fits a 320px phone: the pin box\'s example in the reading face, the squad search gives the hidden ✕\'s room to its example',
+    /\.pin-add-input::placeholder \{ font-family: 'Rubik', system-ui, sans-serif; letter-spacing: 0; \}/.test(PUB('styles.css')) && /\.sq-q-field \.addr-input:placeholder-shown \{ padding-right: 0\.8rem; \}/.test(PUB('squads.css')));
 }
 
 let pass = 0;

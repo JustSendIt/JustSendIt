@@ -95,7 +95,7 @@
           '<p style="font-weight:800; color:var(--green-bright); font-size:max(var(--text-floor), 1.1rem);" id="compose-done-msg">Posted on the Wall!</p>' +
           '<div style="display:flex; gap:0.6rem; justify-content:center; flex-wrap:wrap; margin-top:0.9rem;">' +
             '<a class="btn btn-primary btn-sm" id="compose-view" href="/wall" data-tip="Closes this and shows your new post on the wall">View on the Wall →</a>' +
-            '<a class="btn btn-ghost btn-sm" id="compose-done-mine" href="/profile" data-tip="Closes this and opens your own wall, with everything you have posted">🏠 My Send Wall</a>' +
+            '<a class="btn btn-ghost btn-sm" id="compose-done-mine" href="/profile" data-tip="Closes this and opens your own wall: your public posts, calls and pins">🏠 My Send Wall</a>' +
             '<button class="btn btn-ghost btn-sm" id="compose-again" type="button" data-tip="Returns to the empty composer to send another">Post another ✏️</button>' +
           '</div>' +
         '</div>' +
@@ -438,7 +438,16 @@
 
     modal.addEventListener('click', e => { if (e.target.closest('[data-close]')) close(); });
     modal.querySelector('#compose-view').addEventListener('click', () => close()); // on /wall the link is a same-document #p<id> hash change — the dialog must not stay open over it
-    modal.querySelectorAll('#compose-go-wall, #compose-go-mine, #compose-out-wall, #compose-done-mine').forEach((a) => a.addEventListener('click', () => close()));
+    /* The wall links never cost a draft (the ogBadge 'new-tab' rule): the wall you are on just closes the box — the draft stays in
+       it — and with anything unsent a wall opens in a new tab; otherwise the link goes there and the box closes. */
+    const unsent = () => !!(modal.querySelector('#compose-text').value.trim() || pendingImg || composeBusy || modal.querySelector('#compose-call-addr').value.trim() || modal.querySelector('#compose-call-note').value.trim());
+    modal.querySelectorAll('#compose-go-wall, #compose-go-mine').forEach((a) => a.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;   // the browser's own new-tab gestures
+      if (new URL(a.href, location.href).pathname === location.pathname) { e.preventDefault(); close(); return; }
+      if (unsent()) { e.preventDefault(); window.open(a.href, '_blank', 'noopener'); return; }
+      close();
+    }));
+    modal.querySelectorAll('#compose-out-wall, #compose-done-mine').forEach((a) => a.addEventListener('click', () => close()));
     modal.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
 
     const textEl = modal.querySelector('#compose-text');

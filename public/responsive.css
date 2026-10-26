@@ -451,6 +451,8 @@ html .inv-tag { text-indent: 0.09em; }   /* the COPY tag's tracking after its la
 @media (min-width: 1280px) { :root { --page-max: 1200px; --dash-max: max(var(--page-max), min(92vw, 2240px)); } }
 @media (min-width: 1600px) { :root { --page-max: 1440px; } }
 @media (min-width: 2000px) { :root { --page-max: 1680px; } }
+/* a control scrolled to by Tab stops clear of the fixed corner widgets (✏️ Send it, Sendy, the player), which sit over the wide columns */
+@media (min-width: 1280px) { html { scroll-padding-bottom: 6.5rem; } }
 
 /* ---- type, every width ---- */
 html { font-kerning: normal; font-optical-sizing: auto; hanging-punctuation: first allow-end last; }
@@ -463,6 +465,8 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
 .arc-table thead th, .snap-table thead th, .sqd-table thead th, .trk-table th, .ab-decay-table thead th, .oc-tape th, .gxp-table caption {
   font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; font-variant-numeric: tabular-nums slashed-zero;
 }
+.age-kicker { padding-left: calc(0.65rem + 0.06em); }   /* the pill's left padding balances the new trailing tracking: centred again */
+.trk-dash .hstat .lbl { font-family: var(--font-body); }   /* the wallet report's labels are sentence case: the reading face, as trackerdash.css means them */
 
 /* ---- wide: the page uses the screen ---- */
 @media (min-width: 1280px) {
@@ -548,6 +552,11 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   #beta .beta-cols { gap: 1.2rem 2.4rem; }
   #beta .beta-board { display: block; columns: 2; column-gap: 2.4rem; }
   #beta .beta-board > li { break-inside: avoid; margin-bottom: 0.35rem; }
+  @media (min-width: 1280px) and (max-width: 1599.98px) {
+    #beta .beta-board { display: grid; grid-auto-flow: column; grid-template-rows: repeat(5, auto); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.35rem 2.4rem; }
+    #beta .beta-board > li { margin-bottom: 0; }
+    #beta .beta-row { flex-wrap: wrap; }
+  }
   #beta .beta-card > .ab-fine { max-width: 75ch; }
   #beta .beta-live { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.08em; }
 
@@ -576,6 +585,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   /* the swap: the form on the left, how it works (and the router to check) on the right */
   #swap .swap-panel { max-width: none; columns: 2; column-gap: 2.6rem; column-rule: 1px solid var(--hair); }
   #swap .swap-panel > * { break-inside: avoid; }
+  #swap .swap-panel :is(a, button, input, select, [tabindex]) { scroll-margin-top: calc(var(--nav-h, 64px) + 0.75rem); }
   #swap .swap-panel > .swap-note { break-before: column; margin-top: 0; }
   #swap .swap-panel > div:nth-child(1), #swap .swap-panel > div:nth-child(3) { font-family: var(--font-mono); font-weight: 600 !important; letter-spacing: 0.06em; }
 
@@ -673,6 +683,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
     width: calc(var(--fd-wrap) - var(--fd-read) - var(--fd-gap));
     margin: 0 0 0 var(--fd-side);
     max-width: none;
+    position: relative; z-index: 1;   /* above main > .wrap (positioned for its gutter rule), or the wrap's box takes this column's clicks */
   }
   /* the Send Wall + Support mastheads: the page title on a rule, left-aligned, the lede in the serif voice */
   body:is(:has(#feed-panel), [data-board="support"]) > header.profile-hero {
@@ -763,7 +774,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
     font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; font-variant-numeric: tabular-nums;
   }
   /* the member's bio is their lede */
-  #who-hero .wall-bio { font-family: var(--font-serif); font-weight: 400; line-height: 1.38; max-width: 40ch; font-size: max(var(--text-floor), calc(var(--text-floor) * 1.12)); }
+  #who-hero .wall-bio { overflow-wrap: anywhere; font-family: var(--font-serif); font-weight: 400; line-height: 1.38; max-width: 40ch; font-size: max(var(--text-floor), calc(var(--text-floor) * 1.12)); }
   /* the counts become a small stat board: numeral in the display face beside its mono label, two by two */
   #who-hero .wall-stats {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; margin-top: 0.9rem;
@@ -856,6 +867,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   #gamify-dash > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"]):not([open]) { flex: 1 1 30%; }
   #gamify-dash > details.gsec:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"])[open] { flex: 1 1 40%; }
   #gamify-dash > details.gsec:not([open]) > .gsec-sum { height: 100%; align-items: flex-start; }
+  #gamify-dash:has(> details.gsec[open]:is([data-sec="og"], [data-sec="comm"], [data-sec="boost"], [data-sec="eq"], [data-sec="calls"], [data-sec="loot"])) > details.gsec:not([open]) { align-self: flex-start; }
   #gamify-dash :is(.og-block-body, .engine > p, .gcc-note, .gcc-boost, .loot-foot) { max-width: 75ch; }
   #gamify-dash > details.gsec:not([open]) .gsec-d { white-space: normal; overflow: visible; text-overflow: clip; }
 
@@ -910,6 +922,8 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   #dpanel-settings .settings-group { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0.8rem var(--pf-gap); }
   #dpanel-settings .settings-group > details.setting-card { flex: 1 1 100%; min-width: 0; margin: 0; }
   #dpanel-settings .settings-group > details.setting-card:not([open]) { flex-basis: 30%; }
+  #dpanel-settings #sec-security > summary { flex-wrap: wrap; row-gap: 0.4rem; }
+  #dpanel-settings #sec-state { white-space: nowrap; }
   #dpanel-settings .settings-group > details.setting-card[open] > .setting-body { columns: 2; column-gap: calc(var(--rail-gap) * 1.5); column-rule: 1px solid var(--hair); }
   #dpanel-settings .setting-body > * { break-inside: avoid; }
   #dpanel-settings .setting-body > .f-label { break-after: avoid; }
@@ -948,13 +962,14 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   }
   body:has(#wl-token-panel) .np-hero > * { margin: 0 !important; }
   body:has(#wl-token-panel) .np-hero > h1 { padding-top: 0.6rem; border-top: 2px solid var(--house-rule); }
-  body:has(#wl-token-panel) .np-hero > .section-sub { max-width: 60ch; }
+  body:has(#wl-token-panel) .np-hero > .section-sub { max-width: 60ch; text-align: left; }
   .np-wrap:has(> #wl-token-panel) { max-width: var(--dash-max); }
   /* the hand-off to the tracker: one strip, the sentence and its button on the same line */
   .np-wrap:has(> #wl-token-panel) > .wl-trk-card { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; text-align: left; }
   .np-wrap:has(> #wl-token-panel) > .wl-trk-card > span { flex: 1 1 auto; min-width: 0; max-width: 75ch; }
   .np-wrap:has(> #wl-token-panel) > .wl-trk-card > .btn { flex: 0 0 auto; }
   #wl-token-panel > #wl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 29rem), 1fr)); gap: 0.8rem var(--rail-gap); align-items: stretch; }
+  #wl-token-panel > #wl-list > li > .np-card { box-sizing: border-box; height: 100%; }
   #wl-token-panel > #wl-list > li { margin: 0; min-width: 0; }
   /* in a card the name keeps a real width; the numbers and buttons move under it when the card runs out (the DEX list's rule) */
   #wl-token-panel > #wl-list .np-head { flex-wrap: wrap; }
@@ -1269,7 +1284,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
 
   /* ---- how it works + the boost curve: the long card gets the room, so the two end near the same line ---- */
   .arc-wrap > .arc-info { padding: 0; }
-  .arc-wrap > .arc-info > .arc-info-grid { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); gap: var(--arc-col-gap); }
+  .arc-wrap > .arc-info > .arc-info-grid { grid-template-columns: minmax(0, 1.8fr) minmax(min-content, 1fr); gap: var(--arc-col-gap); }
 }
 
 @media (min-width: 1600px) {
@@ -1415,6 +1430,8 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   header.comm-hero-top-page > .comm-rules > summary, #sq-body > .grules > summary { text-align: left; }
 
   /* the section introductions take the serif voice */
+  #main > .wrap.comm-page .cm-row { flex-wrap: wrap; }
+  #main > .wrap.comm-page .cm-row > .cm-name { flex: 1 1 auto; }
   #comm-members .comm-members-note, #comm-props .prop-intro, #comm-snaps .prop-intro, #comm-wall .cw-note,
   #sqd-tabs-sec .cw-note, #sqd-life .sqd-life-note, #sqd-edit .sqd-edit-note {
     font-family: var(--font-serif); line-height: 1.45;
