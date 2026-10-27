@@ -8,7 +8,10 @@
       and the honesty rules (a missing figure is "Not available" with its reason, never 0; growthepie credited).
    2. The fixtures in tests/fixtures/market/ against the shared contract (the routes' shapes, every figure an
       { v, src, at, why? } object, null with a reason) — they were built from the vendors' own answers measured on
-      2026-10-26 and are what the page was built and walked against in a muted headless Chrome.
+      2026-10-26 and are what the page was built and walked against in a muted headless Chrome. tokens-all-*.json and
+      tokens-ethereum-*.json are lib/marketdata.js's own answers (tests/marketdata.mjs with MARKET_DUMP_DIR set), cut to 32 and
+      12 rows: Robinhood Chain's pools as read, and the same answer re-keyed as Ethereum's (marketdata's fixtures do this to
+      have a second network), so USDG sits at one address on two chains; the other seven networks are not read.
    3. market.js's number words, lifted between its @lift markers and run in a vm.
    4. A fake of the /api/market/* routes, served from those fixtures, with the site's CSP: run here against its own
       contract (sorting with nulls last both ways, wash volume left out of "highest volume", the windows, 404s), and
@@ -21,7 +24,9 @@
    7. The page in a real browser — headless Chrome, muted — on the fake, at 320, 390, 1280 and 1920 px: no sideways scroll,
       nothing under the text floor, and the honesty rules where they are easy to break (a failed read is a failure with its
       reason and a Try again, never "none listed"; a reserve of 0 and a missing price are never $0; each pulse reading keeps
-      its own time; a custom window ends on a whole day; Back and Forward restore the view in the address bar).
+      its own time; a custom window ends on a whole day; Back and Forward restore the view in the address bar) — and Top tokens'
+      every-chain list with its chain filter (a logo button per chain, a broken logo left as initials, the filter in the address,
+      the keyboard, a late answer never painting over a newer one).
    No live vendor is ever called. */
 import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
@@ -60,7 +65,9 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WINDOWS = (() => { const db = new DatabaseSync(':memory:'); MD.migrate(db); return MD.createMarketData({ db, fetchJson: async () => ({ ok: false, status: 0, data: null, reason: 'no vendor in this test' }) }); })();
 const CHAIN_WINS = ['24h', '7d', '30d'], TOKEN_WINS = ['24h', '6h', '1h', '5m'];
 /* what the browser walk can make the fake do, as the real server does when a source cannot be read */
-const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null };
+const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null };
+// the logo proxy: DefiLlama's chain icons draw (any PNG will do for the walk) except Solana's, which fails as a missing picture does
+const LOGO_PNG = readFileSync(path.join(PUB, 'assets', 'logo-128.png')), LOGO_BROKEN = /rsz_solana/;
 const none = (why, src, at) => ({ v: null, src, at, why });
 function fakeAnswer(u) {
   const q = u.searchParams, p = u.pathname, qo = Object.fromEntries(q);
@@ -115,9 +122,11 @@ function fakeAnswer(u) {
     const sort = q.get('sort') || 'volume', dir = q.get('dir') === 'asc' ? 'asc' : 'desc';
     if (!SORT_FIELD.tokens[sort]) return [400, { error: 'unknown sort' }];
     const row = FIX('chains-24h.json').rows.find((r) => r.key === chain);
-    if (!row || !row.gtNetwork) return [200, { at: null, chain, network: null, basis: null, window: pw.w, rows: [], why: 'this site reads the pools of ' + MD.GT_TRACKED.map((k) => MD.CHAIN_BY_KEY.get(k).llama).join(', ') + ' only' }];
-    if (chain !== 'robinhood') return [200, { at: null, chain, network: row.gtNetwork, basis: null, window: pw.w, rows: [], why: 'this chain\'s pools have not been read yet' }];
-    const j = FIX('tokens-robinhood-' + win + '.json');
+    if (chain !== 'all' && (!row || !row.gtNetwork)) return [200, { at: null, chain, network: null, basis: null, window: pw.w, rows: [], why: 'this site reads the pools of ' + MD.GT_TRACKED.map((k) => MD.CHAIN_BY_KEY.get(k).llama).join(', ') + ' only' }];
+    // every chain's list (chain=all) and Ethereum's are lib/marketdata.js's own answers (tests/marketdata.mjs's MARKET_DUMP_DIR),
+    // cut to fewer rows; a chain with no fixture is one whose pools have not been read yet
+    if (!existsSync(path.join(FIXDIR, 'tokens-' + chain + '-' + win + '.json'))) return [200, { at: null, chain, network: row.gtNetwork, basis: null, window: pw.w, rows: [], why: 'this chain\'s pools have not been read yet' }];
+    const j = FIX('tokens-' + chain + '-' + win + '.json');
     if (win === 'custom') j.window = pw.w;
     let rows = sortRows(j.rows, SORT_FIELD.tokens[sort], dir);
     if (sort === 'volume' && dir === 'desc' && q.get('include') !== 'all') rows = rows.filter((r) => !(r.flags || []).includes('wash'));
@@ -134,13 +143,13 @@ function fakeAnswer(u) {
     if (FAKE.unavailable.has(addr)) return [200, { chain, address: addr, unavailable: true, why: 'GeckoTerminal is being asked a lot right now — try again in a minute', scanner, at: Date.now() }];
     const f = 'token-' + chain + '-' + addr + '.json';
     let j = existsSync(path.join(FIXDIR, f)) ? FIX(f) : null;
-    if (!j && chain === 'robinhood') {
-      const r = FIX('tokens-robinhood-24h.json').rows.find((x) => x.address === addr);
+    if (!j && existsSync(path.join(FIXDIR, 'tokens-' + chain + '-24h.json'))) {
+      const r = FIX('tokens-' + chain + '-24h.json').rows.find((x) => x.address === addr);
       if (r) {
-        const win = (k) => { const w = FIX('tokens-robinhood-' + k + '.json').rows.find((x) => x.address === addr);
+        const win = (k) => { const w = FIX('tokens-' + chain + '-' + k + '.json').rows.find((x) => x.address === addr);
           return { volume: w ? w.volume : none('not in our snapshot', 'geckoterminal', r.priceUsd.at), change: w ? w.change : none('not in our snapshot', 'geckoterminal', r.priceUsd.at),
             txns: k === '24h' ? r.txns24h : none('GeckoTerminal\'s trade counts are kept for 24 h only here', 'geckoterminal', r.priceUsd.at) }; };
-        j = { chain, address: addr, network: 'robinhood', symbol: r.symbol, name: r.name, logo: r.logo, links: { websites: [], socials: [], src: 'dexscreener' }, priceUsd: r.priceUsd, mcap: r.mcap, fdv: r.fdv,
+        j = { chain, address: addr, network: MD.CHAIN_BY_KEY.get(chain).gt, symbol: r.symbol, name: r.name, logo: r.logo, links: { websites: [], socials: [], src: 'dexscreener' }, priceUsd: r.priceUsd, mcap: r.mcap, fdv: r.fdv,
           supplyBasis: 'GeckoTerminal\'s FDV is the total supply times the price, burned tokens included.', liquidity: r.liquidity, pools: [],
           windows: { '24h': win('24h'), '6h': win('6h'), '1h': win('1h'), '5m': win('5m') }, at: r.priceUsd.at, basis: 'its pools among the most-traded pools we keep (GeckoTerminal)', flags: r.flags, scanner,
           candles: { tf: 'hour', pool: null, rows: [], src: 'geckoterminal', partialLast: true, note: 'The newest candle is the hour still in progress. An hour with no candle had no trades.' } };
@@ -193,6 +202,13 @@ function startFake(port, opts = {}) {
         const what = u.pathname.slice('/api/market/'.length);
         FAKE.log.push(u.pathname + u.search);
         if (fail && fail.split(',').includes(what)) return json(503, { error: 'the fake was told to fail ' + what });
+        if (what === 'logo') {
+          const src = String(u.searchParams.get('u') || '');
+          if (/^https:\/\/icons\.llamao\.fi\//.test(src) && !LOGO_BROKEN.test(src)) { res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' }); return res.end(LOGO_PNG); }
+          return json(404, { error: 'no such picture in the fake' });
+        }
+        // a slow answer, to walk a newer answer arriving first (FAKE.tokensDelay(url) → ms)
+        if (what === 'tokens' && FAKE.tokensDelay) { const ms = FAKE.tokensDelay(u.search); if (ms) await new Promise((r) => setTimeout(r, ms)); }
         try { const [code, body] = fakeAnswer(u); return json(code, body); } catch (e) { return json(500, { error: String(e && e.message) }); }
       }
       if (u.pathname === '/api/me') return json(401, { error: 'not signed in' });
@@ -263,6 +279,9 @@ async function realAnswers() {
   };
   for (const w of ['24h', '6h', '1h', '5m']) out.tokens[w] = J(md.tokens({ chain: 'robinhood', window: w }));
   out.tokens.custom = J(md.tokens(Object.assign({ chain: 'robinhood' }, cw)));
+  out.tokensAll = {};
+  for (const w of ['24h', '6h', '1h', '5m']) out.tokensAll[w] = J(md.tokens({ chain: 'all', window: w }));
+  out.tokensAll.custom = J(md.tokens(Object.assign({ chain: 'all' }, cw)));
   dsDown = true; out.searchDown = J(await md.search({ q: 'zzzz' }));
   return out;
 }
@@ -355,7 +374,7 @@ async function browserWalk() {
     // each part of the walk on its own: one that breaks is a failure of its own, the rest still run, and the fake is put back as it was
     const step = async (name, fn) => {
       try { await fn(); } catch (e) { check(name + ' (the walk broke here)', false, e && e.message); }
-      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null }); FAKE.unavailable.clear(); }
+      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null }); FAKE.unavailable.clear(); }
     };
     await step('every width: the chain view and a token view fit, on the text floor', async () => {
       const fits = [];
@@ -527,6 +546,120 @@ async function browserWalk() {
         && /not a token address the main view reads on Base/.test(hit(/another name/).t) && stayed && resL.sw <= resL.iw && !resL.out.length && !resL.small.length, JSON.stringify({ hits, stayed, resL }).slice(0, 700));
     });
 
+    /* Top tokens: every chain's list by default, a logo button per chain to narrow it (owner, 2026-10-27) */
+    const tokRows = () => ev('[...document.querySelectorAll("#mkt-list .mkt-row")].map((b) => ({ c: b.dataset.chain, t: b.dataset.token, chb: (b.querySelector(".mkt-chb") || {}).textContent || "", cur: b.getAttribute("aria-current") === "true" }))');
+    const tokAsks = (from) => FAKE.log.slice(from).filter((x) => x.startsWith('/api/market/tokens'));
+    const listReady = () => until('!document.querySelector("#mkt-cap .mkt-loading") && document.querySelectorAll("#mkt-list .mkt-row, #mkt-list .mkt-empty").length > 0');
+    const openTokens = async () => { await ev('document.getElementById("mkt-tab-tokens").click(), true'); return listReady(); };
+    const pressed = () => ev('[...document.querySelectorAll("#mkt-tchains [aria-pressed=\\"true\\"]")].map((b) => b.dataset.tchain).join()');
+    const filterBtn = (k) => 'document.querySelector("#mkt-tchains [data-tchain=\\"' + k + '\\"]")';
+    await step('Top tokens at every width', async () => {
+      const fits = [];
+      for (const w of [320, 390, 1280, 1920]) {
+        await go('/market', w); await openTokens();
+        await until('[...document.querySelectorAll("#mkt-tchains img")].every((i) => i.complete) && !document.querySelector("#mkt-tchains [data-tchain=\\"solana\\"] img")');
+        fits.push({ w, l: await ev(LAYOUT), rows: (await tokRows()).length, btns: await ev('document.querySelectorAll("#mkt-tchains button").length'), rowsH: await ev('Math.round(document.getElementById("mkt-tchains").getBoundingClientRect().height)') });
+      }
+      const bad = fits.filter((f) => f.l.sw > f.l.iw || f.l.out.length || f.l.small.length || !f.rows || f.btns !== 1 + MD.GT_TRACKED.length);
+      check('Top tokens in a real browser at 320, 390, 1280 and 1920 px: every chain\'s list and its row of chain buttons (wrapping onto lines of their own) fit — no sideways scroll, nothing outside the column, no text under the floor',
+        fits.length === 4 && !bad.length, JSON.stringify(bad.length ? bad : fits.map((f) => [f.w, f.rowsH])).slice(0, 600));
+    });
+
+    await step('Top tokens: every chain, and the chain filter', async () => {
+      await go('/market', 1280);
+      const m0 = FAKE.log.length;
+      await openTokens();
+      await until('!!' + filterBtn('ethereum') + '.querySelector("img") && ' + filterBtn('ethereum') + '.querySelector("img").complete && !' + filterBtn('solana') + '.querySelector("img")');
+      const btns = await ev('[...document.querySelectorAll("#mkt-tchains button")].map((b) => { const img = b.querySelector("img"), mono = b.querySelector(".mkt-mono"); return { k: b.dataset.tchain, tag: b.tagName, pressed: b.getAttribute("aria-pressed"), tip: b.dataset.tip || "",'
+        + ' name: [...b.childNodes].filter((n) => !(n.nodeType === 1 && n.getAttribute("aria-hidden") === "true")).map((n) => n.textContent).join("").trim(), img: img ? { alt: img.getAttribute("alt"), ok: img.naturalWidth > 0 } : null,'
+        + ' ini: mono ? mono.textContent : "", iniShown: mono ? getComputedStyle(mono).visibility === "visible" : null }; })');
+      const words = (t) => String(t).toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+      const b = (k) => btns.find((x) => x.k === k) || {};
+      const rows0 = await tokRows(), cap0 = await textOf('#mkt-cap');
+      check('Top tokens opens on every chain\'s list (/api/market/tokens?chain=all, nothing added to the address): "All chains" chosen, then a button per chain the server reads, Robinhood Chain first',
+        tokAsks(m0)[0] === '/api/market/tokens?chain=all' && (await ev('location.search')) === '' && btns.map((x) => x.k).join() === ['all'].concat(MD.GT_TRACKED).join() && (await pressed()) === 'all',
+        JSON.stringify({ asked: tokAsks(m0), btns: btns.map((x) => x.k + ':' + x.pressed) }));
+      check('  ...each a real button with aria-pressed, a name in words ("Show Ethereum tokens"), a description that does not repeat it, and its logo with alt="" — the Solana logo that does not load leaves its initials, never a broken picture',
+        btns.every((x) => x.tag === 'BUTTON' && /^(true|false)$/.test(x.pressed) && x.tip.length > 20 && words(x.tip) !== words(x.name)) && b('all').name === 'Show tokens on All chains' && b('ethereum').name === 'Show Ethereum tokens' && /^Show Robinhood Chain tokens$/.test(b('robinhood').name)
+        && b('ethereum').img && b('ethereum').img.alt === '' && b('ethereum').img.ok && b('ethereum').iniShown === false && b('solana').img === null && b('solana').ini === 'SO' && b('solana').iniShown === true && b('robinhood').ini === 'RC',
+        JSON.stringify(btns).slice(0, 700));
+      const usdg = rows0.filter((r) => r.t === USDG);
+      check('  ...the list mixes the chains, each row naming its own (USDG on Robinhood Chain and on Ethereum are two rows, each saying which), and the caption says what the list is and which chains have not been read',
+        rows0.some((r) => r.c === 'robinhood') && rows0.some((r) => r.c === 'ethereum') && rows0.every((r) => /^on (Robinhood Chain|Ethereum)$/.test(r.chb)) && usdg.length === 2 && usdg.map((r) => r.c).sort().join() === 'ethereum,robinhood'
+        && /^Every chain · ranked by volume, highest first · last 24 hours · 2 of 9 chains read · read /.test(cap0) && /Not read yet: Solana, Base, BSC, Arbitrum, Polygon, Avalanche, OP Mainnet/.test(cap0) && /the same token on two chains is two rows/.test(cap0),
+        JSON.stringify({ rows0: rows0.slice(0, 4), cap0 }).slice(0, 600));
+      // the controls keep working on it
+      let m = FAKE.log.length;
+      await ev('document.querySelector("#mkt-ctl-tokens [data-sort=\\"liquidity\\"]").click(), true'); await listReady();
+      await ev('document.querySelector("#mkt-ctl-tokens [data-win=\\"1h\\"]").click(), true'); await listReady();
+      await ev('document.querySelector("#mkt-ctl-tokens [data-dir=\\"asc\\"]").click(), true'); await listReady();
+      const ctl = { asked: tokAsks(m), cap: await textOf('#mkt-cap'), rows: await tokRows() };
+      check('  ...Rank by, Order and Time frame work on every chain\'s list: each change asks for chain=all again, and the caption follows',
+        ctl.asked.join() === ['/api/market/tokens?chain=all&sort=liquidity', '/api/market/tokens?chain=all&sort=liquidity&window=1h', '/api/market/tokens?chain=all&sort=liquidity&dir=asc&window=1h'].join() && /^Every chain · ranked by liquidity, lowest first · last hour/.test(ctl.cap) && /not the lowest on any chain/.test(ctl.cap)
+        && ctl.rows.some((r) => r.c === 'ethereum') && ctl.rows.some((r) => r.c === 'robinhood'), JSON.stringify(ctl).slice(0, 500));
+      await ev('document.querySelector("#mkt-ctl-tokens [data-sort=\\"volume\\"]").click(), document.querySelector("#mkt-ctl-tokens [data-dir=\\"desc\\"]").click(), document.querySelector("#mkt-ctl-tokens [data-win=\\"24h\\"]").click(), true'); await listReady(); await sleep(300);
+      // a logo narrows it; the main view stays where it was
+      m = FAKE.log.length;
+      await ev(filterBtn('ethereum') + '.click(), true');
+      await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
+      const eth = { rows: await tokRows(), cap: await textOf('#mkt-cap'), asked: tokAsks(m), on: await pressed(), vh: await textOf('#mkt-vh') };
+      m = FAKE.log.length;
+      await ev(filterBtn('base') + '.click(), true');
+      await until('location.search === "?chain=robinhood&tchain=base"'); await listReady();
+      const base = { list: await textOf('#mkt-list'), cap: await textOf('#mkt-cap'), asked: tokAsks(m), on: await pressed() };
+      check('  ...picking a chain\'s logo lists that chain\'s tokens only (its own list, chain=<key>), marks that button chosen, puts tchain in the address — and the main view stays on Robinhood Chain; a chain not read yet says so',
+        eth.asked.join() === '/api/market/tokens?chain=ethereum' && eth.rows.length > 5 && eth.rows.every((r) => r.c === 'ethereum') && /^Tokens on Ethereum · ranked by volume/.test(eth.cap) && eth.on === 'ethereum' && /Robinhood Chain/.test(eth.vh)
+        && base.asked.join() === '/api/market/tokens?chain=base' && /This chain's pools have not been read yet\./.test(base.list) && /^Tokens on Base/.test(base.cap) && base.on === 'base', JSON.stringify({ eth: Object.assign({}, eth, { rows: eth.rows.length }), base }).slice(0, 600));
+      await ev('history.back(), true');
+      await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
+      const back1 = { rows: await tokRows(), on: await pressed() };
+      await ev('history.back(), true');
+      await until('location.search === ""'); await listReady();
+      const back2 = { rows: await tokRows(), on: await pressed() };
+      await ev('history.forward(), true');
+      await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
+      const fwd = { rows: await tokRows(), on: await pressed() };
+      check('  ...Back and Forward restore the filter: Back to Ethereum\'s list, Back to every chain\'s, Forward to Ethereum\'s again',
+        back1.on === 'ethereum' && back1.rows.length && back1.rows.every((r) => r.c === 'ethereum') && back2.on === 'all' && back2.rows.some((r) => r.c === 'robinhood') && back2.rows.some((r) => r.c === 'ethereum') && fwd.on === 'ethereum' && fwd.rows.every((r) => r.c === 'ethereum'),
+        JSON.stringify({ back1: back1.on, back2: back2.on, fwd: fwd.on }));
+      // the keyboard: Tab reaches the next chain's button, Enter picks it, and the focus stays on it
+      await ev(filterBtn('all') + '.focus(), true');
+      const key = async (k, code, vk, text) => { await cdp('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }, text ? { text } : {})); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); };
+      await key('Tab', 'Tab', 9);
+      const tabbed = await ev('document.activeElement.dataset.tchain || ""');
+      await key('Enter', 'Enter', 13, '\r');
+      await until('location.search === "?chain=robinhood&tchain=robinhood"'); await listReady();
+      const kb = { on: await pressed(), focus: await ev('document.activeElement.dataset.tchain || ""'), rows: await tokRows() };
+      check('  ...by keyboard too: Tab from "All chains" reaches Robinhood Chain\'s button, Enter picks it, and the focus stays on it',
+        tabbed === 'robinhood' && kb.on === 'robinhood' && kb.focus === 'robinhood' && kb.rows.length && kb.rows.every((r) => r.c === 'robinhood'), JSON.stringify({ tabbed, kb: Object.assign({}, kb, { rows: kb.rows.length }) }));
+      // a row opens its token on ITS chain, and only that row is marked as the one in view
+      await ev(filterBtn('all') + '.click(), true'); await until('location.search === "?chain=robinhood"'); await listReady();
+      await ev('document.querySelector("#mkt-list .mkt-row[data-chain=\\"ethereum\\"][data-token=\\"' + USDG + '\\"]").click(), true');
+      await until('location.search === "?chain=ethereum&token=' + USDG + '"'); await viewReady();
+      const opened = { kick: await textOf('.mkt-kicker'), cur: (await tokRows()).filter((r) => r.cur) };
+      check('  ...a row opens that token on its own chain in the main view (USDG on Ethereum, not on Robinhood Chain), and only that row is marked as the one shown',
+        /Token · Ethereum/.test(opened.kick) && opened.cur.length === 1 && opened.cur[0].c === 'ethereum' && opened.cur[0].t === USDG, JSON.stringify(opened));
+    });
+
+    await step('Top tokens: a link to a filter, and a slow answer', async () => {
+      const m = FAKE.log.length;
+      await go('/market?tchain=base', 390); await listReady();
+      const link = { tab: await ev('document.getElementById("mkt-tab-tokens").getAttribute("aria-selected")'), on: await pressed(), asked: tokAsks(m), chains: FAKE.log.slice(m).includes('/api/market/chains'), vh: await textOf('#mkt-vh') };
+      check('a link with tchain=base opens Top tokens on Base\'s list with Base chosen (the logos read quietly from the chains list), the main view on Robinhood Chain',
+        link.tab === 'true' && link.on === 'base' && link.asked.join() === '/api/market/tokens?chain=base' && link.chains && /Robinhood Chain/.test(link.vh), JSON.stringify(link));
+      // every chain's answer is slow to come; Ethereum's, asked after it, comes first — the slower one must not paint over it
+      FAKE.tokensDelay = (search) => (/chain=all/.test(search) ? 900 : 0);
+      await go('/market', 1280);
+      await ev('document.getElementById("mkt-tab-tokens").click(), true');
+      await sleep(100);
+      await ev(filterBtn('ethereum') + '.click(), true');
+      await sleep(1500);
+      const late = { rows: await tokRows(), cap: await textOf('#mkt-cap'), on: await pressed() };
+      FAKE.tokensDelay = null;
+      check('  ...an older answer that arrives late never paints over a newer one: every chain\'s (slow) list does not replace Ethereum\'s (asked after it)',
+        late.on === 'ethereum' && late.rows.length && late.rows.every((r) => r.c === 'ethereum') && /^Tokens on Ethereum/.test(late.cap), JSON.stringify(Object.assign({}, late, { rows: late.rows.length })));
+    });
+
     check('no script error from market.js anywhere on the walk', ours().length === 0, ours().map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
     if (exceptions.length > ours().length) notes.push((exceptions.length - ours().length) + ' script error(s) from other scripts on the faked page (not this page\'s): ' + exceptions.filter((x) => !ours().includes(x)).map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
   } catch (e) {
@@ -599,9 +732,23 @@ async function runSuite() {
       fetches.length === 1 && fetches[0] === 'url' && asks.length >= 6 && asks.every((a) => a === 'url' || /^'\/api\/market\/|^(chainsURL|tokensURL|chainViewURL|tokenViewURL)\(|^v\.token \? tokenViewURL/.test(a))
       && /return '\/api\/market\/chains' \+/.test(code) && /return '\/api\/market\/tokens\?' \+/.test(code) && /return '\/api\/market\/chain\?' \+/.test(code) && /return '\/api\/market\/token\?' \+/.test(code)
       && !/https?:\/\/(?!www\.growthepie\.com|l2beat\.com\/scaling|www\.w3\.org\/2000\/svg)/.test(code.replace(/'https:\/\/'/g, '')) && !/\/api\/scan\?/.test(code), asks.join(' | '));
-    check('  ...the first view asks exactly /api/market/chains, /api/market/chain?key=robinhood and (Top tokens) /api/market/tokens?chain=robinhood — the three reads robots.txt opens',
+    check('  ...the first view asks exactly /api/market/chains and /api/market/chain?key=robinhood (reads robots.txt opens); Top tokens asks /api/market/tokens?chain=all, or chain=<key> for the chain its filter names',
       /if \(k\.sort !== 'tvl'\) p\.set\('sort'/.test(code) && /if \(k\.win !== '24h'\) \{ p\.set\('window'/.test(code) && /p\.set\('key', key\);/.test(code) && /p\.set\('chain', chain\);\s*if \(k\.sort !== 'volume'\)/.test(code)
-      && /const DEFAULT_CHAIN = 'robinhood';/.test(code));
+      && /const DEFAULT_CHAIN = 'robinhood';/.test(code) && /const chain = S\.tokens\.tchain \|\| 'all'/.test(code) && /getJSON\(tokensURL\(chain\)\)/.test(code));
+    const tokensCtl0 = H.slice(H.indexOf('id="mkt-ctl-tokens"'), H.indexOf('id="mkt-cap"'));
+    check('Top tokens\' chain filter (owner, 2026-10-27: "filter by chain using the chain\'s logo"): a labelled group first in the tab\'s controls; market.js draws "All chains" then a real button per chain the server reads, each with aria-pressed, a name in words ("Show Base tokens"), a logo with alt="" over the chain\'s initials, and a description',
+      /<div class="mkt-group" role="group" aria-labelledby="mkt-tf-l">\s*<p class="mkt-group-l" id="mkt-tf-l">Chain<\/p>\s*<div class="mkt-chips mkt-cfs" id="mkt-tchains"><\/div>/.test(tokensCtl0) && tokensCtl0.indexOf('id="mkt-tchains"') < tokensCtl0.indexOf('data-sort=')
+      && /filterBox\.innerHTML = \['all'\]\.concat\(READS\)\.map\(filterHTML\)\.join\(''\);/.test(code) && /<button class="np-chip mkt-cf" type="button" data-tchain="all" aria-pressed="false" data-tip="[^"]{20,}"><span class="mkt-tick" aria-hidden="true">✓&nbsp;<\/span><span class="sr-only">Show tokens on <\/span>All chains<\/button>/.test(code)
+      && /<span class="sr-only">Show ' \+ esc\(nm\) \+ ' tokens<\/span><\/button>'/.test(code) && /'<img class="mkt-logo" src="' \+ esc\(lg\) \+ '" alt=""/.test(code) && /<span class="mkt-mono">' \+ esc\(initials\(nm\)\) \+ '<\/span>/.test(code) && !/id="mkt-tok-on"/.test(H) && !/mkt-tok-on/.test(code));
+    check('  ...it lives in the address bar (tchain=<key>, absent for every chain; anything but a chain the server reads is every chain), a change is pushed so Back and Forward restore it, and the main view is left where it was',
+      /const tc = \(q\.get\('tchain'\) \|\| ''\)\.toLowerCase\(\), tchain = READS\.includes\(tc\) \? tc : '';/.test(code) && /if \(S\.tokens\.tchain\) p\.set\('tchain', S\.tokens\.tchain\);/.test(code)
+      && /S\.tokens\.tchain = t; S\.shown = pageSize\(\);\s*writeURL\(true\); syncControls\(\); loadList\(\);/.test(code) && !/chainChanged/.test(code) && /if \(S\.tchainMoved && S\.tab !== 'tokens'\) setTab\('tokens', false\); else loadList\(\);/.test(code));
+    check('  ...the chosen button says so by more than colour (a tick and a ring as well as its fill), the row wraps, and a logo that does not load leaves the initials (the logo hides them only while it is there)',
+      /\.mkt-cf\[aria-pressed="true"\] \{ box-shadow: 0 0 0 2px var\(--ink-2\), 0 0 0 4px var\(--green-bright\); \}/.test(CSS) && /\.np-chip\[aria-pressed="true"\] > \.mkt-tick \{ display: inline; \}/.test(CSS) && /\.mkt-chips \{ display: flex; flex-wrap: wrap;/.test(CSS)
+      && /\.mkt-ava-cf:has\(img\) \.mkt-mono \{ visibility: hidden; \}/.test(CSS) && /img\.addEventListener\('error', \(\) => img\.remove\(\)\)/.test(code));
+    check('  ...every row of the all-chains list names its chain (its logo and its name in words — "on Base" to a screen reader) and opens the token on that chain; the row in the main view is matched by chain and address',
+      /const chainBadge = \(r\) => '<span class="mkt-chb">'/.test(code) && /'<span class="sr-only">on <\/span>' \+ esc\(r\.chainName \|\| chainName\(r\.chain\)\)/.test(code) && /\(all \? chainBadge\(r\) : ''\)/.test(code)
+      && /data-chain="' \+ esc\(on\) \+ '" data-token="' \+ esc\(r\.address\) \+ '"/.test(code) && /const cur = S\.view\.token && S\.view\.chain === on && sameToken\(S\.view\.token, r\.address\);/.test(code) && /b\.dataset\.chain === S\.view\.chain && sameToken\(b\.dataset\.token, S\.view\.token\)/.test(code));
     check('  ...no storage: the address bar is the state (?chain=&token=&window=&from=&to=), pushed when the view changes, read back on Back / Forward',
       !/localStorage|sessionStorage|indexedDB|document\.cookie/.test(code) && /p\.set\('chain', v\.chain\);\s*if \(v\.token\) p\.set\('token', v\.token\);/.test(code) && /history\[push \? 'pushState' : 'replaceState'\]/.test(code)
       && /window\.addEventListener\('popstate', \(\) => \{ readURL\(\);/.test(code) && /q\.get\('from'\)/.test(code) && /q\.get\('to'\)/.test(code));
@@ -695,6 +842,24 @@ async function runSuite() {
       t24.find((r) => r.symbol === 'FLOP').flags.join() === 'thin,wash' && t24.find((r) => r.symbol === 'USDG').flags.includes('global-mcap')
       && t24.some((r) => r.mcap.v === null && /GeckoTerminal gives 0/.test(r.mcap.why || '')) && t24.some((r) => r.mcap.v === null && /no market cap/.test(r.mcap.why || ''))
       && t24.some((r) => r.symbol === 'PONS' && r.liquidity.v > 69e6));
+    // every chain's list (chain=all) and Ethereum's: lib/marketdata.js's own answers, cut to fewer rows
+    let allOk = true;
+    for (const w of ['5m', '1h', '6h', '24h', 'custom']) {
+      const j = FIX('tokens-all-' + w + '.json'), e = FIX('tokens-ethereum-' + w + '.json');
+      if (!(j.chain === 'all' && j.network === null && typeof j.basis === 'string' && isWin(j.window, ['5m', '1h', '6h', '24h', 'custom']) && j.window.kind === w && j.at >= j.oldestAt && j.oldestAt > 1.7e12
+        && Array.isArray(j.networks) && j.networks.map((n) => n.key).join() === MD.GT_TRACKED.join() && j.networks.every((n) => typeof n.name === 'string' && typeof n.pools === 'number' && typeof n.most === 'number' && typeof n.everyMs === 'number' && (n.pools > 0 ? n.at > 1.7e12 : n.at === null && /not been read yet/.test(n.why)))
+        && j.rows.some((r) => r.chain === 'robinhood') && j.rows.some((r) => r.chain === 'ethereum') && j.notes.some((x) => /^Not read yet: Solana/.test(x)))) allOk = false;
+      if (!(e.chain === 'ethereum' && e.network === 'eth' && e.rows.length > 5 && e.rows.every((r) => r.chain === 'ethereum' && !('chainName' in r)) && !('networks' in e))) allOk = false;
+      for (const r of j.rows) {
+        if (!(MD.GT_TRACKED.includes(r.chain) && r.chainName === MD.CHAIN_BY_KEY.get(r.chain).llama && /^\/api\/market\/logo\?u=https%3A%2F%2Ficons\.llamao\.fi%2Fchains%2F/.test(r.chainLogo || '') && Object.keys(r).slice(0, 4).join() === 'chain,chainName,chainLogo,address')) allOk = false;
+        for (const k of ['priceUsd', 'mcap', 'fdv', 'liquidity', 'volume', 'change', 'txns24h']) isFig(r[k], 'tokens-all-' + w + ':' + r.chain + ':' + r.symbol + '.' + k);
+      }
+      for (const r of e.rows) for (const k of ['priceUsd', 'mcap', 'fdv', 'liquidity', 'volume', 'change', 'txns24h']) isFig(r[k], 'tokens-ethereum-' + w + ':' + r.symbol + '.' + k);
+    }
+    const all24 = FIX('tokens-all-24h.json').rows, allCus = FIX('tokens-all-custom.json');
+    check('  ...GET /api/market/tokens?chain=all: { at (newest read), oldestAt, chain: "all", network: null, basis, window, networks: [{ key, name, network, logo, at, pools, most, everyMs, why? }] in the server\'s order, rows: [{ chain, chainName, chainLogo, …as above }], notes } — and Ethereum\'s own list beside it',
+      allOk && all24.filter((r) => r.address === USDG).map((r) => r.chain).sort().join() === 'ethereum,robinhood'
+      && allCus.networks.find((n) => n.key === 'robinhood').coverage.from === '2026-10-24' && allCus.rows.filter((r) => r.chain === 'ethereum').every((r) => r.volume.v === null && /^our history starts /.test(r.volume.why)));
     const send = FIX('token-robinhood-0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105.json');
     ['priceUsd', 'mcap', 'fdv', 'liquidity'].forEach((k) => isFig(send[k], 'token-send.' + k));
     check('  ...GET /api/market/token: { chain, address, network, symbol, name, logo, links, priceUsd, mcap, fdv, supplyBasis, liquidity, pools, windows (24h 6h 1h 5m: volume, change, txns — trades for 24 h only), at, basis, flags, scanner { supported, href }, candles { tf, pool, rows [ms,o,h,l,c,v], src } }',
@@ -738,6 +903,11 @@ async function runSuite() {
         && cbad.status === 400 && /from is after to/.test(cbad.j.error) && cnow.status === 400 && /whole UTC day that has ended/.test(cnow.j.error), cnow.status + ' ' + JSON.stringify(cnow.j));
       const tv = await get('/api/market/tokens?chain=robinhood'), tall = await get('/api/market/tokens?chain=robinhood&include=all'), tl = await get('/api/market/tokens?chain=robinhood&sort=liquidity&dir=asc');
       check('  ...the tokens: wash volume left out of "highest volume" unless include=all; lowest liquidity first when asked', tv.status === 200 && !tv.j.rows.some((r) => r.flags.includes('wash')) && tall.j.rows.some((r) => r.flags.includes('wash')) && tl.j.rows[0].liquidity.v <= tl.j.rows[1].liquidity.v);
+      const nullsLast = (rows) => { const k = rows.findIndex((r) => r.volume.v == null); return k > 0 && rows.slice(k).every((r) => r.volume.v == null); };
+      const ta = await get('/api/market/tokens?chain=all'), tcD = await get('/api/market/tokens?chain=all&window=custom&from=2026-10-24&to=2026-10-25'), tcA = await get('/api/market/tokens?chain=all&window=custom&from=2026-10-24&to=2026-10-25&dir=asc'), tb = await get('/api/market/tokens?chain=base');
+      check('  ...every chain\'s list (chain=all): Robinhood Chain\'s and Ethereum\'s rows together, wash volume left out of "highest volume", a figure a chain has not got last both ways; a chain not read yet says so',
+        ta.status === 200 && ta.j.chain === 'all' && ta.j.rows.some((r) => r.chain === 'ethereum') && ta.j.rows.some((r) => r.chain === 'robinhood') && !ta.j.rows.some((r) => r.flags.includes('wash'))
+        && nullsLast(tcD.j.rows) && nullsLast(tcA.j.rows) && tcA.j.rows[0].volume.v <= tcA.j.rows[1].volume.v && tb.status === 200 && tb.j.rows.length === 0 && /not been read yet/.test(tb.j.why), JSON.stringify({ d: tcD.j.rows.map((r) => r.volume.v).slice(0, 40) }).slice(0, 300));
       const tm = await get('/api/market/tokens?chain=robinhood&sort=mcap');
       check('  ...a global (all-chains) market cap is kept out of a chain-local market-cap ranking', tm.j.rows.filter((r) => r.flags.includes('global-mcap')).every((r) => r.mcap.v === null));
       const d1 = await get('/api/market/chain?key=robinhood'), d7 = await get('/api/market/chain?key=robinhood&window=7d'), dx = await get('/api/market/chain?key=nowhere'), dg = await get('/api/market/chain?key=solana');
@@ -757,6 +927,8 @@ async function runSuite() {
       ...['24h', '7d', '30d', 'custom'].map((w) => ['chains-' + w + '.json', FIX('chains-' + w + '.json'), R.chains[w]]),
       ['chain-robinhood.json', FIX('chain-robinhood.json'), R.chain.robinhood], ['chain-base.json', FIX('chain-base.json'), R.chain.base],
       ...['24h', '6h', '1h', '5m', 'custom'].map((w) => ['tokens-robinhood-' + w + '.json', FIX('tokens-robinhood-' + w + '.json'), R.tokens[w]]),
+      ...['24h', '6h', '1h', '5m', 'custom'].map((w) => ['tokens-all-' + w + '.json', FIX('tokens-all-' + w + '.json'), R.tokensAll[w]]),
+      ...['24h', '6h', '1h', '5m', 'custom'].map((w) => ['tokens-ethereum-' + w + '.json', FIX('tokens-ethereum-' + w + '.json'), R.tokens[w]]),
       ...files.filter((f) => /^token-robinhood-/.test(f)).map((f) => [f, FIX(f), R.token]),
     ];
     const drift = pairs.map(([f, a, b]) => [f, shapeDiff(a, b)]).filter(([, d]) => d.length);
@@ -768,6 +940,8 @@ async function runSuite() {
     const fakes = [
       ['a chain with no history', fa('/api/market/chain?key=solana'), R.chain.solana],
       ['a token built from the list', fa('/api/market/token?chain=robinhood&address=' + listTok.address), R.token],
+      ['a token built from Ethereum\'s list', fa('/api/market/token?chain=ethereum&address=' + USDG), R.token],
+      ['every chain\'s list, sorted by the fake', fa('/api/market/tokens?chain=all&sort=liquidity&dir=asc'), R.tokensAll['24h']],
       ['a custom window on a token', fa('/api/market/token?chain=robinhood&address=' + USDG + cw), R.tokenCustom],
       ['a token GeckoTerminal could not be asked about', fa('/api/market/token?chain=robinhood&address=0x' + '12'.repeat(20)), R.unavailable],
       ['a search with Dexscreener down', fa('/api/market/search?q=zzzz'), R.searchDown],

@@ -9,8 +9,10 @@
  * What it promises: every figure is drawn with its source and the time it was read; a figure the server could not read
  * arrives as { v: null, why } and is shown as missing with that reason — never as 0. Charts are drawn here, in SVG, at the
  * box's own pixel size (so their labels keep the page's text floor), with a hover / arrow-key readout and a table.
- * The address bar is the state: /market?chain=<key>[&token=<address>][&window=<w>[&from=YYYY-MM-DD&to=YYYY-MM-DD]] —
- * a view is linkable, and Back / Forward walk the views.
+ * The address bar is the state: /market?chain=<key>[&token=<address>][&window=<w>[&from=YYYY-MM-DD&to=YYYY-MM-DD]][&tchain=<key>]
+ * — a view is linkable, and Back / Forward walk the views. tchain is Top tokens' chain filter (owner, 2026-10-27: "add all
+ * chain's top tokens to the top tokens tab and allow users to filter by chain using the chain's logo"): absent, the list is
+ * every chain's; it is independent of the main view, which stays on Robinhood Chain unless the reader opens something else.
  * For a token on Robinhood Chain, Ethereum or Solana the main view ends with the Scanner's own dashboard
  * (NPCard.dashboardHTML + NPCard.mountDashboard, newpairs.js), fed by /api/market/scan, which reads it without adding it to
  * the public "recently scanned" list — fetched only when the reader scrolls to it.
@@ -110,19 +112,25 @@
   const S = {
     tab: 'chains',
     chains: { sort: 'tvl', dir: 'desc', win: '24h', from: '', to: '' },
-    tokens: { sort: 'volume', dir: 'desc', win: '24h', from: '', to: '', all: false },
+    tokens: { sort: 'volume', dir: 'desc', win: '24h', from: '', to: '', all: false, tchain: '' },   // tchain '' = every chain
     view: { chain: DEFAULT_CHAIN, token: null },
     chainRows: null, chainAns: null, tokenAns: null, tokenFor: null, viewData: null,
     shown: 0, range: 90,
   };
   const names = new Map();   // chain key → name, from every answer that names one
+  const logos = new Map();   // chain key → its logo through the server's proxy, from the chains list or the all-chains token list
   const chainName = (k) => names.get(k) || KNOWN[k] || k;
   const chainRow = (k) => (S.chainRows || []).find((r) => r.key === k) || null;
+  // the same token: a 0x address in any case, a Solana one exactly as written (it is case-sensitive)
+  const sameToken = (a, b) => (/^0x/i.test(String(a || '')) ? String(a).toLowerCase() === String(b || '').toLowerCase() : String(a || '') === String(b || ''));
 
   /* ---------- the address bar ---------- */
   function readURL() {
     const q = new URLSearchParams(location.search);
     const c = (q.get('chain') || '').toLowerCase(), t = q.get('token') || '', w = q.get('window') || '', f = q.get('from') || '', to = q.get('to') || '';
+    // Top tokens' chain filter: one of the chains the server reads, or every chain (absent, or anything else)
+    const tc = (q.get('tchain') || '').toLowerCase(), tchain = READS.includes(tc) ? tc : '';
+    S.tchainMoved = tchain !== S.tokens.tchain; S.tokens.tchain = tchain;
     S.view = { chain: CHAIN_KEY.test(c) ? c : DEFAULT_CHAIN, token: TOKEN_ADDR.test(t) ? (/^0x/i.test(t) ? t.toLowerCase() : t) : null };
     const k = S.view.token ? S.tokens : S.chains, wins = S.view.token ? TOKEN_WINS : CHAIN_WINS;
     // an address without a time frame is the default one: Back to /market shows the 24 hours it showed, not the 7 days picked since
@@ -138,6 +146,7 @@
     if (v.token) p.set('token', v.token);
     const k = v.token ? S.tokens : S.chains;
     if (k.win !== '24h') { p.set('window', k.win); if (k.win === 'custom') { p.set('from', k.from); p.set('to', k.to); } }
+    if (S.tokens.tchain) p.set('tchain', S.tokens.tchain);
     return '/market?' + p.toString();
   }
   function writeURL(push) {
@@ -184,10 +193,18 @@
 
   /* ---------- logos: same-origin only (the server's image proxy); anything else is a monogram ---------- */
   const mono = (s) => (Array.from(String(s || '?').replace(/^\$/, ''))[0] || '?').toUpperCase();
+  const ownLogo = (logo) => typeof logo === 'string' && /^\/api\/[\w/.-]+(\?[^"'<>\s]*)?$/.test(logo);
   function avaHTML(name, logo, big) {
-    const img = typeof logo === 'string' && /^\/api\/[\w/.-]+(\?[^"'<>\s]*)?$/.test(logo)
+    const img = ownLogo(logo)
       ? '<img class="mkt-logo" src="' + esc(logo) + '" alt="" loading="lazy" decoding="async" width="' + (big ? 56 : 32) + '" height="' + (big ? 56 : 32) + '">' : '';
     return '<span class="mkt-ava' + (big ? ' mkt-ava-lg' : '') + '" aria-hidden="true"><span class="mkt-mono">' + esc(mono(name)) + '</span>' + img + '</span>';
+  }
+  // a chain's initials, for its button when its logo is missing or does not load: an acronym as it is (OP, BSC), else the
+  // first letters of two words (RC), else the first two letters of the one (ET)
+  function initials(name) {
+    const w = String(name || '?').trim().split(/\s+/);
+    if (/^[A-Z0-9]{2,4}$/.test(w[0])) return w[0];
+    return (w.length > 1 ? w[0].charAt(0) + w[1].charAt(0) : w[0].slice(0, 2)).toUpperCase() || '?';
   }
   function wireLogos(root) { root.querySelectorAll('img.mkt-logo').forEach((img) => { if (img._w) return; img._w = 1; img.addEventListener('error', () => img.remove()); }); }
 
@@ -232,8 +249,44 @@
       }
     }
     const wash = $('mkt-wash'); if (wash) wash.setAttribute('aria-pressed', String(!!S.tokens.all));
-    const on = $('mkt-tok-on'); if (on) on.innerHTML = 'Tokens on <b>' + esc(chainName(S.view.chain)) + '</b> — the chain in the main view';
+    if (filterBox) filterBox.querySelectorAll('[data-tchain]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tchain === (S.tokens.tchain || 'all'))));
   }
+
+  /* ---------- Top tokens' chain filter: "All chains", then one logo button per chain the server reads ---------- */
+  const filterBox = $('mkt-tchains');
+  function filterHTML(k) {
+    if (k === 'all') return '<button class="np-chip mkt-cf" type="button" data-tchain="all" aria-pressed="false" data-tip="Ranks the most-traded tokens of every chain this site reads together — each row names its chain"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span><span class="sr-only">Show tokens on </span>All chains</button>';
+    const nm = chainName(k), lg = logos.get(k);
+    return '<button class="np-chip mkt-cf" type="button" data-tchain="' + esc(k) + '" aria-pressed="false" data-tip="' + esc(nm) + ' only: its most-traded tokens, ranked the way you picked — the main view stays where it is">' +
+      '<span class="mkt-tick" aria-hidden="true">✓&nbsp;</span><span class="mkt-ava mkt-ava-cf" aria-hidden="true"><span class="mkt-mono">' + esc(initials(nm)) + '</span>' +
+      (ownLogo(lg) ? '<img class="mkt-logo" src="' + esc(lg) + '" alt="" decoding="async" width="32" height="32">' : '') + '</span><span class="sr-only">Show ' + esc(nm) + ' tokens</span></button>';
+  }
+  // drawn again only when a name or a logo arrives; the button that had the focus keeps it
+  function paintFilter() {
+    if (!filterBox) return;
+    const had = filterBox.contains(document.activeElement) ? document.activeElement.dataset.tchain : null;
+    filterBox.innerHTML = ['all'].concat(READS).map(filterHTML).join('');
+    wireLogos(filterBox);
+    syncControls();
+    if (had) { const b = filterBox.querySelector('[data-tchain="' + had + '"]'); if (b) b.focus(); }
+  }
+  // the names and logos an answer gives (the chains list's rows, the all-chains list's networks): true when one is new
+  function learnChains(list, keyOf) {
+    let changed = false;
+    for (const x of Array.isArray(list) ? list : []) {
+      const k = x && keyOf(x); if (!k || !READS.includes(k)) continue;
+      if (x.name && names.get(k) !== x.name) { names.set(k, x.name); changed = true; }
+      if (ownLogo(x.logo) && logos.get(k) !== x.logo) { logos.set(k, x.logo); changed = true; }
+    }
+    return changed;
+  }
+  if (filterBox) filterBox.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tchain]'); if (!b) return;
+    const t = b.dataset.tchain === 'all' ? '' : b.dataset.tchain;
+    if (t === S.tokens.tchain) return;
+    S.tokens.tchain = t; S.shown = pageSize();
+    writeURL(true); syncControls(); loadList();
+  });
   function setTab(tab, focus) {
     S.tab = tab;
     tabs.forEach((t) => { const on = t.dataset.tab === tab; t.setAttribute('aria-selected', String(on)); t.classList.toggle('is-on', on); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
@@ -305,6 +358,7 @@
         const j = await getJSON(chainsURL());
         if (my !== seq.list) return;
         S.chainAns = j; S.chainRows = Array.isArray(j && j.rows) ? j.rows : [];
+        if (learnChains(S.chainRows, (r) => r.key)) paintFilter();   // before the names below, so a new name redraws the filter too
         S.chainRows.forEach((r) => { if (r && r.key && r.name) names.set(r.key, r.name); });
         paintChains();
         syncControls();
@@ -313,21 +367,18 @@
         cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the chains')) + '</span> ' + failActs(e, 'list', 'chains');
       }
     } else {
-      const chain = S.view.chain;
-      cap.innerHTML = loadingHTML('Reading the tokens on ' + chainName(chain) + '…'); list.innerHTML = ''; more.innerHTML = ''; foot.innerHTML = '';
-      const row = chainRow(chain);
-      if (row && row.gtNetwork === null) {
-        cap.innerHTML = '<span class="mkt-empty">Token lists are read from GeckoTerminal, which has no network for ' + esc(chainName(chain)) + ' — so there is no token list for it here.</span>';
-        return;
-      }
+      // the chain filter's, never the main view's: absent, every chain the server reads in one list
+      const chain = S.tokens.tchain || 'all', what = chain === 'all' ? 'every chain’s tokens' : 'the tokens on ' + chainName(chain);
+      cap.innerHTML = loadingHTML('Reading ' + what + '…'); list.innerHTML = ''; more.innerHTML = ''; foot.innerHTML = '';
       try {
         const j = await getJSON(tokensURL(chain));
         if (my !== seq.list) return;
         S.tokenAns = j; S.tokenFor = chain;
+        if (chain === 'all' && learnChains(j && j.networks, (n) => n.key)) paintFilter();
         paintTokens();
       } catch (e) {
         if (my !== seq.list) return;
-        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the tokens on ' + chainName(chain))) + '</span> ' + failActs(e, 'list', 'tokens');
+        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, what)) + '</span> ' + failActs(e, 'list', 'tokens');
       }
     }
   }
@@ -365,26 +416,41 @@
     wireLogos(list);
   }
   const FLAG = { thin: ['thin pools', 'Its pools hold under $10k between them'], wash: ['volume ≫ pools', 'Its 24h volume is over 100 times what its pools hold — a sign of wash trading'], 'global-mcap': ['global cap', 'Its market cap is a global, all-chains figure, not this chain’s'] };
+  // the chain a row of the all-chains list is on: its logo (decorative, dropped if it does not load) and its name, in words
+  const chainBadge = (r) => '<span class="mkt-chb">' + (ownLogo(r.chainLogo) ? '<img class="mkt-logo" src="' + esc(r.chainLogo) + '" alt="" loading="lazy" decoding="async" width="16" height="16">' : '') +
+    '<span class="sr-only">on </span>' + esc(r.chainName || chainName(r.chain)) + '</span> · ';
+  // what the all-chains list is drawn from, network by network: how many were read and when, which were not, which are late
+  function allCapHTML(j, k) {
+    const nets = Array.isArray(j.networks) ? j.networks : [], read = nets.filter((n) => n.pools > 0), unread = nets.filter((n) => !(n.pools > 0));
+    const late = read.filter((n) => n.stale || n.stopped), cov = read.filter((n) => n.coverage && n.coverage.from);
+    const when = j.oldestAt && j.at && j.oldestAt !== j.at ? ' · read ' + agoEl(j.oldestAt) + ' to ' + agoEl(j.at) : j.at ? ' · read ' + agoEl(j.at) : '';
+    return 'Every chain · ranked by <b>' + esc(TK_SORT[k.sort] || k.sort) + '</b>, ' + (k.dir === 'asc' ? 'lowest' : 'highest') + ' first · <b>' + esc((j.window && j.window.label) || k.win) + '</b> · <b>' +
+        (nets.length ? (read.length === nets.length ? nets.length + ' chains' : read.length + ' of ' + nets.length + ' chains read') : 'the chains this site reads') + '</b>' + when +
+      (j.basis ? '<span class="mkt-cap-n">From ' + esc(j.basis) + (k.dir === 'asc' ? ' — so “lowest” is lowest among those, not the lowest on any chain.' : '.') + ' Each row names its chain; the same token on two chains is two rows.</span>' : '') +
+      (unread.length ? '<span class="mkt-cap-n">Not read yet: ' + esc(unread.map((n) => n.name || chainName(n.key)).join(', ')) + ' — each joins this list once a read of its pools has finished.</span>' : '') +
+      late.map((n) => '<span class="mkt-cap-n">⏳ ' + esc(n.name || chainName(n.key)) + ': ' + (n.stopped ? 'its last read stopped short (' + esc(n.stopped) + ')' : 'its newest read is from ' + agoEl(n.at) + ', older than usual') + '.</span>').join('') +
+      (cov.length ? '<span class="mkt-cap-n">Custom windows come from this site’s own pool readings, which start on a different day for each chain: ' + esc(cov.map((n) => (n.name || chainName(n.key)) + ' ' + n.coverage.from).join(', ')) + '.</span>' : '');
+  }
   function paintTokens() {
     const j = S.tokenAns || {}, rows = Array.isArray(j.rows) ? j.rows : [], k = S.tokens, sortF = k.sort;
-    const win = j.window || {};
-    cap.innerHTML = 'Tokens on <b>' + esc(chainName(j.chain || S.tokenFor)) + '</b> · ranked by <b>' + esc(TK_SORT[sortF] || sortF) + '</b>, ' + (k.dir === 'asc' ? 'lowest' : 'highest') + ' first · <b>' + esc(win.label || k.win) + '</b>' +
+    const win = j.window || {}, all = j.chain === 'all';
+    cap.innerHTML = (all ? allCapHTML(j, k) : 'Tokens on <b>' + esc(chainName(j.chain || S.tokenFor)) + '</b> · ranked by <b>' + esc(TK_SORT[sortF] || sortF) + '</b>, ' + (k.dir === 'asc' ? 'lowest' : 'highest') + ' first · <b>' + esc(win.label || k.win) + '</b>' +
       (j.at ? ' · gathered ' + agoEl(j.at) : '') +
       (j.basis ? '<span class="mkt-cap-n">From ' + esc(j.basis) + (k.dir === 'asc' ? ' — so “lowest” is lowest among those, not lowest on the chain.' : '.') + '</span>' : '') +
-      (j.coverage && j.coverage.from ? '<span class="mkt-cap-n">Custom windows come from this site’s own pool readings, which start ' + esc(j.coverage.from) + '.</span>' : '') +
+      (j.coverage && j.coverage.from ? '<span class="mkt-cap-n">Custom windows come from this site’s own pool readings, which start ' + esc(j.coverage.from) + '.</span>' : '')) +
       (win.note ? '<span class="mkt-cap-n">' + esc(win.note) + '</span>' : '');
     foot.innerHTML = sortF === 'volume' && k.dir === 'desc' && !k.all ? 'Tokens whose volume is over 100× what their pools hold are left out of “highest volume” — “Include flagged volume” lists them too.' : '';
-    if (!rows.length) { list.innerHTML = '<li class="mkt-empty">' + (j.why ? esc(cap1(j.why)) : 'No tokens are listed for ' + esc(chainName(j.chain || S.tokenFor)) + (k.win === 'custom' ? ' over these days yet' : ' yet')) + '.</li>'; more.innerHTML = ''; return; }
+    if (!rows.length) { list.innerHTML = '<li class="mkt-empty">' + (j.why ? esc(cap1(j.why)) : 'No tokens are listed for ' + esc(all ? 'any chain' : chainName(j.chain || S.tokenFor)) + (k.win === 'custom' ? ' over these days yet' : ' yet')) + '.</li>'; more.innerHTML = ''; return; }
     const sec = sortF === 'volume' ? 'liquidity' : 'volume';
     list.innerHTML = rows.slice(0, S.shown).map((r, i) => {
       const f = fig(r[sortF]), s2 = fig(r[sec]);
       const main = f.v != null ? (sortF === 'change' ? pct(f.v) : usd(f.v)) : null;
-      const nm = r.name || r.symbol || short(r.address);
+      const nm = r.name || r.symbol || short(r.address), on = r.chain || j.chain;
       const flags = (r.flags || []).filter((x) => FLAG[x]).map((x) => '<span class="mkt-flag" title="' + esc(FLAG[x][1]) + '">⚠ ' + esc(FLAG[x][0]) + '</span>').join('');
-      const cur = S.view.token && S.view.token === String(r.address).toLowerCase();
-      return '<li><button class="mkt-row" type="button" data-chain="' + esc(r.chain || j.chain) + '" data-token="' + esc(r.address) + '"' + (cur ? ' aria-current="true"' : '') + ' data-tip="Opens ' + esc(nm) + ' in the main view: price, pools, a chart and the Scanner’s read">' +
+      const cur = S.view.token && S.view.chain === on && sameToken(S.view.token, r.address);
+      return '<li><button class="mkt-row" type="button" data-chain="' + esc(on) + '" data-token="' + esc(r.address) + '"' + (cur ? ' aria-current="true"' : '') + ' data-tip="Opens ' + esc(nm) + (all ? ' on ' + esc(r.chainName || chainName(on)) : '') + ' in the main view: price, pools, a chart and the Scanner’s read">' +
         '<span class="mkt-rank">' + (i + 1) + '</span>' + avaHTML(r.symbol || r.name, r.logo) +
-        '<span class="mkt-nm"><b>' + esc(nm) + (r.symbol ? ' <span class="mkt-sym">$' + esc(r.symbol) + '</span>' : '') + '</b><small><code>' + esc(short(r.address)) + '</code>' +
+        '<span class="mkt-nm"><b>' + esc(nm) + (r.symbol ? ' <span class="mkt-sym">$' + esc(r.symbol) + '</span>' : '') + '</b><small>' + (all ? chainBadge(r) : '') + '<code>' + esc(short(r.address)) + '</code>' +
           (s2.v != null ? ' · ' + (sec === 'liquidity' ? 'Liq ' : 'Vol ') + esc(usd(s2.v)) + (sec === 'liquidity' && r.liquidity && r.liquidity.pools ? ' in ' + r.liquidity.pools + ' pool' + (r.liquidity.pools === 1 ? '' : 's') : '') : '') + '</small>' + (flags ? '<span class="mkt-flags">' + flags + '</span>' : '') + '</span>' +
         '<span class="mkt-fig">' + (main != null ? '<b>' + esc(main) + '</b>' + (sortF === 'mcap' && (r.flags || []).includes('global-mcap') ? '<small>global, all chains</small>' : '') : '<b class="mkt-na">Not available</b><small>' + whyOf(f) + '</small>') + '</span>' +
       '</button></li>';
@@ -421,17 +487,15 @@
   function open(v, push) {
     if (!v || !CHAIN_KEY.test(String(v.chain || ''))) return;
     const tok = v.token && TOKEN_ADDR.test(v.token) ? (/^0x/i.test(v.token) ? v.token.toLowerCase() : v.token) : null;
-    const chainChanged = v.chain !== S.view.chain;
     S.view = { chain: v.chain, token: tok };
     writeURL(push);
     loadView(true);
-    markCurrent();
-    if (S.tab === 'tokens' && chainChanged) loadList();
+    markCurrent();   // the side list stays as it is: Top tokens' chain is its own filter, not the main view's
     syncControls();
   }
   function markCurrent() {
     list.querySelectorAll('.mkt-row').forEach((b) => {
-      const on = S.view.token ? (b.dataset.token || '').toLowerCase() === String(S.view.token).toLowerCase() : !b.dataset.token && b.dataset.chain === S.view.chain;
+      const on = S.view.token ? b.dataset.chain === S.view.chain && sameToken(b.dataset.token, S.view.token) : !b.dataset.token && b.dataset.chain === S.view.chain;
       if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
     });
   }
@@ -502,7 +566,13 @@
     const r = e.target.closest('[data-range]');
     if (r) { S.range = Number(r.dataset.range); view.querySelectorAll('[data-range]').forEach((x) => x.setAttribute('aria-pressed', String(x === r))); redrawRanged(); return; }
     const a = e.target.closest('[data-all-tokens]');
-    if (a) { if (S.tab !== 'tokens') setTab('tokens', true); else tabs[1].focus(); }
+    if (a) {
+      // "All tokens, sorted your way": the side list's chain filter set to the chain in the main view
+      const k = READS.includes(S.view.chain) ? S.view.chain : '';
+      const moved = k !== S.tokens.tchain;
+      if (moved) { S.tokens.tchain = k; S.shown = pageSize(); writeURL(true); }
+      if (S.tab !== 'tokens') setTab('tokens', true); else { if (moved) loadList(); tabs[1].focus(); }
+    }
   });
 
   /* ---------- a stat card ---------- */
@@ -1039,10 +1109,16 @@
   if (q) q.addEventListener('keydown', (e) => { if (e.key === 'Escape' && results && !results.hidden) { e.preventDefault(); closeResults(); } });
 
   /* ════════════════════════════ start ════════════════════════════ */
-  window.addEventListener('popstate', () => { readURL(); syncControls(); loadView(false); loadList(); });
+  // Back / Forward to another chain filter shows Top tokens, where that filter is (the tab itself is not in the address)
+  window.addEventListener('popstate', () => { readURL(); syncControls(); loadView(false); if (S.tchainMoved && S.tab !== 'tokens') setTab('tokens', false); else loadList(); });
   readURL();
   S.shown = pageSize();
-  // a link that opened the page on a token lists that token's chain on the side, Top tokens selected
-  if (S.view.token) setTab('tokens', false); else { syncControls(); loadList(); }
+  paintFilter();
+  // a link that opened the page on a token, or on a chain filter, opens Top tokens; the logos come with the chains list, which
+  // that tab does not read, so it is asked for them quietly (the same read the first view makes, kept a minute)
+  if (S.view.token || S.tokens.tchain) {
+    setTab('tokens', false);
+    getJSON('/api/market/chains').then((j) => { if (learnChains(j && j.rows, (r) => r.key)) paintFilter(); }).catch(() => {});
+  } else { syncControls(); loadList(); }
   loadView(false);
 })();

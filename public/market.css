@@ -43,8 +43,14 @@
 /* the chosen chip says so with a tick as well as its fill (a span: the matrix tile owns both pseudo-elements) */
 .mkt-tick { display: none; }
 .np-chip[aria-pressed="true"] > .mkt-tick { display: inline; }
-.mkt-on { margin: 0 0 0.7rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
-.mkt-on b { color: var(--text); }
+/* Top tokens' chain filter: "All chains", then a logo button per chain. The chosen one says so with a tick and a ring as well as
+   its fill; a logo that is missing or does not load leaves the chain's initials (the logo, laid over them, hides them while it is
+   there). The row wraps — never a sideways scroll. */
+.mkt-cfs .mkt-cf { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; padding: 0.25rem 0.5rem; }
+.mkt-cf[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink-2), 0 0 0 4px var(--green-bright); }
+.mkt-ava-cf { width: 2em; height: 2em; }
+.mkt-ava-cf .mkt-mono { font-family: 'Rubik', sans-serif; font-weight: 800; font-size: max(var(--text-floor), 0.62em); letter-spacing: -0.02em; color: var(--text); }
+.mkt-ava-cf:has(img) .mkt-mono { visibility: hidden; }
 .mkt-custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.6rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px dashed var(--edge-ctl); border-radius: 12px; }
 .mkt-custom[hidden] { display: none; }
 .mkt-date { display: flex; flex-direction: column; gap: 0.2rem; flex: 1 1 9rem; min-width: 0; }
@@ -95,6 +101,9 @@
 .mkt-sym { color: var(--text-dim); font-weight: 700; }
 .mkt-nm small, .mkt-fig small { font-size: max(var(--text-floor), 0.76rem); color: var(--text-mute); overflow-wrap: anywhere; line-height: 1.35; }
 .mkt-nm code { font-size: max(var(--text-floor), 0.95em); }
+/* the chain a row of the all-chains list is on: its logo and its name, at the start of the row's small line */
+.mkt-chb { display: inline-flex; align-items: center; gap: 0.25em; font-weight: 700; color: var(--text-dim); vertical-align: bottom; }
+.mkt-chb img { width: 1.15em; height: 1.15em; border-radius: 50%; object-fit: cover; flex: 0 0 auto; }
 .mkt-fig { flex: 0 1 auto; margin-left: auto; min-width: 0; max-width: 100%; display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; text-align: right; }
 .mkt-fig b { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .mkt-flags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.15rem; }

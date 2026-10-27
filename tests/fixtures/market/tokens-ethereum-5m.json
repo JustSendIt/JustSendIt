@@ -1,0 +1,649 @@
+{
+ "at": 1793037600000,
+ "chain": "ethereum",
+ "network": "eth",
+ "basis": "the 20 most-traded pools on GeckoTerminal, grouped by token",
+ "window": {
+  "kind": "5m",
+  "label": "last 5 minutes"
+ },
+ "sort": "volume",
+ "dir": "desc",
+ "total": 12,
+ "rows": [
+  {
+   "chain": "ethereum",
+   "address": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+   "symbol": "USDG",
+   "name": "Global Dollar",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F51281%2Flarge%2FGDN_USDG_Token_200x200.png%3F1730484111",
+   "priceUsd": {
+    "v": 0.999306850991425,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 3143615851.06444,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "global": true,
+    "label": "global market cap (CoinGecko, all chains) — larger than this chain's FDV, so not this chain's figure; kept out of the market-cap sort"
+   },
+   "fdv": {
+    "v": 672781451.846415,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 18071785.8909,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 2,
+    "label": "sum of the reserves of its 2 pools in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 249270,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "global-mcap"
+   ],
+   "scannable": true,
+   "volume": {
+    "v": 515867.37230001285,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0.015,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x0bd7d308f8e1639fab988df18a8011f41eacad73",
+   "symbol": "WETH",
+   "name": "WETH",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174283%2Flarge%2Fweth-robinhood.jpeg%3F1782924507",
+   "priceUsd": {
+    "v": 2331,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 93351712.4528285,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 95372861.1770286,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 5677637.2128,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 3,
+    "label": "sum of the reserves of its 3 pools in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 88425,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 215743.7075929974,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0.158,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x0000000000000000000000000000000000000000",
+   "symbol": "WETH",
+   "name": "WETH",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fassets.geckoterminal.com%2F7l7tdohmj7ud6i62llktrh18kcj6",
+   "priceUsd": {
+    "v": 2331,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 5759538889.16621,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 22434411.5982,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 2,
+    "label": "sum of the reserves of its 2 pools in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 29795,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 148336.2318318604,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0.054,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0xa5b562d13486735d2a96d6b230489b1f33731440",
+   "symbol": "BTC",
+   "name": "Big Titty Coin",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102179782%2Flarge%2Flogo.png%3F1792952458",
+   "priceUsd": {
+    "v": 0.0205033102989764,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 20503310.3,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 20503310.3,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 424125.6831,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 68192,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 75094.854354749,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 7.826,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x39dbed3a2bd333467115de45665cc57f813c4571",
+   "symbol": "PONS",
+   "name": "Pons",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174571%2Flarge%2Fjhitvkisdq8fhxvimdkpcw7y3dx5.%3F1784093932",
+   "priceUsd": {
+    "v": 0.249866253080044,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 167959070.687326,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 167957986.628457,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 2277283.7367,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 13311,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 32751.4440509918,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0.766,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+   "symbol": "SPCX",
+   "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174129%2Flarge%2F0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png%3F1782444614",
+   "priceUsd": {
+    "v": 148.541497451708,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 12954301.4616156,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 13243422.2942033,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 1592559.9459,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 7768,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 19886.1261035707,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": -0.245,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+   "symbol": "SPY",
+   "name": "SPDR S&P 500 ETF Trust • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174115%2Flarge%2F0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png%3F1782444578",
+   "priceUsd": {
+    "v": 767.959906013623,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 20541500.7450531,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 20513417.5399825,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 1954632.078,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 19228,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 4581.2834710734,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0.096,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+   "symbol": "QQQ",
+   "name": "Invesco QQQ • Robinhood Token",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174119%2Flarge%2F0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png%3F1782444588",
+   "priceUsd": {
+    "v": 714.378830132917,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 5429224.1736209,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 5429223.41436322,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 1438043.7834,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 12996,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 28.6919620862,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0xea6bd2405e4c60d18f428a50d0d16df0028c4b07",
+   "symbol": "Claude",
+   "name": "Claude",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fassets.geckoterminal.com%2Ffd64if3f07nfrxzbh5zsic3bgxo2",
+   "priceUsd": {
+    "v": 0.0000819519939822443,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 8195199.398,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 8190545.9559,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 3847,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 0.0901706361,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0.055,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x621632fe422158e9ce8bc532498993e3dde526d5",
+   "symbol": "PONS",
+   "name": "Pons",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.23299863154817,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 200378823.09,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 69767478.0966,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 61,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x047a84485f1a4314196bed897cd14d3de245ab4d",
+   "symbol": "FLOP",
+   "name": "Flop Labs",
+   "logo": null,
+   "priceUsd": {
+    "v": 0.00000232465215135833,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "why": "GeckoTerminal has no market cap for this token"
+   },
+   "fdv": {
+    "v": 2324.652151,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 2329.0288,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 22082,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true,
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  },
+  {
+   "chain": "ethereum",
+   "address": "0x0b7c6c138dc75622f4200d157b13fb93e6bd94fa",
+   "symbol": "MOW",
+   "name": "MowCat",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175295%2Flarge%2Flogo.jpg%3F1786074528",
+   "priceUsd": {
+    "v": 0.100438542794379,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price in its deepest pool here"
+   },
+   "mcap": {
+    "v": 100438542.8,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "market cap (GeckoTerminal)"
+   },
+   "fdv": {
+    "v": 100438542.8,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "FDV: total supply × price (GeckoTerminal; the supply includes burned tokens)"
+   },
+   "liquidity": {
+    "v": 10002998.3848,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "pools": 1,
+    "label": "sum of the reserves of its 1 pool in this list (where it is the priced token)"
+   },
+   "txns24h": {
+    "v": 552,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
+   "volume": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "DEX volume, last 5 minutes, across these pools"
+   },
+   "change": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793037600000,
+    "label": "price change, last 5 minutes, in its deepest pool"
+   }
+  }
+ ],
+ "notes": [
+  "Highest and lowest are within the 20 most-traded pools on GeckoTerminal, grouped by token — never the whole chain's.",
+  "\"thin\": under $10,000 of liquidity. \"wash\": 24 h volume over 100 times its liquidity."
+ ]
+}
