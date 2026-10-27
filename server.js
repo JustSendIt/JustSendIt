@@ -6333,9 +6333,12 @@ async function runLedgerSnapshot(snapId, cid, token) {
       ? 'This token has more transfers than this server can rebuild its holder list from, and ' + EXPLORER_UNKEYED + ', so no holder list could be read.'
       : 'No holders could be read: the holder list is rebuilt from the chain’s own transfer records, and that could not be done just now. Try again in a few minutes.';
   } else {
-    const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
-    holders = rows.filter((r) => r.wallet !== ZERO_ADDR && r.wallet !== DEAD_ADDR).map((r) => [r.wallet, r.balance])
-      .sort((a, b) => (BigInt(b[1]) > BigInt(a[1]) ? 1 : BigInt(b[1]) < BigInt(a[1]) ? -1 : 0));
+    // a read that throws leaves the snapshot failed, never "running" for ever
+    try {
+      const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
+      holders = rows.filter((r) => r.wallet !== ZERO_ADDR && r.wallet !== DEAD_ADDR).map((r) => [r.wallet, r.balance])
+        .sort((a, b) => (BigInt(b[1]) > BigInt(a[1]) ? 1 : BigInt(b[1]) < BigInt(a[1]) ? -1 : 0));
+    } catch { holders = []; }
     const cap = SNAP_MAX_PAGES * SNAP_PAGE_SIZE;
     if (!lg.consistent) { status = 'partial'; reason = 'This token changes balances without the transfer records the holder list is rebuilt from, so the list does not add up.'; }
     else if (lg.at < t0 - 60000) { status = 'partial'; reason = 'The chain’s transfer records could not be brought up to date just now, so this is the holder list as of block ' + lg.block + ' (read ' + new Date(lg.at).toISOString().replace('T', ' ').slice(0, 16) + ' UTC), not of this moment.'; }
@@ -10474,8 +10477,8 @@ async function mktRadarSweep(tools) {
    the token cache's views are for what people chose to read, so nothing is written there; only Market Data keeps the reading.
      · the home chain: the reading the site already holds — the token cache's row, which its own refresher keeps current — when it is from
        the last hour and newer than the one Market Data has; nothing is fetched for it, and no holder ledger is walked;
-     · Ethereum and Solana: the Scanner's own read (lib/multichain.js), through an instance of its own that asks as the site itself
-       (Market Data's honest fetch and meters) and takes GoPlus only from a small share of its own, giving way when the site's GoPlus meter
+     · Ethereum and Solana: the Scanner's own read (lib/multichain.js), through an instance of its own on Market Data's fetch and meters
+       (the same identity as every request; its own size caps and budgets) and takes GoPlus only from a small share of its own, giving way when the site's GoPlus meter
        has nothing to spare. A read that could not ask GoPlus is not kept: without the security read a token scores better than it is. */
 const MKT_RESCAN_MAX_AGE = 60 * 60 * 1000;
 const MKT_GOPLUS_WAIT_MS = 4 * OUTBOUND_MAX_WAIT_MS;   // a re-scan waits its turn on its GoPlus share (one every 20 s at 3 a minute)
