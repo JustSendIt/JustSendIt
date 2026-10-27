@@ -51,6 +51,9 @@
 .mkt-ava-cf { width: 2em; height: 2em; }
 .mkt-ava-cf .mkt-mono { font-family: 'Rubik', sans-serif; font-weight: 800; font-size: max(var(--text-floor), 0.62em); letter-spacing: -0.02em; color: var(--text); }
 .mkt-ava-cf:has(img) .mkt-mono { visibility: hidden; }
+/* with no logo the initials are the label: a three-letter one (BSC, BNB) is wider than the disc at the text floor, so the disc
+   grows into a pill around it instead of cutting its last letter */
+.mkt-ava-cf:not(:has(img)) { width: auto; min-width: 2em; padding: 0 0.3em; border-radius: 1em; }
 .mkt-custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.6rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px dashed var(--edge-ctl); border-radius: 12px; }
 .mkt-custom[hidden] { display: none; }
 .mkt-date { display: flex; flex-direction: column; gap: 0.2rem; flex: 1 1 9rem; min-width: 0; }

@@ -583,6 +583,10 @@ async function browserWalk() {
         btns.every((x) => x.tag === 'BUTTON' && /^(true|false)$/.test(x.pressed) && x.tip.length > 20 && words(x.tip) !== words(x.name)) && b('all').name === 'Show tokens on All chains' && b('ethereum').name === 'Show Ethereum tokens' && /^Show Robinhood Chain tokens$/.test(b('robinhood').name)
         && b('ethereum').img && b('ethereum').img.alt === '' && b('ethereum').img.ok && b('ethereum').iniShown === false && b('solana').img === null && b('solana').ini === 'SO' && b('solana').iniShown === true && b('robinhood').ini === 'RC',
         JSON.stringify(btns).slice(0, 700));
+      // BSC's logo taken away as a failed load does: its three-letter initials must fit, as Solana's two do
+      const iniFit = await ev('(() => { const i = ' + filterBtn('bsc') + '.querySelector("img"); if (i) i.remove(); return [...document.querySelectorAll("#mkt-tchains .mkt-ava-cf")].filter((d) => !d.querySelector("img")).map((d) => { const m = d.querySelector(".mkt-mono"), r = m.getBoundingClientRect(), o = d.getBoundingClientRect(); return { t: m.textContent, fits: r.left >= o.left - 0.5 && r.right <= o.right + 0.5 && m.scrollWidth <= Math.ceil(r.width) + 1 }; }); })()');
+      check('  ...a logo that is missing leaves initials that fit their disc — three letters (BSC) as well as two (SO), never a letter cut off',
+        iniFit.some((x) => x.t.length === 3) && iniFit.some((x) => x.t === 'SO') && iniFit.every((x) => x.fits), JSON.stringify(iniFit));
       const usdg = rows0.filter((r) => r.t === USDG);
       check('  ...the list mixes the chains, each row naming its own (USDG on Robinhood Chain and on Ethereum are two rows, each saying which), and the caption says what the list is and which chains have not been read',
         rows0.some((r) => r.c === 'robinhood') && rows0.some((r) => r.c === 'ethereum') && rows0.every((r) => /^on (Robinhood Chain|Ethereum)$/.test(r.chb)) && usdg.length === 2 && usdg.map((r) => r.c).sort().join() === 'ethereum,robinhood'
