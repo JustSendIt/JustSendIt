@@ -13,7 +13,7 @@ import zlib from 'node:zlib';
 import path from 'node:path';
 import vm from 'node:vm';
 import { DB_PATH, KEY_PATH, ROOT, SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped, HONEST_UA } from './_rpc.mjs';
 const require = createRequire(ROOT + '/package.json');
 const { Wallet } = require('ethers');
 
@@ -34,7 +34,7 @@ const IDX_KEY = createHmac('sha256', DATA_KEY).update('blind-index').digest();
 const SEND = '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', PAIR = '0xf30bb531d0255969be155533abac34b22bd63414';
 const WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73', USDG = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
-const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
+const UA = { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA };
 async function rpc(method, params) {
   for (let i = 0; ; i++) {
     const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });

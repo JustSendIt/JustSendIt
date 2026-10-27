@@ -23,8 +23,8 @@ check('  ...and falls back to the system lookup only when c-ares has nothing', /
    2026-10-08 under the node's refusals: HTTP/1.1 with fetch's browser-style headers got a "Just a moment…" 403 while
    HTTP/2 with this plain User-Agent got 200 at the same moment. */
 check('the node has its own dispatcher: HTTP/2 allowed, the same resolver and connect timeout', /const rpcDispatcher = new UndiciAgent\(\{ allowH2: true, connect: \{ lookup: outboundLookup, timeout: 10000 \} \}\);/.test(SRC));
-check('  ...with a truthful User-Agent naming the site, not a browser', /const RPC_UA = 'JustSendIt\/1\.0 \(\+' \+ BASE_URL \+ '\)';/.test(SRC));
-check('  ...used by both chain fetches (one call, and a batch) and by nothing else', (SRC.match(/fetch\(RH_RPC, \{ method: 'POST', headers: \{ 'Content-Type': 'application\/json', 'User-Agent': RPC_UA \}, [^\n]*dispatcher: rpcDispatcher \}\);/g) || []).length === 2 && (SRC.match(/fetch\(RH_RPC/g) || []).length === 2 && !/fetch\(RH_RPC[^\n]*BROWSER_UA/.test(SRC));
+check('  ...with a truthful User-Agent naming the site, not a browser: the server\'s one identity (HONEST_UA, Market Data\'s own)', /const HONEST_UA = require\('\.\/lib\/marketdata\.js'\)\.HONEST_UA;/.test(SRC) && !/Mozilla\//.test(SRC));
+check('  ...used by both chain fetches (one call, and a batch), over the node\'s own dispatcher', (SRC.match(/fetch\(RH_RPC, \{ method: 'POST', headers: \{ 'Content-Type': 'application\/json', 'User-Agent': HONEST_UA \}, [^\n]*dispatcher: rpcDispatcher \}\);/g) || []).length === 2 && (SRC.match(/fetch\(RH_RPC/g) || []).length === 2);
 
 /* ═══ the lookup itself, with a stubbed resolver ═══ */
 const code = grab(/const OUT_DNS_TTL_MIN_MS = [^\n]+\n/, 'the TTL constants') +

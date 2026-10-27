@@ -20,7 +20,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DB_PATH, ROOT } from './_paths.mjs';
-import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped, HONEST_UA } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -31,7 +31,7 @@ const SEND = '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', PAIR = '0xf30bb531d02
 const WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73';
 const T = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef', pad = (a) => '0x' + a.slice(2).padStart(64, '0');
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
-const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
+const UA = { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function rpc(method, params) {
   for (let i = 0; ; i++) {

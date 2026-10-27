@@ -13,16 +13,19 @@
  *   npm test -- gate auth    — only suites whose names contain "gate" or "auth"
  *   npm test -- --keep       — leave the temporary data directory behind, and print where it is
  *   CHAIN_LIVE=1 npm test    — also the live reads of the public chain node (off by default: from the machine that serves
- *                              the site they throttle its own chain reads for minutes, and GitHub's runners are refused)
+ *                              the site they throttle its own chain reads for minutes, and GitHub's runners are refused);
+ *                              without it the throwaway server reaches nothing off this machine (THE GUARD, below)
  *
  * Exit code is 0 only if every assertion in every suite passed.
  */
 import { spawn } from 'node:child_process';
-import { readdirSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readdirSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { randomBytes } from 'node:crypto';
 import { ROOT } from './_paths.mjs';
 
@@ -122,9 +125,32 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
                  suite needs a live one), and its collectors are off whatever a .env says: tests/marketdata.mjs runs its own server
                  against fakes of every one of them. */
               MARKET_COLLECT: '0', MARKET_LLAMA_URL: DEAD, MARKET_LLAMA_COINS_URL: DEAD, MARKET_LLAMA_STABLES_URL: DEAD, MARKET_L2BEAT_URL: DEAD,
-              MARKET_GROWTHEPIE_URL: DEAD, MARKET_GROWTHEPIE_METRICS_URL: DEAD, MARKET_GT_URL: DEAD, MARKET_DS_URL: DEAD, MARKET_CG_URL: DEAD, MARKET_ETH_RPC_URL: DEAD, MARKET_LOGO_ORIGIN: DEAD };
+              MARKET_GROWTHEPIE_URL: DEAD, MARKET_GROWTHEPIE_METRICS_URL: DEAD, MARKET_GT_URL: DEAD, MARKET_DS_URL: DEAD, MARKET_CG_URL: DEAD, MARKET_ETH_RPC_URL: DEAD, MARKET_LOGO_ORIGIN: DEAD,
+              // no keyed explorer, whatever a .env says: the server then asks the explorer nothing (owner, 2026-10-27), which the guard below holds it to
+              ...(process.env.CHAIN_LIVE === '1' ? {} : { BLOCKSCOUT_URL: '' }) };
 
-const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'server.js'],
+/* THE GUARD (2026-10-27). The feeds the server reads at fixed addresses — Dexscreener, GoPlus, the stock quote, the logo CDNs —
+   have no env to point at a dead address, so a suite that opened a token used to send the throwaway server out to them for
+   real. Unless CHAIN_LIVE=1, a module loaded before server.js refuses every fetch that would leave this machine, the way a
+   dead address does, and writes one line saying where it was going (host and path, never a query) and as whom. After the
+   suites the runner reads that log and holds the server to its one identity: every attempt carried the honest User-Agent,
+   and none was to the keyless explorer. */
+const NETGUARD = process.env.CHAIN_LIVE === '1' ? null : path.join(dataDir, 'netguard.mjs');
+const NETLOG = path.join(dataDir, 'netguard.log');
+if (NETGUARD) writeFileSync(NETGUARD, `import { appendFileSync } from 'node:fs';
+const real = globalThis.fetch;
+globalThis.fetch = async function (input, init) {
+  const url = typeof input === 'string' ? input : (input && input.url) || String(input);
+  let u = null; try { u = new URL(url); } catch {}
+  if (u && (u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]')) return real.call(this, input, init);
+  const h = (init && init.headers) || {};
+  const ua = typeof h.get === 'function' ? h.get('user-agent') : (h['User-Agent'] || h['user-agent'] || null);
+  try { appendFileSync(${JSON.stringify(NETLOG)}, JSON.stringify({ to: u ? u.host + u.pathname : String(url).slice(0, 80), ua }) + '\\n'); } catch {}
+  throw new TypeError('fetch failed');
+};
+`);
+
+const server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', ...(NETGUARD ? ['--import', pathToFileURL(NETGUARD).href] : []), 'server.js'],
   { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let serverLog = '';
 server.stdout.on('data', d => { serverLog += d; });
@@ -194,6 +220,22 @@ if (process.env.CHAIN_LIVE !== '1') console.log('live chain reads are skipped (C
     if (verbose) for (const l of r.out.split('\n')) if (l.startsWith('PASS ')) console.log('      ' + l);
     // a suite that neither reported nor skipped has gone wrong in a way the summary cannot express — show it
     if (!r.ran && !r.skipped) for (const l of r.out.split('\n').slice(0, 14)) if (l.trim()) console.log('      ' + l);
+  }
+  /* What the guard refused, across every suite: each attempt as the site itself (the stock quote's identity says what it asks
+     for inside the same parentheses), and not one to the explorer — this run has no key for it. Two assertions of the runner's own. */
+  if (NETGUARD) {
+    const HONEST = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'marketdata.js')).HONEST_UA;
+    const tried = existsSync(NETLOG) ? readFileSync(NETLOG, 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return { to: l, ua: null }; } }) : [];
+    const masked = tried.filter((x) => !String(x.ua || '').startsWith(HONEST.slice(0, -1)));
+    const explorer = tried.filter((x) => /blockscout/i.test(String(x.to).split('/')[0]));
+    const fails = [];
+    if (masked.length) fails.push('FAIL ' + masked.length + ' request(s) off this machine without the honest User-Agent: ' + JSON.stringify(masked.slice(0, 4)));
+    if (explorer.length) fails.push('FAIL ' + explorer.length + ' request(s) to the explorer with no key: ' + JSON.stringify(explorer.slice(0, 4)));
+    pass += 2 - fails.length; total += 2;
+    const hosts = [...new Set(tried.map((x) => String(x.to).split('/')[0]))].sort();
+    console.log((fails.length ? '  ✗ ' : '  ✓ ') + 'netguard'.padEnd(14) + (2 - fails.length) + '/2  (' + tried.length + ' request(s) off this machine refused' + (hosts.length ? ': ' + hosts.join(', ') : '') + ')');
+    for (const f of fails) console.log('      ' + f);
+    if (fails.length) broken.push({ suite: 'netguard', fails });
   }
 } catch (e) {
   console.error('\n' + e.message);

@@ -102,8 +102,8 @@ const PEPE_V3 = '0x11950d141ecb863f01007add7d1a342041227b58';   // a real PEPE p
   check('  ...an empty window is GeckoTerminal having no candles, said as that — never "the pool exists; nobody traded it", a fact only a chain read of the swaps can give',
     /: 'GeckoTerminal has no candles for this pool in this window — that says nothing about whether it traded\.',/.test(LIB) && !/nobody traded it/.test(LIB));
   // the server
-  check('the server reads the module with its own fetchers, risk model and clock, and every upstream URL is env (so this suite can fake them)',
-    /const mc = \(\) => _mcInst \|\| \(_mcInst = MC\.createMultichain\(\{ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS \}\)\);/.test(SRC)
+  check('the server reads the module with its own fetchers, risk model, clock and identity (HONEST_UA), and every upstream URL is env (so this suite can fake them)',
+    /const mc = \(\) => _mcInst \|\| \(_mcInst = MC\.createMultichain\(\{ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS, userAgent: HONEST_UA \}\)\);/.test(SRC)
     && /ds: process\.env\.MC_DEXSCREENER_URL \|\| 'https:\/\/api\.dexscreener\.com'/.test(SRC) && /ethRpc: process\.env\.ETH_RPC_URL \|\| 'https:\/\/ethereum-rpc\.publicnode\.com'/.test(SRC) && /solRpc: process\.env\.SOL_RPC_URL \|\| 'https:\/\/api\.mainnet-beta\.solana\.com'/.test(SRC)
     && /ETH_RPC_URL=\nSOL_RPC_URL=\nMC_DEXSCREENER_URL=\nMC_GECKO_URL=\nMC_GOPLUS_URL=/.test(ENV));
   check('the scan route takes the address\'s chain (or ?chain=), tries Ethereum for a 0x address the home chain has nothing for or cannot read, and keeps the other chains\' scans in their own (chain, token) store',

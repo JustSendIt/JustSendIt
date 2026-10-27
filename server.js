@@ -2679,13 +2679,15 @@ function proposalView(p, me, c, cm) {
    handful of rapid reads — measured. A keyed endpoint (Alchemy serves chain 4663) goes in RPC_URL. */
 const RH_RPC = process.env.RPC_URL || 'https://rpc.mainnet.chain.robinhood.com';
 const RPC_RPM = Number(process.env.OUTBOUND_RPM_RPC) || 0;   // 0 = unmetered (the public node publishes no limit); set it with a paid plan
-const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
-/* The node is read as the server itself: a truthful User-Agent, over HTTP/2 when the node offers it, through the same
-   resolver as every other outbound call. Measured 2026-10-08 while the node's edge was refusing this address: the
-   same eth_blockNumber over HTTP/1.1 with fetch's browser-style headers answered a "Just a moment…" challenge (403),
-   and over HTTP/2 — with this plain User-Agent — answered 200 at the same moment; curl answered 200 either way. The
-   browser User-Agent above is kept for the feeds that still want one, not for the chain. */
-const RPC_UA = 'JustSendIt/1.0 (+' + BASE_URL + ')';
+/* ONE IDENTITY for every request this server makes — the node, every feed, the explorer, the images and the image proxy, the
+   sign-in providers, Sendy's model, the Telegram bot (owner, 2026-10-27: "yes switch the scanner to the honest identity too"):
+   the site's name and where to read about it, Market Data's own (lib/marketdata.js), and never a browser's. Feeds that would
+   only answer a browser are not asked as one; they answer this, or the figure is said as not read.
+   The node is read with it over HTTP/2 when the node offers it, through the same resolver as every other outbound call.
+   Measured 2026-10-08 while the node's edge was refusing this address: the same eth_blockNumber over HTTP/1.1 with fetch's
+   browser-style headers answered a "Just a moment…" challenge (403), and over HTTP/2 — with this plain User-Agent — answered
+   200 at the same moment; curl answered 200 either way. */
+const HONEST_UA = require('./lib/marketdata.js').HONEST_UA;
 const rpcDispatcher = new UndiciAgent({ allowH2: true, connect: { lookup: outboundLookup, timeout: 10000 } });
 const TOK = { SEND: '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', GWC: '0x61339f11384dde4b2dc3a33e75b4dc23cc620f22' };
 const SWAP_ROUTER = '0x89e5db8b5aa49aa85ac63f691524311aeb649eba';
@@ -2732,7 +2734,7 @@ async function rpc(method, params, paced) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 10000); // fast-fail a stalled RPC so a hung read can't freeze the pairs refresher
   try {
-    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': RPC_UA }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctrl.signal, dispatcher: rpcDispatcher });
+    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), signal: ctrl.signal, dispatcher: rpcDispatcher });
     if (!res.ok) { if (!paced && (res.status === 429 || res.status === 403)) paceYield(); throw new Error('rpc http ' + res.status); } // an HTTP error (429/500/503) must FAIL, not silently return null (which would read as a 0 balance → false OG revoke / streak reset)
     const j = await res.json();
     if (j.error) { if (!paced && (j.error.code === 429 || /too many requests/i.test(String(j.error.message || '')))) paceYield(); throw new Error(j.error.message); }   // the site's own reads were refused: the wallet tracker steps back
@@ -3247,7 +3249,7 @@ async function rpcBatch(calls) {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), 20000);
   try {
-    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': RPC_UA }, body: JSON.stringify(calls.map((c, i) => ({ jsonrpc: '2.0', id: i, method: c[0], params: c[1] }))), signal: ctrl.signal, dispatcher: rpcDispatcher });
+    const res = await fetch(RH_RPC, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA }, body: JSON.stringify(calls.map((c, i) => ({ jsonrpc: '2.0', id: i, method: c[0], params: c[1] }))), signal: ctrl.signal, dispatcher: rpcDispatcher });
     if (!res.ok) throw new Error('rpc http ' + res.status);
     const j = await res.json();
     if (!Array.isArray(j)) throw new Error((j && j.error && j.error.message) || 'the chain did not answer');   // a throttled batch comes back as ONE error object
@@ -4079,6 +4081,9 @@ async function readWalletHistory(w, uid, step, guard, prior, opts) {
    answers whenever it refuses; the explorer is then left alone for ten minutes rather than asked, and made to wait
    for, on every wallet. With no keyed explorer the chain answers directly: the public host refuses servers. */
 const EXPLORER_KEYED = !!process.env.BLOCKSCOUT_URL;
+/* With no key the explorer's API is not asked at all, by anything (owner, 2026-10-27): the public host meets a server with a
+   Cloudflare challenge, and this site does not try to get past one. What it alone gave is said as not read, in these words. */
+const EXPLORER_UNKEYED = 'the explorer is read only with an API key (BLOCKSCOUT_URL)';
 const EXPLORER_REST_MS = 10 * 60 * 1000;
 let explorerRestUntil = 0;
 async function ogTransfers(wallet, token, opts) {
@@ -4965,7 +4970,8 @@ function communityCardView(c, me) {
     status: c.status, memberCount: c.member_count, qualCount: c.qual_count, need: LIVE_THRESHOLD, remaining: Math.max(0, LIVE_THRESHOLD - c.qual_count),
     // the sandbox has no token: its market fields are null and the company's stock quote rides in `stock`
     holders: c.demo ? null : (lg && lg.count != null ? lg.count : c.c_holders), mcap: c.demo ? null : c.c_mc, price: c.demo ? null : c.c_price, priceChange: c.demo ? null : c.c_pc24, liq: c.demo ? null : c.c_liq,
-    holdersSource: c.demo ? null : (lg && lg.count != null ? 'chain' : 'explorer'),   // where the holder count came from
+    // where the holder count came from: the ledger; else the count last stored (a keyed explorer refreshes it — with no key it is the figure the community was made with)
+    holdersSource: c.demo ? null : (lg && lg.count != null ? 'chain' : c.c_holders == null ? null : EXPLORER_KEYED ? 'explorer' : 'recorded'),
     supply: communitySupplyView(c),                                                       // members' share of supply (aggregate only)
     stock: c.demo ? stockView() : null,
     level: levelForXp(c.xp), activity: Math.round(act * 10) / 10, activityTier: actTier(act),
@@ -5026,10 +5032,12 @@ const STOCK_SOURCES = [
   { url: 'https://query1.finance.yahoo.com/v8/finance/chart/' + DEMO_STOCK.symbol + '?range=1d&interval=1d', parse: parseYahooQuote },
 ];
 const QUOTE_MAX_BYTES = 256 * 1024;
+// the site's one identity, saying what it asks for and how often
+const QUOTE_UA = HONEST_UA.replace(/\)$/, '; one stock quote for one page, at most once per 5 minutes)');
 async function fetchQuoteJson(url) {
   const ac = new AbortController(); const tm = setTimeout(() => ac.abort(), 8000);
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': 'JustSendIt/1.0 (+' + BASE_URL + '; one stock quote for one page, at most once per 5 minutes)', Accept: 'application/json' }, signal: ac.signal, redirect: 'error' });
+    const r = await fetch(url, { headers: { 'User-Agent': QUOTE_UA, Accept: 'application/json' }, signal: ac.signal, redirect: 'error' });
     if (!r.ok) return null;
     const len = Number(r.headers.get('content-length') || 0); if (len > QUOTE_MAX_BYTES) return null;
     const txt = await r.text(); if (txt.length > QUOTE_MAX_BYTES) return null;
@@ -5521,14 +5529,15 @@ async function refreshCommunities() {
     }
   }
   for (const k of tokens) if (ownPoolOf(k) && !(byToken[k] && byToken[k].price > 0)) { const r = await ownPoolRow(k); if (r) byToken[k] = r; }   // $SEND / $GWC from their pools
-  // Holder counts aren't in the Dexscreener batch — refresh them from Blockscout so the grid's
-  // "holders" figure stays live like the rest of the market data (bounded per cycle to be gentle).
+  // Holder counts aren't in the Dexscreener batch — refresh them from the chain's ledger, or from a keyed Blockscout, so the
+  // grid's "holders" figure stays live like the rest of the market data (bounded per cycle to be gentle). A token with neither
+  // keeps the count it last had (c_holders is only ever overwritten by a reading).
   const holdersByToken = {};
   let explorerReads = 0;
   for (const tok of tokens) {
     const ledger = holderLedger(tok);                               // the chain's own count, when the ledger has been built
     if (ledger && ledger.count != null) { holdersByToken[tok] = ledger.count; continue; }
-    if (explorerReads++ >= 24) continue;
+    if (!EXPLORER_KEYED || explorerReads++ >= 24) continue;
     const meta = await jget(BLOCKSCOUT + '/api/v2/tokens/' + tok);
     if (meta) { const hc = meta.holders_count != null ? Number(meta.holders_count) : (meta.holders != null ? Number(meta.holders) : NaN); if (hc > 0) holdersByToken[tok] = hc; }
   }
@@ -5855,15 +5864,17 @@ function weekWindow(t) {
 
 /* =========================================================================
    LIVE NEW-PAIRS TRACKER — reads brand-new token pairs straight from the DEX
-   factory on-chain, enriches with Dexscreener market data + Blockscout holder/
-   verification data, and computes honest risk flags. All reads are public and
+   factory on-chain, enriches with Dexscreener market data, GoPlus's contract read
+   and the chain's own holder ledger (Blockscout's too, when it has a key), and
+   computes honest risk flags. All reads are public and
    server-cached; the client only ever hits our own /api/pairs/new. Nothing here
    moves funds or trusts client input.
    ========================================================================= */
 /* The explorer, overridable the same way and for a sharper reason: the keyless public host answers 403
-   with a Cloudflare bot challenge to a server's request (measured), so holder counts, concentration and
-   contract-power flags read as unknown until BLOCKSCOUT_URL points at a keyed endpoint. */
+   with a Cloudflare bot challenge to a server's request (measured), so its API is asked only when
+   BLOCKSCOUT_URL points at a keyed endpoint (EXPLORER_KEYED). The public host stays as the link people open. */
 const BLOCKSCOUT = (process.env.BLOCKSCOUT_URL || 'https://robinhoodchain.blockscout.com').replace(/\/+$/, '');
+const EXPLORER_HOST = (() => { try { return new URL(BLOCKSCOUT).host; } catch { return ''; } })();
 const FACTORY = '0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f';           // UniswapV2-style factory (router.factory())
 const WETH_ADDR = '0x0bd7d308f8e1639fab988df18a8011f41eacad73';
 const USDG_ADDR = '0x5fc5360d0400a0fd4f2af552add042d716f1d168';         // Global Dollar stablecoin
@@ -6044,6 +6055,8 @@ function jgetCached(url, ttl) {
   jgetInflight.set(url, pr);
   return pr;
 }
+// one of the explorer's API reads (a path under BLOCKSCOUT), cached like any other — and with no key, not asked: null at once
+function explorerGet(apiPath, ttl) { return EXPLORER_KEYED ? jgetCached(BLOCKSCOUT + apiPath, ttl) : Promise.resolve(null); }
 
 /* Two different answers used to collapse into the same `null`:
      "the upstream answered, and there is nothing there"   → the token really is unlisted
@@ -6152,10 +6165,11 @@ async function jgetR(url, maxWait) {   // maxWait: how long our own meter may ho
   try {
     let host = '';
     try { host = new URL(url).host; } catch {}
+    if (host && host === EXPLORER_HOST && !EXPLORER_KEYED) return { ok: false, data: null, reason: EXPLORER_UNKEYED };   // never the keyless explorer, whoever builds the URL
     if (host) { try { await outboundTake(host, maxWait == null ? OUTBOUND_MAX_WAIT_MS : maxWait); } catch (e) { return { ok: false, data: null, reason: 'rate-limited' }; } }   // our own meter, before theirs
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json' }, signal: ctrl.signal });
+    const res = await fetch(url, { headers: { 'User-Agent': HONEST_UA, accept: 'application/json' }, signal: ctrl.signal });
     clearTimeout(to);
     if (!res.ok) return { ok: false, data: null, reason: res.status === 429 ? 'rate-limited' : 'upstream ' + res.status };
     return { ok: true, data: await res.json(), reason: null };
@@ -6169,10 +6183,11 @@ async function jget(url) { return (await jgetR(url)).data; }
 async function jgetHR(url, headers, maxWait) {
   try {
     let host = ''; try { host = new URL(url).host; } catch {}
+    if (host && host === EXPLORER_HOST && !EXPLORER_KEYED) return { ok: false, data: null, reason: EXPLORER_UNKEYED };
     if (host) { try { await outboundTake(host, maxWait == null ? OUTBOUND_MAX_WAIT_MS : maxWait); } catch { return { ok: false, data: null, reason: 'rate-limited' }; } }
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json', ...(headers || {}) }, signal: ctrl.signal });
+    const res = await fetch(url, { headers: { 'User-Agent': HONEST_UA, accept: 'application/json', ...(headers || {}) }, signal: ctrl.signal });
     clearTimeout(to);
     if (!res.ok) return { ok: false, data: null, reason: res.status === 429 ? 'rate-limited' : 'upstream ' + res.status };
     return { ok: true, data: await res.json(), reason: null };
@@ -6181,7 +6196,9 @@ async function jgetHR(url, headers, maxWait) {
   }
 }
 /* ===== Community holder snapshots ==================================================================
-   Walks Blockscout's paginated holders endpoint and freezes the full holder list at a moment in time.
+   Walks Blockscout's paginated holders endpoint and freezes the full holder list at a moment in time —
+   when the explorer has a key (EXPLORER_KEYED); without one the chain's own holder ledger is frozen
+   instead (runLedgerSnapshot, below).
 
    TWO MEASURED FACTS drive this design, both learned the hard way against the live explorer:
    1. items_count > 50 returns HTTP 200 with an EMPTY list and no cursor. The page size is therefore
@@ -6215,7 +6232,7 @@ async function snapPage(token, cursor) {
     try {
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), SNAP_PAGE_TIMEOUT);
-      const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json' }, signal: ctrl.signal });
+      const res = await fetch(url, { headers: { 'User-Agent': HONEST_UA, accept: 'application/json' }, signal: ctrl.signal });
       clearTimeout(to);
       // The explorer throttles in two different shapes: a hard 429, and a soft "200 with an empty list".
       // Both mean slow down, and both are retried with the long backoff rather than believed.
@@ -6233,6 +6250,7 @@ async function snapPage(token, cursor) {
 }
 
 async function runSnapshot(snapId, cid, token) {
+  if (!EXPLORER_KEYED) return runLedgerSnapshot(snapId, cid, token);   // the keyless explorer is not asked: the chain's own ledger answers
   const seen = new Map();           // address -> raw value string (dedupe: paging can repeat a row)
   let cursor = null, pages = 0, failedAt = null, failCode = 0;
   try {
@@ -6257,7 +6275,6 @@ async function runSnapshot(snapId, cid, token) {
   const expected = (meta && meta.holders_count != null && Number(meta.holders_count) > 0) ? Number(meta.holders_count) : null;
 
   const holders = [...seen.entries()].sort((a, b) => (BigInt(b[1]) > BigInt(a[1]) ? 1 : BigInt(b[1]) < BigInt(a[1]) ? -1 : 0));
-  let held = 0n; for (const [, v] of holders) { try { held += BigInt(v); } catch {} }
 
   let status = 'complete', reason = null;
   if (failedAt != null) {
@@ -6271,7 +6288,13 @@ async function runSnapshot(snapId, cid, token) {
   else if (expected != null && holders.length < Math.floor(expected * 0.98)) {
     status = 'partial'; reason = 'The explorer reports ' + expected.toLocaleString('en-US') + ' holders but only ' + holders.length.toLocaleString('en-US') + ' could be read.';
   }
-
+  snapStore(snapId, holders, { status, reason, symbol: (meta && meta.symbol) || null, decimals: meta && meta.decimals != null ? Number(meta.decimals) : 18,
+    totalSupply: (meta && meta.total_supply) ? String(meta.total_supply) : null, expected, pages });
+  snapRunning.delete(cid);
+}
+// holders: [[address, raw balance string]] largest first — written in gzipped chunks, with the header row, in one transaction
+function snapStore(snapId, holders, s) {
+  let held = 0n; for (const [, v] of holders) { try { held += BigInt(v); } catch {} }
   try {
     db.exec('BEGIN');
     let chunks = 0;
@@ -6283,15 +6306,44 @@ async function runSnapshot(snapId, cid, token) {
     }
     db.prepare(`UPDATE holder_snapshots SET status=?, reason=?, finished_at=?, symbol=?, decimals=?, total_supply=?,
                 supply_held=?, holder_count=?, expected_count=?, pages=?, top20=? WHERE id=?`)
-      .run(status, reason, now(),
-           (meta && meta.symbol) || null,
-           meta && meta.decimals != null ? Number(meta.decimals) : 18,
-           (meta && meta.total_supply) ? String(meta.total_supply) : null,
-           held.toString(), holders.length, expected, pages,
+      .run(s.status, s.reason, now(), s.symbol, s.decimals, s.totalSupply,
+           held.toString(), holders.length, s.expected, s.pages,
            JSON.stringify(holders.slice(0, 20)), snapId);
     db.exec('COMMIT');
   } catch (e) { try { db.exec('ROLLBACK'); } catch {}
     try { db.prepare("UPDATE holder_snapshots SET status='failed', reason=?, finished_at=? WHERE id=?").run('Could not store the snapshot.', now(), snapId); } catch {} }
+}
+/* With no keyed explorer the snapshot is the chain's own holder ledger (holder_balances: every Transfer event the token has
+   emitted, folded into balances), brought up to date first and frozen as of the block it is complete to — the same list the
+   explorer would have paged through, without hundreds of calls to it. There is no second count to check it against, so what
+   can be checked is said: a ledger the node would not bring up to date is the list as of its last block (partial, with the
+   block and when it was read); a token that moves balances without Transfer events cannot be rebuilt from them (partial); one
+   too large to ledger here, or a ledger that could not be built, gives no list at all (failed). The burn and zero addresses
+   are not holders, as everywhere the ledger is read. */
+const SNAP_LEDGER_WAIT_MS = 2 * 60 * 1000;   // a first build of a busy token's ledger takes a while — the snapshot runs in the background
+async function runLedgerSnapshot(snapId, cid, token) {
+  const tok = String(token || '').toLowerCase(), t0 = now();
+  let lg = null, tooBig = false;
+  try { lg = await ensureLedger(tok, { wait: true, waitMs: SNAP_LEDGER_WAIT_MS, freshMs: 60000 }); } catch {}   // brought up to date unless read in the last minute
+  try { const r = db.prepare('SELECT status FROM holder_index WHERE token_addr=?').get(tok); tooBig = !!(r && r.status === 'too-big'); } catch {}
+  let holders = [], status = 'complete', reason = null;
+  if (!lg || lg.count == null) {
+    status = 'failed';
+    reason = tooBig
+      ? 'This token has more transfers than this server can rebuild its holder list from, and ' + EXPLORER_UNKEYED + ', so no holder list could be read.'
+      : 'No holders could be read: the holder list is rebuilt from the chain’s own transfer records, and that could not be done just now. Try again in a few minutes.';
+  } else {
+    const rows = db.prepare('SELECT wallet, balance FROM holder_balances WHERE token_addr=? AND positive=1').all(tok);
+    holders = rows.filter((r) => r.wallet !== ZERO_ADDR && r.wallet !== DEAD_ADDR).map((r) => [r.wallet, r.balance])
+      .sort((a, b) => (BigInt(b[1]) > BigInt(a[1]) ? 1 : BigInt(b[1]) < BigInt(a[1]) ? -1 : 0));
+    const cap = SNAP_MAX_PAGES * SNAP_PAGE_SIZE;
+    if (!lg.consistent) { status = 'partial'; reason = 'This token changes balances without the transfer records the holder list is rebuilt from, so the list does not add up.'; }
+    else if (lg.at < t0 - 60000) { status = 'partial'; reason = 'The chain’s transfer records could not be brought up to date just now, so this is the holder list as of block ' + lg.block + ' (read ' + new Date(lg.at).toISOString().replace('T', ' ').slice(0, 16) + ' UTC), not of this moment.'; }
+    if (holders.length > cap) { holders = holders.slice(0, cap); status = 'partial'; reason = 'This token has more holders than one snapshot stores (' + cap.toLocaleString('en-US') + ').'; }
+    else if (!holders.length) { status = 'failed'; reason = 'No holders could be read from the chain’s transfer records.'; }
+  }
+  let symbol = null; try { const c = db.prepare('SELECT symbol FROM communities WHERE id=?').get(cid); symbol = (c && c.symbol) || null; } catch {}
+  snapStore(snapId, holders, { status, reason, symbol, decimals: lg && lg.decimals != null ? Number(lg.decimals) : 18, totalSupply: (lg && lg.supply) || null, expected: null, pages: 0 });
   snapRunning.delete(cid);
 }
 
@@ -6317,7 +6369,7 @@ async function jgetH(url, headers) { // jget with custom headers (for the option
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 8000);
-    const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'application/json', ...headers }, signal: ctrl.signal });
+    const res = await fetch(url, { headers: { 'User-Agent': HONEST_UA, accept: 'application/json', ...headers }, signal: ctrl.signal });
     clearTimeout(to);
     if (!res.ok) return null;
     return await res.json();
@@ -6486,6 +6538,8 @@ function goplusPowers(d) {
 }
 async function checkLpLock(pairAddr) {
   if (!pairAddr) return { known: false };
+  // asked only after the chain's own read of the LP (lpBurnRead) gave no answer
+  if (!EXPLORER_KEYED) return { known: false, reason: 'the pool’s LP could not be read on the chain just now, and ' + EXPLORER_UNKEYED };
   try {
     const lpTok = await jget(BLOCKSCOUT + '/api/v2/tokens/' + pairAddr);
     const supplyRaw = lpTok && lpTok.total_supply ? BigInt(lpTok.total_supply) : 0n;
@@ -6508,7 +6562,7 @@ function contractSummaryOf(o) {
   const via = o.source === 'goplus' ? ' (read by GoPlus Security, an automated scanner — not an audit)' : '';
   if (o.honeypot === true) return 'An automated scan reports this token as a HONEYPOT — it says a buy goes through and a sell does not. Treat it as unsellable until you have proof otherwise' + via + '.';
   if (o.verified === false) return 'The contract source is NOT published, so no one can read what it actually does' + via + '. That is itself a red flag; treat it as high-risk.';
-  if (o.verified == null) return 'Couldn’t read the contract right now.';
+  if (o.verified == null) return o.why ? 'Couldn’t read the contract: ' + o.why + '.' : 'Couldn’t read the contract right now.';
   if (!o.powers.length) return 'No obvious owner powers to mint, blacklist, pause, toggle trading, or change taxes were found — the usual honeypot/rug levers weren’t detected. Still DYOR; a scan isn’t an audit.';
   const live = o.powers.filter((p) => !p.neutralised), dead = o.powers.filter((p) => p.neutralised);
   const by = o.source === 'goplus' ? 'An automated scan of the contract' : 'A heuristic read of the verified source';
@@ -6541,7 +6595,7 @@ async function analyzeContract(tokenAddr, pairAddr) {
   if (cached && now() - cached.t < CONTRACT_TTL) return cached.v;
   const out = { verified: null, name: null, powers: [], liquidity: { known: false }, summary: '', source: null };
   /* GoPlus first: it answers on this chain, and its flags are the same vocabulary the source scanner
-     produces. The explorer's verified source is still read when it will answer — it names the contract
+     produces. The explorer's verified source is still read when it has a key — it names the contract
      and is a second opinion — but it is no longer the only way to learn what an owner can do. */
   let g = null, src = '';
   try {
@@ -6564,25 +6618,27 @@ async function analyzeContract(tokenAddr, pairAddr) {
       }
     }
   } catch {}
-  try {
+  if (EXPLORER_KEYED) try {
     const sc = await jget(BLOCKSCOUT + '/api/v2/smart-contracts/' + tok);
     if (sc) { if (out.verified == null) out.verified = !!sc.is_verified; out.name = String(sc.name || '').slice(0, 60); src = String(sc.source_code || ''); if (out.verified && src && !out.powers.length) out.powers = scanContractSource(src); }
   } catch {}
+  // nobody said whether the source is published: the reason, said in the summary (never "right now" for a read that is never made)
+  if (out.verified == null && !EXPLORER_KEYED) out.why = (g ? 'GoPlus Security’s reading does not say whether its source is published' : 'GoPlus Security gave no reading of it') + ', and ' + EXPLORER_UNKEYED;
   /* A renounced owner cannot call the owner's functions (owner, 2026-10-24) — the SAME rule as the profile's (lib/contractfacts.js):
      the owner read the same way (owner() first, GoPlus's owner_address only when there is no owner() — homeOwner), and only the
      owner's own calls are marked neutralised: mint, blacklist, pause, change balances, change the tax or one wallet's tax, change
      the trade caps. A cap, a cooldown, a whitelist or a trading switch is the token's behaviour and still applies; a take-back path,
      a hidden owner or a proxy makes the renounce not real (review, 2026-10-24). With no GoPlus reading, the source scan cannot see
      who gates a function — another role, a pending owner, a hard-coded wallet — so a source that shows any of those neutralises
-     nothing. */
+     nothing; and with neither a reading nor a source, whether a dead owner() is the whole story is not known (null). */
   let ownerInfo = null; try { ownerInfo = await tokenOwner(tok); } catch {}
   const own = homeOwner(ownerInfo, g);
   const notReal = g ? (gpFlag(g.can_take_back_ownership) === true || gpFlag(g.hidden_owner) === true || gpFlag(g.is_proxy) === true)
-    : /onlyRole|hasRole|AccessControl|_previousOwner|pendingOwner|\bunlock\s*\(|msg\.sender\s*==\s*_?[A-Za-z]|upgradeTo|Proxy\b/.test(src);
-  out.renounced = own.renounced === true ? !notReal : own.renounced === false ? false : null;
+    : src ? /onlyRole|hasRole|AccessControl|_previousOwner|pendingOwner|\bunlock\s*\(|msg\.sender\s*==\s*_?[A-Za-z]|upgradeTo|Proxy\b/.test(src) : null;
+  out.renounced = own.renounced === true ? (notReal == null ? null : !notReal) : own.renounced === false ? false : null;
   out.ownerBurn = own.ownerBurn; out.owner = own.owner; out.ownerIsContract = own.ownerIsContract;
   if (out.renounced === true) { const NEUTRAL = new Set(['mint', 'blacklist', 'pausable', 'fees', 'balance', 'perwallet', 'maxlimits-mod']); out.powers = out.powers.map((p) => NEUTRAL.has(p.key) ? Object.assign({}, p, { neutralised: true }) : p); }
-  // the LP: GoPlus's (same pool) first; else the chain's own read of what sits at dead addresses; else the explorer's holder list
+  // the LP: GoPlus's (same pool) first; else the chain's own read of what sits at dead addresses; else a keyed explorer's holder list
   if (!out.liquidity.known && pair && await pairContainsToken(pair, tok)) {
     const lb = await lpBurnRead(pair);
     if (lb && lb.emptied) out.liquidity = { known: true, emptied: true, source: 'chain' };
@@ -6934,7 +6990,7 @@ async function brandImage(tokenAddr, kind) {
   try {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 12000);
-    const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'image/*' }, signal: ctrl.signal, redirect: 'error' });
+    const res = await fetch(url, { headers: { 'User-Agent': HONEST_UA, accept: 'image/*' }, signal: ctrl.signal, redirect: 'error' });
     clearTimeout(to);
     if (!res.ok) return hit || null;                                        // keep serving the last good copy
     const len = Number(res.headers.get('content-length') || 0);
@@ -7088,7 +7144,7 @@ function fetchLogo(tok, url, source) {
       const to = setTimeout(() => ctrl.abort(), 12000);
       let buf;
       try {
-        const res = await fetch(url, { headers: { 'User-Agent': BROWSER_UA, accept: 'image/*' }, signal: ctrl.signal, redirect: 'error' });
+        const res = await fetch(url, { headers: { 'User-Agent': HONEST_UA, accept: 'image/*' }, signal: ctrl.signal, redirect: 'error' });
         if (!res.ok) throw new Error('http ' + res.status);
         const len = Number(res.headers.get('content-length') || 0);
         if (len && len > LOGO_MAX_BYTES) throw new Error('too large');
@@ -8240,11 +8296,11 @@ async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDe
     }
   } catch { out.types.dev = []; out.types.block0 = []; }
 
-  /* The deployer's own trades. The address comes from the explorer's creator field via the token cache;
-     its trades come from the same transfer walk the Send Call size check uses, so this costs one
-     explorer read and only when a deployer is actually known. */
+  /* The deployer's own trades. The address comes from the token cache (a keyed explorer's creator field, else
+     GoPlus Security's creator_address); its trades from a keyed explorer's transfer list, else the chain's own
+     Transfer logs (the reader the wallet checks use), and only when a deployer is actually known. */
   /* Only when the layer is actually switched on. This is the one marker type that costs a network read —
-     a token-cache lookup plus a Blockscout transfer walk — and it was being paid on every chart open by
+     a token-cache lookup plus a transfer walk — and it was being paid on every chart open by
      everyone, including the charts on the landing page, whether or not anybody was looking at the layer.
      Every other layer here is an indexed read on a table we already keep. */
   if (!wantDev) {
@@ -8258,14 +8314,15 @@ async function chartMarkers(tokenAddr, pairAddr, fromMs, toMs, me, tfSec, wantDe
       out.types.dev = markerCluster(trades, span);
       out.notes.dev = null;
     } else if (!dev) {
-      out.notes.dev = 'The explorer does not name a deployer for this token.';
+      out.notes.dev = EXPLORER_KEYED ? 'Neither the explorer nor GoPlus Security names a deployer for this token.' : 'No deployer is named for this token: GoPlus Security names none, and ' + EXPLORER_UNKEYED + '.';
     }
   } catch { out.notes.dev = 'The deployer’s trades could not be read just now.'; }
 
   return out;
 }
-/* The deployer's buys and sells, from the pool's own transfer list. Cached, because a deployer's history
-   does not change fast and a chart is not a reason to re-walk it on every load. */
+/* The deployer's buys and sells, from the pool's own transfer list — a keyed explorer's page of it, or with no key the
+   chain's Transfer logs to and from the deployer (rpcTokenTransfers, the same rows in the same shape). Cached, because a
+   deployer's history does not change fast and a chart is not a reason to re-walk it on every load. */
 const devTradeCache = new Map();
 const devTradeInflight = new Map();          // single flight, for the same reason buildCandles has one
 const DEV_TRADE_TTL = 10 * 60 * 1000;
@@ -8278,8 +8335,9 @@ async function devTrades(dev, tokenAddr, pairAddr, fromMs, toMs) {
       job = (async () => {
         const me = dev.toLowerCase(), pool = pairAddr.toLowerCase();
         const rows = [];
-        const j = await jget(BLOCKSCOUT + '/api/v2/addresses/' + dev + '/token-transfers?type=ERC-20&token=' + tokenAddr);
-        for (const it of (j && j.items) || []) {
+        const items = EXPLORER_KEYED ? (((await jget(BLOCKSCOUT + '/api/v2/addresses/' + dev + '/token-transfers?type=ERC-20&token=' + tokenAddr)) || {}).items || [])
+          : await rpcTokenTransfers(dev, tokenAddr);   // throws when the chain cannot be read: said as unread by the caller, never as no trades
+        for (const it of items) {
           const f = ((it.from && it.from.hash) || '').toLowerCase(), tt = ((it.to && it.to.hash) || '').toLowerCase();
           const ts = Date.parse(it.timestamp || it.block_timestamp || '') || 0;
           if (!ts) continue;
@@ -8294,8 +8352,8 @@ async function devTrades(dev, tokenAddr, pairAddr, fromMs, toMs) {
       devTradeInflight.set(key, job);
       job.catch(() => {}).finally(() => { devTradeInflight.delete(key); });
     }
-    // an explorer that will not answer must not blank a history we already read once
-    try { await job; } catch { return hit ? hit.rows.filter(r => r.t >= fromMs && r.t <= toMs).slice(0, MARKER_MAX) : []; }
+    // a source that will not answer must not blank a history we already read once — and with none read, it is unread, not empty
+    try { await job; } catch (e) { if (hit) return hit.rows.filter(r => r.t >= fromMs && r.t <= toMs).slice(0, MARKER_MAX); throw e; }
   }
   return (devTradeCache.get(key) || { rows: [] }).rows.filter(r => r.t >= fromMs && r.t <= toMs).slice(0, MARKER_MAX);
 }
@@ -8808,7 +8866,7 @@ const MC_URLS = {
   solRpc: process.env.SOL_RPC_URL || 'https://api.mainnet-beta.solana.com',
 };
 let _mcInst = null;
-const mc = () => _mcInst || (_mcInst = MC.createMultichain({ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS }));
+const mc = () => _mcInst || (_mcInst = MC.createMultichain({ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS, userAgent: HONEST_UA }));
 const chainMetaFor = (slug) => MC.publicMeta(slug);
 /* ===== Swap in my wallet (owner, 2026-10-23): "a simple button on every token on-chain details that takes the contract address and
    sets up a swap in their wallet to purchase that token they are looking at." lib/swapkit.js quotes and builds the transaction —
@@ -8817,7 +8875,7 @@ const chainMetaFor = (slug) => MC.publicMeta(slug);
 const SWAPKIT = require('./lib/swapkit.js');
 let _skInst = null;
 const swapkit = () => _skInst || (_skInst = SWAPKIT.createSwapKit({
-  mc: mc(), ethUsd, take: outboundTake, now,
+  mc: mc(), ethUsd, take: outboundTake, now, userAgent: HONEST_UA,
   jgetR: (u, headers) => (headers && Object.keys(headers).length ? jgetHR(u, headers) : jgetR(u)),
   rhCall: async (to, data) => {
     try { return await rpc('eth_call', [{ to, data }, 'latest']); }
@@ -9600,7 +9658,7 @@ async function gaReport(force) {
   if (!gaClient) gaClient = GA4.makeClient({
     propertyId: GA_PROPERTY, now,
     readKey: async () => { try { return await fs.promises.readFile(GA_KEY_FILE, 'utf8'); } catch { throw new Error('the key file (GA_KEY_FILE) could not be read by the server'); } },
-    fetch: (u, o) => fetch(u, { ...o, signal: AbortSignal.timeout(20000) }),
+    fetch: (u, o) => fetch(u, { ...o, headers: { ...((o && o.headers) || {}), 'User-Agent': HONEST_UA }, signal: AbortSignal.timeout(20000) }),
     tokenUrl: process.env.GA_TOKEN_URL || undefined, apiBase: process.env.GA_API_BASE || undefined, adminBase: process.env.GA_ADMIN_BASE || undefined, measurementId: GA_ID,
   });
   /* A read in which Google answered nothing (an outage, a refused key) never replaces the last good figures: they stay,
@@ -9914,18 +9972,23 @@ let usdgDecimals = null; // cached once (Global Dollar's decimals — don't hard
 
 function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tokenDec, gp, lpBurn) {
   /* gp: the GoPlus reading for this token, when we have one. It is preferred over the explorer for the
-     holder count, the top-ten list, verification and ownership — the explorer refuses server requests on
-     this chain, so those readings are otherwise simply absent. Every field falls back to the explorer's
-     answer, and then to null: an unknown is still rendered as an unknown, never as a zero. */
+     holder count, the top-ten list, verification and ownership — the explorer is asked only with a key
+     (meta, addr and holdersData are null without one), so those readings are otherwise simply absent. Every
+     field falls back to the explorer's answer, and then to null: an unknown is still rendered as an unknown,
+     never as a zero. */
   const g = (gp && gp.raw) || null;
   const decimals = tokenDec != null ? tokenDec : (meta && meta.decimals != null ? Number(meta.decimals) : 18); // prefer authoritative on-chain decimals
-  const totalSupplyRaw = meta && meta.total_supply ? meta.total_supply : null;
+  const ledger = holderLedger(t.token);
+  // the supply: a keyed explorer's, else the chain's own totalSupply() as the holder ledger last read it, else not read (null)
+  const totalSupplyRaw = meta && meta.total_supply ? meta.total_supply : (ledger && ledger.supply ? ledger.supply : null);
+  // the deployer: a keyed explorer's creator, else GoPlus Security's creator_address (the same reading as the Ethereum scan's), else not read
+  const deployer = (addr && addr.creator_address_hash) ? String(addr.creator_address_hash).toLowerCase()
+    : (g && /^0x[0-9a-fA-F]{40}$/.test(String(g.creator_address || ''))) ? String(g.creator_address).toLowerCase() : null;
   const holdersVal = meta ? (meta.holders_count != null ? meta.holders_count : meta.holders) : null;
   // treat 0 as "not indexed yet" (unknown), not a real zero — brand-new tokens lag either index
   const gpCount = g ? gpNum(g.holder_count) : null;
   /* The chain's own ledger first (holderLedger: every Transfer event folded into balances — see indexHolders);
      GoPlus and the explorer are what we show until a token's ledger has been built. `source` says which. */
-  const ledger = holderLedger(t.token);
   const holdersAt = ledger ? ledger.at : (gp && gp.at ? gp.at : null);   // when the holder figures were read
   const count = (ledger && ledger.count != null) ? ledger.count
     : (gpCount != null && gpCount > 0) ? gpCount
@@ -10013,7 +10076,7 @@ function buildPair(t, dex, meta, addr, holdersData, ts, reserves, ownerInfo, tok
       decimals, totalSupply: totalSupplyRaw,
       isVerified: (g && gpFlag(g.is_open_source) != null) ? gpFlag(g.is_open_source)
         : (addr && typeof addr.is_verified === 'boolean' ? addr.is_verified : null),
-      deployer: (addr && addr.creator_address_hash) ? String(addr.creator_address_hash).toLowerCase() : null,
+      deployer, deployerSource: deployer ? ((addr && addr.creator_address_hash) ? 'explorer' : 'goplus') : null,
       // the chain's own owner() read; GoPlus's owner_address only where the contract has no owner() to read. A dead owner is
       // renounced, and is kept (ownerBurn) so the card can say where ownership went; owner is a LIVE owner or null
       ...homeOwner(ownerInfo, g),
@@ -10080,8 +10143,12 @@ function applyRisk(e, deployerCounts, deployerDied) {
     snipers:   r.sniperOk != null,       // the block-0 scan finished and could answer
   };
   r.dataScore = Object.values(r.dataKnown).filter(Boolean).length;   // 0..6
-  // liquidity + holders + an index entry are the minimum needed to say anything at all
-  r.thinData = !(r.dataKnown.indexed && r.dataKnown.liquidity && r.dataKnown.holders);
+  /* liquidity + holders + an index entry are the minimum needed to say anything at all — and on Robinhood Chain, some read of
+     the contract: GoPlus's (chainFacts), or failing that whether its source is published (since 2026-10-27 only a keyed explorer
+     can say). With neither, nobody read the contract, and an unread contract is an unknown — it must not score its way to the
+     top tier on the checks that were never made (owner, 2026-10-27). Another chain's profile carries its own `chain`. */
+  const homeChain = !e.chain || e.chain === 'robinhood';
+  r.thinData = !(r.dataKnown.indexed && r.dataKnown.liquidity && r.dataKnown.holders) || (homeChain && !e.chainFacts && !r.dataKnown.verified);
   if (r.thinData && r.triage === 'ok') r.triage = 'caution';
   // honesty floor: a token carrying a high/critical-severity flag can never read as the green "Looks OK" tier
   const SEV_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
@@ -10180,9 +10247,9 @@ async function enrichPairs() {
        the keyed explorer tier allows. A token's name and verification do not change in five minutes; its
        holder list moves slowly enough that two is honest, and the row says when it was read. */
     const [meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp, lpBurn] = await Promise.all([
-      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
-      jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
-      jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
+      explorerGet('/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
+      explorerGet('/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
+      explorerGet('/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
       blockTimestamp(t.block),
       getReserves(t.pair),        // pooled reserves (read-only)
       tokenOwner(t.token),        // owner()/renounced (read-only)
@@ -10190,7 +10257,14 @@ async function enrichPairs() {
       goplusToken(t.token),       // holder count, top ten and owner powers — the explorer will not serve a server
       lpBurnRead(t.pair),         // the LP at dead addresses (read-only; kept 15 min)
     ]);
-    const p = buildPair(t, dexByPair[t.pair.toLowerCase()], meta, addr, holders, ts, reserves, ownerInfo, tokenDec, gp, lpBurn);
+    // neither a keyed explorer nor the price feed names it: the contract itself does (two eth_calls, kept for the process), as a lookup's does
+    const dx = dexByPair[t.pair.toLowerCase()];
+    let metaN = meta;
+    if (!(meta && meta.symbol && meta.name) && !(dx && dx.baseToken && dx.baseToken.symbol)) {
+      const oc = await tokenNameOnChain(t.token);
+      if (oc.name || oc.symbol) metaN = Object.assign({}, meta || {}, { name: (meta && meta.name) || oc.name, symbol: (meta && meta.symbol) || oc.symbol });
+    }
+    const p = buildPair(t, dx, metaN, addr, holders, ts, reserves, ownerInfo, tokenDec, gp, lpBurn);
     /* GoPlus did not answer this pass: the facts it gave last time are carried, marked with when (staleAt) — an outage must never
        read as "no red powers" and let a token onto the top tier (review, 2026-10-24). */
     if (!p.chainFacts) { const prevF = (pairsCache.pairs || []).find((x) => x && x.pair && x.pair.address && x.pair.address.toLowerCase() === t.pair.toLowerCase()); if (prevF && prevF.chainFacts) p.chainFacts = Object.assign({}, prevF.chainFacts, { staleAt: prevF.chainFacts.staleAt || pairsCache.updatedAt || null }); }
@@ -10307,7 +10381,7 @@ const MKT_URLS = {
   cg: process.env.MARKET_CG_URL || 'https://api.coingecko.com/api/v3',
   ethRpc: process.env.MARKET_ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com',
 };
-const MKT_HTTP = MD.createHonestFetch();   // 'JustSendIt/1.0 (+https://sendrh.com)', ≥30 s, no redirects, a size cap — never BROWSER_UA
+const MKT_HTTP = MD.createHonestFetch();   // the same identity as every other request (HONEST_UA), ≥30 s, no redirects, a size cap
 const MKT_COLLECT_ON = process.env.MARKET_COLLECT === '1' || (process.env.NODE_ENV === 'production' && process.env.MARKET_COLLECT !== '0');
 /* The collectors give way to the site's own chain reads: for a minute after the node last refused one, or while the shared pace
    has reads queued more than 5 s ahead (a wallet or holder walk). The answer is the reason, for the run's note, or false. Not "while _paceMs is above its start": the pace only speeds up again on a successful whole-wallet read,
@@ -10564,9 +10638,9 @@ async function enrichOne(item, opts = {}) {
   // the on-chain holder ledger: built or brought up to date behind this read, so the next read shows the chain's count
   try { ensureLedger(t.token).catch(() => {}); } catch {}
   const [meta, addr, holders, reserves, ownerInfo, tokenDec, dexArr, gp, lpBurn] = await Promise.all([
-    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
-    jgetCached(BLOCKSCOUT + '/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
-    jgetCached(BLOCKSCOUT + '/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
+    explorerGet('/api/v2/tokens/' + t.token, EXPLORER_META_TTL),
+    explorerGet('/api/v2/addresses/' + t.token, EXPLORER_META_TTL),
+    explorerGet('/api/v2/tokens/' + t.token + '/holders?items_count=10', EXPLORER_HOLDERS_TTL),
     getReserves(t.pair),
     tokenOwner(t.token),
     tokenDecimals(t.token),
@@ -11901,7 +11975,7 @@ function purgeCdn(urls) {
   const zone = process.env.CF_ZONE_ID, tok = process.env.CF_API_TOKEN;
   if (!zone || !tok || !urls.length) return;
   fetch('https://api.cloudflare.com/client/v4/zones/' + zone + '/purge_cache', {
-    method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Authorization': 'Bearer ' + tok, 'Content-Type': 'application/json', 'User-Agent': HONEST_UA },
     body: JSON.stringify({ files: urls.slice(0, 30) }), signal: AbortSignal.timeout(8000),
   }).then((r) => { if (!r.ok) console.warn('[cdn] purge failed: HTTP ' + r.status); }).catch((e) => console.warn('[cdn] purge failed:', e && e.message));
 }
@@ -12118,7 +12192,7 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
   // token exchange — Basic-auth clients (X) send credentials in the header + PKCE verifier in the body;
   // classic clients (Google/Facebook/Instagram) send client_secret in the body.
   const body = new URLSearchParams({ client_id: p.id, code, grant_type: 'authorization_code', redirect_uri: redirect });
-  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': HONEST_UA };
   if (p.pkce && verifier) body.set('code_verifier', verifier);
   if (p.basicAuth) headers.Authorization = 'Basic ' + Buffer.from(p.id + ':' + p.secret).toString('base64');
   else body.set('client_secret', p.secret);
@@ -12127,8 +12201,8 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
   if (!accessToken) throw new Error('oauth token exchange failed');
   // userinfo — Instagram takes ?access_token=; the rest take a Bearer header
   const info = p.accessTokenQuery
-    ? await (await fetch(p.userUrl + (p.userUrl.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(accessToken))).json()
-    : await (await fetch(p.userUrl, { headers: { Authorization: 'Bearer ' + accessToken } })).json();
+    ? await (await fetch(p.userUrl + (p.userUrl.includes('?') ? '&' : '?') + 'access_token=' + encodeURIComponent(accessToken), { headers: { 'User-Agent': HONEST_UA } })).json()
+    : await (await fetch(p.userUrl, { headers: { Authorization: 'Bearer ' + accessToken, 'User-Agent': HONEST_UA } })).json();
   // stable subject id (X nests it under data; others are flat)
   let sub = p.subPath === 'data.id' ? (info && info.data && info.data.id) : (info[p.subField || 'sub'] || info.sub || info.id);
   sub = String(sub || '');
@@ -18637,7 +18711,7 @@ const server = http.createServer(async (req, res) => {
         try {
           const r = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST', signal: ac.signal,
-            headers: { 'Content-Type': 'application/json', 'x-api-key': SENDY_KEY, 'anthropic-version': '2023-06-01' },
+            headers: { 'Content-Type': 'application/json', 'x-api-key': SENDY_KEY, 'anthropic-version': '2023-06-01', 'User-Agent': HONEST_UA },
             body: JSON.stringify({
               model: SENDY_MODEL, max_tokens: 450, temperature: 0.3,
               system: [{ type: 'text', text: SENDY_SYSTEM + '\n\n===== THE SITE, IN ITS OWN WORDS =====\n' + sendyKnowledge(), cache_control: { type: 'ephemeral' } }, { type: 'text', text: sendyLive() }],
@@ -18875,7 +18949,7 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('img-site', 1500, 6e4)) return bad(res, 'slow down', 429);
         try {
           const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 8000);
-          const r2 = await fetch(u, { headers: { 'User-Agent': BROWSER_UA, 'Accept': 'image/*' }, signal: ctrl.signal });
+          const r2 = await fetch(u, { headers: { 'User-Agent': HONEST_UA, 'Accept': 'image/*' }, signal: ctrl.signal });
           clearTimeout(to);
           if (!r2.ok) return bad(res, 'image fetch failed', 502);
           if (r2.url && !/^https:\/\/(cdn|dd)\.dexscreener\.com\//i.test(r2.url)) return bad(res, 'image redirected off the allowed CDN', 502); // SSRF defense-in-depth: reject a redirect that leaves the Dexscreener CDN
@@ -18899,7 +18973,8 @@ const server = http.createServer(async (req, res) => {
          The tracker and the profile page used to read Blockscout, Dexscreener and the RPC straight from the
          browser, which handed those companies each visitor's IP address together with the wallets they own
          or track — the very link the database encrypts. These three routes make the same reads from here.
-         Explorer reads need BLOCKSCOUT_URL to point at a keyed endpoint: the public host refuses servers. */
+         Explorer reads need BLOCKSCOUT_URL to point at a keyed endpoint: the public host refuses servers, so
+         without one they are not made, and the answer says so. */
       if (p === '/api/chain/pairs' && req.method === 'GET') {   // the homepage's live $SEND / $GWC pair data
         if (!rateLimit('chainp:' + clientIp(req), 120, 6e4)) return bad(res, 'slow down', 429);
         const j = await jgetCached('https://api.dexscreener.com/latest/dex/pairs/robinhood/' + OG_PAIR.SEND + ',' + OG_PAIR.GWC, 20000);
@@ -19015,7 +19090,8 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('chainx:' + me.id, 90, 6e4)) return bad(res, 'slow down', 429);   // one tracker report is ~70 explorer reads; the whole site has 240/min
         const want = String(url.searchParams.get('path') || '').replace(/0x[0-9a-fA-F]+/g, (m) => m.toLowerCase());
         if (!EXPLORER_PROXY_PATHS.some((re) => re.test(want))) return bad(res, 'that explorer read is not available here', 400);
-        const j = await jgetCached(BLOCKSCOUT + want, 30000);
+        if (!EXPLORER_KEYED) return send(res, 503, { error: 'not read: ' + EXPLORER_UNKEYED + ', and this server has none', keyed: false });   // the tracker reads the chain itself (/api/chain/wallet)
+        const j = await explorerGet(want, 30000);
         if (!j) return bad(res, 'the explorer could not be read right now', 502);
         return send(res, 200, j);
       }
@@ -20917,7 +20993,7 @@ async function tgApi(method, params, timeoutMs = 12000) {
   const to = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const r = await fetch('https://api.telegram.org/bot' + TG_TOKEN + '/' + method, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA },
       body: JSON.stringify(params || {}), signal: ctrl.signal,
     });
     const j = await r.json();

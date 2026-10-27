@@ -123,7 +123,7 @@
     else owner = '<p class="np-owner">🔑 Owner unknown</p>';
     const contract = '<div class="np-addr-row"><span class="np-addr-lbl">Token</span><code>' + esc(p.token.address) + '</code>' + copyBtn(p.token.address, 'token contract') + '</div>' +
       '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span><code>' + esc(p.pair.address) + '</code>' + copyBtn(p.pair.address, 'pair') + '</div>' +
-      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer') + '</div>' : '') + owner +
+      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer' + (p.token.deployerSource === 'goplus' ? ' (per GoPlus)' : '') + '</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer') + '</div>' : '') + owner +
       '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b>' : '📄 Verification unknown') + '</p>' +
       '<div class="np-actions"><a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this token on the block explorer in a new tab">🔍 Explorer ↗</a><a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this pair chart on Dexscreener in a new tab">📈 Chart ↗</a></div>';
     return '<div class="np-body">' +
