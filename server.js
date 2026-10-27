@@ -7831,6 +7831,17 @@ const namedToken = (sym, name) => !!(sym && sym !== '???' && name && name !== 'U
 const identifiedPair = (p) => !!(p && p.token && namedToken(p.token.symbol, p.token.name));
 let pairsRefreshing = false;
 const _pairsWarn = { at: 0, n: 0 };
+/* The background walk of the factory's logs (mktRadarSweep) holds the radar while it reads. A member who opens the radar then is not
+   turned away: their sweep is queued and starts the moment the walk ends, and the first build says "building" meanwhile — before, the
+   page read the empty, unbuilt radar as "quiet on the chain" until its next poll. */
+let pairsWalking = false, pairsQueued = false;
+// a member opened the radar (or its runners): built the first time, refreshed once stale (stale: false asks for the first build only)
+function pairsWanted(stale) {
+  if (pairsCache.updatedAt && !(stale && now() - pairsCache.updatedAt > PAIRS_TTL)) return;
+  if (!pairsCache.updatedAt) pairsCache.building = true;
+  if (pairsWalking) pairsQueued = true;
+  else if (!pairsRefreshing) refreshPairs();
+}
 
 // quiet: the background's reader (mktNodeRead) — every read of the walk goes through it, and a refusal ends the walk instead of being asked again
 async function scanNewPairs(quiet) {
@@ -10339,10 +10350,13 @@ async function mktRadarSweep(tools) {
   const busy = mktRpcBusy();
   if (busy) return { error: 'yielded: ' + busy };   // the timer's sweep gives way; a member opening the radar still builds it
   const t = tools || {};
-  pairsRefreshing = true;   // the walk moves pairsRaw and the cursor: never beside a member's sweep
+  pairsRefreshing = pairsWalking = true;   // the walk moves pairsRaw and the cursor: never beside a member's sweep
   try { await scanNewPairs((method, params) => mktNodeRead(method, params, t.counted)); }
   catch (e) { return { error: String((e && e.message) || e) }; }
-  finally { pairsRefreshing = false; }
+  finally {
+    pairsRefreshing = pairsWalking = false;
+    if (pairsQueued) { pairsQueued = false; refreshPairs(); }   // a member opened the radar during the walk: theirs goes now
+  }
   const lc = (a) => String(a || '').toLowerCase();
   const targets = [];
   for (const r of pairsRaw.slice(-PAIRS_KEEP).reverse()) {   // the newest first: the pairs a member's sweep enriches
@@ -10394,7 +10408,7 @@ async function mktScanQuiet(chain, addr, tools, held) {
     if (!row || !row.found || now() - row.updated_at > MKT_RESCAN_MAX_AGE) return null;   // no reading from the last hour: none is made
     if (held && held.lastReadAt != null && row.updated_at <= held.lastReadAt) return null;   // the reading Market Data already has
     const res = tokenCacheRes(row);
-    return res && res.pair ? { pair: res.pair, readAt: row.updated_at } : null;
+    return res && res.pair ? { pair: res.pair, readAt: row.updated_at, cached: true } : null;   // cached: copied, not read — the run's note counts it apart
   }
   if (!MC.SCAN_CHAINS.includes(chain) || !tools || !tools.ask) return null;
   let gpMissed = false;
@@ -18285,8 +18299,7 @@ const server = http.createServer(async (req, res) => {
             note: 'On ' + ch.name + ' we can read market data but not holders, contract verification or deployer history — those come from a block explorer we only have for Robinhood Chain. Checks that need them are shown as unknown rather than passed.',
           });
         }
-        if (!pairsCache.updatedAt && !pairsRefreshing) { pairsCache.building = true; refreshPairs(); } // lazy first build
-        else if (pairsCache.updatedAt && now() - pairsCache.updatedAt > PAIRS_TTL && !pairsRefreshing) refreshPairs(); // stale → refresh in bg, serve current
+        pairsWanted(true);   // lazy first build; stale → refresh in bg, serve current
         // This feed is identical for every user, so serialize + gzip it ONCE per cache version instead of per request
         // (it's ~90KB → re-gzipping it on every hit would burn CPU on the event loop under load).
         const building = pairsCache.building && !pairsCache.updatedAt;
@@ -18309,7 +18322,7 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/runners' && req.method === 'GET') { // Best Runners: top gainers over a trailing window
         if (!me) return send(res, 401, { error: 'sign in to use the New Pairs radar — reading the site is free, the radar is for members', code: 'need_signin' });   // part of the radar, same door
         if (!rateLimit('runners:' + clientIp(req), 60, 60000)) return bad(res, 'slow down', 429);
-        if (!pairsCache.updatedAt && !pairsRefreshing) { pairsCache.building = true; refreshPairs(); } // ensure the store is being fed
+        pairsWanted(false);   // ensure the store is being fed
         maybeRefreshRunners();
         const wkey = Object.prototype.hasOwnProperty.call(RUNNER_WINDOWS, url.searchParams.get('window')) ? url.searchParams.get('window') : '24h';
         const tracked = db.prepare('SELECT MIN(first_seen_at) m FROM runner_tokens').get().m || now();

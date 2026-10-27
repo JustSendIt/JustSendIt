@@ -10,8 +10,10 @@
          every read, not once a run — and a refused read stands the background down without making the site's own reads give way;
      (e) neither counts as a token view (token_cache.reads) or a public scan;
      (f) no holder ledger is walked for the re-scanned tokens.
-   Also: the jobs run when MARKET_JOBS names nothing; the radar's background rows carry no verdict; the backup scrub runs off the event
-   loop and leaves Market Data's bulk history out of the copy; the logo proxy goes by the canonical URL and meters its misses. */
+   Also: the jobs run when MARKET_JOBS names nothing; the radar's background rows carry no verdict; a member who opens the radar while
+   the background walk holds it is told it is being built, and their sweep runs as the walk ends; the re-scan's note tells a reading it
+   made from one it copied; the docs say what the jobs read; the backup scrub runs off the event loop and leaves Market Data's bulk
+   history out of the copy; the logo proxy goes by the canonical URL and meters its misses. */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -112,7 +114,21 @@ try {
   check('part 1 ran to the end', false, e.message);
 } finally { try { fs.rmSync(tmpS, { recursive: true, force: true }); } catch {} }
 
-/* ═══ 2. THE JOBS, IN A SERVER OF THEIR OWN ═══ */
+/* ═══ 2. THE DOCS: the Data API page says what the two jobs read, and what their rows hold ═══ */
+{
+  const DOC = fs.readFileSync(path.join(ROOT, 'public', 'data.html'), 'utf8');
+  const rowOf = (name) => (DOC.match(new RegExp('<tr><td>' + name + '</td><td>([^<]*)</td>')) || [])[1] || '';
+  const radarRes = (DOC.match(/<summary><code>radar<\/code>[\s\S]*?<\/details>/) || [''])[0];
+  const scans = rowOf('Scans'), radar = rowOf('Radar');
+  check('the docs: the re-scan reads Ethereum and Solana again but nothing on Robinhood Chain (the token cache\'s reading from the last hour is kept, or the token skipped); the radar\'s timer sweep reads the new pairs and their market figures and judges nothing',
+    /On Ethereum and Solana, read again the way the Scanner reads them/.test(scans) && /On Robinhood Chain nothing is read: the token cache’s own reading is kept when it is under an hour old/.test(scans) && /the token is skipped otherwise/.test(scans)
+    && /new pairs/.test(radar) && /market figures from Dexscreener/.test(radar) && /It judges nothing: health, verdict and risk come from a member’s sweep/.test(radar), brief({ scans, radar }));
+  check('  ...and the radar resource says a row the timer\'s sweep wrote has no health, verdict, risk or profile — not "latest price, liquidity, risk and verdict" as if every row had them',
+    /health\|null, verdict\|null, risk\|null, json\|null/.test(radarRes) && /on a row it wrote, <code>health<\/code>, <code>verdict<\/code>, <code>risk<\/code> and <code>json<\/code> are <code>null<\/code>/.test(radarRes)
+    && !/latest price, liquidity, risk and verdict/.test(DOC) && !/with their latest price, liquidity and risk\./.test(DOC), brief(radarRes.slice(0, 300)));
+}
+
+/* ═══ 3. THE JOBS, IN A SERVER OF THEIR OWN ═══ */
 // the Robinhood Chain node: every request recorded (one call or a batch, and who asked)
 const node = { reqs: [], mode: 'ok', hold: null };
 const hx = (n) => '0x' + n.toString(16);
@@ -140,10 +156,11 @@ const nodeSrv = http.createServer((req, res) => {
     node.reqs.push(rec);
     const out = (code, o) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
     if (single && j) {
-      // the refusal run: the node refuses the radar's log read; the busy run: it holds the head-block read, and refuses the site's own eth_call
+      /* the refusal run: the node refuses the radar's log read; the busy run: it holds the head-block read, and refuses the site's own eth_call;
+         the hold run: it only holds the head-block read */
       if (node.mode === 'refuse' && j.method === 'eth_getLogs' && String(j.params[0].address).toLowerCase() === FACTORY) return out(429, { error: 'Too Many Requests' });
       if (node.mode === 'busy' && j.method === 'eth_call') return out(429, { error: 'Too Many Requests' });
-      if (node.mode === 'busy' && j.method === 'eth_blockNumber' && node.hold) { const h = node.hold; node.hold = null; h(rec); await sleep(1500); }
+      if ((node.mode === 'busy' || node.mode === 'hold') && j.method === 'eth_blockNumber' && node.hold) { const h = node.hold; node.hold = null; h(rec); await sleep(1500); }
       const r = nodeAnswer(j.method, j.params);
       return out(200, r.error ? { jsonrpc: '2.0', id: j.id, error: r.error } : { jsonrpc: '2.0', id: j.id, result: r.result });
     }
@@ -325,7 +342,9 @@ try {
   const gp = mc.filter((r) => r.path.startsWith('/mc/gp/'));
   check('(b) every one of those reads — Dexscreener, GoPlus, the Ethereum node — carried the honest User-Agent', mc.length >= 4 && mc.every((r) => r.ua === HONEST) && mc.some((r) => r.path === '/mc/ethnode') && mc.some((r) => r.path.startsWith('/mc/ds/token-pairs/v1/ethereum/')), brief(mc));
   check('(c) GoPlus is asked only from the re-scan\'s own share (one a minute here): the second token found it spent, was not asked, and its reading — which would have scored without the security read — is not kept',
-    gp.length === 1 && gp[0].search.toLowerCase().includes(PEPE) && rX.length === 0 && /2 re-read, 4 not/.test(runs.scans.note), brief({ gp, rX, note: runs.scans.note }));
+    gp.length === 1 && gp[0].search.toLowerCase().includes(PEPE) && rX.length === 0, brief({ gp, rX }));
+  check('  ...and the run says which readings it made and which it copied: PEPE re-read, the home chain\'s one kept from the token cache (nothing was read for it), the other four not — and the job\'s title says the same',
+    /^6 tokens: 1 re-read, 1 kept from the token cache, 4 not$/.test(runs.scans.note) && /Robinhood Chain from the token cache/.test(stOf('scans').title || '') && /Ethereum and Solana read again/.test(stOf('scans').title || ''), brief({ note: runs.scans.note, title: stOf('scans').title }));
   const tcA = sdb.prepare('SELECT reads, last_read_at FROM token_cache WHERE token_addr = ?').get(RA);
   const scansAfter = sdb.prepare('SELECT COUNT(*) n, COALESCE(SUM(count), 0) c FROM scans').get();
   check('(e) neither job counts as a token view or a public scan: the token cache\'s reads and last read stand, its rows are the same ones, and the Scanner\'s public store is untouched',
@@ -381,9 +400,27 @@ try {
   check('(d) the radar asks before every read whether the site\'s own reads are waiting: its head-block read was answered after a member\'s read was refused, so its log read was never sent',
     siteRefused && radarNodeReqs().length === 0 && r4runs.radar && r4runs.radar.ok === 0 && r4runs.radar.calls === 1 && /yielded: the node refused one of the site's own reads/.test(r4runs.radar.note), brief({ siteRefused, radar: r4runs.radar, n: radarNodeReqs().length }));
   await halt();
+
+  /* ── boot 5: a member opens the radar, never built since the restart, while the background walk holds it ── */
+  sdb.exec("DELETE FROM mkt_runs; DELETE FROM mkt_state WHERE name = 'radar'");
+  node.reqs.length = 0; node.mode = 'hold';
+  let opened = null;
+  node.hold = () => { opened = api('/api/pairs/new', { sid: adminSid }).catch(() => null); };   // asked while the walk's head-block read is held
+  check('the server came up again (the radar only), the node holding the walk\'s head-block read', await boot({ MARKET_JOBS: 'radar' }), slog.slice(-300));
+  const r5runs = await waitRun(['radar']);
+  const seen = await (opened || Promise.resolve(null)), sj = (seen && seen.j) || {};
+  check('a member who opens the radar during the background walk is told it is being built — not handed an empty radar that reads as "quiet on the chain"',
+    seen && seen.status === 200 && sj.building === true && Array.isArray(sj.pairs) && sj.pairs.length === 0 && sj.error == null && sj.updatedAt === 0, brief({ status: seen && seen.status, building: sj.building, pairs: sj.pairs && sj.pairs.length, error: sj.error, updatedAt: sj.updatedAt }));
+  // the member's sweep reads each pair's reserves; the background walk never does
+  const reservesReads = () => node.reqs.filter((r) => r.calls.some(([m, p]) => m === 'eth_call' && p && p[0] && String(p[0].data || '').startsWith('0x0902f1ac')));
+  for (let i = 0; i < 50 && !reservesReads().length; i++) await sleep(100);
+  const walkLogs = radarNodeReqs(), memberReads = reservesReads();
+  check('  ...and their sweep is queued behind the walk, not dropped: it starts as the walk ends, with no second ask, and reads on from the walk\'s cursor (one log walk in all)',
+    r5runs.radar && r5runs.radar.ok === 1 && walkLogs.length === 1 && memberReads.length >= 1 && memberReads.every((r) => r.at >= walkLogs[0].at), brief({ radar: r5runs.radar, walks: walkLogs.length, member: memberReads.length }));
+  await halt();
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
-  check('part 2 ran to the end', false, e.message + ' · ' + slog.slice(-400));
+  check('part 3 ran to the end', false, e.message + ' · ' + slog.slice(-400));
 } finally {
   await halt();
   try { sdb && sdb.close(); } catch {}

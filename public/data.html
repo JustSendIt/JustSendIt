@@ -127,7 +127,7 @@
           <tr><td><code>token</code></td><td>One token in full: price, market cap and FDV, liquidity, pools, volume per window, candles.</td></tr>
           <tr><td><code>pools</code></td><td>Every pool reading the collectors kept.</td></tr>
           <tr><td><code>new-pools</code></td><td>Pools as they were created.</td></tr>
-          <tr><td><code>radar</code></td><td>The New Pairs radar’s pairs, with their latest price, liquidity and risk.</td></tr>
+          <tr><td><code>radar</code></td><td>The New Pairs radar’s pairs, with their latest price and liquidity, and the risk a member’s sweep found.</td></tr>
           <tr><td><code>scans</code></td><td>Every token the Scanner read, on any chain.</td></tr>
           <tr><td><code>pulse</code></td><td>Robinhood Chain’s own readings over time: block, block time, gas, supplies, the bridge.</td></tr>
           <tr><td><code>collectors</code></td><td>When each collector last ran, whether it worked, when it runs next, and how big each table is.</td></tr>
@@ -266,8 +266,9 @@
       </div></details>
       <details class="dk-res"><summary><code>radar</code> <span>the New Pairs radar</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/radar?limit=200"</pre>
-<pre class="dk-pre">{ data: [ { pair, token, quote, …its created block and time, latest price, liquidity, risk and verdict, updated_at } ],
+<pre class="dk-pre">{ data: [ { pair, token, quote, …its created block and time, latest price, liquidity, health|null, verdict|null, risk|null, json|null, updated_at } ],
   next, limit, cursor }</pre>
+        <p class="dk-note">The timer’s sweep reads the new pairs and their market figures only, and judges nothing: on a row it wrote, <code>health</code>, <code>verdict</code>, <code>risk</code> and <code>json</code> are <code>null</code> — an older verdict is cleared, never left beside newer figures. They are filled in by a member’s sweep, which runs while someone has the radar open (every 30 seconds at most). <code>cursor</code> is the block the radar has read the chain up to.</p>
       </div></details>
       <details class="dk-res"><summary><code>scans</code> <span>every token the Scanner read</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
@@ -294,8 +295,8 @@
           <tr><td>Pools</td><td>GeckoTerminal’s 200 most-traded pools on Robinhood Chain; the top 60 on Ethereum, Solana, Base, BNB Chain, Arbitrum, Polygon, Avalanche and OP Mainnet.</td><td>Robinhood Chain every 10 minutes, the others hourly</td></tr>
           <tr><td>New pools</td><td>Robinhood Chain’s own logs (v2 PairCreated, v3 PoolCreated, v4 Initialize); GeckoTerminal’s new pools on the other networks.</td><td>Every 3 minutes; the other networks every 15</td></tr>
           <tr><td>Pulse</td><td>Robinhood Chain’s public RPC: block, block time, gas; WETH and USDG supply and the v4 PoolManager’s holdings; the canonical bridge’s ETH, from a public Ethereum node.</td><td>Every minute; supplies every 10 minutes; the bridge every 15</td></tr>
-          <tr><td>Radar</td><td>The New Pairs radar’s own sweep of new pairs (and at once whenever someone opens the radar).</td><td>Every 10 minutes</td></tr>
-          <tr><td>Scans</td><td>The 40 tokens scanned most in the last 7 days, read again the way the Scanner reads them.</td><td>Hourly</td></tr>
+          <tr><td>Radar</td><td>The new pairs, from the radar’s own walk of Robinhood Chain’s v2 factory logs, and their market figures from Dexscreener (a name Dexscreener lacks is read from the token itself). It judges nothing: health, verdict and risk come from a member’s sweep, run while someone has the radar open.</td><td>Every 10 minutes</td></tr>
+          <tr><td>Scans</td><td>The 40 tokens scanned most in the last 7 days. On Ethereum and Solana, read again the way the Scanner reads them; a reading whose security check (GoPlus) could not be made is not kept. On Robinhood Chain nothing is read: the token cache’s own reading is kept when it is under an hour old and newer than the last one kept, dated when it was read, and the token is skipped otherwise.</td><td>Hourly</td></tr>
           <tr><td>Tidy-up</td><td>Thins old rows to the spacing each resource above describes.</td><td>Hourly</td></tr>
         </tbody>
       </table>
