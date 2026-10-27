@@ -116,7 +116,7 @@
       '<div class="sendy-say" id="sendy-say" aria-hidden="true" hidden></div><span class="sendy-live" id="sendy-live" role="status"></span>' +
       '<div class="sendy-popup" id="sendy-popup" role="dialog" aria-label="Sendy" hidden>' +
         '<div class="sendy-head">' +
-          '<button class="sendy-hbtn sendy-back-btn" id="sendy-back" type="button" data-tip="Leaves the chat and shows the tips again" hidden>← Tips</button>' +
+          '<button class="sendy-hbtn sendy-back-btn" id="sendy-back" type="button" data-tip="Leaves the chat and shows the tips again" hidden>←<span class="sendy-back-word"> Tips</span></button>' +
           '<img class="sendy-avatar" src="/assets/sendy.png" alt="" width="28" height="28">' +
           '<span class="sendy-title">Sendy <small>your $Send guide</small></span>' +
           '<button class="sendy-hbtn sendy-close" id="sendy-close" type="button" aria-label="Close Sendy" data-tip="Closes Sendy — the rocket stays in the corner"><span class="sendy-x" aria-hidden="true"></span></button>' +
@@ -133,12 +133,14 @@
           '<p class="sendy-fine">Prefer email? <a class="sendy-link" href="' + MAILTO + '">' + EMAIL + '</a> — private, and a person reads it.</p>' +
         '</div>' +
         '<div class="sendy-body" id="sendy-chat-mode" hidden>' +
-          '<div class="sendy-chat-messages" id="sendy-chat-messages" role="log" aria-live="polite"></div>' +
+          // a Tab stop of its own, so a keyboard can scroll the conversation; focusChat puts focus here on a touch screen
+          '<div class="sendy-chat-messages" id="sendy-chat-messages" role="log" aria-live="polite" aria-label="Your conversation with Sendy" tabindex="0"></div>' +
           '<form class="sendy-chat-form" id="sendy-chat-form">' +
-            '<textarea id="sendy-chat-input" class="sendy-chat-input" rows="1" placeholder="Ask Sendy anything — Enter sends" autocomplete="off" maxlength="600" aria-label="Your question for Sendy"></textarea>' +
-            '<button type="submit" class="sendy-chat-send" id="sendy-chat-send" aria-label="Send the question" data-tip="Sends your question to Sendy">Send</button>' +
+            // short enough for one line in a phone's box (the longer hint wrapped it to two, and an empty box is sized by it)
+            '<textarea id="sendy-chat-input" class="sendy-chat-input" rows="1" placeholder="Ask Sendy anything" autocomplete="off" maxlength="600" aria-label="Your question for Sendy"></textarea>' +
+            '<button type="submit" class="sendy-chat-send" id="sendy-chat-send" aria-label="Send the question" data-tip="Sends your question to Sendy — Enter does too; Shift+Enter starts a new line">Send</button>' +
           '</form>' +
-          '<p class="sendy-fine">Sendy\'s answers are generated and can be wrong — check the page it points to. Entertainment only, not financial advice, not affiliated with Robinhood.</p>' +
+          '<p class="sendy-fine">Sendy\'s answers are generated and can be wrong<span class="sendy-fine-more"> — check the page it points to</span>. Entertainment only, not financial advice, not affiliated with Robinhood.</p>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -215,19 +217,27 @@
       '@media (prefers-reduced-motion:no-preference){.sendy-widget.is-hyped .sendy-rocket{animation:sendy-hop .6s ease}}' +
       '@keyframes sendy-hop{0%,100%{transform:none}40%{transform:translateY(calc(var(--sendy-size) * -.16)) rotate(-6deg)}70%{transform:translateY(calc(var(--sendy-size) * -.05)) rotate(4deg)}}' +   /* the glow and the hop scale with the rocket */
       /* the popup: above the rocket, aligned to its right edge; flipped when the rocket sits near the top or the left.
-         25em wide (capped to the screen) and, in the chat, a steady 40em tall (capped to the room there is), with the
-         conversation taking whatever the header and the question box leave */
-      '.sendy-popup{position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;font-size:max(var(--text-floor), .92rem);width:min(25em,calc(100vw - 2rem));max-height:calc(100vh - 24px);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:.7em;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1;overflow:hidden;display:flex;flex-direction:column}' +
-      '.sendy-popup.is-chat{height:40em}' +
+         The tips are 25em wide (capped to the screen). The chat is as much of the screen as the conversation can have:
+         wider (25em on a tablet to 28em on a laptop, then growing to 38em on the widest screens: fewer lines for the same
+         answer) and as tall as there is room for. On a desktop placePopup stands it beside the rocket, from under the nav
+         down to the strip the music player and the SEND IT button own; on a phone it is a sheet over that whole height. */
+      '.sendy-popup{--sendy-chat-w:clamp(25em, calc(25em + (100vw - 768px) * .3), 28em);position:absolute;bottom:calc(var(--sendy-size) + 10px);right:0;font-size:max(var(--text-floor), .92rem);width:min(25em,calc(100vw - 2rem));max-height:calc(100vh - 24px);background:var(--ink-2,var(--bg-0,#0f120b));color:var(--text);border:1px solid var(--edge-ctl);border-radius:.7em;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:1;overflow:hidden;display:flex;flex-direction:column}' +
+      '@media (min-width:1280px){.sendy-popup{--sendy-chat-w:clamp(28em, calc(28em + (100vw - 1280px) * .3), 38em)}}' +
+      '@media (max-height:520px){.sendy-popup{--sendy-chat-w:36em}}' +   /* a short window: what the conversation cannot have in height it takes in width */
+      '.sendy-popup.is-chat{width:min(var(--sendy-chat-w),calc(100vw - 2rem));height:52em}' +   /* placePopup caps the height to the room there is */
       '@media (min-width:768px){.sendy-widget.is-up .sendy-popup{bottom:auto;top:calc(var(--sendy-size) + 10px)}' +
         '.sendy-widget.is-left .sendy-popup{right:auto;left:0}' +
         '.sendy-widget.is-side .sendy-popup{position:fixed;top:auto;bottom:var(--fab-clear,5.5rem);right:auto;left:auto}}' +   /* beside the rocket: placePopup sets the side and the width */
-      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px);display:flex;flex-direction:column}}' +
-      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - var(--sendy-size) - 24px)}}}' +
+      /* a phone: the tips span the width above the rocket, kept under the nav; the chat is a sheet from under the nav down to
+         the strip, over the rocket (its own header has him, and the close) — fitPhone measures the nav, the theme tune's
+         nudge and the keyboard and moves its edges to clear them */
+      '@media (max-width:767px){.sendy-popup{position:fixed;left:0.75rem;right:0.75rem;bottom:calc(var(--fab-clear,5.5rem) + var(--sendy-size) + 8px);width:auto;max-width:none;max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--sendy-size) - var(--nav-h,58px) - 16px);display:flex;flex-direction:column}' +
+        '.sendy-popup.is-chat{top:calc(var(--nav-h,58px) + 6px);bottom:var(--fab-clear,5.5rem);left:max(.5rem,env(safe-area-inset-left,0px));right:max(.5rem,env(safe-area-inset-right,0px));width:auto;height:auto;max-height:none}}' +
+      '@supports (height:100dvh){@media (max-width:767px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - var(--sendy-size) - var(--nav-h,58px) - 16px)}}}' +
       /* a phone on its side: above the rocket there is almost no height, so the panel stands left of the rocket's column
-         instead, from near the top down to the strip the music player and the SEND IT button own */
-      '@media (max-width:767px) and (max-height:500px){.sendy-popup{right:calc(var(--sendy-size) + 1.5rem);bottom:var(--fab-clear,5.5rem);max-height:calc(100vh - var(--fab-clear,5.5rem) - 12px)}}' +
-      '@supports (height:100dvh){@media (max-width:767px) and (max-height:500px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - 12px)}}}' +
+         instead, from under the nav down to the strip */
+      '@media (max-width:767px) and (max-height:500px){.sendy-popup,.sendy-popup.is-chat{right:calc(var(--sendy-size) + 1.5rem);bottom:var(--fab-clear,5.5rem)}.sendy-popup{max-height:calc(100vh - var(--fab-clear,5.5rem) - var(--nav-h,58px) - 12px)}}' +
+      '@supports (height:100dvh){@media (max-width:767px) and (max-height:500px){.sendy-popup{max-height:calc(100dvh - var(--fab-clear,5.5rem) - var(--nav-h,58px) - 12px)}}}' +
       '.sendy-popup[hidden]{display:none !important}' +
       /* header: the way back to the tips (chat only), Sendy, and the close — both controls a finger can hit */
       '.sendy-head{display:flex;align-items:center;gap:.5em;padding:.45em .5em .45em .8em;border-bottom:1px solid var(--edge-ctl);flex:none}' +
@@ -243,7 +253,22 @@
       '.sendy-x::after{rotate:-45deg}' +
       '.sendy-back-btn{background:transparent;color:var(--text-dim);border:1px solid var(--edge-ctl)}' +
       '.sendy-back-btn:hover{color:var(--text);border-color:var(--text-mute)}' +
-      '@media (max-width:420px),(max-height:700px){.sendy-popup.is-chat .sendy-title small{display:none}}' +   /* a narrow or short screen in the chat: one row for the header */   /* a phone in the chat: the back, Sendy and the close on one row */
+      /* the chat's header is one slim row at every size — the back, Sendy and the close — so the conversation keeps the height */
+      '.sendy-popup.is-chat .sendy-title small{display:none}' +
+      '.sendy-popup.is-chat .sendy-head{padding:.2em .35em .2em .7em}' +
+      '.sendy-popup.is-chat .sendy-hbtn{min-height:2em}.sendy-popup.is-chat .sendy-close{width:2em}' +   /* 50px at 19pt; 44px under a finger (below) */
+      '.sendy-back-word{white-space:pre}' +
+      /* A short, wide chat (a phone on its side, a laptop's 720-768px, a small window; fitChat sets it): the header becomes a
+         rail down the left side, the back and the close at its top and Sendy at its foot, so the conversation gets that row
+         too. The back is its arrow there (its name and its tip stay), and the fine print drops its aside. */
+      '.sendy-popup.is-rail{flex-direction:row}' +
+      '.sendy-popup.is-rail .sendy-head{flex-direction:column;align-items:center;padding:.35em .25em;border-bottom:0;border-right:1px solid var(--edge-ctl)}' +
+      '.sendy-popup.is-rail .sendy-title{display:none}' +
+      '.sendy-popup.is-rail .sendy-avatar{order:1;margin-top:auto}' +
+      '.sendy-popup.is-rail .sendy-back-btn{width:2em;padding:0}' +
+      '.sendy-popup.is-rail .sendy-back-word{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}' +
+      '.sendy-popup.is-rail .sendy-fine-more{display:none}' +
+      '.sendy-popup.is-rail .sendy-body{flex:1 1 auto;min-width:0}' +
       '.sendy-close:focus-visible,.sendy-btn:focus-visible,.sendy-back-btn:focus-visible,.sendy-chat-send:focus-visible,.sendy-link:focus-visible{outline:3px solid var(--focus);outline-offset:2px}' +
       '.sendy-body{padding:.8em;display:flex;flex-direction:column;gap:.7em;min-height:0;flex:1 1 auto;overflow:auto;overscroll-behavior:contain}' +
       '.sendy-body[hidden]{display:none}' +
@@ -260,14 +285,19 @@
       '.sendy-btn-tertiary:hover{color:var(--text);border-color:var(--text-mute)}' +
       '.sendy-fine{margin:0;font-size:max(var(--text-floor), .8em);line-height:1.4;color:var(--text-mute)}' +
       '.sendy-link{color:var(--green-bright);font-weight:600;text-decoration:underline;text-underline-offset:2px;border-radius:3px}' +
-      /* chat: the conversation fills the body, the question box and the fine print sit under it */
-      '.sendy-chat-messages{display:flex;flex-direction:column;gap:.6em;flex:1 1 auto;min-height:4.5em;overflow-y:auto;overscroll-behavior:contain;padding:.1em .15em .1em 0}' +
+      /* chat: the conversation fills the body and is the one thing in it that scrolls; the question box and the fine print
+         sit under it. Tighter padding than the tips: every em of it is a line of an answer at 19pt. */
+      '#sendy-chat-mode{padding:.4em .45em .35em .5em;gap:.35em}' +
+      '.sendy-chat-messages{position:relative;display:flex;flex-direction:column;gap:.5em;flex:1 1 auto;min-height:2.5em;overflow-y:auto;overscroll-behavior:contain;padding:.1em .15em .1em 0}' +
+      '.sendy-chat-messages:focus{outline:none}.sendy-chat-messages:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}' +   /* a ring when the keyboard brings focus here, none for a finger (focusChat) */
       '.sendy-msg{display:flex;animation:sendy-in .25s ease}' +
       '@keyframes sendy-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}' +
       '@media (prefers-reduced-motion:reduce){.sendy-msg{animation:none}}' +
       '.sendy-msg-user{justify-content:flex-end}' +
-      '.sendy-msg-bubble{padding:.55em .8em;border-radius:.7em;max-width:90%;overflow-wrap:anywhere;font-size:max(var(--text-floor), 1em);line-height:1.45;white-space:pre-line}' +
-      '.sendy-msg-sendy .sendy-msg-bubble{background:var(--g-wash);color:var(--text);border:1px solid var(--edge-ctl);border-bottom-left-radius:3px}' +
+      /* nothing in a bubble is ever cut: it wraps anywhere (a long address, a URL, a made-up word) and grows to its words */
+      '.sendy-msg-bubble{padding:.5em .75em;border-radius:.7em;max-width:88%;min-width:0;overflow-wrap:anywhere;font-size:max(var(--text-floor), 1em);line-height:1.45;white-space:pre-line}' +
+      '.sendy-msg-sendy .sendy-msg-bubble{max-width:100%;background:var(--g-wash);color:var(--text);border:1px solid var(--edge-ctl);border-bottom-left-radius:3px}' +   /* an answer takes the width: fewer lines to scroll */
+      '.sendy-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}' +   /* who said it, for a screen reader; the side and the colour say it on screen */
       '.sendy-msg-user .sendy-msg-bubble{background:var(--green);color:var(--ink-1);border-bottom-right-radius:3px}' +
       /* the routes to a person under an answer: pills, not bare words */
       '.sendy-msg-links{display:flex;flex-wrap:wrap;gap:.4em;margin-top:.55em;white-space:normal}' +
@@ -278,17 +308,20 @@
       '.sendy-rate-btn{min-width:2.4em;min-height:2.2em;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid var(--edge-ctl);border-radius:.45em;cursor:pointer;padding:0 .5em;font:inherit;line-height:1}' +
       '.sendy-rate-btn:hover{border-color:var(--edge-ctl-lit);background:var(--g-wash)}' +
       '.sendy-rate-btn:focus-visible{outline:3px solid var(--focus);outline-offset:2px}' +
-      '.sendy-chat-form{display:flex;align-items:flex-end;gap:.5em;flex:none}' +
-      /* the question box: at least 16px (an iPhone zooms the whole page into a smaller one), growing to five lines */
-      '.sendy-chat-input{flex:1;min-width:0;min-height:2.6em;max-height:8em;padding:.55em .7em;border:1px solid var(--edge-ctl);border-radius:.45em;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:max(var(--text-floor), 16px, 1em);line-height:1.35;resize:none;overflow-y:auto;field-sizing:content}' +
+      '.sendy-chat-form{display:flex;align-items:flex-end;gap:.45em;flex:none}' +
+      /* the question box: at least 16px (an iPhone zooms the whole page into a smaller one), growing with what is typed to
+         five lines — or to under a third of the panel, where that is less (a phone on its side, the keyboard up), so the
+         conversation is never pushed out by the question; past that it scrolls. --sendy-h is the panel's height (fitChat). */
+      '.sendy-chat-input{flex:1;min-width:0;min-height:2.4em;max-height:min(8em,calc(var(--sendy-h,40em) * .3));padding:.45em .65em;border:1px solid var(--edge-ctl);border-radius:.45em;background:var(--ink-1,#050505);color:var(--text);font:inherit;font-size:max(var(--text-floor), 16px, 1em);line-height:1.35;resize:none;overflow-y:auto;field-sizing:content}' +
       '.sendy-chat-input::placeholder{color:var(--text-mute)}' +
       '.sendy-chat-input:focus{outline:2px solid var(--focus);outline-offset:-1px;border-color:var(--edge-ctl-lit)}' +
-      '.sendy-chat-send{flex:none;min-width:2.6em;min-height:2.6em;padding:0 .9em;background:var(--green);color:var(--ink-1);border:1px solid var(--green);border-radius:.45em;cursor:pointer;font:inherit;font-size:max(var(--text-floor), 1em);font-weight:800;line-height:1.2}' +
+      '.sendy-chat-send{flex:none;min-width:2.6em;min-height:2.4em;padding:0 .9em;background:var(--green);color:var(--ink-1);border:1px solid var(--green);border-radius:.45em;cursor:pointer;font:inherit;font-size:max(var(--text-floor), 1em);font-weight:800;line-height:1.2}' +
       '.sendy-chat-send:hover{background:var(--green-bright);border-color:var(--green-bright)}' +
       '.sendy-chat-send[disabled]{opacity:.6;cursor:default}' +
-      '#sendy-chat-mode .sendy-fine{flex:none}' +
+      '#sendy-chat-mode .sendy-fine{flex:none;line-height:1.3}' +
       /* a finger does the tapping: every control at least 44px */
-      '@media (pointer:coarse){.sendy-hbtn,.sendy-close,.sendy-rate-btn{min-height:max(44px,2.4em)}.sendy-btn,.sendy-chat-send,.sendy-chat-input{min-height:max(44px,2.6em)}.sendy-msg-links .sendy-link{min-height:max(44px,2.2em)}.sendy-close,.sendy-rate-btn{min-width:max(44px,2.4em)}.sendy-chat-send{min-width:max(44px,2.6em)}}' +
+      '@media (pointer:coarse){.sendy-hbtn,.sendy-close,.sendy-rate-btn{min-height:max(44px,2.4em)}.sendy-btn{min-height:max(44px,2.6em)}.sendy-chat-send,.sendy-chat-input{min-height:max(44px,2.4em)}.sendy-msg-links .sendy-link{min-height:max(44px,2.2em)}.sendy-close,.sendy-rate-btn{min-width:max(44px,2.4em)}.sendy-chat-send{min-width:max(44px,2.6em)}' +
+        '.sendy-popup.is-chat .sendy-hbtn{min-height:max(44px,2em)}.sendy-popup.is-chat .sendy-close,.sendy-popup.is-rail .sendy-back-btn{width:max(44px,2em)}}' +
       /* forced colours: the drawn close mark keeps the system's button-text colour */
       '@media (forced-colors:active){.sendy-x::before,.sendy-x::after{forced-color-adjust:none;background:ButtonText}}';
   }
@@ -309,7 +342,7 @@
     const tipsMode = $('sendy-tips-mode'), chatMode = $('sendy-chat-mode'), chatForm = $('sendy-chat-form');
     const chatInput = $('sendy-chat-input'), chatSend = $('sendy-chat-send'), chatLog = $('sendy-chat-messages');
     let history = Array.isArray(store.get('chat')) ? store.get('chat').slice(-12) : [];
-    let userPlaced = false, flying = false, hovering = false;
+    let userPlaced = false, flying = false, hovering = false, painting = false, revealLater = null;
 
     /* ---------- open / close ---------- */
     const size = () => rocket.getBoundingClientRect().width || 228;
@@ -319,47 +352,91 @@
       const d = document.createElement('div'); d.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;height:var(--fab-clear,5.5rem);width:0';
       document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h || 88;
     }
+    /* The bottom of the nav bar on the screen (0 when there is none): the popup stops under it, so Sign In, the bell and the
+       menu stay theirs to tap. Measured rather than read from --nav-h, so a strip above the bar at the top of a page counts. */
+    function navBottom() {
+      const n = document.querySelector('.nav'), b = n && n.getClientRects().length ? n.getBoundingClientRect().bottom : 0;
+      return Math.max(0, Math.min(b, window.innerHeight / 2));
+    }
+    /* How far down the popup may reach over x0…x1: to the strip the player and SEND IT own — or higher while the theme
+       tune's nudge stands above the player (it belongs to the strip, but stands above it for its few seconds; the popup
+       moves back down when it goes). */
+    let hintWatched = null;
+    function lowEdge(x0, x1) {
+      let low = window.innerHeight - fabClearPx();
+      const hint = document.querySelector('#mp-hint');   // the player's (player.js), so optional: not one of Sendy's own ids
+      if (hint && !hint.hidden && hint.getClientRects().length) { const b = hint.getBoundingClientRect(); if (b.right > x0 && b.left < x1) low = Math.min(low, b.top - 8); }
+      if (hint && hintWatched !== hint && typeof MutationObserver === 'function') {
+        hintWatched = hint;
+        new MutationObserver(() => { if (isOpen()) placePopup(); }).observe(hint, { attributes: true, attributeFilter: ['hidden'] });
+      }
+      return low;
+    }
     /* desktop only: a rocket near the top opens its popup downward, one near the left edge opens it rightward.
-       On a phone the popup spans the width above the rocket (fixed), and these flips must never touch it. */
+       On a phone fitPhone places it (fixed, the width of the screen), and these flips must never touch it. */
     function placePopup() {
-      if (isMobile()) { widget.classList.remove('is-up', 'is-left'); popup.style.maxHeight = ''; fitPhone(); return; }
-      popup.style.bottom = ''; popup.style.left = ''; popup.style.right = ''; popup.style.width = ''; widget.classList.remove('is-side');
-      const strip = fabClearPx();
-      // upward stops under the fixed nav (--nav-h, published by nav.js): on a 768 px laptop it used to open over Sign In
-      const navH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 58;
-      const r = rocket.getBoundingClientRect(), above = r.top - 12 - navH, below = window.innerHeight - r.bottom - 12 - strip;   // downward stops above the player strip
+      popup.style.top = ''; popup.style.bottom = ''; popup.style.left = ''; popup.style.right = ''; popup.style.width = ''; popup.style.maxHeight = ''; widget.classList.remove('is-side');
+      if (isMobile()) { widget.classList.remove('is-up', 'is-left'); fitPhone(); return; }
+      const strip = fabClearPx(), chat = popup.classList.contains('is-chat');
+      // upward stops under the nav bar: on a 768 px laptop it used to open over Sign In
+      const top0 = navBottom() + 8;
+      const r = rocket.getBoundingClientRect(), above = r.top - 4 - top0, below = window.innerHeight - r.bottom - 12 - strip;   // downward stops above the player strip
       widget.classList.toggle('is-up', below > above);      // open toward whichever side has more room…
-      // …and rightward when hung too near the left edge for the popup (25em of its own text, capped to the screen)
-      const fs = parseFloat(getComputedStyle(popup).fontSize), pw = Math.min(fs * 25, window.innerWidth - 32);
+      // …and rightward when hung too near the left edge for the popup (its own width: 25em of its text for the tips, the chat's wider)
+      const fs = parseFloat(getComputedStyle(popup).fontSize), pw = Math.min(popup.getBoundingClientRect().width || fs * 25, window.innerWidth - 32);
       widget.classList.toggle('is-left', r.right - pw < 8);
       popup.style.maxHeight = Math.max(260, Math.floor(Math.max(above, below))) + 'px';   // …and never past the viewport: the body scrolls instead
-      /* A short window (a laptop with a small browser, a phone on its side): above and below the rocket there is not
-         the height the popup wants, so it opens beside the rocket instead and takes the screen's full height. */
-      const want = Math.min(fs * (popup.classList.contains('is-chat') ? 40 : 24), window.innerHeight - strip - 20);
       const leftRoom = r.left - 18, rightRoom = window.innerWidth - r.right - 18;
       // a rocket dragged near the middle of a narrow window: the popup fits neither hung left nor right of it, so it is
       // slid along until it is wholly on the screen
       const left0 = widget.classList.contains('is-left') ? r.left : r.right - pw, fit = Math.max(8, Math.min(left0, window.innerWidth - 8 - pw));
       if (Math.abs(fit - left0) > 0.5) { popup.style.left = Math.round(fit - r.left) + 'px'; popup.style.right = 'auto'; }
-      if (Math.max(above, below) < want * 0.87 && Math.max(leftRoom, rightRoom) >= Math.min(pw, fs * 16)) {   // only when it gains a sixth or more
+      /* Beside the rocket the popup has the screen's whole height between the nav and the strip. The chat opens there
+         whenever there is room for it beside him: it is the most of a conversation anyone can see at once. The tips, a few
+         lines, only on a short window, where above and below the rocket there is not the height they want. */
+      const want = Math.min(fs * 24, window.innerHeight - strip - top0);
+      if ((chat || Math.max(above, below) < want * 0.87) && Math.max(leftRoom, rightRoom) >= Math.min(pw, fs * 16)) {   // the tips only when it gains a sixth or more
         popup.style.left = ''; popup.style.right = '';
         widget.classList.add('is-side');
-        popup.style.width = Math.floor(Math.min(pw, Math.max(leftRoom, rightRoom))) + 'px';
+        const w = Math.floor(Math.min(pw, Math.max(leftRoom, rightRoom))), x0 = leftRoom >= rightRoom ? r.left - 10 - w : r.right + 10;
+        popup.style.width = w + 'px';
         if (leftRoom >= rightRoom) popup.style.right = Math.round(window.innerWidth - r.left + 10) + 'px'; else popup.style.left = Math.round(r.right + 10) + 'px';
-        popup.style.maxHeight = Math.floor(window.innerHeight - strip - 20) + 'px';
+        const low = lowEdge(x0, x0 + w);
+        popup.style.bottom = Math.round(window.innerHeight - low) + 'px';
+        popup.style.maxHeight = Math.floor(low - top0) + 'px';
       }
+      fitChat();
     }
-    /* A phone's keyboard covers the bottom of the screen without moving a fixed box, which would leave the question
-       box under it. While it is up (the visual viewport is shorter than the page's), the popup sits on top of it. */
+    /* A phone: the tips above the rocket, the chat a sheet from under the nav down to the strip (fixed, styles above). A
+       phone's keyboard covers the bottom of the screen without moving a fixed box, which would leave the question box under
+       it. While it is up (the visual viewport is shorter than the page's), the popup sits on top of it. */
     function fitPhone() {
       const vv = window.visualViewport;
-      if (!isMobile() || !vv || !isOpen()) { popup.style.bottom = ''; if (isMobile()) popup.style.maxHeight = ''; return; }
-      const covered = window.innerHeight - vv.height - vv.offsetTop;
-      if (covered > 80) { popup.style.bottom = Math.round(covered + 8) + 'px'; popup.style.maxHeight = Math.floor(vv.height - 16) + 'px'; }
-      else { popup.style.bottom = ''; popup.style.maxHeight = ''; }
+      if (isMobile()) { popup.style.top = ''; popup.style.bottom = ''; popup.style.maxHeight = ''; }
+      if (!isMobile() || !isOpen()) return;
+      const covered = vv ? window.innerHeight - vv.height - vv.offsetTop : 0;
+      if (popup.classList.contains('is-chat')) {
+        // the sheet's top under the nav (or at the top of what is on screen, scrolled for the keyboard); its foot on the
+        // strip, above the theme tune's nudge while that is up, or on the keyboard
+        popup.style.top = Math.round(Math.max(navBottom(), vv ? vv.offsetTop : 0) + 6) + 'px';
+        const pr = popup.getBoundingClientRect();
+        popup.style.bottom = Math.round(covered > 80 ? covered + 6 : window.innerHeight - lowEdge(pr.left, pr.right)) + 'px';
+      } else if (covered > 80) { popup.style.bottom = Math.round(covered + 8) + 'px'; popup.style.maxHeight = Math.floor(vv.height - 16) + 'px'; }
+      fitChat();
     }
     if (window.visualViewport) { visualViewport.addEventListener('resize', fitPhone); visualViewport.addEventListener('scroll', fitPhone); }
-    function openPopup() { popup.removeAttribute('hidden'); placePopup(); rocket.setAttribute('aria-expanded', 'true'); }
+    /* The chat, once its box is placed: its height for the question box's cap (--sendy-h), and on a short, wide panel (a
+       phone on its side, a laptop's 720-768px, a small window: under 24em of its own text tall and 24em or more wide) the
+       header as a rail down its side — there a row is a tenth of the height, and the conversation gets it back. Neither
+       changes the box, so nothing here can set off another fit. */
+    function fitChat() {
+      popup.classList.remove('is-rail');
+      if (!popup.classList.contains('is-chat') || !isOpen()) return;
+      const r = popup.getBoundingClientRect(), fs = parseFloat(getComputedStyle(popup).fontSize) || 16;
+      popup.style.setProperty('--sendy-h', Math.round(r.height) + 'px');
+      popup.classList.toggle('is-rail', r.height < fs * 24 && r.width >= fs * 24);
+    }
+    function openPopup() { popup.removeAttribute('hidden'); placePopup(); rocket.setAttribute('aria-expanded', 'true'); if (revealLater) { const row = revealLater; revealLater = null; reveal(row); } }
     function closePopup() {
       const hadFocus = popup.contains(document.activeElement);
       popup.setAttribute('hidden', ''); rocket.setAttribute('aria-expanded', 'false');
@@ -399,15 +476,37 @@
     function addMessage(text, who, links) {
       const row = document.createElement('div'); row.className = 'sendy-msg sendy-msg-' + who;
       const bubble = document.createElement('div'); bubble.className = 'sendy-msg-bubble';
-      if (who === 'sendy') linkify(text, bubble); else bubble.textContent = text;
+      const said = document.createElement('span'); said.className = 'sendy-sr'; said.textContent = who === 'sendy' ? 'Sendy: ' : 'You: ';
+      bubble.appendChild(said);
+      if (who === 'sendy') linkify(text, bubble); else bubble.appendChild(document.createTextNode(text));
       if (links && links.length) {
         const bar = document.createElement('div'); bar.className = 'sendy-msg-links';
         for (const l of links) { const a = document.createElement('a'); a.className = 'sendy-link'; a.setAttribute('href', l.href); a.textContent = l.text; bar.appendChild(a); }
         bubble.appendChild(bar);
       }
-      row.appendChild(bubble); chatLog.appendChild(row); chatLog.scrollTop = chatLog.scrollHeight;
+      row.appendChild(bubble); chatLog.appendChild(row);
+      if (!painting) reveal(row);
       return row;
     }
+    /* The newest message in view. An answer is shown from its FIRST line, with the question it answers still above it when
+       the two fit, so a long answer is read from the top down instead of being found at its end (the log used to jump to
+       its last line); a question, or the · · · under it, at the foot. Instant, never smooth: the reader is waiting for it.
+       A message that lands while the chat is out of sight (closed, or the tips showing) is shown when it opens again. */
+    function reveal(row) {
+      if (!chatLog.clientHeight) { revealLater = row; return; }
+      const prev = row.previousElementSibling;
+      if (!row.classList.contains('sendy-msg-sendy') || !prev) { chatLog.scrollTop = chatLog.scrollHeight; return; }
+      // where a message starts in the conversation: offsetTop in the log (positioned for it), which a message's arrival
+      // slide does not move — mid-slide a measured box sits 6px low, and the answer came to rest with its top edge cut off
+      const cs = getComputedStyle(row.firstElementChild);
+      const firstLine = row.offsetTop + (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.45);
+      const q = prev.classList.contains('sendy-msg-user') ? prev : null;
+      chatLog.scrollTop = Math.max(0, (q && firstLine - q.offsetTop <= chatLog.clientHeight - 6 ? q : row).offsetTop - 4);
+    }
+    /* Where focus goes in the chat: the question box — except on a touch screen with a conversation to read, where focus
+       in the box would raise the keyboard over half of it. There it waits on the conversation; the box is a tap away. */
+    const coarse = () => !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
+    function focusChat() { if (coarse() && history.length) chatLog.focus({ preventScroll: true }); else chatInput.focus(); }
     // a thumb under a model answer: rated up, an answer is reused for the next person who asks the same thing
     function rateBar(row, id) {
       const bar = document.createElement('div'); bar.className = 'sendy-rate';
@@ -417,7 +516,7 @@
         b.addEventListener('click', async () => {
           bar.textContent = v > 0 ? 'Thanks — noted 👍' : 'Thanks — I\'ll do better 👎';
           if (window.SFX) SFX.play(v > 0 ? 'vote' : 'downvote');   // a 👍 rises, a 👎 steps down
-          chatInput.focus();   // the button just replaced itself with the thanks
+          focusChat();   // the button just replaced itself with the thanks
           try { await fetch('/api/sendy/rate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, vote: v }) }); } catch {}
         });
         return b;
@@ -430,9 +529,11 @@
     const NO_ANSWER = "I don't have an answer for that yet. Ask it on the Support board, where the community and the team answer in public — or email if it's private.";
     function remember(role, text) { history.push({ role, text }); history = history.slice(-12); store.set('chat', history); }
     function paintHistory() {
-      chatLog.textContent = '';
+      chatLog.textContent = ''; painting = true;
       if (!history.length) addMessage(chatHello(), 'sendy');
       for (const m of history) addMessage(m.text, m.role === 'assistant' ? 'sendy' : 'user');
+      painting = false; revealLater = null;
+      reveal(chatLog.lastElementChild);   // once, for the last exchange: the conversation picks up where it was left
     }
     async function ask(q) {
       addMessage(q, 'user'); remember('user', q);
@@ -459,7 +560,7 @@
       }
       chatInput.focus();
     }
-    function showChat() { tipsMode.setAttribute('hidden', ''); chatMode.removeAttribute('hidden'); popup.classList.add('is-chat'); $('sendy-back').removeAttribute('hidden'); placePopup(); paintHistory(); setTimeout(() => chatInput.focus(), 60); }
+    function showChat() { tipsMode.setAttribute('hidden', ''); chatMode.removeAttribute('hidden'); popup.classList.add('is-chat'); $('sendy-back').removeAttribute('hidden'); placePopup(); paintHistory(); setTimeout(focusChat, 60); }
     function showTips() {
       const fromBack = document.activeElement === $('sendy-back');
       chatMode.setAttribute('hidden', ''); tipsMode.removeAttribute('hidden'); popup.classList.remove('is-chat'); $('sendy-back').setAttribute('hidden', ''); placePopup();
