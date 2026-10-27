@@ -101,7 +101,7 @@ check('the fixtures are the contract\'s shapes: a list of datasets with id, titl
       && /Source: growthepie, https:\/\/www\.growthepie\.com, under <a href="https:\/\/creativecommons\.org\/licenses\/by\/4\.0\/"[^>]*>CC BY 4\.0<\/a>/.test(DATA) && /Not affiliated with Robinhood Markets, Inc\./.test(DATA));
   check('the privacy policy (§8) names every new host the server reads for market data, says the browser never contacts them, names the picture hosts it proxies, and moved to 2026-10-26',
     ['DefiLlama', 'L2BEAT', 'growthepie', 'CoinGecko', 'GeckoTerminal', 'Dexscreener', 'Robinhood Chain RPC', 'public Ethereum node', 'cdn.dexscreener.com', 'dd.dexscreener.com', 'coin-images.coingecko.com', 'assets.geckoterminal.com', 'icons.llama.fi'].every((h) => PRIV.slice(PRIV.indexOf('id="p8"'), PRIV.indexOf('id="p9"')).includes(h))
-      && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-26 · \$Send \/ JustSendIt/.test(PRIV));
+      && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-27 · \$Send \/ JustSendIt/.test(PRIV));
   check('the README has the Market Data row in its core features and the market resources in the Send API section',
     /^\| \*\*📊 Market Data\*\* \| `\/market`/m.test(README) && /- \*\*And the market data the site collects\*\*[^\n]*`chain-history`[^\n]*`collectors`/.test(README));
   const vars = ['MARKET_COLLECT', 'MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'COINGECKO_DEMO_KEY'];

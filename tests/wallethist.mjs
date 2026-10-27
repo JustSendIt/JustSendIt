@@ -188,7 +188,7 @@ try {
     check('the boot sweep removes rows whose wallet is no longer tracked or linked and keeps the total under 64 MB, oldest first', /^sweepWalletHist\(\);/m.test(SRC) && /WALLET_HIST_TOTAL_MAX = 64 \* 1024 \* 1024/.test(SRC) && /ORDER BY updated_at ASC'\)\.all\(\)\) \{\s*if \(total <= WALLET_HIST_TOTAL_MAX\) break;/.test(SRC));
     check('the bell for a finished read rings only when nobody polled for 30 s, and names the wallet by id, never by address', /if \(now\(\) - job\.polledAt > WALLET_NOTIFY_QUIET_MS\) walletReadNotify\(uid, w\)/.test(SRC) && /WALLET_NOTIFY_QUIET_MS = 30 \* 1000/.test(SRC) && /'\/tracker\?wid=' \+ row\.id : '\/tracker\?lid=' \+ linked\.id/.test(SRC));
     check('the privacy policy lists the saved histories, scrambled, deleted on untrack or account deletion', /Saved wallet histories — the token transfers and trade details of wallets you track, read from the chain<\/td>[\s\S]*?deleted when you untrack them or delete your account<\/td>/.test(PRIV));
-    check('  ...and the policy\'s visible Version line is the current one (tests/sendy.mjs pins it)', /Version 2026-10-26 · \$Send \/ JustSendIt/.test(PRIV));
+    check('  ...and the policy\'s visible Version line is the current one (tests/sendy.mjs pins it)', /Version 2026-10-27 · \$Send \/ JustSendIt/.test(PRIV));
   }
 
   /* ═══ 5. the read itself, against a fabricated saved copy ═══ */
