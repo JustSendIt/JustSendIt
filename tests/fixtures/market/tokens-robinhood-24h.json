@@ -9,6 +9,7 @@
  },
  "sort": "volume",
  "dir": "desc",
+ "total": 30,
  "rows": [
   {
    "chain": "robinhood",
@@ -40,6 +41,16 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 249270,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "global-mcap"
+   ],
+   "scannable": true,
    "volume": {
     "v": 197666671.54230142,
     "src": "geckoterminal",
@@ -51,12 +62,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 249270,
-   "flags": [
-    "global-mcap"
-   ],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -88,6 +94,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 31591,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 71404663.95767727,
     "src": "geckoterminal",
@@ -99,10 +113,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 31591,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -133,6 +144,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 88425,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 67286827.94116147,
     "src": "geckoterminal",
@@ -144,10 +163,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 88425,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -179,6 +195,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 61,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 50007331.4313958,
     "src": "geckoterminal",
@@ -190,10 +214,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 61,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -224,6 +245,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 68192,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 21696097.6169744,
     "src": "geckoterminal",
@@ -235,10 +264,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 68192,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -270,6 +296,17 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 22082,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true,
    "volume": {
     "v": 9254751.29195648,
     "src": "geckoterminal",
@@ -281,13 +318,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 22082,
-   "flags": [
-    "thin",
-    "wash"
-   ],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -318,6 +349,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 552,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 8389616.53363654,
     "src": "geckoterminal",
@@ -329,10 +368,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 552,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -363,6 +399,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 20427,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 7504589.629308984,
     "src": "geckoterminal",
@@ -374,10 +418,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 20427,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -409,6 +450,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 3847,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 6323905.19903161,
     "src": "geckoterminal",
@@ -420,10 +469,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 3847,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -454,6 +500,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 18759,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 5847271.1430433905,
     "src": "geckoterminal",
@@ -465,10 +519,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 18759,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -499,6 +550,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 7768,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 5162149.67811716,
     "src": "geckoterminal",
@@ -510,10 +569,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 7768,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -544,6 +600,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 19228,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 4700552.86560674,
     "src": "geckoterminal",
@@ -555,10 +619,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 19228,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -590,6 +651,17 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 9081,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true,
    "volume": {
     "v": 4561198.33514493,
     "src": "geckoterminal",
@@ -601,13 +673,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 9081,
-   "flags": [
-    "thin",
-    "wash"
-   ],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -639,6 +705,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 500,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 4269721.51524424,
     "src": "geckoterminal",
@@ -650,10 +724,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 500,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -684,6 +755,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 5911,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 3947988.08820069,
     "src": "geckoterminal",
@@ -695,10 +774,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 5911,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -731,6 +807,14 @@
     "at": 1793035260000,
     "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
    },
+   "txns24h": {
+    "v": 6273,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 3873361.17755495,
     "src": "geckoterminal",
@@ -742,10 +826,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 6273,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -777,6 +858,16 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 2657,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "global-mcap"
+   ],
+   "scannable": true,
    "volume": {
     "v": 760503.245737033,
     "src": "geckoterminal",
@@ -788,12 +879,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 2657,
-   "flags": [
-    "global-mcap"
-   ],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -824,6 +910,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 1443,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 729518.613021839,
     "src": "geckoterminal",
@@ -835,10 +929,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 1443,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -869,6 +960,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 5097,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 410836.69232377,
     "src": "geckoterminal",
@@ -880,10 +979,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 5097,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -915,6 +1011,17 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 1676,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true,
    "volume": {
     "v": 400232.036499201,
     "src": "geckoterminal",
@@ -926,13 +1033,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 1676,
-   "flags": [
-    "thin",
-    "wash"
-   ],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -964,6 +1065,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 3750,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 397800.714619751,
     "src": "geckoterminal",
@@ -975,10 +1084,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 3750,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1010,6 +1116,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 1839,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 396664.145555108,
     "src": "geckoterminal",
@@ -1021,10 +1135,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 1839,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1056,6 +1167,17 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 1155,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [
+    "thin",
+    "wash"
+   ],
+   "scannable": true,
    "volume": {
     "v": 388226.950124079,
     "src": "geckoterminal",
@@ -1067,13 +1189,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 1155,
-   "flags": [
-    "thin",
-    "wash"
-   ],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1104,6 +1220,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 746,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 379429.262160473,
     "src": "geckoterminal",
@@ -1115,10 +1239,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 746,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1149,6 +1270,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 1609,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 377679.345339905,
     "src": "geckoterminal",
@@ -1160,10 +1289,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 1609,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1196,6 +1322,14 @@
     "at": 1793035260000,
     "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
    },
+   "txns24h": {
+    "v": 543,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 367125.42942453,
     "src": "geckoterminal",
@@ -1207,10 +1341,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 543,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1241,6 +1372,14 @@
     "src": "geckoterminal",
     "at": 1793035260000
    },
+   "txns24h": {
+    "v": 1144,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 354512.435977489,
     "src": "geckoterminal",
@@ -1252,10 +1391,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 1144,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1288,6 +1424,14 @@
     "at": 1793035260000,
     "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
    },
+   "txns24h": {
+    "v": 965,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 351477.509355397,
     "src": "geckoterminal",
@@ -1299,10 +1443,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 965,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1335,6 +1476,14 @@
     "at": 1793035260000,
     "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
    },
+   "txns24h": {
+    "v": 606,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 345992.699898938,
     "src": "geckoterminal",
@@ -1346,10 +1495,7 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 606,
-   "flags": [],
-   "scannable": true
+   }
   },
   {
    "chain": "robinhood",
@@ -1382,6 +1528,14 @@
     "at": 1793035260000,
     "why": "GeckoTerminal gives its pools a reserve of 0, which is not a reading"
    },
+   "txns24h": {
+    "v": 736,
+    "src": "geckoterminal",
+    "at": 1793035260000,
+    "label": "trades, 24 h, across these pools"
+   },
+   "flags": [],
+   "scannable": true,
    "volume": {
     "v": 345198.169398561,
     "src": "geckoterminal",
@@ -1393,10 +1547,11 @@
     "src": "geckoterminal",
     "at": 1793035260000,
     "label": "price change of its deepest pool, %"
-   },
-   "txns24h": 736,
-   "flags": [],
-   "scannable": true
+   }
   }
+ ],
+ "notes": [
+  "Highest and lowest are within the 200 most-traded pools on GeckoTerminal, grouped by token — never the whole chain's.",
+  "\"thin\": under $10,000 of liquidity. \"wash\": 24 h volume over 100 times its liquidity."
  ]
 }

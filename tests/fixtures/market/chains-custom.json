@@ -4,6 +4,7 @@
   "kind": "custom",
   "from": "2026-10-01",
   "to": "2026-10-25",
+  "days": 25,
   "label": "2026-10-01 – 2026-10-25 (25 whole UTC days)",
   "note": "Volume and fees are summed over the days; TVL and stablecoins are the value at the end of the window."
  },
