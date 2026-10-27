@@ -366,6 +366,13 @@ try {
   const ch = md.chains({}).body;
   check('the chains list: DeFi TVL highest first by default, each figure { v, src, at } with its label, the window and the notes', ch.sort === 'tvl' && ch.dir === 'desc' && ch.window.kind === '24h' && ch.rows[0].key === 'ethereum' && ch.rows.every((r, i, a) => i === 0 || a[i - 1].tvl.v >= r.tvl.v)
     && ch.rows[0].tvl.src === 'defillama' && ch.rows[0].tvl.at === NOW && /DeFi TVL/.test(ch.rows[0].tvl.label) && ch.notes.length >= 3 && ch.total >= 40 && ch.rows.length === Math.min(50, ch.total), brief({ n: ch.rows.length, t: ch.total, r: ch.rows[0] }));
+  // DefiLlama's feeds name chain icons at icons.llamao.fi/chains/…, which answers 404 since the files moved under /icons/chains/ (2026-10-27)
+  const ethLogo = (ch.rows.find((r) => r.key === 'ethereum') || {}).logo;
+  check('chain logos point where DefiLlama keeps them now (/icons/chains/; the feeds\' /chains/ answers 404): stored mended, served mended, and an address stored before the fix is mended on the way out',
+    q1("SELECT logo FROM mkt_chain_snap WHERE chain = 'ethereum' ORDER BY id DESC LIMIT 1").logo === 'https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg'
+    && decodeURIComponent(String(ethLogo).split('?u=')[1] || '') === 'https://icons.llamao.fi/icons/chains/rsz_ethereum.jpg'
+    && MD.llamaIcon('https://icons.llamao.fi/chains/rsz_op%20mainnet.jpg') === 'https://icons.llamao.fi/icons/chains/rsz_op%20mainnet.jpg' && MD.llamaIcon('https://icons.llamao.fi/icons/protocols/x') === 'https://icons.llamao.fi/icons/protocols/x' && MD.llamaIcon(null) === null,
+    brief({ ethLogo }));
   const rhRow = ch.rows.find((r) => r.key === 'robinhood');
   check('  ...Robinhood Chain in it: market cap null with why, liquidity labelled DEX liquidity, gas fees, TVS, stage, an L2, its GeckoTerminal network', rhRow && rhRow.mcap.v === null && rhRow.mcap.why === 'No native token — gas is paid in ETH' && /DEX liquidity/.test(rhRow.liquidity.label) && rhRow.fees.v === RH_FEES.total24h
     && near(rhRow.tvs.v, RH_TVS) && rhRow.stage === 'Stage 0' && rhRow.isL2 === true && rhRow.gtNetwork === 'robinhood' && rhRow.chainId === 4663 && /\/api\/market\/logo\?u=https%3A%2F%2Ficons\.llamao\.fi/.test(rhRow.logo || ''), brief(rhRow));
@@ -438,7 +445,7 @@ try {
     brief({ n: ta.rows.length, rh: tk.rows.length, eth: tkEth.rows.length, r0: ta.rows[0] }));
   check('  ...the same token on two chains (USDG at one address on Robinhood Chain and on Ethereum) is two rows, each with its chain key, name and logo (our proxy, DefiLlama\'s chain icon)', usdgs.length === 2
     && usdgs.map((r) => r.chain).sort().join() === 'ethereum,robinhood' && usdgs.find((r) => r.chain === 'robinhood').chainName === 'Robinhood Chain' && usdgs.find((r) => r.chain === 'ethereum').chainName === 'Ethereum'
-    && ta.rows.every((r) => /^\/api\/market\/logo\?u=https%3A%2F%2Ficons\.llamao\.fi%2Fchains%2F/.test(r.chainLogo || '')) && Object.keys(ta.rows[0]).slice(0, 4).join() === 'chain,chainName,chainLogo,address', brief(usdgs.map((r) => [r.chain, r.chainName, r.chainLogo])));
+    && ta.rows.every((r) => /^\/api\/market\/logo\?u=https%3A%2F%2Ficons\.llamao\.fi%2Ficons%2Fchains%2F/.test(r.chainLogo || '')) && Object.keys(ta.rows[0]).slice(0, 4).join() === 'chain,chainName,chainLogo,address', brief(usdgs.map((r) => [r.chain, r.chainName, r.chainLogo])));
   const taNets = ta.networks.map((n) => n.key);
   check('  ...the answer says which networks were read, when and how many pools each, and names every one not read yet instead of dropping it', taNets.join() === MD.GT_TRACKED.join()
     && ta.networks.find((n) => n.key === 'robinhood').pools === nPools && ta.networks.find((n) => n.key === 'robinhood').most === 200 && ta.networks.find((n) => n.key === 'ethereum').pools === F.gtEth.data.length && ta.networks.find((n) => n.key === 'ethereum').most === 60
@@ -725,7 +732,8 @@ try {
   const dbLp = { exec: (s) => dbL.exec(s), prepare: (s) => { const st = dbL.prepare(s); return { all: (...a) => { seenL.push(s); return st.all(...a); }, get: (...a) => { seenL.push(s); return st.get(...a); }, run: (...a) => st.run(...a) }; } };
   const mdL = MD.createMarketData({ db: dbLp, now: () => NOW, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 }); mdL.migrate();
   const T_RH = NOW - 5 * 60e3, T_BASE = NOW - 40 * 60e3, T_ETH = NOW - 5 * 3600e3, T_ARB = NOW - 20 * 60e3;
-  const icon = (n) => 'https://icons.llamao.fi/chains/rsz_' + n + '.jpg';
+  // seeded the way DefiLlama's feeds give them (and the live tables kept them before 2026-10-27); served mended, where the file is now
+  const icon = (n) => 'https://icons.llamao.fi/chains/rsz_' + n + '.jpg', mended = (n) => 'https://icons.llamao.fi/icons/chains/rsz_' + n + '.jpg';
   for (const [chain, name, logo] of [['robinhood', 'Robinhood Chain', icon('robinhood%20chain')], ['base', 'Base', icon('base')], ['ethereum', 'Ethereum', icon('ethereum')], ['arbitrum', 'Arbitrum', 'https://evil.example/x.png']])
     dbL.prepare("INSERT INTO mkt_chain_snap (chain, name, at, tvl, logo, src) VALUES (?, ?, ?, 1, ?, '{}')").run(chain, name, NOW - 10 * 60e3, logo);
   const insL = dbL.prepare('INSERT INTO mkt_pool_snap (network, pool, at, rank, base_addr, base_symbol, base_name, price_usd, reserve_usd, fdv_usd, mcap_usd, vol_m5, vol_h1, vol_h6, vol_h24, tx_h24, chg_m5, chg_h1, chg_h6, chg_h24) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
@@ -747,7 +755,7 @@ try {
     aL.rows.length === 7 && aL.rows.every((r) => figsOf(r).every((f) => f.at === { robinhood: T_RH, base: T_BASE, ethereum: T_ETH, arbitrum: T_ARB }[r.chain])) && aL.at === T_RH && aL.oldestAt === T_ETH
     && aL.networks.find((n) => n.key === 'base').at === T_BASE && aL.networks.find((n) => n.key === 'ethereum').at === T_ETH, brief(aL.rows.map((r) => [r.chain, r.symbol, r.volume.at])));
   check('  ...the same address on Robinhood Chain and on Base is two rows, each with its chain\'s name and logo (through our proxy; a logo host not on the allow-list gives none)', rowL('robinhood', XL) && rowL('base', XL) && rowL('robinhood', XL).liquidity.v === 2e6 && rowL('base', XL).liquidity.v === 8e6
-    && rowL('base', XL).chainName === 'Base' && rowL('base', XL).chainLogo === '/api/market/logo?u=' + encodeURIComponent(icon('base')) && rowL('arbitrum', EL).chainLogo === null && rowL('arbitrum', EL).chainName === 'Arbitrum', brief([rowL('robinhood', XL), rowL('base', XL)]));
+    && rowL('base', XL).chainName === 'Base' && rowL('base', XL).chainLogo === '/api/market/logo?u=' + encodeURIComponent(mended('base')) && rowL('arbitrum', EL).chainLogo === null && rowL('arbitrum', EL).chainName === 'Arbitrum', brief([rowL('robinhood', XL), rowL('base', XL)]));
   check('  ...a batch still being written (Base\'s newest) is never served: Base\'s rows are its last finished read', !aL.rows.some((r) => r.symbol === 'HALF') && aL.rows.filter((r) => r.chain === 'base').length === 2);
   const nL = (k) => aL.networks.find((n) => n.key === k);
   check('  ...a read that stopped short and a network whose reads keep failing are said (stopped, stale, in the notes); every network never read is named, with why', nL('arbitrum').stopped === 'page 2: the GeckoTerminal budget was spent' && nL('ethereum').stale === true && !nL('robinhood').stale && !nL('base').stale
@@ -789,7 +797,7 @@ try {
     keysTa.length > 20 && ['stopped', 'stale', 'coverage', 'chainName', 'chainLogo', 'oldestAt'].every((k) => keysTa.includes(k)) && keysTa.every((k) => new RegExp('\\b' + k + '\\b').test(tokDoc)) && /chain=all/.test(DOCS.split('<tr><td><code>tokens</code></td>')[1].split('</tr>')[0]),
     keysTa.filter((k) => !new RegExp('\\b' + k + '\\b').test(tokDoc)).join(','));
   check('the Send API\'s tokens takes chain=all: data with each row\'s chain fields (the raw logo URL — programs, not browsers), the networks read, the newest and oldest read times', apiL.status === 200 && apiL.body.chain === 'all' && apiL.body.data.length === 7
-    && apiL.body.data.find((r) => r.chain === 'base' && r.address === XL).chainLogo === icon('base') && apiL.body.networks.find((n) => n.key === 'base').logo === icon('base') && apiL.body.at === T_RH && apiL.body.oldestAt === T_ETH && JSON.parse(JSON.stringify(apiL.body)).rows === undefined && apiL.body.data.every((r) => !('_globalMc' in r)), brief(apiL.body).slice(0, 300));
+    && apiL.body.data.find((r) => r.chain === 'base' && r.address === XL).chainLogo === mended('base') && apiL.body.networks.find((n) => n.key === 'base').logo === mended('base') && apiL.body.at === T_RH && apiL.body.oldestAt === T_ETH && JSON.parse(JSON.stringify(apiL.body)).rows === undefined && apiL.body.data.every((r) => !('_globalMc' in r)), brief(apiL.body).slice(0, 300));
   dbL.close();
   const dbL0 = freshDb('l0'), mdL0 = MD.createMarketData({ db: dbL0, now: () => NOW }); mdL0.migrate();
   const aL0 = mdL0.tokens({ chain: 'all' }).body; dbL0.close();
