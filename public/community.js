@@ -72,7 +72,7 @@
         '</p>'
       : '<div class="comm-hero-metrics">' +
       '<span>👥 <b>' + fmtNum(c.memberCount) + '</b> members</span>' +
-      '<span title="' + (c.holdersSource === 'chain' ? 'Wallets with a balance, from the chain’s own transfer ledger' : 'Holder count from the block explorer') + '">🪙 <b>' + fmtNum(c.holders) + '</b> holders' + (c.holdersSource === 'chain' ? ' <small class="comm-src">on-chain</small>' : '') + '</span>' +
+      '<span title="' + (c.holdersSource === 'chain' ? 'Wallets with a balance, from the chain’s own transfer ledger' : c.holdersSource === 'explorer' ? 'Holder count from the block explorer' : c.holders == null ? 'Holder count not read yet — the chain’s own transfer ledger for this token is still being built' : 'Holder count as the site last recorded it — the chain’s own transfer ledger for this token is still being built') + '">🪙 <b>' + fmtNum(c.holders) + '</b> holders' + (c.holdersSource === 'chain' ? ' <small class="comm-src">on-chain</small>' : '') + '</span>' +
       '<span>💰 <b>' + fmtUsd(c.mcap) + '</b> MC</span>' +
       (chgChip(c.priceChange) ? '<span>' + chgChip(c.priceChange) + '</span>' : '') +
       supplyChip(c.supply) +

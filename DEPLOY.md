@@ -10,7 +10,7 @@ This app is a **single long-running Node process** backed by an on-disk SQLite d
   So it needs **one instance with a persistent volume**, *not* serverless functions and *not*
   multiple auto-scaled instances sharing nothing. (See **Scaling to millions** at the bottom.)
 - It speaks **plain HTTP**; TLS is terminated by a reverse proxy / platform in front of it.
-- **No custody, no private keys** — all chain data is read from public RPC/Blockscout/Dexscreener.
+- **No custody, no private keys** — all chain data is read from the public RPC, Dexscreener and GoPlus (Blockscout too, only with a key).
 
 Two good paths: **(A) a small VPS + Caddy** (recommended, cheapest, full control) or
 **(B) a managed platform with a volume** (Fly.io / Render / Railway). Pick one — then put
@@ -71,8 +71,12 @@ BLOCKSCOUT_URL=<a keyed explorer — free key at dev.blockscout.com>
 **The last two are not optional at launch volume.** Measured against the public hosts: the chain RPC returns
 429 on `eth_call` after a handful of rapid reads (Robinhood's own docs call it "rate-limited and not
 recommended for production use"), and the explorer returns 403 with a Cloudflare bot challenge to a server
-request. On the defaults the charts fail intermittently and every holder count, concentration figure and
-contract-power flag on the radar reads as unknown.
+request — so with `BLOCKSCOUT_URL` unset the site does not ask the explorer anything at all. Holder counts
+then come from the chain's own holder ledger and GoPlus, contract flags and the deployer from GoPlus, and
+community holder snapshots from the ledger; the explorer's verified source (a second opinion on a contract
+GoPlus has not read), its contract names and the tracker's explorer route read as not read until a keyed
+endpoint is set. Every request the server makes, keyed or not, says it is the site: `User-Agent:
+JustSendIt/1.0 (+https://sendrh.com)` — never a browser's. On the RPC default the charts fail intermittently.
 Node binds to `127.0.0.1` unless `HOST` says otherwise, so only Caddy on the same box can reach it.
 `BASE_URL` also drives every absolute SEO / share URL (canonical, og:*, twitter:*, JSON-LD, sitemap.xml, robots.txt) —
 they are rewritten at serve time, so nothing in `public/` needs editing on deploy.
@@ -433,7 +437,7 @@ public URL at all. The two are mutually exclusive and the app handles the switch
 deep-links straight to a scan of that token — the New Pairs page uses this for its per-token
 "📡 Scan in Telegram" link.
 
-**Limits:** 6 scans per chat per minute, because each one is a real read of the chain and the explorer.
+**Limits:** 6 scans per chat per minute, because each one is a real read of the chain and its feeds (and of the explorer, when it has a key).
 
 **Note on the token:** it is the entire credential for the bot. It lives only in `.env` (git-ignored), is
 never written to a log line, and is never sent anywhere but Telegram. If it leaks, run `/revoke` in

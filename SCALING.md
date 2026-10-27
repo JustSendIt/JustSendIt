@@ -12,7 +12,7 @@ These make the current single box survive traffic spikes, slow clients, and bad 
 - **Connections can't pile up forever.** `keepAliveTimeout` (30s), `headersTimeout` (35s, slowloris protection) and `requestTimeout` (60s) shed idle/stuck sockets.
 - **SQLite is tuned for concurrency.** `WAL` journal (concurrent readers + one writer), `busy_timeout=5000` (writers wait instead of throwing `SQLITE_BUSY`), `synchronous=NORMAL` (fast + safe under WAL).
 - **No unbounded memory growth.** A periodic sweeper prunes every in‑memory map (rate‑limit buckets, OAuth states, pending logins, anti‑gaming activity logs). Per‑user history is capped (notifications ≤ 50, watchlist ≤ 500). Caches carry TTLs (nav balances 60s, on‑chain pair data 30s, watchlist enrichment 60s **shared across all users watching the same token**).
-- **Expensive work is centralized + cached, not per‑request.** The on‑chain sweep (RPC + Blockscout + Dexscreener) runs at most once per 30s and every client is served the cached result — a spike of readers does **not** multiply into a spike of chain reads. External calls have abort timeouts so one slow upstream can't wedge a request.
+- **Expensive work is centralized + cached, not per‑request.** The on‑chain sweep (RPC + Dexscreener + GoPlus, and Blockscout only when `BLOCKSCOUT_URL` gives it a key) runs at most once per 30s and every client is served the cached result — a spike of readers does **not** multiply into a spike of chain reads. External calls have abort timeouts so one slow upstream can't wedge a request.
 - **Abuse is rate‑limited** per IP/user on every mutating endpoint.
 
 Pair this with a **process manager** (systemd / pm2 / a container orchestrator) that auto‑restarts on a truly fatal exit, and the app stays up.

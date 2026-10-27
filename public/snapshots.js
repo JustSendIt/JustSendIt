@@ -76,9 +76,11 @@
     }).join('');
 
     const shown = (s.holders || []).length;
+    // a failed snapshot read no holders (the server sends null): said as that, never "0 holders"; a partial one counts what it read
+    const count = s.holderCount == null ? '<span><b>Holders not read</b></span>'
+      : '<span><b>' + s.holderCount.toLocaleString('en-US') + '</b> holders' + (s.status === 'complete' ? '' : ' read') + '</span>';
     body.innerHTML = warn +
-      '<div class="snap-meta">' +
-        '<span><b>' + (s.holderCount || 0).toLocaleString('en-US') + '</b> holders</span>' +
+      '<div class="snap-meta">' + count +
         (s.expectedCount != null ? '<span>explorer reported <b>' + s.expectedCount.toLocaleString('en-US') + '</b></span>' : '') +
         '<span>taken <b>' + esc(when(s.startedAt)) + '</b></span>' +
         (s.symbol ? '<span>$' + esc(s.symbol) + '</span>' : '') +

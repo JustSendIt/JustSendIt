@@ -102,8 +102,8 @@ const PEPE_V3 = '0x11950d141ecb863f01007add7d1a342041227b58';   // a real PEPE p
   check('  ...an empty window is GeckoTerminal having no candles, said as that — never "the pool exists; nobody traded it", a fact only a chain read of the swaps can give',
     /: 'GeckoTerminal has no candles for this pool in this window — that says nothing about whether it traded\.',/.test(LIB) && !/nobody traded it/.test(LIB));
   // the server
-  check('the server reads the module with its own fetchers, risk model and clock, and every upstream URL is env (so this suite can fake them)',
-    /const mc = \(\) => _mcInst \|\| \(_mcInst = MC\.createMultichain\(\{ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS \}\)\);/.test(SRC)
+  check('the server reads the module with its own fetchers, risk model, clock and identity (HONEST_UA), and every upstream URL is env (so this suite can fake them)',
+    /const mc = \(\) => _mcInst \|\| \(_mcInst = MC\.createMultichain\(\{ jgetR, applyRisk, pairFromDex, riskFinish, now, urls: MC_URLS, userAgent: HONEST_UA \}\)\);/.test(SRC)
     && /ds: process\.env\.MC_DEXSCREENER_URL \|\| 'https:\/\/api\.dexscreener\.com'/.test(SRC) && /ethRpc: process\.env\.ETH_RPC_URL \|\| 'https:\/\/ethereum-rpc\.publicnode\.com'/.test(SRC) && /solRpc: process\.env\.SOL_RPC_URL \|\| 'https:\/\/api\.mainnet-beta\.solana\.com'/.test(SRC)
     && /ETH_RPC_URL=\nSOL_RPC_URL=\nMC_DEXSCREENER_URL=\nMC_GECKO_URL=\nMC_GOPLUS_URL=/.test(ENV));
   check('the scan route takes the address\'s chain (or ?chain=), tries Ethereum for a 0x address the home chain has nothing for or cannot read, and keeps the other chains\' scans in their own (chain, token) store',
@@ -140,7 +140,7 @@ const PEPE_V3 = '0x11950d141ecb863f01007add7d1a342041227b58';   // a real PEPE p
     && /\.tkd\[data-chain\]:not\(\[data-chain="robinhood"\]\) \.onchain-chart \{ border-color: color-mix\(in srgb, var\(--chain\) 58%, var\(--ink-4\)\); \}/.test(CSS) && /button\.sc-chain--ethereum\.is-on, button\.sc-chain--solana\.is-on \{ background: color-mix\(in srgb, var\(--chain\) 26%, var\(--ink-2\)\); border-color: var\(--chain\);/.test(CSS)
     && !/font-size:\s*(?!max\(var\(--text-floor\))[0-9.]+(rem|px|em)/.test(CSS.slice(CSS.indexOf('/* ===== Chains (owner, 2026-10-23)'))));
   check('the privacy page says what the server asks about a token on another chain (and its version moved); the README and Sendy\'s map say the Scanner reads the three chains',
-    /When you scan an Ethereum or Solana token, the server asks the same kind of services about that chain: Dexscreener and GoPlus Security for the token, CoinGecko's GeckoTerminal for its candles and trades, and a public node for that chain/.test(PRIV) && /Version 2026-10-26 · \$Send \/ JustSendIt/.test(PRIV)
+    /When you scan an Ethereum or Solana token, the server asks the same kind of services about that chain: Dexscreener and GoPlus Security for the token, CoinGecko's GeckoTerminal for its candles and trades, and a public node for that chain/.test(PRIV) && /Version 2026-10-27 · \$Send \/ JustSendIt/.test(PRIV)
     && /on Robinhood Chain, Ethereum or Solana\*\* \(owner, 2026‑10‑23; Ethereum tokens are framed in Ethereum blue, Solana tokens in Solana purple/.test(README) && /paste any token or pool address on Robinhood Chain, Ethereum or Solana for its on-chain profile \(the pools Dexscreener lists for it, up to 30; Ethereum tokens are framed blue, Solana purple\)/.test(SRC));
   const NO_BUY = /\bbuy (now|this|some|more|it|today)\b|should buy|\bpurchase\b/i;
   check('nothing in the new code tells anyone to buy (the module, the Scanner, the dashboard: "buy now/this/some/more/it/today", "should buy", "purchase"), while the honesty line "never a tip to buy" stays allowed; the home chain\'s 0x addresses are still lower-cased while a Solana address never is',

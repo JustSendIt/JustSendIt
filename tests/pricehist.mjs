@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { DB_PATH, SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped, HONEST_UA } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -28,7 +28,7 @@ const FACTORY = '0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f';
 const SYNC = '0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1';
 const PAIRCREATED = '0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9';
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
-const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
+const UA = { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA };
 async function rpc(method, params) {
   for (let i = 0; ; i++) {
     const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });

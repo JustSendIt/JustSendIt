@@ -63,7 +63,7 @@
             '</span>'
             : '<span class="comm-card-metrics">' +
             '<span title="Members">👥 <b>' + fmtNum(c.memberCount) + '</b><span class="sr-only"> members</span></span>' +
-            '<span title="' + (c.holdersSource === 'chain' ? 'Holders — from the chain’s own transfer ledger' : 'Holders — from the block explorer') + '">🪙 <b>' + fmtNum(c.holders) + '</b><span class="sr-only"> holders</span></span>' +
+            '<span title="' + (c.holdersSource === 'chain' ? 'Holders — from the chain’s own transfer ledger' : c.holdersSource === 'explorer' ? 'Holders — from the block explorer' : c.holders == null ? 'Holders — not read yet; the chain’s own ledger is still being built' : 'Holders — as the site last recorded them; the chain’s own ledger is still being built') + '">🪙 <b>' + fmtNum(c.holders) + '</b><span class="sr-only"> holders</span></span>' +
             '<span title="' + (c.supply && c.supply.shown ? 'Share of the supply in members’ linked wallets (' + c.supply.members + ' members, from the chain’s ledger)' : 'Share of supply held by members — shown once ' + ((c.supply && c.supply.need) || 3) + ' members have linked a read-only wallet') + '">🔒 <b>' + (c.supply && c.supply.shown ? esc(fmtPct(c.supply.pct)) : '—') + '</b><span class="sr-only"> of supply held by members</span></span>' +
             '<span title="Market cap">💰 <b>' + fmtUsd(c.mcap) + '</b><span class="sr-only"> market cap</span></span>' +
             '<span title="Price change (24h)">' + chgChip(c.priceChange) + '<span class="sr-only"> price change, 24 hours</span></span>' +

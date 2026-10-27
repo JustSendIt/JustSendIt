@@ -3,7 +3,7 @@
    shows for these two coins is one this suite can reproduce. Read-only: nothing is written anywhere. */
 import { readFileSync } from 'node:fs';
 import { SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped, HONEST_UA } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const SRC = readFileSync(SERVER_JS, 'utf8');
@@ -11,7 +11,7 @@ const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
-const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
+const UA = { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA };
 // the public node rate-limits bursts (and the server under test has just read the same pools), so back off and retry
 async function call(to, data) {
   for (let i = 0; ; i++) {

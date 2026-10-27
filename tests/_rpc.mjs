@@ -7,6 +7,8 @@ import { ROOT } from './_paths.mjs';
 const require = createRequire(ROOT + '/package.json');
 const { Agent } = require('undici');
 export const rpcDispatcher = new Agent({ allowH2: true });
+// …and as the site itself: the server's one identity (lib/marketdata.js HONEST_UA), never a browser's (owner, 2026-10-27)
+export const HONEST_UA = require('./lib/marketdata.js').HONEST_UA;
 
 /* Live reads of the chain — the suites' own probes and the routes that make the server read it — run only with
    CHAIN_LIVE=1. Measured 2026-10-08/09: from the machine that serves the site they throttle its own pool-price and

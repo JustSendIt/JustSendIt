@@ -191,7 +191,7 @@
        triage avoid    — the risk model's own bottom tier
      and two more that are not flags the server scores:
        thinData        — too little of it was READ to judge (server: not indexed, or no liquidity, or no holder
-                         count) — on EVERY chain (owner, 2026-10-24: "apply the missing data rule on robinhood
+                         count; on Robinhood Chain also no read of the contract at all) — on EVERY chain (owner, 2026-10-24: "apply the missing data rule on robinhood
                          chain also"; it was off the home chain only from 2026-10-23)
        a held power    — another chain's contract read found something red the score does not count
                          (vendorFacts, below) — Ethereum and Solana only, where GoPlus reads those powers
@@ -1053,7 +1053,7 @@
       liqLine = liq.locked
         ? '<p class="np-hp-ok">🔒 <b>Liquidity looks locked / burned</b> — about <b>' + Math.round(liq.lockedPct) + '%</b> of the LP sits in a burn address or locker, so it can’t easily be pulled.</p>'
         : '<p class="np-hp-bad">⚠️ <b>Liquidity does NOT look locked</b> — only about <b>' + Math.round(liq.lockedPct) + '%</b> of the LP is burned/locked, so it could be pulled (rug risk).</p>';
-    } else if (liq) liqLine = '<p class="np-hp-note">🤷 Couldn’t tell whether the liquidity is locked.</p>';
+    } else if (liq) liqLine = '<p class="np-hp-note">🤷 Couldn’t tell whether the liquidity is locked' + (liq.reason ? ' — ' + esc(liq.reason) : '') + '.</p>';   // the server's reason, when it gave one
     const sevCls = { critical: 'crit', high: 'high', medium: 'med' };
     const plist = j.powers || [];
     const pul = '<ul class="np-hp-powers">' + plist.map(x => x.neutralised
@@ -1418,8 +1418,8 @@
     const r = p.risk || {};
     return '<div class="np-addr-row"><span class="np-addr-lbl">Token</span>' + addrFit(p.token.address) + copyBtn(p.token.address, 'token contract address') + '</div>' +
       '<div class="np-addr-row"><span class="np-addr-lbl">Pair (LP)</span>' + addrFit(p.pair.address) + copyBtn(p.pair.address, 'pair address') + '</div>' +
-      // the deployer on another EVM chain is GoPlus's creator_address, and says so
-      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer' + perGP(p) + '</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + npNum(r.deployerLaunches) + ' launched' + (r.deployerDied ? ' · ' + npNum(r.deployerDied) + ' dead' : '') + '</span>' : '') + '</div>' : '');
+      // the deployer on another EVM chain is GoPlus's creator_address, and says so — on Robinhood Chain too, when GoPlus named it (deployerSource)
+      (p.token.deployer ? '<div class="np-addr-row"><span class="np-addr-lbl">Deployer' + (perGP(p) || (p.token.deployerSource === 'goplus' ? ' (per GoPlus)' : '')) + '</span><code>' + esc(shortAddr(p.token.deployer)) + '</code>' + copyBtn(p.token.deployer, 'deployer address') + (r.serialDeployer ? ' <span class="np-flag np-flag--bad">' + npNum(r.deployerLaunches) + ' launched' + (r.deployerDied ? ' · ' + npNum(r.deployerDied) + ' dead' : '') + '</span>' : '') + '</div>' : '');
   }
   const HONEST = '<p class="np-honest">Auto-flags are heuristics from public data — not a guarantee and not an audit. Most new tokens go to zero. We don\'t tell you to buy. Entertainment only.</p>';
 

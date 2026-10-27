@@ -10,7 +10,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DB_PATH, KEY_PATH, SERVER_JS } from './_paths.mjs';
-import { rpcDispatcher, LIVE_CHAIN, liveSkipped } from './_rpc.mjs';
+import { rpcDispatcher, LIVE_CHAIN, liveSkipped, HONEST_UA } from './_rpc.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -27,7 +27,7 @@ const made = [];
 const SEND = '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', PAIR = '0xf30bb531d0255969be155533abac34b22bd63414', ROUTER = '0xb92fe925dc43a0ecde6c8b1a2709c170ec4fff4f', DEAD = '0x000000000000000000000000000000000000dead';
 const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const RPC = 'https://rpc.mainnet.chain.robinhood.com';
-const UA = { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36' };
+const UA = { 'Content-Type': 'application/json', 'User-Agent': HONEST_UA };
 async function rpc(method, params) {
   for (let i = 0; ; i++) {
     const r = await fetch(RPC, { method: 'POST', headers: UA, dispatcher: rpcDispatcher, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
