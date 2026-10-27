@@ -738,7 +738,9 @@
     function scheduleFlight() { setTimeout(() => { fly(); scheduleFlight(); }, 45000 + Math.random() * 45000); }
 
     /* ---------- outside click / escape ---------- */
-    document.addEventListener('click', (e) => { if (isOpen() && !widget.contains(e.target)) closePopup(); });
+    // inside or out by the click's path, fixed when it starts: a thumb replaces itself with its thanks, and its click
+    // reached here from a button no longer in the widget — so rating an answer closed the chat
+    document.addEventListener('click', (e) => { if (isOpen() && !e.composedPath().includes(widget)) closePopup(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen() && window.SFX) SFX.play('close'); });   // before the close below, while the popup is still open
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) closePopup(); });   // closePopup returns focus to the rocket only if it was inside
     document.addEventListener('auth:change', () => { const g = $('sendy-greeting'); if (g) g.textContent = greeting(); });

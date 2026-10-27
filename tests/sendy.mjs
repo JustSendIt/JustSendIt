@@ -251,6 +251,12 @@ async function chatWalk() {
 
     await step('Escape, the way back, and a dragged rocket', async () => {
       await openChat(1280, 800, false);
+      await ev('(() => { const i = document.getElementById("sendy-chat-input"); i.value = "What is a Send Call?"; document.getElementById("sendy-chat-form").requestSubmit(); return true; })()');
+      await until('!!document.querySelector("#sendy-chat-messages .sendy-msg:last-child .sendy-rate-btn")');
+      const rated = await ev('(async () => { document.querySelector("#sendy-chat-messages .sendy-msg:last-child .sendy-rate-btn").click(); await new Promise((r) => setTimeout(r, 60)); const bar = document.querySelector("#sendy-chat-messages .sendy-msg:last-child .sendy-rate"); return { thanks: !!bar && /Thanks/.test(bar.textContent), focus: document.activeElement && document.activeElement.id }; })()');
+      // the thumb replaces itself with the thanks: its click used to reach the outside-click close from a button no longer
+      // in the widget, and rating an answer closed the chat (focus went back to the rocket)
+      check('a thumb under an answer says thanks and leaves the chat open, focus handed on to the box (with a mouse)', rated.thanks && rated.focus === 'sendy-chat-input' && /e\.composedPath\(\)\.includes\(widget\)/.test(SRC), JSON.stringify(rated));
       await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
       await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
       await sleep(80);
