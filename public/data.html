@@ -123,7 +123,7 @@
           <tr><td><code>chain</code></td><td>One chain in full: its figures, daily history, top tokens and newest pools, the sources — and for Robinhood Chain its pulse.</td></tr>
           <tr><td><code>chain-history</code></td><td>One chain’s daily series for one metric, between two days.</td></tr>
           <tr><td><code>chain-snapshots</code></td><td>Every chain reading the collectors kept.</td></tr>
-          <tr><td><code>tokens</code></td><td>A chain’s top tokens, sorted your way, over a window.</td></tr>
+          <tr><td><code>tokens</code></td><td>A chain’s top tokens — or every tracked chain’s in one list (<code>chain=all</code>) — sorted your way, over a window.</td></tr>
           <tr><td><code>token</code></td><td>One token in full: price, market cap and FDV, liquidity, pools, volume per window, candles.</td></tr>
           <tr><td><code>pools</code></td><td>Every pool reading the collectors kept.</td></tr>
           <tr><td><code>new-pools</code></td><td>Pools as they were created.</td></tr>
@@ -237,13 +237,21 @@
 
     <section class="card reveal" aria-labelledby="dk-tok-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
       <h2 class="ab-eng-h" id="dk-tok-h">Market data: tokens, pools and scans</h2>
-      <p class="dk-note">A token window is <code>5m</code>, <code>1h</code>, <code>6h</code> or <code>24h</code>, as the sources give them; a <code>custom</code> one only where the site’s own pool history covers it, and the answer says where that history starts.</p>
-      <details class="dk-res"><summary><code>tokens</code> <span>a chain’s top tokens</span></summary><div class="dk-res-body">
+      <p class="dk-note">A token window is <code>5m</code>, <code>1h</code>, <code>6h</code> or <code>24h</code>, as the sources give them; a <code>custom</code> one only where the site’s own pool history covers it, and the answer says where that history starts (for <code>chain=all</code>, network by network).</p>
+      <details class="dk-res"><summary><code>tokens</code> <span>a chain’s top tokens, or every chain’s</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
   "https://YOUR-HOST/api/data/v1/tokens?chain=robinhood&amp;sort=liquidity&amp;dir=desc&amp;window=24h"</pre>
 <pre class="dk-pre">{ data: [ { chain, address, symbol, name, logo|null, priceUsd, mcap, fdv, liquidity: { v, pools }, volume, change, txns24h, flags: [ … ], scannable } ],
   at, chain, network, basis, window, coverage?: { from }, total, notes: [ … ] }</pre>
         <p class="dk-note"><code>sort</code> is <code>volume</code>, <code>liquidity</code>, <code>mcap</code>, <code>fdv</code> or <code>change</code>; <code>dir</code> is <code>desc</code> or <code>asc</code>. <code>basis</code> says what the list is drawn from — on Robinhood Chain the 200 most-traded pools on GeckoTerminal, grouped by token — so “lowest” means lowest among those, never on the whole chain. <code>flags</code>: <code>thin</code> (under $10k in its pools), <code>wash</code> (24-hour volume over 100× its reserve — left out of the highest-volume list unless <code>include=all</code>), <code>global-mcap</code> (a market cap counted over every chain); <code>thin</code> and <code>wash</code> are raised only when every one of its pools gave a reserve. A figure summed over its pools leaves out a pool that gave none — never counted as 0 — and then says so in its <code>label</code>, with <code>missing</code> the number left out.</p>
+        <p class="dk-note"><b>Every chain at once:</b> <code>chain=all</code> puts the lists of every tracked network into one, ranked together — the same <code>sort</code>, <code>dir</code>, <code>window</code> and <code>include</code>, a figure that is missing last in either order, and the 200 highest rows at most, as for one chain.</p>
+<pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
+  "https://YOUR-HOST/api/data/v1/tokens?chain=all&amp;sort=volume&amp;dir=desc&amp;window=1h"</pre>
+<pre class="dk-pre">{ data: [ { chain, chainName, chainLogo|null, address, …the rest as above } ],
+  at, oldestAt, chain: "all", network: null, basis, window, total, notes: [ … ],
+  networks: [ { key, name, network, logo|null, at|null, pools, most, everyMs, // one per tracked network, Robinhood Chain first
+    why?, stopped?, stale?, coverage?: { from } } ] }</pre>
+        <p class="dk-note">Each network’s newest finished read, grouped by token <i>on that chain</i>: the same token on two chains is two rows, and <code>chain</code>, <code>chainName</code> and <code>chainLogo</code> say which (the logo is DefiLlama’s chain icon, as a URL). The networks are read at different times — Robinhood Chain’s 200 most-traded pools every 10 minutes, the others’ top 60 on GeckoTerminal hourly — so every figure keeps the time its own network was read; <code>at</code> is the newest of those reads and <code>oldestAt</code> the oldest. <code>networks</code> says, network by network, when it was read (<code>at</code>), how many pools (<code>pools</code>, of at most <code>most</code>) and how often (<code>everyMs</code>); a network not read yet is listed with <code>pools: 0</code>, <code>at: null</code> and <code>why</code> — and named in <code>notes</code> — never left out without a word. <code>stopped</code> says where a read stopped short; <code>stale</code> marks a network whose newest read is over three of its rounds old. A <code>custom</code> window is each network’s own: its daily snapshots start on their own day (<code>networks[].coverage.from</code>), and a token outside its chain’s coverage has <code>volume</code> <code>null</code> with why.</p>
       </div></details>
       <details class="dk-res"><summary><code>token</code> <span>one token in full</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" \
