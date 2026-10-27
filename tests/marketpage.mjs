@@ -25,8 +25,9 @@
       nothing under the text floor, and the honesty rules where they are easy to break (a failed read is a failure with its
       reason and a Try again, never "none listed"; a reserve of 0 and a missing price are never $0; each pulse reading keeps
       its own time; a custom window ends on a whole day; Back and Forward restore the view in the address bar) — and Top tokens'
-      every-chain list with its chain filter (a logo button per chain, a broken logo left as initials, the filter in the address,
-      the keyboard, a late answer never painting over a newer one).
+      every-chain list with its chain drop-down (a button naming the chain chosen; the list of every chain with its logo and its
+      name, open and closed at every width, never under the corner widgets; a broken logo left as initials; the filter in the
+      address; Escape, a press outside and the keyboard alone; a late answer never painting over a newer one).
    No live vendor is ever called. */
 import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
@@ -341,8 +342,8 @@ async function browserWalk() {
   const S = (sel) => JSON.stringify(sel);
   const textOf = (sel) => ev('(document.querySelector(' + S(sel) + ') || {}).textContent || ""');
   const viewReady = () => until('!document.getElementById("mkt-view").hasAttribute("aria-busy") && !!document.getElementById("mkt-vh") && !document.querySelector("#mkt-view > .mkt-loading")');   // the view's own "Reading…" (the Scanner's waits for a scroll)
-  async function go(p, width) {
-    await cdp('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 768 });
+  async function go(p, width, height = 900) {
+    await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: width < 768 });
     await cdp('Page.navigate', { url: ORIGIN + p });
     await until('document.readyState === "complete" && !!document.getElementById("mkt-view")');
     return viewReady();
@@ -546,48 +547,152 @@ async function browserWalk() {
         && /not a token address the main view reads on Base/.test(hit(/another name/).t) && stayed && resL.sw <= resL.iw && !resL.out.length && !resL.small.length, JSON.stringify({ hits, stayed, resL }).slice(0, 700));
     });
 
-    /* Top tokens: every chain's list by default, a logo button per chain to narrow it (owner, 2026-10-27) */
+    /* Top tokens: every chain's list by default, and a drop-down of every chain — its logo and its name — to narrow it
+       (owner, 2026-10-27: "Make the chain picker filter be a drop down picker with the names of each chain and their logo") */
     const tokRows = () => ev('[...document.querySelectorAll("#mkt-list .mkt-row")].map((b) => ({ c: b.dataset.chain, t: b.dataset.token, chb: (b.querySelector(".mkt-chb") || {}).textContent || "", cur: b.getAttribute("aria-current") === "true" }))');
     const tokAsks = (from) => FAKE.log.slice(from).filter((x) => x.startsWith('/api/market/tokens'));
     const listReady = () => until('!document.querySelector("#mkt-cap .mkt-loading") && document.querySelectorAll("#mkt-list .mkt-row, #mkt-list .mkt-empty").length > 0');
     const openTokens = async () => { await ev('document.getElementById("mkt-tab-tokens").click(), true'); return listReady(); };
-    const pressed = () => ev('[...document.querySelectorAll("#mkt-tchains [aria-pressed=\\"true\\"]")].map((b) => b.dataset.tchain).join()');
-    const filterBtn = (k) => 'document.querySelector("#mkt-tchains [data-tchain=\\"' + k + '\\"]")';
-    await step('Top tokens at every width', async () => {
-      const fits = [];
-      for (const w of [320, 390, 1280, 1920]) {
-        await go('/market', w); await openTokens();
-        await until('[...document.querySelectorAll("#mkt-tchains img")].every((i) => i.complete) && !document.querySelector("#mkt-tchains [data-tchain=\\"solana\\"] img")');
-        fits.push({ w, l: await ev(LAYOUT), rows: (await tokRows()).length, btns: await ev('document.querySelectorAll("#mkt-tchains button").length'), rowsH: await ev('Math.round(document.getElementById("mkt-tchains").getBoundingClientRect().height)') });
+    const TRIG = 'document.getElementById("mkt-tchain-b")', POP = 'document.getElementById("mkt-tchain-p")';
+    const opt = (k) => 'document.querySelector("#mkt-tchain-p [data-tchain=\\"' + k + '\\"]")';
+    const pressed = () => ev('[...document.querySelectorAll("#mkt-tchain-p [aria-pressed=\\"true\\"]")].map((b) => b.dataset.tchain).join()');
+    const isOpen = () => ev('!' + POP + '.hidden && ' + TRIG + '.getAttribute("aria-expanded") === "true"');
+    const focused = () => ev('document.activeElement.id === "mkt-tchain-b" ? "button" : document.activeElement.dataset.tchain || document.activeElement.dataset.sort || document.activeElement.id || document.activeElement.tagName');
+    // what the button shows: its words, its logo (drawn or not) or its initials, the all-chains mark, and whether it is open
+    const trig = () => ev('(() => { const b = ' + TRIG + ', img = b.querySelector("img"), mono = b.querySelector(".mkt-mono"); return { t: (b.querySelector(".mkt-cpick-t") || {}).textContent || "", exp: b.getAttribute("aria-expanded"),'
+      + ' img: img ? img.complete && img.naturalWidth > 0 : null, ini: mono ? mono.textContent : "", iniShown: mono ? getComputedStyle(mono).visibility === "visible" : null, all: !!b.querySelector(".mkt-ava-all") }; })()');
+    // the name a screen reader gives a control, as Chrome computes it
+    const axOf = async (expr) => { await cdp('Accessibility.enable'); const r = await cdp('Runtime.evaluate', { expression: expr }); const t = await cdp('Accessibility.getPartialAXTree', { objectId: r.result.objectId, fetchRelatives: false }); const nd = (t.nodes || [])[0] || {}; return { role: nd.role && nd.role.value, name: nd.name && nd.name.value }; };
+    // a real press, where the control is drawn: it lands on whatever is on top there, as a reader's does
+    const press = async (expr) => {
+      const r = await ev('(() => { const e = ' + expr + '; e.scrollIntoView({ block: "nearest", behavior: "instant" }); const b = e.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()');
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x: r[0], y: r[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
+    };
+    const key = async (k, code, vk, text, mods) => { await cdp('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods || 0 }, text ? { text } : {})); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods || 0 }); };
+    const K = { tab: () => key('Tab', 'Tab', 9), shiftTab: () => key('Tab', 'Tab', 9, null, 8), enter: () => key('Enter', 'Enter', 13, '\r'), space: () => key(' ', 'Space', 32, ' '), esc: () => key('Escape', 'Escape', 27), down: () => key('ArrowDown', 'ArrowDown', 40), up: () => key('ArrowUp', 'ArrowUp', 38), end: () => key('End', 'End', 35) };
+    const pickChain = async (k) => { await press(TRIG); await until('!' + POP + '.hidden'); await press(opt(k)); };
+    // nothing in the button or a chain's row cut: each part inside its button, a name never wider than its box, initials inside their disc
+    const PICKFIT = `(() => {
+      const inside = (a, b) => a.left >= b.left - 1 && a.right <= b.right + 1 && a.top >= b.top - 1 && a.bottom <= b.bottom + 1, bad = [];
+      for (const b of document.querySelectorAll('#mkt-tchains button')) {
+        if (b.closest('[hidden]')) continue;
+        const br = b.getBoundingClientRect(), who = b.dataset.tchain || 'the button';
+        for (const s of b.querySelectorAll('.mkt-ava, .mkt-cpick-t, .mkt-copt-n, .mkt-tick, .mkt-caret')) if (!inside(s.getBoundingClientRect(), br)) bad.push(who + ': ' + s.className + ' outside its button');
+        for (const s of b.querySelectorAll('.mkt-cpick-t, .mkt-copt-n')) if (s.scrollWidth > s.clientWidth + 1) bad.push(who + ': its name is cut');
+        const m = b.querySelector('.mkt-mono');
+        if (m && getComputedStyle(m).visibility === 'visible') { const mr = m.getBoundingClientRect(), dr = m.parentNode.getBoundingClientRect(); if (mr.left < dr.left - 0.5 || mr.right > dr.right + 0.5 || m.scrollWidth > Math.ceil(mr.width) + 1) bad.push(who + ': its initials (' + m.textContent + ') are cut'); }
       }
-      const bad = fits.filter((f) => f.l.sw > f.l.iw || f.l.out.length || f.l.small.length || !f.rows || f.btns !== 1 + MD.GT_TRACKED.length);
-      check('Top tokens in a real browser at 320, 390, 1280 and 1920 px: every chain\'s list and its row of chain buttons (wrapping onto lines of their own) fit — no sideways scroll, nothing outside the column, no text under the floor',
-        fits.length === 4 && !bad.length, JSON.stringify(bad.length ? bad : fits.map((f) => [f.w, f.rowsH])).slice(0, 600));
+      return bad;
+    })()`;
+    // the open list on the screen: inside the side card, above the bottom of the screen, and every chain in it on top where it
+    // is drawn — each brought into view in the list (it scrolls inside), then hit-tested at its centre. The description bubble
+    // (tips.js, shown on focus) is put away first: it is the site's own label for the control in focus, on top on purpose.
+    const PICKSEEN = `(() => {
+      if (window.sendTips) sendTips.hide();
+      const p = document.getElementById('mkt-tchain-p'), pr = p.getBoundingClientRect(), side = document.getElementById('mkt-side').getBoundingClientRect(), covered = [];
+      const keep = p.scrollTop;
+      for (const o of p.querySelectorAll('.mkt-copt')) {
+        p.scrollTop = Math.max(0, o.offsetTop - (p.clientHeight - o.offsetHeight) / 2);
+        const r = o.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
+        if (!hit || !o.contains(hit)) covered.push(o.dataset.tchain + ' under ' + (hit ? (hit.id || String(hit.className).slice(0, 40) || hit.tagName) : 'nothing (off the screen)'));
+      }
+      p.scrollTop = keep;
+      return { covered, top: Math.round(pr.top), bottom: Math.round(pr.bottom), ih: innerHeight, inCard: pr.left >= side.left - 1 && pr.right <= side.right + 1, onScreen: pr.top >= 0 && pr.bottom <= innerHeight, scrolls: p.scrollHeight > p.clientHeight + 1, n: p.querySelectorAll('.mkt-copt').length };
+    })()`;
+    const settled = () => until('[...document.querySelectorAll("#mkt-tchains img")].every((i) => i.complete) && !document.querySelector("#mkt-tchains [data-tchain=\\"solana\\"] img")');
+    await step('Top tokens\' chain drop-down at every width, closed and open', async () => {
+      const fits = [];
+      for (const [w, h] of [[320, 900], [390, 900], [1280, 900], [1920, 900], [390, 600]]) {
+        await go('/market', w, h); await openTokens(); await settled();
+        const closed = { l: await ev(LAYOUT), cut: await ev(PICKFIT), trig: await trig(), rows: (await tokRows()).length };
+        // the press is the page's first, so the player's nudge comes up over the corner a moment later: the list measures its
+        // room again twice a second, and is judged after that
+        await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
+        const open = { l: await ev(LAYOUT), cut: await ev(PICKFIT), seen: await ev(PICKSEEN), focus: await focused(), label: await ev('document.getElementById("mkt-tf-l").getBoundingClientRect().top >= (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0) - 1') };
+        await ev(TRIG + '.click(), true'); await until(POP + '.hidden');
+        fits.push({ w, h, closed, open });
+      }
+      const flat = (l) => l.sw > l.iw || l.out.length || l.small.length;
+      const bad = fits.filter((f) => flat(f.closed.l) || f.closed.cut.length || !f.closed.rows || f.closed.trig.t !== 'All chains' || !f.closed.trig.all || f.closed.trig.exp !== 'false'
+        || flat(f.open.l) || f.open.cut.length || f.open.seen.covered.length || !f.open.seen.inCard || !f.open.seen.onScreen || f.open.seen.n !== 1 + MD.GT_TRACKED.length || f.open.focus !== 'all' || !f.open.label);
+      check('Top tokens\' chain drop-down in a real browser at 320, 390, 1280 and 1920 px (and a 600px-tall phone): closed, the button says "All chains" with its mark; open, every chain is listed — and either way no sideways scroll, nothing outside the column, no text under the floor, no name or initials cut',
+        fits.length === 5 && !bad.length, JSON.stringify(bad.length ? bad : fits.map((f) => [f.w + 'x' + f.h, f.open.seen.top, f.open.seen.bottom, f.open.seen.scrolls])).slice(0, 900));
+      check('  ...the open list lies over the controls below it, inside the side card and on the screen, and nothing covers it — not the music player or its hint, the ✏️ SEND IT button or Sendy: every chain is on top at its centre (a short screen scrolls the list inside, and the Chain label stays in view)',
+        fits.length === 5 && fits.every((f) => !f.open.seen.covered.length && f.open.seen.inCard && f.open.seen.onScreen && f.open.label) && fits.find((f) => f.h === 600).open.seen.scrolls,
+        JSON.stringify(fits.map((f) => ({ w: f.w + 'x' + f.h, seen: f.open.seen }))).slice(0, 900));
     });
 
-    await step('Top tokens: every chain, and the chain filter', async () => {
+    await step('Top tokens\' chain drop-down: room for what comes up over it', async () => {
+      await go('/market', 1280); await openTokens(); await settled();
+      const nudge = (on) => ev('(() => { const h = document.getElementById("mp-hint"); if (h) h.hidden = ' + !on + '; return !!h; })()');
+      // the page's first press brings the nudge up by itself: made on the Chain label, then the nudge put away, then the list opened
+      await press('document.getElementById("mkt-tf-l")'); await sleep(400); await nudge(false);
+      await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
+      const before = await ev(PICKSEEN);
+      const had = await nudge(true); await sleep(700);
+      const over = await ev(PICKSEEN), hint = await ev('(() => { const r = document.getElementById("mp-hint").getBoundingClientRect(); return { top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right) }; })()');
+      await nudge(false); await sleep(700);
+      const after = await ev(PICKSEEN);
+      await ev(TRIG + '.click(), true');
+      check('  ...the open list makes room for what comes up over it while it is open (the player\'s nudge, at 1280 px): it stops above the nudge within half a second, nothing in it covered, and takes the room back once the nudge has gone',
+        had && !before.covered.length && !over.covered.length && over.bottom <= hint.top && over.bottom < before.bottom && !after.covered.length && after.bottom === before.bottom,
+        JSON.stringify({ before: [before.top, before.bottom], over: [over.top, over.bottom, over.covered], hint, after: [after.top, after.bottom] }));
+    });
+
+    await step('Top tokens\' chain drop-down: a list being scrolled is left alone', async () => {
+      await go('/market', 390, 600); await openTokens(); await settled();
+      // what comes and goes over the corner (the player and its nudge, Sendy arriving and greeting — it shows itself again if
+      // only hidden) is taken off the page first: this measures that nothing moves while nothing changes (the step above has
+      // the list making room when something does)
+      await press('document.getElementById("mkt-tf-l")'); await sleep(400);
+      await ev('(() => { for (const id of ["music-player", "sendy-widget"]) { const h = document.getElementById(id); if (h) h.remove(); } return true; })()');
+      await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
+      const s0 = await ev('(() => { const p = ' + POP + '; p.scrollTop = Math.round((p.scrollHeight - p.clientHeight) / 2); window.__mktStyle = 0; new MutationObserver((m) => { window.__mktStyle += m.length; }).observe(p, { attributes: true, attributeFilter: ["style"] }); return { top: p.scrollTop, mh: p.style.maxHeight, scrolls: p.scrollHeight > p.clientHeight + 1 }; })()');
+      await sleep(1300);
+      const s1 = await ev('(() => { const p = ' + POP + '; return { top: p.scrollTop, mh: p.style.maxHeight, changes: window.__mktStyle }; })()');
+      check('  ...a list that scrolls inside (a 600px-tall phone) is left alone while nothing changes over it: the twice-a-second looks are hit tests only — its height is not touched and where it was scrolled to stays, so a flick through it is never cut short',
+        s0.scrolls && s0.top > 0 && s1.top === s0.top && s1.mh === s0.mh && s1.changes === 0, JSON.stringify({ s0, s1 }));
+      // the page scrolled with the list open: its top slides up under the sticky nav, which is scrolled away, not something over it
+      await ev('window.scrollBy({ top: 90, behavior: "instant" }), true'); await sleep(1200);
+      const s2 = await ev('(() => { const p = ' + POP + ', r = p.getBoundingClientRect(); return { mh: p.style.maxHeight, top: Math.round(r.top), nav: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0 }; })()');
+      await ev(TRIG + '.click(), true');
+      check('  ...and the page scrolled with it open, its top up under the sticky nav: the list keeps its room (the nav is not read as something lying over it) and grows into what the scroll freed below',
+        s2.top < s2.nav && parseFloat(s2.mh) >= parseFloat(s0.mh), JSON.stringify({ s0: s0.mh, s2 }));
+    });
+
+    await step('Top tokens: every chain, and the chain drop-down', async () => {
       await go('/market', 1280);
       const m0 = FAKE.log.length;
-      await openTokens();
-      await until('!!' + filterBtn('ethereum') + '.querySelector("img") && ' + filterBtn('ethereum') + '.querySelector("img").complete && !' + filterBtn('solana') + '.querySelector("img")');
-      const btns = await ev('[...document.querySelectorAll("#mkt-tchains button")].map((b) => { const img = b.querySelector("img"), mono = b.querySelector(".mkt-mono"); return { k: b.dataset.tchain, tag: b.tagName, pressed: b.getAttribute("aria-pressed"), tip: b.dataset.tip || "",'
-        + ' name: [...b.childNodes].filter((n) => !(n.nodeType === 1 && n.getAttribute("aria-hidden") === "true")).map((n) => n.textContent).join("").trim(), img: img ? { alt: img.getAttribute("alt"), ok: img.naturalWidth > 0 } : null,'
-        + ' ini: mono ? mono.textContent : "", iniShown: mono ? getComputedStyle(mono).visibility === "visible" : null }; })');
+      await openTokens(); await settled();
+      await until('!!' + opt('ethereum') + '.querySelector("img") && ' + opt('ethereum') + '.querySelector("img").complete');
+      const t0 = await trig(), ax0 = await axOf(TRIG);
+      const btnAttrs = await ev('(() => { const b = ' + TRIG + '; return { tip: b.dataset.tip || "", ctl: b.getAttribute("aria-controls"), pop: b.hasAttribute("aria-haspopup"), tag: b.tagName, type: b.type }; })()');
+      check('Top tokens opens on every chain\'s list (/api/market/tokens?chain=all, nothing added to the address); the Chain button says "All chains", with the all-chains mark and closed',
+        tokAsks(m0)[0] === '/api/market/tokens?chain=all' && (await ev('location.search')) === '' && t0.t === 'All chains' && t0.all && t0.exp === 'false' && (await ev(POP + '.hidden')) === true && (await pressed()) === 'all',
+        JSON.stringify({ asked: tokAsks(m0), t0 }));
+      check('  ...the button is a real button that names what it shows ("Chain: All chains" to a screen reader), says what it does in a description that does not repeat that, and controls the list as a disclosure (aria-expanded, aria-controls — no menu popup)',
+        ax0.role === 'button' && ax0.name === 'Chain: All chains' && btnAttrs.tag === 'BUTTON' && btnAttrs.type === 'button' && btnAttrs.ctl === 'mkt-tchain-p' && !btnAttrs.pop && btnAttrs.tip.length > 30 && !/^chain:? all chains$/i.test(btnAttrs.tip), JSON.stringify({ ax0, btnAttrs }));
+      await press(TRIG); await until('!' + POP + '.hidden');
+      const opts = await ev('[...document.querySelectorAll("#mkt-tchain-p button")].map((b) => { const img = b.querySelector("img"), mono = b.querySelector(".mkt-mono"); return { k: b.dataset.tchain, tag: b.tagName, li: b.parentNode.tagName, pressed: b.getAttribute("aria-pressed"), tip: b.dataset.tip || "",'
+        + ' name: (b.querySelector(".mkt-copt-n") || {}).textContent || "", tick: getComputedStyle(b.querySelector(".mkt-tick")).visibility, img: img ? { alt: img.getAttribute("alt"), ok: img.naturalWidth > 0 } : null,'
+        + ' ini: mono ? mono.textContent : "", iniShown: mono ? getComputedStyle(mono).visibility === "visible" : null, all: !!b.querySelector(".mkt-ava-all") }; })');
+      const list = await ev('(() => { const p = ' + POP + '; return { tag: p.tagName, role: p.getAttribute("role"), by: p.getAttribute("aria-labelledby") }; })()');
+      const axEth = await axOf(opt('ethereum')), o = (k) => opts.find((x) => x.k === k) || {};
       const words = (t) => String(t).toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
-      const b = (k) => btns.find((x) => x.k === k) || {};
-      const rows0 = await tokRows(), cap0 = await textOf('#mkt-cap');
-      check('Top tokens opens on every chain\'s list (/api/market/tokens?chain=all, nothing added to the address): "All chains" chosen, then a button per chain the server reads, Robinhood Chain first',
-        tokAsks(m0)[0] === '/api/market/tokens?chain=all' && (await ev('location.search')) === '' && btns.map((x) => x.k).join() === ['all'].concat(MD.GT_TRACKED).join() && (await pressed()) === 'all',
-        JSON.stringify({ asked: tokAsks(m0), btns: btns.map((x) => x.k + ':' + x.pressed) }));
-      check('  ...each a real button with aria-pressed, a name in words ("Show Ethereum tokens"), a description that does not repeat it, and its logo with alt="" — the Solana logo that does not load leaves its initials, never a broken picture',
-        btns.every((x) => x.tag === 'BUTTON' && /^(true|false)$/.test(x.pressed) && x.tip.length > 20 && words(x.tip) !== words(x.name)) && b('all').name === 'Show tokens on All chains' && b('ethereum').name === 'Show Ethereum tokens' && /^Show Robinhood Chain tokens$/.test(b('robinhood').name)
-        && b('ethereum').img && b('ethereum').img.alt === '' && b('ethereum').img.ok && b('ethereum').iniShown === false && b('solana').img === null && b('solana').ini === 'SO' && b('solana').iniShown === true && b('robinhood').ini === 'RC',
-        JSON.stringify(btns).slice(0, 700));
-      // BSC's logo taken away as a failed load does: its three-letter initials must fit, as Solana's two do
-      const iniFit = await ev('(() => { const i = ' + filterBtn('bsc') + '.querySelector("img"); if (i) i.remove(); return [...document.querySelectorAll("#mkt-tchains .mkt-ava-cf")].filter((d) => !d.querySelector("img")).map((d) => { const m = d.querySelector(".mkt-mono"), r = m.getBoundingClientRect(), o = d.getBoundingClientRect(); return { t: m.textContent, fits: r.left >= o.left - 0.5 && r.right <= o.right + 0.5 && m.scrollWidth <= Math.ceil(r.width) + 1 }; }); })()');
-      check('  ...a logo that is missing leaves initials that fit their disc — three letters (BSC) as well as two (SO), never a letter cut off',
-        iniFit.some((x) => x.t.length === 3) && iniFit.some((x) => x.t === 'SO') && iniFit.every((x) => x.fits), JSON.stringify(iniFit));
-      const usdg = rows0.filter((r) => r.t === USDG);
+      check('  ...opening it lists every chain the server reads, "All chains" first then Robinhood Chain and the rest in the server\'s order, each a real button in a list (role="list", not a menu) with its logo and its full name — the focus on the chosen one, the button now open',
+        opts.map((x) => x.k).join() === ['all'].concat(MD.GT_TRACKED).join() && opts.every((x) => x.tag === 'BUTTON' && x.li === 'LI') && list.tag === 'UL' && list.role === 'list' && list.by === 'mkt-tf-l'
+        && o('all').name === 'All chains' && o('all').all && o('robinhood').name === 'Robinhood Chain' && o('ethereum').name === 'Ethereum' && o('base').name === 'Base' && (await focused()) === 'all' && (await trig()).exp === 'true'
+        && axEth.role === 'button' && axEth.name === 'Ethereum', JSON.stringify({ opts: opts.map((x) => x.k + ':' + x.name), list, axEth }).slice(0, 700));
+      check('  ...the chosen one says so by more than its fill: a tick and aria-pressed; each says what it does in a description that does not repeat its name; a logo is decorative (alt="") over the initials, and Solana\'s, which does not load, leaves its initials — never a broken picture',
+        opts.every((x) => /^(true|false)$/.test(x.pressed) && x.tip.length > 20 && words(x.tip) !== words(x.name)) && opts.filter((x) => x.pressed === 'true').map((x) => x.k).join() === 'all' && o('all').tick === 'visible' && opts.filter((x) => x.k !== 'all').every((x) => x.tick === 'hidden')
+        && o('ethereum').img && o('ethereum').img.alt === '' && o('ethereum').img.ok && o('ethereum').iniShown === false && o('solana').img === null && o('solana').ini === 'SO' && o('solana').iniShown === true && o('robinhood').ini === 'RC',
+        JSON.stringify(opts).slice(0, 800));
+      // BSC's logo failing as a missing picture does: its three-letter initials must fit, as Solana's two do
+      const iniFit = await ev('(() => { const i = ' + opt('bsc') + '.querySelector("img"); if (i) i.dispatchEvent(new Event("error")); return [...document.querySelectorAll("#mkt-tchain-p .mkt-ava-cf:not(.mkt-ava-all)")].filter((d) => !d.querySelector("img")).map((d) => { const m = d.querySelector(".mkt-mono"), r = m.getBoundingClientRect(), b = d.getBoundingClientRect(); return { t: m.textContent, fits: r.left >= b.left - 0.5 && r.right <= b.right + 0.5 && m.scrollWidth <= Math.ceil(r.width) + 1 }; }); })()');
+      check('  ...a logo that fails in the list leaves initials that fit their disc — three letters (BSC) as well as two (SO), never a letter cut off',
+        iniFit.some((x) => x.t === 'BSC') && iniFit.some((x) => x.t === 'SO') && iniFit.every((x) => x.fits), JSON.stringify(iniFit));
+      await K.esc(); await until(POP + '.hidden');
+      const rows0 = await tokRows(), cap0 = await textOf('#mkt-cap'), usdg = rows0.filter((r) => r.t === USDG);
       check('  ...the list mixes the chains, each row naming its own (USDG on Robinhood Chain and on Ethereum are two rows, each saying which), and the caption says what the list is and which chains have not been read',
         rows0.some((r) => r.c === 'robinhood') && rows0.some((r) => r.c === 'ethereum') && rows0.every((r) => /^on (Robinhood Chain|Ethereum)$/.test(r.chb)) && usdg.length === 2 && usdg.map((r) => r.c).sort().join() === 'ethereum,robinhood'
         && /^Every chain · ranked by volume, highest first · last 24 hours · 2 of 9 chains read · read /.test(cap0) && /Not read yet: Solana, Base, BSC, Arbitrum, Polygon, Avalanche, OP Mainnet/.test(cap0) && /the same token on two chains is two rows/.test(cap0),
@@ -602,42 +707,86 @@ async function browserWalk() {
         ctl.asked.join() === ['/api/market/tokens?chain=all&sort=liquidity', '/api/market/tokens?chain=all&sort=liquidity&window=1h', '/api/market/tokens?chain=all&sort=liquidity&dir=asc&window=1h'].join() && /^Every chain · ranked by liquidity, lowest first · last hour/.test(ctl.cap) && /not the lowest on any chain/.test(ctl.cap)
         && ctl.rows.some((r) => r.c === 'ethereum') && ctl.rows.some((r) => r.c === 'robinhood'), JSON.stringify(ctl).slice(0, 500));
       await ev('document.querySelector("#mkt-ctl-tokens [data-sort=\\"volume\\"]").click(), document.querySelector("#mkt-ctl-tokens [data-dir=\\"desc\\"]").click(), document.querySelector("#mkt-ctl-tokens [data-win=\\"24h\\"]").click(), true'); await listReady(); await sleep(300);
-      // a logo narrows it; the main view stays where it was
+      // a chain picked narrows it; the main view stays where it was
       m = FAKE.log.length;
-      await ev(filterBtn('ethereum') + '.click(), true');
+      await pickChain('ethereum');
       await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
-      const eth = { rows: await tokRows(), cap: await textOf('#mkt-cap'), asked: tokAsks(m), on: await pressed(), vh: await textOf('#mkt-vh') };
+      const eth = { rows: await tokRows(), cap: await textOf('#mkt-cap'), asked: tokAsks(m), on: await pressed(), vh: await textOf('#mkt-vh'), trig: await trig(), focus: await focused(), open: await isOpen(), ax: await axOf(TRIG) };
       m = FAKE.log.length;
-      await ev(filterBtn('base') + '.click(), true');
+      await pickChain('base');
       await until('location.search === "?chain=robinhood&tchain=base"'); await listReady();
-      const base = { list: await textOf('#mkt-list'), cap: await textOf('#mkt-cap'), asked: tokAsks(m), on: await pressed() };
-      check('  ...picking a chain\'s logo lists that chain\'s tokens only (its own list, chain=<key>), marks that button chosen, puts tchain in the address — and the main view stays on Robinhood Chain; a chain not read yet says so',
+      const base = { list: await textOf('#mkt-list'), cap: await textOf('#mkt-cap'), asked: tokAsks(m), on: await pressed(), trig: await trig() };
+      check('  ...picking Ethereum lists its tokens only (its own list, chain=<key>), puts tchain in the address, closes the list with the focus back on the button — which now shows Ethereum\'s logo and "Ethereum" ("Chain: Ethereum") — and the main view stays on Robinhood Chain; a chain not read yet says so',
         eth.asked.join() === '/api/market/tokens?chain=ethereum' && eth.rows.length > 5 && eth.rows.every((r) => r.c === 'ethereum') && /^Tokens on Ethereum · ranked by volume/.test(eth.cap) && eth.on === 'ethereum' && /Robinhood Chain/.test(eth.vh)
-        && base.asked.join() === '/api/market/tokens?chain=base' && /This chain's pools have not been read yet\./.test(base.list) && /^Tokens on Base/.test(base.cap) && base.on === 'base', JSON.stringify({ eth: Object.assign({}, eth, { rows: eth.rows.length }), base }).slice(0, 600));
+        && eth.trig.t === 'Ethereum' && eth.trig.img === true && eth.trig.exp === 'false' && !eth.open && eth.focus === 'button' && eth.ax.name === 'Chain: Ethereum'
+        && base.asked.join() === '/api/market/tokens?chain=base' && /This chain's pools have not been read yet\./.test(base.list) && /^Tokens on Base/.test(base.cap) && base.on === 'base' && base.trig.t === 'Base',
+        JSON.stringify({ eth: Object.assign({}, eth, { rows: eth.rows.length }), base }).slice(0, 700));
       await ev('history.back(), true');
       await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
-      const back1 = { rows: await tokRows(), on: await pressed() };
+      const back1 = { rows: await tokRows(), on: await pressed(), t: (await trig()).t };
       await ev('history.back(), true');
       await until('location.search === ""'); await listReady();
-      const back2 = { rows: await tokRows(), on: await pressed() };
+      const back2 = { rows: await tokRows(), on: await pressed(), t: (await trig()).t, all: (await trig()).all };
       await ev('history.forward(), true');
       await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
-      const fwd = { rows: await tokRows(), on: await pressed() };
-      check('  ...Back and Forward restore the filter: Back to Ethereum\'s list, Back to every chain\'s, Forward to Ethereum\'s again',
-        back1.on === 'ethereum' && back1.rows.length && back1.rows.every((r) => r.c === 'ethereum') && back2.on === 'all' && back2.rows.some((r) => r.c === 'robinhood') && back2.rows.some((r) => r.c === 'ethereum') && fwd.on === 'ethereum' && fwd.rows.every((r) => r.c === 'ethereum'),
-        JSON.stringify({ back1: back1.on, back2: back2.on, fwd: fwd.on }));
-      // the keyboard: Tab reaches the next chain's button, Enter picks it, and the focus stays on it
-      await ev(filterBtn('all') + '.focus(), true');
-      const key = async (k, code, vk, text) => { await cdp('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }, text ? { text } : {})); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); };
-      await key('Tab', 'Tab', 9);
-      const tabbed = await ev('document.activeElement.dataset.tchain || ""');
-      await key('Enter', 'Enter', 13, '\r');
+      const fwd = { rows: await tokRows(), on: await pressed(), t: (await trig()).t };
+      check('  ...Back and Forward restore the filter and the button\'s label: Back to Ethereum\'s list ("Ethereum"), Back to every chain\'s ("All chains"), Forward to Ethereum\'s again',
+        back1.on === 'ethereum' && back1.t === 'Ethereum' && back1.rows.length && back1.rows.every((r) => r.c === 'ethereum') && back2.on === 'all' && back2.t === 'All chains' && back2.all && back2.rows.some((r) => r.c === 'robinhood') && back2.rows.some((r) => r.c === 'ethereum')
+        && fwd.on === 'ethereum' && fwd.t === 'Ethereum' && fwd.rows.every((r) => r.c === 'ethereum'), JSON.stringify({ back1: [back1.on, back1.t], back2: [back2.on, back2.t], fwd: [fwd.on, fwd.t] }));
+      // Escape and a press outside close it; neither changes the filter
+      m = FAKE.log.length;
+      await press(TRIG); await until('!' + POP + '.hidden');
+      await K.esc(); await until(POP + '.hidden');
+      const esc1 = { open: await isOpen(), focus: await focused(), url: await ev('location.search') };
+      await press(TRIG); await until('!' + POP + '.hidden');
+      await press('document.getElementById("mkt-vh")'); await until(POP + '.hidden');
+      const out1 = { open: await isOpen(), url: await ev('location.search'), on: await pressed(), t: (await trig()).t };
+      check('  ...Escape closes it with the focus back on the button; a press outside it closes it too; neither changes the filter or reads the list again',
+        !esc1.open && esc1.focus === 'button' && esc1.url === '?chain=robinhood&tchain=ethereum' && !out1.open && out1.url === esc1.url && out1.on === 'ethereum' && out1.t === 'Ethereum' && !tokAsks(m).length, JSON.stringify({ esc1, out1, asked: tokAsks(m) }));
+      // the keyboard alone: Tab to the button, Enter opens it on the chosen chain, the arrows move, Enter picks
+      await ev('document.getElementById("mkt-tab-tokens").focus(), true');
+      await K.tab();
+      const kb0 = await focused();
+      await K.enter(); await until('!' + POP + '.hidden');
+      const kb1 = { focus: await focused(), open: await isOpen() };
+      await K.down(); const kb2 = await focused();
+      await K.up(); await K.up(); const kb3 = await focused();
+      await K.enter();
       await until('location.search === "?chain=robinhood&tchain=robinhood"'); await listReady();
-      const kb = { on: await pressed(), focus: await ev('document.activeElement.dataset.tchain || ""'), rows: await tokRows() };
-      check('  ...by keyboard too: Tab from "All chains" reaches Robinhood Chain\'s button, Enter picks it, and the focus stays on it',
-        tabbed === 'robinhood' && kb.on === 'robinhood' && kb.focus === 'robinhood' && kb.rows.length && kb.rows.every((r) => r.c === 'robinhood'), JSON.stringify({ tabbed, kb: Object.assign({}, kb, { rows: kb.rows.length }) }));
+      const kb4 = { open: await isOpen(), focus: await focused(), t: (await trig()).t, rows: await tokRows() };
+      check('  ...by keyboard alone: Tab from the Top tokens tab reaches the button, Enter opens it with the focus on the chosen chain (Ethereum), the arrows move (Solana, then back up to Robinhood Chain), Enter picks — the list closes, the focus is back on the button, which says "Robinhood Chain"',
+        kb0 === 'button' && kb1.focus === 'ethereum' && kb1.open && kb2 === 'solana' && kb3 === 'robinhood' && !kb4.open && kb4.focus === 'button' && kb4.t === 'Robinhood Chain' && kb4.rows.length && kb4.rows.every((r) => r.c === 'robinhood'),
+        JSON.stringify({ kb0, kb1, kb2, kb3, kb4: Object.assign({}, kb4, { rows: kb4.rows.length }) }));
+      // Space opens it too; Tab goes through the chains and is never trapped: past the last one it leaves, and the list closes
+      await K.space(); await until('!' + POP + '.hidden');
+      const sp = await focused();
+      await K.tab(); const tb1 = { focus: await focused(), open: await isOpen() };
+      await K.shiftTab(); const tb2 = await focused();
+      await K.end(); const tb3 = await focused();
+      await K.tab(); await sleep(60);
+      const tb4 = { focus: await focused(), open: await isOpen(), exp: (await trig()).exp };
+      check('  ...Space opens it (on Robinhood Chain); Tab and Shift+Tab move through the chains like any buttons (Ethereum, back to Robinhood Chain), End jumps to the last (OP Mainnet), and Tab past it leaves the list for the next control (Rank by: Volume) and closes it — never a trap',
+        sp === 'robinhood' && tb1.focus === 'ethereum' && tb1.open && tb2 === 'robinhood' && tb3 === 'optimism' && tb4.focus === 'volume' && !tb4.open && tb4.exp === 'false', JSON.stringify({ sp, tb1, tb2, tb3, tb4 }));
+      // an arrow puts the next chain's description up (tips.js, for any focus moved by a key); as everywhere on the site, the first
+      // Escape takes that description down (WCAG 1.4.13) and the next one closes the list
+      await ev(TRIG + '.focus(), true'); await K.enter(); await until('!' + POP + '.hidden');
+      await K.down(); await sleep(60);
+      const tip1 = await ev('!!document.getElementById("tip-bubble") && !document.getElementById("tip-bubble").hidden');
+      await K.esc(); const e1 = { open: await isOpen(), tip: await ev('!!document.getElementById("tip-bubble") && !document.getElementById("tip-bubble").hidden') };
+      await K.esc(); await until(POP + '.hidden');
+      const e2 = { open: await isOpen(), focus: await focused() };
+      check('  ...after an arrow, its description showing: the first Escape takes the description down (the site\'s rule for every control), the second closes the list and puts the focus back on the button',
+        tip1 && e1.open && !e1.tip && !e2.open && e2.focus === 'button', JSON.stringify({ tip1, e1, e2 }));
+      // a logo that fails on the button leaves its initials there too: Solana's (two letters), BSC's (three)
+      await pickChain('solana'); await until('location.search === "?chain=robinhood&tchain=solana"'); await listReady();
+      const so = await trig();
+      await pickChain('bsc'); await until('location.search === "?chain=robinhood&tchain=bsc"'); await listReady();
+      await ev('(() => { const i = ' + TRIG + '.querySelector("img"); if (i) i.dispatchEvent(new Event("error")); return true; })()');
+      const bsc = await trig(), bscCut = await ev(PICKFIT);
+      check('  ...a logo that is missing or fails on the button leaves the chain\'s initials there as in the list — Solana\'s "SO", and BSC\'s "BSC" whole, nothing cut',
+        so.t === 'Solana' && so.img === null && so.ini === 'SO' && so.iniShown && bsc.t === 'BSC' && bsc.img === null && bsc.ini === 'BSC' && bsc.iniShown && !bscCut.length, JSON.stringify({ so, bsc, bscCut }));
       // a row opens its token on ITS chain, and only that row is marked as the one in view
-      await ev(filterBtn('all') + '.click(), true'); await until('location.search === "?chain=robinhood"'); await listReady();
+      await pickChain('all'); await until('location.search === "?chain=robinhood"'); await listReady();
       await ev('document.querySelector("#mkt-list .mkt-row[data-chain=\\"ethereum\\"][data-token=\\"' + USDG + '\\"]").click(), true');
       await until('location.search === "?chain=ethereum&token=' + USDG + '"'); await viewReady();
       const opened = { kick: await textOf('.mkt-kicker'), cur: (await tokRows()).filter((r) => r.cur) };
@@ -648,20 +797,20 @@ async function browserWalk() {
     await step('Top tokens: a link to a filter, and a slow answer', async () => {
       const m = FAKE.log.length;
       await go('/market?tchain=base', 390); await listReady();
-      const link = { tab: await ev('document.getElementById("mkt-tab-tokens").getAttribute("aria-selected")'), on: await pressed(), asked: tokAsks(m), chains: FAKE.log.slice(m).includes('/api/market/chains'), vh: await textOf('#mkt-vh') };
-      check('a link with tchain=base opens Top tokens on Base\'s list with Base chosen (the logos read quietly from the chains list), the main view on Robinhood Chain',
-        link.tab === 'true' && link.on === 'base' && link.asked.join() === '/api/market/tokens?chain=base' && link.chains && /Robinhood Chain/.test(link.vh), JSON.stringify(link));
+      const link = { tab: await ev('document.getElementById("mkt-tab-tokens").getAttribute("aria-selected")'), on: await pressed(), t: (await trig()).t, asked: tokAsks(m), chains: FAKE.log.slice(m).includes('/api/market/chains'), vh: await textOf('#mkt-vh') };
+      check('a link with tchain=base opens Top tokens on Base\'s list with Base chosen and named on the button (the logos read quietly from the chains list), the main view on Robinhood Chain',
+        link.tab === 'true' && link.on === 'base' && link.t === 'Base' && link.asked.join() === '/api/market/tokens?chain=base' && link.chains && /Robinhood Chain/.test(link.vh), JSON.stringify(link));
       // every chain's answer is slow to come; Ethereum's, asked after it, comes first — the slower one must not paint over it
       FAKE.tokensDelay = (search) => (/chain=all/.test(search) ? 900 : 0);
       await go('/market', 1280);
       await ev('document.getElementById("mkt-tab-tokens").click(), true');
       await sleep(100);
-      await ev(filterBtn('ethereum') + '.click(), true');
+      await ev(TRIG + '.click(), ' + opt('ethereum') + '.click(), true');
       await sleep(1500);
-      const late = { rows: await tokRows(), cap: await textOf('#mkt-cap'), on: await pressed() };
+      const late = { rows: await tokRows(), cap: await textOf('#mkt-cap'), on: await pressed(), t: (await trig()).t };
       FAKE.tokensDelay = null;
       check('  ...an older answer that arrives late never paints over a newer one: every chain\'s (slow) list does not replace Ethereum\'s (asked after it)',
-        late.on === 'ethereum' && late.rows.length && late.rows.every((r) => r.c === 'ethereum') && /^Tokens on Ethereum/.test(late.cap), JSON.stringify(Object.assign({}, late, { rows: late.rows.length })));
+        late.on === 'ethereum' && late.t === 'Ethereum' && late.rows.length && late.rows.every((r) => r.c === 'ethereum') && /^Tokens on Ethereum/.test(late.cap), JSON.stringify(Object.assign({}, late, { rows: late.rows.length })));
     });
 
     check('no script error from market.js anywhere on the walk', ours().length === 0, ours().map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
@@ -740,16 +889,35 @@ async function runSuite() {
       /if \(k\.sort !== 'tvl'\) p\.set\('sort'/.test(code) && /if \(k\.win !== '24h'\) \{ p\.set\('window'/.test(code) && /p\.set\('key', key\);/.test(code) && /p\.set\('chain', chain\);\s*if \(k\.sort !== 'volume'\)/.test(code)
       && /const DEFAULT_CHAIN = 'robinhood';/.test(code) && /const chain = S\.tokens\.tchain \|\| 'all'/.test(code) && /getJSON\(tokensURL\(chain\)\)/.test(code));
     const tokensCtl0 = H.slice(H.indexOf('id="mkt-ctl-tokens"'), H.indexOf('id="mkt-cap"'));
-    check('Top tokens\' chain filter (owner, 2026-10-27: "filter by chain using the chain\'s logo"): a labelled group first in the tab\'s controls; market.js draws "All chains" then a real button per chain the server reads, each with aria-pressed, a name in words ("Show Base tokens"), a logo with alt="" over the chain\'s initials, and a description',
-      /<div class="mkt-group" role="group" aria-labelledby="mkt-tf-l">\s*<p class="mkt-group-l" id="mkt-tf-l">Chain<\/p>\s*<div class="mkt-chips mkt-cfs" id="mkt-tchains"><\/div>/.test(tokensCtl0) && tokensCtl0.indexOf('id="mkt-tchains"') < tokensCtl0.indexOf('data-sort=')
-      && /filterBox\.innerHTML = \['all'\]\.concat\(READS\)\.map\(filterHTML\)\.join\(''\);/.test(code) && /<button class="np-chip mkt-cf" type="button" data-tchain="all" aria-pressed="false" data-tip="[^"]{20,}"><span class="mkt-tick" aria-hidden="true">✓&nbsp;<\/span><span class="sr-only">Show tokens on <\/span>All chains<\/button>/.test(code)
-      && /<span class="sr-only">Show ' \+ esc\(nm\) \+ ' tokens<\/span><\/button>'/.test(code) && /'<img class="mkt-logo" src="' \+ esc\(lg\) \+ '" alt=""/.test(code) && /<span class="mkt-mono">' \+ esc\(initials\(nm\)\) \+ '<\/span>/.test(code) && !/id="mkt-tok-on"/.test(H) && !/mkt-tok-on/.test(code));
+    check('Top tokens\' chain filter (owner, 2026-10-27: "Make the chain picker filter be a drop down picker with the names of each chain and their logo"): first in the tab\'s controls, a labelled group holding a real button with aria-expanded and aria-controls — a disclosure, as the bell\'s list is: no aria-haspopup, no role="menu" — and the list it opens (role="list"), hidden until it is opened; the row of logo buttons is gone',
+      /<div class="mkt-group" role="group" aria-labelledby="mkt-tf-l">\s*<p class="mkt-group-l" id="mkt-tf-l">Chain<\/p>\s*<div class="mkt-cpick" id="mkt-tchains">\s*<button class="np-chip mkt-cpick-b" id="mkt-tchain-b" type="button" aria-expanded="false" aria-controls="mkt-tchain-p" data-tip="[^"]{30,}">/.test(tokensCtl0)
+      && /<ul class="mkt-cpick-p" id="mkt-tchain-p" role="list" aria-labelledby="mkt-tf-l" hidden><\/ul>\s*<\/div>\s*<\/div>/.test(tokensCtl0) && tokensCtl0.indexOf('id="mkt-tchains"') < tokensCtl0.indexOf('data-sort=')
+      && !/aria-haspopup|role="menu"|menuitem/.test(H + code) && !/mkt-cfs|mkt-cf\b/.test(H + code + CSS) && !/id="mkt-tok-on"/.test(H) && !/mkt-tok-on/.test(code));
+    check('  ...market.js draws "All chains" then a real button per chain the server reads, each in a list item, with aria-pressed, a tick, the chain\'s mark (its logo with alt="" over its initials; a drawn mark for every chain) and its full name in words, and a description; the button shows the chosen chain\'s mark and name, "Chain: " said before it, and a drawn caret — no ▾ typed anywhere',
+      /filterBox\.innerHTML = \['all'\]\.concat\(READS\)\.map\(filterHTML\)\.join\(''\);/.test(code) && /'<li><button class="npm-item mkt-copt" type="button" data-tchain="' \+ esc\(k\) \+ '" aria-pressed="false" data-tip="' \+/.test(code)
+      && /'<span class="mkt-tick" aria-hidden="true">✓<\/span>' \+ markHTML\(k, nm\) \+ '<span class="mkt-copt-n">' \+ esc\(nm\) \+ '<\/span><\/button><\/li>'/.test(code)
+      && /pick\.btn\.innerHTML = markHTML\(k, pickName\(k\)\) \+ '<span class="sr-only">Chain: <\/span><span class="mkt-cpick-t">' \+ esc\(pickName\(k\)\) \+ '<\/span><span class="mkt-caret" aria-hidden="true"><\/span>';/.test(code)
+      && /'<img class="mkt-logo" src="' \+ esc\(lg\) \+ '" alt=""/.test(code) && /<span class="mkt-mono">' \+ esc\(initials\(nm\)\) \+ '<\/span>/.test(code) && /if \(k === 'all'\) return '<span class="mkt-ava mkt-ava-cf mkt-ava-all" aria-hidden="true"><\/span>';/.test(code)
+      && /const pickName = \(k\) => \(k === 'all' \? 'All chains' : chainName\(k\)\);/.test(code) && !/▾/.test(H + JS));
+    check('  ...it opens and closes as a disclosure: opening moves the focus to the chosen chain; a pick or Escape closes it with the focus back on the button; a press outside closes it; leaving it with Tab closes it (a focus that goes nowhere does not); the arrows, Home and End move between the chains, and Tab is never taken over',
+      /const on = filterBox\.querySelector\('\[aria-pressed="true"\]'\)/.test(code) && /pick\.box\.addEventListener\('focusout', \(e\) => \{ if \(e\.relatedTarget && !pick\.box\.contains\(e\.relatedTarget\)\) closePick\(false\); \}\);/.test(code)
+      && /document\.addEventListener\('click', \(e\) => \{ if \(filterBox && !filterBox\.hidden && !pick\.box\.contains\(e\.target\)\) closePick\(false\); \}\);/.test(code)
+      && /if \(\(e\.key === 'Escape' \|\| e\.key === 'Esc'\) && filterBox && !filterBox\.hidden\) \{ e\.preventDefault\(\); closePick\(true\); \}/.test(code)
+      && /closePick\(true, e\.detail > 0\);\s*if \(t === S\.tokens\.tchain\) return;/.test(code) && /if \(!\['ArrowDown', 'ArrowUp', 'Home', 'End'\]\.includes\(e\.key\)\) return;/.test(code) && !/'Tab'/.test(code));
+    check('  ...the open list is kept out from under whatever is pinned over it — measured by hit-testing, not assumed — lifts the page only as far as the Chain label and a sticking side column allow, scrolls inside when it is longer than the room, and fits again on a scroll or a resize; it layers over the page and under the sticky nav',
+      /const el = document\.elementFromPoint\(x, y\); if \(!el \|\| !\(filterBox\.contains\(el\) \|\| el\.id === 'tip-bubble'\)\) return \{ x, y, el \};/.test(code)
+      && /pick\.timer = setInterval\(pickWatch, 500\);/.test(code) && /if \(pickCover\(filterBox\.getBoundingClientRect\(\)\) \|\| \(u && document\.elementFromPoint\(u\.x, u\.y\) !== u\.el\)\) fitPick\('measure'\);/.test(code)
+      && /clearInterval\(pick\.timer\); pick\.timer = 0; pick\.under = null;/.test(code) && /window\.scrollBy\(\{ top: up, behavior: 'instant' \}\)/.test(code)
+      && /if \(cs\.position === 'sticky'\) up = Math\.min\(up,/.test(code) && /window\.addEventListener\('resize', \(\) => fitPick\('measure'\)\);/.test(code) && /window\.addEventListener\('scroll', \(e\) => \{ if \(filterBox && !filterBox\.contains\(e\.target\)\) fitPick\(\); \}/.test(code)
+      && /\.mkt-cpick-p \{\s*position: absolute;[^}]*z-index: 40;[^}]*overflow-y: auto;/.test(CSS) && /\.mkt-cpick-p\[hidden\] \{ display: none; \}/.test(CSS));
     check('  ...it lives in the address bar (tchain=<key>, absent for every chain; anything but a chain the server reads is every chain), a change is pushed so Back and Forward restore it, and the main view is left where it was',
       /const tc = \(q\.get\('tchain'\) \|\| ''\)\.toLowerCase\(\), tchain = READS\.includes\(tc\) \? tc : '';/.test(code) && /if \(S\.tokens\.tchain\) p\.set\('tchain', S\.tokens\.tchain\);/.test(code)
       && /S\.tokens\.tchain = t; S\.shown = pageSize\(\);\s*writeURL\(true\); syncControls\(\); loadList\(\);/.test(code) && !/chainChanged/.test(code) && /if \(S\.tchainMoved && S\.tab !== 'tokens'\) setTab\('tokens', false\); else loadList\(\);/.test(code));
-    check('  ...the chosen button says so by more than colour (a tick and a ring as well as its fill), the row wraps, and a logo that does not load leaves the initials (the logo hides them only while it is there)',
-      /\.mkt-cf\[aria-pressed="true"\] \{ box-shadow: 0 0 0 2px var\(--ink-2\), 0 0 0 4px var\(--green-bright\); \}/.test(CSS) && /\.np-chip\[aria-pressed="true"\] > \.mkt-tick \{ display: inline; \}/.test(CSS) && /\.mkt-chips \{ display: flex; flex-wrap: wrap;/.test(CSS)
-      && /\.mkt-ava-cf:has\(img\) \.mkt-mono \{ visibility: hidden; \}/.test(CSS) && /img\.addEventListener\('error', \(\) => img\.remove\(\)\)/.test(code));
+    check('  ...the chosen chain says so by more than colour (a tick as well as its fill); the caret is drawn (a clipped square, never a glyph), turns without animating under reduced motion or the nav\'s ⏸, and keeps a system colour in forced colours; a logo that does not load leaves the initials (the logo hides them only while it is there; three letters grow the disc into a pill)',
+      /\.mkt-copt\[aria-pressed="true"\] \.mkt-tick \{ visibility: visible; \}/.test(CSS) && /\.mkt-copt \.mkt-tick \{[^}]*visibility: hidden; \}/.test(CSS)
+      && /\.mkt-caret::before \{ content: ''; [^}]*clip-path: polygon\(0 0, 100% 0, 50% 100%\); \}/.test(CSS) && /\.mkt-row, \.mkt-caret \{ transition: none; \}/.test(CSS) && /html\.motion-off \.mkt-caret \{ transition: none; \}/.test(CSS)
+      && /@media \(forced-colors: active\) \{\s*\.mkt-caret::before \{ forced-color-adjust: none; background: ButtonText; \}/.test(CSS)
+      && /\.mkt-ava-cf:has\(img\) \.mkt-mono \{ visibility: hidden; \}/.test(CSS) && /\.mkt-ava-cf:not\(:has\(img\)\) \{ width: auto; min-width: 2em; padding: 0 0\.3em; border-radius: 1em; \}/.test(CSS) && /img\.addEventListener\('error', \(\) => img\.remove\(\)\)/.test(code));
     check('  ...every row of the all-chains list names its chain (its logo and its name in words — "on Base" to a screen reader) and opens the token on that chain; the row in the main view is matched by chain and address',
       /const chainBadge = \(r\) => '<span class="mkt-chb">'/.test(code) && /'<span class="sr-only">on <\/span>' \+ esc\(r\.chainName \|\| chainName\(r\.chain\)\)/.test(code) && /\(all \? chainBadge\(r\) : ''\)/.test(code)
       && /data-chain="' \+ esc\(on\) \+ '" data-token="' \+ esc\(r\.address\) \+ '"/.test(code) && /const cur = S\.view\.token && S\.view\.chain === on && sameToken\(S\.view\.token, r\.address\);/.test(code) && /b\.dataset\.chain === S\.view\.chain && sameToken\(b\.dataset\.token, S\.view\.token\)/.test(code));
@@ -783,7 +951,7 @@ async function runSuite() {
       && !/minmax\((1[6-9]\d|[2-9]\d\d)px, *1fr\)/.test(CSS) && /@media \(prefers-reduced-motion: reduce\)/.test(CSS) && /container: mktv \/ inline-size;/.test(CSS) && /@container mktv \(max-width: 46em\)/.test(CSS)
       && !/position: relative; isolation: isolate;/.test(CSS));
     check('  ...every control at least 44px tall, a visible focus ring on the rows and the charts, and the current row marked by a bar as well as colour',
-      /\.mkt-chips \.np-chip, \.mkt-wash \{ min-height: 44px;/.test(CSS) && /\.mkt-row \{[^}]*min-height: 52px;/.test(CSS) && /\.mkt-row:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS)
+      /\.mkt-chips \.np-chip, \.mkt-wash \{ min-height: 44px;/.test(CSS) && /\.mkt-cpick-b \{[^}]*min-height: 44px;/.test(CSS) && /\.mkt-copt \{ min-height: 44px;/.test(CSS) && /\.mkt-row \{[^}]*min-height: 52px;/.test(CSS) && /\.mkt-row:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS)
       && /\.mkt-plot:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS) && /\.mkt-row\[aria-current="true"\] \{[^}]*box-shadow: inset 5px 0 0 var\(--green\);/.test(CSS));
 
     /* ═══ the site's lists that name pages ═══ */

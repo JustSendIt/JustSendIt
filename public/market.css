@@ -43,17 +43,47 @@
 /* the chosen chip says so with a tick as well as its fill (a span: the matrix tile owns both pseudo-elements) */
 .mkt-tick { display: none; }
 .np-chip[aria-pressed="true"] > .mkt-tick { display: inline; }
-/* Top tokens' chain filter: "All chains", then a logo button per chain. The chosen one says so with a tick and a ring as well as
-   its fill; a logo that is missing or does not load leaves the chain's initials (the logo, laid over them, hides them while it is
-   there). The row wraps — never a sideways scroll. */
-.mkt-cfs .mkt-cf { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; padding: 0.25rem 0.5rem; }
-.mkt-cf[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink-2), 0 0 0 4px var(--green-bright); }
+/* Top tokens' chain filter: a button that names the chain chosen, with its logo and a drawn caret, and under it the list of every
+   chain, each with its logo and its name. The list lies over the controls below it; market.js sets its height to the room under
+   the button (clear of the corner widgets) and it scrolls inside when that is shorter. The chosen chain says so with a tick as
+   well as its fill. A logo that is missing or does not load leaves the chain's initials (the logo, laid over them, hides them
+   while it is there). Below 560px the list is the card's full width. */
+.mkt-cpick { position: relative; }
+.mkt-cpick-b { display: inline-flex; align-items: center; gap: 0.5rem; max-width: 100%; min-height: 44px; padding: 0.25rem 0.9rem 0.25rem 0.3rem; white-space: normal; text-align: left; line-height: 1.2; }
+.mkt-cpick-b[aria-expanded="true"] { border-color: var(--green-bright); }
+.mkt-cpick-t { min-width: 0; overflow-wrap: anywhere; }
+/* the caret is drawn, as the site's others are (styles.css .np-caret): a clipped square, centred by geometry, never a glyph */
+.mkt-caret { flex: 0 0 auto; position: relative; width: 0.7em; height: 0.7em; transition: transform 0.15s ease; }
+.mkt-caret::before { content: ''; position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 0.62em; height: 0.36em; background: currentColor; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.mkt-cpick-b[aria-expanded="true"] .mkt-caret { transform: rotate(180deg); }
+.mkt-cpick-p {
+  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 40; width: max-content; min-width: min(100%, 17rem); max-width: 100%;   /* z 40: over the page, under the sticky nav (50) */
+  max-height: min(70vh, 34rem); overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 0.45rem; list-style: none; display: grid; gap: 0.15rem;
+  background: var(--ink-2); border: 1.5px solid var(--ink-5); border-radius: 14px; box-shadow: 0 14px 40px rgba(0,0,0,0.5), 0 0 0 1px color-mix(in srgb, var(--green) 6%, transparent);
+  scrollbar-width: thin; scrollbar-color: var(--green-dark) transparent;
+}
+.mkt-cpick-p[hidden] { display: none; }
+.mkt-cpick-p > li { min-width: 0; }
+/* each chain is the account menu's item (styles.css .npm-item: black ink on the green fill, the matrix tile), a tick in front */
+.mkt-copt { min-height: 44px; padding: 0.35rem 0.7rem 0.35rem 0.45rem; line-height: 1.2; }
+.mkt-copt-n { min-width: 0; overflow-wrap: anywhere; }
+.mkt-copt .mkt-tick { display: inline-block; flex: 0 0 auto; width: 1em; text-align: center; visibility: hidden; }
+.mkt-copt:hover, .mkt-copt:focus-visible { background: var(--ctl-fill-hi); color: var(--ctl-ink); }   /* lighter than the chosen one's fill */
+.mkt-copt[aria-pressed="true"] { background: var(--green); color: var(--on-green); }
+.mkt-copt[aria-pressed="true"] .mkt-tick { visibility: visible; }
+@media (max-width: 560px) { .mkt-cpick-p { right: 0; width: auto; min-width: 0; } }
 .mkt-ava-cf { width: 2em; height: 2em; }
 .mkt-ava-cf .mkt-mono { font-family: 'Rubik', sans-serif; font-weight: 800; font-size: max(var(--text-floor), 0.62em); letter-spacing: -0.02em; color: var(--text); }
 .mkt-ava-cf:has(img) .mkt-mono { visibility: hidden; }
 /* with no logo the initials are the label: a three-letter one (BSC, BNB) is wider than the disc at the text floor, so the disc
    grows into a pill around it instead of cutting its last letter */
 .mkt-ava-cf:not(:has(img)) { width: auto; min-width: 2em; padding: 0 0.3em; border-radius: 1em; }
+/* every chain together: four discs in a square, drawn — no one chain's logo stands for all of them */
+.mkt-ava-cf.mkt-ava-all {
+  width: 2em; padding: 0; border-radius: 50%;
+  background: radial-gradient(circle at 33% 33%, var(--green-bright) 0 13%, transparent 14%), radial-gradient(circle at 67% 33%, var(--green-bright) 0 13%, transparent 14%),
+    radial-gradient(circle at 33% 67%, var(--green-bright) 0 13%, transparent 14%), radial-gradient(circle at 67% 67%, var(--green-bright) 0 13%, transparent 14%), var(--ink-3);
+}
 .mkt-custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.6rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px dashed var(--edge-ctl); border-radius: 12px; }
 .mkt-custom[hidden] { display: none; }
 .mkt-date { display: flex; flex-direction: column; gap: 0.2rem; flex: 1 1 9rem; min-width: 0; }
@@ -212,7 +242,14 @@
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   .mkt-wrap .np-live-dot { animation: none; }
-  .mkt-row { transition: none; }
+  .mkt-row, .mkt-caret { transition: none; }
+}
+html.motion-off .mkt-caret { transition: none; }   /* the nav's ⏸ stops motion too */
+
+/* ---------- forced colours: the system repaints fills, so the drawn caret names a system colour (responsive.css does the
+   same for the site's other drawn marks) ---------- */
+@media (forced-colors: active) {
+  .mkt-caret::before { forced-color-adjust: none; background: ButtonText; }
 }
 
 /* ---------- 1280px and up: the house's dashboard width, the side column beside the main view ---------- */

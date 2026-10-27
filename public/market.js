@@ -11,8 +11,9 @@
  * box's own pixel size (so their labels keep the page's text floor), with a hover / arrow-key readout and a table.
  * The address bar is the state: /market?chain=<key>[&token=<address>][&window=<w>[&from=YYYY-MM-DD&to=YYYY-MM-DD]][&tchain=<key>]
  * — a view is linkable, and Back / Forward walk the views. tchain is Top tokens' chain filter (owner, 2026-10-27: "add all
- * chain's top tokens to the top tokens tab and allow users to filter by chain using the chain's logo"): absent, the list is
- * every chain's; it is independent of the main view, which stays on Robinhood Chain unless the reader opens something else.
+ * chain's top tokens to the top tokens tab and allow users to filter by chain using the chain's logo", then "Make the chain
+ * picker filter be a drop down picker with the names of each chain and their logo"): absent, the list is every chain's; it
+ * is independent of the main view, which stays on Robinhood Chain unless the reader opens something else.
  * For a token on Robinhood Chain, Ethereum or Solana the main view ends with the Scanner's own dashboard
  * (NPCard.dashboardHTML + NPCard.mountDashboard, newpairs.js), fed by /api/market/scan, which reads it without adding it to
  * the public "recently scanned" list — fetched only when the reader scrolls to it.
@@ -250,25 +251,49 @@
     }
     const wash = $('mkt-wash'); if (wash) wash.setAttribute('aria-pressed', String(!!S.tokens.all));
     if (filterBox) filterBox.querySelectorAll('[data-tchain]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tchain === (S.tokens.tchain || 'all'))));
+    paintPicked();
   }
 
-  /* ---------- Top tokens' chain filter: "All chains", then one logo button per chain the server reads ---------- */
-  const filterBox = $('mkt-tchains');
-  function filterHTML(k) {
-    if (k === 'all') return '<button class="np-chip mkt-cf" type="button" data-tchain="all" aria-pressed="false" data-tip="Ranks the most-traded tokens of every chain this site reads together — each row names its chain"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span><span class="sr-only">Show tokens on </span>All chains</button>';
-    const nm = chainName(k), lg = logos.get(k);
-    return '<button class="np-chip mkt-cf" type="button" data-tchain="' + esc(k) + '" aria-pressed="false" data-tip="' + esc(nm) + ' only: its most-traded tokens, ranked the way you picked — the main view stays where it is">' +
-      '<span class="mkt-tick" aria-hidden="true">✓&nbsp;</span><span class="mkt-ava mkt-ava-cf" aria-hidden="true"><span class="mkt-mono">' + esc(initials(nm)) + '</span>' +
-      (ownLogo(lg) ? '<img class="mkt-logo" src="' + esc(lg) + '" alt="" decoding="async" width="32" height="32">' : '') + '</span><span class="sr-only">Show ' + esc(nm) + ' tokens</span></button>';
+  /* ---------- Top tokens' chain filter: a button that names the chain chosen, and the list of every chain the server reads ----------
+     A disclosure, as the bell's list is (notifications.js): a real button and a list of real buttons, not role="menu" — these
+     are choices, not commands, and a menu promises arrow-key behaviour and a trap the reader never asked for. The arrows move
+     between the chains as a convenience; Tab goes through them as usual, and leaving the list with Tab closes it. */
+  const pick = { box: $('mkt-tchains'), btn: $('mkt-tchain-b'), drawn: '', floor: 0, under: null, timer: 0 };
+  const filterBox = $('mkt-tchain-p');
+  // a chain's mark: its logo laid over its initials, so a logo that is missing or does not load leaves the initials; every
+  // chain together has a drawn mark of its own (no one chain's logo stands for all of them)
+  function markHTML(k, nm) {
+    if (k === 'all') return '<span class="mkt-ava mkt-ava-cf mkt-ava-all" aria-hidden="true"></span>';
+    const lg = logos.get(k);
+    return '<span class="mkt-ava mkt-ava-cf" aria-hidden="true"><span class="mkt-mono">' + esc(initials(nm)) + '</span>' +
+      (ownLogo(lg) ? '<img class="mkt-logo" src="' + esc(lg) + '" alt="" decoding="async" width="32" height="32">' : '') + '</span>';
   }
-  // drawn again only when a name or a logo arrives; the button that had the focus keeps it
+  const pickName = (k) => (k === 'all' ? 'All chains' : chainName(k));
+  function filterHTML(k) {
+    const nm = pickName(k);
+    return '<li><button class="npm-item mkt-copt" type="button" data-tchain="' + esc(k) + '" aria-pressed="false" data-tip="' +
+        (k === 'all' ? 'Ranks the most-traded tokens of every chain this site reads together — each row names its chain' : esc(nm) + ' only: its most-traded tokens, ranked the way you picked — the main view stays where it is') + '">' +
+      '<span class="mkt-tick" aria-hidden="true">✓</span>' + markHTML(k, nm) + '<span class="mkt-copt-n">' + esc(nm) + '</span></button></li>';
+  }
+  // the button says the chain chosen in words, its logo beside them; "Chain: " is said to a screen reader, as the group's
+  // label is printed above it. Drawn again only when the choice, its name or its logo changes — a logo that failed stays failed
+  function paintPicked() {
+    if (!pick.btn) return;
+    const k = S.tokens.tchain || 'all', id = k + '|' + pickName(k) + '|' + (logos.get(k) || '');
+    if (pick.drawn === id) return;
+    pick.drawn = id;
+    pick.btn.innerHTML = markHTML(k, pickName(k)) + '<span class="sr-only">Chain: </span><span class="mkt-cpick-t">' + esc(pickName(k)) + '</span><span class="mkt-caret" aria-hidden="true"></span>';
+    wireLogos(pick.btn);
+  }
+  // drawn again only when a name or a logo arrives; the chain that had the focus keeps it, and an open list stays open
   function paintFilter() {
     if (!filterBox) return;
     const had = filterBox.contains(document.activeElement) ? document.activeElement.dataset.tchain : null;
     filterBox.innerHTML = ['all'].concat(READS).map(filterHTML).join('');
     wireLogos(filterBox);
     syncControls();
-    if (had) { const b = filterBox.querySelector('[data-tchain="' + had + '"]'); if (b) b.focus(); }
+    if (had) { const b = filterBox.querySelector('[data-tchain="' + had + '"]'); if (b) b.focus({ preventScroll: true }); }
+    fitPick();
   }
   // the names and logos an answer gives (the chains list's rows, the all-chains list's networks): true when one is new
   function learnChains(list, keyOf) {
@@ -280,13 +305,115 @@
     }
     return changed;
   }
+  /* The open list lies over the controls below it, as tall as the screen has room for under the button. What is pinned to the
+     screen sits above anything the page can layer — the music player and its hint, the ✏️ SEND IT button, Sendy and its
+     bubble — and from 1280px the side column scrolls on its own and clips what runs past its edge; so the list is kept out
+     from under all of them rather than drawn over them. Which of them reach the list depends on the width, the screen and
+     what is showing, so it is measured: laid out as tall as the screen allows, the list is hit-tested down five columns, and
+     it stops above the first point where something else is on top. Longer than the room, it scrolls inside. What is pinned
+     there can come and go while the list is open (the player's nudge appears on a first tap and leaves by itself), so twice
+     a second it is looked at again — by hit-testing alone, which leaves a list being flicked through undisturbed — and
+     measured again only when something new lies over it or what lay over it has gone. */
+  const navH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 60;   // nav.js publishes it
+  // the first point down the list where something else is on top, or null. It starts below the nav (a list scrolled up under
+  // it is scrolled away, not covered); the columns stand clear of the rounded corners, where a point is outside the list's own
+  // box; the description bubble (tips.js) is the label of the chain in focus, over it on purpose, and does not count
+  function pickCover(r) {
+    const xs = [0, 0.25, 0.5, 0.75, 1].map((f) => r.left + 18 + (r.width - 36) * f);
+    for (let y = Math.max(r.top, navH()) + 2; y < r.bottom - 1; y += 6) {
+      for (const x of xs) { const el = document.elementFromPoint(x, y); if (!el || !(filterBox.contains(el) || el.id === 'tip-bubble')) return { x, y, el }; }
+    }
+    return null;
+  }
+  function pickFloor() {
+    filterBox.style.maxHeight = Math.max(0, Math.floor(window.innerHeight - 8 - filterBox.getBoundingClientRect().top)) + 'px';
+    const r = filterBox.getBoundingClientRect(), c = pickCover(r);
+    pick.under = c;   // watched while the list is open: once it has gone, the list takes the room back
+    return c ? c.y - 8 : r.bottom;
+  }
+  function pickWatch() {
+    if (!filterBox || filterBox.hidden || !filterBox.getClientRects().length) return;
+    const u = pick.under;
+    if (pickCover(filterBox.getBoundingClientRect()) || (u && document.elementFromPoint(u.x, u.y) !== u.el)) fitPick('measure');
+  }
+  // how far the page may move up to give a short list more room: until the Chain label meets the nav — and a side column
+  // that stays in view (1280px and up) moves only until it has stuck
+  function pickLift(short) {
+    const side = $('mkt-side'), cs = getComputedStyle(side);
+    let up = Math.min(short, pick.box.parentNode.getBoundingClientRect().top - navH() - 8);
+    if (cs.position === 'sticky') up = Math.min(up, side.getBoundingClientRect().top - (parseFloat(cs.top) || 0));
+    return up;
+  }
+  // how: 'open' measures and may move the page (at once — a smooth scroll would still be moving when the list is measured),
+  // 'measure' measures (a resize), nothing keeps the last measure (a scroll: what is pinned to the screen has not moved)
+  function fitPick(how) {
+    if (!filterBox || filterBox.hidden || !filterBox.getClientRects().length) return;   // closed, or its tab is not the one showing
+    const need = filterBox.scrollHeight, row = (filterBox.querySelector('.mkt-copt') || {}).offsetHeight || 48, keep = filterBox.scrollTop;
+    if (how) {
+      pick.floor = pickFloor();
+      const short = need - (pick.floor - filterBox.getBoundingClientRect().top), up = how === 'open' && short > 1 ? pickLift(short) : 0;
+      if (up > 1) { window.scrollBy({ top: up, behavior: 'instant' }); pick.floor = pickFloor(); }
+    }
+    filterBox.style.maxHeight = Math.round(Math.max(pick.floor - filterBox.getBoundingClientRect().top, Math.min(need, row * 2))) + 'px';
+    filterBox.scrollTop = keep;   // measuring laid it out taller for a moment, which can pull a scrolled list back
+  }
+  // opening moves the focus to the chain chosen; opened by a press, its description is not shown (app.js: a tip is for the keyboard)
+  function openPick(pressed) {
+    if (!filterBox || !filterBox.hidden) return;
+    if (window.sendTips) sendTips.hide();   // the button's own description, shown by a Tab, would be measured as lying over the list
+    filterBox.hidden = false; pick.btn.setAttribute('aria-expanded', 'true');
+    fitPick('open');
+    clearInterval(pick.timer); pick.timer = setInterval(pickWatch, 500);
+    const on = filterBox.querySelector('[aria-pressed="true"]') || filterBox.querySelector('[data-tchain]');
+    if (!on) return;
+    try { on.focus({ preventScroll: true }); } catch { on.focus(); }
+    filterBox.scrollTop = Math.max(0, on.offsetTop - (filterBox.clientHeight - on.offsetHeight) / 2);
+    if (pressed && window.sendTips) sendTips.hide();
+  }
+  // back: the focus returns to the button (a pick, Escape); an outside click or a Tab away leaves it where it went
+  function closePick(back, pressed) {
+    if (!filterBox || filterBox.hidden) return;
+    const inside = pick.box.contains(document.activeElement) || document.activeElement === document.body;
+    if (back && inside) { pick.btn.focus(); if (pressed && window.sendTips) sendTips.hide(); }
+    filterBox.hidden = true; filterBox.style.maxHeight = ''; pick.btn.setAttribute('aria-expanded', 'false');
+    clearInterval(pick.timer); pick.timer = 0; pick.under = null;
+  }
+  if (pick.btn) pick.btn.addEventListener('click', (e) => { if (filterBox.hidden) openPick(e.detail > 0); else closePick(true, e.detail > 0); });
+  // a pick applies the filter as the row of logos did — in the address, pushed so Back and Forward walk it, and the list read
+  // again (seq.list keeps a late answer from painting over it) — and the list closes with the focus back on the button
   if (filterBox) filterBox.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tchain]'); if (!b) return;
     const t = b.dataset.tchain === 'all' ? '' : b.dataset.tchain;
+    closePick(true, e.detail > 0);
     if (t === S.tokens.tchain) return;
     S.tokens.tchain = t; S.shown = pageSize();
     writeURL(true); syncControls(); loadList();
   });
+  if (pick.box) {
+    // the arrows (and Home / End) as a convenience; Tab is left to the browser
+    pick.box.addEventListener('keydown', (e) => {
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+      const opts = [...filterBox.querySelectorAll('[data-tchain]')], i = opts.indexOf(document.activeElement);
+      if (e.target === pick.btn) {
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        e.preventDefault();
+        if (filterBox.hidden) openPick(false); else if (opts.length) opts[e.key === 'ArrowDown' ? 0 : opts.length - 1].focus();
+        return;
+      }
+      if (i < 0) return;
+      e.preventDefault();
+      opts[e.key === 'Home' ? 0 : e.key === 'End' ? opts.length - 1 : (i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length].focus();
+    });
+    // Tab or Shift+Tab out of the button and the list closes it; a focus that goes nowhere (a press on the page, another
+    // window) does not — a press outside is the click handler's below
+    pick.box.addEventListener('focusout', (e) => { if (e.relatedTarget && !pick.box.contains(e.relatedTarget)) closePick(false); });
+  }
+  document.addEventListener('click', (e) => { if (filterBox && !filterBox.hidden && !pick.box.contains(e.target)) closePick(false); });
+  document.addEventListener('keydown', (e) => { if ((e.key === 'Escape' || e.key === 'Esc') && filterBox && !filterBox.hidden) { e.preventDefault(); closePick(true); } });
+  // the room under the button moves with the page's scroll (and the side column's own) and with the window; the list's own
+  // scroll is not one of them
+  window.addEventListener('scroll', (e) => { if (filterBox && !filterBox.contains(e.target)) fitPick(); }, { passive: true, capture: true });
+  window.addEventListener('resize', () => fitPick('measure'));
   function setTab(tab, focus) {
     S.tab = tab;
     tabs.forEach((t) => { const on = t.dataset.tab === tab; t.setAttribute('aria-selected', String(on)); t.classList.toggle('is-on', on); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });

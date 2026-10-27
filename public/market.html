@@ -93,7 +93,7 @@
       <aside class="mkt-side" id="mkt-side" aria-label="Top chains and top tokens">
         <div class="sc-tabs mkt-tabs" role="tablist" aria-label="Top lists">
           <button class="sc-tab is-on" id="mkt-tab-chains" type="button" role="tab" aria-selected="true" aria-controls="mkt-panel" data-tab="chains" data-tip="Lists the chains, ranked by the figure you pick">🔗 Top chains</button>
-          <button class="sc-tab" id="mkt-tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="tokens" data-tip="Lists the most-traded tokens of every chain this site reads, or of the one chain you pick by its logo">🪙 Top tokens</button>
+          <button class="sc-tab" id="mkt-tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="tokens" data-tip="Lists the most-traded tokens of every chain this site reads, or of the one chain you pick from its list">🪙 Top tokens</button>
         </div>
 
         <div class="mkt-panel" id="mkt-panel" role="tabpanel" aria-labelledby="mkt-tab-chains">
@@ -136,10 +136,14 @@
 
           <!-- the tokens list's controls -->
           <div class="mkt-ctl" id="mkt-ctl-tokens" hidden>
-            <!-- the chain filter: "All chains", then a logo button per chain the server reads (market.js draws them) -->
+            <!-- the chain filter: a button that names the chain chosen, and under it the list of every chain the server reads,
+                 each with its logo and its name (market.js draws both) -->
             <div class="mkt-group" role="group" aria-labelledby="mkt-tf-l">
               <p class="mkt-group-l" id="mkt-tf-l">Chain</p>
-              <div class="mkt-chips mkt-cfs" id="mkt-tchains"></div>
+              <div class="mkt-cpick" id="mkt-tchains">
+                <button class="np-chip mkt-cpick-b" id="mkt-tchain-b" type="button" aria-expanded="false" aria-controls="mkt-tchain-p" data-tip="Opens the list of chains this site reads: pick one to rank only its tokens, or every chain’s together"><span class="mkt-ava mkt-ava-cf mkt-ava-all" aria-hidden="true"></span><span class="sr-only">Chain: </span><span class="mkt-cpick-t">All chains</span><span class="mkt-caret" aria-hidden="true"></span></button>
+                <ul class="mkt-cpick-p" id="mkt-tchain-p" role="list" aria-labelledby="mkt-tf-l" hidden></ul>
+              </div>
             </div>
             <div class="mkt-group" role="group" aria-labelledby="mkt-ts-l">
               <p class="mkt-group-l" id="mkt-ts-l">Rank by</p>
