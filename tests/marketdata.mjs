@@ -427,6 +427,28 @@ try {
   check('  ...a window outside that coverage says "our history starts <date>" on every row, never a number', tc2.rows.length > 0 && tc2.rows.every((r) => r.volume.v === null && r.volume.why === 'our history starts 2026-10-24') && tc2.coverage.from === '2026-10-24', brief(tc2.rows[0] && tc2.rows[0].volume));
   const tOther = md.tokens({ chain: 'bitcoin' }).body, tEth = md.tokens({ chain: 'ethereum' }).body;
   check('  ...another tracked network lists its own pools; a chain whose pools are not read says so', tEth.network === 'eth' && tEth.rows.length > 0 && tEth.rows[0].scannable === true && tOther.rows.length === 0 && /reads the pools of/.test(tOther.why));
+  // every network's tokens in one list (owner, 2026-10-27), from what the collectors above really wrote: Robinhood Chain's pools and
+  // the same answer re-keyed as Ethereum's (so USDG sits at one address on two chains), every other network's page empty
+  const ta = md.tokens({ chain: 'all', limit: 200, include: 'all' }).body, tkEth = md.tokens({ chain: 'ethereum', limit: 200, include: 'all' }).body;
+  const plain = (r) => { const o = Object.assign({}, r); delete o.chainName; delete o.chainLogo; return JSON.stringify(o); };
+  const same = (rows, single) => rows.length === single.rows.length && rows.every((r) => { const s = single.rows.find((x) => x.address === r.address); return s && plain(r) === JSON.stringify(s); });
+  const usdgs = ta.rows.filter((r) => r.address === USDG);
+  check('chain=all: every tracked network\'s newest finished batch in one list, grouped per (chain, address) exactly as each chain\'s own list — the same figures, flags and nulls row for row', ta.chain === 'all' && ta.network === null
+    && same(ta.rows.filter((r) => r.chain === 'robinhood'), tk) && same(ta.rows.filter((r) => r.chain === 'ethereum'), tkEth) && ta.rows.length === tk.rows.length + tkEth.rows.length && ta.total === ta.rows.length,
+    brief({ n: ta.rows.length, rh: tk.rows.length, eth: tkEth.rows.length, r0: ta.rows[0] }));
+  check('  ...the same token on two chains (USDG at one address on Robinhood Chain and on Ethereum) is two rows, each with its chain key, name and logo (our proxy, DefiLlama\'s chain icon)', usdgs.length === 2
+    && usdgs.map((r) => r.chain).sort().join() === 'ethereum,robinhood' && usdgs.find((r) => r.chain === 'robinhood').chainName === 'Robinhood Chain' && usdgs.find((r) => r.chain === 'ethereum').chainName === 'Ethereum'
+    && ta.rows.every((r) => /^\/api\/market\/logo\?u=https%3A%2F%2Ficons\.llamao\.fi%2Fchains%2F/.test(r.chainLogo || '')) && Object.keys(ta.rows[0]).slice(0, 4).join() === 'chain,chainName,chainLogo,address', brief(usdgs.map((r) => [r.chain, r.chainName, r.chainLogo])));
+  const taNets = ta.networks.map((n) => n.key);
+  check('  ...the answer says which networks were read, when and how many pools each, and names every one not read yet instead of dropping it', taNets.join() === MD.GT_TRACKED.join()
+    && ta.networks.find((n) => n.key === 'robinhood').pools === nPools && ta.networks.find((n) => n.key === 'robinhood').most === 200 && ta.networks.find((n) => n.key === 'ethereum').pools === F.gtEth.data.length && ta.networks.find((n) => n.key === 'ethereum').most === 60
+    && ta.networks.filter((n) => !n.pools).length === 7 && ta.networks.filter((n) => !n.pools).every((n) => n.at === null && /not been read yet/.test(n.why))
+    && ta.notes.some((x) => /^Read: Robinhood Chain, \d+ pools at 2026-10-26 18:00 UTC \(its 200 most-traded at most, read every 10 minutes\); Ethereum, 20 pools at .* read hourly\)\.$/.test(x))
+    && ta.notes.some((x) => /^Not read yet: Solana \(read hourly\), Base \(read hourly\), .*OP Mainnet \(read hourly\) — named here rather than left out/.test(x)) && /of 2 networks \(\d+ pools\), grouped by token on each chain/.test(ta.basis), brief({ nets: ta.networks.slice(0, 3), notes: ta.notes }));
+  const taHv = md.tokens({ chain: 'all', limit: 200 }).body;
+  check('  ...wash-flagged tokens are left out of its highest-volume list too (and it says so), unless include=all', !taHv.rows.some((r) => r.flags.includes('wash')) && taHv.rows.length === ta.rows.length - ta.rows.filter((r) => r.flags.includes('wash')).length && taHv.notes.some((n) => /left out of the highest-volume list/.test(n)));
+  const plainRh = md.tokens({ chain: 'robinhood' }).body;
+  check('  ...and chain=<one key> answers exactly as before: no chain fields on its rows, no networks list', !('networks' in plainRh) && !('oldestAt' in plainRh) && plainRh.rows.every((r) => !('chainName' in r) && !('chainLogo' in r)) && plainRh.chain === 'robinhood');
 
   // one token
   hits['gt-ohlcv'] = 0;
@@ -463,6 +485,10 @@ try {
   const stt = md.status().body;
   dump('chains', ch); dump('chains-custom', cus); dump('chain-robinhood', cd2); dump('tokens-robinhood', tk); dump('tokens-custom', tc1); dump('token-usdg', td); dump('token-usdg-custom', tdc); dump('token-send', ts);
   dump('search-usdg', s1); dump('search-robinhood', s2); dump('new-pools-robinhood', np); dump('status', stt);
+  // every network's list and Ethereum's own, at each window (the page's fixtures for the Top tokens chain filter are cut from these)
+  for (const [wk, wq] of [['24h', {}], ['6h', { window: '6h' }], ['1h', { window: '1h' }], ['5m', { window: '5m' }], ['custom', { window: 'custom', from: '2026-10-24', to: '2026-10-25' }]]) {
+    for (const c of ['all', 'ethereum']) dump('tokens-' + c + '-' + wk, md.tokens(Object.assign({ chain: c, limit: 200, include: 'all' }, wq)).body);
+  }
   check('the status lists every collector (last run, ok, ms, requests, note, next run) and every table (rows, oldest, newest)', stt.collectors.length === Object.keys(MD.JOBS).length && stt.collectors.find((c) => c.job === 'pools').ok === true && stt.collectors.every((c) => 'nextAt' in c && 'calls' in c)
     && stt.tables.find((t) => t.name === 'mkt_pool_snap').rows > 0 && stt.tables.every((t) => 'oldestAt' in t && 'newestAt' in t) && stt.enabled === false && /MARKET_COLLECT=1/.test(stt.note), brief(stt.collectors[0]));
 
@@ -692,6 +718,83 @@ try {
   dbK.close();
   check('  ...and every query it runs for them walks an index in id order: no full scan, no sort of a whole network (0.8 s a call at retention before)', apiSql.length === QK.length && plans1.every(planOk) && plans2.every(planOk), brief({ plans1, plans2 }));
 
+  /* every network's tokens in one list, on a database seeded by hand so each network has its own read time: Robinhood Chain 5 minutes
+     ago, Base 40 minutes ago (a run still writing a newer batch), Ethereum 5 hours ago (hourly reads that keep failing), Arbitrum's
+     read stopped short, Solana and the rest never read — and every query the answer runs is seen */
+  const dbL = freshDb('l'), seenL = [];
+  const dbLp = { exec: (s) => dbL.exec(s), prepare: (s) => { const st = dbL.prepare(s); return { all: (...a) => { seenL.push(s); return st.all(...a); }, get: (...a) => { seenL.push(s); return st.get(...a); }, run: (...a) => st.run(...a) }; } };
+  const mdL = MD.createMarketData({ db: dbLp, now: () => NOW, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 }); mdL.migrate();
+  const T_RH = NOW - 5 * 60e3, T_BASE = NOW - 40 * 60e3, T_ETH = NOW - 5 * 3600e3, T_ARB = NOW - 20 * 60e3;
+  const icon = (n) => 'https://icons.llamao.fi/chains/rsz_' + n + '.jpg';
+  for (const [chain, name, logo] of [['robinhood', 'Robinhood Chain', icon('robinhood%20chain')], ['base', 'Base', icon('base')], ['ethereum', 'Ethereum', icon('ethereum')], ['arbitrum', 'Arbitrum', 'https://evil.example/x.png']])
+    dbL.prepare("INSERT INTO mkt_chain_snap (chain, name, at, tvl, logo, src) VALUES (?, ?, ?, 1, ?, '{}')").run(chain, name, NOW - 10 * 60e3, logo);
+  const insL = dbL.prepare('INSERT INTO mkt_pool_snap (network, pool, at, rank, base_addr, base_symbol, base_name, price_usd, reserve_usd, fdv_usd, mcap_usd, vol_m5, vol_h1, vol_h6, vol_h24, tx_h24, chg_m5, chg_h1, chg_h6, chg_h24) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)');
+  const XL = '0x' + 'a1'.repeat(20), AL = '0x' + 'a2'.repeat(20), BL = '0x' + 'a3'.repeat(20), CL = '0x' + 'a4'.repeat(20), DL = '0x' + 'a5'.repeat(20), EL = '0x' + 'a6'.repeat(20);
+  let poolN = 0;
+  const pl = (net, at, base, sym, o) => { const d = Object.assign({ p: 1, fdv: 1e6, mc: null, m5: 1, h1: 10, h6: 60, c5: 0.1, c24: 3 }, o);
+    insL.run(net, '0x' + (++poolN).toString(16).padStart(40, '0'), at, poolN, base, sym, sym + ' token', d.p, d.liq, d.fdv, d.mc, d.m5, d.h1, d.h6, d.v, 5, d.c5, 1, 2, d.c24); };
+  pl('robinhood', T_RH, XL, 'USDX', { liq: 2e6, v: 9e5, h1: 4e4, c24: -1, mc: 5e5 }); pl('robinhood', T_RH, AL, 'AAA', { liq: 50000, v: 1000, h1: 900, c24: 12, mc: 2e5 }); pl('robinhood', T_RH, BL, 'BBB', { liq: 30000, v: null, h1: null, c24: null });
+  pl('base', T_BASE, XL, 'USDX', { liq: 8e6, v: 3e6, h1: 1e3, c24: 0.5 }); pl('base', T_BASE, CL, 'CCC', { liq: 20000, v: 5e4, mc: 9e9, fdv: 1e6, c24: -7 });   // CCC: a global market cap, kept out of the sort
+  pl('base', NOW - 60e3, DL, 'HALF', { liq: 1e9, v: 1e10 });   // the run still writing: no 'pools:base' names it yet
+  pl('eth', T_ETH, DL, 'DDD', { liq: 4e5, v: 2e5, h1: 2e5, c24: 40, mc: 3e5 });
+  pl('arbitrum', T_ARB, EL, 'EEE', { liq: 15000, v: 3e3, h1: 5 });
+  const stL = dbL.prepare('INSERT INTO mkt_state (name, value, at) VALUES (?, ?, ?)');
+  for (const [net, at, n, why] of [['robinhood', T_RH, 3, null], ['base', T_BASE, 2, null], ['eth', T_ETH, 1, null], ['arbitrum', T_ARB, 1, 'page 2: the GeckoTerminal budget was spent']]) stL.run('pools:' + net, JSON.stringify({ at, pages: 1, pools: n, wanted: 3, why, ended: !why }), at);
+  const aL = mdL.tokens({ chain: 'all', limit: 200, include: 'all' }).body;
+  const rowL = (chain, addr) => aL.rows.find((r) => r.chain === chain && r.address === addr);
+  const figsOf = (r) => ['priceUsd', 'mcap', 'fdv', 'liquidity', 'txns24h', 'volume', 'change'].map((k) => r[k]);
+  check('chain=all on networks read at different times: every row\'s figures carry its own network\'s read time — never one time stamped on all — and the answer gives the newest and the oldest',
+    aL.rows.length === 7 && aL.rows.every((r) => figsOf(r).every((f) => f.at === { robinhood: T_RH, base: T_BASE, ethereum: T_ETH, arbitrum: T_ARB }[r.chain])) && aL.at === T_RH && aL.oldestAt === T_ETH
+    && aL.networks.find((n) => n.key === 'base').at === T_BASE && aL.networks.find((n) => n.key === 'ethereum').at === T_ETH, brief(aL.rows.map((r) => [r.chain, r.symbol, r.volume.at])));
+  check('  ...the same address on Robinhood Chain and on Base is two rows, each with its chain\'s name and logo (through our proxy; a logo host not on the allow-list gives none)', rowL('robinhood', XL) && rowL('base', XL) && rowL('robinhood', XL).liquidity.v === 2e6 && rowL('base', XL).liquidity.v === 8e6
+    && rowL('base', XL).chainName === 'Base' && rowL('base', XL).chainLogo === '/api/market/logo?u=' + encodeURIComponent(icon('base')) && rowL('arbitrum', EL).chainLogo === null && rowL('arbitrum', EL).chainName === 'Arbitrum', brief([rowL('robinhood', XL), rowL('base', XL)]));
+  check('  ...a batch still being written (Base\'s newest) is never served: Base\'s rows are its last finished read', !aL.rows.some((r) => r.symbol === 'HALF') && aL.rows.filter((r) => r.chain === 'base').length === 2);
+  const nL = (k) => aL.networks.find((n) => n.key === k);
+  check('  ...a read that stopped short and a network whose reads keep failing are said (stopped, stale, in the notes); every network never read is named, with why', nL('arbitrum').stopped === 'page 2: the GeckoTerminal budget was spent' && nL('ethereum').stale === true && !nL('robinhood').stale && !nL('base').stale
+    && aL.notes.some((x) => /Arbitrum, 1 pool at .* — the read stopped at page 2: the GeckoTerminal budget was spent/.test(x) && /Ethereum, 1 pool at .* — older than its reads usually are/.test(x))
+    && ['solana', 'bsc', 'polygon', 'avalanche', 'optimism'].every((k) => nL(k).pools === 0 && nL(k).at === null && nL(k).why === 'its pools have not been read yet (they are read hourly)')
+    && aL.notes.some((x) => /^Not read yet: Solana \(read hourly\), BSC \(read hourly\), Polygon \(read hourly\), Avalanche \(read hourly\), OP Mainnet \(read hourly\)/.test(x)), brief({ nets: aL.networks, notes: aL.notes }));
+  const orderL = (q) => mdL.tokens(Object.assign({ chain: 'all', include: 'all', limit: 200 }, q)).body.rows.map((r) => r.chain + ':' + r.symbol).join(' ');
+  check('  ...sorted across chains, highest or lowest, by volume, liquidity, market cap and price change — a figure that is missing sits last both ways',
+    orderL({}) === 'base:USDX robinhood:USDX ethereum:DDD base:CCC arbitrum:EEE robinhood:AAA robinhood:BBB' && orderL({ dir: 'asc' }) === 'robinhood:AAA arbitrum:EEE base:CCC ethereum:DDD robinhood:USDX base:USDX robinhood:BBB'
+    && orderL({ sort: 'liquidity' }) === 'base:USDX robinhood:USDX ethereum:DDD robinhood:AAA robinhood:BBB base:CCC arbitrum:EEE' && orderL({ sort: 'liquidity', dir: 'asc' }) === 'arbitrum:EEE base:CCC robinhood:BBB robinhood:AAA ethereum:DDD robinhood:USDX base:USDX'
+    && orderL({ sort: 'change' }) === 'ethereum:DDD robinhood:AAA arbitrum:EEE base:USDX robinhood:USDX base:CCC robinhood:BBB' && orderL({ sort: 'change', dir: 'asc' }) === 'base:CCC robinhood:USDX base:USDX arbitrum:EEE robinhood:AAA ethereum:DDD robinhood:BBB'
+    && orderL({ sort: 'mcap' }) === 'robinhood:USDX ethereum:DDD robinhood:AAA robinhood:BBB base:USDX base:CCC arbitrum:EEE' && orderL({ sort: 'mcap', dir: 'asc' }) === 'robinhood:AAA ethereum:DDD robinhood:USDX robinhood:BBB base:USDX base:CCC arbitrum:EEE'
+    && rowL('base', CL).mcap.v === 9e9 && rowL('base', CL).mcap.global === true,
+    [orderL({}), orderL({ dir: 'asc' }), orderL({ sort: 'liquidity' }), orderL({ sort: 'change' }), orderL({ sort: 'mcap' })].join(' | '));
+  const h1L = mdL.tokens({ chain: 'all', window: '1h', include: 'all', limit: 200 }).body;
+  check('  ...over the preset windows each row sums its own pools\' figures for that window (1 h here: Ethereum\'s DDD first, Robinhood Chain\'s BBB with no figure last)', h1L.window.kind === '1h' && h1L.rows[0].symbol === 'DDD' && h1L.rows[0].volume.v === 2e5 && h1L.rows[h1L.rows.length - 1].symbol === 'BBB' && h1L.rows[h1L.rows.length - 1].volume.v === null && /not read/.test(h1L.rows[h1L.rows.length - 1].volume.why), brief(h1L.rows.map((r) => [r.symbol, r.volume.v])));
+  // a custom window: each network over its own daily snapshots — Robinhood Chain's cover these days, Base's start later
+  const yL = dayOf(NOW - 864e5), y2L = dayOf(NOW - 2 * 864e5);
+  for (const d of [y2L, yL, dayOf(NOW)]) { const at = Date.parse(d + 'T00:05:00Z'); pl('robinhood', at, XL, 'USDX', { liq: 2e6, v: 1e5 }); pl('robinhood', at, AL, 'AAA', { liq: 5e4, v: 100 }); pl('robinhood', at, BL, 'BBB', { liq: 3e4, v: 7 }); }
+  mdL._test.memo.clear();
+  const cL = mdL.tokens({ chain: 'all', window: 'custom', from: y2L, to: yL, include: 'all', limit: 200 });
+  const cRow = (chain, addr) => cL.body.rows.find((r) => r.chain === chain && r.address === addr);
+  check('  ...a custom window is served (the daily snapshots allow it network by network): Robinhood Chain\'s tokens summed over its days, Base\'s say where its history starts, each network\'s coverage given', cL.status === 200 && cL.body.window.kind === 'custom'
+    && cRow('robinhood', XL).volume.v === 2e5 && cRow('robinhood', XL).volume.days === 2 && cRow('base', XL).volume.v === null && /^our history starts /.test(cRow('base', XL).volume.why) && cL.body.networks.find((n) => n.key === 'robinhood').coverage.from === y2L
+    && cL.body.notes.some((x) => /each network is summed from its own daily snapshots/.test(x)) && cL.body.rows.findIndex((r) => r.volume.v == null) >= 2, brief({ x: cRow('robinhood', XL) && cRow('robinhood', XL).volume, b: cRow('base', XL) && cRow('base', XL).volume, nets: cL.body.networks.slice(0, 3) }));
+  const badL = mdL.tokens({ chain: 'all', window: 'custom', from: yL, to: dayOf(NOW) });
+  check('  ...and a window that is not whole UTC days is refused in parseWindow\'s words, as on one chain', badL.status === 400 && /whole UTC day that has ended/.test(badL.body.error));
+  // cheap per request: the rows are built once per change of the data; another sort or order reads nothing from the pools again
+  mdL.tokens({ chain: 'all' }); seenL.length = 0;
+  for (const q of [{ sort: 'liquidity' }, { dir: 'asc' }, { sort: 'mcap', dir: 'asc' }, { include: 'all' }]) mdL.tokens(Object.assign({ chain: 'all' }, q));
+  const poolReads = seenL.filter((s) => /mkt_pool_snap|mkt_state|mkt_chain_snap/.test(s)).length;
+  const t0L = process.hrtime.bigint(); for (let i = 0; i < 200; i++) mdL.tokens({ chain: 'all', sort: i % 2 ? 'volume' : 'change' }); const msL = Number(process.hrtime.bigint() - t0L) / 1e6 / 200;
+  check('  ...memoised like the other answers: four more requests with other sorts read nothing from the tables, and a request costs ' + msL.toFixed(3) + ' ms here', poolReads === 0 && msL < 5, poolReads + ' table reads; ' + msL + ' ms');
+  const apiL = await mdL.apiResource('tokens', { chain: 'all' }, { limit: 100 });
+  // the docs' chain=all shape names every key the resource returns (the answer's, each network's — stopped, stale and coverage too — and the rows' chain fields)
+  const tokDoc = (DOCS.split('/api/data/v1/tokens?chain=all')[1] || '').split('</details>')[0];
+  const keysTa = [...Object.keys(apiL.body).filter((k) => apiL.body[k] !== undefined), ...new Set(aL.networks.concat(cL.body.networks).flatMap((n) => Object.keys(n))), ...Object.keys(apiL.body.data[0]).slice(0, 3)];
+  check('the docs\' "tokens" names chain=all and every key it returns: at and oldestAt, the networks (key, name, network, logo, at, pools, most, everyMs, why, stopped, stale, coverage), and each row\'s chain, chainName and chainLogo',
+    keysTa.length > 20 && ['stopped', 'stale', 'coverage', 'chainName', 'chainLogo', 'oldestAt'].every((k) => keysTa.includes(k)) && keysTa.every((k) => new RegExp('\\b' + k + '\\b').test(tokDoc)) && /chain=all/.test(DOCS.split('<tr><td><code>tokens</code></td>')[1].split('</tr>')[0]),
+    keysTa.filter((k) => !new RegExp('\\b' + k + '\\b').test(tokDoc)).join(','));
+  check('the Send API\'s tokens takes chain=all: data with each row\'s chain fields (the raw logo URL — programs, not browsers), the networks read, the newest and oldest read times', apiL.status === 200 && apiL.body.chain === 'all' && apiL.body.data.length === 7
+    && apiL.body.data.find((r) => r.chain === 'base' && r.address === XL).chainLogo === icon('base') && apiL.body.networks.find((n) => n.key === 'base').logo === icon('base') && apiL.body.at === T_RH && apiL.body.oldestAt === T_ETH && JSON.parse(JSON.stringify(apiL.body)).rows === undefined && apiL.body.data.every((r) => !('_globalMc' in r)), brief(apiL.body).slice(0, 300));
+  dbL.close();
+  const dbL0 = freshDb('l0'), mdL0 = MD.createMarketData({ db: dbL0, now: () => NOW }); mdL0.migrate();
+  const aL0 = mdL0.tokens({ chain: 'all' }).body; dbL0.close();
+  check('  ...and before any network has been read it says so (rows empty, why), each network still named', aL0.rows.length === 0 && aL0.why === 'no network\'s pools have been read yet' && aL0.networks.length === MD.GT_TRACKED.length && aL0.networks.every((n) => n.pools === 0 && n.why));
+
   // the docs' chain shape is the chain resource's (every key it returns is named there)
   const chainDoc = (DOCS.split('/api/data/v1/chain?key=robinhood')[1] || '').split('</pre>')[1] || '';
   const named = (k) => new RegExp('\\b' + k + '\\b').test(chainDoc);
@@ -794,6 +897,9 @@ try {
   check('GET /api/market/chain?key=robinhood: the stats, the pulse read from the chain (block, gas, supplies, the bridge), the newest pools', cd.status === 200 && cd.j.pulse.now.block >= HEAD && cd.j.pulse.now.wethSupply > 40000 && cd.j.pulse.now.bridgeEth > 200000 && cd.j.newPools.length === 19 && cd.j.stats.mcap.why === 'No native token — gas is paid in ETH', brief(cd.j && cd.j.pulse));
   const tk = await api('/api/market/tokens?chain=robinhood&sort=volume&dir=desc');
   check('GET /api/market/tokens: the token list with its basis', tk.status === 200 && tk.j.rows.length > 0 && /most-traded pools on GeckoTerminal, grouped by token/.test(tk.j.basis));
+  const tka = await api('/api/market/tokens?chain=all&sort=liquidity&dir=asc');
+  check('  ...and chain=all through the route: every network\'s list in one, each row naming its chain (the logo through our proxy), the networks not read yet named (only Robinhood Chain\'s pools are collected here)', tka.status === 200 && tka.j.chain === 'all' && tka.j.rows.length > 0
+    && tka.j.rows.every((r) => r.chain === 'robinhood' && r.chainName === 'Robinhood Chain' && /^\/api\/market\/logo\?u=/.test(r.chainLogo || '')) && tka.j.networks.length === MD.GT_TRACKED.length && tka.j.networks.filter((n) => !n.pools).length === MD.GT_TRACKED.length - 1 && /no-store/.test(tka.cc), brief(tka.j && { n: tka.j.networks, r: tka.j.rows && tka.j.rows[0] }));
   const td = await api('/api/market/token?chain=robinhood&address=' + USDG);
   check('GET /api/market/token: one token in full with its candles, the logo through our own proxy', td.status === 200 && td.j.symbol === 'USDG' && td.j.candles.rows.length > 0 && /^\/api\/market\/logo\?u=https%3A%2F%2Fcoin-images\.coingecko\.com/.test(td.j.logo || ''), brief(td.j && { l: td.j.logo, c: td.j.candles && td.j.candles.rows && td.j.candles.rows.length }));
   const sr = await api('/api/market/search?q=USDG'), np = await api('/api/market/new-pools?chain=robinhood&limit=5'), no = await api('/api/market/nope');
@@ -829,7 +935,7 @@ try {
   const dsn2 = await api('/api/data/v1/chain-snapshots?limit=4&before=' + (dsn.j && dsn.j.next), { key }), dsc = await api('/api/data/v1/scans?chain=ethereum&address=' + PEPE, { key });
   check('  ...with one: the chains (raw logo URLs — programs, not browsers), a chain\'s history, snapshots paged by before / limit, every scan', dc.status === 200 && dc.j.data.length > 0 && dc.j.data[0].tvl.src === 'defillama' && dh.status === 200 && Array.isArray(dh.j.data)
     && dsn.status === 200 && dsn.j.data.length === 4 && dsn.j.next && dsn2.j.data[0].id < dsn.j.data[3].id && dsc.j.data.length === 2 && dsc.j.data.some((x) => x.src === 'market') && dsc.j.data.some((x) => x.src === 'scan'), brief({ dsn: dsn.j && dsn.j.next, dsc: dsc.j && dsc.j.data.map((x) => x.src) }));
-  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors'].map((r) => api('/api/data/v1/' + r, { key })));
+  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors'].map((r) => api('/api/data/v1/' + r, { key })));
   const dunk = await api('/api/data/v1/nope', { key });
   check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition'].every((n) => dunk.j.error.includes(n)),
     dall.map((r) => r.status).join(' ') + ' ' + brief(dunk.j));
