@@ -239,6 +239,8 @@ async function realAnswers() {
   pool(1, '0x' + '52'.repeat(20), USDG, 'USDG', 'Global Dollar', 13093964); pool(2, '0x' + '69'.repeat(20), USDG, 'USDG', 'Global Dollar', 0);
   pool(3, '0x' + 'f3'.repeat(20), SEND, 'SEND', 'Just Send It', 25390);
   pool(1, '0x' + 'ba'.repeat(20), '0x' + '83'.repeat(20), 'BTK', 'A Base token', 5e6, 'base');   // Base's pools are read too, so its top tokens carry no "not read"
+  // a pools run marks its batch finished only after its last page; the answers serve the newest finished batch, never one still being written
+  for (const [net, n] of [['robinhood', 3], ['base', 1]]) db.prepare('INSERT INTO mkt_state (name, value, at) VALUES (?, ?, ?)').run('pools:' + net, JSON.stringify({ at: T, pages: 1, pools: n, wanted: 1, why: null, ended: T }), T);
   let dsDown = false;
   const candles = [0, 1, 2].map((i) => [Math.floor((NOW - (72 - i) * 3600e3) / 1000), 1, 1.01, 0.99, 1, 1e6]);
   const pair = { chainId: 'robinhood', pairAddress: '0x' + 'f3'.repeat(20), baseToken: { address: SEND, symbol: 'SEND', name: 'Just Send It' }, priceUsd: '0.00017', liquidity: { usd: 25390 }, volume: { h24: 525 },

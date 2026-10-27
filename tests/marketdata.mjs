@@ -298,6 +298,8 @@ try {
   // the pools: three daily batches at the start of three days, then one now
   for (const d of ['2026-10-24', '2026-10-25', '2026-10-26']) await run('pools', Date.parse(d + 'T00:05:00Z'));
   const rp = await run('pools');
+  const spy = q1("SELECT base_name, name FROM mkt_pool_snap WHERE base_name LIKE 'SPDR S%' ORDER BY id DESC LIMIT 1");
+  check('GeckoTerminal\'s HTML-escaped names ("S&amp;P") are stored decoded, so the page escapes them once and shows "S&P"', spy && spy.base_name === 'SPDR S&P 500 ETF Trust \u2022 Robinhood Token' && !/&amp;/.test(spy.name || ''), brief(spy));
   const nPools = new Set(allPools.map((p) => p.attributes.address)).size;
   check('the Robinhood Chain pools run read GeckoTerminal\'s pages until the list ended (2 pages of 20 here) and kept every pool once per batch', rp.ok && q1('SELECT COUNT(*) n FROM mkt_pool_snap WHERE network=? AND at=?', 'robinhood', NOW).n === nPools && /2 pages/.test(rp.note), rp.note);
   const usdgPool = q1("SELECT * FROM mkt_pool_snap WHERE network='robinhood' AND at=? AND pool='0x52e65b17fb6e5ba00ed806f37afcd2daa50271ca'", NOW);

@@ -582,7 +582,7 @@
    "chain": "robinhood",
    "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
    "symbol": "SPY",
-   "name": "SPDR S&amp;P 500 ETF Trust • Robinhood Token",
+   "name": "SPDR S&P 500 ETF Trust • Robinhood Token",
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174115%2Flarge%2F0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png%3F1782444578",
    "priceUsd": {
     "v": 767.959906013623,
