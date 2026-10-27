@@ -6351,10 +6351,12 @@ async function runLedgerSnapshot(snapId, cid, token) {
 }
 
 function snapshotView(s, withHolders, offset, limit) {
+  // a failed (or still running) snapshot read no holders: its count is not known (null), never the column's 0
+  const read = s.status === 'complete' || s.status === 'partial';
   const out = {
     id: s.id, communityId: s.community_id, token: s.token_addr, status: s.status, reason: s.reason,
     startedAt: s.started_at, finishedAt: s.finished_at, symbol: s.symbol, decimals: s.decimals,
-    totalSupply: s.total_supply, supplyHeld: s.supply_held, holderCount: s.holder_count,
+    totalSupply: s.total_supply, supplyHeld: read ? s.supply_held : null, holderCount: read ? s.holder_count : null,
     expectedCount: s.expected_count, pages: s.pages,
     complete: s.status === 'complete',
     top20: s.top20 ? JSON.parse(s.top20) : [],
@@ -6577,15 +6579,18 @@ function contractSummaryOf(o) {
    looks locked" into the risk panel for token X, for everyone, for the next half hour. Two things fix it,
    and both are needed: the pool has to actually BE a pool for this token (checked on-chain, not taken on
    the caller's word), and the cache is keyed on the pair as well, so one caller's question can never
-   become another caller's answer. */
+   become another caller's answer.
+   true / false is the chain's answer; null is "the node did not answer" — read strictly, because pairTokens turns a refused
+   read into an empty side, and a throttled token0() then read as "that pool does not hold this token", cached for good, and
+   the contract panel said so to every reader (review, 2026-10-27). */
 const _pairHasTokenCache = new Map();
 async function pairContainsToken(pairAddr, tokenAddr) {
   const k = pairAddr + ':' + tokenAddr;
   const hit = _pairHasTokenCache.get(k);
   if (hit !== undefined) return hit;              // a pool's two sides never change
   let ok = false;
-  try { const { token0, token1 } = await pairTokens(pairAddr); ok = (token0 === tokenAddr || token1 === tokenAddr); }
-  catch { return false; }                          // unreadable → not verified, and not cached
+  try { const { token0, token1 } = await pairLayoutStrict(pairAddr); ok = (token0 === tokenAddr || token1 === tokenAddr); }
+  catch { return null; }                           // unreadable → not known, and not cached
   pruneCache(_pairHasTokenCache, 20000);
   _pairHasTokenCache.set(k, ok);
   return ok;
@@ -6642,15 +6647,18 @@ async function analyzeContract(tokenAddr, pairAddr) {
   out.ownerBurn = own.ownerBurn; out.owner = own.owner; out.ownerIsContract = own.ownerIsContract;
   if (out.renounced === true) { const NEUTRAL = new Set(['mint', 'blacklist', 'pausable', 'fees', 'balance', 'perwallet', 'maxlimits-mod']); out.powers = out.powers.map((p) => NEUTRAL.has(p.key) ? Object.assign({}, p, { neutralised: true }) : p); }
   // the LP: GoPlus's (same pool) first; else the chain's own read of what sits at dead addresses; else a keyed explorer's holder list
-  if (!out.liquidity.known && pair && await pairContainsToken(pair, tok)) {
+  const holds = !out.liquidity.known && pair ? await pairContainsToken(pair, tok) : undefined;
+  if (holds === true) {
     const lb = await lpBurnRead(pair);
     if (lb && lb.emptied) out.liquidity = { known: true, emptied: true, source: 'chain' };
     else if (lb && lb.burnedPct != null) out.liquidity = { known: true, lockedPct: lb.burnedPct, locked: lb.burnedPct >= 50, burnedOnly: true, source: 'chain' };
     else out.liquidity = await checkLpLock(pair);
   }
-  else if (!out.liquidity.known && pair) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
+  else if (holds === false) out.liquidity = { known: false, reason: 'that pool does not hold this token' };
+  else if (holds === null) out.liquidity = { known: false, reason: 'the pool could not be read on the chain just now' };
   out.summary = contractSummaryOf(out);
-  _contractCache.set(key, { t: now(), v: out });
+  // a pool the node did not answer for is asked again on the next read, not held as the answer for half an hour
+  if (holds !== null) _contractCache.set(key, { t: now(), v: out });
   return out;
 }
 
@@ -19519,9 +19527,11 @@ const server = http.createServer(async (req, res) => {
         // price unreadable → undecided, not "dust will do" and not "you don't hold it"
         if (holdsC === null) return bad(res, 'We couldn’t price this token just now, so we can’t check your holding against the $' + MIN_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
         // The token's own deployer/owner wallet may start the community WITHOUT holding — a dev often keeps a clean
-        // wallet. Verified on-chain (the creator address from the explorer, and owner() from the contract), and only
-        // against a wallet they proved control of by signature. It grants the community, NOT a qualified member slot:
-        // qualifyOptIn still needs real holdings, so a dev can't tip a community live on their own.
+        // wallet. The deployer is the creator address a keyed explorer gives, else GoPlus Security's creator_address
+        // (token.deployerSource says which), and the owner is owner() from the contract (GoPlus's owner_address only
+        // where it has none); only ever matched against a wallet they proved control of by signature. It grants the
+        // community, NOT a qualified member slot: qualifyOptIn still needs real holdings, so a dev can't tip a
+        // community live on their own.
         const devWallet = isTokenDev(me.id, pr.token);
         if (!holdsC && !devWallet) return bad(res, 'You must hold $' + sym + ' to start its community — connect a wallet that holds it. (The token’s own deployer wallet can start it without holding.)', 403);
         const ip = clientIp(req);

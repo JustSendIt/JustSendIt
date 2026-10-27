@@ -57,10 +57,15 @@ If you self-host, these are yours and the code cannot do them for you:
 - Set `SEED_INVITE_CODE` (or read the generated one from the first boot's log) — it is the only key to the
   only door on a fresh deploy and it mints accounts. Set `ADMIN_USER_IDS` to the operators who may use the
   moderation queue.
-- Point `RPC_URL` and `BLOCKSCOUT_URL` at keyed endpoints before launch. The public chain RPC answers 429
-  to `eth_call` after a handful of rapid reads, and the public explorer answers 403 with a bot challenge to a
-  server request — both measured. Left on the defaults, on-chain reads fail under load and every holder count
-  and contract-power flag reads as unknown, which is a safety readout going quiet rather than an outage you see.
+- Point `RPC_URL` at a keyed endpoint before launch, and `BLOCKSCOUT_URL` too if the explorer's readings are
+  wanted. The public chain RPC answers 429 to `eth_call` after a handful of rapid reads, and the public explorer
+  answers 403 with a bot challenge to a server request — both measured. The site never tries to get past that
+  challenge: with `BLOCKSCOUT_URL` unset it does not ask the explorer anything. Holder counts then come from the
+  chain's own holder ledger and GoPlus, contract-power flags and the deployer from GoPlus, and what only the
+  explorer gives is said as not read, with the reason. Left on the default RPC, on-chain reads fail under load
+  and those readouts go to unknown, which is a safety readout going quiet rather than an outage you see.
+- Every request the server makes says it is the site (`JustSendIt/1.0 (+https://sendrh.com)`); none pretends
+  to be a browser.
 - Every outbound JSON read is metered per host against that vendor's published limit (`OUTBOUND_RPM_*`), so
   the site waits for its own budget rather than being cut off by theirs. `/api/admin/outbound` shows what each
   vendor is actually costing per minute, the busiest minute since boot, and how many calls were declined —

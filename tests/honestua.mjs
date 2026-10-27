@@ -10,7 +10,9 @@
         machine. A member's scan, a token dashboard read, the contract read, the radar build, the deployer's trades on the chart,
         the tracker's explorer route and a community holder snapshot: zero requests to the explorer, every request as the site,
         the figures the explorer gave either from the chain / GoPlus (named) or null with the reason — and the page renders them
-        without "undefined", and without a green verdict for a contract nobody read.
+        without "undefined", and without a green verdict for a contract nobody read. Two of those nulls are only honest if they
+        say the right thing: a pool the node would not read is "could not be read just now" (asked again next time), never
+        "that pool does not hold this token"; and a snapshot that read no holders says so, never "0 holders".
      3. The same server WITH a key (BLOCKSCOUT_URL at a fake keyed explorer): the explorer's reads happen as before, as the site.
    Everything lives in a temporary directory, deleted. */
 import { spawn } from 'node:child_process';
@@ -70,11 +72,11 @@ const A = (h) => '0x' + h.repeat(20);
 const WETH = '0x0bd7d308f8e1639fab988df18a8011f41eacad73', FACTORY = '0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f';
 const PAIRCREATED = '0x0d3648bd0f6ba80134a33ba9275ac585d9d315f0ad8355cddefde31afa28d0e9', TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ZERO = '0x' + '0'.repeat(40), DEAD = '0x000000000000000000000000000000000000dead';
-const TOKA = A('a1'), TOKB = A('b2'), TOKC = A('c3'), TOKD = A('d4'), PA = A('1a'), PB = A('2b'), PC = A('3c'), PD = A('4d');
+const TOKA = A('a1'), TOKB = A('b2'), TOKC = A('c3'), TOKD = A('d4'), PA = A('1a'), PB = A('2b'), PC = A('3c'), PD = A('4d'), PE = A('2c');
 const CREATOR = A('5e'), CREATOR2 = A('5f'), OWNER = A('6f'), H1 = A('71'), H2 = A('72'), H3 = A('73'), WALLET = A('7e');
 const HEAD = 100000000, E18 = 10n ** 18n;
 const NAMES = { [TOKA]: ['Token A', 'TOKA'], [TOKB]: ['Token B', 'TOKB'], [TOKC]: ['Token C', 'TOKC'], [TOKD]: ['Token D', 'TOKD'] };
-const PAIRS = { [PA]: TOKA, [PB]: TOKB, [PC]: TOKC, [PD]: TOKD };
+const PAIRS = { [PA]: TOKA, [PB]: TOKB, [PC]: TOKC, [PD]: TOKD, [PE]: TOKB };   // PE: a second pool of Token B, whose LP reads like A's
 const hx = (n) => '0x' + BigInt(n).toString(16);
 const w256 = (hex) => String(hex).replace(/^0x/, '').padStart(64, '0');
 const topic = (a) => '0x' + w256(a);
@@ -90,7 +92,7 @@ const pairLog = (pair, t0, t1, b) => ({ address: FACTORY, blockNumber: hx(b), lo
 const PLOGS = [pairLog(PA, TOKA, WETH, HEAD - 495), pairLog(PB, TOKB, WETH, HEAD - 395), pairLog(PD, TOKD, WETH, HEAD - 95)];
 
 // the chain node: every request recorded with its User-Agent
-const node = { reqs: [] };
+const node = { reqs: [], refuse: new Set(), refused: 0 };   // refuse: pools whose token0()/token1() the node answers 429 to, as the public node does in a burst
 function nodeAnswer(m, p) {
   const a0 = (p && p[0]) || {};
   if (m === 'eth_blockNumber') return hx(HEAD);
@@ -106,11 +108,12 @@ function nodeAnswer(m, p) {
     const to = String(a0.to || '').toLowerCase(), d = String(a0.data || '');
     if (to === FACTORY && d.startsWith('0xe6a43905')) { const x = '0x' + d.slice(34, 74), y = '0x' + d.slice(98, 138); return '0x' + w256([x, y].includes(TOKC) && [x, y].includes(WETH) ? PC : ZERO); }
     if (PAIRS[to]) {
+      if (node.refuse.has(to) && (d === '0x0dfe1681' || d === '0xd21220a7')) return node.refused++, { error: { code: 429, message: 'Too Many Requests' } };
       if (d === '0x0dfe1681') return '0x' + w256(PAIRS[to]);
       if (d === '0xd21220a7') return '0x' + w256(WETH);
       if (d === '0x0902f1ac') return '0x' + w256((270n * E18).toString(16)) + w256((3n * E18 / 10n).toString(16)) + w256('1');
       // Token A's LP: 1,000, of which 900 at 0x…dEaD and the 1,000-wei minimum at zero; the other pools' LP cannot be read
-      if (d === '0x18160ddd') return to === PA ? '0x' + w256((1000n * E18).toString(16)) : '0x';
+      if (d === '0x18160ddd') return to === PA || to === PE ? '0x' + w256((1000n * E18).toString(16)) : '0x';
       if (d.startsWith('0x70a08231')) { const who = '0x' + d.slice(-40); return '0x' + w256(who === DEAD ? (900n * E18).toString(16) : who === ZERO ? '3e8' : '0'); }
       return '0x';
     }
@@ -333,6 +336,39 @@ try {
   const card = (await api('/api/communities/' + cid3, { sid: m.sid })).j, cc3 = (card && card.community) || {};
   check('a community card whose token has no chain ledger yet shows the count the site recorded, labelled "recorded" — never "from the block explorer" with no key',
     cc3.holdersSource !== 'explorer' && (cc3.holdersSource === 'chain' || (cc3.holdersSource === 'recorded' && cc3.holders === 42)), brief({ holders: cc3.holders, src: cc3.holdersSource }));
+
+  /* a pool the node would not read (review, 2026-10-27): the reader that checks the pool holds the token turned a refused token0()
+     into an empty side, so the panel said "that pool does not hold this token" — and kept saying it, cached — for a pool that does */
+  node.refuse.add(PE);
+  const ce = await api('/api/pairs/contract?token=' + TOKB + '&pair=' + PE);
+  check('a contract read whose pool the node refuses to read: the LP is unknown because the pool could not be read just now — not "that pool does not hold this token"',
+    ce.status === 200 && ce.j.liquidity && ce.j.liquidity.known === false && ce.j.liquidity.reason === 'the pool could not be read on the chain just now' && node.refused > 0, brief(ce.j && { liquidity: ce.j.liquidity, refused: node.refused }));
+  const hE = bareText(await contractHTMLOf(ce.j, TOKB, PE));
+  check('  ...and the panel says that, not a false claim about the pool', /Couldn’t tell whether the liquidity is locked — the pool could not be read on the chain just now\./.test(hE) && !/does not hold this token/.test(hE) && !badWords(hE), hE.slice(0, 400));
+  node.refuse.delete(PE);
+  const ce2 = await api('/api/pairs/contract?token=' + TOKB + '&pair=' + PE);
+  check('  ...and the refusal is not kept: once the node answers, the same read finds the pool and reads its LP (90% at a dead address, on-chain)',
+    ce2.status === 200 && ce2.j.liquidity && ce2.j.liquidity.known === true && ce2.j.liquidity.burnedOnly === true && Math.round(ce2.j.liquidity.lockedPct) === 90, brief(ce2.j && ce2.j.liquidity));
+  const cn = await api('/api/pairs/contract?token=' + TOKB + '&pair=' + PA);
+  check('  ...while a pool the chain says is another token\'s still reads as that (the chain\'s answer, not a guess)', cn.status === 200 && cn.j.liquidity && cn.j.liquidity.known === false && cn.j.liquidity.reason === 'that pool does not hold this token', brief(cn.j && cn.j.liquidity));
+
+  /* a snapshot that read no holders: Token B's ledger is one too large to build here, and without a key the explorer is not walked
+     instead — the snapshot fails with the reason, and its count is not known (null), never the stored 0 shown as "0 holders" */
+  const cid4 = community(m.id, TOKB, PB, 'TOKB');
+  sdb.prepare("INSERT INTO holder_index (token_addr, status, updated_at) VALUES (?, 'too-big', ?) ON CONFLICT(token_addr) DO UPDATE SET status='too-big', updated_at=excluded.updated_at").run(TOKB, Date.now());
+  const sn4 = await snapshot(m, cid4);
+  check('a holder snapshot that could read no holders fails with the reason, and its holder count is null (not read) — never 0',
+    sn4.started === 202 && sn4.s && sn4.s.status === 'failed' && sn4.s.holderCount === null && sn4.s.supplyHeld === null && /more transfers than this server can rebuild its holder list from, and the explorer is read only with an API key/.test(sn4.s.reason || ''), brief(sn4));
+  // the community page's own renderer (public/snapshots.js), in a sandbox, fed by the server
+  const el = (id) => ({ id, hidden: true, innerHTML: '', textContent: '', disabled: false, addEventListener: noop });
+  const sEls = { 'comm-snaps': el('comm-snaps'), 'snap-tabs': el('snap-tabs'), 'snap-body': el('snap-body'), 'snap-take': el('snap-take'), 'snap-status': el('snap-status') };
+  const sDoc = { readyState: 'complete', getElementById: (id) => sEls[id] || null, addEventListener: noop };
+  const sWin = { AUTH: { user: { username: '__hua_member__' } }, api: async (p) => (await api(p, { sid: m.sid })).j };
+  const sCtx = { window: sWin, AUTH: sWin.AUTH, document: sDoc, location: { search: '?id=' + cid4 }, URLSearchParams, setInterval: () => 0, clearInterval: noop, console };
+  sCtx.globalThis = sCtx; vm.createContext(sCtx); vm.runInContext(fs.readFileSync(path.join(ROOT, 'public', 'snapshots.js'), 'utf8'), sCtx);
+  for (let i = 0; i < 50 && !sEls['snap-body'].innerHTML; i++) await sleep(100);
+  const sv = bareText(sEls['snap-body'].innerHTML);
+  check('  ...and the community page says the holders were not read, beside why — not "0 holders"', /This snapshot is incomplete\./.test(sv) && /Holders not read/.test(sv) && !/\b0\s+holders/.test(sv) && !badWords(sv), sv.replace(/\s+/g, ' ').slice(0, 400));
 
   // the network, the whole run
   await sleep(300);
