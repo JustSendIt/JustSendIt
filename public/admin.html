@@ -54,7 +54,7 @@
 
 <main id="main" class="wrap" style="padding-top:2.2rem; padding-bottom:4rem;">
   <h1 class="display" style="font-size:max(var(--text-floor), 1.6rem); margin:0 0 0.3rem;">Admin 🛠️</h1>
-  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, every public dataset the platform collects, then the moderation queue.</p>
+  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, every public dataset the platform collects, what Sendy could not answer, then the moderation queue.</p>
 
   <p class="modal-note" id="adm-gate" role="status" aria-live="polite">Checking who you are…</p>
 
@@ -159,6 +159,16 @@
         <button class="btn btn-sm" id="adm-col-older" type="button" hidden data-tip="Shows the next page: the rows that come after the last one here">Older →</button>
       </div>
     </div>
+  </section>
+
+  <!-- Sendy: how his brain is doing, and the questions he could not answer — grouped, without who asked (admin.js, GET /api/sendy/live) -->
+  <section class="card adm-ov adm-sendy" id="adm-sendy" hidden aria-labelledby="adm-sendy-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-sendy-h" class="adm-h2">Sendy 🚀</h2>
+      <button class="btn btn-sm" id="adm-sendy-refresh" type="button" data-tip="Reads Sendy's index and the questions he could not answer again">↻ Refresh</button>
+    </div>
+    <p class="modal-note" id="adm-sendy-sum" role="status" aria-live="polite"></p>
+    <div id="adm-sendy-body"></div>
   </section>
 
   <div id="adm-tools" hidden>

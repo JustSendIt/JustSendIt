@@ -7,6 +7,7 @@
      POST /api/admin/resolve             {id, action}
      POST /api/admin/keys/rotate         {confirm: 'ROTATE', scope: data|all, compromised} (needs "confirm it's you")
      GET  /api/admin/activity            daily visitors (counted from 2026-10-13) and daily active members (from the records)
+     GET  /api/sendy/live                Sendy's index, its refresh, and the questions he could not answer (never who asked)
    Nothing is computed here; every number and name is the server's. */
 (function () {
   const gate = document.getElementById('adm-gate'), tools = document.getElementById('adm-tools');
@@ -264,6 +265,25 @@
   });
   document.getElementById('adm-dau-refresh').addEventListener('click', loadActivity);
 
+  /* ----- Sendy: what his brain holds, and the questions he could not answer (GET /api/sendy/live) — never who asked ----- */
+  const sendy = document.getElementById('adm-sendy'), sendySum = document.getElementById('adm-sendy-sum'), sendyBody = document.getElementById('adm-sendy-body');
+  async function loadSendy() {
+    sendyBody.setAttribute('aria-busy', 'true');
+    try {
+      const r = await fetch('/api/sendy/live', { credentials: 'same-origin' });
+      if (!r.ok) throw new Error('could not read Sendy (' + r.status + ')');
+      const j = await r.json(), b = j.brain || {}, ix = b.index || {}, rf = b.refresh || {}, un = j.unanswered || { rows: [], total: 0 };
+      sendySum.textContent = (b.model ? 'Answers with ' + b.model + ' and the tools' : 'Answers on his own (no model key)') + ' · ' + Number(ix.docs || 0).toLocaleString() + ' passages · last read ' + (ageOf(rf.lastTickAt) || 'not yet')
+        + ' · longest slice ' + rf.maxSliceMs + ' ms · ' + Number(j.answered || 0).toLocaleString() + ' answered since the start';
+      const kinds = Object.entries(ix.kinds || {}).sort((a, c) => c[1] - a[1]).map(([k, n]) => stat(esc(k), Number(n).toLocaleString())).join('');
+      sendyBody.innerHTML = '<div class="adm-ov-grid"><div><h3 class="adm-h3">What he holds</h3>' + kinds + '</div>' +
+        '<div><h3 class="adm-h3">Questions he could not answer</h3><p class="modal-note">' + Number(un.total || 0).toLocaleString() + ' kept (' + esc(un.keptDays) + ' days, the newest ' + Number(un.keptRows || 0).toLocaleString() + ' at most), without who asked. The same question asked again is one line, with how often.</p>' +
+        (un.rows.length ? '<ol class="adm-ov-list">' + un.rows.map((x) => '<li>“' + esc(x.q) + '”' + (x.n > 1 ? ' ×' + Number(x.n) : '') + ' · ' + esc(x.page || '/') + ' · ' + esc(x.engine) + ' · ' + esc(when(x.at)) + '</li>').join('') + '</ol>' : '<p class="modal-note">None yet.</p>') + '</div></div>';
+    } catch (e) { sendyBody.innerHTML = '<p class="empty-wall">⚠️ ' + esc(e.message || 'could not read Sendy') + '</p>'; }
+    finally { sendyBody.removeAttribute('aria-busy'); }
+  }
+  document.getElementById('adm-sendy-refresh').addEventListener('click', loadSendy);
+
   /* ----- collected data: everything public the platform collects, read-only (owner, 2026-10-26: "Make all cache data from the
      platform visible on the Admin page. Don't show anything on the admin page that is encrypted.") -----
        GET /api/admin/collected                          { datasets: [{ id, title, description, rows, newestAt, oldestAt, columns: [{ name, label }] }] }
@@ -462,11 +482,12 @@
   document.getElementById('adm-col-refresh').addEventListener('click', loadCollected);
 
   function boot() {
-    if (!(window.AUTH && AUTH.user)) { gate.textContent = 'Sign in first.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; col.hidden = true; return; }
-    if (!AUTH.user.admin) { gate.textContent = 'This page is for the site operators. If that is you, your user id has to be in ADMIN_USER_IDS on the server.'; tools.hidden = true; ov.hidden = true; dau.hidden = true; col.hidden = true; return; }
+    if (!(window.AUTH && AUTH.user)) { gate.textContent = 'Sign in first.'; sendy.hidden = true; tools.hidden = true; ov.hidden = true; dau.hidden = true; col.hidden = true; return; }
+    if (!AUTH.user.admin) { gate.textContent = 'This page is for the site operators. If that is you, your user id has to be in ADMIN_USER_IDS on the server.'; sendy.hidden = true; tools.hidden = true; ov.hidden = true; dau.hidden = true; col.hidden = true; return; }
     gate.textContent = 'Signed in as @' + AUTH.user.username + ' (admin).';
     tools.hidden = false; ov.hidden = false; dau.hidden = false; col.hidden = false;
     loadOverview(); loadActivity(); load(); loadCollected();
+    sendy.hidden = false; loadSendy();
   }
   if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(boot, boot); else boot();
   document.addEventListener('auth:change', boot);

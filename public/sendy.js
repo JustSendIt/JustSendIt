@@ -6,8 +6,10 @@
    Phone: pinned above the bottom controls, never dragged, never in the way of anything.
    Desktop: floats, takes a short flight along the edges now and then, and can be dragged anywhere — once
    dragged, it stays where it was put.
-   Chat: POST /api/sendy/ask answers from the site's own text. Without a model key the built-in notes below
-   answer the common questions and everything else is handed to a person: the Support board, or the email. */
+   Chat: POST /api/sendy/ask — the server's brain (lib/sendybrain.js) answers from the site's own pages and its live public
+   data, with or without a model key, and says where each figure came from. The built-in notes below answer only when the
+   server cannot be reached (the server indexes these same notes, so the two never disagree); anything they do not cover is
+   handed to a person: the Support board, or the email. */
 (function () {
   'use strict';
 
@@ -18,7 +20,7 @@
   const reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.classList.contains('motion-off');   // the site's ⏸ switch counts too
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  /* ---------- the built-in notes: what Sendy can say with no model behind it ---------- */
+  /* ---------- the built-in notes: what Sendy can say when the server cannot be reached (it indexes them too) ---------- */
   const knowledgeBase = {
     'send power': {
       keywords: ['send power', 'power', 'points', 'leaderboard', 'level'],
@@ -53,8 +55,24 @@
       answer: 'Every post and comment has a report control — use it and a moderator will look. For anything that needs a person right away, email ' + EMAIL + ' with a link and a sentence about what is wrong.'
     },
     'safety': {
-      keywords: ['safe', 'security', 'risk', 'dyor', 'research', 'rug', 'scam', 'should i buy', 'buy'],
+      keywords: ['safe', 'security', 'risk', 'dyor', 'research', 'rug', 'scam', 'should i buy', 'should i sell', 'go up', 'moon', 'price prediction'],
       answer: 'Nothing here will ever tell you to buy — that is not what the site does. Read the token in the Scanner (/newpairs), look at the liquidity, the holders and the contract, and decide for yourself. Everything on this site is entertainment, not financial advice, and it is not affiliated with Robinhood.'
+    },
+    'how to buy': {
+      keywords: ['how to buy', 'how do i buy', 'where to buy', 'where can i buy', 'get send', 'get gwc', 'swap', 'bridge', 'robinhood wallet'],
+      answer: 'The How to Buy guide (/guide) walks through it in five steps: get a wallet and lock down its seed phrase, add Robinhood Chain to it, bridge some ETH over, swap it into $SEND or $GWC on the swap (/swap) — which fills in the real contract address — and then see your bags. It is a guide, not a tip: memecoins are maximum-risk entertainment, and nothing here tells anyone to buy.'
+    },
+    'market data': {
+      keywords: ['market data', 'tvl', 'market cap', 'top tokens', 'top chains', 'chain stats', 'liquidity', 'volume', 'fees'],
+      answer: 'Market Data (/market) has the figures for Robinhood Chain and the other chains — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps — and the top tokens of a chain or of every chain, sortable over a time frame. Every figure names its source (DefiLlama, L2BEAT, growthepie, GeckoTerminal, Dexscreener, the chain itself) and when it was read; one nobody could read says why instead of showing a zero.'
+    },
+    'arcade': {
+      keywords: ['arcade', 'competition', 'biggest sender', 'rocket run', 'prize', 'weekly', 'leaderboard'],
+      answer: 'The Arcade (/arcade) holds the weekly competitions and their boards: Biggest Sender (the most Send Power earned this week — the top ten win a boost for the week after), the Send Calls board, the community race, and Rocket Run, the free once-a-day game. The all-time leaderboard is there too.'
+    },
+    'data api': {
+      keywords: ['data api', 'api key', 'send api', 'developer', 'export my data'],
+      answer: 'The Data API (/data) serves the site\'s public data — and your own account\'s data — to programs, read-only, behind a key. The key is backed by a $SEND burn from your linked wallets; the page explains how, and the limits per key.'
     },
     'appeal': {
       keywords: ['appeal', 'restricted', 'strike', 'suspended', 'read-only', 'muted', 'banned'],
@@ -69,10 +87,15 @@
       answer: 'Two ways to reach a person: ask on the Support board (/support), where the community and the team answer in public, or email ' + EMAIL + ' for anything private. Both are free.'
     }
   };
+  // the note whose keywords cover most of the question (a longer keyword says more than a short one); null when none does
   function findAnswer(question) {
     const q = question.toLowerCase();
-    for (const entry of Object.values(knowledgeBase)) if (entry.keywords.some((k) => q.includes(k))) return entry.answer;
-    return null;
+    let best = null, top = 0;
+    for (const entry of Object.values(knowledgeBase)) {
+      const score = entry.keywords.reduce((s, k) => s + (q.includes(k) ? k.length : 0), 0);
+      if (score > top) { top = score; best = entry; }
+    }
+    return best ? best.answer : null;
   }
 
   /* ---------- tips per page ---------- */
@@ -434,28 +457,35 @@
       if (!history.length) addMessage(chatHello(), 'sendy');
       for (const m of history) addMessage(m.text, m.role === 'assistant' ? 'sendy' : 'user');
     }
+    // where an answer came from, under it: site paths only (anything else the server might send is dropped), each with its reading's age
+    const ageOf = (at) => { const s = Math.max(0, (Date.now() - at) / 1000); return s < 90 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : s < 172800 ? Math.round(s / 3600) + ' h ago' : Math.round(s / 86400) + ' days ago'; };
+    const sourceLinks = (list) => (Array.isArray(list) ? list : [])
+      .filter((s) => s && typeof s.href === 'string' && /^\/(?!\/)[^\s]{0,200}$/.test(s.href) && typeof s.label === 'string' && s.label)
+      .slice(0, 4).map((s) => ({ text: s.label.slice(0, 60) + (Number.isFinite(s.at) ? ' · ' + ageOf(s.at) : ''), href: s.href }));
+    // the server first, always; the notes above answer only when it cannot be reached (or failed outright)
     async function ask(q) {
       addMessage(q, 'user'); remember('user', q);
       if (window.SFX) SFX.play('send');   // the question goes up to Sendy
       const typing = addMessage('· · ·', 'sendy'); typing.classList.add('sendy-typing');
       chatSend.disabled = true;
-      let answer = null, note = null, offline = false, qaId = 0;
+      let answer = null, note = null, reached = false, qaId = 0, sources = [];
       try {
         const r = await fetch('/api/sendy/ask', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ q, page: location.pathname, history: history.slice(-9, -1) }) });
         const j = await r.json().catch(() => ({}));
-        if (r.ok && j.answer) { answer = String(j.answer); qaId = Number(j.id) || 0; }
-        else if (r.ok && j.unavailable) offline = true;
+        reached = r.status < 500;
+        if (r.ok && j.answer) { answer = String(j.answer); qaId = Number(j.id) || 0; sources = sourceLinks(j.sources); }
+        else if (r.ok && j.unavailable) reached = false;   // a server from before the brain: it has no answer of its own, so the notes answer
         else if (r.status === 429) note = String(j.error || 'Sendy needs a breather — try again in a few minutes.');
       } catch {}
       typing.remove(); chatSend.disabled = false;
       if (window.SFX) { if (note) SFX.play('error'); else SFX.play('toast'); }   // Sendy answers (or says he needs a breather)
-      if (answer) { const row = addMessage(answer, 'sendy'); remember('assistant', answer); if (qaId) rateBar(row, qaId); }
+      if (answer) { const row = addMessage(answer, 'sendy', sources); remember('assistant', answer); if (qaId) rateBar(row, qaId); }
       else {
-        const local = findAnswer(q);
+        const local = reached ? null : findAnswer(q);
         if (note) addMessage(note, 'sendy', ROUTES);
         else if (local) { addMessage(local, 'sendy'); remember('assistant', local); }
-        else addMessage(NO_ANSWER + (offline ? '' : ' (I could not reach my notes just now.)'), 'sendy', ROUTES);
+        else addMessage(NO_ANSWER + (reached ? '' : ' (I could not reach the server just now.)'), 'sendy', ROUTES);
       }
       chatInput.focus();
     }
