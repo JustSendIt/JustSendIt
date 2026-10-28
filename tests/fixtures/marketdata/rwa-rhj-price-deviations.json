@@ -1,0 +1,93 @@
+{
+ "asOf": {
+  "year": 2026,
+  "month": 10,
+  "day": 27
+ },
+ "rows": [
+  {
+   "tokenSymbol": "SATS",
+   "deployments": [
+    {
+     "contractAddress": "0x95052ddcd5DC25641657424A8Cf04834997E1730",
+     "chainId": 4663,
+     "networkName": "Robinhood Chain",
+     "transporterEnabled": false,
+     "replicatorEnabled": false
+    }
+   ],
+   "nyseClosePrice": {
+    "amount": "90.39",
+    "currency": "USD"
+   },
+   "onchainPrice": {
+    "amount": "1440.8899423779583",
+    "currency": "USD"
+   },
+   "deviationPct": "1494.08113992472431",
+   "direction": "DEVIATION_DIRECTION_PREMIUM",
+   "consecutiveDays": 32,
+   "firstObserved": {
+    "year": 2026,
+    "month": 9,
+    "day": 14
+   }
+  },
+  {
+   "tokenSymbol": "WEEK",
+   "deployments": [
+    {
+     "contractAddress": "0xc93a8c440CEa26D7445dF01729f193b27965099f",
+     "chainId": 4663,
+     "networkName": "Robinhood Chain",
+     "transporterEnabled": false,
+     "replicatorEnabled": false
+    }
+   ],
+   "nyseClosePrice": {
+    "amount": "99.98",
+    "currency": "USD"
+   },
+   "onchainPrice": {
+    "amount": "49.9022779925453743",
+    "currency": "USD"
+   },
+   "deviationPct": "50.0877395553657",
+   "direction": "DEVIATION_DIRECTION_DISCOUNT",
+   "consecutiveDays": 32,
+   "firstObserved": {
+    "year": 2026,
+    "month": 9,
+    "day": 14
+   }
+  },
+  {
+   "tokenSymbol": "NAVN",
+   "deployments": [
+    {
+     "contractAddress": "0xf7181b63Fdb858558A74ba96BC42732684cd7965",
+     "chainId": 4663,
+     "networkName": "Robinhood Chain",
+     "transporterEnabled": false,
+     "replicatorEnabled": false
+    }
+   ],
+   "nyseClosePrice": {
+    "amount": "27.08",
+    "currency": "USD"
+   },
+   "onchainPrice": {
+    "amount": "23.14882774627386",
+    "currency": "USD"
+   },
+   "deviationPct": "14.51688424566521",
+   "direction": "DEVIATION_DIRECTION_DISCOUNT",
+   "consecutiveDays": 9,
+   "firstObserved": {
+    "year": 2026,
+    "month": 10,
+    "day": 15
+   }
+  }
+ ]
+}

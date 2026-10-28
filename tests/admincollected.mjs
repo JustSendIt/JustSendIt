@@ -104,7 +104,7 @@ check('the fixtures are the contract\'s shapes: a list of datasets with id, titl
       && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-27 · \$Send \/ JustSendIt/.test(PRIV));
   check('the README has the Market Data row in its core features and the market resources in the Send API section',
     /^\| \*\*📊 Market Data\*\* \| `\/market`/m.test(README) && /- \*\*And the market data the site collects\*\*[^\n]*`chain-history`[^\n]*`collectors`/.test(README));
-  const vars = ['MARKET_COLLECT', 'MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'COINGECKO_DEMO_KEY'];
+  const vars = ['MARKET_COLLECT', 'MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_RHJ_URL', 'MARKET_CHAINLINK_URL', 'COINGECKO_DEMO_KEY'];
   check('.env.example lists MARKET_COLLECT, every MARKET_* base, the optional CoinGecko Demo key and the keyed-explorer note — and no empty value followed by a note the .env reader would take as the value',
     vars.every((v) => new RegExp('^' + v + '=$', 'm').test(ENV)) && /BLOCKSCOUT_URL above, pointed at a keyed endpoint/.test(ENV) && !/^[A-Z_]+=[ \t]+#/m.test(ENV), vars.filter((v) => !new RegExp('^' + v + '=$', 'm').test(ENV)).join(','));
 }

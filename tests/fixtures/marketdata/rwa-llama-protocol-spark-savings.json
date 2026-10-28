@@ -1,0 +1,16 @@
+{
+ "name": "Spark Savings",
+ "category": "Yield",
+ "chainTvls": {
+  "Robinhood Chain": {
+   "tokensInUsd": [
+    {
+     "date": 1793185511,
+     "tokens": {
+      "SPUSDG": 13672732.62907
+     }
+    }
+   ]
+  }
+ }
+}

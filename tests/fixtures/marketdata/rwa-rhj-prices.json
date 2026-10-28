@@ -1,0 +1,76 @@
+{
+ "quotes": [
+  {
+   "tokenSymbol": "CRM",
+   "deployments": [
+    {
+     "contractAddress": "0xd95B44124e475743a7589e68F3D74008A5536D44",
+     "chainId": 4663,
+     "networkName": "Robinhood Chain",
+     "transporterEnabled": false,
+     "replicatorEnabled": false
+    }
+   ],
+   "bid": "242.76",
+   "ask": "242.98",
+   "currency": "USD",
+   "dailyTradingVolume": "720337",
+   "isTradingHalt": false,
+   "generatedAt": "2026-10-28T14:04:41.099866185Z",
+   "dailyHigh": "244.61",
+   "dailyLow": "236.19",
+   "mintBurnTokenVolume": "1.71902601",
+   "mintBurnUsdVolume": "417.4998470487",
+   "tokenBid": "243.038766843101401769",
+   "tokenAsk": "243.259019474117558913"
+  },
+  {
+   "tokenSymbol": "P",
+   "deployments": [
+    {
+     "contractAddress": "0x1Cdad396DB64BDa184d5182A97Dd9B3C62100b7D",
+     "chainId": 4663,
+     "networkName": "Robinhood Chain",
+     "transporterEnabled": false,
+     "replicatorEnabled": false
+    }
+   ],
+   "bid": "139.92",
+   "ask": "140.09",
+   "currency": "USD",
+   "dailyTradingVolume": "336644",
+   "isTradingHalt": false,
+   "generatedAt": "2026-10-28T14:04:41.099866185Z",
+   "dailyHigh": "143.97",
+   "dailyLow": "138.3901",
+   "mintBurnTokenVolume": "4.19101",
+   "mintBurnUsdVolume": "586.76235505",
+   "tokenBid": "139.920000000000000000",
+   "tokenAsk": "140.090000000000000000"
+  },
+  {
+   "tokenSymbol": "TSLA",
+   "deployments": [
+    {
+     "contractAddress": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d",
+     "chainId": 4663,
+     "networkName": "Robinhood Chain",
+     "transporterEnabled": false,
+     "replicatorEnabled": false
+    }
+   ],
+   "bid": "399.31",
+   "ask": "399.4",
+   "currency": "USD",
+   "dailyTradingVolume": "9353398",
+   "isTradingHalt": false,
+   "generatedAt": "2026-10-28T14:04:45.030251586Z",
+   "dailyHigh": "412.5",
+   "dailyLow": "398.9201",
+   "mintBurnTokenVolume": "1336.64297",
+   "mintBurnUsdVolume": "533795.05328435",
+   "tokenBid": "399.310000000000000000",
+   "tokenAsk": "399.400000000000000000"
+  }
+ ]
+}

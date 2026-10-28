@@ -1,0 +1,40 @@
+{
+ "name": "Solon Stocks",
+ "category": "RWA",
+ "chainTvls": {
+  "Robinhood Chain": {
+   "tvl": [
+    {
+     "date": 1793145600,
+     "totalLiquidityUSD": 656
+    },
+    {
+     "date": 1793189567,
+     "totalLiquidityUSD": 661
+    }
+   ],
+   "tokensInUsd": [
+    {
+     "date": 1793145600,
+     "tokens": {
+      "NVDA": 656.5433
+     }
+    },
+    {
+     "date": 1793189567,
+     "tokens": {
+      "NVDA": 661.23676
+     }
+    }
+   ],
+   "tokens": [
+    {
+     "date": 1793189567,
+     "tokens": {
+      "NVDA": 3.00863
+     }
+    }
+   ]
+  }
+ }
+}

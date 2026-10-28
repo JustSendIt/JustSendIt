@@ -140,6 +140,7 @@
   "supported": true,
   "href": "/newpairs?scan=0x5fc5360d0400a0fd4f2af552add042d716f1d168&chain=robinhood"
  },
+ "rwa": null,
  "candles": {
   "tf": "hour",
   "pool": "0x52e65b17fb6e5ba00ed806f37afcd2daa50271ca",
