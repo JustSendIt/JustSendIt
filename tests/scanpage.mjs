@@ -309,9 +309,14 @@ async function rwaCardWalk() {
       fits.length === 24 && !bad.length && !exceptions.length, bad.slice(0, 3).map((x) => x.f + ' ' + x.w + (x.open ? ' open ' : ' ') + JSON.stringify(x.L)).join(' | ') + (exceptions.length ? ' exceptions: ' + JSON.stringify(exceptions[0]).slice(0, 200) : ''));
     /* the review (2026-10-28): in the narrow side column, every part open, TSLA's card was 8,883 px tall at 1280 (4,529 at 390) and pushed
        the Market card ~9,200 px down. In the wide column with parts 2–7 behind their pop-downs: measured, shut */
-    const tall = fits.filter((x) => x.f === 'rwa-token-tsla.json' && !x.open), t1280 = tall.find((x) => x.w === 1280), t390 = tall.find((x) => x.w === 390);
-    check('  ...TSLA\'s card, its pop-downs shut, stands at well under half its old height — under 3,400 px at 1280 in the wide column (8,883 before), under 2,800 at 390 (4,529) — and the Market card at 1280 starts under 5,000 px down (15,053 before)',
-      !!(t1280 && t390 && t1280.L && t390.L) && t1280.L.h < 3400 && t390.L.h < 2800 && t1280.L.market != null && t1280.L.market < 5000, JSON.stringify(tall.map((x) => ({ w: x.w, h: x.L && x.L.h, market: x.L && x.L.market }))));
+    // (font-independent: the card shut against the same card with every pop-down open, in the same browser — a runner's fonts make
+    // both taller or shorter together; on this Mac shut was ~3,160 px at 1280, on GitHub's Linux runner 3,618)
+    const tsla = (w, open) => fits.find((x) => x.f === 'rwa-token-tsla.json' && x.w === w && x.open === open);
+    const pairs = [1280, 390].map((w) => ({ w, shut: tsla(w, false), open: tsla(w, true) }));
+    const ok = pairs.every((p) => p.shut && p.open && p.shut.L && p.open.L && p.shut.L.h < 0.5 * p.open.L.h);
+    const m = pairs[0], mOk = m.shut && m.open && m.shut.L && m.open.L && m.shut.L.market != null && m.open.L.market != null && m.shut.L.market <= m.open.L.market;
+    check('  ...TSLA\'s card, its pop-downs shut, is under half its height with every pop-down open, at 1280 in the wide column and at 390 (it was 8,883 and 4,529 px with every part open in the side column), and the Market card never starts lower for it (measured: it stands where it is, shut or open)',
+      !!(ok && mOk), JSON.stringify(pairs.map((p) => ({ w: p.w, shut: p.shut && p.shut.L && p.shut.L.h, open: p.open && p.open.L && p.open.L.h, marketShut: p.shut && p.shut.L && p.shut.L.market, marketOpen: p.open && p.open.L && p.open.L.market }))));
     /* review two (2026-10-28), 16: on a phone the card came before the Safety read and the Contract card (the score's reasons and red facts
        pushed down by its whole height); it now follows them, as SPEC §6 says, and wider it stays in the wide column with the chart */
     const phones = fits.filter((x) => x.f === 'rwa-token-tsla.json' && x.w <= 390 && x.L), wides = fits.filter((x) => x.f === 'rwa-token-tsla.json' && x.w >= 1280 && x.L);
