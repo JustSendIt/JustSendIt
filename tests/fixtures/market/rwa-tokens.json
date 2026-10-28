@@ -93,6 +93,7 @@
     "v": 25509.33948,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -276,6 +277,7 @@
     "v": 1446457.16865,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -464,6 +466,7 @@
     "v": 1216059.8538,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -645,6 +648,7 @@
     "v": 186.10141,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -819,6 +823,7 @@
     "v": 1765.48135,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -988,12 +993,14 @@
     "v": 3936787.4498885535,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
+    "pairsRwa": true
    },
    "tvl": {
     "v": 733.85122,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -1082,7 +1089,9 @@
     "at": 1793205000000,
     "why": "Robinhood's /prices answer has no quote for it"
    },
-   "flags": []
+   "flags": [
+    "pairs-rwa"
+   ]
   },
   {
    "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
@@ -1168,6 +1177,7 @@
     "v": 40457.97698,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -1342,6 +1352,7 @@
     "v": 678169.25131,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -1517,6 +1528,7 @@
     "v": 836.65647,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -1687,12 +1699,14 @@
     "v": 1228631.0867777634,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
+    "pairsRwa": true
    },
    "tvl": {
     "v": 3895.81269,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -1786,7 +1800,9 @@
     "at": 1793196285030,
     "label": "primary-market mint and burn, USD — Robinhood does not document its window"
    },
-   "flags": []
+   "flags": [
+    "pairs-rwa"
+   ]
   },
   {
    "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
@@ -1872,6 +1888,7 @@
     "v": 383.82838,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -2205,6 +2222,7 @@
     "v": 11.21389,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -3356,6 +3374,7 @@
     "v": 500914.07796,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -3448,7 +3467,7 @@
   },
   {
    "address": "0xe10cc5f0cd0c90322ebeb33e7757b2c9090146dc",
-   "symbol": "googlon",
+   "symbol": "GOOGLon",
    "name": "Alphabet Class A (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -3465,7 +3484,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -3595,7 +3615,7 @@
   },
   {
    "address": "0x9bf86418caf2b7a939603d6c24219a77bf7f9b33",
-   "symbol": "aaplon",
+   "symbol": "AAPLon",
    "name": "Apple (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -3612,7 +3632,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -3742,7 +3763,7 @@
   },
   {
    "address": "0x900f8970d2fae8060d06bb29234f629c837c3383",
-   "symbol": "bmnron",
+   "symbol": "BMNRon",
    "name": "BitMine Immersion Technologies (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -3759,7 +3780,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -3889,7 +3911,7 @@
   },
   {
    "address": "0x369c4748e98c153e9b7adebc3e71e9e2a5f60dc0",
-   "symbol": "crclon",
+   "symbol": "CRCLon",
    "name": "Circle Internet Group (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -3906,7 +3928,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4036,7 +4059,7 @@
   },
   {
    "address": "0xb094d0d3221d7f7a9f14b0f78c34cd38d7acf6f2",
-   "symbol": "gmeon",
+   "symbol": "GMEon",
    "name": "GameStop (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -4053,7 +4076,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4183,7 +4207,7 @@
   },
   {
    "address": "0x300fe8a40701ce81460503fb886f9ed81a3b5e14",
-   "symbol": "qqqon",
+   "symbol": "QQQon",
    "name": "Invesco QQQ ETF (Ondo Tokenized ETF)",
    "logo": null,
    "issuer": {
@@ -4200,7 +4224,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4330,7 +4355,7 @@
   },
   {
    "address": "0x75113389169b154ddac67ca7efa542680d75f072",
-   "symbol": "fxion",
+   "symbol": "FXIon",
    "name": "iShares China Large-Cap ETF (Ondo Tokenized)",
    "logo": null,
    "issuer": {
@@ -4347,7 +4372,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4477,7 +4503,7 @@
   },
   {
    "address": "0x7b5026cfcb4de0cf3d9a39fe2a541514b71437a2",
-   "symbol": "metaon",
+   "symbol": "METAon",
    "name": "Meta Platforms (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -4494,7 +4520,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4624,7 +4651,7 @@
   },
   {
    "address": "0x09dedc334fc47ab543e5d70c7fd9d2b1aea175bd",
-   "symbol": "mstron",
+   "symbol": "MSTRon",
    "name": "MicroStrategy (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -4641,7 +4668,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4771,7 +4799,7 @@
   },
   {
    "address": "0xf1b95ae4e7700b962714702ea53784dc8492a856",
-   "symbol": "nvdaon",
+   "symbol": "NVDAon",
    "name": "NVIDIA (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -4788,7 +4816,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -4918,7 +4947,7 @@
   },
   {
    "address": "0x43cac729218c62210d71d66b7f0ec93990d8d8cc",
-   "symbol": "hoodon",
+   "symbol": "HOODon",
    "name": "Robinhood Markets (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -4935,7 +4964,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -5065,7 +5095,7 @@
   },
   {
    "address": "0x9b8294f24453379aa87c807ab82bf1d5722153fc",
-   "symbol": "spcxon",
+   "symbol": "SPCXon",
    "name": "SpaceX (Ondo Tokenized Stock)",
    "logo": null,
    "issuer": {
@@ -5082,7 +5112,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -5212,7 +5243,7 @@
   },
   {
    "address": "0x533c5571ae586985e1fddfaa24304284d970c62a",
-   "symbol": "spyon",
+   "symbol": "SPYon",
    "name": "SPDR S&P 500 ETF (Ondo Tokenized ETF)",
    "logo": null,
    "issuer": {
@@ -5229,7 +5260,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -5376,7 +5408,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map), and its code runs from Ondo Global Markets's beacon 0xc6fbc077d53d01f73e3195b2b916fd95555ba222 (checked on the chain)",
+     "check": "beacon",
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map), and its code runs from Ondo Global Markets' beacon 0xc6fbc077d53d01f73e3195b2b916fd95555ba222 (checked on the chain)",
      "src": "rpc",
      "at": 1793201400000
     },
@@ -5504,7 +5537,7 @@
   },
   {
    "address": "0xa8f72952653864f7457e0c307fdb415e03c2ece1",
-   "symbol": "cperon",
+   "symbol": "CPERon",
    "name": "US Copper Index Fund (Ondo Tokenized)",
    "logo": null,
    "issuer": {
@@ -5521,7 +5554,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -5651,7 +5685,7 @@
   },
   {
    "address": "0x17683e492d0c8910f7c0157d04af31cb7a23ad71",
-   "symbol": "aaapl",
+   "symbol": "aAAPL",
    "name": "Apple aStock",
    "logo": null,
    "issuer": {
@@ -5668,7 +5702,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -5798,7 +5833,7 @@
   },
   {
    "address": "0xda230a7ec7aff66e62ff3e225c3d9c42093c23ae",
-   "symbol": "amrna",
+   "symbol": "aMRNA",
    "name": "Moderna Inc aStock",
    "logo": null,
    "issuer": {
@@ -5815,7 +5850,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -5945,7 +5981,7 @@
   },
   {
    "address": "0x5f3b897deea4ea0cb6aefe50bd2ae556cf6f4b63",
-   "symbol": "abot",
+   "symbol": "aBOT",
    "name": "RoboStrategy Inc aStock",
    "logo": null,
    "issuer": {
@@ -5962,7 +5998,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -6092,7 +6129,7 @@
   },
   {
    "address": "0x4fc5b9f8933597d3ecf84d0611687e1dc8dd576f",
-   "symbol": "abil",
+   "symbol": "aBIL",
    "name": "SPDR Bloomberg 1-3 Month T-Bill ETF (Anchored Tokenized ETF)",
    "logo": null,
    "issuer": {
@@ -6109,7 +6146,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map)",
+     "proof": false,
+     "text": "On this site's list of Anchored (aStock) tokens (by address, from CoinGecko's platform map) — not checked on the chain yet",
      "src": "site",
      "at": null
     },
@@ -6256,6 +6294,7 @@
     {
      "tier": "A3",
      "kind": "curated",
+     "check": "beacon",
      "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain), and its code runs from ST0x's beacon 0x9fd790f65ca3af2772358c653f097f0a4c7ee7d2 (checked on the chain)",
      "src": "rpc",
      "at": 1793201400000
@@ -6394,6 +6433,7 @@
     {
      "tier": "A3",
      "kind": "curated",
+     "check": "beacon",
      "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain), and its code runs from ST0x's beacon 0x9fd790f65ca3af2772358c653f097f0a4c7ee7d2 (checked on the chain)",
      "src": "rpc",
      "at": 1793201400000
@@ -6532,7 +6572,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain)",
+     "proof": false,
+     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain) — not checked on the chain yet",
      "src": "site",
      "at": null
     }
@@ -6672,7 +6713,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain)",
+     "proof": false,
+     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain) — not checked on the chain yet",
      "src": "site",
      "at": null
     }
@@ -6812,7 +6854,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain)",
+     "proof": false,
+     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain) — not checked on the chain yet",
      "src": "site",
      "at": null
     }
@@ -6952,7 +6995,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain)",
+     "proof": false,
+     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain) — not checked on the chain yet",
      "src": "site",
      "at": null
     }
@@ -7092,7 +7136,8 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain)",
+     "proof": false,
+     "text": "On this site's list of ST0x (S01 Issuer GmbH) tokens (by address, from GeckoTerminal and the chain) — not checked on the chain yet",
      "src": "site",
      "at": null
     }
@@ -7232,14 +7277,15 @@
     {
      "tier": "A3",
      "kind": "curated",
-     "text": "On this site's list of Midas tokens (by address, from CoinGecko's platform map), and it is a live ERC-1967 proxy (its implementation slot reads 0xf29aef8cbe31e5d257d6d3afab1580de8210f650, checked on the chain)",
+     "check": "proxy",
+     "text": "On this site's list of Midas tokens (by address, from CoinGecko's platform map), and it is a live ERC-1967 proxy (its implementation slot reads 0xf29aef8cbe31e5d257d6d3afab1580de8210f650, checked on the chain) — its code is not compared with the issuer's",
      "src": "rpc",
      "at": 1793201400000
     }
    ],
    "status": {
     "code": null,
-    "text": "On this site's list; confirmed on the chain"
+    "text": "On this site's list; a live ERC-1967 proxy on the chain"
    },
    "priceUsd": {
     "v": null,
@@ -7277,6 +7323,7 @@
     "v": 36244432.49185,
     "src": "defillama",
     "at": 1793201400000,
+    "caveat": "may be low: Longbow not read",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
@@ -7560,9 +7607,9 @@
    "v": 46202736.159673795,
    "src": "geckoterminal",
    "at": 1793205000000,
-   "label": "GeckoTerminal's liquidity figures of the RWA tokens counted, added up — 9 without one are left out — 1 pool pairs two of these tokens",
+   "label": "GeckoTerminal's liquidity figures of the RWA tokens counted, added up — 9 without one are left out — 4 pools pair two of these tokens",
    "missing": 9,
-   "pairPools": 1
+   "pairPools": 4
   },
   "tvl": {
    "v": 40159813.105440006,
@@ -7578,16 +7625,16 @@
    "v": 105645696.56025593,
    "src": "geckoterminal",
    "at": 1793199600000,
-   "label": "market caps summed (GeckoTerminal) — 8 without one are left out",
+   "label": "market caps summed (GeckoTerminal), this chain's only — 8 without one are left out",
    "missing": 8
   },
   "volume24h": {
-   "v": 61636275.040369585,
+   "v": 60749839.330517605,
    "src": "geckoterminal",
    "at": 1793205000000,
-   "label": "GeckoTerminal's 24 h volume figures of the RWA tokens counted, added up — 9 without one are left out — less the 24 h volume of the 1 pool pairing two of these tokens, which is in both tokens' figures",
+   "label": "GeckoTerminal's 24 h volume figures of the RWA tokens counted, added up — 9 without one are left out — less the 24 h volume of the 4 pools pairing two of these tokens, which is in both tokens' figures — a pool pairing two of these tokens that this site has not read may be in both tokens' figures",
    "missing": 9,
-   "pairPools": 1
+   "pairPools": 4
   },
   "count": 25,
   "notConfirmed": 23,
@@ -7667,9 +7714,9 @@
   "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
   "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
   "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
-  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's — and never mixed with the value on chain.",
-  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read); a total takes a pool pairing two RWAs once.",
-  "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's, kept out of the market-cap ranking and never added to this chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read). A total takes a pool pairing two RWAs once when this site has read that pool (the most-traded pools, and the top RWAs' own pools); one it has not read may be in both tokens' figures, and the total says so.",
+  "premium": "Premium or discount: the DEX price against the token's reference price — the price of one token, which is the underlying's price times the token's multiplier: Chainlink's feed read on the chain, else Robinhood's token quote (multiplier applied). Stock markets close while DEX pools trade around the clock.",
   "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
   "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."
  },

@@ -1723,7 +1723,7 @@
   function rwaChipsHTML(R) {
     const pr = R.premium || {}, dv = R.deviation || {};
     const W = {
-      premium: ['warn', '⚠️ ' + (rwaHas(pr) ? rwaPct(pr.v) + ' ' : '') + 'vs the share'],
+      premium: ['warn', '⚠️ ' + (rwaHas(pr) ? rwaPct(pr.v) + ' ' : '') + 'vs its reference'],   // the reference is one token's price: the share's × the token's multiplier
       halted: ['bad', '⏸ Trading halted (Robinhood)'],
       paused: ['bad', '⏸ Paused on the chain'],
       'oracle-paused': ['warn', '⏸ Price oracle paused'],
@@ -1744,18 +1744,25 @@
   const rwaLookOf = (p) => (p && p.rwa && typeof p.rwa === 'object' && p.rwa.notRwa === true && !p.rwa.stablecoin && /^Same ticker as \$/.test(String(p.rwa.why || '')) && !foreignChain(p) ? p.rwa : null);
   /* Next to the verdict (it is unchanged — the owner decides the score): one plain line that the token is a real-world asset whose
      issuer keeps powers over every holder's tokens, which the health score does not count; or that it only shares an RWA's ticker. */
+  // a twin this site has confirmed (or Robinhood's registry lists) is "the real one"; one not confirmed yet is never asserted to be its issuer's
+  const rwaTwinSure = (tw) => !!tw && (tw.confidence === 'confirmed' || tw.registry === true);
   function rwaVerdictHTML(p) {
     const R = rwaOf(p), L = rwaLookOf(p);
     if (L) {
-      const tw = L.twin && typeof L.twin === 'object' && /^0x[0-9a-f]{40}$/i.test(String(L.twin.address || '')) ? L.twin : null;
-      const whose = tw && tw.issuer && tw.issuer.key === 'rhj' ? 'Robinhood’s ' : '';
-      return '<p class="tkd-verdict-rwa tkd-warn">⚠️ <b>Same ticker as ' + whose + '$' + esc((tw && tw.symbol) || String(L.why).replace(/^Same ticker as \$([^,\s]+).*$/, '$1')) + ' — not it.</b> Not a real-world asset here; the card below says where the real one is.</p>';
+      const tw = L.twin && typeof L.twin === 'object' && /^0x[0-9a-f]{40}$/i.test(String(L.twin.address || '')) ? L.twin : null, sure = rwaTwinSure(tw);
+      const whose = sure && tw.issuer && tw.issuer.key === 'rhj' ? 'Robinhood’s ' : '';
+      return '<p class="tkd-verdict-rwa tkd-warn">⚠️ <b>Same ticker as ' + whose + '$' + esc((tw && tw.symbol) || String(L.why).replace(/^Same ticker as \$([^,\s]+).*$/, '$1')) + (sure ? ' — not it.' : ' — not the token this site found for it.') + '</b> Not a real-world asset here; the card below says ' + (sure ? 'where the real one is' : 'where that token is, and that it is not confirmed yet') + '.</p>';
     }
     if (!R) return '';
     const powers = R.controls && Array.isArray(R.controls.powers) ? R.controls.powers.filter((x) => x && Array.isArray(x.holders) && x.holders.length) : [];
-    return '<p class="tkd-verdict-rwa">🏛️ <b>A real-world-asset token</b> — issued by ' + esc((R.issuer && R.issuer.name) || 'its issuer') + '. ' +
-      (rwaIsRhj(p) ? 'Its issuer keeps powers over every holder’s tokens (replacing their code, minting, burning from any wallet, pausing them and blocking wallets' + (powers.length ? ': ' + powers.length + ' powers read from its registry' : '') + ') that the health score does not count — the real-world-asset card lists them.'
-        : 'Its issuer keeps powers of its own over holders’ tokens, which this site does not read and the health score does not count — the real-world-asset card says what was read.') + '</p>';
+    // how sure, in the words: a token not confirmed on the chain is "listed as" one, never "a real-world-asset token issued by …"
+    const lead = R.confidence === 'confirmed' ? '🏛️ <b>A real-world-asset token</b> — issued by ' + esc((R.issuer && R.issuer.name) || 'its issuer') + '. '
+      : R.confidence === 'issuer-listed' ? '🏛️ <b>A real-world-asset token in Robinhood’s registry</b>, not checked on the chain yet. '
+      : '⚠️ <b>Listed as a real-world-asset token of ' + esc((R.issuer && R.issuer.name) || 'its issuer') + ', not confirmed on the chain yet</b> — not counted. ';
+    const sure = R.confidence === 'confirmed' || R.confidence === 'issuer-listed', its = sure ? 'Its issuer keeps' : 'If it is one, its issuer keeps';
+    return '<p class="tkd-verdict-rwa' + (sure ? '' : ' tkd-warn') + '">' + lead +
+      (rwaIsRhj(p) ? its + ' powers over every holder’s tokens (replacing their code, minting, burning from any wallet, pausing them and blocking wallets' + (powers.length ? ': ' + powers.length + ' powers read from its registry' : '') + ') that the health score does not count — the real-world-asset card lists them.'
+        : its + ' powers of its own over holders’ tokens, which this site does not read and the health score does not count — the real-world-asset card says what was read.') + '</p>';
   }
   // beside the Swap button (its showing is the owner's call): who Robinhood says its Stock Tokens are not for, in Robinhood's words
   function rwaSwapNoteHTML(p) {
@@ -1786,8 +1793,8 @@
       const tw = R.twin && typeof R.twin === 'object' && /^0x[0-9a-f]{40}$/i.test(String(R.twin.address || '')) ? R.twin : null;
       return dashCard(u, 'rwa', hc, '🏛️ Real-world asset?',
         '<p class="tkd-line tkd-warn">⚠️ <b>Not an RWA here — a lookalike.</b> ' + esc(why) + '.</p>' +
-        (tw ? '<p class="tkd-line">The real ' + (tw.symbol ? '$' + esc(tw.symbol) : 'token') + (tw.issuer && tw.issuer.name ? ' (' + esc(tw.issuer.name) + ')' : '') + ': ' + addrLinkHTML(p, String(tw.address).toLowerCase(), 'the real token') +
-          ' <code class="tkd-rwa-full">' + esc(String(tw.address).toLowerCase()) + '</code> <a class="np-addr-link" href="/newpairs?scan=' + encodeURIComponent(String(tw.address).toLowerCase()) + '" data-tip="Opens the real token in the Scanner">Open it in the Scanner</a></p>' : '') +
+        (tw ? '<p class="tkd-line">' + (rwaTwinSure(tw) ? 'The real ' + (tw.symbol ? '$' + esc(tw.symbol) : 'token') + (tw.issuer && tw.issuer.name ? ' (' + esc(tw.issuer.name) + ')' : '') : 'The ' + (tw.symbol ? '$' + esc(tw.symbol) : 'token') + ' this site found, not confirmed on the chain yet') + ': ' + addrLinkHTML(p, String(tw.address).toLowerCase(), rwaTwinSure(tw) ? 'the real token' : 'that token') +
+          ' <code class="tkd-rwa-full">' + esc(String(tw.address).toLowerCase()) + '</code> <a class="np-addr-link" href="/newpairs?scan=' + encodeURIComponent(String(tw.address).toLowerCase()) + '" data-tip="Opens that token in the Scanner">Open it in the Scanner</a></p>' : '') +
         (/Robinhood Assets \(Jersey\)/.test(why) ? '<p class="tkd-note">Robinhood lists its Stock Tokens on ' + rwaOut('https://docs.robinhood.com/chain/contracts/', 'its contracts page', 'Opens Robinhood’s list of its Stock Token contracts in a new tab') + ' — a token with the same ticker at another address is not one.</p>' : '') +
         foot, '', '', 'not an RWA');
     }
@@ -1806,7 +1813,8 @@
     const lead = conf === 'confirmed' ? '<p class="tkd-line">✓ <b>Confirmed</b> — issued by ' + esc(iss.name || 'its issuer') + '.</p>'
       : conf === 'issuer-listed' ? '<p class="tkd-line tkd-warn">◐ <b>Listed by the issuer, not yet checked on the chain</b>' + (R.why ? ' — ' + esc(R.why) : '') + '.</p>'
       : '<p class="tkd-line tkd-warn">⚠️ <b>Not confirmed yet</b>' + (R.why ? ' — ' + esc(R.why) : '') + '.</p>';
-    const evRow = (e) => { const proof = /^A/.test(String(e.tier || '')); return '<li><span class="np-flag np-flag--' + (proof ? 'ok' : 'note') + '">' + esc(e.tier || '?') + ' · ' + (proof ? 'proof' : 'supporting only') + '</span> ' + esc(e.text || '') + ' ' + rwaSrc(e) + '</li>'; };
+    // an issuer-list item the chain has not agreed with yet (proof: false) is listed, not proof
+    const evRow = (e) => { const tierA = /^A/.test(String(e.tier || '')), proof = tierA && e.proof !== false; return '<li><span class="np-flag np-flag--' + (proof ? 'ok' : 'note') + '">' + esc(e.tier || '?') + ' · ' + (proof ? 'proof' : tierA ? 'listed, not proof yet' : 'supporting only') + '</span> ' + esc(e.text || '') + ' ' + rwaSrc(e) + '</li>'; };
     const look = Array.isArray(R.lookalikes) ? R.lookalikes.filter((x) => x && x.address) : [];
     const sameWhat = (x) => ([sym, und.symbol].filter(Boolean).some((s) => s.toLowerCase() === String(x.symbol || '').toLowerCase()) ? 'Same ticker' : 'Same name');
     const lookRow = (x) => '<li>⚠️ <b>' + sameWhat(x) + ', not issued by ' + esc(iss.name || 'its issuer') + ':</b> ' + (x.symbol ? '$' + esc(x.symbol) + ' ' : '') + (x.name ? '“' + esc(x.name) + '” ' : '') + addrLinkHTML(p, x.address, 'this lookalike') + (RWA_SEEN[x.src] ? ' <span class="tkd-rwa-src">seen in ' + RWA_SEEN[x.src] + '</span>' : '') + '</li>';
@@ -1827,12 +1835,13 @@
     const s2 = fold('hold', '💼 What you hold',
       '<p class="tkd-line">Underlying: <b>' + esc(und.name || und.symbol || 'not named') + '</b>' + (und.symbol && und.name ? ' ($' + esc(und.symbol) + ')' : '') + (RWA_KIND[und.kind] ? ' — ' + RWA_KIND[und.kind] : '') + '</p>' +
         (shown.length ? rwaList('tkd-rwa-said', 'What the issuer says', shown.map(sayRow)) : '<p class="tkd-note">The issuer’s terms are not read by this site.</p>'),
-      'The rest of what you hold (' + more.length + '), each with its page',
+      // the pop-down named by what it holds — never "(0)" over a CoinGecko link or the terms
+      more.length ? 'The rest of what you hold (' + more.length + '), each with its page' : [terms ? 'The terms its contract names' : '', httpsOnly(ip.coingecko) ? 'its page on CoinGecko' : ''].filter(Boolean).join(' and ').replace(/^./, (c) => c.toUpperCase()) || 'More of what you hold',
       (more.length ? rwaList('tkd-rwa-said', 'More of what the issuer says', more.map(sayRow)) : '') +
       (terms ? '<p class="tkd-line">📜 The terms its contract names (<code>terms()</code>): ' + (httpsOnly(terms.v) ? rwaOut(terms.v, esc(String(terms.v).replace(/^https:\/\//i, '')), 'Opens the terms page the token’s contract names, in a new tab') : '<code>' + esc(terms.v) + '</code>') + ' ' + rwaSrc(terms) + '</p>' : '') +
       (httpsOnly(ip.coingecko) ? '<p class="tkd-line">' + rwaOut(ip.coingecko, 'Its page on CoinGecko', 'Opens this token’s CoinGecko page in a new tab') + '</p>' : ''));
 
-    // 3. Price check — the DEX price against the underlying's own (Chainlink read on the chain, Robinhood's quote); a live halt, pause or flag stays in sight
+    // 3. Price check — the DEX price against its reference, the price of one token (the share's × the multiplier: Chainlink read on the chain, Robinhood's token quote); a live halt, pause or flag stays in sight
     const ref = R.reference || {}, cl = R.chainlink || null, pr = R.premium || {}, dv = R.deviation || null, pa = R.paused || {};
     const clF = ref.chainlink || { v: null, src: 'chainlink', why: R.chainlinkWhy || 'not read' }, hb = clF.heartbeat || (cl && cl.heartbeat);
     const clHTML = rwaFig(clF, npPrice, hb ? (clF.stale ? '<span class="tkd-rwa-lbl tkd-bad">⚠️ Stale — older than its ' + rwaSecs(hb) + ' heartbeat</span>' : '<span class="tkd-rwa-lbl">updated within its ' + rwaSecs(hb) + ' heartbeat</span>') : '');
@@ -1884,7 +1893,8 @@
     const appRow = (x) => '<li>' + (x.slug ? rwaOut('https://defillama.com/protocol/' + encodeURIComponent(x.slug), esc(x.name), 'Opens ' + x.name + ' on DefiLlama in a new tab') : esc(x.name)) + (x.category ? ' (' + esc(x.category) + ')' : '') + (x.usd != null && isFinite(x.usd) ? ' <b>' + npFmtUsd(x.usd) + '</b>' : '') +
       (x.kept ? '<span class="tkd-rwa-lbl tkd-warn">' + esc(x.keptWhy || 'kept from an earlier read') + '</span>' : x.at ? ' ' + rwaSrc({ src: 'defillama', at: x.at }) : '') + '</li>';
     const s5 = fold('size', '📏 Size',
-      '<p class="tkd-line">' + brief('Value on chain', R.value, npFmtUsd) + ' · ' + brief('liquidity', R.liquidity, npFmtUsd) + ' · ' + brief('TVL in DeFi', tvl, npFmtUsd) + '</p>',
+      // a TVL figure that may be low (an app not read) or rests on a kept read says so in sight, never as a plain figure
+      '<p class="tkd-line">' + brief('Value on chain', R.value, npFmtUsd) + ' · ' + brief('liquidity', R.liquidity, npFmtUsd) + ' · ' + brief('TVL in DeFi', tvl, npFmtUsd) + (rwaHas(tvl) && tvl.caveat ? ' <span class="tkd-warn">⚠️ ' + esc(tvl.caveat) + '</span>' : '') + '</p>',
       'Every size figure and what each one means',
       rwaKv([
         ['Value on chain', rwaFig(R.value, npFmtUsd)],
@@ -1933,7 +1943,10 @@
       '<p class="tkd-line"><b>' + cn.length + '</b> token' + (cn.length === 1 ? '' : 's') + ' paired with it in a pool — not one of them is an RWA.</p>' + cnWhy,
       'Every token paired with it (' + cn.length + ')',
       (defs.connected ? '<p class="tkd-note">' + esc(defs.connected) + '</p>' : '') + rwaList('tkd-rwa-cn', 'Tokens paired with it', cn.map(cnRow)))
-      : sec('connected', '🔗 Connected tokens', cnWhy || (reads.connected && reads.connected.ok === false ? '<p class="tkd-note">The pools paired with it could not be read' + (reads.connected.why ? ' — ' + esc(reads.connected.why) : '') + ' — not a "none".</p>'
+      /* none: its own read failing says so (connectedWhy); else the server's words for where its pools were read (connectedBasis) — the
+         round's failures are about the RWAs it asked, never a token whose own pools were not asked */
+      : sec('connected', '🔗 Connected tokens', cnWhy || (R.connectedBasis && R.connectedBasis.note ? '<p class="tkd-line">' + esc(R.connectedBasis.note) + '. ' + rwaSrc(R.connectedBasis) + '</p>'
+        : reads.connected && reads.connected.ok === false ? '<p class="tkd-note">The pools paired with it could not be read' + (reads.connected.why ? ' — ' + esc(reads.connected.why) : '') + ' — not a "none".</p>'
         : '<p class="tkd-line">No pool among those read pairs it with another token. ' + rwaSrc({ src: 'geckoterminal', at: reads.connected && reads.connected.at }) + '</p>'));
 
     return dashCard(u, 'rwa', hc, '🏛️ Real-world asset',
@@ -2090,16 +2103,18 @@
     return '<div class="tkd" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '" data-chain="' + esc(chainOf(p).slug) + '" style="' + tokVars(p) + '">' +
       '<div class="tkd-in">' +
         head + (opts.meta ? '<div class="tkd-meta">' + opts.meta + '</div>' : '') + flagstripHTML(p) + stats + acts +
-        // source order is the phone's reading order: the chart and the trading (and an RWA's card, in the wide column, so it never
-        // stands as a tall wall in a narrow one), then the safety read, the contract, the market, holders, block 0, community and links,
+        // source order is the phone's reading order: the chart and the trading, then the safety read, the contract, the market,
+        // holders, block 0, community and links, then an RWA's card (after the safety read and the contract, never in front of them),
         // and last the score breakdown. Wider, styles.css places the same wrappers as columns (the side pair beside the chart, or
-        // split either side of it) without reordering them.
-        '<div class="tkd-grid">' +
-          '<div class="tkd-col tkd-col--c">' + cChart + cActivity + cRwa + '</div>' +
+        // split either side of it) without reordering them; the RWA card sits in the wide column, under the chart and the trading and
+        // above the score breakdown, so it never stands as a tall wall in a narrow one.
+        '<div class="tkd-grid' + (cRwa ? ' tkd-grid--rwa' : '') + '">' +
+          '<div class="tkd-col tkd-col--c">' + cChart + cActivity + '</div>' +
           '<div class="tkd-side">' +
             '<div class="tkd-col tkd-col--l">' + cSafety + cContract + '</div>' +
             '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cPools + cBlock0 + cBundles + comm + cLinks + '</div>' +
           '</div>' +
+          (cRwa ? '<div class="tkd-col tkd-col--rwa">' + cRwa + '</div>' : '') +
           '<div class="tkd-col tkd-col--c2">' + cScore + '</div>' +
         '</div>' +
         HONEST +

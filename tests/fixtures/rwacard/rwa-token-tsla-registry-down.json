@@ -76,12 +76,14 @@
   "v": 1228631.0867777634,
   "src": "geckoterminal",
   "at": 1793228460000,
-  "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
+  "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
+  "pairsRwa": true
  },
  "tvl": {
   "v": 3895.81269,
   "src": "defillama",
   "at": 1793228460000,
+  "caveat": "may be low: Longbow not read",
   "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
   "protocols": [
    {
@@ -175,7 +177,9 @@
   "at": 1793196285030,
   "label": "primary-market mint and burn, USD — Robinhood does not document its window"
  },
- "flags": [],
+ "flags": [
+  "pairs-rwa"
+ ],
  "issuerProfile": {
   "issuer": {
    "key": "rhj",
@@ -703,6 +707,12 @@
   }
  ],
  "lookalikes": [],
+ "connectedBasis": {
+  "own": true,
+  "src": "geckoterminal",
+  "at": 1793205000000,
+  "note": "No pool among its own pools (GeckoTerminal, its first 20) or the most-traded pools this site keeps pairs it with another token from $1,000 of reserve"
+ },
  "chainlink": {
   "proxy": "0x4a1166a659a55625345e9515b32adecea5547c38",
   "name": "Robinhood TSLA / USD",
@@ -788,9 +798,9 @@
   "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
   "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
   "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
-  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's — and never mixed with the value on chain.",
-  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read); a total takes a pool pairing two RWAs once.",
-  "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's, kept out of the market-cap ranking and never added to this chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read). A total takes a pool pairing two RWAs once when this site has read that pool (the most-traded pools, and the top RWAs' own pools); one it has not read may be in both tokens' figures, and the total says so.",
+  "premium": "Premium or discount: the DEX price against the token's reference price — the price of one token, which is the underlying's price times the token's multiplier: Chainlink's feed read on the chain, else Robinhood's token quote (multiplier applied). Stock markets close while DEX pools trade around the clock.",
   "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
   "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."
  },

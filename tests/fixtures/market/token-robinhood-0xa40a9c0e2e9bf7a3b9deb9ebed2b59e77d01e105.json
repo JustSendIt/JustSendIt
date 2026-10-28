@@ -649,5 +649,6 @@
   "src": "geckoterminal",
   "partialLast": true,
   "note": "The newest candle is the day still in progress. A day with no candle had no trades."
- }
+ },
+ "rwaLookalike": null
 }

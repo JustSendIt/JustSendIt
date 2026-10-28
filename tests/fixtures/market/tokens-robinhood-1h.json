@@ -270,7 +270,7 @@
    "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
    "symbol": "SPCX",
    "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174129%2Flarge%2F0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png%3F1782444614",
+   "logo": null,
    "priceUsd": {
     "v": 148.541497451708,
     "src": "geckoterminal",
@@ -320,7 +320,7 @@
    "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
    "symbol": "NVDA",
    "name": "NVIDIA • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174110%2Flarge%2F0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png%3F1782444565",
+   "logo": null,
    "priceUsd": {
     "v": 216.417541980062,
     "src": "geckoterminal",
@@ -370,7 +370,7 @@
    "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
    "symbol": "SPY",
    "name": "SPDR S&P 500 ETF Trust • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174115%2Flarge%2F0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png%3F1782444578",
+   "logo": null,
    "priceUsd": {
     "v": 767.959906013623,
     "src": "geckoterminal",
@@ -420,7 +420,7 @@
    "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
    "symbol": "QQQ",
    "name": "Invesco QQQ • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174119%2Flarge%2F0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png%3F1782444588",
+   "logo": null,
    "priceUsd": {
     "v": 714.378830132917,
     "src": "geckoterminal",
@@ -624,7 +624,7 @@
    "address": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
    "symbol": "amc",
    "name": "AMC Entertainment Holdings, Inc. • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175476%2Flarge%2FAMC.png%3F1786375197",
+   "logo": null,
    "priceUsd": {
     "v": 2.84481185717985,
     "src": "geckoterminal",
@@ -674,7 +674,7 @@
    "address": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
    "symbol": "GOOGL",
    "name": "Alphabet Class A • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174124%2Flarge%2F0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png%3F1782444601",
+   "logo": null,
    "priceUsd": {
     "v": 319.149009313591,
     "src": "geckoterminal",
@@ -724,7 +724,7 @@
    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
    "symbol": "TSLA",
    "name": "Tesla • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174112%2Flarge%2F0x322f0929c4625ed5bad873c95208d54e1c003b2d.png%3F1782444570",
+   "logo": null,
    "priceUsd": {
     "v": 396.743454076546,
     "src": "geckoterminal",

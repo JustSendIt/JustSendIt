@@ -23,6 +23,10 @@ rwa-token-*.json — the server's own /api/market/rwa/token answers (lib/marketd
   and WEEK's code, measured), DefiLlama's per-app dates, rolesRead, the lookalike's twin, no Robinhood logo on a Stock Token's row.
   That suite's world leaves AMC and AAPL out of GeckoTerminal's multi answer (so TSLA is among the 12 with the most liquidity) and
   adds a spoofed token of its own, which is left out of every file dumped.
+  Rewritten again on 2026-10-28 after review two, by the same harness and switch: connectedBasis (where a token's connected
+  tokens come from), the TVL figure's caveat, the job's own pool reads in the shared-pool volume, the chain's own casing of
+  Ondo's and Anchored's symbols ("GOOGLon"), "listed, not proof" (proof: false) on an issuer-list item the chain has not agreed
+  with, and the premium's reference worded as one token's price.
   An earlier change, the same in every file with Robinhood's sentences (tsla, tsla-registry-down, spy, week, gme, and
   tests/fixtures/market/rwa-token-0x322f…3b2d.json): issuerProfile.sentences is lib/rwa.js's ISSUER_TEXT.rhj as it now
   stands, where the custody sentence became two, each linking the page it comes from (the FAQ; the service-providers page
