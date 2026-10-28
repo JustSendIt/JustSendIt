@@ -41,3 +41,27 @@ rows and fields were dropped, never invented:
     User-Agent: all 21 the same 283-byte BeaconProxy as the research's TSLA read) for the A2 code check; the fake answers nothing else;
   rwa-cg-lookalikes.json — CoinGecko coins/list?include_platform=true: the rows for the lookalike traps (GameStop 0x7e86…,
     Greatest Meme Ever, A Meme Coin, Advanced Micro Dog, BLACKROCK, Blockchain USD) and their namesakes, robinhood address only.
+
+The chain market caps' cross-check (2026-10-28; lib/chainmcap.js). Measured 2026-10-28 with the honest User-Agent; rows dropped
+and fields trimmed to what the code reads, never a value changed:
+  mcap-llama-chains.json — DefiLlama /v2/chains, ~15:30 UTC: 37 chains (the traps among them: Fantom, Mixin, PulseChain and Krown
+    Network, whose CoinGecko market cap is 0; Morph, whose tokenSymbol is "-"; XRPL / XRPL EVM, IOTA / IOTA EVM and Ontology /
+    OntologyEVM, which share one token; Beam, Mezo and MANTRA, whose token CoinGecko's asset platforms name differently);
+  mcap-cg-markets.json — CoinGecko keyless /coins/markets?vs_currency=usd&per_page=250&ids=… for those chains' 32 tokens,
+    15:29:50 UTC (stable-2's name "\u200b\u200bStable" carries two zero-width spaces, as CoinGecko gives it; icon's last_updated is 06:38);
+  mcap-llama-mcaps.json — DefiLlama coins.llama.fi/mcaps for the same 32 tokens (its relay of CoinGecko's figure);
+  mcap-cg-platforms.json — CoinGecko /asset_platforms: the 34 platforms these chains match by EVM chain id or name, and both
+    platforms CoinGecko names "Sei Network" (the ambiguity trap);
+  mcap-lore-tickers.json — CoinLore /tickers/?start=N&limit=100 for N = 0 … 1900 (pages 0–400 read ~15:30 UTC with the samples
+    above, pages 500–1900 at 15:42–15:43 UTC by the build, 1.2 s apart), each page cut to the rows the suite needs and at least
+    its first: the coins that match these chains' tokens, every coin sharing one of their symbols (both of CoinLore's "Beam"s —
+    onbeam at $0.003362 and the older BEAM at $0.006579 — Blast at $0.000003, "Binance Coin"), Bubblemaps on two pages (its list
+    shifted during the walk) and eCash (a measured figure 3.9% off its own price × supply);
+  mcap-lore-ticker.json — CoinLore /ticker/?id=90,80,48543 (BTC, ETH, SOL), ~15:32 UTC: the per-run read's shape (the same rows
+    as the walk's). The fake answers a /ticker/ read from the walk's rows.
+  mcap-lore-others.json — the "not found" wording's traps from the same reads: CoinGecko's rows for bittorrent (BTT) and
+    xdce-crowd-sale (XDC, "XDC Network") from the /coins/markets answer above (its whole 199-coin answer, not the 32 here), and
+    CoinLore's rows that are not under those symbols — "IOTA" as MIOTA (page start=100), "BitTorrent" as BTTC (start=1200) and
+    "XinFin Network" as XDCE (start=0) — as its walk gave them, keyed by page.
+  CoinPaprika's answers were measured for the comparison too, and are NOT here: its free plan is for personal use only, and
+  passing its data on needs its Enterprise licence.

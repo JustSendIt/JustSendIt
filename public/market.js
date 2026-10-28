@@ -5,7 +5,10 @@
  * own time or default times), Market Cap, Liquidity, TVL and Volume."
  *
  * What it reads: only this site's own /api/market/* routes (the server reads DefiLlama, L2BEAT, growthepie, CoinGecko,
- * GeckoTerminal, Dexscreener and the chain; the browser contacts none of them — the CSP's connect-src stays as it is).
+ * CoinLore, GeckoTerminal, Dexscreener and the chain; the browser contacts none of them — the CSP's connect-src stays as it is).
+ * A chain's market cap carries its cross-check (owner, 2026-10-28: "make sure you are showing the right market caps for all
+ * of the chains pulled from multiple sources and cross verified"): a chip beside the figure says whether CoinGecko's figure
+ * and CoinLore's agree, and the chain view lists each source's figure, price and supply with the notes (lib/chainmcap.js).
  * What it promises: every figure is drawn with its source and the time it was read; a figure the server could not read
  * arrives as { v: null, why } and is shown as missing with that reason — never as 0. Charts are drawn here, in SVG, at the
  * box's own pixel size (so their labels keep the page's text floor), with a hover / arrow-key readout and a table.
@@ -60,6 +63,7 @@
   function count(v) {
     if (v == null || !isFinite(v)) return null;
     const a = Math.abs(v);
+    if (a >= 1e12) return sig(v / 1e12) + 'T';   // BitTorrent's 965 trillion tokens: "965T", never "965416B"
     if (a >= 1e9) return sig(v / 1e9) + 'B';
     if (a >= 1e6) return sig(v / 1e6) + 'M';
     if (a >= 1e5) return sig(v / 1e3) + 'k';
@@ -88,7 +92,7 @@
   /* @lift:end */
 
   /* ---------- figures: { v, src, at, why?, label? } ---------- */
-  const SRC = { defillama: 'DefiLlama', l2beat: 'L2BEAT', growthepie: 'growthepie', coingecko: 'CoinGecko', geckoterminal: 'GeckoTerminal', dexscreener: 'Dexscreener', rpc: 'the chain’s public node', site: 'this site',
+  const SRC = { defillama: 'DefiLlama', l2beat: 'L2BEAT', growthepie: 'growthepie', coingecko: 'CoinGecko', coinlore: 'CoinLore', geckoterminal: 'GeckoTerminal', dexscreener: 'Dexscreener', rpc: 'the chain’s public node', site: 'this site',
     robinhood: 'Robinhood’s Stock Token API', chainlink: 'Chainlink' };
   const GTP = '<a class="mkt-src-l" href="https://www.growthepie.com" target="_blank" rel="noopener">Source: growthepie (CC BY 4.0)</a>';
   const fig = (x) => (x == null ? { v: null } : typeof x === 'number' ? { v: x } : typeof x === 'object' ? x : { v: null });
@@ -99,6 +103,15 @@
     return (f.src === 'growthepie' ? GTP : esc(srcName(f.src))) + (f.at ? ' · ' + agoEl(f.at) : '');
   }
   const NA = '<span class="mkt-na">Not available</span>';
+  /* a chain market cap's cross-check, as a chip beside the figure: the words say it (a tick or a warning sign as well as the colour) */
+  const MCAP_CAP = 'Market cap of the chain’s own token: CoinGecko’s figure, checked against CoinLore';
+  const CHK = {
+    agreed: ['✓ 2 sources agree', 'is-ok', 'CoinGecko and CoinLore give market caps within 10% of each other'],
+    differs: ['⚠ Sources differ', 'is-warn', 'CoinGecko and CoinLore give market caps more than 10% apart'],
+    single: ['1 source', 'is-one', 'Only one source gave a market cap for this token, so nothing checks it'],
+  };
+  const chkOf = (f) => { const c = f && f.check; return c && CHK[c.status] ? c : null; };
+  const mcapChip = (f) => { const c = chkOf(f); return c ? '<span class="mkt-chk ' + CHK[c.status][1] + '" title="' + esc(CHK[c.status][2] + (c.status === 'differs' ? ' — the chain’s view says why' : '')) + '">' + esc(CHK[c.status][0]) + '</span>' : ''; };
   const whyOf = (f) => (f && f.why ? esc(f.why) : 'The source gave no figure for this');
 
   /* ---------- the chains this page knows by name before the list arrives ---------- */
@@ -675,6 +688,7 @@
       ' · ' + rows.length + (j.total != null && j.total > rows.length ? ' of ' + Number(j.total).toLocaleString('en-US') : '') + ' chains' +
       (srcs.size ? ' · ' + esc([...srcs].join(', ')) : '') + (j.at ? ', gathered ' + agoEl(j.at) : '') +
       (k.dir === 'asc' ? '<span class="mkt-cap-n">A chain with no figure for this stays at the end, in both orders.</span>' : '') +
+      (sortF === 'mcap' ? '<span class="mkt-cap-n">' + esc(MCAP_CAP) + '.</span>' : '') +
       (win.note ? '<span class="mkt-cap-n">' + esc(win.note) + '</span>' : '');
     foot.innerHTML = Array.isArray(j.notes) && j.notes.length ? j.notes.map(esc).join(' ') : '';
     if (!rows.length) { list.innerHTML = '<li class="mkt-empty">No chains are listed for this time frame yet.</li>'; more.innerHTML = ''; return; }
@@ -687,7 +701,7 @@
       return '<li><button class="mkt-row" type="button" data-chain="' + esc(r.key) + '"' + (cur ? ' aria-current="true"' : '') + ' data-tip="Opens ' + esc(r.name) + ' in the main view: every figure, chart and source we hold for it">' +
         '<span class="mkt-rank">' + (i + 1) + '</span>' + avaHTML(r.name, r.logo) +
         '<span class="mkt-nm"><b>' + esc(r.name) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
-        '<span class="mkt-fig">' + (main != null ? '<b>' + esc(main) + '</b>' + (f.label && sortF === 'mcap' ? '<small>' + esc(f.label) + '</small>' : '') : '<b class="mkt-na">Not available</b><small>' + whyOf(f) + '</small>') + '</span>' +
+        '<span class="mkt-fig">' + (main != null ? '<b>' + esc(main) + '</b>' + (sortF === 'mcap' ? mcapChip(f) : '') + (f.label && sortF === 'mcap' ? '<small>' + esc(f.label) + '</small>' : '') : '<b class="mkt-na">Not available</b><small>' + whyOf(f) + '</small>') + '</span>' +
       '</button></li>';
     }).join('');
     more.innerHTML = moreHTML(rows.length) + (j.total > rows.length && rows.length < 200 && !S.chainsLimit ? '<button class="btn btn-sm btn-ghost mkt-more-b" type="button" data-limit="200" data-tip="Asks the site for up to 200 chains instead of the first page">Read up to 200 chains</button>' : '');
@@ -1078,7 +1092,7 @@
       ? '<span class="mkt-s">' + ['native', 'canonical', 'external'].filter((k) => val(tb[k]) != null).map((k) => esc(k) + ' ' + esc(usd(val(tb[k])))).join(' · ') + '</span>' : '';
     const money = sgroup('Money on the chain',
       stat('DeFi TVL', st.tvl, usd) + stat('Total value secured', st.tvs, usd, tvsExtra) + stat('Stablecoins', st.stables, usd) +
-      stat('Native token market cap', st.mcap, usd));
+      stat('Native token market cap', st.mcap, usd, mcapChip(st.mcap)));
     const trade = sgroup('Trading',
       (w.kind && w.kind !== '24h' ? stat('DEX volume, ' + (w.label || w.kind), st.windowVolume, usd) : '') +
       stat('DEX volume, 1 day', st.volume24h, usd) + stat('DEX volume, 7 days', st.volume7d, usd) + stat('DEX volume, 30 days', st.volume30d, usd) +
@@ -1090,11 +1104,34 @@
       '<header class="mkt-vhead">' + avaHTML(d.name || d.key, row.logo, true) +
         '<div class="mkt-vt"><p class="mkt-kicker">' + esc(kick) + '</p>' +
         '<h2 class="mkt-h" id="mkt-vh" tabindex="-1">' + esc(d.name || chainName(d.key)) + '</h2>' +
-        '<p class="mkt-vsub">Figures for <b>' + esc(w.label || 'the last full UTC day') + '</b>' + (d.at ? ' · gathered ' + agoEl(d.at) : '') + '. Each card names its source and when that source was read.</p></div>' +
+        '<p class="mkt-vsub">Figures for <b>' + esc(w.label || 'the last full UTC day') + '</b>' + (d.at ? ' · gathered ' + agoEl(d.at) : '') + '. Each card names its source and how recent its figure is.</p></div>' +
       '</header>' + (d.why ? '<p class="mkt-note mkt-basis">⏳ ' + esc(d.why) + '</p>' : '') +
       '<div class="mkt-groups">' + money + trade + feesG + act + '</div>' +
-      chartsHTML(d) + pulseHTML(d) + l2HTML(d) + topTokensHTML(d) + newPoolsHTML(d) + sourcesHTML(d) +
+      mcapHTML(d) + chartsHTML(d) + pulseHTML(d) + l2HTML(d) + topTokensHTML(d) + newPoolsHTML(d) + sourcesHTML(d) +
     '</article>';
+  }
+
+  /* the market cap's cross-check in full: each source's own figure, price and circulating supply with how recent it is ("As of":
+     CoinGecko's own update time, DefiLlama's on its relay, CoinLore's read time), what the check found, and whether CoinGecko
+     names the same token for this chain as DefiLlama does — or only its gas token, which does not check the token shown */
+  const MAP_WORD = { confirmed: '✓ CoinGecko names the same token for this chain', gas: 'Checked for its gas token only', differs: '⚠ CoinGecko names another coin for this chain', unchecked: 'Not checked' };
+  function mcapHTML(d) {
+    const f = fig((d.stats || {}).mcap), c = f.check;
+    if (!c || !c.status || (c.status === 'none' && !(c.notes || []).length && !(c.coin && c.coin.id))) return '';
+    const srcs = Array.isArray(c.sources) ? c.sources : [];
+    const cellOf = (x, fmt) => (x != null && isFinite(x) ? esc(fmt(Number(x))) : '<span class="mkt-na">not given</span>');
+    const rows = srcs.map((x) => '<tr><th scope="row" data-l="Source">' + esc(srcName(x.src)) + (x.relay ? ' <span class="mkt-s">(CoinGecko’s figure, relayed)</span>' : '') + '</th>' +
+      '<td data-l="Market cap">' + cellOf(x.v, usd) + '</td><td data-l="Price">' + cellOf(x.price, usd) + '</td><td data-l="Circulating supply">' + cellOf(x.supply, count) + '</td>' +
+      '<td data-l="As of">' + (x.at ? agoEl(x.at) : 'time not recorded') + '</td></tr>').join('');
+    const sym = c.coin && c.coin.symbol ? '<span class="mkt-sym">' + esc('$' + c.coin.symbol) + '</span> ' : '';
+    const coin = c.coin && c.coin.id ? (c.coin.name ? esc(c.coin.name) + ' ' : '') + sym + '<span class="mkt-s">(CoinGecko id <code>' + esc(c.coin.id) + '</code>)</span>' : '';
+    const status = c.status === 'none' ? '<p class="mkt-s">' + (f.why ? esc(f.why) : 'No source gave a market cap for this token.') + '</p>' : '<p class="mkt-chkline">' + mcapChip(f) + ' <span class="mkt-s">' + esc(CHK[c.status][2]) + '.</span></p>';
+    const notes = (c.notes || []).length ? '<ul class="mkt-chknotes">' + c.notes.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '';
+    const m = c.mapping || {};
+    const mapping = '<p class="mkt-s"><b>The chain’s token:</b> ' + esc((m.status === 'confirmed' && m.by === 'gas' ? MAP_WORD.gas : MAP_WORD[m.status]) || 'Not checked') + (m.note ? ' — ' + esc(m.note) : '') + '.</p>';
+    return '<section class="mkt-card mkt-mcap" aria-labelledby="mkt-mc-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-mc-h">🧮 Market cap, cross-checked</h3><p class="mkt-s">' + esc(MCAP_CAP) + '</p>' + (coin ? '<p class="mkt-s">' + coin + '</p>' : '') + '</div>' +
+      status + (rows ? '<table class="mkt-table mkt-chktbl"><thead><tr><th scope="col">Source</th><th scope="col">Market cap</th><th scope="col">Price</th><th scope="col">Circulating supply</th><th scope="col">As of</th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
+      notes + mapping + '<p class="mkt-s">“As of” is when each source’s figure is from: CoinGecko’s own update time, DefiLlama’s on its relay, CoinLore’s when this site read it. Shown is CoinGecko’s figure when it has one (the one the rest of this site uses), never an average of the two; DefiLlama only relays CoinGecko’s figure, so it never counts as a second source. Not advice — a market cap is a count of tokens times a price.</p></section>';
   }
 
   /* the charts: one card, a range for all of them, each chart with its own source */

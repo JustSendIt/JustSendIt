@@ -65,8 +65,19 @@
   "mcap": {
    "v": null,
    "src": "site",
-   "at": 1793035800000,
-   "why": "No native token — gas is paid in ETH"
+   "at": 1793201760000,
+   "why": "No native token — gas is paid in ETH",
+   "label": "Market cap of the chain's own token",
+   "check": {
+    "status": "none",
+    "sources": [],
+    "notes": [],
+    "mapping": {
+     "status": "unchecked",
+     "note": "no token of its own to check"
+    },
+    "coin": null
+   }
   },
   "liquidity": {
    "v": 864386264.6384401,

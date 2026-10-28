@@ -6106,6 +6106,10 @@ const OUTBOUND_RPM = {
      (mktRpcBusy); it averages about one request a minute. */
   'api.llama.fi': 30, 'coins.llama.fi': 10, 'stablecoins.llama.fi': 20, 'l2beat.com': 10,
   'api.growthepie.xyz': 10, 'api.growthepie.com': 10,
+  /* CoinLore (the chain market caps' second source, 2026-10-28): its API page asks for about one request a second and prints no
+     other number. lib/marketdata.js spaces its calls 1.1 s apart itself; this is the ceiling on top. A chains run makes at most
+     5 (its learned coins, 50 to a call), the daily walk at most 20. */
+  'api.coinlore.net': 30,
   'market:geckoterminal': 3, 'market:geckoterminal-asked': 2, 'market:rpc': 12,
   /* The RWA job (2026-10-28): Robinhood's Stock Token API documents 60 requests a second and cached answers; the job asks it about
      five times every 30 minutes, so 20 a minute is far above what it needs, and 6 of them are Market Data's share. Chainlink's feed
@@ -10405,6 +10409,8 @@ const MKT_URLS = {
   // the RWA tab (owner, 2026-10-28): Robinhood's Stock Token API, and Chainlink's public feed directory for the chain
   rhj: process.env.MARKET_RHJ_URL || 'https://api.robinhood.com/rhj',
   chainlink: process.env.MARKET_CHAINLINK_URL || 'https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json',
+  // CoinLore, the chain market caps' second source: an empty MARKET_COINLORE_URL turns it off (the check then says so)
+  coinlore: process.env.MARKET_COINLORE_URL != null ? process.env.MARKET_COINLORE_URL : 'https://api.coinlore.net/api',
 };
 const MKT_HTTP = MD.createHonestFetch();   // the same identity as every other request (HONEST_UA), ≥30 s, no redirects, a size cap
 const MKT_COLLECT_ON = process.env.MARKET_COLLECT === '1' || (process.env.NODE_ENV === 'production' && process.env.MARKET_COLLECT !== '0');
@@ -10534,7 +10540,7 @@ const MKT = MD.createMarketData({
   // the chain node through the server's own reader (honest User-Agent, HTTP/2) on the shared pace; a log read weighs what it weighs there
   rpcBatch: async (calls) => { await paceTake(calls.reduce((w, c) => w + (c[0] === 'eth_getLogs' ? PACE_LOG_WEIGHT : 1), 0)); return rpcBatch(calls); },
   rpcBusy: mktRpcBusy, radarSweep: mktRadarSweep, scanRefresh: mktScanQuiet,
-  cgDemoKey: String(process.env.COINGECKO_DEMO_KEY || '').trim() || null,   // optional: a free CoinGecko Demo key for the market-cap fallback (keyless otherwise)
+  cgDemoKey: String(process.env.COINGECKO_DEMO_KEY || '').trim() || null,   // optional: a free CoinGecko Demo key for the chain market caps and asset platforms (keyless otherwise)
   // a collector's failure is said in the log at most once in ten minutes per job
   log: (m) => { const k = String(m).split(':')[0]; if (now() - (_mktLogAt.get(k) || 0) > 10 * 60e3) { _mktLogAt.set(k, now()); console.warn(m); } },
 });
@@ -11498,7 +11504,7 @@ const SENDYBRAIN = require('./lib/sendybrain.js');
 const Anthropic = require('@anthropic-ai/sdk').default;
 const SENDY_KEY = process.env.ANTHROPIC_API_KEY || '';
 const SENDY_MODEL = process.env.SENDY_MODEL || SENDYBRAIN.DEFAULT_MODEL;   // claude-opus-5-5
-const SENDY_Q_MAX = 600, SENDY_HISTORY_MAX = 8;
+const SENDY_Q_MAX = 600, SENDY_HISTORY_MAX = 12;   // (six exchanges: the crisis lines are kept for a feeling said up to six answers on; the model hears the last four)
 let sendyKnowledgeCache = null, sendyAnswered = 0;
 const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<!--[\s\S]*?-->/g, '')
   .replace(/<\/(p|h[1-6]|li|tr|section|div|details|summary|blockquote)>/gi, '\n').replace(/<[^>]+>/g, ' ')
