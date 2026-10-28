@@ -671,7 +671,7 @@ CREATE INDEX IF NOT EXISTS idx_uploads_sweep ON uploads(claimed, created_at);
 -- keeps the hot ones fresh from on-chain data. found=0 is a negative cache (looked up, not priced/indexed).
 CREATE TABLE IF NOT EXISTS sendy_qa (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  q TEXT NOT NULL,                                     -- the question as typed — no account, no address: nothing says who asked
+  q TEXT NOT NULL,                                     -- the question as typed (a pasted seed phrase or key removed) — no account, no address: nothing says who asked
   a TEXT NOT NULL DEFAULT '',                          -- the answer Sendy gave
   page TEXT,                                           -- the page it was asked on
   at INTEGER NOT NULL,
