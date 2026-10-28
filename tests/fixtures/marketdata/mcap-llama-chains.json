@@ -1,0 +1,335 @@
+[
+ {
+  "gecko_id": "ethereum",
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 45938374483.05917,
+  "tokenSymbol": "ETH",
+  "cmcId": "1027",
+  "name": "Ethereum",
+  "chainId": 1
+ },
+ {
+  "gecko_id": "bitcoin",
+  "gasTokenGeckoId": "bitcoin",
+  "tvl": 6343133170.222082,
+  "tokenSymbol": "BTC",
+  "cmcId": "1",
+  "name": "Bitcoin",
+  "chainId": null
+ },
+ {
+  "gecko_id": "solana",
+  "gasTokenGeckoId": "solana",
+  "tvl": 5744116707.182135,
+  "tokenSymbol": "SOL",
+  "cmcId": "5426",
+  "name": "Solana",
+  "chainId": null
+ },
+ {
+  "gecko_id": "binancecoin",
+  "gasTokenGeckoId": "binancecoin",
+  "tvl": 5512030621.660931,
+  "tokenSymbol": "BNB",
+  "cmcId": "1839",
+  "name": "BSC",
+  "chainId": 56
+ },
+ {
+  "gecko_id": "tron",
+  "gasTokenGeckoId": "tron",
+  "tvl": 5385328874.66824,
+  "tokenSymbol": "TRX",
+  "cmcId": "1958",
+  "name": "Tron",
+  "chainId": null
+ },
+ {
+  "gecko_id": "hyperliquid",
+  "gasTokenGeckoId": "hyperliquid",
+  "tvl": 2464437971.967716,
+  "tokenSymbol": "HYPE",
+  "cmcId": "32196",
+  "name": "Hyperliquid L1",
+  "chainId": null
+ },
+ {
+  "gecko_id": "arbitrum",
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 1508119794.8020074,
+  "tokenSymbol": "ARB",
+  "cmcId": "11841",
+  "name": "Arbitrum",
+  "chainId": 42161
+ },
+ {
+  "gecko_id": "polygon-ecosystem-token",
+  "gasTokenGeckoId": "polygon-ecosystem-token",
+  "tvl": 708742252.0733039,
+  "tokenSymbol": "POL",
+  "cmcId": "28321",
+  "name": "Polygon",
+  "chainId": 137
+ },
+ {
+  "gecko_id": "avalanche-2",
+  "gasTokenGeckoId": "avalanche-2",
+  "tvl": 554383555.4832989,
+  "tokenSymbol": "AVAX",
+  "cmcId": "5805",
+  "name": "Avalanche",
+  "chainId": 43114
+ },
+ {
+  "gecko_id": "optimism",
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 423245102.989214,
+  "tokenSymbol": "OP",
+  "cmcId": "11840",
+  "name": "OP Mainnet",
+  "chainId": 10
+ },
+ {
+  "gecko_id": null,
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 1134533373.1495059,
+  "tokenSymbol": null,
+  "cmcId": null,
+  "name": "Robinhood Chain",
+  "chainId": 4663
+ },
+ {
+  "gecko_id": null,
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 6130116023.545193,
+  "tokenSymbol": null,
+  "cmcId": null,
+  "name": "Base",
+  "chainId": 8453
+ },
+ {
+  "gecko_id": "ripple",
+  "gasTokenGeckoId": "ripple",
+  "tvl": 334470124.2073599,
+  "tokenSymbol": "XRP",
+  "cmcId": "52",
+  "name": "XRPL",
+  "chainId": null
+ },
+ {
+  "gecko_id": "ripple",
+  "gasTokenGeckoId": "ripple",
+  "tvl": 30432.951625889375,
+  "tokenSymbol": "XRP",
+  "cmcId": null,
+  "name": "XRPL EVM",
+  "chainId": 1440000
+ },
+ {
+  "gecko_id": "iota",
+  "gasTokenGeckoId": "iota",
+  "tvl": 1423481.901924496,
+  "tokenSymbol": "IOTA",
+  "cmcId": "1720",
+  "name": "IOTA",
+  "chainId": null
+ },
+ {
+  "gecko_id": "iota",
+  "gasTokenGeckoId": "iota",
+  "tvl": 319212.5523137525,
+  "tokenSymbol": "IOTA",
+  "cmcId": null,
+  "name": "IOTA EVM",
+  "chainId": 8822
+ },
+ {
+  "gecko_id": "ontology",
+  "gasTokenGeckoId": "ong",
+  "tvl": 4788241.892315,
+  "tokenSymbol": "ONT",
+  "cmcId": "2566",
+  "name": "Ontology",
+  "chainId": null
+ },
+ {
+  "gecko_id": "ontology",
+  "gasTokenGeckoId": "ong",
+  "tvl": 1505.9058384539842,
+  "tokenSymbol": "ONT",
+  "cmcId": "2566",
+  "name": "OntologyEVM",
+  "chainId": 58
+ },
+ {
+  "gecko_id": "fantom",
+  "gasTokenGeckoId": "fantom",
+  "tvl": 3331915.1201466876,
+  "tokenSymbol": "FTM",
+  "cmcId": "3513",
+  "name": "Fantom",
+  "chainId": 250
+ },
+ {
+  "gecko_id": "mixin",
+  "gasTokenGeckoId": "mixin",
+  "tvl": 76283287.28705294,
+  "tokenSymbol": "XIN",
+  "cmcId": "2349",
+  "name": "Mixin",
+  "chainId": null
+ },
+ {
+  "gecko_id": "pulsechain",
+  "gasTokenGeckoId": "pulsechain",
+  "tvl": 42972515.318868876,
+  "tokenSymbol": "PLS",
+  "cmcId": "11145",
+  "name": "PulseChain",
+  "chainId": null
+ },
+ {
+  "gecko_id": "krown-network",
+  "gasTokenGeckoId": "krown-network",
+  "tvl": 367869.3939218622,
+  "tokenSymbol": "KROWN",
+  "cmcId": "35141",
+  "name": "Krown Network",
+  "chainId": 1983
+ },
+ {
+  "gecko_id": "bitget-token",
+  "gasTokenGeckoId": "bitget-token",
+  "tvl": 25037038.968383923,
+  "tokenSymbol": "-",
+  "cmcId": null,
+  "name": "Morph",
+  "chainId": null
+ },
+ {
+  "gecko_id": "stable-2",
+  "gasTokenGeckoId": "usdt0",
+  "tvl": 27270210.36444187,
+  "tokenSymbol": "STABLE",
+  "cmcId": null,
+  "name": "Stable",
+  "chainId": 988
+ },
+ {
+  "gecko_id": "beam-2",
+  "gasTokenGeckoId": "beam-2",
+  "tvl": 1352227.1313991323,
+  "tokenSymbol": "BEAM",
+  "cmcId": "28298",
+  "name": "Beam",
+  "chainId": 4337
+ },
+ {
+  "gecko_id": "the-open-network",
+  "gasTokenGeckoId": "the-open-network",
+  "tvl": 46165637.35624685,
+  "tokenSymbol": "GRAM",
+  "cmcId": "11419",
+  "name": "TON",
+  "chainId": null
+ },
+ {
+  "gecko_id": "neo",
+  "gasTokenGeckoId": "gas",
+  "tvl": 969766.8027446491,
+  "tokenSymbol": "NEO",
+  "cmcId": "1376",
+  "name": "NEO",
+  "chainId": null
+ },
+ {
+  "gecko_id": "vechain",
+  "gasTokenGeckoId": "vethor-token",
+  "tvl": 1192790.4113924839,
+  "tokenSymbol": "VET",
+  "cmcId": "3077",
+  "name": "VeChain",
+  "chainId": null
+ },
+ {
+  "gecko_id": "theta-token",
+  "gasTokenGeckoId": "theta-fuel",
+  "tvl": 312021.696536753,
+  "tokenSymbol": "THETA",
+  "cmcId": "2416",
+  "name": "Theta",
+  "chainId": 361
+ },
+ {
+  "gecko_id": "mezo",
+  "gasTokenGeckoId": "bitcoin",
+  "tvl": 72092003.21719366,
+  "tokenSymbol": "MEZO",
+  "cmcId": "39727",
+  "name": "Mezo",
+  "chainId": 31612
+ },
+ {
+  "gecko_id": "mantra",
+  "gasTokenGeckoId": "mantra",
+  "tvl": 525614.7094427039,
+  "tokenSymbol": "MANTRA",
+  "cmcId": "39611",
+  "name": "MANTRA",
+  "chainId": 5887
+ },
+ {
+  "gecko_id": "blast",
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 7043369.406553708,
+  "tokenSymbol": "BLAST",
+  "cmcId": "28480",
+  "name": "Blast",
+  "chainId": 81457
+ },
+ {
+  "gecko_id": "icon",
+  "gasTokenGeckoId": "icon",
+  "tvl": 160646.09768193148,
+  "tokenSymbol": "ICX",
+  "cmcId": "2099",
+  "name": "Icon",
+  "chainId": null
+ },
+ {
+  "gecko_id": "sonic-3",
+  "gasTokenGeckoId": "sonic-3",
+  "tvl": 16513418.987189796,
+  "tokenSymbol": "S",
+  "cmcId": null,
+  "name": "Sonic",
+  "chainId": 146
+ },
+ {
+  "gecko_id": "mode",
+  "gasTokenGeckoId": "ethereum",
+  "tvl": 610631.5841644881,
+  "tokenSymbol": "MODE",
+  "cmcId": "31016",
+  "name": "Mode",
+  "chainId": 34443
+ },
+ {
+  "gecko_id": "kucoin-shares",
+  "gasTokenGeckoId": "kucoin-shares",
+  "tvl": 806547.2637806358,
+  "tokenSymbol": "KCS",
+  "cmcId": "2087",
+  "name": "KCC",
+  "chainId": 321
+ },
+ {
+  "gecko_id": "sei-network",
+  "gasTokenGeckoId": "sei-network",
+  "tvl": 28158151.720275216,
+  "tokenSymbol": "SEI",
+  "cmcId": "23149",
+  "name": "Sei",
+  "chainId": null
+ }
+]

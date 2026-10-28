@@ -24,6 +24,7 @@ import { createRequire } from 'node:module';
 import { ROOT, SERVER_JS } from './_paths.mjs';
 const require = createRequire(import.meta.url);
 const MD = require(path.join(ROOT, 'lib', 'marketdata.js'));
+const CM = require(path.join(ROOT, 'lib', 'chainmcap.js'));
 
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
 const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'marketdata.js'), 'utf8');
@@ -55,6 +56,12 @@ const F = {
   dsTokens: FIX('ds-tokens-v1.json'), dsSend: FIX('ds-token-pairs-send.json'), dsSearch: FIX('ds-search-robinhood.json'), cgMarkets: FIX('cg-markets.json'),
   state: FIX('rpc-state.json'), logs: FIX('rpc-logs.json'), anchors: FIX('rpc-anchor-blocks.json'), bridge: FIX('eth-bridge.json'), pm: FIX('rpc-poolmanager.json'),
 };
+/* the chain market caps' cross-check (2026-10-28): DefiLlama's chains, CoinGecko's coins and asset platforms, DefiLlama's relay,
+   CoinLore's walk and a /ticker/ read — measured that day (tests/fixtures/marketdata/README.txt) */
+const MC = { chains: FIX('mcap-llama-chains.json'), cg: FIX('mcap-cg-markets.json'), relay: FIX('mcap-llama-mcaps.json'), platforms: FIX('mcap-cg-platforms.json'),
+  walk: FIX('mcap-lore-tickers.json'), ticker: FIX('mcap-lore-ticker.json') };
+const NOW_M = Date.parse('2026-10-28T15:30:00Z');   // CoinGecko's answer is stamped 15:29:50 UTC that day
+const loreRows = Object.values(MC.walk.pages).flat();
 const leaf = (o) => (typeof o === 'number' ? o : o && typeof o === 'object' ? Object.values(o).reduce((a, v) => a + leaf(v), 0) : 0);
 const sumKey = (ov, field, key) => ov.protocols.reduce((a, p) => a + (p[field] && p[field][key] ? leaf(p[field][key]) : 0), 0);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -87,7 +94,9 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 /* ═══ the fake vendors: one server, a prefix per source ═══ */
 const hits = {}, uas = new Set(), log = [];
 const hit = (k) => { hits[k] = (hits[k] || 0) + 1; };
-const vendorFail = { mcaps: false, gtAll: false, noList: false }, cgSeen = [];
+const vendorFail = { mcaps: false, gtAll: false, noList: false, cg: false, platforms: false, lore: false, loreFrom: null }, cgSeen = [];
+// vendorMode.mcap: DefiLlama's chains and relay as measured 2026-10-28 (the market-cap section); otherwise the 2026-10-26 answers
+const vendorMode = { mcap: false };
 // hold.rhPage2: a promise Robinhood Chain's second pools page waits on (a run caught partway through); asked: it was asked for
 const hold = { rhPage2: null, asked: false };
 const w256 = (hex) => String(hex).replace(/^0x/, '').padStart(64, '0');
@@ -98,11 +107,11 @@ const vendor = http.createServer((req, res) => {
   req.on('end', () => {
     const send = (code, o, ct) => { res.writeHead(code, { 'Content-Type': ct || 'application/json' }); res.end(Buffer.isBuffer(o) || typeof o === 'string' ? o : JSON.stringify(o)); };
     const seg = p.split('/')[1];
-    if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img'].includes(seg)) uas.add(String(req.headers['user-agent']));
+    if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img', 'lore'].includes(seg)) uas.add(String(req.headers['user-agent']));
     log.push(req.method + ' ' + p + u.search);
     hit(seg);
     // DefiLlama
-    if (p === '/llama/v2/chains') return send(200, F.chains);
+    if (p === '/llama/v2/chains') return send(200, vendorMode.mcap ? MC.chains : F.chains);
     // vendorFail.noList: a 200 that carries an error instead of the protocols list (a schema change, a bad day)
     if (p === '/llama/overview/dexs') return send(200, vendorFail.noList ? { error: 'no protocols today' } : F.dexs);
     if (p === '/llama/overview/fees') return send(200, vendorFail.noList ? { error: 'no protocols today' } : F.fees);
@@ -115,8 +124,14 @@ const vendor = http.createServer((req, res) => {
     if (p === '/stables/stablecoinchains') return send(200, F.stables);
     if (p === '/stables/stablecoincharts/Robinhood%20Chain') return send(200, F.stChart);
     if (p.startsWith('/stables/')) return send(404, { error: 'not in the fixtures' });
-    if (p === '/coins/mcaps' && req.method === 'POST') { hit('mcaps-post'); try { JSON.parse(body); } catch { return send(400, {}); } return vendorFail.mcaps ? send(500, { error: 'down' }) : send(200, F.mcaps); }
-    if (p === '/cg/coins/markets') { hit('cg-markets'); cgSeen.push({ key: req.headers['x-cg-demo-api-key'] || null, q: u.search }); return send(200, F.cgMarkets); }
+    if (p === '/coins/mcaps' && req.method === 'POST') { hit('mcaps-post'); try { JSON.parse(body); } catch { return send(400, {}); } return vendorFail.mcaps ? send(500, { error: 'down' }) : send(200, vendorMode.mcap ? MC.relay : F.mcaps); }
+    // CoinGecko answers the coins asked for (ids=…), from its two measured answers: the 2026-10-26 token list and the 2026-10-28 chain tokens
+    if (p === '/cg/coins/markets') { hit('cg-markets'); cgSeen.push({ key: req.headers['x-cg-demo-api-key'] || null, q: u.search }); if (vendorFail.cg) return send(500, { error: 'down' });
+      const want = new Set(String(u.searchParams.get('ids') || '').split(',')); return send(200, [...MC.cg, ...F.cgMarkets.filter((x) => !MC.cg.some((y) => y.id === x.id))].filter((x) => want.has(x.id))); }
+    if (p === '/cg/asset_platforms') { hit('cg-platforms'); cgSeen.push({ key: req.headers['x-cg-demo-api-key'] || null, q: 'asset_platforms' }); return vendorFail.platforms ? send(429, { error: 'slow down' }) : send(200, MC.platforms); }
+    // CoinLore: its walk's pages (start=N), and a /ticker/ read answered from the same rows
+    if (p === '/lore/tickers/') { hit('lore-walk'); const st = Number(u.searchParams.get('start') || 0); if (vendorFail.lore || (vendorFail.loreFrom != null && st >= vendorFail.loreFrom)) return send(429, { error: 'slow down' }); return send(200, { data: MC.walk.pages[st] || [], info: MC.walk.info }); }
+    if (p === '/lore/ticker/') { hit('lore-ticker'); if (vendorFail.lore) return send(429, { error: 'slow down' }); const want = String(u.searchParams.get('id') || '').split(','); const byId = new Map(loreRows.map((x) => [String(x.id), x])); return send(200, want.map((i) => byId.get(i)).filter(Boolean)); }
     // L2BEAT, growthepie
     if (p === '/l2beat/scaling/summary') return send(200, F.l2beat);
     if (p.startsWith('/l2beat/scaling/activity/')) { hit('l2beat-activity'); return p.endsWith('/robinhood') ? send(200, FIX('l2beat-activity-robinhood.json')) : send(404, { error: 'no' }); }
@@ -178,7 +193,10 @@ const vendor = http.createServer((req, res) => {
 await new Promise((ok) => vendor.listen(0, '127.0.0.1', ok));
 vendor.unref();
 const V = 'http://127.0.0.1:' + vendor.address().port;
-const URLS = { llama: V + '/llama', coins: V + '/coins', stables: V + '/stables', l2beat: V + '/l2beat', growthepie: V + '/gtp', growthepieMetrics: V + '/gtp', gt: V + '/gt', ds: V + '/ds', cg: V + '/cg', ethRpc: V + '/eth' };
+const URLS = { llama: V + '/llama', coins: V + '/coins', stables: V + '/stables', l2beat: V + '/l2beat', growthepie: V + '/gtp', growthepieMetrics: V + '/gtp', gt: V + '/gt', ds: V + '/ds', cg: V + '/cg', ethRpc: V + '/eth', coinlore: V + '/lore' };
+// CoinLore's pace without the wait: each sleep the module asks for is recorded (and the clock it reads stays where it is)
+const sleeps = [];
+const fakeSleep = async (ms) => { sleeps.push(ms); };
 
 /* ═══ the fake Robinhood Chain node: the research's state batch, its real pool-creation logs, and timestamps between two real blocks ═══ */
 const node = { head: HEAD, ranges: [], single: [], throttle: false, v4Limit: 400000, calls: 0 };
@@ -226,7 +244,7 @@ let busy = false;
 const radarPairs = [{ pair: { address: '0x' + 'ab'.repeat(20), quoteSymbol: 'WETH', createdAt: NOW - 60000, token0: null, token1: null }, token: { address: '0x' + 'cd'.repeat(20), symbol: 'RADAR', name: 'Radar Test' }, market: { priceUsd: 0.5, liquidityUsd: 1234, fdv: 9999, marketCap: null }, volume: { h24: 77 }, risk: { triage: 'caution', health: 55, thinData: true }, holders: { count: 12 } }];
 const radarRaw = [{ pair: '0x' + 'ab'.repeat(20), token0: '0x' + 'cd'.repeat(20), token1: WETH, block: 98587000 }, { pair: '0x' + 'ef'.repeat(20), token0: '0x' + '12'.repeat(20), token1: WETH, block: 98587100 }];
 const refreshed = [];
-const md = MD.createMarketData({ db: dbA, now: () => clock, outboundTake: take, rpcBatch: fakeRpcBatch, rpcBusy: () => busy, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000,
+const md = MD.createMarketData({ db: dbA, now: () => clock, outboundTake: take, rpcBatch: fakeRpcBatch, rpcBusy: () => busy, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: fakeSleep,
   radarSweep: async () => ({ pairs: radarPairs, cursor: 98587100, raw: radarRaw }), scanRefresh: async (chain, addr) => { refreshed.push(chain + ':' + addr); return { pair: radarPairs[0], readAt: clock }; } });
 md.migrate();
 const q1 = (sql, ...a) => dbA.prepare(sql).get(...a);
@@ -255,18 +273,30 @@ try {
   check('  ...no market cap — a null with its why, never 0: "No native token — gas is paid in ETH"', rh.mcap === null && rhSrc.mcap.why === 'No native token — gas is paid in ETH' && rh.native_token === null);
   check('  ...L2BEAT\'s Total Value Secured and stage beside it, never mixed into TVL', near(rh.tvs, RH_TVS) && rh.stage === 'Stage 0' && rh.is_l2 === 1 && rh.tvs !== rh.tvl);
   const eth = q1("SELECT * FROM mkt_chain_snap WHERE chain='ethereum'"), arb = q1("SELECT * FROM mkt_chain_snap WHERE chain='arbitrum'"), mon = q1("SELECT * FROM mkt_chain_snap WHERE chain='monad'");
-  check('a chain\'s own token\'s market cap comes from DefiLlama\'s coins (ETH for Ethereum, ARB for Arbitrum); one it gave none for is missing, with why',
-    near(eth.mcap, F.mcaps['coingecko:ethereum'].mcap) && near(arb.mcap, F.mcaps['coingecko:arbitrum'].mcap) && mon && mon.mcap === null && /no market cap was given for monad/.test(JSON.parse(mon.src).mcap.why) && eth.tvs === null && JSON.parse(eth.src).tvs.why === 'L2BEAT tracks Ethereum L2s and L3s only',
-    brief({ e: eth.mcap, a: arb.mcap, m: mon && mon.src }));
+  const cgOf = (id) => MC.cg.find((x) => x.id === id);
+  check('a chain\'s own token\'s market cap is CoinGecko\'s own figure (ETH for Ethereum, ARB for Arbitrum), its source and read time CoinGecko\'s; a token CoinGecko\'s answer has not got, with no relay either, is missing with why — never 0',
+    eth.mcap === cgOf('ethereum').market_cap && arb.mcap === cgOf('arbitrum').market_cap && JSON.parse(eth.src).mcap.src === 'coingecko' && JSON.parse(eth.src).mcap.at === Date.parse(cgOf('ethereum').last_updated)
+    && mon && mon.mcap === null && /CoinGecko's answer did not include monad/.test(JSON.parse(mon.src).mcap.why) && eth.tvs === null && JSON.parse(eth.src).tvs.why === 'L2BEAT tracks Ethereum L2s and L3s only'
+    && !qa('SELECT mcap FROM mkt_chain_snap WHERE mcap IS NOT NULL').some((r) => !(r.mcap > 0)), brief({ e: eth.mcap, a: arb.mcap, m: mon && mon.src }));
   const zero = F.chains.filter((c) => !c.tvl).map((c) => c.name);
   check('a chain with neither a TVL nor a DEX volume is not listed; every other chain DefiLlama gave is, once', qa('SELECT name FROM mkt_chain_snap').every((r) => !zero.includes(r.name)) && q1('SELECT COUNT(*) n FROM mkt_chain_snap').n === q1('SELECT COUNT(DISTINCT chain) n FROM mkt_chain_snap').n && q1('SELECT COUNT(*) n FROM mkt_chain_snap').n >= 40);
-  check('the chains run asked each source once (chains, DEX, fees, open interest, stablecoins, market caps) — and DefiLlama\'s overviews without their charts', ['/llama/v2/chains', '/llama/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true', '/llama/overview/fees?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true', '/llama/overview/open-interest?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true', '/stables/stablecoinchains', '/coins/mcaps'].every((x) => log.filter((l) => l.endsWith(' ' + x)).length === 1), log.slice(0, 12).join(' | '));
-  // the CoinGecko fallback, once in two minutes
-  vendorFail.mcaps = true; clock = NOW + 3 * 60e3;
+  const cgAsk = log.filter((l) => /^GET \/cg\/coins\/markets\?vs_currency=usd&per_page=250&ids=/.test(l));
+  check('the chains run asked each source once (chains, DEX, fees, open interest, stablecoins, CoinGecko\'s coins, DefiLlama\'s relay) — and DefiLlama\'s overviews without their charts', ['/llama/v2/chains', '/llama/overview/dexs?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true', '/llama/overview/fees?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true', '/llama/overview/open-interest?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true', '/stables/stablecoinchains', '/coins/mcaps'].every((x) => log.filter((l) => l.endsWith(' ' + x)).length === 1)
+    && cgAsk.length === 1 && new Set(decodeURIComponent(cgAsk[0].split('ids=')[1]).split(',')).size === qa('SELECT DISTINCT native_token t FROM mkt_chain_snap WHERE native_token IS NOT NULL').length, log.slice(0, 12).join(' | '));
+  // CoinGecko: once per run, never within two minutes of another CoinGecko read; DefiLlama's relay stands in, said so
+  clock = NOW + 3 * 60e3;
   const rc2 = await md.runJob('chains'); const cg1 = hits['cg-markets'] || 0;
   clock = NOW + 3 * 60e3 + 30e3; const rc3 = await md.runJob('chains'); const cg2 = hits['cg-markets'] || 0;
-  vendorFail.mcaps = false; clock = NOW;
-  check('when DefiLlama\'s market caps fail, CoinGecko is asked — at most once in two minutes, and the run says so', rc2.ok && cg1 === 1 && cg2 === 1 && /CoinGecko was asked less than two minutes ago/.test(rc3.note), brief([rc2.note, rc3.note, cg1, cg2]));
+  const relayRow = md._test.latestSnap().rows.find((r) => r.chain === 'ethereum'), relayEth = md.chains({ limit: 200 }).body.rows.find((r) => r.key === 'ethereum');
+  clock = NOW + 6 * 60e3; vendorFail.cg = true; const rc4 = await md.runJob('chains');
+  vendorFail.mcaps = true; clock = NOW + 9 * 60e3; const rc5 = await md.runJob('chains'); vendorFail.cg = false; vendorFail.mcaps = false;
+  const bothDown = md.chains({ limit: 200 }).body.rows.find((r) => r.key === 'ethereum');
+  clock = NOW;
+  check('CoinGecko is asked once per chains run and never twice within two minutes: a run 30 s after another takes DefiLlama\'s relay of CoinGecko\'s figure, labelled as that, one source, and the run says why', rc2.ok && cg1 === 2 && cg2 === 2 && /CoinGecko was asked less than two minutes ago/.test(rc3.note)
+    && relayRow.mcap === F.mcaps['coingecko:ethereum'].mcap && JSON.parse(relayRow.src).mcap.src === 'defillama' && relayEth.mcap.v === F.mcaps['coingecko:ethereum'].mcap && relayEth.mcap.src === 'defillama' && /CoinGecko's figure, relayed by DefiLlama/.test(relayEth.mcap.label)
+    && relayEth.mcap.check.status === 'single' && relayEth.mcap.check.sources.length === 1 && relayEth.mcap.check.sources[0].relay === true && /still one source/.test(relayEth.mcap.check.notes.join(' ')), brief([rc2.note, rc3.note, cg1, cg2, relayEth && relayEth.mcap]));
+  check('  ...CoinGecko down takes the relay too (the reason said); with the relay down as well the market cap is missing with both reasons — never a stale figure, never 0', rc4.ok && /CoinGecko could not be read \(upstream 500\)/.test(rc4.note) && rc5.ok
+    && bothDown.mcap.v === null && /CoinGecko could not be read \(upstream 500\); DefiLlama's relay of it could not be read either \(upstream 500\)/.test(bothDown.mcap.why) && bothDown.mcap.check.status === 'none', brief([rc4.note, bothDown && bothDown.mcap]));
   // an operator's CoinGecko Demo key goes as its header, never in the URL
   const dbB = new DatabaseSync(path.join(tmpA, 'b.db'));
   const mdB = MD.createMarketData({ db: dbB, now: () => NOW, outboundTake: take, urls: URLS, cgDemoKey: 'demo-key-for-the-test' });
@@ -274,6 +304,7 @@ try {
   const cgB = cgSeen[cgSeen.length - 1] || {};
   check('  ...with a CoinGecko Demo key (COINGECKO_DEMO_KEY) the fallback sends it as its header, never in the URL', rcB.ok && cgB.key === 'demo-key-for-the-test' && !/demo-key/.test(cgB.q) && cgSeen[0].key === null && /COINGECKO_DEMO_KEY/.test(SRC), brief(cgSeen));
   dbA.prepare('DELETE FROM mkt_chain_snap WHERE at > ?').run(NOW);   // keep the first run's snapshot as the latest
+  dbA.prepare("DELETE FROM mkt_state WHERE name = 'cg_last'").run();
   // a chain snapshot taken before L2BEAT's first read: the newer L2BEAT read wins, so the card never says "not read yet" above L2BEAT's own split
   const dbC = new DatabaseSync(path.join(tmpA, 'c.db'));
   const mdC = MD.createMarketData({ db: dbC, now: () => NOW, outboundTake: take, urls: URLS });
@@ -379,7 +410,7 @@ try {
   const byMcapAsc = md.chains({ sort: 'mcap', dir: 'asc', limit: 200 }).body.rows, byMcapDesc = md.chains({ sort: 'mcap', dir: 'desc', limit: 200 }).body.rows;
   const firstNull = (rows) => rows.findIndex((r) => r.mcap.v == null);
   check('sorting by market cap, both ways: a chain with no figure is listed last in BOTH directions', firstNull(byMcapAsc) > 0 && byMcapAsc.slice(firstNull(byMcapAsc)).every((r) => r.mcap.v == null) && byMcapAsc.slice(0, firstNull(byMcapAsc)).every((r, i, a) => i === 0 || a[i - 1].mcap.v <= r.mcap.v)
-    && byMcapDesc.slice(firstNull(byMcapDesc)).every((r) => r.mcap.v == null) && byMcapDesc.slice(0, firstNull(byMcapDesc)).every((r, i, a) => i === 0 || a[i - 1].mcap.v >= r.mcap.v) && byMcapDesc[0].key === 'ethereum', brief(byMcapAsc.slice(0, 3).map((r) => [r.key, r.mcap.v])));
+    && byMcapDesc.slice(firstNull(byMcapDesc)).every((r) => r.mcap.v == null) && byMcapDesc.slice(0, firstNull(byMcapDesc)).every((r, i, a) => i === 0 || a[i - 1].mcap.v >= r.mcap.v) && byMcapDesc[0].key === 'bitcoin' && byMcapDesc[0].mcap.v === MC.cg.find((x) => x.id === 'bitcoin').market_cap, brief(byMcapAsc.slice(0, 3).map((r) => [r.key, r.mcap.v])));
   const byVol = md.chains({ sort: 'volume', dir: 'desc' }).body.rows, byLiqAsc = md.chains({ sort: 'liquidity', dir: 'asc' }).body.rows, byFees = md.chains({ sort: 'fees', limit: 5 }).body;
   check('  ...and by volume, liquidity (lowest first) and fees', byVol.every((r, i, a) => i === 0 || a[i - 1].volume.v == null || r.volume.v == null || a[i - 1].volume.v >= r.volume.v) && byLiqAsc.every((r, i, a) => i === 0 || a[i - 1].liquidity.v == null || r.liquidity.v == null || a[i - 1].liquidity.v <= r.liquidity.v) && byFees.rows.length === 5 && byFees.sort === 'fees');
   const w30 = md.chains({ window: '30d', limit: 200 }).body.rows.find((r) => r.key === 'robinhood'), w7 = md.chains({ window: '7d', limit: 200 }).body.rows;
@@ -809,13 +840,153 @@ try {
   const keysCd = [...Object.keys(cd2), ...Object.keys(cd2.stats), ...Object.keys(cd2.history), ...Object.keys(cd2.history.src), ...Object.keys(cd2.topTokens)];
   check('the docs\' "chain" shape names every key the resource returns (stats.liquidity and l2beat, history.from / to and its src map, appFees and daa)', keysCd.length > 30 && keysCd.every(named), keysCd.filter((k) => !named(k)).join(','));
 
+  /* ── the chain market caps, cross-checked (owner, 2026-10-28: "make sure you are showing the right market caps for all of the
+     chains pulled from multiple sources and cross verified") — every input one the sources gave that day (README.txt) ── */
+  // 1. the rules on their own (lib/chainmcap.js)
+  const cgM = new Map(MC.cg.map((x) => CM.cgCoin(x, NOW_M)).map((c) => [c.id, c]));
+  const walkM = loreRows.map((x) => CM.loreCoin(x, NOW_M)).filter(Boolean);
+  const cgRaw = (id) => MC.cg.find((x) => x.id === id), loreRaw = (id) => loreRows.find((x) => String(x.id) === id);
+  const relayOf = (id) => { const e = MC.relay['coingecko:' + id]; return e ? { v: e.mcap, at: e.timestamp * 1000 } : null; };
+  const xc = (id) => { const m = CM.matchCoin(cgM.get(id), walkM); return CM.crossCheck({ sym: cgM.get(id).symbol, cg: cgM.get(id), relay: relayOf(id), lore: m.coin, loreWhy: m.why, loreAlso: m.coin ? m.rejected : null, now: NOW_M }); };
+  check('names are compared as words: a parenthesised part dropped (CoinGecko\'s TON is "Gram (prev. Toncoin)", CoinLore\'s Sonic "Sonic (prev. FTM)"), invisible characters gone (CoinGecko writes stable-2 "\\u200b\\u200bStable"), one name the start of the other — and "Theta Token" is not "Theta Network"',
+    cgRaw('the-open-network').name === 'Gram (prev. Toncoin)' && CM.normName(cgRaw('the-open-network').name) === 'gram' && cgRaw('stable-2').name === '​​Stable' && CM.normName(cgRaw('stable-2').name) === 'stable' && cgM.get('stable-2').name === 'Stable'
+    && loreRaw('148191').name === 'Sonic (prev. FTM)' && CM.sameName(loreRaw('148191').name, cgRaw('sonic-3').name) && loreRaw('32360').name === 'Theta Token' && !CM.sameName(loreRaw('32360').name, cgRaw('theta-token').name), brief([cgRaw('stable-2').name, CM.normName(cgRaw('the-open-network').name)]));
+  const beamM = CM.matchCoin(cgM.get('beam-2'), walkM);
+  check('the Beam trap: CoinLore lists two coins named Beam — onbeam at $0.003362 (CoinGecko\'s beam-2 is $0.0033395) and the older BEAM at $0.006579; the matcher takes the first, and leaves the other out as a different coin',
+    beamM.coin && beamM.coin.id === '136107' && beamM.rejected.length === 1 && beamM.rejected[0].id === '33386' && loreRaw('33386').price_usd === '0.006579' && loreRaw('136107').price_usd === '0.003362' && cgRaw('beam-2').current_price === 0.0033395, brief(beamM));
+  const twoM = CM.matchCoin(cgM.get('beam-2'), walkM, { priceTol: 1 });
+  check('  ...two coins that both pass are neither: with the price test widened to 100% both of CoinLore\'s Beams pass, and no figure is taken from either', twoM.coin === null && /^CoinLore lists two coins that could be it/.test(twoM.why), twoM.why);
+  const blastM = CM.matchCoin(cgM.get('blast'), walkM), bnbM = CM.matchCoin(cgM.get('binancecoin'), walkM), bmtM = CM.bySymbol(walkM).get('BMT') || [];
+  check('  ...a same-name coin at another price is a different coin (CoinLore\'s "Blast" at $0.000003 against CoinGecko\'s $0.00003657); a coin under another name is not taken (CoinLore\'s "Binance Coin" is not CoinGecko\'s "BNB"); a coin seen on two pages of the walk (Bubblemaps — the list shifted while it was read) is one coin',
+    blastM.coin === null && /priced \$0\.000003 against CoinGecko’s \$0\.000037 for \$BLAST — a different coin, not used/.test(blastM.why) && bnbM.coin === null && /only under another name \(“Binance Coin”, not CoinGecko’s “BNB”\)/.test(bnbM.why)
+    && loreRows.filter((x) => String(x.id) === '151131').length === 2 && bmtM.length === 1, brief([blastM.why, bnbM.why, bmtM.length]));
+  const zerosM = ['fantom', 'mixin', 'pulsechain', 'krown-network'].map(xc);
+  check('CoinGecko\'s 0 is no market cap: Fantom, Mixin, PulseChain and Krown Network come with 0 and no circulating supply — each null with why in words, never $0',
+    ['fantom', 'mixin', 'pulsechain', 'krown-network'].every((id) => cgRaw(id).market_cap === 0 && cgRaw(id).circulating_supply === 0) && zerosM.every((r) => r.v === null && r.check.status === 'none' && /it lists no circulating supply/.test(r.why))
+    && zerosM[0].why === 'CoinGecko gives no market cap for $FTM — it lists no circulating supply; CoinLore does not list $FTM', brief(zerosM.map((r) => r.why)));
+  const ethM = xc('ethereum'), arbM = xc('arbitrum'), kcsM = xc('kucoin-shares'), bnbX = xc('binancecoin');
+  check('agreed, differs, single — from the numbers, the figure shown always CoinGecko\'s: ETH within 10% (CoinGecko $285B, CoinLore $286B); ARB 21% apart at the same price, each counting its own circulating supply; KCS 38% apart with prices 2.2% apart; BNB CoinGecko\'s alone',
+    ethM.check.status === 'agreed' && ethM.v === cgRaw('ethereum').market_cap && ethM.src === 'coingecko' && ethM.check.sources.map((x) => x.src).join() === 'coingecko,coinlore' && ethM.check.sources[1].v === Number(loreRaw('80').market_cap_usd) && ethM.check.sources[1].price === Number(loreRaw('80').price_usd)
+    && arbM.check.status === 'differs' && arbM.v === cgRaw('arbitrum').market_cap && arbM.check.notes[0] === 'CoinGecko $1.15B, CoinLore $904M (21% apart): both price $ARB the same (about $0.17); they count a different circulating supply (CoinGecko 6.89B, CoinLore 5.4B)'
+    && kcsM.check.status === 'differs' && /their prices for \$KCS differ by 2\.2% \(CoinGecko \$7\.6, CoinLore \$7\.43\)$/.test(kcsM.check.notes[0])
+    && bnbX.check.status === 'single' && bnbX.v === cgRaw('binancecoin').market_cap && bnbX.check.sources.length === 1, brief([ethM.check, arbM.check.notes, kcsM.check.notes]));
+  const selfM = MC.cg.map((x) => [x.id, CM.selfChecks(CM.cgCoin(x, NOW_M), NOW_M)]).filter(([, n]) => n.length);
+  const ecash = CM.loreCoin(loreRaw('51539'), NOW_M), usdgGt = F.gtP1.data.find((p) => (INC.get(p.relationships.base_token.data.id) || {}).attributes && INC.get(p.relationships.base_token.data.id).attributes.address === USDG).attributes;
+  const ecashN = CM.selfChecks(ecash, NOW_M, 'CoinLore'), usdgN = CM.selfChecks({ mcap: Number(usdgGt.market_cap_usd), fdv: Number(usdgGt.fdv_usd), price: Number(usdgGt.base_token_price_usd), supply: null }, NOW, 'GeckoTerminal');
+  check('CoinGecko\'s figures checked against themselves: of the 32 measured none is more than 2% off its own price × circulating supply or above its own FDV; ICX\'s, last updated 06:38 UTC, is stale at a 15:30 read — and the same arithmetic catches the measured figures that fail it (CoinLore\'s eCash, 3.9% off; GeckoTerminal\'s USDG pool, whose market cap is CoinGecko\'s global $3.1B, above the chain\'s $674M FDV)',
+    selfM.length === 1 && selfM[0][0] === 'icon' && selfM[0][1].length === 1 && selfM[0][1][0] === 'stale: CoinGecko last updated this figure 9 h before it was read (2026-10-28 06:38 UTC)'
+    && ecashN.length === 1 && /^CoinLore’s figure does not equal its own price × circulating supply/.test(ecashN[0]) && usdgN.length === 1 && usdgN[0] === 'GeckoTerminal’s market cap (' + CM.money(Number(usdgGt.market_cap_usd)) + ') is larger than its own fully diluted value (' + CM.money(Number(usdgGt.fdv_usd)) + ')' && Number(usdgGt.market_cap_usd) > 3e9 && Number(usdgGt.fdv_usd) < 7e8, brief([selfM, ecashN, usdgN]));
+  const modeM = xc('mode');
+  check('DefiLlama\'s relay is a freshness check, never a second source: Mode\'s relay ($779k, read 12:08 UTC) is 3.7% off CoinGecko\'s own $809k — noted, and counted nowhere; ETH\'s (0.02% off) is not noted',
+    modeM.check.notes.includes('DefiLlama’s relay differs from CoinGecko’s own figure (DefiLlama $779k, CoinGecko $809k — one of them is older)') && !ethM.check.notes.some((n) => /relay/.test(n)) && [modeM, ethM].every((r) => r.check.sources.every((x) => x.src !== 'defillama')), brief(modeM.check));
+  const idxM = CM.platformIndex(CM.platformsOf(MC.platforms)), chM = (n) => MC.chains.find((c) => c.name === n);
+  const mapOf = (n) => { const c = chM(n); return CM.mappingCheck({ chainId: c.chainId, name: c.name, gecko: c.gecko_id, gas: c.gasTokenGeckoId }, idxM, (id) => cgM.get(id)); };
+  const seiAmb = CM.mappingCheck({ chainId: null, name: 'Sei Network', gecko: 'sei-network', gas: 'sei-network' }, idxM);
+  check('the chain → token mapping against CoinGecko\'s asset platforms: Ethereum (chain id 1) confirmed; chains with two tokens confirmed by either — NEO, VeChain and Theta by their own token, Stable by its gas token (usdt0); Beam differs (CoinGecko names beam, DefiLlama beam-2 — said, and DefiLlama\'s kept); Hyperliquid L1, which no platform is named, unchecked; a name CoinGecko gives two platforms ("Sei Network" and "Sei Network (Deprecating)") is not used',
+    mapOf('Ethereum').status === 'confirmed' && ['NEO', 'VeChain', 'Theta'].every((n) => mapOf(n).status === 'confirmed' && chM(n).gasTokenGeckoId !== chM(n).gecko_id) && mapOf('Stable').status === 'confirmed' && chM('Stable').gasTokenGeckoId === 'usdt0' && chM('Stable').gecko_id === 'stable-2'
+    && mapOf('Beam').status === 'differs' && mapOf('Beam').note === 'CoinGecko lists beam as this chain’s native coin; DefiLlama names beam-2 — the figure shown is for DefiLlama’s' && mapOf('Hyperliquid L1').status === 'unchecked'
+    && seiAmb.status === 'unchecked' && /more than one asset platform/.test(seiAmb.note) && MC.platforms.filter((p) => CM.normName(p.name) === 'seinetwork').map((p) => p.name).sort().join('|') === 'Sei Network|Sei Network (Deprecating)', brief([mapOf('Beam'), mapOf('Hyperliquid L1'), seiAmb]));
+
+  // 2. the collectors on those answers: a chains run, the daily references (CoinGecko's platforms, CoinLore's walk), a chains run again
+  vendorMode.mcap = true;
+  const dbM = freshDb('m'); let clockM = NOW_M;
+  const mdM = MD.createMarketData({ db: dbM, now: () => clockM, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: fakeSleep });
+  mdM.migrate();
+  const logM0 = log.length;
+  const m1 = await mdM.runJob('chains');
+  const preEth = mdM.chains({ limit: 200 }).body.rows.find((r) => r.key === 'ethereum');
+  clockM = NOW_M + 3 * 60e3; const walkAt = log.length, slp0 = sleeps.length;
+  const mrM = await mdM.runJob('mcapRefs');
+  const walkCalls = log.slice(walkAt).filter((l) => /^GET \/lore\/tickers\//.test(l)), walkSleeps = sleeps.slice(slp0);
+  const learnedM = JSON.parse(dbM.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value);
+  clockM = NOW_M + 6 * 60e3; const tickAt = log.length;
+  const m2 = await mdM.runJob('chains');
+  const tickCalls = log.slice(tickAt).filter((l) => /^GET \/lore\/ticker\//.test(l));
+  const rowsM = mdM.chains({ sort: 'mcap', limit: 200 }).body.rows, rowM = (k) => rowsM.find((r) => r.key === k);
+  const ascM = mdM.chains({ sort: 'mcap', dir: 'asc', limit: 200 }).body.rows;
+  check('the first chains run reads CoinGecko and DefiLlama\'s relay, and says CoinLore\'s coins are not matched yet (one source, said); the daily references then read CoinGecko\'s asset platforms and walk CoinLore\'s list — 20 pages at most, every page 1.1 s after the one before',
+    m1.ok && /market caps of 32 tokens: 32 read from CoinGecko/.test(m1.note) && /CoinLore's coins have not been matched yet/.test(m1.note) && preEth.mcap.check.status === 'single' && /not been matched yet/.test(preEth.mcap.check.notes.join(' '))
+    && mrM.ok && new RegExp('^' + MC.platforms.length + ' CoinGecko asset platforms; CoinLore: 20 of 32 chain tokens matched over 20 pages').test(mrM.note)
+    && walkCalls.length === 20 && walkCalls.length <= MD.MCAP.LORE_WALK_MAX && walkSleeps.length === walkCalls.length - 1 && walkSleeps.every((ms) => ms >= 1100) && MD.MCAP.LORE_GAP_MS >= 1100
+    && learnedM.ids['beam-2'].lore === '136107' && learnedM.ids['beam-2'].rejected[0].id === '33386' && /a different coin/.test(learnedM.misses.blast), brief([m1.note, mrM.note, walkCalls.length, walkSleeps.slice(0, 3)]));
+  check('  ...and the next chains run reads the matched coins again in one CoinLore call (50 ids at most a call), matched again on that read: ETH agrees, ARB differs and says why, BNB has one source',
+    m2.ok && tickCalls.length === 1 && decodeURIComponent(tickCalls[0].split('id=')[1]).split(',').length === 20 && /checked against CoinLore: \d+ agree, \d+ differ, \d+ one source, 4 none/.test(m2.note)
+    && rowM('ethereum').mcap.check.status === 'agreed' && rowM('arbitrum').mcap.check.status === 'differs' && /both price \$ARB the same/.test(rowM('arbitrum').mcap.check.notes[0]) && rowM('bsc').mcap.check.status === 'single', m2.note);
+  const ethR = rowM('ethereum').mcap;
+  check('  ...every chain\'s market cap carries its check: { status, sources [{ src, v, price, supply, at }], notes, mapping { status, note? }, coin } — CoinGecko\'s figure shown, with its own price, supply and update time beside CoinLore\'s',
+    rowsM.length === MC.chains.length && rowsM.every((r) => r.mcap.check && ['agreed', 'differs', 'single', 'none'].includes(r.mcap.check.status) && Array.isArray(r.mcap.check.sources) && Array.isArray(r.mcap.check.notes) && r.mcap.check.mapping && r.mcap.check.mapping.status)
+    && JSON.stringify(Object.keys(ethR.check)) === '["status","sources","notes","mapping","coin"]' && JSON.stringify(Object.keys(ethR.check.sources[0])) === '["src","v","price","supply","at"]'
+    && ethR.v === cgRaw('ethereum').market_cap && ethR.src === 'coingecko' && ethR.at === Date.parse(cgRaw('ethereum').last_updated) && ethR.check.sources[0].price === cgRaw('ethereum').current_price && ethR.check.sources[0].supply === cgRaw('ethereum').circulating_supply
+    && ethR.check.sources[1].src === 'coinlore' && ethR.check.sources[1].at === NOW_M + 6 * 60e3 && ethR.check.mapping.status === 'confirmed' && ethR.check.coin.id === 'ethereum' && ethR.label === 'ETH (gas token), market cap', brief(ethR));
+  const zeroRows = ['fantom', 'mixin', 'pulsechain', 'krown-network'].map(rowM);
+  check('  ...Fantom, Mixin, PulseChain and Krown Network are "not available" with why (they showed $0 before), never 0 anywhere — in the list, the sort, the table', zeroRows.every((r) => r && r.mcap.v === null && /lists no circulating supply/.test(r.mcap.why) && r.mcap.check.status === 'none' && r.mcap.check.coin.symbol)
+    && rowsM.every((r) => r.mcap.v === null || r.mcap.v > 0) && !dbM.prepare('SELECT 1 FROM mkt_chain_snap WHERE mcap <= 0').get()
+    && (() => { const k = rowsM.findIndex((r) => r.mcap.v == null), a = ascM.findIndex((r) => r.mcap.v == null); return k > 0 && rowsM.slice(k).every((r) => r.mcap.v == null) && a > 0 && ascM.slice(a).every((r) => r.mcap.v == null) && rowsM.slice(0, k).every((r, i, x) => i === 0 || x[i - 1].mcap.v >= r.mcap.v); })(), brief(zeroRows.map((r) => r && r.mcap)));
+  const morphR = rowM('morph'), stableR = rowM('stable'), xrplR = rowM('xrpl'), xevmR = rowM('xrpl-evm'), beamR = rowM('beam'), blastR = rowM('blast'), iconR = rowM('icon'), rhR = rowM('robinhood');
+  check('  ...the labels: Morph is BGB (CoinGecko\'s symbol; DefiLlama gives "-"), Stable\'s name has no invisible characters, XRPL and XRPL EVM show the same token\'s market cap and say so, Robinhood Chain has none and nothing to check',
+    MC.chains.find((c) => c.name === 'Morph').tokenSymbol === '-' && morphR.mcap.label === 'BGB (gas token), market cap' && dbM.prepare("SELECT native_symbol FROM mkt_chain_snap WHERE chain = 'morph' ORDER BY id DESC LIMIT 1").get().native_symbol === 'BGB'
+    && stableR.mcap.check.coin.name === 'Stable' && xrplR.mcap.v === xevmR.mcap.v && xrplR.mcap.v === cgRaw('ripple').market_cap && /the same token's market cap as XRPL EVM's \(one token, shared\)$/.test(xrplR.mcap.label) && /the same token's market cap as XRPL's \(one token, shared\)$/.test(xevmR.mcap.label)
+    && rhR.mcap.v === null && rhR.mcap.why === 'No native token — gas is paid in ETH' && rhR.mcap.check.status === 'none' && rhR.mcap.check.mapping.note === 'no token of its own to check', brief([morphR.mcap.label, xrplR.mcap.label, stableR.mcap.check.coin]));
+  check('  ...and the traps are said where they apply: Beam agrees with onbeam and names the other BEAM it left out, and its mapping differs; Blast\'s CoinLore namesake is a different coin; ICX\'s figure is stale; Mode\'s relay is older',
+    beamR.mcap.check.status === 'agreed' && beamR.mcap.check.notes.includes('CoinLore also lists a “BEAM” priced $0.0066 — another coin, not counted') && beamR.mcap.check.mapping.status === 'differs' && /DefiLlama names beam-2/.test(beamR.mcap.check.mapping.note)
+    && blastR.mcap.check.status === 'single' && /a different coin, not used/.test(blastR.mcap.check.notes.join(' ')) && /^stale: /.test(iconR.mcap.check.notes.join(' ')) && /DefiLlama’s relay differs/.test(rowM('mode').mcap.check.notes.join(' ')), brief([beamR.mcap.check, blastR.mcap.check.notes]));
+  const cdArb = mdM.chain({ key: 'arbitrum' }).body, apiM = await mdM.apiResource('chains', {}, { limit: 100 }), snapM = await mdM.apiResource('chain-snapshots', { key: 'arbitrum' }, { limit: 1 });
+  check('  ...the chain detail and the Send API carry the same figure and check (the snapshots their stored mcap_check as JSON), and the chain detail names CoinGecko and CoinLore among its sources',
+    JSON.stringify(cdArb.stats.mcap) === JSON.stringify(rowM('arbitrum').mcap) && ['coingecko', 'coinlore'].every((id) => cdArb.sources.some((x) => x.id === id && /^https:\/\/www\.coin(gecko|lore)\.com$/.test(x.url)))
+    && JSON.stringify(apiM.body.data.find((r) => r.key === 'arbitrum').mcap) === JSON.stringify(rowM('arbitrum').mcap) && snapM.body.data[0].mcap_check && snapM.body.data[0].mcap_check.status === 'differs' && typeof snapM.body.data[0].mcap_check.notes[0] === 'string', brief(snapM.body.data[0] && snapM.body.data[0].mcap_check));
+  const cgAsks = log.slice(logM0).filter((l) => /^GET \/cg\//.test(l));
+  check('  ...CoinGecko was asked three times in all (its coins on each chains run, its platforms once), never twice within two minutes; CoinLore 21 times (the walk, then one read)',
+    cgAsks.length === 3 && cgAsks.filter((l) => /asset_platforms/.test(l)).length === 1 && log.slice(logM0).filter((l) => /^GET \/lore\//.test(l)).length === 21, cgAsks.join(' | '));
+  // a learned coin whose price no longer agrees is dropped for that read (here the state names the older BEAM for beam-2, as a bad walk would)
+  learnedM.ids['beam-2'] = { lore: '33386' };
+  dbM.prepare("UPDATE mkt_state SET value = ? WHERE name = 'coinlore_ids'").run(JSON.stringify(learnedM));
+  clockM = NOW_M + 9 * 60e3; await mdM.runJob('chains');
+  const beamBad = mdM.chains({ limit: 200 }).body.rows.find((r) => r.key === 'beam').mcap;
+  check('  ...the price test runs again on every read: a learned CoinLore coin whose price stops agreeing (the older BEAM\'s $0.006579 against beam-2\'s $0.0033395) is dropped for that read, said, and the figure is CoinGecko\'s alone',
+    beamBad.check.status === 'single' && beamBad.v === cgRaw('beam-2').market_cap && /priced \$0\.0066 against CoinGecko’s \$0\.0033 for \$BEAM — a different coin, not used \(on this read\)/.test(beamBad.check.notes.join(' ')), brief(beamBad.check));
+  dbM.close();
+  // the references' own rules: never within two minutes of another CoinGecko read; a walk cut short tried again; a walk that stops once every token is matched
+  const dbN = freshDb('n'); let clockN = NOW_M;
+  const mdN = MD.createMarketData({ db: dbN, now: () => clockN, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: fakeSleep, cgDemoKey: 'demo-key-for-the-test' });
+  mdN.migrate(); await mdN.runJob('chains');
+  clockN = NOW_M + 60e3; const cgN0 = hits['cg-platforms'] || 0; vendorFail.loreFrom = 500;
+  const rN1 = await mdN.runJob('mcapRefs'); vendorFail.loreFrom = null; const cgN1 = hits['cg-platforms'] || 0;
+  const learnedN = JSON.parse(dbN.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value);
+  clockN = NOW_M + 4 * 60e3; const walkN = log.length;
+  const rN2 = await mdN.runJob('mcapRefs');
+  const cgPlat = cgSeen.filter((x) => x.q === 'asset_platforms').pop() || {};
+  check('the references never ask CoinGecko within two minutes of another read (they wait for the next try), and a walk cut short (CoinLore refusing from page 6) keeps what it matched, says where it stopped and is tried again; the operator\'s Demo key goes with the platforms read as its header',
+    !rN1.ok && /asset platforms not read: CoinGecko was asked less than two minutes ago/.test(rN1.note) && cgN1 === cgN0 && /the walk stopped at page 6: rate-limited/.test(rN1.note) && learnedN.stopped === 'page 6: rate-limited' && learnedN.ids.ethereum && learnedN.pages === 6
+    && rN2.ok && (hits['cg-platforms'] || 0) === cgN0 + 1 && cgPlat.key === 'demo-key-for-the-test' && log.slice(walkN).filter((l) => /^GET \/lore\/tickers\//.test(l)).length === 20, brief([rN1.note, rN2.note]));
+  dbN.close();
+  const dbO = freshDb('o'), mdO = MD.createMarketData({ db: dbO, now: () => NOW_M + 3 * 60e3, outboundTake: take, urls: URLS, sleep: fakeSleep }); mdO.migrate();
+  for (const id of ['bitcoin', 'ethereum', 'solana']) { const g = cgRaw(id); dbO.prepare("INSERT INTO mkt_chain_snap (chain, name, at, tvl, native_token, src, mcap_check) VALUES (?, ?, ?, 1, ?, '{}', ?)").run(id, g.name, NOW_M, id, JSON.stringify({ coin: { id, symbol: g.symbol.toUpperCase(), name: g.name, price: g.current_price }, status: 'single', sources: [], notes: [], mapping: { status: 'unchecked' } })); }
+  dbO.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('cg_platforms', ?, ?)").run(JSON.stringify({ list: [] }), NOW_M);
+  const walkO = log.length, rO = await mdO.runJob('mcapRefs'); dbO.close();
+  check('  ...and the walk stops as soon as every chain token is matched (Bitcoin, Ethereum and Solana are all on its first page)', rO.ok && log.slice(walkO).filter((l) => /^GET \/lore\/tickers\//.test(l)).length === 1 && /3 of 3 chain tokens matched over 1 pages/.test(rO.note), rO.note);
+  const dbP = freshDb('p'), mdP = MD.createMarketData({ db: dbP, now: () => NOW_M, outboundTake: take, urls: Object.assign({}, URLS, { coinlore: '' }), sleep: fakeSleep }); mdP.migrate();
+  const loreP = log.length, rP = await mdP.runJob('chains'), rP2 = await mdP.runJob('mcapRefs');
+  const ethP = mdP.chains({ limit: 200 }).body.rows.find((r) => r.key === 'ethereum'); dbP.close();
+  check('MARKET_COINLORE_URL set empty turns CoinLore off: nothing is asked of it, the runs and each check say so, and the figure is CoinGecko\'s alone', !log.slice(loreP).some((l) => /\/lore\//.test(l)) && /CoinLore is not read on this server \(MARKET_COINLORE_URL is empty\)/.test(rP.note) && /CoinLore is not read on this server/.test(rP2.note)
+    && ethP.mcap.check.status === 'single' && ethP.mcap.check.notes.includes('CoinLore is not read on this server (MARKET_COINLORE_URL is empty)'), brief([rP.note, rP2.note]));
+  vendorMode.mcap = false;
+  // the budgets, in the server's own table, and the docs
+  const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), PRIV = fs.readFileSync(path.join(ROOT, 'public', 'privacy.html'), 'utf8'), ENVX = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
+  check('the budgets: CoinLore metered at 30 a minute on top of its own 1.1 s pace, at most 20 walk pages a day and 50 ids a read; CoinGecko\'s coins in one read of 250, its shared 20 a minute untouched; the references daily; CoinPaprika read nowhere',
+    /'api\.coinlore\.net': 30,/.test(SRC) && /'api\.coingecko\.com': 20,/.test(SRC) && MD.MCAP.LORE_WALK_MAX === 20 && MD.MCAP.LORE_PER_CALL <= 50 && MD.MCAP.CG_PER_CALL === 250 && MD.JOBS.mcapRefs.every === 864e5 && MD.JOBS.mcapRefs.retry >= 3600e3
+    && !/api\.coinpaprika\.com|coinpaprika\.com\/v1/.test(LIB + SRC) && /CoinPaprika is NOT read/.test(LIB), '');
+  check('  ...and the docs say it: the README (the sources, the cadence, why not CoinPaprika), /data (each chain figure\'s check, and coinlore among the sources), the Privacy Policy §8 (CoinLore read by the server), .env.example (MARKET_COINLORE_URL)',
+    /CoinLore/.test(README) && /CoinPaprika/.test(README) && /personal use only/.test(README) && /checked against CoinLore/.test(README)
+    && /<code>check<\/code>/.test(DOCS) && /<code>coinlore<\/code>/.test(DOCS) && ['status', 'sources', 'notes', 'mapping', 'agreed', 'differs', 'single', 'none'].every((k) => DOCS.includes(k))
+    && /<b>CoinLore<\/b>/.test(PRIV.split('<h2>8.')[1].split('<h2>9.')[0]) && /MARKET_COINLORE_URL/.test(ENVX) && !/^MARKET_COINLORE_URL=$/m.test(ENVX), '');
+
   /* ── the timetable ── */
   check('the timetable is the contract\'s: pulse 60 s, chains 30 min, radar 10 min (its sweep is the radar\'s full node read), pools 10 min, new pools 3 min (chain) / 15 min (others), others\' pools hourly, histories 6 h, growthepie daily, L2BEAT hourly, re-scan hourly, prune hourly — and a failed DefiLlama run is not retried sooner than DefiLlama refreshes (30 min)',
     MD.JOBS.pulse.every === 60e3 && MD.JOBS.chains.every === 30 * 60e3 && MD.JOBS.radar.every === 10 * 60e3 && MD.JOBS.pools.every === 10 * 60e3 && MD.JOBS.newPoolsRh.every === 3 * 60e3 && MD.JOBS.newPoolsGt.every === 15 * 60e3 && MD.JOBS.poolsOther.every === 3600e3
     && MD.JOBS.chains.retry >= 30 * 60e3 && MD.JOBS.liquidity.retry >= 30 * 60e3 && MD.JOBS.series.retry >= 30 * 60e3
-    && MD.JOBS.series.every === 6 * 3600e3 && MD.JOBS.growthepie.every === 864e5 && MD.JOBS.l2beat.every === 3600e3 && MD.JOBS.scans.every === 3600e3 && MD.JOBS.prune.every === 3600e3);
+    && MD.JOBS.series.every === 6 * 3600e3 && MD.JOBS.growthepie.every === 864e5 && MD.JOBS.l2beat.every === 3600e3 && MD.JOBS.scans.every === 3600e3 && MD.JOBS.prune.every === 3600e3 && MD.JOBS.mcapRefs.every === 864e5);
   check('the collectors start only when asked (MARKET_COLLECT=1, or production unless MARKET_COLLECT=0), and the test runner points every vendor URL at a dead address', /const MKT_COLLECT_ON = process\.env\.MARKET_COLLECT === '1' \|\| \(process\.env\.NODE_ENV === 'production' && process\.env\.MARKET_COLLECT !== '0'\);/.test(SRC) && /if \(MKT_COLLECT_ON\) \{/.test(SRC)
-    && ['MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_LOGO_ORIGIN'].every((k) => new RegExp(k + ": DEAD").test(RUNJS) && SRC.includes('process.env.' + k)) && !/MARKET_COLLECT: '1'/.test(RUNJS));
+    && ['MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_LOGO_ORIGIN', 'MARKET_COINLORE_URL'].every((k) => new RegExp(k + ": DEAD").test(RUNJS) && SRC.includes('process.env.' + k)) && !/MARKET_COLLECT: '1'/.test(RUNJS));
   check('the server\'s busy signal decays: a minute after the node\'s last refusal, or while the shared pace is queued over 5 s — never "the pace has not sped up yet" (one refusal at boot kept every chain job idle for hours)', /const mktRpcBusy = \(\) => now\(\) - _paceRefusedAt < 60000 \? '[^']*'[^\n]*\n\s*: _paceAt - now\(\) > 5000 \? '/.test(SRC) && /const paceRefused = \(attempt\) => \{ _paceRefusedAt = now\(\);/.test(SRC) && /function paceYield\(\) \{ _paceRefusedAt = now\(\);/.test(SRC) && !/_paceMs > PACE_MS_START/.test(SRC));
   // the shares carved out of GeckoTerminal's 10 a minute, read from the server's own table: they leave the chart switch and the Scanner some in the busiest minute
   const rpmOf = (k) => { const m = SRC.match(new RegExp("'" + k.replace(/[.:]/g, '\\$&') + "': (\\d+),")); return m ? Number(m[1]) : null; };
@@ -857,7 +1028,7 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
   RPC_URL: NODE, CHART_SRC_DS_URL: 'http://127.0.0.1:9/', CHART_SRC_GT_URL: 'http://127.0.0.1:9/', TOKSEARCH_GT_URL: 'http://127.0.0.1:9/', TOKSEARCH_DS_URL: 'http://127.0.0.1:9/', ETHUSD_URL: 'http://127.0.0.1:9/', BLOCKSCOUT_URL: 'http://127.0.0.1:9', STOCK_QUOTE: '0',
   MC_DEXSCREENER_URL: V + '/mc/ds', MC_GECKO_URL: 'http://127.0.0.1:9', MC_GOPLUS_URL: V + '/mc/gp', ETH_RPC_URL: V + '/mc/ethnode', SOL_RPC_URL: 'http://127.0.0.1:9/', JUPITER_URL: 'http://127.0.0.1:9',
   MARKET_LLAMA_URL: URLS.llama, MARKET_LLAMA_COINS_URL: URLS.coins, MARKET_LLAMA_STABLES_URL: URLS.stables, MARKET_L2BEAT_URL: URLS.l2beat, MARKET_GROWTHEPIE_URL: URLS.growthepie, MARKET_GT_URL: URLS.gt,
-  MARKET_DS_URL: URLS.ds, MARKET_CG_URL: URLS.cg, MARKET_ETH_RPC_URL: URLS.ethRpc, MARKET_LOGO_ORIGIN: V + '/img', MARKET_GROWTHEPIE_METRICS_URL: URLS.growthepieMetrics,
+  MARKET_DS_URL: URLS.ds, MARKET_CG_URL: URLS.cg, MARKET_ETH_RPC_URL: URLS.ethRpc, MARKET_LOGO_ORIGIN: V + '/img', MARKET_GROWTHEPIE_METRICS_URL: URLS.growthepieMetrics, MARKET_COINLORE_URL: URLS.coinlore,
   MARKET_COLLECT: '1', MARKET_JOBS: 'pulse,chains,l2beat,liquidity,pools,newPoolsRh,radar', MARKET_STAGGER_MS: '40',
   OUTBOUND_MAX_WAIT_MS: '4000', OUTBOUND_RPM_MARKET_GECKOTERMINAL: '600', ['OUTBOUND_RPM_' + vHost.replace(/[^A-Z0-9]/gi, '_')]: '6000' };
 let server = null, slog = '';
