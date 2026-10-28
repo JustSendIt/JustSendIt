@@ -327,6 +327,10 @@ try {
   for (const [q, scan] of [['Is $SEND safe?', SEND], ['is $GWC a rug?', GWC], ['is ZQRH legit?', ZQRH]])
     await Q('"' + q + '" — nobody can promise it, the Scanner is not an audit; where to read it, and no figure beside the word "safe"', q,
       (a) => /^Nobody can promise that/.test(a) && /not an audit, and nothing on it is a promise/.test(a) && a.includes('/newpairs?scan=' + scan) && !/\$\d|about \d/.test(a));
+  await Q('"how does the Scanner work?" — the Scanner\'s own note ("work" is the asking, not the topic), not a row of the Data API\'s table', 'how does the Scanner work?',
+    (a) => /^The Scanner \(\/newpairs\) reads any token or pool address/.test(a) && !/\/data#/.test(a));
+  await Q('"what is Diamond Hands?" — the section\'s opening, its heading said once (not quoted twice, not the tier table)', 'what is Diamond Hands?',
+    (a) => /\/about#power/.test(a) && /“Never sell and your no-sell streak climbs/.test(a) && (a.match(/conviction, rewarded/g) || []).length === 1 && !/Steel Hands 14d/.test(a));
   await Q('"how do I buy $SEND" — the How to Buy guide, not a price and not a tip', 'how do I buy $SEND?', (a) => /\/guide/.test(a) && /nothing here tells anyone to buy/.test(a) && !/price about/.test(a));
   await Q('"How can I change my profile picture?" — the Support board\'s answer, quoted, with the thread', 'How can I change my profile picture?', (a, j) => /This came up on the Support board/.test(a) && /zqanswer/.test(a) && a.includes('/support#p' + qPic) && j.sources.some((s) => s.href === '/support#p' + qPic));
   const wp = await Q('"In Rocket Run, what is the explosion point capped at?" — a white-paper fact, quoted as written, with its section', 'In Rocket Run, what is the explosion point capped at?', (a) => /capped at 50×/.test(a) && /\/whitepaper#s12|\/about|\/arcade/.test(a));
