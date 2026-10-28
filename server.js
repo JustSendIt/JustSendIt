@@ -11570,7 +11570,8 @@ function sendyLive() {
     return qa.length ? '=== the Support board (/support): questions people asked, with the community\'s answers ===\n' + qa.join('\n') : '';
   });
   part('rated answers', () => {
-    const rated = db.prepare("SELECT q, a FROM sendy_qa WHERE up - down >= 2 AND a != '' ORDER BY (up - down) DESC, at DESC LIMIT 30").all();
+    // an answer that quoted a figure is left out: the figure was true when it was said, and the tools read it again now
+    const rated = db.prepare("SELECT q, a FROM sendy_qa WHERE up - down >= 2 AND a != '' ORDER BY (up - down) DESC, at DESC LIMIT 60").all().filter((r) => !/\$\s?\d|\d\s?%/.test(r.a)).slice(0, 30);
     return rated.length ? '=== answers Sendy gave before that readers rated helpful — reuse one when the question matches; the site text above wins if they disagree ===\n' + rated.map((r) => 'Q: ' + r.q + '\nA: ' + r.a).join('\n') : '';
   });
   sendyLiveMemo = { at: now(), text: parts.join('\n\n') };
