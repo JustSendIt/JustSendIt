@@ -88,7 +88,7 @@ check('the fixtures are the contract\'s shapes: a list of datasets with id, titl
 {
   const DATA = PUB('data.html'), PRIV = PUB('privacy.html'), README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), ENV = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
   const SRV = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  const RES = ['me', 'users', 'posts', 'comments', 'calls', 'communities', 'leaderboard', 'competition', 'chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors'];
+  const RES = ['me', 'users', 'posts', 'comments', 'calls', 'communities', 'leaderboard', 'competition', 'chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token'];
   const listed = (r) => DATA.includes('<tr><td><code>' + r + '</code></td>'), opened = (r) => DATA.includes('<details class="dk-res"><summary><code>' + r + '</code>');
   const curl = (r) => new RegExp('<summary><code>' + r + '</code>[\\s\\S]*?curl -H "Authorization: Bearer sk_…"[\\s\\S]*?/api/data/v1/' + r + '\\b[\\s\\S]*?<pre class="dk-pre">\\{ data').test(DATA);
   check('/data documents every Send API resource, old and new: listed in the index, and each with a curl request and the shape that comes back',
@@ -101,9 +101,30 @@ check('the fixtures are the contract\'s shapes: a list of datasets with id, titl
       && /Source: growthepie, https:\/\/www\.growthepie\.com, under <a href="https:\/\/creativecommons\.org\/licenses\/by\/4\.0\/"[^>]*>CC BY 4\.0<\/a>/.test(DATA) && /Not affiliated with Robinhood Markets, Inc\./.test(DATA));
   check('the privacy policy (§8) names every new host the server reads for market data, says the browser never contacts them, names the picture hosts it proxies, and moved to 2026-10-26',
     ['DefiLlama', 'L2BEAT', 'growthepie', 'CoinGecko', 'GeckoTerminal', 'Dexscreener', 'Robinhood Chain RPC', 'public Ethereum node', 'cdn.dexscreener.com', 'dd.dexscreener.com', 'coin-images.coingecko.com', 'assets.geckoterminal.com', 'icons.llama.fi'].every((h) => PRIV.slice(PRIV.indexOf('id="p8"'), PRIV.indexOf('id="p9"')).includes(h))
-      && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-27 · \$Send \/ JustSendIt/.test(PRIV));
+      && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-28 · \$Send \/ JustSendIt/.test(PRIV));
   check('the README has the Market Data row in its core features and the market resources in the Send API section',
     /^\| \*\*📊 Market Data\*\* \| `\/market`/m.test(README) && /- \*\*And the market data the site collects\*\*[^\n]*`chain-history`[^\n]*`collectors`/.test(README));
+  /* the RWAs tab (owner, 2026-10-28): the Data API page, the privacy policy, the README and llms.txt say what counts as an RWA, on
+     what evidence, from which sources, how often — with the not-affiliated line wherever Robinhood's tokens are described */
+  const RWA = DATA.slice(DATA.indexOf('id="dk-rwa-h"'), DATA.indexOf('aria-labelledby="dk-col-h"')), P8 = PRIV.slice(PRIV.indexOf('id="p8"'), PRIV.indexOf('id="p9"'));
+  const LL = PUB('llms.txt'), RWAROW = (/^\| \*\*🏛️ RWAs on Market Data\*\* \| [^\n]*$/m.exec(README) || [''])[0];
+  check('/data has an RWA section: the three confidences and their evidence tiers in words, lookalikes, what is listed apart, not affiliated with Robinhood, not advice — and the index groups rwa and rwa-token apart',
+    /Market data: RWAs on Robinhood Chain/.test(RWA) && ['<code>confirmed</code>', '<code>issuer-listed</code>', '<code>not-confirmed</code>', '<code>A1</code>', '<code>A2</code>', '<code>A3</code>', '<code>B</code>'].every((k) => RWA.includes(k))
+      && /never on its name/.test(RWA) && /<b>lookalike<\/b>/.test(RWA) && /Fiat-backed stablecoins and tokens merely paired with an RWA are listed apart and never counted/.test(RWA)
+      && /Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\.; no Robinhood logo or artwork is served/.test(RWA) && /Not advice, never a tip to buy/.test(RWA)
+      && /<th colspan="2" scope="rowgroup">Real-world assets on Robinhood Chain \(Market Data’s RWAs tab\)<\/th>/.test(DATA), RWA.length);
+  check('  ...and its collectors table and sources name what the RWA job reads, and how often: Robinhood\'s Stock Token API, Chainlink\'s feed directory, DefiLlama, GeckoTerminal and the chain — every 30 minutes, each part when due',
+    /<tr><td>RWAs<\/td><td>Robinhood’s Stock Token API \(api\.robinhood\.com\/rhj\)[^<]*Chainlink’s public directory[^<]*DefiLlama[^<]*GeckoTerminal[^<]*Robinhood Chain’s public RPC[^<]*<\/td><td>Every 30 minutes, each part when it is due/.test(DATA)
+      && ['Robinhood’s Stock Token API', 'Chainlink'].every((s2) => DATA.includes('>' + s2 + '</a></b>')) && /<code>robinhood<\/code>, <code>chainlink<\/code>, <code>rpc<\/code> or <code>site<\/code>/.test(DATA));
+  check('the privacy policy (§8) names the RWAs tab\'s new hosts — Robinhood\'s Stock Token API (api.robinhood.com) and Chainlink\'s feed directory (reference-data-directory.vercel.app) — read on a timer by the server, never because someone opened a token',
+    ['Robinhood’s Stock Token API', 'api.robinhood.com', 'Chainlink’s public directory of price feeds', 'reference-data-directory.vercel.app'].every((h) => P8.includes(h)) && /For the page’s RWAs tab it also reads, on a timer and never because someone opened a token/.test(P8));
+  check('the README has the RWAs row after Market Data\'s: how a token counts (evidence, never a name), lookalikes, what is listed apart, the job\'s cadence, the meters and the two new MARKET_* URLs, not affiliated — and rwa and rwa-token in the Send API section',
+    !!RWAROW && README.indexOf('| **📊 Market Data** |') < README.indexOf(RWAROW) && /on evidence, never on its name/.test(RWAROW) && /\*\*lookalike\*\*/.test(RWAROW) && /listed apart and never counted/.test(RWAROW)
+      && /one `rwa` job every 30 min/.test(RWAROW) && /`api\.robinhood\.com` at 20 a minute/.test(RWAROW) && /`reference-data-directory\.vercel\.app` at 6/.test(RWAROW) && /`MARKET_RHJ_URL` and `MARKET_CHAINLINK_URL`/.test(RWAROW)
+      && /Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\./.test(RWAROW) && /Not advice, never a tip to buy/.test(RWAROW)
+      && /- \*\*And the market data the site collects\*\*[^\n]*`rwa` \(`\?view=&sort=&dir=&kind=&issuer=`[^\n]*`rwa-token` \(`\?address=`/.test(README) && /the RWAs every 30 min/.test(README), RWAROW.length);
+  check('  ...and llms.txt\'s Market Data line names the RWAs tab, how a token counts, and its two new sources',
+    /\n- \[Market Data\]\(https:\/\/sendrh\.com\/market\): [^\n]*an RWAs tab of the real-world-asset tokens on Robinhood Chain[^\n]*never a name[^\n]*Robinhood's Stock Token API, Chainlink/.test(LL));
   const vars = ['MARKET_COLLECT', 'MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_RHJ_URL', 'MARKET_CHAINLINK_URL', 'COINGECKO_DEMO_KEY'];
   check('.env.example lists MARKET_COLLECT, every MARKET_* base, the optional CoinGecko Demo key and the keyed-explorer note — and no empty value followed by a note the .env reader would take as the value',
     vars.every((v) => new RegExp('^' + v + '=$', 'm').test(ENV)) && /BLOCKSCOUT_URL above, pointed at a keyed endpoint/.test(ENV) && !/^[A-Z_]+=[ \t]+#/m.test(ENV), vars.filter((v) => !new RegExp('^' + v + '=$', 'm').test(ENV)).join(','));
