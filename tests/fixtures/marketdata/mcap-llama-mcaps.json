@@ -1,0 +1,130 @@
+{
+ "coingecko:ethereum": {
+  "mcap": 285310625306.49927,
+  "timestamp": 1793201390
+ },
+ "coingecko:bitcoin": {
+  "mcap": 1620768320664.5613,
+  "timestamp": 1793201390
+ },
+ "coingecko:solana": {
+  "mcap": 59652109849.137085,
+  "timestamp": 1793201390
+ },
+ "coingecko:binancecoin": {
+  "mcap": 98508156117.12767,
+  "timestamp": 1793201390
+ },
+ "coingecko:tron": {
+  "mcap": 31449796574.022358,
+  "timestamp": 1793201401
+ },
+ "coingecko:hyperliquid": {
+  "mcap": 19152868075.51096,
+  "timestamp": 1793201390
+ },
+ "coingecko:arbitrum": {
+  "mcap": 1149138841.4929225,
+  "timestamp": 1793201390
+ },
+ "coingecko:polygon-ecosystem-token": {
+  "mcap": 978174092.9403747,
+  "timestamp": 1793201215
+ },
+ "coingecko:avalanche-2": {
+  "mcap": 3940779306.5147266,
+  "timestamp": 1793201390
+ },
+ "coingecko:optimism": {
+  "mcap": 254438908.14020118,
+  "timestamp": 1793201215
+ },
+ "coingecko:ripple": {
+  "mcap": 83236316498.01607,
+  "timestamp": 1793201390
+ },
+ "coingecko:iota": {
+  "mcap": 196339190.1331094,
+  "timestamp": 1793200975
+ },
+ "coingecko:ontology": {
+  "mcap": 48803078.844106734,
+  "timestamp": 1793200975
+ },
+ "coingecko:fantom": {
+  "mcap": 0,
+  "timestamp": 1793185599
+ },
+ "coingecko:mixin": {
+  "mcap": 0,
+  "timestamp": 1793189283
+ },
+ "coingecko:pulsechain": {
+  "mcap": 0,
+  "timestamp": 1793189269
+ },
+ "coingecko:krown-network": {
+  "mcap": 0,
+  "timestamp": 1793189283
+ },
+ "coingecko:bitget-token": {
+  "mcap": 1306852107.2253866,
+  "timestamp": 1793201215
+ },
+ "coingecko:stable-2": {
+  "mcap": 491196253.7583583,
+  "timestamp": 1793201226
+ },
+ "coingecko:beam-2": {
+  "mcap": 171610014.30814946,
+  "timestamp": 1793200975
+ },
+ "coingecko:the-open-network": {
+  "mcap": 3480084790.947107,
+  "timestamp": 1793201215
+ },
+ "coingecko:neo": {
+  "mcap": 148547250.04745096,
+  "timestamp": 1793200975
+ },
+ "coingecko:vechain": {
+  "mcap": 541542368.1808498,
+  "timestamp": 1793200975
+ },
+ "coingecko:theta-token": {
+  "mcap": 177439747.58560425,
+  "timestamp": 1793200975
+ },
+ "coingecko:mezo": {
+  "mcap": 2117481.664746894,
+  "timestamp": 1793200975
+ },
+ "coingecko:mantra": {
+  "mcap": 24957969.750198223,
+  "timestamp": 1793200975
+ },
+ "coingecko:blast": {
+  "mcap": 2623417.219184471,
+  "timestamp": 1793200975
+ },
+ "coingecko:icon": {
+  "mcap": 11068969.668841444,
+  "timestamp": 1793169506
+ },
+ "coingecko:sonic-3": {
+  "mcap": 179251528.09974056,
+  "timestamp": 1793201215
+ },
+ "coingecko:mode": {
+  "mcap": 779184.8684619289,
+  "timestamp": 1793189283
+ },
+ "coingecko:kucoin-shares": {
+  "mcap": 1058472574.2581879,
+  "timestamp": 1793200975
+ },
+ "coingecko:sei-network": {
+  "mcap": 355421890.7854516,
+  "timestamp": 1793201215
+ }
+}

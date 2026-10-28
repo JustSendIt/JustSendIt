@@ -11,7 +11,11 @@
       2026-10-26 and are what the page was built and walked against in a muted headless Chrome. tokens-all-*.json and
       tokens-ethereum-*.json are lib/marketdata.js's own answers (tests/marketdata.mjs with MARKET_DUMP_DIR set), cut to 32 and
       12 rows: Robinhood Chain's pools as read, and the same answer re-keyed as Ethereum's (marketdata's fixtures do this to
-      have a second network), so USDG sits at one address on two chains; the other seven networks are not read.
+      have a second network), so USDG sits at one address on two chains; the other seven networks are not read. Every chain's
+      market cap in chains-*.json and chain-*.json (its `mcap` with its `check`) is lib/marketdata.js's own answer — a chains run,
+      the daily references and a chains run again — on the CoinGecko, DefiLlama, CoinLore and asset-platform answers measured on
+      2026-10-28 (owner: "make sure you are showing the right market caps for all of the chains pulled from multiple sources and
+      cross verified"); chains-24h.json also carries Fantom, Morph and Stable as the live site served them that day, with theirs.
    3. market.js's number words, lifted between its @lift markers and run in a vm.
    4. A fake of the /api/market/* routes, served from those fixtures, with the site's CSP: run here against its own
       contract (sorting with nulls last both ways, wash volume left out of "highest volume", the windows, 404s), and
@@ -40,6 +44,8 @@ import { createRequire } from 'node:module';
 import { ROOT } from './_paths.mjs';
 const require = createRequire(import.meta.url);
 const MD = require(path.join(ROOT, 'lib', 'marketdata.js'));
+const CM = require(path.join(ROOT, 'lib', 'chainmcap.js'));
+const MDFIX = (f) => JSON.parse(readFileSync(path.join(ROOT, 'tests', 'fixtures', 'marketdata', f), 'utf8'));
 
 const PUB = path.join(ROOT, 'public');
 const FIXDIR = path.join(ROOT, 'tests', 'fixtures', 'market');
@@ -233,10 +239,14 @@ function startFake(port, opts = {}) {
    business), and every vendor answered by a fake that never leaves this process. What comes back is what the server sends. */
 async function realAnswers() {
   const NOW = Date.now(), T = NOW - 10 * 60e3, today = dayOf(NOW), y = addDays(today, -1);
+  // Ethereum's market-cap check as the chains run stores it: lib/chainmcap.js on CoinGecko's, DefiLlama's and CoinLore's answers of 2026-10-28
+  const cgE = CM.cgCoin(MDFIX('mcap-cg-markets.json').find((x) => x.id === 'ethereum'), T), loreE = CM.loreCoin(Object.values(MDFIX('mcap-lore-tickers.json').pages).flat().find((x) => String(x.id) === '80'), T);
+  const relE = MDFIX('mcap-llama-mcaps.json')['coingecko:ethereum'], xE = CM.crossCheck({ sym: cgE.symbol, cg: cgE, relay: { v: relE.mcap, at: relE.timestamp * 1000 }, lore: CM.matchCoin(cgE, [loreE]).coin, now: T });
+  const ETH_CHECK = JSON.stringify(Object.assign({ coin: { id: 'ethereum', symbol: cgE.symbol, name: cgE.name, price: cgE.price } }, xE.check, { mapping: { status: 'confirmed' } }));
   const db = new DatabaseSync(':memory:'); MD.migrate(db);
   const ins = (table, row) => { const k = Object.keys(row); db.prepare('INSERT INTO ' + table + ' (' + k.join(', ') + ') VALUES (' + k.map(() => '?').join(', ') + ')').run(...k.map((c) => row[c])); };
   for (const [chain, name, id, stage, l2] of [['robinhood', 'Robinhood Chain', 4663, 'Stage 0', 1], ['ethereum', 'Ethereum', 1, null, 0], ['base', 'Base', 8453, 'Stage 1', 1], ['solana', 'Solana', null, null, 0]]) {
-    ins('mkt_chain_snap', { chain, name, chain_id: id, at: T, tvl: 1e9, dex_vol_24h: 5e8, dex_vol_30d: 2e10, fees_24h: 3e4, fees_7d: 2e5, fees_30d: 9e5, app_fees_24h: 1e6, stables: 1e9, oi: 3e8, dex_liq: 4e8,
+    ins('mkt_chain_snap', { chain, name, chain_id: id, at: T, tvl: 1e9, dex_vol_24h: 5e8, dex_vol_30d: 2e10, fees_24h: 3e4, fees_7d: 2e5, fees_30d: 9e5, app_fees_24h: 1e6, stables: 1e9, oi: 3e8, dex_liq: 4e8, mcap_check: chain === 'ethereum' ? ETH_CHECK : null,
       mcap: chain === 'robinhood' ? null : 2e11, native_token: chain === 'robinhood' ? null : chain, native_symbol: null, gas_token: chain === 'robinhood' ? 'ethereum' : chain, tvs: l2 ? 2e9 : null, stage, is_l2: l2, logo: null, src: '{}' });
   }
   for (let i = 1; i <= 10; i++) for (const [metric, src] of [['tvl', 'defillama'], ['dex_volume', 'defillama'], ['fees', 'growthepie'], ['app_fees', 'defillama'], ['stables', 'defillama'], ['txcount', 'growthepie'], ['daa', 'growthepie'], ['txcost_median', 'growthepie']]) {
@@ -902,6 +912,41 @@ async function browserWalk() {
         late.on === 'ethereum' && late.t === 'Ethereum' && late.rows.length && late.rows.every((r) => r.c === 'ethereum') && /^Tokens on Ethereum/.test(late.cap), JSON.stringify(Object.assign({}, late, { rows: late.rows.length })));
     });
 
+    // last, so the steps before it see the page history they had before it (run earlier in the walk, its extra page loads moved where
+    // the chain drop-down opened at 320 px in a later step)
+    await step('a chain\'s market cap, cross-checked: the chip, the caption and the detail', async () => {
+      await go('/market', 1280);
+      await until('document.querySelectorAll("#mkt-list .mkt-row").length > 5');
+      await ev('document.querySelector("#mkt-ctl-chains [data-sort=\\"mcap\\"]").click(), true');
+      await until('document.querySelectorAll("#mkt-list .mkt-chk").length > 3');
+      const lst = await ev('({ chips: [...document.querySelectorAll("#mkt-list .mkt-chk")].map((e) => e.textContent), cap: document.getElementById("mkt-cap").textContent, text: document.getElementById("mkt-list").textContent, fantom: ((document.querySelector("#mkt-list [data-chain=\\"fantom\\"]") || {}).textContent || "") })');
+      await go('/market', 320);
+      await until('document.querySelectorAll("#mkt-list .mkt-row").length > 5');
+      await ev('document.querySelector("#mkt-ctl-chains [data-sort=\\"mcap\\"]").click(), true');
+      await until('document.querySelectorAll("#mkt-list .mkt-chk").length > 3');
+      const l320 = await ev(LAYOUT);
+      check('ranked by market cap, each row carries its check in words — "✓ 2 sources agree", "⚠ Sources differ", "1 source" — the caption says the figure is CoinGecko\'s, checked against CoinLore, Fantom is "Not available" with why, never $0, and at 320 px the chips fit their rows',
+        ['✓ 2 sources agree', '⚠ Sources differ', '1 source'].every((t) => lst.chips.includes(t)) && /Market cap of the chain’s own token: CoinGecko’s figure, checked against CoinLore\./.test(lst.cap)
+        && /Not available/.test(lst.fantom) && /lists no circulating supply/.test(lst.fantom) && !/\$0(?![.\d])/.test(lst.text) && l320.sw <= l320.iw && !l320.out.length && !l320.small.length, JSON.stringify({ lst, l320 }).slice(0, 600));
+      const fits = [];
+      for (const w of [320, 1280]) {
+        await go('/market?chain=arbitrum', w);
+        await until('!!document.getElementById("mkt-mc-h")');
+        const d = await ev('(() => { const c = document.querySelector(".mkt-mcap"); return c ? { rows: [...c.querySelectorAll("tbody tr")].map((t) => t.textContent), notes: [...c.querySelectorAll(".mkt-chknotes li")].map((l) => l.textContent), chip: (document.querySelector(".mkt-stat .mkt-chk") || {}).textContent || "", text: c.textContent } : null; })()');
+        fits.push({ w, d, l: await ev(LAYOUT) });
+      }
+      const d0 = fits[0].d || {};
+      check('  ...and the chain view lists each source\'s market cap, price and circulating supply with how recent it is ("As of"), why they differ in the sources\' own numbers, and the token check — Arbitrum\'s says CoinGecko named only its gas token (ETH), so ARB is not checked by it — at 320 and 1280 px, nothing outside the column, nothing under the text floor',
+        fits.every((x) => x.d && x.l.sw <= x.l.iw && !x.l.out.length && !x.l.small.length) && d0.rows.length === 2 && /^CoinGecko\$1\.15B\$0\.1668/.test(d0.rows[0]) && /^CoinLore\$904M/.test(d0.rows[1]) && /6\.89B/.test(d0.rows[0]) && /5\.4B/.test(d0.rows[1])
+        && /both price \$ARB the same/.test(d0.notes.join(' ')) && d0.chip === '⚠ Sources differ' && !/CoinGecko names the same token for this chain/.test(d0.text)
+        && /The chain’s token: Checked for its gas token only — CoinGecko names \$ETH \(ethereum\), the chain’s gas token, as its native coin; that does not check \$ARB \(arbitrum\), the token whose market cap is shown\./.test(d0.text) && /never an average/.test(d0.text) && /As of/.test(d0.text), JSON.stringify(fits.map((x) => ({ w: x.w, d: x.d && { rows: x.d.rows, chip: x.d.chip }, l: x.l }))).slice(0, 700));
+      await go('/market?chain=fantom', 390);
+      await until('!!document.getElementById("mkt-mc-h")');
+      const fd = await ev('({ card: (document.querySelector(".mkt-mcap") || {}).textContent || "", stat: [...document.querySelectorAll(".mkt-stat")].map((s) => s.textContent).find((t) => /Native token market cap/.test(t)) || "" })');
+      check('  ...a token CoinGecko gives 0 for (Fantom: no circulating supply) is "Not available" with that reason in the stat and the check, never $0',
+        /Not available/.test(fd.stat) && /lists no circulating supply/.test(fd.stat) && /lists no circulating supply/.test(fd.card) && !/\$0(?![.\d])/.test(fd.stat + fd.card), JSON.stringify(fd).slice(0, 400));
+    });
+
     check('no script error from market.js anywhere on the walk', ours().length === 0, ours().map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
     if (exceptions.length > ours().length) notes.push((exceptions.length - ours().length) + ' script error(s) from other scripts on the faked page (not this page\'s): ' + exceptions.filter((x) => !ours().includes(x)).map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
   } catch (e) {
@@ -1031,10 +1076,20 @@ async function runSuite() {
     check('  ...every figure names its source and when it was read; growthepie\'s licence is credited with a link wherever its data appears',
       /function srcLine\(f\)/.test(code) && /'<a class="mkt-src-l" href="https:\/\/www\.growthepie\.com" target="_blank" rel="noopener">Source: growthepie \(CC BY 4\.0\)<\/a>'/.test(code) && /f\.src === 'growthepie' \? GTP/.test(code)
       && /x\.id === 'growthepie' \? 'Source: growthepie \(CC BY 4\.0\)'/.test(code) && /growthepie \(CC BY 4\.0\)/.test(H));
+    check('  ...the page\'s own list of its sources names every one it shows, CoinLore among them (the market caps\' second source)',
+      /Market figures come from DefiLlama, L2BEAT, growthepie \(CC BY 4\.0\), CoinGecko, CoinLore, GeckoTerminal, Dexscreener and Robinhood Chain’s public node, read by this site’s server/.test(H));
     check('  ...a "lowest first" list says it is lowest among what the source lists, not lowest on the chain; DeFi TVL and TVS are separate figures; the v4 PoolManager and the bridge say what they are and are not',
       /so “lowest” is lowest among those, not lowest on the chain\./.test(code) && /stat\('DeFi TVL', st\.tvl, usd\) \+ stat\('Total value secured', st\.tvs, usd/.test(code)
       && /includes claims and fees — assets held, not pool TVL/.test(code) && /held by the bridge contract on Ethereum — not a net inflow/.test(code) && /pools, not tokens/.test(code));
     check('  ...nothing tells anyone to buy, promises safety, or claims an affiliation', !/\b(you should buy|buy now|great investment|guaranteed|risk-free|safe investment|to the moon)\b/i.test(H + JS) && /never a tip to buy/.test(H) && /not a recommendation/.test(JS));
+    check('a chain\'s market cap shows its cross-check (2026-10-28): a chip beside the figure in the list (ranked by market cap) and in the chain view — "✓ 2 sources agree", "⚠ Sources differ" or "1 source", in words, never by colour alone — the caption says what the figure is, and the chain view lists each source\'s figure, price and supply with how recent it is ("As of"), the notes and the token check',
+      /agreed: \['✓ 2 sources agree', 'is-ok', '[^']{20,}'\]/.test(code) && /differs: \['⚠ Sources differ', 'is-warn', '[^']{20,}'\]/.test(code) && /single: \['1 source', 'is-one', '[^']{20,}'\]/.test(code)
+      && /const MCAP_CAP = 'Market cap of the chain’s own token: CoinGecko’s figure, checked against CoinLore';/.test(code) && /\(sortF === 'mcap' \? '<span class="mkt-cap-n">' \+ esc\(MCAP_CAP\) \+ '\.<\/span>' : ''\)/.test(code)
+      && /\(sortF === 'mcap' \? mcapChip\(f\) : ''\)/.test(code) && /stat\('Native token market cap', st\.mcap, usd, mcapChip\(st\.mcap\)\)/.test(code) && /mcapHTML\(d\) \+ chartsHTML\(d\)/.test(code)
+      && /<section class="mkt-card mkt-mcap" aria-labelledby="mkt-mc-h">/.test(code) && /<th scope="col">Source<\/th><th scope="col">Market cap<\/th><th scope="col">Price<\/th><th scope="col">Circulating supply<\/th><th scope="col">As of<\/th>/.test(code)
+      && /data-l="As of"/.test(code) && /“As of” is when each source’s figure is from: CoinGecko’s own update time, DefiLlama’s on its relay, CoinLore’s when this site read it\./.test(code) && !/data-l="Read"/.test(code)
+      && /gas: 'Checked for its gas token only'/.test(code) && /m\.status === 'confirmed' && m\.by === 'gas' \? MAP_WORD\.gas/.test(code)
+      && /data-l="Circulating supply"/.test(code) && /never an average of the two/.test(code) && /coinlore: 'CoinLore'/.test(code) && /\.mkt-chk \{[^}]*font-size: max\(var\(--text-floor\), 0\.72rem\)/.test(CSS) && /\.mkt-chk\.is-warn \{/.test(CSS));
     check('the charts are drawn by market.js in SVG (no library): at the box\'s own pixel size, an axis, a hover and arrow-key readout, a table of every value',
       /createElementNS\(NS, tag\)/.test(code) && /const W = Math\.max\(200, Math\.floor\(box\.clientWidth \|\| 300\)\);/.test(code) && /viewBox: '0 0 ' \+ W \+ ' ' \+ H/.test(code) && /class: 'mkt-ax'/.test(code)
       && /box\.addEventListener\('pointermove'/.test(code) && /e\.key === 'ArrowLeft'/.test(code) && /Every value as a table/.test(code) && !/<script[^>]+src="(https?:|\/\/)|d3(\.min)?\.js|plotly|echarts|chart\.umd|chartjs/i.test(H));
@@ -1057,7 +1112,7 @@ async function runSuite() {
       /^Allow: \/api\/market\/chains\$$/m.test(RB) && /^Allow: \/api\/market\/chain\?key=robinhood\$$/m.test(RB) && /^Allow: \/api\/market\/tokens\?chain=robinhood\$$/m.test(RB) && /^Disallow: \/api\/$/m.test(RB) && !/^Allow: \/api\/market\/?$/m.test(RB));
 
     /* ═══ 2. the fixtures against the contract ═══ */
-    const SRCS = ['defillama', 'l2beat', 'growthepie', 'coingecko', 'geckoterminal', 'dexscreener', 'rpc', 'site'];
+    const SRCS = ['defillama', 'l2beat', 'growthepie', 'coingecko', 'coinlore', 'geckoterminal', 'dexscreener', 'rpc', 'site'];
     const badFig = [];
     const isFig = (x, where) => {
       const ok = x && typeof x === 'object' && 'v' in x && (x.v === null || (typeof x.v === 'number' && isFinite(x.v))) && SRCS.includes(x.src) && typeof x.at === 'number' && x.at > 1.7e12
@@ -1082,7 +1137,24 @@ async function runSuite() {
     const rh24 = FIX('chains-24h.json').rows.find((r) => r.key === 'robinhood');
     check('  ...GET /api/market/chains: { at, window, sort, dir, total, rows: [{ key, name, chainId, gtNetwork, logo, tvl, volume, liquidity, mcap, fees, stables, tvs, stage, isL2 }], notes }', chainsOk);
     check('  ...Robinhood Chain\'s market cap is null with "No native token — gas is paid in ETH" (no number is built for it); a native token\'s cap is labelled with its token',
-      rh24 && rh24.mcap.v === null && rh24.mcap.why === 'No native token — gas is paid in ETH' && FIX('chains-24h.json').rows.find((r) => r.key === 'ethereum').mcap.label === 'ETH (gas token)' && rh24.chainId === 4663 && rh24.stage === 'Stage 0' && rh24.isL2 === true);
+      rh24 && rh24.mcap.v === null && rh24.mcap.why === 'No native token — gas is paid in ETH' && FIX('chains-24h.json').rows.find((r) => r.key === 'ethereum').mcap.label === 'ETH (gas token), market cap' && rh24.chainId === 4663 && rh24.stage === 'Stage 0' && rh24.isL2 === true);
+    // the market cap's cross-check (2026-10-28), on every chain row of every window and in each chain's detail
+    const CHK_ST = ['agreed', 'differs', 'single', 'none'], badChk = [];
+    const isChk = (f, where) => {
+      const c = f && f.check;
+      const ok = c && CHK_ST.includes(c.status) && Array.isArray(c.sources) && Array.isArray(c.notes) && c.notes.every((n) => typeof n === 'string' && n.length > 8) && c.mapping && ['confirmed', 'differs', 'unchecked'].includes(c.mapping.status)
+        && c.sources.every((x) => ['coingecko', 'coinlore', 'defillama'].includes(x.src) && x.v > 0 && x.at > 1.7e12 && 'price' in x && 'supply' in x)
+        && (c.status === 'agreed' || c.status === 'differs' ? c.sources.length === 2 && c.sources.filter((x) => x.src !== 'defillama').length === 2 : c.status === 'single' ? c.sources.length === 1 : c.sources.length === 0)
+        && (c.status === 'differs' ? /^CoinGecko .* apart\): /.test(c.notes[0]) : true) && (f.v == null ? c.status === 'none' || f.why : f.v === c.sources[0].v);
+      if (!ok) badChk.push(where + '=' + JSON.stringify(c).slice(0, 120));
+    };
+    for (const w of ['24h', '7d', '30d', 'custom']) for (const r of FIX('chains-' + w + '.json').rows) isChk(r.mcap, 'chains-' + w + ':' + r.key);
+    for (const k of ['robinhood', 'base']) isChk(FIX('chain-' + k + '.json').stats.mcap, 'chain-' + k);
+    const c24 = FIX('chains-24h.json').rows, mc = (k) => (c24.find((r) => r.key === k) || {}).mcap || {};
+    check('  ...every chain\'s market cap carries its check — { status (agreed, differs, single, none), sources [{ src, v, price, supply, at }], notes, mapping, coin } — the figure shown the first source\'s (CoinGecko\'s when it has one), never an average, never a relay counted as a second source',
+      !badChk.length && mc('ethereum').check.status === 'agreed' && mc('arbitrum').check.status === 'differs' && /both price \$ARB the same/.test(mc('arbitrum').check.notes[0]) && mc('bsc').check.status === 'single'
+      && mc('fantom').v === null && /lists no circulating supply/.test(mc('fantom').why) && mc('fantom').check.status === 'none' && mc('morph').label === 'BGB (gas token), market cap' && mc('stable').check.coin.name === 'Stable'
+      && mc('robinhood').check.status === 'none' && mc('robinhood').check.mapping.note === 'no token of its own to check', badChk.slice(0, 4).join(' | '));
     const rh = FIX('chain-robinhood.json');
     const stKeys = ['tvl', 'volume24h', 'volume7d', 'volume30d', 'windowVolume', 'fees24h', 'appFees24h', 'stables', 'oi', 'mcap', 'tvs', 'txcount24h', 'daa', 'medianTxCostUsd'];
     stKeys.forEach((k) => isFig(rh.stats[k], 'chain-robinhood.stats.' + k));
@@ -1148,8 +1220,9 @@ async function runSuite() {
       && F.usd(null) === null && F.usd(undefined) === null && F.usd(NaN) === null && F.usd(0) === '$0' && F.usd(48511e6) === '$48.5B' && F.usd(2.4e12) === '$2.4T',
       [F.usd(1125597534), F.usd(552453391), F.usd(32373), F.usd(0.0001703), F.usd(0.00000631)].join(' '));
     check('  ...a change carries its direction in an arrow and a sign, not only in a colour; counts and gas read as people say them',
-      F.pct(-2.55) === '▼ −2.55%' && F.pct(8.23) === '▲ +8.23%' && F.pct(0) === '0.00%' && F.pct(null) === null && F.count(4613599) === '4.61M' && F.count(207510) === '208k' && F.count(1343) === '1,343' && F.gwei(0.02014) === '0.02014 gwei' && F.amount(262043.43, 'ETH') === '262k ETH',
-      [F.pct(-2.55), F.count(207510), F.amount(262043.43, 'ETH')].join(' '));
+      F.pct(-2.55) === '▼ −2.55%' && F.pct(8.23) === '▲ +8.23%' && F.pct(0) === '0.00%' && F.pct(null) === null && F.count(4613599) === '4.61M' && F.count(207510) === '208k' && F.count(1343) === '1,343'
+      && F.count(965416274329945.1) === '965T' && F.count(5512186236358.09) === '5.51T' && F.count(146246726558361) === '146T' && F.count(6892115031) === '6.89B' && F.gwei(0.02014) === '0.02014 gwei' && F.amount(262043.43, 'ETH') === '262k ETH',
+      [F.pct(-2.55), F.count(207510), F.amount(262043.43, 'ETH'), F.count(965416274329945.1)].join(' '));
     check('  ...and a read time says how long ago, never a guess when there is none', F.agoText(Date.now() - 5 * 60e3) === '5\u00a0min ago' && F.agoText(Date.now() - 3 * 3600e3) === '3\u00a0h ago' && F.agoText(null) === 'time not recorded' && F.utc(Date.parse('2026-10-26T17:30:00Z')) === '2026-10-26 17:30 UTC');
 
     /* ═══ 4. the fake, against the same contract ═══ */
@@ -1200,6 +1273,11 @@ async function runSuite() {
     const drift = pairs.map(([f, a, b]) => [f, shapeDiff(a, b)]).filter(([, d]) => d.length);
     check('every fixture has the shape lib/marketdata.js really serves, key for key (history as [day, value] arrays with history.src, a token\'s trades as windows[k].txns, the pulse with suppliesAt and bridgeAt)',
       !drift.length && R.chain.robinhood.history && Array.isArray(R.chain.robinhood.history.tvl) && R.chain.robinhood.pulse.now.suppliesAt > 0 && 'txns' in R.token.windows['24h'], drift.map(([f, d]) => f + ': ' + d.slice(0, 4).join('; ')).join(' | '));
+    const realChk = R.chains['24h'].rows.find((r) => r.key === 'ethereum').mcap.check, realNone = R.chain.robinhood.stats.mcap.check;
+    const chkKeys = (c) => JSON.stringify([Object.keys(c || {}), c && c.sources && c.sources[0] ? Object.keys(c.sources[0]) : null, c && c.mapping ? Object.keys(c.mapping).filter((k) => k === 'status') : null, c && c.coin ? Object.keys(c.coin) : null]);
+    const fixChk = FIX('chains-24h.json').rows.find((r) => r.key === 'ethereum').mcap.check;
+    check('  ...and a market cap\'s check has the keys lib/marketdata.js serves, key for key (status, sources [{ src, v, price, supply, at }], notes, mapping, coin), with and without a token of its own',
+      realChk && chkKeys(fixChk) === chkKeys(realChk) && JSON.stringify(Object.keys(FIX('chain-robinhood.json').stats.mcap.check)) === JSON.stringify(Object.keys(realNone)) && realChk.status === 'agreed' && realNone.status === 'none', chkKeys(fixChk) + ' vs ' + chkKeys(realChk));
     const today6 = dayOf(Date.now()), cw = '&window=custom&from=' + addDays(today6, -3) + '&to=' + addDays(today6, -1);
     FAKE.unavailable.add('0x' + '12'.repeat(20)); FAKE.searchWhy = 'Dexscreener could not be read (timed out)';
     const listTok = FIX('tokens-robinhood-24h.json').rows.find((r) => !existsSync(path.join(FIXDIR, 'token-robinhood-' + r.address + '.json')));

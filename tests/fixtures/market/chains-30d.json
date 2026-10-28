@@ -33,10 +33,38 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": 283949545169.9954,
-    "src": "defillama",
-    "at": 1793035803000,
-    "label": "ETH (gas token)"
+    "v": 285379610629,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "ETH (gas token), market cap",
+    "check": {
+     "status": "agreed",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 285379610629,
+       "price": 2335.88,
+       "supply": 122170165.62061684,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 286285159124.83,
+       "price": 2339.42,
+       "supply": 122374665.72,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "ethereum",
+      "symbol": "ETH",
+      "name": "Ethereum"
+     }
+    }
    },
    "fees": {
     "v": 15362885,
@@ -86,8 +114,19 @@
    "mcap": {
     "v": null,
     "src": "site",
-    "at": 1793035800000,
-    "why": "No native token — gas is paid in ETH"
+    "at": 1793201760000,
+    "why": "No native token — gas is paid in ETH",
+    "label": "Market cap of the chain's own token",
+    "check": {
+     "status": "none",
+     "sources": [],
+     "notes": [],
+     "mapping": {
+      "status": "unchecked",
+      "note": "no token of its own to check"
+     },
+     "coin": null
+    }
    },
    "fees": {
     "v": 2560153,
@@ -135,10 +174,38 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": 59805293069.23263,
-    "src": "defillama",
-    "at": 1793035803000,
-    "label": "SOL (gas token)"
+    "v": 59662335600,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "SOL (gas token), market cap",
+    "check": {
+     "status": "agreed",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 59662335600,
+       "price": 101.13,
+       "supply": 589928360.4291474,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 54999754341.7,
+       "price": 101.26,
+       "supply": 543155320.58,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "solana",
+      "symbol": "SOL",
+      "name": "Solana"
+     }
+    }
    },
    "fees": {
     "v": 25409346,
@@ -186,10 +253,33 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": 97845649312.47754,
-    "src": "defillama",
-    "at": 1793035803000,
-    "label": "BNB (gas token)"
+    "v": 98520233989,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "BNB (gas token), market cap",
+    "check": {
+     "status": "single",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 98520233989,
+       "price": 749.14,
+       "supply": 131511532.76,
+       "at": 1793201390000
+      }
+     ],
+     "notes": [
+      "CoinLore lists $BNB only under another name (“Binance Coin”, not CoinGecko’s “BNB”), so it is not taken as the same coin"
+     ],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "binancecoin",
+      "symbol": "BNB",
+      "name": "BNB"
+     }
+    }
    },
    "fees": {
     "v": 14362403,
@@ -237,10 +327,38 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": 31405937647.40275,
-    "src": "defillama",
-    "at": 1793035803000,
-    "label": "TRX (gas token)"
+    "v": 31452261616,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "TRX (gas token), market cap",
+    "check": {
+     "status": "agreed",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 31452261616,
+       "price": 0.331011,
+       "supply": 95017840500.45294,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 31380978735.48,
+       "price": 0.331491,
+       "supply": 94666134895.32,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "tron",
+      "symbol": "TRX",
+      "name": "TRON"
+     }
+    }
    },
    "fees": {
     "v": 23561720,
@@ -288,11 +406,38 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": null,
-    "src": "defillama",
-    "at": 1793035200000,
-    "why": "The coin price source gave no market cap for BTC in this read",
-    "label": "BTC (gas token)"
+    "v": 1620951275985,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "BTC (gas token), market cap",
+    "check": {
+     "status": "agreed",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 1620951275985,
+       "price": 80626,
+       "supply": 20104859,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 1612095807720.1,
+       "price": 80722.44,
+       "supply": 19970852,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "bitcoin",
+      "symbol": "BTC",
+      "name": "Bitcoin"
+     }
+    }
    },
    "fees": {
     "v": 6808950,
@@ -340,10 +485,41 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": 17477370635.808113,
-    "src": "defillama",
-    "at": 1793035803000,
-    "label": "HYPE (gas token)"
+    "v": 19154526140,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "HYPE (gas token), market cap",
+    "check": {
+     "status": "differs",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 19154526140,
+       "price": 79.99,
+       "supply": 239406814.37414145,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 26741845215.87,
+       "price": 80.08,
+       "supply": 333928180,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [
+      "CoinGecko $19.2B, CoinLore $26.7B (40% apart): both price $HYPE the same (about $79.99); they count a different circulating supply (CoinGecko 239M, CoinLore 334M)"
+     ],
+     "mapping": {
+      "status": "unchecked",
+      "note": "CoinGecko lists no asset platform for this chain"
+     },
+     "coin": {
+      "id": "hyperliquid",
+      "symbol": "HYPE",
+      "name": "Hyperliquid"
+     }
+    }
    },
    "fees": {
     "v": 489325,
@@ -391,10 +567,42 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": 1161200175.8186817,
-    "src": "defillama",
-    "at": 1793035803000,
-    "label": "ARB (governance token; gas is paid in ETH)"
+    "v": 1149338350,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "ARB (the chain's own token; gas is paid in ETH), market cap",
+    "check": {
+     "status": "differs",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 1149338350,
+       "price": 0.166756,
+       "supply": 6892115031,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 903771439.44,
+       "price": 0.167253,
+       "supply": 5403630609,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [
+      "CoinGecko $1.15B, CoinLore $904M (21% apart): both price $ARB the same (about $0.17); they count a different circulating supply (CoinGecko 6.89B, CoinLore 5.4B)"
+     ],
+     "mapping": {
+      "status": "confirmed",
+      "by": "gas",
+      "note": "CoinGecko names $ETH (ethereum), the chain’s gas token, as its native coin; that does not check $ARB (arbitrum), the token whose market cap is shown"
+     },
+     "coin": {
+      "id": "arbitrum",
+      "symbol": "ARB",
+      "name": "Arbitrum"
+     }
+    }
    },
    "fees": {
     "v": 632562,
@@ -444,8 +652,19 @@
    "mcap": {
     "v": null,
     "src": "site",
-    "at": 1793035800000,
-    "why": "No native token — gas is paid in ETH"
+    "at": 1793201760000,
+    "why": "No native token — gas is paid in ETH",
+    "label": "Market cap of the chain's own token",
+    "check": {
+     "status": "none",
+     "sources": [],
+     "notes": [],
+     "mapping": {
+      "status": "unchecked",
+      "note": "no token of its own to check"
+     },
+     "coin": null
+    }
    },
    "fees": {
     "v": 1815672,
@@ -493,11 +712,33 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": null,
-    "src": "defillama",
-    "at": 1793035200000,
-    "why": "The coin price source gave no market cap for POL in this read",
-    "label": "POL (gas token)"
+    "v": 977776897,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "POL (gas token), market cap",
+    "check": {
+     "status": "single",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 977776897,
+       "price": 0.091901,
+       "supply": 10639710752.536375,
+       "at": 1793201390000
+      }
+     ],
+     "notes": [
+      "CoinLore does not list $POL"
+     ],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "polygon-ecosystem-token",
+      "symbol": "POL",
+      "name": "POL (ex-MATIC)"
+     }
+    }
    },
    "fees": {
     "v": 2164635,
@@ -545,11 +786,38 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": null,
-    "src": "defillama",
-    "at": 1793035200000,
-    "why": "The coin price source gave no market cap for AVAX in this read",
-    "label": "AVAX (gas token)"
+    "v": 3940750138,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "AVAX (gas token), market cap",
+    "check": {
+     "status": "agreed",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 3940750138,
+       "price": 8.88,
+       "supply": 443963070.7253372,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 3752964557.52,
+       "price": 8.89,
+       "supply": 422275285.49,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [],
+     "mapping": {
+      "status": "confirmed"
+     },
+     "coin": {
+      "id": "avalanche-2",
+      "symbol": "AVAX",
+      "name": "Avalanche"
+     }
+    }
    },
    "fees": {
     "v": 385368,
@@ -597,11 +865,42 @@
     "label": "DEX liquidity (TVL of DEX protocols, DefiLlama)"
    },
    "mcap": {
-    "v": null,
-    "src": "defillama",
-    "at": 1793035200000,
-    "why": "The coin price source gave no market cap for OP in this read",
-    "label": "OP (governance token)"
+    "v": 254350592,
+    "src": "coingecko",
+    "at": 1793201390000,
+    "label": "OP (the chain's own token; gas is paid in ETH), market cap",
+    "check": {
+     "status": "differs",
+     "sources": [
+      {
+       "src": "coingecko",
+       "v": 254350592,
+       "price": 0.111095,
+       "supply": 2290771093,
+       "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 197797888.07,
+       "price": 0.111208,
+       "supply": 1778634390,
+       "at": 1793201760000
+      }
+     ],
+     "notes": [
+      "CoinGecko $254M, CoinLore $198M (22% apart): both price $OP the same (about $0.11); they count a different circulating supply (CoinGecko 2.29B, CoinLore 1.78B)"
+     ],
+     "mapping": {
+      "status": "confirmed",
+      "by": "gas",
+      "note": "CoinGecko names $ETH (ethereum), the chain’s gas token, as its native coin; that does not check $OP (optimism), the token whose market cap is shown"
+     },
+     "coin": {
+      "id": "optimism",
+      "symbol": "OP",
+      "name": "Optimism"
+     }
+    }
    },
    "fees": {
     "v": 75209,
