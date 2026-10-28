@@ -1,0 +1,240 @@
+[
+ {
+  "id": "icon",
+  "chain_identifier": null,
+  "name": "ICON",
+  "shortname": "",
+  "native_coin_id": "icon"
+ },
+ {
+  "id": "ontology",
+  "chain_identifier": null,
+  "name": "Ontology",
+  "shortname": "",
+  "native_coin_id": "ontology"
+ },
+ {
+  "id": "neo",
+  "chain_identifier": null,
+  "name": "NEO",
+  "shortname": "",
+  "native_coin_id": "neo"
+ },
+ {
+  "id": "mantra",
+  "chain_identifier": null,
+  "name": "Mantra",
+  "shortname": "",
+  "native_coin_id": "mantra-dao"
+ },
+ {
+  "id": "theta",
+  "chain_identifier": 361,
+  "name": "Theta",
+  "shortname": "",
+  "native_coin_id": "theta-token"
+ },
+ {
+  "id": "iota",
+  "chain_identifier": null,
+  "name": "IOTA",
+  "shortname": "",
+  "native_coin_id": "iota"
+ },
+ {
+  "id": "xrpl-evm",
+  "chain_identifier": 1440000,
+  "name": "XRPL EVM ",
+  "shortname": "",
+  "native_coin_id": "ripple"
+ },
+ {
+  "id": "polygon-pos",
+  "chain_identifier": 137,
+  "name": "Polygon POS",
+  "shortname": "Polygon",
+  "native_coin_id": "polygon-ecosystem-token"
+ },
+ {
+  "id": "beamprivacy",
+  "chain_identifier": null,
+  "name": "BeamPrivacy",
+  "shortname": "",
+  "native_coin_id": "beam"
+ },
+ {
+  "id": "pulsechain",
+  "chain_identifier": 369,
+  "name": "Pulsechain",
+  "shortname": "",
+  "native_coin_id": "pulsechain"
+ },
+ {
+  "id": "stable",
+  "chain_identifier": 988,
+  "name": "Stable",
+  "shortname": "",
+  "native_coin_id": "usdt0"
+ },
+ {
+  "id": "tron",
+  "chain_identifier": null,
+  "name": "TRON",
+  "shortname": "",
+  "native_coin_id": "tron"
+ },
+ {
+  "id": "iota-evm",
+  "chain_identifier": 8822,
+  "name": "Iota EVM",
+  "shortname": "",
+  "native_coin_id": "iota"
+ },
+ {
+  "id": "kucoin-community-chain",
+  "chain_identifier": 321,
+  "name": "Kucoin Community Chain",
+  "shortname": "KCC",
+  "native_coin_id": "kucoin-shares"
+ },
+ {
+  "id": "vechain",
+  "chain_identifier": 100009,
+  "name": "VeChain",
+  "shortname": "",
+  "native_coin_id": "vechain"
+ },
+ {
+  "id": "arbitrum-one",
+  "chain_identifier": 42161,
+  "name": "Arbitrum One",
+  "shortname": "Arbitrum",
+  "native_coin_id": "ethereum"
+ },
+ {
+  "id": "sonic",
+  "chain_identifier": 146,
+  "name": "Sonic",
+  "shortname": "sonic",
+  "native_coin_id": "sonic-3"
+ },
+ {
+  "id": "fantom",
+  "chain_identifier": 250,
+  "name": "Fantom",
+  "shortname": "",
+  "native_coin_id": "fantom"
+ },
+ {
+  "id": "sei-network",
+  "chain_identifier": null,
+  "name": "Sei Network (Deprecating)",
+  "shortname": "",
+  "native_coin_id": "sei-network"
+ },
+ {
+  "id": "robinhood",
+  "chain_identifier": 4663,
+  "name": "Robinhood",
+  "shortname": "Robinhood",
+  "native_coin_id": "ethereum"
+ },
+ {
+  "id": "optimistic-ethereum",
+  "chain_identifier": 10,
+  "name": "Optimism",
+  "shortname": "Optimism",
+  "native_coin_id": "ethereum"
+ },
+ {
+  "id": "the-open-network",
+  "chain_identifier": null,
+  "name": "TON",
+  "shortname": "TON",
+  "native_coin_id": "the-open-network"
+ },
+ {
+  "id": "mezo",
+  "chain_identifier": 31612,
+  "name": "Mezo",
+  "shortname": "",
+  "native_coin_id": "wrapped-bitcoin"
+ },
+ {
+  "id": "krown-network",
+  "chain_identifier": 1983,
+  "name": "Krown Network",
+  "shortname": "",
+  "native_coin_id": "krown-network"
+ },
+ {
+  "id": "binance-smart-chain",
+  "chain_identifier": 56,
+  "name": "BNB Smart Chain",
+  "shortname": "BSC",
+  "native_coin_id": "binancecoin"
+ },
+ {
+  "id": "ethereum",
+  "chain_identifier": 1,
+  "name": "Ethereum",
+  "shortname": "Ethereum",
+  "native_coin_id": "ethereum"
+ },
+ {
+  "id": "blast",
+  "chain_identifier": 81457,
+  "name": "Blast",
+  "shortname": "",
+  "native_coin_id": "ethereum"
+ },
+ {
+  "id": "base",
+  "chain_identifier": 8453,
+  "name": "Base",
+  "shortname": "",
+  "native_coin_id": "ethereum"
+ },
+ {
+  "id": "avalanche",
+  "chain_identifier": 43114,
+  "name": "Avalanche",
+  "shortname": "AVAX",
+  "native_coin_id": "avalanche-2"
+ },
+ {
+  "id": "beam",
+  "chain_identifier": 4337,
+  "name": "Beam",
+  "shortname": "",
+  "native_coin_id": "beam"
+ },
+ {
+  "id": "solana",
+  "chain_identifier": null,
+  "name": "Solana",
+  "shortname": "Solana",
+  "native_coin_id": "solana"
+ },
+ {
+  "id": "sei-v2",
+  "chain_identifier": 1329,
+  "name": "Sei Network",
+  "shortname": "",
+  "native_coin_id": "wrapped-sei"
+ },
+ {
+  "id": "ordinals",
+  "chain_identifier": null,
+  "name": "Bitcoin",
+  "shortname": "Ordinals",
+  "native_coin_id": "bitcoin"
+ },
+ {
+  "id": "mode",
+  "chain_identifier": 34443,
+  "name": "Mode",
+  "shortname": "",
+  "native_coin_id": "mode"
+ }
+]
