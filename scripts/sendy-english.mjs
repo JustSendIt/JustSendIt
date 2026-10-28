@@ -4,6 +4,10 @@
  * site's pages happen not to use must never be "corrected" that way: "lunch" is not "launch", "steak" is not "stake". The
  * guard is the list of real words a slip away from a word Sendy corrects to, and Sendy treats every word on it as known.
  *
+ * It also holds the dictionary words the site's own pages use ("link", "bridge", "higher"), so a word of English that is
+ * also some token's symbol is read as the word unless it is typed as one ($LINK, LINK); a symbol that is no word ("pepe")
+ * stays a symbol.
+ *
  * Read from this Mac's dictionary (/usr/share/dict/words, Webster's Second) against the words Sendy corrects to — the site's
  * own passages (a brain over this checkout's files, no data), the words his questions turn on, and the common words — with
  * the same rule as the brain (one slip, two for a word of eight letters or more, the same first letter). Run it again after
@@ -42,11 +46,13 @@ const byLen = new Map();
 for (const w of targets) { let b = byLen.get(w.length); if (!b) byLen.set(w.length, (b = [])); b.push(w); }
 const near = new Set();
 for (const w of fs.readFileSync(DICT, 'utf8').split('\n')) {
-  if (!/^[a-z]{4,24}$/.test(w) || vocab.has(w)) continue;
+  if (!/^[a-z]{3,24}$/.test(w)) continue;
+  if (vocab.has(w)) { near.add(w); continue; }   // a word of English the pages use
+  if (w.length < 4) continue;
   const max = w.length >= 8 ? 2 : 1;
   find: for (let L = w.length - max; L <= w.length + max; L++) for (const c of byLen.get(L) || []) if (c !== w && c[0] === w[0] && W.distance(w, c, max) <= max) { near.add(w); break find; }
 }
 const out = path.join(ROOT, 'lib', 'sendy-english.txt');
 fs.writeFileSync(out, [...near].sort().join('\n') + '\n');
-console.log(near.size + ' words a slip from the ' + targets.length + ' Sendy corrects to → ' + path.relative(ROOT, out) + ' (' + Math.round(fs.statSync(out).size / 1024) + ' KB)');
+console.log(near.size + ' words (a slip from the ' + targets.length + ' Sendy corrects to, or on the pages) → ' + path.relative(ROOT, out) + ' (' + Math.round(fs.statSync(out).size / 1024) + ' KB)');
 process.exit(0);
