@@ -57,7 +57,7 @@
     },
     'report': {
       keywords: ['report', 'spam', 'inappropriate', 'moderator', 'remove'],
-      answer: 'Every post and comment has a report control — use it and a moderator will look. For anything that needs a person right away, email ' + EMAIL + ' with a link and a sentence about what is wrong.'
+      answer: 'Every post has a ⚑ report control — use it and a moderator will look. For anything that needs a person right away, email ' + EMAIL + ' with a link and a sentence about what is wrong.'
     },
     'safety': {
       keywords: ['safe', 'security', 'risk', 'dyor', 'research', 'rug', 'scam', 'should i buy', 'should i sell', 'go up', 'moon', 'price prediction'],

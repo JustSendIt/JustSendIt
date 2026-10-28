@@ -755,7 +755,7 @@ try {
      say next (a new wallet, moving what is left, freezing, impostors, blocking, revoking); a crisis that is still the first thing
      three turns on; and a message's own questions — only questions take the four places, a filler none, a question that leans
      on the sentence before it read with it. Each conversation is asked turn by turn, so every turn reads today's answers
-     (tests/fixtures/sendy-conversations.json; review six's 650 cases). ═══ */
+     (tests/fixtures/sendy-conversations.json: review six's 650 cases, then the 172 its own review confirmed). ═══ */
   {
     const CONV = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'sendy-conversations.json'), 'utf8'));
     let n = 0;
