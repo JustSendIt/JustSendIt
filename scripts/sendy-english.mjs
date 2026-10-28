@@ -45,7 +45,9 @@ brain.stop();
 const byLen = new Map();
 for (const w of targets) { let b = byLen.get(w.length); if (!b) byLen.set(w.length, (b = [])); b.push(w); }
 const near = new Set();
-for (const w of fs.readFileSync(DICT, 'utf8').split('\n')) {
+// words of today's English that a dictionary of 1934 never had: "pricey" is not "price"
+const MODERN = ['pricey', 'pricy', 'scammy', 'spammy', 'hypey', 'legit', 'lowkey', 'noob', 'noobs', 'newbie', 'newbies', 'techy', 'overhyped', 'overpriced', 'underpriced', 'undervalued', 'overvalued'];
+for (const w of fs.readFileSync(DICT, 'utf8').split('\n').concat(MODERN)) {
   if (!/^[a-z]{3,24}$/.test(w)) continue;
   if (vocab.has(w)) { near.add(w); continue; }   // a word of English the pages use
   if (w.length < 4) continue;

@@ -6693,11 +6693,13 @@ prezonal
 price
 priced
 pricer
+pricey
 prich
 prick
 pricked
 prickled
 pricks
+pricy
 pride
 pried
 primacy
