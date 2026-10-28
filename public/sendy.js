@@ -612,7 +612,7 @@
       .slice(0, 4).map((s) => ({ text: s.label.slice(0, 60) + (Number.isFinite(s.at) ? ' · ' + ageOf(s.at) : ''), href: s.href }));
     // the server first, always; the notes above answer only when it cannot be reached (or failed outright)
     async function ask(q) {
-      addMessage(q, 'user'); remember('user', q);
+      const mine = addMessage(q, 'user'); remember('user', q);
       if (window.SFX) SFX.play('send');   // the question goes up to Sendy
       const typing = addMessage('· · ·', 'sendy'); typing.classList.add('sendy-typing');
       chatSend.disabled = true;
@@ -623,6 +623,12 @@
         const j = await r.json().catch(() => ({}));
         reached = r.status < 500;
         if (r.ok && j.answer) { answer = String(j.answer); qaId = Number(j.id) || 0; sources = sourceLinks(j.sources); }
+        // a seed phrase or a key in the question: the chat keeps (and shows) it with those words removed, and never sends it again
+        if (r.ok && typeof j.redacted === 'string' && j.redacted) {
+          for (let i = history.length - 1; i >= 0; i--) if (history[i].role === 'user' && history[i].text === q) { history[i].text = j.redacted.slice(0, 2000); break; }
+          store.set('chat', history);
+          const t = mine && mine.querySelector('.sendy-msg-bubble'); if (t && t.lastChild && t.lastChild.nodeType === 3) t.lastChild.textContent = j.redacted;
+        }
         else if (r.ok && j.unavailable) reached = false;   // a server from before the brain: it has no answer of its own, so the notes answer
         else if (r.status === 429) note = String(j.error || 'Sendy needs a breather — try again in a few minutes.');
       } catch {}

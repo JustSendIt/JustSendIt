@@ -671,7 +671,7 @@ CREATE INDEX IF NOT EXISTS idx_uploads_sweep ON uploads(claimed, created_at);
 -- keeps the hot ones fresh from on-chain data. found=0 is a negative cache (looked up, not priced/indexed).
 CREATE TABLE IF NOT EXISTS sendy_qa (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  q TEXT NOT NULL,                                     -- the question as typed — no account, no address: nothing says who asked
+  q TEXT NOT NULL,                                     -- the question as typed (a pasted seed phrase or key removed) — no account, no address: nothing says who asked
   a TEXT NOT NULL DEFAULT '',                          -- the answer Sendy gave
   page TEXT,                                           -- the page it was asked on
   at INTEGER NOT NULL,
@@ -18765,12 +18765,14 @@ const server = http.createServer(async (req, res) => {
         sendyAnswered++;
         let id = null;   // kept without who asked, so readers can rate it and a helpful answer can be reused
         try {
-          id = Number(db.prepare('INSERT INTO sendy_qa (q, a, page, at) VALUES (?, ?, ?, ?)').run(q, r.answer.slice(0, 4000), page, now()).lastInsertRowid);
+          // (never the words of a seed phrase or a key someone pasted: those are removed before the question is kept)
+          id = Number(db.prepare('INSERT INTO sendy_qa (q, a, page, at) VALUES (?, ?, ?, ?)').run(SENDY.redact(q), r.answer.slice(0, 4000), page, now()).lastInsertRowid);
           // only an answer in the site's own words may be reused once rated: never a member's words, never a reading
           if (r.reuse) db.prepare('UPDATE sendy_qa SET reuse = 1 WHERE id = ?').run(id);
         } catch {}
         // unavailable: there is no model on this server (no key) — the answer is the brain's own
-        return send(res, 200, { answer: r.answer, id, sources: r.sources, ...(SENDY_AI ? {} : { unavailable: true }) });
+        // (a question that held a seed phrase or a key comes back with those words removed, for the chat to keep instead)
+        return send(res, 200, { answer: r.answer, id, sources: r.sources, ...(r.redacted ? { redacted: r.redacted } : {}), ...(SENDY_AI ? {} : { unavailable: true }) });
       }
       /* A thumb on one of Sendy's answers: counted without who gave it (one per address per answer, a day's memory). */
       if (p === '/api/sendy/rate' && req.method === 'POST') {

@@ -168,6 +168,7 @@ async function chatWalk() {
       (() => { const real = window.fetch, answers = ${JSON.stringify(CHAT_TURNS.slice(CHAT_SEEDED).map((x) => x[1]))}; let i = 0;
         window.fetch = function (input, init) {
           const u = typeof input === 'string' ? input : (input && input.url) || '';
+          if (/\\/api\\/sendy\\/ask$/.test(new URL(u, location.href).pathname) && /abandon ability able/.test(String(init && init.body))) return Promise.resolve(new Response(JSON.stringify({ answer: 'Never share a seed phrase or a private key.', id: 8, redacted: 'my seed is [removed: looked like a seed phrase]' }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
           if (/\\/api\\/sendy\\/ask$/.test(new URL(u, location.href).pathname)) { const a = answers[Math.min(i++, answers.length - 1)];
             return new Promise((r) => setTimeout(() => r(new Response(JSON.stringify({ answer: a, id: 7 }), { status: 200, headers: { 'Content-Type': 'application/json' } })), 150)); }
           return real.apply(this, arguments);
@@ -304,6 +305,12 @@ async function chatWalk() {
       // the thumb replaces itself with the thanks: its click used to reach the outside-click close from a button no longer
       // in the widget, and rating an answer closed the chat (focus went back to the rocket)
       check('a thumb under an answer says thanks and leaves the chat open, focus handed on to the box (with a mouse)', rated.thanks && rated.focus === 'sendy-chat-input' && /e\.composedPath\(\)\.includes\(widget\)/.test(SRC), JSON.stringify(rated));
+      // a seed phrase pasted in the box: the server sends the question back with those words removed, and the chat keeps and shows
+      // that instead — on the screen and in the tab's storage, so it is never sent again with the next question
+      await ev('(() => { const i = document.getElementById("sendy-chat-input"); i.value = "my seed is abandon ability able about above absent absorb abstract absurd abuse access accident"; document.getElementById("sendy-chat-form").requestSubmit(); return true; })()');
+      await until('/Never share a seed phrase/.test(document.getElementById("sendy-chat-messages").textContent)');
+      const kept = await ev('({ shown: document.getElementById("sendy-chat-messages").textContent, stored: sessionStorage.getItem("sendy:chat") || "" })');
+      check('a seed phrase pasted in the chat is shown and kept with its words removed — on the screen and in the tab\'s storage — once the server says so', !/abandon|accident/.test(kept.shown) && !/abandon|accident/.test(kept.stored) && /removed: looked like a seed phrase/.test(kept.shown), kept.stored.slice(-200));
       await cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
       await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
       await sleep(80);
