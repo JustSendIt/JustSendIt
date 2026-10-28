@@ -44,10 +44,10 @@
 .mkt-tick { display: none; }
 .np-chip[aria-pressed="true"] > .mkt-tick { display: inline; }
 /* Top tokens' chain filter: a button that names the chain chosen, with its logo and a drawn caret, and under it the list of every
-   chain, each with its logo and its name. The list lies over the controls below it; market.js sets its height to the room under
-   the button (clear of the corner widgets) and it scrolls inside when that is shorter. The chosen chain says so with a tick as
-   well as its fill. A logo that is missing or does not load leaves the chain's initials (the logo, laid over them, hides them
-   while it is there). Below 560px the list is the card's full width. */
+   chain, each with its logo and its name. The list lies over the controls below it; market.js hangs it under the button (or over
+   it, when the room under it is short and there is more above), sets its height to that room and it scrolls inside when that is
+   shorter. The chosen chain says so with a tick as well as its fill. A logo that is missing or does not load leaves the chain's
+   initials (the logo, laid over them, hides them while it is there). Below 560px the list is the card's full width. */
 .mkt-cpick { position: relative; }
 .mkt-cpick-b { display: inline-flex; align-items: center; gap: 0.5rem; max-width: 100%; min-height: 44px; padding: 0.25rem 0.9rem 0.25rem 0.3rem; white-space: normal; text-align: left; line-height: 1.2; }
 .mkt-cpick-b[aria-expanded="true"] { border-color: var(--green-bright); }
@@ -57,12 +57,20 @@
 .mkt-caret::before { content: ''; position: absolute; left: 50%; top: 50%; translate: -50% -50%; width: 0.62em; height: 0.36em; background: currentColor; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .mkt-cpick-b[aria-expanded="true"] .mkt-caret { transform: rotate(180deg); }
 .mkt-cpick-p {
-  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 40; width: max-content; min-width: min(100%, 17rem); max-width: 100%;   /* z 40: over the page, under the sticky nav (50) */
+  position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 260; width: max-content; min-width: min(100%, 17rem); max-width: 100%;
   max-height: min(70vh, 34rem); overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 0.45rem; list-style: none; display: grid; gap: 0.15rem;
   background: var(--ink-2); border: 1.5px solid var(--ink-5); border-radius: 14px; box-shadow: 0 14px 40px rgba(0,0,0,0.5), 0 0 0 1px color-mix(in srgb, var(--green) 6%, transparent);
   scrollbar-width: thin; scrollbar-color: var(--green-dark) transparent;
 }
 .mkt-cpick-p[hidden] { display: none; }
+.mkt-cpick-p.is-up { top: auto; bottom: calc(100% + 0.4rem); }
+/* z 260 lays it over what is pinned to the bottom of the screen (Sendy 190, ✏️ SEND IT 240, the player and its nudge 250), as
+   the nav's own menus are (styles.css), and the nav rises over it as it does for them — a list scrolled up passes under the nav.
+   Where the side column sticks (1280px and up, on a screen 700px tall or more) the column is a layer of its own under what is
+   pinned, and clips what runs past its edge: there the list is fixed to the screen beside the button (market.js places it,
+   out of the clip) and kept out from under what is pinned instead */
+.mkt-cpick-p.is-fixed { position: fixed; }
+body:has(#mkt-tchain-p:not([hidden])) > .nav { z-index: 300; }
 .mkt-cpick-p > li { min-width: 0; }
 /* each chain is the account menu's item (styles.css .npm-item: black ink on the green fill, the matrix tile), a tick in front */
 .mkt-copt { min-height: 44px; padding: 0.35rem 0.7rem 0.35rem 0.45rem; line-height: 1.2; }
@@ -80,9 +88,9 @@
 .mkt-ava-cf:not(:has(img)) { width: auto; min-width: 2em; padding: 0 0.3em; border-radius: 1em; }
 /* every chain together: four discs in a square, drawn — no one chain's logo stands for all of them */
 .mkt-ava-cf.mkt-ava-all {
-  width: 2em; padding: 0; border-radius: 50%;
-  background: radial-gradient(circle at 33% 33%, var(--green-bright) 0 13%, transparent 14%), radial-gradient(circle at 67% 33%, var(--green-bright) 0 13%, transparent 14%),
-    radial-gradient(circle at 33% 67%, var(--green-bright) 0 13%, transparent 14%), radial-gradient(circle at 67% 67%, var(--green-bright) 0 13%, transparent 14%), var(--ink-3);
+  --dot: var(--green-bright); width: 2em; padding: 0; border-radius: 50%;
+  background: radial-gradient(circle at 33% 33%, var(--dot) 0 13%, transparent 14%), radial-gradient(circle at 67% 33%, var(--dot) 0 13%, transparent 14%),
+    radial-gradient(circle at 33% 67%, var(--dot) 0 13%, transparent 14%), radial-gradient(circle at 67% 67%, var(--dot) 0 13%, transparent 14%), var(--ink-3);
 }
 .mkt-custom { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem 0.6rem; margin-top: 0.6rem; padding: 0.7rem; border: 1px dashed var(--edge-ctl); border-radius: 12px; }
 .mkt-custom[hidden] { display: none; }
@@ -250,6 +258,9 @@ html.motion-off .mkt-caret { transition: none; }   /* the nav's ⏸ stops motion
    same for the site's other drawn marks) ---------- */
 @media (forced-colors: active) {
   .mkt-caret::before { forced-color-adjust: none; background: ButtonText; }
+  /* the all-chains mark's dots are a background picture, which forced colours take away (it was an empty ring): drawn again in
+     the system's colours */
+  .mkt-ava-cf.mkt-ava-all { forced-color-adjust: none; --dot: ButtonText; background-color: ButtonFace; border-color: ButtonText; }
 }
 
 /* ---------- 1280px and up: the house's dashboard width, the side column beside the main view ---------- */

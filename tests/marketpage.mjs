@@ -584,80 +584,160 @@ async function browserWalk() {
       }
       return bad;
     })()`;
-    // the open list on the screen: inside the side card, above the bottom of the screen, and every chain in it on top where it
-    // is drawn — each brought into view in the list (it scrolls inside), then hit-tested at its centre. The description bubble
+    // the open list on the screen: inside the side card's width, between the nav and the bottom of the screen, and every chain in
+    // it on top where it is drawn — each brought into view in the list (it scrolls inside), then hit-tested at its centre and
+    // at both its edges (the player stands over the side column's corner, beside where a centre is). The description bubble
     // (tips.js, shown on focus) is put away first: it is the site's own label for the control in focus, on top on purpose.
+    // Its own button is never under it either: whatever is at the button's centre, it is not the list.
     const PICKSEEN = `(() => {
       if (window.sendTips) sendTips.hide();
       const p = document.getElementById('mkt-tchain-p'), pr = p.getBoundingClientRect(), side = document.getElementById('mkt-side').getBoundingClientRect(), covered = [];
-      const keep = p.scrollTop;
+      const nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 0, keep = p.scrollTop, name = (h) => h ? (h.id || String(h.className).slice(0, 40) || h.tagName) : 'nothing (off the screen)';
       for (const o of p.querySelectorAll('.mkt-copt')) {
         p.scrollTop = Math.max(0, o.offsetTop - (p.clientHeight - o.offsetHeight) / 2);
-        const r = o.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y);
-        if (!hit || !o.contains(hit)) covered.push(o.dataset.tchain + ' under ' + (hit ? (hit.id || String(hit.className).slice(0, 40) || hit.tagName) : 'nothing (off the screen)'));
+        const r = o.getBoundingClientRect(), y = r.top + r.height / 2, hit = document.elementFromPoint(r.left + r.width / 2, y);
+        if (!hit || !o.contains(hit)) covered.push(o.dataset.tchain + ' under ' + name(hit));
+        for (const x of [r.left + 2, r.right - 2]) { const e = document.elementFromPoint(x, y); if (!e || !p.contains(e)) covered.push(o.dataset.tchain + '\\'s edge under ' + name(e)); }
       }
       p.scrollTop = keep;
-      return { covered, top: Math.round(pr.top), bottom: Math.round(pr.bottom), ih: innerHeight, inCard: pr.left >= side.left - 1 && pr.right <= side.right + 1, onScreen: pr.top >= 0 && pr.bottom <= innerHeight, scrolls: p.scrollHeight > p.clientHeight + 1, n: p.querySelectorAll('.mkt-copt').length };
+      const b = document.getElementById('mkt-tchain-b').getBoundingClientRect(), onBtn = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { covered, top: Math.round(pr.top), bottom: Math.round(pr.bottom), ih: innerHeight, inCard: pr.left >= side.left - 1 && pr.right <= side.right + 1, onScreen: pr.top >= nav && pr.bottom <= innerHeight,
+        scrolls: p.scrollHeight > p.clientHeight + 1, n: p.querySelectorAll('.mkt-copt').length, up: p.classList.contains('is-up'), fixed: p.classList.contains('is-fixed'), btnClear: !p.contains(onBtn), mh: p.style.maxHeight };
     })()`;
     const settled = () => until('[...document.querySelectorAll("#mkt-tchains img")].every((i) => i.complete) && !document.querySelector("#mkt-tchains [data-tchain=\\"solana\\"] img")');
+    // the page where it is before the press (the press scrolls nothing then), so a page that moves when the list opens shows
+    const pressStill = async (expr) => { await ev(expr + '.scrollIntoView({ block: "nearest", behavior: "instant" }), true'); await sleep(120); const y0 = await ev('scrollY'); await press(expr); return y0; };
     await step('Top tokens\' chain drop-down at every width, closed and open', async () => {
       const fits = [];
-      for (const [w, h] of [[320, 900], [390, 900], [1280, 900], [1920, 900], [390, 600]]) {
+      for (const [w, h] of [[320, 900], [390, 900], [1280, 900], [1920, 900], [390, 600], [740, 360]]) {
         await go('/market', w, h); await openTokens(); await settled();
         const closed = { l: await ev(LAYOUT), cut: await ev(PICKFIT), trig: await trig(), rows: (await tokRows()).length };
-        // the press is the page's first, so the player's nudge comes up over the corner a moment later: the list measures its
-        // room again twice a second, and is judged after that
-        await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
-        const open = { l: await ev(LAYOUT), cut: await ev(PICKFIT), seen: await ev(PICKSEEN), focus: await focused(), label: await ev('document.getElementById("mkt-tf-l").getBoundingClientRect().top >= (parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0) - 1') };
+        // the press is the page's first, so the player's nudge comes up over the corner a moment later: the list is judged after that
+        const y0 = await pressStill(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
+        const open = { l: await ev(LAYOUT), cut: await ev(PICKFIT), seen: await ev(PICKSEEN), focus: await focused(), moved: Math.round((await ev('scrollY')) - y0) };
         await ev(TRIG + '.click(), true'); await until(POP + '.hidden');
         fits.push({ w, h, closed, open });
       }
       const flat = (l) => l.sw > l.iw || l.out.length || l.small.length;
       const bad = fits.filter((f) => flat(f.closed.l) || f.closed.cut.length || !f.closed.rows || f.closed.trig.t !== 'All chains' || !f.closed.trig.all || f.closed.trig.exp !== 'false'
-        || flat(f.open.l) || f.open.cut.length || f.open.seen.covered.length || !f.open.seen.inCard || !f.open.seen.onScreen || f.open.seen.n !== 1 + MD.GT_TRACKED.length || f.open.focus !== 'all' || !f.open.label);
-      check('Top tokens\' chain drop-down in a real browser at 320, 390, 1280 and 1920 px (and a 600px-tall phone): closed, the button says "All chains" with its mark; open, every chain is listed — and either way no sideways scroll, nothing outside the column, no text under the floor, no name or initials cut',
-        fits.length === 5 && !bad.length, JSON.stringify(bad.length ? bad : fits.map((f) => [f.w + 'x' + f.h, f.open.seen.top, f.open.seen.bottom, f.open.seen.scrolls])).slice(0, 900));
-      check('  ...the open list lies over the controls below it, inside the side card and on the screen, and nothing covers it — not the music player or its hint, the ✏️ SEND IT button or Sendy: every chain is on top at its centre (a short screen scrolls the list inside, and the Chain label stays in view)',
-        fits.length === 5 && fits.every((f) => !f.open.seen.covered.length && f.open.seen.inCard && f.open.seen.onScreen && f.open.label) && fits.find((f) => f.h === 600).open.seen.scrolls,
-        JSON.stringify(fits.map((f) => ({ w: f.w + 'x' + f.h, seen: f.open.seen }))).slice(0, 900));
+        || flat(f.open.l) || f.open.cut.length || f.open.seen.covered.length || !f.open.seen.inCard || !f.open.seen.onScreen || f.open.seen.n !== 1 + MD.GT_TRACKED.length || f.open.focus !== 'all' || !f.open.seen.btnClear || f.open.moved);
+      const at = (w, h) => fits.find((f) => f.w === w && f.h === h) || { open: { seen: {} } };
+      check('Top tokens\' chain drop-down in a real browser at 320, 390, 1280 and 1920 px (and a 600px-tall phone and a phone on its side): closed, the button says "All chains" with its mark; open, every chain is listed — and either way no sideways scroll, nothing outside the column, no text under the floor, no name or initials cut',
+        fits.length === 6 && !bad.length, JSON.stringify(bad.length ? bad : fits.map((f) => [f.w + 'x' + f.h, f.open.seen.top, f.open.seen.bottom, f.open.seen.up ? 'up' : 'down', f.open.seen.fixed ? 'fixed' : 'over', f.open.seen.scrolls])).slice(0, 900));
+      check('  ...the open list lies over the controls below it, inside the side card\'s width, between the nav and the bottom of the screen, and nothing covers it — not the music player or its nudge, the ✏️ SEND IT button or Sendy: every chain is on top at its centre and its edges; it never lies over its own button, and the page does not move when it opens (a short screen scrolls the list inside)',
+        fits.length === 6 && fits.every((f) => !f.open.seen.covered.length && f.open.seen.inCard && f.open.seen.onScreen && f.open.seen.btnClear && f.open.moved === 0) && at(740, 360).open.seen.scrolls,
+        JSON.stringify(fits.map((f) => ({ w: f.w + 'x' + f.h, moved: f.open.moved, seen: f.open.seen }))).slice(0, 1200));
+      check('  ...with too little room under the button it opens upward rather than moving the page: on a 1280px screen at the top of the page (the side column sticks there, so the list is fixed to the screen out of its clip) and on a phone whose button is low on the screen',
+        at(1280, 900).open.seen.up && at(1280, 900).open.seen.fixed && at(1920, 900).open.seen.fixed && at(390, 600).open.seen.up && !at(390, 600).open.seen.fixed && !at(320, 900).open.seen.fixed,
+        JSON.stringify(fits.map((f) => [f.w + 'x' + f.h, f.open.seen.up, f.open.seen.fixed])));
     });
 
     await step('Top tokens\' chain drop-down: room for what comes up over it', async () => {
       await go('/market', 1280); await openTokens(); await settled();
-      const nudge = (on) => ev('(() => { const h = document.getElementById("mp-hint"); if (h) h.hidden = ' + !on + '; return !!h; })()');
-      // the page's first press brings the nudge up by itself: made on the Chain label, then the nudge put away, then the list opened
+      // the nudge, up or put away by the step — the player's own timers (it leaves by itself a few seconds after the page opens)
+      // are held off, so it is where the step says it is
+      const nudge = (on) => ev('(() => { const h = document.getElementById("mp-hint"); if (!h) return false; if (!h.__held) { const d = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "hidden"); Object.defineProperty(h, "hidden", { get() { return d.get.call(this); }, set() { d.set.call(this, !window.__mktNudge); } }); h.__held = true; } window.__mktNudge = ' + on + '; h.hidden = ' + !on + '; return true; })()');
+      // the page's first press brings the nudge up by itself: made on the Chain label, then the nudge put away; the page scrolled
+      // until the side column sticks, so the list hangs down from the button towards the player's corner; then the list opened
       await press('document.getElementById("mkt-tf-l")'); await sleep(400); await nudge(false);
+      await ev('window.scrollTo({ top: 900, behavior: "instant" }), true'); await sleep(300);
       await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
       const before = await ev(PICKSEEN);
       const had = await nudge(true); await sleep(700);
       const over = await ev(PICKSEEN), hint = await ev('(() => { const r = document.getElementById("mp-hint").getBoundingClientRect(); return { top: Math.round(r.top), left: Math.round(r.left), right: Math.round(r.right) }; })()');
+      // a description lying over the nudge (a chip's, shown by the pointer) does not hide the nudge from the list: when something
+      // pinned then changes and the list is looked at again, it stays above the nudge (it used to grow under it, and shrink back
+      // when the description went, over and over). The bubble is held over the nudge by a rule of the walk's own (tips.js moves
+      // and hides it as the pointer and the focus please), and the player is touched so the list looks again
+      await ev('(() => { const h = document.getElementById("mp-hint"), r = h.getBoundingClientRect(); sendTips.show(h); const st = document.createElement("style"); st.id = "mkt-held-tip"; st.textContent = "#tip-bubble { display: block !important; left: " + r.left + "px !important; top: " + r.top + "px !important; width: " + r.width + "px !important; height: " + r.height + "px !important; max-width: none !important; box-sizing: border-box !important; }"; document.head.appendChild(st); document.getElementById("music-player").classList.add("mkt-poke"); return true; })()');
+      await sleep(700);
+      const tipOver = await ev('(() => { const p = ' + POP + ', h = document.getElementById("mp-hint").getBoundingClientRect(), t = document.elementFromPoint(h.left + 10, h.top + h.height / 2); return { bottom: Math.round(p.getBoundingClientRect().bottom), tip: !!t && t.id === "tip-bubble" }; })()');
+      await ev('document.getElementById("mkt-held-tip").remove(), sendTips.hide(), document.getElementById("music-player").classList.remove("mkt-poke"), true');
       await nudge(false); await sleep(700);
       const after = await ev(PICKSEEN);
       await ev(TRIG + '.click(), true');
-      check('  ...the open list makes room for what comes up over it while it is open (the player\'s nudge, at 1280 px): it stops above the nudge within half a second, nothing in it covered, and takes the room back once the nudge has gone',
-        had && !before.covered.length && !over.covered.length && over.bottom <= hint.top && over.bottom < before.bottom && !after.covered.length && after.bottom === before.bottom,
-        JSON.stringify({ before: [before.top, before.bottom], over: [over.top, over.bottom, over.covered], hint, after: [after.top, after.bottom] }));
+      check('  ...the open list makes room for what comes up over it while it is open (the player\'s nudge, at 1280 px with the side column stuck): it stops above the nudge within a second, nothing in it covered — still when a description lies over the nudge — and takes the room back once the nudge has gone',
+        had && !before.up && before.fixed && !before.covered.length && !over.covered.length && over.bottom <= hint.top && over.bottom < before.bottom && tipOver.tip && tipOver.bottom === over.bottom && !after.covered.length && after.bottom === before.bottom,
+        JSON.stringify({ before: [before.top, before.bottom, before.up], over: [over.top, over.bottom, over.covered], hint, tipOver, after: [after.top, after.bottom] }));
     });
 
-    await step('Top tokens\' chain drop-down: a list being scrolled is left alone', async () => {
-      await go('/market', 390, 600); await openTokens(); await settled();
-      // what comes and goes over the corner (the player and its nudge, Sendy arriving and greeting — it shows itself again if
-      // only hidden) is taken off the page first: this measures that nothing moves while nothing changes (the step above has
-      // the list making room when something does)
-      await press('document.getElementById("mkt-tf-l")'); await sleep(400);
-      await ev('(() => { for (const id of ["music-player", "sendy-widget"]) { const h = document.getElementById(id); if (h) h.remove(); } return true; })()');
+    // the list's own hit tests, counted: market.js's looks at what is on top, and nobody else's
+    const COUNT_HITS = `(() => { window.__mktHits = 0; for (const k of ['elementFromPoint', 'elementsFromPoint']) { const f = document[k].bind(document); document[k] = (x, y) => { if (/market\\.js/.test(new Error().stack || '')) window.__mktHits++; return f(x, y); }; } return true; })()`;
+    await step('Top tokens\' chain drop-down: looked at only when something changes', async () => {
+      // where the column sticks, the list is looked at when something pinned changes — never on a timer
+      await go('/market', 1280); await openTokens(); await settled();
+      await ev('window.scrollTo({ top: 900, behavior: "instant" }), true'); await sleep(300);
+      // Sendy arriving and greeting is a real change to what is pinned (it is looked at); he is taken off the page so the two
+      // seconds are ones where nothing changes (he shows himself again if only hidden)
+      await ev('(() => { const s = document.getElementById("sendy-widget"); if (s) s.remove(); return true; })()');
+      await ev(COUNT_HITS);
+      await press(TRIG); await until('!' + POP + '.hidden'); await sleep(900);
+      const opened = await ev('window.__mktHits'); await ev('window.__mktHits = 0, true');
+      await sleep(2000);
+      const idle = await ev('window.__mktHits');
+      await ev('document.getElementById("music-player").classList.add("mkt-poke"), true'); await sleep(600);
+      const poked = await ev('window.__mktHits');
+      await ev('document.getElementById("music-player").classList.remove("mkt-poke"), ' + TRIG + '.click(), true');
+      // below 1280px it lies over what is pinned, and never looks
+      await go('/market', 390, 844); await openTokens(); await settled();
+      await ev(COUNT_HITS);
+      await press(TRIG); await until('!' + POP + '.hidden'); await sleep(2000);
+      const phone = await ev('window.__mktHits');
+      await ev(TRIG + '.click(), true');
+      check('  ...the open list is not hit-tested on a schedule: where the side column sticks it looks when it opens and when something pinned changes (the player, here), and not at all in two seconds of nothing changing; on a phone, where it lies over what is pinned, it never looks',
+        opened > 0 && idle === 0 && poked > 0 && phone === 0, JSON.stringify({ opened, idle, poked, phone }));
+    });
+
+    await step('Top tokens\' chain drop-down: over what is pinned, under the nav, and left alone', async () => {
+      // a phone on its side: the list lies over the player's nudge where the two meet (not cut short above it), and its height
+      // is not touched while the nudge and a description come and go over it
+      await go('/market', 568, 320); await openTokens(); await settled();
+      await pressStill(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
+      await ev('(() => { const h = document.getElementById("mp-hint"); if (h) h.hidden = false; window.__mktStyle = 0; new MutationObserver((m) => { window.__mktStyle += m.length; }).observe(' + POP + ', { attributes: true, attributeFilter: ["style", "class"] }); return true; })()');
+      await sleep(400);
+      const meet = await ev('(() => { if (window.sendTips) sendTips.hide(); const p = ' + POP + '.getBoundingClientRect(), h = document.getElementById("mp-hint").getBoundingClientRect(), l = Math.max(p.left, h.left), r = Math.min(p.right, h.right), t = Math.max(p.top, h.top), b = Math.min(p.bottom, h.bottom); if (r - l < 4 || b - t < 4) return { meet: false }; const e = document.elementFromPoint((l + r) / 2, (t + b) / 2); return { meet: true, onTop: ' + POP + '.contains(e), was: e && (e.id || e.className) }; })()');
+      await ev('(() => { const h = document.getElementById("mp-hint"); sendTips.show(h); setTimeout(() => { sendTips.hide(); h.hidden = true; }, 300); return true; })()'); await sleep(900);
+      const still = await ev('window.__mktStyle');
+      await ev(TRIG + '.click(), true');
+      // a 560px-tall phone scrolled so the button is near the top: the list hangs down and scrolls inside. Scrolled to its
+      // middle, it is left alone while nothing changes; the page scrolled with it open, its top slides under the nav, which
+      // stays over it, and it grows into what the scroll freed below
+      await go('/market', 390, 560); await openTokens(); await settled();
+      await ev('(() => { const r = ' + TRIG + '.getBoundingClientRect(); window.scrollBy({ top: r.top - 90, behavior: "instant" }); return true; })()'); await sleep(200);
       await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
-      const s0 = await ev('(() => { const p = ' + POP + '; p.scrollTop = Math.round((p.scrollHeight - p.clientHeight) / 2); window.__mktStyle = 0; new MutationObserver((m) => { window.__mktStyle += m.length; }).observe(p, { attributes: true, attributeFilter: ["style"] }); return { top: p.scrollTop, mh: p.style.maxHeight, scrolls: p.scrollHeight > p.clientHeight + 1 }; })()');
+      const s0 = await ev('(() => { const p = ' + POP + '; p.scrollTop = Math.round((p.scrollHeight - p.clientHeight) / 2); window.__mktStyle = 0; new MutationObserver((m) => { window.__mktStyle += m.length; }).observe(p, { attributes: true, attributeFilter: ["style"] }); return { top: p.scrollTop, mh: p.style.maxHeight, scrolls: p.scrollHeight > p.clientHeight + 1, up: p.classList.contains("is-up") }; })()');
       await sleep(1300);
       const s1 = await ev('(() => { const p = ' + POP + '; return { top: p.scrollTop, mh: p.style.maxHeight, changes: window.__mktStyle }; })()');
-      check('  ...a list that scrolls inside (a 600px-tall phone) is left alone while nothing changes over it: the twice-a-second looks are hit tests only — its height is not touched and where it was scrolled to stays, so a flick through it is never cut short',
-        s0.scrolls && s0.top > 0 && s1.top === s0.top && s1.mh === s0.mh && s1.changes === 0, JSON.stringify({ s0, s1 }));
-      // the page scrolled with the list open: its top slides up under the sticky nav, which is scrolled away, not something over it
-      await ev('window.scrollBy({ top: 90, behavior: "instant" }), true'); await sleep(1200);
-      const s2 = await ev('(() => { const p = ' + POP + ', r = p.getBoundingClientRect(); return { mh: p.style.maxHeight, top: Math.round(r.top), nav: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0 }; })()');
+      await ev('window.scrollBy({ top: 90, behavior: "instant" }), true'); await sleep(400);
+      const s2 = await ev('(() => { const p = ' + POP + ', r = p.getBoundingClientRect(), nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0, e = document.elementsFromPoint(r.left + r.width / 2, Math.max(2, nav - 6)).find((x) => !x.closest("#tip-bubble")); return { mh: p.style.maxHeight, top: Math.round(r.top), nav, navOver: !!e && !!e.closest(".nav"), open: !p.hidden }; })()');
       await ev(TRIG + '.click(), true');
-      check('  ...and the page scrolled with it open, its top up under the sticky nav: the list keeps its room (the nav is not read as something lying over it) and grows into what the scroll freed below',
-        s2.top < s2.nav && parseFloat(s2.mh) >= parseFloat(s0.mh), JSON.stringify({ s0: s0.mh, s2 }));
+      check('  ...on a phone on its side the open list lies over the player\'s nudge where they meet (so it is not cut short above it) and is not measured again while the nudge and a description come and go: its height is never touched',
+        meet.meet && meet.onTop && still === 0, JSON.stringify({ meet, still }));
+      check('  ...a list that scrolls inside (a 560px-tall phone) is left alone while nothing changes: its height is not touched and where it was scrolled to stays, so a flick through it is never cut short',
+        s0.scrolls && !s0.up && s0.top > 0 && s1.top === s0.top && s1.mh === s0.mh && s1.changes === 0, JSON.stringify({ s0, s1 }));
+      check('  ...and the page scrolled with it open: its top slides up under the sticky nav, which stays over it (the nav rises over the open list, as it does for its own menus), and it grows into what the scroll freed below',
+        s2.open && s2.top < s2.nav && s2.navOver && parseFloat(s2.mh) >= parseFloat(s0.mh), JSON.stringify({ s0: s0.mh, s2 }));
+    });
+
+    await step('Top tokens\' chain drop-down: the page never moves, so a double-click is not a pick', async () => {
+      const res = [];
+      for (const [w, h] of [[390, 844], [1280, 900], [1920, 1080]]) {
+        await go('/market', w, h); await openTokens(); await settled();
+        await ev(TRIG + '.scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(200);
+        const y0 = await ev('scrollY'), xy = await ev('(() => { const r = ' + TRIG + '.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })()');
+        await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: xy[0], y: xy[1], button: 'none' });
+        for (const n of [1, 2]) for (const type of ['mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x: xy[0], y: xy[1], button: 'left', clickCount: n });
+        await sleep(600);
+        res.push({ w: w + 'x' + h, url: await ev('location.search'), t: (await trig()).t, open: await isOpen(), on: await pressed(), moved: Math.round((await ev('scrollY')) - y0) });
+      }
+      check('a double-click on the Chain button opens and closes the list and picks nothing: the page does not move under the pointer, so the second press lands on the button again (it used to land on a chain the page had lifted there — Base on a phone, Solana on a 1920px screen)',
+        res.every((r) => r.url === '' && r.t === 'All chains' && r.on === 'all' && !r.open && r.moved === 0), JSON.stringify(res));
+      // forced colours take background pictures away: the all-chains mark's dots are drawn again in the system's colours
+      await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
+      const fc = await ev('(() => { const m = document.querySelector("#mkt-tchains .mkt-ava-all"), cs = getComputedStyle(m); return { bi: cs.backgroundImage.slice(0, 60), fca: cs.forcedColorAdjust }; })()');
+      await cdp('Emulation.setEmulatedMedia', { features: [] });
+      check('  ...in forced colours the all-chains mark keeps its four dots (drawn in the system\'s colours), not an empty ring',
+        /radial-gradient/.test(fc.bi) && fc.fca === 'none', JSON.stringify(fc));
     });
 
     await step('Top tokens: every chain, and the chain drop-down', async () => {
@@ -733,6 +813,13 @@ async function browserWalk() {
       check('  ...Back and Forward restore the filter and the button\'s label: Back to Ethereum\'s list ("Ethereum"), Back to every chain\'s ("All chains"), Forward to Ethereum\'s again',
         back1.on === 'ethereum' && back1.t === 'Ethereum' && back1.rows.length && back1.rows.every((r) => r.c === 'ethereum') && back2.on === 'all' && back2.t === 'All chains' && back2.all && back2.rows.some((r) => r.c === 'robinhood') && back2.rows.some((r) => r.c === 'ethereum')
         && fwd.on === 'ethereum' && fwd.t === 'Ethereum' && fwd.rows.every((r) => r.c === 'ethereum'), JSON.stringify({ back1: [back1.on, back1.t], back2: [back2.on, back2.t], fwd: [fwd.on, fwd.t] }));
+      // Back with the list open: it closes first — left open, its tick and the focus would be on a chain no longer chosen
+      await press(TRIG); await until('!' + POP + '.hidden');
+      await ev('history.back(), true'); await until('location.search === ""'); await listReady();
+      const bo = { open: await isOpen(), focus: await focused(), t: (await trig()).t, on: await pressed() };
+      await ev('history.forward(), true'); await until('location.search === "?chain=robinhood&tchain=ethereum"'); await listReady();
+      check('  ...Back with the list open closes it, the focus back on the button, which says "All chains" again',
+        !bo.open && bo.focus === 'button' && bo.t === 'All chains' && bo.on === 'all', JSON.stringify(bo));
       // Escape and a press outside close it; neither changes the filter
       m = FAKE.log.length;
       await press(TRIG); await until('!' + POP + '.hidden');
@@ -769,7 +856,9 @@ async function browserWalk() {
         sp === 'robinhood' && tb1.focus === 'ethereum' && tb1.open && tb2 === 'robinhood' && tb3 === 'optimism' && tb4.focus === 'volume' && !tb4.open && tb4.exp === 'false', JSON.stringify({ sp, tb1, tb2, tb3, tb4 }));
       // an arrow puts the next chain's description up (tips.js, for any focus moved by a key); as everywhere on the site, the first
       // Escape takes that description down (WCAG 1.4.13) and the next one closes the list
-      await ev(TRIG + '.focus(), true'); await K.enter(); await until('!' + POP + '.hidden');
+      await until('new Promise((r) => { const y = scrollY; setTimeout(() => r(scrollY === y), 200); })');   // the Tab above scrolled the page to the next control (smoothly): a scroll takes any description down
+      await ev(TRIG + '.focus(), true'); await until('new Promise((r) => { const y = scrollY; setTimeout(() => r(scrollY === y), 200); })');
+      await K.enter(); await until('!' + POP + '.hidden');
       await K.down(); await sleep(60);
       const tip1 = await ev('!!document.getElementById("tip-bubble") && !document.getElementById("tip-bubble").hidden');
       await K.esc(); const e1 = { open: await isOpen(), tip: await ev('!!document.getElementById("tip-bubble") && !document.getElementById("tip-bubble").hidden') };
@@ -904,26 +993,31 @@ async function runSuite() {
       && /document\.addEventListener\('click', \(e\) => \{ if \(filterBox && !filterBox\.hidden && !pick\.box\.contains\(e\.target\)\) closePick\(false\); \}\);/.test(code)
       && /if \(\(e\.key === 'Escape' \|\| e\.key === 'Esc'\) && filterBox && !filterBox\.hidden\) \{ e\.preventDefault\(\); closePick\(true\); \}/.test(code)
       && /closePick\(true, e\.detail > 0\);\s*if \(t === S\.tokens\.tchain\) return;/.test(code) && /if \(!\['ArrowDown', 'ArrowUp', 'Home', 'End'\]\.includes\(e\.key\)\) return;/.test(code) && !/'Tab'/.test(code));
-    check('  ...the open list is kept out from under whatever is pinned over it — measured by hit-testing, not assumed — lifts the page only as far as the Chain label and a sticking side column allow, scrolls inside when it is longer than the room, and fits again on a scroll or a resize; it layers over the page and under the sticky nav',
-      /const el = document\.elementFromPoint\(x, y\); if \(!el \|\| !\(filterBox\.contains\(el\) \|\| el\.id === 'tip-bubble'\)\) return \{ x, y, el \};/.test(code)
-      && /pick\.timer = setInterval\(pickWatch, 500\);/.test(code) && /if \(pickCover\(filterBox\.getBoundingClientRect\(\)\) \|\| \(u && document\.elementFromPoint\(u\.x, u\.y\) !== u\.el\)\) fitPick\('measure'\);/.test(code)
-      && /clearInterval\(pick\.timer\); pick\.timer = 0; pick\.under = null;/.test(code) && /window\.scrollBy\(\{ top: up, behavior: 'instant' \}\)/.test(code)
-      && /if \(cs\.position === 'sticky'\) up = Math\.min\(up,/.test(code) && /window\.addEventListener\('resize', \(\) => fitPick\('measure'\)\);/.test(code) && /window\.addEventListener\('scroll', \(e\) => \{ if \(filterBox && !filterBox\.contains\(e\.target\)\) fitPick\(\); \}/.test(code)
-      && /\.mkt-cpick-p \{\s*position: absolute;[^}]*z-index: 40;[^}]*overflow-y: auto;/.test(CSS) && /\.mkt-cpick-p\[hidden\] \{ display: none; \}/.test(CSS));
+    const pickCode = code.slice(code.indexOf('const navH = () =>'), code.indexOf("window.addEventListener('resize', () => fitPick('measure'));"));
+    check('  ...the open list never moves the page: it hangs under the button or over it, whichever has the room (only when under is short), as tall as that room and scrolling inside; below 1280px it lies over what is pinned to the screen with the nav risen over it, and where the side column sticks it is fixed to the screen out of the column\'s clip and kept out from under what is pinned — by hit-testing that looks through the description bubble, on a change to the page and never on a timer',
+      pickCode.length > 2000 && !/scrollBy\(|scrollTo\(|scrollIntoView|setInterval/.test(pickCode)
+      && /return el && el\.closest\('#tip-bubble'\) \? document\.elementsFromPoint\(x, y\)\.find\(\(e\) => !e\.closest\('#tip-bubble'\)\) \|\| null : el;/.test(pickCode)
+      && /edges = \[r\.left \+ 3, r\.right - 3\]/.test(pickCode) && /if \(how === 'open' && use\.h < need\) \{ const up = pickRoom\(true, band\); if \(up\.h > use\.h\) use = up; else placePick\(false\); \}/.test(pickCode)
+      && /pick\.fixed = getComputedStyle\(\$\('mkt-side'\)\)\.position === 'sticky';/.test(pickCode) && /const under = pick\.fixed \? pickCover\(r, band, up\) : null;/.test(pickCode)
+      && /new MutationObserver\(/.test(pickCode) && /pickMO\.observe\(document\.body, \{ subtree: true, childList: true, attributes: true, attributeFilter: \['hidden', 'class', 'style'\] \}\);/.test(pickCode)
+      && /t\.contains\(filterBox\) \|\| t\.id === 'tip-bubble' \|\| t\.classList\.contains\('rk-layer'\)/.test(pickCode) && /pick\.soon = setTimeout\(pickWatch, 300\);/.test(pickCode)
+      && /window\.addEventListener\('scroll', \(e\) => \{ if \(filterBox && !filterBox\.contains\(e\.target\)\) fitPick\(\); \}/.test(code)
+      && /\.mkt-cpick-p \{\s*position: absolute;[^}]*z-index: 260;[^}]*overflow-y: auto;/.test(CSS) && /\.mkt-cpick-p\[hidden\] \{ display: none; \}/.test(CSS)
+      && /\.mkt-cpick-p\.is-up \{ top: auto; bottom: calc\(100% \+ 0\.4rem\); \}/.test(CSS) && /\.mkt-cpick-p\.is-fixed \{ position: fixed; \}/.test(CSS) && /body:has\(#mkt-tchain-p:not\(\[hidden\]\)\) > \.nav \{ z-index: 300; \}/.test(CSS));
     check('  ...it lives in the address bar (tchain=<key>, absent for every chain; anything but a chain the server reads is every chain), a change is pushed so Back and Forward restore it, and the main view is left where it was',
       /const tc = \(q\.get\('tchain'\) \|\| ''\)\.toLowerCase\(\), tchain = READS\.includes\(tc\) \? tc : '';/.test(code) && /if \(S\.tokens\.tchain\) p\.set\('tchain', S\.tokens\.tchain\);/.test(code)
       && /S\.tokens\.tchain = t; S\.shown = pageSize\(\);\s*writeURL\(true\); syncControls\(\); loadList\(\);/.test(code) && !/chainChanged/.test(code) && /if \(S\.tchainMoved && S\.tab !== 'tokens'\) setTab\('tokens', false\); else loadList\(\);/.test(code));
-    check('  ...the chosen chain says so by more than colour (a tick as well as its fill); the caret is drawn (a clipped square, never a glyph), turns without animating under reduced motion or the nav\'s ⏸, and keeps a system colour in forced colours; a logo that does not load leaves the initials (the logo hides them only while it is there; three letters grow the disc into a pill)',
+    check('  ...the chosen chain says so by more than colour (a tick as well as its fill); the caret is drawn (a clipped square, never a glyph), turns without animating under reduced motion or the nav\'s ⏸, and keeps a system colour in forced colours (so does the all-chains mark); a logo that does not load leaves the initials (the logo hides them only while it is there; three letters grow the disc into a pill)',
       /\.mkt-copt\[aria-pressed="true"\] \.mkt-tick \{ visibility: visible; \}/.test(CSS) && /\.mkt-copt \.mkt-tick \{[^}]*visibility: hidden; \}/.test(CSS)
       && /\.mkt-caret::before \{ content: ''; [^}]*clip-path: polygon\(0 0, 100% 0, 50% 100%\); \}/.test(CSS) && /\.mkt-row, \.mkt-caret \{ transition: none; \}/.test(CSS) && /html\.motion-off \.mkt-caret \{ transition: none; \}/.test(CSS)
-      && /@media \(forced-colors: active\) \{\s*\.mkt-caret::before \{ forced-color-adjust: none; background: ButtonText; \}/.test(CSS)
+      && /@media \(forced-colors: active\) \{\s*\.mkt-caret::before \{ forced-color-adjust: none; background: ButtonText; \}/.test(CSS) && /\.mkt-ava-cf\.mkt-ava-all \{ forced-color-adjust: none; --dot: ButtonText; background-color: ButtonFace; border-color: ButtonText; \}/.test(CSS)
       && /\.mkt-ava-cf:has\(img\) \.mkt-mono \{ visibility: hidden; \}/.test(CSS) && /\.mkt-ava-cf:not\(:has\(img\)\) \{ width: auto; min-width: 2em; padding: 0 0\.3em; border-radius: 1em; \}/.test(CSS) && /img\.addEventListener\('error', \(\) => img\.remove\(\)\)/.test(code));
     check('  ...every row of the all-chains list names its chain (its logo and its name in words — "on Base" to a screen reader) and opens the token on that chain; the row in the main view is matched by chain and address',
       /const chainBadge = \(r\) => '<span class="mkt-chb">'/.test(code) && /'<span class="sr-only">on <\/span>' \+ esc\(r\.chainName \|\| chainName\(r\.chain\)\)/.test(code) && /\(all \? chainBadge\(r\) : ''\)/.test(code)
       && /data-chain="' \+ esc\(on\) \+ '" data-token="' \+ esc\(r\.address\) \+ '"/.test(code) && /const cur = S\.view\.token && S\.view\.chain === on && sameToken\(S\.view\.token, r\.address\);/.test(code) && /b\.dataset\.chain === S\.view\.chain && sameToken\(b\.dataset\.token, S\.view\.token\)/.test(code));
     check('  ...no storage: the address bar is the state (?chain=&token=&window=&from=&to=), pushed when the view changes, read back on Back / Forward',
       !/localStorage|sessionStorage|indexedDB|document\.cookie/.test(code) && /p\.set\('chain', v\.chain\);\s*if \(v\.token\) p\.set\('token', v\.token\);/.test(code) && /history\[push \? 'pushState' : 'replaceState'\]/.test(code)
-      && /window\.addEventListener\('popstate', \(\) => \{ readURL\(\);/.test(code) && /q\.get\('from'\)/.test(code) && /q\.get\('to'\)/.test(code));
+      && /window\.addEventListener\('popstate', \(\) => \{ closePick\(true\); readURL\(\);/.test(code) && /q\.get\('from'\)/.test(code) && /q\.get\('to'\)/.test(code));
     check('  ...a token on Robinhood Chain, Ethereum or Solana gets the Scanner\'s own dashboard (NPCard.dashboardHTML + mountDashboard) from /api/market/scan, only once the reader scrolls to it',
       /const SCANS = \['robinhood', 'ethereum', 'solana'\];/.test(code) && /'\/api\/market\/scan\?chain=' \+ encodeURIComponent\(chain\) \+ '&address=' \+ encodeURIComponent\(addr\)/.test(code)
       && /NPCard\.dashboardHTML\(p, \{ kicker: '🛡️ Scanner', meta, level: 3 \}\)/.test(code) && /NPCard\.mountDashboard\(host\)/.test(code) && /new IntersectionObserver\(/.test(code));

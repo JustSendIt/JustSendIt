@@ -258,7 +258,7 @@
      A disclosure, as the bell's list is (notifications.js): a real button and a list of real buttons, not role="menu" — these
      are choices, not commands, and a menu promises arrow-key behaviour and a trap the reader never asked for. The arrows move
      between the chains as a convenience; Tab goes through them as usual, and leaving the list with Tab closes it. */
-  const pick = { box: $('mkt-tchains'), btn: $('mkt-tchain-b'), drawn: '', floor: 0, under: null, timer: 0 };
+  const pick = { box: $('mkt-tchains'), btn: $('mkt-tchain-b'), drawn: '', fixed: false, up: false, under: null, soon: 0, watching: false };
   const filterBox = $('mkt-tchain-p');
   // a chain's mark: its logo laid over its initials, so a logo that is missing or does not load leaves the initials; every
   // chain together has a drawn mark of its own (no one chain's logo stands for all of them)
@@ -305,78 +305,138 @@
     }
     return changed;
   }
-  /* The open list lies over the controls below it, as tall as the screen has room for under the button. What is pinned to the
-     screen sits above anything the page can layer — the music player and its hint, the ✏️ SEND IT button, Sendy and its
-     bubble — and from 1280px the side column scrolls on its own and clips what runs past its edge; so the list is kept out
-     from under all of them rather than drawn over them. Which of them reach the list depends on the width, the screen and
-     what is showing, so it is measured: laid out as tall as the screen allows, the list is hit-tested down five columns, and
-     it stops above the first point where something else is on top. Longer than the room, it scrolls inside. What is pinned
-     there can come and go while the list is open (the player's nudge appears on a first tap and leaves by itself), so twice
-     a second it is looked at again — by hit-testing alone, which leaves a list being flicked through undisturbed — and
+  /* Where the open list goes. It hangs under the button, or over it when the room under it is short and there is more above
+     — the page is never moved to make room (a page that jumps under the pointer turns the second press of a double-click into
+     a pick nobody made, and moves the main view the reader was on) — and it is as tall as that room, scrolling inside when it
+     is longer. Below 1280px, or on a screen under 700px tall, it lies over what is pinned to the bottom of the screen — the
+     music player and its nudge, the ✏️ SEND IT button, Sendy and his bubble — as the nav's own menus do (market.css), so
+     nothing pinned covers a chain. From 1280px on a taller screen the side column stays in view (sticky): it is a layer of
+     its own, under what is pinned, and it clips what runs past its edge — on a page not yet scrolled the button sits a hand's
+     width above the bottom of the screen, with no room in the column either way. There the list is fixed to the screen
+     beside the button (out of the column's clip, so it can open upward over the page above it) and kept out from under what
+     is pinned instead: laid out as tall as the room, it is hit-tested across and stops before the first point where
+     something else is on top. What is pinned can change while it is open (the nudge appears on a first tap and leaves by
+     itself; Sendy greets), so a change there is looked at again — on the change, never on a timer — and the list is
      measured again only when something new lies over it or what lay over it has gone. */
   const navH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 60;   // nav.js publishes it
-  // the first point down the list where something else is on top, or null. It starts below the nav (a list scrolled up under
-  // it is scrolled away, not covered); the columns stand clear of the rounded corners, where a point is outside the list's own
-  // box; the description bubble (tips.js) is the label of the chain in focus, over it on purpose, and does not count
-  function pickCover(r) {
-    const xs = [0, 0.25, 0.5, 0.75, 1].map((f) => r.left + 18 + (r.width - 36) * f);
-    for (let y = Math.max(r.top, navH()) + 2; y < r.bottom - 1; y += 6) {
-      for (const x of xs) { const el = document.elementFromPoint(x, y); if (!el || !(filterBox.contains(el) || el.id === 'tip-bubble')) return { x, y, el }; }
+  const EDGE = 8;   // the list stops this far short of the nav, the bottom of the screen and anything over it
+  // what is on top at a point. The description bubble (tips.js) is looked through: it labels whatever has the focus or the
+  // pointer and comes and goes with them, so it is not something to make room for — and lying over the nudge, it must not
+  // hide the nudge from the look (it did: the list grew under the nudge while a chip's description lay over it, then shrank
+  // when the pointer moved and the description went, over and over)
+  function topAt(x, y) {
+    const el = document.elementFromPoint(x, y);
+    return el && el.closest('#tip-bubble') ? document.elementsFromPoint(x, y).find((e) => !e.closest('#tip-bubble')) || null : el;
+  }
+  // the first point going away from the button (down the list, or up it when it opens upward) where something else is on top,
+  // or null. Five columns stand clear of the rounded corners, where a point is outside the list's own box, and two more run
+  // down its edges between them (the player stands over the column's corner, beside the five). It looks every 24px — nothing
+  // pinned there is shorter — then goes back over the last 24px, 4px at a time
+  function pickCover(r, band, up) {
+    const lo = Math.max(r.top, band.top) + 2, hi = Math.min(r.bottom, band.bot) - 2, step = up ? -1 : 1, from = up ? hi : lo;
+    if (hi <= lo) return null;
+    const xs = [0, 0.25, 0.5, 0.75, 1].map((f) => r.left + 18 + (r.width - 36) * f), edges = [r.left + 3, r.right - 3];
+    const at = (y) => {
+      for (const x of (y > r.top + 16 && y < r.bottom - 16 ? xs.concat(edges) : xs)) { const el = topAt(x, y); if (!el || !filterBox.contains(el)) return { x, y, el }; }
+      return null;
+    };
+    for (let i = 0, prev = from; ; i++) {
+      const y = from + step * Math.min(i * 24, hi - lo), c = at(y);
+      if (c) { for (let f = prev + step * 4; step * (y - f) > 0; f += step * 4) { const d = at(f); if (d) return d; } return c; }
+      if (i * 24 >= hi - lo) return null;
+      prev = y;
     }
-    return null;
   }
-  function pickFloor() {
-    filterBox.style.maxHeight = Math.max(0, Math.floor(window.innerHeight - 8 - filterBox.getBoundingClientRect().top)) + 'px';
-    const r = filterBox.getBoundingClientRect(), c = pickCover(r);
-    pick.under = c;   // watched while the list is open: once it has gone, the list takes the room back
-    return c ? c.y - 8 : r.bottom;
+  // which way the list hangs; fixed to the screen (where the column sticks), it is put beside the button and as wide as the column
+  function placePick(up) {
+    filterBox.classList.toggle('is-up', up);
+    if (!pick.fixed) return;
+    const b = pick.btn.getBoundingClientRect(), w = pick.box.getBoundingClientRect(), s = filterBox.style;
+    s.left = w.left + 'px'; s.maxWidth = w.width + 'px'; s.minWidth = 'min(' + w.width + 'px, 17rem)';
+    s.top = up ? 'auto' : 'calc(' + b.bottom + 'px + 0.4rem)';
+    s.bottom = up ? 'calc(' + (window.innerHeight - b.top) + 'px + 0.4rem)' : 'auto';
   }
-  function pickWatch() {
-    if (!filterBox || filterBox.hidden || !filterBox.getClientRects().length) return;
-    const u = pick.under;
-    if (pickCover(filterBox.getBoundingClientRect()) || (u && document.elementFromPoint(u.x, u.y) !== u.el)) fitPick('measure');
+  // the list laid out one way as tall as the screen allows: how tall it may be that way, and what stops it (only where it sits
+  // under what is pinned)
+  function pickRoom(up, band) {
+    placePick(up);
+    let r = filterBox.getBoundingClientRect();
+    filterBox.style.maxHeight = Math.max(0, Math.floor(up ? r.bottom - band.top : band.bot - r.top)) + 'px';
+    r = filterBox.getBoundingClientRect();
+    const under = pick.fixed ? pickCover(r, band, up) : null;
+    return { up, under, h: up ? r.bottom - Math.max(band.top, under ? under.y + EDGE : 0) : Math.min(band.bot, under ? under.y - EDGE : Infinity) - r.top };
   }
-  // how far the page may move up to give a short list more room: until the Chain label meets the nav — and a side column
-  // that stays in view (1280px and up) moves only until it has stuck
-  function pickLift(short) {
-    const side = $('mkt-side'), cs = getComputedStyle(side);
-    let up = Math.min(short, pick.box.parentNode.getBoundingClientRect().top - navH() - 8);
-    if (cs.position === 'sticky') up = Math.min(up, side.getBoundingClientRect().top - (parseFloat(cs.top) || 0));
-    return up;
-  }
-  // how: 'open' measures and may move the page (at once — a smooth scroll would still be moving when the list is measured),
-  // 'measure' measures (a resize), nothing keeps the last measure (a scroll: what is pinned to the screen has not moved)
+  // how: 'open' chooses the layout and the way the list hangs, and measures; 'measure' measures again that way (the window
+  // changed, or something pinned did); nothing keeps the last measure (a scroll: what is pinned to the screen has not moved — a
+  // list fixed to the screen follows its button, and closes once the button has scrolled out of sight)
   function fitPick(how) {
     if (!filterBox || filterBox.hidden || !filterBox.getClientRects().length) return;   // closed, or its tab is not the one showing
     const need = filterBox.scrollHeight, row = (filterBox.querySelector('.mkt-copt') || {}).offsetHeight || 48, keep = filterBox.scrollTop;
+    const band = { top: navH() + EDGE, bot: window.innerHeight - EDGE };
     if (how) {
-      pick.floor = pickFloor();
-      const short = need - (pick.floor - filterBox.getBoundingClientRect().top), up = how === 'open' && short > 1 ? pickLift(short) : 0;
-      if (up > 1) { window.scrollBy({ top: up, behavior: 'instant' }); pick.floor = pickFloor(); }
+      pick.fixed = getComputedStyle($('mkt-side')).position === 'sticky';
+      filterBox.classList.toggle('is-fixed', pick.fixed);
+      if (!pick.fixed) for (const k of ['left', 'top', 'bottom', 'minWidth', 'maxWidth']) filterBox.style[k] = '';
+      watchPick(pick.fixed);
+      // under the button when it fits there or there is more room there than above it
+      let use = pickRoom(how === 'open' ? false : pick.up, band);
+      if (how === 'open' && use.h < need) { const up = pickRoom(true, band); if (up.h > use.h) use = up; else placePick(false); }
+      pick.up = use.up; pick.under = use.under;
+    } else if (pick.fixed) {
+      const b = pick.btn.getBoundingClientRect(), c = $('mkt-side').getBoundingClientRect();
+      if (b.bottom <= Math.max(c.top, navH()) || b.top >= Math.min(c.bottom, window.innerHeight)) { closePick(true); return; }
+      placePick(pick.up);
     }
-    filterBox.style.maxHeight = Math.round(Math.max(pick.floor - filterBox.getBoundingClientRect().top, Math.min(need, row * 2))) + 'px';
+    const r = filterBox.getBoundingClientRect(), u = pick.under;
+    const room = pick.up ? r.bottom - Math.max(band.top, u ? u.y + EDGE : 0) : Math.min(band.bot, u ? u.y - EDGE : Infinity) - r.top;
+    filterBox.style.maxHeight = Math.round(Math.max(room, Math.min(need, row))) + 'px';
     filterBox.scrollTop = keep;   // measuring laid it out taller for a moment, which can pull a scrolled list back
+  }
+  // where the list is fixed to the screen, a change to what is pinned there is looked at a moment later (after an entrance's
+  // quarter-second animation). The page the list belongs to, the description bubble and the pointer's rocket (cursor.js redraws
+  // it on every move of the mouse; it never takes a press) are not what can lie over it, and are passed over
+  const pickMO = window.MutationObserver ? new MutationObserver((recs) => {
+    if (pick.soon) return;
+    for (const r of recs) {
+      let t = r.target;
+      while (t !== document.body && t.parentElement && t.parentElement !== document.body) t = t.parentElement;
+      if (t !== document.body && (t.contains(filterBox) || t.id === 'tip-bubble' || t.classList.contains('rk-layer'))) continue;
+      pick.soon = setTimeout(pickWatch, 300);
+      return;
+    }
+  }) : null;
+  function watchPick(on) {
+    if (!pickMO || on === pick.watching) return;
+    pick.watching = on;
+    if (on) pickMO.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'class', 'style'] });
+    else { pickMO.disconnect(); clearTimeout(pick.soon); pick.soon = 0; }
+  }
+  function pickWatch() {
+    pick.soon = 0;
+    if (!filterBox || filterBox.hidden || !pick.fixed || !filterBox.getClientRects().length) return;
+    const u = pick.under;
+    if ((u && topAt(u.x, u.y) !== u.el) || pickCover(filterBox.getBoundingClientRect(), { top: navH() + EDGE, bot: window.innerHeight - EDGE }, pick.up)) fitPick('measure');
   }
   // opening moves the focus to the chain chosen; opened by a press, its description is not shown (app.js: a tip is for the keyboard)
   function openPick(pressed) {
     if (!filterBox || !filterBox.hidden) return;
-    if (window.sendTips) sendTips.hide();   // the button's own description, shown by a Tab, would be measured as lying over the list
+    if (window.sendTips) sendTips.hide();   // the button's own description, shown by a Tab, would lie over the list it opens
     filterBox.hidden = false; pick.btn.setAttribute('aria-expanded', 'true');
     fitPick('open');
-    clearInterval(pick.timer); pick.timer = setInterval(pickWatch, 500);
     const on = filterBox.querySelector('[aria-pressed="true"]') || filterBox.querySelector('[data-tchain]');
     if (!on) return;
     try { on.focus({ preventScroll: true }); } catch { on.focus(); }
     filterBox.scrollTop = Math.max(0, on.offsetTop - (filterBox.clientHeight - on.offsetHeight) / 2);
     if (pressed && window.sendTips) sendTips.hide();
   }
-  // back: the focus returns to the button (a pick, Escape); an outside click or a Tab away leaves it where it went
+  // back: the focus returns to the button (a pick, Escape, Back / Forward, its button scrolled away) without moving the page; an
+  // outside click or a Tab away leaves it where it went
   function closePick(back, pressed) {
     if (!filterBox || filterBox.hidden) return;
     const inside = pick.box.contains(document.activeElement) || document.activeElement === document.body;
-    if (back && inside) { pick.btn.focus(); if (pressed && window.sendTips) sendTips.hide(); }
+    if (back && inside) { try { pick.btn.focus({ preventScroll: true }); } catch { pick.btn.focus(); } if (pressed && window.sendTips) sendTips.hide(); }
     filterBox.hidden = true; filterBox.style.maxHeight = ''; pick.btn.setAttribute('aria-expanded', 'false');
-    clearInterval(pick.timer); pick.timer = 0; pick.under = null;
+    watchPick(false); pick.under = null;
   }
   if (pick.btn) pick.btn.addEventListener('click', (e) => { if (filterBox.hidden) openPick(e.detail > 0); else closePick(true, e.detail > 0); });
   // a pick applies the filter as the row of logos did — in the address, pushed so Back and Forward walk it, and the list read
@@ -410,7 +470,7 @@
   }
   document.addEventListener('click', (e) => { if (filterBox && !filterBox.hidden && !pick.box.contains(e.target)) closePick(false); });
   document.addEventListener('keydown', (e) => { if ((e.key === 'Escape' || e.key === 'Esc') && filterBox && !filterBox.hidden) { e.preventDefault(); closePick(true); } });
-  // the room under the button moves with the page's scroll (and the side column's own) and with the window; the list's own
+  // the room beside the button moves with the page's scroll (and the side column's own) and with the window; the list's own
   // scroll is not one of them
   window.addEventListener('scroll', (e) => { if (filterBox && !filterBox.contains(e.target)) fitPick(); }, { passive: true, capture: true });
   window.addEventListener('resize', () => fitPick('measure'));
@@ -1236,8 +1296,9 @@
   if (q) q.addEventListener('keydown', (e) => { if (e.key === 'Escape' && results && !results.hidden) { e.preventDefault(); closeResults(); } });
 
   /* ════════════════════════════ start ════════════════════════════ */
-  // Back / Forward to another chain filter shows Top tokens, where that filter is (the tab itself is not in the address)
-  window.addEventListener('popstate', () => { readURL(); syncControls(); loadView(false); if (S.tchainMoved && S.tab !== 'tokens') setTab('tokens', false); else loadList(); });
+  // Back / Forward to another chain filter shows Top tokens, where that filter is (the tab itself is not in the address); an open
+  // chain list closes first — left open, its tick and the focus would be on a chain that is no longer the one chosen
+  window.addEventListener('popstate', () => { closePick(true); readURL(); syncControls(); loadView(false); if (S.tchainMoved && S.tab !== 'tokens') setTab('tokens', false); else loadList(); });
   readURL();
   S.shown = pageSize();
   paintFilter();
