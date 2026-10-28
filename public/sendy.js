@@ -595,7 +595,7 @@
     }
     const ROUTES = [{ text: 'Support board', href: '/support' }, { text: 'Email ' + EMAIL, href: MAILTO }];
     const NO_ANSWER = "I don't have an answer for that yet. Ask it on the Support board, where the community and the team answer in public — or email if it's private.";
-    function remember(role, text) { history.push({ role, text }); history = history.slice(-12); store.set('chat', history); }
+    function remember(role, text) { history.push({ role, text }); history = history.slice(-13); store.set('chat', history); }
     function paintHistory() {
       for (const m of chatLog.querySelectorAll('.sendy-msg')) m.remove();   // the messages, not the honesty line riding at their foot
       painting = true;
@@ -619,7 +619,7 @@
       let answer = null, note = null, reached = false, qaId = 0, sources = [];
       try {
         const r = await fetch('/api/sendy/ask', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q, page: location.pathname, history: history.slice(-9, -1) }) });
+          body: JSON.stringify({ q, page: location.pathname, history: history.slice(-13, -1) }) });
         const j = await r.json().catch(() => ({}));
         reached = r.status < 500;
         if (r.ok && j.answer) { answer = String(j.answer); qaId = Number(j.id) || 0; sources = sourceLinks(j.sources); }

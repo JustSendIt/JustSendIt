@@ -11475,7 +11475,7 @@ const SENDYBRAIN = require('./lib/sendybrain.js');
 const Anthropic = require('@anthropic-ai/sdk').default;
 const SENDY_KEY = process.env.ANTHROPIC_API_KEY || '';
 const SENDY_MODEL = process.env.SENDY_MODEL || SENDYBRAIN.DEFAULT_MODEL;   // claude-opus-5-5
-const SENDY_Q_MAX = 600, SENDY_HISTORY_MAX = 8;
+const SENDY_Q_MAX = 600, SENDY_HISTORY_MAX = 12;   // (six exchanges: the crisis lines are kept for a feeling said up to six answers on; the model hears the last four)
 let sendyKnowledgeCache = null, sendyAnswered = 0;
 const sendyHtmlToText = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<!--[\s\S]*?-->/g, '')
   .replace(/<\/(p|h[1-6]|li|tr|section|div|details|summary|blockquote)>/gi, '\n').replace(/<[^>]+>/g, ' ')

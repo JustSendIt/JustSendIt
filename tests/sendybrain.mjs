@@ -755,7 +755,7 @@ try {
      say next (a new wallet, moving what is left, freezing, impostors, blocking, revoking); a crisis that is still the first thing
      three turns on; and a message's own questions — only questions take the four places, a filler none, a question that leans
      on the sentence before it read with it. Each conversation is asked turn by turn, so every turn reads today's answers
-     (tests/fixtures/sendy-conversations.json: review six's 650 cases, then the 172 its own review confirmed). ═══ */
+     (tests/fixtures/sendy-conversations.json: review six's 650 cases, then the 172 its own review confirmed, then review seven's, slice by slice). ═══ */
   {
     const CONV = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'sendy-conversations.json'), 'utf8'));
     let n = 0;
@@ -947,6 +947,16 @@ try {
   const t0 = Date.now();
   const slow = await ask('zq slow — how many members are there?');
   check('a timeout (the whole question has one deadline): the friendly word and the brain\'s answer, in about the deadline', slow.status === 200 && /^My model took too long just now, so this is from my own notes: Right now the site has/.test(slow.a) && Date.now() - t0 < 6000, (Date.now() - t0) + ' ms ' + slow.a.slice(0, 120));
+  // (review seven: a phrase earlier in the chat in a form the redaction once missed, and a crisis in the chat, keep the turn on the brain)
+  asked.length = 0;
+  const CURLY = '“skin”, “rose”, “dwarf”, “neither”, “rookie”, “tornado”, “twelve”, “economy”, “receive”, “speed”, “warfare”, “opinion”';
+  const afterSeed = await ask('what is send power?', { history: [{ role: 'user', text: CURLY }, { role: 'assistant', text: 'Never share a seed phrase or a private key — not here, not anywhere.' }] });
+  const afterPiece = await ask('what is send power?', { history: [{ role: 'user', text: 'skin rose dwarf neither rookie' }, { role: 'assistant', text: "I don't have an answer for that yet." }] });
+  check('a seed phrase earlier in the chat — in curly quotes, as an old chat kept it, or a first piece of five of its words — is never sent to the model: the brain answers', afterSeed.status === 200 && afterPiece.status === 200 && asked.length === 0 && !/zq-plain/.test(afterSeed.a + afterPiece.a), asked.length + ' · ' + afterSeed.a.slice(0, 80));
+  const crisisTurns = [{ role: 'user', text: 'i want to die' }, { role: 'assistant', text: "I'm really sorry you're feeling this way, and I'm glad you said it." }];
+  const afterCrisis = [];
+  for (const q of ['nobody cares about me', 'what now?', 'ok']) afterCrisis.push(await ask(q, { history: crisisTurns }));
+  check('  ...and with a crisis in the chat the person comes first with a key too: the follow-ups get the lines from the brain, never the model', asked.length === 0 && afterCrisis.every((r) => /^I'm still here/.test(r.a)), asked.length + ' · ' + afterCrisis.map((r) => r.a.slice(0, 40)).join(' | '));
   check('the boot log says which engine answers, and the model\'s errors are logged by kind, never with the question', /Sendy answers questions with claude-opus-5-5/.test(slog) && /the model could not answer \(busy\)/.test(slog) && /the model could not answer \(timeout\)/.test(slog) && !/zq busy|zq slow/.test(slog), slog.split('\n').filter((l) => /sendy/i.test(l)).slice(-4).join(' | '));
 } catch (e) {
   console.error('ERROR', e && e.message, e && e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
@@ -1070,6 +1080,14 @@ try {
   check('a seed phrase is found by the BIP39 word lists however it is pasted (numbered, commas, capitals, inside a sentence) and removed before anything is kept; a transaction hash beside "tx" is no key, a 64-character key and a spaced key are',
     !/abandon|accident/.test(site.redact(B39)) && !/ability/.test(site.redact('here: ' + B39.toUpperCase().replace(/\d+\. /g, '') + ' thanks')) && !/4c0883a6/.test(site.redact('4c0883a6 9102937d 6231471b 5dbb6204 fe512961 7082792a e468d01a 3f362318'))
     && /0x…/.test(site.redact('my burn tx: 0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')) && site.redact('love sendy love rocket run love send calls love wall love squads love arcade love it') === 'love sendy love rocket run love send calls love wall love squads love arcade love it', site.redact(B39));
+  // (review seven: every way a phrase or a key was found written — none of its words is kept)
+  const P12 = 'skin rose dwarf neither rookie tornado twelve economy receive speed warfare opinion'.split(' '), KEY = 'f9fc3f6419690139b8df1c5e7b4f47969b0312321296f829e325748a24e6e0a0';
+  const forms = [P12.map((w) => '“' + w + '”').join(', '), P12.map((w) => '‘' + w + '’').join(' '), P12.join('… ') + '…', P12.map((w, i) => String(i + 1).split('').map((d) => d + '\uFE0F\u20E3').join('') + ' ' + w).join(' '),
+    P12.map((w, i) => String.fromCharCode(0xFF11 + i % 9) + '．' + w).join(' '), P12.map((w) => '`' + w + '`').join(' '), P12.map((w) => '🔑 ' + w).join(' '), P12.join(' > '), P12.join(' & '), P12.slice(0, 11).join(' '), P12.slice(0, 6).join(' '), P12.slice(6).join(' ')];
+  const nfd = 'ábaco acción ácido acné aéreo afición ágil agonía águila alacrán álbum algodón'.normalize('NFD');
+  const keyForms = [KEY.slice(0, 32) + '\n' + KEY.slice(32), 'my key: ' + KEY.match(/../g).join(' '), 'I exported my private key 0x' + KEY + ' from metamask, can I use it to sign a transaction in rabby?'];
+  const leftIn = forms.filter((x) => /skin|rose|dwarf|tornado|twelve|economy|warfare|opinion/.test(site.redact(x))).concat(/baco|acci/.test(site.redact(nfd).normalize('NFC')) ? [nfd] : [], /界|脆|氢/.test(site.redact('界脆和副得氢婚芳艰夹治练')) ? ['zh'] : [], /了/.test(site.redact('了，性，总，认，须，细，判，否，扩，染，弱，灰')) ? ['zh,'] : [], keyForms.filter((x) => /f9fc3f64|f9 fc 3f 64|48a24e6e0a0|8a 24 e6/.test(site.redact(x))));
+  check('  ...however the phrase or the key is written — curly quotes, ellipses, keycaps, full-width digits, backticks, emoji bullets, ">" or "&", accents typed apart, Chinese with full-width commas or none, 11 of its words, a piece of six, a key in halves, in byte pairs or named beside "transaction" — none of its words is kept', !leftIn.length, brief(leftIn.map((x) => site.redact(x).slice(0, 60))));
   const dis2 = await Promise.all(['kms', 'i want to cut myself', 'life isnt worth living', 'quiero morir'].map((q) => site.answerBrain(q, '/', []))), notDis = await Promise.all(['i don\'t want to die poor', 'is suicide squad a squad name i can use', 'this coin is better off dead', 'i\'m dying to know the gwc price'].map((q) => site.answerBrain(q, '/', [])));
   check('  ...distress said any way gets the crisis lines; the idioms that only sound like it do not', dis2.every((r) => r.intent === 'distress') && notDis.every((r) => r.intent !== 'distress'), dis2.map((r) => r.intent).concat(notDis.map((r) => r.intent)).join(','));
   site.stop(); sdbx.close();
@@ -1078,4 +1096,5 @@ try {
 let pass = 0;
 for (const [n, ok, extra] of results) { console.log((ok ? 'PASS ' : 'FAIL ') + n + (extra && !ok ? '  [' + extra + ']' : '')); if (ok) pass++; }
 console.log(`\n${pass}/${results.length} passed`);
-process.exit(pass === results.length ? 0 : 1);
+// (exit once the report is out: on macOS a pipe is written asynchronously, and exiting at once cut a long report off before its summary)
+process.stdout.write('\n', () => process.exit(pass === results.length ? 0 : 1));
