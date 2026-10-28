@@ -159,8 +159,12 @@ async function chatWalk() {
     const seeded = [];
     for (const [q, a] of CHAT_TURNS.slice(0, CHAT_SEEDED)) seeded.push({ role: 'user', text: q }, { role: 'assistant', text: a });
     /* before the page's own scripts: no tour, no hello bubble, the conversation so far; a stand-in for the model; and a
-       visual viewport whose keyboard the walk can raise (window.__kb = its height, then __kbFire()) */
-    await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `try { localStorage.setItem('jsi-tour-v1', 'seen'); sessionStorage.setItem('jsi-onboard-later', '1'); sessionStorage.setItem('sendy:greeted', 'true'); sessionStorage.setItem('sendy:chat', ${JSON.stringify(JSON.stringify(seeded))}); } catch {}
+       visual viewport whose keyboard the walk can raise (window.__kb = its height, then __kbFire()). The theme tune opted
+       out (mp-on 0), so its nudge never stands up mid-measure: it is up for 12 s once a page, the sheet stands above it for
+       those seconds (the nudge's own step below puts it up and checks that), and what is measured is the room the
+       conversation has the rest of the time. A checkout with the tune drew it at load, one without it (CI, a worktree)
+       did not — the same walk measured two different screens. */
+    await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `try { localStorage.setItem('jsi-tour-v1', 'seen'); localStorage.setItem('mp-on', '0'); sessionStorage.setItem('jsi-onboard-later', '1'); sessionStorage.setItem('sendy:greeted', 'true'); sessionStorage.setItem('sendy:chat', ${JSON.stringify(JSON.stringify(seeded))}); } catch {}
       (() => { const real = window.fetch, answers = ${JSON.stringify(CHAT_TURNS.slice(CHAT_SEEDED).map((x) => x[1]))}; let i = 0;
         window.fetch = function (input, init) {
           const u = typeof input === 'string' ? input : (input && input.url) || '';
