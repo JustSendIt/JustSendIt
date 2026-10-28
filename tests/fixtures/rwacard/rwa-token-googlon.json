@@ -1,0 +1,279 @@
+{
+ "address": "0xe10cc5f0cd0c90322ebeb33e7757b2c9090146dc",
+ "symbol": "googlon",
+ "name": "Alphabet Class A (Ondo Tokenized Stock)",
+ "logo": null,
+ "issuer": {
+  "key": "ondo",
+  "name": "Ondo Global Markets"
+ },
+ "underlying": {
+  "symbol": "GOOGL",
+  "name": "Alphabet Class A",
+  "kind": "stock"
+ },
+ "confidence": "not-confirmed",
+ "evidence": [
+  {
+   "tier": "A3",
+   "kind": "curated",
+   "text": "On this site's list of Ondo Global Markets tokens (by address, from CoinGecko's platform map)",
+   "src": "site",
+   "at": null
+  },
+  {
+   "tier": "B",
+   "kind": "coingecko",
+   "text": "CoinGecko files it as \"alphabet-class-a-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
+   "src": "geckoterminal",
+   "at": null
+  }
+ ],
+ "status": {
+  "code": null,
+  "text": "On this site's list; not confirmed on the chain yet"
+ },
+ "why": "fingerprint not read yet",
+ "priceUsd": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793199600000,
+  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+ },
+ "supply": {
+  "v": null,
+  "src": "rpc",
+  "at": 1793206800000,
+  "why": "its decimals have not been read yet"
+ },
+ "value": {
+  "v": null,
+  "src": "site",
+  "at": null,
+  "why": "neither its on-chain supply nor a DEX price has been read",
+  "label": "on-chain supply × the DEX price"
+ },
+ "mcap": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": null,
+  "why": "GeckoTerminal has no market cap for it"
+ },
+ "liquidity": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793199600000,
+  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+ },
+ "tvl": {
+  "v": null,
+  "src": "defillama",
+  "at": 1793201400000,
+  "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+  "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+  "protocols": []
+ },
+ "volume24h": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793199600000,
+  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+ },
+ "reference": {
+  "chainlink": {
+   "v": null,
+   "src": "chainlink",
+   "at": null,
+   "why": "Chainlink's Robinhood feeds price Robinhood's Stock Tokens; no reference is read for this issuer's tokens"
+  },
+  "robinhood": {
+   "v": null,
+   "src": "robinhood",
+   "at": null,
+   "why": "Robinhood quotes its own Stock Tokens only"
+  }
+ },
+ "premium": {
+  "v": null,
+  "src": "site",
+  "at": null,
+  "why": "no reference price is read for this issuer's tokens"
+ },
+ "deviation": null,
+ "multiplier": {
+  "v": null,
+  "src": "site",
+  "at": null,
+  "why": "only Robinhood's Stock Tokens carry this multiplier (ERC-8056 uiMultiplier)"
+ },
+ "halted": {
+  "v": null,
+  "src": "robinhood",
+  "at": null,
+  "why": "Robinhood reports halts for its own Stock Tokens only"
+ },
+ "paused": {
+  "global": {
+   "v": null,
+   "src": "rpc",
+   "at": null,
+   "why": "Robinhood's pause functions — not read for this issuer's tokens"
+  },
+  "token": {
+   "v": null,
+   "src": "rpc",
+   "at": null,
+   "why": "Robinhood's pause functions — not read for this issuer's tokens"
+  },
+  "oracle": {
+   "v": null,
+   "src": "rpc",
+   "at": null,
+   "why": "Robinhood's pause functions — not read for this issuer's tokens"
+  }
+ },
+ "mintBurnUsd": {
+  "v": null,
+  "src": "robinhood",
+  "at": null,
+  "why": "Robinhood publishes primary-market figures for its own Stock Tokens only"
+ },
+ "flags": [
+  "not-confirmed"
+ ],
+ "issuerProfile": {
+  "issuer": {
+   "key": "ondo",
+   "name": "Ondo Global Markets"
+  },
+  "sentences": [
+   {
+    "text": "Issued by Ondo Global Markets. As read on the chain by this site's research (2026-10-28): a beacon proxy whose code has a compliance() check, minting and burning by role, and a token pause. The issuer's terms are not read by this site.",
+    "href": null
+   }
+  ],
+  "coingecko": "https://www.coingecko.com/en/coins/alphabet-class-a-ondo-tokenized-stock"
+ },
+ "controls": {
+  "kind": "beacon proxy",
+  "beacon": null,
+  "registry": null,
+  "implementation": {
+   "address": null,
+   "src": "rpc",
+   "at": null,
+   "why": "not read on the chain yet"
+  },
+  "verifiedSource": null,
+  "verifiedWhy": "this site has not checked a verified source for this issuer's code",
+  "powers": [],
+  "powersWhy": "This site reads the roles of Robinhood's registry only; this issuer's contract keeps powers of its own (see what you hold).",
+  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict. The Scanner marks these powers in red; for a regulated issuer they are expected — they are still powers over your tokens."
+ },
+ "roles": [],
+ "rolesAt": 1793205000000,
+ "blocked": null,
+ "corporateActions": [],
+ "connected": [],
+ "lookalikes": [],
+ "chainlink": null,
+ "chainlinkWhy": "Chainlink's Robinhood feeds price Robinhood's Stock Tokens only",
+ "deployer": null,
+ "reads": {
+  "registry": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "prices": {
+   "at": 1793206800000,
+   "ok": true
+  },
+  "actions": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "deviations": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chain": {
+   "at": 1793206800000,
+   "ok": true
+  },
+  "tvl": {
+   "at": 1793201400000,
+   "ok": true,
+   "apps": 5,
+   "why": "not read: longbow (upstream 404) — each keeps its last good deposits, if any"
+  },
+  "stables": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chainlink": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "roles": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "gt": {
+   "at": 1793206800000,
+   "ok": true
+  },
+  "connected": {
+   "at": 1793201400000,
+   "ok": true
+  }
+ },
+ "at": 1793206800000,
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
+  "Not advice, never a tip to buy. Do your own research.",
+  "Stock markets close while DEX pools trade around the clock: a gap from the reference price can open outside market hours."
+ ],
+ "definitions": {
+  "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
+  "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
+  "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
+  "liquidity": "Liquidity: USD in the DEX pools on Robinhood Chain holding the token (each pool's whole reserve), from GeckoTerminal; a pool pairing two RWAs is counted once in any total.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains it is every chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: DEX trading over the last 24 hours in the pools holding the token (GeckoTerminal).",
+  "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
+  "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
+  "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."
+ },
+ "sources": [
+  {
+   "id": "robinhood",
+   "name": "Robinhood's Stock Token API (registry, quotes, corporate actions, price deviations)",
+   "href": "https://docs.robinhood.com/chain/stock-token-apis/"
+  },
+  {
+   "id": "rpc",
+   "name": "Robinhood Chain (its public node), read by this site",
+   "href": "https://docs.robinhood.com/chain/"
+  },
+  {
+   "id": "chainlink",
+   "name": "Chainlink price feeds (its public directory; each feed read on the chain)",
+   "href": "https://docs.chain.link/data-feeds/tokenized-equity-feeds/robinhood"
+  },
+  {
+   "id": "defillama",
+   "name": "DefiLlama (per-app deposits, stablecoins)",
+   "href": "https://defillama.com"
+  },
+  {
+   "id": "geckoterminal",
+   "name": "GeckoTerminal (prices, market caps, pools)",
+   "href": "https://www.geckoterminal.com"
+  },
+  {
+   "id": "l2beat",
+   "name": "L2BEAT (its count of real-world assets on the chain)",
+   "href": "https://l2beat.com/scaling/projects/robinhood"
+  }
+ ]
+}

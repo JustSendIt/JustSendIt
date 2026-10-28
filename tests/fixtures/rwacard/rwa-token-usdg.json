@@ -1,0 +1,11 @@
+{
+ "notRwa": true,
+ "address": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+ "symbol": "USDG",
+ "stablecoin": true,
+ "why": "USDG is a fiat-backed stablecoin — listed apart, not counted as an RWA here (DefiLlama and rwa.xyz count stablecoins apart)",
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
+  "Not advice, never a tip to buy. Do your own research."
+ ]
+}

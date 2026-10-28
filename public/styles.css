@@ -6193,6 +6193,37 @@ button.sc-chain--ethereum.is-on, button.sc-chain--solana.is-on { background: col
 .tkd-facts > div.tkd-facts-list { grid-column: 1 / -1; flex-direction: column; gap: 0.3rem; }
 .tkd-facts > div.tkd-facts-list dd { text-align: left; }
 
+/* ===== The real-world-asset card (owner's RWA spec, 2026-10-28; newpairs.js rwaCardHTML) =====
+   One card in the dashboard's left column, its parts in the spec's order, each with a heading of its own and its long lists in
+   a pop-down of its own. Every figure is the label over its value, then what it is and whose it is — a side column is too narrow
+   for both across. Nothing here is sized under the floor, and a chip wraps rather than pushing the card wider than a phone. */
+.tkd-card--rwa .tkd-card-b { gap: 0.75rem; }
+.tkd-rwa-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; min-width: 0; padding-top: 0.7rem; border-top: 1px solid var(--ink-4); }
+.tkd-card--rwa .tkd-card-b > .tkd-rwa-sec:first-of-type { padding-top: 0; border-top: 0; }
+.tkd-rwa-h { margin: 0; font-size: max(var(--text-floor), 0.92rem); font-weight: 800; line-height: 1.3; color: var(--text); overflow-wrap: anywhere; }
+.tkd-rwa-chips { margin: 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.tkd-card--rwa .np-flag { white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
+.tkd-rwa-kv { margin: 0; display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fit, minmax(min(12em, 100%), 1fr)); }
+.tkd-rwa-kv > div { min-width: 0; background: var(--ink); border-radius: 10px; padding: 0.45rem 0.6rem; }
+.tkd-rwa-kv dt { font-size: max(var(--text-floor), 0.72rem); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-dim); overflow-wrap: anywhere; }
+.tkd-rwa-kv dd { margin: 0.15rem 0 0; min-width: 0; overflow-wrap: anywhere; font-size: max(var(--text-floor), 0.9rem); line-height: 1.45; }   /* a block, not a grid: a value, its link and its copy button stay on one line */
+.tkd-rwa-v { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--text); }
+.tkd-rwa-lbl, .tkd-rwa-why, .tkd-rwa-src { display: block; margin-top: 0.1rem; font-size: max(var(--text-floor), 0.78rem); line-height: 1.4; overflow-wrap: anywhere; }
+.tkd-rwa-dir { font-weight: 600; color: var(--text-dim); }
+.tkd-card--rwa b.tkd-bad, .tkd-card--rwa .tkd-rwa-lbl.tkd-bad { color: var(--red); }   /* a live halt, pause or stale feed: said in words first, the colour only adds to it */
+.tkd-rwa-lbl { color: var(--text-dim); }
+.tkd-rwa-why { color: var(--text-dim); font-style: italic; }
+.tkd-rwa-src { color: var(--text-mute); }
+li > .tkd-rwa-src, p > .tkd-rwa-src { display: inline; margin-top: 0; }
+.tkd-rwa-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; font-size: max(var(--text-floor), 0.88rem); line-height: 1.45; }
+.tkd-rwa-list > li { min-width: 0; overflow-wrap: anywhere; }
+.tkd-rwa-said > li, .tkd-rwa-cn > li { padding: 0.4rem 0.6rem; background: var(--ink); border-radius: 10px; }
+.tkd-rwa-cn .tkd-rwa-lbl { margin-top: 0.15rem; }
+.tkd-card--rwa .tkd-lp-holders { margin: 0; }
+.tkd-card--rwa code { font-size: max(var(--text-floor), 0.8rem); overflow-wrap: anywhere; }
+.tkd-rwa-foot { gap: 0.3rem; }
+.tkd-rwa-fine { margin: 0; font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; color: var(--text-dim); }
+
 /* ===== The tour with Sendy, right after sign-up (owner, 2026-10-24; public/onboard.js) =====
    Sendy flies from thing to thing, the thing is lit (a cut-out in a dim layer), and a card beside him says what it is; on a
    phone the card is a bottom sheet and he perches above it. The corner Sendy steps aside while his tour twin is out. */
