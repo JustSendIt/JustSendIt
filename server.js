@@ -18771,7 +18771,8 @@ const server = http.createServer(async (req, res) => {
           if (r.reuse) db.prepare('UPDATE sendy_qa SET reuse = 1 WHERE id = ?').run(id);
         } catch {}
         // unavailable: there is no model on this server (no key) — the answer is the brain's own
-        return send(res, 200, { answer: r.answer, id, sources: r.sources, ...(SENDY_AI ? {} : { unavailable: true }) });
+        // (a question that held a seed phrase or a key comes back with those words removed, for the chat to keep instead)
+        return send(res, 200, { answer: r.answer, id, sources: r.sources, ...(r.redacted ? { redacted: r.redacted } : {}), ...(SENDY_AI ? {} : { unavailable: true }) });
       }
       /* A thumb on one of Sendy's answers: counted without who gave it (one per address per answer, a day's memory). */
       if (p === '/api/sendy/rate' && req.method === 'POST') {
