@@ -18765,7 +18765,8 @@ const server = http.createServer(async (req, res) => {
         sendyAnswered++;
         let id = null;   // kept without who asked, so readers can rate it and a helpful answer can be reused
         try {
-          id = Number(db.prepare('INSERT INTO sendy_qa (q, a, page, at) VALUES (?, ?, ?, ?)').run(q, r.answer.slice(0, 4000), page, now()).lastInsertRowid);
+          // (never the words of a seed phrase or a key someone pasted: those are removed before the question is kept)
+          id = Number(db.prepare('INSERT INTO sendy_qa (q, a, page, at) VALUES (?, ?, ?, ?)').run(SENDY.redact(q), r.answer.slice(0, 4000), page, now()).lastInsertRowid);
           // only an answer in the site's own words may be reused once rated: never a member's words, never a reading
           if (r.reuse) db.prepare('UPDATE sendy_qa SET reuse = 1 WHERE id = ?').run(id);
         } catch {}
