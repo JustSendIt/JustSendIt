@@ -55,6 +55,7 @@
   function count(v) {
     if (v == null || !isFinite(v)) return null;
     const a = Math.abs(v);
+    if (a >= 1e12) return sig(v / 1e12) + 'T';   // BitTorrent's 965 trillion tokens: "965T", never "965416B"
     if (a >= 1e9) return sig(v / 1e9) + 'B';
     if (a >= 1e6) return sig(v / 1e6) + 'M';
     if (a >= 1e5) return sig(v / 1e3) + 'k';
@@ -812,16 +813,17 @@
       '<header class="mkt-vhead">' + avaHTML(d.name || d.key, row.logo, true) +
         '<div class="mkt-vt"><p class="mkt-kicker">' + esc(kick) + '</p>' +
         '<h2 class="mkt-h" id="mkt-vh" tabindex="-1">' + esc(d.name || chainName(d.key)) + '</h2>' +
-        '<p class="mkt-vsub">Figures for <b>' + esc(w.label || 'the last full UTC day') + '</b>' + (d.at ? ' · gathered ' + agoEl(d.at) : '') + '. Each card names its source and when that source was read.</p></div>' +
+        '<p class="mkt-vsub">Figures for <b>' + esc(w.label || 'the last full UTC day') + '</b>' + (d.at ? ' · gathered ' + agoEl(d.at) : '') + '. Each card names its source and how recent its figure is.</p></div>' +
       '</header>' + (d.why ? '<p class="mkt-note mkt-basis">⏳ ' + esc(d.why) + '</p>' : '') +
       '<div class="mkt-groups">' + money + trade + feesG + act + '</div>' +
       mcapHTML(d) + chartsHTML(d) + pulseHTML(d) + l2HTML(d) + topTokensHTML(d) + newPoolsHTML(d) + sourcesHTML(d) +
     '</article>';
   }
 
-  /* the market cap's cross-check in full: each source's own figure, price and circulating supply with when it was read, what the
-     check found, and whether CoinGecko names the same token for this chain as DefiLlama does */
-  const MAP_WORD = { confirmed: '✓ CoinGecko names the same token for this chain', differs: '⚠ CoinGecko names another coin for this chain', unchecked: 'Not checked' };
+  /* the market cap's cross-check in full: each source's own figure, price and circulating supply with how recent it is ("As of":
+     CoinGecko's own update time, DefiLlama's on its relay, CoinLore's read time), what the check found, and whether CoinGecko
+     names the same token for this chain as DefiLlama does — or only its gas token, which does not check the token shown */
+  const MAP_WORD = { confirmed: '✓ CoinGecko names the same token for this chain', gas: 'Checked for its gas token only', differs: '⚠ CoinGecko names another coin for this chain', unchecked: 'Not checked' };
   function mcapHTML(d) {
     const f = fig((d.stats || {}).mcap), c = f.check;
     if (!c || !c.status || (c.status === 'none' && !(c.notes || []).length && !(c.coin && c.coin.id))) return '';
@@ -829,16 +831,16 @@
     const cellOf = (x, fmt) => (x != null && isFinite(x) ? esc(fmt(Number(x))) : '<span class="mkt-na">not given</span>');
     const rows = srcs.map((x) => '<tr><th scope="row" data-l="Source">' + esc(srcName(x.src)) + (x.relay ? ' <span class="mkt-s">(CoinGecko’s figure, relayed)</span>' : '') + '</th>' +
       '<td data-l="Market cap">' + cellOf(x.v, usd) + '</td><td data-l="Price">' + cellOf(x.price, usd) + '</td><td data-l="Circulating supply">' + cellOf(x.supply, count) + '</td>' +
-      '<td data-l="Read">' + (x.at ? agoEl(x.at) : 'time not recorded') + '</td></tr>').join('');
+      '<td data-l="As of">' + (x.at ? agoEl(x.at) : 'time not recorded') + '</td></tr>').join('');
     const sym = c.coin && c.coin.symbol ? '<span class="mkt-sym">' + esc('$' + c.coin.symbol) + '</span> ' : '';
     const coin = c.coin && c.coin.id ? (c.coin.name ? esc(c.coin.name) + ' ' : '') + sym + '<span class="mkt-s">(CoinGecko id <code>' + esc(c.coin.id) + '</code>)</span>' : '';
     const status = c.status === 'none' ? '<p class="mkt-s">' + (f.why ? esc(f.why) : 'No source gave a market cap for this token.') + '</p>' : '<p class="mkt-chkline">' + mcapChip(f) + ' <span class="mkt-s">' + esc(CHK[c.status][2]) + '.</span></p>';
     const notes = (c.notes || []).length ? '<ul class="mkt-chknotes">' + c.notes.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '';
     const m = c.mapping || {};
-    const mapping = '<p class="mkt-s"><b>The chain’s token:</b> ' + esc(MAP_WORD[m.status] || 'Not checked') + (m.note ? ' — ' + esc(m.note) : '') + '.</p>';
+    const mapping = '<p class="mkt-s"><b>The chain’s token:</b> ' + esc((m.status === 'confirmed' && m.by === 'gas' ? MAP_WORD.gas : MAP_WORD[m.status]) || 'Not checked') + (m.note ? ' — ' + esc(m.note) : '') + '.</p>';
     return '<section class="mkt-card mkt-mcap" aria-labelledby="mkt-mc-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-mc-h">🧮 Market cap, cross-checked</h3><p class="mkt-s">' + esc(MCAP_CAP) + '</p>' + (coin ? '<p class="mkt-s">' + coin + '</p>' : '') + '</div>' +
-      status + (rows ? '<table class="mkt-table mkt-chktbl"><thead><tr><th scope="col">Source</th><th scope="col">Market cap</th><th scope="col">Price</th><th scope="col">Circulating supply</th><th scope="col">Read</th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
-      notes + mapping + '<p class="mkt-s">Shown is CoinGecko’s figure when it has one (the one the rest of this site uses), never an average of the two; DefiLlama only relays CoinGecko’s figure, so it never counts as a second source. Not advice — a market cap is a count of tokens times a price.</p></section>';
+      status + (rows ? '<table class="mkt-table mkt-chktbl"><thead><tr><th scope="col">Source</th><th scope="col">Market cap</th><th scope="col">Price</th><th scope="col">Circulating supply</th><th scope="col">As of</th></tr></thead><tbody>' + rows + '</tbody></table>' : '') +
+      notes + mapping + '<p class="mkt-s">“As of” is when each source’s figure is from: CoinGecko’s own update time, DefiLlama’s on its relay, CoinLore’s when this site read it. Shown is CoinGecko’s figure when it has one (the one the rest of this site uses), never an average of the two; DefiLlama only relays CoinGecko’s figure, so it never counts as a second source. Not advice — a market cap is a count of tokens times a price.</p></section>';
   }
 
   /* the charts: one card, a range for all of them, each chart with its own source */

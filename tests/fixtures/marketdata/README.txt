@@ -26,5 +26,9 @@ and fields trimmed to what the code reads, never a value changed:
     shifted during the walk) and eCash (a measured figure 3.9% off its own price × supply);
   mcap-lore-ticker.json — CoinLore /ticker/?id=90,80,48543 (BTC, ETH, SOL), ~15:32 UTC: the per-run read's shape (the same rows
     as the walk's). The fake answers a /ticker/ read from the walk's rows.
+  mcap-lore-others.json — the "not found" wording's traps from the same reads: CoinGecko's rows for bittorrent (BTT) and
+    xdce-crowd-sale (XDC, "XDC Network") from the /coins/markets answer above (its whole 199-coin answer, not the 32 here), and
+    CoinLore's rows that are not under those symbols — "IOTA" as MIOTA (page start=100), "BitTorrent" as BTTC (start=1200) and
+    "XinFin Network" as XDCE (start=0) — as its walk gave them, keyed by page.
   CoinPaprika's answers were measured for the comparison too, and are NOT here: its free plan is for personal use only, and
   passing its data on needs its Enterprise licence.

@@ -59,7 +59,7 @@ const F = {
 /* the chain market caps' cross-check (2026-10-28): DefiLlama's chains, CoinGecko's coins and asset platforms, DefiLlama's relay,
    CoinLore's walk and a /ticker/ read — measured that day (tests/fixtures/marketdata/README.txt) */
 const MC = { chains: FIX('mcap-llama-chains.json'), cg: FIX('mcap-cg-markets.json'), relay: FIX('mcap-llama-mcaps.json'), platforms: FIX('mcap-cg-platforms.json'),
-  walk: FIX('mcap-lore-tickers.json'), ticker: FIX('mcap-lore-ticker.json') };
+  walk: FIX('mcap-lore-tickers.json'), ticker: FIX('mcap-lore-ticker.json'), others: FIX('mcap-lore-others.json') };
 const NOW_M = Date.parse('2026-10-28T15:30:00Z');   // CoinGecko's answer is stamped 15:29:50 UTC that day
 const loreRows = Object.values(MC.walk.pages).flat();
 const leaf = (o) => (typeof o === 'number' ? o : o && typeof o === 'object' ? Object.values(o).reduce((a, v) => a + leaf(v), 0) : 0);
@@ -92,7 +92,7 @@ const UNREAD = [...groupBy.keys()].filter((a) => !liqKnown(a));
 const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from('0000000d49484452', 'hex'), randomBytes(40)]);
 
 /* ═══ the fake vendors: one server, a prefix per source ═══ */
-const hits = {}, uas = new Set(), log = [];
+const hits = {}, uas = new Set(), log = [], loreAt = [];   // loreAt: when each CoinLore request arrived (real clock), for its pace
 const hit = (k) => { hits[k] = (hits[k] || 0) + 1; };
 const vendorFail = { mcaps: false, gtAll: false, noList: false, cg: false, platforms: false, lore: false, loreFrom: null }, cgSeen = [];
 // vendorMode.mcap: DefiLlama's chains and relay as measured 2026-10-28 (the market-cap section); otherwise the 2026-10-26 answers
@@ -109,6 +109,7 @@ const vendor = http.createServer((req, res) => {
     const seg = p.split('/')[1];
     if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img', 'lore'].includes(seg)) uas.add(String(req.headers['user-agent']));
     log.push(req.method + ' ' + p + u.search);
+    if (seg === 'lore') loreAt.push([Date.now(), p + u.search]);
     hit(seg);
     // DefiLlama
     if (p === '/llama/v2/chains') return send(200, vendorMode.mcap ? MC.chains : F.chains);
@@ -847,7 +848,9 @@ try {
   const walkM = loreRows.map((x) => CM.loreCoin(x, NOW_M)).filter(Boolean);
   const cgRaw = (id) => MC.cg.find((x) => x.id === id), loreRaw = (id) => loreRows.find((x) => String(x.id) === id);
   const relayOf = (id) => { const e = MC.relay['coingecko:' + id]; return e ? { v: e.mcap, at: e.timestamp * 1000 } : null; };
-  const xc = (id) => { const m = CM.matchCoin(cgM.get(id), walkM); return CM.crossCheck({ sym: cgM.get(id).symbol, cg: cgM.get(id), relay: relayOf(id), lore: m.coin, loreWhy: m.why, loreAlso: m.coin ? m.rejected : null, now: NOW_M }); };
+  const canon = (o) => JSON.stringify(Object.keys(o || {}).sort().map((k) => [k, o[k]]));   // the same entries, whatever their order
+  const SEEN = { upTo: 2000, total: MC.walk.info.coins_num, ended: false };   // what the 20-page walk read: CoinLore's first 2,000 of 14,993
+  const xc = (id) => { const m = CM.matchCoin(cgM.get(id), walkM, { seen: SEEN }); return CM.crossCheck({ sym: cgM.get(id).symbol, cg: cgM.get(id), relay: relayOf(id), lore: m.coin, loreWhy: m.why, loreAlso: m.coin ? m.rejected : null, now: NOW_M }); };
   check('names are compared as words: a parenthesised part dropped (CoinGecko\'s TON is "Gram (prev. Toncoin)", CoinLore\'s Sonic "Sonic (prev. FTM)"), invisible characters gone (CoinGecko writes stable-2 "\\u200b\\u200bStable"), one name the start of the other — and "Theta Token" is not "Theta Network"',
     cgRaw('the-open-network').name === 'Gram (prev. Toncoin)' && CM.normName(cgRaw('the-open-network').name) === 'gram' && cgRaw('stable-2').name === '​​Stable' && CM.normName(cgRaw('stable-2').name) === 'stable' && cgM.get('stable-2').name === 'Stable'
     && loreRaw('148191').name === 'Sonic (prev. FTM)' && CM.sameName(loreRaw('148191').name, cgRaw('sonic-3').name) && loreRaw('32360').name === 'Theta Token' && !CM.sameName(loreRaw('32360').name, cgRaw('theta-token').name), brief([cgRaw('stable-2').name, CM.normName(cgRaw('the-open-network').name)]));
@@ -863,12 +866,12 @@ try {
   const zerosM = ['fantom', 'mixin', 'pulsechain', 'krown-network'].map(xc);
   check('CoinGecko\'s 0 is no market cap: Fantom, Mixin, PulseChain and Krown Network come with 0 and no circulating supply — each null with why in words, never $0',
     ['fantom', 'mixin', 'pulsechain', 'krown-network'].every((id) => cgRaw(id).market_cap === 0 && cgRaw(id).circulating_supply === 0) && zerosM.every((r) => r.v === null && r.check.status === 'none' && /it lists no circulating supply/.test(r.why))
-    && zerosM[0].why === 'CoinGecko gives no market cap for $FTM — it lists no circulating supply; CoinLore does not list $FTM', brief(zerosM.map((r) => r.why)));
+    && zerosM[0].why === 'CoinGecko gives no market cap for $FTM — it lists no circulating supply; no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)', brief(zerosM.map((r) => r.why)));
   const ethM = xc('ethereum'), arbM = xc('arbitrum'), kcsM = xc('kucoin-shares'), bnbX = xc('binancecoin');
   check('agreed, differs, single — from the numbers, the figure shown always CoinGecko\'s: ETH within 10% (CoinGecko $285B, CoinLore $286B); ARB 21% apart at the same price, each counting its own circulating supply; KCS 38% apart with prices 2.2% apart; BNB CoinGecko\'s alone',
     ethM.check.status === 'agreed' && ethM.v === cgRaw('ethereum').market_cap && ethM.src === 'coingecko' && ethM.check.sources.map((x) => x.src).join() === 'coingecko,coinlore' && ethM.check.sources[1].v === Number(loreRaw('80').market_cap_usd) && ethM.check.sources[1].price === Number(loreRaw('80').price_usd)
     && arbM.check.status === 'differs' && arbM.v === cgRaw('arbitrum').market_cap && arbM.check.notes[0] === 'CoinGecko $1.15B, CoinLore $904M (21% apart): both price $ARB the same (about $0.17); they count a different circulating supply (CoinGecko 6.89B, CoinLore 5.4B)'
-    && kcsM.check.status === 'differs' && /their prices for \$KCS differ by 2\.2% \(CoinGecko \$7\.6, CoinLore \$7\.43\)$/.test(kcsM.check.notes[0])
+    && kcsM.check.status === 'differs' && kcsM.check.notes[0] === 'CoinGecko $1.06B, CoinLore $659M (38% apart): their prices for $KCS differ by 2.2% (CoinGecko $7.6, CoinLore $7.43), and they count a different circulating supply (CoinGecko 140M, CoinLore 88.7M)'
     && bnbX.check.status === 'single' && bnbX.v === cgRaw('binancecoin').market_cap && bnbX.check.sources.length === 1, brief([ethM.check, arbM.check.notes, kcsM.check.notes]));
   const selfM = MC.cg.map((x) => [x.id, CM.selfChecks(CM.cgCoin(x, NOW_M), NOW_M)]).filter(([, n]) => n.length);
   const ecash = CM.loreCoin(loreRaw('51539'), NOW_M), usdgGt = F.gtP1.data.find((p) => (INC.get(p.relationships.base_token.data.id) || {}).attributes && INC.get(p.relationships.base_token.data.id).attributes.address === USDG).attributes;
@@ -879,13 +882,49 @@ try {
   const modeM = xc('mode');
   check('DefiLlama\'s relay is a freshness check, never a second source: Mode\'s relay ($779k, read 12:08 UTC) is 3.7% off CoinGecko\'s own $809k — noted, and counted nowhere; ETH\'s (0.02% off) is not noted',
     modeM.check.notes.includes('DefiLlama’s relay differs from CoinGecko’s own figure (DefiLlama $779k, CoinGecko $809k — one of them is older)') && !ethM.check.notes.some((n) => /relay/.test(n)) && [modeM, ethM].every((r) => r.check.sources.every((x) => x.src !== 'defillama')), brief(modeM.check));
+  const kcsG = cgRaw('kucoin-shares'), kcsL = loreRaw('2750'), gap = (a, b) => Math.abs(a - b) / a;
+  check('  ...a "differs" note whose prices are more than 2% apart gives both circulating supplies too: KCS\'s prices are 2.2% apart but its supplies 36% (CoinGecko 140M, CoinLore 88.7M) — the price gap alone cannot make a 38% gap, so the note does not blame it alone',
+    gap(kcsG.current_price, Number(kcsL.price_usd)) < 0.03 && gap(kcsG.circulating_supply, Number(kcsL.csupply)) > 0.3 && /and they count a different circulating supply \(CoinGecko 140M, CoinLore 88\.7M\)$/.test(kcsM.check.notes[0]), kcsM.check.notes[0]);
+  const icxTs = MC.relay['coingecko:icon'].timestamp, icxRelay = CM.crossCheck({ sym: 'ICX', cg: null, cgWhy: 'CoinGecko was asked less than two minutes ago', relay: { v: MC.relay['coingecko:icon'].mcap, at: CM.relayAt(icxTs) }, now: NOW_M });
+  const undated = CM.crossCheck({ sym: 'ETH', cg: null, relay: { v: MC.relay['coingecko:ethereum'].mcap, at: CM.relayAt(undefined) }, now: NOW_M });
+  check('DefiLlama\'s relay standing in gets the same 6 h stale rule as CoinGecko\'s own figure (ICX\'s relay is stamped 06:38 UTC, read at 15:30); its timestamp is unix seconds (milliseconds taken as such), and a relay without one is "time not recorded" — never stamped as just read',
+    icxRelay.check.status === 'single' && icxRelay.check.notes.includes('stale: DefiLlama’s relay of CoinGecko’s figure was last updated 9 h before it was read (2026-10-28 06:38 UTC)')
+    && CM.relayAt(icxTs) === icxTs * 1000 && CM.relayAt(icxTs * 1000) === icxTs * 1000 && CM.relayAt(undefined) === null && CM.relayAt('soon') === null && CM.relayAt(12) === null
+    && undated.check.sources[0].at === null && !undated.check.notes.some((n) => /stale/.test(n)) && !CM.crossCheck({ sym: 'MODE', cg: null, relay: { v: MC.relay['coingecko:mode'].mcap, at: CM.relayAt(MC.relay['coingecko:mode'].timestamp) }, now: NOW_M }).check.notes.some((n) => /stale/.test(n)), brief([icxRelay.check.notes, undated.check.sources]));
+  /* what the walk read, in its words: CoinLore's first 2,000 of 14,993 coins is not "CoinLore does not list" */
+  const lrFull = CM.learnLore(cgM, walkM, { seen: SEEN }), lrEnd = CM.learnLore(cgM, walkM, { seen: Object.assign({}, SEEN, { ended: true }) });
+  const othCg = MC.others.cg.map((x) => CM.cgCoin(x, NOW_M)), othLore = Object.values(MC.others.pages).flat().map((x) => CM.loreCoin(x, NOW_M));
+  const lrOth = CM.learnLore([cgM.get('iota'), ...othCg], [...walkM, ...othLore], { seen: SEEN });
+  check('a token the walk found no CoinLore coin for is said by what the walk read: "no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list … (it lists 14,993)", never "CoinLore does not list"; "lists no coin with the symbol" only from a walk that reached the end of its list',
+    Object.values(lrFull.misses).length > 5 && !Object.values(lrFull.misses).some((m) => /does not list|lists no coin/.test(m)) && lrFull.misses.fantom === 'no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)'
+    && lrEnd.misses.fantom === 'CoinLore lists no coin with the symbol $FTM' && canon(lrEnd.ids) === canon(lrFull.ids), brief(lrFull.misses));
+  check('  ...and a coin CoinLore lists under another symbol is said, never taken: "IOTA" as $MIOTA and "BitTorrent" as $BTTC at CoinGecko\'s price; XDC Network\'s same-price XDCE is "XinFin Network" — no name in common, so nothing is claimed about it beyond "no coin with the symbol $XDC"',
+    lrOth.misses.iota === 'no coin with the symbol $IOTA among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993); CoinLore lists “IOTA” as $MIOTA (priced $0.042) against CoinGecko’s $0.042 — another symbol, so it is not taken as the same coin'
+    && /^no coin with the symbol \$BTT among the first 2,000 coins .*; CoinLore lists “BitTorrent” as \$BTTC \(priced \$0\.00000036\) against CoinGecko’s \$0\.00000036 — another symbol, so it is not taken as the same coin$/.test(lrOth.misses.bittorrent)
+    && lrOth.misses['xdce-crowd-sale'] === 'no coin with the symbol $XDC among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)' && Object.keys(lrOth.ids).length === 0 && othLore.some((c) => c.symbol === 'XDCE' && Math.abs(c.price - othCg[1].price) / othCg[1].price < 0.01), brief(lrOth.misses));
+  // a walk cut short (CoinLore refusing from page 6): what it matched is taken; every token it did not settle keeps the last whole walk's verdict
+  const cutRows = ['0', '100', '200', '300', '400'].flatMap((k) => MC.walk.pages[k]).map((x) => CM.loreCoin(x, NOW_M));
+  const lrCut = CM.learnLore(cgM, cutRows, { seen: { upTo: 500, total: 14993, stopped: 'page 6: rate-limited', partial: true } }), merged = CM.mergeLore(lrFull, lrCut), firstCut = CM.mergeLore(null, lrCut);
+  const lostCut = Object.keys(lrFull.ids).filter((k) => !lrCut.ids[k]);
+  // a token new since the last whole walk: here that walk as if it had not had Ethereum or Fantom yet
+  const baseNew = { ids: Object.fromEntries(Object.entries(lrFull.ids).filter(([k]) => k !== 'ethereum')), misses: Object.fromEntries(Object.entries(lrFull.misses).filter(([k]) => k !== 'fantom')) }, mergedNew = CM.mergeLore(baseNew, lrCut);
+  check('  ...a walk cut short leaves the last whole walk\'s verdicts standing — its matches (here ' + lostCut.join(', ') + ', on pages 6–20; Beam with the other BEAM it left out) and its reasons — settles only a token new since then, and on a first walk says how far it got: never "not listed" for a page it did not read',
+    lostCut.length >= 1 && canon(merged.ids) === canon(lrFull.ids) && canon(merged.misses) === canon(lrFull.misses) && merged.ids['beam-2'].rejected[0].id === '33386'
+    && mergedNew.ids.ethereum.lore === lrCut.ids.ethereum.lore && mergedNew.misses.fantom === 'no coin with the symbol $FTM among the first 500 coins of CoinLore’s list, read so far (its walk was cut short at page 6: rate-limited and goes on later)'
+    && lostCut.every((k) => /^no coin with the symbol \$\S+ among the first 500 coins of CoinLore’s list, read so far \(its walk was cut short at page 6: rate-limited and goes on later\)$/.test(firstCut.misses[k])), brief([lostCut, firstCut.misses[lostCut[0]]]));
   const idxM = CM.platformIndex(CM.platformsOf(MC.platforms)), chM = (n) => MC.chains.find((c) => c.name === n);
   const mapOf = (n) => { const c = chM(n); return CM.mappingCheck({ chainId: c.chainId, name: c.name, gecko: c.gecko_id, gas: c.gasTokenGeckoId }, idxM, (id) => cgM.get(id)); };
   const seiAmb = CM.mappingCheck({ chainId: null, name: 'Sei Network', gecko: 'sei-network', gas: 'sei-network' }, idxM);
-  check('the chain → token mapping against CoinGecko\'s asset platforms: Ethereum (chain id 1) confirmed; chains with two tokens confirmed by either — NEO, VeChain and Theta by their own token, Stable by its gas token (usdt0); Beam differs (CoinGecko names beam, DefiLlama beam-2 — said, and DefiLlama\'s kept); Hyperliquid L1, which no platform is named, unchecked; a name CoinGecko gives two platforms ("Sei Network" and "Sei Network (Deprecating)") is not used',
-    mapOf('Ethereum').status === 'confirmed' && ['NEO', 'VeChain', 'Theta'].every((n) => mapOf(n).status === 'confirmed' && chM(n).gasTokenGeckoId !== chM(n).gecko_id) && mapOf('Stable').status === 'confirmed' && chM('Stable').gasTokenGeckoId === 'usdt0' && chM('Stable').gecko_id === 'stable-2'
+  const gasOnly = MC.chains.filter((c) => c.gecko_id && mapOf(c.name).by === 'gas');
+  check('the chain → token mapping against CoinGecko\'s asset platforms: Ethereum (chain id 1) confirmed; chains with two tokens confirmed by either — NEO, VeChain and Theta by their own token, Stable by its gas token (usdt0), said as only that; Beam differs (CoinGecko names beam, DefiLlama beam-2 — said, and DefiLlama\'s kept); Hyperliquid L1, which no platform is named, unchecked; a name CoinGecko gives two platforms ("Sei Network" and "Sei Network (Deprecating)") is not used',
+    mapOf('Ethereum').status === 'confirmed' && !('by' in mapOf('Ethereum')) && !mapOf('Ethereum').note && ['NEO', 'VeChain', 'Theta'].every((n) => mapOf(n).status === 'confirmed' && !mapOf(n).by && chM(n).gasTokenGeckoId !== chM(n).gecko_id) && mapOf('Stable').status === 'confirmed' && mapOf('Stable').by === 'gas' && chM('Stable').gasTokenGeckoId === 'usdt0' && chM('Stable').gecko_id === 'stable-2'
+    && mapOf('Stable').note === 'CoinGecko names usdt0, the chain’s gas token, as its native coin; that does not check $STABLE (stable-2), the token whose market cap is shown'
     && mapOf('Beam').status === 'differs' && mapOf('Beam').note === 'CoinGecko lists beam as this chain’s native coin; DefiLlama names beam-2 — the figure shown is for DefiLlama’s' && mapOf('Hyperliquid L1').status === 'unchecked'
     && seiAmb.status === 'unchecked' && /more than one asset platform/.test(seiAmb.note) && MC.platforms.filter((p) => CM.normName(p.name) === 'seinetwork').map((p) => p.name).sort().join('|') === 'Sei Network|Sei Network (Deprecating)', brief([mapOf('Beam'), mapOf('Hyperliquid L1'), seiAmb]));
+
+  check('  ...a chain confirmed only by its gas token says so — it checks the gas token, not the token whose market cap is shown: Arbitrum (CoinGecko names ETH; the figure is ARB\'s), OP Mainnet, Stable — ' + gasOnly.length + ' of the measured chains, each with its own token not its gas token',
+    gasOnly.length >= 3 && ['Arbitrum', 'OP Mainnet', 'Stable'].every((n) => gasOnly.some((c) => c.name === n)) && gasOnly.every((c) => c.gecko_id !== c.gasTokenGeckoId && mapOf(c.name).status === 'confirmed' && mapOf(c.name).note.includes(c.gasTokenGeckoId) && mapOf(c.name).note.includes(c.gecko_id + ')'))
+    && mapOf('Arbitrum').note === 'CoinGecko names $ETH (ethereum), the chain’s gas token, as its native coin; that does not check $ARB (arbitrum), the token whose market cap is shown', brief(gasOnly.map((c) => [c.name, mapOf(c.name)])));
 
   // 2. the collectors on those answers: a chains run, the daily references (CoinGecko's platforms, CoinLore's walk), a chains run again
   vendorMode.mcap = true;
@@ -944,21 +983,82 @@ try {
   const beamBad = mdM.chains({ limit: 200 }).body.rows.find((r) => r.key === 'beam').mcap;
   check('  ...the price test runs again on every read: a learned CoinLore coin whose price stops agreeing (the older BEAM\'s $0.006579 against beam-2\'s $0.0033395) is dropped for that read, said, and the figure is CoinGecko\'s alone',
     beamBad.check.status === 'single' && beamBad.v === cgRaw('beam-2').market_cap && /priced \$0\.0066 against CoinGecko’s \$0\.0033 for \$BEAM — a different coin, not used \(on this read\)/.test(beamBad.check.notes.join(' ')), brief(beamBad.check));
+  const cdFtm = mdM.chain({ key: 'fantom' }).body;
+  check('  ...the chain detail names the source its stat names even when no figure came of it: Fantom\'s market cap is CoinGecko\'s "no market cap" (v null), and CoinGecko is among its sources, linked',
+    cdFtm.stats.mcap.src === 'coingecko' && cdFtm.stats.mcap.v === null && /CoinGecko gives no market cap/.test(cdFtm.stats.mcap.why) && cdFtm.sources.some((x) => x.id === 'coingecko' && x.url === 'https://www.coingecko.com'), brief([cdFtm.stats.mcap, cdFtm.sources]));
+  // a chains run right after another takes DefiLlama's relay: the token keeps CoinGecko's symbol and name from the run before (never its price)
+  clockM = NOW_M + 9 * 60e3 + 30e3; const rRel = await mdM.runJob('chains');
+  const relRows = mdM.chains({ limit: 200 }).body.rows, relMorph = relRows.find((r) => r.key === 'morph').mcap, relIcon = relRows.find((r) => r.key === 'icon').mcap;
+  check('  ...on a run that has only DefiLlama\'s relay, Morph is still BGB (CoinGecko\'s symbol, from the run before — DefiLlama writes "-"), never BITGET-TOKEN, with no price carried; and the relay\'s own 6 h stale rule applies (ICX\'s relay, 06:38 UTC)',
+    /CoinGecko was asked less than two minutes ago/.test(rRel.note) && /0 read from CoinGecko, \d+ relayed by DefiLlama/.test(rRel.note) && relMorph.label === 'BGB (gas token), market cap — CoinGecko\'s figure, relayed by DefiLlama' && relMorph.check.coin.symbol === 'BGB' && relMorph.check.coin.name === 'Bitget Token'
+    && dbM.prepare("SELECT native_symbol s, mcap_check k FROM mkt_chain_snap WHERE chain = 'morph' ORDER BY id DESC LIMIT 1").get().s === 'BGB' && JSON.parse(dbM.prepare("SELECT mcap_check k FROM mkt_chain_snap WHERE chain = 'morph' ORDER BY id DESC LIMIT 1").get().k).coin.price === null
+    && relIcon.check.notes.includes('stale: DefiLlama’s relay of CoinGecko’s figure was last updated 9 h before it was read (2026-10-28 06:38 UTC)'), brief([rRel.note, relMorph.label, relIcon.check.notes]));
   dbM.close();
-  // the references' own rules: never within two minutes of another CoinGecko read; a walk cut short tried again; a walk that stops once every token is matched
+  // the references' own rules: never within two minutes of another CoinGecko read, nor just before a chains run; a walk cut short goes on
+  // from where it stopped, within 20 pages a UTC day; a walk that stops once every token is matched
   const dbN = freshDb('n'); let clockN = NOW_M;
   const mdN = MD.createMarketData({ db: dbN, now: () => clockN, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: fakeSleep, cgDemoKey: 'demo-key-for-the-test' });
+  const loreN = () => JSON.parse(dbN.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value);
+  const walkStarts = (from) => log.slice(from).filter((l) => /^GET \/lore\/tickers\//.test(l)).map((l) => Number(l.match(/start=(\d+)/)[1]));
   mdN.migrate(); await mdN.runJob('chains');
   clockN = NOW_M + 60e3; const cgN0 = hits['cg-platforms'] || 0; vendorFail.loreFrom = 500;
-  const rN1 = await mdN.runJob('mcapRefs'); vendorFail.loreFrom = null; const cgN1 = hits['cg-platforms'] || 0;
-  const learnedN = JSON.parse(dbN.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value);
+  const wN1 = log.length, rN1 = await mdN.runJob('mcapRefs'); vendorFail.loreFrom = null; const cgN1 = hits['cg-platforms'] || 0;
+  const learnedN = loreN(), startsN1 = walkStarts(wN1);
   clockN = NOW_M + 4 * 60e3; const walkN = log.length;
-  const rN2 = await mdN.runJob('mcapRefs');
+  const rN2 = await mdN.runJob('mcapRefs'); const learnedN2 = loreN(), startsN2 = walkStarts(walkN);
   const cgPlat = cgSeen.filter((x) => x.q === 'asset_platforms').pop() || {};
-  check('the references never ask CoinGecko within two minutes of another read (they wait for the next try), and a walk cut short (CoinLore refusing from page 6) keeps what it matched, says where it stopped and is tried again; the operator\'s Demo key goes with the platforms read as its header',
-    !rN1.ok && /asset platforms not read: CoinGecko was asked less than two minutes ago/.test(rN1.note) && cgN1 === cgN0 && /the walk stopped at page 6: rate-limited/.test(rN1.note) && learnedN.stopped === 'page 6: rate-limited' && learnedN.ids.ethereum && learnedN.pages === 6
-    && rN2.ok && (hits['cg-platforms'] || 0) === cgN0 + 1 && cgPlat.key === 'demo-key-for-the-test' && log.slice(walkN).filter((l) => /^GET \/lore\/tickers\//.test(l)).length === 20, brief([rN1.note, rN2.note]));
+  check('the references never ask CoinGecko within two minutes of another read (they wait for the next try), and a walk cut short (CoinLore refusing from page 6) keeps what it matched, says where it stopped, and goes on from that page — not from page 1; the operator\'s Demo key goes with the platforms read as its header',
+    !rN1.ok && /asset platforms not read: CoinGecko was asked less than two minutes ago/.test(rN1.note) && cgN1 === cgN0 && /the walk stopped at page 6: rate-limited and goes on from there/.test(rN1.note) && learnedN.stopped === 'page 6: rate-limited' && learnedN.ids.ethereum && learnedN.pages === 5
+    && learnedN.walk.next === 500 && learnedN.dayCalls === 6 && startsN1.join() === '0,100,200,300,400,500'
+    && (hits['cg-platforms'] || 0) === cgN0 + 1 && cgPlat.key === 'demo-key-for-the-test' && startsN2[0] === 500 && startsN2.length === 14, brief([rN1.note, rN2.note, startsN1, startsN2]));
+  check('  ...and the walk reads at most 20 pages in a UTC day, a refused page counted: the cut-short walk (6 calls) goes on for 14 more and stops there, says so, and keeps its place',
+    startsN1.length + startsN2.length === MD.MCAP.LORE_WALK_MAX && !rN2.ok && /today's 20 pages are spent and the walk goes on after 00:00 UTC/.test(rN2.note) && learnedN2.dayCalls === 20 && learnedN2.walk.next === 1900 && learnedN2.complete === false && learnedN2.ids.ethereum, brief([rN2.note, learnedN2.dayCalls]));
+  // a chains run 90 s after the platforms read: it waits out the rest of CoinGecko's two minutes (its slot taken first), never DefiLlama's relay for half an hour
+  clockN = NOW_M + 4 * 60e3 + 90e3; const slpN = sleeps.length, cgM0 = hits['cg-markets'] || 0;
+  const rN3 = await mdN.runJob('chains'); const morphN = mdN.chains({ limit: 200 }).body.rows.find((r) => r.key === 'morph').mcap;
+  check('  ...a chains run that comes 90 s after the platforms read waits the other 30 s and reads CoinGecko itself — every token read from CoinGecko, none relayed, Morph still BGB',
+    sleeps.slice(slpN).includes(30e3) && (hits['cg-markets'] || 0) === cgM0 + 1 && /market caps of 32 tokens: 32 read from CoinGecko;/.test(rN3.note) && !/relayed by DefiLlama|asked less than two minutes/.test(rN3.note) && morphN.label === 'BGB (gas token), market cap', brief([rN3.note, sleeps.slice(slpN)]));
+  // the next UTC day: the walk goes on from page 20 and is whole
+  clockN = Date.parse('2026-10-29T00:40:00Z'); const walkN3 = log.length;
+  const rN4 = await mdN.runJob('mcapRefs'); const learnedN4 = loreN(), startsN4 = walkStarts(walkN3);
+  check('  ...the next UTC day it goes on from page 20 — one page — and is whole: every token matched as a full walk matches it, the misses worded by what it read',
+    rN4.ok && startsN4.join() === '1900' && learnedN4.complete === true && learnedN4.walk === null && learnedN4.pages === 20 && learnedN4.dayCalls === 1 && canon(learnedN4.ids) === canon(lrFull.ids)
+    && learnedN4.misses.fantom === 'no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)' && /20 of 32 chain tokens matched over 20 pages \([^)]*this walk going on from page 20\)/.test(rN4.note), brief([rN4.note, startsN4]));
+  // the platforms read steps aside when the chains run is due within 3 minutes (it reads CoinGecko first)
+  dbN.prepare("DELETE FROM mkt_state WHERE name = 'cg_platforms'").run(); clockN = Date.parse('2026-10-29T00:50:00Z');
+  mdN.start({ jobs: ['chains'], staggerMs: 1000 }); const cgP0 = hits['cg-platforms'] || 0, rN5 = await mdN.runJob('mcapRefs'); mdN.stop();
+  check('  ...and the platforms read steps aside, to be tried again within the hour, when the chains run is due within 3 minutes', !rN5.ok && /asset platforms not read now: the chains run, which reads CoinGecko first, is under way or due within 3 minutes/.test(rN5.note) && (hits['cg-platforms'] || 0) === cgP0, rN5.note);
   dbN.close();
+  /* a whole walk, then a walk cut short the next day: yesterday's matches stand for every token today's never reached, and however
+     often it is tried while CoinLore keeps refusing, the day's walk reads 20 pages at most */
+  const dbQ = freshDb('q'); let clockQ = NOW_M;
+  const mdQ = MD.createMarketData({ db: dbQ, now: () => clockQ, outboundTake: take, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: fakeSleep }); mdQ.migrate();
+  const loreQ = () => JSON.parse(dbQ.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value);
+  const statusesQ = () => { const n = {}; for (const r of mdQ.chains({ limit: 200 }).body.rows) n[r.mcap.check.status] = (n[r.mcap.check.status] || 0) + 1; return JSON.stringify(n); };
+  await mdQ.runJob('chains'); clockQ = NOW_M + 3 * 60e3; await mdQ.runJob('mcapRefs'); clockQ = NOW_M + 6 * 60e3; await mdQ.runJob('chains');
+  const day1 = loreQ(), st1 = statusesQ();
+  clockQ = NOW_M + 864e5 + 4 * 60e3; vendorFail.loreFrom = 300; const wQ = log.length;
+  const rQ1 = await mdQ.runJob('mcapRefs'); const day2 = loreQ();
+  clockQ += 2 * 60e3; await mdQ.runJob('chains'); const st2 = statusesQ();
+  const tries = [];
+  for (let i = 1; i <= 30; i++) { clockQ = NOW_M + 864e5 + (4 + 10 * i) * 60e3; const w0 = log.length; const r = await mdQ.runJob('mcapRefs'); tries.push({ ok: r.ok, starts: walkStarts(w0), note: r.note }); }
+  const day2Calls = walkStarts(wQ).length; vendorFail.loreFrom = null;
+  check('a walk cut short the next day (CoinLore refusing from page 4) keeps every match of the day before — ' + Object.keys(day1.ids).length + ' tokens — and its reasons for the rest; the chains run after it checks as many against CoinLore as before (never "not listed" for a page it did not read)',
+    !rQ1.ok && Object.keys(day1.ids).length === 20 && canon(day2.ids) === canon(day1.ids) && canon(day2.misses) === canon(day1.misses) && day2.walk.next === 300 && st2 === st1
+    && /20 of 32 chain tokens matched over 3 pages \(\d+ coins\), \d+ of them kept from the last whole walk, the walk stopped at page 4: rate-limited and goes on from there/.test(rQ1.note), brief([rQ1.note, st1, st2]));
+  check('  ...and tried every 10 minutes for 5 hours while CoinLore keeps refusing, each try goes on from page 4 (never from page 1) and the day\'s walk stops at 20 pages, saying so',
+    day2Calls === MD.MCAP.LORE_WALK_MAX && tries.every((t) => t.starts.every((x) => x === 300)) && tries.filter((t) => t.starts.length).length === 16 && tries.slice(16).every((t) => !t.ok && !t.starts.length && /today's 20 walk pages are spent; the walk goes on from page 4 after 00:00 UTC/.test(t.note))
+    && canon(loreQ().ids) === canon(day1.ids), brief([day2Calls, tries.slice(14, 18)]));
+  clockQ = Date.parse('2026-10-30T00:40:00Z'); const wQ3 = log.length, rQ3 = await mdQ.runJob('mcapRefs'), day3 = loreQ();
+  check('  ...the next UTC day, CoinLore answering again, the walk goes on from page 4 to the end of its 20 pages and is whole again', rQ3.ok && walkStarts(wQ3).join() === [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19].map((i) => i * 100).join() && day3.complete === true && day3.walk === null && canon(day3.ids) === canon(day1.ids), brief([rQ3.note, walkStarts(wQ3)]));
+  dbQ.close();
+  /* CoinLore's 1.1 s pace on a moving clock, with callers at once (the chains run during the walk: each job has its own timer) —
+     each takes its slot before it waits, so they queue */
+  const dbR = freshDb('r'), mdR = MD.createMarketData({ db: dbR, outboundTake: take, urls: URLS }); mdR.migrate();
+  const lr0 = loreAt.length;
+  await Promise.all([mdR._test.loreAsk(null, '/ticker/?id=80'), mdR._test.loreAsk(null, '/ticker/?id=90'), mdR._test.loreAsk(null, '/tickers/?start=0&limit=100')]);
+  const loreGaps = loreAt.slice(lr0).map((x, i, a) => (i ? x[0] - a[i - 1][0] : null)).slice(1); dbR.close();
+  check('CoinLore\'s pace holds with two jobs asking at once: three calls made together on the real clock go out at least 1.1 s apart, one behind the other', loreGaps.length === 2 && loreGaps.every((g) => g >= MD.MCAP.LORE_GAP_MS - 15), brief(loreGaps));
   const dbO = freshDb('o'), mdO = MD.createMarketData({ db: dbO, now: () => NOW_M + 3 * 60e3, outboundTake: take, urls: URLS, sleep: fakeSleep }); mdO.migrate();
   for (const id of ['bitcoin', 'ethereum', 'solana']) { const g = cgRaw(id); dbO.prepare("INSERT INTO mkt_chain_snap (chain, name, at, tvl, native_token, src, mcap_check) VALUES (?, ?, ?, 1, ?, '{}', ?)").run(id, g.name, NOW_M, id, JSON.stringify({ coin: { id, symbol: g.symbol.toUpperCase(), name: g.name, price: g.current_price }, status: 'single', sources: [], notes: [], mapping: { status: 'unchecked' } })); }
   dbO.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('cg_platforms', ?, ?)").run(JSON.stringify({ list: [] }), NOW_M);
@@ -972,7 +1072,7 @@ try {
   vendorMode.mcap = false;
   // the budgets, in the server's own table, and the docs
   const README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), PRIV = fs.readFileSync(path.join(ROOT, 'public', 'privacy.html'), 'utf8'), ENVX = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
-  check('the budgets: CoinLore metered at 30 a minute on top of its own 1.1 s pace, at most 20 walk pages a day and 50 ids a read; CoinGecko\'s coins in one read of 250, its shared 20 a minute untouched; the references daily; CoinPaprika read nowhere',
+  check('the budgets: CoinLore metered at 30 a minute on top of its own 1.1 s pace, at most 20 walk pages a UTC day (the cut-short walk and its retries above stay within it) and 50 ids a read; CoinGecko\'s coins in one read of 250, its shared 20 a minute untouched; the references daily; CoinPaprika read nowhere',
     /'api\.coinlore\.net': 30,/.test(SRC) && /'api\.coingecko\.com': 20,/.test(SRC) && MD.MCAP.LORE_WALK_MAX === 20 && MD.MCAP.LORE_PER_CALL <= 50 && MD.MCAP.CG_PER_CALL === 250 && MD.JOBS.mcapRefs.every === 864e5 && MD.JOBS.mcapRefs.retry >= 3600e3
     && !/api\.coinpaprika\.com|coinpaprika\.com\/v1/.test(LIB + SRC) && /CoinPaprika is NOT read/.test(LIB), '');
   check('  ...and the docs say it: the README (the sources, the cadence, why not CoinPaprika), /data (each chain figure\'s check, and coinlore among the sources), the Privacy Policy §8 (CoinLore read by the server), .env.example (MARKET_COINLORE_URL)',

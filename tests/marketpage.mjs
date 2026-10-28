@@ -936,9 +936,10 @@ async function browserWalk() {
         fits.push({ w, d, l: await ev(LAYOUT) });
       }
       const d0 = fits[0].d || {};
-      check('  ...and the chain view lists each source\'s market cap, price and circulating supply with when it was read, why they differ in the sources\' own numbers, and the token check — at 320 and 1280 px, nothing outside the column, nothing under the text floor',
+      check('  ...and the chain view lists each source\'s market cap, price and circulating supply with how recent it is ("As of"), why they differ in the sources\' own numbers, and the token check — Arbitrum\'s says CoinGecko named only its gas token (ETH), so ARB is not checked by it — at 320 and 1280 px, nothing outside the column, nothing under the text floor',
         fits.every((x) => x.d && x.l.sw <= x.l.iw && !x.l.out.length && !x.l.small.length) && d0.rows.length === 2 && /^CoinGecko\$1\.15B\$0\.1668/.test(d0.rows[0]) && /^CoinLore\$904M/.test(d0.rows[1]) && /6\.89B/.test(d0.rows[0]) && /5\.4B/.test(d0.rows[1])
-        && /both price \$ARB the same/.test(d0.notes.join(' ')) && d0.chip === '⚠ Sources differ' && /CoinGecko names the same token for this chain/.test(d0.text) && /never an average/.test(d0.text), JSON.stringify(fits.map((x) => ({ w: x.w, d: x.d && { rows: x.d.rows, chip: x.d.chip }, l: x.l }))).slice(0, 700));
+        && /both price \$ARB the same/.test(d0.notes.join(' ')) && d0.chip === '⚠ Sources differ' && !/CoinGecko names the same token for this chain/.test(d0.text)
+        && /The chain’s token: Checked for its gas token only — CoinGecko names \$ETH \(ethereum\), the chain’s gas token, as its native coin; that does not check \$ARB \(arbitrum\), the token whose market cap is shown\./.test(d0.text) && /never an average/.test(d0.text) && /As of/.test(d0.text), JSON.stringify(fits.map((x) => ({ w: x.w, d: x.d && { rows: x.d.rows, chip: x.d.chip }, l: x.l }))).slice(0, 700));
       await go('/market?chain=fantom', 390);
       await until('!!document.getElementById("mkt-mc-h")');
       const fd = await ev('({ card: (document.querySelector(".mkt-mcap") || {}).textContent || "", stat: [...document.querySelectorAll(".mkt-stat")].map((s) => s.textContent).find((t) => /Native token market cap/.test(t)) || "" })');
@@ -1075,15 +1076,19 @@ async function runSuite() {
     check('  ...every figure names its source and when it was read; growthepie\'s licence is credited with a link wherever its data appears',
       /function srcLine\(f\)/.test(code) && /'<a class="mkt-src-l" href="https:\/\/www\.growthepie\.com" target="_blank" rel="noopener">Source: growthepie \(CC BY 4\.0\)<\/a>'/.test(code) && /f\.src === 'growthepie' \? GTP/.test(code)
       && /x\.id === 'growthepie' \? 'Source: growthepie \(CC BY 4\.0\)'/.test(code) && /growthepie \(CC BY 4\.0\)/.test(H));
+    check('  ...the page\'s own list of its sources names every one it shows, CoinLore among them (the market caps\' second source)',
+      /Market figures come from DefiLlama, L2BEAT, growthepie \(CC BY 4\.0\), CoinGecko, CoinLore, GeckoTerminal, Dexscreener and Robinhood Chain’s public node, read by this site’s server/.test(H));
     check('  ...a "lowest first" list says it is lowest among what the source lists, not lowest on the chain; DeFi TVL and TVS are separate figures; the v4 PoolManager and the bridge say what they are and are not',
       /so “lowest” is lowest among those, not lowest on the chain\./.test(code) && /stat\('DeFi TVL', st\.tvl, usd\) \+ stat\('Total value secured', st\.tvs, usd/.test(code)
       && /includes claims and fees — assets held, not pool TVL/.test(code) && /held by the bridge contract on Ethereum — not a net inflow/.test(code) && /pools, not tokens/.test(code));
     check('  ...nothing tells anyone to buy, promises safety, or claims an affiliation', !/\b(you should buy|buy now|great investment|guaranteed|risk-free|safe investment|to the moon)\b/i.test(H + JS) && /never a tip to buy/.test(H) && /not a recommendation/.test(JS));
-    check('a chain\'s market cap shows its cross-check (2026-10-28): a chip beside the figure in the list (ranked by market cap) and in the chain view — "✓ 2 sources agree", "⚠ Sources differ" or "1 source", in words, never by colour alone — the caption says what the figure is, and the chain view lists each source\'s figure, price and supply with when it was read, the notes and the token check',
+    check('a chain\'s market cap shows its cross-check (2026-10-28): a chip beside the figure in the list (ranked by market cap) and in the chain view — "✓ 2 sources agree", "⚠ Sources differ" or "1 source", in words, never by colour alone — the caption says what the figure is, and the chain view lists each source\'s figure, price and supply with how recent it is ("As of"), the notes and the token check',
       /agreed: \['✓ 2 sources agree', 'is-ok', '[^']{20,}'\]/.test(code) && /differs: \['⚠ Sources differ', 'is-warn', '[^']{20,}'\]/.test(code) && /single: \['1 source', 'is-one', '[^']{20,}'\]/.test(code)
       && /const MCAP_CAP = 'Market cap of the chain’s own token: CoinGecko’s figure, checked against CoinLore';/.test(code) && /\(sortF === 'mcap' \? '<span class="mkt-cap-n">' \+ esc\(MCAP_CAP\) \+ '\.<\/span>' : ''\)/.test(code)
       && /\(sortF === 'mcap' \? mcapChip\(f\) : ''\)/.test(code) && /stat\('Native token market cap', st\.mcap, usd, mcapChip\(st\.mcap\)\)/.test(code) && /mcapHTML\(d\) \+ chartsHTML\(d\)/.test(code)
-      && /<section class="mkt-card mkt-mcap" aria-labelledby="mkt-mc-h">/.test(code) && /<th scope="col">Source<\/th><th scope="col">Market cap<\/th><th scope="col">Price<\/th><th scope="col">Circulating supply<\/th><th scope="col">Read<\/th>/.test(code)
+      && /<section class="mkt-card mkt-mcap" aria-labelledby="mkt-mc-h">/.test(code) && /<th scope="col">Source<\/th><th scope="col">Market cap<\/th><th scope="col">Price<\/th><th scope="col">Circulating supply<\/th><th scope="col">As of<\/th>/.test(code)
+      && /data-l="As of"/.test(code) && /“As of” is when each source’s figure is from: CoinGecko’s own update time, DefiLlama’s on its relay, CoinLore’s when this site read it\./.test(code) && !/data-l="Read"/.test(code)
+      && /gas: 'Checked for its gas token only'/.test(code) && /m\.status === 'confirmed' && m\.by === 'gas' \? MAP_WORD\.gas/.test(code)
       && /data-l="Circulating supply"/.test(code) && /never an average of the two/.test(code) && /coinlore: 'CoinLore'/.test(code) && /\.mkt-chk \{[^}]*font-size: max\(var\(--text-floor\), 0\.72rem\)/.test(CSS) && /\.mkt-chk\.is-warn \{/.test(CSS));
     check('the charts are drawn by market.js in SVG (no library): at the box\'s own pixel size, an axis, a hover and arrow-key readout, a table of every value',
       /createElementNS\(NS, tag\)/.test(code) && /const W = Math\.max\(200, Math\.floor\(box\.clientWidth \|\| 300\)\);/.test(code) && /viewBox: '0 0 ' \+ W \+ ' ' \+ H/.test(code) && /class: 'mkt-ax'/.test(code)
@@ -1215,8 +1220,9 @@ async function runSuite() {
       && F.usd(null) === null && F.usd(undefined) === null && F.usd(NaN) === null && F.usd(0) === '$0' && F.usd(48511e6) === '$48.5B' && F.usd(2.4e12) === '$2.4T',
       [F.usd(1125597534), F.usd(552453391), F.usd(32373), F.usd(0.0001703), F.usd(0.00000631)].join(' '));
     check('  ...a change carries its direction in an arrow and a sign, not only in a colour; counts and gas read as people say them',
-      F.pct(-2.55) === '▼ −2.55%' && F.pct(8.23) === '▲ +8.23%' && F.pct(0) === '0.00%' && F.pct(null) === null && F.count(4613599) === '4.61M' && F.count(207510) === '208k' && F.count(1343) === '1,343' && F.gwei(0.02014) === '0.02014 gwei' && F.amount(262043.43, 'ETH') === '262k ETH',
-      [F.pct(-2.55), F.count(207510), F.amount(262043.43, 'ETH')].join(' '));
+      F.pct(-2.55) === '▼ −2.55%' && F.pct(8.23) === '▲ +8.23%' && F.pct(0) === '0.00%' && F.pct(null) === null && F.count(4613599) === '4.61M' && F.count(207510) === '208k' && F.count(1343) === '1,343'
+      && F.count(965416274329945.1) === '965T' && F.count(5512186236358.09) === '5.51T' && F.count(146246726558361) === '146T' && F.count(6892115031) === '6.89B' && F.gwei(0.02014) === '0.02014 gwei' && F.amount(262043.43, 'ETH') === '262k ETH',
+      [F.pct(-2.55), F.count(207510), F.amount(262043.43, 'ETH'), F.count(965416274329945.1)].join(' '));
     check('  ...and a read time says how long ago, never a guess when there is none', F.agoText(Date.now() - 5 * 60e3) === '5\u00a0min ago' && F.agoText(Date.now() - 3 * 3600e3) === '3\u00a0h ago' && F.agoText(null) === 'time not recorded' && F.utc(Date.parse('2026-10-26T17:30:00Z')) === '2026-10-26 17:30 UTC');
 
     /* ═══ 4. the fake, against the same contract ═══ */
