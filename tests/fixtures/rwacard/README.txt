@@ -17,6 +17,10 @@ rwa-token-*.json — the server's own /api/market/rwa/token answers (lib/marketd
     gme-memecoin          that memecoin's own answer: the 404 { notRwa, why } ("Same ticker as $GME, but not issued by …")
     usdg                  USDG's 404: a fiat-backed stablecoin, listed apart
     notmystock            "Not My Stock" (NMS): a 404 that is neither a lookalike nor a stablecoin
+  One later change, the same in every file with Robinhood's sentences (tsla, tsla-registry-down, spy, week, gme, and
+  tests/fixtures/market/rwa-token-0x322f…3b2d.json): issuerProfile.sentences is lib/rwa.js's ISSUER_TEXT.rhj as it now
+  stands, where the custody sentence became two, each linking the page it comes from (the FAQ; the service-providers page
+  that names Alpaca). tests/marketpage.mjs holds these files to lib's shapes, and the market copy's list to lib's text.
 
 goplus-4663-tsla.json — GoPlus Security's token_security/4663 answer for TSLA, read 2026-10-28 with the site's honest
   User-Agent (the research read in the RWA build's detail.md §5); the result object is unchanged, in the wrapper the

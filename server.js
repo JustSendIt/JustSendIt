@@ -10540,11 +10540,12 @@ const MKT = MD.createMarketData({
 });
 MKT.migrate();
 /* The RWA card on the Scanner's dashboard (owner, 2026-10-28): a Robinhood Chain profile carries p.rwa — the facts Market Data keeps
-   for that token when it is an RWA here (MKT.rwaFacts: its evidence, figures, issuer powers, corporate actions, lookalikes), else
-   null. A lookup of stored facts, never a read on the scan path; added to the answer only, never stored with the profile. */
+   for that token when it is an RWA here (MKT.rwaFacts: its evidence, figures, issuer powers, corporate actions, lookalikes); for a
+   token that only shares an RWA's ticker, the "not an RWA" answer that says so (MKT.rwaLookalike, { notRwa, why }); else null. A
+   lookup of stored facts, never a read on the scan path; added to the answer only, never stored with the profile. */
 function withRwa(p) {
   if (!p || !p.token || !/^0x[0-9a-f]{40}$/i.test(String(p.token.address || '')) || (p.chain && p.chain !== 'robinhood')) return p;
-  let rwa = null; try { rwa = MKT.rwaFacts(p.token.address); } catch {}
+  let rwa = null; try { rwa = MKT.rwaFacts(p.token.address) || MKT.rwaLookalike(p.token.address, p.token.symbol); } catch {}
   return Object.assign({}, p, { rwa });
 }
 // the radar resumes where it stopped: its block cursor and its newest pairs (until now they lived in memory only)

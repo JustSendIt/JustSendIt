@@ -178,8 +178,12 @@
     "href": "https://docs.robinhood.com/rhj/product/"
    },
    {
-    "text": "Robinhood's FAQ says every Stock Token in circulation is backed 1:1 by the underlying, held by its US-based custody partner; its service-providers page names Alpaca Securities LLC as broker and custodian.",
+    "text": "Robinhood's FAQ says every Stock Token in circulation is backed 1:1 by the underlying, held by its US-based custody partner.",
     "href": "https://docs.robinhood.com/rhj/faq/"
+   },
+   {
+    "text": "Robinhood's service-providers page names Alpaca Securities LLC as the broker and custodian.",
+    "href": "https://docs.robinhood.com/rhj/service-providers/"
    },
    {
     "text": "Holders can sell on the secondary market, or redeem directly with the issuer where no authorised participant does it for them, after completing the issuer's KYC/AML checks.",

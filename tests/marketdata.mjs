@@ -1091,6 +1091,13 @@ try {
     check('RWA: the Scanner\'s serial-deployer flag is waived only on a confirmed Stock Token deployed by the registry\'s token-deployer role holder — another deployer, an issuer-listed token or a token that is not an RWA keeps it; the server applies it in applyRisk and attaches p.rwa from these stored facts (no read on the scan path)',
       /token-deployer role/.test(mdR.rwaIssuerDeployer(TSLA, '0x5516b3451d4d6c9f63353fe7bc9537477ecce000') || '') && mdR.rwaIssuerDeployer(TSLA, '0x' + '12'.repeat(20)) === null && mdR.rwaIssuerDeployer(GME_MEME, '0x5516b3451d4d6c9f63353fe7bc9537477ecce000') === null
       && /waived = MKT\.rwaIssuerDeployer\(e\.token\.address, dep\)/.test(SRC) && /if \(waived\) \{ r\.serialDeployer = false; r\.serialDeployerWaived = waived; \}/.test(SRC) && /rwa = MKT\.rwaFacts\(p\.token\.address\)/.test(SRC) && /pair: withRwa\(r\.pair\)/.test(SRC) && mdR.rwaFacts(TSLA).address === TSLA && mdR.rwaFacts(USDG) === null);
+    /* a token this site has never seen, scanned under an RWA's ticker: its own profile names the symbol, and p.rwa is the lookalike 404
+       that says so; a ticker of its own, a stablecoin, an RWA itself or no symbol at all gets nothing (the symbol is the server's, never a query) */
+    const neverSeen = '0x' + 'ab'.repeat(20), lkT1 = mdR.rwaLookalike(neverSeen, 'TSLA'), lkM = mdR.rwaLookalike(GME_MEME, 'GME');
+    check('RWA: the Scanner\'s lookalike answer — a token sharing an RWA\'s ticker gets the 404 that names the real one ("Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey) — the registry lists $TSLA at 0x322f…2d"); its own ticker, USDG, TSLA itself, "Not My Stock" or no symbol get null; withRwa falls back to it',
+      lkT1 && lkT1.notRwa === true && lkT1.why === 'Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey) — the registry lists $TSLA at ' + RW.short(TSLA) && lkM && /^Same ticker as \$GME, but not issued by Robinhood Assets \(Jersey\)/.test(lkM.why)
+      && mdR.rwaLookalike(neverSeen, 'ZZQX') === null && mdR.rwaLookalike(neverSeen, null) === null && mdR.rwaLookalike(USDG, 'USDG') === null && mdR.rwaLookalike(TSLA, 'TSLA') === null && mdR.rwaLookalike('0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d', 'NMS') === null
+      && mdR.rwaToken({ address: neverSeen, symbol: 'TSLA' }).body.why !== lkT1.why && /rwa = MKT\.rwaFacts\(p\.token\.address\) \|\| MKT\.rwaLookalike\(p\.token\.address, p\.token\.symbol\)/.test(SRC), brief([lkT1, lkM]));
     // a failed read keeps the last good one, with its age and the reason
     vendorFail.rhj = true; const rf = await runR('rwa', 6 * 3600e3 + 60e3); vendorFail.rhj = false;
     const AF = mdR.rwa({ view: 'tokens' }).body, tF = AF.rows.find((r) => r.address === TSLA);
@@ -1257,6 +1264,11 @@ try {
   check('the token profile the Scanner\'s dashboard draws carries p.rwa — TSLA\'s RWA facts (confirmed, the issuer\'s controls) — and p.rwa null for a token that is not an RWA ($SEND); nothing stored with the profile',
     lkT.status === 200 && lkT.j.pair.rwa && lkT.j.pair.rwa.address === TSLA && lkT.j.pair.rwa.confidence === 'confirmed' && lkT.j.pair.rwa.controls.registry === REGISTRY && lkS.status === 200 && lkS.j.pair.rwa === null
     && !/"rwa"/.test(sdb.prepare('SELECT pair_json FROM token_cache WHERE token_addr = ?').get(TSLA).pair_json), brief({ t: lkT.j && lkT.j.pair && lkT.j.pair.rwa && lkT.j.pair.rwa.confidence, s: lkS.j && lkS.j.pair && lkS.j.pair.rwa }));
+  // the "GameStop" memecoin ($GME, not Robinhood's): its own profile carries the lookalike answer, so its dashboard says it is not the RWA
+  tcIns.run(GME_MEME, prof(GME_MEME, 'GME'), 'GME', 'GME', Date.now(), Date.now(), Date.now() + 2 * 3600e3);
+  const lkG = await api('/api/pairs/lookup?token=' + GME_MEME);
+  check('  ...and a token that only shares an RWA\'s ticker (the "GameStop" memecoin, $GME) carries the 404 that says so — { notRwa, why: "Same ticker as $GME, but not issued by Robinhood Assets (Jersey) …" }',
+    lkG.status === 200 && lkG.j.pair.rwa && lkG.j.pair.rwa.notRwa === true && /^Same ticker as \$GME, but not issued by Robinhood Assets \(Jersey\) — the registry lists \$GME at /.test(lkG.j.pair.rwa.why), brief(lkG.j && lkG.j.pair && lkG.j.pair.rwa));
 
   // the image proxy
   const imgHits = () => (hits['img-png'] || 0);

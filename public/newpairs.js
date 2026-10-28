@@ -1749,8 +1749,8 @@
       rwaMore('Where these figures come from', srcs.length ? rwaList('', 'Sources', srcs.map((s) => '<li>' + (httpsOnly(s.href) ? rwaOut(s.href, esc(s.name), 'Opens this source’s own page in a new tab') : esc(s.name)) + '</li>')) : '') + '</div>';
 
     /* A token that only SHARES an RWA's ticker (the server's 404 for it: { notRwa, why }) is said as a lookalike, never as an RWA.
-       Dormant until a profile carries that answer — today p.rwa is null for every token that is not an RWA — and only for a
-       lookalike: a stablecoin or any other token that is not an RWA gets no card at all. */
+       The server puts that answer on a profile only for a lookalike (server.js withRwa, lib MKT.rwaLookalike), and the card checks
+       it again: a stablecoin or any other token that is not an RWA gets no card at all. */
     if (R.notRwa === true) {
       const why = String(R.why || '');
       if (R.stablecoin || !/^Same ticker as \$/.test(why)) return '';

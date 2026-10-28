@@ -55,6 +55,8 @@ const PUB = path.join(ROOT, 'public');
 const FIXDIR = path.join(ROOT, 'tests', 'fixtures', 'market');
 const read = (f) => readFileSync(path.join(PUB, f), 'utf8');
 const FIX = (f) => JSON.parse(readFileSync(path.join(FIXDIR, f), 'utf8'));
+// the Scanner's RWA card fixtures (tests/fixtures/rwacard/: lib's own rwa/token answers, frozen for tests/scanpage.mjs)
+const RWACARD = (f) => JSON.parse(readFileSync(path.join(ROOT, 'tests', 'fixtures', 'rwacard', f), 'utf8'));
 const FIXMD = (f) => JSON.parse(readFileSync(path.join(ROOT, 'tests', 'fixtures', 'marketdata', f), 'utf8'));   // the vendors' measured answers
 const results = [], notes = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
@@ -1152,7 +1154,7 @@ async function browserWalk() {
         && /None among the pools, scans and new pairs this site keeps — that is not a search of the whole chain\./.test(c.s1), c.s1.slice(0, 900));
       check('  ...2. what you hold: Robinhood\'s own words, each sentence with its page (opened in a new tab, noopener) — a debt security, no voting rights, backed 1:1 per its FAQ, redemption after KYC, not offered to US persons with the restricted list — and terms() as the contract names it, read on the chain',
         /tokenised debt securities issued by Robinhood Assets \(Jersey\) Limited/.test(c.s2) && /no voting rights/.test(c.s2) && /backed 1:1 by the underlying/.test(c.s2) && /KYC\/AML/.test(c.s2) && /Not offered to US persons/.test(c.s2) && !/docs\.robinhood\.com\/chain\/contracts/.test(c.s2)
-        && c.links.filter((x) => /^https:\/\/docs\.robinhood\.com\//.test(x)).length === 7 && c.links.every((x) => /\|noopener nofollow\|_blank$/.test(x)) && c.links.some((x) => x.startsWith('https://docs.robinhood.com/rhj/restricted-jurisdictions/|'))
+        && c.links.filter((x) => /^https:\/\/docs\.robinhood\.com\//.test(x)).length === RW.ISSUER_TEXT.rhj.filter((x) => !/\/chain\/contracts\//.test(x.href)).length && c.links.every((x) => /\|noopener nofollow\|_blank$/.test(x)) && c.links.some((x) => x.startsWith('https://docs.robinhood.com/rhj/restricted-jurisdictions/|'))
         && /Its terms, as the contract itself names them \(terms\(\) read on the chain\): robinhood\.com\/stocktoken\/rhj ↗ the chain’s public node · /.test(c.s2), c.s2.slice(-400) + ' ' + JSON.stringify(c.links));
       check('  ...3. the price check: the DEX price, Chainlink\'s feed (when it was updated, its 24 h heartbeat, within it) and Robinhood\'s quote (an undocumented field, said so), the premium or discount in words, Robinhood\'s deviation flag (not on its list), no halt, the registry\'s paused() as "no such function" — never "not paused" — and that stock markets close while DEX pools trade',
         /DEX price\$396\.74/.test(c.s3) && /Chainlink’s feed for it\$397\.95Chainlink RHTSLA \/ USD · Chainlink · .*feed 0x4a11…7c38 · updated .* · heartbeat 24 h · within its heartbeat/.test(c.s3) && /Robinhood’s quote for it\$399\.3[56]Robinhood's quote, multiplier applied — an undocumented field/.test(c.s3)
@@ -1543,7 +1545,7 @@ async function runSuite() {
       && [RA, RT, RC, RS].every((j) => j.notes.some((n) => /^Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\./.test(n)) && j.notes.some((n) => n === 'Not advice, never a tip to buy. Do your own research.') && j.notes.some((n) => /^How a token counts as an RWA here/.test(n)) && j.notes.some((n) => /listed apart and never counted/.test(n))));
     for (const k of ['priceUsd', 'supply', 'value', 'mcap', 'liquidity', 'tvl', 'volume24h', 'premium', 'multiplier', 'mintBurnUsd']) isRFig(RTS[k], 'rwa-token-tsla.' + k);
     check('  ...GET /api/market/rwa/token (TSLA): its row plus what its card shows — what you hold (every Robinhood sentence with its docs.robinhood.com page, terms() read on the chain), the controls (the registry as beacon, the code it runs, its Sourcify link, 12 powers, each holder\'s kind, "powers a regulated issuer keeps"), the roles, 175 wallets blocked, the corporate actions, the connected tokens, the lookalikes, Chainlink\'s feed (heartbeat, not stale), the token deployer, the reads, the notes; the memecoin\'s 404 says it is not issued by Robinhood Assets (Jersey) and where the registry lists $GME',
-      RTS.address === TSLA && RTS.issuerProfile.sentences.length === 8 && RTS.issuerProfile.sentences.every((x) => /^https:\/\/docs\.robinhood\.com\//.test(x.href)) && RTS.issuerProfile.terms.src === 'rpc' && /^https:\/\//.test(RTS.issuerProfile.terms.v)
+      RTS.address === TSLA && RTS.issuerProfile.sentences.length === RW.ISSUER_TEXT.rhj.length && RTS.issuerProfile.sentences.every((x, i) => x.text === RW.ISSUER_TEXT.rhj[i].text && x.href === RW.ISSUER_TEXT.rhj[i].href) && RTS.issuerProfile.sentences.every((x) => /^https:\/\/docs\.robinhood\.com\//.test(x.href)) && RTS.issuerProfile.terms.src === 'rpc' && /^https:\/\//.test(RTS.issuerProfile.terms.v)
       && RTS.controls.registry === RW.ISSUERS.rhj.registry && RTS.controls.beacon === RTS.controls.registry && /^0x[0-9a-f]{40}$/.test(RTS.controls.implementation.address) && /^https:\/\/sourcify\.dev\/server\/v2\/contract\/4663\//.test(RTS.controls.verifiedSource)
       && RTS.controls.powers.length === 12 && RTS.controls.powers.every((x) => x.power && x.role && Array.isArray(x.holders)) && /they are still powers over your tokens/.test(RTS.controls.note)
       && Array.isArray(RTS.roles) && RTS.roles.length > 12 && RTS.blocked.count === 175 && Array.isArray(RTS.corporateActions) && RTS.connected.length > 0 && RTS.connected.every((c) => /^Not an RWA/.test(c.label)) && Array.isArray(RTS.lookalikes)
@@ -1631,7 +1633,21 @@ async function runSuite() {
       ...files.filter((f) => /^token-robinhood-/.test(f)).map((f) => [f, FIX(f), R.token]),
       ['rwa-assets.json', FIX('rwa-assets.json'), R.rwa.assets], ['rwa-tokens.json', FIX('rwa-tokens.json'), R.rwa.tokens], ['rwa-connected.json', FIX('rwa-connected.json'), R.rwa.connected],
       ['rwa-stables.json', FIX('rwa-stables.json'), R.rwa.stables], ['rwa-token-' + TSLA + '.json', FIX('rwa-token-' + TSLA + '.json'), R.rwa.tsla], ['rwa-token-notrwa-' + GME_MEME + '.json', FIX('rwa-token-notrwa-' + GME_MEME + '.json'), R.rwa.notRwa],
+      // the Scanner's RWA card fixtures (tests/scanpage.mjs) are frozen copies of the same answer: held to lib's shapes here too
+      ...['tsla', 'tsla-registry-down', 'spy', 'week', 'gme'].map((k) => ['rwacard/rwa-token-' + k + '.json', RWACARD('rwa-token-' + k + '.json'), R.rwa.tsla]),
+      ['rwacard/rwa-token-tslaon.json', RWACARD('rwa-token-tslaon.json'), R.rwa.ondo], ['rwacard/rwa-token-gme-memecoin.json', RWACARD('rwa-token-gme-memecoin.json'), R.rwa.notRwa],
+      ['rwacard/rwa-token-usdg.json', RWACARD('rwa-token-usdg.json'), R.rwa.notRwaStable],
     ];
+    /* a key lib adds only in a state the answer it is held to is not in: a failed read's reason (reads.<k>.why, Robinhood's API down) and
+       chainlinkWhy beside a null chainlink (a ticker Chainlink has no feed for) — dropped from the frozen copy before the comparison when
+       lib's answer is not in that state too, never from lib's answer, so a key lib stops serving or starts serving still shows */
+    const stateOnly = (o, ref) => {
+      const c = JSON.parse(JSON.stringify(o));
+      if (c && c.reads) for (const [k, r] of Object.entries(c.reads)) if (r && typeof r === 'object' && r.ok === false && !(ref.reads && ref.reads[k] && 'why' in ref.reads[k])) delete r.why;
+      if (c && c.chainlink === null && !('chainlinkWhy' in ref)) delete c.chainlinkWhy;
+      return c;
+    };
+    for (const p of pairs) if (/^rwacard\//.test(p[0])) p[1] = stateOnly(p[1], p[2]);
     const drift = pairs.map(([f, a, b]) => [f, shapeDiff(a, b)]).filter(([, d]) => d.length);
     check('every fixture has the shape lib/marketdata.js really serves, key for key (history as [day, value] arrays with history.src, a token\'s trades as windows[k].txns, the pulse with suppliesAt and bridgeAt; the RWA answers on a database seeded from the measured samples — TSLA confirmed, its facts in full, the memecoin\'s 404 with its symbol)',
       !drift.length && R.chain.robinhood.history && Array.isArray(R.chain.robinhood.history.tvl) && R.chain.robinhood.pulse.now.suppliesAt > 0 && 'txns' in R.token.windows['24h']
