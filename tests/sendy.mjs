@@ -41,9 +41,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
      768×1024 (touch)  47% → 64%                                   5.0 → 3.3
      1280×720          35% → 47%                                  12.8 → 8.5
      1920×1080         57% → 59%                                   5.3 → 3.5
-     844×390 (touch)   23% → 23%                                  28.8 → 22.0
-   (844×390, a phone on its side: the same height for the conversation, but before it the panel's own body scrolled — the
-   box and the fine print ran off its foot — and it covered the nav; now all of it fits and the nav is free.) */
+     844×390 (touch)   23% → 39%                                  28.8 → 13.3
+     740×360 (touch)   23% → 37%                                  23.8 → 13.1
+     568×320 (touch)   23% → 31%                                  27.2 → 17.7
+   (A phone on its side: before, the panel ran up over the nav and its own body scrolled — the box and the fine print ran
+   off its foot. Now the nav is free, the chat on a phone under 768px is as wide as the screen, and the honesty line rides
+   at the foot of the conversation: pinned under the box it took two or three of the ten lines there are, and the first
+   cut of this layout left the conversation one — 13% at 740×360 and 568×320.) */
 const CHAT_TURNS = [
   ['What is Send Power?', 'Send Power is your score on $Send. You earn it by making Send Calls on the Wall, taking part in communities and being active. It decays if you go quiet, so steady beats bursts. The About page (/about) has every rule.'],
   ['How do I make a Send Call?', 'Four steps:\n1. Open the Scanner (/newpairs) and paste the token\'s address.\n2. Read the scan — liquidity, holders, the contract.\n3. Tap "Send Call to the Wall" under it.\n4. Add a line about why, and post it. It stays on the record for good.'],
@@ -55,8 +59,12 @@ const CHAT_TURNS = [
   ['How are communities and squads different?', 'A community gathers around a token and is open to holders who opt in. A Send Squad is a private, token-gated group. Squad calls are seen only by the squad and score for it. Both start on /communities.'],
 ];
 const CHAT_SEEDED = 6;
-// [width, height, touch, the conversation's least share of the screen, the most screens of it to scroll through, header as a rail?]
-const CHAT_SIZES = [[320, 568, true, 0.33, 11, false], [390, 844, true, 0.52, 4.3, false], [768, 1024, true, 0.55, 4.3, false], [1280, 720, false, 0.40, 10.5, true], [1920, 1080, false, 0.52, 4.6, false], [844, 390, true, 0.19, 26, true]];
+// the longest of the tips (the Wallet tracker's), to try the tips popup where there is little room
+const LONG_TIP = 'On the public node a first read can take an hour or more — leave the page: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops; it goes on from where it stopped when you come back). Later refreshes take seconds.';
+// [width, height, touch, the conversation's least share of the screen, the most screens of it to scroll through, header as a rail?,
+//  the honesty line at the conversation's foot (a short chat) rather than under the box?]
+const CHAT_SIZES = [[320, 568, true, 0.33, 11, false, false], [390, 844, true, 0.52, 4.3, false, false], [768, 1024, true, 0.55, 4.3, false, false], [1280, 720, false, 0.40, 10.5, true, false],
+  [1920, 1080, false, 0.52, 4.6, false, false], [844, 390, true, 0.33, 16, true, true], [740, 360, true, 0.31, 16, true, true], [568, 320, true, 0.26, 20, true, true]];
 // what a reader sees of the open chat
 const CHAT_MEASURE = `(() => {
   const W = innerWidth, H = innerHeight, popup = document.getElementById('sendy-popup'), log = document.getElementById('sendy-chat-messages'), input = document.getElementById('sendy-chat-input');
@@ -87,18 +95,23 @@ const CHAT_MEASURE = `(() => {
   const d = document.createElement('div'); d.style.cssText = 'position:fixed;visibility:hidden;height:var(--fab-clear,5.5rem);width:0'; document.body.appendChild(d); const strip = d.getBoundingClientRect().height; d.remove();
   const nav = document.querySelector('.nav'), navB = nav ? nav.getBoundingClientRect().bottom : 0;
   const ir = input.getBoundingClientRect(), ihit = document.elementFromPoint(ir.left + ir.width / 2, ir.top + ir.height / 2), body = document.getElementById('sendy-chat-mode');
+  const fine = document.getElementById('sendy-chat-fine') || document.querySelector('#sendy-chat-mode .sendy-fine'), form = document.getElementById('sendy-chat-form');
+  const fineAt = fine.parentElement === log ? (log.lastElementChild === fine ? 'foot' : 'mid-conversation') : fine.parentElement === body && fine.previousElementSibling === form ? 'under the box' : 'elsewhere';
   return { share: log.clientHeight / H, screens: log.scrollHeight / Math.max(1, log.clientHeight), visible: Math.round(log.clientHeight), popup: [Math.round(pr.left), Math.round(pr.top), Math.round(pr.width), Math.round(pr.height)],
     inputShown: ir.top >= 0 && ir.bottom <= H && !!ihit && input.contains(ihit), bodyScrolls: body.scrollHeight > body.clientHeight + 1,
     inStrip: pr.bottom > H - strip + 1, overNav: pr.top < navB - 1, offScreen: pr.left < -1 || pr.right > W + 1 || pr.top < -1,
-    sideScroll: document.scrollingElement.scrollWidth > W + 1, rail: popup.classList.contains('is-rail'), clipped, small, sideways, blocked };
+    sideScroll: document.scrollingElement.scrollWidth > W + 1, rail: popup.classList.contains('is-rail'), fineAt, clipped, small, sideways, blocked };
 })()`;
-// after an answer arrives: its first line in view — and the question it answers above it, when the two fit
+// after an answer arrives: its first line in view — and the question it answers above it, when the two fit; and its
+// thumbs, when the whole exchange fits (they are added after the answer, and were left under the log's foot)
 const CHAT_ARRIVED = `(() => {
   const log = document.getElementById('sendy-chat-messages'), lr = log.getBoundingClientRect();
   const rows = [...log.querySelectorAll('.sendy-msg')], a = rows[rows.length - 1], q = rows[rows.length - 2];
   const ab = a.getBoundingClientRect(), qb = q.getBoundingClientRect(), cs = getComputedStyle(a.firstElementChild);
   const firstBottom = ab.top + parseFloat(cs.paddingTop) + parseFloat(cs.lineHeight);
-  return { first: ab.top >= lr.top - 1 && firstBottom <= lr.bottom + 1, fits: firstBottom - qb.top <= log.clientHeight - 6, question: qb.top >= lr.top - 1 && qb.bottom <= lr.bottom + 1, atEnd: log.scrollTop + log.clientHeight >= log.scrollHeight - 2 };
+  const t = a.querySelector('.sendy-rate'), tb = t && t.getBoundingClientRect();
+  return { first: ab.top >= lr.top - 1 && firstBottom <= lr.bottom + 1, fits: firstBottom - qb.top <= log.clientHeight - 6, question: qb.top >= lr.top - 1 && qb.bottom <= lr.bottom + 1, atEnd: log.scrollTop + log.clientHeight >= log.scrollHeight - 2,
+    thumbs: t ? tb.top >= lr.top - 1 && tb.bottom <= lr.bottom + 1 : null, all: ab.bottom - qb.top <= log.clientHeight - 6 };
 })()`;
 function findChrome() {
   const c = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -187,14 +200,14 @@ async function chatWalk() {
     }
 
     const rows = [];
-    for (const [w, h, touch, minShare, maxScreens, rail] of CHAT_SIZES) {
+    for (const [w, h, touch, minShare, maxScreens, rail, fineInLog] of CHAT_SIZES) {
       await step('the chat at ' + w + '×' + h, async () => {
         await openChat(w, h, touch);
         const focus = await ev('document.activeElement && document.activeElement.id');
         const arrived = await askAll();
         const m = await ev(CHAT_MEASURE);
-        const grow = await ev('(async () => { const i = document.getElementById("sendy-chat-input"); const h0 = i.getBoundingClientRect().height; i.value = "a fairly long question about how the site works ".repeat(12); i.dispatchEvent(new Event("input", { bubbles: true })); await new Promise((r) => setTimeout(r, 120)); const r = i.getBoundingClientRect(), p = document.getElementById("sendy-popup").getBoundingClientRect(); const out = { grew: r.height > h0 + 10, capped: r.height <= p.height * 0.3 + 2 || r.height <= parseFloat(getComputedStyle(i).fontSize) * 8 + 2, shown: r.top >= 0 && r.bottom <= innerHeight, log: document.getElementById("sendy-chat-messages").clientHeight }; i.value = ""; i.dispatchEvent(new Event("input", { bubbles: true })); return out; })()');
-        rows.push({ w, h, touch, minShare, maxScreens, rail, focus, arrived, m, grow });
+        const grow = await ev('(async () => { const i = document.getElementById("sendy-chat-input"); const h0 = i.getBoundingClientRect().height; i.value = "a fairly long question about how the site works ".repeat(12); i.dispatchEvent(new Event("input", { bubbles: true })); await new Promise((r) => setTimeout(r, 120)); const r = i.getBoundingClientRect(), p = document.getElementById("sendy-popup").getBoundingClientRect(); const cap = Math.max(parseFloat(getComputedStyle(i).minHeight), Math.min(p.height * 0.3, parseFloat(getComputedStyle(i).fontSize) * 8)); const out = { grew: r.height > h0 + 10 || (r.height >= cap - 2 && i.scrollHeight > i.clientHeight + 1), capped: r.height <= p.height * 0.3 + 2 || r.height <= parseFloat(getComputedStyle(i).fontSize) * 8 + 2 || r.height <= parseFloat(getComputedStyle(i).minHeight) + 1, shown: r.top >= 0 && r.bottom <= innerHeight, log: document.getElementById("sendy-chat-messages").clientHeight }; i.value = ""; i.dispatchEvent(new Event("input", { bubbles: true })); return out; })()');
+        rows.push({ w, h, touch, minShare, maxScreens, rail, fineInLog, focus, arrived, m, grow });
       });
     }
     const sizeOf = (r) => r.w + '×' + r.h;
@@ -211,24 +224,54 @@ async function chatWalk() {
       rows.every((r) => !r.m.bodyScrolls && !r.m.sideScroll), bad((r) => !r.m.bodyScrolls && !r.m.sideScroll));
     check('  ...each new answer arrives shown from its first line (not its last), with the question above it whenever the two fit',
       rows.every((r) => r.arrived.length === 2 && r.arrived.every((a) => a.first && (!a.fits || a.question))), rows.map((r) => sizeOf(r) + ' ' + JSON.stringify(r.arrived)).join(' | '));
-    check('  ...the question box stays on the screen and takes a tap; it grows with a long question, to a cap, and stays on the screen',
+    check('  ...and its thumbs are in view with it wherever the whole exchange fits (they come a moment after the answer, and were left under the foot of the conversation)',
+      rows.every((r) => r.arrived.every((a) => a.thumbs !== null && (!a.all || a.thumbs))) && rows.some((r) => r.arrived.some((a) => a.all)), rows.map((r) => sizeOf(r) + ' ' + r.arrived.map((a) => (a.all ? 'fits' : 'long') + ':' + a.thumbs).join(',')).join(' | '));
+    check('  ...the question box stays on the screen and takes a tap; it grows with a long question, to a cap (where the panel is that short it is already there, and scrolls), and stays on the screen',
       rows.every((r) => r.m.inputShown && r.grow.grew && r.grow.capped && r.grow.shown && r.grow.log > 20), rows.map((r) => sizeOf(r) + ' ' + JSON.stringify(r.grow) + (r.m.inputShown ? '' : ' box hidden')).join(', '));
     check('  ...it stays off the nav, the strip the player and ✏️ SEND IT own, and the screen\'s edges: every one of their controls still takes a tap (hit-tested)',
       rows.every((r) => !r.m.blocked.length && !r.m.inStrip && !r.m.overNav && !r.m.offScreen), bad((r) => !r.m.blocked.length && !r.m.inStrip && !r.m.overNav && !r.m.offScreen));
     check('  ...a short, wide chat (1280×720, a phone on its side) has its header as a rail down the side; the others one slim row',
       rows.every((r) => r.m.rail === r.rail), rows.map((r) => sizeOf(r) + ' ' + (r.m.rail ? 'rail' : 'row')).join(', '));
+    check('  ...the honesty line is always there: under the box, or in a short chat (a phone on its side) at the foot of the conversation, under the newest answer — pinned there it took two or three of the ten lines and left the conversation one',
+      rows.every((r) => r.m.fineAt === (r.fineInLog ? 'foot' : 'under the box')), rows.map((r) => sizeOf(r) + ' ' + r.m.fineAt).join(', '));
     check('  ...on a touch screen with a conversation to read, focus waits on the conversation (no keyboard springing up over it); with a mouse it is in the box',
       rows.every((r) => r.focus === (r.touch ? 'sendy-chat-messages' : 'sendy-chat-input')), rows.map((r) => sizeOf(r) + ' ' + r.focus).join(', '));
 
-    await step('the keyboard on a phone', async () => {
-      await openChat(390, 844, true);
-      const shut = await ev('document.getElementById("sendy-popup").getBoundingClientRect().bottom');
-      await ev('window.__kb = 320, window.__kbFire(), true'); await sleep(80);
-      const up = await ev('(() => { const p = document.getElementById("sendy-popup").getBoundingClientRect(), i = document.getElementById("sendy-chat-input").getBoundingClientRect(); return { bottom: p.bottom, top: p.top, input: i.bottom, log: document.getElementById("sendy-chat-messages").clientHeight, kbTop: innerHeight - 320 }; })()');
-      await ev('window.__kb = 0, window.__kbFire(), true'); await sleep(80);
-      const down = await ev('document.getElementById("sendy-popup").getBoundingClientRect().bottom');
-      check('with a phone\'s keyboard up, the sheet stands on it — the question box above the keyboard, the conversation still showing — and goes back down to the strip when it closes',
-        up.bottom <= up.kbTop && up.input <= up.kbTop && up.top >= 60 && up.log >= 30 && Math.abs(down - shut) < 2, JSON.stringify({ shut, up, down }));
+    /* the keyboard: a phone upright, a phone on its side wider than 768px (844×390: the panel used to stay on the strip there,
+       the box under the keyboard), a smaller one on its side, and a tablet */
+    await step('the keyboard', async () => {
+      const kbs = [];
+      for (const [w, h, kb] of [[390, 844, 320], [844, 390, 200], [740, 360, 190], [1024, 768, 360]]) {
+        await openChat(w, h, true);
+        const shut = await ev('document.getElementById("sendy-popup").getBoundingClientRect().bottom');
+        await ev('window.__kb = ' + kb + ', window.__kbFire(), true'); await sleep(80);
+        const up = await ev('(() => { const p = document.getElementById("sendy-popup").getBoundingClientRect(), i = document.getElementById("sendy-chat-input").getBoundingClientRect(), nav = document.querySelector(".nav"), body = document.getElementById("sendy-chat-mode"); return { bottom: Math.round(p.bottom), top: Math.round(p.top), input: Math.round(i.bottom), log: document.getElementById("sendy-chat-messages").clientHeight, kbTop: innerHeight - ' + kb + ', navB: nav ? Math.round(nav.getBoundingClientRect().bottom) : 0, bodyScrolls: body.scrollHeight > body.clientHeight + 1 }; })()');
+        await ev('window.__kb = 0, window.__kbFire(), true'); await sleep(80);
+        const down = await ev('document.getElementById("sendy-popup").getBoundingClientRect().bottom');
+        kbs.push({ size: w + '×' + h, shut: Math.round(shut), up, down: Math.round(down) });
+      }
+      check('with the keyboard up — a phone upright or on its side (at 768px and wider too), a tablet — the chat stands on it: the question box above the keyboard, the panel still under the nav, a line or more of the conversation showing and nothing else scrolling; it goes back down to the strip when the keyboard closes',
+        kbs.length === 4 && kbs.every((k) => k.up.bottom <= k.up.kbTop && k.up.input <= k.up.kbTop && k.up.top >= k.up.navB && k.up.log >= 30 && !k.up.bodyScrolls && Math.abs(k.down - k.shut) < 2), JSON.stringify(kbs));
+    });
+
+    /* the tips with a long tip on a short screen: the way into the chat was under the fold of the tips at 844×390, and a
+       finger's tap there landed on the page and closed Sendy */
+    await step('the tips on a short screen', async () => {
+      const tips = [];
+      for (const [w, h] of [[568, 320], [844, 390], [390, 844]]) {
+        await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
+        await cdp('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+        await cdp('Page.navigate', { url: BASE + '/about' });
+        await until('document.readyState === "complete" && !!document.getElementById("sendy-widget") && !document.getElementById("sendy-widget").hasAttribute("hidden")', 15000);
+        await sleep(200);
+        await ev('document.getElementById("sendy-tip").textContent = ' + JSON.stringify('💡 ' + LONG_TIP) + ', document.getElementById("sendy-rocket").click(), true'); await sleep(150);
+        const t = await ev('(() => { const p = document.getElementById("sendy-popup"), body = document.getElementById("sendy-tips-mode").getBoundingClientRect(), c = document.getElementById("sendy-chat").getBoundingClientRect(); return { x: c.left + c.width / 2, y: c.top + c.height / 2, inView: c.top >= body.top - 1 && c.bottom <= body.bottom + 1, cls: p.className.replace(/^sendy-popup ?/, "") }; })()');
+        await cdp('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: t.x, y: t.y }] }); await cdp('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        t.tapped = !!await until('!document.getElementById("sendy-popup").hasAttribute("hidden") && !document.getElementById("sendy-chat-mode").hidden', 2000);
+        tips.push(Object.assign({ size: w + '×' + h }, t));
+      }
+      check('with a long tip on a short screen (a phone on its side) the way into the chat is in view without scrolling — straight under the greeting, or first where even that leaves it under the fold — and a finger\'s tap on it opens the chat; a tall phone keeps the tip above the buttons',
+        tips.length === 3 && tips.every((t) => t.inView && t.tapped) && /is-cramped/.test(tips[1].cls) && /is-tight/.test(tips[0].cls) && !/is-cramped/.test(tips[2].cls), JSON.stringify(tips.map((t) => ({ size: t.size, inView: t.inView, tapped: t.tapped, cls: t.cls }))));
     });
 
     await step('the theme tune\'s nudge', async () => {
@@ -596,7 +639,7 @@ try {
     && /@media \(max-height:520px\)\{\.sendy-popup\{--sendy-chat-w:36em\}\}/.test(SRC) && /\.sendy-popup\.is-chat\{width:min\(var\(--sendy-chat-w\),calc\(100vw - 2rem\)\);height:52em\}/.test(SRC)
     && /\.sendy-chat-messages\{position:relative;[^}]*flex:1 1 auto;min-height:2\.5em;overflow-y:auto/.test(SRC) && !/max-height:300px/.test(SRC) && /popup\.classList\.add\('is-chat'\)/.test(SRC));
   check('  ...on a desktop the chat opens beside the rocket whenever there is room there, from under the nav (measured) to the strip; the tips beside him only on a short window',
-    /if \(\(chat \|\| Math\.max\(above, below\) < want \* 0\.87\) && Math\.max\(leftRoom, rightRoom\) >= Math\.min\(pw, fs \* 16\)\)/.test(SRC) && /const top0 = navBottom\(\) \+ 8;/.test(SRC) && /popup\.style\.maxHeight = Math\.floor\(low - top0\) \+ 'px';/.test(SRC) && /function navBottom\(\)/.test(SRC));
+    /if \(\(chat \|\| Math\.max\(above, below\) < want \* 0\.87\) && Math\.max\(leftRoom, rightRoom\) >= Math\.min\(pw, fs \* 16\)\)/.test(SRC) && /const top0 = Math\.max\(navBottom\(\), kb \? visualViewport\.offsetTop : 0\) \+ 8;/.test(SRC) && /popup\.style\.maxHeight = Math\.floor\(low - top0\) \+ 'px';/.test(SRC) && /function navBottom\(\)/.test(SRC));
   check('  ...on a phone the chat is a sheet from under the nav down to the strip (over the rocket — its header has him and the close), safe-area insets kept',
     /\.sendy-popup\.is-chat\{top:calc\(var\(--nav-h,58px\) \+ 6px\);bottom:var\(--fab-clear,5\.5rem\);left:max\(\.5rem,env\(safe-area-inset-left,0px\)\);right:max\(\.5rem,env\(safe-area-inset-right,0px\)\);width:auto;height:auto;max-height:none\}/.test(SRC)
     && /popup\.style\.top = Math\.round\(Math\.max\(navBottom\(\), vv \? vv\.offsetTop : 0\) \+ 6\) \+ 'px';/.test(SRC));
@@ -609,18 +652,22 @@ try {
   check('every control a finger taps is at least 44px (a floor that only ever raises the em sizes, never lowers them on a tablet) — the chat\'s slimmer header too — and the close mark is drawn (a typed ✕ spilled out of its 28px box at 19pt)',
     /@media \(pointer:coarse\)\{\.sendy-hbtn,\.sendy-close,\.sendy-rate-btn\{min-height:max\(44px,2\.4em\)\}\.sendy-btn\{min-height:max\(44px,2\.6em\)\}\.sendy-chat-send,\.sendy-chat-input\{min-height:max\(44px,2\.4em\)\}/.test(SRC)
     && /'\.sendy-popup\.is-chat \.sendy-hbtn\{min-height:max\(44px,2em\)\}\.sendy-popup\.is-chat \.sendy-close,\.sendy-popup\.is-rail \.sendy-back-btn\{width:max\(44px,2em\)\}\}'/.test(SRC) && /<span class="sendy-x" aria-hidden="true"><\/span>/.test(SRC) && !/width:28px;height:28px/.test(SRC));
-  check('on a phone the chat sits above the on-screen keyboard (the visual viewport) instead of under it', /function fitPhone\(\)/.test(SRC) && /const covered = vv \? window\.innerHeight - vv\.height - vv\.offsetTop : 0;/.test(SRC) && /visualViewport\.addEventListener\('resize', fitPhone\)/.test(SRC) && /covered > 80 \? covered \+ 6 :/.test(SRC));
+  check('the chat sits above an on-screen keyboard (the visual viewport) instead of under it: on a phone at any width and on anything with a finger for a pointer, the side panel too — never for a desktop\'s pinch zoom',
+    /function fitPhone\(\)/.test(SRC) && /function keyboardCover\(\) \{\n\s+const vv = window\.visualViewport;\n\s+if \(!vv \|\| !\(isMobile\(\) \|\| coarse\(\)\)\) return 0;\n\s+const c = window\.innerHeight - vv\.height - vv\.offsetTop;\n\s+return c > 80 \? c : 0;/.test(SRC)
+    && /const refit = \(\) => \{ if \(isOpen\(\)\) placePopup\(\); \}; visualViewport\.addEventListener\('resize', refit\); visualViewport\.addEventListener\('scroll', refit\);/.test(SRC) && /covered \? covered \+ 6 :/.test(SRC)
+    && /const low = kb \? Math\.min\(lowEdge\(x0, x0 \+ w\), window\.innerHeight - kb - 6\) : lowEdge\(x0, x0 \+ w\);/.test(SRC));
   check('opened from the keyboard, focus goes into the popup; the rightward flip uses the popup\'s real width, not a fixed 380px', /if \(e\.detail === 0\) \{ const first = chatMode\.hasAttribute\('hidden'\) \? \$\('sendy-chat'\) : chatInput;/.test(SRC) && /widget\.classList\.toggle\('is-left', r\.right - pw < 8\)/.test(SRC) && /pw = Math\.min\(popup\.getBoundingClientRect\(\)\.width \|\| fs \* 25, window\.innerWidth - 32\)/.test(SRC));
   check('on a short window (a small laptop browser, a phone on its side) the popup opens beside the rocket at the screen\'s full height instead of running off the top', /widget\.classList\.add\('is-side'\)/.test(SRC) && /\.sendy-widget\.is-side \.sendy-popup\{position:fixed;top:auto;bottom:var\(--fab-clear,5\.5rem\)/.test(SRC) && /placePopup\(\); paintHistory\(\)/.test(SRC));
   check('the chat never hides its question box or its honesty line: the chat body scrolls when the popup is short (never overflow:hidden) — the walk below holds it to never needing to', !/#sendy-chat-mode\{overflow:hidden\}/.test(SRC) && /\.sendy-body\{[^}]*overflow:auto/.test(SRC));
   check('the popup stays out of the strip the music player and SEND IT own: measured in pixels (the calc() used to parse as 5.5), downward and beside-the-rocket popups stop above it (and above the theme tune\'s nudge while it is up), and a phone on its side gets a full-height panel beside the rocket\'s column',
     /function fabClearPx\(\)/.test(SRC) && /const fabClear = fabClearPx;/.test(SRC) && /below = window\.innerHeight - r\.bottom - 12 - strip;/.test(SRC) && /let low = window\.innerHeight - fabClearPx\(\);/.test(SRC) && /document\.querySelector\('#mp-hint'\)/.test(SRC)
-    && /@media \(max-width:767px\) and \(max-height:500px\)\{\.sendy-popup,\.sendy-popup\.is-chat\{right:calc\(var\(--sendy-size\) \+ 1\.5rem\);bottom:var\(--fab-clear,5\.5rem\)\}/.test(SRC));
+    && /@media \(max-width:767px\) and \(max-height:500px\)\{\.sendy-popup\{right:calc\(var\(--sendy-size\) \+ 1\.5rem\);bottom:var\(--fab-clear,5\.5rem\);/.test(SRC));
   check('focus is never dropped: closing returns it to the rocket (only if it was inside), the back button hands it to the chat button, a rating hands it on (to the box, or on a touch screen to the conversation, so no keyboard springs up), and the tip swap is announced',
     /if \(hadFocus\) rocket\.focus\(\);/.test(SRC) && /if \(fromBack\) \$\('sendy-chat'\)\.focus\(\);/.test(SRC) && /focusChat\(\);   \/\/ the button just replaced itself/.test(SRC) && /id="sendy-tip" aria-live="polite"/.test(SRC)
     && /function focusChat\(\) \{ if \(coarse\(\) && history\.length\) chatLog\.focus\(\{ preventScroll: true \}\); else chatInput\.focus\(\); \}/.test(SRC) && /role="log" aria-live="polite" aria-label="Your conversation with Sendy" tabindex="0"/.test(SRC));
   check('a new answer is shown from its first line, the question above it when both fit (the log used to jump to an answer\'s last line); an answer that lands out of sight is shown on the next open',
-    /if \(!painting\) reveal\(row\);/.test(SRC) && /function reveal\(row\)/.test(SRC) && /if \(!chatLog\.clientHeight\) \{ revealLater = row; return; \}/.test(SRC) && !/chatLog\.scrollTop = chatLog\.scrollHeight;\n\s+return row;/.test(SRC) && /reveal\(chatLog\.lastElementChild\);/.test(SRC));
+    /if \(!painting\) reveal\(row\);/.test(SRC) && /function reveal\(row\)/.test(SRC) && /if \(!chatLog\.clientHeight\) \{ revealLater = row; return; \}/.test(SRC) && !/chatLog\.scrollTop = chatLog\.scrollHeight;\n\s+return row;/.test(SRC) && /const rows = chatLog\.querySelectorAll\('\.sendy-msg'\);\n\s+reveal\(rows\[rows\.length - 1\]\);/.test(SRC)
+    && /row\.querySelector\('\.sendy-msg-bubble'\)\.appendChild\(bar\);\n\s+if \(!painting\) reveal\(row\);/.test(SRC));
   check('a rocket dragged near the middle of a narrow window: the popup is slid along until it is wholly on the screen', /const left0 = widget\.classList\.contains\('is-left'\) \? r\.left : r\.right - pw, fit = Math\.max\(8, Math\.min\(left0, window\.innerWidth - 8 - pw\)\);/.test(SRC));
   check('it sits above the nav but under every dialog and the token popup (z 200), so it is never on top of one', /--sendy-z:190/.test(SRC));
   await chatWalk();
