@@ -749,6 +749,23 @@ try {
     /^Never share a seed phrase/.test(sp.a) && !/Support board \(\/support\), where the community/.test(sp.a) && keptQ && !/witch collapse/.test(keptQ.q) && /removed/.test(keptQ.q) && !sdb.prepare("SELECT 1 FROM sendy_misses WHERE q LIKE '%witch collapse%'").get(), sp.a.slice(0, 120) + ' · ' + (keptQ && keptQ.q));
   const pk = await ask('my pk is 4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318'), keptK = sdb.prepare('SELECT q FROM sendy_qa ORDER BY id DESC LIMIT 1').get();
   check('  ...and a private key the same', /^Never share a seed phrase/.test(pk.a) && keptK && !/4c0883a69102937d/.test(keptK.q), keptK && keptK.q);
+  /* ═══ 2i. THE CONVERSATIONS (2026-10-28): what a follow-up is about, several turns on — the topic and the list of the answers
+     before it, every place in a list ("the 2nd", "both", "the other one", the third of two), two tokens side by side, a member
+     after the board and the board after a member, re-sorts three turns deep; after the seed-phrase and scam answers what people
+     say next (a new wallet, moving what is left, freezing, impostors, blocking, revoking); a crisis that is still the first thing
+     three turns on; and a message's own questions — only questions take the four places, a filler none, a question that leans
+     on the sentence before it read with it. Each conversation is asked turn by turn, so every turn reads today's answers
+     (tests/fixtures/sendy-conversations.json; review six's 650 cases). ═══ */
+  {
+    const CONV = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'sendy-conversations.json'), 'utf8'));
+    let n = 0;
+    for (const c of CONV) {
+      if (n++ % 100 === 0) await anew();
+      let h = [];
+      for (const u of c.convo) { const r0 = await ask(u, { history: h }); h = h.concat([{ role: 'user', text: u }, { role: 'assistant', text: r0.a }]); }
+      await Q('conversation (' + c.tag + '): ' + (c.convo.length ? c.convo.map((x) => '"' + x + '" → ').join('') : '') + '"' + c.q + '"', c.q, (a) => new RegExp(c.expect).test(a) && !(c.mustNot && new RegExp(c.mustNot).test(a)), { history: h });
+    }
+  }
   await anew();
   // over the whole battery
   const leaks = all.filter((x) => leak(x.r.a + JSON.stringify(x.r.j)).length);
