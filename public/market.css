@@ -1,6 +1,6 @@
 /* ===== Market Data (market.html) ======================================================================================
    A tool page: it takes the dashboard width (--dash-max, responsive.css's house layer), a search bar across the top, the
-   two top lists in a side column and one chain or one token in the main view. Below 1280px the side column sits above the
+   top lists (chains, tokens, Robinhood Chain's RWAs) in a side column and one chain or one token in the main view. Below 1280px the side column sits above the
    main view (reading order = DOM order everywhere: the lists, then the view they open). Every size is on the text floor;
    tables fold into labelled cards whenever the view is too narrow for their columns (a container query), so nothing ever
    needs a sideways scroll; every control is at least 44px tall; a missing figure is written "Not available" with its
@@ -37,6 +37,7 @@
 .mkt-tabs .sc-tab { flex: 1 1 0; min-width: 0; justify-content: center; white-space: normal; text-align: center; padding: 0.4rem 0.6rem; line-height: 1.2; }
 .mkt-ctl[hidden] { display: none; }
 .mkt-group { margin: 0 0 0.75rem; }
+.mkt-group[hidden] { display: none; }
 .mkt-group-l { font-size: max(var(--text-floor), 0.75rem); color: var(--text-dim); margin: 0 0 0.3rem; }
 .mkt-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .mkt-chips .np-chip, .mkt-wash { min-height: 44px; white-space: normal; text-align: center; line-height: 1.2; }
@@ -240,6 +241,48 @@ body:has(#mkt-tchain-p:not([hidden])) > .nav { z-index: 300; }
   .mkt-table-2 tr { justify-content: space-between; }
   .mkt-table-2 tbody th { flex: 0 1 auto; }
 }
+
+/* ---------- the RWA tab and an RWA's facts (market.js paintRwa, rwaCardHTML) ----------
+   How sure the site is that a token is the real one is a chip in words ("✓ Registry + on-chain", "Registry only", "Not
+   confirmed"); a token that is not an RWA says so in words on its row ("Not an RWA — paired with $TSLA"). The colours only
+   repeat what the words say. */
+.mkt-rwa-lede { margin: 0 0 0.8rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.45; }
+.mkt-ctl .mkt-rwa-lede { flex: none; }
+.mkt-conf, .mkt-notrwa { font-size: max(var(--text-floor), 0.72rem); font-weight: 800; border: 1px solid var(--ink-5); border-radius: 999px; padding: 0 0.45rem; line-height: 1.5; color: var(--text-dim); overflow-wrap: anywhere; }
+.mkt-conf.is-ok { color: var(--green-bright); border-color: var(--g-lit); }
+.mkt-conf.is-mid { color: var(--gold); border-color: var(--o-edge); }
+.mkt-conf.is-no { color: var(--text-dim); border-style: dashed; }
+.mkt-notrwa { color: var(--text); border-color: var(--r-edge); }
+.mkt-card-h .mkt-conf { font-size: max(var(--text-floor), 0.8rem); }
+.mkt-nm small.mkt-also { color: var(--text-dim); }
+.mkt-foot-n { display: block; margin: 0 0 0.45rem; }
+.mkt-foot-b { color: var(--text-dim); font-weight: 700; }
+.mkt-foot a { color: var(--green-bright); overflow-wrap: anywhere; }
+.mkt-defs { margin: 0.2rem 0 0.6rem; }
+.mkt-defs dl { margin: 0.2rem 0 0; display: grid; gap: 0.45rem; }
+.mkt-defs dt { font-weight: 800; color: var(--text-dim); }
+.mkt-defs dd { margin: 0.1rem 0 0; }
+.mkt-rwa { margin: 0 0 1.2rem; }
+.mkt-rwa > .mkt-rwa-lede { margin-bottom: 0.9rem; }
+.mkt-rwa-verdict { margin: 0 0 0.7rem; font-weight: 700; line-height: 1.45; }
+.mkt-kv { margin: 0 0 0.8rem; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.45rem; }
+.mkt-kv > div { min-width: 0; display: flex; flex-wrap: wrap; gap: 0.15rem 0.6rem; align-items: baseline; }
+.mkt-kv dt { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: max(var(--text-floor), 0.72rem); color: var(--text-dim); }
+.mkt-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; line-height: 1.45; }
+.mkt-rwa-c h4.mkt-gh { margin: 0.9rem 0 0.4rem; }
+.mkt-evid, .mkt-hold, .mkt-looks { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.45rem; line-height: 1.45; }
+.mkt-evid li, .mkt-hold li, .mkt-looks li { overflow-wrap: anywhere; }
+.mkt-tier { display: inline-block; font-size: max(var(--text-floor), 0.72rem); font-weight: 800; border: 1px solid var(--ink-5); border-radius: 999px; padding: 0 0.45rem; line-height: 1.5; color: var(--text-dim); }
+.mkt-tier.is-a { color: var(--green-bright); border-color: var(--g-lit); }
+.mkt-rwa-terms, .mkt-rwa-powers { margin: 0.8rem 0; line-height: 1.45; overflow-wrap: anywhere; }
+.mkt-rwa-powers { color: var(--text-dim); font-weight: 700; }
+.mkt-rwa-foot { margin: 0 0 1.1rem; }
+.mkt-rwa-foot a { color: var(--green-bright); }
+.mkt-stat.is-warn { border-color: var(--o-edge); }
+.mkt-def { color: var(--text-mute); }
+.mkt-addr-l { color: var(--green-bright); overflow-wrap: anywhere; }
+.mkt-copy { min-width: 44px; min-height: 44px; vertical-align: middle; }
+.mkt-rwa .mkt-table code, .mkt-kv code { overflow-wrap: anywhere; }
 
 /* ---------- 1280px and up on a screen tall enough: the side column stays in view while the main view scrolls (its own
    list scrolls inside it when it is longer than the screen; every row is a button, so the keyboard reaches all of it) ---------- */

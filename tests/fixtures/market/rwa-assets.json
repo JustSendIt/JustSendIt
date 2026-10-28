@@ -1,0 +1,2952 @@
+{
+ "at": 1793205000000,
+ "chain": "robinhood",
+ "view": "assets",
+ "sort": "value",
+ "dir": "desc",
+ "kind": "all",
+ "issuer": "all",
+ "total": 36,
+ "rows": [
+  {
+   "key": "SPY",
+   "underlying": {
+    "symbol": "SPY",
+    "name": "SPDR S&P 500 ETF Trust",
+    "kind": "etf"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+     "symbol": "SPY",
+     "name": "SPDR S&P 500 ETF Trust • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x533c5571ae586985e1fddfaa24304284d970c62a",
+     "symbol": "spyon",
+     "name": "SPDR S&P 500 ETF (Ondo Tokenized ETF)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174115%2Flarge%2F0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png%3F1782444578",
+   "value": {
+    "v": 20569514.21104185,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 3392675.8614,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 2,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 20541500.7450531,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 25509.33948,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 10192822.64607875,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 2,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "pairs-rwa",
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "NVDA",
+   "underlying": {
+    "symbol": "NVDA",
+    "name": "NVIDIA",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+     "symbol": "NVDA",
+     "name": "NVIDIA • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0xf1b95ae4e7700b962714702ea53784dc8492a856",
+     "symbol": "nvdaon",
+     "name": "NVIDIA (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174110%2Flarge%2F0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png%3F1782444565",
+   "value": {
+    "v": 18369258.040190756,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 3105280.5777,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 18550571.673245,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 1446457.16865,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 3947988.08820069,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "SPCX",
+   "underlying": {
+    "symbol": "SPCX",
+    "name": "Space Exploration Technologies Corp. Class A Common Stock",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+     "symbol": "SPCX",
+     "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x9b8294f24453379aa87c807ab82bf1d5722153fc",
+     "symbol": "spcxon",
+     "name": "SpaceX (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174129%2Flarge%2F0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png%3F1782444614",
+   "value": {
+    "v": 13705043.40844513,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 1592559.9459,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 12954301.4616156,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 1216059.8538,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 5162149.67811716,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "CRCL",
+   "underlying": {
+    "symbol": "CRCL",
+    "name": "Circle Internet Group",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+     "symbol": "CRCL",
+     "name": "Circle Internet Group • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x369c4748e98c153e9b7adebc3e71e9e2a5f60dc0",
+     "symbol": "crclon",
+     "name": "Circle Internet Group (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174121%2Flarge%2F0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5.png%3F1782444593",
+   "value": {
+    "v": 10358293.029638736,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 3104075.045062572,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 10149637.420762,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 186.10141,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 2507803.57903622,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "GLD",
+   "underlying": {
+    "symbol": "GLD",
+    "name": "SPDR Gold Trust",
+    "kind": "commodity"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+     "symbol": "GLD",
+     "name": "SPDR Gold Trust • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175452%2Flarge%2FGLD.png%3F1786367509",
+   "value": {
+    "v": 7564008.662249023,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 4408939.27508718,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "mcap": {
+    "v": 7603393.98308383,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": 1765.48135,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 3572454.18027474,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": []
+  },
+  {
+   "key": "MSTR",
+   "underlying": {
+    "symbol": "MSTR",
+    "name": "Strategy Inc.",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xec262a75e413fafd0df80480274532c79d42da09",
+     "symbol": "MSTR",
+     "name": "Strategy Inc. • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x09dedc334fc47ab543e5d70c7fd9d2b1aea175bd",
+     "symbol": "mstron",
+     "name": "MicroStrategy (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xec262a75e413fafd0df80480274532c79d42da09",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174143%2Flarge%2F0xec262a75e413fafd0df80480274532c79d42da09.png%3F1782444651",
+   "value": {
+    "v": 6819530.981898297,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 3936787.4498885535,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 6675200.97636935,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 733.85122,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 2141145.74875385,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "META",
+   "underlying": {
+    "symbol": "META",
+    "name": "Meta Platforms",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+     "symbol": "META",
+     "name": "Meta Platforms • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x7b5026cfcb4de0cf3d9a39fe2a541514b71437a2",
+     "symbol": "metaon",
+     "name": "Meta Platforms (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174122%2Flarge%2F0xc0d6457c16cc70d6790dd43521c899c87ce02f35.png%3F1782444595",
+   "value": {
+    "v": 6806751.869549287,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 2115754.9301146287,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 6743782.86024914,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 40457.97698,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 1690860.09015173,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "GOOGL",
+   "underlying": {
+    "symbol": "GOOGL",
+    "name": "Alphabet Class A",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+     "symbol": "GOOGL",
+     "name": "Alphabet Class A • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0xe10cc5f0cd0c90322ebeb33e7757b2c9090146dc",
+     "symbol": "googlon",
+     "name": "Alphabet Class A (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174124%2Flarge%2F0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png%3F1782444601",
+   "value": {
+    "v": 6527391.999011039,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 615274.429,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 6381044.58517414,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 678169.25131,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 377679.345339905,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "QQQ",
+   "underlying": {
+    "symbol": "QQQ",
+    "name": "Invesco QQQ",
+    "kind": "etf"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+     "symbol": "QQQ",
+     "name": "Invesco QQQ • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x300fe8a40701ce81460503fb886f9ed81a3b5e14",
+     "symbol": "qqqon",
+     "name": "Invesco QQQ ETF (Ondo Tokenized ETF)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174119%2Flarge%2F0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png%3F1782444588",
+   "value": {
+    "v": 5088030.232323421,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 1453176.8355,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 2,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 5429224.1736209,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 836.65647,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 5847271.1430433905,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 2,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "pairs-rwa",
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "TSLA",
+   "underlying": {
+    "symbol": "TSLA",
+    "name": "Tesla",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+     "symbol": "TSLA",
+     "name": "Tesla • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0xb197f36c25ba9b66960688882a4dc595c6b04309",
+     "symbol": "TSLAon",
+     "name": "Tesla (Ondo Tokenized)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174112%2Flarge%2F0x322f0929c4625ed5bad873c95208d54e1c003b2d.png%3F1782444570",
+   "value": {
+    "v": 4511532.854059423,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 1121369.111,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 2,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 4291173.7277862,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 3895.81269,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 729518.613021839,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 2,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": -0.30218821735964463,
+    "src": "site",
+    "at": 1793196580000,
+    "label": "DEX price against Chainlink RHTSLA / USD",
+    "ref": "chainlink"
+   },
+   "flags": []
+  },
+  {
+   "key": "AAPL",
+   "underlying": {
+    "symbol": "AAPL",
+    "name": "Apple",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    },
+    {
+     "key": "anchored",
+     "name": "Anchored (aStock)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+     "symbol": "AAPL",
+     "name": "Apple • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0x9bf86418caf2b7a939603d6c24219a77bf7f9b33",
+     "symbol": "aaplon",
+     "name": "Apple (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    },
+    {
+     "address": "0x17683e492d0c8910f7c0157d04af31cb7a23ad71",
+     "symbol": "aaapl",
+     "name": "Apple aStock",
+     "issuer": {
+      "key": "anchored",
+      "name": "Anchored (aStock)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174123%2Flarge%2F0xaf3d76f1834a1d425780943c99ea8a608f8a93f9.png%3F1782444598",
+   "value": {
+    "v": 3991862.770856816,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 3 tokens (on-chain supply × the DEX price) — 2 without one are left out",
+    "missing": 2
+   },
+   "liquidity": {
+    "v": 1322104.9890249148,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 2 without one left out",
+    "missing": 2
+   },
+   "mcap": {
+    "v": 3986098.27824582,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 3 tokens (GeckoTerminal) — 2 without one are left out",
+    "missing": 2
+   },
+   "tvl": {
+    "v": 500914.07796,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 3 tokens (DefiLlama, matched by symbol) — 2 without one are left out",
+    "missing": 2
+   },
+   "volume24h": {
+    "v": 1797384.25793757,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 2 without one left out",
+    "missing": 2
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "GME",
+   "underlying": {
+    "symbol": "GME",
+    "name": "GameStop",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    },
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+     "symbol": "GME",
+     "name": "GameStop • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    },
+    {
+     "address": "0xb094d0d3221d7f7a9f14b0f78c34cd38d7acf6f2",
+     "symbol": "gmeon",
+     "name": "GameStop (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174150%2Flarge%2F0x1b0e319c6a659f002271b69db8a7df2f911c153e.png%3F1782444670",
+   "value": {
+    "v": 2767697.341140245,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 2 tokens (on-chain supply × the DEX price) — 1 without one is left out",
+    "missing": 1
+   },
+   "liquidity": {
+    "v": 1496174.0682924117,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "mcap": {
+    "v": 2760222.52582071,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 2 tokens (GeckoTerminal) — 1 without one is left out",
+    "missing": 1
+   },
+   "tvl": {
+    "v": 383.82838,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 2 tokens (DefiLlama, matched by symbol) — 1 without one is left out",
+    "missing": 1
+   },
+   "volume24h": {
+    "v": 654381.936841003,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 1 without one left out",
+    "missing": 1
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "AMC",
+   "underlying": {
+    "symbol": "AMC",
+    "name": "AMC Entertainment",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+     "symbol": "AMC",
+     "name": "AMC Entertainment • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175476%2Flarge%2FAMC.png%3F1786375197",
+   "value": {
+    "v": 1841834.0652186088,
+    "src": "site",
+    "at": 1793199600000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 272002.402,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once)"
+   },
+   "mcap": {
+    "v": 1850177.27835363,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 379429.262160473,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 1,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": []
+  },
+  {
+   "key": "SGOV",
+   "underlying": {
+    "symbol": "SGOV",
+    "name": "iShares 0-3 Month Treasury Bond",
+    "kind": "bond"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x92fd66527192e3e61d4ddd13322aa222de86f9b5",
+     "symbol": "SGOV",
+     "name": "iShares 0-3 Month Treasury Bond • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x92fd66527192e3e61d4ddd13322aa222de86f9b5",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174130%2Flarge%2F0x92fd66527192e3e61d4ddd13322aa222de86f9b5.png%3F1782444616",
+   "value": {
+    "v": 1660314.5605227735,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 484505.25979637646,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "mcap": {
+    "v": 1660461.75800563,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": 11.21389,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 33846.8954441525,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": []
+  },
+  {
+   "key": "CRM",
+   "underlying": {
+    "symbol": "CRM",
+    "name": "Salesforce",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xd95b44124e475743a7589e68f3d74008a5536d44",
+     "symbol": "CRM",
+     "name": "Salesforce • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0xd95b44124e475743a7589e68f3d74008a5536d44",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175348%2Flarge%2FCRM.png%3F1786124241",
+   "value": {
+    "v": 28997.998319082195,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 13200.253209546965,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "mcap": {
+    "v": 28579.0551698232,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 1345.5433048905,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": 0.23060416739169032,
+    "src": "site",
+    "at": 1793196281099,
+    "label": "DEX price against Robinhood's quote",
+    "ref": "robinhood"
+   },
+   "flags": []
+  },
+  {
+   "key": "P",
+   "underlying": {
+    "symbol": "P",
+    "name": "Everpure",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x1cdad396db64bda184d5182a97dd9b3c62100b7d",
+     "symbol": "P",
+     "name": "Everpure • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x1cdad396db64bda184d5182a97dd9b3c62100b7d",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174199%2Flarge%2F0x1cdad396db64bda184d5182a97dd9b3c62100b7d.png%3F1782444800",
+   "value": {
+    "v": 14804.526042438161,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 31862.80812376467,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "mcap": {
+    "v": 15382.9915627322,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 1 token (GeckoTerminal) — includes CoinGecko's every-chain figure for a multi-chain issuer's token",
+    "global": true
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 370.4404714365,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": -1.4140025661940503,
+    "src": "site",
+    "at": 1793196281099,
+    "label": "DEX price against Robinhood's quote",
+    "ref": "robinhood"
+   },
+   "flags": [
+    "global-mcap"
+   ]
+  },
+  {
+   "key": "SHY",
+   "underlying": {
+    "symbol": "SHY",
+    "name": "iShares 1-3 Year Treasury Bond ETF",
+    "kind": "bond"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xbe274710bf3d9567e1b290ef6a5f9f90ca016fd8",
+     "symbol": "SHY",
+     "name": "iShares 1-3 Year Treasury Bond ETF • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0xbe274710bf3d9567e1b290ef6a5f9f90ca016fd8",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175480%2Flarge%2FSHY.png%3F1786401178",
+   "value": {
+    "v": 8326.726358635235,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 905.1633398226347,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "mcap": {
+    "v": 8326.7263586352,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": []
+  },
+  {
+   "key": "NAVN",
+   "underlying": {
+    "symbol": "NAVN",
+    "name": "Navan",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xf7181b63fdb858558a74ba96bc42732684cd7965",
+     "symbol": "NAVN",
+     "name": "Navan • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0xf7181b63fdb858558a74ba96bc42732684cd7965",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175423%2Flarge%2FNAVN.png%3F1786299132",
+   "value": {
+    "v": 2714.6180254958886,
+    "src": "site",
+    "at": 1793205000000,
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": 654.8261216680089,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "USD in the DEX pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "mcap": {
+    "v": 2714.6180254959,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price has been read for its underlying"
+   },
+   "flags": [
+    "deviation"
+   ]
+  },
+  {
+   "key": "SATS",
+   "underlying": {
+    "symbol": "SATS",
+    "name": "EchoStar",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x95052ddcd5dc25641657424a8cf04834997e1730",
+     "symbol": "SATS",
+     "name": "EchoStar • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x95052ddcd5dc25641657424a8cf04834997e1730",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174181%2Flarge%2F0x95052ddcd5dc25641657424a8cf04834997e1730.png%3F1782444753",
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "GeckoTerminal gave no reserve for it",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it"
+   },
+   "flags": [
+    "deviation"
+   ]
+  },
+  {
+   "key": "BND",
+   "underlying": {
+    "symbol": "BND",
+    "name": "Vanguard Total Bond Market ETF",
+    "kind": "bond"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x2f62fc9fabb470c690f141c28340ed832bb27020",
+     "symbol": "BND",
+     "name": "Vanguard Total Bond Market ETF • Robinhood Token",
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x2f62fc9fabb470c690f141c28340ed832bb27020",
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175450%2Flarge%2FBND.png%3F1786367471",
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "GeckoTerminal gave no reserve for it",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": 0,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "pools": 0,
+    "label": "DEX volume, 24 h, of the pools holding its tokens (each pool counted once; 1 token outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already)"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it"
+   },
+   "flags": []
+  },
+  {
+   "key": "ondo:BMNR",
+   "underlying": {
+    "symbol": "BMNR",
+    "name": "BitMine Immersion Technologies",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x900f8970d2fae8060d06bb29234f629c837c3383",
+     "symbol": "bmnron",
+     "name": "BitMine Immersion Technologies (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x900f8970d2fae8060d06bb29234f629c837c3383",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "ondo:FXI",
+   "underlying": {
+    "symbol": "FXI",
+    "name": "iShares China Large-Cap ETF",
+    "kind": "etf"
+   },
+   "issuers": [
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x75113389169b154ddac67ca7efa542680d75f072",
+     "symbol": "fxion",
+     "name": "iShares China Large-Cap ETF (Ondo Tokenized)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x75113389169b154ddac67ca7efa542680d75f072",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "ondo:HOOD",
+   "underlying": {
+    "symbol": "HOOD",
+    "name": "Robinhood Markets",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x43cac729218c62210d71d66b7f0ec93990d8d8cc",
+     "symbol": "hoodon",
+     "name": "Robinhood Markets (Ondo Tokenized Stock)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x43cac729218c62210d71d66b7f0ec93990d8d8cc",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "ondo:CPER",
+   "underlying": {
+    "symbol": "CPER",
+    "name": "US Copper Index Fund",
+    "kind": "commodity"
+   },
+   "issuers": [
+    {
+     "key": "ondo",
+     "name": "Ondo Global Markets"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xa8f72952653864f7457e0c307fdb415e03c2ece1",
+     "symbol": "cperon",
+     "name": "US Copper Index Fund (Ondo Tokenized)",
+     "issuer": {
+      "key": "ondo",
+      "name": "Ondo Global Markets"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xa8f72952653864f7457e0c307fdb415e03c2ece1",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "anchored:MRNA",
+   "underlying": {
+    "symbol": "MRNA",
+    "name": "Moderna Inc",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "anchored",
+     "name": "Anchored (aStock)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xda230a7ec7aff66e62ff3e225c3d9c42093c23ae",
+     "symbol": "amrna",
+     "name": "Moderna Inc aStock",
+     "issuer": {
+      "key": "anchored",
+      "name": "Anchored (aStock)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xda230a7ec7aff66e62ff3e225c3d9c42093c23ae",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "anchored:BOT",
+   "underlying": {
+    "symbol": "BOT",
+    "name": "RoboStrategy Inc",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "anchored",
+     "name": "Anchored (aStock)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x5f3b897deea4ea0cb6aefe50bd2ae556cf6f4b63",
+     "symbol": "abot",
+     "name": "RoboStrategy Inc aStock",
+     "issuer": {
+      "key": "anchored",
+      "name": "Anchored (aStock)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x5f3b897deea4ea0cb6aefe50bd2ae556cf6f4b63",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "anchored:BIL",
+   "underlying": {
+    "symbol": "BIL",
+    "name": "SPDR Bloomberg 1-3 Month T-Bill ETF",
+    "kind": "bond"
+   },
+   "issuers": [
+    {
+     "key": "anchored",
+     "name": "Anchored (aStock)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x4fc5b9f8933597d3ecf84d0611687e1dc8dd576f",
+     "symbol": "abil",
+     "name": "SPDR Bloomberg 1-3 Month T-Bill ETF (Anchored Tokenized ETF)",
+     "issuer": {
+      "key": "anchored",
+      "name": "Anchored (aStock)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x4fc5b9f8933597d3ecf84d0611687e1dc8dd576f",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "st0x:WMT",
+   "underlying": {
+    "symbol": "WMT",
+    "name": "Walmart Inc.",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x23a0944e82766242da76cb0f77e0b7812e5487ea",
+     "symbol": "wtWMT",
+     "name": "Wrapped Walmart Inc. ST0x",
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x23a0944e82766242da76cb0f77e0b7812e5487ea",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": []
+  },
+  {
+   "key": "st0x:SNES",
+   "underlying": {
+    "symbol": "SNES",
+    "name": "SenesTech, Inc.",
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x06096908dbc38fc54509024674e4fd1891b5f7ca",
+     "symbol": "wtSNES",
+     "name": "Wrapped SenesTech, Inc. ST0x",
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0x06096908dbc38fc54509024674e4fd1891b5f7ca",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": []
+  },
+  {
+   "key": "st0x:PLBY",
+   "underlying": {
+    "symbol": "PLBY",
+    "name": null,
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xbe127eed812dc1f622227fadc8639d4138b47b2e",
+     "symbol": "wtPLBY",
+     "name": null,
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xbe127eed812dc1f622227fadc8639d4138b47b2e",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "st0x:DIS",
+   "underlying": {
+    "symbol": "DIS",
+    "name": null,
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x81f40cbcfae7a1ad1f4474ed95a210dfa3b90b0f",
+     "symbol": "wtDIS",
+     "name": null,
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x81f40cbcfae7a1ad1f4474ed95a210dfa3b90b0f",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "st0x:FGI",
+   "underlying": {
+    "symbol": "FGI",
+    "name": null,
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0x685dfd386968b58d895f934485820c479c79a8bb",
+     "symbol": "wtFGI",
+     "name": null,
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0x685dfd386968b58d895f934485820c479c79a8bb",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "st0x:DNUT",
+   "underlying": {
+    "symbol": "DNUT",
+    "name": null,
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xb7fc2b7881cceeb73d8deccf69b6acb8ac2e0826",
+     "symbol": "wtDNUT",
+     "name": null,
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xb7fc2b7881cceeb73d8deccf69b6acb8ac2e0826",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "st0x:GRND",
+   "underlying": {
+    "symbol": "GRND",
+    "name": null,
+    "kind": "stock"
+   },
+   "issuers": [
+    {
+     "key": "st0x",
+     "name": "ST0x (S01 Issuer GmbH)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xb80bd4d599eebbf2851d4e7f5594918b82ff1823",
+     "symbol": "wtGRND",
+     "name": null,
+     "issuer": {
+      "key": "st0x",
+      "name": "ST0x (S01 Issuer GmbH)"
+     },
+     "confidence": "not-confirmed"
+    }
+   ],
+   "main": "0xb80bd4d599eebbf2851d4e7f5594918b82ff1823",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": [
+    "not-confirmed"
+   ]
+  },
+  {
+   "key": "midas:MGLO",
+   "underlying": {
+    "symbol": "mGLO",
+    "name": "Midas Fasanara Global Open",
+    "kind": "credit"
+   },
+   "issuers": [
+    {
+     "key": "midas",
+     "name": "Midas"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xfed493f38c1aacb4ea4e6a11f8b9287849ee0096",
+     "symbol": "mGLO",
+     "name": "Midas Fasanara Global Open",
+     "issuer": {
+      "key": "midas",
+      "name": "Midas"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0xfed493f38c1aacb4ea4e6a11f8b9287849ee0096",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": 36244432.49185,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no reference price is read for this issuer's tokens"
+   },
+   "flags": []
+  },
+  {
+   "key": "WEEK",
+   "underlying": {
+    "symbol": "WEEK",
+    "name": null,
+    "kind": "bond"
+   },
+   "issuers": [
+    {
+     "key": "rhj",
+     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+    }
+   ],
+   "tokens": [
+    {
+     "address": "0xc93a8c440cea26d7445df01729f193b27965099f",
+     "symbol": "WEEK",
+     "name": null,
+     "issuer": {
+      "key": "rhj",
+      "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+     },
+     "confidence": "confirmed"
+    }
+   ],
+   "main": "0xc93a8c440cea26d7445df01729f193b27965099f",
+   "logo": null,
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "neither its on-chain supply nor a DEX price has been read",
+    "label": "value on chain over its 1 token (on-chain supply × the DEX price)"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "USD in the DEX pools holding its tokens"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": null,
+    "why": "GeckoTerminal has no market cap for it",
+    "label": "market cap over its 1 token (GeckoTerminal)"
+   },
+   "tvl": {
+    "v": null,
+    "src": "defillama",
+    "at": null,
+    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "label": "deposited in DeFi apps on Robinhood Chain over its 1 token (DefiLlama, matched by symbol)"
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793199600000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet",
+    "label": "DEX volume, 24 h, of the pools holding its tokens"
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it"
+   },
+   "flags": [
+    "deviation"
+   ]
+  }
+ ],
+ "issuers": [
+  {
+   "key": "rhj",
+   "name": "Robinhood Assets (Jersey) Limited (RHJ)",
+   "count": 21
+  },
+  {
+   "key": "ondo",
+   "name": "Ondo Global Markets",
+   "count": 15
+  },
+  {
+   "key": "anchored",
+   "name": "Anchored (aStock)",
+   "count": 4
+  },
+  {
+   "key": "st0x",
+   "name": "ST0x (S01 Issuer GmbH)",
+   "count": 7
+  },
+  {
+   "key": "midas",
+   "name": "Midas",
+   "count": 1
+  }
+ ],
+ "totals": {
+  "value": {
+   "v": 110635907.89489107,
+   "src": "site",
+   "at": 1793199600000,
+   "label": "value on chain of the 25 RWA tokens counted — 7 without one are left out",
+   "missing": 7
+  },
+  "liquidity": {
+   "v": 27029259.447161444,
+   "src": "geckoterminal",
+   "at": 1793199600000,
+   "pools": 9,
+   "label": "USD in the DEX pools holding RWA tokens (each pool counted once; 11 tokens outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 7 without one left out",
+   "missing": 7
+  },
+  "tvl": {
+   "v": 40159813.105440006,
+   "src": "defillama",
+   "at": 1793201400000,
+   "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — 11 without one are left out",
+   "missing": 11
+  },
+  "mcap": {
+   "v": 109631794.83850175,
+   "src": "geckoterminal",
+   "at": 1793199600000,
+   "label": "market caps summed (GeckoTerminal) — includes CoinGecko's every-chain figure for multi-chain issuers' tokens — 7 without one are left out",
+   "missing": 7,
+   "global": true
+  },
+  "volume24h": {
+   "v": 33544181.66770579,
+   "src": "geckoterminal",
+   "at": 1793199600000,
+   "pools": 9,
+   "label": "DEX volume, 24 h, of the pools holding RWA tokens (each pool counted once; 13 tokens outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 5 without one left out",
+   "missing": 5
+  },
+  "count": 25,
+  "notConfirmed": 23,
+  "stables": {
+   "v": 711728847.7855448,
+   "src": "defillama",
+   "at": 1793201400000,
+   "label": "fiat-backed stablecoins circulating on Robinhood Chain (DefiLlama) — apart from the RWA totals"
+  },
+  "l2beat": {
+   "rwaPublic": {
+    "v": 166200819.82714844,
+    "src": "l2beat",
+    "at": 1793199600000,
+    "label": "L2BEAT's count of real-world assets on Robinhood Chain — its own measure, never mixed with this site's sums"
+   },
+   "rwaRestricted": {
+    "v": 0,
+    "src": "l2beat",
+    "at": 1793199600000,
+    "label": "L2BEAT's count of real-world assets on Robinhood Chain — its own measure, never mixed with this site's sums (restricted)"
+   }
+  }
+ },
+ "reads": {
+  "registry": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "prices": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "actions": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "deviations": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chain": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "tvl": {
+   "at": 1793201400000,
+   "ok": true,
+   "apps": 5,
+   "why": "not read: longbow (upstream 404) — each keeps its last good deposits, if any"
+  },
+  "stables": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chainlink": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "roles": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "gt": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "connected": {
+   "at": 1793201400000,
+   "ok": true
+  }
+ },
+ "definitions": {
+  "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
+  "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
+  "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
+  "liquidity": "Liquidity: USD in the DEX pools on Robinhood Chain holding the token (each pool's whole reserve), from GeckoTerminal; a pool pairing two RWAs is counted once in any total.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains it is every chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: DEX trading over the last 24 hours in the pools holding the token (GeckoTerminal).",
+  "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
+  "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
+  "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."
+ },
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc. No Robinhood logos or artwork are used.",
+  "Not advice, never a tip to buy. Do your own research.",
+  "How a token counts as an RWA here: it is in Robinhood's Stock Token registry and its code runs from Robinhood's registry on the chain (\"confirmed\"); or the registry lists it and the chain has not been read yet (\"issuer-listed\"); or it is on this site's list of other issuers, confirmed only once its own fingerprint is read on the chain. A name or a symbol never qualifies a token.",
+  "Stablecoins and tokens merely paired with an RWA are listed apart and never counted.",
+  "Highest and lowest are among these RWA tokens — a token with no figure for the ranking sits last, whichever way the list is sorted.",
+  "23 listed tokens are not confirmed on the chain yet: shown, marked, and left out of the totals.",
+  "TVL in DeFi is summed over the apps DefiLlama lists with the largest deposits on the chain (Catch Exchange, Solon Stocks, Morpho Blue, Grove Finance, Spark Savings); DEX pools, exchanges and apps that deposit into other apps are left out so nothing is counted twice."
+ ],
+ "sources": [
+  {
+   "id": "robinhood",
+   "name": "Robinhood's Stock Token API (registry, quotes, corporate actions, price deviations)",
+   "href": "https://docs.robinhood.com/chain/stock-token-apis/"
+  },
+  {
+   "id": "rpc",
+   "name": "Robinhood Chain (its public node), read by this site",
+   "href": "https://docs.robinhood.com/chain/"
+  },
+  {
+   "id": "chainlink",
+   "name": "Chainlink price feeds (its public directory; each feed read on the chain)",
+   "href": "https://docs.chain.link/data-feeds/tokenized-equity-feeds/robinhood"
+  },
+  {
+   "id": "defillama",
+   "name": "DefiLlama (per-app deposits, stablecoins)",
+   "href": "https://defillama.com"
+  },
+  {
+   "id": "geckoterminal",
+   "name": "GeckoTerminal (prices, market caps, pools)",
+   "href": "https://www.geckoterminal.com"
+  },
+  {
+   "id": "l2beat",
+   "name": "L2BEAT (its count of real-world assets on the chain)",
+   "href": "https://l2beat.com/scaling/projects/robinhood"
+  }
+ ]
+}

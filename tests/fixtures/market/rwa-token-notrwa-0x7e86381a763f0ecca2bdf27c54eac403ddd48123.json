@@ -1,0 +1,10 @@
+{
+ "notRwa": true,
+ "address": "0x7e86381a763f0ecca2bdf27c54eac403ddd48123",
+ "symbol": "gme",
+ "why": "Same ticker as $GME, but not issued by Robinhood Assets (Jersey) — the registry lists $GME at 0x1b0e…3e",
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
+  "Not advice, never a tip to buy. Do your own research."
+ ]
+}
