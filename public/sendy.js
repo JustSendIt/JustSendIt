@@ -38,6 +38,10 @@
       keywords: ['wallet', 'link wallet', 'track', 'holdings', 'pnl', 'tracker', 'cost basis'],
       answer: 'The wallet tracker (/tracker) tracks any wallet on Robinhood Chain — holdings, every token transaction, a value-over-time chart, cost basis and PNL, read from the chain by this site. On the public node a wallet\'s first read can take an hour or more. You can leave: it keeps its place in line, keeps reading, is saved, and you get a notification when it is ready (or when the node refuses it for so long that it stops — it goes on from where it stopped when you come back). Later refreshes read only what is new and take seconds. Linking a wallet to your account happens on your profile (/profile) and is how the site checks what you hold.'
     },
+    'which wallet': {
+      keywords: ['which wallet', 'what wallet', 'best wallet', 'wallet should i', 'wallet to use', 'get a wallet', 'install a wallet', 'download a wallet'],
+      answer: 'Step 1 of the How to Buy guide (/guide) lists the wallets that connect here, with links to install them. Only ever download a wallet from its official site or your phone\'s app store, and never type its seed phrase into a website or give it to anyone. Connecting a wallet here is read-only: you sign a message to prove it\'s yours, and that\'s all it can ever do.'
+    },
     'squad': {
       keywords: ['squad', 'send squad', 'private group'],
       answer: 'A Send Squad is a private, token-gated group. Members can make Send Calls that only the squad sees, and the squad earns points together. Start one or find yours under Communities (/communities); only verified members count toward a squad\'s gate.'
