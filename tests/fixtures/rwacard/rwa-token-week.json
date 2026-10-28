@@ -17,8 +17,15 @@
   {
    "tier": "A2",
    "kind": "fingerprint",
-   "text": "Its code runs from Robinhood's token registry contract (checked on the chain)",
+   "text": "Its code runs from Robinhood's token registry contract (checked on the chain: its beacon slot names the registry, and its code is the very proxy code the registry's own Stock Tokens run)",
    "src": "rpc",
+   "at": 1793201400000
+  },
+  {
+   "tier": "B",
+   "kind": "robinhood-api",
+   "text": "Robinhood's own /price-deviations answer names this address (supporting evidence only — the registry's list and the chain are what count)",
+   "src": "robinhood",
    "at": 1793201400000
   }
  ],
@@ -29,13 +36,13 @@
  "priceUsd": {
   "v": null,
   "src": "geckoterminal",
-  "at": 1793199600000,
-  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+  "at": 1793205000000,
+  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
  },
  "supply": {
   "v": null,
   "src": "rpc",
-  "at": 1793206800000,
+  "at": 1793205000000,
   "why": "its decimals have not been read yet"
  },
  "value": {
@@ -48,28 +55,31 @@
  "mcap": {
   "v": null,
   "src": "geckoterminal",
-  "at": null,
-  "why": "GeckoTerminal has no market cap for it"
+  "at": 1793205000000,
+  "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
  },
  "liquidity": {
   "v": null,
   "src": "geckoterminal",
-  "at": 1793199600000,
-  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+  "at": 1793205000000,
+  "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
  },
  "tvl": {
   "v": null,
   "src": "defillama",
   "at": 1793201400000,
-  "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+  "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
   "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-  "protocols": []
+  "protocols": [],
+  "missingApps": [
+   "longbow"
+  ]
  },
  "volume24h": {
   "v": null,
   "src": "geckoterminal",
-  "at": 1793199600000,
-  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+  "at": 1793205000000,
+  "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
  },
  "reference": {
   "chainlink": {
@@ -81,7 +91,7 @@
   "robinhood": {
    "v": null,
    "src": "robinhood",
-   "at": 1793206800000,
+   "at": 1793205000000,
    "why": "Robinhood's /prices answer has no quote for it"
   }
  },
@@ -103,7 +113,7 @@
  "multiplier": {
   "v": null,
   "src": "rpc",
-  "at": 1793206800000,
+  "at": 1793205000000,
   "label": "shares of the underlying one token carries (uiMultiplier() on the chain)",
   "pending": null,
   "why": "its multiplier has not been read on the chain yet"
@@ -118,7 +128,7 @@
   "global": {
    "v": null,
    "src": "rpc",
-   "at": 1793206800000,
+   "at": 1793205000000,
    "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
    "absent": true,
    "label": "paused() on Robinhood's registry: every Stock Token at once"
@@ -126,7 +136,7 @@
   "token": {
    "v": null,
    "src": "rpc",
-   "at": 1793206800000,
+   "at": 1793205000000,
    "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
    "absent": true,
    "label": "tokenPaused(): this token alone"
@@ -134,7 +144,7 @@
   "oracle": {
    "v": null,
    "src": "rpc",
-   "at": 1793206800000,
+   "at": 1793205000000,
    "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
    "absent": true,
    "label": "oraclePaused(): Robinhood's advisory price-oracle flag"
@@ -143,7 +153,7 @@
  "mintBurnUsd": {
   "v": null,
   "src": "robinhood",
-  "at": 1793206800000,
+  "at": 1793205000000,
   "why": "Robinhood's /prices answer has no quote for it"
  },
  "flags": [
@@ -206,7 +216,7 @@
   "implementation": {
    "address": "0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2",
    "src": "rpc",
-   "at": 1793206800000
+   "at": 1793205000000
   },
   "verifiedSource": "https://sourcify.dev/server/v2/contract/4663/0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2",
   "powers": [
@@ -339,7 +349,7 @@
     ]
    }
   ],
-  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict. The Scanner marks these powers in red; for a regulated issuer they are expected — they are still powers over your tokens."
+  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner's health score does not count them."
  },
  "roles": [
   {
@@ -479,6 +489,12 @@
   }
  ],
  "rolesAt": 1793205000000,
+ "rolesRead": {
+  "complete": true,
+  "cursor": 98587507,
+  "head": 98587507,
+  "at": 1793205000000
+ },
  "blocked": {
   "count": 175,
   "at": 1793205000000,
@@ -505,7 +521,7 @@
    "ok": true
   },
   "prices": {
-   "at": 1793206800000,
+   "at": 1793205000000,
    "ok": true
   },
   "actions": {
@@ -517,14 +533,14 @@
    "ok": true
   },
   "chain": {
-   "at": 1793206800000,
+   "at": 1793205000000,
    "ok": true
   },
   "tvl": {
    "at": 1793201400000,
-   "ok": true,
+   "ok": false,
    "apps": 5,
-   "why": "not read: longbow (upstream 404) — each keeps its last good deposits, if any"
+   "why": "DefiLlama's per-app deposits — not read: Longbow (upstream 404)"
   },
   "stables": {
    "at": 1793201400000,
@@ -539,15 +555,17 @@
    "ok": true
   },
   "gt": {
-   "at": 1793206800000,
+   "at": 1793205000000,
    "ok": true
   },
   "connected": {
    "at": 1793201400000,
-   "ok": true
+   "ok": false,
+   "failed": 11,
+   "why": "GeckoTerminal could not be read for 11 of 12 RWAs' own pools (upstream 404) — tried again on the next runs"
   }
  },
- "at": 1793206800000,
+ "at": 1793205000000,
  "notes": [
   "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
   "Not advice, never a tip to buy. Do your own research.",
@@ -557,9 +575,9 @@
   "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
   "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
   "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
-  "liquidity": "Liquidity: USD in the DEX pools on Robinhood Chain holding the token (each pool's whole reserve), from GeckoTerminal; a pool pairing two RWAs is counted once in any total.",
-  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains it is every chain's — and never mixed with the value on chain.",
-  "volume": "Volume 24h: DEX trading over the last 24 hours in the pools holding the token (GeckoTerminal).",
+  "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read); a total takes a pool pairing two RWAs once.",
   "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
   "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
   "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."

@@ -6098,7 +6098,7 @@ const OUTBOUND_RPM = {
   /* Market Data (lib/marketdata.js, 2026-10-26). DefiLlama, L2BEAT and the logo CDNs publish no number, so these are ceilings
      of our own, far below anything they would notice (DefiLlama is CDN-cached for 30 minutes and is read no faster than that);
      growthepie publishes 10 a minute. GeckoTerminal is the site's 10 a minute: Market Data's collectors take at most 3 of them
-     ('market:geckoterminal', about 2.2 a minute on average with the RWA job's reads), and 2 more are kept for a person opening a token on /market or
+     ('market:geckoterminal', about 2.3 a minute on average with the RWA job's reads), and 2 more are kept for a person opening a token on /market or
      through the Send API ('market:geckoterminal-asked': its candles and token reads), which the collectors never take from —
      they queue for minutes, and a person waits 8 s at most. With the name search's 4, that leaves the chart switch and the
      Scanner at least 1 in the busiest minute, and in practice most of the 10. 'market:rpc' is Market Data's own ceiling on

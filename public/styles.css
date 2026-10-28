@@ -6194,9 +6194,11 @@ button.sc-chain--ethereum.is-on, button.sc-chain--solana.is-on { background: col
 .tkd-facts > div.tkd-facts-list dd { text-align: left; }
 
 /* ===== The real-world-asset card (owner's RWA spec, 2026-10-28; newpairs.js rwaCardHTML) =====
-   One card in the dashboard's left column, its parts in the spec's order, each with a heading of its own and its long lists in
-   a pop-down of its own. Every figure is the label over its value, then what it is and whose it is — a side column is too narrow
-   for both across. Nothing here is sized under the floor, and a chip wraps rather than pushing the card wider than a phone. */
+   One card in the dashboard's wide column (under the chart and the trading — never a tall wall in a narrow side column), its
+   parts in the spec's order, each with a heading of its own: the first part open, every later one a line of what matters and
+   the rest in a pop-down of its own. Every figure is the label over its value, then what it is and whose it is. Nothing here is
+   sized under the floor, a chip wraps rather than pushing the card wider than a phone, and a long link or address wraps inside
+   the card instead of running past its edge. */
 .tkd-card--rwa .tkd-card-b { gap: 0.75rem; }
 .tkd-rwa-sec { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.5rem; min-width: 0; padding-top: 0.7rem; border-top: 1px solid var(--ink-4); }
 .tkd-card--rwa .tkd-card-b > .tkd-rwa-sec:first-of-type { padding-top: 0; border-top: 0; }
@@ -6223,6 +6225,12 @@ li > .tkd-rwa-src, p > .tkd-rwa-src { display: inline; margin-top: 0; }
 .tkd-card--rwa code { font-size: max(var(--text-floor), 0.8rem); overflow-wrap: anywhere; }
 .tkd-rwa-foot { gap: 0.3rem; }
 .tkd-rwa-fine { margin: 0; font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; color: var(--text-dim); }
+.tkd-card--rwa .tkd-note, .tkd-card--rwa .tkd-line, .tkd-card--rwa .tkd-gaps, .tkd-card--rwa .np-addr-link { overflow-wrap: anywhere; }
+.tkd-rwa-full { overflow-wrap: anywhere; word-break: break-all; }
+/* beside the verdict and the Swap button: the token is a real-world asset (its issuer's powers, which the score does not count), or a lookalike of one */
+.tkd-verdict-rwa { grid-column: 1 / -1; margin: 0.35rem 0 0; font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.tkd-verdict-rwa.tkd-warn { color: var(--gold); }
+.tkd-rwa-swapnote { margin: 0.5rem 0 0; font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; overflow-wrap: anywhere; }
 
 /* ===== The tour with Sendy, right after sign-up (owner, 2026-10-24; public/onboard.js) =====
    Sendy flies from thing to thing, the thing is lit (a cut-out in a dim layer), and a card beside him says what it is; on a

@@ -223,30 +223,36 @@
                 <button class="np-chip" type="button" aria-pressed="false" data-rsort="liquidity" data-tip="Ranks the stablecoins by the USD in the DEX pools holding them (GeckoTerminal)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Liquidity</button>
               </div>
             </div>
-            <div class="mkt-group" role="group" aria-labelledby="mkt-rd-l">
-              <p class="mkt-group-l" id="mkt-rd-l">Order</p>
-              <div class="mkt-chips">
-                <button class="np-chip" type="button" aria-pressed="true" data-rdir="desc" data-tip="Puts the biggest figure at the top"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↓ Highest first</button>
-                <button class="np-chip" type="button" aria-pressed="false" data-rdir="asc" data-tip="Puts the smallest figure at the top; a token with no figure stays last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↑ Lowest first</button>
+            <!-- Order, Kind and Issuer: one pop-down, its summary naming what is chosen (Show and Rank by stay in sight) -->
+            <details class="mkt-filters" id="mkt-rf">
+              <summary class="mkt-filters-s"><span class="mkt-filters-l">Order and filters</span> <span class="mkt-filters-now" id="mkt-rf-now">highest first · every kind · every issuer</span></summary>
+              <div class="mkt-filters-b">
+                <div class="mkt-group" role="group" aria-labelledby="mkt-rd-l">
+                  <p class="mkt-group-l" id="mkt-rd-l">Order</p>
+                  <div class="mkt-chips">
+                    <button class="np-chip" type="button" aria-pressed="true" data-rdir="desc" data-tip="Puts the biggest figure at the top"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↓ Highest first</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rdir="asc" data-tip="Puts the smallest figure at the top; a token with no figure stays last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↑ Lowest first</button>
+                  </div>
+                </div>
+                <div class="mkt-group" role="group" aria-labelledby="mkt-rk-l" id="mkt-rk-g">
+                  <p class="mkt-group-l" id="mkt-rk-l">Kind</p>
+                  <div class="mkt-chips">
+                    <button class="np-chip" type="button" aria-pressed="true" data-rkind="all" data-tip="Lists every kind of real-world asset together"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="stock" data-tip="Lists only tokens of company shares, depositary receipts included"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Stocks</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="etf" data-tip="Lists only tokens of index and sector funds traded on an exchange"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>ETFs</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="bond" data-tip="Lists only tokens of treasury, T-bill and bond funds"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Bonds &amp; T-bills</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="commodity" data-tip="Lists only tokens of gold, silver, oil, copper and miners’ funds"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Commodities</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="credit" data-tip="Lists only tokens of credit and other fund shares"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Credit &amp; funds</button>
+                  </div>
+                </div>
+                <div class="mkt-group" role="group" aria-labelledby="mkt-ri-l" id="mkt-ri-g">
+                  <p class="mkt-group-l" id="mkt-ri-l">Issuer</p>
+                  <div class="mkt-chips" id="mkt-ri-c">
+                    <button class="np-chip" type="button" aria-pressed="true" data-rissuer="all" data-tip="Lists the tokens of every issuer this site counts"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All</button>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="mkt-group" role="group" aria-labelledby="mkt-rk-l" id="mkt-rk-g">
-              <p class="mkt-group-l" id="mkt-rk-l">Kind</p>
-              <div class="mkt-chips">
-                <button class="np-chip" type="button" aria-pressed="true" data-rkind="all" data-tip="Lists every kind of real-world asset together"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All</button>
-                <button class="np-chip" type="button" aria-pressed="false" data-rkind="stock" data-tip="Lists only tokens of company shares, depositary receipts included"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Stocks</button>
-                <button class="np-chip" type="button" aria-pressed="false" data-rkind="etf" data-tip="Lists only tokens of index and sector funds traded on an exchange"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>ETFs</button>
-                <button class="np-chip" type="button" aria-pressed="false" data-rkind="bond" data-tip="Lists only tokens of treasury, T-bill and bond funds"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Bonds &amp; T-bills</button>
-                <button class="np-chip" type="button" aria-pressed="false" data-rkind="commodity" data-tip="Lists only tokens of gold, silver, oil, copper and miners’ funds"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Commodities</button>
-                <button class="np-chip" type="button" aria-pressed="false" data-rkind="credit" data-tip="Lists only tokens of credit and other fund shares"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Credit &amp; funds</button>
-              </div>
-            </div>
-            <div class="mkt-group" role="group" aria-labelledby="mkt-ri-l" id="mkt-ri-g">
-              <p class="mkt-group-l" id="mkt-ri-l">Issuer</p>
-              <div class="mkt-chips" id="mkt-ri-c">
-                <button class="np-chip" type="button" aria-pressed="true" data-rissuer="all" data-tip="Lists the tokens of every issuer this site counts"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All</button>
-              </div>
-            </div>
+            </details>
           </div>
 
           <p class="mkt-cap" id="mkt-cap" aria-live="polite"></p>

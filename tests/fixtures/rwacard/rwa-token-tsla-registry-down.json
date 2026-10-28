@@ -2,7 +2,7 @@
  "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
  "symbol": "TSLA",
  "name": "Tesla • Robinhood Token",
- "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174112%2Flarge%2F0x322f0929c4625ed5bad873c95208d54e1c003b2d.png%3F1782444570",
+ "logo": null,
  "issuer": {
   "key": "rhj",
   "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -73,37 +73,41 @@
   "label": "market cap (GeckoTerminal)"
  },
  "liquidity": {
-  "v": 1121369.111,
+  "v": 1228631.0867777634,
   "src": "geckoterminal",
-  "at": 1793199600000,
-  "pools": 2,
-  "label": "the reserves of the 2 pools holding it among the most-traded pools we keep (each pool's whole reserve, both sides)"
+  "at": 1793228460000,
+  "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
  },
  "tvl": {
   "v": 3895.81269,
   "src": "defillama",
   "at": 1793228460000,
-  "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+  "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
   "protocols": [
    {
     "name": "Morpho Blue",
     "slug": "morpho-blue",
     "category": "Lending",
-    "usd": 3884.18588
+    "usd": 3884.18588,
+    "at": 1793228460000
    },
    {
     "name": "Catch Exchange",
     "slug": "catch-exchange",
     "category": "RWA",
-    "usd": 11.62681
+    "usd": 11.62681,
+    "at": 1793228460000
    }
+  ],
+  "missingApps": [
+   "longbow"
   ]
  },
  "volume24h": {
-  "v": 729518.613021839,
+  "v": 1485775.11931864,
   "src": "geckoterminal",
-  "at": 1793199600000,
-  "label": "DEX volume, 24 h, of the pools holding it here"
+  "at": 1793228460000,
+  "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
  },
  "reference": {
   "chainlink": {
@@ -362,7 +366,7 @@
     ]
    }
   ],
-  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict. The Scanner marks these powers in red; for a regulated issuer they are expected — they are still powers over your tokens."
+  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner's health score does not count them."
  },
  "roles": [
   {
@@ -502,6 +506,12 @@
   }
  ],
  "rolesAt": 1793205000000,
+ "rolesRead": {
+  "complete": true,
+  "cursor": 98587507,
+  "head": 98587507,
+  "at": 1793205000000
+ },
  "blocked": {
   "count": 175,
   "at": 1793205000000,
@@ -740,9 +750,9 @@
   },
   "tvl": {
    "at": 1793228460000,
-   "ok": true,
+   "ok": false,
    "apps": 5,
-   "why": "not read: longbow (upstream 404) — each keeps its last good deposits, if any"
+   "why": "DefiLlama's per-app deposits — not read: Longbow (upstream 404)"
   },
   "stables": {
    "at": 1793228460000,
@@ -761,9 +771,10 @@
    "ok": true
   },
   "connected": {
-   "at": 1793228460000,
+   "at": 1793201400000,
    "ok": false,
-   "why": "the RWAs' own pools are read a few a run; this round is not finished"
+   "failed": 11,
+   "why": "GeckoTerminal could not be read for 11 of 12 RWAs' own pools (upstream 404) — tried again on the next runs"
   }
  },
  "at": 1793228460000,
@@ -776,9 +787,9 @@
   "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
   "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
   "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
-  "liquidity": "Liquidity: USD in the DEX pools on Robinhood Chain holding the token (each pool's whole reserve), from GeckoTerminal; a pool pairing two RWAs is counted once in any total.",
-  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains it is every chain's — and never mixed with the value on chain.",
-  "volume": "Volume 24h: DEX trading over the last 24 hours in the pools holding the token (GeckoTerminal).",
+  "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read); a total takes a pool pairing two RWAs once.",
   "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
   "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
   "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."

@@ -12,7 +12,7 @@
    "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
    "symbol": "SPY",
    "name": "SPDR S&P 500 ETF Trust • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174115%2Flarge%2F0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png%3F1782444578",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -83,38 +83,42 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 3392675.8614,
+    "v": 9841751.534190593,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 2,
-    "label": "the reserves of the 2 pools holding it among the most-traded pools we keep (each pool's whole reserve, both sides)",
+    "at": 1793205000000,
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
     "pairsRwa": true
    },
    "tvl": {
     "v": 25509.33948,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 24891.02238
+      "usd": 24891.02238,
+      "at": 1793201400000
      },
      {
       "name": "Catch Exchange",
       "slug": "catch-exchange",
       "category": "RWA",
-      "usd": 618.3171
+      "usd": 618.3171,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
-    "v": 10192822.64607875,
+    "v": 24230488.3334257,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -192,7 +196,7 @@
    "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
    "symbol": "NVDA",
    "name": "NVIDIA • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174110%2Flarge%2F0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png%3F1782444565",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -263,43 +267,48 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 3105280.5777,
+    "v": 9705139.745541075,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 1,
-    "label": "the reserves of the 1 pool holding it among the most-traded pools we keep (each pool's whole reserve, both sides)"
+    "at": 1793205000000,
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 1446457.16865,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 1445785.91939
+      "usd": 1445785.91939,
+      "at": 1793201400000
      },
      {
       "name": "Solon Stocks",
       "slug": "solon-stocks",
       "category": "RWA",
-      "usd": 661.23676
+      "usd": 661.23676,
+      "at": 1793201400000
      },
      {
       "name": "Catch Exchange",
       "slug": "catch-exchange",
       "category": "RWA",
-      "usd": 10.0125
+      "usd": 10.0125,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
-    "v": 3947988.08820069,
+    "v": 14283902.2307839,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -375,7 +384,7 @@
    "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
    "symbol": "SPCX",
    "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174129%2Flarge%2F0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png%3F1782444614",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -446,37 +455,41 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 1592559.9459,
+    "v": 5542537.971845224,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 1,
-    "label": "the reserves of the 1 pool holding it among the most-traded pools we keep (each pool's whole reserve, both sides)"
+    "at": 1793205000000,
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 1216059.8538,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 1216049.62129
+      "usd": 1216049.62129,
+      "at": 1793201400000
      },
      {
       "name": "Catch Exchange",
       "slug": "catch-exchange",
       "category": "RWA",
-      "usd": 10.23251
+      "usd": 10.23251,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
-    "v": 5162149.67811716,
+    "v": 11267617.7302016,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -552,7 +565,7 @@
    "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
    "symbol": "CRCL",
    "name": "Circle Internet Group • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174121%2Flarge%2F0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5.png%3F1782444593",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -626,27 +639,31 @@
     "v": 3104075.045062572,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 186.10141,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 186.10141
+      "usd": 186.10141,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": 2507803.57903622,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -722,7 +739,7 @@
    "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
    "symbol": "GLD",
    "name": "SPDR Gold Trust • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175452%2Flarge%2FGLD.png%3F1786367509",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -758,7 +775,7 @@
     {
      "tier": "B",
      "kind": "chainlink",
-     "text": "Chainlink publishes a \"GLD / USD\" price feed for this ticker (supporting evidence only)",
+     "text": "Chainlink publishes a \"GLD / USD\" feed for this ticker, priced from the token's own DEX trading (supporting evidence only)",
      "src": "chainlink",
      "at": 1793201400000
     }
@@ -796,35 +813,40 @@
     "v": 4408939.27508718,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 1765.48135,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Catch Exchange",
       "slug": "catch-exchange",
       "category": "RWA",
-      "usd": 1765.48135
+      "usd": 1765.48135,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": 3572454.18027474,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
      "v": null,
      "src": "chainlink",
-     "at": 1793205000000,
-     "why": "the feed answered no latestRoundData()",
-     "proxy": "0x470a51258068043bd43dc0a56245625c9fe86eb0"
+     "at": 1793201400000,
+     "why": "Chainlink's \"GLD / USD\" feed is priced from the token's own DEX trading (a dex state price, per Chainlink's directory), not from the share — so it is not used as the underlying's price",
+     "proxy": "0x470a51258068043bd43dc0a56245625c9fe86eb0",
+     "notReference": true
     },
     "robinhood": {
      "v": null,
@@ -892,7 +914,7 @@
    "address": "0xec262a75e413fafd0df80480274532c79d42da09",
    "symbol": "MSTR",
    "name": "Strategy Inc. • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174143%2Flarge%2F0xec262a75e413fafd0df80480274532c79d42da09.png%3F1782444651",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -966,27 +988,31 @@
     "v": 3936787.4498885535,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 733.85122,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 733.85122
+      "usd": 733.85122,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": 2141145.74875385,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -1062,7 +1088,7 @@
    "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
    "symbol": "META",
    "name": "Meta Platforms • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174122%2Flarge%2F0xc0d6457c16cc70d6790dd43521c899c87ce02f35.png%3F1782444595",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -1136,27 +1162,31 @@
     "v": 2115754.9301146287,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 40457.97698,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 40457.97698
+      "usd": 40457.97698,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": 1690860.09015173,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -1232,7 +1262,7 @@
    "address": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
    "symbol": "GOOGL",
    "name": "Alphabet Class A • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174124%2Flarge%2F0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png%3F1782444601",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -1303,31 +1333,34 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 615274.429,
+    "v": 2033629.9997414192,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 1,
-    "label": "the reserves of the 1 pool holding it among the most-traded pools we keep (each pool's whole reserve, both sides)"
+    "at": 1793205000000,
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 678169.25131,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 678169.25131
+      "usd": 678169.25131,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
-    "v": 377679.345339905,
+    "v": 3241712.99564368,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -1403,7 +1436,7 @@
    "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
    "symbol": "QQQ",
    "name": "Invesco QQQ • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174119%2Flarge%2F0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png%3F1782444588",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -1474,32 +1507,35 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 1453176.8355,
+    "v": 2258186.742541192,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 2,
-    "label": "the reserves of the 2 pools holding it among the most-traded pools we keep (each pool's whole reserve, both sides)",
+    "at": 1793205000000,
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
     "pairsRwa": true
    },
    "tvl": {
     "v": 836.65647,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 836.65647
+      "usd": 836.65647,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
-    "v": 5847271.1430433905,
+    "v": 2016839.99719005,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -1577,7 +1613,7 @@
    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
    "symbol": "TSLA",
    "name": "Tesla • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174112%2Flarge%2F0x322f0929c4625ed5bad873c95208d54e1c003b2d.png%3F1782444570",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -1648,37 +1684,41 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 1121369.111,
+    "v": 1228631.0867777634,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 2,
-    "label": "the reserves of the 2 pools holding it among the most-traded pools we keep (each pool's whole reserve, both sides)"
+    "at": 1793205000000,
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 3895.81269,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 3884.18588
+      "usd": 3884.18588,
+      "at": 1793201400000
      },
      {
       "name": "Catch Exchange",
       "slug": "catch-exchange",
       "category": "RWA",
-      "usd": 11.62681
+      "usd": 11.62681,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
-    "v": 729518.613021839,
+    "v": 1485775.11931864,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -1749,180 +1789,10 @@
    "flags": []
   },
   {
-   "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
-   "symbol": "AAPL",
-   "name": "Apple • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174123%2Flarge%2F0xaf3d76f1834a1d425780943c99ea8a608f8a93f9.png%3F1782444598",
-   "issuer": {
-    "key": "rhj",
-    "name": "Robinhood Assets (Jersey) Limited (RHJ)"
-   },
-   "underlying": {
-    "symbol": "AAPL",
-    "name": "Apple",
-    "kind": "stock"
-   },
-   "confidence": "confirmed",
-   "evidence": [
-    {
-     "tier": "A1",
-     "kind": "registry",
-     "text": "Listed in Robinhood's Stock Token registry (api.robinhood.com/rhj/assets)",
-     "src": "robinhood",
-     "at": 1793201400000
-    },
-    {
-     "tier": "A2",
-     "kind": "fingerprint",
-     "text": "Its code runs from Robinhood's token registry contract (checked on the chain)",
-     "src": "rpc",
-     "at": 1793201400000
-    },
-    {
-     "tier": "B",
-     "kind": "coingecko",
-     "text": "CoinGecko files it as \"apple-robinhood-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
-     "at": 1793205000000
-    },
-    {
-     "tier": "B",
-     "kind": "chainlink",
-     "text": "Chainlink publishes a \"Robinhood AAPL / USD\" price feed for this ticker (supporting evidence only)",
-     "src": "chainlink",
-     "at": 1793201400000
-    }
-   ],
-   "status": {
-    "code": "ASSET_STATUS_ACTIVE",
-    "text": "Active in Robinhood's registry"
-   },
-   "priceUsd": {
-    "v": 345.6134223898,
-    "src": "geckoterminal",
-    "at": 1793205000000,
-    "label": "GeckoTerminal's token price (not among the most-traded pools we keep)"
-   },
-   "supply": {
-    "v": 11550.08026961,
-    "src": "rpc",
-    "at": 1793205000000,
-    "label": "totalSupply() read on the chain",
-    "decimals": 18
-   },
-   "value": {
-    "v": 3991862.770856816,
-    "src": "site",
-    "at": 1793205000000,
-    "label": "on-chain supply × the DEX price"
-   },
-   "mcap": {
-    "v": 3986098.27824582,
-    "src": "geckoterminal",
-    "at": 1793205000000,
-    "label": "market cap (GeckoTerminal)"
-   },
-   "liquidity": {
-    "v": 1322104.9890249148,
-    "src": "geckoterminal",
-    "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
-   },
-   "tvl": {
-    "v": 500914.07796,
-    "src": "defillama",
-    "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": [
-     {
-      "name": "Morpho Blue",
-      "slug": "morpho-blue",
-      "category": "Lending",
-      "usd": 500914.07796
-     }
-    ]
-   },
-   "volume24h": {
-    "v": 1797384.25793757,
-    "src": "geckoterminal",
-    "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
-   },
-   "reference": {
-    "chainlink": {
-     "v": null,
-     "src": "chainlink",
-     "at": 1793205000000,
-     "why": "the feed answered no latestRoundData()",
-     "proxy": "0x6b22a786baa607d76728168703a39ea9c99f2cd0"
-    },
-    "robinhood": {
-     "v": null,
-     "src": "robinhood",
-     "at": 1793205000000,
-     "why": "Robinhood's /prices answer has no quote for it"
-    }
-   },
-   "premium": {
-    "v": null,
-    "src": "site",
-    "at": null,
-    "why": "no reference price has been read for its underlying"
-   },
-   "deviation": null,
-   "multiplier": {
-    "v": 1.0005660800610925,
-    "src": "robinhood",
-    "at": 1793201400000,
-    "label": "shares of the underlying one token carries (RHJ currentMultiplier)",
-    "onchain": null,
-    "pending": null
-   },
-   "halted": {
-    "v": null,
-    "src": "robinhood",
-    "at": null,
-    "why": "Robinhood's /prices answer has no quote for it"
-   },
-   "paused": {
-    "global": {
-     "v": null,
-     "src": "rpc",
-     "at": 1793205000000,
-     "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
-     "absent": true,
-     "label": "paused() on Robinhood's registry: every Stock Token at once"
-    },
-    "token": {
-     "v": null,
-     "src": "rpc",
-     "at": 1793205000000,
-     "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
-     "absent": true,
-     "label": "tokenPaused(): this token alone"
-    },
-    "oracle": {
-     "v": null,
-     "src": "rpc",
-     "at": 1793205000000,
-     "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
-     "absent": true,
-     "label": "oraclePaused(): Robinhood's advisory price-oracle flag"
-    }
-   },
-   "mintBurnUsd": {
-    "v": null,
-    "src": "robinhood",
-    "at": 1793205000000,
-    "why": "Robinhood's /prices answer has no quote for it"
-   },
-   "flags": []
-  },
-  {
    "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
    "symbol": "GME",
    "name": "GameStop • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174150%2Flarge%2F0x1b0e319c6a659f002271b69db8a7df2f911c153e.png%3F1782444670",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -1996,27 +1866,31 @@
     "v": 1496174.0682924117,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 383.82838,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 383.82838
+      "usd": 383.82838,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": 654381.936841003,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -2092,7 +1966,7 @@
    "address": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
    "symbol": "AMC",
    "name": "AMC Entertainment • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175476%2Flarge%2FAMC.png%3F1786375197",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -2156,25 +2030,27 @@
     "label": "market cap (GeckoTerminal)"
    },
    "liquidity": {
-    "v": 272002.402,
+    "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "pools": 1,
-    "label": "the reserves of the 1 pool holding it among the most-traded pools we keep (each pool's whole reserve, both sides)"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
-    "v": 379429.262160473,
+    "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "label": "DEX volume, 24 h, of the pools holding it here"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -2249,7 +2125,7 @@
    "address": "0x92fd66527192e3e61d4ddd13322aa222de86f9b5",
    "symbol": "SGOV",
    "name": "iShares 0-3 Month Treasury Bond • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174130%2Flarge%2F0x92fd66527192e3e61d4ddd13322aa222de86f9b5.png%3F1782444616",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -2323,33 +2199,38 @@
     "v": 484505.25979637646,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": 11.21389,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Catch Exchange",
       "slug": "catch-exchange",
       "category": "RWA",
-      "usd": 10.42769
+      "usd": 10.42769,
+      "at": 1793201400000
      },
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 0.7862
+      "usd": 0.7862,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": 33846.8954441525,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -2425,7 +2306,7 @@
    "address": "0xd95b44124e475743a7589e68f3d74008a5536d44",
    "symbol": "CRM",
    "name": "Salesforce • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175348%2Flarge%2FCRM.png%3F1786124241",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -2492,21 +2373,24 @@
     "v": 13200.253209546965,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": 1345.5433048905,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -2581,7 +2465,7 @@
    "address": "0x1cdad396db64bda184d5182a97dd9b3c62100b7d",
    "symbol": "P",
    "name": "Everpure • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174199%2Flarge%2F0x1cdad396db64bda184d5182a97dd9b3c62100b7d.png%3F1782444800",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -2642,28 +2526,31 @@
     "v": 15382.9915627322,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "global": true,
-    "label": "CoinGecko's figure, every chain — not this chain's; never mixed with the value on chain"
+    "aboveFdv": true,
+    "label": "market cap (GeckoTerminal) — above its FDV here: CoinGecko counts its supply differently from the chain"
    },
    "liquidity": {
     "v": 31862.80812376467,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": 370.4404714365,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -2732,15 +2619,13 @@
     "at": 1793196281099,
     "label": "primary-market mint and burn, USD — Robinhood does not document its window"
    },
-   "flags": [
-    "global-mcap"
-   ]
+   "flags": []
   },
   {
    "address": "0xbe274710bf3d9567e1b290ef6a5f9f90ca016fd8",
    "symbol": "SHY",
    "name": "iShares 1-3 Year Treasury Bond ETF • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175480%2Flarge%2FSHY.png%3F1786401178",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -2807,21 +2692,24 @@
     "v": 905.1633398226347,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": 0,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -2896,7 +2784,7 @@
    "address": "0xf7181b63fdb858558a74ba96bc42732684cd7965",
    "symbol": "NAVN",
    "name": "Navan • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175423%2Flarge%2FNAVN.png%3F1786299132",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -2963,21 +2851,24 @@
     "v": 654.8261216680089,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": 0,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)"
    },
    "reference": {
     "chainlink": {
@@ -3062,7 +2953,7 @@
    "address": "0x95052ddcd5dc25641657424a8cf04834997e1730",
    "symbol": "SATS",
    "name": "EchoStar • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174181%2Flarge%2F0x95052ddcd5dc25641657424a8cf04834997e1730.png%3F1782444753",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -3105,7 +2996,7 @@
     "src": "geckoterminal",
     "at": 1793205000000,
     "label": "GeckoTerminal's token price (not among the most-traded pools we keep)",
-    "why": "not read"
+    "why": "GeckoTerminal gave no price for it — it indexes no pool with a reserve for it"
    },
    "supply": {
     "v": 0.103,
@@ -3131,22 +3022,26 @@
     "v": null,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)",
-    "why": "GeckoTerminal gave no reserve for it"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
+    "why": "GeckoTerminal indexes no pool with a reserve for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
-    "v": 0,
+    "v": null,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)",
+    "why": "GeckoTerminal indexes no pool with a reserve for it"
    },
    "reference": {
     "chainlink": {
@@ -3231,7 +3126,7 @@
    "address": "0x2f62fc9fabb470c690f141c28340ed832bb27020",
    "symbol": "BND",
    "name": "Vanguard Total Bond Market ETF • Robinhood Token",
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102175450%2Flarge%2FBND.png%3F1786367471",
+   "logo": null,
    "issuer": {
     "key": "rhj",
     "name": "Robinhood Assets (Jersey) Limited (RHJ)"
@@ -3267,7 +3162,7 @@
     "src": "geckoterminal",
     "at": 1793205000000,
     "label": "GeckoTerminal's token price (not among the most-traded pools we keep)",
-    "why": "not read"
+    "why": "GeckoTerminal gave no price for it — it indexes no pool with a reserve for it"
    },
    "supply": {
     "v": 0,
@@ -3293,22 +3188,26 @@
     "v": null,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "GeckoTerminal's total of the reserves of its pools (its token read)",
-    "why": "GeckoTerminal gave no reserve for it"
+    "label": "GeckoTerminal's total for it across its pools on the chain (its token read)",
+    "why": "GeckoTerminal indexes no pool with a reserve for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
-    "v": 0,
+    "v": null,
     "src": "geckoterminal",
     "at": 1793205000000,
-    "label": "DEX volume, 24 h (GeckoTerminal's token read)"
+    "label": "DEX volume, 24 h — GeckoTerminal's total for it across its pools (its token read)",
+    "why": "GeckoTerminal indexes no pool with a reserve for it"
    },
    "reference": {
     "chainlink": {
@@ -3333,6 +3232,174 @@
    "deviation": null,
    "multiplier": {
     "v": 1,
+    "src": "robinhood",
+    "at": 1793201400000,
+    "label": "shares of the underlying one token carries (RHJ currentMultiplier)",
+    "onchain": null,
+    "pending": null
+   },
+   "halted": {
+    "v": null,
+    "src": "robinhood",
+    "at": null,
+    "why": "Robinhood's /prices answer has no quote for it"
+   },
+   "paused": {
+    "global": {
+     "v": null,
+     "src": "rpc",
+     "at": 1793205000000,
+     "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
+     "absent": true,
+     "label": "paused() on Robinhood's registry: every Stock Token at once"
+    },
+    "token": {
+     "v": null,
+     "src": "rpc",
+     "at": 1793205000000,
+     "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
+     "absent": true,
+     "label": "tokenPaused(): this token alone"
+    },
+    "oracle": {
+     "v": null,
+     "src": "rpc",
+     "at": 1793205000000,
+     "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
+     "absent": true,
+     "label": "oraclePaused(): Robinhood's advisory price-oracle flag"
+    }
+   },
+   "mintBurnUsd": {
+    "v": null,
+    "src": "robinhood",
+    "at": 1793205000000,
+    "why": "Robinhood's /prices answer has no quote for it"
+   },
+   "flags": []
+  },
+  {
+   "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+   "symbol": "AAPL",
+   "name": "Apple • Robinhood Token",
+   "logo": null,
+   "issuer": {
+    "key": "rhj",
+    "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+   },
+   "underlying": {
+    "symbol": "AAPL",
+    "name": "Apple",
+    "kind": "stock"
+   },
+   "confidence": "confirmed",
+   "evidence": [
+    {
+     "tier": "A1",
+     "kind": "registry",
+     "text": "Listed in Robinhood's Stock Token registry (api.robinhood.com/rhj/assets)",
+     "src": "robinhood",
+     "at": 1793201400000
+    },
+    {
+     "tier": "A2",
+     "kind": "fingerprint",
+     "text": "Its code runs from Robinhood's token registry contract (checked on the chain)",
+     "src": "rpc",
+     "at": 1793201400000
+    },
+    {
+     "tier": "B",
+     "kind": "chainlink",
+     "text": "Chainlink publishes a \"Robinhood AAPL / USD\" price feed for this ticker (supporting evidence only)",
+     "src": "chainlink",
+     "at": 1793201400000
+    }
+   ],
+   "status": {
+    "code": "ASSET_STATUS_ACTIVE",
+    "text": "Active in Robinhood's registry"
+   },
+   "priceUsd": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+   },
+   "supply": {
+    "v": 11550.08026961,
+    "src": "rpc",
+    "at": 1793205000000,
+    "label": "totalSupply() read on the chain",
+    "decimals": 18
+   },
+   "value": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it",
+    "label": "on-chain supply × the DEX price"
+   },
+   "mcap": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+   },
+   "liquidity": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+   },
+   "tvl": {
+    "v": 500914.07796,
+    "src": "defillama",
+    "at": 1793201400000,
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
+    "protocols": [
+     {
+      "name": "Morpho Blue",
+      "slug": "morpho-blue",
+      "category": "Lending",
+      "usd": 500914.07796,
+      "at": 1793201400000
+     }
+    ],
+    "missingApps": [
+     "longbow"
+    ]
+   },
+   "volume24h": {
+    "v": null,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+   },
+   "reference": {
+    "chainlink": {
+     "v": null,
+     "src": "chainlink",
+     "at": 1793205000000,
+     "why": "the feed answered no latestRoundData()",
+     "proxy": "0x6b22a786baa607d76728168703a39ea9c99f2cd0"
+    },
+    "robinhood": {
+     "v": null,
+     "src": "robinhood",
+     "at": 1793205000000,
+     "why": "Robinhood's /prices answer has no quote for it"
+    }
+   },
+   "premium": {
+    "v": null,
+    "src": "site",
+    "at": null,
+    "why": "no DEX price has been read for it"
+   },
+   "deviation": null,
+   "multiplier": {
+    "v": 1.0005660800610925,
     "src": "robinhood",
     "at": 1793201400000,
     "label": "shares of the underlying one token carries (RHJ currentMultiplier)",
@@ -3405,8 +3472,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"alphabet-class-a-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"alphabet-class-a-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -3418,8 +3485,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -3437,28 +3504,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -3549,8 +3619,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"apple-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"apple-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -3562,8 +3632,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -3581,28 +3651,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -3693,8 +3766,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"bitmine-immersion-technologies-ondo-tokenized-stocks\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"bitmine-immersion-technologies-ondo-tokenized-stocks\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -3706,8 +3779,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -3725,28 +3798,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -3837,8 +3913,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"circle-internet-group-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"circle-internet-group-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -3850,8 +3926,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -3869,28 +3945,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -3981,8 +4060,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"gamestop-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"gamestop-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -3994,8 +4073,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4013,28 +4092,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4125,8 +4207,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"invesco-qqq-etf-ondo-tokenized-etf\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"invesco-qqq-etf-ondo-tokenized-etf\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -4138,8 +4220,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4157,28 +4239,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4269,8 +4354,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"ishares-china-large-cap-etf-ondo-tokenized\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"ishares-china-large-cap-etf-ondo-tokenized\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -4282,8 +4367,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4301,28 +4386,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4413,8 +4501,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"meta-platforms-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"meta-platforms-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -4426,8 +4514,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4445,28 +4533,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4557,8 +4648,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"microstrategy-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"microstrategy-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -4570,8 +4661,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4589,28 +4680,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4701,8 +4795,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"nvidia-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"nvidia-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -4714,8 +4808,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4733,28 +4827,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4845,8 +4942,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"robinhood-markets-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"robinhood-markets-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -4858,8 +4955,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -4877,28 +4974,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -4989,8 +5089,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"spacex-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"spacex-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5002,8 +5102,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -5021,28 +5121,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5133,8 +5236,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"spdr-s-p-500-etf-ondo-tokenized-etf\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"spdr-s-p-500-etf-ondo-tokenized-etf\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5146,8 +5249,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -5165,28 +5268,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5277,8 +5383,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"tesla-ondo-tokenized-stock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"tesla-ondo-tokenized-stock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5289,8 +5395,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": 68.293647,
@@ -5309,28 +5415,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5419,8 +5528,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"us-copper-index-fund-ondo-tokenized\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"us-copper-index-fund-ondo-tokenized\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5432,8 +5541,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -5451,28 +5560,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5563,8 +5675,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"apple-astock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"apple-astock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5576,8 +5688,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -5595,28 +5707,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5707,8 +5822,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"moderna-inc-astock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"moderna-inc-astock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5720,8 +5835,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -5739,28 +5854,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5851,8 +5969,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"robostrategy-inc-astock\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"robostrategy-inc-astock\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -5864,8 +5982,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -5883,28 +6001,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -5995,8 +6116,8 @@
     {
      "tier": "B",
      "kind": "coingecko",
-     "text": "CoinGecko files it as \"spdr-bloomberg-1-3-month-t-bill-etf-anchored-tokenized-etf\" (supporting evidence only — never enough on its own)",
-     "src": "geckoterminal",
+     "text": "CoinGecko files it as \"spdr-bloomberg-1-3-month-t-bill-etf-anchored-tokenized-etf\" — from this site's list, taken from CoinGecko's platform map on 2026-10-28 (supporting evidence only — never enough on its own)",
+     "src": "site",
      "at": null
     }
    ],
@@ -6008,8 +6129,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -6027,28 +6148,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6144,8 +6268,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": 569.965014576,
@@ -6164,28 +6288,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6279,8 +6406,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": 24468.014575029,
@@ -6299,28 +6426,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6415,8 +6545,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -6434,28 +6564,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6552,8 +6685,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -6571,28 +6704,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6689,8 +6825,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -6708,28 +6844,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6826,8 +6965,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -6845,28 +6984,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -6963,8 +7105,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -6982,28 +7124,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -7099,8 +7244,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": 35836885.495180905,
@@ -7119,34 +7264,38 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": 36244432.49185,
     "src": "defillama",
     "at": 1793201400000,
-    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+    "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low",
     "protocols": [
      {
       "name": "Morpho Blue",
       "slug": "morpho-blue",
       "category": "Lending",
-      "usd": 36244432.49185
+      "usd": 36244432.49185,
+      "at": 1793201400000
      }
+    ],
+    "missingApps": [
+     "longbow"
     ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -7228,8 +7377,15 @@
     {
      "tier": "A2",
      "kind": "fingerprint",
-     "text": "Its code runs from Robinhood's token registry contract (checked on the chain)",
+     "text": "Its code runs from Robinhood's token registry contract (checked on the chain: its beacon slot names the registry, and its code is the very proxy code the registry's own Stock Tokens run)",
      "src": "rpc",
+     "at": 1793201400000
+    },
+    {
+     "tier": "B",
+     "kind": "robinhood-api",
+     "text": "Robinhood's own /price-deviations answer names this address (supporting evidence only — the registry's list and the chain are what count)",
+     "src": "robinhood",
      "at": 1793201400000
     }
    ],
@@ -7240,8 +7396,8 @@
    "priceUsd": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "supply": {
     "v": null,
@@ -7259,28 +7415,31 @@
    "mcap": {
     "v": null,
     "src": "geckoterminal",
-    "at": null,
-    "why": "GeckoTerminal has no market cap for it"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "liquidity": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "tvl": {
     "v": null,
     "src": "defillama",
     "at": 1793201400000,
-    "why": "DefiLlama lists no DeFi deposits of it on Robinhood Chain",
+    "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
     "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
-    "protocols": []
+    "protocols": [],
+    "missingApps": [
+     "longbow"
+    ]
    },
    "volume24h": {
     "v": null,
     "src": "geckoterminal",
-    "at": 1793199600000,
-    "why": "not among the most-traded pools we keep, and GeckoTerminal's token read of it has not run yet"
+    "at": 1793205000000,
+    "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
    },
    "reference": {
     "chainlink": {
@@ -7391,42 +7550,44 @@
  ],
  "totals": {
   "value": {
-   "v": 110635907.89489107,
+   "v": 106644045.12403426,
    "src": "site",
    "at": 1793199600000,
-   "label": "value on chain of the 25 RWA tokens counted — 7 without one are left out",
-   "missing": 7
+   "label": "value on chain of the 25 RWA tokens counted — 8 without one are left out",
+   "missing": 8
   },
   "liquidity": {
-   "v": 27029259.447161444,
+   "v": 46202736.159673795,
    "src": "geckoterminal",
-   "at": 1793199600000,
-   "pools": 9,
-   "label": "USD in the DEX pools holding RWA tokens (each pool counted once; 11 tokens outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 7 without one left out",
-   "missing": 7
+   "at": 1793205000000,
+   "label": "GeckoTerminal's liquidity figures of the RWA tokens counted, added up — 9 without one are left out — 1 pool pairs two of these tokens",
+   "missing": 9,
+   "pairPools": 1
   },
   "tvl": {
    "v": 40159813.105440006,
    "src": "defillama",
    "at": 1793201400000,
-   "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — 11 without one are left out",
-   "missing": 11
+   "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low — 11 without one are left out",
+   "missing": 11,
+   "missingApps": [
+    "longbow"
+   ]
   },
   "mcap": {
-   "v": 109631794.83850175,
+   "v": 105645696.56025593,
    "src": "geckoterminal",
    "at": 1793199600000,
-   "label": "market caps summed (GeckoTerminal) — includes CoinGecko's every-chain figure for multi-chain issuers' tokens — 7 without one are left out",
-   "missing": 7,
-   "global": true
+   "label": "market caps summed (GeckoTerminal) — 8 without one are left out",
+   "missing": 8
   },
   "volume24h": {
-   "v": 33544181.66770579,
+   "v": 61636275.040369585,
    "src": "geckoterminal",
-   "at": 1793199600000,
-   "pools": 9,
-   "label": "DEX volume, 24 h, of the pools holding RWA tokens (each pool counted once; 13 tokens outside the most-traded pools add GeckoTerminal's own total, which may include a pool counted already) — 5 without one left out",
-   "missing": 5
+   "at": 1793205000000,
+   "label": "GeckoTerminal's 24 h volume figures of the RWA tokens counted, added up — 9 without one are left out — less the 24 h volume of the 1 pool pairing two of these tokens, which is in both tokens' figures",
+   "missing": 9,
+   "pairPools": 1
   },
   "count": 25,
   "notConfirmed": 23,
@@ -7474,9 +7635,9 @@
   },
   "tvl": {
    "at": 1793201400000,
-   "ok": true,
+   "ok": false,
    "apps": 5,
-   "why": "not read: longbow (upstream 404) — each keeps its last good deposits, if any"
+   "why": "DefiLlama's per-app deposits — not read: Longbow (upstream 404)"
   },
   "stables": {
    "at": 1793201400000,
@@ -7496,16 +7657,18 @@
   },
   "connected": {
    "at": 1793201400000,
-   "ok": true
+   "ok": false,
+   "failed": 11,
+   "why": "GeckoTerminal could not be read for 11 of 12 RWAs' own pools (upstream 404) — tried again on the next runs"
   }
  },
  "definitions": {
   "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
   "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
   "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
-  "liquidity": "Liquidity: USD in the DEX pools on Robinhood Chain holding the token (each pool's whole reserve), from GeckoTerminal; a pool pairing two RWAs is counted once in any total.",
-  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains it is every chain's — and never mixed with the value on chain.",
-  "volume": "Volume 24h: DEX trading over the last 24 hours in the pools holding the token (GeckoTerminal).",
+  "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read); a total takes a pool pairing two RWAs once.",
   "premium": "Premium or discount: the DEX price against the underlying's own price — Chainlink's feed read on the chain, else Robinhood's quote. Stock markets close while DEX pools trade around the clock.",
   "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
   "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."

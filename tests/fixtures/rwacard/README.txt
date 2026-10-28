@@ -17,7 +17,13 @@ rwa-token-*.json — the server's own /api/market/rwa/token answers (lib/marketd
     gme-memecoin          that memecoin's own answer: the 404 { notRwa, why } ("Same ticker as $GME, but not issued by …")
     usdg                  USDG's 404: a fiat-backed stablecoin, listed apart
     notmystock            "Not My Stock" (NMS): a 404 that is neither a lookalike nor a stablecoin
-  One later change, the same in every file with Robinhood's sentences (tsla, tsla-registry-down, spy, week, gme, and
+  Rewritten on 2026-10-28 after the review, by the same harness and switch (every file here and the six in
+  tests/fixtures/market/rwa-*.json are now dumped by tests/marketdata.mjs itself, so they follow lib's answers as they stand): one
+  basis for liquidity and volume (GeckoTerminal's per-token figures), the A2 code check (the fake node answers the registry tokens'
+  and WEEK's code, measured), DefiLlama's per-app dates, rolesRead, the lookalike's twin, no Robinhood logo on a Stock Token's row.
+  That suite's world leaves AMC and AAPL out of GeckoTerminal's multi answer (so TSLA is among the 12 with the most liquidity) and
+  adds a spoofed token of its own, which is left out of every file dumped.
+  An earlier change, the same in every file with Robinhood's sentences (tsla, tsla-registry-down, spy, week, gme, and
   tests/fixtures/market/rwa-token-0x322f…3b2d.json): issuerProfile.sentences is lib/rwa.js's ISSUER_TEXT.rhj as it now
   stands, where the custody sentence became two, each linking the page it comes from (the FAQ; the service-providers page
   that names Alpaca). tests/marketpage.mjs holds these files to lib's shapes, and the market copy's list to lib's text.

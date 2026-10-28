@@ -36,6 +36,8 @@ rows and fields were dropped, never invented:
   rwa-rpc-registry-logs.json — Robinhood Chain's node: every log of the registry (276, address-filtered 10M-block windows);
   rwa-rpc-reads.json — what the research read from the chain, keyed for the suite's fake node (totalSupply, the beacon and
     implementation slots, implementation() on each beacon, the TSLA batch, WEEK's beacon and supply and the TSLA Chainlink feed
-    as landscape.md §1.1 reports them, the role holders found to have no code); the fake answers nothing else;
+    as landscape.md §1.1 reports them, the role holders found to have no code) and, since the review of 2026-10-28, the runtime
+    code of the 20 registry tokens here and WEEK (eth_getCode, one JSON-RPC batch to the public node at 18:30 UTC with the honest
+    User-Agent: all 21 the same 283-byte BeaconProxy as the research's TSLA read) for the A2 code check; the fake answers nothing else;
   rwa-cg-lookalikes.json — CoinGecko coins/list?include_platform=true: the rows for the lookalike traps (GameStop 0x7e86…,
     Greatest Meme Ever, A Meme Coin, Advanced Micro Dog, BLACKROCK, Blockchain USD) and their namesakes, robinhood address only.

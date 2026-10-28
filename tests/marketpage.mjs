@@ -95,8 +95,9 @@ const rwaNullLast = (dir, get) => (a, b) => { const x = get(a), y = get(b); if (
 function fakeRwa(q) {
   if (FAKE.rwaDown) return [503, { error: 'The RWA list could not be read just now.' }];
   const one = (x, list, d) => (list.includes(x) ? x : d);
-  const view = one(q.get('view'), ['assets', 'tokens', 'stables', 'connected'], 'assets'), sort = RWA_GET[q.get('sort')] ? q.get('sort') : 'value', dir = q.get('dir') === 'asc' ? 'asc' : 'desc';
-  const kind = one(q.get('kind'), ['all', 'stock', 'etf', 'bond', 'commodity', 'credit'], 'all'), issuer = q.get('issuer') === 'all' || RW.ISSUERS[q.get('issuer')] ? q.get('issuer') : 'all';
+  const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);   // as lib: own keys only (never ?sort=__proto__)
+  const view = one(q.get('view'), ['assets', 'tokens', 'stables', 'connected'], 'assets'), sort = own(RWA_GET, q.get('sort')) ? q.get('sort') : 'value', dir = q.get('dir') === 'asc' ? 'asc' : 'desc';
+  const kind = one(q.get('kind'), ['all', 'stock', 'etf', 'bond', 'commodity', 'credit'], 'all'), issuer = own(RW.ISSUERS, q.get('issuer')) ? q.get('issuer') : 'all';
   const limit = Math.min(300, Math.max(1, Number(q.get('limit')) || 300));
   const j = FIX(RWA_FILE[view]), tokens = FIX('rwa-tokens.json').rows, rowOf = (a) => tokens.find((x) => x.address === a) || {};
   let rows, notes = j.notes.slice();
@@ -108,9 +109,12 @@ function fakeRwa(q) {
       .sort(rwaNullLast(dir, (r) => (sort === 'volume' ? v(r.volume24h) : v(r.reserveUsd))));
     notes = notes.map((n) => n.replace(/^Ranked by the pool's (reserve|24 h volume)\./, 'Ranked by ' + (sort === 'volume' ? 'the pool\'s 24 h volume' : 'the pool\'s reserve') + '.'));
   } else {
-    rows = j.rows.filter((r) => kind === 'all' || r.underlying.kind === kind).filter((r) => issuer === 'all' || (view === 'assets' ? r.issuers.some((x) => x.key === issuer) : r.issuer.key === issuer))
+    // Top RWAs by an issuer: each group built from that issuer's tokens only (lib/rwa.js groupRows over them), as lib does
+    const src = view === 'assets' && issuer !== 'all' ? RW.groupRows(tokens.filter((r) => r.issuer.key === issuer), j.at) : j.rows;
+    rows = src.filter((r) => kind === 'all' || r.underlying.kind === kind).filter((r) => issuer === 'all' || (view === 'assets' ? r.issuers.every((x) => x.key === issuer) : r.issuer.key === issuer))
       .sort(rwaNullLast(dir, view === 'tokens' && sort === 'mcap' ? (r) => (r.mcap.global ? null : v(r.mcap)) : RWA_GET[sort]));
-    if (view === 'tokens' && sort === 'mcap') notes.splice(notes.findIndex((n) => /^Highest and lowest/.test(n)) + 1, 0, 'A market cap that is CoinGecko\'s every-chain figure (a multi-chain issuer\'s token) is kept out of the market-cap ranking and listed last.');
+    if (view === 'tokens' && sort === 'mcap') notes.splice(notes.findIndex((n) => /^Highest and lowest/.test(n)) + 1, 0, 'A market cap that is CoinGecko\'s every-chain figure (Ondo\'s and Anchored\'s tokens, which live on several chains) is kept out of the market-cap ranking and listed last.');
+    if (view === 'assets' && issuer !== 'all') notes.splice(notes.findIndex((n) => /^Highest and lowest/.test(n)) + 1, 0, 'Each row here is built from ' + RW.ISSUERS[issuer].name + '\'s tokens only: its figures, its premium and how sure the site is are that issuer\'s token\'s.');
   }
   const body = Object.assign({}, j, { view, sort, dir, kind, issuer, total: rows.length, rows: rows.slice(0, limit), notes });
   return [200, FAKE.rwaList ? FAKE.rwaList(body) : body];
@@ -128,14 +132,14 @@ function fakeRwaTokenBuilt(addr) {
     implementation: implAddr ? { address: implAddr, src: 'rpc', at: T.controls.implementation.at } : { address: null, src: 'rpc', at: null, why: 'not read on the chain yet' },
     verifiedSource: null, verifiedWhy: 'this site has not checked a verified source for this issuer\'s code', powers: [],
     powersWhy: 'This site reads the roles of Robinhood\'s registry only; this issuer\'s contract keeps powers of its own (see what you hold).', note: T.controls.note };
-  const feed = rhj ? RWA_STATE.feeds().find((x) => x.ticker === String(row.symbol).toUpperCase()) || null : null, cl = row.reference.chainlink;
+  const feed = rhj ? RWA_STATE.feeds().find((x) => x.ticker === String(row.symbol).toUpperCase() && x.ref !== false) || null : null, cl = row.reference.chainlink;   // a feed that prices the share (not GLD / USD)
   const chainlink = feed ? (feed.proxy === T.chainlink.proxy ? T.chainlink : { proxy: feed.proxy, name: feed.name, description: null, answer: v(cl), updatedAt: null, heartbeat: feed.heartbeat, stale: !!cl.stale, at: T.chainlink.at }) : null;
   return Object.assign({}, row, {
     issuerProfile: RW.issuerProfile(row, rhj ? { terms: T.issuerProfile.terms.v, termsAt: T.issuerProfile.terms.at } : {}), controls,
-    roles: rhj ? T.roles : [], rolesAt: T.rolesAt, blocked: rhj ? T.blocked : null,
+    roles: rhj ? T.roles : [], rolesAt: T.rolesAt, rolesRead: rhj ? T.rolesRead : null, blocked: rhj ? T.blocked : null,
     corporateActions: RWA_STATE.actions().filter((x) => x.address === addr).sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
     connected: FIX('rwa-connected.json').rows.filter((c) => c.rwa.address === addr), lookalikes: [],
-    chainlink, ...(chainlink ? {} : { chainlinkWhy: rhj ? 'Chainlink\'s public directory lists no feed for this ticker' : 'Chainlink\'s Robinhood feeds price Robinhood\'s Stock Tokens only' }),
+    chainlink, ...(chainlink ? {} : { chainlinkWhy: rhj ? (cl && cl.notReference ? cl.why : 'Chainlink\'s public directory lists no feed for this ticker') : 'Chainlink\'s Robinhood feeds price Robinhood\'s Stock Tokens only' }),
     deployer: rhj ? T.deployer : null, reads: T.reads, at: T.at, notes: T.notes, definitions: T.definitions, sources: T.sources,
   });
 }
@@ -151,8 +155,10 @@ function fakeRwaToken(q) {
   // not an RWA here: which evidence is missing, in lib's own words (lib/rwa.js notRwaWhy)
   const stable = FIX('rwa-stables.json').rows.find((x) => x.address === addr) || null, seen = FIX('tokens-robinhood-24h.json').rows.find((x) => x.address === addr), symbol = seen ? seen.symbol : null;
   const meme = FIX('rwa-token-notrwa-' + GME_MEME + '.json');
+  const tw = !stable ? RW.twinOf(addr, symbol, FIX('rwa-tokens.json').rows) : null;
   return [404, { notRwa: true, address: addr, ...(symbol ? { symbol } : {}), ...(stable ? { stablecoin: true } : {}),
-    why: RW.notRwaWhy(addr, null, { stable, symbol, rows: FIX('rwa-tokens.json').rows, registryRead: true, beaconRead: false }), notes: meme.notes }];
+    why: RW.notRwaWhy(addr, null, { stable, symbol, rows: FIX('rwa-tokens.json').rows, registryRead: true, beaconRead: false }),
+    ...(tw ? { twin: { address: tw.address, symbol: tw.symbol, name: tw.name, issuer: tw.issuer, confidence: tw.confidence, registry: tw.evidence.some((e) => e.tier === 'A1') } } : {}), notes: meme.notes }];
 }
 // the RWA row a token answer carries (the token view's rwa key): its row on Robinhood Chain, null for anything not an RWA here
 const fakeRwaRow = (chain, addr) => (chain === 'robinhood' ? FIX('rwa-tokens.json').rows.find((r) => r.address === addr) || null : null);
@@ -360,17 +366,20 @@ async function realAnswers() {
   const mb = RW.parseLlamaProtocol(FIXMD('rwa-llama-protocol-morpho-blue.json'));
   stSet('rwa_tvl', { readAt: T, picks: ['morpho-blue', 'longbow'], reads: { 'morpho-blue': { ok: true, at: T, name: mb.name, category: mb.category, date: mb.date, tokens: mb.tokens } }, failed: ['longbow (upstream 404)'] });
   const RR = FIXMD('rwa-rpc-reads.json'), REG = RW.ISSUERS.rhj.registry, big = (h) => BigInt(h).toString(), feed = Object.keys(RR.feeds)[0];
+  const SPYA = FIXMD('rwa-rhj-assets.json').assets.find((a) => a.tokenSymbol === 'SPY').deployments.find((d) => d.chainId === 4663).contractAddress.toLowerCase();
   const units = (x, d) => { const [i, fr = ''] = String(x).split('.'); return (BigInt(i) * 10n ** BigInt(d) + BigInt((fr + '0'.repeat(d)).slice(0, d) || '0')).toString(); };
   stSet('rwa_chain', { stateAt: T,
     tokens: { [TSLA]: { beacon: RR.beacons[TSLA], beaconAt: T, fpAt: T, supplyRaw: big(RR.tsla.totalSupply), supplyAt: T, tokenPaused: RR.tsla.tokenPaused, tokenPausedAbsent: false, oraclePaused: RR.tsla.oraclePaused, oraclePausedAbsent: false,
       uiMultiplier: big(RR.tsla.uiMultiplier), newUIMultiplier: big(RR.tsla.newUIMultiplier), effectiveAt: big(RR.tsla.effectiveAt), stateAt: T },
-    [TSLAON]: Object.assign({ beacon: RR.beacons[TSLAON], beaconAt: T, fpAt: T, supplyRaw: units(RR.supplies[TSLAON], RR.meta[TSLAON].decimals), supplyAt: T, metaAt: T }, RR.meta[TSLAON]) },
+    [TSLAON]: Object.assign({ beacon: RR.beacons[TSLAON], beaconAt: T, fpAt: T, supplyRaw: units(RR.supplies[TSLAON], RR.meta[TSLAON].decimals), supplyAt: T, metaAt: T }, RR.meta[TSLAON]),
+    [SPYA]: { beacon: RR.beacons[SPYA], beaconAt: T, fpAt: T } },   // SPY's beacon slot as the research read it
     registry: { terms: RR.tsla.terms, termsAt: T }, beacons: Object.fromEntries(Object.entries(RR.beaconImpl).map(([b, i]) => [b, { implementation: i, at: T }])),
     feeds: { [feed]: { answer: RR.feeds[feed].answer, updatedAt: RR.feeds[feed].updatedAt, description: RR.feeds[feed].description, absent: false, at: T } } });
   const logs = FIXMD('rwa-rpc-registry-logs.json'), head = Math.max(...logs.map((l) => parseInt(l.blockNumber, 16)));
   stSet('rhj_roles', Object.assign(RW.foldRegistryLogs({}, logs), { cursor: head, head, readAt: T, complete: true, walkedAt: T,
     kinds: Object.fromEntries(Object.entries(RR.holderCode).map(([a, code]) => [a, { kind: code === '0x' ? 'wallet' : 'contract', at: T }])) }));
-  stSet('rwa_connected', { cycleAt: T, doneAt: T, reads: { [TSLA]: { at: T, triedAt: T, ok: true, pools: RW.parseGtTokenPools(FIXMD('rwa-gt-token-pools-tsla.json')).pools.slice(0, 30) } } });
+  stSet('rwa_connected', { cycleAt: T, doneAt: T, top: [TSLA, SPYA], reads: { [TSLA]: { at: T, triedAt: T, tries: 1, ok: true, pools: RW.parseGtTokenPools(FIXMD('rwa-gt-token-pools-tsla.json')).pools.slice(0, 30) },
+    [SPYA]: { ok: false, pools: [], triedAt: T, tries: 3, failAt: T, failWhy: 'upstream 404' } } });
   stSet('rwa_gt', { readAt: T, tokens: {} });
   const meme = FIXMD('rwa-cg-lookalikes.json').find((c) => c.platforms && c.platforms.robinhood === GME_MEME);
   stSet('rwa_seen', { at: T, tokens: [{ address: GME_MEME, symbol: meme.symbol, name: meme.name, src: 'scan' }] });
@@ -401,7 +410,7 @@ async function realAnswers() {
   out.tokensAll.custom = J(md.tokens(Object.assign({ chain: 'all' }, cw)));
   dsDown = true; out.searchDown = J(await md.search({ q: 'zzzz' }));
   out.rwa = { assets: J(md.rwa({})), tokens: J(md.rwa({ view: 'tokens' })), connected: J(md.rwa({ view: 'connected' })), stables: J(md.rwa({ view: 'stables' })),
-    tsla: J(md.rwaToken({ address: TSLA })), ondo: J(md.rwaToken({ address: TSLAON })), notRwa: J(md.rwaToken({ address: GME_MEME })), notRwaStatus: md.rwaToken({ address: GME_MEME }).status, notRwaStable: J(md.rwaToken({ address: USDG })) };
+    tsla: J(md.rwaToken({ address: TSLA })), spy: J(md.rwaToken({ address: SPYA })), ondo: J(md.rwaToken({ address: TSLAON })), notRwa: J(md.rwaToken({ address: GME_MEME })), notRwaStatus: md.rwaToken({ address: GME_MEME }).status, notRwaStable: J(md.rwaToken({ address: USDG })) };
   out.tokenTsla = J(await md.token({ chain: 'robinhood', address: TSLA }));
   return out;
 }
@@ -1054,6 +1063,35 @@ async function browserWalk() {
         fits.length === 4 && !bad.length, bad.map((x) => x.w + 'px ' + (x.ok ? '' : 'did not draw (list ' + x.a + ', tokens ' + x.b + ', card ' + x.c + ') ') + JSON.stringify({ l: x.listL, t: x.tokL, c: x.cardL }).slice(0, 400)).join(' | '));
     });
 
+    /* the review (2026-10-28): the RWA tab's controls and caption pushed its first row 2,385 px down the side column at 1280 (Top tokens:
+       1,149), and TSLA's RWA facts took 14,770 px before its trading, chart and pools. Now Order, Kind and Issuer are one pop-down and the
+       caption one line plus the totals; on the token view parts 2–7 are pop-downs with a line of what matters. Measured, not assumed. */
+    await step('the RWAs tab and an RWA\'s facts take a few screens, never sixteen', async () => {
+      const M = [];
+      const firstRow = 'Math.round(document.querySelector("#mkt-list > li > .mkt-row").getBoundingClientRect().top - document.querySelector("#mkt-side [role=tablist]").getBoundingClientRect().bottom)';
+      for (const w of [390, 1280]) {
+        await go('/market?chain=robinhood', w); await listReady(); await ev('document.getElementById("mkt-tab-tokens").click(), true'); await listReady(); await sleep(150);
+        const tok = await ev(firstRow);
+        await go('/market?tab=rwa', w); await rwaReady(); const rwa = await ev(firstRow);
+        const filt = await ev('(() => { const d = document.getElementById("mkt-rf"), s = d && d.querySelector("summary"); return d ? { open: d.open, h: Math.round(s.getBoundingClientRect().height), groups: d.querySelectorAll(".mkt-group").length } : null; })()');
+        await go('/market?chain=robinhood&token=' + TSLA + '&tab=rwa', w); await cardReady(); await sleep(150);
+        const card = await ev('(() => { const h = document.getElementById("mkt-rwa-host"), s = document.getElementById("mkt-tstats"), tw = document.getElementById("mkt-tw-h"); const folds = [...h.querySelectorAll("details.mkt-rwa-fold")];' +
+          ' return { host: Math.round(h.getBoundingClientRect().height), gap: tw ? Math.round(tw.getBoundingClientRect().top - s.getBoundingClientRect().bottom) : null, folds: folds.length, shut: folds.every((d) => !d.open),' +
+          ' low: folds.map((d) => d.querySelector("summary").getBoundingClientRect().height).filter((x) => x < 43.5).length, open1: !h.querySelector("section[aria-labelledby=mkt-rw1-h] details.mkt-rwa-fold"),' +
+          ' secs: [...h.children].map((x) => (x.getAttribute("aria-labelledby") || x.className).slice(0, 12) + ":" + Math.round(x.getBoundingClientRect().height)).join(" "), sight: [...h.querySelectorAll("section[aria-labelledby=mkt-rw2-h] .mkt-hold li")].filter((li) => !li.closest("details")).map((li) => li.textContent.slice(0, 240)), img: !!document.querySelector(".mkt-vt img") }; })()');
+        M.push({ w, tok, rwa, filt, card });
+      }
+      const m1280 = M.find((x) => x.w === 1280), bad = M.filter((x) => !(x.rwa <= Math.max(1300, x.tok + 450)) || !x.filt || x.filt.open || x.filt.h < 44 || x.filt.groups !== 3
+        || !(x.card.host < (x.w < 768 ? 4200 : 5500)) || !(x.card.gap <= x.card.host + 400) || x.card.folds < 7 || !x.card.shut || x.card.low || !x.card.open1 || x.card.img);
+      check('the RWAs tab\'s first row sits about where Top tokens\' does (Show and Rank by in sight; Order, Kind and Issuer one 44px pop-down, shut), and TSLA\'s RWA facts — "Is this the real one?" open, parts 2–7 each a line and a 44px pop-down, shut — leave its trading, chart and pools a few screens below the stats (under a third of the 14,770 px they took), at 390 and 1280 px; its header draws no picture (no Robinhood artwork)',
+        M.length === 2 && !bad.length && m1280.card.sight.some((t) => /debt securities/.test(t)) && m1280.card.sight.some((t) => /Not offered to US persons/.test(t)) && m1280.card.sight.some((t) => /KYC/.test(t)), JSON.stringify(M));
+      // Connected tokens with a filter that leaves none: the sentence says the filter, never "no pool pairs a token with an RWA"
+      await go('/market?chain=robinhood&tab=rwa&rview=connected&rissuer=ondo', 1280); await rwaReady();
+      const empty = await textOf('#mkt-list .mkt-empty');
+      check('  ...Connected tokens filtered to an issuer whose tokens no pool pairs: "No pool pairs a token with Ondo Global Markets’s tokens … — choose All to see every one", never "no pool pairs a token with an RWA"',
+        /^No pool pairs a token with Ondo Global Markets’s tokens from \$1,000 of reserve — choose All to see every one/.test(empty) && !/with an RWA/.test(empty), empty);
+    });
+
     await step('the RWAs tab: what it asks, what each row says, its caption and its foot', async () => {
       await go('/market', 1280); const m0 = FAKE.log.length;
       await ev('document.getElementById("mkt-tab-rwa").click(), true'); await rwaReady();
@@ -1065,10 +1103,12 @@ async function browserWalk() {
       check('the RWAs tab asks exactly /api/market/rwa (Top RWAs by value on chain), puts tab=rwa in the address, selects its tab (the others out of the Tab order) and shows only its controls, the panel and the list labelled by it, the not-affiliated line above the controls',
         t0.asked.join() === '/api/market/rwa' && t0.url === '?chain=robinhood&tab=rwa' && t0.sel === 'chains:false:-1,tokens:false:-1,rwa:true:0' && t0.ctl === 'chains:true,tokens:true,rwa:false' && t0.lab === 'mkt-tab-rwa|mkt-tab-rwa'
         && /Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\. Not advice, never a tip to buy\./.test(t0.lede) && t0.pressed === 'view=assets sort=value dir=desc kind=all issuer=all', JSON.stringify(Object.assign({}, t0, { rows: t0.rows.length, cap: '', foot: '' })));
-      check('  ...the caption says what is shown and how it is ranked, the ranking\'s meaning, what is counted with each sum\'s source and age, the stablecoins and L2BEAT\'s own count apart, and a read that did not work with its reason; the Issuer chips name every issuer the answer names',
-        /^Top RWAs on Robinhood Chain \(one row per underlying asset, its tokens together\) · ranked by value on chain, highest first · 36 assets · gathered /.test(t0.cap) && /Value on chain: the token's supply read on the chain times its DEX price/.test(t0.cap)
-        && /Counted: 25 RWA tokens \(23 more not confirmed on the chain yet: shown, marked and left out\) — value on chain \$\d+(\.\d)?M \(this site · [^)]*\) · liquidity \$[\d.]+M \(GeckoTerminal · [^)]*\) · TVL in DeFi \$[\d.]+M \(DefiLlama · /.test(t0.cap)
-        && /Apart, never added in: fiat-backed stablecoins \$[\d.]+M \(DefiLlama · [^)]*\) · L2BEAT’s own count of real-world assets on Robinhood Chain \$[\d.]+M \(L2BEAT · /.test(t0.cap) && /⏳ DefiLlama’s per-app deposits: not read: longbow \(upstream 404\)/.test(t0.cap)
+      /* the caption is one line of what is shown and how it is ranked, then what is counted and any read that did not work (review, 2026-10-28:
+         the first RWA row sat 2,385 px down the side column); what the ranking figure means and what is kept apart are in the foot */
+      check('  ...the caption says in one line what is shown and how it is ranked, then what is counted with each sum\'s source and age, and a read that did not work with its reason; the ranking\'s meaning and the stablecoins and L2BEAT\'s own count apart are in the foot; the Issuer chips name every issuer the answer names',
+        /^Top RWAs on Robinhood Chain · ranked by value on chain, highest first · 36 assets · gathered /.test(t0.cap) && !/Value on chain: the token's supply/.test(t0.cap) && /Value on chain: the token's supply read on the chain times its DEX price/.test(t0.foot)
+        && /Counted: 25 RWA tokens \(\+23 not confirmed yet, left out\) — value on chain \$\d+(\.\d)?M \(this site · [^)]*\) · liquidity \$[\d.]+M \(GeckoTerminal · [^)]*\) · TVL in DeFi \$[\d.]+M \(DefiLlama · /.test(t0.cap)
+        && !/Apart, never added in/.test(t0.cap) && /Apart, never added in: fiat-backed stablecoins \$[\d.]+M \(DefiLlama · [^)]*\) · L2BEAT’s own count of real-world assets on Robinhood Chain \$[\d.]+M \(L2BEAT · /.test(t0.foot) && /⏳ DefiLlama's per-app deposits — not read: Longbow \(upstream 404\)\./.test(t0.cap)
         && t0.issuers === 'all:All:true|rhj:Robinhood (RHJ):true|ondo:Ondo:true|anchored:Anchored:true|st0x:ST0x:true|midas:Midas:true', t0.cap + ' || ' + t0.issuers);
       check('  ...each row is a real button that opens the main token of its underlying on Robinhood Chain, with its kind, its issuer, how sure the site is that it is the real one, its other issuers\' tokens ("also $TSLAon (Ondo Global Markets)") and the ranked figure with its meaning; 25 shown, then "Show 11 more"',
         t0.rows.length === 25 && t0.rows.every((x) => x.tag === 'BUTTON' && x.c === 'robinhood' && /^0x[0-9a-f]{40}$/.test(x.t) && x.tip.length > 30 && /value on chain|Not available/.test(x.fig) && x.conf) && /^Show 11 more \(11 left\)$/.test(t0.more)
@@ -1082,16 +1122,17 @@ async function browserWalk() {
     await step('the RWAs tab: every RWA token, its rankings and filters in the address, Back and Forward', async () => {
       await go('/market', 1280); await listReady();
       await ev('document.getElementById("mkt-tab-rwa").click(), true'); await until('location.search === "?chain=robinhood&tab=rwa"'); await rwaReady();
-      const at = async (attr, val) => { const m = FAKE.log.length; await rwaClick(attr, val); await rwaReady(); await rwaAll(); return { asked: rwaAsks(m), url: await ev('location.search'), rows: await rwaRows(), cap: await textOf('#mkt-cap'), pressed: await rwaPressed() }; };
+      const at = async (attr, val) => { const m = FAKE.log.length; await rwaClick(attr, val); await rwaReady(); await rwaAll(); return { asked: rwaAsks(m), url: await ev('location.search'), rows: await rwaRows(), cap: await textOf('#mkt-cap'), foot: await textOf('#mkt-foot'), pressed: await rwaPressed(), filt: await textOf('#mkt-rf-now') }; };
       const v1 = await at('rview', 'tokens'), v2 = await at('rsort', 'tvl'), v3 = await at('rdir', 'asc'), v4 = await at('rkind', 'stock'), v5 = await at('rissuer', 'ondo');
       const row = (x, sym) => x.rows.find((r) => new RegExp('\\$' + sym + '(?![a-z])').test(r.text)) || {};
       check('All RWA tokens: one row per token, each saying in words how sure the site is — "✓ Registry + on-chain" (Robinhood\'s registry and the chain), "✓ On-chain" (WEEK, gone from the registry\'s list), "✓ Issuer list + on-chain" (Ondo\'s TSLAon), "Not confirmed" (fingerprint not read yet) — with Robinhood\'s own price flag (NAVN, SATS, WEEK) and the pools pairing two RWAs',
         v1.asked.join() === '/api/market/rwa?view=tokens' && v1.url === '?chain=robinhood&tab=rwa&rview=tokens' && v1.rows.length === 48 && row(v1, 'SPY').conf === '✓ Registry + on-chain' && row(v1, 'WEEK').conf === '✓ On-chain' && row(v1, 'TSLAon').conf === '✓ Issuer list + on-chain'
         && v1.rows.filter((r) => r.conf === 'Not confirmed').length === 23 && ['NAVN', 'SATS', 'WEEK'].every((x) => row(v1, x).flags.includes('⚠ Robinhood flags its price')) && row(v1, 'QQQ').flags.includes('pairs two RWAs') && /^All RWA tokens on Robinhood Chain · ranked by value on chain, highest first · 48 tokens/.test(v1.cap),
         JSON.stringify({ n: v1.rows.length, asked: v1.asked, url: v1.url, conf: ['SPY', 'WEEK', 'TSLAon', 'NAVN', 'SATS', 'QQQ'].map((x) => x + ':' + row(v1, x).conf + ':' + (row(v1, x).flags || []).join('/')), nc: v1.rows.filter((r) => r.conf === 'Not confirmed').length, cap: v1.cap.slice(0, 120) }));
-      check('  ...ranked by TVL in DeFi (mGLO first, its definition in the caption), lowest first (said to be lowest among these, a token with none at the end), Stocks only, Ondo only — each pushed into the address and asked of the server, the chips pressed with a tick',
-        v2.asked.join() === '/api/market/rwa?view=tokens&sort=tvl' && /\$mGLO/.test(v2.rows[0].text) && /in DeFi apps/.test(v2.rows[0].fig) && /ranked by TVL in DeFi, highest first/.test(v2.cap) && /TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain/.test(v2.cap)
-        && v3.asked.join() === '/api/market/rwa?view=tokens&sort=tvl&dir=asc' && /So “lowest” is lowest among these, not the lowest on the chain/.test(v3.cap) && /in DeFi apps/.test(v3.rows[0].fig) && /^Not available/.test(v3.rows[v3.rows.length - 1].fig)
+      check('  ...ranked by TVL in DeFi (mGLO first, its definition in the foot), lowest first (said to be lowest among these, a token with none at the end), Stocks only, Ondo only — each pushed into the address and asked of the server, the chips pressed with a tick, the Order and filters pop-down\'s summary naming every choice',
+        v2.asked.join() === '/api/market/rwa?view=tokens&sort=tvl' && /\$mGLO/.test(v2.rows[0].text) && /in DeFi apps/.test(v2.rows[0].fig) && /ranked by TVL in DeFi, highest first/.test(v2.cap) && /TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain/.test(v2.foot)
+        && v3.asked.join() === '/api/market/rwa?view=tokens&sort=tvl&dir=asc' && /So “lowest” is lowest among these, not the lowest on the chain/.test(v3.foot) && /in DeFi apps/.test(v3.rows[0].fig) && /^Not available/.test(v3.rows[v3.rows.length - 1].fig)
+        && v2.filt === 'highest first · every kind · every issuer' && v5.filt === 'lowest first · stocks · Ondo Global Markets only'
         && v4.asked.join() === '/api/market/rwa?view=tokens&sort=tvl&dir=asc&kind=stock' && v4.rows.length > 5 && v4.rows.every((r) => /Stock · /.test(r.text)) && / · Stocks · /.test(v4.cap)
         && v5.asked.join() === '/api/market/rwa?view=tokens&sort=tvl&dir=asc&kind=stock&issuer=ondo' && v5.rows.length > 0 && v5.rows.every((r) => /Ondo Global Markets/.test(r.text)) && v5.url === '?chain=robinhood&tab=rwa&rview=tokens&rsort=tvl&rdir=asc&rkind=stock&rissuer=ondo'
         && v5.pressed === 'view=tokens sort=tvl dir=asc kind=stock issuer=ondo', JSON.stringify({ v2: v2.asked, v3: v3.asked, v5: [v5.url, v5.pressed] }));
@@ -1126,7 +1167,7 @@ async function browserWalk() {
       const topVol = FIX('rwa-connected.json').rows.slice().sort((a, b) => b.volume24h.v - a.volume24h.v)[0];
       check('Connected tokens: every row says it is NOT an RWA ("Not an RWA — paired with $TSLA", the server\'s words) and opens that token; ranked by the pool\'s reserve (its own Rank by: reserve or volume — the RWA rankings, Kind and Issuer as they apply), the floor and what fell below it in the caption; by the pool\'s volume when asked',
         c1.asked.join() === '/api/market/rwa?view=connected&sort=liquidity' && c1.url === '?chain=robinhood&tab=rwa&rview=connected' && c1.rows.length === FIX('rwa-connected.json').rows.length && c1.rows.every((r) => r.tag === 'BUTTON' && r.flags.includes('Not an RWA — paired with $TSLA') && /not an RWA itself/.test(r.tip) && /the pool’s reserve/.test(r.fig))
-        && /^Connected tokens — not RWAs: tokens with a DEX pool against one · ranked by the pool’s reserve, highest first/.test(c1.cap) && /Pools from \$1,000 of reserve are listed; 0 below that are left out\./.test(c1.cap) && /Connected tokens: tokens with a DEX pool against an RWA/.test(c1.cap)
+        && /^Connected tokens — not RWAs: tokens with a DEX pool against one · ranked by the pool’s reserve, highest first/.test(c1.cap) && /Pools from \$1,000 of reserve; 0 below that left out\./.test(c1.cap) && /Connected tokens: tokens with a DEX pool against an RWA/.test(await textOf('#mkt-foot'))
         && c1.g === 'rs-g:off,rsc-g:on,rss-g:off,rk-g:on,ri-g:on' && c1.pressed === 'view=connected sort=liquidity dir=desc kind=all issuer=all'
         && c2.asked.join() === '/api/market/rwa?view=connected&sort=volume' && /ranked by the pool’s 24h volume/.test(c2.cap) && c2.rows[0].t === topVol.address && /the pool’s 24h volume/.test(c2.rows[0].fig), JSON.stringify({ c1: Object.assign({}, c1, { rows: c1.rows.slice(0, 1) }), c2: c2.asked }).slice(0, 700));
       m = FAKE.log.length; await rwaClick('rview', 'stables'); await rwaReady();
@@ -1162,10 +1203,10 @@ async function browserWalk() {
         && /Paused: every Stock TokenNot availableno such function on this contract \(the call reverted\) — not the same as "not paused"/.test(c.s3) && /Paused: this tokenNot paused/.test(c.s3) && /Price-oracle flagNot paused/.test(c.s3) && /Stock markets close while DEX pools trade around the clock/.test(c.s3), c.s3);
       check('  ...4. corporate actions: one token stands for one share (Robinhood\'s multiplier; the chain\'s the same, nothing pending), none listed for it, and that dividends are paid by raising the multiplier; 5. size: value on chain, the supply on the chain, market cap, liquidity, TVL in DeFi with the apps holding it, primary mint and burn and 24 h volume — each with its source and what it means',
         /One token stands for1 share of the underlying/.test(c.s4) && /on the chain \(uiMultiplier\(\)\): 1 · no change pending on the chain/.test(c.s4) && /Robinhood’s corporate-actions list has none for it\./.test(c.s4) && /Dividends are paid by raising the multiplier, so the token’s price sits above the share’s/.test(c.s4)
-        && /Value on chain\$4\.51M/.test(c.s5) && /Supply on the chain11,371 TSLA/.test(c.s5) && /Market cap\$4\.29M/.test(c.s5) && /Liquidity\$1\.12M/.test(c.s5) && /TVL in DeFi\$3,895\.81/.test(c.s5) && /held in Morpho Blue \(Lending\) \$3,884\.19, Catch Exchange \(RWA\) \$11\.63/.test(c.s5)
+        && /Value on chain\$4\.51M/.test(c.s5) && /Supply on the chain11,371 TSLA/.test(c.s5) && /Market cap\$4\.29M/.test(c.s5) && /Liquidity\$1\.23M/.test(c.s5) && /TVL in DeFi\$3,895\.81/.test(c.s5) && /held in Morpho Blue \(Lending\) \$3,884\.19, Catch Exchange \(RWA\) \$11\.63/.test(c.s5)
         && /Primary mint and burn\$534k/.test(c.s5) && /Robinhood does not document its window/.test(c.s5) && /Value on chain: the token's supply read on the chain times its DEX price — not the company's market value\./.test(c.s5) && /TVL in DeFi: USD of the token deposited/.test(c.s5), c.s4 + ' || ' + c.s5);
-      check('  ...6. the powers its issuer keeps, said as powers a regulated issuer keeps (the Scanner marks them red; still powers over your tokens): the beacon is Robinhood\'s registry, the code it runs with Sourcify\'s record, every power with its role and holders — each linked to the chain\'s explorer, a wallet or a contract — 175 wallets blocked, every role holder in the logs, and why the Scanner does not raise "serial deployer" on it',
-        /The Scanner marks these powers in red; for a regulated issuer they are expected — they are still powers over your tokens\./.test(c.s6) && /Its beacon: Robinhood’s registry0xe10b…1b00 ↗/.test(c.s6) && /The code it runs now0xb354…5ae2 ↗/.test(c.s6) && /Sourcify’s record of that code ↗/.test(c.s6)
+      check('  ...6. the powers its issuer keeps, said as powers a regulated issuer keeps (still powers over your tokens; the Scanner\'s health score does not count them): the beacon is Robinhood\'s registry, the code it runs with Sourcify\'s record, every power with its role and holders — each linked to the chain\'s explorer, a wallet or a contract — 175 wallets blocked, every role holder in the logs, and why the Scanner does not raise "serial deployer" on it',
+        /for a regulated issuer they are expected — they are still powers over your tokens\. The Scanner['’]s health score does not count them\./.test(c.s6) && !/marks these powers in red/.test(c.s6) && /12 of 12 powers held · 175 wallets blocked from moving these tokens/.test(c.s6) && /Its beacon: Robinhood’s registry0xe10b…1b00 ↗/.test(c.s6) && /The code it runs now0xb354…5ae2 ↗/.test(c.s6) && /Sourcify’s record of that code ↗/.test(c.s6)
         && /Replace the code of every Robinhood Stock Token at once \(the beacon's upgradeTo\)BEACON_UPGRADER_ROLE0xcd8c…e094 ↗ ⧉ \(a wallet\)/.test(c.s6) && /Burn tokens from any wallet \(adminBurn\)ADMIN_BURNER_ROLE/.test(c.s6) && /Wallets blocked175/.test(c.s6) && /Every role holder in the registry’s logs \(15\)/.test(c.s6)
         && /does not raise "serial deployer" on a confirmed Stock Token deployed by it/.test(c.s6) && c.holders.length >= 13 && c.holders.every((h) => /^https:\/\/robinhoodchain\.blockscout\.com\/address\/0x[0-9a-f]{40}$/.test(h)), c.s6.slice(0, 900));
       check('  ...7. the tokens paired with it: each "Not an RWA — paired with $TSLA", opening that token; and nothing in these facts is "$0"',
@@ -1354,10 +1395,12 @@ async function runSuite() {
     check('  ...an RWA\'s facts on its token view: when the token answer\'s rwa key is set, a host right after the stats (#mkt-tstats) read from /api/market/rwa/token, in the order a holder needs them — 1 is this the real one, 2 what you hold, 3 the price check, 4 corporate actions, 5 size, 6 the powers its issuer keeps, 7 the tokens paired with it, then the not-affiliated and not-advice foot — each a section card with its own heading id; holders link to the Scanner\'s explorer (NPCard.CHAIN_META), never one typed here',
       /const rwa = chain === 'robinhood' && d\.rwa && typeof d\.rwa === 'object' \? d\.rwa : null;/.test(code) && /'<div class="mkt-tstats" id="mkt-tstats">' \+ stats \+ '<\/div>' \+\s*\(rwa \? rwaHostHTML\(d\.address \|\| S\.view\.token, rwa\) : ''\) \+\s*windowsHTML\(d\)/.test(code)
       && /const rwaCardHTML = \(j\) => rwaLeadHTML\(j\) \+ rwaRealHTML\(j\) \+ rwaHoldHTML\(j\) \+ rwaPriceHTML\(j\) \+ rwaActionsHTML\(j\) \+ rwaSizeHTML\(j\) \+ rwaControlsHTML\(j\) \+ rwaConnHTML\(j\) \+ rwaCardFootHTML\(j\);/.test(code)
-      && [1, 2, 3, 4, 5, 6, 7].every((i) => (code.match(new RegExp("rwaSec\\('mkt-rw" + i + "-h'", 'g')) || []).length >= 1) && /const rwaSec = \(id, title, sub, body\) => '<section class="mkt-card mkt-rwa-c" aria-labelledby="' \+ id \+ '"><div class="mkt-card-h"><h3 class="mkt-h3" id="' \+ id \+ '">'/.test(code)
+      && [1, 2, 3, 4, 5, 6, 7].every((i) => (code.match(new RegExp("rwa(?:Sec|Fold)\\('mkt-rw" + i + "-h'", 'g')) || []).length >= 1) && /const rwaSec = \(id, title, sub, body\) => '<section class="mkt-card mkt-rwa-c" aria-labelledby="' \+ id \+ '"><div class="mkt-card-h"><h3 class="mkt-h3" id="' \+ id \+ '">'/.test(code)
+      && /const rwaFold = \(id, title, sub, open, sumLine, body\) => rwaSec\(id, title, sub, open \+ \(body \? '<details class="mkt-tbl mkt-rwa-fold"><summary>' \+ sumLine \+ '<\/summary>/.test(code) && (code.match(/rwaFold\('mkt-rw1-h'/g) || []).length === 0
       && /const c = window\.NPCard && NPCard\.CHAIN_META && NPCard\.CHAIN_META\.robinhood/.test(code) && /if \(rh\) loadRwa\(rh\);/.test(code) && !/mkt-rw[1-7]-h/.test(H));
     check('  ...the RWA words are honest: how sure the site is that a token is the real one is said in words on every row ("✓ Registry + on-chain", "Registry only", "Not confirmed"); a token paired with an RWA is labelled "Not an RWA"; the issuer\'s powers are powers a regulated issuer keeps, not a verdict; dividends raise the multiplier; the not-affiliated and not-advice lines stand even when the list could not be read',
       /'✓ Registry \+ on-chain'/.test(code) && /chip: 'Registry only'/.test(code) && /chip: 'Not confirmed'/.test(code) && /esc\(c\.label \|\| 'Not an RWA'\)/.test(code) && /they are still powers over your tokens/.test(code)
+      && /— a holder granted later is not shown yet/.test(code) && /walk\.complete === false/.test(code) && /j\.connectedWhy \? '<p class="mkt-err-t">⏳ '/.test(code) && !/marks these powers in red/.test(code)
       && /Dividends are paid by raising the multiplier, so the token’s price sits above the share’s/.test(code) && /const RWA_NOT_AFFILIATED = 'Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\. No Robinhood logos or artwork are used\.';/.test(code)
       && /const RWA_NOT_ADVICE = 'Not advice, never a tip to buy\. Do your own research\.';/.test(code) && /if \(!last\.some\(\(x\) => \/\^Not affiliated\/\.test\(x\)\)\) last\.push\(RWA_NOT_AFFILIATED\);/.test(code) && !/cdn\.robinhood\.com|logoUrl/.test(code));
     const pickCode = code.slice(code.indexOf('const navH = () =>'), code.indexOf("window.addEventListener('resize', () => fitPick('measure'));"));
@@ -1534,7 +1577,7 @@ async function runSuite() {
     const row = (sym) => RT.rows.find((r) => r.symbol === sym) || {}, tiers = (r) => (r.evidence || []).map((e) => e.tier).join('+');
     check('  ...GET /api/market/rwa?view=tokens: every row { address, symbol, name, logo, issuer, underlying, confidence, evidence, status, priceUsd, supply, value, mcap, liquidity, tvl, volume24h, reference { chainlink, robinhood }, premium, deviation, multiplier, halted, paused { global, token, oracle }, mintBurnUsd, flags } — the measured cases in it: TSLA confirmed on the registry and the chain (A1 + A2), WEEK by the chain alone ("on the chain, not in the registry\'s active list", a bond, Robinhood\'s −50% deviation), Ondo\'s TSLAon on its own beacon (A3), listed tokens not confirmed yet (why: fingerprint not read yet), SPY and QQQ pairing two RWAs, a reverted paused() as "no such function" — never "not paused"',
       RT.rows.every((r) => /^0x[0-9a-f]{40}$/.test(r.address) && r.issuer && RW.ISSUERS[r.issuer.key] && ['confirmed', 'issuer-listed', 'not-confirmed'].includes(r.confidence) && Array.isArray(r.evidence) && r.evidence.length && r.evidence.every((e) => ['A1', 'A2', 'A3', 'B'].includes(e.tier) && typeof e.text === 'string' && SRCS.includes(e.src)) && Array.isArray(r.flags) && (r.logo == null || /^\/api\/market\/logo\?u=https%3A%2F%2F/.test(r.logo)))
-      && row('TSLA').confidence === 'confirmed' && /^A1\+A2/.test(tiers(row('TSLA'))) && row('WEEK').confidence === 'confirmed' && tiers(row('WEEK')) === 'A2' && row('WEEK').status.text === 'On the chain, not in the registry\'s active list' && row('WEEK').underlying.kind === 'bond' && row('WEEK').deviation.direction === 'discount'
+      && row('TSLA').confidence === 'confirmed' && /^A1\+A2/.test(tiers(row('TSLA'))) && row('WEEK').confidence === 'confirmed' && /^A2(\+B)*$/.test(tiers(row('WEEK'))) && row('WEEK').status.text === 'On the chain, not in the registry\'s active list' && row('WEEK').underlying.kind === 'bond' && row('WEEK').deviation.direction === 'discount'
       && row('TSLAon').confidence === 'confirmed' && /^A3/.test(tiers(row('TSLAon'))) && RT.rows.filter((r) => r.confidence === 'not-confirmed').every((r) => r.why === 'fingerprint not read yet' && r.flags.includes('not-confirmed')) && RT.rows.some((r) => r.confidence === 'not-confirmed')
       && row('SPY').flags.includes('pairs-rwa') && row('QQQ').flags.includes('pairs-rwa') && row('TSLA').paused.global.v === null && row('TSLA').paused.global.absent === true && /no such function/.test(row('TSLA').paused.global.why) && row('TSLA').paused.token.v === false
       && row('TSLAon').premium.v === null && /no reference price is read for this issuer/.test(row('TSLAon').premium.why) && !JSON.stringify([RA, RT, RTS]).includes('cdn.robinhood.com'));
@@ -1634,7 +1677,9 @@ async function runSuite() {
       ['rwa-assets.json', FIX('rwa-assets.json'), R.rwa.assets], ['rwa-tokens.json', FIX('rwa-tokens.json'), R.rwa.tokens], ['rwa-connected.json', FIX('rwa-connected.json'), R.rwa.connected],
       ['rwa-stables.json', FIX('rwa-stables.json'), R.rwa.stables], ['rwa-token-' + TSLA + '.json', FIX('rwa-token-' + TSLA + '.json'), R.rwa.tsla], ['rwa-token-notrwa-' + GME_MEME + '.json', FIX('rwa-token-notrwa-' + GME_MEME + '.json'), R.rwa.notRwa],
       // the Scanner's RWA card fixtures (tests/scanpage.mjs) are frozen copies of the same answer: held to lib's shapes here too
-      ...['tsla', 'tsla-registry-down', 'spy', 'week', 'gme'].map((k) => ['rwacard/rwa-token-' + k + '.json', RWACARD('rwa-token-' + k + '.json'), R.rwa.tsla]),
+      // SPY and GME: their own pools' read failed when the files were dumped (connectedWhy), as SPY's does in the real answers' world
+      ...['tsla', 'tsla-registry-down', 'week'].map((k) => ['rwacard/rwa-token-' + k + '.json', RWACARD('rwa-token-' + k + '.json'), R.rwa.tsla]),
+      ...['spy', 'gme'].map((k) => ['rwacard/rwa-token-' + k + '.json', RWACARD('rwa-token-' + k + '.json'), R.rwa.spy]),
       ['rwacard/rwa-token-tslaon.json', RWACARD('rwa-token-tslaon.json'), R.rwa.ondo], ['rwacard/rwa-token-gme-memecoin.json', RWACARD('rwa-token-gme-memecoin.json'), R.rwa.notRwa],
       ['rwacard/rwa-token-usdg.json', RWACARD('rwa-token-usdg.json'), R.rwa.notRwaStable],
     ];

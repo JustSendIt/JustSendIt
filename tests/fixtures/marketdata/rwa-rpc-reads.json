@@ -1,5 +1,5 @@
 {
- "_about": "What the research read from Robinhood Chain (2026-10-28), keyed for the suite's fake node. supplies: totalSupply as the research recorded it in token units; meta: name(), symbol(), decimals() as its profile reads recorded them (registry_onchain_check.json, onchain_supply_ondo_anchored.json, the profile reads); beacons: the ERC-1967 beacon slot; implementations: the ERC-1967 implementation slot; beaconImpl: implementation() on each beacon; tsla: the TSLA batch (rpc_tsla_raw.json); week: WEEK's beacon and supply as landscape.md §1.1 reports them; feeds: the TSLA feed as landscape.md §1.1 reports it; holderCode: the role holders landscape.md §1.1 found to be EOAs (no code).",
+ "_about": "What the research read from Robinhood Chain (2026-10-28), keyed for the suite's fake node. supplies: totalSupply as the research recorded it in token units; meta: name(), symbol(), decimals() as its profile reads recorded them (registry_onchain_check.json, onchain_supply_ondo_anchored.json, the profile reads); beacons: the ERC-1967 beacon slot; implementations: the ERC-1967 implementation slot; beaconImpl: implementation() on each beacon; tsla: the TSLA batch (rpc_tsla_raw.json); week: WEEK's beacon and supply as landscape.md §1.1 reports them; feeds: the TSLA feed as landscape.md §1.1 reports it; holderCode: the role holders landscape.md §1.1 found to be EOAs (no code). code: eth_getCode for the 20 registry tokens here and WEEK, read once on 2026-10-28 18:30 UTC with the honest User-Agent (one JSON-RPC batch to the public node) — all 21 answered the same 283-byte BeaconProxy, the bytes the research's TSLA read (rpc_tsla_raw.json) holds.",
  "supplies": {
   "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9": "11550.08026961",
   "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b": "647436.16017",
@@ -142,5 +142,32 @@
   "0x913ca87347391218e5de2c17c5a0aeba8b0b28fd": "0x",
   "0x5516b3451d4d6c9f63353fe7bc9537477ecce000": "0x",
   "0x697e774d60c1a3769f2ed0b919aacf17be0ae553": "0x"
+ },
+ "code": {
+  "readAt": "2026-10-28T18:30:45Z",
+  "hex": "0x6080604052600a600c565b005b60186014601a565b609d565b565b5f7f000000000000000000000000e10b6f6b275de231345c20d14ab812db62151b006001600160a01b0316635c60da1b6040518163ffffffff1660e01b8152600401602060405180830381865afa1580156076573d5f5f3e3d5ffd5b505050506040513d601f19601f820116820180604052508101906098919060ba565b905090565b365f5f375f5f365f845af43d5f5f3e80801560b6573d5ff35b3d5ffd5b5f6020828403121560c9575f5ffd5b81516001600160a01b038116811460de575f5ffd5b939250505056fea2646970667358221220e296a217a10765339b402e91ead95bcbcf74e678d7c756705f097d88cc2554b064736f6c63430008210033",
+  "addresses": [
+   "0xd95b44124e475743a7589e68f3d74008a5536d44",
+   "0x1cdad396db64bda184d5182a97dd9b3c62100b7d",
+   "0x95052ddcd5dc25641657424a8cf04834997e1730",
+   "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+   "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+   "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+   "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+   "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+   "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+   "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+   "0x92fd66527192e3e61d4ddd13322aa222de86f9b5",
+   "0x2f62fc9fabb470c690f141c28340ed832bb27020",
+   "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+   "0xbe274710bf3d9567e1b290ef6a5f9f90ca016fd8",
+   "0xf7181b63fdb858558a74ba96bc42732684cd7965",
+   "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+   "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+   "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+   "0xec262a75e413fafd0df80480274532c79d42da09",
+   "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+   "0xc93a8c440cea26d7445df01729f193b27965099f"
+  ]
  }
 }

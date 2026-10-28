@@ -277,11 +277,25 @@ body:has(#mkt-tchain-p:not([hidden])) > .nav { z-index: 300; }
 .mkt-rwa-terms, .mkt-rwa-powers { margin: 0.8rem 0; line-height: 1.45; overflow-wrap: anywhere; }
 .mkt-rwa-powers { color: var(--text-dim); font-weight: 700; }
 .mkt-rwa-foot { margin: 0 0 1.1rem; }
+.mkt-rwa-foot-l { margin: 0 0 0.3rem; }
 .mkt-rwa-foot a { color: var(--green-bright); }
 .mkt-stat.is-warn { border-color: var(--o-edge); }
 .mkt-def { color: var(--text-mute); }
 .mkt-addr-l { color: var(--green-bright); overflow-wrap: anywhere; }
 .mkt-copy { min-width: 44px; min-height: 44px; vertical-align: middle; }
+/* an RWA part's line of what matters, and the rest one press down (market.js rwaFold): the pop-down's summary is 44px and wraps */
+.mkt-rwa-line { margin: 0 0 0.6rem; line-height: 1.5; overflow-wrap: anywhere; }
+.mkt-rwa-fold { margin: 0.2rem 0 0.4rem; }
+.mkt-rwa-fold > summary { width: auto; text-align: left; line-height: 1.35; padding: 0.25rem 0; }
+.mkt-rwa-fold-b { padding-top: 0.4rem; }
+.mkt-warn-t { color: var(--gold); }
+.mkt-full { overflow-wrap: anywhere; word-break: break-all; }
+/* the RWA tab's Order, Kind and Issuer: one pop-down whose 44px summary names what is chosen */
+.mkt-filters { margin: 0 0 0.75rem; border: 1px solid var(--ink-4); border-radius: 12px; padding: 0 0.6rem; }
+.mkt-filters-s { cursor: pointer; min-height: 44px; display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.5rem; font-weight: 700; color: var(--green-bright); font-size: max(var(--text-floor), 0.88rem); line-height: 1.3; padding: 0.3rem 0; }
+.mkt-filters-s:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.mkt-filters-now { color: var(--text-dim); font-weight: 600; overflow-wrap: anywhere; }
+.mkt-filters-b { padding: 0.2rem 0 0.1rem; }
 .mkt-rwa .mkt-table code, .mkt-kv code { overflow-wrap: anywhere; }
 
 /* ---------- 1280px and up on a screen tall enough: the side column stays in view while the main view scrolls (its own
