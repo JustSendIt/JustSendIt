@@ -694,7 +694,7 @@ try {
   check('  ...and never a link, a path, an @name, a $SYMBOL, an address or an email', ['sendrh.com/guide', '/u/zqbob', '@zqbob', '$SEND', A('ab'), 'zq@example.com'].every((x) => W.read(keep).text.includes(x)), W.read(keep).text);
   check('  ...several questions in one message are cut where each starts (sentences, "… and …", "…, how …"), and a spelling distance counts a swapped pair as one slip',
     W.sentences('whats the price of send? and who is top of the leaderboard. Thanks!').length === 3 && W.clauses('how many members and who is top of the leaderboard').length === 2
-    && W.clauses('price of $SEND, how many holders does it have').length === 2 && W.distance('leaderbord', 'leaderboard') === 1 && W.distance('sned', 'send') === 1 && W.distance('competion', 'competition') === 2);
+    && W.clauses('i got some eth on coinbase, how would i buy $SEND').length === 2 && W.clauses('In Rocket Run, what is the explosion point capped at?').length === 1 && W.distance('leaderbord', 'leaderboard') === 1 && W.distance('sned', 'send') === 1 && W.distance('competion', 'competition') === 2);
   const hostile = ('hey sendy could u tell me ' + 'wat '.repeat(60) + 'r u a bot n ' + 'a b '.repeat(40)).slice(0, 600), t0 = performance.now();
   for (let i = 0; i < 20; i++) W.read(hostile + i);
   const per = (performance.now() - t0) / 20;
